@@ -485,6 +485,14 @@
   {/if}
 {/snippet}
 
+<!-- Beside the conversation it floats on the conversation's own ground
+     (`surface-recess`, the tab's sheet), the drawer shadow its one mark of
+     separation: no second colour and no seam (the split's edge draws its
+     grip only under the pointer or the keyboard's focus). HIG, Sheets: "a
+     sheet can be either modal or nonmodal. When a nonmodal sheet is
+     onscreen, people use its functionality to affect the parent view";
+     Materials: "Don't use Liquid Glass in the content layer", so its ground
+     is the content's. The phone's sheet keeps the sheet's raised surface. -->
 <section
   data-slot="side-card"
   data-side-card={of}
@@ -492,7 +500,7 @@
   data-expanded-recessed={(expanded && recessed) || undefined}
   data-recessed={recessed || undefined}
   aria-label={label}
-  class="group/card @container flex h-full min-h-0 min-w-0 flex-col rounded-lg bg-surface-raised px-space-2 pt-0 pb-space-2 shadow-drawer data-side-surface-expanded:rounded-none data-side-surface-expanded:px-0 data-side-surface-expanded:pt-space-3 data-side-surface-expanded:pb-0 data-side-surface-expanded:shadow-none data-side-surface-expanded:not-data-recessed:px-(--expanded-inset) in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
+  class="group/card @container flex h-full min-h-0 min-w-0 flex-col rounded-lg bg-surface-recess in-data-preview-sheet:bg-surface-raised px-space-2 pt-0 pb-space-2 shadow-drawer data-side-surface-expanded:rounded-none data-side-surface-expanded:px-0 data-side-surface-expanded:pt-space-3 data-side-surface-expanded:pb-0 data-side-surface-expanded:shadow-none data-side-surface-expanded:not-data-recessed:px-(--expanded-inset) in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
   style:--expanded-inset="calc(var(--space-3) + var(--space-2))"
   style:--card-max="calc(100% - var(--sheet-hidden, 0px))"
   bind:this={section}

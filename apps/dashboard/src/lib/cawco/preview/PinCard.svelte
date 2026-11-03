@@ -1,14 +1,18 @@
 <script lang="ts">
   /**
    * A comment's thread, as a card beside its pin (the owner's pick; DESIGN.md,
-   * A thread beside its pin). Its head's first row: the pin's pill, only
-   * while the page's own pill is out of view (`marked` says it stands
-   * beside it), the element's nearest parent in meta ("on Routine form";
-   * none for the whole page), and at its end Resolve or Reopen, Delete
-   * comment, ⋯ (Copy link; Pin it somewhere else while its element is gone)
-   * and Close, each the `sm` ghost; under it what it stands on, two lines at
-   * most across the card's width (a press scrolls the page to it and lights
-   * its element). Then the line saying its element is gone, or that it stands resolved,
+   * A thread beside its pin). It has no head band (The Title Bars Follow
+   * Liquid Glass Rule): Resolve or Reopen, Delete comment and More (Copy
+   * link; Pin it somewhere else while its element is gone) float as one
+   * glass group at its top's trailing edge, and Close in a group of its own,
+   * over the thread, which starts at the card's top and blurs under them
+   * from the first scroll (BarFloat). Its start, said once and scrolling
+   * with it: the pin's pill, only while the page's own pill is out of view
+   * (`marked` says it stands beside it), what it stands on, two lines at
+   * most (a press scrolls the page to it and lights its element), and the
+   * element's nearest parent in meta ("on Routine form") where it names
+   * something the name doesn't; its first line keeps clear of the groups.
+   * Then the line saying its element is gone, or that it stands resolved,
    * each with its way back; then, when its delivery reached no one or it
    * stands only on the page, "Not sent: why" with Try again (a comment goes
    * to the session by itself once written). Then the thread, the one part
@@ -40,13 +44,21 @@
   import type { CommentAttachment, Pin } from "@cawco/core/comments";
   import { artifactWords as words } from "@cawco/core/words/artifacts";
   import { commentWords as said } from "@cawco/core/words/comments";
+  import { commonWords } from "@cawco/core/words/common";
   import { type Snippet, tick, untrack } from "svelte";
-  import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
+  import {
+    BarFloat,
+    BarGlass,
+    BarItem,
+  } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import {
     IconClose,
     IconLink,
+    IconMore,
     IconPin,
     IconReopen,
     IconSuccess,
@@ -56,7 +68,6 @@
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import type { SendExtras } from "../client.svelte";
-  import RowMenu from "../config/RowMenu.svelte";
   import { copyRefused, copyToClipboard } from "../copy";
   import MessageBody from "../MessageBody.svelte";
   import RowFault from "../RowFault.svelte";
@@ -175,10 +186,14 @@
     const newest = holder.querySelector<HTMLElement>(
       '[data-slot="thread"] > li:last-child'
     );
-    if ((fromChip && pin.thread.length <= 2) || peek) {
+    if ((fromChip && pin.thread.length <= 2) || peek || pin.thread.length < 2) {
       holder.scrollTop = 0;
     } else {
-      holder.scrollTop = newest ? newest.offsetTop : holder.scrollHeight;
+      // Its first line under the floating groups, never behind them.
+      const bar =
+        holder.parentElement?.querySelector<HTMLElement>('[data-slot="bar"]')
+          ?.offsetHeight ?? 0;
+      holder.scrollTop = newest ? newest.offsetTop - bar : holder.scrollHeight;
     }
     placed = holder.scrollTop;
   };
@@ -203,7 +218,12 @@
   });
   let head = $state<HTMLElement | null>(null);
   let foot = $state<HTMLDivElement | null>(null);
-  /** The head and the foot alone outgrow the card (a phone's keyboard over a short well). */
+  /** How wide the floating groups stand: the first line of the thread's start keeps clear of them. */
+  let groupsW = $state(0);
+  const groupsSize = frameSize<HTMLElement>((node) => {
+    groupsW = node.offsetWidth;
+  });
+  /** The thread's start (its pill, name and place) and the foot alone outgrow the card (a phone's keyboard over a short well). */
   let squeezed = $state(false);
   // When the head and the foot alone outgrow the card, the thread keeps its
   // whole height and the card scrolls, the field kept in view while
@@ -214,7 +234,7 @@
   $effect(() => {
     const top = head;
     const bottom = foot;
-    const holder = top?.parentElement;
+    const holder = bottom?.parentElement;
     if (!(top && bottom && holder)) {
       return;
     }
@@ -226,7 +246,7 @@
         (Number.parseFloat(style.paddingTop) || 0) +
         (Number.parseFloat(style.paddingBottom) || 0);
       measured =
-        top.offsetHeight + bottom.offsetHeight + 2 * gap + edges >
+        top.offsetHeight + bottom.offsetHeight + gap + edges >
         holder.clientHeight + 1;
     };
     const watch = frameObserver(
@@ -382,168 +402,6 @@
   {/if}
 {/snippet}
 
-<!-- Its first row: the pill while the page's is out of view, the
-     element's nearest parent in meta ("on Routine form"; none for the whole
-     page), and the actions at its end. Under it what it stands on, two
-     lines at most, across the card's whole width. -->
-<header
-  bind:this={head}
-  data-slot="head"
-  class="flex shrink-0 flex-col gap-space-1"
->
-  <div
-    class="flex min-w-0 items-center gap-space-2 coarse:gap-space-5 mark-line"
-    data-slot="head-row"
-  >
-    {#if !marked}
-      <span class="mark-cell" data-slot="head-pill">
-        <PinMark
-          gone={!!pin.movedAt}
-          number={pin.number}
-          state={markState(pin)}
-          tail="bottom-start"
-        />
-      </span>
-    {/if}
-    {#if parent}
-      <p
-        data-slot="chain"
-        class="m-0 min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted type-meta"
-        title={`on ${parent}`}
-      >
-        on {parent}
-      </p>
-    {/if}
-    {#if !peek}
-      <span
-        class="ms-auto flex flex-none items-center gap-space-2 coarse:gap-space-5"
-        data-box
-      >
-        {#if pin.resolvedAt}
-          <Button
-            aria-label={said.reopen}
-            icon={IconReopen}
-            onclick={() => onresolve(false)}
-            size="icon-sm"
-            title={said.reopen}
-            variant="ghost"
-          />
-        {:else}
-          <Button
-            aria-label={said.resolve}
-            icon={IconSuccess}
-            onclick={() => onresolve(true)}
-            size="icon-sm"
-            title={said.resolve}
-            variant="ghost"
-          />
-        {/if}
-        {#if !fromChip}
-          <!-- One press asks, in the card itself (DESIGN.md, A thread beside its pin). -->
-          <Button
-            aria-label={said.deleteComment}
-            data-slot="delete"
-            icon={IconTrash}
-            onclick={askDelete}
-            size="icon-sm"
-            title={said.deleteComment}
-            variant="ghost"
-          />
-          <span class="flex flex-none">
-            <RowMenu actions={moreActions} label={`comment ${pin.number}`} />
-          </span>
-        {/if}
-        <Button
-          aria-label={said.close}
-          icon={IconClose}
-          onclick={onclose}
-          size="icon-sm"
-          title={said.close}
-          variant="ghost"
-        />
-      </span>
-    {/if}
-  </div>
-  <!-- Two lines at most, clamped in an inner span (The Truncate Inside Rule): WebKit clamps no button. -->
-  {#if peek}
-    <p
-      data-slot="name"
-      class="m-0 min-w-0 text-start text-ink-strong type-label"
-      title={name}
-    >
-      <span class="line-clamp-2 text-pretty wrap-anywhere">{name}</span>
-    </p>
-  {:else}
-    <button
-      data-slot="name"
-      class="min-w-0 px-0 border-none bg-transparent text-start text-ink-strong type-label rounded-xs hover:text-ink-row focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
-      onclick={onfind}
-      title={name}
-      type="button"
-      ><span class="line-clamp-2 text-pretty wrap-anywhere">{name}</span
-      ></button
-    >
-  {/if}
-</header>
-{#if !peek && pin.movedAt}
-  <!-- Its element is gone: said once, and pinned anew with the next tap on the page. -->
-  <div
-    data-slot="gone"
-    class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
-  >
-    <p class="m-0 min-w-0 text-ink-muted" role="status">
-      {placing ? said.placeHere : words.pinElementGone}
-    </p>
-    <Button
-      label={placing ? "Cancel" : said.placeElsewhere}
-      onclick={() => onplace(!placing)}
-      pad="none"
-      size="sm"
-      variant="link"
-    />
-  </div>
-{:else if !peek && pin.resolvedAt}
-  <div
-    data-slot="resolved"
-    class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
-  >
-    <p class="m-0 min-w-0 text-ink-muted num" role="status">
-      {said.resolvedAgo(resolvedAge)}
-    </p>
-    <Button
-      label={said.reopen}
-      onclick={() => onresolve(false)}
-      pad="none"
-      size="sm"
-      variant="link"
-    />
-  </div>
-{/if}
-{#if !peek && whyNotSent && markState(pin) === "unsent"}
-  <!-- Its delivery reached no one, or it stands only on the page: why, with Try again. -->
-  <div
-    data-slot="not-sent"
-    data-not-sent=""
-    class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
-  >
-    <p
-      class="m-0 min-w-0 text-pretty wrap-anywhere text-status-fail-ink"
-      role="status"
-    >
-      {said.notSent(whyNotSent)}
-    </p>
-    <Button
-      aria-label={said.retryComment(pin.number)}
-      data-slot="pin-retry"
-      label={said.tryAgain}
-      onclick={onretry}
-      pad="none"
-      pending={retrying}
-      size="sm"
-      variant="link"
-    />
-  </div>
-{/if}
 <!-- A later entry of one speaker's run: its words, and its age at the end
      of their first line, on its baseline (a row's meta on its words' line,
      The Row Dress Rule), the words wrapping in their own column as prose
@@ -558,64 +416,243 @@
     <Who grouped name={who} shown timestamp={at} {you} />
   </div>
 {/snippet}
-<!-- What the comment holds, the one part that scrolls: the head stands over
-     it and the reply under it, never a scroll away; the house edge fade says
-     there is more above or below. -->
+<!-- No head band (DESIGN.md, A thread beside its pin; The Title Bars
+     Follow Liquid Glass Rule): Resolve or Reopen, Delete comment and More
+     float as one glass group and Close in its own (HIG, Toolbars: "Group
+     navigation controls and critical actions like Done, Close, or Save in
+     dedicated, familiar, and visually distinct sections"), over the thread,
+     which starts at the card's top and blurs under them from the first
+     scroll. The peek takes no press, so it has none. -->
 <div
-  class="kit-edge-fade-block relative flex flex-auto flex-col min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain data-whole:shrink-0"
+  class="relative flex flex-auto flex-col min-h-0 min-w-0 timeline-scope-transcript-head data-whole:shrink-0"
   data-whole={squeezed || undefined}
-  data-pin-room
-  onscroll={readAt}
-  bind:this={roomEl}
+  data-slot="pin-thread"
+  style:--groups-w="{groupsW}px"
 >
-  <!-- The transcript's turns: a run of one speaker's entries is one turn
-       (its later entries under the first's speaker line), the person's
-       run one well. -->
-  <ol data-slot="thread" class="m-0 p-0 list-none">
-    {#each thread as entry, i (entry.id)}
-      {@const grouped = thread[i - 1]?.by === entry.by}
-      <li data-slot="entry" class="group/entry" data-by={entry.by}>
-        {#if entry.by === "person"}
-          {@const runsOn = thread[i + 1]?.by === "person"}
-          <Turn class="group-first/entry:mt-0" {grouped} {runsOn} you>
-            {#if !grouped}
-              <Who name="You" shown timestamp={entry.at} you />
+  {#if !peek}
+    <BarFloat tint="bg-surface-raised">
+      {#snippet trailing()}
+        <div class="flex items-center gap-space-2" {@attach groupsSize}>
+          <BarGlass form="group">
+            {#if pin.resolvedAt}
+              <BarItem
+                icon={IconReopen}
+                label={said.reopen}
+                onclick={() => onresolve(false)}
+              />
+            {:else}
+              <BarItem
+                icon={IconSuccess}
+                label={said.resolve}
+                onclick={() => onresolve(true)}
+              />
             {/if}
-            <Well {grouped} {runsOn}>
+            {#if !fromChip}
+              <!-- One press asks, in the card itself (DESIGN.md, A thread beside its pin). -->
+              <BarItem
+                data-slot="delete"
+                icon={IconTrash}
+                label={said.deleteComment}
+                onclick={askDelete}
+              />
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger>
+                  {#snippet child({ props })}
+                    <BarItem
+                      icon={IconMore}
+                      label={commonWords.moreFor(`comment ${pin.number}`)}
+                      {props}
+                    />
+                  {/snippet}
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content align="end" class="w-auto" min="regular">
+                  {#each moreActions as action (action.label)}
+                    <DropdownMenu.Item onSelect={action.onselect}>
+                      <action.icon /><span>{action.label}</span>
+                    </DropdownMenu.Item>
+                  {/each}
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
+            {/if}
+          </BarGlass>
+          <BarGlass form="group">
+            <BarItem icon={IconClose} label={said.close} onclick={onclose} />
+          </BarGlass>
+        </div>
+      {/snippet}
+    </BarFloat>
+  {/if}
+  <!-- What the comment holds, the one part that scrolls; the reply under it,
+       never a scroll away. -->
+  <div
+    class="relative flex flex-auto flex-col gap-space-2 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain scroll-timeline-transcript-head"
+    data-pin-room
+    onscroll={readAt}
+    bind:this={roomEl}
+  >
+    <!-- Its start, said once: the pill while the page's is out of view,
+         what it stands on (two lines at most; a press scrolls the page to it
+         and lights its element), and its element's nearest parent in meta
+         where it says more than the name. Its first line keeps clear of the
+         floating groups. -->
+    <div
+      bind:this={head}
+      data-slot="head"
+      class={[
+        "flex shrink-0 items-start gap-space-2",
+        !peek && "min-h-c-top-bar-h pe-(--groups-w) pt-space-1",
+      ]}
+    >
+      {#if !marked}
+        <span class="mark-cell" data-slot="head-pill">
+          <PinMark
+            gone={!!pin.movedAt}
+            number={pin.number}
+            state={markState(pin)}
+            tail="bottom-start"
+          />
+        </span>
+      {/if}
+      <div class="flex min-w-0 flex-1 flex-col gap-space-row">
+        <!-- Two lines at most, clamped in an inner span (The Truncate Inside Rule): WebKit clamps no button. -->
+        {#if peek}
+          <p
+            data-slot="name"
+            class="m-0 min-w-0 text-start text-ink-strong type-label"
+            title={name}
+          >
+            <span class="line-clamp-2 text-pretty wrap-anywhere">{name}</span>
+          </p>
+        {:else}
+          <button
+            data-slot="name"
+            class="min-w-0 self-start px-0 border-none bg-transparent text-start text-ink-strong type-label rounded-xs hover:text-ink-row focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
+            onclick={onfind}
+            title={name}
+            type="button"
+            ><span class="line-clamp-2 text-pretty wrap-anywhere">{name}</span
+            ></button
+          >
+        {/if}
+        {#if parent && parent !== name}
+          <p
+            data-slot="chain"
+            class="m-0 min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted type-meta"
+            title={`on ${parent}`}
+          >
+            on {parent}
+          </p>
+        {/if}
+      </div>
+    </div>
+    {#if !peek && pin.movedAt}
+      <!-- Its element is gone: said once, and pinned anew with the next tap on the page. -->
+      <div
+        data-slot="gone"
+        class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
+      >
+        <p class="m-0 min-w-0 text-ink-muted" role="status">
+          {placing ? said.placeHere : words.pinElementGone}
+        </p>
+        <Button
+          label={placing ? "Cancel" : said.placeElsewhere}
+          onclick={() => onplace(!placing)}
+          pad="none"
+          size="sm"
+          variant="link"
+        />
+      </div>
+    {:else if !peek && pin.resolvedAt}
+      <div
+        data-slot="resolved"
+        class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
+      >
+        <p class="m-0 min-w-0 text-ink-muted num" role="status">
+          {said.resolvedAgo(resolvedAge)}
+        </p>
+        <Button
+          label={said.reopen}
+          onclick={() => onresolve(false)}
+          pad="none"
+          size="sm"
+          variant="link"
+        />
+      </div>
+    {/if}
+    {#if !peek && whyNotSent && markState(pin) === "unsent"}
+      <!-- Its delivery reached no one, or it stands only on the page: why, with Try again. -->
+      <div
+        data-slot="not-sent"
+        data-not-sent=""
+        class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
+      >
+        <p
+          class="m-0 min-w-0 text-pretty wrap-anywhere text-status-fail-ink"
+          role="status"
+        >
+          {said.notSent(whyNotSent)}
+        </p>
+        <Button
+          aria-label={said.retryComment(pin.number)}
+          data-slot="pin-retry"
+          label={said.tryAgain}
+          onclick={onretry}
+          pad="none"
+          pending={retrying}
+          size="sm"
+          variant="link"
+        />
+      </div>
+    {/if}
+    <!-- The transcript's turns: a run of one speaker's entries is one turn
+         (its later entries under the first's speaker line), the person's
+         run one well. -->
+    <ol data-slot="thread" class="m-0 p-0 list-none">
+      {#each thread as entry, i (entry.id)}
+        {@const grouped = thread[i - 1]?.by === entry.by}
+        <li data-slot="entry" class="group/entry" data-by={entry.by}>
+          {#if entry.by === "person"}
+            {@const runsOn = thread[i + 1]?.by === "person"}
+            <Turn class="group-first/entry:mt-0" {grouped} {runsOn} you>
+              {#if !grouped}
+                <Who name="You" shown timestamp={entry.at} you />
+              {/if}
+              <Well {grouped} {runsOn}>
+                {#if grouped}
+                  {@render later(entry.text, entry.at, "You", true)}
+                {:else if entry.text.trim()}
+                  <MessageBody source={entry.text} wrap="pretty" />
+                {/if}
+                {@render gallery(entry.attachments)}
+              </Well>
+            </Turn>
+          {:else}
+            <Turn class="group-first/entry:mt-0" {grouped}>
               {#if grouped}
-                {@render later(entry.text, entry.at, "You", true)}
-              {:else if entry.text.trim()}
+                {@render later(entry.text, entry.at, agentName, false)}
+              {:else}
+                <Who name={agentName} shown timestamp={entry.at} />
                 <MessageBody source={entry.text} wrap="pretty" />
               {/if}
-              {@render gallery(entry.attachments)}
-            </Well>
-          </Turn>
-        {:else}
-          <Turn class="group-first/entry:mt-0" {grouped}>
-            {#if grouped}
-              {@render later(entry.text, entry.at, agentName, false)}
-            {:else}
-              <Who name={agentName} shown timestamp={entry.at} />
-              <MessageBody source={entry.text} wrap="pretty" />
-            {/if}
-            {#if entry.files?.length}
-              <p class="flex flex-wrap gap-space-1 mt-space-1 mx-0 mb-0">
-                {#each entry.files as file (file)}
-                  <code
-                    class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-code-bg type-code"
-                    >{file}</code
-                  >
-                {/each}
-              </p>
-            {/if}
-          </Turn>
-        {/if}
-      </li>
-    {/each}
-  </ol>
-  {#if changes && !peek}
-    <div class="mt-space-2" data-slot="pin-changes">{@render changes(pin)}</div>
-  {/if}
+              {#if entry.files?.length}
+                <p class="flex flex-wrap gap-space-1 mt-space-1 mx-0 mb-0">
+                  {#each entry.files as file (file)}
+                    <code
+                      class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-code-bg type-code"
+                      >{file}</code
+                    >
+                  {/each}
+                </p>
+              {/if}
+            </Turn>
+          {/if}
+        </li>
+      {/each}
+    </ol>
+    {#if changes && !peek}
+      <div data-slot="pin-changes">{@render changes(pin)}</div>
+    {/if}
+  </div>
 </div>
 {#if !peek}
   <div

@@ -14,10 +14,13 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Page } from "playwright-core";
-import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
+import type { Frame, Page } from "playwright-core";
+import { HOUR_MS } from "../../../packages/core/src/time";
+import { commentWords } from "../../../packages/core/src/words/comments";
+import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { HouseRules } from "../house-rules";
 import { type Kit, open, type Spec, type View } from "../kit";
+import { writePagePins } from "../pins";
 
 /** A long answer: the conversation scrolls under the bar. */
 const ANSWER = Array.from(
@@ -279,27 +282,321 @@ const run = async (kit: Kit) => {
     '[data-slot="top"]'
   );
 
-  // The Comments rail beside a page artifact, opened from the panel's head.
+  // The Comments rail beside a page artifact whose name is a slug, opened
+  // from the panel's head.
   await fleet.api(`/api/instances/${talk}/artifacts`, {
     kind: "page",
     does: "judge",
     ask: "Judge the glass bars page",
     name: "glass-page",
-    html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Glass bars</title></head><body><h1>Glass bars</h1><p>Every bar floats its controls in glass.</p></body></html>',
+    html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Glass bars</title></head><body><h1 id="head">Glass bars</h1><p id="one">Every bar floats its controls in glass.</p></body></html>',
   });
+  const RAIL = '[data-slot="comment-rail"]';
+  const SESSION = `${base}/session/${talk}`;
+  /** The rail opened from the panel's head. */
+  const railOpen = async (tab: Page): Promise<void> => {
+    // Comments on the head, or in More where the head has no room for it.
+    const toggle = tab
+      .locator('[data-slot="side-head"] [data-slot="comments"]')
+      .filter({ visible: true });
+    if ((await toggle.count()) > 0) {
+      await toggle.first().click();
+    } else {
+      await tab.locator('[data-slot="side-head"] [data-slot="more"]').click();
+      await tab.getByRole("menuitem", { name: /^Comments/u }).click();
+    }
+    await tab.waitForSelector(RAIL, { timeout: 30_000 });
+  };
   await surface(
-    "comments rail",
-    `${base}/session/${talk}`,
-    '[data-slot="comments"]',
+    "comments rail empty",
+    SESSION,
+    '[data-slot="side-head"]',
     WIDTHS,
     async (tab) => {
-      await tab.locator('[data-slot="comments"]').first().click();
-      await tab.waitForSelector('[data-slot="comment-rail"]', {
-        timeout: 30_000,
-      });
+      await railOpen(tab);
+      const empty = await tab
+        .locator(`${RAIL} [data-slot="pin-list-empty"]`)
+        .innerText({ timeout: 20_000 })
+        .catch(() => "");
+      kit.check(
+        `comments rail empty ${tab.viewportSize()?.width}: the empty line is "${commentWords.noneOpen}" alone`,
+        empty.trim() === commentWords.noneOpen,
+        JSON.stringify(empty)
+      );
     },
-    '[data-slot="comment-rail"]'
+    RAIL
   );
+
+  /** Three comments on the page, the third resolved, written into its doc as the overlay writes them. */
+  const pinsOn = async (tab: Page): Promise<Frame> => {
+    const frame = await until(
+      "the page in the pane",
+      async () =>
+        (await (
+          await tab.locator('iframe[title="Preview"]').elementHandle()
+        )?.contentFrame()) ?? null,
+      Boolean,
+      60_000
+    );
+    await (frame as Frame).waitForFunction(
+      () =>
+        !!(window as { cawcoArtifact?: { doc?: unknown } }).cawcoArtifact?.doc,
+      undefined,
+      { timeout: 30_000 }
+    );
+    const when = new Date(Date.now() - HOUR_MS).toISOString();
+    const made = [
+      { number: 1, text: "The glass group floats over the rows here." },
+      { number: 2, text: "Search should open in the bar, not a row." },
+      { number: 3, text: "The old band is gone.", resolved: true },
+    ].map((one) => {
+      const id = `00000000-0000-4000-8000-${String(one.number).padStart(12, "0")}`;
+      return {
+        id,
+        number: one.number,
+        kind: "comment" as const,
+        anchor: {
+          selector: one.number === 1 ? "#one" : "#head",
+          source: null,
+          text: one.number === 1 ? "Every bar floats" : "Glass bars",
+        },
+        at: when,
+        by: "person" as const,
+        elements: [],
+        // His words alone: an agent's reply is comment_reply's, never the page's.
+        thread: [
+          { id: `${id}-1`, by: "person" as const, text: one.text, at: when },
+          {
+            id: `${id}-2`,
+            by: "person" as const,
+            text: "And keep the rows starting at the top.",
+            at: when,
+          },
+        ],
+        ...(one.resolved ? { resolvedAt: when } : {}),
+      };
+    });
+    await writePagePins(frame as Frame, ...(made as never[]));
+    return frame as Frame;
+  };
+  /** The rail open on its rows. */
+  const railRows = async (tab: Page): Promise<void> => {
+    await pinsOn(tab);
+    await railOpen(tab);
+    await tab
+      .locator(`${RAIL} [data-slot="pin-row"]`)
+      .first()
+      .waitFor({ timeout: 30_000 });
+  };
+  const railStates: [string, (tab: Page) => Promise<void>][] = [
+    ["comments rail rows", railRows],
+    [
+      "comments rail resolved",
+      async (tab) => {
+        await railRows(tab);
+        await tab
+          .locator(RAIL)
+          .getByRole("tab", { name: commentWords.resolved })
+          .click();
+        await tab.waitForTimeout(600);
+      },
+    ],
+    [
+      "comments rail search matches",
+      async (tab) => {
+        await railRows(tab);
+        await tab.locator(`${RAIL} [data-slot="search-open"]`).click();
+        const field = tab.locator(`${RAIL} input[data-slot="search"]`);
+        await field.waitFor({ timeout: 5000 });
+        await field.fill("glass");
+        await tab.waitForTimeout(800);
+        const marks = await tab.locator(`${RAIL} [data-pin-row] mark`).count();
+        kit.check(
+          `comments rail search ${tab.viewportSize()?.width}: Search opens its field in the bar, and Find marks the matching words`,
+          (await field.evaluate((el) => !!el.closest('[data-slot="bar"]'))) &&
+            marks > 0,
+          `${marks} mark(s)`
+        );
+      },
+    ],
+    [
+      "comments rail search none",
+      async (tab) => {
+        await railRows(tab);
+        await tab.keyboard.press("Escape");
+        await tab.locator(`${RAIL} [data-slot="search-open"]`).click();
+        const field = tab.locator(`${RAIL} input[data-slot="search"]`);
+        await field.fill("zebra");
+        await tab.waitForTimeout(800);
+        const none = await tab
+          .locator(`${RAIL} [data-slot="pin-list-empty"]`)
+          .innerText()
+          .catch(() => "");
+        await field.press("Escape");
+        await tab.waitForTimeout(300);
+        const folded =
+          (await tab.locator(`${RAIL} input[data-slot="search"]`).count()) ===
+          0;
+        await tab.locator(`${RAIL} [data-slot="search-open"]`).click();
+        await tab.locator(`${RAIL} input[data-slot="search"]`).fill("zebra");
+        await tab.waitForTimeout(800);
+        kit.check(
+          `comments rail search none ${tab.viewportSize()?.width}: "${commentWords.noMatch("zebra")}", and Esc folds the field back into Search`,
+          none.trim() === commentWords.noMatch("zebra") && folded,
+          JSON.stringify({ none, folded })
+        );
+      },
+    ],
+  ];
+  for (const [state, then] of railStates) {
+    await surface(
+      state,
+      SESSION,
+      '[data-slot="side-head"]',
+      WIDTHS,
+      then,
+      RAIL
+    );
+  }
+
+  // A comment's thread: open, resolved, with Delete asking, and its peek
+  // (a mouse resting on its pill; no peek under a finger).
+  const CARD = ':is([data-slot="pin-card"], [data-slot="thread-sheet"])';
+  const threadOf = async (tab: Page, resolved: boolean): Promise<void> => {
+    await railRows(tab);
+    if (resolved) {
+      await tab
+        .locator(RAIL)
+        .getByRole("tab", { name: commentWords.resolved })
+        .click();
+      await tab.waitForTimeout(400);
+    }
+    await tab
+      .locator(
+        `${RAIL} [data-slot="pin-row"][data-pin-row="${resolved ? 3 : 1}"]`
+      )
+      .click();
+    await tab.locator(CARD).first().waitFor({ timeout: 10_000 });
+    await tab.waitForTimeout(800);
+    const groups = await tab
+      .locator(`${CARD} [data-slot="bar"] [data-slot="tools"]`)
+      .count();
+    const bands = await tab.locator(`${CARD} header`).count();
+    kit.check(
+      `comments thread ${tab.viewportSize()?.width}: its actions float as two glass groups (Close in its own) with no head band`,
+      groups === 2 && bands === 0,
+      JSON.stringify({ groups, bands })
+    );
+  };
+  const threadStates: [string, typeof WIDTHS, (tab: Page) => Promise<void>][] =
+    [
+      ["comments thread open", WIDTHS, (tab) => threadOf(tab, false)],
+      ["comments thread resolved", WIDTHS, (tab) => threadOf(tab, true)],
+      [
+        "comments thread delete asking",
+        WIDTHS,
+        async (tab) => {
+          await threadOf(tab, false);
+          await tab.locator(`${CARD} [data-slot="delete"]`).click();
+          await tab
+            .locator(`${CARD} [data-ask="delete"]`)
+            .waitFor({ timeout: 5000 });
+        },
+      ],
+      [
+        "comments thread peek",
+        WIDTHS.filter(({ view }) => view !== "phone"),
+        async (tab) => {
+          const frame = await pinsOn(tab);
+          const face = frame
+            .locator('svg[data-cawco-pins] g[data-pin="1"] [data-face]')
+            .first();
+          await face.waitFor({ timeout: 20_000 });
+          const box = await face.boundingBox();
+          if (box) {
+            await tab.mouse.move(
+              box.x + box.width / 2,
+              box.y + box.height / 2,
+              {
+                steps: 3,
+              }
+            );
+          }
+          await tab
+            .locator('[data-slot="pin-peek"]')
+            .waitFor({ timeout: 5000 });
+          kit.check(
+            `comments thread peek ${tab.viewportSize()?.width}: the peek floats no actions`,
+            (await tab
+              .locator('[data-slot="pin-peek"] [data-slot="tools"]')
+              .count()) === 0
+          );
+        },
+      ],
+    ];
+  for (const [state, widths, then] of threadStates) {
+    await surface(state, SESSION, '[data-slot="side-head"]', widths, then);
+  }
+
+  // The artifact panel with the rail open, and expanded, read whole.
+  await surface(
+    "artifact panel rail open",
+    SESSION,
+    '[data-slot="side-head"]',
+    WIDTHS,
+    async (tab) => {
+      await railRows(tab);
+      const closes = await tab
+        .locator(`${RAIL} [aria-label="${commentWords.closeComments}"]`)
+        .count();
+      const sheet = (await tab.locator('[data-slot="rail-sheet"]').count()) > 0;
+      kit.check(
+        `artifact panel rail open ${tab.viewportSize()?.width}: the rail has its own Close only as the foot sheet`,
+        closes === (sheet ? 1 : 0),
+        JSON.stringify({ closes, sheet })
+      );
+    }
+  );
+  await surface(
+    "artifact panel expanded",
+    SESSION,
+    '[data-slot="side-head"]',
+    WIDTHS,
+    async (tab) => {
+      const expand = tab.locator(
+        '[data-slot="side-head"] [aria-label="Expand"]'
+      );
+      if (await expand.isVisible().catch(() => false)) {
+        await expand.click();
+        await tab.waitForTimeout(900);
+      }
+    }
+  );
+
+  // The split's edge: nothing at rest, its grip under the pointer.
+  const deskEdge = await kit.page("desk");
+  await open(deskEdge, SESSION, '[data-slot="side-head"]', 90_000);
+  await deskEdge.waitForTimeout(2000);
+  const edge = deskEdge.locator("[data-side-divider]").first();
+  const inkOf = () =>
+    edge.evaluate((node) => getComputedStyle(node).backgroundColor);
+  const atRest = await inkOf();
+  const edgeBox = await edge.boundingBox();
+  if (edgeBox) {
+    await deskEdge.mouse.move(
+      edgeBox.x + edgeBox.width / 2,
+      edgeBox.y + edgeBox.height / 2
+    );
+  }
+  await deskEdge.waitForTimeout(400);
+  const hovered = await inkOf();
+  await shot(kit, deskEdge, "split-edge-hover");
+  kit.check(
+    "the split's edge draws no line at rest and its grip under the pointer",
+    atRest === "rgba(0, 0, 0, 0)" && hovered !== atRest,
+    JSON.stringify({ atRest, hovered })
+  );
+  await deskEdge.context().close();
 
   // The artifact panel's head (the mode centred, the trailing glass, Close
   // in its own) beside the conversation, read whole: the top bar's shelf and

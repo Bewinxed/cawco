@@ -40,16 +40,24 @@
 </script>
 
 <HeadFade band="var(--c-top-bar-h)" {tint} />
+<!-- With a centre, leading and trailing share the room either side of it
+     so the centre stands centred; with none, leading takes all the room
+     the trailing group leaves (a search field opened in the bar). -->
 <div
   data-slot="bar"
-  class="pointer-events-none absolute inset-x-0 top-0 z-2 grid h-c-top-bar-h grid-cols-[1fr_auto_1fr] items-center gap-space-2 px-space-2 [&_[data-slot=tools]]:pointer-events-auto"
+  class={[
+    "pointer-events-none absolute inset-x-0 top-0 z-2 grid h-c-top-bar-h items-center gap-space-2 px-space-2 [&_[data-slot=tools]]:pointer-events-auto",
+    center ? "grid-cols-[1fr_auto_1fr]" : "grid-cols-[minmax(0,1fr)_auto]",
+  ]}
 >
-  <div class="flex min-w-0 items-center gap-space-2 justify-self-start">
+  <div class="flex min-w-0 items-center gap-space-2">
     {@render leading?.()}
   </div>
-  <div class="flex items-center justify-self-center">
-    {@render center?.()}
-  </div>
+  {#if center}
+    <div class="flex items-center justify-self-center">
+      {@render center()}
+    </div>
+  {/if}
   <div class="flex items-center gap-space-2 justify-self-end">
     {@render trailing?.()}
   </div>

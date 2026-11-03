@@ -470,9 +470,9 @@ const leg = async (
 
   // 2. A field in the drawer focused: its search, then a thread's Reply.
   const search = page.locator(`${RAIL} input[data-slot="search"]`);
-  // The press lands on the field's frame, whose touch area stands over the
-  // field and hands it the focus (ui/input-group `focusField`).
-  await page.locator(`${RAIL} [data-slot="input-group"]`).click();
+  // Search, a symbol in the rail's glass group, opens the field in the bar
+  // and hands it the focus.
+  await page.locator(`${RAIL} [data-slot="search-open"]`).click();
   await settle(page, 400);
   const searching = await pageBox(page, frame);
   const searchCover = phone ? await atComposer(page) : null;

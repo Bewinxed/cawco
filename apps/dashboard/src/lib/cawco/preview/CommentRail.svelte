@@ -7,16 +7,19 @@
    * The Comments rail (DESIGN.md, The Comments rail): beside the page on a
    * desk, the head's Comments its pressed toggle, the page narrowed to meet
    * it; on a phone, or a pane under 640px, the well's foot sheet, at most 60%
-   * of it. It closes only by its Close or by Comments, never by a press
-   * outside or Esc.
+   * of it. On a desk it closes only by Comments; the foot sheet also by its
+   * Close. Never by a press outside or Esc.
    *
-   * Its bar (44px) carries no title, since Comments, pressed, names it
-   * (DESIGN.md, The Title Bars Follow Liquid Glass Rule): Sort, a comment on
-   * the whole page and Close float at its trailing edge as one glass group
-   * of bare symbols (BarGlass `form="group"`). Under it the search field (Find's
-   * engine, core find-match, over each comment's number, words, place and
-   * state; `/` focuses it, Esc clears it), and Open and Resolved, the
-   * segmented filter, each count only above 0. Then the rows, newest first
+   * It carries no title and no band, since Comments, pressed, names it
+   * (DESIGN.md, The Title Bars Follow Liquid Glass Rule): Search, Sort, a
+   * comment on the whole page (and the sheet's Close) float at its trailing
+   * edge as one glass group of bare symbols (BarFloat, BarGlass
+   * `form="group"`), over the rows, which start at the rail's top and blur
+   * under the group from the first scroll. Search, pressed or `/`, opens its
+   * field in the bar (Find's engine, core find-match, over each comment's
+   * number, words, place and state); Esc, or the field left empty, folds it
+   * back. First under the group Open and Resolved, the segmented filter,
+   * each count only above 0. Then the rows, newest first
    * by last activity (or top of page first), each one press in up to four
    * lines (The Row Dress Rule): the same pill as on the page in its mark
    * cell; the place, its name in label at 500 in the row ink and its age at
@@ -40,11 +43,15 @@
    * same fault line stands over the rows, which keep their last read.
    */
   import { commentWords as said } from "@cawco/core/words/comments";
-  import { type Snippet, untrack } from "svelte";
+  import { type Snippet, tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import RegionBoundary from "#lib/cawco/RegionBoundary.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
-  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import {
+    BarFloat,
+    BarGlass,
+    BarItem,
+  } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent from "#lib/components/ui/button/pending-content.svelte";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
@@ -159,7 +166,7 @@
     scroll?: number;
   } = $props();
 
-  /** A finger taps the page, a mouse clicks it: the empty line says which; no Resolve on a row under a finger. */
+  /** No Resolve on a row under a finger. */
   const coarse = new MediaQuery("(pointer: coarse)");
 
   let query = $state("");
@@ -176,9 +183,21 @@
     return () => clearTimeout(wait);
   });
   let searchField = $state<HTMLInputElement | null>(null);
-  /** `/` from the pane: the search field takes the keyboard. */
+  let searchItem = $state<HTMLElement | null>(null);
+  /** The search field stands open in the bar, in the Search symbol's place. */
+  let searching = $state(false);
+  /** Search pressed, or `/` from the pane: the field opens in the bar and takes the keyboard. */
   export function focusSearch() {
-    searchField?.focus();
+    searching = true;
+    tick().then(() => searchField?.focus());
+  }
+  /** Esc, or the field left empty: it folds back into the Search symbol; Esc hands the symbol the keyboard. */
+  function foldSearch(refocus: boolean) {
+    query = "";
+    searching = false;
+    if (refocus) {
+      tick().then(() => searchItem?.focus());
+    }
   }
 
   const openPins = $derived(pins.filter((pin) => !pin.resolvedAt));
@@ -503,100 +522,139 @@
   data-slot="comment-rail"
   aria-label={said.comments}
   data-layout={layout}
-  class="flex flex-col min-h-0 w-c-comments-w max-w-full bg-surface-raised data-[layout=beside]:h-full data-[layout=sheet]:w-full data-[layout=sheet]:max-h-full data-[layout=sheet]:border-t data-[layout=sheet]:border-border-hairline data-[layout=sheet]:rounded-ss-lg data-[layout=sheet]:rounded-se-lg data-[layout=sheet]:shadow-drawer"
+  class="relative flex flex-col min-h-0 w-c-comments-w max-w-full timeline-scope-transcript-head data-[layout=beside]:h-full data-[layout=sheet]:bg-surface-raised data-[layout=sheet]:w-full data-[layout=sheet]:max-h-full data-[layout=sheet]:border-t data-[layout=sheet]:border-border-hairline data-[layout=sheet]:rounded-ss-lg data-[layout=sheet]:rounded-se-lg data-[layout=sheet]:shadow-drawer"
 >
-  <div
-    data-slot="bar"
-    class="flex flex-none items-center justify-end h-c-top-bar-h px-space-2"
+  <!-- No title and no band (The Title Bars Follow Liquid Glass Rule): its
+       controls float as one glass group over the rows, which start at the
+       rail's top and blur under the group from the first scroll (BarFloat).
+       Search is a symbol that opens its field in the bar, in its own place
+       (HIG, Search fields: "it appears as a toolbar button. When someone
+       taps it, it animates into a search field"). Close only on the foot
+       sheet: on a desk the head's Comments shuts it. -->
+  <BarFloat
+    tint={layout === "sheet" ? "bg-surface-raised" : "bg-surface-recess"}
   >
-    <BarGlass form="group">
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger>
-          {#snippet child({ props })}
-            <BarItem icon={IconSort} label={said.sort} {props} />
-          {/snippet}
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end">
-          <DropdownMenu.RadioGroup
-            onValueChange={(next) => {
-              sort = next === "top" ? "top" : "newest";
-            }}
-            value={sort}
-          >
-            <DropdownMenu.RadioItem value="newest"
-              >{said.newestFirst}</DropdownMenu.RadioItem
-            >
-            <DropdownMenu.RadioItem value="top"
-              >{said.topOfPageFirst}</DropdownMenu.RadioItem
-            >
-          </DropdownMenu.RadioGroup>
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
-      <BarItem icon={IconPlus} label={said.onWholePage} onclick={onpage} />
-      <BarItem icon={IconClose} label={said.closeComments} onclick={onclose} />
-    </BarGlass>
-  </div>
-  <div class="flex flex-none flex-col gap-space-2 px-space-3 pb-space-2">
-    <InputGroup.Root>
-      <InputGroup.Addon><IconSearch /></InputGroup.Addon>
-      <InputGroup.Input
-        aria-keyshortcuts="/"
-        aria-label={said.searchComments}
-        data-slot="search"
-        onkeydown={(event: KeyboardEvent) => {
-          if (event.key === "Escape" && query) {
-            event.preventDefault();
-            event.stopPropagation();
-            query = "";
-          }
-        }}
-        placeholder={said.searchComments}
-        type="search"
-        bind:ref={searchField}
-        bind:value={query}
-      />
-    </InputGroup.Root>
-    <Tabs
-      onValueChange={(next) => {
-        filter = next as "check" | "open" | "resolved";
-      }}
-      size="compact"
-      value={filter}
-      values={checks ? ["check", "open", "resolved"] : ["open", "resolved"]}
-    >
-      <TabsList aria-label="Which comments">
-        {#if checks}
-          <TabItem label={tab(said.toCheck, checks.count)} value="check" />
+    {#snippet leading()}
+      {#if searching}
+        <!-- The field takes presses where the bar's empty row takes none. -->
+        <div class="flex-1 min-w-0 pointer-events-auto" data-slot="search-bar">
+          <InputGroup.Root look="bar">
+            <InputGroup.Addon><IconSearch /></InputGroup.Addon>
+            <InputGroup.Input
+              aria-keyshortcuts="/"
+              aria-label={said.searchComments}
+              data-slot="search"
+              onblur={() => {
+                if (!query.trim()) {
+                  foldSearch(false);
+                }
+              }}
+              onkeydown={(event: KeyboardEvent) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  foldSearch(true);
+                }
+              }}
+              placeholder={said.searchComments}
+              type="search"
+              bind:ref={searchField}
+              bind:value={query}
+            />
+          </InputGroup.Root>
+        </div>
+      {/if}
+    {/snippet}
+    {#snippet trailing()}
+      <BarGlass form="group">
+        {#if !searching}
+          <BarItem
+            aria-keyshortcuts="/"
+            data-slot="search-open"
+            icon={IconSearch}
+            keys="/"
+            label={said.searchComments}
+            onclick={focusSearch}
+            bind:ref={searchItem}
+          />
         {/if}
-        <TabItem label={tab(said.open, openPins.length)} value="open" />
-        <TabItem
-          label={tab(said.resolved, resolvedPins.length)}
-          value="resolved"
-        />
-      </TabsList>
-    </Tabs>
-  </div>
-  {#if down !== null && failed === null}
-    <!-- A link stands lost: said above the rows, which stand as last read, with what closed it under Show details. -->
-    <RowFault
-      data-pin-list-down
-      again={onretry}
-      class="shrink-0 py-space-1 px-space-3"
-      details={down}
-      end="var(--space-2)"
-      indent="var(--space-2)"
-      reason={LINK_DROPPED}
-    />
-  {/if}
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger>
+            {#snippet child({ props })}
+              <BarItem icon={IconSort} label={said.sort} {props} />
+            {/snippet}
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="end">
+            <DropdownMenu.RadioGroup
+              onValueChange={(next) => {
+                sort = next === "top" ? "top" : "newest";
+              }}
+              value={sort}
+            >
+              <DropdownMenu.RadioItem value="newest"
+                >{said.newestFirst}</DropdownMenu.RadioItem
+              >
+              <DropdownMenu.RadioItem value="top"
+                >{said.topOfPageFirst}</DropdownMenu.RadioItem
+              >
+            </DropdownMenu.RadioGroup>
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+        <BarItem icon={IconPlus} label={said.onWholePage} onclick={onpage} />
+        {#if layout === "sheet"}
+          <BarItem
+            icon={IconClose}
+            label={said.closeComments}
+            onclick={onclose}
+          />
+        {/if}
+      </BarGlass>
+    {/snippet}
+  </BarFloat>
   <div
     data-slot="rows"
-    class="relative flex-auto min-h-0 overflow-y-auto overscroll-contain border-t border-border-hairline kit-edge-fade-block"
+    class="relative flex-auto min-h-0 overflow-y-auto overscroll-contain scroll-timeline-transcript-head pt-c-top-bar-h"
     onscroll={(event) => {
       scroll = event.currentTarget.scrollTop;
     }}
     style:--fault-indent="var(--space-2)"
     style:--fault-end="var(--space-2)"
   >
+    <!-- Open and Resolved, the scope of the rows under it (HIG, Search
+         fields: "include a scope bar in the search results content area"). -->
+    <div class="px-space-3 pb-space-1">
+      <Tabs
+        onValueChange={(next) => {
+          filter = next as "check" | "open" | "resolved";
+        }}
+        size="compact"
+        value={filter}
+        values={checks ? ["check", "open", "resolved"] : ["open", "resolved"]}
+      >
+        <TabsList aria-label="Which comments">
+          {#if checks}
+            <TabItem label={tab(said.toCheck, checks.count)} value="check" />
+          {/if}
+          <TabItem label={tab(said.open, openPins.length)} value="open" />
+          <TabItem
+            label={tab(said.resolved, resolvedPins.length)}
+            value="resolved"
+          />
+        </TabsList>
+      </Tabs>
+    </div>
+    {#if down !== null && failed === null}
+      <!-- A link stands lost: said above the rows, which stand as last read, with what closed it under Show details. -->
+      <RowFault
+        data-pin-list-down
+        again={onretry}
+        class="py-space-1 px-space-3"
+        details={down}
+        end="var(--space-2)"
+        indent="var(--space-2)"
+        reason={LINK_DROPPED}
+      />
+    {/if}
     {#if hold === "quiet"}
       <!-- Inside the wait's grace: its plain surface (The Real Wait Rule). -->
     {:else if hold === "reading"}
@@ -689,10 +747,9 @@
         {:else if filter === "open"}
           <p
             data-slot="pin-list-empty"
-            class="flex flex-col gap-space-1 m-0 px-space-2 py-space-3 text-ink-muted text-size-meta"
+            class="m-0 px-space-2 py-space-3 text-ink-strong type-label"
           >
-            <span class="text-ink-strong type-label">{said.noneOpen}</span>
-            {coarse.current ? said.noneOpenTap : said.noneOpenClick}
+            {said.noneOpen}
           </p>
         {:else}
           <p

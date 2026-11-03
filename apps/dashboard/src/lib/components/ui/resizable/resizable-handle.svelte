@@ -2,8 +2,10 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  /** Its callers' looks, each as they drew it: the line in the hairline
-      ink, the control's under the pointer and the muted ink while it is
+  /** Its callers' looks, each as they drew it: a pane grid's line in the
+      hairline ink, a split's edge with no line at rest (its side surface
+      floats, so the shadow parts them); each the control's ink under the
+      pointer or the keyboard's focus and the muted ink while it is
       dragged, its colour easing over --dur-control. A split's side handle
       marks the drag with `data-active`; a pane grid's with paneforge's
       keyboard or pointer state, and eases only with motion. A split's
@@ -17,7 +19,7 @@
     variants: {
       look: {
         split:
-          "bg-border-hairline transition-[background-color] duration-(--dur-control) ease-out not-data-active:hover:bg-border-control data-hidden:hidden data-active:bg-ink-muted data-expanded:after:left-px data-expanded:after:w-c-side-grip-w data-expanded:after:translate-x-0",
+          "bg-transparent transition-[background-color] duration-(--dur-control) ease-out not-data-active:hover:bg-border-control not-data-active:focus-visible:bg-border-control data-hidden:hidden data-active:bg-ink-muted data-expanded:after:left-px data-expanded:after:w-c-side-grip-w data-expanded:after:translate-x-0",
         grid: "bg-border-hairline not-active-keyboard:not-active-pointer:hover:bg-border-control active-keyboard:bg-ink-muted active-pointer:bg-ink-muted motion-safe:transition-[background-color] motion-safe:duration-(--dur-control) motion-safe:ease-out motion-reduce:transition-off",
       },
     },

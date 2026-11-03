@@ -6,8 +6,18 @@
     ref = $bindable(null),
     class: className,
     children,
+    look = "field",
     ...props
-  }: WithElementRef<HTMLAttributes<HTMLDivElement>> = $props();
+  }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
+    /**
+     * `field`: the field frame (DESIGN.md, Inputs and fields). `bar`: a
+     * search field opened in a floating bar, a capsule of the panel's glass
+     * as tall as the bar's groups (The Title Bars Follow Liquid Glass Rule;
+     * HIG, Toolbars: "standard buttons, text fields … have corner radii that
+     * are concentric with bar corners").
+     */
+    look?: "field" | "bar";
+  } = $props();
 
   /**
    * A press on the frame's touch area beside its field: the field's own
@@ -36,9 +46,11 @@
 <div
   class={cn(
     "touch-hit hit-under [--hit-edge:1px]",
-    "relative flex h-9 w-full min-w-0 items-center rounded-md",
-    "border border-border-control",
-    "field-edge bg-surface-raised shadow-xs",
+    "relative flex w-full min-w-0 items-center",
+    "border field-edge",
+    look === "bar"
+      ? "h-c-btn-h rounded-pill border-border-hairline bg-material-panel shadow-tile glass-backdrop contrast-more:border-border-contrast contrast-more:bg-surface-raised contrast-more:backdrop-filter-none reduced-transparency:border-border-contrast reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"
+      : "h-9 rounded-md border-border-control bg-surface-raised shadow-xs",
     "[transition:var(--transition-control)]",
     "has-[>[data-align=block-end]]:h-auto",
     "has-[>[data-align=block-start]]:h-auto",

@@ -250,9 +250,8 @@ final class PinListController: UIViewController {
         }
         fault.isHidden = fault.arrangedSubviews.isEmpty
         let shown = resolvedShown ? resolved : open
-        empty.text = resolvedShown
-            ? "No resolved comments. A pin you resolve leaves the page and waits here."
-            : "No open comments. Choose Comment, then tap the page to pin one."
+        // The web rail's empty lines, and nothing after them (core words/comments.ts `noneOpen`, `noneResolved`).
+        empty.text = resolvedShown ? "Nothing resolved yet" : "No open comments"
         // Nothing is claimed empty before the pins are read (The Claim Of Nothing Rule).
         empty.superview?.isHidden = !(ready && shown.isEmpty)
         for pin in ready ? shown : [] {

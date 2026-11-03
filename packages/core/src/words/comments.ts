@@ -56,8 +56,6 @@ export const commentWords = {
   open: "Open",
   resolved: "Resolved",
   noneOpen: "No open comments",
-  noneOpenClick: "Choose Comment, then click something on the page.",
-  noneOpenTap: "Choose Comment, then tap something on the page.",
   noneResolved: "Nothing resolved yet",
   noMatch: (query: string) => `Nothing matches “${query}”`,
   attached: (n: number) => `${n} attached`,

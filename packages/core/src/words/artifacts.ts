@@ -94,10 +94,6 @@ export const artifactWords = {
   commentsNotRead: (why: string) => `The comments couldn't be read. ${why}`,
   /** A gone pin's notice, a sentence of its own: what it stood on is gone. */
   pinElementGone: "Its element is gone from the page.",
-  /** No open pins yet, how to pin one, by the pointer that will: a mouse clicks… */
-  pinsNoneOpenClick: "Choose Comment, then click the page to pin one.",
-  /** …and a finger taps. */
-  pinsNoneOpenTap: "Choose Comment, then tap the page to pin one.",
 
   // ── A sheet's inspector (preview/SheetInspector.svelte) ──
   inspect: "Inspect",

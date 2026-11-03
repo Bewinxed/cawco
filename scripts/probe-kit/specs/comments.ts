@@ -7873,8 +7873,11 @@ const railUseChecks = async (
 ) => {
   const railNow = on.page.locator(RAIL);
   const pinsNow = async () => (await docOf(await pageFrame(on))).pins as Pins;
-  // Search on Find's engine: the matching words marked; none says so; Esc clears.
-  const search = railNow.locator('[data-slot="search"]');
+  // Search on Find's engine, its field opened from the Search symbol in the
+  // rail's glass group: the matching words marked; none says so; Esc clears
+  // it and folds the field back into the symbol.
+  await railNow.locator('[data-slot="search-open"]').click();
+  const search = railNow.locator('input[data-slot="search"]');
   await search.fill("heading");
   await settle(on.page, 400);
   const found = await railNow.locator('[data-slot="pin-row"]').count();
@@ -7891,12 +7894,13 @@ const railUseChecks = async (
   await settle(on.page, 400);
   const all = await railNow.locator('[data-slot="pin-row"]').count();
   on.kit.check(
-    'search: "heading" finds the heading\'s comments, their words marked; "zzzqx" says Nothing matches “zzzqx”; Esc clears it',
+    'search: "heading" finds the heading\'s comments, their words marked; "zzzqx" says Nothing matches “zzzqx”; Esc clears it and folds the field back into Search',
     found >= 1 &&
       found < all &&
       marked >= 1 &&
       none === "Nothing matches “zzzqx”" &&
-      (await search.inputValue()) === "",
+      (await search.count()) === 0 &&
+      (await railNow.locator('[data-slot="search-open"]').count()) === 1,
     JSON.stringify({ found, marked, none, all })
   );
   // Sort: Top of page first, by the anchors' boxes.
