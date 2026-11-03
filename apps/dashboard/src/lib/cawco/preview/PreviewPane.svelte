@@ -1204,14 +1204,11 @@
       return;
     }
     const refused = await enterPreviews(origin, performance.now());
-    if (refused) {
-      if (said) {
-        failure = {
-          message: `The hub didn't give this preview a pass: ${refused}`,
-          again: null,
-        };
-      }
-      return;
+    if (refused && said) {
+      failure = {
+        message: `The hub didn't give this preview a pass: ${refused}`,
+        again: null,
+      };
     }
     post({ type: "cawco:reconnect" });
   }
