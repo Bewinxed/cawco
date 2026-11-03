@@ -48,6 +48,9 @@
     Badge,
     Row,
     Column,
+    Setup: Text,
+    Stage: Text,
+    Delegate: Text,
   });
   /** caw-off-calls, as the hub keeps it: its second card throws, and the first card's diagram. */
   const PROGRAM = `root = Decisions("Turning Caw off: the tray you asked for", [build, throws, keeps])

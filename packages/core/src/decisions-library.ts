@@ -11,9 +11,13 @@
  * decision page asks the person to pick, shows media, and runs no `Query()`.
  * Text, Badge, Row and Column are the view library's, by name and shape.
  *
- * A page cannot run code or reach the network: the library has no action,
- * link or input, and media name files beside the program or artifacts the
- * hub keeps, by id.
+ * A page cannot run code or reach the network: the library has no action
+ * or link, and media name files beside the program or artifacts the hub
+ * keeps, by id. Its one input is a project's setup (`Setup`): the name,
+ * what it is for, its stages and its delegates, drafted by Caw as data and
+ * edited by the person in place on the house's own controls, its values kept
+ * through the page's bridge (`cawco.set`) under `name`, `aim`, `stages`,
+ * `shape` and `delegates` (hub setup.ts).
  */
 import {
   createLibrary,
@@ -22,7 +26,13 @@ import {
   type PromptOptions,
 } from "@openuidev/lang-core";
 import { z } from "zod";
-import { VIEW_TEXT_ROLES, VIEW_TONES } from "./views";
+import {
+  STAGE_COLORS,
+  STAGE_ICONS,
+  STAGE_KINDS,
+  VIEW_TEXT_ROLES,
+  VIEW_TONES,
+} from "./views";
 
 /** Every component a decision page may name, in the order the prompt lists them. */
 export const DECISION_COMPONENTS = [
@@ -39,6 +49,9 @@ export const DECISION_COMPONENTS = [
   "Badge",
   "Row",
   "Column",
+  "Setup",
+  "Stage",
+  "Delegate",
 ] as const;
 export type DecisionComponentName = (typeof DECISION_COMPONENTS)[number];
 
@@ -283,6 +296,71 @@ export const decisionLibrary = <C>(
         ),
     })
   );
+  const Stage = define(
+    "Stage",
+    "One stage of a project's setup: what the board calls it, its kind, its look, and what it hooks.",
+    z.object({
+      name: z
+        .string()
+        .describe(
+          'As the board reads it, plain words after the first letter: "Your call", "Waiting on reply".'
+        ),
+      kind: z.enum(STAGE_KINDS),
+      icon: z
+        .enum(STAGE_ICONS)
+        .optional()
+        .describe("Its mark's glyph, for what the stage is."),
+      color: z
+        .enum(STAGE_COLORS)
+        .optional()
+        .describe(
+          "Its mark's colour: give stages of one kind of work one colour; none for a stage that needs none."
+        ),
+      hooks: z
+        .record(z.string(), z.string())
+        .optional()
+        .describe(
+          'Its stages.md hooks, kept as written: {runs: "writer"}, {after: "7d"}, {until: "post_at"}.'
+        ),
+      line: z
+        .string()
+        .optional()
+        .describe('What its hooks do, in words: "Runs the writer".'),
+    })
+  );
+  const Delegate = define(
+    "Delegate",
+    "One delegate type the project's stages run: kept unless the person removes it.",
+    z.object({
+      id: z.string().describe("Its type's name, as delegates/<id>.md."),
+      name: z.string(),
+      brief: z.string().describe("One line of its brief, from their words."),
+      runs: z
+        .string()
+        .optional()
+        .describe('Its harness and model: "Claude Code · Opus".'),
+    })
+  );
+  const Setup = define(
+    "Setup",
+    "A project's setup (the project-setup skill), its one input: its name and what it is for as an editable title and description, its stages as a strip the person renames, re-kinds, restyles, reorders, adds to and removes from, and its delegates, each removable. The page's Send sets it up.",
+    z.object({
+      name: z.string(),
+      aim: z
+        .string()
+        .describe(
+          "What it is for and how its work is done, in your words: the seed of AGENTS.md."
+        ),
+      stages: z.array(Stage.ref),
+      delegates: z.array(Delegate.ref).optional(),
+      shape: z
+        .string()
+        .optional()
+        .describe(
+          'The shipped template the stages start from, or "own" when you drafted them.'
+        ),
+    })
+  );
   const Section = define(
     "Section",
     "A heading over some decisions on the page.",
@@ -293,10 +371,12 @@ export const decisionLibrary = <C>(
   );
   const Decisions = define(
     "Decisions",
-    "The page: its title, Caw, the count picked, Send picks. The root.",
+    "The page: its title, Caw, the count picked, Send picks. The root. A setup page holds one Setup, and its Send sets the project up.",
     z.object({
       title: z.string(),
-      children: z.array(z.union([Section.ref, Decision.ref, Dials.ref, media])),
+      children: z.array(
+        z.union([Section.ref, Decision.ref, Dials.ref, Setup.ref, media])
+      ),
     })
   );
 
@@ -315,6 +395,9 @@ export const decisionLibrary = <C>(
       Badge,
       Row,
       Column,
+      Setup,
+      Stage,
+      Delegate,
     ],
     root: DECISION_ROOT,
   });

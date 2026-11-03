@@ -75,6 +75,21 @@ const rawImports: Bun.BunPlugin = {
   },
 };
 
+/** SvelteKit's `$app/env`, which the kit's menus and popovers read `browser` from. */
+const APP_ENV = /^\$app\/env$/u;
+/**
+ * `$app/env` in the host: the page is always drawn in a browser
+ * (host/app-env.ts), so the kit's menus mount as in the dashboard.
+ */
+const appEnv: Bun.BunPlugin = {
+  name: "app env",
+  setup(build) {
+    build.onResolve({ filter: APP_ENV }, () => ({
+      path: join(HOST_DIR, "app-env.ts"),
+    }));
+  },
+};
+
 /** A compiled component's import of the Svelte runtime: `import 'svelte/…'` or `from 'svelte/…'`, either quote. */
 const SVELTE_IMPORT = /(\bfrom |\bimport )["'](svelte\/[^"']+)["']/gu;
 
@@ -271,6 +286,7 @@ export async function buildDecisionHost(): Promise<Map<string, Blob>> {
     minify: true,
     conditions: ["browser", "production"],
     plugins: [
+      appEnv,
       rawImports,
       await iconsPlugin(),
       svelteStylesApart(vendor),
