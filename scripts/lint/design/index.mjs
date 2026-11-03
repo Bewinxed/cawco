@@ -119,6 +119,7 @@ const INLINE_STYLES = {
   ],
   "src/lib/cawco/preview/PinCard.svelte": ["left", "max-width", "top"],
   "src/lib/cawco/project/CardFace.svelte": ["color"],
+  "src/lib/cawco/project/NewProject.svelte": ["block-size"],
   "src/lib/cawco/project/TemplateCards.svelte": ["translate"],
   "src/lib/cawco/side/SideSheet.svelte": ["height"],
   "src/lib/cawco/spawn/EffortPips.svelte": [
@@ -222,7 +223,6 @@ const INLINE_STYLES = {
   "src/routes/(app)/config/models/+page.svelte": ["block-size"],
   "src/routes/(app)/motion/delegate-tray/+page.svelte": ["width"],
   "src/routes/(app)/project/[id]/+page.svelte": ["animation", "block-size"],
-  "src/routes/(app)/project/new/+page.svelte": ["block-size"],
   // A decision page's media measure their own box while mounted: Preview's
   // frame takes the height its page or component canvas says it stands at,
   // and Canvas's frame the box its drawing's shape gives it in its well
