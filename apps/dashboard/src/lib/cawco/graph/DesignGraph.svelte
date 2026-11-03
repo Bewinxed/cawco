@@ -84,7 +84,7 @@
   import { browser } from "$app/env";
   import { figureOf, pageLang } from "./figures";
   import Journey from "./Journey.svelte";
-  import MoveFace, { type MoveState, type Timings } from "./MoveFace.svelte";
+  import MoveFace, { type MoveState } from "./MoveFace.svelte";
   import {
     type Move,
     moveInto,
@@ -276,14 +276,8 @@
     playing = false;
     cancelAnimationFrame(clock);
   };
-  /** The animation as read, or as he changed it: what the rows show and Play plays. */
-  let timings = $state<Timings>("edited");
-  const clipsNow = (): Clip[] => {
-    if (move.kind !== "ready") {
-      return [];
-    }
-    return timings === "original" ? move.clips.map(untune) : move.clips;
-  };
+  /** The animation as read, with what he changed: what the rows show and Play plays. */
+  const clipsNow = (): Clip[] => (move.kind === "ready" ? move.clips : []);
 
   /**
    * The stage is on its way to the kept state (mounting it, or playing and
@@ -339,7 +333,6 @@
     run += 1;
     const mine = run;
     playhead = 0;
-    timings = "edited";
     const to = nameIn(on, pick.state) || pick.state;
     const into = pick.variant === null ? moveInto(on, pick.state) : null;
     const played = into && on.states[pick.state]?.play ? into : null;
@@ -412,16 +405,14 @@
     });
   });
 
-  /** The rate the move last played at, and the one a scrub resumes at once let go. */
-  let lastRate = 1;
-  let resumeRate: number | null = null;
-  const play = (rate: number) => {
+  /** A scrub during play: once let go, the move plays on. */
+  let resume = false;
+  const play = () => {
     const clips = clipsNow();
     if (clips.length === 0) {
       return;
     }
     stop();
-    lastRate = rate;
     const length = lengthOf(clips);
     if (still) {
       replays.seek(clips, length);
@@ -430,11 +421,11 @@
       return;
     }
     const from = playhead >= length ? 0 : playhead;
-    replays.play(clips, from, rate);
+    replays.play(clips, from);
     playing = true;
     const t0 = performance.now();
     const step = () => {
-      playhead = Math.min(length, from + (performance.now() - t0) * rate);
+      playhead = Math.min(length, from + (performance.now() - t0));
       if (playhead >= length) {
         playing = false;
         playhead = 0;
@@ -447,7 +438,7 @@
   /** A scrub while the move plays pauses it; let go, it plays on from there (DialKit's rule). */
   const scrub = (t: number) => {
     if (playing) {
-      resumeRate = lastRate;
+      resume = true;
     }
     stop();
     playhead = t;
@@ -463,10 +454,9 @@
     arrive(review, kept);
   };
   const scrubbed = () => {
-    if (resumeRate !== null) {
-      const rate = resumeRate;
-      resumeRate = null;
-      play(rate);
+    if (resume) {
+      resume = false;
+      play();
     }
   };
   /**
@@ -504,12 +494,9 @@
       ...move,
       clips: move.clips.map((clip) => by.get(clip.id) ?? clip),
     };
-    if (!move.clips.some((clip) => clip.was)) {
-      timings = "edited";
-    }
     sendTuned();
     playhead = Math.min(...changed.map((clip) => clip.start + clip.delay));
-    play(1);
+    play();
   };
 
   // --- Keys ---------------------------------------------------------------------
@@ -815,18 +802,9 @@
     onretry={retry}
     onseek={scrub}
     onseekend={scrubbed}
-    ontimings={(next) => {
-      timings = next;
-      stop();
-      replays.release();
-      playhead = 0;
-      play(1);
-    }}
     {lang}
     {playhead}
     {playing}
-    {still}
-    {timings}
   />
 {/snippet}
 
