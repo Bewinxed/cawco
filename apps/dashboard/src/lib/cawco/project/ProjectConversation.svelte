@@ -7,8 +7,9 @@
    *
    * - It shows the project's newest conversation (CawLead `conversation`:
    *   a session a person or the project started there), or the hero when
-   *   there is none: Caw at 80 over "What's next for <project>?", the
-   *   project's starters as rows under him. A starter puts its words in the
+   *   there is none: "What's next for <project>?" under a new conversation's
+   *   glyph, the project's starters as rows under it. It draws no Caw: his
+   *   seat on the page is the one live Caw (DESIGN.md, The Flock Rule). A starter puts its words in the
    *   composer; nothing is sent. The first words start a conversation
    *   (conversation.ts), and the panel shows it.
    * - Its head is Caw's face, his name over the conversation's status word,
@@ -18,9 +19,9 @@
    * - Its two tabs (decision page `onboarding-design`, card `artifact-open`):
    *   Assistant, the conversation; Preview, what the conversation shows (a
    *   preview, a canvas, a component, a page: PreviewPane, the same pane a
-   *   session's split holds). The switch leads the head while there is
-   *   something to show, where the preview's own bar holds its switch, so it
-   *   never moves as the tabs change; Caw showing something brings it to
+   *   session's split holds). The switch stands at the bar's top right
+   *   while there is something to show, in his head and in the preview's own
+   *   bar (`switchAt`; leading the bar is the other option on the card); Caw showing something brings it to
    *   the front, and the panel widens as Preview opens (the page's grid reads
    *   `lead.tab`, CawFloat). On Preview the pane's own head is the panel's one
    *   bar, the switch at its end (The Title Bars Follow Liquid Glass Rule).
@@ -40,7 +41,6 @@
     type PendingPermission,
     type SendExtras,
   } from "#lib/cawco/client.svelte.js";
-  import Caw from "#lib/cawco/home/Caw.svelte";
   import CawFace from "#lib/cawco/home/CawFace.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { rowHref } from "#lib/cawco/links.js";
@@ -74,7 +74,12 @@
   } from "#lib/components/ui/fluid-tabs/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconClose, IconMaximize, IconPlus } from "#lib/icons.js";
+  import {
+    IconChatAdd,
+    IconClose,
+    IconMaximize,
+    IconPlus,
+  } from "#lib/icons.js";
   import { barGlass } from "../bar-glass.svelte";
   import type { CawLead } from "./caw-lead.svelte";
   import { startConversation } from "./conversation";
@@ -89,6 +94,7 @@
     sheet = false,
     setup = null,
     asksElsewhere,
+    switchAt = "end",
   }: {
     lead: CawLead;
     projectId: string;
@@ -102,6 +108,12 @@
     setup?: SetupProgress | null;
     /** The asks the board draws instead of the composer (SessionPane `asksElsewhere`). */
     asksElsewhere?: (request: PendingPermission) => boolean;
+    /**
+     * Where Assistant | Preview stands (decision page `onboarding-design`,
+     * card `artifact-open`): at the bar's end, top right, as the person
+     * asked; or leading it, where it never moves between the tabs.
+     */
+    switchAt?: "start" | "end";
   } = $props();
 
   // --- the conversation on show -------------------------------------------------
@@ -339,8 +351,8 @@
     "calc(var(--space-4) + var(--safe-bottom) + var(--c-composer-panel) + var(--c-tray-row) + var(--space-2))";
 </script>
 
-<!-- Assistant and Preview: the switch leading whichever bar heads the
-     panel, his on Assistant, the preview's own on Preview. -->
+<!-- Assistant and Preview: the switch in whichever bar heads the panel,
+     his on Assistant, the preview's own on Preview (`switchAt`). -->
 {#snippet switcher()}
   <!-- Whole at every width: the bar's title gives way before its words. -->
   <div class="flex-none" data-slot="caw-tabs">
@@ -370,8 +382,8 @@
     data-caw-head
     hidden={onPreview}
   >
-    {#if previewOpen}
-      <!-- The switch leads the bar, where the preview's own bar holds it
+    {#if previewOpen && switchAt === "start"}
+      <!-- Leading: where the preview's own bar holds a surface's switch
            (SideSurface, as a session's Plan | Preview), so it stays put as
            the tabs change. -->
       {@render switcher()}
@@ -441,6 +453,11 @@
           {/snippet}
         </Tip>
       {/if}
+      {#if previewOpen && switchAt === "end"}
+        <!-- At the bar's end, top right, as the preview's bar holds it
+             before its Close. -->
+        {@render switcher()}
+      {/if}
       {#if sheet}
         <!-- The sheet's Close, the ghost his head's other actions are. -->
         <Drawer.Close>
@@ -499,6 +516,7 @@
             onScreen={onPreview}
             {sheet}
             {switcher}
+            switcherAt={switchAt}
           />
         </div>
       {/if}
@@ -520,8 +538,8 @@
           style:--reserved={reserved}
         >
           <!-- The hero: the empty board's (project page `.caw-empty`), from the
-             room's top, its inline padding the composer's own column, so Caw,
-             the title, the line and the starters share the composer's start
+             room's top, its inline padding the composer's own column, so its
+             glyph, the title, the line and the starters share the composer's start
              edge (--space-3 where the composer goes edge to edge, under
              900px). It clears the composer as a transcript does. -->
           <div
@@ -533,20 +551,12 @@
             <EmptyState
               actionWidth="fill"
               axis
+              icon={IconChatAdd}
               line={off
                 ? "Caw is off, so he acts only when you write to him."
                 : undefined}
               title="What’s next for {projectName}?"
             >
-              {#snippet mark()}
-                <div
-                  data-slot="caw-80"
-                  class="mb-space-3 grid justify-items-center"
-                  data-share={`caw:${projectId}`}
-                >
-                  <Caw size={80} status="ready" />
-                </div>
-              {/snippet}
               {#snippet action()}
                 {#if starters.length > 0}
                   <StarterCards onpick={pick} rows {starters} />
@@ -573,7 +583,7 @@
                     start(text, extras);
                   }}
                   paneVisible
-                  placeholder="Message Caw…"
+                  placeholder={conversationWords.placeholder.short}
                   sendError={startError}
                   sending={starting}
                 />

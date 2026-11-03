@@ -212,6 +212,7 @@
   let {
     instanceId,
     switcher,
+    switcherAt = "start",
     sheet = false,
     ownTab = false,
     inset = false,
@@ -242,6 +243,8 @@
     sheet?: boolean;
     /** The Plan | Preview switch, when the conversation has a plan beside it (SideSplit). */
     switcher?: Snippet;
+    /** Where the switch stands in the bar (SideSurface `switcherAt`). */
+    switcherAt?: "start" | "end";
   } = $props();
   /** The split's expansion, beside a conversation on a desk (SideSplit). */
   const expand = sideExpand();
@@ -4163,6 +4166,7 @@
     subtitle={headLine}
     subtitleId={`${paneId}-line`}
     {switcher}
+    {switcherAt}
     titleControl={artifact ? artifactTitle : undefined}
     above={changesBar}
     beside={railBeside}

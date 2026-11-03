@@ -5,6 +5,14 @@
 export const conversationWords = {
   /** The panel head's action: a new session in the project, its words the first prompt. */
   newConversation: "New conversation",
+  /**
+   * His composer's hint, in the panel's hero and on his conversation: it
+   * names him, never "the agent".
+   */
+  placeholder: {
+    full: "Message Caw…  /  for commands, @ to mention",
+    short: "Message Caw…",
+  },
   /** The panel head's action: the conversation on show, as a tab. */
   openAsTab: "Open as a tab",
   /** A new conversation with nowhere to run: the project has no checkout on a machine yet. */

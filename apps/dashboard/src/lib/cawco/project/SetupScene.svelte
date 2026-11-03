@@ -18,8 +18,8 @@
    *   he is here; while he drafts in his panel (`lead.inPanel`) the seat
    *   shows the folder glyph instead (CawSeat `standIn`). With no seat (no
    *   machine for him), the folder glyph alone.
-   * - **Its floor** (`floor`) is his flock: his drawn self walking and
-   *   pecking about the board's foot (CawFlock), decoration a screen reader
+   * - **Its floor** (`floor`) is his flock: his rests standing as
+   *   pictures about the board's foot (CawFlock), decoration a screen reader
    *   does not hear. It stands under the middle, never over it: on a short
    *   board the scene grows past it and the page scrolls.
    *

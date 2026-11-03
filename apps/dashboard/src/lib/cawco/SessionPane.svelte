@@ -3,6 +3,7 @@
   import type { HarnessKind, PermissionResult } from "@cawco/core/harness";
   import { CONTINUED_IN } from "@cawco/core/relaunch";
   import { commonWords } from "@cawco/core/words/common";
+  import { conversationWords } from "@cawco/core/words/project-conversation";
   /**
    * One conversation, whole: the identity header, the transcript (Chat) or its
    * graph (Flow), and the floating composer, grown into any parked permission
@@ -1294,6 +1295,7 @@
   <Composer
     fleet={composerFleet}
     {agentName}
+    placeholder={caw ? conversationWords.placeholder : undefined}
     ask={firstAsk}
     busy={session?.busy ?? false}
     {commands}
