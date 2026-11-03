@@ -40,6 +40,7 @@
  * | clipped-glyph | own code                  | an svg draws inside its viewBox, and no box that clips without scrolling cuts it |
  * | mixed-icons | own code                    | no outlined mark beside a filled one in a bar, nav or list; an open-stroked glyph (chevron, arrow, close, plus, tick) is allowed |
  * | small-text  | own code                    | at a width under 600, no words drawn under 10px |
+ * | text-overlap | own code                   | no two drawn text runs cross (an aria-hidden ruler's figures included); a layer over the page, or a pinned bar over what scrolls under it, is its own |
  * | anchor-drift | own code, over reads        | an open popover, menu or listbox whose height changed between two reads of a page holds its top or its bottom |
  *
  * Two other unintended-looking lines are read already: cut by
@@ -79,6 +80,7 @@ export type CheckName =
   | "clipped-glyph"
   | "mixed-icons"
   | "small-text"
+  | "text-overlap"
   | "anchor-drift";
 
 /** Each rule, what it holds, and who reads it: the report's words. */
@@ -139,6 +141,10 @@ const CHECKS: Record<CheckName, { says: string; by: string }> = {
   },
   "small-text": {
     says: "no words under 10px on a narrow screen (the dense roles are the smallest that reads)",
+    by: "own code",
+  },
+  "text-overlap": {
+    says: "no words drawn over other words",
     by: "own code",
   },
   "anchor-drift": {
@@ -2123,6 +2129,112 @@ function readInPage(args: InPageArgs): InPageRead {
     }
   }
 
+  // Words over words: two text runs drawn, a reader's or not (an
+  // aria-hidden ruler's figures run into each other as readily), whose line
+  // boxes cross by 2px sideways and a third of the shorter's height. A run
+  // wrapping onto its next line is one run. Each run is read as it shows:
+  // cut by every box round it that clips (a scroller, a drawer's body), so
+  // a list scrolled under its drawer's head is no overlap. A layer over the
+  // page (a popover, a dialog) and a pinned bar over what scrolls under it
+  // stand over words by design: only runs on one plane are compared.
+  if (!skip.has("text-overlap")) {
+    const pinned = (el: Element) => {
+      for (let up: Element | null = el; up; up = up.parentElement) {
+        const at = style(up).position;
+        if (at === "fixed" || at === "sticky") {
+          return up;
+        }
+      }
+      return null;
+    };
+    /** Each layer and pinned bar by a number of its own: a run's plane is the pair it stands in. */
+    const planes = new Map<Element | null, number>([[null, -1]]);
+    const planeOf = (el: Element | null) => {
+      if (!planes.has(el)) {
+        planes.set(el, planes.size);
+      }
+      return planes.get(el);
+    };
+    interface Box {
+      bottom: number;
+      left: number;
+      right: number;
+      top: number;
+    }
+    /** What of the viewport `el` shows its content in: every clipping box round it, crossed. */
+    const shows = new Map<Element, Box>();
+    const showsOf = (el: Element | null): Box => {
+      if (!el) {
+        return {
+          left: 0,
+          top: 0,
+          right: window.innerWidth,
+          bottom: window.innerHeight,
+        };
+      }
+      const known = shows.get(el);
+      if (known) {
+        return known;
+      }
+      const outer = showsOf(el.parentElement);
+      const s = style(el);
+      let box = outer;
+      if (s.overflowX !== "visible" || s.overflowY !== "visible") {
+        const r = el.getBoundingClientRect();
+        const left = r.left + el.clientLeft;
+        const top = r.top + el.clientTop;
+        box = {
+          left: Math.max(outer.left, left),
+          top: Math.max(outer.top, top),
+          right: Math.min(outer.right, left + el.clientWidth),
+          bottom: Math.min(outer.bottom, top + el.clientHeight),
+        };
+      }
+      shows.set(el, box);
+      return box;
+    };
+    const runs = texts.flatMap((t) => {
+      const plane = `${planeOf(t.parent.closest(LAYER))}/${planeOf(pinned(t.parent))}`;
+      const cut = showsOf(t.parent);
+      return t.rects.flatMap((one) => {
+        const r = {
+          left: Math.max(one.left, cut.left),
+          top: Math.max(one.top, cut.top),
+          right: Math.min(one.right, cut.right),
+          bottom: Math.min(one.bottom, cut.bottom),
+          height: one.height,
+        };
+        return r.right - r.left > 1 && r.bottom - r.top > 1
+          ? [{ t, r, plane }]
+          : [];
+      });
+    });
+    const told = new Set<Element>();
+    for (let i = 0; i < runs.length; i += 1) {
+      const a = runs[i] as (typeof runs)[number];
+      for (let j = i + 1; j < runs.length; j += 1) {
+        const b = runs[j] as (typeof runs)[number];
+        if (a.t === b.t || a.plane !== b.plane || told.has(b.t.parent)) {
+          continue;
+        }
+        const across =
+          Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left);
+        const down =
+          Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top);
+        if (across > 2 && down > Math.min(a.r.height, b.r.height) / 3) {
+          told.add(a.t.parent);
+          told.add(b.t.parent);
+          say(
+            "text-overlap",
+            a.t.parent,
+            `“${words(a.t.node.data)}” and “${words(b.t.node.data)}” (${selectorOf(b.t.parent)}) cross by ${px(across)} × ${px(down)}`
+          );
+          break;
+        }
+      }
+    }
+  }
+
   // The Nothing Jumps Rule, on an open surface: its list grows and shrinks
   // from the edge it opened on. Read across this page's reads, so one read
   // alone says so.
@@ -2713,7 +2825,7 @@ export class RenderedChecks {
 /** Below this width a page is read as a phone's: touch and a coarse pointer (DESIGN.md's 640px line). */
 const PHONE_LINE = 640;
 const USAGE =
-  "bun scripts/probe-kit/rendered-checks.ts <url> [--width 1540] [--width 390x844] [--scope <selector>] [--scheme light|dark]";
+  "bun scripts/probe-kit/rendered-checks.ts <url> [--width 1540] [--width 390x844] [--scope <selector>] [--scheme light|dark] [--wait-for <selector>]";
 
 /** One width a page is read at, from `--width 1540` or `--width 390x844`. */
 const sizeOf = (said: string): { height: number; width: number } => {
@@ -2729,6 +2841,7 @@ const askedOf = (
   args: string[]
 ): {
   scheme: "light" | "dark";
+  waitFor: string | undefined;
   scope: string | undefined;
   sizes: { height: number; width: number }[];
   url: string | undefined;
@@ -2740,10 +2853,12 @@ const askedOf = (
   const widths = valuesOf("--width");
   const [scope] = valuesOf("--scope");
   const [scheme] = valuesOf("--scheme");
+  const [waitFor] = valuesOf("--wait-for");
   if (scheme !== undefined && scheme !== "light" && scheme !== "dark") {
     throw new Error(`--scheme takes light or dark: not "${scheme}".`);
   }
   return {
+    waitFor,
     scheme: scheme ?? "light",
     url: args.find(
       (one, i) => !(one.startsWith("--") || args[i - 1]?.startsWith("--"))
@@ -2789,7 +2904,7 @@ const sayRead = (read: CheckRead): number => {
  * on it as in a spec). Exits 1 when any rule found something.
  */
 async function main(args: string[]): Promise<number> {
-  const { url, sizes, scope, scheme } = askedOf(args);
+  const { url, sizes, scope, scheme, waitFor } = askedOf(args);
   if (!url) {
     console.log(USAGE);
     return 2;
@@ -2811,6 +2926,9 @@ async function main(args: string[]): Promise<number> {
         await context.addInitScript(installRuns);
         const page = await context.newPage();
         await page.goto(url, { waitUntil: "load" });
+        if (waitFor) {
+          await page.waitForSelector(waitFor, { state: "attached" });
+        }
         await settle(page);
         const read = await renderedChecks(page, scope ? { scope } : {});
         console.log(
