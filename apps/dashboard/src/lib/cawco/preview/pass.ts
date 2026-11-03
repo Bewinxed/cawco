@@ -10,7 +10,9 @@
  * with no pass never asks the lock for a frame. An entry is one ticket,
  * spent at `/__cawco/enter` on the frame's origin beside the frames, never
  * in one. A frame turned away later (`cawco:locked`: its pass ran out or
- * was revoked since) enters again, then loads again. One entry stands per
+ * was revoked since) enters again, then loads again; a loaded page whose
+ * socket stays shut enters again, then opens its socket again
+ * (PreviewPane `enterAgain`). One entry stands per
  * pass (a domain, or a host by its scheme), so the frames of one pass spend
  * one ticket, and an entry that landed after a frame last stood without a
  * pass (its load, or its page's word that it was let in) stands for that

@@ -18,16 +18,31 @@ export interface DecidedByShown {
 const GITHUB_ISSUE =
   /^https:\/\/github\.com\/([^/]+\/[^/]+)\/(?:issues|pull)\/(\d+)/u;
 
-/** A source as its link reads: an issue as `owner/repo #n`, else its host and path. */
-export const sourceLabel = (url: string): string => {
-  const issue = GITHUB_ISSUE.exec(url);
-  if (issue) {
-    return `${issue[1]} #${issue[2]}`;
-  }
+/**
+ * A source as the card shows it (`settle` takes links or repository paths):
+ * a web link opens, an issue read as `owner/repo #n`, else its host and
+ * path; anything else is a path in a repository the dashboard has no place
+ * to open (it opens only a project's folder, FolderFile), and the page
+ * stands on a preview origin, where it would answer 404, so it is its words
+ * alone.
+ */
+export const sourceShown = (
+  source: string
+): { href: string | null; label: string } => {
+  let parsed: URL;
   try {
-    const parsed = new URL(url);
-    return `${parsed.host}${parsed.pathname === "/" ? "" : parsed.pathname}`;
+    parsed = new URL(source);
   } catch {
-    return url;
+    return { href: null, label: source };
   }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    return { href: null, label: source };
+  }
+  const issue = GITHUB_ISSUE.exec(source);
+  return {
+    href: source,
+    label: issue
+      ? `${issue[1]} #${issue[2]}`
+      : `${parsed.host}${parsed.pathname === "/" ? "" : parsed.pathname}`,
+  };
 };

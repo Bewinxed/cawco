@@ -1190,11 +1190,43 @@
       ? "Comments (⇧C hides the pins)"
       : "Comments (⇧C shows the pins)";
   });
-  /** Try again on the comments' links: the pane's socket and the page's, each opened again now. */
-  function relink() {
-    doc?.retry();
+  /**
+   * The page's socket opened again through the entry a frame's load takes
+   * (preview/pass.ts): the lock refuses a socket whose pass ended or was
+   * replaced since the page loaded (hub preview.ts `atTheLock`, a 401 the
+   * browser says only as code 1006), and only a new entry gives the browser
+   * a pass its next open carries, with no reload. `said`: the person asked
+   * (Try again), so an entry the hub won't give is the failure band.
+   */
+  async function enterAgain(said: boolean) {
+    const origin = paneOrigin;
+    if (!origin) {
+      return;
+    }
+    const refused = await enterPreviews(origin, performance.now());
+    if (refused) {
+      if (said) {
+        failure = {
+          message: `The hub didn't give this preview a pass: ${refused}`,
+          again: null,
+        };
+      }
+      return;
+    }
     post({ type: "cawco:reconnect" });
   }
+  /** Try again on the comments' links: the pane's socket opened again now, and the page's through a new entry. */
+  function relink() {
+    doc?.retry();
+    enterAgain(true);
+  }
+  // The page's link stood down: its socket's own backoff goes on, carrying a
+  // pass entered once in the spell, whatever ended the one it loaded with.
+  $effect(() => {
+    if (pageDown) {
+      untrack(() => enterAgain(false));
+    }
+  });
   /**
    * The head's line under the name (DESIGN.md, Artifact panel): the ask the
    * session gave it, carried by the panel's frame, so it stands from the

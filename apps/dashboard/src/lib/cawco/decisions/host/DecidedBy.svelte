@@ -1,14 +1,14 @@
 <!--
   Under a card settled for the person (core decides.ts):
   "Decided by Advisor · Claude Code · Opus 5.5 · why · 2 sources", then each
-  source as a link.
+  source: a web link as a link, a repository path as its words.
   Picked otherwise since, the card is his, and the line says whose pick he
   took back.
 -->
 <script lang="ts">
   import type { SettledBy } from "@cawco/core/choices";
   import { decidedByLine } from "@cawco/core/decides";
-  import { sourceLabel } from "./decided-by.js";
+  import { sourceShown } from "./decided-by.js";
 
   let {
     settled,
@@ -33,13 +33,20 @@
       >
         <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
         {#each settled.sources as source (source)}
+          {@const shown = sourceShown(source)}
           <li class="min-w-0">
-            <a
-              class="type-meta wrap-anywhere text-link-ink"
-              href={source}
-              rel="noreferrer"
-              target="_blank">{sourceLabel(source)}</a
-            >
+            {#if shown.href}
+              <a
+                class="type-meta wrap-anywhere text-link-ink"
+                href={shown.href}
+                rel="noreferrer"
+                target="_blank">{shown.label}</a
+              >
+            {:else}
+              <span class="type-meta wrap-anywhere text-ink-muted"
+                >{shown.label}</span
+              >
+            {/if}
           </li>
         {/each}
       </ul>
