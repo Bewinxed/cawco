@@ -142,6 +142,14 @@
     )
   );
   const length = $derived(Math.max(1, lengthOf(shown)));
+  /**
+   * How far the lane reaches: the move's end, or, once he changed it, the
+   * later of its end and the end as the engine ran it, so the original's
+   * outlines under Edited stand inside the lane when he shortened it.
+   */
+  const reach = $derived(
+    changed ? Math.max(length, lengthOf(clips.map(untune))) : length
+  );
   /** A bar's drag step, ms (ClipBar's). */
   const STEP = 10;
   /** The ruler's finest mark, ms. */
@@ -169,14 +177,14 @@
     // Up the ladder until the marks fit; a length no figure holds (never
     // read: an endless animation is its state's own, never a clip) stops
     // at the finest.
-    while (Number.isFinite(length) && Math.ceil(length / found) > most) {
+    while (Number.isFinite(reach) && Math.ceil(reach / found) > most) {
       at += 1;
       found = (ladder[at % 3] as number) * 10 ** Math.floor(at / 3);
     }
     return found;
   });
-  /** The lane's end: the move's end, to the ruler's next mark. */
-  const scale = $derived(Math.max(step, Math.ceil(length / step) * step));
+  /** The lane's end: its reach, to the ruler's next mark. */
+  const scale = $derived(Math.max(step, Math.ceil(reach / step) * step));
   const adHoc = $derived(shown.filter((clip) => clip.adHoc).length);
   /** The ruler's marks, a step apart. */
   const marks = $derived(
