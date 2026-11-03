@@ -48,6 +48,7 @@
   let {
     label,
     switcher,
+    switcherAt = "start",
     title,
     titleControl,
     titleCode = false,
@@ -73,6 +74,12 @@
     label: string;
     /** The Plan | Preview switch, while both are there. */
     switcher?: Snippet;
+    /**
+     * Where the switch stands: leading the bar (a session's split), or at
+     * its end before Close (Caw's panel's Assistant | Preview, decision page
+     * `onboarding-design`, card `artifact-open`).
+     */
+    switcherAt?: "start" | "end";
     /** What is on show, past what the switch says; nothing when it says it all. */
     title?: string;
     /** What is on show as a control (the artifact panel's menu), in the title's place; its words that keep their width marked `data-slot="name-lead"`, what trails them cut inside the name's box. */
@@ -458,7 +465,7 @@
     class="relative z-1 flex h-c-btn-h-lg flex-none items-center gap-space-1 hit-gap-x-space-1 coarse:data-fitted:gap-space-5 coarse:data-fitted:hit-gap-x-space-5"
     bind:this={head}
   >
-    {#if switcher}
+    {#if switcher && switcherAt === "start"}
       {@render switcher()}
     {/if}
     <!-- The name keeps its own width up to NAME_KEEPS (`--name-keeps`, set
@@ -474,7 +481,7 @@
     <div
       data-slot="identity"
       data-controlled={titleControl ? "" : undefined}
-      data-switched={switcher ? "" : undefined}
+      data-switched={switcher && switcherAt === "start" ? "" : undefined}
       data-lined={(titleControl && subtitle && subtitleStands) || undefined}
       class="-m-space-1 flex min-w-(--name-keeps) flex-1 flex-col items-start overflow-hidden p-space-1 ps-space-3 *:max-w-full data-switched:ps-space-2 data-controlled:not-data-switched:ps-space-1 data-lined:[&>:is(button,a)]:h-auto data-lined:[&>:is(button,a)]:py-space-1"
       style:--name-keeps="{nameKeeps}px"
@@ -559,6 +566,9 @@
     {/if}
     {#if !items && expand?.available}
       {@render expandBar()}
+    {/if}
+    {#if switcher && switcherAt === "end"}
+      {@render switcher()}
     {/if}
     <Button
       data-slot="close"
