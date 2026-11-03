@@ -82,6 +82,7 @@
     IconTablet,
   } from "#lib/icons.js";
   import { browser } from "$app/env";
+  import { figureOf, langOf } from "./figures";
   import Journey from "./Journey.svelte";
   import MoveFace, { type MoveState, type Timings } from "./MoveFace.svelte";
   import {
@@ -167,6 +168,8 @@
   let reduce = $state(false);
   const still = $derived(reduce || !motionOk.current);
   let surface = $state(0);
+  /** The page's language, which its figures are grouped in (figures.ts). */
+  let lang = $state<string | undefined>(undefined);
   /**
    * The divider's width (the kit handle's `w-px`): paneforge shares what is
    * left of the group beside it between the panes, so every share is of
@@ -436,6 +439,15 @@
     stop();
     playhead = t;
     replays.seek(clipsNow(), t);
+  };
+  /**
+   * A move whose play threw, played again (its Try again): the stage is
+   * left part-way by the throw, so its from state is reached anew and the
+   * move plays from there, as it played on arrival.
+   */
+  const retry = () => {
+    onStage = null;
+    arrive(review, kept);
   };
   const scrubbed = () => {
     if (resumeRate !== null) {
@@ -760,6 +772,7 @@
           .map(untune)
       )}
     onretime={retime}
+    onretry={retry}
     onseek={scrub}
     onseekend={scrubbed}
     ontimings={(next) => {
@@ -769,6 +782,7 @@
       playhead = 0;
       play(1);
     }}
+    {lang}
     {playhead}
     {playing}
     {still}
@@ -815,7 +829,7 @@
         class={[
           "type-meta num",
           own && "underline decoration-dotted underline-offset-2",
-        ]}>{figure}</span
+        ]}>{figureOf(figure, lang)}</span
       >
     </span>
   </ToggleGroup.Item>
@@ -827,6 +841,7 @@
     class="flex h-full min-h-0 min-w-0 flex-col bg-surface-page contain-layout"
     {@attach frameSize((node: HTMLElement) => {
       surface = node.clientWidth;
+      lang = langOf(node);
     })}
   >
     <!-- The bar: one row, no ground of its own. -->
@@ -1077,6 +1092,7 @@
         <Stage
           bind:this={stage}
           against={againstShown}
+          {lang}
           {lit}
           {review}
           {scheme}

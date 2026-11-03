@@ -5,7 +5,8 @@
    * in the panel, holding the routine form from its own states file, and
    * the roster beside it when the ask names it too (loaded only then); or,
    * for the surface's own edge states, a states file of one story (the
-   * kit's menu) or one whose component throws as it mounts.
+   * kit's menu) or one whose component throws as it mounts; and its
+   * hardening cases (harden-review.ts), one of them in another language.
    */
   import { screenHeight } from "@cawco/core/stage";
   import type { ComponentProps } from "svelte";
@@ -19,11 +20,14 @@
     stale = false,
     withRoster = false,
     alone = null,
+    lang,
   }: Pick<ComponentProps<typeof DesignGraph>, "ask" | "stale"> & {
     /** Whether the ask names the roster beside the routine form. */
     withRoster?: boolean;
     /** The one component under review in place of the routine form. */
     alone?: ReviewInput | null;
+    /** The page's language round the surface (a locale's figures), else the page's own. */
+    lang?: string;
   } = $props();
 
   let roster = $state<ReviewInput | null>(null);
@@ -52,6 +56,7 @@
 
 <div
   class="h-(--window-h)"
+  {lang}
   style:--window-h="{tall}px"
   {@attach frameSize((node: HTMLElement) => {
     tall = screenHeight(node.clientWidth);
