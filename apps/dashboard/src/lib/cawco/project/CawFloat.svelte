@@ -47,6 +47,7 @@
     projectName,
     setup = null,
     asksElsewhere,
+    switchAt,
   }: {
     lead: CawLead;
     projectId: string;
@@ -55,6 +56,8 @@
     setup?: SetupProgress | null;
     /** ProjectConversation's `asksElsewhere`: the questions the board draws. */
     asksElsewhere?: (request: PendingPermission) => boolean;
+    /** ProjectConversation's `switchAt`: where Assistant | Preview stands. */
+    switchAt?: "start" | "end";
   } = $props();
 
   /** A phone: the page is one scroller with the views bar at its foot (ViewBar's line). */
@@ -142,6 +145,7 @@
             {projectId}
             {projectName}
             {setup}
+            {switchAt}
             sheet
           />
         {/key}
@@ -173,6 +177,7 @@
         {projectId}
         {projectName}
         {setup}
+        {switchAt}
       />
     {/key}
   </aside>

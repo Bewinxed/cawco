@@ -17,7 +17,10 @@
    * `questions` (three of his questions on the board, one holding him),
    * `page` (the setup page open: the board's action opens it), `set` (the
    * page sent: the board on his eight stages with their looks); `first-run`
-   * is the fleet board's first-run row. `?closed` puts his panel away.
+   * is the fleet board's first-run row. `?closed` puts his panel away;
+   * `?tab=assistant` keeps the page's beat on his conversation;
+   * `?switch=start` stands Assistant | Preview leading the bar, the other
+   * option of the card `artifact-open` to its top-right default.
    */
   import { onMount, untrack } from "svelte";
   import { blankSession, cawco } from "#lib/cawco/client.svelte.js";
@@ -55,6 +58,9 @@
   const PROJECT = "pr-team";
   const now = Date.now();
   const named = beat !== "sent";
+  /** Where Assistant | Preview stands (`?switch=start`, else top right). */
+  const switchAt: "start" | "end" =
+    page.url.searchParams.get("switch") === "start" ? "start" : "end";
   const name = named ? PR_NAME : projectWords.placeholderName;
 
   const WORDS =
@@ -204,7 +210,7 @@
   });
   untrack(() => {
     lead.open = !page.url.searchParams.has("closed");
-    if (beat === "page") {
+    if (beat === "page" && page.url.searchParams.get("tab") !== "assistant") {
       lead.tab = "preview";
     }
   });
@@ -317,6 +323,7 @@
         projectId={PROJECT}
         projectName={name}
         {setup}
+        {switchAt}
       />
     {/snippet}
   </ProjectDock>
