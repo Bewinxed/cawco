@@ -145,6 +145,7 @@
   import NeedsMeta from "./NeedsMeta.svelte";
   import NeedsRow from "./NeedsRow.svelte";
   import { openPeek, peekable, peekTipOff } from "./peek.svelte";
+  import StepRow from "./StepRow.svelte";
 
   let {
     item,
@@ -1015,43 +1016,13 @@
           >
             <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
             {#each todos as one, index (one.step)}
-              <li
-                data-slot="step"
-                class="group/step mark-line grid grid-cols-(--step-cols) items-box-start gap-x-space-2 gap-y-space-1 type-label"
-                data-done={one.done || undefined}
-                data-step={one.step}
-                style:--step-cols="var(--icon-md) minmax(0, 1fr)"
+              <StepRow
+                done={one.done}
+                doneWord={tailnetWords.stepDone}
+                label={one.label}
+                n={index + 1}
+                step={one.step}
               >
-                <span class="mark-cell">
-                  <span
-                    data-slot="step-mark"
-                    class="grid size-icon-md place-items-center text-ink-muted"
-                  >
-                    {#if one.done}
-                      <IconSuccess
-                        aria-hidden="true"
-                        class="size-icon-md text-status-done-ink"
-                      />
-                    {:else}
-                      <!-- The step's place in the list, drawn from its
-                         attribute: the grid items are no list items, so the
-                         list's own counter stays at 0. -->
-                      <span
-                        data-slot="step-number"
-                        aria-hidden="true"
-                        class="box-border grid size-full place-items-center rounded-pill border border-border-control type-meta leading-none num before:content-data-n"
-                        data-n={index + 1}
-                      ></span>
-                    {/if}
-                  </span>
-                </span>
-                <span
-                  data-slot="step-label"
-                  class="min-w-0 type-label wrap-anywhere text-ink-strong group-data-done/step:text-ink-muted"
-                  >{#if one.done}<span class="sr-only"
-                      >{tailnetWords.stepDone}{" "}</span
-                    >{/if}{one.label}</span
-                >
                 {#if !one.done}
                   <span
                     data-slot="step-note"
@@ -1088,7 +1059,7 @@
                     </div>
                   {/if}
                 {/if}
-              </li>
+              </StepRow>
             {/each}
           </ol>
         {/if}
