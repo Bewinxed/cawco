@@ -1533,6 +1533,8 @@
     --ease-glide-out: cubic-bezier(0.3333, 0.6667, 0.6667, 1);
     /* Between one row of an opening tree and the next: its line reaches each in turn at a steady pace, one row's room per stagger. */
     --dur-stagger: 60ms;
+    /* Between one letter of a typed example and the next: New project's placeholder typing its examples (decision page onboarding-design, card describe-hint); it erases at half this. */
+    --dur-type: 50ms;
     /* The most an opening tree's line takes to reach its last row: a longer tree's rows come closer together. */
     --dur-cascade: 480ms;
     /* The hover ghost following the pointer from row to row. */

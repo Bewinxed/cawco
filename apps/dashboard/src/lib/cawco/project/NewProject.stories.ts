@@ -2,7 +2,7 @@
  * New project (Component Story Format 3, live components), with the
  * person's own first words: the personal PR team that fits no template. The
  * meta's args are every story's; a story's own args are what it changes.
- * The `Hint*` and `Hues*` stories are the options of the decision page
+ * The `Examples*` and `Hues*` stories are the options of the decision page
  * `onboarding-design` (cards `describe-hint` and `card-hues`); the rest are
  * the states every option keeps.
  */
@@ -26,65 +26,58 @@ export default {
   parameters: { viewport: 1440 },
 };
 
-/** A line under the question says the work can just be described. */
-export const HintTitle = { args: { hint: "title" } };
+/** Today: a still placeholder, "A repo, a launch, a job hunt…". */
+export const ExamplesNone = {};
 
-/** A head over the cards names them as the other way, and what happens without one. */
-export const HintHead = { args: { hint: "head" } };
+/** The placeholder types one example after another, round and round, while the field is empty. */
+export const ExamplesLoop = { args: { examples: "loop" } };
 
-/** A caption under the cards, in addendum 4's words. */
-export const HintCaption = { args: { hint: "caption" } };
+/** The placeholder types each example once, then lands on its resting words. */
+export const ExamplesOnce = { args: { examples: "once" } };
 
-/** On a phone: the line under the question. */
-export const HintTitlePhone = {
-  args: { hint: "title" },
-  parameters: { viewport: 390 },
-};
+/** Their words in the field: nothing types, the field is theirs. */
+export const ExamplesWithWords = { args: { examples: "loop", words: PR_TEAM } };
 
-/** On a phone: the head over the cards. */
-export const HintHeadPhone = {
-  args: { hint: "head" },
-  parameters: { viewport: 390 },
-};
+/** Reduced motion, or a hidden tab: the resting words, still. */
+export const ExamplesStill = { args: { examples: "loop", still: true } };
 
-/** On a phone: the caption under the cards, below the first screen. */
-export const HintCaptionPhone = {
-  args: { hint: "caption" },
+/** On a phone: the examples typing. */
+export const ExamplesLoopPhone = {
+  args: { examples: "loop" },
   parameters: { viewport: 390 },
 };
 
 /** Their words typed: Caw peeks over Social, the cards in today's section hues. */
 export const HuesSection = {
-  args: { hint: "title", words: PR_TEAM, hues: "section" },
+  args: { words: PR_TEAM, hues: "section" },
 };
 
 /** Their words typed: every glyph in the muted ink. */
 export const HuesInk = {
-  args: { hint: "title", words: PR_TEAM, hues: "ink" },
+  args: { words: PR_TEAM, hues: "ink" },
 };
 
 /** Their words typed and Social tapped: only the tapped card's glyph in coral. */
 export const HuesPicked = {
-  args: { hint: "title", words: PR_TEAM, hues: "picked", tapped: "social" },
+  args: { words: PR_TEAM, hues: "picked", tapped: "social" },
 };
 
 /** The hub has not listed the machines yet: nothing is claimed about them. */
-export const Reading = { args: { hint: "title", fleet: "reading" } };
+export const Reading = { args: { fleet: "reading" } };
 
 /** No machine has joined: the words stay, Send waits, Add machine is the way on. */
 export const NoMachine = {
-  args: { hint: "title", fleet: "none", words: PR_TEAM, hues: "ink" },
+  args: { fleet: "none", words: PR_TEAM, hues: "ink" },
 };
 
 /** Machines joined, none online: Check machines. */
 export const NoneOnline = {
-  args: { hint: "title", fleet: "offline", words: PR_TEAM, hues: "ink" },
+  args: { fleet: "offline", words: PR_TEAM, hues: "ink" },
 };
 
 /** The send never reached the hub: the words are back, with Send again. */
 export const Unreached = {
   args: {
-    hint: "title",
     words: PR_TEAM,
     hues: "ink",
     refusal: {
@@ -96,6 +89,6 @@ export const Unreached = {
 
 /** No machine, on a phone. */
 export const NoMachinePhone = {
-  args: { hint: "title", fleet: "none", words: PR_TEAM, hues: "ink" },
+  args: { fleet: "none", words: PR_TEAM, hues: "ink" },
   parameters: { viewport: 390 },
 };

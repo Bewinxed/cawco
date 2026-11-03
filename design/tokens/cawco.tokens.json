@@ -7166,6 +7166,14 @@
       },
       "$description": "Between one row of an opening tree and the next: its line reaches each in turn at a steady pace, one row's room per stagger."
     },
+    "dur-type": {
+      "$type": "duration",
+      "$value": {
+        "value": 50,
+        "unit": "ms"
+      },
+      "$description": "Between one letter of a typed example and the next: New project's placeholder typing its examples (decision page onboarding-design, card describe-hint); it erases at half this."
+    },
     "dur-cascade": {
       "$type": "duration",
       "$value": {

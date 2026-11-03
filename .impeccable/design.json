@@ -2544,6 +2544,11 @@
         "purpose": "Between one row of an opening tree and the next: its line reaches each glyph in turn at a steady pace."
       },
       {
+        "name": "dur-type",
+        "value": "50ms",
+        "purpose": "Between one letter of a typed example and the next: New project's placeholder typing its examples; it erases at half this."
+      },
+      {
         "name": "dur-cascade",
         "value": "480ms",
         "purpose": "The most an opening tree's line takes to reach its last row: a longer tree's rows come closer together."

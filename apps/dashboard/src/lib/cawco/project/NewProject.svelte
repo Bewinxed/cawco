@@ -18,7 +18,7 @@
    * Its state arrives as props, so every state stands in a story
    * (NewProject.stories.ts): where the fleet stands (`fleet`, read from the
    * home's `machines`: nothing is claimed while it is read), and the design
-   * options the page `onboarding-design` asks about (`hint`, `hues`).
+   * options the page `onboarding-design` asks about (`examples`, `hues`).
    */
   import { detach } from "@cawco/core/detach";
   import { onboardingWords } from "@cawco/core/words/onboarding";
@@ -39,6 +39,7 @@
     type TemplateName,
   } from "#lib/cawco/project/new-project.js";
   import TemplateCards from "#lib/cawco/project/TemplateCards.svelte";
+  import { TypedExamples } from "#lib/cawco/project/typed-examples.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
@@ -53,7 +54,8 @@
     create,
     onmade,
     onmachines,
-    hint,
+    examples,
+    still = false,
     hues = "section",
     words: firstWords = "",
     tapped: firstTapped = null,
@@ -72,11 +74,13 @@
     /** No machine online: Add machine, or Check machines, from what asked. */
     onmachines: (anchor: HTMLElement, fleet: "none" | "offline") => void;
     /**
-     * What says the work can just be described (onboarding-design
-     * #describe-hint, open): a line under the question, a head over the
-     * cards, or a caption under them; none today.
+     * The placeholder typing examples of the work (onboarding-design
+     * #describe-hint, open): round and round, or once and then at rest;
+     * a still placeholder today.
      */
-    hint?: "title" | "head" | "caption";
+    examples?: "loop" | "once";
+    /** Stands still as with reduced motion (a story of that state). */
+    still?: boolean;
     /** The cards' glyph colours (onboarding-design#card-hues, open). */
     hues?: "section" | "ink" | "picked";
     /** Words already in the field (a draft kept, a story). */
@@ -97,6 +101,20 @@
   draft.focusWanted = true;
   draft.text = firstWords;
   const words = $derived(draft.text);
+
+  /**
+   * The placeholder typing its examples while the field is empty, the tab
+   * shown and motion allowed (typed-examples.svelte.ts); focus does not stop
+   * it, a first letter does, and an emptied field starts it again.
+   */
+  const typed = examples
+    ? new TypedExamples(
+        onboardingWords.examples,
+        onboardingWords.placeholder,
+        examples
+      )
+    : null;
+  $effect(() => typed?.run(words.length === 0 && !still));
   let fit = $state<TemplateName | null>(fitOf(firstWords));
   /**
    * The card the person tapped, the one pick: the frame stands on it and
@@ -210,19 +228,9 @@
         <Caw ongone={gone} present={!leaving} size={CAW_SIZE} status="ready" />
       </div>
     {/if}
-    <div class="flex flex-col items-center gap-space-2">
-      <h1 data-slot="title" class="type-title text-center text-ink-strong">
-        {onboardingWords.ask}
-      </h1>
-      {#if hint === "title"}
-        <p
-          data-slot="hint"
-          class="m-0 max-w-c-page-line type-body text-center text-balance text-ink-muted"
-        >
-          {onboardingWords.hintTitle}
-        </p>
-      {/if}
-    </div>
+    <h1 data-slot="title" class="type-title text-center text-ink-strong">
+      {onboardingWords.ask}
+    </h1>
     <div
       data-slot="new-page-field"
       class="relative w-full max-w-c-new-project-field-w"
@@ -244,7 +252,8 @@
         onsubmit={(text, _extras, id) => {
           detach(start(text, id), "start");
         }}
-        placeholder={onboardingWords.placeholder}
+        label={onboardingWords.ask.replace(/\?$/u, "")}
+        placeholder={typed ? typed.text : onboardingWords.placeholder}
         sendAgain={again}
         sendError={refused}
         sending={starting}
@@ -301,17 +310,7 @@
     </div>
   </div>
 
-  <div data-slot="cards" class="flex w-full flex-col gap-space-2">
-    {#if hint === "head"}
-      <div data-slot="cards-head" class="flex flex-col gap-space-1">
-        <h2 class="m-0 type-label text-ink-strong">
-          {onboardingWords.hintHead}
-        </h2>
-        <p class="m-0 type-meta text-ink-muted">
-          {onboardingWords.hintHeadLine}
-        </p>
-      </div>
-    {/if}
+  <div data-slot="cards" class="w-full">
     <TemplateCards
       cards={TEMPLATE_CARDS}
       {fit}
@@ -324,13 +323,5 @@
       peekSize={CAW_SIZE}
       bind:selected={() => tapped, tap}
     />
-    {#if hint === "caption"}
-      <p
-        data-slot="cards-caption"
-        class="m-0 pt-space-3 type-body text-center text-pretty text-ink-muted"
-      >
-        {onboardingWords.hintCaption}
-      </p>
-    {/if}
   </div>
 </main>
