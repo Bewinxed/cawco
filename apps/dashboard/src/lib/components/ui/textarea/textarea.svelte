@@ -21,6 +21,8 @@
           growing a line at a time. */
       resize: { block: "resize-y" },
       fill: { page: "bg-surface-page" },
+      /** Its line length held to the reading measure (DESIGN.md: running text 60 to 72ch). */
+      measure: { reading: "max-w-c-measure" },
       look: {
         /** A paragraph edited where it stands (a setup page's description): text at rest, its edge only while it has focus. */
         prose:
@@ -49,6 +51,7 @@
     resize,
     fill,
     look,
+    measure,
     area = true,
     "data-slot": dataSlot = "textarea",
     ...restProps
@@ -82,7 +85,7 @@
       "disabled:cursor-not-allowed disabled:opacity-50",
       "aria-invalid:border-error-9",
       "dark:aria-invalid:border-error-9/50",
-      textareaVariants({ face, text, height, resize, fill, look }),
+      textareaVariants({ face, text, height, resize, fill, look, measure }),
       placement
     )}
     data-slot={dataSlot}

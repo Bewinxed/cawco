@@ -8,6 +8,10 @@
     picks,
   } from "#lib/cawco/decisions/host/page.svelte.js";
   import { stillCaw } from "#lib/cawco/decisions/host/StillCaw.svelte";
+  import {
+    type SetupLook,
+    setSetupLook,
+  } from "#lib/cawco/decisions/host/setup-look.js";
   /**
    * A project's setup page as the decision host draws it (the decision
    * library's `Setup`): the PR team's program as the project-setup skill
@@ -17,7 +21,22 @@
    */
   import OpenUiRenderer from "#lib/cawco/views/openui/OpenUiRenderer.svelte";
 
-  const PROGRAM = `root = Decisions("Your PR team", [setup])
+  let {
+    look,
+    stages = "team",
+  }: {
+    look?: SetupLook;
+    /**
+     * The stages it draws: the PR team's eight, the same with names as long
+     * as a person writes them and four more (twelve), or one alone.
+     */
+    stages?: "team" | "long" | "one";
+  } = $props();
+  if (look) {
+    setSetupLook(look);
+  }
+
+  const TEAM = `root = Decisions("Your PR team", [setup])
 setup = Setup("Your PR team", "A personal PR team: the job search, visa applications and renewals, travel booked around them, and a public voice. Research and drafts are done by delegates; every message, post and application goes out only once you send it.", [inbox, researching, drafted, call, sent, waiting, done, dropped], [researcher, writer], "own")
 inbox = Stage("Inbox", "todo", "inbox", "cyan")
 researching = Stage("Researching", "active", "search", "cyan", {runs: "researcher"}, "Runs the researcher")
@@ -29,6 +48,25 @@ done = Stage("Done", "done", "done", "green")
 dropped = Stage("Dropped", "dropped", "trash")
 researcher = Delegate("researcher", "Researcher", "Finds roles, visa rules and travel options on the web, with sources.", "Claude Code · Sonnet")
 writer = Delegate("writer", "Writer", "Drafts applications, cover letters, posts and replies in your voice.", "Claude Code · Opus")`;
+  const LONG = TEAM.replace(
+    "[inbox, researching, drafted, call, sent, waiting, done, dropped]",
+    "[inbox, researching, drafted, call, sent, waiting, interview, offer, visa, travel, done, dropped]"
+  )
+    .replace(
+      'Stage("Waiting on reply"',
+      'Stage("Waiting on the hiring manager\'s reply"'
+    )
+    .replace('Stage("Your call"', 'Stage("Your call before anything goes out"')
+    .concat(`
+interview = Stage("Interview scheduled with the recruiter", "active", "calendar", "amber")
+offer = Stage("Offer", "you", "eye", "green")
+visa = Stage("Visa paperwork with the consulate", "waiting", "book", "orange", {after: "30d"}, "Moves on after 30 days")
+travel = Stage("Travel booked", "done", "pin", "cyan")`);
+  const ONE = TEAM.replace(
+    "[inbox, researching, drafted, call, sent, waiting, done, dropped]",
+    "[inbox]"
+  );
+  const PROGRAM = { team: TEAM, long: LONG, one: ONE }[stages];
 
   // The page's bridge: a preview's overlay brings its own (frozen on
   // `window`, keeping each change on the preview's artifact), followed here
