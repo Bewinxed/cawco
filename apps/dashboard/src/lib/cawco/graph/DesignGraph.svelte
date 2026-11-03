@@ -82,7 +82,7 @@
     IconTablet,
   } from "#lib/icons.js";
   import { browser } from "$app/env";
-  import { figureOf, langOf } from "./figures";
+  import { figureOf, pageLang } from "./figures";
   import Journey from "./Journey.svelte";
   import MoveFace, { type MoveState, type Timings } from "./MoveFace.svelte";
   import {
@@ -103,15 +103,20 @@
     inputs,
     ask = {},
     stale = false,
+    lang = pageLang(),
   }: {
     /** The components under review, each its states file and the agent's spec. */
     inputs: ReviewInput[];
     ask?: Ask;
     /** The hub's link is down. */
     stale?: boolean;
+    /** The page's language, which every figure is written in (figures.ts); the document's when not given. */
+    lang?: string;
   } = $props();
 
-  const reviews = $derived(inputs.map(reviewOf));
+  /** `n` as a figure in the page's language. */
+  const figure = (n: number) => figureOf(n, lang);
+  const reviews = $derived(inputs.map((one) => reviewOf(one, figure)));
   /** The component the ask names, else the first: the one in front until he picks another. */
   const askedFront = $derived(
     Math.max(
@@ -168,8 +173,6 @@
   let reduce = $state(false);
   const still = $derived(reduce || !motionOk.current);
   let surface = $state(0);
-  /** The page's language, which its figures are grouped in (figures.ts). */
-  let lang = $state<string | undefined>(undefined);
   /**
    * The divider's width (the kit handle's `w-px`): paneforge shares what is
    * left of the group beside it between the panes, so every share is of
@@ -756,6 +759,7 @@
       against={comparing ? against : null}
       kept={kept.state}
       keptVariant={kept.variant}
+      {lang}
       onpress={press}
       onstep={(next) => keep(next, null)}
       {review}
@@ -818,13 +822,13 @@
 {/snippet}
 
 {#snippet stepper()}
-  <Stepper {at} onstep={(next) => keep(next, null)} {path} />
+  <Stepper {at} {lang} onstep={(next) => keep(next, null)} {path} />
 {/snippet}
 
 {#snippet widthItem(
   value: string,
   name: string,
-  figure: number,
+  px: number,
   own: boolean,
   Icon: typeof IconPhone
 )}
@@ -836,7 +840,7 @@
         class={[
           "type-meta num",
           own && "underline decoration-dotted underline-offset-2",
-        ]}>{figureOf(figure, lang)}</span
+        ]}>{figure(px)}</span
       >
     </span>
   </ToggleGroup.Item>
@@ -846,9 +850,9 @@
   <div
     data-slot="design-graph"
     class="flex h-full min-h-0 min-w-0 flex-col bg-surface-page contain-layout"
+    {lang}
     {@attach frameSize((node: HTMLElement) => {
       surface = node.clientWidth;
-      lang = langOf(node);
     })}
   >
     <!-- The bar: one row, no ground of its own. -->
@@ -997,7 +1001,7 @@
                     {#if !ownListed}
                       {@render widthItem(
                         "own",
-                        words.ownWidth(ownWidth),
+                        words.ownWidth(figure(ownWidth)),
                         ownWidth,
                         true,
                         IconMaximize
@@ -1008,8 +1012,8 @@
                       {@render widthItem(
                         String(one.value),
                         own
-                          ? words.ownListed(one.name, one.value)
-                          : words.widthOf(one.name, one.value),
+                          ? words.ownListed(one.name, figure(one.value))
+                          : words.widthOf(one.name, figure(one.value)),
                         one.value,
                         own,
                         one.icon

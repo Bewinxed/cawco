@@ -23,7 +23,7 @@
 import type { CanvasEdge } from "@cawco/core/stage";
 import { sectionName } from "@cawco/core/stage";
 import type { CanvasQueries, UserEvent } from "@cawco/core/stage-play";
-import { graphWords as words } from "@cawco/core/words/graph";
+import { type Figure, graphWords as words } from "@cawco/core/words/graph";
 import type { Component } from "svelte";
 
 /** What a story's `play` is handed on the stage (the canvas's own: core stage-play.ts). */
@@ -185,7 +185,8 @@ const MANY = 20;
 function recordSets(
   state: Pick<Variant, "args" | "story" | "width">,
   arg: string,
-  id: string
+  id: string,
+  figure: (n: number) => Figure
 ): Variant[] {
   const list = state.args[arg];
   if (!Array.isArray(list) || list.length === 0) {
@@ -205,7 +206,7 @@ function recordSets(
   });
   return [
     set("one", words.recordsOne, list.slice(0, 1)),
-    set("many", words.recordsMany(many.length), many),
+    set("many", words.recordsMany(figure(many.length)), many),
     set("longest", words.recordsLongest, longest),
   ];
 }
@@ -270,8 +271,11 @@ function movesOf(
   return moves;
 }
 
-/** The review of one states file: its states, machines and moves. */
-export function reviewOf(input: ReviewInput): Review {
+/** The review of one states file: its states, machines and moves; its words' figures written by `figure`. */
+export function reviewOf(
+  input: ReviewInput,
+  figure: (n: number) => Figure
+): Review {
   const meta = input.module.default;
   const group = input.group ?? {};
   const exported = exportsOf(input.source).filter(
@@ -321,7 +325,8 @@ export function reviewOf(input: ReviewInput): Review {
         ...recordSets(
           { args: state.args, story: id, width: state.width },
           arg,
-          id
+          id,
+          figure
         )
       );
     }
