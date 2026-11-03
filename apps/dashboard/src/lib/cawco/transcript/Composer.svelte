@@ -145,6 +145,7 @@
     sendAgain = false,
     faultAgain,
     held = false,
+    heldWhy = "Finish switching conversations before sending.",
     paneVisible = true,
     commands = [],
     mentionsFrom = null,
@@ -206,6 +207,8 @@
      * is on its way off screen.
      */
     held?: boolean;
+    /** What a send says while `held`, when its holder is not a swipe (New project with no machine online). */
+    heldWhy?: string;
     paneVisible?: boolean;
     /** What this session offers behind `/`. */
     commands?: AvailableCommand[];
@@ -1303,7 +1306,7 @@
   /** Sends the draft; `cuts` stops a busy session's turn first ({@link deliver}). */
   function submit(cuts = false): void {
     if (held) {
-      sendBlock = "Finish switching conversations before sending.";
+      sendBlock = heldWhy;
       return;
     }
     if (!draft.hasContent) {
