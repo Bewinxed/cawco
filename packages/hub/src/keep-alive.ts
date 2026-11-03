@@ -109,7 +109,7 @@ export const keepAliveState = (
   // Paused while the window that binds the session (core `headroom` over
   // its bearing windows, whichever the account has) is critical.
   const binds = headroom(
-    bearing(usage?.windows ?? [], modelScope(row.model), now),
+    bearing(usage?.windows ?? [], modelScope(row.model), now, null),
     now
   )?.window;
   if (binds?.severity === "critical") {

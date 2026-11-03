@@ -8,6 +8,7 @@ import {
   OVER_STATUSES,
   openedAt,
   windowKey,
+  windowOpen,
   windowUsed,
 } from "@cawco/core";
 import { DAY_MS } from "@cawco/core/time";
@@ -123,7 +124,7 @@ interface Charge {
   accountId: string;
   at: number;
   instanceId: string;
-  /** The reset of every window it was charged against, by window: a new window of any of them drops it. */
+  /** The reset of every window it was charged against, by window (null for a fresh one, which nothing opened yet): a new window of any of them drops it. */
   resets: ReadonlyMap<string, string | null>;
   usd: number | null;
 }
@@ -245,7 +246,12 @@ export const figuresOf = (
       };
 };
 
-/** The windows of `accountId`'s reading that bear on a session of model scope `scope` at `now` (core `bearing`). */
+/**
+ * The windows of `accountId`'s reading that bear on a session of model
+ * scope `scope` at `now` (core `bearing`, a lapsed one its window set names
+ * read fresh), and the reset each was reported with while it is still open:
+ * a fresh window's is null, as nothing has opened it yet.
+ */
 const bearingWindows = (
   db: DbShape,
   accountId: string,
@@ -255,7 +261,14 @@ const bearingWindows = (
   const reading = db.accounts
     .readings()
     .find((one) => one.accountId === accountId);
-  return { reading, windows: bearing(reading?.windows ?? [], scope, now) };
+  const held = reading?.windows ?? [];
+  const windows = bearing(held, scope, now, reading?.windowKinds ?? null);
+  const reported = new Map(
+    held
+      .filter((one) => windowOpen(one, now))
+      .map((one) => [windowKey(one), one.resetsAt])
+  );
+  return { reading, reported, windows };
 };
 
 export const createAdmission = (db: DbShape) => {
@@ -458,7 +471,7 @@ export const createAdmission = (db: DbShape) => {
       usd: number | null
     ): void {
       const now = Date.now();
-      const { windows } = bearingWindows(
+      const { windows, reported } = bearingWindows(
         db,
         accountId,
         modelScope(session.model),
@@ -468,7 +481,12 @@ export const createAdmission = (db: DbShape) => {
         accountId,
         instanceId: session.id,
         at: now,
-        resets: new Map(windows.map((one) => [windowKey(one), one.resetsAt])),
+        resets: new Map(
+          windows.map((one) => [
+            windowKey(one),
+            reported.get(windowKey(one)) ?? null,
+          ])
+        ),
         usd,
       });
     },

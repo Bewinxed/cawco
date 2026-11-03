@@ -75,20 +75,86 @@ export const windowUsed = (window: Used, now: number): number => {
   return reset !== null && reset <= now ? 0 : window.percent;
 };
 
+/** The parts of a window a fresh one is made from ({@link freshWindows}). */
+type Freshable = Pick<
+  LimitWindow,
+  "group" | "kind" | "percent" | "resetsAt" | "scopeLabel"
+>;
+
+/**
+ * An account's windows as they stand at `now`, its window set `kinds`
+ * (core `AccountReading.windowKinds`) read in: a held window whose reset has
+ * passed, of a kind the set names, is that kind's fresh window. The
+ * provider's last report named the window, and until a turn opens the next
+ * one the account has it whole: nothing used, opening now, resetting a span
+ * of its own from now (no reset known for a window of no known length). A
+ * lapsed window outside the set, or any with no set named (`null`), stays as
+ * held, and {@link bearing} reads it as over.
+ */
+export const freshWindows = <W extends Freshable>(
+  windows: readonly W[],
+  kinds: readonly string[] | null,
+  now: number
+): W[] => {
+  if (!kinds) {
+    return [...windows];
+  }
+  const named = new Set(kinds);
+  return windows.map((window) => {
+    const reset = windowResetAt(window);
+    if (reset === null || reset > now || !named.has(windowKey(window))) {
+      return window;
+    }
+    const span = windowSpan(window);
+    const fresh = {
+      ...window,
+      percent: 0,
+      resetsAt: span === null ? null : new Date(now + span).toISOString(),
+    };
+    return "severity" in fresh
+      ? { ...fresh, severity: "normal", isActive: false }
+      : fresh;
+  });
+};
+
 /**
  * The windows of an account that bear on a session of model scope `scope`
  * (core `modelScope`) at `now`: every window over all models, whatever its
  * kind (a session window, a week, a month, a provider's rolling one), and the
  * windows of that model alone. `undefined` reads the account as a whole,
- * every model's windows with it. A window whose reset has passed is over:
+ * every model's windows with it. The account's window set `kinds` makes a
+ * lapsed window it names a fresh one ({@link freshWindows}); `null` reads
+ * windows already freshened (a forecast's), or an account whose set no
+ * report has named yet. Any other window whose reset has passed is over:
  * until the account reports the next one, it bears nothing.
  */
-export const bearing = <W extends Pick<LimitWindow, "resetsAt" | "scopeLabel">>(
+export function bearing<W extends Pick<LimitWindow, "resetsAt" | "scopeLabel">>(
   windows: readonly W[],
   scope: string | null | undefined,
-  now: number
-): W[] =>
-  windows.filter((window) => {
+  now: number,
+  kinds: null
+): W[];
+export function bearing<W extends Freshable>(
+  windows: readonly W[],
+  scope: string | null | undefined,
+  now: number,
+  kinds: readonly string[] | null
+): W[];
+export function bearing<W extends Pick<LimitWindow, "resetsAt" | "scopeLabel">>(
+  windows: readonly W[],
+  scope: string | null | undefined,
+  now: number,
+  kinds: readonly string[] | null
+): W[] {
+  // Only the second signature names a set, and its windows are freshable.
+  const read = kinds
+    ? (freshWindows(
+        windows as unknown as Freshable[],
+        kinds,
+        now
+      ) as unknown as W[])
+    : windows;
+  return read.filter((window) => {
     const reset = windowResetAt(window);
     return (
       (reset === null || reset > now) &&
@@ -97,6 +163,7 @@ export const bearing = <W extends Pick<LimitWindow, "resetsAt" | "scopeLabel">>(
         window.scopeLabel === scope)
     );
   });
+}
 
 /**
  * The window that binds now: among `windows` (the bearing ones), the one

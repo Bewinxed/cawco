@@ -5,6 +5,7 @@ import {
   type AccountReading,
   bearing,
   type CarrySpan,
+  freshWindows,
   type LimitWindow,
   type ProviderRouting,
   pushCarry,
@@ -130,7 +131,7 @@ const bindingWindow = (
   all: WindowForecast[],
   now: number
 ): WindowRef | null => {
-  const windows = bearing(all, undefined, now);
+  const windows = bearing(all, undefined, now, null);
   const ref = (window: WindowForecast | undefined): WindowRef | null =>
     window ? { kind: window.kind, scopeLabel: window.scopeLabel } : null;
   const runningOut = windows.filter(
@@ -330,7 +331,13 @@ export const accountForecasts = (
 ): AccountForecast[] =>
   accounts.map((account) => {
     const reading = readings.find((one) => one.accountId === account.id);
-    const windows = (reading?.windows ?? []).map((window) =>
+    // A lapsed window the account's set names is its fresh one (core
+    // `freshWindows`), so every reader of the forecast walks it.
+    const windows = freshWindows(
+      reading?.windows ?? [],
+      reading?.windowKinds ?? null,
+      now
+    ).map((window) =>
       windowForecast(window, history, account.id, running.has(account.id), now)
     );
     return {

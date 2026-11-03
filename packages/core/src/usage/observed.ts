@@ -155,7 +155,7 @@ const refusalOf = (
  * `bearing`): every window over all models, and `scope`'s own.
  */
 const heldSpent = (session: ObservedSession, scope: string | null): Spent[] =>
-  bearing(session.held, scope, session.now).flatMap((one) => {
+  bearing(session.held, scope, session.now, null).flatMap((one) => {
     const resets = windowResetAt(one);
     return one.percent >= 100 && resets !== null
       ? [
@@ -217,7 +217,7 @@ const ownWeekResets = (
   if (!(session && scope)) {
     return credits;
   }
-  const open = bearing(session.held, scope, session.now);
+  const open = bearing(session.held, scope, session.now, null);
   const short = open.every(
     (one) => one.scopeLabel !== null || one.percent < 100
   );
@@ -250,7 +250,7 @@ const windowKindsOf = (
     return null;
   }
   const others = session
-    ? bearing(session.held, undefined, session.now).filter(
+    ? bearing(session.held, undefined, session.now, null).filter(
         (one) => !UNIFIED_KEYS.has(windowKey(one))
       )
     : [];

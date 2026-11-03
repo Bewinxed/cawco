@@ -773,7 +773,12 @@ const fullWindow = (
   now: number
 ): LimitWindow | undefined =>
   spentWindow(
-    bearing(reading?.windows ?? [], modelScope(model ?? undefined), now),
+    bearing(
+      reading?.windows ?? [],
+      modelScope(model ?? undefined),
+      now,
+      reading?.windowKinds ?? null
+    ),
     now
   );
 

@@ -14,6 +14,7 @@ import {
   type ClaudeExtraUsage,
   type ClaudeLimits,
   extraUsageOn,
+  freshWindows,
   type ProviderAccountReading,
   type SessionAccountRead,
   type SigninState,
@@ -467,7 +468,8 @@ const extraUsageOf = (
 /**
  * An account's reading as `ClaudeLimits`. A window whose reset has passed
  * with no newer report reads 0%: it has rolled over, and nothing has been
- * spent in the new one that anyone has heard of. The reading is current for
+ * spent in the new one that anyone has heard of. One the account's window
+ * set names reads as that fresh window, its next reset a span from now. The reading is current for
  * `currentFor` after its time (the last report on the account, or a later
  * turn there that changed nothing); past that it is stale, as of its time.
  * `signedIn`: the account is signed in on some machine, so a reading can
@@ -506,10 +508,13 @@ export const limitsOf = (
     stale: now - reading.lastSeenAt >= currentFor,
     error: null,
     errorKind: null,
-    windows: reading.windows.map((window) =>
-      window.resetsAt && Date.parse(window.resetsAt) <= now
-        ? { ...window, percent: 0, severity: "normal", isActive: false }
-        : window
+    // A lapsed window the account's set names is its fresh one (core
+    // `freshWindows`); one outside a named set reads 0% at its past reset.
+    windows: freshWindows(reading.windows, reading.windowKinds, now).map(
+      (window) =>
+        window.resetsAt && Date.parse(window.resetsAt) <= now
+          ? { ...window, percent: 0, severity: "normal", isActive: false }
+          : window
     ),
   };
 };

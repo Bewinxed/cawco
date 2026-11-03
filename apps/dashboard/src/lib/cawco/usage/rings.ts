@@ -325,7 +325,8 @@ function accountRing(
     bearing(
       windows.map((w) => ({ ...w, percent: w.utilization })),
       undefined,
-      now
+      now,
+      null
     ),
     now
   )?.window;
@@ -536,7 +537,10 @@ export function openCodeRing(
     .map((w) => w?.runsOutAt ?? null)
     .filter((at): at is number => at !== null);
   const state = stateOf(spent ? "5h" : null, Boolean(reading.stale), false);
-  const least = headroom(bearing(reading.windows, undefined, now), now)?.window;
+  const least = headroom(
+    bearing(reading.windows, undefined, now, null),
+    now
+  )?.window;
   const leastRing = least ? win(least.group) : null;
   let limitOn: RingAccount["limitOn"] = null;
   if (spent) {

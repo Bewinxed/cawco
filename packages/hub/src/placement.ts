@@ -334,11 +334,19 @@ class Usage {
   name = (account: Account): string =>
     accountNameAmong(account, this.#input.accounts);
 
-  /** The windows of account `id` that bear on this session (core `bearing`): its own, whichever it has. */
+  /**
+   * The windows of account `id` that bear on this session (core `bearing`):
+   * its own, whichever it has, a lapsed one its window set names read as
+   * that kind's fresh window.
+   */
   #bearing(id: string): LimitWindow[] {
-    const windows =
-      this.#input.readings.find((one) => one.accountId === id)?.windows ?? [];
-    return bearing(windows, this.#scope, this.#input.now);
+    const reading = this.#input.readings.find((one) => one.accountId === id);
+    return bearing(
+      reading?.windows ?? [],
+      this.#scope,
+      this.#input.now,
+      reading?.windowKinds ?? null
+    );
   }
 
   /** The use of the window that binds it now, percent: the most used of its bearing windows; 0 with none read. */
