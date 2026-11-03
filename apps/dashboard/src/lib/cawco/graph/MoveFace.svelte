@@ -576,18 +576,21 @@
               style:--row={line.row}
               {...lights(track)}
             >
+              <!-- The row's words, its chevron beside them; under them its
+                   chips, one line of their own across the whole column, the
+                   same in every row, on the words' leading edge. -->
               <div
                 class={[
-                  "col-start-1 flex min-w-0 items-start gap-space-1",
+                  "col-start-1 flex min-w-0 flex-col gap-space-1",
                   line.part && "ps-space-4",
                 ]}
               >
-                <div class="flex min-w-0 flex-1 flex-col gap-space-1">
+                <div class="flex min-w-0 items-start gap-space-1">
                   <button
                     type="button"
                     aria-expanded={open}
                     class={[
-                      "pointer-hit touch-hit -ms-space-1 flex min-h-c-pill-h min-w-0 items-center self-start rounded-sm px-space-1 text-start type-label transition-control can-hover:hover:bg-surface-hover",
+                      "pointer-hit touch-hit -ms-space-1 me-auto flex min-h-c-pill-h min-w-0 items-center rounded-sm px-space-1 text-start type-label transition-control can-hover:hover:bg-surface-hover",
                       open && "bg-surface-hover",
                     ]}
                     onclick={() => {
@@ -599,27 +602,53 @@
                       <span class="text-ink-muted">{track.how}</span></span
                     >
                   </button>
-                  <div
-                    class="flex min-w-0 flex-wrap items-center gap-space-1"
-                    data-slot="chips"
-                  >
-                    {#each chips as chip (chip.key)}
-                      {#snippet face()}
-                        {#if chip.glyph}
-                          <svg
-                            aria-hidden="true"
-                            class="size-icon-sm flex-none"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-linecap="round"
-                            stroke-width="2"
-                            viewBox="0 0 24 24"
-                          >
-                            <path d={chip.glyph} />
-                          </svg>
-                        {/if}
-                        <span class="whitespace-nowrap">{chip.text}</span>
-                      {/snippet}
+                  {#if many}
+                    {@const said = opened[track.id]
+                      ? words.hideClips(track.clips.length)
+                      : words.showClips(track.clips.length)}
+                    <button
+                      type="button"
+                      aria-expanded={opened[track.id] ?? false}
+                      aria-label={said}
+                      class={toggle}
+                      onclick={() => {
+                        opened = { ...opened, [track.id]: !opened[track.id] };
+                      }}
+                      title={said}
+                    >
+                      <IconChevronDown
+                        aria-hidden="true"
+                        class={[
+                          "size-icon-md transition-transform duration-(--dur-control) ease-out",
+                          opened[track.id] && "rotate-180",
+                        ]}
+                      />
+                    </button>
+                  {/if}
+                </div>
+                <div
+                  class="-ms-space-1 flex min-w-0 flex-wrap items-center gap-space-1"
+                  data-slot="chips"
+                >
+                  {#each chips as chip (chip.key)}
+                    {#snippet face()}
+                      {#if chip.glyph}
+                        <svg
+                          aria-hidden="true"
+                          class="size-icon-sm flex-none"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-linecap="round"
+                          stroke-width="2"
+                          viewBox="0 0 24 24"
+                        >
+                          <path d={chip.glyph} />
+                        </svg>
+                      {/if}
+                      <span class="whitespace-nowrap">{chip.text}</span>
+                    {/snippet}
+                    <!-- A chip and its token's badge wrap as one. -->
+                    <span class="inline-flex min-w-0 items-center gap-space-1">
                       {#if chip.reset}
                         <!-- Changed: its own chip marked; a press puts it back. -->
                         <button
@@ -661,32 +690,9 @@
                           >{chip.badge}</span
                         >
                       {/if}
-                    {/each}
-                  </div>
+                    </span>
+                  {/each}
                 </div>
-                {#if many}
-                  {@const said = opened[track.id]
-                    ? words.hideClips(track.clips.length)
-                    : words.showClips(track.clips.length)}
-                  <button
-                    type="button"
-                    aria-expanded={opened[track.id] ?? false}
-                    aria-label={said}
-                    class={toggle}
-                    onclick={() => {
-                      opened = { ...opened, [track.id]: !opened[track.id] };
-                    }}
-                    title={said}
-                  >
-                    <IconChevronDown
-                      aria-hidden="true"
-                      class={[
-                        "size-icon-md transition-transform duration-(--dur-control) ease-out",
-                        opened[track.id] && "rotate-180",
-                      ]}
-                    />
-                  </button>
-                {/if}
               </div>
               <div
                 class="col-start-2 min-w-0 self-start px-space-2"
