@@ -47,6 +47,24 @@ export const Move = {
   parameters: { viewport: 1440 },
 };
 
+/** The move on a phone: the room's drawer at its half stop, on the Animation face. */
+export const MovePhone = {
+  args: {
+    ask: { component: "Routine form", state: "FailedSave", face: "move" },
+    opensAt: "half",
+  },
+  parameters: { viewport: 390 },
+};
+
+/** The move at 680: the same drawer, wider. */
+export const MoveDrawer = {
+  args: {
+    ask: { component: "Routine form", state: "FailedSave", face: "move" },
+    opensAt: "half",
+  },
+  parameters: { viewport: 680 },
+};
+
 /** Two components under one ask: the roster waits behind the name's menu. */
 export const TwoComponents = {
   args: { withRoster: true },
