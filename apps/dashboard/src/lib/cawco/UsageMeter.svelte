@@ -955,7 +955,6 @@
     <div
       class={[
         "kit-edge-fade-block relative min-h-0 flex-auto overflow-y-auto overscroll-contain",
-        sheet && "kit-sheet-scroll",
         claude && "border-t border-t-border-hairline",
       ]}
       data-accounts

@@ -17,7 +17,7 @@
   import { failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import Markdown from "#lib/components/ui/markdown/markdown.svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconChevronLeft } from "#lib/icons.js";
@@ -30,7 +30,7 @@
     path,
     onclose,
     page = false,
-    backLabel = "Back",
+    backLabel = "",
   }: {
     projectId: string;
     path: string;
@@ -38,7 +38,7 @@
     onclose: () => void;
     /** Under 900px: the file is its own page, with Back, not a card beside the view. */
     page?: boolean;
-    /** What Back says on its own page. */
+    /** Where Back goes on its own page, named in its tooltip ("Back to …"). */
     backLabel?: string;
   } = $props();
 
@@ -82,13 +82,27 @@
   });
 
   const markdown = $derived(path.endsWith(".md"));
+  /** The file's own name, its title; and the folder it stands in, said in its content. */
+  const name = $derived(path.split("/").at(-1) ?? path);
+  const folder = $derived(path.split("/").slice(0, -1).join("/"));
 </script>
 
 {#snippet body()}
   <div
-    class="flex min-h-0 flex-1 flex-col gap-space-2 overflow-y-auto p-space-5 in-data-file-page:border-t in-data-file-page:border-t-border-hairline"
+    class="flex min-h-0 flex-1 flex-col gap-space-2 overflow-y-auto p-space-5"
     data-folder-file={path}
   >
+    {#if folder}
+      <!-- Where it is in the project's folder: a fact of the file, in its
+           content, never a path in the bar. -->
+      <p
+        data-slot="file-folder"
+        class="m-0 min-w-0 truncate type-code text-ink-muted"
+        title={path}
+      >
+        <bdi>{folder}</bdi>
+      </p>
+    {/if}
     {#if media}
       <TaskOutput
         bare
@@ -121,26 +135,33 @@
 {/snippet}
 
 {#if page}
-  <!-- Its own page under 900px, headed as a task's (TaskPane's page): Back,
-       then the path at the row's end, cut short where it runs long. -->
+  <!-- Its own page under 900px, headed as a task's (TaskPane's page). -->
   <section
     aria-label={path}
     class="flex min-h-0 flex-1 flex-col"
     data-file-page
   >
+    <!-- One row (DESIGN.md, The Title Bars Follow Liquid Glass Rule): Back,
+         the chevron alone in its glass group, named by where it goes, then
+         the file's name; its folder is the content's first line, never a
+         path in the bar. -->
     <header
       data-slot="page-head"
-      class="flex flex-none items-center gap-space-2 pt-0 pr-space-5 pb-space-2 pl-space-3"
+      class="flex h-c-top-bar-h flex-none items-center gap-space-2 pe-space-5 ps-space-2"
     >
-      <Button onclick={onclose} size="sm" variant="ghost">
-        <IconChevronLeft />
-        <span>{backLabel}</span>
-      </Button>
-      <bdi
-        data-slot="page-path"
-        class="ms-auto min-w-0 overflow-clip type-meta font-mono liga-none text-ellipsis whitespace-nowrap text-ink-subtle"
-        >{path}</bdi
+      <BarGlass form="group">
+        <BarItem
+          icon={IconChevronLeft}
+          label={backLabel ? `Back to ${backLabel}` : "Back"}
+          onclick={onclose}
+        />
+      </BarGlass>
+      <h2
+        data-slot="title"
+        class="m-0 min-w-0 truncate type-label font-medium text-ink-strong"
       >
+        {name}
+      </h2>
     </header>
     {@render body()}
   </section>
@@ -149,7 +170,7 @@
     of="file"
     label="A file of the project's folder"
     {onclose}
-    title={path}
+    title={name}
     titleCode
   >
     {@render body()}

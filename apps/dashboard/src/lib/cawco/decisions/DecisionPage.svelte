@@ -34,6 +34,7 @@
   } from "#lib/cawco/motion/curves.svelte.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import FootFade from "#lib/cawco/transcript/FootFade.svelte";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { dockShellVariants } from "#lib/components/ui/dock-shell/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -251,17 +252,13 @@
     style:--scroll-pad="calc(var(--dock-room) + var(--space-4))"
     bind:this={scroller}
   >
-    <!-- The bar: one row, no ground; the back symbol and the title. -->
+    <!-- The bar: one row, no ground; Back, the chevron alone in its glass
+         group (DESIGN.md, The Title Bars Follow Liquid Glass Rule), and the
+         title. -->
     <div data-slot="page-head" class="flex flex-none items-center gap-space-2">
-      <Button
-        aria-label={words.back}
-        class="-ms-space-2 flex-none"
-        icon={IconChevronLeft}
-        onclick={onback}
-        size="icon-sm"
-        title={words.back}
-        variant="ghost"
-      />
+      <BarGlass form="group">
+        <BarItem icon={IconChevronLeft} label={words.back} onclick={onback} />
+      </BarGlass>
       <h2
         data-slot="title"
         class="m-0 min-w-0 type-label text-pretty wrap-anywhere text-ink-strong"

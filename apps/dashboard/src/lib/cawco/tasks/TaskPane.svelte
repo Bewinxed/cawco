@@ -37,6 +37,7 @@
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
     TabItem,
@@ -105,7 +106,7 @@
     onclose,
     onopen,
     page = false,
-    backLabel = "Back",
+    backLabel = "",
     switcher,
   }: {
     projectId: string;
@@ -465,7 +466,10 @@
               <Badge variant="secondary"><span>Queued</span></Badge>
             {/if}
             <span class="type-meta text-ink-muted whitespace-nowrap">
-              Created
+              <span data-slot="task-id" class="type-code liga-none"
+                >{taskId}</span
+              >
+              · Created
               <time
                 datetime={new Date(shown.createdAt).toISOString()}
                 title={when(shown.createdAt)}
@@ -791,17 +795,20 @@
 
 {#if page}
   <section aria-label="Task {taskId}" class="flex flex-1 flex-col min-h-0">
+    <!-- One row with no title (DESIGN.md, The Title Bars Follow Liquid
+         Glass Rule): Back, the chevron alone in its glass group, named by
+         where it goes. The task's id is a fact in its content's meta line. -->
     <header
       data-slot="page-head"
-      class="flex flex-none items-center gap-space-2 pt-space-2 pe-space-5 pb-space-2 ps-space-3"
+      class="flex h-c-top-bar-h flex-none items-center ps-space-2"
     >
-      <Button onclick={onclose} size="sm" variant="ghost">
-        <IconChevronLeft />
-        <span>{backLabel}</span>
-      </Button>
-      <span class="ms-auto type-meta font-mono liga-none text-ink-subtle"
-        >{taskId}</span
-      >
+      <BarGlass form="group">
+        <BarItem
+          icon={IconChevronLeft}
+          label={backLabel ? `Back to ${backLabel}` : "Back"}
+          onclick={onclose}
+        />
+      </BarGlass>
     </header>
     {@render content()}
   </section>
@@ -812,8 +819,6 @@
     {onclose}
     recessed={false}
     {switcher}
-    title={switcher ? undefined : taskId}
-    titleCode
   >
     {@render content()}
   </SideSurface>

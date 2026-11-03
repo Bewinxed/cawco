@@ -161,9 +161,6 @@
       var(--drawer-max-height, 85vh),
       var(--visible-height, 100dvh)
     );
-    /* What scrolls in the sheet (`kit-sheet-scroll`) drives its header's
-       seam (`sheet-seam`, ui/drawer/sheet-head). */
-    timeline-scope: --sheet-scroll;
   }
 }
 

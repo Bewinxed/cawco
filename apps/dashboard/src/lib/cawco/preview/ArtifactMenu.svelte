@@ -6,9 +6,9 @@
    * each waiting on the person (core artifact-needs.ts) wearing the
    * needs-you dot, the status's own glyph ink (The Glyph, Word, Hue Rule);
    * choosing one shows it.
-   * Its line (the ask, or "Sent to <session>") stands under it in the head's
-   * subtitle (SideSurface); where the head drops it, it is the menu's first
-   * row, and always the control's title and description. Each row's Remove (its trailing glyph, or Delete
+   * Its line (the ask, or "Sent to <session>") is the menu's first row and
+   * the control's title, never a line under the name (DESIGN.md, Artifact
+   * panel; The Title Bars Follow Liquid Glass Rule). Each row's Remove (its trailing glyph, or Delete
    * or Backspace on the highlighted row) removes it where it stands: a light
    * action, no confirm; focus goes on to the row that takes its place. The row leaves once the hub says it is gone, closing as the
    * rows under it slide up (motion/rows), in every tab: the panel's frame
@@ -48,18 +48,12 @@
     instanceId,
     held,
     line,
-    lineId,
-    lineDropped,
     shown,
     onrefused,
   }: {
     instanceId: string;
-    /** The head's line under the name (the ask, or "Sent to <session>"); empty: the name alone. */
+    /** What the artifact asks (the ask, or "Sent to <session>"); empty: the name alone. */
     line: string;
-    /** The head's line's element (SideSurface's subtitle), which describes this control. */
-    lineId: string;
-    /** The head dropped the line for want of room: the menu says it first. */
-    lineDropped: boolean;
     /**
      * The session's artifacts by id, as its panel's frame lists them: a row
      * whose id leaves it (removed in any tab, or by the agent) leaves the
@@ -247,7 +241,6 @@
   <!-- The head's title as a control: the kit's sm ghost in the title face. -->
   <DropdownMenu.Trigger
     data-artifact-trigger
-    aria-describedby={line ? lineId : undefined}
     class="max-w-full"
     data-artifact={shown.id}
     face="title"
@@ -269,7 +262,7 @@
     width="wide"
     bind:ref={list}
   >
-    {#if line && lineDropped}
+    {#if line}
       <DropdownMenu.Label data-slot="menu-line" kind="line"
         >{line}</DropdownMenu.Label
       >

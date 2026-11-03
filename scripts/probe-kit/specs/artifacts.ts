@@ -1973,7 +1973,11 @@ const headLine = (page: Page) =>
     const panel = head?.closest('[data-slot="side-card"]');
     return {
       head: !!head,
-      line: head?.querySelector('[data-slot="subtitle"]')?.textContent ?? null,
+      // The ask is the name's tooltip and its menu's first row, never a line
+      // under the name (DESIGN.md, Artifact panel).
+      line:
+        head?.querySelector<HTMLElement>("[data-artifact-trigger]")?.title ??
+        null,
       route: !!panel?.textContent?.includes("/@cawco/"),
     };
   });
