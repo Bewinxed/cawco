@@ -1,0 +1,346 @@
+/* A project's setup page (setup.html, the project-setup skill): the name and
+   what it is for as fields, how work moves as the stage strip, who does the
+   work ticked, one Set it up. On the kit's tokens; placed by {{SETUP}}. */
+
+/* The fields: the name in the title size, what it is for as a paragraph. */
+.su-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-label);
+  color: var(--ink-muted);
+}
+.su-field input,
+.su-field textarea {
+  font: inherit;
+  font-size: var(--text-body);
+  color: var(--ink-strong);
+  background: var(--surface-page);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  caret-color: var(--brand-solid);
+}
+.su-field input:focus,
+.su-field textarea:focus {
+  outline: none;
+  border-color: var(--border-control-strong);
+}
+.su-field textarea {
+  line-height: var(--leading-body);
+  resize: vertical;
+  min-block-size: calc(4lh + 2 * var(--space-2));
+}
+.su-name input {
+  font-size: var(--text-title);
+  font-weight: var(--weight-strong);
+}
+.su-sub {
+  color: var(--ink-muted);
+  font-size: var(--text-meta);
+}
+
+/* The parts of a stage's tile, before the tile places them. */
+.su-hook {
+  font-size: var(--text-meta);
+  color: var(--ink-muted);
+  padding-inline: var(--space-2);
+}
+.su-acts {
+  display: flex;
+  gap: 0;
+}
+.su-act {
+  font: inherit;
+  font-size: var(--text-meta);
+  color: var(--ink-muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+.su-act:hover {
+  background: var(--surface-hover);
+  color: var(--ink-strong);
+}
+.su-act:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+}
+select.su-kind {
+  font: inherit;
+  font-size: var(--text-meta);
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-2);
+  color: var(--ink-muted);
+  cursor: pointer;
+  justify-self: start;
+  inline-size: fit-content;
+}
+select.su-kind:hover {
+  border-color: var(--border-control);
+}
+select.su-kind:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+}
+
+/* The stage strip: a tile per stage, in order, wrapping on a desk; a row per
+   stage on a narrow page (Caw's panel, a phone). A tile: its mark, its name
+   over its kind and its controls, then what it hooks. */
+.su-strip {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, var(--c-board-col-min)), 1fr)
+  );
+  gap: var(--space-2);
+}
+.su-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-content: start;
+  align-items: center;
+  gap: 0 var(--space-2);
+  min-inline-size: 0;
+  background: var(--surface-recess);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+}
+.su-stage > input {
+  grid-column: 2 / -1;
+  font: inherit;
+  font-size: var(--text-label);
+  font-weight: var(--weight-strong);
+  color: var(--ink-strong);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  min-inline-size: 0;
+}
+.su-stage > input:hover {
+  border-color: var(--border-control);
+}
+.su-stage > input:focus {
+  outline: none;
+  border-color: var(--border-control-strong);
+  background: var(--surface-raised);
+  caret-color: var(--brand-solid);
+}
+.su-stage > .su-kind {
+  grid-column: 2;
+  grid-row: 2;
+}
+.su-stage > .su-acts {
+  grid-column: 3;
+  grid-row: 2;
+}
+.su-stage > .su-hook {
+  grid-column: 2 / -1;
+}
+.su-stage[data-kind="you"] select.su-kind {
+  color: var(--status-attn-ink);
+}
+@media (hover: hover) and (pointer: fine) {
+  .su-stage > .su-acts {
+    transition: opacity var(--dur-control) var(--ease-out);
+  }
+  .su-stage:not(:hover, :focus-within) > .su-acts {
+    opacity: 0;
+  }
+}
+
+/* A stage's mark: the icon tile (DESIGN.md, Icon tile: a raised 26px square,
+   its 16px duotone glyph in its section hue), a press opening the look's
+   picker. A stage with no look shows a dotted ring, the house's Not yet. */
+.su-look {
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  inline-size: var(--c-mark);
+  block-size: var(--c-mark);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-tile);
+  color: var(--su-hue, var(--ink-muted));
+  cursor: pointer;
+  padding: 0;
+}
+.su-look svg {
+  inline-size: var(--icon-md);
+  block-size: var(--icon-md);
+}
+.su-look:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+[data-color="cyan"] {
+  --su-hue: var(--hue-cyan-500);
+}
+[data-color="amber"] {
+  --su-hue: var(--hue-amber-500);
+}
+[data-color="orange"] {
+  --su-hue: var(--hue-orange-500);
+}
+[data-color="green"] {
+  --su-hue: var(--hue-green-500);
+}
+
+.su-add {
+  display: grid;
+  inline-size: 100%;
+  place-items: center;
+  min-block-size: var(--c-btn-h-lg);
+  block-size: 100%;
+  border: 1px dashed var(--border-control);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: var(--text-label);
+  cursor: pointer;
+}
+.su-add:hover {
+  background: var(--surface-hover);
+  color: var(--ink-strong);
+}
+.su-add:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+}
+
+/* The look's picker: the platform's popover beside the mark pressed, its
+   glyphs in a grid and its colours as swatches. */
+.su-picker {
+  margin: 0;
+  inset: auto;
+  position: fixed;
+  inset-inline-start: var(--su-x, 0);
+  inset-block-start: var(--su-y, 0);
+  inline-size: min(var(--c-panel-w), calc(100vw - 2 * var(--space-4)));
+  background: var(--surface-raised);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay);
+  padding: var(--space-3);
+  color: var(--ink-strong);
+}
+.su-picker fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.su-picker fieldset + fieldset {
+  margin-block-start: var(--space-3);
+}
+.su-picker legend {
+  font-size: var(--text-meta);
+  color: var(--ink-muted);
+  padding: 0 0 var(--space-1);
+}
+.su-glyph,
+.su-swatch {
+  display: grid;
+  place-items: center;
+  inline-size: var(--c-btn-h);
+  block-size: var(--c-btn-h);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--su-hue, var(--ink-muted));
+  cursor: pointer;
+  padding: 0;
+}
+.su-glyph svg {
+  inline-size: var(--icon-md);
+  block-size: var(--icon-md);
+}
+.su-swatch::before {
+  content: "";
+  inline-size: var(--icon-md);
+  block-size: var(--icon-md);
+  border-radius: var(--radius-pill);
+  background: var(--su-hue, var(--neutral-8));
+}
+.su-glyph:hover,
+.su-swatch:hover {
+  background: var(--surface-hover);
+}
+.su-glyph[aria-pressed="true"],
+.su-swatch[aria-pressed="true"] {
+  border-color: var(--brand-solid);
+  background: var(--surface-pressed);
+}
+.su-glyph:focus-visible,
+.su-swatch:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+}
+
+/* Who does the work: a row per delegate type, ticked. */
+.su-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.su-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-1) var(--space-3);
+  align-items: start;
+  padding: var(--space-3);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.su-row:has(input:checked) {
+  border-color: var(--brand-solid);
+  background: var(--surface-raised);
+}
+.su-row input {
+  accent-color: var(--action-solid);
+  margin: var(--space-1) 0 0;
+  inline-size: var(--icon-md);
+  block-size: var(--icon-md);
+}
+.su-row b {
+  font-size: var(--text-label);
+  font-weight: var(--weight-strong);
+  color: var(--ink-strong);
+}
+.su-row span {
+  grid-column: 2;
+  font-size: var(--text-meta);
+  color: var(--ink-muted);
+}
+
+/* biome-ignore lint/plugin/no-raw-css-values: a plain stylesheet no Tailwind build reads, and a media query reads no custom property: the theme's --breakpoint-phone (640px). */
+@media (max-width: 640px) {
+  .su-strip {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+}
+@media (pointer: coarse) {
+  .su-field input,
+  .su-field textarea,
+  .su-stage > input {
+    font-size: var(--text-field-floor);
+  }
+  .su-act,
+  .su-glyph,
+  .su-swatch {
+    min-block-size: var(--c-touch-floor);
+    min-inline-size: var(--c-touch-floor);
+  }
+}

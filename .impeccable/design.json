@@ -2544,11 +2544,6 @@
         "purpose": "Between one letter of a typed example and the next: New project's placeholder typing its examples once, then resting; it erases at half this."
       },
       {
-        "name": "dur-caw-blend",
-        "value": "640ms",
-        "purpose": "One pose of Caw's rig into the next, on ease-in-out: a step of his flock's walk on a board before setup, his travel and his waddle landing together."
-      },
-      {
         "name": "dur-cascade",
         "value": "480ms",
         "purpose": "The most an opening tree's line takes to reach its last row: a longer tree's rows come closer together."
@@ -3354,6 +3349,11 @@
       {
         "name": "The Caw Stands On The Axis Rule",
         "body": "Caw's mark sits in the 28px lead column only on a row: a list entry, a notice, a Needs-you row. Everywhere else (an empty page, a hero, a setup or pairing card, a panel's empty state, a fault at a surface's centre) he stands on the composition's own axis: centred over what he heads, never pushed to its leading edge. The lead column is the row grid's; carrying it into a page, a head or a hero left him at the left of an empty page. The owner: \"also again, why is caw left aligned here? u seem to have left aligned him everywhere for some reason\".",
+        "section": "components"
+      },
+      {
+        "name": "The Flock Rule",
+        "body": "A page has one live Caw: his status mark, wherever his seat stands. The one place more of him stand is a project's board before it is set up (`project/SetupScene`, decision page `onboarding-design`, card `board-before`): its floor holds a few of his rests as pictures (`project/CawFlock`: his asleep, nodding-off, ready and done stills, `home/CawFace`, two on a phone and four wider), standing still, decoration a screen reader does not hear; no Rive runs for them. Each stands in a place of its own on the floor, so walking and pecking can be given to them later without the layout moving; that waits on his rig, which is not approved. While Caw drafts the setup in his panel (`project/SetupWell`, his live self in a well over what he is on and the setup's four steps), the seat over the board shows the folder glyph, so the live one is never drawn twice.",
         "section": "components"
       },
       {
