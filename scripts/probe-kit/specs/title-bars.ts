@@ -223,7 +223,8 @@ const run = async (kit: Kit) => {
         const where = `${state} ${label} ${theme}`;
         try {
           await open(tab, url, ready, 90_000);
-          await tab.waitForTimeout(1200);
+          // A working session's mark echoes three loops (7.2s), then stills.
+          await tab.waitForTimeout(7500);
           await then?.(tab);
           await tab.waitForTimeout(800);
           await house.at(tab, where, scope ? { scope } : {});
