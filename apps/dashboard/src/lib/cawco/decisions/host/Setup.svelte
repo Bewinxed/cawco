@@ -14,7 +14,8 @@
     `stage-rest` is open (SetupStages, setup-look.ts).
   - Delegate types: only when Caw proposed any; one row each on the stage
     list's grid, its name and what runs it, its brief under it on every
-    row, and More to remove it; one removed waits under them with Add back.
+    row, and More to remove it. A stage or type removed waits under its
+    list with Add back (RemovedLine).
 
   The groups stand on the page's ground under their heads (`document`) or
   each in a raised card (`cards`), while the card `setup-groups` is open.
@@ -28,7 +29,6 @@
   import { STAGE_COLORS, STAGE_ICONS, STAGE_KINDS } from "@cawco/core/views";
   import { setupPageWords as words } from "@cawco/core/words/onboarding";
   import type { Snippet } from "svelte";
-  import { Button } from "#lib/components/ui/button/index.js";
   import Card from "#lib/components/ui/card/card.svelte";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
@@ -38,6 +38,7 @@
   import { STAGE_GLYPHS, STAGE_HUES } from "../../tasks/stage-look";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { bridge, picks } from "./page.svelte.js";
+  import RemovedLine from "./setup/RemovedLine.svelte";
   import SetupStages from "./setup/SetupStages.svelte";
   import { LIST_CLASS, type Stage } from "./setup/stage";
   import { setupLook } from "./setup-look";
@@ -173,6 +174,12 @@
   const working = $derived(
     drafted.delegates.filter((one) => keptIds.includes(one.id))
   );
+  /** Caw's stages the person removed, each with its place in his draft, to put back. */
+  const gone = $derived(
+    drafted.stages
+      .map((stage, at) => ({ stage, at }))
+      .filter(({ stage }) => !stages.some((one) => one.name === stage.name))
+  );
   /** The stage that runs a type: its row wears that stage's mark. */
   const runner = (id: string): Stage | undefined =>
     stages.find((one) => one.hooks?.runs === id);
@@ -196,6 +203,17 @@
 {#snippet stageList()}
   <h2 class={sectionHeadVariants()} id="setup-stages">{words.stages}</h2>
   <SetupStages look={look.stages} onchange={change} {stages} />
+  <RemovedLine
+    names={gone.map(({ stage, at }) => ({ key: String(at), name: stage.name }))}
+    onback={(key) => {
+      const one = gone.find(({ at }) => String(at) === key);
+      if (one) {
+        const next = [...stages];
+        next.splice(Math.min(one.at, next.length), 0, one.stage);
+        change(next);
+      }
+    }}
+  />
 {/snippet}
 
 {#snippet delegateList()}
@@ -260,23 +278,10 @@
       </li>
     {/each}
   </ul>
-  {#if removed.length > 0}
-    <p
-      class="m-0 flex flex-wrap items-center gap-space-2 type-meta text-ink-muted"
-    >
-      <span>{words.removed}</span>
-      {#each removed as one (one.id)}
-        <span class="flex items-center gap-space-1">
-          <span class="text-ink-strong">{one.name}</span>
-          <Button
-            onclick={() => setDelegates([...keptIds, one.id])}
-            size="xs"
-            variant="ghost">{words.addBack}</Button
-          >
-        </span>
-      {/each}
-    </p>
-  {/if}
+  <RemovedLine
+    names={removed.map((one) => ({ key: one.id, name: one.name }))}
+    onback={(id) => setDelegates([...keptIds, id])}
+  />
 {/snippet}
 
 {#snippet framedOr(framed: boolean, head: string, part: Snippet)}
