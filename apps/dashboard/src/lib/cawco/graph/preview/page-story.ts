@@ -8,12 +8,15 @@
 import * as GraphStates from "../DesignGraph.stories";
 import type { Ask } from "../DesignGraph.svelte";
 import type { ReviewInput } from "../model";
+import type { PhoneMap } from "../WholeSet.svelte";
 
 /** What a story of the design graph hands its frame. */
 export interface PageStory {
   alone?: ReviewInput | null;
   ask?: Ask;
   lang?: string;
+  opensAt?: "head" | "half" | "whole";
+  phoneMap?: PhoneMap | null;
   stale?: boolean;
   withRoster?: boolean;
 }
