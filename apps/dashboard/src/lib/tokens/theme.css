@@ -626,6 +626,7 @@
   --radius-inner-well: var(--inner-well-r);
 
   --duration-stagger: var(--dur-stagger);
+  --duration-type: var(--dur-type);
   --duration-cascade: var(--dur-cascade);
   --duration-ghost: var(--dur-ghost);
   --duration-control: var(--dur-control);

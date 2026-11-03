@@ -70,7 +70,7 @@
     done: boolean;
     id: "machine" | "harness" | "relay" | "project";
     label: string;
-    note: string;
+    note?: string;
   }
 
   const list = $derived.by<Step[]>(() => {
@@ -123,7 +123,6 @@
         id: "project",
         done: steps.project,
         label: firstRunWords.project,
-        note: firstRunWords.projectNote,
         act:
           signedIn && !steps.project
             ? { label: firstRunWords.newProject, run: () => onnewproject() }
@@ -185,7 +184,7 @@
           n={index + 1}
           step={one.id}
         >
-          {#if !one.done || one.id === "relay"}
+          {#if one.note && (!one.done || one.id === "relay")}
             <span
               data-slot="step-note"
               class={[

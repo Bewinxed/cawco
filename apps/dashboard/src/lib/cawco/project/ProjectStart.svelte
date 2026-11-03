@@ -114,9 +114,48 @@
     return pageOpen || isSet ? PR_STAGES : [];
   }
   const shownStages = $derived(stagesShown());
+  /**
+   * The page's one live Caw (CawSeat): over a board with nothing on it he
+   * stands on its axis at 80; once the board has columns, or a canvas takes
+   * its place, he sits in the head at 48. Never both.
+   */
+  const standing = $derived(
+    !artifact &&
+      board !== "standin" &&
+      !isSet &&
+      !(board === "draft" && pageOpen)
+  );
+  const cawStatus = $derived(pageOpen ? "needs-you" : "working");
   const none = () => undefined;
   const nowhere = () => new Set<string>();
 </script>
+
+{#snippet bar(back: string, inset: boolean)}
+  <!-- The canvas's own bar: back, its name and kind, Open full size. -->
+  <div
+    class={[
+      "mark-line flex items-center gap-space-2 pb-space-2",
+      inset && "px-space-3",
+    ]}
+  >
+    <Button
+      aria-label={back}
+      icon={IconChevronLeft}
+      size="icon-sm"
+      variant="ghost"
+    />
+    <span class="type-label text-ink-strong">New project</span>
+    <span class="type-meta text-ink-muted">Components</span>
+    <span class="ms-auto" data-box
+      ><Button
+        aria-label="Open full size"
+        icon={IconMaximize}
+        size="icon-sm"
+        variant="ghost"
+      /></span
+    >
+  </div>
+{/snippet}
 
 {#snippet well(inset: boolean)}
   <!-- The canvas as it draws, at its real width, scrolling in its well. -->
@@ -150,9 +189,9 @@
         <LiveDot /><span>Naming…</span>
       </span>
     {/if}
-    <span class="ms-auto" data-box
-      ><Caw size={48} status={pageOpen ? "needs-you" : "working"} /></span
-    >
+    {#if !standing}
+      <span class="ms-auto" data-box><Caw size={48} status={cawStatus} /></span>
+    {/if}
   </div>
 {/snippet}
 
@@ -173,13 +212,7 @@
         tasks={[]}
       />
     {:else if board === "draft" && pageOpen}
-      <div class="mb-space-3 flex flex-wrap items-center gap-space-2">
-        <Badge><span>Draft</span></Badge>
-        <span class="type-meta text-ink-muted"
-          >From the setup page as it stands. Nothing is written until you set it
-          up.</span
-        >
-      </div>
+      <div class="mb-space-3"><Badge><span>Draft</span></Badge></div>
       <TaskBoard
         allowedFrom={nowhere}
         hrefOf={() => "#"}
@@ -194,14 +227,12 @@
       <div class="mx-auto max-w-c-measure">
         <EmptyState
           axis
-          line={pageOpen
-            ? "Its stages show here once you set it up on the setup page. Nothing is written before that."
-            : "Caw is drafting how it runs from what you wrote. Its stages show here once you send the setup page."}
+          line="Its stages show here once you set it up."
           title="Not set up yet"
         >
           {#snippet mark()}
             <div class="mb-space-3 grid justify-items-center">
-              <CawFace size={48} status={pageOpen ? "needs-you" : "working"} />
+              <Caw size={80} status={cawStatus} />
             </div>
           {/snippet}
           {#snippet action()}
@@ -234,9 +265,6 @@
       <!-- The setup's steps, each ticking as his calls land: the same step
            list as the first-run row and the tailnet row. -->
       <div data-slot="setup-steps" class="flex flex-col gap-space-2">
-        <span class="type-label text-ink-strong"
-          >Setting up {named ? PR_NAME : "the project"}</span
-        >
         <!-- biome-ignore lint/a11y/noRedundantRoles: WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list), as NeedsCard's steps say. -->
         <ol class="m-0 grid list-none gap-space-2 p-0" role="list">
           {#each steps as one (one.label)}
@@ -315,26 +343,7 @@
       </div>
     {:else if artifact === "panel"}
       <div class="flex min-h-0 flex-auto flex-col">
-        <div
-          class="mark-line flex items-center gap-space-2 px-space-3 pb-space-2"
-        >
-          <Button
-            aria-label="Back to the conversation"
-            icon={IconChevronLeft}
-            size="icon-sm"
-            variant="ghost"
-          />
-          <span class="type-label text-ink-strong">New project</span>
-          <span class="type-meta text-ink-muted">Components</span>
-          <span class="ms-auto" data-box
-            ><Button
-              aria-label="Open full size"
-              icon={IconMaximize}
-              size="icon-sm"
-              variant="ghost"
-            /></span
-          >
-        </div>
+        {@render bar("Back to the conversation", true)}
         {@render well(true)}
       </div>
     {:else}
@@ -438,24 +447,7 @@
         <div
           class="flex min-h-0 flex-auto flex-col px-space-6 pt-space-4 pb-space-3"
         >
-          <div class="mark-line flex items-center gap-space-2 pb-space-2">
-            <Button
-              aria-label="Back to Board"
-              icon={IconChevronLeft}
-              size="icon-sm"
-              variant="ghost"
-            />
-            <span class="type-label text-ink-strong">New project</span>
-            <span class="type-meta text-ink-muted">Components · from Caw</span>
-            <span class="ms-auto" data-box
-              ><Button
-                aria-label="Open full size"
-                icon={IconMaximize}
-                size="icon-sm"
-                variant="ghost"
-              /></span
-            >
-          </div>
+          {@render bar("Back to Board", false)}
           {@render well(false)}
         </div>
       {:else}
