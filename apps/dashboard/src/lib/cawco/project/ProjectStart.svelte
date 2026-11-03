@@ -26,10 +26,10 @@
   import {
     IconChevronLeft,
     IconClose,
+    IconFolder,
     IconMaximize,
-    IconNotYet,
-    IconSuccess,
   } from "#lib/icons.js";
+  import StepRow from "../home/StepRow.svelte";
   import canvasFrame from "./fixtures/canvas-frame-1440.png";
   import setupPage from "./fixtures/setup-pr-team-380.png";
   import {
@@ -40,7 +40,9 @@
     PR_STAGES,
     SENT,
     SET_UP,
+    type SetupAsk,
   } from "./pr-team.fixtures";
+  import SetupAskCard from "./SetupAskCard.svelte";
 
   type Beat = "sent" | "named" | "spoke" | "drafting" | "page" | "set";
 
@@ -49,14 +51,17 @@
     wait = "steps",
     board = "empty",
     artifact,
+    asks = [],
     phone = false,
   }: {
     /** Where the wait stands: sent (0 s), named (8 s), Caw's first words (13 s), drafting (60 s), the page open (121 s), the page sent. */
     beat: Beat;
     /** What fills Caw's panel while he drafts (card `the-wait`). */
-    wait?: "stream" | "steps" | "line";
+    wait?: "stream" | "steps" | "line" | "stage" | "asks";
     /** The board before the setup page is sent (card `board-before`). */
-    board?: "standin" | "empty" | "draft";
+    board?: "standin" | "empty" | "draft" | "scene";
+    /** `asks`: the questions he has asked so far, as they stand. */
+    asks?: SetupAsk[];
     /** A preview, canvas or component of his, opened (card `artifact-open`). */
     artifact?: "panel" | "main" | "session";
     /** The phone's layout: no rail, the panel the sheet over the board. */
@@ -94,7 +99,16 @@
     page: "Drafting the stages…",
     set: "Drafting the stages…",
   };
-  const doing = $derived(DOING[beat]);
+  /** A question his work waits on, still open. */
+  const holding = $derived(asks.find((one) => one.blocks && !one.answered));
+  const redo = $derived(asks.find((one) => one.redoing)?.redoing);
+  function doingNow(): string {
+    if (redo) {
+      return redo;
+    }
+    return holding ? "Drafting the rest while you decide" : DOING[beat];
+  }
+  const doing = $derived(doingNow());
   /** How many of his calls have landed by each beat (DRAFTING_TOOLS). */
   const CALLS: Record<Beat, number> = {
     sent: 0,
@@ -115,16 +129,28 @@
   }
   const shownStages = $derived(stagesShown());
   /**
-   * The page's one live Caw (CawSeat): over a board with nothing on it he
-   * stands on its axis at 80; once the board has columns, or a canvas takes
-   * its place, he sits in the head at 48. Never both.
+   * The page's one live Caw (CawSeat), in one place at a time: in his
+   * panel's setup element while he drafts there (`stage`, `asks`); else over
+   * a board with nothing on it, on its axis at 80; else in the head at 48.
    */
-  const standing = $derived(
+  const boardEmpty = $derived(
     !artifact &&
       board !== "standin" &&
       !isSet &&
       !(board === "draft" && pageOpen)
   );
+  function cawPlace(): "panel" | "board" | "head" | "none" {
+    if ((wait === "stage" || wait === "asks") && !pageOpen && !isSet) {
+      return "panel";
+    }
+    if (artifact === "session") {
+      return "none";
+    }
+    return boardEmpty ? "board" : "head";
+  }
+  const cawAt = $derived(cawPlace());
+  /** The questions still open, newest first, as they float. */
+  const open = $derived(asks.filter((one) => !one.answered || one.redoing));
   const cawStatus = $derived(pageOpen ? "needs-you" : "working");
   const none = () => undefined;
   const nowhere = () => new Set<string>();
@@ -189,7 +215,7 @@
         <LiveDot /><span>Naming…</span>
       </span>
     {/if}
-    {#if !standing}
+    {#if cawAt === "head"}
       <span class="ms-auto" data-box><Caw size={48} status={cawStatus} /></span>
     {/if}
   </div>
@@ -223,31 +249,119 @@
         stages={shownStages}
         tasks={[]}
       />
-    {:else}
-      <div class="mx-auto max-w-c-measure">
-        <EmptyState
-          axis
-          line="Its stages show here once you set it up."
-          title="Not set up yet"
+    {:else if board === "scene"}
+      <!-- As big as the board: the claim and its action on the axis, his
+           live self over them while he is here, and around them his rests
+           as pictures (no Rive runs for them), standing on the floor. -->
+      <!-- mark-line: Caw stands over the claim on its axis, never beside its words. -->
+      <div
+        data-slot="scene"
+        class="relative flex h-full min-h-c-caw-panel-h flex-col items-center justify-center gap-space-2 pb-space-8"
+      >
+        {@render asking()}
+        {#if cawAt === "board"}
+          <Caw size={80} status={cawStatus} />
+        {/if}
+        <h2 class="m-0 type-title text-center text-ink-strong">
+          Not set up yet
+        </h2>
+        <p class="m-0 type-body text-center text-ink-muted">
+          Its stages show here once you set it up.
+        </p>
+        <div class="mt-space-2">{@render openPage()}</div>
+        <div
+          aria-hidden="true"
+          class="absolute inset-x-0 bottom-0 flex items-end justify-around px-space-8 pb-space-5"
         >
-          {#snippet mark()}
-            <div class="mb-space-3 grid justify-items-center">
-              <Caw size={80} status={cawStatus} />
-            </div>
-          {/snippet}
-          {#snippet action()}
-            {#if pageOpen}
-              <Button
-                label="Open the setup page"
-                onclick={none}
-                variant="outline"
-              />
-            {/if}
-          {/snippet}
-        </EmptyState>
+          <CawFace size={56} status="sleeping" />
+          <CawFace size={64} status="idle" />
+          <CawFace size={48} status="ready" />
+          <CawFace size={56} status="done" />
+        </div>
+      </div>
+    {:else}
+      {@render asking()}
+      <div class="mx-auto max-w-c-measure">
+        {#if cawAt === "board"}
+          <EmptyState
+            actionWidth="fill"
+            axis
+            line="Its stages show here once you set it up."
+            title="Not set up yet"
+          >
+            {#snippet mark()}
+              <div class="mb-space-3 grid justify-items-center">
+                <Caw size={80} status={cawStatus} />
+              </div>
+            {/snippet}
+            {#snippet action()}
+              {@render openPage()}
+            {/snippet}
+          </EmptyState>
+        {:else}
+          <EmptyState
+            actionWidth="fill"
+            axis
+            icon={IconFolder}
+            line="Its stages show here once you set it up."
+            title="Not set up yet"
+          >
+            {#snippet action()}
+              {@render openPage()}
+            {/snippet}
+          </EmptyState>
+        {/if}
       </div>
     {/if}
   </div>
+{/snippet}
+
+{#snippet openPage()}
+  <!-- The empty board's one action: the setup page, once it is there; while
+       Caw drafts it, why it can't open yet over the button, held. -->
+  <div class="flex flex-col items-center gap-space-1">
+    {#if !pageOpen}
+      <span class="type-meta text-ink-muted">Caw is drafting it.</span>
+    {/if}
+    <Button
+      disabled={!pageOpen}
+      label="Open the setup page"
+      onclick={none}
+      variant="outline"
+    />
+  </div>
+{/snippet}
+
+{#snippet setupSteps()}
+  <!-- biome-ignore lint/a11y/noRedundantRoles: WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list), as NeedsCard's steps say. -->
+  <ol class="m-0 grid list-none gap-space-2 p-0" role="list">
+    {#each steps as one, index (one.label)}
+      <StepRow
+        done={one.done}
+        doneWord="Done:"
+        label={one.label}
+        live={one.live ?? false}
+        n={index + 1}
+        step={String(index)}
+      />
+    {/each}
+  </ol>
+{/snippet}
+
+{#snippet asking()}
+  <!-- His questions, floating in on the board while he drafts: what holds
+       him up wears the Needs-you mark, what doesn't says what he goes on
+       with. On a phone they stand in his sheet instead. -->
+  {#if wait === "asks" && !isSet && !phone && open.length > 0}
+    <div
+      data-slot="asks"
+      class="relative z-1 mx-auto mb-space-5 flex w-full max-w-c-measure flex-col gap-space-3"
+    >
+      {#each open as ask (ask.id)}
+        <SetupAskCard {ask} />
+      {/each}
+    </div>
+  {/if}
 {/snippet}
 
 {#snippet waitRows()}
@@ -265,42 +379,32 @@
       <!-- The setup's steps, each ticking as his calls land: the same step
            list as the first-run row and the tailnet row. -->
       <div data-slot="setup-steps" class="flex flex-col gap-space-2">
-        <!-- biome-ignore lint/a11y/noRedundantRoles: WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list), as NeedsCard's steps say. -->
-        <ol class="m-0 grid list-none gap-space-2 p-0" role="list">
-          {#each steps as one (one.label)}
-            <li
-              class="mark-line grid grid-cols-(--step-cols) items-box-start gap-x-space-2 type-label"
-              style:--step-cols="var(--icon-md) minmax(0, 1fr)"
-            >
-              <span class="mark-cell"
-                ><span class="grid size-icon-md place-items-center">
-                  {#if one.done}
-                    <IconSuccess
-                      aria-hidden="true"
-                      class="size-icon-md text-status-done-ink"
-                    />
-                  {:else if one.live}
-                    <LiveDot />
-                  {:else}
-                    <IconNotYet
-                      aria-hidden="true"
-                      class="size-icon-md text-ink-subtle"
-                    />
-                  {/if}
-                </span></span
-              >
-              <span class={one.done ? "text-ink-muted" : "text-ink-strong"}
-                >{one.label}</span
-              >
-            </li>
-          {/each}
-        </ol>
+        {@render setupSteps()}
         <Button
           label="Show his work ({calls})"
           onclick={none}
           size="xs"
           variant="ghost"
         />
+      </div>
+    {:else if wait === "stage" || wait === "asks"}
+      {#if phone && wait === "asks" && open.length > 0}
+        <SetupAskCard ask={open[0]} count={{ at: 1, of: open.length }} />
+      {/if}
+      <!-- His setup element: a transcript well holding him, live, on its
+           axis, what he is on now under him, and the setup's fixed steps. -->
+      <div
+        data-slot="setup-stage"
+        class="flex flex-col items-center gap-space-3 rounded-lg border border-border-well bg-surface-well p-space-4"
+      >
+        {#if cawAt === "panel"}
+          <Caw size={80} status={cawStatus} />
+        {/if}
+        <span
+          class="mark-line flex items-center gap-space-2 type-label text-ink-strong"
+          ><LiveDot /><MorphText text={doing} /></span
+        >
+        <div class="self-stretch">{@render setupSteps()}</div>
       </div>
     {:else}
       <div
