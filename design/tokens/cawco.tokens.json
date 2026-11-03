@@ -3982,7 +3982,7 @@
         "value": 120,
         "unit": "px"
       },
-      "$description": "The floor of a project's board before it is set up (SetupScene): Caw's flock stands on it (CawFlock), his rig at 72 with the room a raised wing takes, and the scene's middle stands clear of it."
+      "$description": "The floor of a project's board before it is set up (SetupScene): Caw's flock stands on it (CawFlock), his rests as pictures, the tallest at 64, and the scene's middle stands clear of it."
     },
     "c-top-bar-h": {
       "$type": "dimension",
@@ -7181,14 +7181,6 @@
         "unit": "ms"
       },
       "$description": "Between one letter of a typed example and the next: New project's placeholder typing its examples once, then resting (decision page onboarding-design, card describe-hint, the person's pick); it erases at half this."
-    },
-    "dur-caw-blend": {
-      "$type": "duration",
-      "$value": {
-        "value": 640,
-        "unit": "ms"
-      },
-      "$description": "One pose of Caw's rig into the next, on ease-in-out (caw-rig/rig.ts BLEND_MS): a step of his flock's walk takes this, so his travel and his waddle land together (CawFlock)."
     },
     "dur-cascade": {
       "$type": "duration",
