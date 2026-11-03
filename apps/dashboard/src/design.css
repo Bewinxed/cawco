@@ -611,6 +611,12 @@
 @utility pick-inherit {
   --pick: inherit;
 }
+/* A chosen folder tab's muted name going out as its strong copy comes in, on
+   the choice's clock (`--pick`): the text swap's other half, so a chosen
+   tab reads in the strong ink alone, never the muted one under it. */
+@utility pick-out {
+  opacity: calc(1 - var(--pick, 0));
+}
 
 @utility transition-off {
   transition: none;

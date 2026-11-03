@@ -28,6 +28,7 @@
    */
   import type { Snippet } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
@@ -143,6 +144,16 @@
   const stands = (key: string) => shown === null || shown.has(key);
   const formOf = (key: string): Standing => shown?.get(key) ?? "whole";
   const more = $derived(all.filter((one) => !stands(one.key)));
+  /** The mode, which stands in the head's centre. */
+  const centred = $derived(all.filter((one) => one.key === "mode"));
+  /** The prominent action with words (Send, a browser's Take over), outside the glass. */
+  const worded = $derived(
+    all.filter((one) => one.key === "send" || one.key === "control")
+  );
+  /** Every other control: a bare symbol in the trailing glass group. */
+  const glassed = $derived(
+    all.filter((one) => !(centred.includes(one) || worded.includes(one)))
+  );
   /** The count a control in More says on it (Comments'), only above 0 (The Earned Count Rule). */
   const moreCount = $derived(
     more.find((one) => one.count && one.count.n > 0)?.count
@@ -212,10 +223,34 @@
     return width;
   }
 
+  /**
+   * The head's controls as one row: a glass group's items stand in the row
+   * where the group does (its own gap is the head's), and its inline
+   * padding is room the row keeps.
+   */
+  function rowOf(el: HTMLElement): { row: Element[]; pads: number[] } {
+    const row: Element[] = [];
+    const pads: number[] = [];
+    for (const child of el.children) {
+      if ((child as HTMLElement).dataset.slot === "tools") {
+        const style = getComputedStyle(child);
+        pads.push(
+          (Number.parseFloat(style.paddingInlineStart) || 0) +
+            (Number.parseFloat(style.paddingInlineEnd) || 0)
+        );
+        row.push(...child.children);
+      } else {
+        row.push(child);
+      }
+    }
+    return { row, pads };
+  }
+
   /** What always stands (the switch, Close) as drawn; each control's width, and More's, kept while it stands. */
   function drawnWidths(el: HTMLElement, name: HTMLElement) {
-    const kept: number[] = [];
-    for (const child of el.children) {
+    const { row, pads } = rowOf(el);
+    const kept: number[] = [...pads];
+    for (const child of row) {
       const one = child as HTMLElement;
       const width = laidOut(one);
       const item = one.dataset.headItem;
@@ -351,7 +386,7 @@
     // re-observes them.
     for (const one of all) {
       const child = el.querySelector(
-        `:scope > [data-head-item="${CSS.escape(one.key)}"]`
+        `[data-head-item="${CSS.escape(one.key)}"]`
       );
       if (child) {
         seen.observe(child);
@@ -365,6 +400,57 @@
     return () => seen.disconnect();
   });
 </script>
+
+{#snippet standingItem(one: HeadItem, place = "")}
+  <div
+    data-form={formOf(one.key)}
+    data-head-item={one.key}
+    class={["unhidden:flex unhidden:flex-none", place]}
+    hidden={!stands(one.key)}
+  >
+    {#if one.compact && formOf(one.key) === "compact"}
+      {@render one.compact()}
+    {:else}
+      {@render one.bar()}
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet moreMenu()}
+  <DropdownMenu.Root>
+    <DropdownMenu.Trigger
+      data-slot="more"
+      aria-label={moreCount
+        ? `More, ${moreCount.of} ${moreCount.n} open`
+        : "More"}
+      face="count"
+      size={moreCount ? "sm" : "icon-sm"}
+      title="More"
+      variant="ghost"
+    >
+      <IconMore />
+      {#if moreCount}
+        <!-- The count says what it counts: its control's own glyph beside it (Comments' chat-square), so "⋯ 2" never reads as two things in More. -->
+        <!-- A mark line of its own (a box on the trigger's): its count
+                 trimmed beside its glyph. -->
+        <span
+          data-box
+          data-slot="more-count"
+          class="mark-line inline-flex items-center gap-space-1 text-ink-muted num"
+          ><moreCount.glyph data-box /><span>{moreCount.n}</span></span
+        >
+      {/if}
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Content align="end" width="regular">
+      {#each more as one, at (one.key)}
+        {#if at > 0 && (one.group || more[at - 1]?.group)}
+          <DropdownMenu.Separator />
+        {/if}
+        {@render one.menu()}
+      {/each}
+    </DropdownMenu.Content>
+  </DropdownMenu.Root>
+{/snippet}
 
 {#snippet expandBar()}
   {#if expand}
@@ -437,7 +523,10 @@
       data-slot="identity"
       data-controlled={titleControl ? "" : undefined}
       data-switched={switcher ? "" : undefined}
-      class="-m-space-1 flex min-w-(--name-keeps) flex-1 flex-col items-start overflow-hidden p-space-1 ps-space-3 *:max-w-full data-switched:ps-space-2 data-controlled:not-data-switched:ps-space-1"
+      class={[
+        "-m-space-1 flex min-w-(--name-keeps) flex-col items-start overflow-hidden p-space-1 ps-space-3 *:max-w-full data-switched:ps-space-2 data-controlled:not-data-switched:ps-space-1",
+        centred.some((one) => stands(one.key)) ? "flex-initial" : "flex-1",
+      ]}
       style:--name-keeps="{nameKeeps}px"
       bind:this={identity}
     >
@@ -458,69 +547,44 @@
       {/if}
     </div>
     {@render actions?.()}
-    {#each all as one (one.key)}
-      <div
-        data-form={formOf(one.key)}
-        data-head-item={one.key}
-        class="unhidden:flex unhidden:flex-none"
-        hidden={!stands(one.key)}
-      >
-        {#if one.compact && formOf(one.key) === "compact"}
-          {@render one.compact()}
-        {:else}
-          {@render one.bar()}
-        {/if}
-      </div>
+    <!-- The mode stands in the centre (DESIGN.md, Artifact panel: "Centre,
+         the mode"); what acts on the view stands trailing as one glass
+         group of bare symbols, then the one prominent action with words
+         (Send, a browser's Take over), then Close in a group of its own
+         (The Title Bars Follow Liquid Glass Rule; HIG, Toolbars: "Keep
+         actions with text labels separate"). -->
+    {#each centred as one (one.key)}
+      {@render standingItem(one, "mx-auto")}
     {/each}
-    {#if more.length > 0}
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger
-          data-slot="more"
-          aria-label={moreCount
-            ? `More, ${moreCount.of} ${moreCount.n} open`
-            : "More"}
-          face="count"
-          size={moreCount ? "sm" : "icon-sm"}
-          title="More"
-          variant="ghost"
-        >
-          <IconMore />
-          {#if moreCount}
-            <!-- The count says what it counts: its control's own glyph beside it (Comments' chat-square), so "⋯ 2" never reads as two things in More. -->
-            <!-- A mark line of its own (a box on the trigger's): its count
-                 trimmed beside its glyph. -->
-            <span
-              data-box
-              data-slot="more-count"
-              class="mark-line inline-flex items-center gap-space-1 text-ink-muted num"
-              ><moreCount.glyph data-box /><span>{moreCount.n}</span></span
-            >
-          {/if}
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end" width="regular">
-          {#each more as one, at (one.key)}
-            {#if at > 0 && (one.group || more[at - 1]?.group)}
-              <DropdownMenu.Separator />
-            {/if}
-            {@render one.menu()}
-          {/each}
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
+    {#if glassed.length > 0 || more.length > 0 || (!items && expand?.available)}
+      <BarGlass form="group">
+        {#each glassed as one (one.key)}
+          {@render standingItem(one)}
+        {/each}
+        {#if more.length > 0}
+          {@render moreMenu()}
+        {/if}
+        {#if !items && expand?.available}
+          {@render expandBar()}
+        {/if}
+      </BarGlass>
     {/if}
-    {#if !items && expand?.available}
-      {@render expandBar()}
-    {/if}
-    <Button
-      data-slot="close"
-      aria-label="Close"
-      failed={closeFailed}
-      icon={IconClose}
-      onclick={onclose}
-      pending={closing}
-      size="icon-sm"
-      title="Close"
-      variant="ghost"
-    />
+    {#each worded as one (one.key)}
+      {@render standingItem(one)}
+    {/each}
+    <BarGlass form="group">
+      <Button
+        data-slot="close"
+        aria-label="Close"
+        failed={closeFailed}
+        icon={IconClose}
+        onclick={onclose}
+        pending={closing}
+        size="icon-sm"
+        title="Close"
+        variant="ghost"
+      />
+    </BarGlass>
   </header>
   {@render above?.()}
   {#if recessed}

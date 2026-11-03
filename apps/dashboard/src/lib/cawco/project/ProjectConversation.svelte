@@ -55,7 +55,12 @@
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import { IconClose, IconInfo, IconMaximize, IconPlus } from "#lib/icons.js";
+  import {
+    IconClose,
+    IconListRows,
+    IconMaximize,
+    IconPlus,
+  } from "#lib/icons.js";
   import { barGlass } from "../bar-glass.svelte";
   import type { CawLead } from "./caw-lead.svelte";
   import { startConversation } from "./conversation";
@@ -274,7 +279,7 @@
             <BarItem
               aria-expanded={cardOpen}
               aria-haspopup="dialog"
-              icon={IconInfo}
+              icon={IconListRows}
               label={transcriptWords.sessionDetails}
               onclick={cardPress}
               onpointerenter={(event: PointerEvent) => {
