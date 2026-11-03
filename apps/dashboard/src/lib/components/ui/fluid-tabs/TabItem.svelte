@@ -478,8 +478,9 @@
       <Icon class="size-(--icon) flex-none" />
     {/if}
     <!-- The name, and over it the same name in the strong ink: a folder tab
-         fades the strong one in as it is chosen (transitions.dev, text swap
-         soft), so its ink travels with the choice. -->
+         fades the strong one in as it is chosen and the muted one out
+         (`pick-out`; transitions.dev, text swap soft), so its ink travels
+         with the choice. -->
     <!-- A tab's name is in the label role whatever its state; the colour and
          the sheet say which one is chosen. Each layer is clipped for the
          ellipsis, so the line box is left whole — a trimmed one would lose
@@ -490,7 +491,7 @@
     >
       <span
         data-slot="text"
-        class="col-start-1 row-start-1 min-w-0 truncate leading-(--item) font-medium"
+        class="pick-inherit col-start-1 row-start-1 min-w-0 truncate leading-(--item) font-medium in-variant-folder:pick-out"
         >{label}</span
       >
       <!-- Its words drawn, not written (`::before`): as a second copy of
