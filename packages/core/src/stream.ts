@@ -216,8 +216,8 @@ import type { TailnetServing } from "./tailnet-https";
  *    `mayStart` (`["any"]` every type), where a `canDelegate` yes or no
  *    stood. A page built for 42 reads a `canDelegate` the hub no longer
  *    sends, so it reloads first.
- * 44: no choice holds a session's writes to any repository: `GET`/`PUT
- *    /api/fleet/choices` carries no `upstream`, a project carries no answer
+ * 44: no choice holds a session's writes to any repository: the fleet
+ *    choices route (since removed) carried no `upstream`, a project carries no answer
  *    of its own, and the `fleet.upstream` frame is gone. A page built for 43
  *    sends a choice the hub refuses, so it reloads first.
  *

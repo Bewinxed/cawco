@@ -27,6 +27,7 @@
  *   already minted lapse at their TTL.
  */
 import { createHmac, randomBytes } from "node:crypto";
+import type { ChoiceEntry } from "@cawco/core";
 import type { Bounded } from "@cawco/core/bounded";
 import type { BrowserRelay } from "@cawco/core/browser";
 import type { MachineCapabilities } from "@cawco/core/capabilities";
@@ -547,4 +548,41 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       };
     },
   };
+};
+
+/** The relay card's id and its two options. */
+const RELAY_CARD = {
+  id: "fleet-relay",
+  setUp: "set-up",
+  later: "later",
+} as const;
+
+/**
+ * The `fleet-relay` card, for the first-run row's relay step: the step's
+ * lead (core `STREAM_RELAY_WORDS`), and two options, Set up the stream relay
+ * and Later; Set up recommended when the person reached CawCo through a
+ * domain, which carries pages and not streams.
+ *
+ * @public Kept for the first-run row's relay step, the build after the one
+ * that took the card off the setup page.
+ */
+export const relayCard = (domain: string | null): string => {
+  const words = STREAM_RELAY_WORDS;
+  const lead = domain ? words.leadDomain(domain) : words.leadPlain;
+  return `- \`${RELAY_CARD.id}\`: "${words.title}" — ${lead} Options \`${RELAY_CARD.setUp}\` labelled "${words.setUp}"${domain ? " (recommended)" : ""} and \`${RELAY_CARD.later}\` labelled "${words.later}". Say on the card that Set up opens a short guided set-up in Needs you, each step ticking by itself, and that Settings › Browsers is where it is finished and seen. It is the fleet's, asked once: say so on the card.`;
+};
+
+/**
+ * What the person picked on the relay card: Set up, Later, or nothing.
+ *
+ * @public Kept for the first-run row's relay step, as {@link relayCard} is.
+ */
+export const relayPickOf = (
+  state: Record<string, ChoiceEntry>
+): "set-up" | "later" | undefined => {
+  const card: ChoiceEntry | undefined = state[RELAY_CARD.id];
+  const [option] = card?.options ?? [];
+  if (option === RELAY_CARD.setUp || option === RELAY_CARD.later) {
+    return option;
+  }
 };

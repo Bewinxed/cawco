@@ -935,23 +935,6 @@
         }
       }
     },
-    "/api/fleet/choices": {
-      "get": {
-        "operationId": "getApiFleetChoices",
-        "responses": {
-          "200": {
-            "description": "getApiFleetChoices 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FleetChoices"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/browsers": {
       "get": {
         "operationId": "getApiBrowsers",
@@ -35611,60 +35594,6 @@
             "type": "number"
           }
         }
-      },
-      "FleetChoices": {
-        "description": "What `GET /api/fleet/choices` answers.",
-        "type": "object",
-        "properties": {
-          "delegates": {
-            "description": "Always true: every session uses CawCo's delegates over its harness's\nsubagents, the fleet's policy. Still sent, with `setAt` and\n`tools.delegates`, because the apps on TestFlight 20261015 through\n20261018 decode them as required (hub openapi.ts's wire check); they go\nin the change that expires those builds.",
-            "type": "boolean",
-            "enum": [
-              true
-            ]
-          },
-          "deniedTools": {
-            "description": "The baseline as stored: denials beyond the fixed policy.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "setAt": {
-            "description": "Always null: nothing about the fleet's tools is set. Kept as `delegates` is.",
-            "type": "null"
-          },
-          "todos": {
-            "description": "Always true: every session keeps CawCo's list. Kept as `delegates` is.",
-            "type": "boolean",
-            "enum": [
-              true
-            ]
-          },
-          "tools": {
-            "type": "object",
-            "properties": {
-              "delegates": {
-                "type": "object"
-              },
-              "todos": {
-                "type": "object"
-              }
-            },
-            "required": [
-              "delegates",
-              "todos"
-            ],
-            "description": "What each fixed denial denies, per harness."
-          }
-        },
-        "required": [
-          "delegates",
-          "deniedTools",
-          "setAt",
-          "todos",
-          "tools"
-        ]
       },
       "ListedBrowser": {
         "description": "One browser of the fleet as the hub lists it (`GET /api/browsers`, and\n{@link BrowserListFrame}): the row its machine last reported, kept by the\nhub, with the machine's name and what the machine says of it now (`why`,\n`progress`, `origin`, from its latest frame).",

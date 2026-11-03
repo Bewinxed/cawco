@@ -3055,7 +3055,7 @@ export const supervisorConfig = sqliteTable("supervisor_config", {
   /**
    * When the fleet's stream relay was last offered on a new project's setup
    * page and answered (a machine picked, or Later); null while never, so the
-   * page offers it (fleet-choices.ts). Settings › Browsers is where it is
+   * page offers it (stream-relay.ts `relayCard`). Settings › Browsers is where it is
    * finished afterwards.
    */
   relayAskedAt: timestamp("relay_asked_at"),

@@ -734,7 +734,6 @@ import { faviconRoutes } from "./favicon";
 import { answerFind, createFind, FIND_QUERY } from "./find";
 import { forScreens } from "./find-secrets";
 import { createFindTool } from "./find-tool";
-import { fleetChoicesRoutes } from "./fleet-choices";
 import { type FetchNews, heardFetch } from "./fleet-fetches";
 import { FleetMcp } from "./fleet-mcp";
 import { FleetMcpChanges, type RidingChanges } from "./fleet-mcp-changes";
@@ -29925,7 +29924,6 @@ export const createServer = (
         projectDelegateTypesRoutes(projectTypes, (id) =>
           db.listProjects().some((project) => project.id === id)
         ),
-        fleetChoicesRoutes(() => db.getSupervisorConfig().deniedTools),
         browserRoutes(browsers),
         browserStreamRoutes(browserStream),
         relayJourneyRoutes(relayJourney, relayAsker, (request, server) =>
