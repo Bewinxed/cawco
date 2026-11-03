@@ -111,6 +111,20 @@ export const setupPageWords = {
     dropped: "Dropped",
   } satisfies Record<StageKind, string>,
   kindOf: (name: string) => `Kind of ${name}`,
+  /** The kind menu's head over the kinds. */
+  kind: "What the board does with it",
+  /** A stage's reorder handle, for a screen reader: where it stands, as the house order list says it. */
+  place: (name: string, at: number, of: number) =>
+    `Move ${name}, ${at} of ${of}`,
+  draggable: "draggable",
+  /** A stage's remove button, and the button it turns into that removes it (Reminders' minus, then Delete). */
+  removeAsk: (name: string) => `Remove ${name}…`,
+  removeNow: "Remove",
+  /** The Notion list's open button and its rename item. */
+  editFor: (name: string) => `Change ${name}`,
+  rename: "Rename",
+  /** A kind's head's add button (Notion's + on a group). */
+  addTo: (kind: string) => `Add a stage to ${kind}`,
   lookOf: (name: string) => `Look of ${name}`,
   glyph: "Glyph",
   color: "Colour",

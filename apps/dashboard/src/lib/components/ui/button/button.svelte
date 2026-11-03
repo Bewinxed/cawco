@@ -67,10 +67,13 @@
         "icon-composer": "size-c-composer-field",
       },
       /* The looks its callers draw over a variant, each as they drew it. */
-      /** The ink: muted, or muted until the pointer is on it. */
+      /** The ink: muted, muted until the pointer is on it, or destructive. */
       tone: {
         muted: "text-ink-muted",
         quiet: "text-ink-muted hover:text-ink-strong",
+        /** A bare symbol that removes (a list's minus in edit mode, as
+            Reminders' is): the destructive ink, at rest and under the pointer. */
+        destructive: "text-error-11",
       },
       /** An answer to an ask: filled in the status tint, edged on the recess,
           or edged with its strong ink held (a prompt's answers). Its hover

@@ -31,6 +31,19 @@
       },
       /** Its share of a row of code cells (`--code-flex`). */
       flex: { code: { box: "flex-(--code-flex)" } },
+      /** A name edited where it stands in a list row (a setup page's
+          stage): the row's words at rest, with no edge, fill or shadow, and
+          the field's edge only while it has the caret (`field-edge`), as
+          the prose textarea's (DESIGN.md, Inputs and fields, Field frame).
+          Its box bleeds space-2 past its words on each side, so the words
+          stand on the row's column and the edge, when it comes, clears them. */
+      look: {
+        inline: {
+          box: "-mx-space-2 min-w-0",
+          field:
+            "h-c-btn-h-sm text-ellipsis border-transparent bg-transparent px-space-2 text-ink-row shadow-none not-focus-visible:hover:bg-surface-hover focus-visible:bg-surface-raised",
+        },
+      },
     },
   });
 
@@ -78,12 +91,13 @@
     field: kind,
     measure,
     flex,
+    look,
     area = true,
     "data-slot": dataSlot = "input",
     ...restProps
   }: Props = $props();
   const looks = $derived(
-    inputVariants({ face, text, field: kind, measure, flex })
+    inputVariants({ face, text, field: kind, measure, flex, look })
   );
   /** The field's own look, the same for a file picker and a text field.
       Typed in, its edge steps up (`field-edge`): the caret is its focus. */
