@@ -7,17 +7,21 @@
    */
   import { graphWords as words } from "@cawco/core/words/graph";
   import { IconChevronLeft, IconChevronRight } from "#lib/icons.js";
+  import { figureOf } from "./figures";
 
   let {
     path,
     at,
     onstep,
+    lang,
   }: {
     /** The component's path, its states in the list's order. */
     path: readonly string[];
     /** Where the kept state stands on it. */
     at: number;
     onstep: (state: string) => void;
+    /** The page's language, for the figures. */
+    lang: string | undefined;
   } = $props();
 
   const step = (by: number) => {
@@ -50,7 +54,7 @@
       class="m-0 min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap text-center type-label text-ink-row num"
       aria-live="polite"
     >
-      {words.position(at + 1, path.length)}
+      {words.position(figureOf(at + 1, lang), figureOf(path.length, lang))}
     </p>
     <button
       type="button"

@@ -26,7 +26,7 @@
     withRoster?: boolean;
     /** The one component under review in place of the routine form. */
     alone?: ReviewInput | null;
-    /** The page's language round the surface (a locale's figures), else the page's own. */
+    /** The page's language for its figures (a locale's), else the document's. */
     lang?: string;
   } = $props();
 
@@ -56,11 +56,10 @@
 
 <div
   class="h-(--window-h)"
-  {lang}
   style:--window-h="{tall}px"
   {@attach frameSize((node: HTMLElement) => {
     tall = screenHeight(node.clientWidth);
   })}
 >
-  <DesignGraph {ask} {inputs} {stale} />
+  <DesignGraph {ask} {inputs} {lang} {stale} />
 </div>

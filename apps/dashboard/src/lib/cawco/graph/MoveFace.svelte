@@ -196,23 +196,38 @@
    * drag, as Jitter's Duration follows its bar's end handle.
    */
   let holding = $state<{ from: number; id: string; to: number } | null>(null);
+  /** `n` as a figure in the page's language. */
+  const figure = (n: number) => figureOf(n, lang);
   /** A row as a person says it: one length when its stretches share one, else its whole stretch; while its bar is held, the held one. */
   const nameOf = (track: Track) => {
     const held = holding?.id === track.id ? holding : null;
     if (held) {
       return track.spans.length === 1
-        ? words.clipName(track.name, track.how, held.to - held.from)
-        : words.clipSpan(track.name, track.how, held.from, held.to);
+        ? words.clipName(track.name, track.how, figure(held.to - held.from))
+        : words.clipSpan(
+            track.name,
+            track.how,
+            figure(held.from),
+            figure(held.to)
+          );
     }
     return track.length === null
-      ? words.clipSpan(track.name, track.how, track.begins, track.ends)
-      : words.clipName(track.name, track.how, track.length);
+      ? words.clipSpan(
+          track.name,
+          track.how,
+          figure(track.begins),
+          figure(track.ends)
+        )
+      : words.clipName(track.name, track.how, figure(track.length));
   };
   /** Before and after, when he changed it. */
   const tunedOf = (track: Track) => {
     const [first] = track.clips;
     return first?.was
-      ? words.tuned(words.ms(first.was.duration), words.ms(first.duration))
+      ? words.tuned(
+          words.ms(figure(first.was.duration)),
+          words.ms(figure(first.duration))
+        )
       : null;
   };
   /** The row's duration chip: its figure, and the design system's name when it is one; a spring's figure is where it settles. */
@@ -224,8 +239,8 @@
     );
     if (track.sprung) {
       return {
-        text: words.springFigure(ms),
-        said: words.springSettles(ms),
+        text: words.springFigure(figure(ms)),
+        said: words.springSettles(figure(ms)),
         free: false,
       };
     }
@@ -235,11 +250,15 @@
         : null;
     return token
       ? {
-          text: words.durationChip(ms, token),
-          said: words.durationOf(ms, token),
+          text: words.durationChip(figure(ms), token),
+          said: words.durationOf(figure(ms), token),
           free: false,
         }
-      : { text: words.ms(ms), said: words.freeOf(ms), free: true };
+      : {
+          text: words.ms(figure(ms)),
+          said: words.freeOf(figure(ms)),
+          free: true,
+        };
   };
   const pct = (t: number) => `${(t / scale) * 100}%`;
   /**
@@ -412,12 +431,15 @@
             <span class="h-px w-full bg-border-control"></span>
             <Slider.Thumb
               aria-label={words.scrub}
-              aria-valuetext={words.playhead(handle, Math.round(length))}
+              aria-valuetext={words.playhead(
+                figure(handle),
+                figure(Math.round(length))
+              )}
               class="pointer-hit touch-hit flex h-space-5 min-w-space-8 cursor-ew-resize items-center justify-center rounded-pill bg-ink-strong px-space-1 type-meta text-surface-raised shadow-xs num focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2"
               index={0}
               onkeydown={pageKey}
             >
-              {figureOf(handle, lang)}
+              {figure(handle)}
             </Slider.Thumb>
           </Slider.Root>
           <div
@@ -445,7 +467,7 @@
                 style:--at={pct(mark)}
               >
                 <span class="h-space-1 w-px bg-border-control"></span>
-                {#if at % figureEvery === 0}{figureOf(mark, lang)}{/if}
+                {#if at % figureEvery === 0}{figure(mark)}{/if}
               </span>
             {/each}
           </div>
@@ -536,6 +558,7 @@
           >
             <ClipBar
               disabled={original}
+              {lang}
               {name}
               onhold={(span) => {
                 holding = span ? { id: track.id, ...span } : null;

@@ -4,6 +4,13 @@
  * its states, with the moves between them and their timing. Plain words,
  * DESIGN.md's Voice: a state is named as the product talks of it.
  */
+/**
+ * A number as the page's language writes it (dashboard graph/figures.ts
+ * `figureOf`, `Intl.NumberFormat` in the page's `lang`): every figure these
+ * words say is one, so none says a raw number ("1800000 ms").
+ */
+export type Figure = string & { readonly figure: true };
+
 export const graphWords = {
   /** The room's three faces, its switch's segments, and the switch's name for a screen reader. */
   statesFace: "States",
@@ -13,7 +20,7 @@ export const graphWords = {
   /** The panel's own name, whichever face it shows: the room's aside and the phone drawer's title. */
   room: "States, map and animation",
   /** Where the journey stands on the component's path: "8 of 11". */
-  position: (at: number, of: number) => `${at} of ${of}`,
+  position: (at: Figure, of: Figure) => `${at} of ${of}`,
   previous: "Previous state",
   next: "Next state",
   /** The room's one close, its own; and the bar's symbol that brings it back while it is put away. */
@@ -62,7 +69,7 @@ export const graphWords = {
   pause: "Pause",
   playQuarter: "Play at quarter speed",
   /** The playhead's time over the move's length, tabular figures. */
-  playhead: (at: number, of: number) => `${at} / ${of} ms`,
+  playhead: (at: Figure, of: Figure) => `${at} / ${of} ms`,
   scrub: "Time",
   /** A clip's two handles on its bar. */
   clipStarts: (clip: string) => `Start of ${clip}`,
@@ -115,9 +122,9 @@ export const graphWords = {
   element: "Element",
 
   /** A row of the move, one per thing that moves, named as a person says it: "Form failure unfolds, 260 ms"; a thing that moves at two moments of different lengths says its whole stretch. */
-  clipName: (element: string, how: string, ms: number) =>
+  clipName: (element: string, how: string, ms: Figure) =>
     `${element} ${how}, ${ms} ms`,
-  clipSpan: (element: string, how: string, from: number, to: number) =>
+  clipSpan: (element: string, how: string, from: Figure, to: Figure) =>
     `${element} ${how}, ${from}–${to} ms`,
   /** The clip editor. */
   edit: (clip: string) => `Change ${clip}`,
@@ -153,7 +160,7 @@ export const graphWords = {
   damping: "Damping",
   delay: "Delay",
   reset: "Reset",
-  ms: (value: number) => `${value} ms`,
+  ms: (value: Figure) => `${value} ms`,
   /** The ruler's unit, beside the playhead's figure. */
   msUnit: "ms",
   /** A tuned clip says so on its row, before and after. */
@@ -165,19 +172,19 @@ export const graphWords = {
   original: "Original",
   edited: "Edited",
   /** The moment a row's animation was started, before any delay: its mark on the lane. */
-  triggeredAt: (ms: number) => `Triggered at ${ms} ms`,
+  triggeredAt: (ms: Figure) => `Triggered at ${ms} ms`,
   /** A row with several animations, opened into one row each. */
   showClips: (n: number) => `Show ${n} animations`,
   hideClips: (n: number) => `Hide ${n} animations`,
   /** A row's duration chip when its length is the design system's, and its name for a reader. */
-  durationChip: (ms: number, name: string) => `${ms} ms · ${name}`,
-  durationOf: (ms: number, name: string) =>
+  durationChip: (ms: Figure, name: string) => `${ms} ms · ${name}`,
+  durationOf: (ms: Figure, name: string) =>
     `${ms} ms, the design system's “${name}” duration`,
   /** The dashed chip, its length off the ladder (⌥), and its name for a reader. */
-  freeOf: (ms: number) => `${ms} ms, not from the design system`,
+  freeOf: (ms: Figure) => `${ms} ms, not from the design system`,
   /** A spring row: its bar's figure, and what a reader hears for it. */
-  springFigure: (ms: number) => `~${ms} ms`,
-  springSettles: (ms: number) => `Spring, settles in about ${ms} ms`,
+  springFigure: (ms: Figure) => `~${ms} ms`,
+  springSettles: (ms: Figure) => `Spring, settles in about ${ms} ms`,
   /** The bar's body, dragged: the whole animation along the lane. */
   moveClip: (clip: string) => `Move ${clip}`,
   /** The editor's curve sections: the house's curves, then the shapes. */
@@ -186,20 +193,20 @@ export const graphWords = {
 
   /** A list state's record sets, each a variant. */
   recordsOne: "One record",
-  recordsMany: (n: number) => `${n} records`,
+  recordsMany: (n: Figure) => `${n} records`,
   recordsLongest: "Longest names",
 
   /** The stage's view. */
   stageView: "View options",
   width: "Width",
-  ownWidth: (px: number) => `Component's own width, ${px}`,
+  ownWidth: (px: Figure) => `Component's own width, ${px}`,
   /** A listed width that is also the component's own. */
-  ownListed: (device: string, px: number) =>
+  ownListed: (device: string, px: Figure) =>
     `${device}, ${px}, the component's own width`,
   phone: "Phone",
   tablet: "Tablet",
   desk: "Desktop",
-  widthOf: (device: string, px: number) => `${device}, ${px}`,
+  widthOf: (device: string, px: Figure) => `${device}, ${px}`,
   scheme: "Appearance",
   light: "Light",
   dark: "Dark",
