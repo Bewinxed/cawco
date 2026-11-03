@@ -1,8 +1,3 @@
-<script lang="ts" module>
-  /** How the map reads at a phone's width (WholeSet `phoneMap`). */
-  export type PhoneMap = "floor" | "shapes" | "list";
-</script>
-
 <script lang="ts">
   /**
    * The whole set (spec, The whole set): every state of every machine and
@@ -28,6 +23,10 @@
    * moved is already its frame. No zoom figure. The kept card wears the list's
    * on-stage face. One press keeps a state, or, while comparing, compares
    * with it; resting on a card changes nothing.
+   *
+   * In a pane under 640px the map is a list (WholeList), as DESIGN.md's
+   * Map mode draws a narrow map: fitted whole there, its words drew at
+   * 2.6px.
    *
    * Light while panning: the node components are one constant map, each
    * card's data is set when the set, the kept state or the comparison
@@ -65,21 +64,14 @@
     kept,
     against,
     onpress,
-    phoneMap = null,
+    narrow = false,
   }: {
     review: Review;
     kept: string;
     against: string | null;
     onpress: (state: string, variant: string | null) => void;
-    /**
-     * How the map reads at a phone's width, the owner's look to pick (its
-     * decision page, design-graph-phone-map): fitted whole, its words fall
-     * under the size that reads. `floor`: no fit draws a word under it, and
-     * the map pans; `shapes`: the fit stands, and its words go while they
-     * draw under it; `list`: the states and their moves as a list. Null at
-     * a desk's width.
-     */
-    phoneMap?: PhoneMap | null;
+    /** A pane under 640px: the map is a list (DESIGN.md, Map mode; WholeList). */
+    narrow?: boolean;
   } = $props();
 
   const nodeTypes = { state: StateNode, machine: MachineNode };
@@ -103,16 +95,6 @@
   );
   /** A hidden line in the label's own type, at its widest: what an act's label takes. */
   let ruler = $state<HTMLElement>();
-  /** The least a word draws at and still reads (the house rules' small-text: 10px under a 600px screen). */
-  const READABLE_PX = 10;
-  /** The map's smallest words, px: an act's label and a card's note, in the meta role, as the label's ruler draws them. */
-  const smallest = $derived(
-    ruler ? Number.parseFloat(getComputedStyle(ruler).fontSize) : 0
-  );
-  /** The zoom that draws the smallest words at READABLE_PX, rounded up to a hundredth so no word draws a fraction under it. */
-  const readableZoom = $derived(
-    smallest > 0 ? Math.ceil((READABLE_PX / smallest) * 100) / 100 : undefined
-  );
   const labelSize = (label: string) => {
     if (!ruler) {
       return { width: lengths.label, height: lengths.labelLine };
@@ -249,23 +231,14 @@
       .join(";")
   );
   let zoom = $state(1);
-  /**
-   * `shapes`, and the map drawn so small its words would not read: its
-   * words go (each card's, group's and act's own `group-data-tiny/whole`)
-   * and its shapes stay.
-   */
-  const tiny = $derived(
-    phoneMap === "shapes" && smallest > 0 && zoom * smallest < READABLE_PX
-  );
 </script>
 
-{#if phoneMap === "list"}
-  <WholeList {cardOf} {review} />
+{#if narrow}
+  <WholeList {cardOf} {kept} {review} />
 {:else}
   <div
     data-slot="whole-set"
-    data-tiny={tiny || undefined}
-    class="group/whole relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-md border border-border-hairline bg-surface-raised"
+    class="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-md border border-border-hairline bg-surface-raised"
     style:--xy-edge-stroke="var(--border-contrast)"
     style:--xy-edge-stroke-width="var(--c-graph-edge)"
   >
@@ -278,9 +251,6 @@
       fitView
       fitViewOptions={FIT}
       {...ZOOM}
-      minZoom={phoneMap === "floor" && readableZoom
-        ? readableZoom
-        : ZOOM.minZoom}
       nodesConnectable={false}
       nodesDraggable={false}
       nodesFocusable={false}
@@ -306,7 +276,6 @@
         bind:this={fit}
         {held}
         layout={placed}
-        minZoom={phoneMap === "floor" ? readableZoom : undefined}
         nodeCount={nodes.length}
       />
       <WholeMeasure

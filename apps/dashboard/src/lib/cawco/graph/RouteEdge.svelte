@@ -64,7 +64,7 @@
 {#if route.label && route.labelAt}
   <EdgeLabel transparent x={route.labelAt.x} y={route.labelAt.y}>
     <span
-      class="block max-w-c-graph-label rounded-sm border border-border-hairline bg-surface-raised px-space-1 type-meta text-ink-row group-data-tiny/whole:invisible"
+      class="block max-w-c-graph-label rounded-sm border border-border-hairline bg-surface-raised px-space-1 type-meta text-ink-row"
       >{route.label}</span
     >
   </EdgeLabel>
