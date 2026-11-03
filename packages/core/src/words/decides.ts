@@ -217,10 +217,6 @@ export const decidesWords = {
     `${andList(kinds)} ${kinds.length === 1 ? "follows" : "follow"} the fleet again`,
 
   // ── The page: its bar and head ──────────────────────────────────────────
-  /** The fleet, as the bar's first crumb names it until he names it. */
-  fleet: "Your fleet",
-  /** The bar, as a screen reader names it. */
-  crumbs: "Breadcrumb",
   /** The bar's trailing link: the project's Decisions tab. */
   decisions: "Decisions",
   /** The project page's title. */

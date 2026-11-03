@@ -24,6 +24,7 @@
    * his until it does.
    */
   import type { Member } from "@cawco/core/decides";
+  import { commonWords } from "@cawco/core/words/common";
   import { configureWords } from "@cawco/core/words/configure";
   import { decidesWords } from "@cawco/core/words/decides";
   import { untrack } from "svelte";
@@ -32,9 +33,10 @@
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import { listTasks, type TaskSummary } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
-  import { IconFolder, IconGlobe } from "#lib/icons.js";
+  import { IconChevronLeft, IconFolder, IconGlobe } from "#lib/icons.js";
   import { WhoDecides } from "./decides.svelte";
   import KindsOfChoice from "./KindsOfChoice.svelte";
   import WhoRoster from "./WhoRoster.svelte";
@@ -155,50 +157,41 @@
       class="min-w-0 flex-auto overflow-y-auto pt-space-5 pr-space-6 pb-space-6 pl-space-7 max-desk:px-space-5 max-phone:py-space-4"
     >
       <div class="flex flex-col gap-space-5">
-        <nav
-          aria-label={decidesWords.crumbs}
-          class="flex flex-wrap items-baseline justify-between gap-x-space-4 gap-y-space-1 type-label"
+        <!-- One bar, one row (DESIGN.md, The Title Bars Follow Liquid Glass
+             Rule): Back to the project, the chevron alone in its glass
+             group, the page's title, and its Decisions at the trailing
+             edge; never a crumb trail. -->
+        <div
+          data-slot="page-head"
+          class="flex min-h-c-top-bar-h items-center gap-space-3"
         >
-          <ol
-            class="m-0 flex min-w-0 list-none flex-wrap items-baseline gap-x-space-2 p-0"
-          >
-            <li class="min-w-0">
-              <a
-                class="text-ink-muted wrap-anywhere can-hover:hover:text-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
-                href="/config/decides">{decidesWords.fleet}</a
-              >
-            </li>
-            <li aria-hidden="true" class="text-ink-muted">/</li>
-            <li class="min-w-0">
-              {#if project}
-                <a
-                  class="text-ink-strong wrap-anywhere can-hover:hover:text-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
-                  href={projectHref}>{name}</a
-                >
-              {:else}
-                <Skeleton line="label" radius="text" width="name" />
-              {/if}
-            </li>
-          </ol>
+          <BarGlass form="group">
+            <BarItem
+              href={projectHref}
+              icon={IconChevronLeft}
+              label={commonWords.backTo(name)}
+            />
+          </BarGlass>
+          {#if project}
+            <h1
+              data-slot="title"
+              class="m-0 min-w-0 truncate type-label text-ink-strong"
+            >
+              {decidesWords.title(name)}
+            </h1>
+          {:else}
+            <Skeleton line="label" radius="text" width="title" />
+          {/if}
           <a
-            class="flex-none text-link-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+            class="ms-auto flex-none type-label text-link-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
             href="{projectHref}?view=decisions">{decidesWords.decisions}</a
           >
-        </nav>
+        </div>
         <div
           class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-5 gap-y-space-3 max-phone:grid-cols-1"
           style:--head-cols="minmax(0, 1fr) auto"
         >
-          <header class="flex min-w-0 flex-col gap-space-2">
-            {#if project}
-              <h1
-                class="m-0 type-title text-balance text-ink-strong wrap-anywhere"
-              >
-                {decidesWords.title(name)}
-              </h1>
-            {:else}
-              <Skeleton line="title" radius="text" width="title" />
-            {/if}
+          <div class="flex min-w-0 flex-col gap-space-2">
             {#if ready}
               <p class="m-0 type-body text-pretty text-ink-muted">
                 {who.own.length === 0
@@ -234,7 +227,7 @@
                 </li>
               </ul>
             {/if}
-          </header>
+          </div>
           <KindsOfChoice {named} {who} />
         </div>
         {@render roster()}
