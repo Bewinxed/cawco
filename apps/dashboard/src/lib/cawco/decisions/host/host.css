@@ -25,6 +25,11 @@
 @source "../../../components/ui/checkbox/checkbox.svelte";
 @source "../../../components/ui/chip/";
 @source "../../../components/ui/copy-button/";
+@source "../../../components/ui/dropdown-menu/";
+@source "../../../components/ui/icon-tile/";
+@source "../../../components/ui/input/";
+@source "../../../components/ui/section-header/";
+@source "../../../components/ui/menu-item/";
 @source "../../../components/ui/kbd/";
 @source "../../../components/ui/live-dot/";
 @source "../../../components/ui/morph-text/";

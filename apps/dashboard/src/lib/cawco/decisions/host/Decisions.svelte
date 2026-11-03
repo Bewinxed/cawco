@@ -48,6 +48,7 @@
 <script lang="ts">
   import { unsentChoices } from "@cawco/core/choices";
   import { pickMade, readProgram } from "@cawco/core/decisions";
+  import { setupPageWords } from "@cawco/core/words/onboarding";
   import type { ElementNode } from "@openuidev/lang-core";
   import { setContext } from "svelte";
   import type { Attachment } from "svelte/attachments";
@@ -71,7 +72,9 @@
     picks,
     sent,
   } from "./page.svelte.js";
+  import SetupTitle from "./SetupTitle.svelte";
   import { scheme } from "./scheme.svelte.js";
+  import { setupName } from "./setup-name.svelte.js";
 
   let {
     props,
@@ -91,6 +94,15 @@
     } as unknown as ElementNode)
   );
   const cards = $derived(program.cards);
+  /**
+   * A project's setup page (one `Setup`): no picks to count, and its Send
+   * sets the project up.
+   */
+  const setupPage = $derived(
+    (Array.isArray(props.children) ? props.children : []).some(
+      (child) => (child as { typeName?: string } | null)?.typeName === "Setup"
+    )
+  );
   /**
    * The widest piece of media on the page at its real size, px, as its well
    * says it (Well.svelte `picture`, through its card); 0 on a page with no
@@ -206,6 +218,9 @@
     if (spent) {
       return "Sent";
     }
+    if (setupPage) {
+      return setupPageWords.send(setupName.now || String(props.title ?? ""));
+    }
     return count === 0
       ? "Send picks"
       : `Send ${count} ${count === 1 ? "pick" : "picks"}`;
@@ -287,11 +302,18 @@
             width="40"
           />
         </span>
-        <h1
-          class="type-title mark-text min-w-0 text-balance text-ink-strong wrap-anywhere"
-        >
-          {String(props.title ?? "")}
-        </h1>
+        {#if setupPage}
+          <!-- A setup page's title is the project's name, renamed in place. -->
+          <h1 class="m-0 flex min-w-0 flex-auto" data-box>
+            <SetupTitle drafted={String(props.title ?? "")} />
+          </h1>
+        {:else}
+          <h1
+            class="type-title mark-text min-w-0 text-balance text-ink-strong wrap-anywhere"
+          >
+            {String(props.title ?? "")}
+          </h1>
+        {/if}
       </header>
       {#if !bridge()}
         <Alert variant="warning">
@@ -319,6 +341,7 @@
       <p
         class="mark-line type-meta num flex min-w-0 grow items-center gap-space-3 text-ink-muted"
         data-slot="meter"
+        class:invisible={setupPage}
       >
         <span class="shrink-0"
           ><MorphText text={String(count)} /> of {ids.length} picked</span

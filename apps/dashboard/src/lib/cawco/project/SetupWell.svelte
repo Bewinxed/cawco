@@ -3,12 +3,16 @@
   /**
    * Caw at work on a project's setup, in his panel's transcript (decision
    * page `onboarding-design`, card `the-wait`): one element made of the
-   * transcript's own parts. A well (the preview's `surface-well`) holds him
-   * live, on its axis, at 80; under him what he is on now, its live dot
-   * breathing and its words changing in place (MorphText, The Steady Swap
-   * Rule); under that the setup's four fixed steps as the transcript's
-   * thinking steps, each ticked from his own calls (setup-progress.ts), the
-   * one he is on breathing.
+   * transcript's own parts, on the transcript's own columns (`tx-columns`):
+   * a rail row like a tool's or the reasoning's, its 2px rail on the
+   * transcript's line, no border and no ground of its own, at the text
+   * column's measure. In its text column he stands live at 80; under him
+   * the row's head line, the live dot in the glyph cell (the Needs-you
+   * glyph while a question holds him) and what he is on now in its words,
+   * changing in place (MorphText, The Steady Swap Rule); under that the
+   * setup's four fixed steps as the transcript's thinking steps, each
+   * ticked from his own calls (setup-progress.ts), the one he is on
+   * breathing.
    *
    * It is the page's one live Caw while it stands (The Caw Stands On The
    * Axis Rule): the project's seat stands empty for as long as it holds him
@@ -28,7 +32,7 @@
     ThinkingStep,
     ThinkingSteps,
   } from "#lib/components/ui/thinking-steps/index.js";
-  import { IconSuccess } from "#lib/icons.js";
+  import { IconNeedsYou, IconSuccess } from "#lib/icons.js";
   import type { SetupProgress, SetupStep } from "./setup-progress";
 
   let {
@@ -55,37 +59,49 @@
   }
 </script>
 
+<!-- A rail row (design.css `rail-row`, `rail-line`, `rail-hang`): the
+     transcript's line runs down it, its head line on the glyph and text
+     columns, what it holds hung at the text column, as a tool's body is. -->
 <section
   aria-label={setupWords.element}
   data-slot="setup-well"
-  class="mx-auto my-space-3 flex w-full max-w-c-composer-w flex-col items-center gap-space-3 rounded-lg border border-border-well bg-surface-well px-space-4 pt-space-4 pb-space-3"
+  data-tx-rail
+  class="tx-columns rail-row max-w-c-measure"
 >
-  <Caw size={80} still={!cawLoop.on} {status} />
-  <!-- mark-line: the live dot heads his words as one pair on the well's axis. -->
+  <div class="rail-hang" data-box>
+    <Caw size={80} still={!cawLoop.on} {status} />
+  </div>
   <p
     aria-live="polite"
-    class="mark-line m-0 flex items-center gap-space-2 type-label text-ink-strong"
+    class="m-0 min-h-(--tx-line) rail-line text-size-label font-medium text-ink-strong"
   >
-    {#if progress.phase !== "page" && progress.phase !== "waiting"}<LiveDot
-      />{/if}
+    <span data-slot="rail-cell" class="rail-cell">
+      {#if progress.phase === "waiting"}
+        <IconNeedsYou class="size-icon-md text-status-attn-glyph" />
+      {:else if progress.phase !== "page"}
+        <LiveDot />
+      {/if}
+    </span>
     <MorphText text={progress.doing} />
   </p>
-  <ThinkingSteps class="self-stretch">
-    {#each progress.steps as step, index (step.id)}
-      {@const drawn = look(step)}
-      <div
-        data-slot="setup-step"
-        class={["min-w-0", step.live && "breathe"]}
-        data-done={step.done || undefined}
-      >
-        <ThinkingStep
-          icon={drawn.icon}
-          ink={drawn.ink}
-          isLast={index === progress.steps.length - 1}
-          label={step.label}
-          status={drawn.status}
-        />
-      </div>
-    {/each}
-  </ThinkingSteps>
+  <div class="rail-hang">
+    <ThinkingSteps>
+      {#each progress.steps as step, index (step.id)}
+        {@const drawn = look(step)}
+        <div
+          data-slot="setup-step"
+          class={["min-w-0", step.live && "breathe"]}
+          data-done={step.done || undefined}
+        >
+          <ThinkingStep
+            icon={drawn.icon}
+            ink={drawn.ink}
+            isLast={index === progress.steps.length - 1}
+            label={step.label}
+            status={drawn.status}
+          />
+        </div>
+      {/each}
+    </ThinkingSteps>
+  </div>
 </section>

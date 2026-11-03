@@ -1,6 +1,6 @@
 ---
 name: project-setup
-description: Set up a project with the person — its name, what it is for, its stages with their look, who does the work, its place and routines — asking what their words leave open with `ask` as you draft, then one short setup page they send; write its files once they do. Use when a project was just made with Caw (its first message is the person's words, or CawCo's notice of a project made from an offer), when the person asks to set the project up again, to change how it runs or one part of it, or says it should become something else.
+description: Set up a project with the person — its name, what it is for, its stages with their look, its delegates, its place and routines — asking what their words leave open with `ask` as you draft, then one setup page (a Setup in a decision program) they send; write its files once they do. Use when a project was just made with Caw (its first message is the person's words, or CawCo's notice of a project made from an offer), when the person asks to set the project up again, to change how it runs or one part of it, or says it should become something else.
 ---
 
 # Setting a project up
@@ -15,7 +15,7 @@ A setup is your questions as they come up, then one decision page, `setup`, that
 
 ## 1. Read the facts
 
-Your first words come before any work on the page: the person watches an unnamed, silent project until you speak. Load `project_setup`, `project_name` and `ask` alone now (where tools load by search, all three in one search); the decision-page skill and the page's tools wait for step 4.
+Your first words come before any work on the page: the person watches an unnamed, silent project until you speak. Load `project_setup`, `project_name` and `ask` alone now (where tools load by search, all three in one search); the decision-page skill's LIBRARY.md and the page's tools wait for step 4.
 
 Call `project_setup` (with `change` when the person named parts). It answers: the project's name and whether it is still the placeholder, the template tapped on New project (or none), every template a project is offered with its stages and delegate types, the current stages.md and tasks by stage, its places and the machines online, and the page's card ids with what Send applies for each. Done when you hold the facts.
 
@@ -38,30 +38,37 @@ Each answer reaches you as a message. Fold it into the draft; when it changes so
 
 ## 4. Build the page
 
-Load the `decision-page` skill and read the kit's setup recipe, `kit/setup.html`, with your Read tool: its comments say what each part holds. Copy it, fill it from the draft, write it to `decisions/setup/page.html` with `folder_write`, then call `artifact_create({ kind: "page", name: "setup", does: "pick", ask: "Set up <name>" })`. Write in CawCo's voice: sentence case, no "I", no folder paths inside sentences, no line that restates what a field already shows.
+The page is a decision program (the `decision-page` skill's LIBRARY.md), drawn by CawCo's own components: you give the data, never markup or styles. Its root is `Decisions("<name>", [setup])`, titled with the name alone (the page's Send carries "Set up <name>"), and its one `Setup`:
 
-The page holds the draft only, every part editable where it stands, in this order, each only when it applies:
+```
+root = Decisions("Your PR team", [setup])
+setup = Setup("Your PR team", "<what it is for and how its work is done, in your words>", [inbox, call, done], [writer], "own")
+inbox = Stage("Inbox", "todo", "inbox", "cyan")
+call = Stage("Your call", "you")
+done = Stage("Done", "done", "done", "green")
+writer = Delegate("writer", "Writer", "Drafts applications, posts and replies in your voice.", "Claude Code · Opus")
+```
 
-1. **`name`: Name and what it's for.** The name field (`name="name"`) with the name you gave, and a "What it's for" paragraph (`name="aim"`): your restatement of what the project is for and how its work is done, never quoting the person. It is the seed of AGENTS.md. Always present.
-2. **`stages`: How work moves.** The strip: one tile per stage in order, its name as the board reads it ("Your call", plain lowercase words after the first letter, no punctuation), its kind, its hooks kept as data with what they do in words ("Runs the writer", "Moves on after 7 days"), and its **look**: a glyph (`data-icon`) and a colour (`data-color`) you pick for what the stage is, from the kit's list (`kit/stage-glyphs.js`: glyphs like inbox, search, pen, eye, hourglass, send, done, trash; colours cyan, amber, orange, green). Give every stage a glyph; give colours that group stages of a kind of work, and none to a stage that needs none (dropped). A stage of kind `you` keeps the Needs-you mark on the board whatever its look. Keep one stage of kind `you`. Set the strip's `data-shape` to the template it starts from, or `own`. The person renames, changes the kind or look, reorders, adds and removes stages on the strip itself; the kit keeps the list under `stages`.
-3. **`delegates`: Who does the work.** Only when a stage runs a type or the words call for one: a row per type, ticked (`name="delegates"`, its value the type's name), with one line of its brief from their words, and its harness and model. For a shipped template, its own types with briefs fitted to the words; for `own`, the types you propose (a researcher for web-facing work, a writer).
-4. **`place`: Place.** Only when the words hold a repository URL or a path, or the shape is code, and the project has no checkout yet (or the person asked to move it). One button calling `cawco.pickPlace()`; once picked the card reads "<label> — <path>" from `cawco.on("picks", …)` (`picks.place.value`). When the words hold a repository URL, the button calls `cawco.pickPlace({ clone: "<url>" })`, the card names the repository, and the folder picked is where the clone goes. Otherwise the project's folder on the hub is its place and no card appears.
-5. **`routines`: Routines.** Only when the words name a rhythm ("Mondays", "every morning", "weekly"): each routine proposed with its schedule, ticked.
-6. **`what-moves`: What moves.** Only on a pivot or a stages change with tasks standing: each task in a stage that goes, with the stage it will move to; each type no stage runs any more, offered to drop; each routine whose stage goes.
+Pass it to `artifact_create({ kind: "page", name: "setup", does: "pick", ask: "Set up <name>", program })`. The person edits the title and description in place, renames, re-kinds, restyles, reorders, adds and removes stages, and removes delegates; the page keeps each change.
 
-The page's one Send reads "Set it up". Done when the page is open and every part that applies is on it, and no other.
+- **`Setup(name, aim, stages, delegates, shape)`.** `name`: the name you gave. `aim`: your restatement of what the project is for and how its work is done, never quoting the person: the seed of AGENTS.md. `shape`: the shipped template the stages start from, or `own`.
+- **`Stage(name, kind, icon, color, hooks, line)`**, one per stage in order. Its name as the board reads it ("Your call", plain lowercase words after the first letter, no punctuation). Its kind (todo, active, waiting, you, done, dropped). Its look: a glyph you pick for what the stage is and a colour that groups stages of one kind of work, from the library's lists; no colour for a stage that needs none (dropped). A stage of kind `you` shows the Needs-you mark whatever its look. `hooks`: its stages.md hooks as written (`{runs: "writer"}`, `{after: "7d"}`), and `line` what they do in words ("Runs the writer"). Keep one stage of kind `you`.
+- **`Delegate(id, name, brief, runs)`**, only when a stage runs a type or the words call for one: its type name, its label, one line of its brief from their words, and its harness and model. For a shipped template, its own types with briefs fitted to the words; for `own`, the types you propose (a researcher for web-facing work, a writer).
+- **Place, routines and what moves** come as their own cards beside the Setup, only when they apply (a URL or path in the words or a code shape with no checkout; a rhythm in the words; a pivot with tasks standing): Decision cards from the library, with the ids `place`, `routines` and `what-moves`; the place's pick goes through `cawco.pickPlace()` as before.
+
+Write it as a product's interface would: no line that restates what a control shows, none that reassures. Done when the page is open with every part that applies, and no other.
 
 ## 5. End your turn
 
-The person changes what they want and sends the page when they are ready. Say nothing more until they do. A question answered after the page is open that changes the draft: revise the page in place with `artifact_update` (their edits are kept by name), saying what changed in one line.
+The person changes what they want and sends the page when they are ready. Say nothing more until they do. A question answered after the page is open that changes the draft: revise the page in place with `artifact_update`'s `statements` (what the person changed is kept), saying what changed in one line.
 
 ## 6. After they send it
 
 You hear that the page has new responses; `artifact_read()` has them in full. CawCo has already applied the `name`, the template kept under `shape` (its stages.md, its delegate types and its starter skills) and the `place`: leave those. A place to clone is cloning as you write; its result comes as its own notice. Cloned, say so in a sentence. Not cloned, tell the person git's reason in one sentence: the page keeps the pick, so their next Send tries again. Then, with `folder_write`:
 
-- **stages.md** from the list kept under `stages`, in its order, each stage on its line: its name lowercased with each space as `-` ("Your call" is `your-call`), its kind, its hooks, then `icon: <glyph>` and `color: <colour>` when it has them. It must read cleanly; `folder_write` refuses it with the reason, which you fix.
-- **delegates/<type>.md** for each type kept under `delegates`: front matter (harness, model, effort, role, lands) and the type's brief from their words. A shipped template's types are written already under their names; rewrite a brief only where their words change the work.
-- **AGENTS.md** from the text kept under `aim`: what the project is and how its work is done, in CawCo's voice, no paths inside its sentences.
+- **stages.md** from the list kept under `stages` (or, when they changed nothing, the stages you drafted), in its order, each stage on its line: its name lowercased with each space as `-` ("Your call" is `your-call`), its kind, its hooks, then `icon: <glyph>` and `color: <colour>` when it has them. It must read cleanly; `folder_write` refuses it with the reason, which you fix.
+- **delegates/<type>.md** for each type id kept under `delegates` (or every one you drafted, when they removed none): front matter (harness, model, effort, role, lands) and the type's brief from their words. A shipped template's types are written already under their names; rewrite a brief only where their words change the work.
+- **AGENTS.md** from the text kept under `aim` (or your own, when they left it): what the project is and how its work is done, in CawCo's voice, no paths inside its sentences.
 - On a pivot, move each task to the stage the person picked for it.
 - Each routine they kept, made with `routine_create`.
 

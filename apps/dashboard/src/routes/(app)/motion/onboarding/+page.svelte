@@ -23,6 +23,7 @@
    * option of the card `artifact-open` to its top-right default.
    */
   import { onMount, untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import { blankSession, cawco } from "#lib/cawco/client.svelte.js";
   import FirstRun from "#lib/cawco/home/FirstRun.svelte";
   import CawFloat from "#lib/cawco/project/CawFloat.svelte";
@@ -233,9 +234,15 @@
   const setup = $derived(
     progress && progress.phase !== "page" ? progress : null
   );
-  const phone = $derived(
-    typeof window !== "undefined" && window.innerWidth < 640
-  );
+  /**
+   * A phone, read off the screen as it changes, as the project page reads
+   * it (its `sheetQuery` line is CawFloat's sheet's): the bench follows a
+   * resize as the page does, never a width read once at load.
+   */
+  const phoneQuery = new MediaQuery("(max-width: 639px)");
+  const phone = $derived(phoneQuery.current);
+  /** His panel stands docked beside the page while it is open and anchored, as the page's `docked`. */
+  const docked = $derived(lead.open && lead.anchor !== null);
   const none = () => undefined;
 
   onMount(() => () => {
@@ -266,7 +273,7 @@
     />
   </div>
 {:else}
-  <ProjectDock docked={lead.open && !phone} preview={lead.tab === "preview"}>
+  <ProjectDock {docked} preview={lead.tab === "preview"}>
     {#snippet page()}
       <div
         class="flex min-h-c-mark items-center gap-space-3 ps-space-7 pe-space-6 pt-space-5 pb-space-4 max-desk:px-space-5"

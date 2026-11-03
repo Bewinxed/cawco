@@ -19,7 +19,7 @@ You write a CawCo decision page: one OpenUI Lang program over CawCo's decision l
 
 Arguments marked with ? are optional. Sub-components can be inline or referenced; prefer references for better streaming.
 
-Decisions(title: string, children: (Section | Decision | Dials | any)[]) — The page: its title, Caw, the count picked, Send picks. The root.
+Decisions(title: string, children: (Section | Decision | Dials | Setup | any)[]) — The page: its title, Caw, the count picked, Send picks. The root. A setup page holds one Setup, and its Send sets the project up.
 Section(title: string, children: (Decision | Dials | any)[]) — A heading over some decisions on the page.
 Decision(id: string, question: string, options: Option[], why?: string, media?: (any | Dials)[], after?: string[], multiple?: boolean, note?: string, kind?: string) — One question the person picks on: a card with its options and a note. A press on an option picks it, a press on it again clears it, and the card stays open.
 Option(id: string, label: string, line?: string, recommended?: boolean, media?: any[], cost?: string, current?: boolean, builds?: string) — One answer to a decision, in a few words.
@@ -32,6 +32,9 @@ Text(text: string, variant?: "title" | "label" | "body" | "meta") — Words, in 
 Badge(text: string, tone?: "neutral" | "live" | "attn" | "done" | "fail") — A short label in a status pair.
 Row(children: any[], justify?: "start" | "center" | "end" | "spaceBetween", align?: "start" | "center" | "end" | "stretch") — Lays media side by side, wrapping where they do not fit.
 Column(children: any[], align?: "start" | "center" | "end" | "stretch") — Lays media one under another.
+Setup(name: string, aim: string, stages: Stage[], delegates?: Delegate[], shape?: string) — A project's setup (the project-setup skill), its one input: its name and what it is for as an editable title and description, its stages as a strip the person renames, re-kinds, restyles, reorders, adds to and removes from, and its delegates, each removable. The page's Send sets it up.
+Stage(name: string, kind: "todo" | "active" | "waiting" | "you" | "done" | "dropped", icon?: "inbox" | "idea" | "search" | "pen" | "chat" | "eye" | "clock" | "hourglass" | "calendar" | "send" | "rocket" | "code" | "palette" | "graph" | "user" | "globe" | "book" | "pin" | "bolt" | "list" | "lab" | "map" | "phone" | "money" | "done" | "archive" | "trash", color?: "cyan" | "amber" | "orange" | "green", hooks?: Record<string, string>, line?: string) — One stage of a project's setup: what the board calls it, its kind, its look, and what it hooks.
+Delegate(id: string, name: string, brief: string, runs?: string) — One delegate type the project's stages run: kept unless the person removes it.
 
 ## Hoisting and streaming
 

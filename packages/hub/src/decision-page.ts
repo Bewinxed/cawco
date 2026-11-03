@@ -14,9 +14,6 @@
  *   tokens.css and page.css.
  * - `{{KIT_JS}}`: the kit's page.js.
  * - `{{DIALS}}`: DialKit (vendored, MIT) and dials.js.
- * - `{{SETUP}}`: a project's setup page's recipe (kit/setup.html, the
- *   project-setup skill): setup.css, the stage glyphs (stage-glyphs.js,
- *   generated from core's stage looks) and setup.js, the strip's wiring.
  * - `{{MK:<id>}}`: `mockups/<id>.html` beside page.html, one mockup fragment.
  * - `src="caw/…"`: a Caw still from the kit; any other relative `src`, an
  *   image beside page.html; both as data: URIs, each distinct one once per
@@ -47,7 +44,7 @@ const DRAWN = "data-dp-img";
  */
 const BLANK =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
-const KNOWN = new Set(["KIT_CSS", "KIT_JS", "DIALS", "SETUP"]);
+const KNOWN = new Set(["KIT_CSS", "KIT_JS", "DIALS"]);
 
 const MEDIA: Record<string, string> = {
   webp: "image/webp",
@@ -114,7 +111,7 @@ export const buildDecisionPage = async (
     .filter((name) => !(KNOWN.has(name) || MOCKUP_NAME.test(name)));
   if (unknown.length > 0) {
     return {
-      problem: `page.html names placeholders the kit does not have: ${unknown.map((name) => `{{${name}}}`).join(", ")}. It takes {{KIT_CSS}}, {{KIT_JS}}, {{DIALS}}, {{SETUP}} and {{MK:<id>}}.`,
+      problem: `page.html names placeholders the kit does not have: ${unknown.map((name) => `{{${name}}}`).join(", ")}. It takes {{KIT_CSS}}, {{KIT_JS}}, {{DIALS}} and {{MK:<id>}}.`,
     };
   }
   let page = source
@@ -124,11 +121,6 @@ export const buildDecisionPage = async (
         `@import url("${FACES_SHEET}");\n${kitText("tokens.css")}${kitText("page.css")}`
     )
     .replaceAll("{{KIT_JS}}", () => kitText("page.js"))
-    .replaceAll(
-      "{{SETUP}}",
-      () =>
-        `<style>${kitText("setup.css")}</style><script>${kitText("stage-glyphs.js")}</script><script>${kitText("setup.js")}</script>`
-    )
     .replaceAll(
       "{{DIALS}}",
       () =>

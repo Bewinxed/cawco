@@ -37,23 +37,23 @@ const OWN_SHAPE = "own";
 export const SETUP_CARDS = [
   {
     id: "name",
-    send: 'Renames the project to the text kept under "name" (the name field, `name="name"`).',
+    send: 'Renames the project to the text kept under "name" (the Setup\'s title, as the person left it).',
   },
   {
     id: "aim",
-    send: 'Nothing: you write AGENTS.md from the text kept under "aim" (the "What it\'s for" field, `name="aim"`).',
+    send: 'Nothing: you write AGENTS.md from the text kept under "aim" (the Setup\'s description).',
   },
   {
     id: "shape",
-    send: `Applies what the strip started from, kept under "shape" (the strip's data-shape): a shipped template's name writes its stages.md, its delegate types and its starter skills; "${OWN_SHAPE}" writes nothing.`,
+    send: `Applies what the stages started from, kept under "shape" (the Setup's shape): a shipped template's name writes its stages.md, its delegate types and its starter skills; "${OWN_SHAPE}" writes nothing.`,
   },
   {
     id: "stages",
-    send: 'Nothing: you write stages.md from the list kept under "stages" ([{ name, kind, icon?, color?, runs?, until?, after?, by? }, …], the strip as the person left it).',
+    send: 'Nothing: you write stages.md from the list kept under "stages" ([{ name, kind, icon?, color?, runs?, until?, after?, by? }, …], the stages as the person left them).',
   },
   {
     id: "delegates",
-    send: 'Nothing: you write delegates/<type>.md for each type kept under "delegates" (the ticked rows).',
+    send: 'Nothing: you write delegates/<type>.md for each type id kept under "delegates" (the ones the person did not remove).',
   },
   {
     id: "place",

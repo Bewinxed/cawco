@@ -83,7 +83,3 @@ Each returns a promise that settles when the change is in the page's artifact, w
 Every form field with a `name` or `id` (`input`, `select`, `textarea`, `[contenteditable]`) is kept too, under that name, with no script: a radio group, checkboxes sharing a name and a select as `options`, anything typed as `value` (written once typing pauses). Passwords, files and hidden inputs are not kept. A field keeps what was typed across a reload, and when you re-publish the page with `artifact_update({ id, html })` it morphs in place: keep each field's `name` and the person's answers, focus and scroll stay.
 
 Bounds: ids and options up to 200 characters with no spaces at either end, 50 options per multiple pick, notes up to 2,000 characters, 500 ids per page.
-
-## A project's setup page
-
-The project-setup skill's page is its own recipe: `kit/setup.html`, which places `{{SETUP}}` after `{{KIT_JS}}`. It is one draft rather than cards of options: the name and what it is for as fields kept by their `name`, the stage strip (`[data-su-strip]`, a `.su-stage` tile per stage) that the person renames, re-kinds, reorders, adds to and removes from in place, each stage's look (`data-icon`, `data-color`) picked from the kit's glyphs and colours (`kit/stage-glyphs.js`, generated from core's stage looks; never edit it), and who does the work as ticked rows. The strip keeps its list under `stages` and redraws itself from what the hub kept on a reload or a revision. Its comments say what each part holds.
