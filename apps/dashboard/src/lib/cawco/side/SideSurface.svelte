@@ -144,8 +144,10 @@
   const stands = (key: string) => shown === null || shown.has(key);
   const formOf = (key: string): Standing => shown?.get(key) ?? "whole";
   const more = $derived(all.filter((one) => !stands(one.key)));
-  /** The mode, which stands in the head's centre. */
-  const centred = $derived(all.filter((one) => one.key === "mode"));
+  /** The mode, or a browser's address in its place, which stands in the head's centre. */
+  const centred = $derived(
+    all.filter((one) => one.key === "mode" || one.key === "address")
+  );
   /** The prominent action with words (Send, a browser's Take over), outside the glass. */
   const worded = $derived(
     all.filter((one) => one.key === "send" || one.key === "control")
