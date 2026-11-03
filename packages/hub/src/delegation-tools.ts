@@ -438,7 +438,7 @@ export function handoffTools(deps: HandoffDeps) {
       "start_session",
       "Start a new session of its own and give it work: its own sidebar row under this session and its own transcript, outliving this turn. " +
         "Unlike a delegate it reports nothing back. Use it when the user asks to spin something off, or for work in another directory or machine where no session runs yet; " +
-        "prefer handoff to a session already running there. It runs on a delegate type ('medium' by default).",
+        "prefer handoff to a session already running there. It runs on a delegate type ('medium' by default), on Claude Code, OpenCode or pi as the type or `harness` says.",
       {
         cwd: z
           .string()
@@ -463,6 +463,12 @@ export function handoffTools(deps: HandoffDeps) {
           .string()
           .optional()
           .describe("From list_delegate_types; default 'medium'."),
+        harness: z
+          .enum(HARNESSES)
+          .optional()
+          .describe(
+            "Overrides the type's. Without a type, a harness other than the 'medium' type's needs a model."
+          ),
         model: z.string().optional().describe("Overrides the type's model."),
         account: accountParameter(),
         // Never `fullSend`: only the owner puts a session in Full Send. A
@@ -480,6 +486,7 @@ export function handoffTools(deps: HandoffDeps) {
         title,
         spinOff,
         type,
+        harness,
         model,
         account,
         permissionMode,
@@ -488,6 +495,7 @@ export function handoffTools(deps: HandoffDeps) {
         actions.startSession(cwd, prompt, title, {
           spinOff,
           type,
+          harness,
           model,
           account,
           permissionMode,

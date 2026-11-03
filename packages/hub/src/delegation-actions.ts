@@ -972,6 +972,8 @@ export interface HandoffActions {
       spinOff?: boolean;
       /** A delegate type; `medium` (work-items' DEFAULT_DELEGATE_TYPE) when omitted. */
       type?: string;
+      /** Overrides the type's harness, resolved as delegate's (work-items' `resolveSpawnType`). */
+      harness?: HarnessKind;
       /** Overrides the type's model. */
       model?: string;
       /** The account it runs on, by label or id; placed by the hub when omitted. */
@@ -1809,7 +1811,14 @@ export const handoffActions = ({
       workdir: string,
       prompt: string,
       title: string,
-      { spinOff = false, type: typeName, model: modelName, machine, ...opts }
+      {
+        spinOff = false,
+        type: typeName,
+        harness: harnessName,
+        model: modelName,
+        machine,
+        ...opts
+      }
     ): Promise<HandoffResult> {
       // Named: that machine, which must be online. Unnamed: "" is the caller's
       // own, which the hub's forwarder fills in.
@@ -1824,6 +1833,7 @@ export const handoffActions = ({
       const { rows } = fleetInstances(fleet);
       const { type, harness, model } = resolveSpawnType(types, {
         type: typeName,
+        harness: harnessName,
         model: modelName,
       });
       const id = crypto.randomUUID();
