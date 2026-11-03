@@ -7,6 +7,7 @@
  * one card of the decision page `onboarding-design`; a story's own args are
  * what it changes.
  */
+
 import ProjectStart from "./ProjectStart.svelte";
 
 export default {

@@ -8,6 +8,7 @@
    * their steps with it, in an `<ol role="list">` of their own.
    */
   import type { Snippet } from "svelte";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { IconSuccess } from "#lib/icons.js";
 
   let {
@@ -16,6 +17,7 @@
     label,
     doneWord,
     step,
+    live = false,
     children,
   }: {
     done: boolean;
@@ -26,6 +28,8 @@
     doneWord: string;
     /** The step's id, on `data-step`. */
     step: string;
+    /** The step being worked on now: its mark breathes (the live dot). */
+    live?: boolean;
     children?: Snippet;
   } = $props();
 </script>
@@ -47,6 +51,8 @@
           aria-hidden="true"
           class="size-icon-md text-status-done-ink"
         />
+      {:else if live}
+        <LiveDot />
       {:else}
         <!-- The step's place in the list, drawn from its attribute: the grid
              items are no list items, so the list's own counter stays at 0. -->
