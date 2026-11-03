@@ -10,6 +10,11 @@
    * What it never does: claim the fleet is empty while the hub is not live.
    * Then the rows stay as last known and greyed, there is no Caw, and the
    * status line says the hub is gone.
+   *
+   * A fleet with no project yet is a first run: the phone's home page is the
+   * first-run row (FirstRunHere), the steps to a first project, in place of
+   * the machines guide and Caw's lone line, and the rail keeps no Caw of its
+   * own beside the desk's row.
    */
   import { machineLabel } from "@cawco/core/machine-names";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -21,6 +26,8 @@
   import StartingRows from "../spawn/StartingRows.svelte";
   import UsageMeter from "../UsageMeter.svelte";
   import Caw from "./Caw.svelte";
+  import FirstRunHere from "./FirstRunHere.svelte";
+  import { firstRunSteps } from "./first-run.svelte";
   import HomeRecent from "./HomeRecent.svelte";
   import { home } from "./home-state.svelte";
   import StatusLine from "./StatusLine.svelte";
@@ -58,10 +65,13 @@
   const machineless = $derived(
     home.machines === "none" || home.machines === "offline"
   );
+  /** A first run: the first-run row stands (FirstRunHere), and no guide or Caw here beside it. */
+  const firstRunning = $derived(firstRunSteps() !== null);
   /** The fleet state the page shows, from the moment it is wanted until it has gone. */
   let machinesThere = $state<"none" | "offline" | null>(null);
   const firstRun = $derived(
-    home.ready &&
+    !firstRunning &&
+      home.ready &&
       home.live &&
       !machineless &&
       machinesThere === null &&
@@ -77,7 +87,11 @@
   });
   /** One Caw at a time: the guide comes once the first-run Caw has gone. */
   const machinesShown = $derived(
-    variant === "page" && home.ready && machineless && !cawThere
+    variant === "page" &&
+      home.ready &&
+      machineless &&
+      !cawThere &&
+      !firstRunning
   );
   $effect(() => {
     const fleet = home.machines;
@@ -227,6 +241,12 @@
           {/if}
         </figcaption>
       </figure>
+    {/if}
+
+    {#if variant === "page" && firstRunning}
+      <div data-slot="first-run" class="mx-0 mt-space-5 mb-space-6" data-flip>
+        <FirstRunHere />
+      </div>
     {/if}
 
     {#if variant === "page" && !noFleet}

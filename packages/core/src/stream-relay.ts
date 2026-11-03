@@ -404,6 +404,11 @@ export type RelayAct =
  * shows the same ticks.
  */
 export interface RelayJourneyView {
+  /**
+   * The relay was offered and answered (Set up, or Later): the first-run
+   * row's relay step stands ticked (home FirstRun), set up or not.
+   */
+  answered: boolean;
   /** Needs you holds its row: set up, not put away (Later, Done for now), and not yet live and proven from outside. */
   asks: boolean;
   /** How many machines could run it, for the row's meta before a pick. */

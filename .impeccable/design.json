@@ -2541,7 +2541,12 @@
       {
         "name": "dur-type",
         "value": "50ms",
-        "purpose": "Between one letter of a typed example and the next: New project's placeholder typing its examples; it erases at half this."
+        "purpose": "Between one letter of a typed example and the next: New project's placeholder typing its examples once, then resting; it erases at half this."
+      },
+      {
+        "name": "dur-caw-blend",
+        "value": "640ms",
+        "purpose": "One pose of Caw's rig into the next, on ease-in-out: a step of his flock's walk on a board before setup, his travel and his waddle landing together."
       },
       {
         "name": "dur-cascade",

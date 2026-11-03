@@ -7868,6 +7868,50 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/StageColor`.
+    public enum StageColor: OpenEnum {
+        case amber
+        case cyan
+        case green
+        case orange
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "amber": self = .amber
+            case "cyan": self = .cyan
+            case "green": self = .green
+            case "orange": self = .orange
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .amber: "amber"
+            case .cyan: "cyan"
+            case .green: "green"
+            case .orange: "orange"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.amber, .cyan, .green, .orange]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/StageHooksBy`.
     public enum StageHooksBy: OpenEnum {
         case action
@@ -7902,6 +7946,119 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.action, .routine, .session, .you]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/StageIcon`.
+    public enum StageIcon: OpenEnum {
+        case archive
+        case bolt
+        case book
+        case calendar
+        case chat
+        case clock
+        case code
+        case done
+        case eye
+        case globe
+        case graph
+        case hourglass
+        case idea
+        case inbox
+        case lab
+        case list
+        case map
+        case money
+        case palette
+        case pen
+        case phone
+        case pin
+        case rocket
+        case search
+        case send
+        case trash
+        case user
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "archive": self = .archive
+            case "bolt": self = .bolt
+            case "book": self = .book
+            case "calendar": self = .calendar
+            case "chat": self = .chat
+            case "clock": self = .clock
+            case "code": self = .code
+            case "done": self = .done
+            case "eye": self = .eye
+            case "globe": self = .globe
+            case "graph": self = .graph
+            case "hourglass": self = .hourglass
+            case "idea": self = .idea
+            case "inbox": self = .inbox
+            case "lab": self = .lab
+            case "list": self = .list
+            case "map": self = .map
+            case "money": self = .money
+            case "palette": self = .palette
+            case "pen": self = .pen
+            case "phone": self = .phone
+            case "pin": self = .pin
+            case "rocket": self = .rocket
+            case "search": self = .search
+            case "send": self = .send
+            case "trash": self = .trash
+            case "user": self = .user
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .archive: "archive"
+            case .bolt: "bolt"
+            case .book: "book"
+            case .calendar: "calendar"
+            case .chat: "chat"
+            case .clock: "clock"
+            case .code: "code"
+            case .done: "done"
+            case .eye: "eye"
+            case .globe: "globe"
+            case .graph: "graph"
+            case .hourglass: "hourglass"
+            case .idea: "idea"
+            case .inbox: "inbox"
+            case .lab: "lab"
+            case .list: "list"
+            case .map: "map"
+            case .money: "money"
+            case .palette: "palette"
+            case .pen: "pen"
+            case .phone: "phone"
+            case .pin: "pin"
+            case .rocket: "rocket"
+            case .search: "search"
+            case .send: "send"
+            case .trash: "trash"
+            case .user: "user"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.archive, .bolt, .book, .calendar, .chat, .clock, .code, .done, .eye, .globe, .graph, .hourglass, .idea, .inbox, .lab, .list, .map, .money, .palette, .pen, .phone, .pin, .rocket, .search, .send, .trash, .user]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -8050,6 +8207,47 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/StagesSource`.
+    public enum StagesSource: OpenEnum {
+        case file
+        case none
+        case template
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "file": self = .file
+            case "none": self = .none
+            case "template": self = .template
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .file: "file"
+            case .none: "none"
+            case .template: "template"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.file, .none, .template]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/StagesTemplate`.
     public enum StagesTemplate: OpenEnum {
         case brand
@@ -8093,44 +8291,6 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.brand, .code, .design, .launch, .outreach, .seo, .social]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/StagesViewSource`.
-    public enum StagesViewSource: OpenEnum {
-        case file
-        case template
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "file": self = .file
-            case "template": self = .template
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .file: "file"
-            case .template: "template"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.file, .template]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

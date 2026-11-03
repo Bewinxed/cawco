@@ -39,7 +39,7 @@ import type {
   TrackerTarget,
   TrackerView,
 } from "@cawco/core/trackers";
-import type { StageKind, StagesTemplate } from "@cawco/core/views";
+import type { StageKind } from "@cawco/core/views";
 import type { WorkItemState } from "@cawco/core/work-items";
 import {
   HUB_UNREACHABLE,
@@ -75,11 +75,6 @@ export type {
 export interface Starter {
   glyph: StarterGlyph;
   text: string;
-}
-
-export interface StagesTemplateView {
-  name: StagesTemplate;
-  stages: Stage[];
 }
 
 /**
@@ -484,15 +479,6 @@ export const folderRawHref = (projectId: string, path: string): string =>
  */
 export const folderFileHref = (projectId: string, path: string): string =>
   `/project/${encodeURIComponent(projectId)}?${new URLSearchParams({ file: path }).toString().replaceAll("%2F", "/")}`;
-
-export const readTemplates = (): Promise<StagesTemplateView[]> =>
-  send("/api/stage-templates");
-
-export const applyTemplate = (
-  projectId: string,
-  template: StagesTemplate
-): Promise<StagesView & { stranded: string[] }> =>
-  send(`${base(projectId)}/stages/template`, json("POST", { template }));
 
 /**
  * A label as typed, as every editor writes it (the sheet's and the bulk

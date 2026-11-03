@@ -69,6 +69,7 @@ import {
   type LandsMode,
   type Mover,
   markdownLink,
+  OFFERED_TEMPLATES,
   PERMISSION_MODES,
   type ProjectStarter,
   type ResultArtifact,
@@ -94,6 +95,7 @@ import type {
   BuiltOn,
   Stage,
   StageMove,
+  StagesSource,
   StagesView,
   StageView,
   TaskAttempt,
@@ -696,6 +698,12 @@ export const stagesFileOf = async (
   }
 };
 const DEFAULT_TEMPLATE: StagesTemplate = "code";
+
+/** A project not set up yet reads as stages.md with no stages ({@link stagesOf}). */
+const NOT_SET_UP: StagesReading = {
+  ok: true,
+  stages: { stages: [], moves: [], views: [] },
+};
 
 /** Takes stages.md away, so the project reads the code template; one without it has nothing to take. */
 /**
@@ -1392,7 +1400,7 @@ const applyTodos = (doc: TaskDoc, changes: TodoChanges): string => {
 };
 
 const stagesView = (
-  source: "file" | "template",
+  source: StagesSource,
   content: string,
   reading: StagesReading,
   /** The project's starters, each place's (project-starters.ts). */
@@ -2653,16 +2661,20 @@ export const createTasks = (store: TaskStore) => {
       : reading;
 
   /**
-   * The project's stages as the hub applies them: stages.md as it reads, or
-   * the code template while the project has none, with its Review before
-   * done on top.
+   * The project's stages as the hub applies them: stages.md as it reads; the
+   * code template, with its Review before done on top, while it has none and
+   * was set up as the code template (`template`); or none at all while it is
+   * not set up yet (no stages.md, no template: Caw's setup page writes them
+   * when the person sends it, setup.ts). A project made before setup wrote
+   * its stages, with tasks and neither, read the code template as it stood
+   * in for it: it is recorded as the code template once, so it keeps them.
    */
   const stagesOf = async (
     projectId: string
   ): Promise<{
     content: string;
     reading: StagesReading;
-    source: "file" | "template";
+    source: StagesSource;
   }> => {
     try {
       const { content } = await readFolderFile(projectId, STAGES_FILE);
@@ -2672,18 +2684,28 @@ export const createTasks = (store: TaskStore) => {
         reading: ruled(projectId, readStages(content)),
       };
     } catch (error) {
-      if (error instanceof FolderRefusal && error.status === 404) {
-        return {
-          source: "template",
-          content: templateText(DEFAULT_TEMPLATE),
-          reading: ruled(projectId, {
-            ok: true,
-            stages: templateStages(DEFAULT_TEMPLATE),
-          }),
-        };
+      if (!(error instanceof FolderRefusal && error.status === 404)) {
+        throw error;
       }
-      throw error;
     }
+    const project = store.project(projectId);
+    if (!project?.template && store.index(projectId).length === 0) {
+      return { source: "none", content: "", reading: NOT_SET_UP };
+    }
+    if (project && !project.template) {
+      store.setTemplate(projectId, DEFAULT_TEMPLATE);
+      console.info(
+        `[tasks] project ${projectId} had tasks on the code template that stood in for its stages; it is recorded as the code template.`
+      );
+    }
+    return {
+      source: "template",
+      content: templateText(DEFAULT_TEMPLATE),
+      reading: ruled(projectId, {
+        ok: true,
+        stages: templateStages(DEFAULT_TEMPLATE),
+      }),
+    };
   };
 
   /**
@@ -2778,8 +2800,8 @@ export const createTasks = (store: TaskStore) => {
   const currentStages = async (
     projectId: string
   ): Promise<Stages | undefined> => {
-    const { reading } = await stagesOf(projectId);
-    return reading.ok ? reading.stages : undefined;
+    const { reading, source } = await stagesOf(projectId);
+    return reading.ok && source !== "none" ? reading.stages : undefined;
   };
 
   /** The project's stages, or a refusal saying what in stages.md keeps the hub from `doing`. */
@@ -2787,7 +2809,13 @@ export const createTasks = (store: TaskStore) => {
     projectId: string,
     doing: string
   ): Promise<Stages> => {
-    const { reading } = await stagesOf(projectId);
+    const { reading, source } = await stagesOf(projectId);
+    if (source === "none") {
+      return refuse(
+        409,
+        `The project is not set up yet, so it has no stages and the hub cannot ${doing}. Its setup page writes them once the person sends it.`
+      );
+    }
     if (!reading.ok) {
       return refuse(
         409,
@@ -4631,9 +4659,9 @@ export const createTasks = (store: TaskStore) => {
       fillTypesSoon(projectId);
     },
 
-    /** The stage templates a project can apply. */
+    /** The stage templates a project is offered (core `OFFERED_TEMPLATES`). */
     templates(): StagesTemplateView[] {
-      return STAGES_TEMPLATES.map((name) => ({
+      return OFFERED_TEMPLATES.map((name) => ({
         name,
         content: templateText(name),
         ...templateStages(name),

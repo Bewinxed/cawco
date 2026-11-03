@@ -591,6 +591,8 @@ public enum Size {
     public static let cSigninPopW: Double = 340
     /// Caw's panel floating over a project's page at its tallest (CawFloat): his head, a conversation's worth of rows and the composer, or the hero with his starters; shorter where the room under his seat is less.
     public static let cCawPanelH: Double = 640
+    /// The floor of a project's board before it is set up (SetupScene): Caw's flock stands on it (CawFlock), his rig at 72 with the room a raised wing takes, and the scene's middle stands clear of it.
+    public static let cFlockH: Double = 120
     /// The shell's top bar at every width: 43px and its 1px hairline, the compact bar's height (Apple HIG, Toolbars). Hosted tabs stand on its floor, a tab row's height below its top.
     public static let cTopBarH: Double = 44
     /// The phone bar's sidebar toggle: a bare glyph, its leading edge c-bar-phone-edge from the screen's and its centre on the tabs' centre line, in a 44px touch area.
@@ -1348,9 +1350,12 @@ public enum Motion {
     /// Between one row of an opening tree and the next: its line reaches each in turn at a steady pace, one row's room per stagger.
     /// In seconds.
     public static let durStagger: TimeInterval = 0.06
-    /// Between one letter of a typed example and the next: New project's placeholder typing its examples (decision page onboarding-design, card describe-hint); it erases at half this.
+    /// Between one letter of a typed example and the next: New project's placeholder typing its examples once, then resting (decision page onboarding-design, card describe-hint, the person's pick); it erases at half this.
     /// In seconds.
     public static let durType: TimeInterval = 0.05
+    /// One pose of Caw's rig into the next, on ease-in-out (caw-rig/rig.ts BLEND_MS): a step of his flock's walk takes this, so his travel and his waddle land together (CawFlock).
+    /// In seconds.
+    public static let durCawBlend: TimeInterval = 0.64
     /// The most an opening tree's line takes to reach its last row: a longer tree's rows come closer together.
     /// In seconds.
     public static let durCascade: TimeInterval = 0.48
