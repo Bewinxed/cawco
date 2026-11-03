@@ -1100,8 +1100,17 @@ export function startPins(deps: PinsDeps): Pins {
     };
   };
 
-  /** Of the pins no anchor finds now, those gone: no frame they stand in loading, and missing a while ({@link absences}). */
+  /**
+   * Of the pins no anchor finds now, those gone: no frame they stand in
+   * loading, and missing a while ({@link absences}). None where a pin is
+   * never moved aside ({@link settled}: a preview of a session's app): its
+   * absence is not timed, so no timer draws the page again for it.
+   */
   const goneOf = (missing: Pin[]): Pin[] => {
+    if (!settled()) {
+      absent.keep([]);
+      return [];
+    }
     const waited = missing.filter(goneFrom);
     absent.keep(waited.map((pin) => pin.id));
     return waited.filter((pin) => absent.missed(pin.id));

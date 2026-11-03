@@ -6,6 +6,7 @@ import type { PreviewElement } from "@cawco/core";
 import type { ChoiceChange } from "@cawco/core/choices";
 import {
   ANCHOR_IDENTITIES,
+  type AnchorFound,
   type ChainLink,
   COMMENT_LIMITS,
   type CommentAttachment,
@@ -65,7 +66,7 @@ import {
 } from "./frames";
 import { hold, isHeld } from "./hold";
 import { heardFromHost, toHost } from "./host-origin";
-import { OVERLAY_OWN, startInk } from "./ink";
+import { OVERLAY_OWN, ownNode, startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
 import { choiceOf, listenForPicks, optionOf } from "./pick";
 import { cropPicture } from "./picture";
@@ -531,7 +532,7 @@ addEventListener("cawco:hmr", (event) => {
     pageHash = hash;
   }
   // Drawn again by its own framework: a node may hold another part now.
-  lastFound.clear();
+  forgetFound();
   reflect();
   told();
   pins.draw();
@@ -989,7 +990,7 @@ let latest = "";
 function morphTo(html: string) {
   const held = morphPage(html, kept);
   // A morph keeps nodes by their place, whatever they hold now.
-  lastFound.clear();
+  forgetFound();
   pageHash = html.match(SERVED_HASH)?.[1] ?? pageHash;
   filled();
   told();
@@ -1785,13 +1786,6 @@ function anchorOf(el: Element): PageAnchor {
   };
 }
 
-/** `doc`'s own elements (the page's, or a frame's), any overlay's left out. */
-function pageElements(doc: Document): Element[] {
-  return [...(doc.body?.querySelectorAll("*") ?? [])].filter(
-    (el) => !el.closest(OVERLAY_OWN)
-  );
-}
-
 /** The same-origin frame `selector` names in `within`, by its document; null when it is not there or not of this origin. */
 function frameIn(within: Document, selector: string): Document | null {
   let frame: Element | null = null;
@@ -1834,23 +1828,93 @@ function waiting(anchor: PageAnchor): boolean {
   return false;
 }
 
-/** The most anchors {@link locate} keeps the last-found element of. Our call: every pin a page may hold, and a draft. */
+/** The most anchors {@link locate} keeps what it found of. Our call: every pin a page may hold, and a draft. */
 const FOUND_MOST = 512;
-/** The element each anchor last found, by the anchor as kept: its frames, its selector and its words. */
-const lastFound = new Map<string, WeakRef<Element>>();
+
+/**
+ * What an anchor reads of the page (core `findAnchor`): its elements, their
+ * words, their dev source, and the attributes that name them (an id, a test
+ * id, a choice's, an option's, the names {@link textOf} reads, the
+ * inspector's path). A style, a class or a transform written as the page
+ * animates moves an element, and is read where a mark is drawn, never here.
+ */
+const ANCHOR_READS: MutationObserverInit = {
+  attributeFilter: ["id", ...ANCHOR_IDENTITIES, ...NAMED_BY, "data-insp-path"],
+  characterData: true,
+  childList: true,
+  subtree: true,
+};
+
+/**
+ * The page's changes an anchor may read otherwise after, counted: each
+ * document {@link locate} reads (the page's, each same-origin frame's) is
+ * watched from its first read, the overlay's own nodes left out, and the
+ * window's width counts too (a kept box read as the page's own, core
+ * `pageOf`). What {@link locate} found is kept while the count stands, so a
+ * draw the page's scroll, a resize of a box or a timer asked for reads none
+ * of it again.
+ */
+let changesSeen = 0;
+const anchorReads = new MutationObserver((records) => {
+  if (records.some((record) => !ownNode(record.target))) {
+    changesSeen += 1;
+  }
+});
+const readDocs = new WeakSet<Document>();
+addEventListener("resize", () => {
+  changesSeen += 1;
+});
+
+/** The count of the page's changes as they stand now, `doc` watched from here on: changes not yet delivered (a write this very task) taken first. */
+function changesNow(doc: Document): number {
+  if (!readDocs.has(doc)) {
+    readDocs.add(doc);
+    anchorReads.observe(doc, ANCHOR_READS);
+  }
+  if (anchorReads.takeRecords().some((record) => !ownNode(record.target))) {
+    changesSeen += 1;
+  }
+  return changesSeen;
+}
+
+/** What {@link locate} found, in which document, at which count of the page's changes; null where nothing was. */
+interface Kept {
+  doc: Document;
+  found: AnchorFound<Element> | null;
+  seen: number;
+}
+/** What each anchor found, by the anchor as kept: its frames, its selector and its words. */
+const foundBy = new Map<string, Kept>();
 const foundKey = (anchor: PageAnchor) =>
   JSON.stringify([anchor.frames ?? [], anchor.selector, anchor.text ?? ""]);
 
+/** Forgets what every anchor found: the page was drawn again in place (a morph, an HMR update), its nodes holding other parts now. */
+function forgetFound() {
+  foundBy.clear();
+}
+
+/** The document `anchor` stands in: down its frames from this page's; null when one is not there or not of this origin. */
+function documentOf(anchor: PageAnchor): Document | null {
+  let within: Document | null = document;
+  for (const selector of anchor.frames ?? []) {
+    within = within && frameIn(within, selector);
+  }
+  return within;
+}
+
 /**
- * The element `anchor` last found, while it is still in its document and
- * its selector still names that very element: its words changed in place
- * (a live count, a clock, a status line inside a chosen card), which the
- * anchor's text test cannot tell from another element standing in its
+ * The element `was` found, while it is still in its document and the
+ * anchor's selector still names that very element: its words changed in
+ * place (a live count, a clock, a status line inside a chosen card), which
+ * the anchor's text test cannot tell from another element standing in its
  * place, but the same node at the same place is the mark's. A node taken
  * out, or another put where it stood, is not.
  */
-function stillThere(anchor: PageAnchor): Element | null {
-  const el = lastFound.get(foundKey(anchor))?.deref();
+function stillThere(
+  anchor: PageAnchor,
+  was: Kept | undefined
+): AnchorFound<Element> | null {
+  const el = was?.found?.el;
   if (!el?.isConnected) {
     return null;
   }
@@ -1860,40 +1924,109 @@ function stillThere(anchor: PageAnchor): Element | null {
   } catch {
     return null;
   }
-  return named === el ? el : null;
+  return named === el ? { by: "selector", el } : null;
 }
 
 /**
  * Where a page's anchor stands now (core `findAnchor`: down its frames, then
  * file:line, then selector, then text, else the element it last found, still
  * at its place: {@link stillThere}); one that leads into a frame of another
- * origin, where its embed found it (embeds.ts). What it finds is kept for
- * the next look, which is how a pin's anchor is written again with its
- * element's words as they read now (pins.ts `reanchor`).
+ * origin, where its embed found it (embeds.ts). Read again only once the
+ * page changed ({@link changesNow}): until then what it found, or that it
+ * found nothing, stands, and a pin no anchor finds costs no draw a look
+ * through the page. What it finds is how a pin's anchor is written again
+ * with its element's words as they read now (pins.ts `reanchor`).
  */
-function locate(anchor: PageAnchor) {
+function locate(anchor: PageAnchor): AnchorFound<Element> | null {
   const remote = embeds.find(anchor);
   if (remote) {
     return remote.state === "found" ? { by: remote.by, el: remote.el } : null;
   }
-  const found = findAnchorHere(anchor);
-  const key = foundKey(anchor);
-  if (found) {
-    lastFound.delete(key);
-    lastFound.set(key, new WeakRef(found.el));
-    if (lastFound.size > FOUND_MOST) {
-      const [oldest] = lastFound.keys();
-      if (oldest !== undefined) {
-        lastFound.delete(oldest);
-      }
-    }
-    return found;
+  const doc = documentOf(anchor);
+  if (!doc) {
+    return null;
   }
-  const standing = stillThere(anchor);
-  return standing ? { by: "selector" as const, el: standing } : null;
+  const seen = changesNow(doc);
+  const key = foundKey(anchor);
+  const was = foundBy.get(key);
+  if (
+    was?.doc === doc &&
+    was.seen === seen &&
+    (was.found === null || was.found.el.isConnected)
+  ) {
+    return was.found;
+  }
+  const found = findAnchorHere(anchor) ?? stillThere(anchor, was);
+  foundBy.delete(key);
+  foundBy.set(key, { doc, found, seen });
+  if (foundBy.size > FOUND_MOST) {
+    const [oldest] = foundBy.keys();
+    if (oldest !== undefined) {
+      foundBy.delete(oldest);
+    }
+  }
+  return found;
 }
 
-/** {@link locate} in this page and its same-origin frames: core `findAnchor` alone. */
+/**
+ * A document's own elements (the page's, or a frame's), any overlay's left
+ * out, with each one's own source and words as an anchor finds them by:
+ * read once while the page's changes stand ({@link changesNow}), however
+ * many anchors look, each part only once one asks for it.
+ */
+interface PageRead {
+  elements: Element[];
+  /** The elements by their own source's `file:line`. */
+  sources?: Map<string, Element[]>;
+  /** The elements by their words ({@link textOf}). */
+  words?: Map<string, Element[]>;
+}
+let pageReads = new WeakMap<Document, PageRead>();
+let readAt = -1;
+
+/** `doc` read as {@link PageRead} says, at the count of the page's changes now. */
+function pageRead(doc: Document): PageRead {
+  const seen = changesNow(doc);
+  if (readAt !== seen) {
+    pageReads = new WeakMap();
+    readAt = seen;
+  }
+  let read = pageReads.get(doc);
+  if (!read) {
+    read = {
+      elements: [...(doc.body?.querySelectorAll("*") ?? [])].filter(
+        (el) => !el.closest(OVERLAY_OWN)
+      ),
+    };
+    pageReads.set(doc, read);
+  }
+  return read;
+}
+
+/** Each of `elements` under its `keyOf` (none where it gives null), in page order. */
+function byKey(
+  elements: Element[],
+  keyOf: (el: Element) => string | null
+): Map<string, Element[]> {
+  const all = new Map<string, Element[]>();
+  for (const el of elements) {
+    const key = keyOf(el);
+    if (key !== null) {
+      const same = all.get(key);
+      if (same) {
+        same.push(el);
+      } else {
+        all.set(key, [el]);
+      }
+    }
+  }
+  return all;
+}
+
+/** `file:line`, as {@link PageRead} keys a source. */
+const sourceKey = (file: string, line: number) => `${file}:${line}`;
+
+/** {@link locate} in this page and its same-origin frames: core `findAnchor` alone, over the page read once ({@link pageRead}). */
 function findAnchorHere(anchor: PageAnchor) {
   return findAnchor<Element, Document>(anchor, {
     top: document,
@@ -1901,11 +2034,16 @@ function findAnchorHere(anchor: PageAnchor) {
     page: (within) => within.body,
     pageSized: pageSizedBox,
     content: drawsWords,
-    bySource: (within, file, line) =>
-      pageElements(within).filter((el) => {
+    bySource: (within, file, line) => {
+      const read = pageRead(within);
+      read.sources ??= byKey(read.elements, (el) => {
         const own = ownSource(el);
-        return own?.file === file && own.line === line;
-      }),
+        return own?.file && own.line !== null
+          ? sourceKey(own.file, own.line)
+          : null;
+      });
+      return read.sources.get(sourceKey(file, line)) ?? [];
+    },
     bySelector: (within, selector) => {
       try {
         return within.querySelector(selector);
@@ -1915,7 +2053,9 @@ function findAnchorHere(anchor: PageAnchor) {
     },
     textOf,
     byText: (within, text) => {
-      const matches = pageElements(within).filter((el) => textOf(el) === text);
+      const read = pageRead(within);
+      read.words ??= byKey(read.elements, (el) => textOf(el) || null);
+      const matches = read.words.get(text) ?? [];
       // The deepest: the one holding no other match.
       return (
         matches.find(

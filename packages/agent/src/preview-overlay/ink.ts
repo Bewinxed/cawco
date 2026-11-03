@@ -310,7 +310,7 @@ const holding = new Set<SVGSVGElement>();
  */
 export const OVERLAY_OWN = `cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], svg[data-cawco-pins-fixed], svg[data-cawco-changes], [${STAND_INS}]`;
 /** Whether `node` is the overlay's own or stands in it (a node of a frame's document included). */
-const ownNode = (node: Node | null): boolean => {
+export const ownNode = (node: Node | null): boolean => {
   const el =
     node?.nodeType === Node.ELEMENT_NODE
       ? (node as Element)
@@ -912,6 +912,23 @@ export function startInk(deps: InkDeps): Ink {
   /** How long each group has stood missing: one is gone only after a while, drawn again then. */
   const absent = absences(() => draw());
 
+  /**
+   * Of the groups no anchor finds now, those gone: missing for a while, not
+   * for one read of a page drawing itself again (absent.ts). Timed only
+   * where a group is moved aside ({@link settled}), so no timer draws a
+   * preview again for a group it never moves.
+   */
+  const goneOf = (located: { el: Element | null; group: InkGroup }[]) => {
+    const missing = settled()
+      ? located.filter(({ group, el }) => !el && goneFrom(group))
+      : [];
+    const gone = missing
+      .filter(({ group }) => absent.missed(group.id))
+      .map(({ group }) => group);
+    absent.keep(missing.map(({ group }) => group.id));
+    return gone;
+  };
+
   function draw() {
     for (const node of [...layer.children]) {
       if (!node.hasAttribute("data-live")) {
@@ -938,12 +955,7 @@ export function startInk(deps: InkDeps): Ink {
         "selector" in group.anchor ? deps.locate(group.anchor) : null;
       return { group, el: found?.el ?? null, by: found?.by ?? "selector" };
     });
-    // Missing for a while, not for one read of a page drawing itself again (absent.ts).
-    const missing = located.filter(({ group, el }) => !el && goneFrom(group));
-    const gone = missing
-      .filter(({ group }) => absent.missed(group.id))
-      .map(({ group }) => group);
-    absent.keep(missing.map(({ group }) => group.id));
+    const gone = goneOf(located);
     const found: InkGroup[] = [];
     const standing = new Set<Element>();
     for (const { group, el, by } of located) {
