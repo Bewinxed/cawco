@@ -7,10 +7,9 @@
    * compares the kept state with it instead. Resting the pointer on it
    * lights the row and nothing else.
    *
-   * The state on the stage is marked as a pick is, never by a fill
-   * (DESIGN.md, the pick: "its words … take `selected-ink`. There is no
-   * band behind it"): every word in `selected-ink`, and a small mark that
-   * says it is on the stage, so a wash never reads as the state's status.
+   * The state on the stage is the house list's selected row (DESIGN.md,
+   * `nav-row-selected`; the pick: "its words … take `selected-ink`. There
+   * is no band behind it"): every word in `selected-ink`, nothing more.
    * Only it shows its record sets, as the kit's toggle group under its
    * name: the state as written is the one with none picked. The state it
    * is compared with wears the change ring's edge, the stage's mark for
@@ -24,7 +23,6 @@
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconEye } from "#lib/icons.js";
   import type { GraphState } from "./model";
 
   let {
@@ -85,16 +83,6 @@
                 >, {words.comparedWith(item.name)}</span
               >{/if}
           </span>
-          {#if kept}
-            <span
-              data-slot="on-stage"
-              class="mark-line flex flex-none items-center gap-space-1 type-meta text-selected-ink"
-              data-box
-            >
-              <IconEye aria-hidden="true" class="size-icon-sm" data-box />
-              <span>{words.onStage}</span>
-            </span>
-          {/if}
         </button>
       {/snippet}
     </Tip>
