@@ -48,8 +48,10 @@
   import { queriesIn, userEventIn } from "@cawco/core/stage-play";
   import { graphWords as words } from "@cawco/core/words/graph";
   import { type Component as SvelteComponent, tick, untrack } from "svelte";
+  import { detailsOf } from "#lib/cawco/fault/rebuild.svelte.js";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import { dur, motionOk, numberOf } from "#lib/cawco/motion/curves.svelte.js";
+  import RegionHeld from "#lib/cawco/RegionHeld.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconError } from "#lib/icons.js";
@@ -227,9 +229,16 @@
   /** The rest the from state comes to before the move starts: its own arrivals (a read-back the hub answered) have played. */
   const REST_MS = 600;
 
-  const endless = (animation: Animation) =>
+  /**
+   * Motion that is the state's own and never a move's: a loop, or one that
+   * runs on a scroller and not on the clock (the house edge fade, a
+   * scroll-driven animation). Landed, an edge fade jumped to its scroll's
+   * end: a strip of chips lost the fade at its cut edge on the stage.
+   */
+  const statesOwn = (animation: Animation) =>
+    !(animation.timeline instanceof DocumentTimeline) ||
     animation.effect?.getComputedTiming().iterations ===
-    Number.POSITIVE_INFINITY;
+      Number.POSITIVE_INFINITY;
 
   /** Waits until no clip has run for {@link QUIET_MS}, at most {@link MOTION_MS}. */
   async function quietOf(seen: Map<Animation, number>): Promise<void> {
@@ -239,7 +248,7 @@
       await settle();
       if (
         [...seen.keys()].some(
-          (one) => one.playState === "running" && !endless(one)
+          (one) => one.playState === "running" && !statesOwn(one)
         )
       ) {
         quiet = performance.now();
@@ -293,7 +302,7 @@
           return;
         }
         for (const animation of holder.getAnimations({ subtree: true })) {
-          if (!(known.has(animation) || endless(animation))) {
+          if (!(known.has(animation) || statesOwn(animation))) {
             known.add(animation);
             land(animation);
             still = performance.now();
@@ -395,7 +404,7 @@
     const clips: Clip[] = [];
     /** A new animation read as a clip (a loop is a state's own, not the move's); with `still`, landed at once. */
     const take = (animation: Animation) => {
-      if (endless(animation)) {
+      if (statesOwn(animation)) {
         return;
       }
       const clip = clipOf(
@@ -447,6 +456,19 @@
       await settle();
       scan();
       await quietOf(seen);
+      // A move longer than its read (a 30-minute fill, cut at MOTION_MS)
+      // is whole in its clips, read from its timing: the stage rests at
+      // its end, where a shorter move's own animations end, and nothing of
+      // it is left running under a playhead at rest.
+      for (const [animation, since] of seen) {
+        if (
+          since >= 0 &&
+          animation.playState === "running" &&
+          !statesOwn(animation)
+        ) {
+          land(animation);
+        }
+      }
     } finally {
       watching = false;
       giveBack(holder, had);
@@ -690,6 +712,7 @@
         "w-max min-w-full bg-surface-page p-space-6 text-ink-strong",
         scheme === "dark" ? "scheme-dark" : "scheme-light",
         stale && "opacity-(--account-stale-opacity)",
+        fault && "hidden",
       ]}
     >
       <div
@@ -718,6 +741,7 @@
           >
             {#key against}
               <svelte:boundary>
+                <RegionHeld />
                 <Component {...against.args} />
               </svelte:boundary>
             {/key}
@@ -736,13 +760,16 @@
           {#key mount}
             <svelte:boundary
               onerror={(error) => {
+                // What the client `handleError` made of the throw: its own
+                // words (fault/rebuild `detailsOf`), not "[object Object]".
+                const said = detailsOf(error);
                 fault = {
-                  message:
-                    error instanceof Error ? error.message : String(error),
-                  stack: error instanceof Error ? (error.stack ?? "") : "",
+                  message: said,
+                  stack: error instanceof Error ? (error.stack ?? said) : said,
                 };
               }}
             >
+              <RegionHeld />
               {#if Live}
                 <Live {...live} />
               {/if}
@@ -801,11 +828,14 @@
     </div>
 
     {#if fault}
-      <!-- The component failed to mount: the error formula in the stage's place. -->
+      <!-- The component failed to mount: the error formula in the stage's
+           place, in the scroller's flow (the drawing it stands for holds
+           nothing, so a panel laid over the drawing's box was cut to the
+           page's gutters). -->
       <div
         data-slot="stage-failed"
         role="alert"
-        class="absolute inset-0 flex flex-col items-start gap-space-3 overflow-auto bg-surface-recess-deep p-space-6"
+        class="flex min-w-0 flex-col items-start gap-space-3 bg-surface-recess-deep p-space-6"
       >
         <p
           class="mark-line m-0 flex items-center gap-space-2 type-label text-status-fail-ink"

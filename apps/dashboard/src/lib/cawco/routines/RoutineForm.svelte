@@ -541,7 +541,8 @@
 
   {#snippet typesUnread()}
     <!-- Why the types couldn't be read, and the way back: Retry reads
-         them again. -->
+         them again, a link in the quiet tone: Create is the form's one
+         coral. -->
     {typesProblem}
     <Button
       onclick={() => {
@@ -549,6 +550,7 @@
       }}
       pad="none"
       size="xs"
+      tone="quiet"
       type="button"
       variant="link">{words.retry}</Button
     >
