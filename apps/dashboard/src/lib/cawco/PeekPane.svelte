@@ -18,6 +18,7 @@
   import { humanize, mcpParts } from "@cawco/core/tool-presentation";
   import { getToolGlance } from "@cawco/core/transcript-rules";
   import { askWords } from "@cawco/core/words/asks";
+  import { peekWords } from "@cawco/core/words/peek";
   import { planWords } from "@cawco/core/words/plan";
   /**
    * The middle step of the board's loop: glance at the fleet, peek at one
@@ -360,10 +361,14 @@
           {/if}
         </h2>
         <BarGlass form="group">
-          <BarItem href={target.href} icon={IconMaximize} label="Open" />
+          <BarItem
+            href={target.href}
+            icon={IconMaximize}
+            label={peekWords.open}
+          />
         </BarGlass>
         <BarGlass form="group">
-          <BarItem icon={IconClose} label="Close peek" onclick={onclose} />
+          <BarItem icon={IconClose} label={peekWords.close} onclick={onclose} />
         </BarGlass>
       </header>
     </ContextMenu.Trigger>
@@ -371,7 +376,7 @@
     <ContextMenu.Content>
       <ContextMenu.Item onSelect={() => goto(target.href)}>
         <IconExternal />
-        <span>Open</span>
+        <span>{peekWords.open}</span>
       </ContextMenu.Item>
       <ContextMenu.PendingItem
         disabled={!(forkable && machine)}
@@ -389,7 +394,7 @@
       <ContextMenu.Separator />
       <ContextMenu.Item onSelect={onclose}>
         <IconClose />
-        <span>Close peek</span>
+        <span>{peekWords.close}</span>
       </ContextMenu.Item>
     </ContextMenu.Content>
   </ContextMenu.Root>

@@ -24,6 +24,7 @@
 </script>
 
 <script lang="ts">
+  import { commonWords } from "@cawco/core/words/common";
   import { Dialog as SheetPrimitive } from "bits-ui";
   import type { ComponentProps, Snippet } from "svelte";
   import { dragToDismiss } from "#lib/cawco/motion/drag.svelte.js";
@@ -163,7 +164,7 @@
                   <BarItem
                     data-slot="sheet-close"
                     icon={IconClose}
-                    label="Close"
+                    label={commonWords.close}
                     {props}
                   />
                 {/snippet}

@@ -4,6 +4,7 @@
     type ShellShortcut,
     shellShortcutOf,
   } from "@cawco/core/shell-shortcuts";
+  import { configureWords } from "@cawco/core/words/configure";
   import { shellWords } from "@cawco/core/words/shell";
   import { sidebarWords } from "@cawco/core/words/sidebar";
   /**
@@ -1242,7 +1243,7 @@
                 <BarItem
                   href="/config"
                   icon={IconChevronLeft}
-                  label="Back to Configure"
+                  label={configureWords.backTo(configureWords.title)}
                 />
               </BarGlass>
             </div>

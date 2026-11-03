@@ -1,5 +1,6 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
+  import { commonWords } from "@cawco/core/words/common";
   import type { WorkItemState } from "@cawco/core/work-items";
   /**
    * The delegate tray: one compact chip per child this session has working
@@ -1729,7 +1730,7 @@
             <BarGlass form="group">
               <BarItem
                 icon={IconClose}
-                label="Close"
+                label={commonWords.close}
                 onclick={() => closeShelf(true)}
               />
             </BarGlass>

@@ -26,10 +26,17 @@ const ANSWER = Array.from(
     `Step ${i + 1}: the glass groups float over the transcript, and the rows pass under them as you scroll.\n\n`
 );
 
-const respond = (request: Seen): Reply =>
-  request.tools
-    ? { everyMs: 2, words: ANSWER }
-    : { everyMs: 5, words: ["Glass bars"] };
+/** What a peeked session is asked: it answers slowly, so it is still working when peeked. */
+const SLOW = "Take your time over the glass bars.";
+
+const respond = (request: Seen): Reply => {
+  if (!request.tools) {
+    return { everyMs: 5, words: ["Glass bars"] };
+  }
+  return request.last.includes(SLOW)
+    ? { everyMs: 400, words: [...ANSWER, ...ANSWER, ...ANSWER] }
+    : { everyMs: 2, words: ANSWER };
+};
 
 const WIDTHS: { view: View; label: string }[] = [
   { view: "phone", label: "390" },
@@ -197,6 +204,93 @@ const run = async (kit: Kit) => {
   kit.check(
     "Caw's phone sheet: Close puts the sheet away",
     (await phone.locator("[data-caw-float-sheet]").count()) === 0
+  );
+
+  // The other surfaces cut over, each at the widths it stands at.
+  /** One read of `url` at each width and scheme, once `ready` stands; `then` puts it in its state. */
+  const surface = async (
+    state: string,
+    url: string,
+    ready: string,
+    widths: typeof WIDTHS,
+    then?: (tab: Page) => Promise<void>,
+    /** The surface the rules read: the one cut over, not the page round it. */
+    scope?: string
+  ): Promise<void> => {
+    for (const theme of THEMES) {
+      for (const { view, label } of widths) {
+        const tab = await kit.page(view, { theme });
+        const where = `${state} ${label} ${theme}`;
+        try {
+          await open(tab, url, ready, 90_000);
+          await tab.waitForTimeout(1200);
+          await then?.(tab);
+          await tab.waitForTimeout(800);
+          await house.at(tab, where, scope ? { scope } : {});
+        } catch (error) {
+          kit.check(`${where}: the surface stands`, false, String(error));
+        }
+        await shot(kit, tab, where.replaceAll(" ", "-"));
+        await tab.context().close();
+      }
+    }
+  };
+  const WIDE = WIDTHS.filter(
+    ({ view }) => view === "desk" || view === "desk2529"
+  );
+
+  // The peek, from the rail's Working row (wide layouts only), of a
+  // session still at work.
+  const busy = await fleet.spawn("claude", "Peek me", src, {
+    projectId: project.id,
+  });
+  await fleet.send(busy, SLOW);
+  await surface(
+    "peek",
+    at,
+    "[data-session-row-peek]",
+    WIDE,
+    async (tab) => {
+      await tab.locator("[data-session-row-peek]").first().click({
+        force: true,
+      });
+      await tab.waitForSelector('[data-peek-sheet] [data-slot="peek"]', {
+        timeout: 30_000,
+      });
+    },
+    "[data-peek-sheet]"
+  );
+
+  // Configure's Back on a phone: the chevron alone in its glass group.
+  await surface(
+    "configure back",
+    `${base}/config/models`,
+    '[data-slot="crumb"] [data-bar-item]',
+    WIDTHS.filter(({ view }) => view === "phone"),
+    undefined,
+    '[data-slot="top"]'
+  );
+
+  // The Comments rail beside a page artifact, opened from the panel's head.
+  await fleet.api(`/api/instances/${talk}/artifacts`, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge the glass bars page",
+    name: "glass-page",
+    html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Glass bars</title></head><body><h1>Glass bars</h1><p>Every bar floats its controls in glass.</p></body></html>',
+  });
+  await surface(
+    "comments rail",
+    `${base}/session/${talk}`,
+    '[data-slot="comments"]',
+    WIDTHS,
+    async (tab) => {
+      await tab.locator('[data-slot="comments"]').first().click();
+      await tab.waitForSelector('[data-slot="comment-rail"]', {
+        timeout: 30_000,
+      });
+    },
+    '[data-slot="comment-rail"]'
   );
 
   house.report();

@@ -35,6 +35,7 @@
 
 <script lang="ts">
   import { bringIntoView } from "@cawco/core/bring-into-view";
+  import { commonWords } from "@cawco/core/words/common";
   /**
    * A session's plan (PRD §5.2, "Every session's plan, in a panel"): its
    * steps as a tree (PlanTree); its spec, read-only, whole, as running
@@ -238,7 +239,7 @@
       {cardTitle}
     </h2>
     <BarGlass form="group">
-      <BarItem icon={IconClose} label="Close" onclick={shut} />
+      <BarItem icon={IconClose} label={commonWords.close} onclick={shut} />
     </BarGlass>
   </header>
   <!-- The parts, flat on the surface: a heading, then what it names. -->
