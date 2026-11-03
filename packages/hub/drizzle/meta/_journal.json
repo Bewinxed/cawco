@@ -2423,6 +2423,13 @@
       "when": 1793681333984,
       "tag": "0353_place_root",
       "breakpoints": true
+    },
+    {
+      "idx": 354,
+      "version": "6",
+      "when": 1793683430051,
+      "tag": "0354_account_window_kinds",
+      "breakpoints": true
     }
   ]
 }
