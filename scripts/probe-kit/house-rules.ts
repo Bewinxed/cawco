@@ -1859,9 +1859,23 @@ function houseRead(args: InPageArgs): InPageRead {
           (one) => one.r.height >= 16 && one.r.width >= 120
         );
         const fat = wide.flatMap(({ el, r }) => {
+          // A field (its label over its control) is no one-line row: a
+          // select's words are its options', drawn in no line of the row.
           if (
             r.height <= 48 ||
-            el.querySelector("textarea, input, img, canvas")
+            el.querySelector(
+              'textarea, input, select, [role="combobox"], img, canvas'
+            )
+          ) {
+            return [];
+          }
+          // A pane laid out in a page's column (its scroller holding the
+          // page's content) is a region, no row: its one line is the
+          // little its content says, not a row grown over its words.
+          if (
+            [el, ...el.querySelectorAll("*")].some((one) =>
+              /^(auto|scroll)$/u.test(style(one).overflowY)
+            )
           ) {
             return [];
           }
