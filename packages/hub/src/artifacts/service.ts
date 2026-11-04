@@ -113,6 +113,7 @@ import {
   pickMade,
   pickOf,
   picksMade,
+  type SetupDrawn,
 } from "@cawco/core/decisions";
 import type { PictureSize } from "@cawco/core/decisions-library";
 import { detach } from "@cawco/core/detach";
@@ -182,6 +183,7 @@ import {
   folderFileNames,
   folderPath,
 } from "../project-folder";
+import type { SentPage } from "../setup";
 import {
   canvasEntries,
   clearDrawing,
@@ -1836,14 +1838,13 @@ export interface ArtifactServiceDeps {
   screen: (artifact: ArtifactRow, sync: string) => Promise<CanvasScreen>;
   /**
    * What a send applies before the session hears it (setup.ts
-   * `applySetupPicks`), `sentAt` the Send before it (null for the first);
-   * a refusal throws and nothing is sent.
+   * `applySetupPicks`): the page as it stands ({@link SentPage}); a
+   * refusal throws and nothing is sent.
    */
   sending: (
     instance: InstanceRow,
     artifact: ArtifactRow,
-    state: Record<string, ChoiceEntry>,
-    sentAt: string | null
+    page: SentPage
   ) => Promise<void>;
   /**
    * A workspace preview's server (agent stage.ts `ensureServed`), started or
@@ -4519,18 +4520,23 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * What a Send carries of an artifact's doc: every pick since the last
-   * Send, and the note. The person's marks are not its to carry: they go by
-   * themselves ({@link marked}). Refused when it would carry nothing.
+   * Send, and the note; a page holding a project's Setup carries the Setup
+   * whole, every time, as drawn and as the person changed it: Caw's draft
+   * is in its program, not its picks, so a Setup the person left as he
+   * drew it holds no pick at all. The person's marks are not its to carry:
+   * they go by themselves ({@link marked}). Refused when it would carry
+   * nothing.
    */
   const sendOwes = (
     doc: Doc,
     state: Record<string, ChoiceEntry>,
+    setup: SetupDrawn | null,
     body: SendBody
   ) => {
     const { sentAt } = metaOf(doc);
-    const picked = Object.values(state).some(
-      (entry) => !sentAt || entry.at > sentAt
-    );
+    const picked =
+      setup !== null ||
+      Object.values(state).some((entry) => !sentAt || entry.at > sentAt);
     const note = body.text?.trim() || null;
     if (!(picked || note)) {
       throw new ArtifactRefusal(
@@ -5862,7 +5868,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       // A project's setup page holds its Setup alone, Caw's questions going
       // through `ask` (the project-setup skill): the Setup is its choice.
       const holds = program
-        ? program.read.cards.length > 0 || program.read.setup
+        ? program.read.cards.length > 0 || program.read.setup !== null
         : HTML_CHOICE.test(html ?? "");
       if (!holds) {
         throw new ArtifactRefusal(400, NO_CHOICE);
@@ -8649,9 +8655,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         await askAgain(row, new Set(body.again));
         return { choices: state, ...metaOf(doc) };
       }
+      const program = programOf(row);
+      const setup = program === undefined ? null : readKept(program).setup;
       let owes: ReturnType<typeof sendOwes>;
       try {
-        owes = sendOwes(doc, state, body);
+        owes = sendOwes(doc, state, setup, body);
       } catch (error) {
         saySend(
           row,
@@ -8675,7 +8683,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         )
       );
       if (picked) {
-        await deps.sending(instance, row, state, sentAt);
+        await deps.sending(instance, row, {
+          state,
+          sentAt,
+          revisedAt:
+            (doc.getMap("meta").get("revisedAt") as string | undefined) ?? null,
+          setup,
+        });
       }
       await deps.signal(instance, row, { since: row.deliveredSeq });
       const at = new Date().toISOString();

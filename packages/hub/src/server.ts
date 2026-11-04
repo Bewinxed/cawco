@@ -14897,7 +14897,7 @@ export const createServer = (
       const refused = await dropPage(instance, projectId, name);
       return refused && { status: refused.code, refused: refused.refused };
     },
-    sending: async (instance, artifact, state, sentAt) => {
+    sending: async (instance, artifact, page) => {
       // A step of the session's plan that waited on a card picked here stops waiting.
       plans.waitsMoved(instance.id);
       // His Send of a project's decision page decides it: its record and log are written from these picks.
@@ -14907,33 +14907,27 @@ export const createServer = (
       // A project's setup page: its name, shape, account and place applied before
       // its writer hears the picks, and the Send its approval of the
       // AGENTS.md and delegate types it writes from them (caw.ts `setupSent`).
-      const setup = await applySetupPicks(
-        artifact,
-        instance.projectId,
-        state,
-        sentAt,
-        {
-          // Its name field's and account's refusals are the send's to answer, as a place's is.
-          name: (projectId, name) => setupEdit(projectId, { name }),
-          account: (projectId, account) => setupEdit(projectId, { account }),
-          shape: async (projectId, template) => {
-            await tasks.applyTemplate(projectId, template, YOU_ACTOR);
-          },
-          // A refusal is an ArtifactRefusal too: the send answers it. A clone
-          // is checked now and runs after the Send, its result told.
-          place: async (projectId, place) => {
-            const { clone } = place;
-            if (clone) {
-              cloneProjectPlace(instance, artifact.id, projectId, {
-                ...place,
-                clone,
-              });
-              return;
-            }
-            await addProjectPlace(projectId, place.machineId, place.path);
-          },
-        }
-      );
+      const setup = await applySetupPicks(artifact, instance.projectId, page, {
+        // Its name field's and account's refusals are the send's to answer, as a place's is.
+        name: (projectId, name) => setupEdit(projectId, { name }),
+        account: (projectId, account) => setupEdit(projectId, { account }),
+        shape: async (projectId, template) => {
+          await tasks.applyTemplate(projectId, template, YOU_ACTOR);
+        },
+        // A refusal is an ArtifactRefusal too: the send answers it. A clone
+        // is checked now and runs after the Send, its result told.
+        place: async (projectId, place) => {
+          const { clone } = place;
+          if (clone) {
+            cloneProjectPlace(instance, artifact.id, projectId, {
+              ...place,
+              clone,
+            });
+            return;
+          }
+          await addProjectPlace(projectId, place.machineId, place.path);
+        },
+      });
       if (setup && instance.projectId) {
         lead?.setupSent(instance.projectId, instance.id);
       }

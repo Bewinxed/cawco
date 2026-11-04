@@ -693,7 +693,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
       return kept;
     }
     const { title, cards, setup } = readKept(program);
-    const read = { title, cards, setup };
+    const read = { title, cards, setup: setup !== null };
     programReads.set(hash, read);
     if (programReads.size > PROGRAM_READS) {
       programReads.delete(programReads.keys().next().value as string);

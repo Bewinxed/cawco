@@ -20,6 +20,7 @@ import {
   type OfferedTemplate,
   type StagesTemplate,
 } from "@cawco/core";
+import type { SetupDrawn } from "@cawco/core/decisions";
 import { templateStages } from "./stages";
 import { templateTypes } from "./template-types";
 
@@ -236,41 +237,72 @@ const accountOf = (
   return value.trim() === ROUTING ? null : value.trim();
 };
 
+/**
+ * The shape the stages start from: the person's pick on the page, else the
+ * Setup's own as Caw drew it (the board, which draws the Setup from the
+ * program, keeps nothing until the person changes something).
+ */
 const shapeOf = (
-  state: Record<string, ChoiceEntry>
+  state: Record<string, ChoiceEntry>,
+  drawn: SetupDrawn | undefined
 ): OfferedTemplate | undefined => {
   const entry: ChoiceEntry | undefined = state.shape;
-  const picked = entry?.value ?? entry?.options?.[0];
+  const picked = entry ? (entry.value ?? entry.options[0]) : drawn?.shape;
   return OFFERED_TEMPLATES.find((name) => name === picked);
 };
 
 /**
- * When the person sends a project's setup page, by any path (the page's own
- * `cawco.send`, the panel's Send): the name in its `name` field, the shipped
- * template picked on `shape`, the account picked on `account` and the place
- * picked on `place` are applied before Caw hears the picks, so he writes only the project's files. Only
- * picks made since the last Send (`sentAt`) apply: a Send again for one
- * pick (a place whose clone failed) leaves the stages Caw wrote alone. Any
- * other artifact is left alone. Answers whether it was the setup page.
+ * A setup page as its Send finds it: its picks, its last Send (null before
+ * the first), when its session last drew it (`revisedAt`, null when never)
+ * and the Setup its program holds as drawn (null when none).
+ */
+export interface SentPage {
+  revisedAt: string | null;
+  sentAt: string | null;
+  setup: SetupDrawn | null;
+  state: Record<string, ChoiceEntry>;
+}
+
+/**
+ * When the person sends a project's setup page, by any path (the board's
+ * Set up, the page's own `cawco.send`, the panel's Send), whatever it
+ * holds beside its Setup: the name in its `name` field, the shipped
+ * template the Setup's shape starts from (the person's pick, else as Caw
+ * drew it), the account picked on `account` and the place picked on
+ * `place` are applied before Caw hears the page, so he writes only the
+ * project's files. Only what is new since the last Send (`sentAt`) applies:
+ * a pick made since, or, for a part the person left as drawn, the page
+ * drawn again since; so a Send again for one pick (a place whose clone
+ * failed) leaves the stages Caw wrote alone. Any other artifact is left
+ * alone. Answers whether it was the setup page.
  */
 export const applySetupPicks = async (
   artifact: { kind: string; name: string },
   projectId: string | null | undefined,
-  picks: Record<string, ChoiceEntry>,
-  sentAt: string | null,
+  page: SentPage,
   apply: SetupApply
 ): Promise<boolean> => {
   if (!projectId || artifact.kind !== "page" || artifact.name !== SETUP_PAGE) {
     return false;
   }
+  const { revisedAt, sentAt } = page;
   const state = Object.fromEntries(
-    Object.entries(picks).filter(([, entry]) => !sentAt || entry.at > sentAt)
+    Object.entries(page.state).filter(
+      ([, entry]) => !sentAt || entry.at > sentAt
+    )
   );
+  // What Caw drew counts as new on the first Send, or once he drew the page again since.
+  const drawn =
+    page.setup && (!sentAt || (revisedAt !== null && revisedAt > sentAt))
+      ? page.setup
+      : undefined;
   const name = nameOf(state);
   if (name) {
     await apply.name(projectId, name);
   }
-  const shape = shapeOf(state);
+  // A shape the person kept before the last Send went with it: it stands over what Caw drew.
+  const kept: ChoiceEntry | undefined = page.state.shape;
+  const shape = shapeOf(state, kept ? undefined : drawn);
   if (shape) {
     await apply.shape(projectId, shape);
   }

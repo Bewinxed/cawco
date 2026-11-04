@@ -297,9 +297,18 @@ export interface ProgramRead {
   images: string[];
   intro: string;
   sections: { cards: string[]; id: string; title: string }[];
-  /** It holds a project's `Setup`: a page whose one input is the setup, its choices kept under `name`, `aim`, `shape`, `stages` and `delegates`. */
-  setup: boolean;
+  /**
+   * The project's `Setup` it holds, as Caw drew it: a page whose one input
+   * is the setup, the person's changes kept under `name`, `aim`, `shape`,
+   * `stages` and `delegates`; null when it holds none.
+   */
+  setup: SetupDrawn | null;
   title: string;
+}
+
+/** A program's `Setup` as drawn: the shape its stages start from (a shipped template's name, or `own`). */
+export interface SetupDrawn {
+  shape: string;
 }
 
 const SLUG = /[^a-z0-9]+/gu;
@@ -387,7 +396,7 @@ export const readProgram = (root: ElementNode | null): ProgramRead => {
     sections: [],
     artifacts: [],
     images: [],
-    setup: false,
+    setup: null,
   };
   if (root?.typeName !== "Decisions") {
     return read;
@@ -433,7 +442,7 @@ export const readProgram = (root: ElementNode | null): ProgramRead => {
     } else if (typeName === "Image") {
       read.images.push(text(props.file));
     } else if (typeName === "Setup") {
-      read.setup = true;
+      read.setup = { shape: text(props.shape) };
     } else {
       walk(props.children, section);
     }

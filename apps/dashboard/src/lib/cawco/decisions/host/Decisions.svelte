@@ -31,7 +31,9 @@
 
   Send is spent ("Sent", its check) while the hub's record says the person
   sent and has written nothing since (core `unsentChoices` over the doc's
-  `meta.sentAt`, which the bridge's "sent" tells), so a reload keeps it.
+  `meta.sentAt`, which the bridge's "sent" tells), so a reload keeps it. A
+  setup page's never is: its Send carries the Setup whole every time (hub
+  artifacts/service.ts `sendOwes`), so it says Set up whenever it stands.
 
   The count and Send's label ("Send 3 picks": what goes) change in place
   through MorphText (DESIGN.md, The Steady Swap Rule), the count's digit
@@ -209,9 +211,9 @@
     });
   };
   let sending = $state(false);
-  /** The hub's record says the person sent, and has written nothing since (core `unsentChoices`, as artifact_read reads it): Send is spent, across reloads. */
+  /** The hub's record says the person sent, and has written nothing since (core `unsentChoices`, as artifact_read reads it): Send is spent, across reloads. Never a setup page's, whose Send carries its Setup every time. */
   const spent = $derived(
-    sent.at !== null && unsentChoices(picks.now, sent.at) === 0
+    !setupPage && sent.at !== null && unsentChoices(picks.now, sent.at) === 0
   );
   /** Send's label: what goes, or that it went (morphing through the same MorphText as its count). */
   const sendLabel = $derived.by(() => {
