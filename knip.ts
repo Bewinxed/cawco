@@ -221,6 +221,8 @@ export default {
         "scripts/probe-kit/sleep-listener-child.ts",
         // scripts/probe-kit/specs/store-reads-loop.ts:308
         "scripts/probe-kit/store-reads-child.ts",
+        // scripts/probe-kit/specs/tether.ts:48
+        "scripts/probe-kit/tether-child.ts",
         // scripts/probe-kit/specs/atomic-writes.ts:26
         "scripts/probe-kit/atomic-writer.ts",
         // scripts/probe-kit/specs/host-lfs.ts:223

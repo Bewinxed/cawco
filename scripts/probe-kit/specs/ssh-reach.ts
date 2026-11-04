@@ -175,13 +175,15 @@ const SESSIOND_ENTRY = "packages/sessiond/src/main.ts";
 const PROCESS_ID = /^\d+$/u;
 /**
  * The hub's connection to a machine: the `ssh` that is the master of its
- * control socket (ssh-tunnels.ts `master`), by its own argv. Since
- * f7c383c00 it runs under the tether (core tether.ts), whose shell and
- * reader subshell carry the same words after `sh -c …`: three processes
- * for one connection, the shell the lowest pid, and a SIGKILL of that
- * shell left the `ssh` running and the connection up.
+ * control socket (ssh-tunnels.ts `master`), by its own argv: the program
+ * `ssh` at any path, then `-N` and `-M -S` wherever its options put them.
+ * Here the hub's `ssh` is the box's wrapper (`exec <ssh> -F <ssh_config>
+ * "$@"`), so `-F` comes first: r418's `^…ssh -N` matched no connection.
+ * It runs under the tether (core tether.ts), whose shell `exec`s it, so it
+ * is the very process the hub spawned; the tether's reader subshell
+ * carries the same words after `sh -c …`, and is no connection.
  */
-const MASTER = /^(?:\S*\/)?ssh -N .* -M -S /u;
+const MASTER = /^(?:\S*\/)?ssh .*-N .* -M -S /u;
 const LOOPBACK_HOST = /^(?:127\.[\d.]+|\[::1\]|::1)$/u;
 const WHITESPACE = /\s+/u;
 /** A line of Bun's source frame for an error it printed itself: `312 |   throw …`. */

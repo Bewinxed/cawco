@@ -360,12 +360,13 @@ const freePort = (): number => {
  * confirmation requests will be disabled". It leads a process group of its
  * own, so a stop ends it and a `ProxyCommand` it runs.
  *
- * It runs under the tether (core tether.ts), its stdin the hub's end of a
- * pipe, so it ends with the hub however the hub ends: the service hub's
- * SIGTERM is the kernel's (lifetime.ts), so no JavaScript runs to end it,
- * and `detached` (`setsid()`) takes it out of the hub's process group. A
- * hub run outside the service's cgroup (a scratch hub, a `bun --watch`)
- * left its masters running, reparented, holding their machines' ports.
+ * It runs under the tether (core tether.ts), whose shell `exec`s it in its
+ * own place, its stdin the hub's end of a pipe, so it ends with the hub
+ * however the hub ends: the service hub's SIGTERM is the kernel's
+ * (lifetime.ts), so no JavaScript runs to end it, and `detached`
+ * (`setsid()`) takes it out of the hub's process group. A hub run outside
+ * the service's cgroup (a scratch hub, a `bun --watch`) left its masters
+ * running, reparented, holding their machines' ports.
  * None is kept across a restart on purpose: the next hub tells any it
  * finds to exit (`clearControl`, as it connects) and opens its own.
  */
@@ -441,7 +442,8 @@ const eachLine = async (
 
 /**
  * Ends `ssh`'s process group, when it still runs: the master's tether was
- * spawned `detached`, so it leads its own group, `ssh` in it.
+ * spawned `detached` and `exec`s `ssh`, so `ssh` leads its own group, the
+ * tether's reader and its `ProxyCommand` in it.
  */
 const end = (child: Bun.Subprocess | null): void => {
   const leader =

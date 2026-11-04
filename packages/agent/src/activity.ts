@@ -438,7 +438,7 @@ const lockedHint = async (session: string): Promise<boolean | undefined> => {
  * wakes. `listening` once gdbus says it monitors logind; never when gdbus
  * is not there or the bus refuses it. gdbus runs under core tether.ts, so it
  * ends with the agent; when it ends first, the agent closes the tether's
- * stdin and the tether ends too.
+ * stdin and the tether's reader ends too.
  */
 export const hearSleep = (
   onSleep: (going: boolean) => void,
@@ -461,6 +461,8 @@ export const hearSleep = (
     env: toolEnv(),
     // stdin is the agent's end of the pipe whose close ends the listener.
     stdio: ["pipe", "pipe", "ignore"],
+    // The tether leads a process group of its own, which its reader signals whole.
+    detached: true,
   });
   child.unref();
   child.stdin.on("error", () => undefined);

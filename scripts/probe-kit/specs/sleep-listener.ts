@@ -9,10 +9,13 @@
  * with the agent's own `hearSleep` and says `listening` once gdbus monitors
  * logind's path.
  *
- * 1. The listener stands: the tether shell, gdbus and the tether's `cat`,
- *    each under the agent.
+ * 1. The listener stands: gdbus, which the tether's shell `exec`s in its own
+ *    place as the agent's child, the tether's reader (`sh -c`) and its
+ *    `cat`, each under the agent.
  * 2. gdbus ends first (SIGTERM): the tether ends with it, the agent alive.
- * 2b. The tether shell is sent SIGTERM: gdbus and its cat go with it.
+ * 2b. The process the agent spawned for the tether is SIGKILLed, and
+ *    nothing else: it is gdbus, so gdbus is gone, and the reader and its
+ *    cat go with it, the agent alive.
  * 3. A second agent's listener; the agent is SIGKILLed: every process of the
  *    listener is gone within a second.
  *
@@ -47,10 +50,10 @@ const runs = (pid: number): boolean => {
   }
 };
 
-/** Every descendant of `root` now, with its command line. */
+/** Every descendant of `root` now, with its parent and its command line. */
 const descendants = async (
   root: number
-): Promise<{ pid: number; args: string }[]> => {
+): Promise<{ pid: number; ppid: number; args: string }[]> => {
   const rows = await processLineage();
   const tree = new Set<number>([root]);
   for (let grew = true; grew;) {
@@ -64,10 +67,13 @@ const descendants = async (
   }
   tree.delete(root);
   return Promise.all(
-    [...tree].map(async (pid) => ({
-      pid,
-      args: (await commandLine(pid)) ?? "",
-    }))
+    rows
+      .filter((row) => tree.has(row.pid))
+      .map(async ({ pid, ppid }) => ({
+        pid,
+        ppid,
+        args: (await commandLine(pid)) ?? "",
+      }))
   );
 };
 
@@ -188,14 +194,14 @@ const spec: Spec = {
       const gdbus = first.under.find((one) =>
         one.args.split(" ")[0]?.endsWith("/gdbus")
       );
-      const shell = first.under.find((one) =>
+      const tetherReader = first.under.find((one) =>
         one.args.startsWith(`${systemProgram("sh")} -c`)
       );
       check(
-        "the listener stands under the agent: gdbus, its tether shell and the tether's cat",
+        "the listener stands under the agent: gdbus, the process the agent spawned, the tether's reader and its cat",
         first.listening &&
-          !!gdbus &&
-          !!shell &&
+          gdbus?.ppid === first.agent.pid &&
+          !!tetherReader &&
           first.under.some((one) => one.args === "cat"),
         `listening ${first.listening}; ${named(first.under)}`
       );
@@ -214,30 +220,32 @@ const spec: Spec = {
         );
       }
 
-      // 2b: the tether shell signalled ends gdbus with it.
+      // 2b: the process the agent spawned for the tether SIGKILLed alone.
       const signalled = await start();
-      const tetherShell = signalled.under.find((one) =>
-        one.args.startsWith(`${systemProgram("sh")} -c`)
+      const spawned = signalled.under.find(
+        (one) => one.ppid === signalled.agent.pid
       );
       if (
         check(
-          "a listener for the tether's own signal stands",
-          signalled.listening && !!tetherShell,
+          "a listener whose spawned process is to be killed stands",
+          signalled.listening && !!spawned,
           named(signalled.under)
         ) &&
-        tetherShell
+        spawned
       ) {
-        signal(listedPid(tetherShell.pid), "SIGTERM");
+        signal(listedPid(spawned.pid), "SIGKILL");
         const took = await goneWithin(
           signalled.under.map((one) => one.pid),
           GONE_MS
         );
         check(
-          "the tether shell ended by SIGTERM takes gdbus and its cat with it",
-          took !== undefined,
+          "the process the agent spawned for the tether, SIGKILLed alone, is gdbus, and the tether's reader and cat go with it, the agent alive",
+          spawned.args.split(" ")[0]?.endsWith("/gdbus") === true &&
+            took !== undefined &&
+            runs(signalled.agent.pid),
           took === undefined
             ? `still running: ${named(signalled.under.filter((one) => runs(one.pid)))}`
-            : `all gone in ${took} ms`
+            : `${spawned.pid} ${spawned.args.split(" ")[0]}; all gone in ${took} ms; agent ${signalled.agent.pid} running ${runs(signalled.agent.pid)}`
         );
       }
 
