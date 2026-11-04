@@ -60,9 +60,76 @@ function saidOf(el: Element): string {
   return said.join(" ").replace(SPACES, " ").trim();
 }
 
-/** What a person names for an element that moves: the control it is part of, else the element itself. */
+/**
+ * The house part an element stands in: its closest `data-slot` a reader
+ * is told of, never one of the stage's own round the drawing. A morph
+ * text's letters are an `aria-hidden` slot drawn only while it morphs:
+ * the part is the morph text that holds them.
+ */
+const partOf = (el: Element): Element | null => {
+  let part = el.closest("[data-slot], [data-stage-drawing]");
+  while (part?.closest("[aria-hidden='true']")) {
+    part =
+      part.parentElement?.closest("[data-slot], [data-stage-drawing]") ?? null;
+  }
+  return part && !part.hasAttribute("data-stage-drawing") ? part : null;
+};
+
+/** Kit parts that only draw words: named by the words they say, as a person reads them, never by the part. */
+const WORDS_ONLY: ReadonlySet<string> = new Set(["morph-text"]);
+
+/**
+ * What a person names for an element that moves: the control it is part
+ * of, else the house part it stands in, else the element itself. A morph
+ * text's words each move on their own span: keyed by the span, one move
+ * drew 35 rows ("“0” moves", "“:” moves"), none a part a person can name.
+ */
 export const thingOf = (el: Element): Element =>
-  el.closest("button, a[href], [role='button']") ?? el;
+  el.closest("button, a[href], [role='button']") ?? partOf(el) ?? el;
+
+/** A part's name in words, a word said twice once ("field-field" is a field). */
+const slotWords = (slot: string): string =>
+  storyWords(
+    slot
+      .split(SEPARATORS)
+      .filter((word, at, all) => word !== all[at - 1])
+      .join(" ")
+  );
+
+/** The words of the label a part holds, or its legend: what a field is named by. */
+const labelIn = (el: Element): string | null => {
+  const label = el.querySelector("label, legend");
+  const said = label ? wordsOf(label) : "";
+  return said || null;
+};
+
+/** The label of the house part a control stands in, when its own names none: a field's label over its menu. */
+function partLabelOf(el: Element): string | null {
+  for (
+    let part = el.parentElement?.closest("[data-slot]");
+    part && !part.hasAttribute("data-stage-drawing");
+    part = part.parentElement?.closest("[data-slot]")
+  ) {
+    const label = labelIn(part);
+    if (label) {
+      return label;
+    }
+  }
+  return null;
+}
+
+/** A field's label, else its part's, else its placeholder; a menu's label or its part's, never its options' words. */
+function fieldLabelOf(el: Element): string | null {
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+    return (
+      el.labels?.[0]?.textContent?.trim() || partLabelOf(el) || el.placeholder
+    );
+  }
+  if (el instanceof HTMLSelectElement) {
+    return el.labels?.[0]?.textContent?.trim() || partLabelOf(el);
+  }
+  return null;
+}
 
 /** The element in words. */
 export function nameOf(el: Element): string {
@@ -71,16 +138,14 @@ export function nameOf(el: Element): string {
   if (control) {
     return nameOf(control);
   }
-  const slot = CONTROLS.has(el.localName) ? null : el.getAttribute("data-slot");
+  const own = CONTROLS.has(el.localName) ? null : el.getAttribute("data-slot");
+  const slot = own && !WORDS_ONLY.has(own) ? own : null;
   if (slot) {
-    return storyWords(slot.replace(SEPARATORS, " "));
+    const label = labelIn(el);
+    return label ? `${slotWords(slot)} ${quoted(label)}` : slotWords(slot);
   }
   const kind = KIND[el.localName] ?? null;
-  const label =
-    el.getAttribute("aria-label") ??
-    (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
-      ? (el.labels?.[0]?.textContent?.trim() ?? el.placeholder)
-      : null);
+  const label = el.getAttribute("aria-label") ?? fieldLabelOf(el);
   if (label) {
     const said = quoted(label.replace(SPACES, " ").trim());
     return kind ? `${kind} ${said}` : said;

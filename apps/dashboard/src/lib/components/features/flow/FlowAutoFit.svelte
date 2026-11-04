@@ -62,6 +62,15 @@
     onFocus(fitView({ ...frame(), duration, ease: easeInOut }), duration);
   }
 
+  /** Frames the whole graph, whatever zoom that takes: a tool that says it shows the whole set does. */
+  export function fitWhole(): void {
+    fitView({
+      ...FIT,
+      duration: motionOk.current ? dur("--dur-panel") : 0,
+      ease: easeInOut,
+    });
+  }
+
   let framed: number | undefined;
   $effect(() => {
     const count = nodeCount;

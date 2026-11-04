@@ -405,6 +405,16 @@
     const left = scroller
       ? { top: scroller.scrollTop, left: scroller.scrollLeft }
       : null;
+    // Held there while it runs, not only put back after: a capture taken
+    // mid-play showed the stage scrolled to the pressed control, the first
+    // field's label cut under the stage's head.
+    const pinned = scroller;
+    const pin = () => {
+      if (pinned && left) {
+        pinned.scrollTo({ ...left, behavior: "instant" });
+      }
+    };
+    pinned?.addEventListener("scroll", pin);
     const t0 = performance.now();
     const seen = new Map<Animation, number>();
     /** Each clip as the engine had it when it was first seen: a transition's engine drops its effect once it ends. */
@@ -477,6 +487,7 @@
         }
       }
     } finally {
+      pinned?.removeEventListener("scroll", pin);
       watching = false;
       giveBack(holder, had);
       if (scroller && left) {
@@ -516,7 +527,7 @@
    * comparing, the first difference's ring stands for it.
    */
   export async function reveal(els: readonly Element[]): Promise<void> {
-    const first = against ? found[0] : undefined;
+    const first = against ? ringed[0] : undefined;
     if (first) {
       await showBox(first.box);
       return;
@@ -595,6 +606,13 @@
 
   const lines = $derived(found.slice(0, LINES_SHOWN));
   /**
+   * What differs on the drawing he sees: what came in and what changed.
+   * What went is no part of it, and its box is where it stood in the other
+   * drawing: ringed there, it stood over whatever stands there now (a
+   * removed field drawn over "Each run starts"). It is a line, unringed.
+   */
+  const ringed = $derived(found.filter((mark) => mark.kind !== "went"));
+  /**
    * Compare turned on, or turned to another state: once its differences
    * are read, the first one's ring is brought into view, so the words at
    * the head and the ring they name are on screen together.
@@ -606,7 +624,7 @@
     }
   });
   $effect(() => {
-    const [first] = found;
+    const [first] = ringed;
     if (first && firstPending) {
       firstPending = false;
       untrack(() => showBox(first.box));
@@ -675,21 +693,32 @@
       >
         {#each lines as line, at (at)}
           <li class="min-w-0">
-            <button
-              type="button"
-              class="mark-line pointer-hit touch-hit flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2 rounded-sm px-space-1 text-start type-label text-ink-row transition-control can-hover:hover:bg-surface-hover"
-              onclick={() => showBox(line.box)}
-            >
+            {#if line.kind === "went"}
+              <!-- Gone from the drawing: a line with the dashed mark, no ring to bring into view. -->
               <span
-                aria-hidden="true"
-                data-box
-                class={[
-                  "inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-c-change-ring",
-                  line.kind === "went" && "border-dashed",
-                ]}
-              ></span>
-              <span class="min-w-0 wrap-anywhere">{line.line}</span>
-            </button>
+                class="mark-line flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2 px-space-1 type-label text-ink-muted"
+              >
+                <span
+                  aria-hidden="true"
+                  data-box
+                  class="inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-dashed border-c-change-ring"
+                ></span>
+                <span class="min-w-0 wrap-anywhere">{line.line}</span>
+              </span>
+            {:else}
+              <button
+                type="button"
+                class="mark-line pointer-hit touch-hit flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2 rounded-sm px-space-1 text-start type-label text-ink-row transition-control can-hover:hover:bg-surface-hover"
+                onclick={() => showBox(line.box)}
+              >
+                <span
+                  aria-hidden="true"
+                  data-box
+                  class="inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-c-change-ring"
+                ></span>
+                <span class="min-w-0 wrap-anywhere">{line.line}</span>
+              </button>
+            {/if}
           </li>
         {/each}
         {#if found.length > LINES_SHOWN}
@@ -835,13 +864,12 @@
           <!-- The rings: outside each element's box on its own shape, in
                the stage's own layer, taking no press. -->
           <div aria-hidden="true" class="pointer-events-none absolute inset-0">
-            {#each found as mark, at (at)}
+            {#each ringed as mark, at (at)}
               <span
                 data-slot="change-ring"
                 data-kind={mark.kind}
                 class={[
                   "absolute start-(--ring-x) top-(--ring-y) h-(--ring-h) w-(--ring-w) rounded-(--ring-r) border-(length:--c-change-ring-width) border-c-change-ring",
-                  mark.kind === "went" && "border-dashed",
                 ]}
                 style:--ring-x="calc({mark.box.x}px - {ringOut})"
                 style:--ring-y="calc({mark.box.y}px - {ringOut})"

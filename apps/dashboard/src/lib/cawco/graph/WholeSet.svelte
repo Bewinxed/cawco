@@ -21,8 +21,9 @@
    * a set too big for the room at that zoom stands on the kept card, the
    * rest a pan away. It fits again in place as the cards' measured heights lay it
    * out anew or the room changes size, while the view is still a fit
-   * (FlowAutoFit). The Fit tool frames the same way, so a view he has not
-   * moved is already its frame. No zoom figure. The kept card wears the
+   * (FlowAutoFit). The Fit tool shows the whole set at whatever zoom that
+   * takes, as its name says; the pan stops at the set's own bounds. No
+   * zoom figure. The kept card wears the
    * chosen card's coral edge (WholeCard). One press keeps a state, or,
    * while comparing, compares with it; resting on a card changes nothing.
    *
@@ -46,6 +47,7 @@
     SvelteFlow,
   } from "@xyflow/svelte";
   import { untrack } from "svelte";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import FlowAutoFit from "#lib/components/features/flow/FlowAutoFit.svelte";
   import FlowCanvasTools from "#lib/components/features/flow/FlowCanvasTools.svelte";
@@ -220,6 +222,12 @@
           zIndex: 1,
           selectable: false,
           focusable: false,
+          // Its name as a person says it, never the states' ids.
+          ariaLabel: words.moveEdge(
+            review.states[move.from]?.name ?? move.from,
+            review.states[move.to]?.name ?? move.to,
+            move.label ?? null
+          ),
           markerEnd: {
             type: MarkerType.ArrowClosed,
             color: "var(--border-contrast)",
@@ -247,18 +255,70 @@
    * at the least size a word draws at. Fitted whole into a desk's room,
    * the routine form's four machines drew at half size, their notes at 6px:
    * a set too big for the room stands at this zoom on the kept card instead
-   * (FlowAutoFit `focus`), the rest a pan away and the Fit tool's frame the
-   * same; a set that fits whole above it opens whole, as before.
+   * (FlowAutoFit `focus`), the rest a pan away; a set that fits whole above
+   * it opens whole. The Fit tool shows the
+   * whole set at any zoom.
    */
   const READABLE = browser
     ? LEAST_TEXT /
       (numberOf("--text-meta") *
         Number.parseFloat(getComputedStyle(document.documentElement).fontSize))
     : 1;
-  /** The kept card's middle, where a fit held at READABLE stands. */
+  /**
+   * How far the map pans: the set's own bounds, a gutter round them. A view
+   * stood past them showed a band of bare dots beside a set cut at the
+   * other edge; held to them, a set smaller than the room stands in its
+   * middle (d3-zoom's constrain).
+   */
+  const translateExtent = $derived.by(
+    (): [[number, number], [number, number]] => {
+      const boxes = [
+        ...Object.values(layout.states),
+        ...Object.values(layout.machines),
+      ];
+      const gutter = browser ? numberOf("--space-8") : 0;
+      if (boxes.length === 0) {
+        return [
+          [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY],
+          [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY],
+        ];
+      }
+      return [
+        [
+          Math.min(...boxes.map((box) => box.x)) - gutter,
+          Math.min(...boxes.map((box) => box.y)) - gutter,
+        ],
+        [
+          Math.max(...boxes.map((box) => box.x + box.w)) + gutter,
+          Math.max(...boxes.map((box) => box.y + box.h)) + gutter,
+        ],
+      ];
+    }
+  );
+  /** The map's own size on screen, px. */
+  let paneWide = $state(0);
+  let paneTall = $state(0);
+  /** `at` held so a view of `span` around it stays inside `[low, high]`; the middle when the view is the wider. */
+  const within = (at: number, span: number, low: number, high: number) =>
+    high - low <= span
+      ? (low + high) / 2
+      : Math.min(high - span / 2, Math.max(low + span / 2, at));
+  /**
+   * Where a fit held at READABLE stands: on the kept card, held so the view
+   * never reaches past the set's bounds. Centred on the card alone, a card
+   * near the set's edge left a band of bare dots on one side and the set
+   * cut on the other.
+   */
   const keptMiddle = () => {
     const box = layout.states[kept];
-    return box ? { x: box.x + box.w / 2, y: box.y + box.h / 2 } : null;
+    if (!box) {
+      return null;
+    }
+    const [[left, top], [right, bottom]] = translateExtent;
+    return {
+      x: within(box.x + box.w / 2, paneWide / READABLE, left, right),
+      y: within(box.y + box.h / 2, paneTall / READABLE, top, bottom),
+    };
   };
 </script>
 
@@ -267,6 +327,10 @@
 {:else}
   <div
     data-slot="whole-set"
+    {@attach frameSize((node: HTMLElement) => {
+      paneWide = node.clientWidth;
+      paneTall = node.clientHeight;
+    })}
     class="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-surface-raised"
     style:--xy-edge-stroke="var(--border-contrast)"
     style:--xy-edge-stroke-width="var(--c-graph-edge)"
@@ -290,6 +354,7 @@
         }
       }}
       panOnDrag
+      {translateExtent}
       proOptions={{ hideAttribution: true }}
       zoomOnDoubleClick={false}
       bind:edges
@@ -318,7 +383,7 @@
       <Panel position="bottom-center">
         <FlowCanvasTools
           figure={false}
-          fit={() => fit?.fit()}
+          fit={() => fit?.fitWhole()}
           onfit={() => {
             held = false;
           }}
