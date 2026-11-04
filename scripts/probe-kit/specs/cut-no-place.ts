@@ -21,8 +21,12 @@
  * those words, one that does not ask runs.
  *
  * - n1. A repository with no large files, on the far machine, which holds no
- *   place of the project: its workspace is cut and its item runs, so the
- *   cut asked nothing of the project's large files.
+ *   place of the project: its workspace is cut there, and its leaf, briefed
+ *   in that clone, finishes its item, so the cut asked nothing of the
+ *   project's large files. The leaf calls finish_item: a leaf that only
+ *   says "ok" fails its item after three idle turns (work-items.ts, "did
+ *   nothing for three turns in a row"), as r422's did, a second after its
+ *   clone was cut.
  * - n2. A repository whose tree marks files for LFS, there too: its cut asks,
  *   and the hub answers the machine that holds that cut. Its answer is the
  *   connection's refusal, never "This machine holds no place".
@@ -49,8 +53,41 @@ const MISSING = "probe-missing-lfs-connection";
 /** Its declared endpoint, which nothing is ever fetched from. */
 const ENDPOINT = "https://lfs.probe.invalid/info/lfs";
 
-/** Every session says "ok": what is read is whether each item started. */
-const respond = (_request: Seen): Reply => ({ everyMs: 5, words: ["ok"] });
+const FINISH = "mcp__cawco__finish_item";
+/** Whether the leaf has called finish_item; it says "Done." after. */
+let finished = false;
+
+/**
+ * The leaf finishes its item, finish_item looked up first when its harness
+ * has it deferred; every other session says "ok".
+ */
+const respond = (request: Seen): Reply => {
+  if (!(request.tools && request.all.includes(`${TAG}:`)) || finished) {
+    return { everyMs: 5, words: [finished ? "Done." : "ok"] };
+  }
+  if (!request.toolNames.includes(FINISH)) {
+    return {
+      everyMs: 5,
+      words: [],
+      tool: {
+        name: "ToolSearch",
+        input: { query: `select:${FINISH}`, max_results: 1 },
+      },
+    };
+  }
+  finished = true;
+  return {
+    everyMs: 5,
+    words: [],
+    tool: {
+      name: FINISH,
+      input: {
+        headline: "Cut on the far machine.",
+        summary: "Briefed in its clone there; nothing to do.",
+      },
+    },
+  };
+};
 
 /** A repository at `dir` with one commit, its `.gitattributes` marking `*.bin` for LFS when `lfs`. */
 const repository = async (
@@ -100,7 +137,7 @@ const delegateIn = (
       error instanceof Error ? error.message : String(error)
     );
 
-/** The item's state once it has left `starting`, or the start's refusal. */
+/** The item's state once it has ended, with its error, or the start's refusal. */
 const stateOf = async (
   fleet: KitFleet,
   started: Started | string
@@ -108,17 +145,19 @@ const stateOf = async (
   typeof started === "string"
     ? `refused: ${started}`
     : await until(
-        "the item past starting",
+        "the item ended",
         () =>
           fleet.query<{ error: string | null; state: string }>(
             "SELECT state, error FROM work_items WHERE id = ?",
             started.workItemId
           )[0],
-        (row) => row !== undefined && row.state !== "starting",
+        (row) =>
+          row !== undefined &&
+          ["done", "failed", "cancelled"].includes(row.state),
         180_000
       ).then(
         (row) => `${row?.state}${row?.error ? `: ${row.error}` : ""}`,
-        () => "still starting"
+        () => "not ended"
       );
 
 const spec: Spec = {
@@ -181,14 +220,27 @@ const spec: Spec = {
 
     const plain = join(far.home, "vps-audit");
     await repository(plain, far.home, false);
-    const plainState = await stateOf(
+    const plainStart = await delegateIn(
       fleet,
-      await delegateIn(fleet, parent, plain, "Audit with no large files")
+      parent,
+      plain,
+      "Audit with no large files"
     );
+    const plainState = await stateOf(fleet, plainStart);
+    const [cut] =
+      typeof plainStart === "string"
+        ? []
+        : fleet.query<{ machine_id: string; path: string }>(
+            "SELECT machine_id, path FROM workspaces WHERE id = ?",
+            plainStart.workspaceId
+          );
     check(
-      "n1: a repository with no large files on a machine with no place of the project: its workspace is cut and its item runs, so nothing asked where its large files live",
-      places === 0 && plainState.startsWith("running"),
-      `places there ${places}; ${plainState}`
+      "n1: a repository with no large files on a machine with no place of the project: its workspace is cut there and its leaf finishes its item, so nothing asked where its large files live",
+      places === 0 &&
+        plainState === "done" &&
+        cut?.machine_id === FAR &&
+        cut.path.startsWith(join(far.home, ".worktrees", "vps-audit-")),
+      `places there ${places}; ${plainState}; workspace ${JSON.stringify(cut)}`
     );
 
     const marked = join(far.home, "vps-assets");
