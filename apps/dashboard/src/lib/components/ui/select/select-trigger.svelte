@@ -14,7 +14,9 @@
       },
       /** Sharing a row equally with its siblings, however long its words. */
       measure: { share: "min-w-0 basis-0" },
-      tone: { strong: "text-ink-strong" },
+      /** `edited`: a value the person changed from what it was, in the
+          edit's ink (the design graph's clip editor). */
+      tone: { strong: "text-ink-strong", edited: "text-selected-ink" },
       look: {
         /** In a view's bar: it shrinks, takes the bar's control corner, and
             clips the name it morphs while its width follows. */

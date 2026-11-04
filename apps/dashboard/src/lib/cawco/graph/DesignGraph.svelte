@@ -33,8 +33,17 @@
    * trailing one glass group of bare symbols (Compare, the stage's view,
    * and Show states only while the room is put away: the room's one close
    * is its own). The view is a card hung from the glass (HangCard, as the
-   * app's own glass hangs its cards): the widths as device glyphs, the
-   * scheme as sun and moon, Reduce motion as a switch. Under the desk line
+   * app's own glass hangs its cards): one settings row each, its name
+   * leading and its control trailing, the widths as device glyphs with
+   * their figures, the scheme as sun and moon, Reduce motion as a switch.
+   *
+   * One grid under the bar: the stage and the room are two panels of one
+   * kind (one corner, one edge, one raised head on one head line), sharing
+   * a top and a foot inside the page's gutters; the bar's title starts on
+   * their leading edge and its glass ends on their trailing one. The stage
+   * holds its drawing and no more (Stage `need`), so the room, and the map
+   * and the timeline in it, take what a form held to its measure leaves.
+   * Under the desk line
    * (900px of its own width) the room is the kit's bottom drawer, its
    * stops head, half and whole, the stage whole above it at the head stop.
    */
@@ -117,6 +126,8 @@
     opensAt?: "head" | "half" | "whole";
   } = $props();
 
+  /** The page's own ids, for a label's `for`. */
+  const uid = $props.id();
   /** `n` as a figure in the page's language. */
   const figure = (n: number) => figureOf(n, lang);
   const reviews = $derived(inputs.map((one) => reviewOf(one, figure)));
@@ -189,8 +200,8 @@
   /**
    * The room stands beside the stage only where the surface holds both
    * whole: the stage at its least (`c-graph-stage-min`), the room at its
-   * least (`c-graph-room-w`), the gap between them, the split's divider
-   * and the page's gutters. Under that (1066px today) the room is the
+   * least (`c-graph-room-w`), each pane's inset beside the split's
+   * divider, the divider and the page's gutters. Under that (1058px today) the room is the
    * drawer, as the stage's least width says it becomes ("under it the room
    * becomes the drawer"); a narrower desk ran the room past the surface's
    * edge.
@@ -199,9 +210,8 @@
     browser
       ? numberOf("--c-graph-stage-min") +
           numberOf("--c-graph-room-w") +
-          numberOf("--space-5") +
-          numberOf("--space-7") +
-          numberOf("--space-6") +
+          2 * numberOf("--space-2") +
+          2 * numberOf("--space-6") +
           DIVIDER +
           ROUNDING
       : 0
@@ -259,6 +269,8 @@
   // --- The move into the kept state ------------------------------------------
 
   let stage = $state<ReturnType<typeof Stage>>();
+  /** The width the stage asks of its column, px (Stage `need`): the drawing and its panel; 0 until laid out. */
+  let stageNeed = $state(0);
   let move = $state<MoveState>({ kind: "none", state: "" });
   let playhead = $state(0);
   let playing = $state(false);
@@ -719,11 +731,15 @@
   const panesWidth = $derived(Math.max(0, splitWidth - DIVIDER));
   /** The room's width the person dragged the edge to, px; null until he has. */
   let roomDragged: number | null = null;
+  /** The person holds the split's edge: a drag, or its keys while it has the focus. */
+  let edgeHeld = false;
+  let edgeNode = $state<HTMLElement | null>(null);
+  let roomPane = $state<{ resize: (size: number) => void } | null>(null);
   const splitShare = (px: number) =>
     panesWidth > 0 ? Math.min(100, (px / panesWidth) * 100) : 0;
   /** Shares in hundredths, rounded up: a least width read as a share never stands under itself once laid out. */
   const leastShare = (px: number) => Math.ceil(splitShare(px) * 100) / 100;
-  /** Each pane's least: its surface's least width and the pane's own inset beside the edge (`pe-space-2`, `ms-space-3`). */
+  /** Each pane's least: its surface's least width and the pane's own inset beside the edge (`pe-space-2`, `ms-space-2`). */
   const stageLeast = $derived(
     leastShare(
       browser ? numberOf("--c-graph-stage-min") + numberOf("--space-2") : 0
@@ -731,30 +747,48 @@
   );
   const roomLeast = $derived(
     leastShare(
-      browser ? numberOf("--c-graph-room-w") + numberOf("--space-3") : 0
+      browser ? numberOf("--c-graph-room-w") + numberOf("--space-2") : 0
     )
   );
   /**
-   * The room's share: the width he dragged it to, else what the stage at
-   * its component's widest leaves, each held between the least widths.
+   * The room's share: the width he dragged it to, else what the stage
+   * leaves once it holds its drawing (Stage `need`: a form held to its
+   * measure asks for that and no more, so the room, and the map and the
+   * timeline in it, take the rest), each held between the least widths.
    * paneforge lays the split out again from it whenever a least width
    * changes with the split's width; the dragged width is read untracked, so
    * a drag never lays it out anew.
    */
-  const roomShare = $derived(
+  const roomShare: number = $derived(
     Math.min(
       100 - stageLeast,
       Math.max(
         roomLeast,
-        splitShare(
-          untrack(() => roomDragged) ??
-            splitWidth -
-              (width ?? stageWidth) -
-              (browser ? numberOf("--space-5") : 0)
-        )
+        // One state: the room holds one line, so it keeps its least and
+        // the stage the rest.
+        single
+          ? 0
+          : splitShare(
+              untrack(() => roomDragged) ??
+                splitWidth -
+                  (stageNeed || (width ?? stageWidth)) -
+                  (browser ? 2 * numberOf("--space-2") : 0)
+            )
       )
     )
   );
+  // The room takes its share whenever the share changes (the stage's
+  // drawing measured, the surface resized), until he has moved the edge
+  // himself: paneforge takes `defaultSize` once, as the split first lays
+  // out, so the stage stood at the width it had before its drawing was
+  // measured, with paper beside a form held to its measure.
+  $effect(() => {
+    const share = roomShare;
+    const pane = roomPane;
+    if (pane && beside && roomDragged === null) {
+      pane.resize(share);
+    }
+  });
 </script>
 
 {#snippet statesFace(stepperHere: boolean)}
@@ -840,9 +874,9 @@
   Icon: typeof IconPhone
 )}
   <ToggleGroup.Item aria-label={name} {value}>
-    <!-- mark-line: the device's glyph stands over its figure, not beside it -->
-    <span class="flex flex-col items-center gap-space-row" data-box>
-      <Icon aria-hidden="true" />
+    <!-- The device's glyph, then its figure, on one line inside the item. -->
+    <span class="mark-line flex items-center gap-space-1" data-box>
+      <Icon aria-hidden="true" class="size-icon-md flex-none" data-box />
       <span
         class={[
           "type-meta num",
@@ -866,7 +900,7 @@
     <!-- The bar: one row, no ground of its own. -->
     <header
       data-slot="graph-bar"
-      class="flex h-c-top-bar-h min-w-0 flex-none items-center gap-space-3 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5"
+      class="flex h-c-top-bar-h min-w-0 flex-none items-center gap-space-3 px-space-6 max-desk:px-space-5"
     >
       <div class="flex min-w-0 flex-1 items-center">
         {#if reviews.length > 1}
@@ -877,7 +911,7 @@
                   {...props}
                   bind:this={menuTrigger}
                   aria-label={words.components}
-                  class="mark-line pointer-hit touch-hit inline-flex h-c-btn-h-sm min-w-0 items-center gap-space-1 rounded-md px-space-2 type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover"
+                  class="mark-line pointer-hit touch-hit -ms-space-2 inline-flex h-c-btn-h-sm min-w-0 items-center gap-space-1 rounded-md px-space-2 type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover"
                   type="button"
                 >
                   <span
@@ -921,9 +955,7 @@
             </DropdownMenu.Content>
           </DropdownMenu.Root>
         {:else}
-          <h1
-            class="m-0 min-w-0 truncate px-space-2 type-label text-ink-strong"
-          >
+          <h1 class="m-0 min-w-0 truncate type-label text-ink-strong">
             {review.name}
           </h1>
         {/if}
@@ -990,78 +1022,78 @@
               onEscapeKeydown={personsOwn}
               onInteractOutside={personsOwn}
               onOpenAutoFocus={(event: Event) => quietFocus(event, viewTrigger)}
+              frame="settings"
               side="bottom"
               sideOffset={0}
             >
-              <div class="flex min-w-0 flex-col gap-space-4 p-space-4">
-                <div class="flex min-w-0 flex-col gap-space-2">
-                  <span class="type-label text-ink-muted">{words.width}</span>
-                  <!-- Each width once: his own is the listed width it
-                       equals, marked his own, and stands apart only when
-                       none is. The names are the items' own; no tooltip
-                       opens over the card. -->
-                  <ToggleGroup.Root
-                    aria-label={words.width}
-                    onValueChange={pickWidth}
-                    type="single"
-                    value={widthValue}
-                  >
-                    {#if !ownListed}
-                      {@render widthItem(
-                        "own",
-                        words.ownWidth(figure(ownWidth)),
-                        ownWidth,
-                        true,
-                        IconMaximize
-                      )}
-                    {/if}
-                    {#each WIDTHS as one (one.value)}
-                      {@const own = one.value === ownWidth}
-                      {@render widthItem(
-                        String(one.value),
-                        own
-                          ? words.ownListed(one.name, figure(one.value))
-                          : words.widthOf(one.name, figure(one.value)),
-                        one.value,
-                        own,
-                        one.icon
-                      )}
-                    {/each}
-                  </ToggleGroup.Root>
-                </div>
-                <div
-                  class="flex min-w-0 items-center justify-between gap-space-4"
+              <!-- One pattern for every setting: its name leading, its
+                   control trailing, on one grid, so the three read down
+                   two columns (Jitter's inspector rows). -->
+              <div
+                class="grid min-w-0 grid-cols-(--cols) items-center justify-between gap-x-space-5 gap-y-space-3 p-space-4"
+                style:--cols="auto auto"
+              >
+                <span class="type-label text-ink-row">{words.width}</span>
+                <!-- Each width once: his own is the listed width it
+                     equals, marked his own, and stands apart only when
+                     none is. The names are the items' own; no tooltip
+                     opens over the card. -->
+                <ToggleGroup.Root
+                  aria-label={words.width}
+                  class="justify-self-end"
+                  onValueChange={pickWidth}
+                  type="single"
+                  value={widthValue}
                 >
-                  <span class="type-label text-ink-muted">{words.scheme}</span>
-                  <Tabs
-                    onValueChange={(next) => {
+                  {#if !ownListed}
+                    {@render widthItem(
+                      "own",
+                      words.ownWidth(figure(ownWidth)),
+                      ownWidth,
+                      true,
+                      IconMaximize
+                    )}
+                  {/if}
+                  {#each WIDTHS as one (one.value)}
+                    {@const own = one.value === ownWidth}
+                    {@render widthItem(
+                      String(one.value),
+                      own
+                        ? words.ownListed(one.name, figure(one.value))
+                        : words.widthOf(one.name, figure(one.value)),
+                      one.value,
+                      own,
+                      one.icon
+                    )}
+                  {/each}
+                </ToggleGroup.Root>
+                <span class="type-label text-ink-row">{words.scheme}</span>
+                <ToggleGroup.Root
+                  aria-label={words.scheme}
+                  class="justify-self-end"
+                  onValueChange={(next: string) => {
+                    if (next) {
                       scheme = next === "dark" ? "dark" : "light";
-                    }}
-                    size="compact"
-                    value={scheme}
-                  >
-                    <TabsList aria-label={words.scheme}>
-                      <TabItem
-                        glyphOnly
-                        icon={IconSun}
-                        label={words.light}
-                        value="light"
-                      />
-                      <TabItem
-                        glyphOnly
-                        icon={IconMoon}
-                        label={words.dark}
-                        value="dark"
-                      />
-                    </TabsList>
-                  </Tabs>
-                </div>
-                <label
-                  class="flex min-w-0 items-center justify-between gap-space-4 type-label text-ink-row"
+                    }
+                  }}
+                  type="single"
+                  value={scheme}
                 >
-                  <span>{words.reduceMotion}</span>
-                  <Switch bind:checked={reduce} />
-                </label>
+                  <ToggleGroup.Item aria-label={words.light} value="light">
+                    <IconSun aria-hidden="true" class="size-icon-md" />
+                  </ToggleGroup.Item>
+                  <ToggleGroup.Item aria-label={words.dark} value="dark">
+                    <IconMoon aria-hidden="true" class="size-icon-md" />
+                  </ToggleGroup.Item>
+                </ToggleGroup.Root>
+                <label class="type-label text-ink-row" for="{uid}-reduce"
+                  >{words.reduceMotion}</label
+                >
+                <Switch
+                  bind:checked={reduce}
+                  class="justify-self-end"
+                  id="{uid}-reduce"
+                />
               </div>
             </HangCard>
           </Popover.Root>
@@ -1095,7 +1127,7 @@
     <div
       data-slot="graph-page"
       class={[
-        "flex min-h-0 min-w-0 flex-1 overflow-clip ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5",
+        "flex min-h-0 min-w-0 flex-1 overflow-clip px-space-6 max-desk:px-space-5",
         !desk && roomOpen ? "pb-(--drawer-cover)" : "pb-space-6",
       ]}
       style:--drawer-cover="{cover}px"
@@ -1110,6 +1142,7 @@
       {#snippet stagePane()}
         <Stage
           bind:this={stage}
+          bind:need={stageNeed}
           against={againstShown}
           {lang}
           {lit}
@@ -1145,15 +1178,25 @@
           </div>
         </Resizable.Pane>
         {#if beside}
-          <Resizable.Handle look="split" />
+          <Resizable.Handle
+            bind:ref={edgeNode}
+            look="split"
+            onDraggingChange={(on: boolean) => {
+              edgeHeld = on;
+            }}
+          />
           <Resizable.Pane
             defaultSize={roomShare}
             id="room"
             look="split"
             minSize={roomLeast}
             order={2}
+            bind:this={roomPane}
             onResize={(size) => {
-              if (panesWidth > 0) {
+              const his =
+                edgeHeld ||
+                (edgeNode !== null && document.activeElement === edgeNode);
+              if (his && panesWidth > 0) {
                 roomDragged = (size / 100) * panesWidth;
               }
             }}
@@ -1167,9 +1210,12 @@
               aria-label={words.room}
               in:sheetSlide|global={{ axis: "X", leaving: false }}
               out:sheetSlide|global={{ axis: "X", leaving: true }}
-              class="relative ms-space-3 flex min-h-0 min-w-0 flex-1 flex-col gap-space-3 rounded-lg border border-border-hairline bg-surface-raised p-space-4 pt-space-3 shadow-tile"
+              class="relative ms-space-2 flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile"
             >
-              <div class="flex min-w-0 items-center gap-space-2">
+              <!-- Its head on the stage's head line: the faces, its Close. -->
+              <div
+                class="flex min-h-c-top-bar-h min-w-0 flex-none items-center gap-space-2 border-b border-border-hairline ps-space-4 pe-space-2"
+              >
                 {@render faces()}
                 <Tip label={words.closeRoom}>
                   {#snippet children(tip)}
@@ -1189,11 +1235,18 @@
                   {/snippet}
                 </Tip>
               </div>
-              {#if face === "move"}
-                {@render moveFace()}
-              {:else}
-                {@render statesFace(true)}
-              {/if}
+              <div
+                class={[
+                  "flex min-h-0 min-w-0 flex-1 flex-col",
+                  face === "whole" && !single ? "" : "p-space-4",
+                ]}
+              >
+                {#if face === "move"}
+                  {@render moveFace()}
+                {:else}
+                  {@render statesFace(true)}
+                {/if}
+              </div>
             </aside>
           </Resizable.Pane>
         {/if}

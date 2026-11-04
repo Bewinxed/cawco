@@ -245,7 +245,7 @@
 {:else}
   <div
     data-slot="whole-set"
-    class="relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-md border border-border-hairline bg-surface-raised"
+    class="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-surface-raised"
     style:--xy-edge-stroke="var(--border-contrast)"
     style:--xy-edge-stroke-width="var(--c-graph-edge)"
   >

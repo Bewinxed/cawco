@@ -23,7 +23,7 @@
    * sideways, never scaled, so no type renders under its size. It shows
    * the kept state, the one its head names, and nothing else: it changes
    * only when he keeps another. The component stands on the page's own
-   * surface with the page's gutter round it (`--space-6`), as the product
+   * surface with the page's gutter round it (`--space-4`, the head's inset), as the product
    * shows it, never flush with the stage's edge. Nothing of the surface's
    * own stands over it: the comparison's rings stand outside each
    * element's box in a layer of the stage's own, under the pins, taking
@@ -70,7 +70,7 @@
     stale = false,
     lit = null,
     lang,
-    fits = $bindable(false),
+    need = $bindable(0),
   }: {
     review: Review;
     /** The kept state, as it is drawn. */
@@ -86,14 +86,19 @@
     lit?: Element | null;
     /** The page's language, for its figures. */
     lang: string | undefined;
-    /** The drawing stands narrower than its room: the stage is its own width, and its column takes no more. */
-    fits?: boolean;
+    /**
+     * The width the stage asks of its column, px: the drawing's width and
+     * the panel round it (its edge, the page's gutter, the scroller's
+     * gutter). A form held to its measure asks for that and no more, so
+     * the room beside it takes the rest; 0 until the stage is laid out.
+     */
+    need?: number;
   } = $props();
 
   /** A width no state names: the desk form (core stage.ts `FORMS.desk`). */
   const DESK = 1280;
   /** The page's gutter round the component, each side. */
-  const GUTTER = "--space-6";
+  const GUTTER = "--space-4";
   let room = $state(0);
   /** The width it is laid out at: his pick, else its own up to its room's. */
   const roomWidth = $derived(
@@ -113,8 +118,10 @@
   const drawnWidth = $derived(
     fit === null ? roomWidth : Math.min(roomWidth, fit)
   );
+  /** The panel's own width less the drawing's room: its edge, the scroller's gutter and the page's gutters. */
+  let chrome = $state(0);
   $effect(() => {
-    fits = fit !== null;
+    need = chrome > 0 ? Math.ceil(drawnWidth + chrome) : 0;
   });
   /** The drawing's own width read as it rests: its root's box, or what overflows it. */
   const measureFit = (holder: HTMLElement) => {
@@ -479,10 +486,16 @@
     if (holder.isConnected) {
       measureFit(holder);
     }
+    // The move begins where its first animation was set off: the press's
+    // own frames before it (25 ms on the routine form's Create routine)
+    // stood as an empty lead-in, so the first bar sat off the ruler's 0.
+    const origin = Math.min(...clips.map((clip) => clip.start));
     // Each thing named as it stands once the move has ended: what he sees.
-    return clips.map((clip) =>
-      clip.thing?.isConnected ? { ...clip, element: nameOf(clip.thing) } : clip
-    );
+    return clips.map((clip) => ({
+      ...clip,
+      start: clip.start - origin,
+      ...(clip.thing?.isConnected ? { element: nameOf(clip.thing) } : {}),
+    }));
   }
 
   /** Where `el` stands in the drawing, unscaled. */
@@ -603,97 +616,110 @@
   const ringOut = "(var(--c-change-ring-offset) + var(--c-change-ring-width))";
 </script>
 
+<!-- One panel, as the room beside it is one: the same corner, edge and
+     raised head, the two sharing a top and a foot (Base44's preview beside
+     its panel). Its head holds the kept state's name on the head line the
+     room's faces stand on; the component stands on its page under it, the
+     page's gutter the head's own inset, so the name and the drawing share
+     one leading edge. -->
 <section
   data-slot="stage"
   aria-label={shown.name}
-  class="flex min-h-0 min-w-0 flex-initial flex-col"
+  class="flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile"
 >
   <!-- Its head: the state's name in the title role, its record set, and
-       while comparing the state it is compared with. -->
+       while comparing the state it is compared with; under them the stale
+       line and what differs. -->
   <header
     data-slot="stage-head"
-    class="flex min-h-c-btn-h min-w-0 flex-wrap items-baseline gap-x-space-3 gap-y-space-1 px-space-1 pb-space-3"
+    class="flex min-w-0 flex-none flex-col border-b border-border-hairline px-space-4"
   >
-    <h2 class="m-0 min-w-0 type-title text-ink-strong">
-      <span class="block truncate">{shown.name}</span>
-    </h2>
-    {#if shown.variant}
-      <span class="min-w-0 truncate type-label text-ink-muted"
-        >{shown.variant}</span
+    <div
+      class="flex min-h-c-top-bar-h min-w-0 items-center gap-x-space-3 overflow-clip"
+    >
+      <h2 class="m-0 min-w-0 flex-none type-title text-ink-strong">
+        <span class="block truncate">{shown.name}</span>
+      </h2>
+      {#if shown.variant}
+        <span class="min-w-0 truncate type-label text-ink-muted"
+          >{shown.variant}</span
+        >
+      {/if}
+      {#if against}
+        <span
+          data-slot="stage-against"
+          class="min-w-0 truncate type-label text-ink-muted"
+          >{words.comparedWith(against.name)}</span
+        >
+      {/if}
+    </div>
+
+    {#if stale}
+      <p
+        data-slot="stage-stale"
+        role="status"
+        class="m-0 pb-space-3 type-meta text-status-attn-ink"
       >
+        {words.stale}
+      </p>
     {/if}
-    {#if against}
-      <span
-        data-slot="stage-against"
-        class="min-w-0 truncate type-label text-ink-muted"
-        >{words.comparedWith(against.name)}</span
+
+    {#if against && lines.length > 0}
+      <!-- What differs, in words: one line per difference, its mark the
+           ring's own (solid for came in or changed, dashed for went), each a
+           link to its ring: a press brings that ring into view. -->
+      <ul
+        data-slot="differences"
+        aria-label={words.differences}
+        class="-ms-space-1 m-0 flex list-none flex-wrap gap-x-space-1 gap-y-0 p-0 pb-space-2"
       >
+        {#each lines as line, at (at)}
+          <li class="min-w-0">
+            <button
+              type="button"
+              class="mark-line pointer-hit touch-hit flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2 rounded-sm px-space-1 text-start type-label text-ink-row transition-control can-hover:hover:bg-surface-hover"
+              onclick={() => showBox(line.box)}
+            >
+              <span
+                aria-hidden="true"
+                data-box
+                class={[
+                  "inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-c-change-ring",
+                  line.kind === "went" && "border-dashed",
+                ]}
+              ></span>
+              <span class="min-w-0 wrap-anywhere">{line.line}</span>
+            </button>
+          </li>
+        {/each}
+        {#if found.length > LINES_SHOWN}
+          <li class="flex items-center px-space-1 type-meta text-ink-muted num">
+            +{figureOf(found.length - LINES_SHOWN, lang)}
+          </li>
+        {/if}
+      </ul>
+    {:else if against && mounted}
+      <p class="m-0 pb-space-3 type-label text-ink-muted">
+        {words.sameAs(against.name)}
+      </p>
     {/if}
   </header>
-
-  {#if stale}
-    <p
-      data-slot="stage-stale"
-      role="status"
-      class="m-0 mb-space-3 type-meta text-status-attn-ink"
-    >
-      {words.stale}
-    </p>
-  {/if}
-
-  {#if against && lines.length > 0}
-    <!-- What differs, in words: one line per difference, its mark the
-         ring's own (solid for came in or changed, dashed for went), each a
-         link to its ring: a press brings that ring into view. -->
-    <ul
-      data-slot="differences"
-      aria-label={words.differences}
-      class="m-0 mb-space-2 flex list-none flex-wrap gap-x-space-1 gap-y-0 p-0"
-    >
-      {#each lines as line, at (at)}
-        <li class="min-w-0">
-          <button
-            type="button"
-            class="mark-line pointer-hit touch-hit flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2 rounded-sm px-space-1 text-start type-label text-ink-row transition-control can-hover:hover:bg-surface-hover"
-            onclick={() => showBox(line.box)}
-          >
-            <span
-              aria-hidden="true"
-              data-box
-              class={[
-                "inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-c-change-ring",
-                line.kind === "went" && "border-dashed",
-              ]}
-            ></span>
-            <span class="min-w-0 wrap-anywhere">{line.line}</span>
-          </button>
-        </li>
-      {/each}
-      {#if found.length > LINES_SHOWN}
-        <li class="flex items-center px-space-1 type-meta text-ink-muted num">
-          +{figureOf(found.length - LINES_SHOWN, lang)}
-        </li>
-      {/if}
-    </ul>
-  {:else if against && mounted}
-    <p class="m-0 mb-space-3 type-label text-ink-muted">
-      {words.sameAs(against.name)}
-    </p>
-  {/if}
 
   <!-- The field: the stage's room, which scrolls when the page is taller
        or wider. No well and no edge of its own: the component stands on
        the page it lives on, which fills the field (a hairline, a recess
-       and then the page round every component was two frames nested). Its
-       one bound is where that page's surface meets the surface's, seen
-       when the scheme picked is the other one, at the panels' corner. The
+       and then the page round every component was two frames nested); the
+       panel's edge is its one bound. The
        page's gutter holds the room a change ring takes outside an
-       element's box (5px, under --space-6), so a ring on an element at the
+       element's box (5px, under --space-4), so a ring on an element at the
        drawing's edge stands whole. -->
   <div
     bind:this={scroller}
     data-slot="stage-scroll"
-    class="relative min-h-0 min-w-0 flex-initial overflow-auto overscroll-contain rounded-lg scrollbar-gutter-stable"
+    class={[
+      "relative min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain bg-surface-page scrollbar-gutter-stable",
+      scheme === "dark" ? "scheme-dark" : "scheme-light",
+    ]}
     {@attach frameSize((node: HTMLElement) => {
       const style = getComputedStyle(node);
       room =
@@ -701,6 +727,8 @@
         Number.parseFloat(style.paddingInlineStart) -
         Number.parseFloat(style.paddingInlineEnd) -
         2 * numberOf(GUTTER);
+      const panel = node.closest<HTMLElement>('[data-slot="stage"]');
+      chrome = panel ? panel.offsetWidth - room : 0;
     })}
   >
     <!-- The page the component stands on: the product's surface and its
@@ -709,7 +737,7 @@
       data-slot="stage-page"
       data-scheme={scheme}
       class={[
-        "w-max min-w-full bg-surface-page p-space-6 text-ink-strong",
+        "min-h-full w-max min-w-full bg-surface-page p-space-4 text-ink-strong",
         scheme === "dark" ? "scheme-dark" : "scheme-light",
         stale && "opacity-(--account-stale-opacity)",
         fault && "hidden",
@@ -835,7 +863,7 @@
       <div
         data-slot="stage-failed"
         role="alert"
-        class="flex min-w-0 flex-col items-start gap-space-3 bg-surface-recess-deep p-space-6"
+        class="flex min-w-0 flex-col items-start gap-space-3 p-space-4"
       >
         <p
           class="mark-line m-0 flex items-center gap-space-2 type-label text-status-fail-ink"
@@ -875,7 +903,7 @@
       </div>
     {:else if !mounted && waited}
       <div
-        class={["inset-0 p-space-6", lastTall > 0 ? "absolute" : "relative"]}
+        class={["inset-0 p-space-4", lastTall > 0 ? "absolute" : "relative"]}
         aria-busy="true"
       >
         <span class="sr-only">{words.mounting(review.name)}</span>

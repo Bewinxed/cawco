@@ -126,15 +126,16 @@
   import { cn } from "#lib/utils.js";
   import { outlineLayer } from "./hang-outline.js";
 
-  /** The glass card's faces (GlassCard's `Card`), and the session card. */
-  type Frame = "caw" | "machines" | "jump" | "files" | "details";
+  /** The glass card's faces (GlassCard's `Card`), the session card, and a card of settings rows (the design graph's view). */
+  type Frame = "caw" | "machines" | "jump" | "files" | "details" | "settings";
   /**
    * Each face's frame, read off what its custom properties hold (on the card,
    * below): Caw's panel `c-panel-w` wide with its rows `--space-2` in; the
    * machines `c-machines-w`; Jump `c-find-w` wide and its foot clear of the
    * screen's, a full sheet on a phone; Files as Caw's panel, its rows
    * `--space-2` in, as tall as what it holds up to his panel's height or the
-   * room under the glass. Each stands `c-pop-edge` in from the screen's edge
+   * room under the glass; a card of settings as wide as its rows hold,
+   * padded by them, never past the screen less its edges. Each stands `c-pop-edge` in from the screen's edge
    * on either side (DESIGN.md, Breakpoints: popovers widen to the viewport
    * less 24px); on a phone each keeps the bar's `c-bar-phone-edge` on its
    * leading side (the `glass` recipe squares the trailing one). The screen
@@ -155,6 +156,7 @@
     machines: "w-(--frame-w) gap-0",
     jump: "w-(--frame-w) max-h-(--frame-h) gap-0 p-0 @max-desk/shell:h-(--frame-h) @max-desk/shell:w-(--frame-w-narrow)",
     files: "flex w-(--frame-w) max-h-(--frame-h) flex-col gap-0 p-space-2",
+    settings: "w-max max-w-(--frame-w) gap-0 p-0",
     details:
       "flex max-h-[min(var(--c-details-card-max-h),var(--bits-popover-content-available-height,var(--c-sheet-max-h)))] overflow-hidden overscroll-contain p-0 @max-phone/shell:max-h-[min(calc(var(--shell-h)-var(--c-top-bar-h)-2*var(--c-screen-margin)-var(--safe-bottom)),var(--bits-popover-content-available-height,var(--c-sheet-max-h)))]",
   };
@@ -183,6 +185,7 @@
       h: "min(var(--c-caw-panel-h), calc(var(--bits-popover-content-available-height, 85dvh) - 2px))",
     },
     details: {},
+    settings: { w: ROOM },
   };
 
   type Props = Omit<
