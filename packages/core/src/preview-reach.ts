@@ -113,6 +113,32 @@ export type PreviewUnreached =
   /** Answered with an error status, which the hub never sends: something in front of it answered. */
   | { cause: "status"; status: number };
 
+/** The hops a ping's down answer can name that are the preview's own server: nothing on its port, its workspace not running, or gone. */
+const OWN_SERVER_DOWN: ReadonlySet<PreviewDown | null> = new Set([
+  "server",
+  "workspace",
+  "gone",
+]);
+
+/**
+ * What keeps a frame of a preview's origin from loading, from its probe's
+ * answer ({@link probePreview}): null once the origin is reached. The hub's
+ * word that the preview's own server is down ({@link OWN_SERVER_DOWN}) is
+ * the origin reached all the same: its load gets the proxy's page naming the
+ * hop (core preview-proxy `downResponse`, `cawco:down`), and every embed of
+ * the preview draws that hop's own down state, with its fix. Anything on the
+ * way to it (its machine, the listener's bridge, a hop unnamed, the browser's
+ * own failures) leaves it unreached, said by {@link previewUnreachedWords}
+ * and probed again. The one rule every embed of a preview takes (the panel's
+ * pane, a decision page's Preview).
+ */
+export const unreachedOf = (
+  failed: PreviewUnreached | null
+): PreviewUnreached | null =>
+  failed && !(failed.cause === "down" && OWN_SERVER_DOWN.has(failed.down))
+    ? failed
+    : null;
+
 const TRAILING_STOP = /\.$/u;
 
 /**

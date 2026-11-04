@@ -62,6 +62,7 @@
     previewsNeedWords,
     previewUnreachedWords,
     probePreview,
+    unreachedOf,
   } from "@cawco/core/preview-reach";
   import { PREVIEW_DOWNS, type PreviewDown } from "@cawco/core/protocol";
   import {
@@ -584,7 +585,10 @@
     const reached = async () => {
       const deadline = Date.now() + START_MS;
       for (;;) {
-        const why = await probePreview(at.origin, hubReach);
+        // The preview's own server down is the origin reached (core
+        // `unreachedOf`): its frame loads the proxy's page, whose
+        // `cawco:down` says that hop's down state ({@link downWhy}).
+        const why = unreachedOf(await probePreview(at.origin, hubReach));
         if (
           gone ||
           !why ||

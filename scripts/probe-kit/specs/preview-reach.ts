@@ -45,6 +45,11 @@
  * 5. The hub can't reach the origin either: the dashboard opened on a name
  *    only this browser resolves (`--host-resolver-rules`), so the hub's own
  *    reach of the same origin fails, and both say so.
+ * 6. A decision page's Preview of a port nothing listens on: the hub's ping
+ *    says its own server is down, the origin reached (core `unreachedOf`,
+ *    the pane's rule too), so it draws the server's down state ("This
+ *    preview didn't load: its server stopped answering …"), never "can't
+ *    be reached".
  */
 import type { Page, Route } from "playwright-core";
 import {
@@ -53,6 +58,7 @@ import {
   previewsNeedWords,
   previewUnreachedWords,
 } from "../../../packages/core/src/preview-reach";
+import { decisionsWords } from "../../../packages/core/src/words/decisions";
 import { previewWords } from "../../../packages/core/src/words/preview";
 import { MACHINE, until } from "../../scratch-fleet";
 import { type Engine, type Kit, kitsOwnMessage, open, type Spec } from "../kit";
@@ -831,8 +837,68 @@ const run = async (kit: Kit) => {
   }
   // 5. The hub can't reach it either.
   await hubAway(legs);
+  // 6. A decision page's Preview of a port nothing listens on.
+  await deadServer(legs, fleet);
   app.stop(true);
   bare.stop(true);
+};
+
+/** How long a Preview of a dead port may take to say its server's down state: its probe and its frame's load, well inside `START_MS`'s wait. */
+const DEAD_SAID_MS = 20_000;
+
+/**
+ * 6. A decision page embedding a preview of a port nothing listens on: the
+ * hub's ping answers that its own server is down (`down: "server"`), which
+ * is the origin reached (core `unreachedOf`, the one rule the pane takes
+ * too), so the Preview's frame loads the proxy's page and the Preview says
+ * the server's down state, never that the preview can't be reached.
+ */
+const deadServer = async (
+  legs: Legs,
+  fleet: Awaited<ReturnType<Kit["fleet"]>>
+) => {
+  const { base, kit } = legs;
+  const freed = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => new Response(),
+  });
+  const deadPort = Number(freed.port);
+  freed.stop(true);
+  const { decided } = await decisionSession(fleet, deadPort);
+  const picture = await kit.page("desk", {
+    init: [SAMPLE_PREVIEW],
+    oneProcess: true,
+  });
+  await tabAt(picture, decided);
+  await picture.goto(`${base}/session/${decided}`).catch(() => undefined);
+  const shown = await previewSaid(
+    picture,
+    decided,
+    "the dead port's Preview says why",
+    DEAD_SAID_MS
+  );
+  const unreached = await picture
+    .frameLocator(
+      `[data-slot="pane"][data-pane="${decided}"] iframe[title="Preview"]`
+    )
+    .getByText(decisionsWords.previewUnreached("The site as it runs"))
+    .count()
+    .catch(() => -1);
+  const serverDown = decisionsWords.previewFailed(
+    "its server stopped answering"
+  );
+  kit.check(
+    "6: a decision page's Preview of a port nothing listens on draws its server's down state, not that it can't be reached",
+    shown.cause.startsWith(serverDown) && unreached === 0,
+    `${against(shown.cause, `${serverDown} (…)`)}; can't-be-reached lines ${unreached}`
+  );
+  kit.check(
+    "6: the dead port's Preview is never an empty box",
+    neverEmpty(shown.seen),
+    shown.seen.join(" → ") || "never sampled"
+  );
+  await picture.context().close();
 };
 
 const spec: Spec = {

@@ -28,6 +28,7 @@
     previewsNeedWords,
     previewUnreachedWords,
     probePreview,
+    unreachedOf,
   } from "@cawco/core/preview-reach";
   import {
     PREVIEW_DOWNS,
@@ -472,31 +473,21 @@
   /** Each one probes the origin again: Try again's press, the backoff's timer, the tab back in view. */
   let probe = $state(0);
   let probing = $state(false);
-  /** The hops a ping's down answer names that are the preview's own server, which its load says in the pane's down state. */
-  const OWN_SERVER_DOWN: ReadonlySet<PreviewDown | null> = new Set([
-    "server",
-    "workspace",
-    "gone",
-  ]);
   /** Our calls: the first probe again 2 s after a failure, doubling to every 30 s. */
   const PROBE_FIRST_MS = 2000;
   const PROBE_MOST_MS = 30_000;
   /** Why this tab can't load a frame of `origin` yet, or null once it reached it and entered its previews. */
   async function unreachedWords(origin: string): Promise<string | null> {
-    const failed = await probePreview(origin, (asked) =>
-      askHubReach(`${PREVIEW_REACH_API}?origin=${encodeURIComponent(asked)}`)
+    // The preview's own server down is the origin reached (core
+    // `unreachedOf`): its load gets the proxy's page naming the hop
+    // (`heardDown`), so the pane draws that hop's down state and tells the
+    // hub (`artifactShown`).
+    const failed = unreachedOf(
+      await probePreview(origin, (asked) =>
+        askHubReach(`${PREVIEW_REACH_API}?origin=${encodeURIComponent(asked)}`)
+      )
     );
-    // The hub answered for the origin, and what is down is the preview's
-    // own server (nothing on its port, its workspace not running or gone):
-    // the origin is reached all the same. Its load gets the proxy's page
-    // naming the hop (`heardDown`), so the pane says so in its down state,
-    // with that hop's fix, and tells the hub (`artifactShown`), never as an
-    // origin it is trying to reach. The way to it down (its machine, the
-    // listener's bridge) stays unreached, probed again by itself.
-    if (
-      failed &&
-      !(failed.cause === "down" && OWN_SERVER_DOWN.has(failed.down))
-    ) {
+    if (failed) {
       return previewUnreachedWords(
         new URL(origin).host,
         failed,
