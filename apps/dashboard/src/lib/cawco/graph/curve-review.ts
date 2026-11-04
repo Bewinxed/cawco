@@ -39,7 +39,7 @@ export const curveList = {
       name: words.spring,
       glyph: curveGlyph(springEasing(springOf(0.5, 0.45)).easing),
     },
-    { value: "written", name: words.asWritten, glyph: null },
+    { value: "written", name: words.agentsCurve, glyph: null },
   ],
   value: "--ease-out",
   spring: null,

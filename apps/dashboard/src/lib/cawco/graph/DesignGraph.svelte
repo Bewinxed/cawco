@@ -1362,6 +1362,7 @@
           against={againstShown}
           {lang}
           {lit}
+          at={playhead}
           {review}
           {scheme}
           {shown}

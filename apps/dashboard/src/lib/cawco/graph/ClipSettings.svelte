@@ -47,6 +47,7 @@
     delayOf,
     durationTokens,
     editsOf,
+    framesGlyph,
     ownLengths,
     redelay,
     relength,
@@ -143,7 +144,7 @@
       return words.spring;
     }
     return choice === "written"
-      ? words.asWritten
+      ? words.agentsCurve
       : (words.curves[choice] ?? choice);
   };
   const glyphOf = (choice: string, clip: Clip): string | null => {
@@ -151,7 +152,7 @@
       return curveGlyph(springEasing(springOf(0.5, 0.45)).easing);
     }
     if (choice === "written") {
-      return clip.framed ? null : curveGlyph(clip.easing);
+      return clip.framed ? framesGlyph(clip.frames) : curveGlyph(clip.easing);
     }
     return curveGlyph(houseEasing(choice as (typeof HOUSE)[number]));
   };
@@ -346,7 +347,9 @@
           }}
           options={DURATIONS.map((one) => ({
             value: String(one.ms),
-            name: words.durations[one.token] ?? one.token,
+            name: one.tokens
+              .map((token) => words.durations[token] ?? token)
+              .join(", "),
             meta: words.ms(figure(one.ms)),
           }))}
           value={shortest === longest ? String(shortest) : null}

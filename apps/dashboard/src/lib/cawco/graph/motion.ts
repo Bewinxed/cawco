@@ -80,11 +80,22 @@ const LADDER = [
   "--dur-settle",
 ] as const;
 
-/** The design system's durations, shortest first: what the Length setting offers, by token and length. */
-export const durationTokens = (): { token: string; ms: number }[] =>
-  LADDER.map((token) => ({ token, ms: Math.round(dur(token)) })).sort(
-    (a, b) => a.ms - b.ms
-  );
+/**
+ * The design system's durations, shortest first, one per length: what the
+ * Length setting offers. Tokens of one length stand as one choice under
+ * both names (`--dur-toggle` and `--dur-exit` are both 160 ms; listed apart,
+ * the list's two rows of one key threw and the page went to a 500).
+ */
+export const durationTokens = (): { tokens: string[]; ms: number }[] => {
+  const by = new Map<number, string[]>();
+  for (const token of LADDER) {
+    const ms = Math.round(dur(token));
+    by.set(ms, [...(by.get(ms) ?? []), token]);
+  }
+  return [...by]
+    .map(([ms, tokens]) => ({ ms, tokens }))
+    .sort((a, b) => a.ms - b.ms);
+};
 
 /** The house curves, by token. */
 const CURVES = [
@@ -185,7 +196,7 @@ export function curveTokenOf(easing: string): string | null {
 /** A curve in words. */
 const curveWords = (easing: string): string => {
   const token = curveTokenOf(easing);
-  return token ? (words.curves[token] ?? token) : words.asWritten;
+  return token ? (words.curves[token] ?? token) : words.agentsCurve;
 };
 
 const MOTION_KEYS = new Set([
@@ -994,4 +1005,57 @@ export function curveGlyph(easing: string): string | null {
   }
   const [x1 = 0, y1 = 0, x2 = 1, y2 = 1] = bezier;
   return `M2 22 C${x(x1)} ${y(y1)} ${x(x2)} ${y(y2)} 22 2`;
+}
+
+/** A frame's value that is one plain number, with or without its unit. */
+const PLAIN_FIGURE = /^(-?\d*\.?\d+)[a-z%]*$/u;
+
+/**
+ * A curve kept in a clip's frames (a Svelte transition's), drawn as its
+ * progress: the first property whose frames are all one plain number,
+ * each frame's value as the share of the way from the first to the last,
+ * at its offset. Null when no property moves as one number (the Curve chip
+ * then names the agent's curve with no picture).
+ */
+export function framesGlyph(frames: readonly Keyframe[]): string | null {
+  const [first] = frames;
+  const last = frames.at(-1);
+  if (!(first && last) || frames.length < 2) {
+    return null;
+  }
+  const figureIn = (frame: Keyframe, name: string): number | null => {
+    const raw = frame[name];
+    const said = typeof raw === "number" ? String(raw) : raw;
+    const plain =
+      typeof said === "string" ? said.trim().match(PLAIN_FIGURE) : null;
+    return plain ? Number(plain[1]) : null;
+  };
+  const key = Object.keys(first).find((one) => {
+    if (MOTION_KEYS.has(one)) {
+      return false;
+    }
+    const from = figureIn(first, one);
+    const to = figureIn(last, one);
+    return (
+      from !== null &&
+      to !== null &&
+      from !== to &&
+      frames.every((frame) => figureIn(frame, one) !== null)
+    );
+  });
+  if (!key) {
+    return null;
+  }
+  const from = figureIn(first, key) as number;
+  const to = figureIn(last, key) as number;
+  return frames
+    .map((frame, at) => {
+      const offset =
+        typeof frame.computedOffset === "number"
+          ? frame.computedOffset
+          : at / (frames.length - 1);
+      const share = ((figureIn(frame, key) as number) - from) / (to - from);
+      return `${at === 0 ? "M" : "L"}${(2 + 20 * offset).toFixed(1)} ${(22 - 20 * share).toFixed(1)}`;
+    })
+    .join(" ");
 }
