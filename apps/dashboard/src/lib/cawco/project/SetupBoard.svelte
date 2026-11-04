@@ -4,13 +4,18 @@
    * `onboarding-first-minutes`: `draft-where` "As the board it becomes",
    * `asks-where` "On the board on a desk, in his composer on a phone"): his
    * draft drawn as the board it becomes (SetupDraft), and on a desk his open
-   * questions standing above its stages, each answered where it stands
-   * (SetupAskCard); on a phone his composer holds them, and the draft bar's
-   * Answer Caw opens it. The project's page and the onboarding bench both
+   * questions standing above its stages, each answered where it stands; on
+   * a phone his composer holds them, and the draft bar's Answer Caw opens
+   * it. A question is one control wherever it stands: the house ask card
+   * (transcript/Prompt) his composer draws, on the board in a raised card of
+   * its own, so it reads, answers and says whether work waits on it the same
+   * on a desk as on a phone. The project's page and the onboarding bench both
    * draw this, the page from the setup page he writes (setup-draft.svelte.ts),
    * the bench from fixtures.
    */
+  import type { PermissionResult } from "@cawco/core/harness";
   import { setupWords } from "@cawco/core/words/onboarding";
+  import { tick } from "svelte";
   import {
     type BlockedRequest,
     submitCommand,
@@ -20,10 +25,9 @@
     Stage,
   } from "#lib/cawco/decisions/host/setup/stage.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
-  import type { questionAnswer } from "#lib/cawco/question.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import Prompt from "#lib/cawco/transcript/Prompt.svelte";
   import { buttonVariants } from "#lib/components/ui/button/index.js";
-  import SetupAskCard from "./SetupAskCard.svelte";
   import SetupDraft from "./SetupDraft.svelte";
 
   let {
@@ -80,7 +84,7 @@
   /** An answer to one of his questions on the board, as his composer would send it; hands back its command's id. */
   const answer = (
     asked: BlockedRequest,
-    result: ReturnType<typeof questionAnswer>
+    result: PermissionResult
   ): string | null =>
     submitCommand(
       asked.request.instanceId,
@@ -91,21 +95,48 @@
 
   let questions = $state<HTMLElement>();
 
+  /** The first question's options on the board, where its keys go. */
+  const firstOptions = (): HTMLElement | null =>
+    questions?.querySelector<HTMLElement>(
+      '[data-slot="option-group"] [tabindex="0"]'
+    ) ?? null;
+
   /** Answer Caw: on a desk the keys go to the first question on the board; on a phone his composer opens on them. */
   function answerCaw() {
-    const first = questions?.querySelector<HTMLElement>("button");
+    const first = firstOptions();
     if (onBoard && first) {
       first.focus({ focusVisible: true } as FocusOptions);
       return;
     }
     onanswercaw();
   }
+
+  // A question answered from its card leaves the board: the keys it held go
+  // on to the next one standing there, as the composer's next card takes
+  // them, so a digit and Enter keep answering.
+  let standing = 0;
+  $effect(() => {
+    const now = asks.length;
+    const fewer = now < standing;
+    standing = now;
+    if (fewer && onBoard && now > 0) {
+      tick().then(() => {
+        const lost =
+          document.activeElement === document.body ||
+          document.activeElement === null;
+        if (lost) {
+          firstOptions()?.focus();
+        }
+      });
+    }
+  });
 </script>
 
 <div class="flex h-full min-h-0 flex-col gap-space-2">
   <SetupDraft
     {aim}
     asking={asks.length}
+    asksInView={onBoard && asks.length > 0}
     {coming}
     {delegates}
     {name}
@@ -145,20 +176,27 @@
 {/snippet}
 
 <!-- His questions on the board, above the draft's stages, each answered
-     where it stands: one that holds him says what waits on it. -->
+     where it stands, in the card his composer draws: its line says whether
+     work waits on it. -->
 {#snippet boardAsks()}
   <section
     bind:this={questions}
     aria-label={setupWords.questions}
-    class="flex w-full max-w-c-measure flex-col gap-space-3"
+    class="flex w-full flex-col gap-space-3"
     data-slot="setup-asks"
     {@attach reflow()}
   >
     {#each asks as ask (ask.request.requestId)}
-      <div data-flip>
-        <SetupAskCard
+      <div
+        class="rounded-lg bg-surface-raised shadow-overlay"
+        data-flip
+        data-slot="setup-ask"
+      >
+        <Prompt
+          asker="Caw"
           onanswer={(result) => answer(ask, result)}
           request={ask.request}
+          shown
         />
       </div>
     {/each}

@@ -233,6 +233,11 @@
     {/each}
   </ol>
   {#if foot}
-    <div data-slot="foot" class="flex-none *:w-full">{@render foot()}</div>
+    <!-- At the column's foot at every width: on a desk the list fills the
+         column above it; on a phone the list is as tall as its cards, and
+         the foot still stands at the column's end, not under its head. -->
+    <div data-slot="foot" class="mt-auto flex-none *:w-full">
+      {@render foot()}
+    </div>
   {/if}
 </section>

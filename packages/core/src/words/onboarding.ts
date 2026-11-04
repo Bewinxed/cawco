@@ -98,10 +98,6 @@ export const setupWords = {
   changeSetupWords: "I want to change how this project runs.",
   /** His questions on the board: their region's name. */
   questions: "Caw's questions",
-  /** One of several, on a phone where they stand one at a time. */
-  questionAt: (at: number, of: number) => `${at} of ${of}`,
-  /** An answer on its way. */
-  answering: "Answering…",
   /**
    * The board as Caw's draft, over its columns while he writes them (the
    * house draft bar's words: words/views `drafted`).

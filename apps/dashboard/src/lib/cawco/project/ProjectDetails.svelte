@@ -7,7 +7,9 @@
    * machine's mark, or the hub's folder) opens it, and so does ⋯ › Project
    * details…; Done, Escape or the place again folds it.
    *
-   * One row per fact, each changed on its own row:
+   * One row per fact, each changed on its own row; a project that holds no
+   * code (no repository, no place on a machine) shows none of its code's
+   * rows (Repositories, Large files, Work lands, Merge checks):
    * - Place: where it lives, which CawCo can't move, and its places: a
    *   checkout other than the primary can be removed, another added (a
    *   machine and a folder on it). The primary and the project's folder on
@@ -519,6 +521,14 @@
   const checkouts = $derived(
     project.places.filter((each) => each.kind !== "hub").length
   );
+  /**
+   * The project holds code: a repository linked, or a place on a machine.
+   * Only then do its code's rows stand (repository, large files, where work
+   * lands, merge checks): a project is code and more than code (PRODUCT.md),
+   * and a project with neither has none of them to set. A place added makes
+   * it code, and they stand.
+   */
+  const holdsCode = $derived(project.links.length > 0 || checkouts > 0);
   const hostOf = (machineId: string) =>
     cawco.machines.find((row) => row.machineId === machineId);
   const hostWords = (machineId: string) => {
@@ -859,296 +869,300 @@
       </div>
     </div>
 
-    <!-- Repository: a fact, with where it comes from. -->
-    <div
-      data-slot="row"
-      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
-      data-detail="repository"
-    >
-      <p
-        data-slot="project-details-label"
-        class="type-label pt-space-1 text-ink-muted"
-      >
-        {project.links.length > 1 ? "Repositories" : "Repository"}
-      </p>
+    {#if holdsCode}
+      <!-- Repository: a fact, with where it comes from. -->
       <div
-        data-slot="value"
-        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+        data-slot="row"
+        class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+        data-detail="repository"
       >
-        {#if project.links.length > 0}
-          {#each project.links as link (link)}
+        <p
+          data-slot="project-details-label"
+          class="type-label pt-space-1 text-ink-muted"
+        >
+          {project.links.length > 1 ? "Repositories" : "Repository"}
+        </p>
+        <div
+          data-slot="value"
+          class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+        >
+          {#if project.links.length > 0}
+            {#each project.links as link (link)}
+              <p
+                class="type-label flex min-w-0 items-center gap-space-2 wrap-anywhere text-ink-strong"
+              >
+                <bdi>{link}</bdi>
+              </p>
+            {/each}
+          {:else}
+            <p data-slot="note" class="type-meta text-ink-muted">
+              Each folder's GitHub repository shows here. Add a remote to a
+              folder to link one.
+            </p>
+          {/if}
+        </div>
+      </div>
+
+      <!-- Large files: each origin's own LFS, or where the project declared
+         they live, bound to a connection with a key. -->
+      <div
+        data-slot="row"
+        class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+        data-detail="lfs"
+      >
+        <p
+          data-slot="project-details-label"
+          class="type-label pt-space-1 text-ink-muted"
+        >
+          {lfsWords.label}
+        </p>
+        <div
+          data-slot="value"
+          class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+        >
+          {#if project.lfsUrl}
             <p
               class="type-label flex min-w-0 items-center gap-space-2 wrap-anywhere text-ink-strong"
+              data-lfs-url
             >
-              <bdi>{link}</bdi>
+              <bdi>{project.lfsUrl}</bdi>
             </p>
-          {/each}
-        {:else}
-          <p data-slot="note" class="type-meta text-ink-muted">
-            Each folder's GitHub repository shows here. Add a remote to a folder
-            to link one.
-          </p>
-        {/if}
-      </div>
-    </div>
-
-    <!-- Large files: each origin's own LFS, or where the project declared
-         they live, bound to a connection with a key. -->
-    <div
-      data-slot="row"
-      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
-      data-detail="lfs"
-    >
-      <p
-        data-slot="project-details-label"
-        class="type-label pt-space-1 text-ink-muted"
-      >
-        {lfsWords.label}
-      </p>
-      <div
-        data-slot="value"
-        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
-      >
-        {#if project.lfsUrl}
-          <p
-            class="type-label flex min-w-0 items-center gap-space-2 wrap-anywhere text-ink-strong"
-            data-lfs-url
-          >
-            <bdi>{project.lfsUrl}</bdi>
-          </p>
-          <p data-slot="note" class="type-meta text-ink-muted">
-            {lfsWords.declared(project.lfsConnection ?? "")}
-            {lfsWords.pinned}
-          </p>
-        {:else}
-          <p data-slot="note" class="type-meta text-ink-muted">
-            {lfsWords.own}
-          </p>
-        {/if}
-        {#if lfsEditing}
-          <form
-            data-slot="add"
-            class="grid grid-cols-(--add-cols) gap-space-2 pt-space-2 @max-details/details:grid-cols-1"
-            data-lfs-form
-            style:--add-cols={"minmax(0, var(--c-project-details-select-w)) minmax(0, 1fr)"}
-            onsubmit={(event) => {
-              event.preventDefault();
-              saveLfs({ url: lfsUrl.trim(), connection: lfsConnection });
-            }}
-            transition:unfold
-          >
-            <NativeSelect.Root
-              aria-label={lfsWords.connection}
-              class="w-full"
-              disabled={lfsKeyed.length === 0}
-              bind:value={lfsConnection}
+            <p data-slot="note" class="type-meta text-ink-muted">
+              {lfsWords.declared(project.lfsConnection ?? "")}
+              {lfsWords.pinned}
+            </p>
+          {:else}
+            <p data-slot="note" class="type-meta text-ink-muted">
+              {lfsWords.own}
+            </p>
+          {/if}
+          {#if lfsEditing}
+            <form
+              data-slot="add"
+              class="grid grid-cols-(--add-cols) gap-space-2 pt-space-2 @max-details/details:grid-cols-1"
+              data-lfs-form
+              style:--add-cols={"minmax(0, var(--c-project-details-select-w)) minmax(0, 1fr)"}
+              onsubmit={(event) => {
+                event.preventDefault();
+                saveLfs({ url: lfsUrl.trim(), connection: lfsConnection });
+              }}
+              transition:unfold
             >
-              {#each lfsKeyed as each (each.name)}
-                <NativeSelect.Option value={each.name}
-                  >{each.name}</NativeSelect.Option
-                >
-              {/each}
-            </NativeSelect.Root>
-            <Input
-              aria-label={lfsWords.url}
-              autocomplete="off"
-              placeholder={lfsWords.urlPlaceholder}
-              spellcheck="false"
-              text="label"
-              type="url"
-              bind:value={lfsUrl}
-            />
-            {#if lfsKeyed.length === 0 && lfsListed}
-              <p
-                data-slot="note"
-                class="col-span-full type-meta text-ink-muted"
+              <NativeSelect.Root
+                aria-label={lfsWords.connection}
+                class="w-full"
+                disabled={lfsKeyed.length === 0}
+                bind:value={lfsConnection}
               >
-                {lfsWords.noConnections}
-                <a class="text-link-ink" href="/config/connections"
-                  >{lfsWords.connectionsLink}</a
-                >.
-              </p>
-            {/if}
-            <div class="col-span-full flex justify-end gap-space-2">
-              <Button
-                label={lfsWords.cancel}
-                onclick={stopLfs}
-                size="sm"
-                type="button"
-                variant="ghost"
+                {#each lfsKeyed as each (each.name)}
+                  <NativeSelect.Option value={each.name}
+                    >{each.name}</NativeSelect.Option
+                  >
+                {/each}
+              </NativeSelect.Root>
+              <Input
+                aria-label={lfsWords.url}
+                autocomplete="off"
+                placeholder={lfsWords.urlPlaceholder}
+                spellcheck="false"
+                text="label"
+                type="url"
+                bind:value={lfsUrl}
               />
+              {#if lfsKeyed.length === 0 && lfsListed}
+                <p
+                  data-slot="note"
+                  class="col-span-full type-meta text-ink-muted"
+                >
+                  {lfsWords.noConnections}
+                  <a class="text-link-ink" href="/config/connections"
+                    >{lfsWords.connectionsLink}</a
+                  >.
+                </p>
+              {/if}
+              <div class="col-span-full flex justify-end gap-space-2">
+                <Button
+                  label={lfsWords.cancel}
+                  onclick={stopLfs}
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                />
+                <Button
+                  disabled={!(lfsConnection && lfsUrl.trim())}
+                  label={lfsWords.save}
+                  pending={lfsPending}
+                  pendingLabel={lfsWords.saving}
+                  size="sm"
+                  type="submit"
+                />
+              </div>
+            </form>
+          {:else}
+            <div class="flex flex-wrap gap-space-2 pt-space-1">
               <Button
-                disabled={!(lfsConnection && lfsUrl.trim())}
-                label={lfsWords.save}
-                pending={lfsPending}
-                pendingLabel={lfsWords.saving}
-                size="sm"
-                type="submit"
-              />
-            </div>
-          </form>
-        {:else}
-          <div class="flex flex-wrap gap-space-2 pt-space-1">
-            <Button
-              data-lfs-declare
-              label={project.lfsUrl ? lfsWords.change : lfsWords.declare}
-              onclick={startLfs}
-              size="xs"
-              variant="ghost"
-            />
-            {#if project.lfsUrl}
-              <Button
-                data-lfs-clear
-                label={lfsWords.clear}
-                onclick={() => saveLfs(null)}
-                pending={lfsPending}
-                pendingLabel={lfsWords.clearing}
+                data-lfs-declare
+                label={project.lfsUrl ? lfsWords.change : lfsWords.declare}
+                onclick={startLfs}
                 size="xs"
                 variant="ghost"
               />
-            {/if}
-          </div>
-        {/if}
-        <RowFault
-          again={() => (lfsTried === undefined ? undefined : saveLfs(lfsTried))}
-          data-lfs-fault
-          reason={lfsFault}
-        />
+              {#if project.lfsUrl}
+                <Button
+                  data-lfs-clear
+                  label={lfsWords.clear}
+                  onclick={() => saveLfs(null)}
+                  pending={lfsPending}
+                  pendingLabel={lfsWords.clearing}
+                  size="xs"
+                  variant="ghost"
+                />
+              {/if}
+            </div>
+          {/if}
+          <RowFault
+            again={() =>
+              lfsTried === undefined ? undefined : saveLfs(lfsTried)}
+            data-lfs-fault
+            reason={lfsFault}
+          />
+        </div>
       </div>
-    </div>
 
-    <!-- Work lands: the segment asked breathes until the hub answers. -->
-    <div
-      data-slot="row"
-      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
-      data-detail="lands"
-    >
-      <p
-        data-slot="project-details-label"
-        class="type-label pt-space-1 text-ink-muted"
-        id="{uid}-lands"
-      >
-        Work lands
-      </p>
+      <!-- Work lands: the segment asked breathes until the hub answers. -->
       <div
-        data-slot="value"
-        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+        data-slot="row"
+        class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+        data-detail="lands"
       >
-        <ToggleGroup.Root
-          aria-labelledby="{uid}-lands"
-          class="max-w-full self-start"
-          data-pending={landsAsked === null ? undefined : ""}
-          type="single"
-          bind:value={
-            () => lands,
-            (next) => {
-              if (next) {
-                askLands(next as LandsMode);
+        <p
+          data-slot="project-details-label"
+          class="type-label pt-space-1 text-ink-muted"
+          id="{uid}-lands"
+        >
+          Work lands
+        </p>
+        <div
+          data-slot="value"
+          class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+        >
+          <ToggleGroup.Root
+            aria-labelledby="{uid}-lands"
+            class="max-w-full self-start"
+            data-pending={landsAsked === null ? undefined : ""}
+            type="single"
+            bind:value={
+              () => lands,
+              (next) => {
+                if (next) {
+                  askLands(next as LandsMode);
+                }
               }
             }
-          }
-        >
-          {#each LANDS_MODES as mode (mode)}
-            <ToggleGroup.Item value={mode}>{LANDS[mode].label}</ToggleGroup.Item
-            >
-          {/each}
-        </ToggleGroup.Root>
-        <p data-slot="note" class="type-meta text-ink-muted" data-lands-says>
-          {LANDS[lands].says}
-        </p>
-        <RowFault
-          again={() => (landsTried ? setLands(landsTried) : undefined)}
-          data-lands-fault
-          reason={landsFault}
-        />
-      </div>
-    </div>
-
-    <!-- Merge checks: what the hub runs before it merges work, as gate.md declares it. -->
-    <div
-      data-slot="row"
-      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
-      data-detail="gate"
-      data-gate={gateShown}
-    >
-      <p
-        data-slot="project-details-label"
-        class="type-label pt-space-1 text-ink-muted"
-      >
-        {projectWords.mergeChecks}
-      </p>
-      <div
-        data-slot="value"
-        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
-      >
-        {#if gateRead.state === "reading"}
-          <p
-            data-slot="note"
-            class="mark-line flex items-center gap-space-2 type-meta text-ink-muted"
           >
-            <LiveDot /><span>Reading gate.md…</span>
-          </p>
-        {:else if gateRead.state === "failed"}
-          <RowFault
-            again={() => loadGate(project.id)}
-            data-gate-fault
-            reason={gateRead.reason}
-          />
-        {:else if gateRead.gate.kind === "unreadable"}
-          {#each gateRead.gate.problems as problem, at (at)}
-            <RowFault data-gate-problem reason={problem} />
-          {/each}
-          <p data-slot="note" class="type-meta text-ink-muted">
-            {projectWords.mergeChecksUnread}
-          </p>
-        {:else if gateRead.gate.kind === "declared" && gateRead.gate.steps.length > 0}
-          <!-- biome-ignore-start lint/a11y/noRedundantRoles : WebKit drops list semantics when list styles are removed; an explicit role="list" keeps them (scottohara.me/blog/2019/01/12/lists-and-safari.html) -->
-          <ol
-            class="m-0 flex list-none flex-col gap-space-2 p-0"
-            data-gate-steps
-            role="list"
-          >
-            <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
-            {#each gateRead.gate.steps as each, at (at)}
-              {@const facts = stepFacts(each)}
-              <li class="flex min-w-0 flex-col" data-gate-step>
-                <span
-                  data-slot="gate-name"
-                  class="min-w-0 type-label wrap-anywhere text-ink-strong"
-                  >{each.name}</span
-                >
-                {#if each.command !== each.name}
-                  <code
-                    class="min-w-0 type-meta font-mono whitespace-pre-wrap wrap-anywhere text-ink-muted"
-                    >{each.command}</code
-                  >
-                {/if}
-                {#if facts}
-                  <span
-                    data-slot="gate-facts"
-                    class="min-w-0 type-meta wrap-anywhere text-ink-muted"
-                    >{facts}</span
-                  >
-                {/if}
-              </li>
+            {#each LANDS_MODES as mode (mode)}
+              <ToggleGroup.Item value={mode}
+                >{LANDS[mode].label}</ToggleGroup.Item
+              >
             {/each}
-          </ol>
-        {:else}
-          <p data-slot="note" class="type-meta text-ink-muted">
-            {projectWords.noMergeChecks}
+          </ToggleGroup.Root>
+          <p data-slot="note" class="type-meta text-ink-muted" data-lands-says>
+            {LANDS[lands].says}
           </p>
-        {/if}
-        <Button
-          class="self-start"
-          pad="none"
-          data-gate-edit
-          href={folderFileHref(project.id, "gate.md")}
-          label="Edit gate.md"
-          size="xs"
-          variant="link"
-        />
+          <RowFault
+            again={() => (landsTried ? setLands(landsTried) : undefined)}
+            data-lands-fault
+            reason={landsFault}
+          />
+        </div>
       </div>
-    </div>
+
+      <!-- Merge checks: what the hub runs before it merges work, as gate.md declares it. -->
+      <div
+        data-slot="row"
+        class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+        data-detail="gate"
+        data-gate={gateShown}
+      >
+        <p
+          data-slot="project-details-label"
+          class="type-label pt-space-1 text-ink-muted"
+        >
+          {projectWords.mergeChecks}
+        </p>
+        <div
+          data-slot="value"
+          class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+        >
+          {#if gateRead.state === "reading"}
+            <p
+              data-slot="note"
+              class="mark-line flex items-center gap-space-2 type-meta text-ink-muted"
+            >
+              <LiveDot /><span>Reading gate.md…</span>
+            </p>
+          {:else if gateRead.state === "failed"}
+            <RowFault
+              again={() => loadGate(project.id)}
+              data-gate-fault
+              reason={gateRead.reason}
+            />
+          {:else if gateRead.gate.kind === "unreadable"}
+            {#each gateRead.gate.problems as problem, at (at)}
+              <RowFault data-gate-problem reason={problem} />
+            {/each}
+            <p data-slot="note" class="type-meta text-ink-muted">
+              {projectWords.mergeChecksUnread}
+            </p>
+          {:else if gateRead.gate.kind === "declared" && gateRead.gate.steps.length > 0}
+            <!-- biome-ignore-start lint/a11y/noRedundantRoles : WebKit drops list semantics when list styles are removed; an explicit role="list" keeps them (scottohara.me/blog/2019/01/12/lists-and-safari.html) -->
+            <ol
+              class="m-0 flex list-none flex-col gap-space-2 p-0"
+              data-gate-steps
+              role="list"
+            >
+              <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
+              {#each gateRead.gate.steps as each, at (at)}
+                {@const facts = stepFacts(each)}
+                <li class="flex min-w-0 flex-col" data-gate-step>
+                  <span
+                    data-slot="gate-name"
+                    class="min-w-0 type-label wrap-anywhere text-ink-strong"
+                    >{each.name}</span
+                  >
+                  {#if each.command !== each.name}
+                    <code
+                      class="min-w-0 type-meta font-mono whitespace-pre-wrap wrap-anywhere text-ink-muted"
+                      >{each.command}</code
+                    >
+                  {/if}
+                  {#if facts}
+                    <span
+                      data-slot="gate-facts"
+                      class="min-w-0 type-meta wrap-anywhere text-ink-muted"
+                      >{facts}</span
+                    >
+                  {/if}
+                </li>
+              {/each}
+            </ol>
+          {:else}
+            <p data-slot="note" class="type-meta text-ink-muted">
+              {projectWords.noMergeChecks}
+            </p>
+          {/if}
+          <Button
+            class="self-start"
+            pad="none"
+            data-gate-edit
+            href={folderFileHref(project.id, "gate.md")}
+            label="Edit gate.md"
+            size="xs"
+            variant="link"
+          />
+        </div>
+      </div>
+    {/if}
 
     {@render afterChecks?.()}
 

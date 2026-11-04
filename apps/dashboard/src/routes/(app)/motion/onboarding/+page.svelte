@@ -514,14 +514,7 @@
           {@const first = firstTodoStage(boardStages)?.name}
           <div class="flex min-h-0 flex-auto flex-col gap-space-4">
             {#if first}
-              <SetUpBar
-                {first}
-                {name}
-                onask={() => {
-                  lead.tab = "assistant";
-                  lead.open = true;
-                }}
-              />
+              <SetUpBar {first} {name} onask={() => lead.talk()} />
             {/if}
             <div class="min-h-0 flex-auto">
               <TaskBoard

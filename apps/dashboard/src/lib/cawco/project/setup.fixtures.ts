@@ -7,6 +7,7 @@
  * them: pending.ts `askEnvelope`), and the draft his setup page holds.
  */
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
+import { presentPermission } from "@cawco/core/permission-presentation";
 import type { BlockedRequest } from "../client.svelte";
 import type {
   Stage as DraftStage,
@@ -99,37 +100,41 @@ const ask = (
   options: string[],
   stance:
     { blocks: true; waiting: string } | { blocks: false; meanwhile: string }
-): BlockedRequest => ({
-  cwd: "/srv/cawco/projects/pr-team",
-  hostname: "hub",
-  instanceId: "pr-team-conversation",
-  machineId: "hub",
-  stale: false,
-  request: {
-    heard: 0,
+): BlockedRequest => {
+  const input = {
+    questions: [
+      {
+        header: question.split(" ").slice(0, 2).join(" "),
+        multiSelect: false,
+        question,
+        options: options.map((label) => ({ label, description: "" })),
+      },
+    ],
+    ...stance,
+  };
+  return {
+    cwd: "/srv/cawco/projects/pr-team",
+    hostname: "hub",
     instanceId: "pr-team-conversation",
-    requestId: id,
-    toolName: ASK_USER_QUESTION,
-    input: {
-      questions: [
-        {
-          header: question.split(" ").slice(0, 2).join(" "),
-          multiSelect: false,
-          question,
-          options: options.map((label) => ({ label, description: "" })),
-        },
-      ],
-      ...stance,
+    machineId: "hub",
+    stale: false,
+    request: {
+      heard: 0,
+      instanceId: "pr-team-conversation",
+      requestId: id,
+      toolName: ASK_USER_QUESTION,
+      input,
+      // As the hub presents it: its line says whether work waits on it.
+      presentation: presentPermission(ASK_USER_QUESTION, input, {
+        asker: "Caw",
+        current: () => undefined,
+        memory: () => undefined,
+        project: PR_NAME,
+        projectName: () => undefined,
+      }),
     },
-    presentation: {
-      asker: "Caw",
-      changes: [],
-      fields: [],
-      project: PR_NAME,
-      summary: question,
-    },
-  },
-});
+  };
+};
 
 /** The PR team's questions, from what their words leave open. */
 export const PR_ASKS: BlockedRequest[] = [
