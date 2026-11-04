@@ -15,7 +15,8 @@
  *
  * Legs, each stopped at its own point:
  * - before: as the runner's worktree appears, before the release has started.
- * - trees: once the release's three trees exist.
+ * - trees: once the release's two trees exist, the one it builds in and the
+ *   one it checks in (release.ts `treesOf`).
  * - draft: once its draft is up, with a proof instance planted in its staging
  *   (a run dir its storage records, and a process naming it) and a decoy run
  *   dir no staging records, named as a proof's and owned by no live proof,
@@ -54,28 +55,130 @@ const ROOT = resolve(import.meta.dir, "..", "..", "..");
 const POINT_MS = 240_000;
 /** How long a stopped release has to end: its groups' grace (release.ts STOP_GRACE_MS) and its clearing. */
 const STOP_MS = 300_000;
+/** The stand-in's record of a draft's create: `api --include --method POST --input - repos/<owner>/<repo>/releases`. */
+const CREATE_CALL =
+  /--method POST --input - repos\/[^/\s]+\/[^/\s]+\/releases$/mu;
 
-const GH = `#!${systemProgram("bash")}
-# gh stand-in: a release is $GH_STATE/releases/<tag>, holding a 'draft' file while it is one.
-state=\${GH_STATE:?}
-echo "$*" >> "$state/calls.log"
-args=()
-while (($#)); do case $1 in --repo) shift 2 ;; *) args+=("$1"); shift ;; esac; done
-set -- "\${args[@]}"
-[[ \${1:-} == release ]] || { echo "gh stand-in: $*" >&2; exit 1; }
-tag=\${3:-}
-dir=$state/releases/$tag
-case $2 in
-  create) mkdir -p "$dir" && touch "$dir/draft"; exec sleep "\${GH_CREATE_SECONDS:-0}" ;;
-  view) [[ -d $dir ]] || { echo "release not found" >&2; exit 1; }
-    if [[ -e $dir/draft ]]; then echo '{"isDraft":true}'; else echo '{"isDraft":false}'; fi ;;
-  upload) [[ -d $dir ]] || { echo "release not found" >&2; exit 1; }
-    for file in "\${@:4}"; do [[ $file == --* ]] || cp "$file" "$dir/"; done ;;
-  delete) [[ -d $dir ]] || { echo "release not found" >&2; exit 1; }; rm -rf "$dir" ;;
-  edit) rm -f "$dir/draft" ;;
-  list) echo '[]' ;;
-  *) echo "gh stand-in: release $2" >&2; exit 1 ;;
-esac
+/**
+ * The gh stand-in: `gh api --include` as publish-release.ts asks GitHub's
+ * REST API through it (since 6882fb35d), answering each request with a
+ * status line, headers and body as gh prints them (outside-call.ts
+ * `printedAnswer`). A release is $GH_STATE/releases/<tag>: its record in
+ * `release.json`, a `draft` file while it is one, and its assets beside them.
+ * A create makes the draft, then waits `GH_CREATE_SECONDS` before it answers,
+ * as a client still waiting on GitHub does. Anything else is refused, 404.
+ */
+const GH = `#!${process.execPath}
+const fs = require("node:fs");
+const path = require("node:path");
+const state = process.env.GH_STATE;
+if (!state) {
+  console.error("gh stand-in: GH_STATE is not set");
+  process.exit(1);
+}
+const argv = process.argv.slice(2);
+fs.appendFileSync(path.join(state, "calls.log"), argv.join(" ") + "\\n");
+let method = "GET";
+let input;
+let route = "";
+for (let i = 1; i < argv.length; i++) {
+  const arg = argv[i];
+  if (arg === "--include") continue;
+  if (arg === "--method") { method = argv[++i]; continue; }
+  if (arg === "-H") { i++; continue; }
+  if (arg === "--input") { input = argv[++i]; continue; }
+  route = arg;
+}
+const answer = (status, text, body) => {
+  process.stdout.write("HTTP/2.0 " + status + " " + text + "\\r\\nContent-Type: application/json\\r\\n\\r\\n" + (body === undefined ? "" : JSON.stringify(body)));
+  process.exit(0);
+};
+if (argv[0] !== "api") {
+  console.error("gh stand-in: " + argv.join(" "));
+  process.exit(1);
+}
+const releases = path.join(state, "releases");
+const tags = () => fs.readdirSync(releases);
+const recordOf = (tag) => {
+  const record = JSON.parse(fs.readFileSync(path.join(releases, tag, "release.json"), "utf8"));
+  return { ...record, draft: fs.existsSync(path.join(releases, tag, "draft")) };
+};
+const save = (record) => fs.writeFileSync(path.join(releases, record.tag_name, "release.json"), JSON.stringify(record));
+const byId = (id) => tags().map(recordOf).find((record) => String(record.id) === id);
+const nextId = () => {
+  const file = path.join(state, "next-id");
+  const id = Number(fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "1");
+  fs.writeFileSync(file, String(id + 1));
+  return id;
+};
+const body = () => JSON.parse(input === "-" ? fs.readFileSync(0, "utf8") : "{}");
+const [where, query = ""] = route.split("?");
+const parts = where.split("/");
+const repo = parts.slice(0, 3).join("/");
+const rest = parts.slice(3);
+(async () => {
+  if (rest[0] === "releases" && rest.length === 1 && method === "GET") {
+    return answer(200, "OK", tags().filter((tag) => fs.existsSync(path.join(releases, tag, "release.json"))).map(recordOf));
+  }
+  if (rest[0] === "releases" && rest.length === 1 && method === "POST") {
+    const asked = body();
+    const record = {
+      id: nextId(),
+      tag_name: asked.tag_name,
+      prerelease: Boolean(asked.prerelease),
+      created_at: new Date().toISOString(),
+      upload_url: "",
+      assets: [],
+    };
+    record.upload_url = repo + "/releases/" + record.id + "/assets{?name,label}";
+    fs.mkdirSync(path.join(releases, record.tag_name), { recursive: true });
+    save(record);
+    fs.writeFileSync(path.join(releases, record.tag_name, "draft"), "");
+    await Bun.sleep(Number(process.env.GH_CREATE_SECONDS ?? "0") * 1000);
+    return answer(201, "Created", { ...record, draft: true });
+  }
+  if (rest[0] === "releases" && rest[1] === "assets" && rest.length === 3 && method === "DELETE") {
+    for (const tag of tags()) {
+      const record = recordOf(tag);
+      const asset = record.assets.find((one) => String(one.id) === rest[2]);
+      if (asset) {
+        fs.rmSync(path.join(releases, tag, asset.name), { force: true });
+        record.assets = record.assets.filter((one) => one !== asset);
+        save(record);
+        return answer(204, "No Content");
+      }
+    }
+    return answer(404, "Not Found", { message: "Not Found" });
+  }
+  if (rest[0] === "releases" && rest.length === 3 && rest[2] === "assets" && method === "POST") {
+    const record = byId(rest[1]);
+    const name = new URLSearchParams(query).get("name");
+    if (!record || !name) return answer(404, "Not Found", { message: "Not Found" });
+    fs.copyFileSync(input, path.join(releases, record.tag_name, name));
+    const asset = { id: nextId(), name };
+    record.assets.push(asset);
+    save(record);
+    return answer(201, "Created", asset);
+  }
+  if (rest[0] === "releases" && rest.length === 2) {
+    const record = byId(rest[1]);
+    if (!record) return answer(404, "Not Found", { message: "Not Found" });
+    if (method === "GET") return answer(200, "OK", record);
+    if (method === "DELETE") {
+      fs.rmSync(path.join(releases, record.tag_name), { recursive: true, force: true });
+      return answer(204, "No Content");
+    }
+    if (method === "PATCH") {
+      if (body().draft === false) fs.rmSync(path.join(releases, record.tag_name, "draft"), { force: true });
+      return answer(200, "OK", recordOf(record.tag_name));
+    }
+  }
+  if (rest[0] === "git" && rest[1] === "refs" && rest[2] === "tags" && method === "DELETE") {
+    return answer(204, "No Content");
+  }
+  console.error("gh stand-in: " + method + " " + route);
+  return answer(404, "Not Found", { message: "gh stand-in: " + method + " " + route });
+})();
 `;
 const PODMAN = `#!${systemProgram("bash")}
 # podman stand-in: 'unshare' runs its command as this user; nothing else is reached before a stop.
@@ -197,9 +300,10 @@ const LEGS: Leg[] = [
     name: "trees",
     started: true,
     at: ({ home, sha }) =>
-      existsSync(
-        join(home, ".worktrees", `release-${sha.slice(0, 12)}-typecheck`)
-      ),
+      [
+        `release-${sha.slice(0, 12)}`,
+        `release-${sha.slice(0, 12)}-check`,
+      ].every((tree) => existsSync(join(home, ".worktrees", tree))),
   },
   {
     name: "draft",
@@ -216,9 +320,7 @@ const LEGS: Leg[] = [
     env: { GH_CREATE_SECONDS: "120" },
     at: ({ ghState }) =>
       existsSync(join(ghState, "calls.log")) &&
-      readFileSync(join(ghState, "calls.log"), "utf8").includes(
-        "release create"
-      ),
+      CREATE_CALL.test(readFileSync(join(ghState, "calls.log"), "utf8")),
   },
   {
     name: "acquiring",
