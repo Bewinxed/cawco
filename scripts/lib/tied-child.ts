@@ -25,9 +25,14 @@
  * alive; when it differs the child sends itself SIGTERM, once, so its own
  * teardown (scratch-fleet.ts's stop-signal handlers: its fleets' browsers
  * and folders, its services then ending under their leash) runs as for any
- * caught signal. The variable is taken out of this process's environment as
- * it is read, so nothing this child starts mistakes its grandparent for its
- * parent.
+ * caught signal. The variable is taken out of `process.env` as it is read,
+ * so nothing this child starts mistakes its grandparent for its parent, as
+ * long as it is started with `env` given: Bun hands a `Bun.spawn` or
+ * `Bun.spawnSync` with none the environment this process started with
+ * ("Defaults to `process.env` as it was when the current Bun process
+ * launched", bun-types `env`; oven-sh/bun#40846). A child of a tied child
+ * started without `env` that loads this module takes its grandparent's pid
+ * for its parent's and stops at once (browser-cap's child, 2026-11-04).
  *
  * This module imports only the signal wall and stop-signals.ts, which import
  * nothing, so it loads in a checkout with no dependencies installed

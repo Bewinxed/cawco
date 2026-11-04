@@ -54,7 +54,13 @@ export async function underSigningEnv(
   process.exit(await run.exited);
 }
 
-/** Reads every secret once and removes it from the environment, so no child process inherits one. */
+/**
+ * Reads every secret once and removes it from `process.env`, so no child
+ * started with `env: process.env` inherits one. `bun --env-file` puts them in
+ * the environment the process started with, which Bun hands every
+ * `Bun.spawn` or `Bun.spawnSync` given no `env` (oven-sh/bun#40846), so
+ * every spawn of the release names its env.
+ */
 export function takeReleaseSecrets(): ReleaseSecrets {
   const secrets: ReleaseSecrets = {};
   for (const [name, variable] of Object.entries(SECRET_VARIABLES) as [

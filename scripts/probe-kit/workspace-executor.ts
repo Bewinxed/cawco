@@ -62,7 +62,7 @@ export const standExecutor = async (
   await Bun.$`rm -f ${first.fifo} && mkfifo ${first.fifo}`.quiet();
   const runner = Bun.spawn(
     [systemProgram("bash"), "-c", first.runner, "cawco", first.fifo],
-    { stdout: "pipe", stderr: "inherit" }
+    { env: process.env, stdout: "pipe", stderr: "inherit" }
   );
   // Ready once it says so.
   const reader = runner.stdout.getReader();

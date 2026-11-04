@@ -209,7 +209,7 @@ const opencodeLeg = async (kit: Kit, dylib: string, root: string) => {
   await mkdir(home, { recursive: true });
   await mkdir(repo, { recursive: true });
   await writeFile(join(repo, "a.txt"), "a\n");
-  Bun.spawnSync(["git", "init", "-q"], { cwd: repo });
+  Bun.spawnSync(["git", "init", "-q"], { env: process.env, cwd: repo });
   const log = join(root, "opencode.log");
   const server = Bun.spawn(
     [binary, "serve", "--hostname=127.0.0.1", "--port=0"],

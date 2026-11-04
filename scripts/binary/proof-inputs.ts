@@ -25,11 +25,7 @@ export const proofInputsKey = async (
 ): Promise<string> => {
   const listed = Bun.spawn(
     ["git", "ls-tree", "-r", rev, "--", ...PROOF_INPUTS],
-    {
-      cwd: checkout,
-      stdout: "pipe",
-      stderr: "inherit",
-    }
+    { env: process.env, cwd: checkout, stdout: "pipe", stderr: "inherit" }
   );
   const text = await new Response(listed.stdout).text();
   if ((await listed.exited) !== 0 || !text) {
@@ -44,7 +40,7 @@ export const proofInputsChanged = async (
 ): Promise<boolean> => {
   const status = Bun.spawn(
     ["git", "status", "--porcelain", "--", ...PROOF_INPUTS],
-    { cwd: checkout, stdout: "pipe", stderr: "inherit" }
+    { env: process.env, cwd: checkout, stdout: "pipe", stderr: "inherit" }
   );
   const text = await new Response(status.stdout).text();
   if ((await status.exited) !== 0) {

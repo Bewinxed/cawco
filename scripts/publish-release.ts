@@ -76,6 +76,7 @@ async function request(
       path,
     ],
     {
+      env: process.env,
       stdin: options.body
         ? Buffer.from(JSON.stringify(options.body))
         : "ignore",

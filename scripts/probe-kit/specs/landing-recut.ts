@@ -526,7 +526,10 @@ const moveLeg = async (
       )[0],
     (one) =>
       Boolean(one?.path && one.tmp) &&
-      Bun.spawnSync(["git", "-C", one?.path ?? "", "log", "-1", "--format=%s"])
+      Bun.spawnSync(
+        ["git", "-C", one?.path ?? "", "log", "-1", "--format=%s"],
+        { env: process.env }
+      )
         .stdout.toString()
         .includes(`Delegate commit first_${tag}`),
     300_000

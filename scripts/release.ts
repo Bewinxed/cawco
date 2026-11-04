@@ -180,6 +180,7 @@ const LANDING_CHECK = "bun run check --all";
  */
 const gatePassed = async (commit: string): Promise<boolean> => {
   const read = Bun.spawnSync(["git", "rev-parse", `${commit}^{tree}`], {
+    env: process.env,
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -1200,6 +1201,7 @@ if (argv.includes("--dry-run")) {
 
 const git = (...args: string[]) =>
   Bun.spawnSync(["git", ...args], {
+    env: process.env,
     cwd: repo,
     stdout: "pipe",
     stderr: "pipe",
@@ -1293,6 +1295,7 @@ if (missing.length > 0) {
 }
 const rcodesignSays = (await Bun.file(rcodesignPath()).exists())
   ? Bun.spawnSync([rcodesignPath(), "--version"], {
+      env: process.env,
       stdout: "pipe",
       stderr: "ignore",
     }).stdout.toString()
@@ -1330,6 +1333,7 @@ const WHITESPACE = /\s+/u;
 /** A process's start time (`ps -o lstart=`), or undefined once it is gone. */
 async function startedOf(pid: number): Promise<string | undefined> {
   const ps = Bun.spawn(["ps", "-o", "lstart=", "-p", String(pid)], {
+    env: process.env,
     stdout: "pipe",
     stderr: "ignore",
   });
@@ -1365,6 +1369,7 @@ function writeHolder(): Promise<void> {
 }
 async function groupMembers(group: number): Promise<number[]> {
   const ps = Bun.spawn(["ps", "-eo", "pid=,pgid="], {
+    env: process.env,
     stdout: "pipe",
     stderr: "ignore",
   });
@@ -1561,7 +1566,7 @@ let superseded = false;
 if (previous && previous.commit !== requestedCommit) {
   const ancestry = Bun.spawn(
     ["git", "merge-base", "--is-ancestor", requestedCommit, previous.commit],
-    { cwd: repo, stdout: "ignore", stderr: "ignore" }
+    { env: process.env, cwd: repo, stdout: "ignore", stderr: "ignore" }
   );
   superseded = (await ancestry.exited) === 0;
 }
@@ -1620,7 +1625,7 @@ const sweep = async (
   const args = [...(stale ? ["--stale"] : []), ...dirs];
   const child = Bun.spawn(
     ["bash", "-c", SWEEP_SCRIPT, "proof-sweep.sh", ...args],
-    { cwd: mainRepo, stdout: "pipe", stderr: "inherit" }
+    { env: process.env, cwd: mainRepo, stdout: "pipe", stderr: "inherit" }
   );
   const said = await new Response(child.stdout).text();
   process.stdout.write(said);
@@ -1642,6 +1647,7 @@ const gitMain = async (
   ...args: string[]
 ): Promise<{ out: string; status: number }> => {
   const child = Bun.spawn(["git", "-C", mainRepo, ...args], {
+    env: process.env,
     cwd: mainRepo,
     stdout: "pipe",
     stderr: "pipe",

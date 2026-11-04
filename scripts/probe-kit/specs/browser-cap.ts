@@ -46,7 +46,7 @@ async function leg(kit: Kit, engine: "chromium" | "webkit"): Promise<void> {
   const name = `grow-${engine}`;
   const child = Bun.spawn(
     [process.execPath, CHILD, engine, String(CAP_GIB), "--leg", name],
-    { stdout: "pipe", stderr: "pipe" }
+    { env: process.env, stdout: "pipe", stderr: "pipe" }
   );
   const [out, err, code] = await Promise.all([
     new Response(child.stdout).text(),

@@ -32,7 +32,7 @@ const diskProblem = (what: string): string | undefined => {
       workspaceCacheDir(),
       what,
     ],
-    { stdout: "ignore", stderr: "pipe" }
+    { env: process.env, stdout: "ignore", stderr: "pipe" }
   );
   return checked.exitCode === 0
     ? undefined

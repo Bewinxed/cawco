@@ -47,7 +47,14 @@
  * is frames.ts.
  */
 import "../../packages/core/src/no-huge-pages";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureDeps } from "../lib/deps";
@@ -72,15 +79,32 @@ const args = process.argv.slice(2);
  * to have.
  */
 const caller = process.env[OWN_PROCESS_ENV] ? [] : callerNames(process.env);
-/** This run's `argv` again, tied to it, in a process without {@link caller}: its exit. */
-const againWithoutCaller = (argv: string[]): Promise<number> => {
+/**
+ * Where this run, when it runs some of a run's specs, writes what became of
+ * them ({@link Tally}) for the run that started it ({@link runWithoutCaller}).
+ * Out of `process.env` once read; every run.ts this one starts is given its
+ * `env`.
+ */
+const TALLY_ENV = "CAWCO_PROBE_TALLY";
+const tallyTo = process.env[TALLY_ENV];
+delete process.env[TALLY_ENV];
+/** What a run of some of the specs says became of them: those that failed, and those not run here. */
+interface Tally {
+  failed: string[];
+  notHere: string[];
+}
+/** This run's `argv` again, tied to it, in a process without {@link caller} and with `extra`: its exit. */
+const againWithoutCaller = (
+  argv: string[],
+  extra: Record<string, string> = {}
+): Promise<number> => {
   console.log(
     `… running again without the variables of the session it was started from (${caller.join(", ")})`
   );
-  return runTied(
-    [process.execPath, import.meta.path, ...argv],
-    withoutCaller(process.env)
-  );
+  return runTied([process.execPath, import.meta.path, ...argv], {
+    ...withoutCaller(process.env),
+    ...extra,
+  });
 };
 // The user journeys (journeys/suite.ts): every engine, every size, both data sets.
 if (args[0] === "journeys") {
@@ -205,45 +229,98 @@ const runOwnProcess = async (spec: Spec): Promise<number> => {
 };
 
 /**
- * The specs in order without {@link caller}: each `workspace` spec in a
- * process of its own that keeps them (its subject is that session's
- * boundary), and the specs between them in one run of their own without
- * them, as the run was asked for when no `workspace` spec is among them.
- * Answers 1 when any failed, else 3 when one was not run here, else 0.
+ * The chosen specs in order, in the parts a run without {@link caller} runs
+ * them in: each `workspace` spec alone, and each run of other specs between
+ * them as one part.
  */
-const runWithoutCaller = async (): Promise<number> => {
-  const groups: (Spec | string[])[] = [];
+const partsOf = (): (Spec | string[])[] => {
+  const parts: (Spec | string[])[] = [];
   for (const name of chosen) {
     const spec = specs.get(name) as Spec;
-    const last = groups.at(-1);
+    const last = parts.at(-1);
     if (spec.workspace) {
-      groups.push(spec);
+      parts.push(spec);
     } else if (Array.isArray(last)) {
       last.push(name);
     } else {
-      groups.push([name]);
+      parts.push([name]);
     }
   }
-  const [only] = groups;
-  if (groups.length === 1 && Array.isArray(only)) {
+  return parts;
+};
+
+/**
+ * What became of one part: a `workspace` spec in a process of its own that
+ * keeps {@link caller}, by its exit; other specs in one run without them, by
+ * the {@link Tally} it writes to `file`, or every one of them failed when it
+ * ended before writing one.
+ */
+const runPart = async (part: Spec | string[], file: string): Promise<Tally> => {
+  if (!Array.isArray(part)) {
+    const code = await runOwnProcess(part);
+    return {
+      failed: code === 0 || code === 3 ? [] : [part.name],
+      notHere: code === 3 ? [part.name] : [],
+    };
+  }
+  const code = await againWithoutCaller(
+    [...(web ? ["web"] : []), ...part, ...options],
+    { [TALLY_ENV]: file }
+  );
+  if (existsSync(file)) {
+    return JSON.parse(readFileSync(file, "utf8")) as Tally;
+  }
+  console.log(
+    `… ${part.join(", ")}: their run ended (exit ${code}) before it said how each went`
+  );
+  return { failed: part, notHere: [] };
+};
+
+/**
+ * The specs in order without {@link caller}, in parts ({@link partsOf}), as
+ * the run was asked for when no `workspace` spec is among them. Run in
+ * parts, it ends on one line for the whole run, after each part's own: its
+ * specs, how many passed, failed and were not run here, and its time, which
+ * the exit says too. Answers 1 when any failed, else 3 when one was not run
+ * here, else 0.
+ */
+const runWithoutCaller = async (): Promise<number> => {
+  const parts = partsOf();
+  const [only] = parts;
+  if (parts.length === 1 && Array.isArray(only)) {
     return await againWithoutCaller(args);
   }
-  const codes: number[] = [];
-  for (const group of groups) {
-    codes.push(
-      Array.isArray(group)
-        ? await againWithoutCaller([
-            ...(web ? ["web"] : []),
-            ...group,
-            ...options,
-          ])
-        : await runOwnProcess(group)
-    );
+  const failed: string[] = [];
+  const notHere: string[] = [];
+  const tallies = mkdtempSync(join(tmpdir(), "probe-tally-"));
+  try {
+    for (const [index, part] of parts.entries()) {
+      const tally = await runPart(part, join(tallies, `${index}.json`));
+      failed.push(...tally.failed);
+      notHere.push(...tally.notHere);
+    }
+  } finally {
+    rmSync(tallies, { recursive: true, force: true });
   }
-  if (codes.some((code) => code !== 0 && code !== 3)) {
+  const failedCount = failed.filter((name) => chosen.includes(name)).length;
+  const counts = [
+    `${chosen.length - failedCount - notHere.length} passed`,
+    ...(failedCount > 0 ? [`${failedCount} failed`] : []),
+    ...(notHere.length > 0 ? [`${notHere.length} not run here`] : []),
+  ].join(", ");
+  const whole = `${chosen.length} specs: ${counts}; ${(performance.now() / 1000).toFixed(0)}s, in ${parts.length} parts`;
+  if (notHere.length > 0) {
+    console.log(`NOT RUN HERE: ${notHere.join(", ")}`);
+  }
+  console.log(
+    failed.length === 0
+      ? `ALL PASS (${whole})`
+      : `${failed.length} FAILED: ${failed.join(", ")} (${whole})`
+  );
+  if (failed.length > 0) {
     return 1;
   }
-  return codes.includes(3) ? 3 : 0;
+  return notHere.length > 0 ? 3 : 0;
 };
 if (caller.length > 0) {
   process.exit(await runWithoutCaller());
@@ -302,6 +379,15 @@ console.log(
     ? `ALL PASS (${ran} specs, ${seconds}s${notes})`
     : `${failedSpecs.length} FAILED: ${failedSpecs.join(", ")} (${ran} specs, ${seconds}s${notes})`
 );
+if (tallyTo) {
+  writeFileSync(
+    tallyTo,
+    JSON.stringify({
+      failed: failedSpecs,
+      notHere: run.notHere,
+    } satisfies Tally)
+  );
+}
 if (failedSpecs.length > 0) {
   process.exit(1);
 }

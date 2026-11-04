@@ -309,7 +309,7 @@ const run = async (kit: Kit) => {
   await Bun.$`rm -f ${first.fifo} && mkfifo ${first.fifo}`.quiet();
   const runner = Bun.spawn(
     [systemProgram("bash"), "-c", first.runner, "cawco", first.fifo],
-    { stdout: "pipe", stderr: "inherit" }
+    { env: process.env, stdout: "pipe", stderr: "inherit" }
   );
   const reader = runner.stdout.getReader();
   await reader.read();

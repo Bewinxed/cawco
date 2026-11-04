@@ -31,6 +31,6 @@ export const holdAwake = (why: string): void => {
       String(process.pid),
       why,
     ],
-    { stdin: "ignore", stdout: "ignore", stderr: "inherit" }
+    { env: process.env, stdin: "ignore", stdout: "ignore", stderr: "inherit" }
   ).unref();
 };
