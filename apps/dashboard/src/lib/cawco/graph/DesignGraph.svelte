@@ -497,6 +497,7 @@
     // changed, at the form's foot, scrolled its top out of view under
     // 1200px); after that, where he left it.
     holding = false;
+    beforeReset = null;
     move = from ? { kind: "ready", from, to, clips: read } : none;
   };
   // Each kept state is reached on the one live instance; a width or a
@@ -552,6 +553,28 @@
       clock = requestAnimationFrame(step);
     };
     clock = requestAnimationFrame(step);
+  };
+  /** Pause: the move held on the frame it stands at, the stage with it (stopping the clock alone let the stage run on to the end). */
+  const pause = () => {
+    stop();
+    holding = true;
+    replays.seek(clipsNow(), playhead);
+  };
+  /** The clips before Reset all, while nothing has changed since: Undo reset puts them back (the house answer, undo over confirm). */
+  let beforeReset = $state<Clip[] | null>(null);
+  const resetAll = (ids: string[]) => {
+    if (move.kind !== "ready") {
+      return;
+    }
+    const before = move.clips;
+    retime(move.clips.filter((clip) => ids.includes(clip.id)).map(untune));
+    beforeReset = before;
+  };
+  const undoReset = () => {
+    const before = beforeReset;
+    if (before) {
+      retime(before);
+    }
   };
   /** A scrub, during a play too: the move held on that frame where he lets go (T3). */
   const scrub = (t: number) => {
@@ -612,6 +635,7 @@
       return;
     }
     const by = new Map(changed.map((clip) => [clip.id, clip]));
+    beforeReset = null;
     move = {
       ...move,
       clips: move.clips.map((clip) => by.get(clip.id) ?? clip),
@@ -985,17 +1009,30 @@
     onlight={(thing) => {
       lit = thing;
     }}
-    onpause={stop}
+    onpause={pause}
     onplay={play}
     onrepeat={(next) => {
       repeat = next;
     }}
-    onreset={(ids) =>
-      retime(
-        (move.kind === "ready" ? move.clips : [])
-          .filter((clip) => ids.includes(clip.id))
-          .map(untune)
-      )}
+    onreset={(ids) => {
+      const all =
+        move.kind === "ready" &&
+        move.clips
+          .filter((clip) => clip.was)
+          .every((clip) => ids.includes(clip.id));
+      if (all) {
+        resetAll(ids);
+      } else {
+        retime(
+          (move.kind === "ready" ? move.clips : [])
+            .filter((clip) => ids.includes(clip.id))
+            .map(untune)
+        );
+      }
+    }}
+    onundo={undoReset}
+    undoable={beforeReset !== null}
+    {still}
     onretime={retime}
     onretry={retry}
     onseek={scrub}

@@ -1,0 +1,144 @@
+<script lang="ts">
+  /**
+   * A curve drawn to be bent (the decision page's option: the Curve chip
+   * lets him draw his own, as Jitter's easing popover does): progress up
+   * against time across, the line from the start to the end, and its two
+   * control points, each dragged with the pointer or moved with the arrow
+   * keys (0.05, Shift 0.01). Letting go hands the four numbers back.
+   */
+  import { graphWords as words } from "@cawco/core/words/graph";
+
+  let {
+    at,
+    onbend,
+  }: {
+    /** The curve's four numbers: x1, y1, x2, y2. */
+    at: number[];
+    onbend: (at: number[]) => void;
+  } = $props();
+
+  const W = 160;
+  const H = 90;
+  /** Progress from a little under 0 to a little over 1, so an overshoot stands inside the box. */
+  const LOW = -0.25;
+  const HIGH = 1.25;
+  const yOf = (p: number) => (H * (HIGH - p)) / (HIGH - LOW);
+  /** The numbers while a point is held; the curve's own at rest. */
+  let held = $state<number[] | null>(null);
+  const shown = $derived(held ?? at);
+  const [x1 = 0, y1 = 0, x2 = 1, y2 = 1] = $derived(shown);
+  let box = $state<HTMLElement>();
+  let dragging: 0 | 1 | null = null;
+  const STEP = 0.05;
+  const FINE = 0.01;
+
+  const place = (point: 0 | 1, x: number, y: number) => {
+    const next = [...shown];
+    next[point * 2] = Math.min(1, Math.max(0, Math.round(x * 100) / 100));
+    next[point * 2 + 1] = Math.min(
+      HIGH,
+      Math.max(LOW, Math.round(y * 100) / 100)
+    );
+    return next;
+  };
+  const fromPointer = (event: PointerEvent): [number, number] => {
+    const r = (box as HTMLElement).getBoundingClientRect();
+    return [
+      (event.clientX - r.left) / r.width,
+      HIGH - ((event.clientY - r.top) / r.height) * (HIGH - LOW),
+    ];
+  };
+  const take = (point: 0 | 1) => (event: PointerEvent) => {
+    event.preventDefault();
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    dragging = point;
+  };
+  const drag = (event: PointerEvent) => {
+    if (dragging !== null && box) {
+      held = place(dragging, ...fromPointer(event));
+    }
+  };
+  const letGo = () => {
+    if (held) {
+      onbend(held);
+    }
+    held = null;
+    dragging = null;
+  };
+  const key = (point: 0 | 1) => (event: KeyboardEvent) => {
+    const by = event.shiftKey ? FINE : STEP;
+    const move = {
+      ArrowRight: [by, 0],
+      ArrowLeft: [-by, 0],
+      ArrowUp: [0, by],
+      ArrowDown: [0, -by],
+    }[event.key];
+    if (move) {
+      event.preventDefault();
+      const [dx = 0, dy = 0] = move;
+      onbend(
+        place(
+          point,
+          (shown[point * 2] ?? 0) + dx,
+          (shown[point * 2 + 1] ?? 0) + dy
+        )
+      );
+    }
+  };
+  const points = $derived([
+    { x: x1, y: y1 },
+    { x: x2, y: y2 },
+  ]);
+</script>
+
+<div
+  bind:this={box}
+  class="relative aspect-16/9 w-full touch-none"
+  onpointercancel={letGo}
+  onpointermove={drag}
+  onpointerup={letGo}
+  role="presentation"
+>
+  <svg
+    aria-hidden="true"
+    class="size-full overflow-visible rounded-md border border-border-hairline bg-surface-recess text-ink-strong"
+    data-slot="curve-graph"
+    fill="none"
+    preserveAspectRatio="none"
+    viewBox="0 0 {W} {H}"
+  >
+    <path
+      class="stroke-border-control"
+      d="M0 {yOf(0)} H{W} M0 {yOf(1)} H{W}"
+      stroke-dasharray="2 3"
+      vector-effect="non-scaling-stroke"
+    />
+    <path
+      class="stroke-ink-muted"
+      d="M0 {yOf(0)} L{W * x1} {yOf(y1)} M{W} {yOf(1)} L{W * x2} {yOf(y2)}"
+      vector-effect="non-scaling-stroke"
+    />
+    <path
+      d="M0 {yOf(0)} C{W * x1} {yOf(y1)} {W * x2} {yOf(y2)} {W} {yOf(1)}"
+      stroke="currentColor"
+      stroke-linecap="round"
+      stroke-width="1.5"
+      vector-effect="non-scaling-stroke"
+    />
+  </svg>
+  {#each points as point, index (index)}
+    {@const which = index === 0 ? 0 : 1}
+    <span
+      aria-label={words.curvePoint(index + 1)}
+      aria-valuetext="{point.x.toFixed(2)}, {point.y.toFixed(2)}"
+      class="pointer-hit touch-hit absolute start-(--x) top-(--y) size-space-3 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-pill border border-border-control-strong bg-surface-raised shadow-xs focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2 rtl:translate-x-1/2"
+      onkeydown={key(which)}
+      onpointerdown={take(which)}
+      role="slider"
+      aria-valuenow={point.x}
+      style:--x="{point.x * 100}%"
+      style:--y="{(yOf(point.y) / H) * 100}%"
+      tabindex="0"
+    ></span>
+  {/each}
+</div>

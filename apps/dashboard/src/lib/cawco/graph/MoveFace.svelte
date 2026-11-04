@@ -65,7 +65,7 @@
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
@@ -79,6 +79,7 @@
     IconReset,
   } from "#lib/icons.js";
   import { browser } from "$app/env";
+  import ChoiceList, { toChosen } from "./ChoiceList.svelte";
   import ClipBar from "./ClipBar.svelte";
   import ClipSettings from "./ClipSettings.svelte";
   import { figureOf, inkWidth } from "./figures";
@@ -86,9 +87,9 @@
     type Clip,
     type ClipKind,
     editsOf,
-    inRunOrder,
     lengthOf,
-    ownLengths,
+    type Part,
+    partsOf,
     type Run,
     retimeRun,
     type Track,
@@ -118,6 +119,9 @@
     peek = false,
     onretry,
     lang,
+    still = false,
+    undoable = false,
+    onundo,
     selected = $bindable(null),
     opened = $bindable({}),
   }: {
@@ -158,6 +162,11 @@
     onretry: () => void;
     /** The page's language, for the figures. */
     lang: string | undefined;
+    /** Reduced motion is on: Play lands the move at its end. */
+    still?: boolean;
+    /** Reset all can be taken back: nothing has changed since. */
+    undoable?: boolean;
+    onundo: () => void;
     /** The line whose settings stand open under it, by its key (a row's first clip's id; an animation's `row/clip`). */
     selected?: string | null;
     /** The rows opened into one row per animation, by row. */
@@ -165,8 +174,10 @@
   } = $props();
 
   const clips = $derived(move.kind === "ready" ? move.clips : []);
-  /** The clips he changed. */
-  const changedCount = $derived(clips.filter((clip) => clip.was).length);
+  /** The rows he changed, as he sees them: one curve picked on a row of four animations is one change. */
+  const changedCount = $derived(
+    tracksOf(clips).filter((track) => editsOf(track).size > 0).length
+  );
   const written = $derived(version === "written" && changedCount > 0);
   /** The clips the face draws: his, or the agent's as written. */
   const shown = $derived(written ? clips.map(untune) : clips);
@@ -183,20 +194,22 @@
   let lane = $state(0);
   /** The ruler's lane, in its figures' type. */
   let ruler = $state<HTMLElement | null>(null);
-  /**
-   * The stretch a bar's drag holds, by its row: the row's length follows
-   * the drag, as Jitter's Duration follows its bar's end handle.
-   */
-  let holding = $state<{
-    from: number;
-    id: string;
-    run: string;
-    to: number;
-  } | null>(null);
-  /** How far the lane must reach: the move's end, the end as the engine ran it, and a held drag's. */
+  /** How far the lane must reach: the move's end and its end as the engine ran it, a quarter past. */
   const reach = $derived(
-    Math.max(length, lengthOf(clips.map(untune)), holding?.to ?? 0) * HEADROOM
+    Math.max(length, lengthOf(clips.map(untune))) * HEADROOM
   );
+  /**
+   * The lane's end as it last stood for this move: the lane only grows
+   * while one move is on the face, so a drag, a key or a switch between
+   * As written and Yours never rescales it under him (a bar dragged 60px
+   * moved 270 ms as the ruler rescaled mid-drag).
+   */
+  let kept = $derived<{ move: string | null; scale: number }>({
+    move: chosen,
+    scale: 0,
+  });
+  const keptScale = $derived(kept.scale);
+  const span = $derived(Math.max(reach, keptScale));
   /**
    * The ruler's step: 100 ms, else the least of 200, 500, 1000, 2000,
    * 5000… whose marks stand `--space-2` apart on the lane. A mark every
@@ -211,14 +224,19 @@
     const ladder = [1, 2, 5].map((one) => one * FINEST);
     let at = 0;
     let found = FINEST;
-    while (Number.isFinite(reach) && Math.ceil(reach / found) > most) {
+    while (Number.isFinite(span) && Math.ceil(span / found) > most) {
       at += 1;
       found = (ladder[at % 3] as number) * 10 ** Math.floor(at / 3);
     }
     return found;
   });
   /** The lane's end: the ruler's next mark past its reach. */
-  const scale = $derived(Math.max(step, Math.ceil(reach / step) * step));
+  const scale = $derived(Math.max(step, Math.ceil(span / step) * step));
+  $effect(() => {
+    if (kept.scale < scale) {
+      kept = { move: chosen, scale };
+    }
+  });
   const marks = $derived(
     Array.from({ length: Math.floor(scale / step) + 1 }, (_, at) => at * step)
   );
@@ -255,17 +273,42 @@
   const pct = (t: number) => `${(t / scale) * 100}%`;
   /** The playhead as the ruler's handle holds it, on its 1 ms steps. */
   const handle = $derived(Math.round(Math.min(playhead, length)));
-  /** Page Up and Page Down step the playhead a ruler's mark (WAI-ARIA APG, Slider). */
-  const pageKey = (event: KeyboardEvent) => {
-    const by = { PageUp: step, PageDown: -step }[event.key];
-    if (by !== undefined) {
+  /** A key's step of the playhead, ms; with Shift, a ruler's mark. */
+  const KEY_STEP = 10;
+  /**
+   * The ruler's keys, held where they leave the playhead (WAI-ARIA APG,
+   * Slider): the arrows 10 ms, with Shift a mark, Page Up and Page Down a
+   * mark, Home and End the move's two ends. bits-ui's own steps were 1 ms,
+   * each committed, and a commit within half a mark of 0 snapped back to
+   * it, so the arrows never left 0.
+   */
+  const rulerKey = (event: KeyboardEvent) => {
+    const big = event.shiftKey ? step : KEY_STEP;
+    const by: Record<string, number> = {
+      ArrowRight: big,
+      ArrowUp: big,
+      ArrowLeft: -big,
+      ArrowDown: -big,
+      PageUp: step,
+      PageDown: -step,
+      Home: -length,
+      End: length,
+    };
+    const shift = by[event.key];
+    if (shift !== undefined) {
       event.preventDefault();
-      onseek(Math.max(0, Math.min(length, handle + by)));
+      event.stopPropagation();
+      const t = Math.max(0, Math.min(length, handle + shift));
+      onseek(t);
+      onseekend(t);
     }
   };
+  /** A pointer is scrubbing the ruler: its let-go lands near an end on that end. */
+  let scrubbing = false;
   /** A scrub let go within half a mark of either end lands on that end's state (T3: letting go lands on the nearest whole state). */
   const letGo = (t: number) => {
-    const near = step / 2;
+    const near = scrubbing ? step / 2 : 0;
+    scrubbing = false;
     let landed = t;
     if (t <= near) {
       landed = 0;
@@ -280,66 +323,55 @@
 
   /** A row as a person says it: what moves and how. */
   const nameOf = (track: Track) => words.clipName(track.name, track.how);
-  /** A row's own length: its animations' durations as written; a spring's where it settles; a drag's as it holds. */
-  const lengthShown = (track: Track) => {
-    const held = holding?.id === track.id ? holding : null;
-    const [low, high] = ownLengths(track.clips);
-    if (held && track.runs.length === 1 && low === high) {
-      const span = track.ends - track.begins;
-      return words.ms(
-        figure(Math.round((low * (held.to - held.from)) / Math.max(1, span)))
-      );
+  // Another move on the face: its rows are other rows, none selected.
+  let selectedIn = chosen;
+  $effect.pre(() => {
+    if (chosen !== selectedIn) {
+      selectedIn = chosen;
+      selected = null;
     }
-    if (low !== high) {
-      return words.lengthRange(figure(low), figure(high));
-    }
-    return track.sprung
-      ? words.springFigure(figure(low))
-      : words.ms(figure(low));
-  };
-
-  /** Rest and focus on a row light its thing; leaving lets it go. */
+  });
+  /** The selected line's thing, rung on the stage while it is selected. */
+  const keptLit = (): Element | null => picked?.track.thing ?? null;
+  /** Rest and focus on a row light its thing; leaving gives the ring back to the selected row's. */
   const lights = (track: Track) => ({
     onpointerenter: () => onlight(track.thing),
-    onpointerleave: () => onlight(null),
+    onpointerleave: () => onlight(keptLit()),
     onfocusin: () => {
       onlight(track.thing);
       onfocusthing(track.thing);
     },
-    onfocusout: () => onlight(null),
+    onfocusout: () => onlight(keptLit()),
+  });
+  // A row selected rings its thing on the stage until another is.
+  $effect(() => {
+    onlight(picked?.track.thing ?? null);
   });
 
   interface Line {
     key: string;
-    /** A row per animation under its row. */
-    part: boolean;
-    /** Its run, when its thing runs more than once. */
-    run: number | null;
+    /** A row under its row: the animations of one property in one run. */
+    part: Part | null;
     track: Track;
   }
-  /** The timeline's lines, in order: each row, and under an opened one a row per animation in the order the engine ran them, so retiming one never moves it. */
+  /** The timeline's lines, in order: each row, and under an opened one its animations by run and property, in the order the engine ran them, so retiming one never moves it. */
   const lines = $derived(
     tracks.flatMap((track): Line[] => {
-      const own: Line = { key: track.id, track, part: false, run: null };
-      if (!(opened[track.id] && track.clips.length > 1)) {
+      const own: Line = { key: track.id, track, part: null };
+      const parts = partsOf(track);
+      if (!(opened[track.id] && parts.length > 1)) {
         return [own];
       }
-      const runAt = (clip: Clip) =>
-        track.runs.length > 1
-          ? track.runs.findIndex((one) => one.clips.includes(clip)) + 1
-          : null;
       return [
         own,
-        ...inRunOrder(track.clips).flatMap((clip) =>
-          tracksOf([clip]).map((part) => ({
-            key: `${track.id}/${clip.id}`,
-            track: part,
-            part: true,
-            run: runAt(clip),
-          }))
-        ),
+        ...parts.map((part) => ({ key: part.key, track: part.track, part })),
       ];
     })
+  );
+  /** The kinds of change the bars show, in the key's order: their colours named. */
+  const KINDS: ClipKind[] = ["size", "move", "fade", "tint", "effect", "other"];
+  const kindsShown = $derived(
+    KINDS.filter((kind) => tracks.some((track) => track.kind === kind))
   );
   /** The selected line, while it still stands. */
   const picked = $derived(
@@ -355,7 +387,7 @@
   /** A line's name for a reader: a row's words, an animation's property and run. */
   const lineName = (line: Line) =>
     line.part
-      ? words.clipName(line.track.name, line.track.clips[0]?.property ?? "")
+      ? words.clipName(line.track.name, line.part.property)
       : nameOf(line.track);
 
   /** Each kind's bar in As written: its wash and its edge. */
@@ -376,15 +408,18 @@
       ? words.reading
       : words.move(move.from, move.to);
   });
+  let titleOpen = $state(false);
+  let movesList = $state<HTMLElement>();
   const bare =
     "pointer-hit touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-md text-ink-strong transition-control can-hover:hover:bg-surface-hover";
 </script>
 
 {#snippet title()}
-  <!-- The move on the face, the menu of every move under it: the bar's
-       title pattern ("Routine form" with its chevron). -->
-  <DropdownMenu.Root>
-    <DropdownMenu.Trigger>
+  <!-- The move on the face, the list of every move under it (ChoiceList,
+       as a clip's lengths and curves are listed): the bar's title pattern
+       ("Routine form" with its chevron). -->
+  <Popover.Root bind:open={titleOpen}>
+    <Popover.Trigger>
       {#snippet child({ props })}
         <button
           {...props}
@@ -407,28 +442,30 @@
           />
         </button>
       {/snippet}
-    </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="start" width="wide">
-      <DropdownMenu.RadioGroup
-        bind:value={
-          () => chosen ?? "",
-          (next: string) => {
-            const one = choices.find((each) => each.key === next);
-            if (one) {
-              onchoose(one.from, one.to);
-            }
+    </Popover.Trigger>
+    <Popover.Content
+      align="start"
+      height="available"
+      gap="none"
+      onOpenAutoFocus={toChosen(() => movesList)}
+      overflow="scroll"
+      width="wide"
+    >
+      <ChoiceList
+        bind:ref={movesList}
+        label={words.moves}
+        onpick={(next) => {
+          titleOpen = false;
+          const one = choices.find((each) => each.key === next);
+          if (one) {
+            onchoose(one.from, one.to);
           }
-        }
-      >
-        {#each choices as one (one.key)}
-          <DropdownMenu.RadioItem value={one.key}>
-            <!-- A long move wraps whole rather than cut: two moves out of one state differ only at their ends. -->
-            <span class="min-w-0 flex-1 text-pretty">{one.name}</span>
-          </DropdownMenu.RadioItem>
-        {/each}
-      </DropdownMenu.RadioGroup>
-    </DropdownMenu.Content>
-  </DropdownMenu.Root>
+        }}
+        options={choices.map((one) => ({ value: one.key, name: one.name }))}
+        value={chosen}
+      />
+    </Popover.Content>
+  </Popover.Root>
 {/snippet}
 
 {#snippet transport()}
@@ -475,6 +512,13 @@
       data-slot="time"
       >{words.playhead(figure(handle), figure(Math.round(length)))}</span
     >
+    {#if still}
+      <!-- Why Play lands the move at its end: the reader asked for less motion. -->
+      <span
+        class="ms-space-1 min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted"
+        >{words.motionReduced}</span
+      >
+    {/if}
   </div>
 {/snippet}
 
@@ -556,6 +600,16 @@
         <div class="flex min-w-0 flex-1 basis-c-graph-node-w items-center">
           {@render title()}
         </div>
+        {#if move.kind === "ready" && changedCount === 0 && undoable}
+          <!-- Reset all taken back in place, until anything changes again
+               (the house answer: undo over confirm). -->
+          <Button
+            data-slot="undo-reset"
+            onclick={onundo}
+            size="sm"
+            variant="ghost">{words.undoReset}</Button
+          >
+        {/if}
         {#if move.kind === "ready" && changedCount > 0}
           <div class="flex flex-none items-center gap-space-2">
             <ToggleGroup.Root
@@ -633,18 +687,17 @@
         <div class="min-h-0 min-w-0 overflow-y-auto coarse:pe-space-4">
           <div
             data-slot="timeline"
-            class="grid min-w-0 grid-cols-(--cols) gap-x-space-3 @max-timeline/move:grid-cols-(--narrow)"
-            style:--cols="fit-content(40%) auto minmax(0, 1fr)"
-            style:--narrow="minmax(0, 1fr) auto"
+            class="grid min-w-0 grid-cols-(--cols) gap-x-space-3 @max-timeline/move:grid-cols-1"
+            style:--cols="var(--c-graph-move-name-w) minmax(0, 1fr)"
           >
             <div
               class="sticky top-0 z-2 col-span-full grid min-h-c-btn-h grid-cols-subgrid bg-surface-raised"
             >
-              <div class="col-span-2 flex min-w-0 items-center">
+              <div class="flex min-w-0 items-center">
                 {@render transport()}
               </div>
               <div
-                class="relative col-start-3 flex min-w-0 items-end px-space-2 @max-timeline/move:col-span-full @max-timeline/move:col-start-1"
+                class="relative flex min-w-0 items-end px-space-2"
                 data-slot="ruler"
               >
                 <Slider.Root
@@ -655,6 +708,9 @@
                     onseek(Math.min(next, length))}
                   onValueCommit={(next: number) =>
                     letGo(Math.min(next, length))}
+                  onpointerdown={() => {
+                    scrubbing = true;
+                  }}
                   step={1}
                   thumbPositioning="exact"
                   type="single"
@@ -694,7 +750,7 @@
                     class="pointer-hit bottom-0 block h-space-4 w-space-2 cursor-ew-resize rounded-pill bg-ink-strong shadow-xs focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2 coarse:w-space-3"
                     data-slot="playhead-head"
                     index={0}
-                    onkeydown={pageKey}
+                    onkeydown={rulerKey}
                   />
                 </Slider.Root>
               </div>
@@ -703,7 +759,8 @@
             {#each lines as line (line.key)}
               {@const track = line.track}
               {@const name = lineName(line)}
-              {@const many = !line.part && track.clips.length > 1}
+              {@const parts = line.part ? [] : partsOf(track)}
+              {@const many = parts.length > 1}
               {@const chosen = picked?.key === line.key}
               {@const edited = !written && editsOf(track).size > 0}
               <!-- A row: one thing that moves, or under it one animation; one
@@ -728,8 +785,8 @@
                   <span class="grid w-c-btn-h-xs flex-none place-items-center">
                     {#if many}
                       {@const said = opened[track.id]
-                        ? words.hideClips(track.clips.length)
-                        : words.showClips(track.clips.length)}
+                        ? words.hideClips
+                        : words.showClips}
                       <Tip label={said}>
                         {#snippet children(tip)}
                           <button
@@ -776,11 +833,16 @@
                           class={[
                             "type-code",
                             chosen ? "text-selected-ink" : "text-ink-row",
-                          ]}>{track.clips[0]?.property}</span
+                          ]}>{line.part.property}</span
                         >
-                        {#if line.run !== null}
+                        {#if line.part.run !== null}
                           <span class="text-ink-muted"
-                            >{words.runAt(line.run)}</span
+                            >{words.runAt(line.part.run)}</span
+                          >
+                        {/if}
+                        {#if line.part.count > 1}
+                          <span class="text-ink-muted"
+                            >{words.partsCount(line.part.count)}</span
                           >
                         {/if}
                       {:else}
@@ -796,15 +858,10 @@
                       {/if}
                     </span>
                   </button>
-                </div>
-                <!-- Its own length, a tabular figure on the column's end
-                   edge; changed, in strong ink with the restore glyph
-                   before it (every value of the row back). -->
-                <div
-                  class="flex min-w-0 items-center justify-end gap-space-1"
-                  data-slot="length"
-                >
                   {#if edited}
+                    <!-- A changed row: its restore glyph at the name's end,
+                         inside the name's own column, so the lanes never
+                         move as it comes and goes. -->
                     {@const said = words.resetRow(name)}
                     <Tip label={said}>
                       {#snippet children(tip)}
@@ -826,15 +883,9 @@
                       {/snippet}
                     </Tip>
                   {/if}
-                  <span
-                    class={[
-                      "type-code leading-none whitespace-nowrap num",
-                      edited ? "text-ink-strong" : "text-ink-muted",
-                    ]}>{lengthShown(track)}</span
-                  >
                 </div>
                 <div
-                  class="relative flex min-w-0 items-center px-space-2 @max-timeline/move:col-span-full @max-timeline/move:min-h-c-btn-h"
+                  class="relative flex min-w-0 items-center px-space-2 @max-timeline/move:min-h-c-btn-h"
                   data-slot="lane"
                 >
                   <div class="relative flex size-full min-w-0 items-center">
@@ -846,11 +897,6 @@
                         edges={edgesBesides}
                         {lang}
                         {name}
-                        onhold={(run, span) => {
-                          holding = span
-                            ? { id: track.id, run: run.id, ...span }
-                            : null;
-                        }}
                         onretime={(run, from, to, replay) =>
                           onretime(retimeRun(run, from, to), replay)}
                         onselect={() => {
@@ -881,6 +927,26 @@
               </div>
             {/each}
           </div>
+          <!-- What the bars' colours say: each kind on the face, its
+               swatch the bar's own wash and edge, then its word. -->
+          <ul
+            aria-label={words.kindsKey}
+            class="m-0 flex list-none flex-wrap gap-x-space-4 gap-y-space-1 border-t border-border-hairline p-0 pt-space-3"
+            data-slot="kinds"
+          >
+            {#each kindsShown as kind (kind)}
+              <li
+                class="mark-line flex items-center gap-space-1 type-meta text-ink-muted"
+              >
+                <span
+                  aria-hidden="true"
+                  class={["h-space-2 w-space-4 rounded-hair border", BAR[kind]]}
+                  data-box
+                ></span>
+                <span>{words.kinds[kind]}</span>
+              </li>
+            {/each}
+          </ul>
         </div>
       {/if}
     {/if}

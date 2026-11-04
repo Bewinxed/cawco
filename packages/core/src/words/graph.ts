@@ -193,8 +193,8 @@ export const graphWords = {
   changedCount: (n: Figure) => `${n} changed`,
 
   /** A row with several animations, opened into one row each. */
-  showClips: (n: number) => `Show ${n} animations`,
-  hideClips: (n: number) => `Hide ${n} animations`,
+  showClips: "Show its animations",
+  hideClips: "Hide its animations",
   /** A spring row: its length's figure; a spring has no set length, so its figure is when it settles. */
   springFigure: (ms: Figure) => `~${ms} ms`,
   /** A row whose animations run for different lengths: the shortest and the longest. */
@@ -202,6 +202,24 @@ export const graphWords = {
   /** One run of a row that runs more than once: its bar's name for a reader. */
   runOf: (clip: string, at: number, of: number) =>
     `${clip}, run ${at} of ${of}`,
+  /** A row under a row that moves several parts of its thing at once (a morphed text's letters): how many. */
+  partsCount: (n: number) => `${n} parts`,
+  /** A drawn curve's two handles, for a reader. */
+  curvePoint: (n: number) => `Control point ${n}`,
+  /** What each bar's colour means, under the rows: the kinds of change it shows. */
+  kindsKey: "Bar colours",
+  kinds: {
+    size: "Size",
+    move: "Position",
+    fade: "Opacity",
+    tint: "Colour",
+    effect: "Effect",
+    other: "Other",
+  } as Record<string, string>,
+  /** Reset all taken back, while nothing has changed since. */
+  undoReset: "Undo reset",
+  /** With reduced motion on, Play lands the move at its end without playing it: said beside the time. */
+  motionReduced: "Reduced motion: lands without playing",
   /** An animation's row under its row, when its thing runs more than once: which run it is in. */
   runAt: (at: number) => `run ${at}`,
   /** A run's bar's tooltip: its name and where it runs. */

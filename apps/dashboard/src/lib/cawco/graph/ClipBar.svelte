@@ -58,7 +58,6 @@
     name,
     scale,
     onretime,
-    onhold,
     lang,
     selected = false,
     onselect,
@@ -77,8 +76,6 @@
     scale: number;
     /** A run's new stretch, ms into the move. */
     onretime: (run: Run, from: number, to: number, replay: boolean) => void;
-    /** The stretch a drag holds, as it moves (null: let go), so the row's words follow it. */
-    onhold: (run: Run, span: { from: number; to: number } | null) => void;
     /** The page's language, for the figures. */
     lang: string | undefined;
   } = $props();
@@ -129,7 +126,6 @@
           within: toMs(NEAR_PX),
         }),
       };
-      onhold(run, held);
     };
     const start = (part: RunPart) => () => {
       onselect();
@@ -141,7 +137,6 @@
       const next = held;
       held = null;
       holding = null;
-      onhold(run, null);
       if (next) {
         commit(run, next, true);
       }

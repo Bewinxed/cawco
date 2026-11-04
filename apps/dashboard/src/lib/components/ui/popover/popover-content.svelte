@@ -70,7 +70,14 @@
         widest: "w-96",
         room: "w-(--pop-w)",
       },
-      height: { capped: "max-h-80", room: "max-h-(--pop-max-h)" },
+      /* `available`: as tall as the room bits-ui measures on its side of
+         the trigger, scrolling past it (the design graph's lists: a cap
+         of 320px cut the chosen curve on a phone). */
+      height: {
+        capped: "max-h-80",
+        room: "max-h-(--pop-max-h)",
+        available: "max-h-(--bits-popover-content-available-height)",
+      },
       overflow: {
         scroll: "overflow-y-auto overscroll-contain",
         clip: "overflow-hidden",
