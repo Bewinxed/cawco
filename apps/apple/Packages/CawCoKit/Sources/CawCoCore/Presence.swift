@@ -10,7 +10,10 @@ public import UIKit
 /// window of the frontmost app) with a session in front in it: the shell's
 /// own rule for what the person looks at (`ShellController.lookAtFront`,
 /// the focused group's chosen tab). Inactive is said at once on resigning
-/// active, going to the background, or leaving the session. While active,
+/// active, going to the background, or leaving the session. Showing is every
+/// session in a window of this app still on screen, key or not: on the Mac,
+/// a window behind another app's, which the person reads on; it says they are
+/// in that chat, where active holds back its notifications. While any shows,
 /// a beat goes every 30 s from a main run loop timer in the common modes, so
 /// it fires through a scroll's tracking too, and only while the app runs;
 /// the hub counts a client gone 60 s after its last beat.
@@ -27,6 +30,7 @@ public final class Presence {
 
     private struct State: Equatable {
         var sessionId: String?
+        var showing: [String] = []
         var active: Bool { sessionId != nil }
     }
 
@@ -98,14 +102,19 @@ public final class Presence {
 
     /// The key window's session, when it is in front and taking input.
     private var current: State {
-        guard !appResigned, UIApplication.shared.applicationState != .background else { return State() }
+        guard UIApplication.shared.applicationState != .background else { return State() }
         windows = windows.filter { $0.value.scene != nil }
-        for window in windows.values {
+        let onScreen = windows.values.filter { window in
+            window.scene?.activationState == .foregroundActive || window.scene?.activationState == .foregroundInactive
+        }
+        let showing = Set(onScreen.compactMap(\.sessionId)).sorted()
+        guard !appResigned else { return State(showing: showing) }
+        for window in onScreen {
             guard let scene = window.scene, !window.resigned, scene.activationState == .foregroundActive,
                   scene.keyWindow?.isKeyWindow == true, let sessionId = window.sessionId else { continue }
-            return State(sessionId: sessionId)
+            return State(sessionId: sessionId, showing: showing)
         }
-        return State()
+        return State(showing: showing)
     }
 
     private func update(_ why: String) {
@@ -114,7 +123,7 @@ public final class Presence {
             sent = now
             post(now, why)
         }
-        if now.active {
+        if !now.showing.isEmpty {
             guard beat == nil else { return }
             // `.common`, not the default mode alone: a scroll runs the main
             // run loop in its tracking mode, where a default-mode timer waits.
@@ -130,7 +139,7 @@ public final class Presence {
     }
 
     private func beatNow() {
-        guard let sent, sent.active else { return }
+        guard let sent, !sent.showing.isEmpty else { return }
         post(sent, "beat")
     }
 
@@ -153,6 +162,7 @@ public final class Presence {
         // `sessionId` is sent as null, not left out, when there is none.
         request.httpBody = try? JSONSerialization.data(withJSONObject: [
             "clientId": clientId, "client": client, "sessionId": state.sessionId.map { $0 as Any } ?? NSNull(), "active": state.active,
+            "showing": state.showing,
             "saidAt": (Date.now.timeIntervalSince1970 * 1000).rounded(),
         ])
         let session = state.sessionId ?? "none"

@@ -7,6 +7,10 @@
  *   notification about what landed in a session while some client was
  *   active on it. It goes inactive the moment the tab blurs, hides or
  *   unloads; a blur no longer means the person left.
+ * - **The chats on screen** (`showing`): every chat drawn while the page is
+ *   visible, focused or not: what says the person is in them. A preview
+ *   beside the chat, a second window or another app takes the keyboard while
+ *   they read on, and a hidden tab shows nothing.
  * - **The person's input here** (`idleMs`): how long since their last key,
  *   pointer press or move, wheel or touch on this page or a preview frame
  *   in it, as the page's one input tracker hears it (reload.svelte.ts
@@ -73,7 +77,11 @@ const idleDetectorClass = (): IdleDetectorClass | undefined =>
     ? undefined
     : (window as unknown as { IdleDetector?: IdleDetectorClass }).IdleDetector;
 
+/** The workspace's focused chat, and every chat it draws. */
 let front: string | null = null;
+let drawn: readonly string[] = [];
+/** The project conversation drawn on its page, outside the workspace (SessionPane `docked`). */
+let docked: string | null = null;
 let listening = false;
 /** The last state the hub was told, so only a change (or a beat) posts. */
 let told: string | undefined;
@@ -103,10 +111,17 @@ export const presenceClientId = (): string => {
   return mintedHere;
 };
 
+const seen = (): boolean => document.visibilityState === "visible";
+
+/** The chat this tab has in front: the workspace's, else the docked one on its page. */
+const inFront = (): string | null => front ?? docked;
+
 const reading = (): boolean =>
-  front !== null &&
-  document.visibilityState === "visible" &&
-  document.hasFocus();
+  inFront() !== null && seen() && document.hasFocus();
+
+/** Every chat the person can see on this page; none while it is hidden or going. */
+const showing = (): readonly string[] =>
+  seen() ? [...new Set(docked ? [...drawn, docked] : drawn)] : [];
 
 /** What Idle Detection says of this computer now; undefined while it doesn't run. */
 const machineNow = (): MachineState | undefined => {
@@ -173,7 +188,9 @@ const report = (beat = false, leaving = false): void => {
   const machine = machineNow();
   // A tab going away shows nothing more: it is never the desk tab again.
   const alerts = !leaving && notificationsAllowed();
-  const state = `${front}|${active}|${machine}|${alerts}`;
+  const sessionId = inFront();
+  const chats = leaving ? [] : showing();
+  const state = `${sessionId}|${active}|${chats.join()}|${machine}|${alerts}`;
   if (beat || state !== told) {
     told = state;
     const idleMs = idleNow(now);
@@ -182,8 +199,9 @@ const report = (beat = false, leaving = false): void => {
       {
         clientId: presenceClientId(),
         client: "web",
-        sessionId: front,
+        sessionId,
         active,
+        showing: chats,
         alerts,
         handheld: handheld(),
         ...(idleMs === undefined ? {} : { idleMs }),
@@ -225,11 +243,33 @@ const listen = (): void => {
   detectIdle().catch(() => undefined);
 };
 
-/** The session the owner has in front in this tab, or null when none is. */
-export function presenceFront(sessionId: string | null): void {
+/** The workspace: the chat focused in this tab and every chat it draws, or nothing while another page stands. */
+export function presenceWorkspace(
+  focused: string | null,
+  chats: readonly string[]
+): void {
   listen();
-  front = sessionId;
+  front = focused;
+  drawn = chats;
   report();
+}
+
+/** A project's conversation drawn on its page, while the answered call stands undone. */
+export function presenceDocked(sessionId: string): () => void {
+  listen();
+  docked = sessionId;
+  report();
+  return () => {
+    docked = null;
+    report();
+  };
+}
+
+/** The link to the hub came back: it hears this tab again now, not on the next beat. */
+export function presenceAgain(): void {
+  if (listening) {
+    report(true);
+  }
 }
 
 /** Starts this tab's beats, whatever is in front: the dashboard's layout, once. */

@@ -1359,6 +1359,11 @@ export interface DbShape {
     | { named: true; row: PublicInstanceRow }
     | { named: false; row: PublicInstanceRow }
     | undefined;
+  /**
+   * The session replied at `at`: every send it has read so far has its
+   * answer ({@link personUnanswered}). Sends it has not read stay owed.
+   */
+  readonly noteAnswered: (id: string, at: Date) => void;
   /** Records the window a claude turn reported for its model. */
   readonly noteClaudeContextWindow: (
     model: string,
@@ -1644,6 +1649,13 @@ export interface DbShape {
       continuedInto?: string;
     }
   ) => PublicInstanceRow | undefined;
+  /**
+   * The person's last message to the session has no reply after it. His last
+   * words are his newest send that reached it or waits to (a failed, replaced
+   * or cancelled one never did), a turn's, not a note or a slash command,
+   * which asks the harness and not the session.
+   */
+  readonly personUnanswered: (id: string) => boolean;
   /** A plan's latest `limit` changes, oldest first. */
   readonly planChangesOf: (
     instanceId: string,
@@ -9225,6 +9237,42 @@ const make = async (path: string): Promise<DbShape> => {
         .set({ turnEndedAt: at, ...(seenThrough ? { seenAt: at } : {}) })
         .where(eq(instances.id, id))
         .run();
+    },
+    noteAnswered: (id, at) => {
+      db.update(sentMessages)
+        .set({ answeredAt: at })
+        .where(
+          and(
+            eq(sentMessages.instanceId, id),
+            eq(sentMessages.state, "read"),
+            isNull(sentMessages.answeredAt)
+          )
+        )
+        .run();
+    },
+    personUnanswered: (id) => {
+      const [last] = db
+        .select({
+          answeredAt: sentMessages.answeredAt,
+          body: sentMessages.body,
+        })
+        .from(sentMessages)
+        .where(
+          and(
+            eq(sentMessages.instanceId, id),
+            inArray(sentMessages.state, ["pending", "read"]),
+            eq(sentMessages.mode, "turn"),
+            sql`json_extract(${sentMessages.body}, '$.origin.kind') = 'human'`
+          )
+        )
+        .orderBy(desc(sentMessages.acceptedAt))
+        .limit(1)
+        .all();
+      if (last?.answeredAt !== null) {
+        return false;
+      }
+      const words = last.body.message.content;
+      return !(typeof words === "string" && words.startsWith("/"));
     },
     handBackTurn: (id, from, at) =>
       db

@@ -21,16 +21,17 @@
  * {@link PRESENCE_TTL_MS}; every change of a client's presence is logged.
  *
  * **The person.** Every device's facts roll up to one {@link Person}
- * ({@link rollup}): a tab's or an app's chat in front and the person's last
+ * ({@link rollup}): the chats a tab or an app draws and the person's last
  * input there, a tab's Idle Detection reading, and a machine's desktop from
  * its agent's heartbeat (only for a machine the person opted in:
- * `presence_devices`). Input decides it, never a beat: a tab open, visible
- * and focused with nobody at it is no input. Appear away comes first; then
- * a lock or sleep newer than every input means away at once; then no input
- * on any device for the away clock (the person's setting,
- * {@link AWAY_AFTER_DEFAULT_MS} until they set it) means away since the
- * last; else here, on the chat in front on the device that had the newest input, so
- * two clients on two chats never take it in turn on their beats. A
+ * `presence_devices`). Input decides whether they are here, never a beat: a
+ * tab open, visible and focused with nobody at it is no input. Appear away
+ * comes first; then a lock or sleep newer than every input means away at
+ * once; then no input on any device for the away clock (the person's
+ * setting, {@link AWAY_AFTER_DEFAULT_MS} until they set it) means away since
+ * the last; else here, on every chat in sight where they are ({@link chatsOn}):
+ * a chat on screen is one they are in, focused or not, so two clients on two
+ * chats never take it in turn on their beats. A
  * device silent past its time is unknown, never gone: its last input still
  * counts toward the clock. Each device's last word and the last away
  * stretch are kept on the hub (`presence_clients`, `presence_settings`),
@@ -191,6 +192,8 @@ interface Client {
   /** The client's own clock when it said this beat. */
   readonly saidAt: number;
   readonly sessionId: string | null;
+  /** The chats it draws while it can be seen ({@link showingOf}). */
+  readonly showing: readonly string[];
 }
 
 /** A machine's desktop as its agent last said it. */
@@ -211,8 +214,6 @@ interface MachineWord {
 export interface DeviceFacts {
   /** When it last said anything. */
   readonly at: number;
-  /** The chat it has in front and read, or null. */
-  readonly front: string | null;
   /** A phone or tablet: what needs the person goes to the phone while it is the one in use. */
   readonly handheld: boolean;
   /** How long its machine word holds after it said it: an agent's 15 s beats, a hidden tab's minute. */
@@ -232,10 +233,14 @@ export interface DeviceFacts {
   readonly machine: MachineState | null;
   /** The machine it is, or runs on; null when no one machine is known. */
   readonly machineId: string | null;
+  /** The chats it draws where the person can see them; a send from no device, the one it went to. */
+  readonly showing: readonly string[];
 }
 
 /** The person, and what the outlets read beside: their last input and the device in use. */
 export interface Rolled extends Person {
+  /** Every chat they are in ({@link chatsOn}); `on` is its first. */
+  readonly chats: readonly string[];
   /** The device the person touched last, while here; null when away. */
   readonly inUse: DeviceFacts | null;
   /** The newest input on any device, the lock aside; null when none ever said. */
@@ -243,6 +248,14 @@ export interface Rolled extends Person {
   /** Why, in words, for the log. */
   readonly why: string;
 }
+
+/** What a beat says is on screen: a tab names it, an app's is its active chat. */
+const showingOf = (beat: PresenceBeat): readonly string[] => {
+  if (beat.showing) {
+    return beat.showing;
+  }
+  return beat.active && beat.sessionId ? [beat.sessionId] : [];
+};
 
 /** A lock or sleep: the device says nothing of the person but that they left it. */
 const gone = (machine: MachineState | null): boolean =>
@@ -257,7 +270,10 @@ const sameInput = (said: number, kept: number | null): number =>
  * - a tab's `idleMs` (its page's own last input), the same input said again
  *   kept as it was ({@link sameInput});
  * - a tab saying none (no input since it loaded): what it said before;
- * - an app that says no input time (the iOS and Mac apps today): its coming
+ * - the iOS app, active in a chat: every beat. It goes inactive as the phone
+ *   locks, and a phone locks itself left alone, so a foreground chat on it
+ *   is the person reading it;
+ * - any other app that says no input time (the Mac app today): its coming
  *   to a chat, from none, another or inactive, is the person's tap; a beat
  *   saying the same again, or a first beat the hub already kept from before
  *   its restart, is no input.
@@ -274,9 +290,12 @@ const inputOf = (
   if (beat.client === "web") {
     return kept;
   }
+  const inChat = beat.active && beat.sessionId !== null;
+  if (inChat && beat.client === "ios") {
+    return now;
+  }
   const came =
-    beat.active &&
-    beat.sessionId !== null &&
+    inChat &&
     (before === undefined ||
       !before.active ||
       before.sessionId !== beat.sessionId);
@@ -327,6 +346,42 @@ const newestOf = (devices: readonly DeviceFacts[]): DeviceFacts | null =>
   );
 
 /**
+ * The chats the person is in, while here. A chat on a screen they are at
+ * counts whether or not its window has the keyboard: focus goes to a preview
+ * beside it, to a second window, to another app while they read it. So:
+ *
+ * - on a phone or tablet in use (the newest input, still beating): its chats
+ *   alone, whatever a desk left on screen;
+ * - else every computer's client that beats ({@link PRESENCE_TTL_MS}) and
+ *   draws them on the computer in use, which a client on no known machine may
+ *   be: one tab's input never takes the chat off another tab in sight.
+ */
+const chatsOn = (
+  usable: readonly DeviceFacts[],
+  reader: DeviceFacts | null,
+  computer: string | null,
+  now: number
+): readonly string[] => {
+  const beating = usable.filter((device) => now - device.at < PRESENCE_TTL_MS);
+  const reading = reader !== null && beating.includes(reader);
+  if (reading && reader.handheld) {
+    return reader.showing;
+  }
+  const at = computer ?? (reading ? reader.machineId : null);
+  const near = beating.filter(
+    (device) =>
+      !device.handheld &&
+      (at === null || device.machineId === null || device.machineId === at)
+  );
+  // The reader's own come first: the one the presence menu names.
+  return [...new Set([reader, ...near].flatMap(chatsIn))];
+
+  function chatsIn(device: DeviceFacts | null): readonly string[] {
+    return device && near.includes(device) ? device.showing : [];
+  }
+};
+
+/**
  * THE ROLLUP: every device's facts to one person, at `now`, in order. Input
  * decides; a beat alone never does.
  *
@@ -338,15 +393,12 @@ const newestOf = (devices: readonly DeviceFacts[]): DeviceFacts | null =>
  * 4. THE AWAY CLOCK: no input on any device for `awayAfterMs` (the
  *    person's setting) is away since the last input, whatever tabs stand
  *    open, visible and focused. No input ever said is away.
- * 5. Else here. The chat is the one in front on the client (a tab, an app,
- *    the iPhone) that had the newest input, while it still has it in front
- *    and beats ({@link PRESENCE_TTL_MS}); a hidden or blurred tab has none
- *    in front, so the person is here, elsewhere. A computer's desktop (a
- *    machine the person opted in, through its agent; a tab's Idle
- *    Detection, once granted) counts with its input: it keeps them here,
- *    its lock or sleep is rule 3, and input on another known computer newer
- *    than that client's moves them off its chat. A beat with no new input
- *    never moves the chat.
+ * 5. Else here, on the chats in sight where they are ({@link chatsOn}). A
+ *    computer's desktop (a machine the person opted in, through its agent; a
+ *    tab's Idle Detection, once granted) counts with its input: it keeps them
+ *    here, its lock or sleep is rule 3, and input on another known computer
+ *    newer than that client's moves them off its chats. A beat with no new
+ *    input never moves them.
  */
 const rollup = (
   devices: readonly DeviceFacts[],
@@ -363,6 +415,7 @@ const rollup = (
     state: "away",
     manual,
     on: null,
+    chats: [],
     since,
     inUse: null,
     lastInputAt,
@@ -406,20 +459,23 @@ const rollup = (
     reader.machineId !== null &&
     newest.machineId !== reader.machineId &&
     (newest.inputAt ?? 0) - (reader.inputAt ?? 0) > SAME_INPUT_MS;
-  const front =
-    reader !== null && !movedOff && now - reader.at < PRESENCE_TTL_MS
-      ? reader.front
-      : null;
-  let where = "no chat in front there";
-  if (front) {
-    where = "its chat in front";
+  const chats = chatsOn(
+    usable,
+    reader,
+    movedOff ? newest.machineId : null,
+    now
+  );
+  let where = "no chat in sight";
+  if (chats.length > 0) {
+    where = `${chats.length} chat(s) in sight`;
   } else if (movedOff) {
     where = "newer than any chat's input";
   }
   return {
     state: "here",
     manual: false,
-    on: front,
+    on: chats[0] ?? null,
+    chats,
     since: null,
     inUse: newest,
     lastInputAt,
@@ -436,8 +492,8 @@ const stateOf = (person: Rolled): string => {
     ? new Date(person.since).toISOString()
     : "never seen";
   if (person.state === "here") {
-    return person.on
-      ? presenceLogWords.hereOn(person.on)
+    return person.chats.length > 0
+      ? presenceLogWords.hereOn(person.chats.join(", "))
       : presenceLogWords.elsewhere;
   }
   return person.manual
@@ -488,8 +544,9 @@ export const createNotifications = ({
   const readable = new Set<string>();
   /** Clients whose lapse was said: a lapsed client stays, unknown, its last input counting. */
   const lapsed = new Set<string>();
-  /** The person's last send from a device that names none and beats on no chat it sent to, on the hub's clock. */
+  /** The person's last send from a device that names none and beats on no chat it sent to, on the hub's clock, and the chat it went to. */
   let spokeAt: number | null = null;
+  let spokeOn: string | null = null;
   const personListeners: PersonListener[] = [];
   const ackListeners: ((ack: DeskAck) => void)[] = [];
 
@@ -505,6 +562,7 @@ export const createNotifications = ({
       kind: client.client,
       sessionId: client.sessionId,
       active: client.active,
+      showing: [...client.showing],
       alerts: client.alerts,
       handheld: client.handheld,
       deskInputAt:
@@ -526,6 +584,7 @@ export const createNotifications = ({
       kind: "machine",
       sessionId: null,
       active: false,
+      showing: [],
       alerts: false,
       handheld: false,
       deskInputAt: null,
@@ -542,13 +601,15 @@ export const createNotifications = ({
   const SEND_ID = "send";
   /** A tab's computer, as its Idle Detection reads it: the tab's id and this. */
   const DESK_OF = "#desk";
-  const keepSpoke = (at: number): void => {
+  const keepSpoke = (at: number, chat: string): void => {
     spokeAt = at;
+    spokeOn = chat;
     db.presence.keepClient({
       clientId: SEND_ID,
       kind: "send",
-      sessionId: null,
+      sessionId: chat,
       active: false,
+      showing: [],
       alerts: false,
       handheld: false,
       deskInputAt: null,
@@ -591,12 +652,14 @@ export const createNotifications = ({
       }
       if (row.kind === "send") {
         spokeAt = row.inputAt?.getTime() ?? null;
+        spokeOn = row.sessionId;
         continue;
       }
       clients.set(row.clientId, {
         client: row.kind,
         sessionId: row.sessionId,
         active: row.active,
+        showing: row.showing,
         alerts: row.alerts,
         handheld: row.handheld,
         deskInputAt: row.deskInputAt?.getTime() ?? null,
@@ -629,7 +692,7 @@ export const createNotifications = ({
           id,
           kind: client.client,
           at: client.at,
-          front: client.active ? client.sessionId : null,
+          showing: client.showing,
           handheld: client.handheld,
           holdsMs: DEVICE_TTL_MS,
           inputAt: client.inputAt,
@@ -644,7 +707,7 @@ export const createNotifications = ({
                 id: `${id}${DESK_OF}`,
                 kind: "machine" as const,
                 at: client.at,
-                front: null,
+                showing: [],
                 handheld: false,
                 holdsMs: DEVICE_TTL_MS,
                 inputAt: client.deskInputAt,
@@ -660,7 +723,7 @@ export const createNotifications = ({
           id,
           kind: "machine",
           at: word.at,
-          front: null,
+          showing: [],
           handheld: false,
           holdsMs: MACHINE_TTL_MS,
           inputAt: word.inputAt,
@@ -675,7 +738,7 @@ export const createNotifications = ({
               id: SEND_ID,
               kind: "send" as const,
               at: spokeAt,
-              front: null,
+              showing: spokeOn ? [spokeOn] : [],
               handheld: false,
               holdsMs: DEVICE_TTL_MS,
               inputAt: spokeAt,
@@ -786,7 +849,7 @@ export const createNotifications = ({
     const before = told;
     const moved =
       person.state !== before.state ||
-      person.on !== before.on ||
+      person.chats.join() !== before.chats.join() ||
       person.manual !== before.manual ||
       person.since !== before.since;
     told = person;
@@ -989,6 +1052,7 @@ export const createNotifications = ({
         client: beat.client,
         sessionId: beat.sessionId,
         active: beat.active,
+        showing: showingOf(beat),
         alerts: beat.alerts ?? false,
         handheld: beat.client === "ios" || (beat.handheld ?? false),
         deskInputAt: deskInputOf(beat, before, now),
@@ -1012,9 +1076,10 @@ export const createNotifications = ({
 
     /**
      * The person's own send to `instanceId`: input, now, on the device it
-     * came from. A tab names its presence (`presenceId`); an app that names
-     * none is the app beating with that chat in front; else the send counts
-     * as input on no device, toward the clock alone.
+     * came from, which is alive to have sent it. A tab names its presence
+     * (`presenceId`); an app that names none is the app beating with that
+     * chat in front; else the send counts as input on no device, and they
+     * are in that chat until a beat says otherwise.
      */
     spoke(presenceId: string | undefined, instanceId: string): void {
       const now = Date.now();
@@ -1033,12 +1098,12 @@ export const createNotifications = ({
               .sort(([, a], [, b]) => b.at - a.at);
       if (found) {
         const [clientId, client] = found;
-        keepClient(clientId, { ...client, inputAt: now });
+        keepClient(clientId, { ...client, inputAt: now, at: now });
         console.log(
           `[presence] ${client.client} ${clientId.slice(0, 8)}: the person's send to ${instanceId.slice(0, 8)}, counted as input there`
         );
       } else {
-        keepSpoke(now);
+        keepSpoke(now, instanceId);
         console.log(
           `[presence] the person's send to ${instanceId.slice(0, 8)} from no device that beats on it: counted as input`
         );
@@ -1339,6 +1404,7 @@ export const notificationRoutes = (db: DbShape, notifications: Notifications) =>
           ]),
           sessionId: t.Nullable(t.String({ minLength: 1 })),
           active: t.Boolean(),
+          showing: t.Optional(t.Array(t.String({ minLength: 1 }))),
           saidAt: t.Number({ minimum: 0 }),
           alerts: t.Optional(t.Boolean()),
           handheld: t.Optional(t.Boolean()),

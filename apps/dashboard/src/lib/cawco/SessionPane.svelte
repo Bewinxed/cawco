@@ -30,6 +30,7 @@
     crossOutWith,
     reveal,
   } from "#lib/cawco/motion/curves.svelte.js";
+  import { presenceDocked } from "#lib/cawco/presence.js";
   import { track } from "#lib/cawco/track.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -482,6 +483,14 @@
   const here = $derived(
     visible && (workspace.leafOf(viewId)?.active ?? viewId) === viewId
   );
+
+  // A project's conversation stands on its page, outside the workspace that
+  // tells the hub what it draws (SessionSurface): it tells it itself.
+  $effect(() => {
+    if (docked && visible) {
+      return presenceDocked(viewId);
+    }
+  });
 
   /**
    * A reader who left this conversation while its transcript was still on its

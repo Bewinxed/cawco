@@ -1830,6 +1830,12 @@ export const sentMessages = sqliteTable(
     /** When its reader read it (`readSend`). Null until then. */
     readAt: timestamp("read_at"),
     /**
+     * When the session replied after reading it (db `noteAnswered`): a turn's
+     * closing words, its `send_to_user`, or the turn being stopped. Null
+     * while it has no reply: hub db `personUnanswered`.
+     */
+    answeredAt: timestamp("answered_at"),
+    /**
      * The id the harness stores the message under, where that is not the uuid
      * (opencode's message id, pi's entry id), as its adapter reported it
      * (`NeutralSystemMessage.storedAs`) — or, for a send Claude joined into
@@ -3869,6 +3875,8 @@ export const presenceClients = sqliteTable("presence_clients", {
   sessionId: text("session_id"),
   /** That chat was in front and read (visible, focused). */
   active: integer("active", { mode: "boolean" }).notNull(),
+  /** Every chat drawn while its page was visible, focused or not (`PresenceBeat.showing`). */
+  showing: storedJson(z.array(z.string()))("showing").notNull().default([]),
   alerts: integer("alerts", { mode: "boolean" }).notNull(),
   /** A phone or tablet. */
   handheld: integer("handheld", { mode: "boolean" }).notNull(),

@@ -201,7 +201,7 @@ import { notices } from "./notices.svelte";
 import { unpickedMode } from "./permission-modes";
 import { readPerson, showDeskAlert, takePerson } from "./person.svelte";
 import { type HeldPlan, handlePlanMessage } from "./plan";
-import { presenceClientId } from "./presence";
+import { presenceAgain, presenceClientId } from "./presence";
 import { send as askHub, json } from "./project-tasks";
 import { placedOn } from "./projects";
 import { type CommandRefusal, refusals } from "./refusals.svelte";
@@ -5555,6 +5555,7 @@ let socketRun: string | null = null;
 function hubReached(): void {
   state.status = "connected";
   state.retryAt = null;
+  presenceAgain();
   // A set heard before the socket went may have been replaced while it was
   // away: the stages each page reads again on a connection carry the newer.
   state.starters = {};

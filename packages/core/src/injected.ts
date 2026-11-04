@@ -447,7 +447,10 @@ export const withMovedLine = (text: string, move: CheckoutMove): string =>
  * - `away`: away since `since` (HH:MM on the hub's clock; null when no
  *   device has ever said): the same, and keep the notes.
  */
-export type PresenceSaid =
+export type PresenceSaid = {
+  /** Their last message to this session has no reply after it (hub db `personUnanswered`): this turn answers it. */
+  unanswered?: boolean;
+} & (
   | {
       kind: "on";
       recap?: {
@@ -461,7 +464,8 @@ export type PresenceSaid =
       };
     }
   | { kind: "elsewhere" }
-  | { kind: "away"; since: string | null };
+  | { kind: "away"; since: string | null }
+);
 
 /**
  * A page a plan waits on the person on (core plan.ts `PlanWaits`), by its
@@ -515,8 +519,15 @@ const AWAY_HEADING = /^## Since (\d{1,2}:\d{2})\b/u;
 /** The away rule: how a turn ends, and the one thing that reaches the person. */
 const WORK_SILENT = `Work silent: end each turn on ${NO_REPLY_TOOL} as its last call. Only a question or a choice reaches them, by ask or a decision card.`;
 
+/** Their message with no reply yet outranks how {@link whereTheyAre} says a turn ends. */
+const UNANSWERED = `Their last message to you has no reply yet: this turn's closing words answer it, whatever woke this turn, and it does not end on ${NO_REPLY_TOOL}.`;
+
 /** What a session reads of the person, at the head of its turn ({@link PresenceSaid}). */
-export const presenceLine = (said: PresenceSaid): string => {
+export const presenceLine = (said: PresenceSaid): string =>
+  said.unanswered ? `${whereTheyAre(said)} ${UNANSWERED}` : whereTheyAre(said);
+
+/** Where the person is, and how a turn ends for it. */
+const whereTheyAre = (said: PresenceSaid): string => {
   switch (said.kind) {
     case "on":
       return said.recap

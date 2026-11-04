@@ -9753,23 +9753,26 @@ export const createServer = (
   /**
    * What the session is told of the person as this send starts its turn
    * (core injected.ts `presenceLine`): on this chat (the person's own words
-   * always are), here elsewhere, or away since when. The person's own
-   * message after an away stretch carries the notes the session kept in its
-   * plan meanwhile (`awayNotesOf`), once per section, for its recap.
+   * always are), here elsewhere, or away since when, and, on any other
+   * send, that their last message still waits for its reply. The person's
+   * own message after an away stretch carries the notes the session kept in
+   * its plan meanwhile (`awayNotesOf`), once per section, for its recap.
    */
   const personSaid = (instanceId: string, human: boolean): PresenceSaid => {
-    const person = notifications.person();
     if (human) {
       return recapFor(instanceId);
     }
-    if (person.state === "here" && person.on === instanceId) {
-      return { kind: "on" };
+    const person = notifications.person();
+    const owed = db.personUnanswered(instanceId);
+    if (person.state === "here" && person.chats.includes(instanceId)) {
+      return { kind: "on", unanswered: owed };
     }
     if (person.state === "here") {
-      return { kind: "elsewhere" };
+      return { kind: "elsewhere", unanswered: owed };
     }
     return {
       kind: "away",
+      unanswered: owed,
       since: person.since === null ? null : clockOf(person.since),
     };
   };
@@ -9846,7 +9849,7 @@ export const createServer = (
     const next = remindedContent(sent.message.content, lines);
     if (said) {
       console.log(
-        `[presence] send ${message.uuid} to ${instanceId.slice(0, 8)}: the person is ${said.kind}${said.kind === "on" && said.recap ? `, back after away since ${said.recap.since}, with the plan's notes under "Since ${said.recap.section}"` : ""}`
+        `[presence] send ${message.uuid} to ${instanceId.slice(0, 8)}: the person is ${said.kind}${said.unanswered ? ", their last message unanswered" : ""}${said.kind === "on" && said.recap ? `, back after away since ${said.recap.since}, with the plan's notes under "Since ${said.recap.section}"` : ""}`
       );
     }
     return {
@@ -27432,7 +27435,10 @@ export const createServer = (
       hubAsks.ask(actor, name, input, toolUseId),
     bindAdminInput: (actor, name, input) =>
       bindFolderInstall(actor, name, input),
-    sendToUser: (actor, message) => push.userMessage(actor.id, message),
+    sendToUser: (actor, message) => {
+      db.noteAnswered(actor.id, new Date());
+      push.userMessage(actor.id, message);
+    },
     shownRefusal: (actor, tool, paths) =>
       shownRefusal(shownDeps, {
         instanceId: actor.id,
@@ -38755,6 +38761,14 @@ export const createServer = (
                       ? new Date(row.turnEndedAt)
                       : null;
                     db.noteTurnEnded(turnId, endedAt, silent);
+                    // Its closing words answer what it read, and the person's
+                    // stop settles it; a server's stop is handed back to go on.
+                    if (
+                      (text && neutral.is_error !== true) ||
+                      (cut && neutral.serverStopped !== true)
+                    ) {
+                      db.noteAnswered(turnId, endedAt);
+                    }
                     // An approval this turn read and didn't use lapses.
                     hubAsks.turnEnded(turnId);
                     publishInstances(row.machineId);

@@ -30,8 +30,9 @@ export type MachineState = "active" | "idle" | "locked" | "asleep";
  * and `sessionId` is it, until {@link PRESENCE_TTL_MS} pass without a beat.
  * The iOS and Mac apps send the first five fields alone: the chat in front,
  * and no input time, so the hub counts their coming to a chat (from none,
- * from another, from inactive) as their input, and a beat that says the
- * same again as none (hub notifications.ts `inputOf`).
+ * from another, from inactive) as their input, the iPhone's every beat in
+ * a chat too, and the Mac's beat that says the same again as none (hub
+ * notifications.ts `inputOf`).
  */
 export interface PresenceBeat {
   /** The chat `sessionId` is in front and read: the window visible, focused and taking input. */
@@ -83,6 +84,14 @@ export interface PresenceBeat {
   readonly saidAt: number;
   /** The session in front, or null when none is. */
   readonly sessionId: string | null;
+  /**
+   * Every chat drawn on this page while it is visible, focused or not: each
+   * group's chosen tab, a project's docked conversation. What says the
+   * person is on a chat (hub notifications.ts `rollup`), where `active` says
+   * only what the notification gate holds back. Absent, an app's: its active
+   * chat alone. Web only.
+   */
+  readonly showing?: readonly string[];
 }
 
 /**
@@ -183,7 +192,7 @@ export interface PresenceDevice {
 export interface Person {
   /** The person turned Appear away on. */
   readonly manual: boolean;
-  /** The chat in front and read on the device that had the newest input, when here on one. */
+  /** A chat they are in, the first of those in sight where they are (hub notifications.ts `chatsOn`); null when elsewhere or away. */
   readonly on: string | null;
   /** Away: since their last input or the lock, epoch ms; null when here, or no device has ever said. */
   readonly since: number | null;

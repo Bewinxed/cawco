@@ -53,7 +53,7 @@
     ease,
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
-  import { presenceFront } from "#lib/cawco/presence.js";
+  import { presenceWorkspace } from "#lib/cawco/presence.js";
   import { layoutPolicy } from "#lib/cawco/workspace/layout-policy.svelte.js";
   import PaneDeck from "#lib/cawco/workspace/PaneDeck.svelte";
   import PaneGrid from "#lib/cawco/workspace/PaneGrid.svelte";
@@ -270,24 +270,33 @@
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
   });
+  /** What stands on screen here: its group's chosen tab on a grid, the focused one on a deck. */
+  const drawnChats = $derived(
+    (narrow
+      ? [workspace.activeSessionId]
+      : workspace.leaves.map((leaf) => leaf.active)
+    ).filter((id) => id !== null)
+  );
   $effect(() => {
     if (!(shown && pageVisible) || onBoard) {
       return;
     }
-    const front = narrow
-      ? [workspace.activeSessionId]
-      : workspace.leaves.map((leaf) => leaf.active);
-    for (const id of front) {
+    for (const id of drawnChats) {
       const row = id ? cawco.instanceIndex.byId.get(id) : undefined;
       if (row && endedUnseen(row) && !picked.has(row.id)) {
         untrack(() => markOpened(row.id));
       }
     }
   });
-  // The session in front, for the hub's hold on its notifications
-  // (presence.ts adds whether this tab is visible and focused).
+  // The session in front, for the hub's hold on its notifications, and every
+  // chat drawn, for the person being in it (presence.ts adds whether this tab
+  // is visible and focused).
   $effect(() => {
-    presenceFront(shown && !onBoard ? workspace.activeSessionId : null);
+    const here = shown && !onBoard;
+    presenceWorkspace(
+      here ? workspace.activeSessionId : null,
+      here ? drawnChats : []
+    );
   });
   // One the app picked that has left the front was switched away from: the
   // app never puts one back, so in front again it is the owner's doing.
