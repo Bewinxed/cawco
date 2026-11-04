@@ -66,6 +66,7 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import { gitDoorWords } from "@cawco/core/words/git-door";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { hubOrigins } from "./git-credential";
 import { hostGh } from "./host-gh";
@@ -347,8 +348,10 @@ const pushLfs = async (
  * (git-lfs's `lfs.activitytimeout`: "the maximum time, in seconds, that the
  * HTTP client will wait for the next tcp read or write … Default: 30
  * seconds", git-lfs-config(5)). What stays silent past this is stopped
- * whatever it waits on; one wait seen is a credential helper's prompt with
- * no one at the screen. On macOS, Apple's `git-credential-osxkeychain` first takes an
+ * whatever it waits on. A credential helper's prompt with no one at the
+ * screen is the one wait seen; the door now asks the helpers once, before it
+ * answers git, under a limit of their own ({@link withHostLogin}), so a run
+ * here asks none. On macOS, Apple's `git-credential-osxkeychain` first takes an
  * exclusive lock on its own binary (`open(argv[0], O_EXLOCK)`), so one
  * waiting for a keychain prompt holds every other keychain lookup on the
  * machine until it ends: on 2026-10-24 the git-door probe's push of an LFS
@@ -359,11 +362,18 @@ const HOST_RUN_SILENCE_MS = 120_000;
 /** The most of a host run's stderr kept: its progress repeats, its last words are what it said. */
 const HOST_RUN_ERR_KEPT = 64_000;
 
-/** A host run's whole stdout, the tail of its stderr, and its exit (128 when it was stopped or never ran). */
+/** A host run's whole stdout, the tail of its stderr, and its exit (128 when it was stopped or never ran); `silent` when its silence stopped it. */
 interface HostRun {
   readonly code: number;
   readonly err: string;
   readonly out: string;
+  readonly silent: boolean;
+}
+
+/** What a host run is given beyond its arguments: its stdin, and how long it may say nothing ({@link HOST_RUN_SILENCE_MS} when unsaid). */
+interface HostRunOptions {
+  readonly input?: string;
+  readonly silenceMs?: number;
 }
 
 /**
@@ -380,7 +390,8 @@ interface HostRun {
 const runOnHost = (
   ref: WorkspaceRef,
   args: readonly string[],
-  env: Record<string, string>
+  env: Record<string, string>,
+  { input, silenceMs = HOST_RUN_SILENCE_MS }: HostRunOptions = {}
 ): Promise<HostRun> =>
   new Promise((resolve) => {
     const run = inCopySync(ref.id, ref.path, safeGitArgv([...args]));
@@ -394,8 +405,10 @@ const runOnHost = (
         GIT_LFS_FORCE_PROGRESS: "1",
       },
       detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
+    child.stdin.on("error", () => undefined);
+    child.stdin.end(input);
     let out = "";
     let err = "";
     let silent = false;
@@ -415,7 +428,7 @@ const runOnHost = (
     };
     const heard = () => {
       clearTimeout(timer);
-      timer = setTimeout(stop, HOST_RUN_SILENCE_MS);
+      timer = setTimeout(stop, silenceMs);
     };
     heard();
     child.stdout.on("data", (chunk: Buffer) => {
@@ -436,11 +449,119 @@ const runOnHost = (
         code: silent ? 128 : (code ?? 128),
         out,
         err: silent
-          ? `${err}\ncawco: ${what} said nothing on stdout or stderr for ${HOST_RUN_SILENCE_MS / 1000} s, so it was stopped, with every process it had started.`
+          ? `${err}\ncawco: ${what} said nothing on stdout or stderr for ${silenceMs / 1000} s, so it was stopped, with every process it had started.`
           : err,
+        silent,
       });
     });
   });
+
+/**
+ * How long the door waits on the host's credential helpers for a remote's
+ * login ({@link withHostLogin}) before it refuses. Our choice: a helper that
+ * has the login answers in well under a second (gh, a store, an unlocked
+ * keychain); one still silent after this waits on a person (a keychain
+ * prompt, an askpass window) nobody may be there to answer.
+ */
+const CREDENTIAL_LIMIT_MS = 15_000;
+
+/** One `key=value` line of `git credential fill`'s answer (git-credential(1), "INPUT/OUTPUT FORMAT"). */
+const CREDENTIAL_LINE = /^([\w[\]]+)=(.*)$/u;
+
+/**
+ * The `Authorization` value a `git credential fill` answer gives: its
+ * pre-encoded `authtype` and `credential` when a helper gave those, else
+ * `username` and `password` as Basic; none when it gave neither.
+ */
+const authorizationOf = (answer: string): string | undefined => {
+  const said = new Map<string, string>();
+  for (const line of answer.split("\n")) {
+    const read = CREDENTIAL_LINE.exec(line);
+    if (read?.[1] && read[2] !== undefined) {
+      said.set(read[1], read[2]);
+    }
+  }
+  const authtype = said.get("authtype");
+  const credential = said.get("credential");
+  if (authtype && credential) {
+    return `${authtype} ${credential}`;
+  }
+  const username = said.get("username");
+  const password = said.get("password");
+  return username !== undefined && password !== undefined
+    ? `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`
+    : undefined;
+};
+
+/**
+ * `env` for git and git-lfs against the http(s) remote at `url`, carrying
+ * the host's login for it, asked of the host's credential helpers once,
+ * before the door answers: `git credential fill` for the URL, with its own
+ * limit ({@link CREDENTIAL_LIMIT_MS}). A helper silent past it is stopped
+ * with all it started, and the door refuses at once in words naming the
+ * credential helper and the host, so no push or fetch waits out the run's
+ * own silence limit ({@link HOST_RUN_SILENCE_MS}) on a prompt nobody sees
+ * (on 2026-10-24 a keychain `store` held a push 74 minutes).
+ *
+ * The login goes to git as an `Authorization` header for the repository's
+ * own URL (`http.<url>.extraHeader`, matched on whole path segments), env-only
+ * as the hub's is (move.ts `hubGitEnv`); git-lfs sends it too for the
+ * repository's own LFS (`<url>/info/lfs`, lfshttp/client.go `ExtraHeadersFor`).
+ * A request carrying it asks no helper: git fills a credential only after a
+ * 401, and git-lfs takes an existing `Authorization` as ready ("Existing
+ * Authorization … tells LFS that the request is ready", lfsapi/auth.go
+ * `getCreds`); so neither later asks a helper to `store` it, and no store
+ * can hang either. When no helper has a login (git's fill ends non-zero:
+ * `GIT_TERMINAL_PROMPT=0`), git runs as before, without one. A URL that is
+ * not http(s) (ssh, scp-like) signs in by key, not by helper: as it is.
+ */
+const withHostLogin = async (
+  ref: WorkspaceRef,
+  url: string,
+  env: Record<string, string>
+): Promise<Record<string, string>> => {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return env;
+  }
+  if (!(parsed.protocol === "https:" || parsed.protocol === "http:")) {
+    return env;
+  }
+  if (parsed.password) {
+    return env;
+  }
+  // The helpers alone: an askpass (`GIT_ASKPASS`, `core.askPass`,
+  // `SSH_ASKPASS`) would open a window for every remote that needs no login;
+  // set and empty, git passes all three over (prompt.c `git_prompt`), and
+  // with `GIT_TERMINAL_PROMPT=0` a fill no helper answers ends at once.
+  const asked = await runOnHost(
+    ref,
+    ["credential", "fill"],
+    { ...env, GIT_ASKPASS: "" },
+    {
+      input: `url=${url}\n\n`,
+      silenceMs: CREDENTIAL_LIMIT_MS,
+    }
+  );
+  if (asked.silent) {
+    throw new Error(
+      gitDoorWords.credentialSilent(
+        withoutCredential(url),
+        parsed.host,
+        CREDENTIAL_LIMIT_MS / 1000
+      )
+    );
+  }
+  const authorization =
+    asked.code === 0 ? authorizationOf(asked.out) : undefined;
+  return authorization
+    ? withGitConfig(env, [
+        [`http.${url}.extraHeader`, `Authorization: ${authorization}`],
+      ])
+    : env;
+};
 
 /** The copy's `origin` remote-tracking refs, each with the commit it is at. */
 const remoteRefs = (ref: WorkspaceRef): Map<string, string> => {
@@ -1300,9 +1421,13 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
     // only as a connection cut short.
     let env: Record<string, string> = {};
     if (target.kind === "host") {
-      env = target.origin
-        ? await hostOriginGitEnv(url, lfs.declared)
-        : await hostGitEnv();
+      env = await withHostLogin(
+        ref,
+        url,
+        target.origin
+          ? await hostOriginGitEnv(url, lfs.declared)
+          : await hostGitEnv()
+      );
     }
     socket.write("ok\n");
     answered = true;

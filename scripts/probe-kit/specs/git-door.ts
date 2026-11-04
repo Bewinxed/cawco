@@ -51,8 +51,10 @@
  * Every push through the door ends:
  * (y) when the host's credential helper never answers (as macOS's
  *     osxkeychain waits on a keychain prompt nobody is there for), the
- *     door stops the git-lfs it runs, helper and all, after 120 s of
- *     silence, and the push is refused in words that say so;
+ *     door, which asks it for the remote's login before it answers git
+ *     (agent hub-git.ts `withHostLogin`), stops it within its own limit
+ *     (15 s, not the 120 s a host run may be silent), and the push is
+ *     refused at once in words naming the credential helper and the host;
  * (z) when the door says `ok` and then nothing (a stuck agent), the helper
  *     ends git's push itself after 60 s, in words that say so.
  * A command's git, through the workspace's real executor and runner, on
@@ -67,6 +69,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { gitDoorWords } from "../../../packages/core/src/words/git-door";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { serveGitHttp } from "../git-http";
 import type { Spec } from "../kit";
@@ -576,12 +579,13 @@ const spec: Spec = {
         await Bun.$`pgrep -f ${marker}`.quiet().nothrow().text()
       ).trim();
       check(
-        "(y) when the host's credential helper never answers, the push ends within the door's silence limit, refused in words that say so; nothing lands and the helper is gone",
+        "(y) when the host's credential helper never answers, the push is refused within the credential limit (15 s), in words naming the credential helper and the host; nothing lands and the helper is gone",
         stalled.exitCode !== 0 &&
           said(stalled).includes(
-            "said nothing on stdout or stderr for 120 s, so it was stopped"
+            gitDoorWords.helperSilent(new URL(elseUrl).host, 15)
           ) &&
-          stallTook < 180 &&
+          stallTook >= 14 &&
+          stallTook < 25 &&
           (await tip(ELSE, "door-lfs-stall")) === "" &&
           !http.lfs(ELSE_LFS).some((one) => one.oid === stallLfs.oid) &&
           helperLeft === "",

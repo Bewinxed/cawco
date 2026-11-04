@@ -284,6 +284,7 @@
     "./words/memory": "./src/words/memory.ts",
     "./words/offers": "./src/words/offers.ts",
     "./words/lfs": "./src/words/lfs.ts",
+    "./words/git-door": "./src/words/git-door.ts",
     "./words/plan": "./src/words/plan.ts",
     "./workspace-needs": "./src/workspace-needs.ts"
   },
