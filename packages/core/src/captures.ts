@@ -72,12 +72,30 @@ const webpWidth = (bytes: Uint8Array): number | null => {
 const imageWidth = (bytes: Uint8Array): number | null =>
   pngWidth(bytes) ?? jpegWidth(bytes) ?? webpWidth(bytes);
 
-const IMG_SOURCE = /<img\b[^>]*?\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)')/giu;
+const IMG_TAG = /<img\b[^>]*>/giu;
+const SRC = /\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)')/iu;
 const DATA_URL = /^data:[^;,]*;base64,(.*)$/su;
+/**
+ * A rule that draws an `<img>` by an attribute of it, `img[attr="key"]{content:url("…")}`:
+ * how a built decision page inlines each distinct image once (hub
+ * decision-page.ts `DRAWN`), the `<img>` itself keeping a blank source.
+ */
+const DRAWN_RULE = /img\[([\w-]+)="([^"]*)"\]\{content:url\("([^"]*)"\)\}/gu;
 
-/** Each `<img>` source on a page, in order. */
-const imageSources = (html: string): string[] =>
-  [...html.matchAll(IMG_SOURCE)].map((match) => match[1] ?? match[2] ?? "");
+/** Each `<img>` on a page, in order, by what it draws: a rule's picture for one a rule draws, else its `src`. */
+const imageSources = (html: string): string[] => {
+  const rules = [...html.matchAll(DRAWN_RULE)];
+  return [...html.matchAll(IMG_TAG)].flatMap(([tag]) => {
+    const drawn = rules.find(([, attribute, key]) =>
+      tag.includes(` ${attribute}="${key}"`)
+    );
+    if (drawn) {
+      return [drawn[3] ?? ""];
+    }
+    const src = SRC.exec(tag);
+    return src ? [src[1] ?? src[2] ?? ""] : [];
+  });
+};
 
 /** A `data:` URL's bytes when it is base64; null for any other source. */
 export const dataUrlBytes = (src: string): Uint8Array | null => {
