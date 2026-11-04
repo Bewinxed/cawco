@@ -34,46 +34,49 @@ export const workWords = {
   /** A host-scope delegate's scratch dir asked for by a name that is no workspace id (agent host-scratch.ts): nothing is read, made or removed. */
   hostScratchUnnamed: "a host scratch dir is named by its workspace's id",
   /**
-   * How a brief or a handoff names the files handed with it (core injected.ts
+   * How a brief or a handoff names the files sent with it (core injected.ts
    * `withInputsLine`): the folder they landed in, as the receiver names it,
-   * then each. Placeholder words, for a copy pass.
+   * then each.
    */
-  inputsIn: (folder: string) => `Files handed with this are in ${folder}: `,
+  inputsIn: (folder: string) =>
+    `Files sent with this message are in ${folder}: `,
   /**
    * A handoff's inputs refused for whom they would go to (hub work-items.ts
    * `handInputs`): files go only where handoff's own relations reach.
-   * Placeholder words, for a copy pass.
    */
   inputsNotTheirs: (receiver: string) =>
-    `Files go with a handoff to your parent, a session you delegated or started, or your project's conversation; ${receiver} is none of them. Hand off without inputs.`,
+    `Inputs go only to your parent, a session you delegated or started, or your project's conversation; ${receiver} is none of them. Hand off without inputs.`,
   /**
    * The inputs' limits, as every refusal of them says them (hub
    * work-items.ts `readInputs`, agent inputs.ts `admitAll`): `limit` is core
-   * `INPUTS_COUNT_LIMIT` or `INPUTS_LIMIT_BYTES` in MiB. Placeholder words,
-   * for a copy pass.
+   * `INPUTS_COUNT_LIMIT` or `INPUTS_LIMIT_BYTES` in MiB. The machine's
+   * refusals reach the caller under the hub's own `inputs: ` (work-items.ts
+   * `inputsRefused`), so `paths`, `files` and `bytes` do not say it again.
    */
   inputsLimits: {
     entries: (named: number, limit: number) =>
       `inputs: ${named} entries; one handoff or delegation carries ${limit} at most.`,
     paths: (named: number, limit: number) =>
-      `inputs names ${named} paths; one handoff or delegation carries ${limit} at most`,
+      `${named} paths; one handoff or delegation carries ${limit} at most`,
     folder: (folder: string, limit: number) =>
       `${folder} holds more than ${limit} files, the most one handoff or delegation carries; name the files or a narrower folder`,
     files: (limit: number) =>
-      `the inputs come to more than ${limit} files together, the most one handoff or delegation carries; name fewer files or a narrower folder`,
+      `more than ${limit} files together, the most one handoff or delegation carries; name fewer files or a narrower folder`,
     bytes: (mib: number) =>
-      `the inputs come to more than ${mib} MiB together, the most one handoff or delegation carries; hand larger data on through git or a check with machine`,
+      `more than ${mib} MiB together, the most one handoff or delegation carries; commit larger data, or name its path and machine in the message`,
     held: (mib: number) =>
-      `inputs: what the hub hands comes to more than ${mib} MiB, the most one handoff or delegation carries; hand larger data on through git.`,
+      `inputs: what the hub holds of them comes to more than ${mib} MiB, the most one handoff or delegation carries; name the largest in the message by id, for the receiver to read itself.`,
     outputs: (named: number, limit: number) =>
       `outputs names ${named} files; one item declares ${limit} at most.`,
   },
   /**
    * A machine's ask of where a project's large files live, refused: it holds
    * no place of the project, a checkout or a delegate workspace (hub
-   * server.ts `lfsMachineProject`).
+   * server.ts `lfsMachineProject`). `machine` as the fleet names it: the
+   * words are read off that machine, on the board and in a parent's report.
    */
-  lfsNoPlace: (project: string) => `This machine holds no place of ${project}.`,
+  lfsNoPlace: (machine: string, project: string) =>
+    `${machine} holds no place of ${project}, neither a checkout nor a workspace.`,
   /** What a delegate of no project is told of its `$TMPDIR/outputs/`: nothing there is collected. */
   scratchOutputsNoProject:
     "This item belongs to no project, so nothing in $TMPDIR is collected: what your parent needs goes in your report or a commit.",

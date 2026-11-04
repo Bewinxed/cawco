@@ -26476,7 +26476,10 @@ export const createServer = (
       ? { row, machineId: caller.machineId }
       : {
           status: 403,
-          refused: workWords.lfsNoPlace(row.name),
+          refused: workWords.lfsNoPlace(
+            machineName(caller.machineId),
+            row.name
+          ),
         };
   };
   // Git LFS offered for the large files a place's first commit left out,

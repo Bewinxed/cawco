@@ -204,7 +204,7 @@ const finishItemDescription = (lands: ItemEnd = "main"): string => {
 /** What every handoff says of a target's state as the message reaches it. */
 const HANDOFF_DELIVERY =
   "An idle target starts on it at once; a busy one reads it at its next step, its running command kept going. " +
-  "A cold target (cache expired; never your parent) with uncommitted changes gets it; one with only unpushed commits is refused once, naming delegate's `from`; otherwise CawCo's Jev model decides when the hub has its route, and that is final. " +
+  "A cold target (cache expired; never your parent) with uncommitted changes gets it; otherwise CawCo's Jev model decides when the hub has its route, and that is final. " +
   "Repeat a call any other cold refusal answered to deliver it.";
 
 /**
@@ -241,13 +241,13 @@ const handoffShape = () => ({
  * session with no work item's own, work-items.ts `handInputs`), a folder
  * and an item's assets as their trees. Listed open and small
  * ({@link handedInputsListed}); the hub checks each entry strictly
- * (work-items.ts `readInputs`). Placeholder words, for a copy pass.
+ * (work-items.ts `readInputs`).
  */
 const inputsParameter = () =>
   handedInputsListed
     .optional()
     .describe(
-      "Files for its inputs folder, named in the message: absolute paths to files or folders on your machine, or hub-held ones by id or handle, {report|assets|artifact|pins|find|attachment}, or {text|blob, name}, blob base64."
+      "Files for its inputs folder: absolute paths to files or folders on your machine; what the hub holds, as {report|assets|artifact|pins|find|attachment: id or handle}; or {text, name} or {blob: base64, name}."
     );
 
 /** `handoff`'s call: the message, with files for the receiver's inputs folder. */

@@ -252,7 +252,10 @@ const spec: Spec = {
     check(
       "n2: a repository whose tree marks files for LFS there: its cut asks, and the hub answers the machine that holds the cut, with the declared connection's refusal",
       markedState.includes(ENDPOINT) &&
-        !markedState.includes(workWords.lfsNoPlace("Cut with no place")),
+        !markedState.includes(
+          // Whatever the hub names the machine: every fleet machine shares this host's name.
+          workWords.lfsNoPlace("", "Cut with no place").trim()
+        ),
       markedState
     );
   },
