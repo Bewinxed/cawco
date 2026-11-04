@@ -718,7 +718,14 @@ export interface ProviderForecast {
 /** Which account placement chose, by which rule, and why, in a sentence. */
 export interface PlacementExplain {
   accountId: string | null;
-  strategy: PlacementStrategy | "fork" | "explicit" | "only" | "type" | "none";
+  strategy:
+    | PlacementStrategy
+    | "fork"
+    | "explicit"
+    | "project"
+    | "only"
+    | "type"
+    | "none";
   why: string;
 }
 

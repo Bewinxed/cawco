@@ -36,6 +36,8 @@
    * - Who decides: follows the fleet, or how many kinds it handed over
    *   itself; the link to its Who decides (decides/DecidesRow).
    * - Caw: whether events reach a conversation (CawLeadSwitch), its ways off with it.
+   * - Account: the account its sessions start on, or the fleet's routing
+   *   (hub project-edit.ts), and whether it is signed in anywhere.
    * - Review before done.
    *
    * A change shows what was asked while the hub answers (the segment's thumb
@@ -44,6 +46,7 @@
    * (RowFault). Every value is the project as the hub last said it, which
    * `projects.changed` brings to every open dashboard.
    */
+  import { accountNameAmong } from "@cawco/core/accounts";
   import { type ConnectionView, readsGitHubApi } from "@cawco/core/connections";
   import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
   import { machineLabel } from "@cawco/core/machine-names";
@@ -60,6 +63,7 @@
   } from "@cawco/core/trackers";
   import { lfsWords } from "@cawco/core/words/lfs";
   import { projectWords } from "@cawco/core/words/project";
+  import { projectAccountWords } from "@cawco/core/words/project-account";
   import { onMount, type Snippet } from "svelte";
   import {
     addProjectPlace,
@@ -153,6 +157,51 @@
   function askLands(next: LandsMode): void {
     landsTried = next;
     setLands(next);
+  }
+
+  /* ── Account ────────────────────────────────────────────────────── */
+
+  /** The fleet's accounts, each by the name it shows everywhere. */
+  const accountChoices = $derived.by(() => {
+    const all = cawco.accounts?.accounts ?? [];
+    return all.map((one) => ({ id: one.id, name: accountNameAmong(one, all) }));
+  });
+  /** The account asked while the hub answers; undefined: none asked. */
+  let accountAsked = $state<string | null | undefined>(undefined);
+  let accountFault = $state<string | null>(null);
+  const accountNow = $derived(
+    accountAsked === undefined ? project.account : accountAsked
+  );
+  const accountName = $derived(
+    accountChoices.find((one) => one.id === project.account)?.name ??
+      project.account
+  );
+  /** Set, and signed in on no machine: nothing of the project starts. */
+  const accountSignedOut = $derived(
+    project.account !== null &&
+      cawco.accounts !== null &&
+      !cawco.accounts.signins.some(
+        (one) => one.accountId === project.account && one.state === "signed-in"
+      )
+  );
+
+  /** Try again: the last account asked, once more. */
+  let accountTried: string | null = null;
+
+  async function setAccount(next: string | null): Promise<void> {
+    if (accountAsked !== undefined || next === project.account) {
+      return;
+    }
+    accountTried = next;
+    accountAsked = next;
+    accountFault = null;
+    try {
+      await editProject(project.id, { account: next });
+    } catch (error) {
+      accountFault = failureWords(error);
+    } finally {
+      accountAsked = undefined;
+    }
   }
 
   /* ── Merge checks ───────────────────────────────────────────────── */
@@ -1443,6 +1492,62 @@
           {lead}
           projectId={project.id}
           projectName={project.name}
+        />
+      </div>
+    </div>
+
+    <!-- Account: where its sessions start, with that account's connectors. -->
+    <div
+      data-slot="row"
+      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      data-detail="account"
+    >
+      <p
+        data-slot="project-details-label"
+        class="type-label pt-space-1 text-ink-muted"
+      >
+        {projectAccountWords.label}
+      </p>
+      <div
+        data-slot="value"
+        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+      >
+        <NativeSelect.Root
+          aria-label={projectAccountWords.select}
+          class="w-full"
+          data-account-select
+          disabled={accountAsked !== undefined}
+          bind:value={
+            () => accountNow ?? "", (next) => setAccount(next || null)
+          }
+        >
+          <NativeSelect.Option value=""
+            >{projectAccountWords.routing}</NativeSelect.Option
+          >
+          {#each accountChoices as each (each.id)}
+            <NativeSelect.Option value={each.id}
+              >{each.name}</NativeSelect.Option
+            >
+          {/each}
+        </NativeSelect.Root>
+        <p data-slot="note" class="type-meta text-ink-muted">
+          {accountName
+            ? projectAccountWords.set(accountName)
+            : projectAccountWords.routed}
+        </p>
+        {#if accountSignedOut && accountName}
+          <p
+            data-slot="note"
+            class="type-meta text-ink-muted"
+            data-account-signed-out
+          >
+            {projectAccountWords.signedOut(accountName)}
+          </p>
+        {/if}
+        <RowFault
+          again={() => setAccount(accountTried)}
+          data-account-fault
+          reason={accountFault}
         />
       </div>
     </div>

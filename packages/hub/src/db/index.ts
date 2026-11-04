@@ -2246,11 +2246,14 @@ export interface DbShape {
       >
     >
   ) => void;
-  /** The project's name, its Review before done and its large files, as project-edit.ts checked them. */
+  /** The project's name, its Review before done, its large files and its account, as project-edit.ts checked them. */
   readonly setProjectDetails: (
     id: string,
     change: Partial<
-      Pick<ProjectRow, "lfsConnection" | "lfsUrl" | "name" | "review">
+      Pick<
+        ProjectRow,
+        "account" | "lfsConnection" | "lfsUrl" | "name" | "review"
+      >
     >
   ) => void;
   /** The project's dispatch settings: whether it dispatches, its caps, its default budget and landing. */

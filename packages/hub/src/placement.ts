@@ -27,6 +27,7 @@ import {
 } from "@cawco/core";
 import { HOUR_MS } from "@cawco/core/time";
 import { accountsWords } from "@cawco/core/words/accounts";
+import { projectAccountWords } from "@cawco/core/words/project-account";
 import { spawnWords } from "@cawco/core/words/spawn";
 import type { AccountPaces } from "./forecast";
 
@@ -76,6 +77,12 @@ export interface PlacementInput {
    * soonest-reset's carry test; absent: no forecast, the order alone decides.
    */
   paces?: AccountPaces;
+  /**
+   * The account the session's project starts its sessions on (project-edit.ts
+   * `account`), for a start that names none of its own ({@link projectPick});
+   * absent: none, or a session already running.
+   */
+  projectAccount?: string;
   /** The project's allow-list; null or absent: every account. */
   projectAccounts?: string[] | null;
   readings: AccountReading[];
@@ -758,6 +765,62 @@ const explicitPick = (
   };
 };
 
+/**
+ * The project's account, for a start that names none of its own: it starts
+ * there as one naming it would, bench and reserve aside, and is refused
+ * where it is not signed in. Nothing when the project names none, or one of
+ * another provider than the session's (`input.accounts` holds the session's
+ * provider's alone), or one the project's or task's list leaves out: the
+ * session is placed as any other.
+ */
+const projectPick = (
+  input: PlacementInput,
+  signedIn: Account[],
+  name: (id: string) => string
+): Placement | undefined => {
+  const account = input.accounts.find((one) => one.id === input.projectAccount);
+  const allows = (list: string[] | null | undefined) =>
+    !(list && account) || list.includes(account.id);
+  if (!(
+    account &&
+    allows(input.projectAccounts) &&
+    allows(input.taskAccounts)
+  )) {
+    return;
+  }
+  if (!signedIn.includes(account)) {
+    return {
+      ok: false,
+      refusal: projectAccountWords.notSignedIn(
+        name(account.id),
+        input.machineName ?? input.machineId
+      ),
+    };
+  }
+  return {
+    ok: true,
+    accountId: account.id,
+    strategy: "project",
+    why: projectAccountWords.why(name(account.id)),
+  };
+};
+
+/**
+ * The accounts a running session in a project may run on, as its project's
+ * list for placement (`projectAccounts`): the project's account alone for
+ * one on it, so it stays there at a cold wake, a rebalance and its limit;
+ * else the project's own list (null: every account).
+ */
+export const runningAccounts = (
+  project: { account: string | null; accounts: string[] | null } | undefined,
+  on: string | null | undefined
+): string[] | null => {
+  if (project?.account && project.account === on) {
+    return [project.account];
+  }
+  return project?.accounts ?? null;
+};
+
 /** The strategy's choice among the candidates, or nothing when none of them can take it. */
 const byStrategy = (
   strategy: PlacementStrategy,
@@ -1112,6 +1175,10 @@ export const place = (input: PlacementInput): Placement => {
   const { signedIn, allowed } = eligible(input);
   if (input.explicit) {
     return explicitPick(input, input.explicit, signedIn, name);
+  }
+  const project = projectPick(input, signedIn, name);
+  if (project) {
+    return project;
   }
   if (signedIn.length === 0) {
     return { ok: false, refusal: noAccountRefusal(machine) };

@@ -506,6 +506,16 @@ export const projects = sqliteTable("projects", {
     .notNull()
     .default(false),
   /**
+   * The account the sessions it starts run on (its conversation, its
+   * routines' runs, its delegates) when a start names none of its own, and
+   * where they stay (project-edit.ts `account`, placement.ts
+   * `projectAccount`). Null: the fleet's routing; an account removed clears
+   * it.
+   */
+  account: text("account").references(() => accounts.id, {
+    onDelete: "set null",
+  }),
+  /**
    * When the person answered a move's ask "Don't move" (moves.ts): a folder
    * that still needs that ask can't move, and the New session modal says so
    * instead of asking again. Null: never declined.

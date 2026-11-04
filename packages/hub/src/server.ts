@@ -878,6 +878,7 @@ import {
   noAccountRefusal,
   type PlacementInput,
   place as placeAccount,
+  runningAccounts,
   unreportedHarnessRefusal,
 } from "./placement";
 import {
@@ -14902,7 +14903,7 @@ export const createServer = (
       if (artifact.kind === "page" && artifact.projectId) {
         await decisions.decide(artifact.projectId, artifact.name, artifact.id);
       }
-      // A project's setup page: its name, shape and place applied before
+      // A project's setup page: its name, shape, account and place applied before
       // its writer hears the picks, and the Send its approval of the
       // AGENTS.md and delegate types it writes from them (caw.ts `setupSent`).
       const setup = await applySetupPicks(
@@ -14911,14 +14912,9 @@ export const createServer = (
         state,
         sentAt,
         {
-          // Its name field's refusal is the send's to answer, as a place's is.
-          name: async (projectId, name) => {
-            await projectEdits.edit(projectId, { name }).catch((error) => {
-              throw error instanceof ProjectEditRefusal
-                ? new PlaceRefusal(error.status, error.message)
-                : error;
-            });
-          },
+          // Its name field's and account's refusals are the send's to answer, as a place's is.
+          name: (projectId, name) => setupEdit(projectId, { name }),
+          account: (projectId, account) => setupEdit(projectId, { account }),
           shape: async (projectId, template) => {
             await tasks.applyTemplate(projectId, template, YOU_ACTOR);
           },
@@ -16146,9 +16142,15 @@ export const createServer = (
     task: { projectId?: string | null; taskId?: string | null }
   ): Pick<
     PlacementInput,
-    "explicit" | "kind" | "projectAccounts" | "taskAccounts" | "typeAccount"
+    | "explicit"
+    | "kind"
+    | "projectAccount"
+    | "projectAccounts"
+    | "taskAccounts"
+    | "typeAccount"
   > => {
     const projectId = payload.projectId ?? task.projectId ?? undefined;
+    const project = projectId ? db.project(projectId) : undefined;
     const type = payload.delegateType;
     const typeAccount = type
       ? projectTypes.resolveTypeFor(type.projectId ?? projectId, type.name)
@@ -16157,11 +16159,11 @@ export const createServer = (
     const { parentInstanceId } = peekParent(payload);
     return {
       kind: parentInstanceId || payload.spawnedBy ? "delegates" : "yours",
-      projectAccounts: projectId
-        ? (db.project(projectId)?.accounts ?? null)
-        : null,
+      projectAccounts: project?.accounts ?? null,
       taskAccounts: taskAccounts(projectId, task.taskId),
+      // The start's own account wins over its project's (placement.ts `place`).
       ...(payload.account ? { explicit: payload.account } : {}),
+      ...(project?.account ? { projectAccount: project.account } : {}),
       ...(typeAccount ? { typeAccount } : {}),
     };
   };
@@ -25871,7 +25873,7 @@ export const createServer = (
     },
     // Caw's project_name: the rename the project head's details tray makes.
     rename: async (projectId, name) =>
-      (await projectEdits.edit(projectId, { name })).name,
+      (await projectEdits.edit(projectId, { name })).project.name,
     projectsChanged,
     // A project note, a line in its conversation's transcript as it lands.
     noted: (instanceId, note) => noteProject(instanceId, note),
@@ -27128,19 +27130,51 @@ export const createServer = (
   });
   // The stage engine's one door for a `by: action` move (tasks.ts).
   actionMoves = actions.actionMove;
-  // A project's name, Review before done, Apple build gate and where its work
-  // lands: the person's PATCH and Caw's project_settings both change them
-  // here (project-edit.ts), its landing through the dispatcher's own write.
+  // A project's name, Review before done, where its work lands, its large
+  // files and its account: the person's PATCH and Caw's project_settings
+  // both change them here (project-edit.ts), its landing through the
+  // dispatcher's own write.
   const projectEdits = createProjectEdits({
+    accounts: () => db.accounts.list(),
+    // The project's conversation, the one session of it that lives on, moves
+    // to its new account as a person's move of it would (`moveByHand`):
+    // at rest now, else at its turn's end.
+    conversationTo: async (project) => {
+      const to = project.account ? db.accounts.get(project.account) : undefined;
+      const [row] = project.conversationInstanceId
+        ? db.getInstancesByIds([project.conversationInstanceId])
+        : [];
+      if (!(to && row) || row.accountId === to.id) {
+        return;
+      }
+      const refusal = handMoveRefusal(row, to);
+      if (refusal) {
+        return refusal;
+      }
+      const moved = await moveByHand(row, to);
+      return "refusal" in moved ? moved.refusal : moved.why;
+    },
     db,
     lands: (projectId, lands) => dispatcher.configure(projectId, { lands }),
     lfsProblem: (connection) => connections.lfsProblem(connection),
     projectsChanged,
     stagesChanged: (projectId) => tasks.touched(projectId),
   });
+  /** A setup page's pick applied as the person's own edit, its refusal the send's to answer as a place's is. */
+  const setupEdit = async (
+    projectId: string,
+    change: Parameters<typeof projectEdits.edit>[1]
+  ): Promise<void> => {
+    await projectEdits.edit(projectId, change).catch((error) => {
+      throw error instanceof ProjectEditRefusal
+        ? new PlaceRefusal(error.status, error.message)
+        : error;
+    });
+  };
   // Caw's own project settings, applied through the settings' own paths, or
   // asked about as an admin write is (project-settings.ts).
   const settings = createProjectSettings({
+    accounts: () => db.accounts.list(),
     ask: (actor, input, toolUseId) =>
       hubAsks.ask(actor, PROJECT_SETTINGS, input, toolUseId),
     // His switch's own path: off, what he started finishes, his turn among them.
@@ -29898,8 +29932,9 @@ export const createServer = (
       : undefined;
     return {
       kind: row.parentInstanceId ? "delegates" : "yours",
+      // One on its project's account stays there (placement.ts `runningAccounts`).
       projectAccounts: projectId
-        ? (db.project(projectId)?.accounts ?? null)
+        ? runningAccounts(db.project(projectId), row.accountId)
         : null,
       taskAccounts: taskAccounts(projectId, item?.taskId),
       ...(typeAccount ? { typeAccount } : {}),
@@ -35235,7 +35270,8 @@ export const createServer = (
         }
       )
       // The person's own edit of a project: its name, whether it reviews
-      // before done and where its work lands (project-edit.ts). Every dashboard and the app hear
+      // before done, where its work lands, its large files and the account
+      // its sessions start on (project-edit.ts). Every dashboard and the app hear
       // it at once (`projects.changed`; a review change, `tasks.changed` too).
       .patch(
         "/api/projects/:id",
@@ -35244,6 +35280,11 @@ export const createServer = (
             name: t.Optional(t.String({ maxLength: 2000 })),
             review: t.Optional(t.Boolean()),
             lands: t.Optional(LANDS),
+            // The account its sessions start on, by id, nickname or email;
+            // null: the fleet's routing.
+            account: t.Optional(
+              t.Union([t.String({ maxLength: 320 }), t.Null()])
+            ),
             // Where its large files live; null: each origin's own LFS.
             lfs: t.Optional(
               t.Union([
@@ -35258,7 +35299,7 @@ export const createServer = (
         },
         async ({ params, body, status }) => {
           try {
-            const project = await projectEdits.edit(params.id, body);
+            const { project } = await projectEdits.edit(params.id, body);
             return { ...projectOut(project), cap: caps.capOf(project) };
           } catch (error) {
             if (error instanceof ProjectEditRefusal) {

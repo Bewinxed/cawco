@@ -282,6 +282,7 @@ const standUp = (): { roles: RoleTools[]; unrouted: string[] } => {
         }),
       }).tools(actor),
     projectSettings: createProjectSettings({
+      accounts: () => [],
       ask: () => Promise.reject(new Error("measuring")),
       caw: () => undefined,
       connections: {} as never,

@@ -26730,6 +26730,13 @@
                       "none"
                     ]
                   },
+                  "account": {
+                    "maxLength": 320,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
                   "lfs": {
                     "type": [
                       "object",
@@ -32146,6 +32153,12 @@
         "items": {
           "type": "object",
           "properties": {
+            "account": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
             "accounts": {
               "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
               "type": "array",
@@ -32321,6 +32334,7 @@
             }
           },
           "required": [
+            "account",
             "appleGate",
             "capUsd",
             "cawHarness",
@@ -32349,6 +32363,12 @@
       "postApiProjects200": {
         "type": "object",
         "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "accounts": {
             "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
             "type": "array",
@@ -32570,6 +32590,7 @@
           }
         },
         "required": [
+          "account",
           "appleGate",
           "capUsd",
           "cawHarness",
@@ -32624,6 +32645,12 @@
       "patchApiProjectsById200": {
         "type": "object",
         "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "accounts": {
             "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
             "type": "array",
@@ -32799,6 +32826,7 @@
           }
         },
         "required": [
+          "account",
           "appleGate",
           "capUsd",
           "cawHarness",
@@ -32837,6 +32865,12 @@
       "postApiProjectsByIdPlaces200": {
         "type": "object",
         "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "accounts": {
             "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
             "type": "array",
@@ -33055,6 +33089,7 @@
           }
         },
         "required": [
+          "account",
           "appleGate",
           "capUsd",
           "cawHarness",
@@ -33084,6 +33119,12 @@
       "putApiProjectsByIdAccounts200": {
         "type": "object",
         "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "accounts": {
             "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
             "type": "array",
@@ -33256,6 +33297,7 @@
           }
         },
         "required": [
+          "account",
           "appleGate",
           "capUsd",
           "cawHarness",
@@ -45945,13 +45987,13 @@
           "byKind": {
             "type": "object",
             "properties": {
+              "done": {
+                "type": "number"
+              },
               "active": {
                 "type": "number"
               },
               "waiting": {
-                "type": "number"
-              },
-              "done": {
                 "type": "number"
               },
               "you": {
@@ -63882,6 +63924,7 @@
           "none",
           "only",
           "pinned",
+          "project",
           "soonest-reset",
           "spread",
           "type"

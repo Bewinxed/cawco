@@ -3710,6 +3710,7 @@ public enum OpenEnums {
         case none
         case only
         case pinned
+        case project
         case soonestReset
         case spread
         case _type
@@ -3724,6 +3725,7 @@ public enum OpenEnums {
             case "none": self = .none
             case "only": self = .only
             case "pinned": self = .pinned
+            case "project": self = .project
             case "soonest-reset": self = .soonestReset
             case "spread": self = .spread
             case "type": self = ._type
@@ -3739,6 +3741,7 @@ public enum OpenEnums {
             case .none: "none"
             case .only: "only"
             case .pinned: "pinned"
+            case .project: "project"
             case .soonestReset: "soonest-reset"
             case .spread: "spread"
             case ._type: "type"
@@ -3750,7 +3753,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.explicit, .fillFirst, .fork, .none, .only, .pinned, .soonestReset, .spread, ._type]
+        public static let allCases: [Self] = [.explicit, .fillFirst, .fork, .none, .only, .pinned, .project, .soonestReset, .spread, ._type]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

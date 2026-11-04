@@ -181,6 +181,7 @@
     "./words/pairing": "./src/words/pairing.ts",
     "./words/place": "./src/words/place.ts",
     "./words/project": "./src/words/project.ts",
+    "./words/project-account": "./src/words/project-account.ts",
     "./words/rules": "./src/words/rules.ts",
     "./words/sheet": "./src/words/sheet.ts",
     "./words/side": "./src/words/side.ts",

@@ -1,8 +1,9 @@
 /**
- * A project's name, its Review before done and where its work lands, changed
- * by the person (`PATCH /api/projects/:id`, the project head's details tray)
- * or by its Caw (`project_settings` `rename`, `set_review`, `set_lands`):
- * one check and one write for all three. Where work lands is a dispatch
+ * A project's name, its Review before done, where its work lands and the
+ * account its sessions start on, changed by the person (`PATCH
+ * /api/projects/:id`, the project head's details tray, the setup page's
+ * `account`) or by its Caw (`project_settings` `rename`, `set_review`,
+ * `set_lands`, `set_account`): one check and one write for all. Where work lands is a dispatch
  * setting, written by the dispatcher's own `configure` (`lands`), so the
  * dispatcher looks at the project again as it changes. Where its large
  * files live (`lfs`) is the person's alone: an LFS endpoint bound to a
@@ -15,7 +16,13 @@
  * Names are not unique: a project is known by its id, and the hub makes two
  * projects of one name as readily (`POST /api/projects`).
  */
-import { LANDS_MODES, type LandsMode } from "@cawco/core";
+import {
+  type Account,
+  accountNameAmong,
+  LANDS_MODES,
+  type LandsMode,
+} from "@cawco/core";
+import { projectAccountWords } from "@cawco/core/words/project-account";
 import type { DbShape, ProjectRow } from "./db";
 
 /** As long as a name `POST /api/projects` takes. */
@@ -24,6 +31,12 @@ const PROJECT_NAME_LIMIT = 200;
 const CONTROL = /[\u0000-\u001f\u007f]/u;
 
 export interface ProjectEdit {
+  /**
+   * The account the sessions it starts run on when a start names none, by
+   * id, nickname or email (placement.ts `projectAccount`); null: the
+   * fleet's routing.
+   */
+  account?: string | null;
   /** Where its attempts land when their task says nothing. */
   lands?: LandsMode;
   /**
@@ -101,6 +114,14 @@ const lfsEndpoint = (raw: string): string => {
 };
 
 export interface ProjectEditsDeps {
+  /** The fleet's accounts, every provider's. */
+  readonly accounts: () => Account[];
+  /**
+   * Its running conversation moved onto the account it starts its sessions
+   * on now, as a person's move of a session is (server.ts `moveByHand`):
+   * what became of it in a sentence; undefined when it has none to move.
+   */
+  readonly conversationTo: (project: ProjectRow) => Promise<string | undefined>;
   readonly db: Pick<DbShape, "project" | "setProjectDetails">;
   /** Where its work lands, through the dispatch settings' own path (dispatch.ts `configure`). */
   readonly lands: (projectId: string, lands: LandsMode) => Promise<unknown>;
@@ -139,6 +160,73 @@ const lfsChange = (
     : { lfsUrl, lfsConnection };
 };
 
+/** The accounts `asked` names: the one of that id, else those of that nickname, else of that email. */
+const accountsAsked = (accounts: Account[], asked: string): Account[] => {
+  const byId = accounts.find((one) => one.id === asked);
+  if (byId) {
+    return [byId];
+  }
+  const lower = asked.toLowerCase();
+  const byLabel = accounts.filter((one) => one.label?.toLowerCase() === lower);
+  return byLabel.length > 0
+    ? byLabel
+    : accounts.filter((one) => one.email?.toLowerCase() === lower);
+};
+
+/**
+ * The account asked, by id, nickname or email among every provider's, as a
+ * spawn's `account` names one (placement.ts `picked`), or refused
+ * naming the fleet's accounts; one the project's own account list leaves
+ * out is refused too.
+ */
+export const accountChange = (
+  project: ProjectRow,
+  asked: ProjectEdit["account"],
+  accounts: Account[]
+): Pick<ProjectRow, "account"> | undefined => {
+  if (asked === undefined) {
+    return;
+  }
+  const raw = asked?.trim() ?? "";
+  if (!raw) {
+    return project.account === null ? undefined : { account: null };
+  }
+  const matches = accountsAsked(accounts, raw);
+  const [account] = matches;
+  if (!account) {
+    throw new ProjectEditRefusal(
+      400,
+      projectAccountWords.noAccount(
+        raw,
+        accounts.map((one) => accountNameAmong(one, accounts))
+      )
+    );
+  }
+  if (matches.length > 1) {
+    throw new ProjectEditRefusal(
+      400,
+      projectAccountWords.ambiguous(
+        raw,
+        matches.map((one) => one.id)
+      )
+    );
+  }
+  if (project.accounts && !project.accounts.includes(account.id)) {
+    const named = (id: string) => {
+      const one = accounts.find((each) => each.id === id);
+      return one ? accountNameAmong(one, accounts) : id;
+    };
+    throw new ProjectEditRefusal(
+      400,
+      projectAccountWords.notAllowed(
+        accountNameAmong(account, accounts),
+        project.accounts.map(named)
+      )
+    );
+  }
+  return account.id === project.account ? undefined : { account: account.id };
+};
+
 /** What `asked` changes of `project`: each field asked that differs, the name checked. */
 const changeOf = (project: ProjectRow, asked: ProjectEdit): ProjectEdit => {
   const change: ProjectEdit = {};
@@ -165,7 +253,16 @@ const changeOf = (project: ProjectRow, asked: ProjectEdit): ProjectEdit => {
   return change;
 };
 
+/** A project as an edit left it, and what became of its running conversation when its account changed. */
+export interface Edited {
+  /** In a sentence; absent when the account did not change, or it has no conversation to move. */
+  conversation?: string;
+  project: ProjectRow;
+}
+
 export const createProjectEdits = ({
+  accounts,
+  conversationTo,
   db,
   lands,
   lfsProblem,
@@ -174,9 +271,11 @@ export const createProjectEdits = ({
 }: ProjectEditsDeps) => ({
   /**
    * Checks and applies a change to a project's name, Review before done,
-   * landing and large files; answers the project as it is now. Nothing asked is refused.
+   * landing, large files and account; answers the project as it is now,
+   * and, when its account changed, what became of its running
+   * conversation. Nothing asked is refused.
    */
-  async edit(projectId: string, asked: ProjectEdit): Promise<ProjectRow> {
+  async edit(projectId: string, asked: ProjectEdit): Promise<Edited> {
     const project = db.project(projectId);
     if (!project) {
       throw new ProjectEditRefusal(
@@ -188,20 +287,27 @@ export const createProjectEdits = ({
       asked.name === undefined &&
       asked.review === undefined &&
       asked.lands === undefined &&
-      asked.lfs === undefined
+      asked.lfs === undefined &&
+      asked.account === undefined
     ) {
       throw new ProjectEditRefusal(
         400,
-        "Name what changes: the project's name, whether it reviews before done, where its work lands, or where its large files live."
+        "Name what changes: the project's name, whether it reviews before done, where its work lands, where its large files live, or the account its sessions start on."
       );
     }
-    const { lands: landsTo, lfs: _lfs, ...asks } = changeOf(project, asked);
+    const {
+      lands: landsTo,
+      lfs: _lfs,
+      account: _account,
+      ...asks
+    } = changeOf(project, asked);
     const details = {
       ...asks,
       ...lfsChange(project, asked.lfs, lfsProblem),
+      ...accountChange(project, asked.account, accounts()),
     };
     if (Object.keys(details).length === 0 && landsTo === undefined) {
-      return project;
+      return { project };
     }
     if (Object.keys(details).length > 0) {
       db.setProjectDetails(projectId, details);
@@ -213,6 +319,11 @@ export const createProjectEdits = ({
     if (details.review !== undefined) {
       stagesChanged(projectId);
     }
-    return db.project(projectId) ?? project;
+    const now = db.project(projectId) ?? project;
+    // Sessions started from now start on it; its conversation, the one
+    // session that lives on, moves to it as a person's move would.
+    const conversation =
+      details.account === undefined ? undefined : await conversationTo(now);
+    return { project: now, ...(conversation ? { conversation } : {}) };
   },
 });

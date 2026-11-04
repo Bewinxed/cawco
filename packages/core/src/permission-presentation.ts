@@ -24,6 +24,7 @@ import type { LandsMode } from "./injected";
 import { commonEnds, editScript, linesOf } from "./line-diff";
 import { questionsOf } from "./question";
 import { DAY_MS } from "./time";
+import { projectAccountWords } from "./words/project-account";
 import {
   projectSettingsWords,
   type SettingsBudget,
@@ -1267,6 +1268,7 @@ export const PROJECT_SETTING_KINDS = [
   "set_review_limit",
   "set_budget",
   "set_events",
+  "set_account",
 ] as const;
 
 /**
@@ -1296,6 +1298,12 @@ export type ProjectSettingChange =
   | { budget: SettingsBudget | null; kind: "set_budget" }
   /** Whether the project's events reach its conversation, as its switch flips it (hub caw.ts `configure`). */
   | { events: boolean; kind: "set_events" }
+  /**
+   * The account the project's sessions start on (hub project-edit.ts
+   * `account`), by id, with its name as the change was checked; null: the
+   * fleet's routing.
+   */
+  | { account: string | null; kind: "set_account"; name: string | null }
   | {
       /** The account the GitHub connection signs in as: the repository's owner. */
       account?: string;
@@ -1354,6 +1362,8 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
       return projectSettingsWords.budget(change.budget);
     case "set_events":
       return projectSettingsWords.eventsOn(change.events);
+    case "set_account":
+      return projectAccountWords.change(change.name);
     case "set_lands":
       break;
   }

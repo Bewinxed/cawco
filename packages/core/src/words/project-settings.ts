@@ -5,6 +5,8 @@
  * setting by the field that changes it.
  */
 
+import { projectAccountWords } from "./project-account";
+
 /** A budget as a project's dispatch keeps it: what one attempt may spend. */
 export interface SettingsBudget {
   minutes?: number;
@@ -26,6 +28,8 @@ const onOff = (on: boolean): string => (on ? "on" : "off");
 
 /** What the read shows: the project as the hub keeps it, and what dispatch does now. */
 export interface SettingsRead {
+  /** The account its sessions start on, by name; null: the fleet's routing. */
+  account: string | null;
   budget: SettingsBudget | null;
   /** Connections granted to the project. */
   connections: string[];
@@ -64,6 +68,7 @@ export const projectSettingsWords = {
       `- Review before done: ${onOff(now.review)} (set_review)`,
       `- Repositories: ${now.links.length > 0 ? now.links.join(", ") : "none linked"} (link_repo, create_repo with folder)`,
       `- Connections granted: ${now.connections.length > 0 ? now.connections.join(", ") : "none"} (grant_connection)`,
+      projectAccountWords.read(now.account),
       "",
       `Now: ${now.live} ${now.live === 1 ? "attempt is" : "attempts are"} live and ${now.reviewing} ${now.reviewing === 1 ? "task waits" : "tasks wait"} for review. ${
         now.paused === null

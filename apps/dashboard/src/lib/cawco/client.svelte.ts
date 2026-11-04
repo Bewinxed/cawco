@@ -302,6 +302,8 @@ export interface ProjectPlace {
  * primary with `checkoutOf` (projects.ts).
  */
 export interface ProjectRow {
+  /** The account its sessions start on when a start names none (hub project-edit.ts); null: the fleet's routing. */
+  account: string | null;
   /** Its spend cap as it stands, kept by `project.cap` frames; null: none. */
   cap?: ProjectCap | null;
   /** The harness its Caw runs on. */
@@ -6558,6 +6560,8 @@ export async function renameInstance(
 export async function editProject(
   projectId: string,
   change: {
+    /** The account its sessions start on, by id; null: the fleet's routing. */
+    account?: string | null;
     lands?: LandsMode;
     /** Where its large files live, and the connection that signs in there; null: each origin's own LFS. */
     lfs?: { connection: string; url: string } | null;

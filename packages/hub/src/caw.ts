@@ -39,6 +39,7 @@ import { createHash } from "node:crypto";
 import {
   ACT_ORIGIN,
   type ARTIFACT_ORIGIN,
+  accountNameAmong,
   BLOCK_PAGE_TITLES,
   BLOCK_PAGES,
   type BlockPage,
@@ -46,6 +47,7 @@ import {
   CAW_NO_MACHINE,
   type CawInitiated,
   type CawRunning,
+  CLAUDE_PROVIDER,
   type ConnectionView,
   CURATOR_DENIED_TOOLS,
   type Envelope,
@@ -488,6 +490,7 @@ export interface CawDeps {
   readonly conversationStarted: (projectId: string) => void;
   readonly db: Pick<
     DbShape,
+    | "accounts"
     | "cawMode"
     | "cawSpentSince"
     | "getInstancesByIds"
@@ -1184,8 +1187,33 @@ export const createCaw = ({
           : `${machines.name(place.machineId)} — ${place.path}${place.isPrimary ? " (primary)" : ""}`
       ),
       machines: machines.online(),
+      account: project.account ? accountLine(project.account, false) : null,
+      accounts: db.accounts.list().map((one) => accountLine(one.id, true)),
       cards: SETUP_CARDS,
     };
+  };
+
+  /**
+   * An account as `project_setup` names it: its name, and with `whole` its
+   * id, provider and the machines it is signed in on.
+   */
+  const accountLine = (id: string, whole: boolean): string => {
+    const all = db.accounts.list();
+    const account = all.find((one) => one.id === id);
+    if (!account) {
+      return id;
+    }
+    const name = accountNameAmong(account, all);
+    if (!whole) {
+      return name;
+    }
+    const on = db.accounts
+      .signins()
+      .filter((one) => one.accountId === id && one.state === "signed-in")
+      .map((one) => machines.name(one.machineId));
+    const provider =
+      account.provider === CLAUDE_PROVIDER ? "Claude" : account.provider;
+    return `${name}: id ${account.id}, ${provider}, ${on.length > 0 ? `signed in on ${on.join(", ")}` : "signed in nowhere"}`;
   };
 
   /**

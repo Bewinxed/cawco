@@ -43,6 +43,10 @@
  * - `set_events`: whether the project's events reach its conversation,
  *   through the switch the person flips (caw.ts `configure`,
  *   `PATCH /api/projects/:id/caw`). Off lets what it started finish.
+ * - `set_account`: the account the project's sessions start on when a start
+ *   names none (an account's id, nickname or email; null for the fleet's
+ *   routing), checked and written as the person's own edit is
+ *   (project-edit.ts), which moves its running conversation there too.
  * Called with no changes, it answers the project's settings as they stand,
  * each named by the change that sets it, and what dispatch would do now.
  * Only the session's own project, named by its id or its name in any case:
@@ -50,6 +54,8 @@
  * gate.md (gate-file.ts), not a setting.
  */
 import {
+  type Account,
+  accountNameAmong,
   type InstanceRow,
   PROJECT_LANDS,
   PROJECT_SETTING_KINDS,
@@ -62,6 +68,7 @@ import {
 import { PROJECT_SETTINGS } from "@cawco/core/asks";
 import { hubRepoSegment } from "@cawco/core/hub-repo";
 import { unhandled } from "@cawco/core/unhandled";
+import { projectAccountWords } from "@cawco/core/words/project-account";
 import { z } from "zod";
 import type { Connections } from "./connections";
 import type { DbShape, ProjectRow } from "./db";
@@ -72,7 +79,12 @@ import {
 } from "./dispatch";
 import { boardTitle } from "./labels";
 import { type McpTool, sentence, tool } from "./mcp-tool";
-import { type ProjectEdit, projectName } from "./project-edit";
+import {
+  accountChange,
+  type Edited,
+  type ProjectEdit,
+  projectName,
+} from "./project-edit";
 import type { RepoPublish } from "./repo-publish";
 import { runsOnValue } from "./runs-on";
 import { budgetParameter } from "./task-tools";
@@ -132,6 +144,13 @@ const ASKED_CHANGE = z.object({
   review_limit: z.number().int().optional(),
   budget: budgetParameter("Per attempt; null: no limit.").nullable().optional(),
   events: z.boolean().optional(),
+  account: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      "set_account: an account's id, nickname or email; null: the fleet's routing"
+    ),
 });
 type AskedChange = z.infer<typeof ASKED_CHANGE>;
 
@@ -180,6 +199,8 @@ const askedOf = (change: ProjectSettingChange): AskedChange => {
       return { kind: change.kind, budget: change.budget };
     case "set_events":
       return { kind: change.kind, events: change.events };
+    case "set_account":
+      return { kind: change.kind, account: change.account };
     default:
       return unhandled("project setting", change);
   }
@@ -273,6 +294,8 @@ const alreadyWords = (change: DispatchSetting): string => {
 };
 
 export interface ProjectSettingsDeps {
+  /** The fleet's accounts, every provider's. */
+  readonly accounts: () => Account[];
   /**
    * Records the change as the person's ask in the session that asked (asks.ts):
    * what the call answers; undefined in Full Send, when it applies now.
@@ -299,10 +322,13 @@ export interface ProjectSettingsDeps {
     view: (projectId: string) => Promise<DispatchView>;
   };
   /**
-   * The project's name, Review before done, Apple build gate and default
-   * landing, through the person's own edit (project-edit.ts).
+   * The project's name, Review before done, default landing and account,
+   * through the person's own edit (project-edit.ts).
    */
-  readonly edit: (projectId: string, change: ProjectEdit) => Promise<unknown>;
+  readonly edit: (
+    projectId: string,
+    change: ProjectEdit
+  ) => Promise<Pick<Edited, "conversation">>;
   /** Notes what happened in the project's conversation (caw.ts `notice`). */
   readonly note: (actor: InstanceRow, note: ProjectNote) => void;
   /** A place published to a new GitHub repository (repo-publish.ts). */
@@ -310,6 +336,7 @@ export interface ProjectSettingsDeps {
 }
 
 export const createProjectSettings = ({
+  accounts,
   ask,
   caw,
   connections,
@@ -411,6 +438,35 @@ export const createProjectSettings = ({
     return { kind: "set_events", events: on };
   };
 
+  /** An account by its name among the fleet's; null: none. */
+  const accountName = (id: string | null): string | null => {
+    const all = accounts();
+    const account = id ? all.find((one) => one.id === id) : undefined;
+    if (!account) {
+      return id;
+    }
+    return accountNameAmong(account, all);
+  };
+
+  /** The account its sessions start on, checked as the person's own edit is, refused when it is that already. */
+  const accountSet = (
+    project: ProjectRow,
+    asked: AskedChange
+  ): ProjectSettingChange => {
+    if (asked.account === undefined) {
+      refuse(projectAccountWords.needs);
+    }
+    const change = accountChange(project, asked.account, accounts());
+    if (!change) {
+      return refuse(projectAccountWords.already(accountName(project.account)));
+    }
+    return {
+      kind: "set_account",
+      account: change.account,
+      name: accountName(change.account),
+    };
+  };
+
   /** One asked change, checked against the project as it stands, as the hub stores it. */
   const checked = async (
     project: ProjectRow,
@@ -462,6 +518,8 @@ export const createProjectSettings = ({
         return dispatchSet(project, { ...asked, kind: asked.kind });
       case "set_events":
         return eventsSet(project, asked);
+      case "set_account":
+        return accountSet(project, asked);
       case "set_lands":
         break;
       default:
@@ -538,6 +596,17 @@ export const createProjectSettings = ({
       case "set_events":
         caw(project.id, change.events);
         break;
+      case "set_account": {
+        const { conversation } = await edit(project.id, {
+          account: change.account,
+        });
+        return [
+          projectSettingWords(change),
+          ...(conversation
+            ? [projectAccountWords.conversation(conversation)]
+            : []),
+        ];
+      }
       case "set_lands":
         await edit(project.id, { lands: change.lands });
         break;
@@ -615,6 +684,7 @@ export const createProjectSettings = ({
     const now = await dispatch.view(project.id);
     return projectSettingsWords.read({
       name: project.name,
+      account: accountName(project.account),
       events: project.eventsOn,
       dispatch: now.dispatch,
       maxAttempts: now.maxAttempts,
