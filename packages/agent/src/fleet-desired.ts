@@ -33,6 +33,7 @@ import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import {
+  type ConvergeBasis,
   type FleetConverged,
   keepConverged,
   readConverged,
@@ -174,9 +175,9 @@ export class FleetDesired {
     this.#keep({ ...this.#converged, generation });
   }
 
-  /** The agent build whose converge of every part last ended (fleet-converged.ts `build`). */
-  get convergedBuild(): string | undefined {
-    return this.#converged.build;
+  /** What the last converge of every part ran as (fleet-converged.ts `build`, `homes`). */
+  get convergedBasis(): Pick<FleetConverged, "build" | "homes"> {
+    return { build: this.#converged.build, homes: this.#converged.homes };
   }
 
   /** The report the machine last sent, as the disk keeps it; none before its first converge. */
@@ -286,8 +287,8 @@ export class FleetDesired {
    * A converge came to `statuses` over `ids` and to `report`, and every
    * generation up to `generation` has converged: a force on any of them is
    * spent, each that came out ok is converged at its hash, each no longer
-   * held is converged away, and the report is the one kept; `build`, the
-   * build that converged every part, when this one did. Kept on disk; a
+   * held is converged away, and the report is the one kept; `basis`, what
+   * a converge of every part ran as, when this one was. Kept on disk; a
    * write that fails is said, and the next converge writes again.
    */
   converged(
@@ -295,7 +296,7 @@ export class FleetDesired {
     statuses: readonly FleetItemStatus[],
     report: FleetSyncReport | undefined,
     generation: number,
-    build?: string
+    basis?: ConvergeBasis
   ): void {
     const items = { ...this.#converged.items };
     for (const id of ids) {
@@ -309,9 +310,10 @@ export class FleetDesired {
         items[status.id] = status.hash;
       }
     }
-    const kept = build ?? this.#converged.build;
+    const { build, homes } = basis ?? this.#converged;
     this.#keep({
-      ...(kept ? { build: kept } : {}),
+      ...(build ? { build } : {}),
+      ...(homes ? { homes } : {}),
       generation,
       items,
       report: report ?? this.#converged.report,

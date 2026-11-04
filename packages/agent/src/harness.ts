@@ -359,6 +359,15 @@ export interface Harness {
    * hub hashes it. Absent from a harness that converges no content.
    */
   fleetHoldings?: () => Promise<import("@cawco/core").FleetHoldings>;
+  /**
+   * Where this harness's fleet sync ({@link syncFleet}) writes: the dir every
+   * file it writes or links for the fleet hangs from, as this process
+   * resolves it (pi's `PI_CODING_AGENT_DIR`, OpenCode's `XDG_CONFIG_HOME`).
+   * A converge's record keeps it, so a machine whose harness writes
+   * elsewhere now converges every part once (fleet-converged.ts `homes`).
+   * Every harness that has `syncFleet` has it.
+   */
+  fleetHome?: () => string;
   /** What the harness has of what cawco last put on it, without changing it. */
   fleetStatus?: () => Promise<FleetSyncReport>;
   getSessionInfo: (

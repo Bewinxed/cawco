@@ -61,6 +61,7 @@ import {
   type HarnessKind,
   type MachineHarnessReport,
 } from "../../packages/core/src/index";
+import { claudeHome } from "../../packages/core/src/paths";
 import { sessionEnvironment } from "../../packages/core/src/session-env";
 
 /** What a session is handed by the supervisor, and what the harness hands back for it. */
@@ -304,10 +305,10 @@ const detected = async (kind: HarnessKind): Promise<MachineHarnessReport> => {
 };
 
 /** The real Claude adapter's fleet convergence (claude.ts `syncFleet`, `fleetStatus`, `fleetHoldings`). */
-const claudeFleet: Pick<
-  Harness,
-  "fleetHoldings" | "fleetStatus" | "syncFleet"
+const claudeFleet: Required<
+  Pick<Harness, "fleetHoldings" | "fleetHome" | "fleetStatus" | "syncFleet">
 > = {
+  fleetHome: () => claudeHome(),
   syncFleet: (config, parts) => syncFleetConfig(config, parts),
   fleetStatus: () => fleetStatus(),
   fleetHoldings: () => fleetHoldings(),

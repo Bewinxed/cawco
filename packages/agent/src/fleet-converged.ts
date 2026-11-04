@@ -34,6 +34,15 @@ export interface FleetConverged {
    * `FleetAck`). None before its first converge.
    */
   generation?: number;
+  /**
+   * Where that converge of every part wrote: each harness's fleet home
+   * (harness.ts `fleetHome`), by harness. Its items' hashes say what was
+   * written there, never elsewhere, so a machine whose harness writes
+   * elsewhere now (pi's agent dir moved by `PI_CODING_AGENT_DIR`), or that
+   * has a harness it did not have, converges every part once, as a new
+   * build does ({@link basisMoved}). None before the first such converge.
+   */
+  homes?: Record<string, string>;
   /** Each item a converge wrote (the policy as its write landed), by id, with its hash. */
   items: Record<string, string>;
   /** The report the machine last sent; none before its first converge. */
@@ -42,10 +51,44 @@ export interface FleetConverged {
 
 const FleetConvergedShape = z.object({
   build: z.string().optional(),
+  homes: z.record(z.string(), z.string()).optional(),
   generation: z.number().optional(),
   items: z.record(z.string(), z.string()),
   report: FleetSyncReportSchema.optional(),
 });
+
+/** What a converge of every part ran as: the agent's build, and where each harness's fleet sync writes. */
+export interface ConvergeBasis {
+  build: string;
+  homes: Record<string, string>;
+}
+
+/**
+ * Why every part converges once, as the hub welcomes this agent: the last
+ * converge of every part ran as another build, or wrote into another place
+ * than each harness's fleet home now (a harness's home moved, or one came
+ * or went), so what the record holds does not say what is there now.
+ * Undefined when it ran as `now`.
+ */
+export const basisMoved = (
+  converged: Pick<FleetConverged, "build" | "homes">,
+  now: ConvergeBasis
+): string | undefined => {
+  if (converged.build !== now.build) {
+    return `this build (${now.build}) converges every part once: the last to converge them all was ${converged.build ?? "none on record"}`;
+  }
+  const was = converged.homes ?? {};
+  const moved = [...new Set([...Object.keys(was), ...Object.keys(now.homes)])]
+    .sort()
+    .filter((kind) => was[kind] !== now.homes[kind])
+    .map(
+      (kind) =>
+        `${kind}'s at ${now.homes[kind] ?? "none"}, where it was ${was[kind] ?? "none on record"}`
+    );
+  return moved.length > 0
+    ? `every part converges once, since the last to converge them all wrote elsewhere: ${moved.join("; ")}`
+    : undefined;
+};
 
 /** What the file holds; nothing converged when there is none, or it does not read (said). */
 export const readConverged = async (): Promise<FleetConverged> => {

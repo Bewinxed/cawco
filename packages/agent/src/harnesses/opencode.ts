@@ -6207,6 +6207,11 @@ export class OpencodeHarness implements Harness {
     }
   }
 
+  /** OpenCode's global config dir, where its `opencode.json` and the fleet's sidecar are. */
+  fleetHome() {
+    return OPENCODE_DIR;
+  }
+
   async syncFleet(
     config: PlacedFleetConfig,
     parts: ReadonlySet<FleetPart>

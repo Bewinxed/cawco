@@ -5204,6 +5204,11 @@ class ClaudeHarness implements Harness {
     }
   }
 
+  /** The user layer, `~/.claude`, which every account dir links; `~/.claude.json` and the account dirs hang from the same home. */
+  fleetHome() {
+    return claudeHome();
+  }
+
   syncFleet(
     config: import("@cawco/core").PlacedFleetConfig,
     parts: ReadonlySet<FleetPart>

@@ -1146,6 +1146,11 @@ export class PiProfile {
     return method === CONTROL_MODEL_CATALOG ? await modelCatalog() : undefined;
   }
 
+  /** pi's agent dir, where its skills, memory file and the fleet's sidecar are. */
+  fleetHome() {
+    return piAgentDir();
+  }
+
   /**
    * The parts of one fleet sync pi has (fleet-parts.ts): its servers
    * (`mcp`), its skills dir (`skills`), its memory file (`memory`) and its

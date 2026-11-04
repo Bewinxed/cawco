@@ -204,6 +204,7 @@ import { harnessMcpUrl } from "./delegation";
 import { applyFleetDenials } from "./denied-tools";
 import { forgetFirstSession } from "./first-session";
 import { hashText, placeFolder, probeToolchain, readJson } from "./fleet";
+import { basisMoved, type ConvergeBasis } from "./fleet-converged";
 import { FleetDesired, itemStatuses } from "./fleet-desired";
 import { within, writeFleetMcpSet } from "./fleet-mcp-set";
 import {
@@ -5768,13 +5769,16 @@ export class SessionSupervisor {
     this.#reconvergeValue ||= delta.reconverge === true;
     // A build that has not converged every part yet (an update, a first
     // start) does, as the hub welcomes it: what an earlier build's rules
-    // left behind is this one's to take away, though nothing moved at the hub.
+    // left behind is this one's to take away, though nothing moved at the
+    // hub. So does one whose harnesses write the fleet elsewhere now: the
+    // record says what was written where it last wrote.
     if (delta.welcome) {
-      const build = await buildKey();
-      if (this.#desired.convergedBuild !== build) {
-        console.info(
-          `[fleet] this build (${build}) converges every part once: the last to converge them all was ${this.#desired.convergedBuild ?? "none on record"}`
-        );
+      const moved = basisMoved(
+        this.#desired.convergedBasis,
+        await convergeBasis()
+      );
+      if (moved) {
+        console.info(`[fleet] ${moved}`);
         this.#reconvergeValue = true;
       }
     }
@@ -6026,7 +6030,7 @@ export class SessionSupervisor {
         statuses,
         report,
         owedSince ? generation : (this.#desired.generation ?? generation),
-        all && !thrown ? await buildKey() : undefined
+        all && !thrown ? await convergeBasis() : undefined
       );
       this.#converging(generation, statuses);
       if (report) {
@@ -7232,6 +7236,21 @@ const PLACE_FILE_PARTS: readonly FleetPart[] = [
   "hooks",
   "harnessConfig",
 ];
+
+/**
+ * What a converge of every part runs as now: this agent's build, and where
+ * each harness that converges the fleet writes it (harness.ts `fleetHome`).
+ */
+const convergeBasis = async (): Promise<ConvergeBasis> => ({
+  build: await buildKey(),
+  homes: Object.fromEntries(
+    harnesses().flatMap((adapter) =>
+      adapter.syncFleet && adapter.fleetHome
+        ? [[adapter.kind, adapter.fleetHome()]]
+        : []
+    )
+  ),
+});
 
 /**
  * The kinds of fleet-wide items a Linux boundary's form names
