@@ -619,6 +619,7 @@ const gated: Gated[] = [
   bun("scripts/probe-groups-check.ts", ["scripts/probe-kit/"]),
   bun("scripts/design-rules.ts", DASH, "--check"),
   bun("scripts/design-budget-check.ts", ["DESIGN.md"]),
+  bun("scripts/surface-briefs-check.ts", ["apps/dashboard/"]),
   run("packages/hub", "openapi:check", [
     ...PKG,
     "apps/apple/Packages/CawCoKit/Sources/CawCoAPI/",
