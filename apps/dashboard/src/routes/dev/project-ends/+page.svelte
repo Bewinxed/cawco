@@ -1,15 +1,22 @@
 <script lang="ts">
   /**
    * ENDING A PROJECT (dev only): the screen with the records the hub held
-   * on 2026-11-04, for judging and trying without a hub. Project page: the
-   * head of "Private office" with its More menu; Forget project… and Delete
-   * project… unfold the tray under it, and its confirm plays the end (the
-   * stops landing one by one, then the end) as the hub would answer it.
-   * Each step can also be picked from Step. Forgotten projects: the page
-   * with the twenty projects the trash held; Bring back and Delete… answer
-   * after a beat as the hub would, Balcony garden's Bring back refused (a
-   * live project holds its place) and a delete with files of the first
-   * unnamed folder refused (kestrel away).
+   * on 2026-11-04, for judging and trying without a hub.
+   *
+   * Project page: the head of "Private office" with its More menu; Forget
+   * project… and Delete project… unfold the tray under it (StopTrayView),
+   * and its confirm plays the end as the hub would answer it: the first
+   * press arms while a session is mid-turn, the stops land one by one, then
+   * the end runs and is held. Forgotten, the page leaves for Forgotten
+   * projects and the toast offers Bring back, which lands back on the
+   * project's page. Each step can also be opened from Step; Cancel and
+   * Close put Step back to none.
+   *
+   * Forgotten projects: the page with the twenty projects the trash held.
+   * Bring back answers after a beat and lands on the project's page;
+   * Balcony garden's is refused (Garden holds its checkout, with the way
+   * to Garden), and deleting the first unnamed folder with its files is
+   * refused (kestrel away).
    */
   import type { ForgottenProject } from "@cawco/core/forgotten-project";
   import { commonWords } from "@cawco/core/words/common";
@@ -23,31 +30,38 @@
   } from "#lib/cawco/forgotten/forgotten-fixtures.js";
   import {
     ACTIVITY,
-    job as jobOf,
     MACHINES,
     NAME,
     RUNNING,
+    tray as trayOf,
   } from "#lib/cawco/project-end-fixtures.js";
-  import StopTray from "#lib/cawco/StopTray.svelte";
+  import StopTrayView from "#lib/cawco/StopTrayView.svelte";
   import type { StopJob, StopRow } from "#lib/cawco/stop-work.svelte.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
     TabItem,
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
-  import * as Select from "#lib/components/ui/select/index.js";
   import {
+    NativeSelect,
+    NativeSelectOption,
+  } from "#lib/components/ui/native-select/index.js";
+  import { Toaster } from "#lib/components/ui/sonner/index.js";
+  import {
+    IconArchive,
     IconDeleteForGood,
     IconInfo,
     IconMore,
     IconSettings,
-    IconTrash,
     IconUsage,
   } from "#lib/icons.js";
 
   type View = "project" | "forgotten";
   let view = $state<View>("project");
+  /** The project the page stands on: Private office, or one brought back. */
+  let pageName = $state(NAME);
 
   /* ── The project page ───────────────────────────────────────────── */
 
@@ -59,7 +73,7 @@
     "delete-files": "Delete with its files",
     "delete-running": "Delete, 4 running",
     "delete-hub": "Delete, only a hub folder",
-    "refused-running": "Refused: a session runs",
+    "refused-running": "Refused: a session started",
     "refused-away": "Refused: kestrel away",
     "refused-shared": "Refused: folder shared",
     "refused-agent": "Refused: agent too old",
@@ -75,11 +89,10 @@
       "obelisk",
       "Cawco"
     ),
-    "refused-agent": projectTrashWords.notRemoved(
+    "refused-agent": projectTrashWords.agentTooOld(
       NAME,
       "Workspace 3d062e2d",
-      "obelisk",
-      "its machine kept the clone: its agent predates deleting a project for good"
+      "obelisk"
     ),
   };
 
@@ -91,14 +104,14 @@
     if (picked === "forget-armed") {
       return "armed";
     }
-    return picked.endsWith("-running") && !picked.startsWith("refused")
+    return picked === "forget-running" || picked === "delete-running"
       ? "list"
       : "none";
   };
 
-  function stepJob(picked: Step): StopJob {
+  function stepTray(picked: Step) {
     const phase = phaseOf(picked);
-    return jobOf({
+    return trayOf({
       kind: picked.startsWith("forget") ? "forget" : "delete",
       fromDisk: [
         "delete-files",
@@ -107,6 +120,7 @@
         "refused-shared",
       ].includes(picked),
       phase,
+      projectName: pageName,
       rows: phase === "none" ? [] : fresh(RUNNING),
       ...(picked === "delete-hub" ? { places: [] } : {}),
       refusal: REFUSALS[picked] ?? null,
@@ -114,20 +128,35 @@
   }
 
   /** It opens on a delete asked with four running: the tray at its fullest. */
-  let step = $state<Step | null>("delete-running");
-  let tray = $state<StopJob | null>(stepJob("delete-running"));
+  let step = $state<Step | "">("delete-running");
+  let tray = $state<ReturnType<typeof stepTray> | null>(
+    stepTray("delete-running")
+  );
+  let more = $state<HTMLElement | null>(null);
   const timers: ReturnType<typeof setTimeout>[] = [];
+  const later = (ms: number, run: () => void) =>
+    timers.push(setTimeout(run, ms));
 
-  function show(next: Step | null): void {
+  function show(next: Step | ""): void {
     for (const timer of timers.splice(0)) {
       clearTimeout(timer);
     }
     step = next;
-    tray = next ? stepJob(next) : null;
+    tray = next ? stepTray(next) : null;
   }
 
-  /** Each stop lands a beat after the last, then the end runs and is held. */
-  function play(job: StopJob): void {
+  /** Cancel, Close or Escape: the tray goes, Step back to none, the focus back to More. */
+  function cancel(): void {
+    show("");
+    more?.focus();
+  }
+
+  /** The confirm, as the job would take it (stop-work `press`). */
+  function play(): void {
+    const job = tray?.job;
+    if (!job || ["stopping", "ending", "done"].includes(job.phase)) {
+      return;
+    }
     const midTurn = job.rows.some(
       (row) =>
         row.state === "running" && (ACTIVITY[row.s.id] ?? "idle") !== "idle"
@@ -136,15 +165,15 @@
       job.phase = "armed";
       return;
     }
-    if (job.refusal) {
+    if (job.refusal === projectTrashWords.stillRuns(NAME, 1)) {
+      // The hub's refusal listed what runs: the tray asks again on it.
       job.refusal = null;
+      job.rows = fresh(RUNNING.slice(1, 2));
+      job.phase = "list";
+      return;
     }
-    const later = (ms: number, run: () => void) =>
-      timers.push(setTimeout(run, ms));
-    if (
-      job.rows.length > 0 &&
-      (job.phase === "list" || job.phase === "armed")
-    ) {
+    job.refusal = null;
+    if (job.rows.length > 0 && job.phase !== "none") {
       job.total = job.rows.length;
       job.pressedAt = Date.now();
       job.phase = "stopping";
@@ -168,11 +197,28 @@
 
   function end(job: StopJob): void {
     job.phase = "ending";
-    timers.push(
-      setTimeout(() => {
-        job.phase = "done";
-      }, 1200)
-    );
+    later(1200, () => {
+      job.phase = "done";
+      // Held where it was asked, then the page leaves, as stop-work's end.
+      later(1400, () => {
+        const name = job.projectName;
+        const forgot = job.kind === "forget";
+        show("");
+        view = "forgotten";
+        if (forgot) {
+          toast(projectEndWords.forgot(name), {
+            id: `forgot:${name}`,
+            action: {
+              label: projectEndWords.bringBack,
+              onClick: () => {
+                pageName = name;
+                view = "project";
+              },
+            },
+          });
+        }
+      });
+    });
   }
 
   /* ── Forgotten projects ─────────────────────────────────────────── */
@@ -181,7 +227,10 @@
   let refused = $state<Record<string, string>>({});
   const beat = () => new Promise((resolve) => setTimeout(resolve, 900));
 
-  async function bringBack(one: ForgottenProject): Promise<boolean> {
+  async function bringBack(
+    one: ForgottenProject,
+    name?: string
+  ): Promise<boolean> {
     await beat();
     if (one.id === BALCONY.id) {
       refused[one.id] = projectTrashWords.placeTaken(
@@ -193,6 +242,10 @@
     }
     delete refused[one.id];
     list = list.filter((each) => each.id !== one.id);
+    // It lands in the project's page.
+    pageName = one.name ?? name ?? NAME;
+    view = "project";
+    show("");
     return true;
   }
 
@@ -203,7 +256,10 @@
     await beat();
     if (fromDisk && one.id === ALL[2]?.id) {
       throw new Error(
-        projectTrashWords.machinesAway(projectEndWords.unnamed, ["kestrel"])
+        projectTrashWords.machinesAway(
+          one.hints?.heading ?? projectEndWords.unnamed,
+          ["kestrel"]
+        )
       );
     }
     list = list.filter((each) => each.id !== one.id);
@@ -213,6 +269,8 @@
 <svelte:head>
   <title>Ending a project &middot; CawCo</title>
 </svelte:head>
+
+<Toaster position="bottom-right" />
 
 <div class="flex min-h-dvh flex-col bg-surface-recess">
   <div
@@ -230,20 +288,19 @@
       </TabsList>
     </Tabs>
     {#if view === "project"}
-      <Select.Root
-        onValueChange={(value) => show(value ? (value as Step) : null)}
-        type="single"
-        value={step ?? ""}
-      >
-        <Select.Trigger aria-label="Step">
-          {step ? STEPS[step] : "Step"}
-        </Select.Trigger>
-        <Select.Content>
+      <label class="flex items-center gap-space-2 type-label text-ink-muted">
+        Step
+        <NativeSelect
+          aria-label="Step"
+          onchange={(event) => show(event.currentTarget.value as Step | "")}
+          value={step}
+        >
+          <NativeSelectOption value="">None</NativeSelectOption>
           {#each Object.entries(STEPS) as [value, label] (value)}
-            <Select.Item {label} {value} />
+            <NativeSelectOption {value}>{label}</NativeSelectOption>
           {/each}
-        </Select.Content>
-      </Select.Root>
+        </NativeSelect>
+      </label>
     {/if}
   </div>
 
@@ -253,14 +310,15 @@
       class="flex min-w-0 items-center gap-space-3 pt-space-5 ps-space-7 pe-space-6 max-desk:px-space-5"
     >
       <h1 class="m-0 me-auto type-title text-balance text-ink-strong">
-        {NAME}
+        {pageName}
       </h1>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
           {#snippet child({ props })}
             <button
               {...props}
-              aria-label={commonWords.moreFor(NAME)}
+              aria-label={commonWords.moreFor(pageName)}
+              bind:this={more}
               class="grid size-c-btn-h-sm select-none place-items-center rounded-full touch-hit press-tint"
               type="button"
             >
@@ -268,7 +326,14 @@
             </button>
           {/snippet}
         </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end">
+        <DropdownMenu.Content
+          align="end"
+          onCloseAutoFocus={(event) => {
+            if (tray) {
+              event.preventDefault();
+            }
+          }}
+        >
           <DropdownMenu.Item>
             <IconInfo />
             <span>Project details…</span>
@@ -282,11 +347,8 @@
             <span>Spend</span>
           </DropdownMenu.Item>
           <DropdownMenu.Separator />
-          <DropdownMenu.Item
-            onSelect={() => show("forget-running")}
-            variant="destructive"
-          >
-            <IconTrash />
+          <DropdownMenu.Item onSelect={() => show("forget-running")}>
+            <IconArchive />
             <span>{projectEndWords.forgetProject}</span>
           </DropdownMenu.Item>
           <DropdownMenu.Item
@@ -300,22 +362,55 @@
       </DropdownMenu.Root>
     </div>
     {#if tray}
-      <div class="contents" style:--ask-end="var(--space-5)">
-        <StopTray
+      <!-- As the board's wrapper does (stop-tray-here): the focus on Cancel as it opens. -->
+      <div
+        class="contents"
+        style:--ask-end="var(--space-5)"
+        {@attach (node) => {
+          const frame = requestAnimationFrame(() =>
+            node.querySelector<HTMLElement>("[data-stop-cancel]")?.focus()
+          );
+          return () => cancelAnimationFrame(frame);
+        }}
+      >
+        <StopTrayView
           activityOf={(id) => ACTIVITY[id] ?? "idle"}
           class="tray-indent-space-7 max-w-128 max-desk:tray-indent-space-5"
-          job={tray}
+          fillOf={(row) => `var(--mark-${(row.s.id.length % 8) + 1})`}
+          job={tray.job}
           nameOf={(id) => MACHINES[id] ?? id}
+          onarrive={(row) => {
+            row.arrived = true;
+          }}
+          oncancel={cancel}
           onconfirm={play}
+          ondepart={(row) => {
+            row.departed = true;
+          }}
+          onfromdisk={(on) => {
+            if (tray) {
+              tray.job.fromDisk = on;
+            }
+          }}
+          ongone={(row) => {
+            row.gone = true;
+          }}
+          onstopone={() => undefined}
+          share="stop-tray:preview"
+          trailOf={() => ""}
+          words={tray.words}
         />
       </div>
     {/if}
   {:else}
     <ForgottenPage
       {bringBack}
+      holderOf={(one) =>
+        one.id === BALCONY.id ? { href: "#garden", name: "Garden" } : null}
       {list}
       now={NOW}
-      refusalOf={(id) => refused[id] ?? null}
+      refusalOf={(id) =>
+        refused[id] ? { reason: refused[id], standing: true } : null}
       reread={() => undefined}
       {remove}
     />

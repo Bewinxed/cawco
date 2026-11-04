@@ -166,7 +166,7 @@ const asRows = (
  * or waiting on the person as the rows themselves say (StopTray `statusOf`).
  * An idle session's stop ends nothing under way, so it is never asked twice.
  */
-export const midTurn = (
+const midTurn = (
   job: StopJob,
   activityOf: (id: string) => Activity = (id) => cawco.activityOf(id)
 ): StopRow[] =>
@@ -709,6 +709,9 @@ class StopWork {
       job.refusal = failureWords(error);
       job.phase = job.rows.length > 0 ? "fail" : "none";
       this.keep();
+      // Refused while something of it runs (a session started meanwhile):
+      // what runs now stands in the tray, so its confirm stops it.
+      await this.listStarted(job);
       return;
     }
     // The ending word is read before the ended one: an end quicker than the
@@ -739,6 +742,33 @@ class StopWork {
       offerBringBack({ id: job.projectId, name: job.projectName });
     }
     this.close(job);
+  }
+
+  /**
+   * A refused end lists what runs now, when it is a session the tray does
+   * not hold: the ask stands again on it, the refusal kept above the
+   * confirm, which now stops it first.
+   */
+  private async listStarted(job: StopJob): Promise<void> {
+    let running: RunningSession[];
+    try {
+      running = await runningSessions(job);
+    } catch {
+      return;
+    }
+    const held = new Set(
+      job.rows.filter((row) => !row.gone).map((row) => row.s.id)
+    );
+    if (
+      this.jobs[jobKey(job)] !== job ||
+      running.every((one) => held.has(one.id))
+    ) {
+      return;
+    }
+    job.rows = asRows(running);
+    job.total = 0;
+    job.phase = "list";
+    this.keep();
   }
 
   /** The tray folds away as it is (--dur-exit), then the job goes. */

@@ -31,8 +31,11 @@ export interface EndWords {
   ended: string;
   /** The confirm's word while the stops land and the end runs. */
   ending: string;
-  /** The line under the title, in each step; `done` is what the stops did. */
-  line: (step: EndStep, n: number, cut: number, done: string) => string;
+  /**
+   * The line under the title, in each step; `stopped` is what the stops did
+   * ("Stopped 4 sessions."), empty when nothing ran.
+   */
+  line: (step: EndStep, n: number, cut: number, stopped: string) => string;
   /** Parked, while the stops land. */
   parked: (stopped: number, total: number) => string;
   /** Parked, once a stop failed: what was left. */
@@ -41,8 +44,15 @@ export interface EndWords {
   plain: string;
   /** The first press, with sessions running. */
   stop: (n: number) => string;
+  /** The question, until the end has run. */
   title: string;
+  /** The title once it has: the question answered. */
+  titleDone: string;
 }
+
+/** What the stops did, then what stands: one sentence or two. */
+const after = (stopped: string, stands: string) =>
+  stopped ? `${stopped} ${stands}` : stands;
 
 /** The armed line: that a second press stops them, and what it cuts short. */
 const armedLine = (n: number, cut: number): string => {
@@ -71,6 +81,7 @@ export const projectEndWords = {
   /** Forgetting `name`: it waits in Forgotten projects, to be brought back. */
   forget: (name: string): EndWords => ({
     title: `Forget ${name}?`,
+    titleDone: `${name} is forgotten`,
     plain: "Forget project",
     stop: (n) => `Stop ${n} and forget`,
     armed: (n, cut) =>
@@ -79,7 +90,7 @@ export const projectEndWords = {
         : `Stop ${n}, ${cut} mid-turn, and forget`,
     ending: "Forgetting…",
     ended: "Forgotten",
-    line: (step, n, cut, done) => {
+    line: (step, n, cut, stopped) => {
       switch (step) {
         case "none":
         case "list":
@@ -91,7 +102,7 @@ export const projectEndWords = {
           return kept;
         case "ending":
         case "done":
-          return done;
+          return after(stopped, waits);
       }
     },
     parked: (stopped, total) =>
@@ -103,6 +114,7 @@ export const projectEndWords = {
   /** Deleting `name` for good (its files box says what else goes). */
   delete: (name: string): EndWords => ({
     title: `Delete ${name} for good?`,
+    titleDone: `${name} is deleted`,
     plain: "Delete project",
     stop: (n) => `Stop ${n} and delete`,
     armed: (n, cut) =>
@@ -111,7 +123,7 @@ export const projectEndWords = {
         : `Stop ${n}, ${cut} mid-turn, and delete`,
     ending: "Deleting…",
     ended: "Deleted",
-    line: (step, n, cut, done) => {
+    line: (step, n, cut, stopped) => {
       switch (step) {
         case "none":
         case "list":
@@ -122,8 +134,15 @@ export const projectEndWords = {
         case "fail":
           return kept;
         case "ending":
+          return after(
+            stopped,
+            "Removing its tasks, pages, routines, workspaces and signed-in browsers…"
+          );
         case "done":
-          return done;
+          return after(
+            stopped,
+            "Its tasks, pages, routines, workspaces and signed-in browsers are removed."
+          );
       }
     },
     parked: (stopped, total) =>
@@ -140,6 +159,8 @@ export const projectEndWords = {
   /** Checked, for a project whose only place is its folder on the hub: what the box still removes. */
   noPlaces:
     "It has no checkout on any machine; only its sessions' transcripts are removed.",
+  /** Checked, under the checkouts it lists: what else goes. */
+  transcriptsGo: "Its sessions' transcripts are removed too.",
   /** Unchecked: what a delete leaves, and where it may show again. */
   transcriptsStay:
     "Its sessions' transcripts stay on their machines and may show again as sessions with no project.",
@@ -156,6 +177,40 @@ export const projectEndWords = {
   forgottenTitle: "Forgotten projects",
   /** A row forgotten before the hub kept a project's name. */
   unnamed: "Unnamed project",
+  /** A named row's checkout, under its name. */
+  placeAt: (machine: string, path: string) => `${machine} · ${path}`,
+  /**
+   * What a nameless folder says of itself, under its name: its newest task,
+   * its pages, its stages, when its files last changed; a bare stub says so.
+   */
+  folderSays: (said: {
+    task: { number: number; title: string } | null;
+    pages: readonly string[];
+    stages: number;
+    changed: string | null;
+  }): string => {
+    const parts = [
+      said.task && `#${said.task.number} ${said.task.title}`,
+      said.pages.length > 0 &&
+        (said.pages.length === 1
+          ? `${said.pages[0]} page`
+          : `pages ${listed(said.pages)}`),
+      said.stages > 0 && count(said.stages, "stage", "stages"),
+    ].filter((part): part is string => typeof part === "string");
+    const changed = said.changed ? `files changed ${said.changed}` : null;
+    if (parts.length === 0) {
+      return changed ? `Only its stub; ${changed}` : "Only its stub";
+    }
+    const line = [...parts, ...(changed ? [changed] : [])].join(" · ");
+    return line.charAt(0).toUpperCase() + line.slice(1);
+  },
+  /** A nameless row, to a reader and in its delete question. */
+  unnamedAt: (when: string) => `The unnamed project forgotten ${when}`,
+  /** A row's buttons, to a reader: which project each acts on. */
+  bringBackOne: (name: string) => `Bring back ${name}`,
+  deleteOne: (name: string) => `Delete ${name}…`,
+  /** A refused restore's way on: the live project that holds its place. */
+  openHolder: (name: string) => `Open ${name}`,
   /** That row's name field. */
   namePlaceholder: "Name it to bring it back",
   /** That row's name field's accessible name. */
@@ -189,9 +244,6 @@ export const projectEndWords = {
   /** That question's confirm, and its pending word. */
   deletePlain: "Delete project",
   deleting: "Deleting…",
-  /** That question's box, checked: what else goes. */
-  checkoutsGo:
-    "Its checkouts on disk and its sessions' transcripts are removed too.",
   /** The page with nothing forgotten. */
   noneTitle: "Nothing forgotten",
   noneBody:

@@ -95,6 +95,13 @@ export class DeleteRefusal extends Error {
   }
 }
 
+/** A machine kept a workspace's clone: its agent predates deleting one (`held`), so it is updated first. */
+class AgentTooOld extends Error {
+  constructor() {
+    super("its agent predates deleting a project for good");
+  }
+}
+
 /** One removal on a machine: what it removes, counted under `kind`. */
 interface Removal {
   kind: Exclude<keyof MachineRemoved, "sessions">;
@@ -218,9 +225,7 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
       ]
     )) as { held?: unknown } | null;
     if (answer?.held) {
-      throw new Error(
-        "its machine kept the clone: its agent predates deleting a project for good"
-      );
+      throw new AgentTooOld();
     }
   };
 
@@ -309,15 +314,18 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
       try {
         await removal.run();
       } catch (error) {
+        const machine = deps.machineName(removal.machineId);
         // biome-ignore lint/style/useErrorCause: the cause rides the refusal's options, its third argument.
         throw new DeleteRefusal(
-          502,
-          projectTrashWords.notRemoved(
-            name,
-            removal.what,
-            deps.machineName(removal.machineId),
-            error instanceof Error ? error.message : String(error)
-          ),
+          error instanceof AgentTooOld ? 409 : 502,
+          error instanceof AgentTooOld
+            ? projectTrashWords.agentTooOld(name, removal.what, machine)
+            : projectTrashWords.notRemoved(
+                name,
+                removal.what,
+                machine,
+                error instanceof Error ? error.message : String(error)
+              ),
           { cause: error }
         );
       }

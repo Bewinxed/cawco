@@ -15,7 +15,11 @@
 import { detach } from "@cawco/core/detach";
 import { projectEndWords } from "@cawco/core/words/project-ends";
 import { goto } from "$app/navigation";
-import { type ProjectRow, restoreProject } from "./client.svelte";
+import {
+  type ProjectRow,
+  restoreProject,
+  StandingRefusal,
+} from "./client.svelte";
 import { failureWords } from "./hub-read";
 import { refusals } from "./refusals.svelte";
 import type { EndKind } from "./stop-work.svelte";
@@ -76,10 +80,22 @@ export async function bringBack(
   } catch (error) {
     refusals.set(bringBackKey(id), {
       reason: failureWords(error),
-      asked: ask,
+      asked: { ...ask, standing: error instanceof StandingRefusal },
     });
     return false;
   }
+}
+
+/** A refused bring-back as its row says it: the hub's words, and whether asking again could change it. */
+export function bringBackRefusal(
+  id: string
+): { reason: string; standing: boolean } | null {
+  const said = refusals.get(bringBackKey(id));
+  if (!said) {
+    return null;
+  }
+  const kept = said.asked as { standing?: boolean } | undefined;
+  return { reason: said.reason, standing: kept?.standing === true };
 }
 
 /**

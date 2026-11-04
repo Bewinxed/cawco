@@ -47,11 +47,11 @@ export const Unread = {
   },
 };
 
-/** A folder from before names, named and ready to come back. */
+/** Bring back on a folder from before names: its field starts from the heading the folder gives itself. */
 export const Named = {
   args: {
     list: ALL.slice(0, 4),
-    names: { "fc8c6bba-f8da-4492-9a73-1f5fb3434432": "Kitchen renovation" },
+    names: { "fc8c6bba-f8da-4492-9a73-1f5fb3434432": "ds-probe-landing" },
   },
 };
 
@@ -64,17 +64,24 @@ export const BringingBack = {
   },
 };
 
-/** Bring back refused: a live project holds its folder's place now. */
+/** Bring back refused: Garden holds its checkout now; no Try again, the way to Garden instead. */
 export const BringBackRefused = {
   args: {
     list: ALL.slice(0, 4),
     refusalOf: (id: string) =>
       id === BALCONY.id
-        ? projectTrashWords.placeTaken(
-            "Balcony garden",
-            "Garden",
-            "/home/bewinxed/garden"
-          )
+        ? {
+            reason: projectTrashWords.placeTaken(
+              "Balcony garden",
+              "Garden",
+              "/home/bewinxed/garden"
+            ),
+            standing: true,
+          }
+        : null,
+    holderOf: (one: { id: string }) =>
+      one.id === BALCONY.id
+        ? { href: "/project/garden", name: "Garden" }
         : null,
   },
 };
