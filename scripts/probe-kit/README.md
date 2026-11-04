@@ -85,24 +85,24 @@ bun scripts/probe-kit/rendered-checks.ts <url> --width 1540x800 --width 390x844 
 
 | Rule | Read by | What it reads |
 | --- | --- | --- |
-| `overflow` | `journeys/scan.ts` + impeccable `text-occlusion` | text past the screen, out of its control or box; a control out of the row, card or panel it is laid out in (`specs/web/scan-control-box`); text under a control or an opaque box |
-| `coral` | own code | per view (`views`), controls and worded chips whose fill, edge or (a control's) ink is a coral token from tokens.css: at most one; a checked checkbox, switch or radio is named, not counted; a bare link is link ink |
+| `overflow` | `journeys/scan.ts` + impeccable `text-occlusion` | text past the screen, out of its control or box; a control out of the row, card or panel it is laid out in (`specs/web/scan-control-box`); text under a control or an opaque box; what is hidden (a 1px box, `sr-only`'s `clip-path: inset(50%)`) is not read |
+| `coral` | own code | per view (`views`), controls and worded chips whose fill, edge or (a control's) ink is a coral token from tokens.css: at most one; a checked checkbox, switch or radio, a chosen record (`data-chosen`), an identity tile and a mark out of the accessibility tree (`data-mark`, `aria-hidden`: a comment's pin, the reader's own mark) are named, not counted; a bare link is link ink (`specs/web/rendered-reads`) |
 | `glyph` | own code | a control whose only content is a glyph sits on no fill, edge or shadow, nor does a wrapper holding it alone; its svg holds no solid disc, tile or rounded shape spanning 70% of its viewBox (`marks` adds standalone status glyphs) |
-| `bar-ground` | own code | toolbars, the bar and foot data-slots, and a `header` that does not scroll with its content (one that does, in flow under a scroller, heads a group of it: a list's section, a card) paint nothing; a folder-tab shelf (DESIGN.md, Shapes, Folder tabs) and a group's capsule are named |
-| `head` | own code | a bar's title and controls on one row (centres within 4px), no second line in the bar, the title not repeated by the next heading |
+| `bar-ground` | own code | toolbars, the bar and foot data-slots, and a `header` that does not scroll with its content (one that does, in flow under a scroller, or one under another bar of its surface, a sheet's relay head, heads a group of it: a list's section, a card) paint nothing; a folder-tab shelf (DESIGN.md, Shapes, Folder tabs), a group's capsule and a foot's lone top hairline (DESIGN.md, Borders are graded) are named (`specs/web/rendered-reads`) |
+| `head` | own code | a bar's (as `bar-ground` reads one) title and controls on one row (centres within 4px), no second line in the bar, the title not repeated by the next heading (`specs/web/rendered-reads`) |
 | `back-close` | own code | no control's words say Back or Close |
-| `hidden-cue` | own code + ink | a scroller cut at an edge has a mask there that draws (the band drawn with the mask, without it, and without the scroller), or an item peeking 16px |
-| `contrast` | own code + impeccable `low-contrast` | each text run on the ground under it, 4.5:1 (3:1 from 24px); the lowest is printed |
+| `hidden-cue` | own code + ink | a scroller cut at an edge (an element of it past that edge: a pseudo's overflow alone, a `touch-hit` area, hides nothing) has a mask there that draws (the band drawn with the mask, without it, and without the scroller), or an item peeking 16px, or stands under an edge effect, hit there or blurring it without taking presses (HeadFade); a box that clips without scrolling hides no words past its edge, but inside a control that opens a layer, whole items dropped and none cut (the usage strip) are named (`specs/web/rendered-reads`) |
+| `contrast` | own code + impeccable `low-contrast` | each text run on the ground under it, its boxes' fills and the filled svg shapes drawn before it under its middle (a folder tab's sheet), 4.5:1 (3:1 from 24px); the lowest is printed (`specs/web/rendered-reads`) |
 | `settled` | own code | no finite animation running, fonts loaded |
 | `made-up` | own code | no `PROBE-`, `JOURNEY-`, `/tmp/`, `.cawco/tmp`, `probe-kit`, `Lorem`, `Test item`, lone “Body”; `allowedText` slots hold only their source's words |
 | `tight-inset` | own code | words on an edged, rounded surface of 160×48 or more stand 8px or more from its sides (the row grid's inset); sideways only, since a text rect is the line's box and not its ink |
 | `tight-control` | own code | a drawn button stands `space-2` (7px) or more under the field, line or card above it (Spacing ladder); items of one list and a layer over the page are their own |
-| `uneven-inset` | own code | a drawn row its children fill keeps one inset at both ends: the smaller not under 55% of a larger of 16px or more (the row grid's trailing edge) |
-| `fat-row` | own code | a list's one-line rows stand under 3.4 lines or 48px tall, read when two or more of three or more break it (Density) |
-| `loose-list` | own code | a list's alike rows stand no further apart than their height and 24px (Density) |
-| `empty-pane` | own code | a landmark or pane of 120px or more holds a word, mark, control or drawn block (The Empty Starts Work, The Claim Of Nothing); a short list over free space is a layout |
+| `uneven-inset` | own code | a drawn row its children fill (to its padding at both ends: a strip with room after its last item is a layout) keeps one inset at both ends, a ghost control read by its ink: the smaller not under 55% of a larger of 16px or more (the row grid's trailing edge; `specs/web/rendered-reads`) |
+| `fat-row` | own code | a list's one-line rows (its children of its commonest kind) stand under 3.4 lines or 48px tall, a row that draws nothing less the margins its children keep inside it, read when two or more of three or more break it (Density; `specs/web/rendered-reads`) |
+| `loose-list` | own code | a list's alike rows, where two stand next to each other, stand no further apart than their height and 24px (Density; `specs/web/rendered-reads`) |
+| `empty-pane` | own code | a landmark or pane of 120px or more holds a word, mark, control (an editor's `contenteditable` too) or drawn block (The Empty Starts Work, The Claim Of Nothing); a short list over free space is a layout (`specs/web/rendered-reads`) |
 | `clipped-glyph` | own code | an svg draws inside its viewBox, past half its stroke, and no box that clips without scrolling cuts it (The Solar Duotone Rule) |
-| `mixed-icons` | own code | no outlined mark beside a filled one in a bar, nav or list; an open stroke (chevron, arrow, Close, Plus, Tick, Minus) is a glyph (The Solar Duotone Rule) |
+| `mixed-icons` | own code | no outlined mark beside a filled one in a bar, nav or list; an open stroke (chevron, arrow, Close, Plus, Tick, Minus) is a glyph, a ring (circles on one centre, stroked: a task ring, a spinner) a figure, and a shape at opacity 0 is not drawn (The Solar Duotone Rule; `specs/web/rendered-reads`) |
 | `small-text` | own code | under a 600px screen, words drawn at 10px or more, through any scale; one or two letters are a mark |
 | `anchor-drift` | own code, over reads | an open popover, menu or listbox whose height changed between two reads of one page holds its top or its foot (The Nothing Jumps Rule); one read says so as unread |
 | `decoration-spill` | own code | what draws past or on a box's edge (its outline at `outline-offset` from the border edge, a hard box-shadow of blur under 1px by its spread and offsets, a dashed or dotted border, an absolutely placed `::before`/`::after` that draws) stays within 0.5px of the box it marks (a pseudo's own element, when that draws) and of the nearest box that clips it and the nearest rounded box that draws, measured round their corners; a box that itself runs past that box, or is scrolled under its edge, is `overflow`'s and the scroll's; a pseudo flush outside its own box (an edge fade, a joint) carries the box on and is named; what draws through a clip-path or mask is unread (The One Ring Rule: inset on anything flush or clipped; `specs/web/drawn-contour`) |
@@ -116,9 +116,12 @@ Impeccable runs as `impeccable detect --json --cdp <port>` on the page as it
 stands: every kit Chromium carries a DevTools port (`devtoolsPort(page)`),
 and the launcher is `$IMPECCABLE`, else the impeccable skill's. It reads
 Chromium only; on WebKit the report says so and the kit's own contrast and
-overflow reads stand alone. Its findings outside the rendered checks (line
-length, nested cards…) print as a NOTE, never a failure. A Chromium read
-where it could not run fails.
+overflow reads stand alone. With no launcher it is not run here, said as a
+NOTE with why (inside a workspace the boundary reads nothing of the home dir
+outside its clone, so the user layer's skill is not there), the way a host
+spec is not run in a workspace. Its findings outside the rendered checks
+(line length, nested cards…) print as a NOTE, never a failure. A Chromium
+read where its launcher ran and failed fails.
 
 Exempt only with a reason, which the report prints: `exempt: { rule: "why" }`
 drops a rule for the spec; `except: [{ rule, selector, reason }]` (or

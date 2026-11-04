@@ -21,6 +21,15 @@
  *     button pulled out by a negative margin, a scroller's strip of chips
  *     past its edge, a carousel's slide wholly cut away: no finding.
  *
+ * And a control hidden whole draws nothing over the words under it: the
+ * shell's skip link (Shell.svelte) is Tailwind's `sr-only` (`clip-path:
+ * inset(50%)`) with its own padding kept, a 28×14 box at the screen's
+ * corner over a transcript's first line (the delegate-tray bench, 1440):
+ *
+ *  5. skip link, hidden: no finding.
+ *  6. skip link, shown (its focus drops `sr-only`): its words and edge run
+ *     over the line, a finding.
+ *
  *   bun scripts/probe-kit/run.ts web scan-control-box
  */
 import { scan } from "../../journeys/scan";
@@ -73,6 +82,15 @@ const PAGES: Record<string, { html: string; want: "finding" | "none" }> = {
   },
 };
 
+/** The skip link over a transcript's first line, hidden by `sr-only` or shown. */
+const SKIP = (shown: boolean) => `${BASE}<style>
+  .sr-only { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border-width: 0; }
+  .skip { inset-block-start: 0; inset-inline-start: 0; padding: 7px 14px; border-radius: 8px; background: #fff; box-shadow: 0 1px 2px #0003; }
+  .shown { position: absolute; inline-size: auto; block-size: auto; margin: 0; overflow: visible; clip-path: none; }
+  .line { margin: 0; padding-inline: 25px; line-height: 11px; }
+</style>
+<a class="sr-only skip${shown ? " shown" : ""}" href="#main">Skip to content</a><p class="line">Twelve are out. Three wait for the Mac's build slot.</p>`;
+
 const spec: Spec = {
   group: "The probe kit's own rig",
   name: "scan-control-box",
@@ -90,6 +108,18 @@ const spec: Spec = {
           ? named.length > 0 &&
               named.every((line) => line.includes("runs out of"))
           : found.length === 0,
+        found.length > 0 ? found.join(" | ") : "0 findings"
+      );
+    }
+    for (const shown of [false, true]) {
+      await page.setContent(SKIP(shown));
+      const found = await page.evaluate(scan);
+      const named = found.filter((line) => line.includes("“Skip to content”"));
+      kit.check(
+        shown
+          ? "scan-control-box: skip link, shown, the sweep names it over the words"
+          : "scan-control-box: skip link, hidden by sr-only, the sweep finds nothing",
+        shown ? named.length > 0 : found.length === 0,
         found.length > 0 ? found.join(" | ") : "0 findings"
       );
     }

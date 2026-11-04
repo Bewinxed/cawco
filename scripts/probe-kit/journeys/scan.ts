@@ -26,7 +26,8 @@
  * absolutely placed box is cut only by what really holds it. What no clip
  * leaves showing, what lies wholly off the screen (a skip link parked
  * there), or what is hidden (display, visibility, a zero opacity, a 1px
- * visually-hidden box), is not read. A finding names the words or the
+ * visually-hidden box, a clip-path `inset()` whose sides meet, as `sr-only`
+ * draws a skip link whose padding outlasts its 1px), is not read. A finding names the words or the
  * control, and what it measured.
  *
  * It runs inside the page (`page.evaluate(scan)`), so it is one function
@@ -67,6 +68,23 @@ export function scan(): string[] {
     }
     return known;
   };
+  /** A clip-path `inset()` whose opposite sides meet, in percentages: it shows nothing of its box. */
+  const insetCloses = (clip: string): boolean => {
+    const at = clip.trim();
+    if (!(at.startsWith("inset(") && at.endsWith(")"))) {
+      return false;
+    }
+    const sides = (at.slice(6, -1).split(" round ")[0] ?? "")
+      .trim()
+      .split(" ")
+      .filter(Boolean)
+      .map((one) => (one.endsWith("%") ? Number.parseFloat(one) : null));
+    if (sides.length === 0 || sides.some((one) => one === null)) {
+      return false;
+    }
+    const [t = 0, r = t, b = t, l = r] = sides as number[];
+    return t + b >= 100 || l + r >= 100;
+  };
   const shownCache = new Map<Element, boolean>();
   /** Drawn at all: no ancestor takes it out of view. */
   const shown = (el: Element): boolean => {
@@ -80,7 +98,10 @@ export function scan(): string[] {
       s.visibility !== "hidden" &&
       s.visibility !== "collapse" &&
       Number(s.opacity) > 0 &&
-      s.contentVisibility !== "hidden";
+      s.contentVisibility !== "hidden" &&
+      // Tailwind's `sr-only` (`clip-path: inset(50%)`) on a skip link
+      // whose padding outlasts its 1px box hides it whole.
+      !insetCloses(s.clipPath);
     if (result && el.parentElement) {
       result = shown(el.parentElement);
     }

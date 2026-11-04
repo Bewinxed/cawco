@@ -23,24 +23,24 @@
  *
  * | rule        | read by                     | what it reads |
  * | ----------- | --------------------------- | ------------- |
- * | overflow    | scan.ts + impeccable `text-occlusion` | boxes past the screen, out of their control or box, a control out of its row, card or panel, text under a control or an opaque box |
- * | coral       | own code                    | each view's controls and grounded chips whose fill, border or (a control's) ink resolves to a coral token from tokens.css; at most one; a checked checkbox, switch or radio, and an identity tile on its mark hue, are allowed and named |
+ * | overflow    | scan.ts + impeccable `text-occlusion` | boxes past the screen, out of their control or box, a control out of its row, card or panel, text under a control or an opaque box; what is hidden (a 1px box, `sr-only`'s `clip-path: inset(50%)`) is not read |
+ * | coral       | own code                    | each view's controls and grounded chips whose fill, border or (a control's) ink resolves to a coral token from tokens.css; at most one; a checked checkbox, switch or radio, a chosen record (`data-chosen`), an identity tile on its mark hue, and a mark out of the accessibility tree (`data-mark`: a comment's pin) are allowed and named |
  * | glyph       | own code                    | a control whose only content is a glyph: no fill, border or shadow on it or on a wrapper that holds it alone; its svg holds no solid disc, tile or rounded shape spanning 70% of its viewBox |
- * | bar-ground  | own code                    | bars (toolbars, the bar data-slots, foot bars, and a `header` that does not scroll with its content: one that does heads a group of it, no bar) paint no fill, border or shadow; a folder-tab shelf (DESIGN.md, Shapes, Folder tabs) and a group's capsule (DESIGN.md, The Title Bars Follow Liquid Glass Rule: Floating groups) are named, not failed |
+ * | bar-ground  | own code                    | bars (toolbars, the bar data-slots, foot bars, and a `header` that does not scroll with its content: one that does, or one under another bar of its surface, heads a group of it, no bar) paint no fill, border or shadow; a folder-tab shelf (DESIGN.md, Shapes, Folder tabs), a group's capsule (DESIGN.md, The Title Bars Follow Liquid Glass Rule: Floating groups) and a foot's lone top hairline (DESIGN.md, Borders are graded) are named, not failed |
  * | head        | own code                    | a bar's (as bar-ground reads one) title and controls share one row (centres within 4px), no second line in the bar (a popover, menu or dialog it opens is no part of it), the title not repeated by the first heading under it |
  * | back-close  | own code                    | no control's words say Back or Close (DESIGN.md, The Title Bars Follow Liquid Glass Rule: Back and Close are symbols) |
- * | hidden-cue  | own code + ink              | a scroller cut at an edge carries a computed mask there that draws (the edge's pixels with and without it), or an item peeking 16px or more |
- * | contrast    | own code + impeccable `low-contrast` | every text run against the ground under it, 4.5:1 (3:1 at 24px); the lowest is reported |
+ * | hidden-cue  | own code + ink              | a scroller cut at an edge (an element of it past that edge: a pseudo's overflow alone hides nothing) carries a computed mask there that draws (the edge's pixels with and without it), or an item peeking 16px or more, or stands under an edge effect (hit there, or blurring it without taking presses); a box that clips without scrolling hides no words past its edge, but inside a control that opens a layer, whole items dropped, none cut, are named |
+ * | contrast    | own code + impeccable `low-contrast` | every text run against the ground under it (its boxes' fills, and the filled svg shapes drawn before it under its middle: a folder tab's sheet), 4.5:1 (3:1 at 24px); the lowest is reported |
  * | settled     | own code                    | no finite animation running, fonts loaded (`settle(page)` gets a page there) |
  * | made-up     | own code                    | no fixture or probe words (`PROBE-`, `/tmp/`, `Lorem` …), a lone "Body", text outside the spec's `allowedText` source |
  * | tight-inset | own code                    | words on an edged, rounded surface of 160×48 or more stand 8px or more from its sides |
  * | tight-control | own code                  | a drawn button stands 7px (`space-2`) or more under the field, line or card above it |
- * | uneven-inset | own code                   | a drawn row of children one inset at both ends: the smaller end not under 55% of a 16px or larger one |
- * | fat-row     | own code                    | one-line rows of a list not over 3.4 lines and 48px tall |
- * | loose-list  | own code                    | a list's rows not further apart than they are tall, and 24px |
- * | empty-pane  | own code                    | a landmark or pane of 120px or more holds a word, mark, control or drawn block |
+ * | uneven-inset | own code                   | a drawn row its children fill (to its padding at both ends) keeps one inset at both ends, a ghost control read by its ink: the smaller end not under 55% of a 16px or larger one |
+ * | fat-row     | own code                    | one-line rows of a list (its children of its commonest kind) not over 3.4 lines and 48px tall, a row that draws nothing less the margins its children keep inside it |
+ * | loose-list  | own code                    | a list's alike rows, where two stand next to each other, not further apart than they are tall, and 24px |
+ * | empty-pane  | own code                    | a landmark or pane of 120px or more holds a word, mark, control (an editor's `contenteditable` too) or drawn block |
  * | clipped-glyph | own code                  | an svg draws inside its viewBox, and no box that clips without scrolling cuts it |
- * | mixed-icons | own code                    | no outlined mark beside a filled one in a bar, nav or list; an open-stroked glyph (chevron, arrow, close, plus, tick) is allowed |
+ * | mixed-icons | own code                    | no outlined mark beside a filled one in a bar, nav or list; an open-stroked glyph (chevron, arrow, close, plus, tick) is allowed, and a ring (circles on one centre, stroked: a task ring, a spinner) is a figure; a shape at opacity 0 is not drawn |
  * | small-text  | own code                    | at a width under 600, no words drawn under 10px |
  * | anchor-drift | own code, over reads        | an open popover, menu or listbox whose height changed between two reads of a page holds its top or its bottom |
  * | decoration-spill | own code                 | an outline (offset past the border edge), a hard box-shadow (blur under 1px, by its spread and offsets), a dashed or dotted border, or an absolutely placed ::before/::after that draws, reaching 0.5px past the box it marks (a pseudo's own element, when that draws; not a pseudo flush outside it, which carries it on) or past the nearest box that clips it or rounded box that draws, its own box inside that one; a clip-path or mask is unread |
@@ -264,11 +264,17 @@ const TOKEN_VALUES = (() => {
     names.map((name) => ({ name, value: out(raw.get(name) ?? "transparent") }));
 })();
 
+/** The impeccable skill's launcher in the user layer. */
+const IMPECCABLE_SKILL = userLayerPath(
+  "skills",
+  "impeccable",
+  "scripts",
+  "impeccable"
+);
+
 /** The impeccable launcher: `$IMPECCABLE`, else the impeccable skill's in the user layer. */
 function impeccableBin(): string | null {
-  const bin =
-    process.env.IMPECCABLE ??
-    userLayerPath("skills", "impeccable", "scripts", "impeccable");
+  const bin = process.env.IMPECCABLE ?? IMPECCABLE_SKILL;
   return existsSync(bin) ? bin : null;
 }
 
@@ -291,6 +297,8 @@ interface InPageRead {
     band: { height: number; width: number; x: number; y: number };
     element: string;
     holder: number;
+    /** How far an item peeks past the cut: 16px is a cue a fade cut short leaves. */
+    peek: number;
     side: "top" | "bottom" | "left" | "right";
   }[];
   findings: (CheckFinding & { at: number })[];
@@ -396,6 +404,20 @@ function readInPage(args: InPageArgs): InPageRead {
     });
   };
   const px = (n: number) => `${Math.round(n * 10) / 10}px`;
+  /**
+   * Every element at a point, top first, as the engine paints them there:
+   * `elementsFromPoint` with every element hit-testable for the one read,
+   * since `pointer-events: none` keeps an overlay out of the way of a
+   * press, not of the eye (a scroll edge effect, HeadFade).
+   */
+  const stackAt = (x: number, y: number): Element[] => {
+    const hitAll = document.createElement("style");
+    hitAll.textContent = "*{pointer-events:auto!important}";
+    document.head.append(hitAll);
+    const stack = document.elementsFromPoint(x, y);
+    hitAll.remove();
+    return stack;
+  };
 
   // ---- colour ----
   const canvas = document.createElement("canvas");
@@ -718,11 +740,13 @@ function readInPage(args: InPageArgs): InPageRead {
   // ---- 2. one coral per view ----
   if (!skip.has("coral")) {
     // Coral (DESIGN.md, The Coral Is Where You Act Rule) spends beside the act: checked controls, the
-    // selected nav row and the chosen option, each said by its state.
+    // selected nav row and the chosen option, each said by its state; a
+    // record of what was picked says it by `data-chosen` (ui/chip: "a
+    // record of what was picked (`data-chosen`)").
     const sanctioned = (el: Element) =>
       Boolean(
         el.closest(
-          '[role="checkbox"][aria-checked="true"], [role="switch"][aria-checked="true"], [role="radio"][aria-checked="true"], input:checked, [aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"]'
+          '[role="checkbox"][aria-checked="true"], [role="switch"][aria-checked="true"], [role="radio"][aria-checked="true"], input:checked, [aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"], [data-chosen]:not([data-chosen="false"])'
         ) ||
         el.closest("label")?.querySelector("input:checked") ||
         el.querySelector('input:checked, [aria-checked="true"]')
@@ -778,6 +802,18 @@ function readInPage(args: InPageArgs): InPageRead {
         if (el.closest("[data-tree-mark]")) {
           named.push(
             `an identity tile on its mark hue, not the act (DESIGN.md, Identity marks and tiles): ${describe(el)} (${what})`
+          );
+          continue;
+        }
+        // A mark says so itself (`data-mark`) and stands out of the
+        // accessibility tree, its figure said by what it marks: a comment's
+        // pin (PinMark), the reader's own mark, filled as DESIGN.md's Coral
+        // Action fills "the reader's own row mark". Its figure is no word of
+        // a chip's: who or what a thing is, not the act.
+        const mark = el.closest('[data-mark][aria-hidden="true"]');
+        if (mark && !isControl) {
+          named.push(
+            `a mark, not the act (DESIGN.md, Coral Action: the reader's own row mark): ${describe(mark)} (${what})`
           );
           continue;
         }
@@ -1063,6 +1099,9 @@ function readInPage(args: InPageArgs): InPageRead {
   const NAMED_BAR =
     '[role="toolbar"], [role="banner"], [data-slot="bar"], [data-slot="view-bar"], [data-slot="page-head"], [data-slot="project-head"], [data-slot="side-head"], [data-slot="sheet-header"], [data-slot="drawer-header"], [data-slot="dialog-header"], [data-slot="foot"], [data-slot="page-foot"], [data-slot="sheet-footer"], [data-slot="drawer-footer"], [data-slot="dialog-footer"]';
   const BAR = `header, ${NAMED_BAR}`;
+  /** The bars that stand at a surface's foot. */
+  const FOOT =
+    '[data-slot="foot"], [data-slot="page-foot"], [data-slot="sheet-footer"], [data-slot="drawer-footer"], [data-slot="dialog-footer"]';
   /**
    * Whether `el` scrolls with the content it stands in: in flow under a
    * scroller (an element's, or the document's where its root scrolls),
@@ -1091,9 +1130,38 @@ function readInPage(args: InPageArgs): InPageRead {
     );
     return !root.some((one) => /hidden|clip/u.test(one));
   };
-  const bars = [...scope.querySelectorAll(BAR)]
+  const held = [...scope.querySelectorAll(BAR)]
     .filter(shown)
     .filter((one) => one.matches(NAMED_BAR) || !scrollsWithContent(one));
+  /** The surface a bar heads: its nearest layer or landmark. */
+  const surfaceOf = (el: Element) =>
+    el.parentElement?.closest(
+      `${LAYER}, main, aside, section, article, [role="main"], [role="region"], [role="complementary"]`
+    ) ?? scope;
+  /**
+   * A bar heads its surface (DESIGN.md, The Title Bars Follow Liquid Glass
+   * Rule: "Every bar that heads a surface"): a `<header>` under another bar
+   * of the same surface (a sheet's relay head under the sheet's own title
+   * and Close) heads a group of that surface's content, and is no bar.
+   */
+  const underABar = (el: Element) => {
+    if (el.matches(NAMED_BAR)) {
+      return false;
+    }
+    const surface = surfaceOf(el);
+    const { top } = el.getBoundingClientRect();
+    return held.some(
+      (other) =>
+        other !== el &&
+        !other.contains(el) &&
+        !el.contains(other) &&
+        surface.contains(other) &&
+        surfaceOf(other) === surface &&
+        !other.matches(FOOT) &&
+        other.getBoundingClientRect().bottom <= top + 1
+    );
+  };
+  const bars = held.filter((one) => !underABar(one));
   if (!skip.has("bar-ground")) {
     for (const bar of bars) {
       const p = paints(bar);
@@ -1101,6 +1169,20 @@ function readInPage(args: InPageArgs): InPageRead {
         continue;
       }
       const s = style(bar);
+      // A foot heads nothing: the one hairline on its top edge parts it
+      // from the content above (DESIGN.md, Borders are graded:
+      // "`border-hairline` separates rows and regions").
+      if (
+        bar.matches(FOOT) &&
+        p.length === 1 &&
+        p[0]?.startsWith("border-top ") &&
+        Number.parseFloat(s.borderTopWidth) <= 1
+      ) {
+        named.push(
+          `a foot's hairline parting it from the content above (DESIGN.md, Borders are graded): ${describe(bar)}`
+        );
+        continue;
+      }
       const r = bar.getBoundingClientRect();
       const bg = fill(s);
       const holdsTabs = bar.querySelector('[role="tablist"]');
@@ -1301,6 +1383,8 @@ function readInPage(args: InPageArgs): InPageRead {
       const end = er.left + el.clientLeft + el.clientWidth;
       let bottom = 0;
       let right = 0;
+      /** Words the edge runs through: some of them show, some are cut. */
+      let cutThrough = false;
       for (const t of texts) {
         if (!el.contains(t.node)) {
           continue;
@@ -1326,15 +1410,31 @@ function readInPage(args: InPageArgs): InPageRead {
           // descender's room past the edge hides no words.
           if (clipsY && tr.bottom - foot > tr.height / 2) {
             bottom = Math.max(bottom, tr.bottom - foot);
+            cutThrough ||= tr.top < foot - 1;
           }
           if (clipsX && tr.right - end > Math.min(tr.width / 2, 16)) {
             right = Math.max(right, tr.right - end);
+            cutThrough ||= tr.left < end - 1;
           }
         }
       }
-      if (bottom > 0 || right > 0) {
-        clipped.set(el, { bottom, right });
+      if (!(bottom > 0 || right > 0)) {
+        continue;
       }
+      // A control's summary of the layer it opens, dropping whole items
+      // past its edge and cutting none (the usage strip's second account,
+      // wrapped out of its one row): what it hides is a press away, and
+      // nothing on the screen stands cut.
+      const opener = el.closest(
+        '[aria-haspopup]:not([aria-haspopup="false"]), [aria-expanded]'
+      );
+      if (!cutThrough && opener?.matches(CONTROL)) {
+        named.push(
+          `${describe(el)} drops whole items past its edge, cutting none, inside ${describe(opener)}, which opens them`
+        );
+        continue;
+      }
+      clipped.set(el, { bottom, right });
     }
     for (const sc of [...scrollers, ...clipped.keys()]) {
       const s = style(sc);
@@ -1353,14 +1453,31 @@ function readInPage(args: InPageArgs): InPageRead {
       if (cut?.right) {
         cuts.push("right");
       }
+      // What the scroller holds past each edge, read off its elements'
+      // boxes: an overflow a pseudo makes alone (a control's 44px
+      // `touch-hit` area at a scroller's edge) hides nothing to scroll to.
+      const reach = { top: 0, bottom: 0, left: 0, right: 0 };
+      for (const one of sc.querySelectorAll("*")) {
+        const or = one.getBoundingClientRect();
+        if (or.width <= 0 || or.height <= 0) {
+          continue;
+        }
+        reach.top = Math.max(reach.top, box.top - or.top);
+        reach.bottom = Math.max(reach.bottom, or.bottom - box.bottom);
+        reach.left = Math.max(reach.left, box.left - or.left);
+        reach.right = Math.max(reach.right, or.right - box.right);
+      }
       if (
         /auto|scroll/u.test(s.overflowY) &&
         sc.scrollHeight > sc.clientHeight + 1
       ) {
-        if (sc.scrollTop > 1) {
+        if (sc.scrollTop > 1 && reach.top > 1) {
           cuts.push("top");
         }
-        if (sc.scrollTop + sc.clientHeight < sc.scrollHeight - 1) {
+        if (
+          sc.scrollTop + sc.clientHeight < sc.scrollHeight - 1 &&
+          reach.bottom > 1
+        ) {
           cuts.push("bottom");
         }
       }
@@ -1369,27 +1486,29 @@ function readInPage(args: InPageArgs): InPageRead {
         sc.scrollWidth > sc.clientWidth + 1
       ) {
         const x = Math.abs(sc.scrollLeft);
-        if (x > 1) {
+        if (x > 1 && reach.left > 1) {
           cuts.push("left");
         }
-        if (x + sc.clientWidth < sc.scrollWidth - 1) {
+        if (x + sc.clientWidth < sc.scrollWidth - 1 && reach.right > 1) {
           cuts.push("right");
         }
       }
       for (const side of cuts) {
         // A bar standing over the cut with its own scroll edge effect
-        // (Title Bars rule, No bar ground: the content blurs under the bar).
+        // (Title Bars rule, No bar ground: the content blurs under the bar):
+        // what is hit over the cut, blurring or painting, or an overlay
+        // that blurs it whether or not it takes presses (an edge effect is
+        // `pointer-events: none`, HeadFade).
         const point = {
           top: [(box.left + box.right) / 2, box.top + 2],
           bottom: [(box.left + box.right) / 2, box.bottom - 2],
           left: [box.left + 2, (box.top + box.bottom) / 2],
           right: [box.right - 2, (box.top + box.bottom) / 2],
         }[side] as [number, number];
-        const onTop = document.elementFromPoint(point[0], point[1]);
-        if (onTop && onTop !== sc && !sc.contains(onTop)) {
-          let edge: Element | null = null;
+        /** The first box from `from` up to what holds the scroller that blurs, or (`painted`) paints, and is drawn. */
+        const effectOver = (from: Element, painted: boolean) => {
           for (
-            let u: Element | null = onTop;
+            let u: Element | null = from;
             u && !u.contains(sc);
             u = u.parentElement
           ) {
@@ -1399,44 +1518,28 @@ function readInPage(args: InPageArgs): InPageRead {
             const blurs =
               (us.backdropFilter && us.backdropFilter !== "none") ||
               (us.webkitBackdropFilter && us.webkitBackdropFilter !== "none");
-            if (blurs || paints(u).length > 0) {
-              edge = u;
-              break;
+            if ((blurs || (painted && paints(u).length > 0)) && shown(u)) {
+              return u;
             }
           }
+          return null;
+        };
+        const hit = document.elementFromPoint(point[0], point[1]);
+        let edge =
+          hit && hit !== sc && !sc.contains(hit) ? effectOver(hit, true) : null;
+        for (const above of edge ? [] : stackAt(point[0], point[1])) {
+          if (above === sc || above.contains(sc)) {
+            break;
+          }
+          edge = sc.contains(above) ? null : effectOver(above, false);
           if (edge) {
-            named.push(
-              `${describe(sc)}'s ${side} cut stands under ${describe(edge)}, its edge effect (Title Bars rule: No bar ground)`
-            );
-            continue;
+            break;
           }
         }
-        const holder = masked(sc);
-        if (holder) {
-          const vertical = side === "top" || side === "bottom";
-          const len = Math.min(
-            FADE,
-            (vertical ? box.bottom - box.top : box.right - box.left) / 2
+        if (edge) {
+          named.push(
+            `${describe(sc)}'s ${side} cut stands under ${describe(edge)}, its edge effect (Title Bars rule: No bar ground)`
           );
-          const band = vertical
-            ? {
-                x: box.left,
-                width: box.right - box.left,
-                y: side === "top" ? box.top : box.bottom - len,
-                height: len,
-              }
-            : {
-                y: box.top,
-                height: box.bottom - box.top,
-                x: side === "left" ? box.left : box.right - len,
-                width: len,
-              };
-          // One mark per holder, kept for each of its cut edges.
-          const mark = Number(
-            holder.getAttribute("data-check-mask") ?? edgesOut.length
-          );
-          holder.setAttribute("data-check-mask", String(mark));
-          edgesOut.push({ band, element: describe(sc), holder: mark, side });
           continue;
         }
         const items = itemsOf(sc);
@@ -1469,6 +1572,42 @@ function readInPage(args: InPageArgs): InPageRead {
             peek = Math.max(peek, ir.right - box.left);
           }
         }
+        const holder = masked(sc);
+        if (holder) {
+          const vertical = side === "top" || side === "bottom";
+          const len = Math.min(
+            FADE,
+            (vertical ? box.bottom - box.top : box.right - box.left) / 2
+          );
+          const band = vertical
+            ? {
+                x: box.left,
+                width: box.right - box.left,
+                y: side === "top" ? box.top : box.bottom - len,
+                height: len,
+              }
+            : {
+                y: box.top,
+                height: box.bottom - box.top,
+                x: side === "left" ? box.left : box.right - len,
+                width: len,
+              };
+          // One mark per holder, kept for each of its cut edges. The peek
+          // goes with it: a fade cut short (a tab strip's, kept off its
+          // chosen tab) still leaves the peek's cue.
+          const mark = Number(
+            holder.getAttribute("data-check-mask") ?? edgesOut.length
+          );
+          holder.setAttribute("data-check-mask", String(mark));
+          edgesOut.push({
+            band,
+            element: describe(sc),
+            holder: mark,
+            peek,
+            side,
+          });
+          continue;
+        }
         if (peek < 16) {
           const hidden = cut
             ? (cut[side as "bottom" | "right"] ?? 0)
@@ -1498,6 +1637,92 @@ function readInPage(args: InPageArgs): InPageRead {
       style(document.documentElement).colorScheme.includes("dark") &&
       matchMedia("(prefers-color-scheme: dark)").matches;
     const canvasBase: Rgba = dark ? [18, 18, 18, 1] : [255, 255, 255, 1];
+    /** Every element's place in the tree. */
+    const treeOrder = new Map(
+      [...document.querySelectorAll("*")].map((el, i) => [el, i] as const)
+    );
+    /** Each drawn svg of the scope, not inside another, with its box: what may paint a ground. */
+    const svgGrounds = [...scope.querySelectorAll("svg")]
+      .filter((svg) => !svg.parentElement?.closest("svg") && shown(svg))
+      .map((svg) => ({ svg, r: svg.getBoundingClientRect() }));
+    /** Whether `shape` (a geometry, or a `<use>` of one) fills the viewport point `x`, `y`. */
+    const fillsAt = (shape: Element, x: number, y: number): boolean => {
+      const href =
+        shape instanceof SVGUseElement ? shape.href.baseVal : undefined;
+      const target =
+        href === undefined
+          ? shape
+          : document.getElementById(href.startsWith("#") ? href.slice(1) : "");
+      const ctm = (shape as SVGGraphicsElement).getScreenCTM?.();
+      if (!(target instanceof SVGGeometryElement && ctm)) {
+        return false;
+      }
+      let at = new DOMPoint(x, y).matrixTransform(ctm.inverse());
+      if (shape instanceof SVGUseElement) {
+        at = new DOMPoint(
+          at.x - shape.x.baseVal.value,
+          at.y - shape.y.baseVal.value
+        );
+      }
+      return target.isPointInFill(at);
+    };
+    /**
+     * The svg shapes filled under `parent`'s words, at their middle: a
+     * folder tab draws its sheet as one SVG path under its label
+     * (fluid-tabs TabItem), the ground the label stands on, which no box's
+     * background says. Read off the shapes' geometry, so a label scrolled
+     * out of the screen is read too, and only of an svg drawn before the
+     * words in the tree.
+     */
+    const shapesUnder = (parent: Element, rect: DOMRect | undefined) => {
+      if (!rect) {
+        return [];
+      }
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      return svgGrounds
+        .filter(
+          ({ svg, r }) =>
+            x >= r.left &&
+            x <= r.right &&
+            y >= r.top &&
+            y <= r.bottom &&
+            !svg.contains(parent) &&
+            !parent.contains(svg) &&
+            // Drawn before the words, so under them (a tab's sheet before
+            // its hit); a glyph after them stands beside or over them.
+            (treeOrder.get(svg) ?? 0) < (treeOrder.get(parent) ?? 0)
+        )
+        .flatMap(({ svg }) =>
+          [
+            ...svg.querySelectorAll(
+              "path, rect, circle, ellipse, polygon, use"
+            ),
+          ].filter(
+            (shape) =>
+              !shape.closest("defs, mask, clipPath, pattern, symbol, marker") &&
+              fillsAt(shape, x, y)
+          )
+        )
+        .reverse();
+    };
+    /** A shape's fill as it reaches `up`: its colour at its fill-opacity and every opacity between; a paint server is an image. */
+    const shapeFill = (shape: Element, up: Element): Rgba | "image" => {
+      const cs = getComputedStyle(shape);
+      if (cs.fill.includes("url(")) {
+        return "image";
+      }
+      const c = rgba(cs.fill);
+      let alpha = c[3] * (Number(cs.fillOpacity) || 0);
+      for (
+        let at: Element | null = shape;
+        at && at !== up;
+        at = at.parentElement
+      ) {
+        alpha *= Number(getComputedStyle(at).opacity);
+      }
+      return [c[0], c[1], c[2], alpha];
+    };
     let unreadImages = 0;
     let disabled = 0;
     const seenParents = new Set<Element>();
@@ -1520,11 +1745,37 @@ function readInPage(args: InPageArgs): InPageRead {
       let opacity = 1;
       const layers: { bg: Rgba; stops: Rgba[] }[] = [];
       let image = false;
+      const shapes = shapesUnder(t.parent, t.rects[0]);
+      const placed = new Set<Element>();
       for (let up: Element | null = t.parent; up; up = up.parentElement) {
         const s = style(up);
         opacity *= Number(s.opacity);
         if (s.backgroundImage.includes("url(")) {
           image = true;
+          break;
+        }
+        // What an svg inside this box paints under the words stands over
+        // the box's own fill.
+        let solid = false;
+        for (const shape of shapes) {
+          if (placed.has(shape) || !up.contains(shape)) {
+            continue;
+          }
+          placed.add(shape);
+          const paint = shapeFill(shape, up);
+          if (paint === "image") {
+            image = true;
+            break;
+          }
+          if (paint[3] > 0.02) {
+            layers.push({ bg: paint, stops: [] });
+            solid = paint[3] >= 0.99;
+            if (solid) {
+              break;
+            }
+          }
+        }
+        if (image || solid) {
           break;
         }
         const layer = { bg: fill(s), stops: stopsUnder(up, s, t.rects) };
@@ -1811,8 +2062,41 @@ function readInPage(args: InPageArgs): InPageRead {
   }
 
   // The row grid's trailing edge: a drawn row its children fill keeps one
-  // inset at both ends. A row with free space on one side is a layout.
+  // inset at both ends, read in ink: a control that draws nothing of its own
+  // (a ghost) ends where its words and glyph end, not at its padding. A row whose children stop
+  // short of its padding on a side (a tab strip with room after its last
+  // tab) has free space there, and is a layout.
   if (!skip.has("uneven-inset")) {
+    /** Where `el` draws, sideways: its box, but a control that paints nothing of its own (a ghost) by its words, glyphs and painted boxes inside. */
+    const drawnSides = (el: Element): { left: number; right: number } => {
+      const box = el.getBoundingClientRect();
+      if (!el.matches(CONTROL) || paints(el).length > 0) {
+        return box;
+      }
+      let left = Number.POSITIVE_INFINITY;
+      let right = Number.NEGATIVE_INFINITY;
+      const take = (one: { left: number; right: number }) => {
+        left = Math.min(left, one.left);
+        right = Math.max(right, one.right);
+      };
+      for (const t of texts) {
+        if (el.contains(t.node)) {
+          for (const one of t.rects) {
+            take(one);
+          }
+        }
+      }
+      for (const one of el.querySelectorAll("*")) {
+        if (
+          shown(one) &&
+          !one.parentElement?.closest("svg") &&
+          (one.matches("svg, img, canvas, video") || paints(one).length > 0)
+        ) {
+          take(one.getBoundingClientRect());
+        }
+      }
+      return Number.isFinite(left) ? { left, right } : box;
+    };
     for (const row of inFlowBoxes) {
       const r = row.getBoundingClientRect();
       if (
@@ -1829,32 +2113,49 @@ function readInPage(args: InPageArgs): InPageRead {
         .filter(
           (kid) => shown(kid) && !/absolute|fixed/u.test(style(kid).position)
         )
-        .map((kid) => kid.getBoundingClientRect())
-        .filter((kid) => kid.width >= 6 && kid.height >= 6);
+        .map((el) => ({ el, r: el.getBoundingClientRect() }))
+        .filter((kid) => kid.r.width >= 6 && kid.r.height >= 6);
       if (kids.length < 2) {
         continue;
       }
-      const mids = kids.map((kid) => (kid.top + kid.bottom) / 2);
+      const mids = kids.map((kid) => (kid.r.top + kid.r.bottom) / 2);
       if (Math.max(...mids) - Math.min(...mids) > 8) {
         continue;
       }
-      const first = Math.min(...kids.map((kid) => kid.left));
-      const last = Math.max(...kids.map((kid) => kid.right));
+      const rs = style(row);
+      const contentLeft =
+        r.left +
+        Number.parseFloat(rs.borderLeftWidth) +
+        Number.parseFloat(rs.paddingLeft);
+      const contentRight =
+        r.right -
+        Number.parseFloat(rs.borderRightWidth) -
+        Number.parseFloat(rs.paddingRight);
+      const reachLeft = Math.min(
+        ...kids.map(
+          (kid) => kid.r.left - Number.parseFloat(style(kid.el).marginLeft)
+        )
+      );
+      const reachRight = Math.max(
+        ...kids.map(
+          (kid) => kid.r.right + Number.parseFloat(style(kid.el).marginRight)
+        )
+      );
+      if (reachLeft - contentLeft > 1 || contentRight - reachRight > 1) {
+        continue;
+      }
+      const ink = kids.map((kid) => drawnSides(kid.el));
+      const first = Math.min(...ink.map((one) => one.left));
+      const last = Math.max(...ink.map((one) => one.right));
       const leftIn = first - r.left;
       const rightIn = r.right - last;
       const lo = Math.min(leftIn, rightIn);
       const hi = Math.max(leftIn, rightIn);
-      if (
-        (last - first) / r.width >= 0.7 &&
-        hi >= 16 &&
-        lo >= 0 &&
-        lo < hi * 0.55 &&
-        hi - lo >= 6
-      ) {
+      if (hi >= 16 && lo >= 0 && lo < hi * 0.55 && hi - lo >= 6) {
         say(
           "uneven-inset",
           row,
-          `holds its children ${px(leftIn)} from its left and ${px(rightIn)} from its right`
+          `holds its children ${px(leftIn)} from its left and ${px(rightIn)} from its right, in ink`
         );
       }
     }
@@ -1871,14 +2172,73 @@ function readInPage(args: InPageArgs): InPageRead {
         .filter(shown)
         .map((el) => ({ el, r: el.getBoundingClientRect() }));
       if (!skip.has("fat-row")) {
+        /**
+         * The margins a row that draws nothing keeps inside it, above its
+         * first child and under its last, through the wrappers that hold
+         * one child each: a list's spacing (a tool group's room above it,
+         * held in by its row's `flow-root`), not the row's height.
+         */
+        const marginsInside = (row: Element): number => {
+          let at: Element = row;
+          for (let n = 0; n < 4 && paints(at).length === 0; n += 1) {
+            const box = at.getBoundingClientRect();
+            const inside = [...at.children]
+              .filter(shown)
+              .map((kid) => ({ kid, b: kid.getBoundingClientRect() }));
+            if (inside.length === 0) {
+              return 0;
+            }
+            const as = style(at);
+            const top = Math.min(...inside.map((one) => one.b.top));
+            const bottom = Math.max(...inside.map((one) => one.b.bottom));
+            const head = inside.find((one) => one.b.top === top);
+            const foot = inside.find((one) => one.b.bottom === bottom);
+            const above = Math.min(
+              top -
+                box.top -
+                Number.parseFloat(as.borderTopWidth) -
+                Number.parseFloat(as.paddingTop),
+              Number.parseFloat(head ? style(head.kid).marginTop : "0")
+            );
+            const below = Math.min(
+              box.bottom -
+                bottom -
+                Number.parseFloat(as.borderBottomWidth) -
+                Number.parseFloat(as.paddingBottom),
+              Number.parseFloat(foot ? style(foot.kid).marginBottom : "0")
+            );
+            const kept = Math.max(0, above) + Math.max(0, below);
+            if (kept > 0.5 || inside.length !== 1) {
+              return kept;
+            }
+            at = (inside[0] as { kid: Element }).kid;
+          }
+          return 0;
+        };
+        // A list's rows are alike: the children of its most common kind (a
+        // column of a bench's pane groups, its dials and its rail is a
+        // layout, not a list).
+        const kindOf = (el: Element) =>
+          `${el.tagName}[${el.getAttribute("data-slot") ?? ""}]`;
+        const kinds = new Map<string, number>();
+        for (const { el } of rows) {
+          kinds.set(kindOf(el), (kinds.get(kindOf(el)) ?? 0) + 1);
+        }
+        const [kind] =
+          [...kinds.entries()].sort((a, b) => b[1] - a[1])[0] ?? [];
         const wide = rows.filter(
-          (one) => one.r.height >= 16 && one.r.width >= 120
+          (one) =>
+            kindOf(one.el) === kind && one.r.height >= 16 && one.r.width >= 120
         );
         const fat = wide.flatMap(({ el, r }) => {
-          if (
-            r.height <= 48 ||
-            el.querySelector("textarea, input, img, canvas")
-          ) {
+          if (el.querySelector("textarea, input, img, canvas")) {
+            return [];
+          }
+          // A row that draws nothing ends where its children do: a margin
+          // a child keeps inside it (a tool group's space above it, held in
+          // by its row's `flow-root`) is the list's spacing, not its height.
+          const h = r.height - marginsInside(el);
+          if (h <= 48) {
             return [];
           }
           const runs = texts.filter((t) => el.contains(t.node));
@@ -1891,7 +2251,7 @@ function readInPage(args: InPageArgs): InPageRead {
           const size = Math.max(
             ...runs.map((t) => Number.parseFloat(style(t.parent).fontSize))
           );
-          return r.height > size * 3.4 ? [{ el, h: r.height, size }] : [];
+          return h > size * 3.4 ? [{ el, h, size }] : [];
         });
         const [worst] = fat.sort((a, b) => b.h - a.h);
         if (worst && wide.length >= 3 && fat.length >= 2) {
@@ -1903,20 +2263,24 @@ function readInPage(args: InPageArgs): InPageRead {
         }
       }
       if (!skip.has("loose-list")) {
-        const alike = rows
-          .map((one) => one.r)
-          .filter((r) => r.height >= 14 && r.height <= 64 && r.width >= 100)
-          .sort((a, b) => a.top - b.top);
+        const ordered = rows.map((one) => one.r).sort((a, b) => a.top - b.top);
+        const isAlike = (r: DOMRect) =>
+          r.height >= 14 && r.height <= 64 && r.width >= 100;
+        const alike = ordered.filter(isAlike);
         const hs = alike.map((r) => r.height);
         const ws = alike.map((r) => r.width);
+        // The air between two alike rows standing next to each other: a
+        // taller row between them (a transcript's turn between its tool
+        // rows) is a row, not air.
+        const gaps = ordered.slice(1).flatMap((r, i) => {
+          const before = ordered[i] as DOMRect;
+          return isAlike(r) && isAlike(before) ? [r.top - before.bottom] : [];
+        });
         if (
-          alike.length >= 3 &&
+          gaps.length >= 2 &&
           Math.max(...hs) <= Math.min(...hs) * 1.5 &&
           Math.max(...ws) <= Math.min(...ws) * 1.3
         ) {
-          const gaps = alike
-            .slice(1)
-            .map((r, i) => r.top - (alike[i] as DOMRect).bottom);
           const mid = (of: number[]) =>
             [...of].sort((a, b) => a - b)[Math.floor(of.length / 2)] ?? 0;
           const gap = mid(gaps);
@@ -1936,7 +2300,8 @@ function readInPage(args: InPageArgs): InPageRead {
   // The Empty Starts Work and The Claim Of Nothing: empty, a pane says why
   // and offers the work; loading, a skeleton stands in. A pane with nothing
   // in it at all is neither. A short list over free space is a layout, held
-  // to at one item and many, so only the pane with nothing is read.
+  // to at one item and many, so only the pane with nothing is read. An
+  // editor is a field (its `contenteditable`, its placeholder a pseudo's).
   if (!skip.has("empty-pane")) {
     const panes = [
       ...scope.querySelectorAll(
@@ -1953,7 +2318,7 @@ function readInPage(args: InPageArgs): InPageRead {
         (one) =>
           shown(one) &&
           (one.matches(
-            `svg, img, canvas, video, iframe, object, embed, ${CONTROL}`
+            `svg, img, canvas, video, iframe, object, embed, ${CONTROL}, [contenteditable]:not([contenteditable="false"])`
           ) ||
             one.shadowRoot !== null ||
             (one.children.length === 0 && paints(one).length > 0))
@@ -2067,12 +2432,52 @@ function readInPage(args: InPageArgs): InPageRead {
       let filled = 0;
       let stroked = 0;
       let closed = false;
-      for (const shape of svg.querySelectorAll(
-        "path, rect, circle, ellipse, polygon, line, polyline"
-      )) {
-        if (shape.closest("defs, mask, clipPath, pattern, symbol")) {
-          continue;
+      /** Drawn: nothing between it and its svg hides it (a task ring's check waits at opacity 0). */
+      const drawn = (shape: Element) => {
+        for (
+          let at: Element | null = shape;
+          at && at !== svg;
+          at = at.parentElement
+        ) {
+          const cs = getComputedStyle(at);
+          if (cs.display === "none" || Number(cs.opacity) === 0) {
+            return false;
+          }
         }
+        return true;
+      };
+      const shapes = [
+        ...svg.querySelectorAll(
+          "path, rect, circle, ellipse, polygon, line, polyline"
+        ),
+      ].filter(
+        (shape) =>
+          !shape.closest("defs, mask, clipPath, pattern, symbol") &&
+          drawn(shape)
+      );
+      // A ring: circles on one centre, stroked and unfilled, a track and its
+      // arc. A figure (DESIGN.md, Task ring: "wound from the top as a clock
+      // is read"; Spinner: "a 16px ring with a quarter arc"), not a mark.
+      const circles = shapes.filter(
+        (one): one is SVGCircleElement => one instanceof SVGCircleElement
+      );
+      if (
+        circles.length > 0 &&
+        circles.length === shapes.length &&
+        circles.every((one) => {
+          const cs = getComputedStyle(one);
+          const first = circles[0] as SVGCircleElement;
+          return (
+            (cs.fill === "none" || rgba(cs.fill)[3] === 0) &&
+            cs.stroke !== "none" &&
+            Math.abs(one.cx.baseVal.value - first.cx.baseVal.value) < 0.5 &&
+            Math.abs(one.cy.baseVal.value - first.cy.baseVal.value) < 0.5
+          );
+        })
+      ) {
+        return null;
+      }
+      for (const shape of shapes) {
         const s = getComputedStyle(shape);
         const hasFill = s.fill !== "none" && rgba(s.fill)[3] > 0;
         const hasStroke =
@@ -3233,9 +3638,15 @@ async function impeccable(page: Page): Promise<{
   }
   const bin = impeccableBin();
   if (!bin) {
+    // The place, not the page: a workspace's boundary reads nothing of the
+    // home dir outside its clone, the user layer's skill included. Said as
+    // not run here, as a spec that runs on the host is (kit.ts `Spec.host`).
+    const why = process.env.CAWCO_WORKSPACE
+      ? `this workspace's boundary reads nothing of the home dir outside its clone, so ${IMPECCABLE_SKILL} is not here; it runs on the host, or with $IMPECCABLE set to a launcher inside the boundary`
+      : `$IMPECCABLE is unset and ${IMPECCABLE_SKILL} is missing`;
     return {
       ran: false,
-      said: "impeccable not run: no launcher at $IMPECCABLE or in the user layer's impeccable skill",
+      said: `impeccable not run here: no launcher (${why})`,
       found: [],
     };
   }
@@ -3335,6 +3746,44 @@ const IMPECCABLE_CHECKS: Record<string, CheckName> = {
 };
 
 /**
+ * Each masked cut's fade read in its pixels (fadeDraws): a fade that does
+ * not draw is hidden-cue's finding, unless an item peeks 16px there, the
+ * cue a fade cut short leaves (a tab strip's, kept off its chosen tab).
+ */
+async function fadeCues(
+  page: Page,
+  edges: InPageRead["edges"]
+): Promise<{
+  findings: (CheckFinding & { at: number })[];
+  named: string[];
+  unread: string[];
+}> {
+  const out = {
+    findings: [] as (CheckFinding & { at: number })[],
+    named: [] as string[],
+    unread: [] as string[],
+  };
+  for (const edge of edges) {
+    const said = await fadeDraws(page, edge);
+    if (said?.unread) {
+      out.unread.push(said.unread);
+    } else if (said?.finding && edge.peek >= 16) {
+      out.named.push(
+        `${edge.element}'s ${edge.side} fade draws little (${said.finding}), and an item peeks ${Math.round(edge.peek * 10) / 10}px there, the cue`
+      );
+    } else if (said?.finding) {
+      out.findings.push({
+        rule: "hidden-cue",
+        element: edge.element,
+        measured: said.finding,
+        at: -1,
+      });
+    }
+  }
+  return out;
+}
+
+/**
  * Every rendered check read at the state the spec put `page` in. The spec
  * settles first (`settle`, or its own); a page still moving is the
  * `settled` rule's finding, not waited out here.
@@ -3366,19 +3815,11 @@ async function renderedChecks(
   const unread = [...read.unread];
 
   // 7: a declared fade that draws, read in the pixels with and without it.
-  for (const edge of read.edges) {
-    const said = await fadeDraws(page, edge);
-    if (said?.unread) {
-      unread.push(said.unread);
-    } else if (said?.finding) {
-      findings.push({
-        rule: "hidden-cue",
-        element: edge.element,
-        measured: said.finding,
-        at: -1,
-      });
-    }
-  }
+  const named = [...read.named];
+  const fades = await fadeCues(page, read.edges);
+  findings.push(...fades.findings);
+  unread.push(...fades.unread);
+  named.push(...fades.named);
   await page.evaluate(() => {
     for (const el of document.querySelectorAll("[data-check-mask]")) {
       el.removeAttribute("data-check-mask");
@@ -3456,7 +3897,7 @@ async function renderedChecks(
     excused,
     impeccable: { ran: imp.ran, said: imp.said },
     lowest: read.lowest,
-    named: read.named,
+    named,
     others,
     unread,
   };
