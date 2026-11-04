@@ -32,8 +32,7 @@
    *
    * `glass`: from the top bar's glass. Its shadow is the picture the Shell
    * draws once (motion/hung-shadow) as its border-image, under its own
-   * surface (the `hung-surface` element), not a box-shadow; on a phone its
-   * trailing side is the screen's edge, square with no edge drawn there.
+   * surface (the `hung-surface` element), not a box-shadow.
    * A phone is the `shell` container under the desk line (`@max-desk/shell`,
    * as BarGlass reads it), never the window's: the card stands inside the
    * shell it hangs in, so it takes its form from that shell's width in the
@@ -51,7 +50,7 @@
           "motion-safe:will-change-[translate] motion-safe:not-data-[shown]:[translate:0_calc(-100%-var(--hang-reach,0px))]",
       },
       glass: {
-        true: "@max-desk/shell:rounded-ee-none shadow-none @max-desk/shell:after:border-e-0",
+        true: "shadow-none",
       },
       /** The tab's menu hangs on the tab's own surface, as the session card's head is. */
       surface: { recess: "[--hang-surface:var(--surface-recess)]" },
@@ -90,8 +89,7 @@
    *
    * A card on the bar's glass (`glass`) wears the hung shadow, the picture
    * of `--shadow-overlay-hung` the Shell draws once (motion/hung-shadow),
-   * over its own surface (`hung-surface`), and on a phone its trailing side
-   * is the screen's edge, as the glass's is. It is drawn where it is
+   * over its own surface (`hung-surface`). It is drawn where it is
    * mounted, never portaled, so it stands in the `shell` container its site
    * gives it (the Shell's layer, a states frame's) and takes its form from
    * that shell's width.
@@ -137,8 +135,8 @@
    * room under the glass; a card of settings as wide as its rows hold,
    * padded by them, never past the screen less its edges. Each stands `c-pop-edge` in from the screen's edge
    * on either side (DESIGN.md, Breakpoints: popovers widen to the viewport
-   * less 24px); on a phone each keeps the bar's `c-bar-phone-edge` on its
-   * leading side (the `glass` recipe squares the trailing one). The screen
+   * less 24px); on a phone each keeps the bar's `c-bar-phone-edge` on
+   * either side, its trailing edge under Caw's glass's. The screen
    * is the `shell` container the card stands in (Shell's, or a states
    * frame's): its width `100cqi` and its phone `@max-desk/shell`, so a
    * frame of a phone's width draws the phone's card on a desk's page.
@@ -162,9 +160,9 @@
   };
   /** The shell less a floating card's edge each side. */
   const ROOM = "calc(100cqi - 2 * var(--c-screen-margin))";
-  /** The shell less the phone bar's leading edge and the trailing safe area. */
+  /** The shell less the phone bar's edge each side and the trailing safe area. */
   const ROOM_NARROW =
-    "calc(100cqi - var(--c-bar-phone-edge) - env(safe-area-inset-right, 0px))";
+    "calc(100cqi - 2 * var(--c-bar-phone-edge) - env(safe-area-inset-right, 0px))";
   /** The numbers each face's frame reads (`--frame-w`, `--frame-w-narrow`, `--frame-h`). */
   const FRAME_SIZES: Record<
     Frame,

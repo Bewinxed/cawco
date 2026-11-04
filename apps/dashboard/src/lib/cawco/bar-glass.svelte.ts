@@ -61,13 +61,13 @@ export const glassElement = (): HTMLElement | null =>
   document.querySelector<HTMLElement>("[data-bar-group]");
 
 /**
- * Where a card on the glass stands. On a phone the glass is Caw's tab tucked
- * into the screen's trailing edge, and the card hangs from the tab row's
- * floor through his neck (Shell `--caw-neck`), its top edge on the floor's
- * own line (the bar's seam, the strip's shelf) so the two are one line, its
- * trailing side the screen's edge and its leading side the phone's 12px
- * margin; on the wide bar it hangs from the glass's foot, 8px clear of the
- * screen.
+ * Where a card on the glass stands. On a phone the glass is Caw's own,
+ * standing the phone's 12px margin in from the screen's trailing edge, and
+ * the card hangs from the tab row's floor through his neck (Shell
+ * `--caw-neck`), its top edge on the floor's own line (the bar's seam, the
+ * strip's shelf) so the two are one line, its trailing side straight on
+ * down from the glass's and its leading side the same 12px margin; on the
+ * wide bar it hangs from the glass's foot, 8px clear of the screen.
  */
 /** The floor's line, px: the bar's bottom row. */
 const FLOOR_LINE = 1;
@@ -76,15 +76,14 @@ export function glassPlacement(
   glass: HTMLElement | null,
   phone: boolean
 ): {
-  collisionPadding:
-    number | { top: number; bottom: number; left: number; right: number };
+  collisionPadding: number;
   sideOffset: number;
 } {
   if (!(phone && glass)) {
     return { collisionPadding: 8, sideOffset: 0 };
   }
   return {
-    collisionPadding: { top: 12, bottom: 12, left: 12, right: 0 },
+    collisionPadding: 12,
     sideOffset:
       (Number.parseFloat(
         getComputedStyle(glass).getPropertyValue("--caw-neck")

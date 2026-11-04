@@ -41,7 +41,7 @@
   style:--frame-w={`${width}px`}
 >
   <div
-    class="flex h-c-top-bar-h items-center bg-surface-raised border-b border-b-border-hairline pe-space-6 @max-desk/shell:pe-0"
+    class="flex h-c-top-bar-h items-center bg-surface-raised border-b border-b-border-hairline pe-space-6 @max-desk/shell:pe-c-bar-phone-edge"
   >
     <div class="ms-auto flex min-w-0 items-center @max-desk/shell:self-stretch">
       <BarGlass {joined}>
