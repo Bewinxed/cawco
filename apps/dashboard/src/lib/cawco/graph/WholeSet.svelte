@@ -47,7 +47,6 @@
     SvelteFlow,
   } from "@xyflow/svelte";
   import { untrack } from "svelte";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import FlowAutoFit from "#lib/components/features/flow/FlowAutoFit.svelte";
   import FlowCanvasTools from "#lib/components/features/flow/FlowCanvasTools.svelte";
@@ -295,9 +294,8 @@
       ];
     }
   );
-  /** The map's own size on screen, px. */
-  let paneWide = $state(0);
-  let paneTall = $state(0);
+  /** The map's own box on screen, read as a fit asks: the first fit comes before any observer has reported its size. */
+  let pane = $state<HTMLElement>();
   /** `at` held so a view of `span` around it stays inside `[low, high]`; the middle when the view is the wider. */
   const within = (at: number, span: number, low: number, high: number) =>
     high - low <= span
@@ -316,8 +314,18 @@
     }
     const [[left, top], [right, bottom]] = translateExtent;
     return {
-      x: within(box.x + box.w / 2, paneWide / READABLE, left, right),
-      y: within(box.y + box.h / 2, paneTall / READABLE, top, bottom),
+      x: within(
+        box.x + box.w / 2,
+        (pane?.clientWidth ?? 0) / READABLE,
+        left,
+        right
+      ),
+      y: within(
+        box.y + box.h / 2,
+        (pane?.clientHeight ?? 0) / READABLE,
+        top,
+        bottom
+      ),
     };
   };
 </script>
@@ -327,10 +335,7 @@
 {:else}
   <div
     data-slot="whole-set"
-    {@attach frameSize((node: HTMLElement) => {
-      paneWide = node.clientWidth;
-      paneTall = node.clientHeight;
-    })}
+    bind:this={pane}
     class="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-surface-raised"
     style:--xy-edge-stroke="var(--border-contrast)"
     style:--xy-edge-stroke-width="var(--c-graph-edge)"
