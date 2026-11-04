@@ -17,7 +17,7 @@
       ?.template ?? null;
 </script>
 
-<div class="h-dvh overflow-y-auto bg-background">
+<div class="h-dvh overflow-y-auto bg-surface-recess">
   <NewProject
     create={() => new Promise(() => undefined)}
     fleet="online"

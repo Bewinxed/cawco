@@ -18,10 +18,6 @@
    *   he is here; while he drafts in his panel (`lead.inPanel`) the seat
    *   shows the folder glyph instead (CawSeat `standIn`). With no seat (no
    *   machine for him), the folder glyph alone.
-   * - **Its floor** (`floor`) is his flock: his rests standing as
-   *   pictures about the board's foot (CawFlock), decoration a screen reader
-   *   does not hear. It stands under the middle, never over it: on a short
-   *   board the scene grows past it and the page scrolls.
    *
    * On a phone his sheet stands over the board, and his questions are his
    * composer's there (one at a time, "1 of 3"); the scene keeps the claim.
@@ -47,7 +43,6 @@
     onanswer,
     act,
     seat,
-    floor,
   }: {
     /** His questions open on the setup, oldest first; on a phone, none (his composer has them). */
     asks: BlockedRequest[];
@@ -60,8 +55,6 @@
     act: Action;
     /** His live seat over the middle; none while his panel holds him. */
     seat?: Snippet;
-    /** The flock on the board's floor. */
-    floor?: Snippet;
   } = $props();
 </script>
 
@@ -142,13 +135,4 @@
       </div>
     {/if}
   </div>
-  {#if floor}
-    <div
-      aria-hidden="true"
-      class="pointer-events-none relative h-c-flock-h w-full flex-none overflow-hidden"
-      data-slot="floor"
-    >
-      {@render floor()}
-    </div>
-  {/if}
 </div>

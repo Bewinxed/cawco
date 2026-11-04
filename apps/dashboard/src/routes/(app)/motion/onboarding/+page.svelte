@@ -31,13 +31,12 @@
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { blankSession, cawco } from "#lib/cawco/client.svelte.js";
+  import type { Stage as DraftStage } from "#lib/cawco/decisions/host/setup/stage.js";
+  import SetupPagePreview from "#lib/cawco/decisions/SetupPagePreview.svelte";
   import FirstRun from "#lib/cawco/home/FirstRun.svelte";
   import CawFloat from "#lib/cawco/project/CawFloat.svelte";
-  import CawFlock from "#lib/cawco/project/CawFlock.svelte";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
-  import SetupPagePreview from "#lib/cawco/decisions/SetupPagePreview.svelte";
-  import type { Stage as DraftStage } from "#lib/cawco/decisions/host/setup/stage.js";
   import ProjectDock from "#lib/cawco/project/ProjectDock.svelte";
   import SetupDraft from "#lib/cawco/project/SetupDraft.svelte";
   import SetupScene from "#lib/cawco/project/SetupScene.svelte";
@@ -79,18 +78,40 @@
   /** The PR team's draft as the setup page holds it (SetupPagePreview's program). */
   const DRAFT: DraftStage[] = [
     { name: "Inbox", kind: "todo", icon: "inbox", color: "cyan" },
-    { name: "Researching", kind: "active", icon: "search", color: "cyan", hooks: { runs: "researcher" } },
-    { name: "Drafted", kind: "active", icon: "pen", color: "amber", hooks: { runs: "writer" } },
+    {
+      name: "Researching",
+      kind: "active",
+      icon: "search",
+      color: "cyan",
+      hooks: { runs: "researcher" },
+    },
+    {
+      name: "Drafted",
+      kind: "active",
+      icon: "pen",
+      color: "amber",
+      hooks: { runs: "writer" },
+    },
     { name: "Your call", kind: "you" },
     { name: "Sent", kind: "waiting", icon: "send", color: "orange" },
-    { name: "Waiting on reply", kind: "waiting", icon: "hourglass", color: "orange", hooks: { after: "7d" } },
+    {
+      name: "Waiting on reply",
+      kind: "waiting",
+      icon: "hourglass",
+      color: "orange",
+      hooks: { after: "7d" },
+    },
     { name: "Done", kind: "done", icon: "done", color: "green" },
     { name: "Dropped", kind: "dropped", icon: "trash" },
   ];
   const AIM =
     "A personal PR team: the job search, visa applications and renewals, travel booked around them, and a public voice. Research and drafts are done by delegates; every message, post and application goes out only once you send it.";
   /** While he drafts, the stages he has written so far. */
-  const written = beat === "page" ? DRAFT.length : beat === "sent" ? 0 : 5;
+  const WRITTEN: Partial<Record<Beat, number>> = {
+    sent: 0,
+    page: DRAFT.length,
+  };
+  const written = WRITTEN[beat] ?? 5;
   let draft = $state(DRAFT.slice(0, written));
   let draftAim = $state(beat === "sent" ? "" : AIM);
 
@@ -366,13 +387,7 @@
             asks={asksOnBoard ? asks : []}
             onanswer={() => null}
             {seat}
-          >
-            {#snippet floor()}
-              {#if way === undefined}
-                <CawFlock count={phone ? 2 : 4} />
-              {/if}
-            {/snippet}
-          </SetupScene>
+          ></SetupScene>
         {/if}
       </div>
     {/snippet}

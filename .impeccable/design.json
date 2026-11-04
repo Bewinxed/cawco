@@ -3368,7 +3368,7 @@
       },
       {
         "name": "The Flock Rule",
-        "body": "A page has one live Caw: his status mark, wherever his seat stands (the project's head, or over its empty board), or his setup element in his panel while he drafts a project's setup (`project/SetupWell`), when the seat shows the folder glyph instead. Nothing else on the page draws him live: his panel's hero, with no conversation yet, is headed by its own glyph, not by a second Caw. The one place more of him stand is a project's board before it is set up (`project/SetupScene`, decision page `onboarding-design`, card `board-before`): its floor holds a few of his rests as pictures (`project/CawFlock`: his asleep, nodding-off, ready and done stills, `home/CawFace`, two on a phone and four wider), standing still, decoration a screen reader does not hear; no Rive runs for them.",
+        "body": "A page has one live Caw: his status mark, wherever his seat stands (the project's head, or over its empty board), or his setup element in his panel while he drafts a project's setup (`project/SetupWell`), when the seat shows the folder glyph instead. Nothing else on the page draws him live: his panel's hero, with no conversation yet, is headed by its own glyph, not by a second Caw. A project's board before it is set up holds no more of him than that (decision page `onboarding-first-minutes`: every way of the first minutes drops the stills its floor held; on the roost-dark ground his black stills read as wings alone).",
         "section": "components"
       },
       {

@@ -13,10 +13,7 @@
    * setup page's bridge until the person sets it up.
    */
   import type { StageKind } from "@cawco/core/views";
-  import {
-    setupPageWords,
-    setupWords,
-  } from "@cawco/core/words/onboarding";
+  import { setupPageWords, setupWords } from "@cawco/core/words/onboarding";
   import StageKindItems from "#lib/cawco/decisions/host/setup/StageKindItems.svelte";
   import StageLookItems from "#lib/cawco/decisions/host/setup/StageLookItems.svelte";
   import type { Stage } from "#lib/cawco/decisions/host/setup/stage.js";
@@ -42,6 +39,8 @@
     onremove: () => void;
   } = $props();
 
+  /** A span of whole days, as stages.md writes it ("7d"). */
+  const DAYS = /^(\d+)d$/u;
   const days = new Intl.NumberFormat(undefined, {
     style: "unit",
     unit: "day",
@@ -49,7 +48,7 @@
   });
   /** A hook's span ("7d") in words, or as written. */
   const span = (value: string): string => {
-    const match = /^(\d+)d$/u.exec(value);
+    const match = DAYS.exec(value);
     return match ? days.format(Number(match[1])) : value;
   };
   /** What happens to work here, in the column's body. */
@@ -72,7 +71,8 @@
   data-slot="draft-column"
 >
   <header class="flex flex-col gap-0 ps-space-2 pe-0 pt-space-1">
-    <span class="mark-line flex min-h-c-btn-h-sm items-center gap-space-2">
+    <!-- mark-line: the name is a field, a box of its own; the glyph and More stand centred on it as boxes. -->
+    <span class="flex min-h-c-btn-h-sm items-center gap-space-2">
       {#if stage.kind === "you"}
         <IconNeedsYou
           aria-hidden="true"

@@ -27,6 +27,8 @@
         view: "h-40",
         chart: "h-48",
         board: "h-64",
+        /** A board column still being drafted: the board's own height. */
+        column: "h-full",
         /** A word's bar at its text's x-height, so it sits like the word's body. */
         "x-height": "h-c-skeleton-x-height",
         /** A card's picture well, at the ghost picture's 16:10. */
