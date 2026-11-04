@@ -62,6 +62,10 @@ import {
 import { readWithin } from "../../../packages/core/src/bounded";
 import { listedPid, signalGroup } from "../../../packages/core/src/signal";
 import { SOCAT_BACKLOG } from "../../../packages/core/src/socat";
+import type {
+  ArtifactList,
+  Browsed,
+} from "../../../packages/hub/src/artifacts/service";
 import { until } from "../../scratch-fleet";
 import { capped } from "../browser-cap";
 import { launchEnv } from "../browser-leftovers";
@@ -245,14 +249,14 @@ const boundaryEnv = async (kit: Kit) => {
 
 /** (a) The artifact_browse address in a plain chromium.launch() with `env`. */
 const browseLeg = async (kit: Kit, env: Env) => {
-  const page = (
-    await tool<{ id: string; kind: string }[]>("artifact_list", {})
-  ).find((one) => one.kind === "page");
+  const page = (await tool<ArtifactList>("artifact_list", {})).artifacts.find(
+    (one) => one.kind === "page"
+  );
   if (!page) {
     kit.check("(a) the project has a page to browse", false);
     return;
   }
-  const { url } = await tool<{ url: string }>("artifact_browse", {
+  const { url } = await tool<Browsed>("artifact_browse", {
     id: page.id,
   });
   const browser = await capped(

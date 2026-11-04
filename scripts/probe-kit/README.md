@@ -291,6 +291,18 @@ own setup pushes through that workspace's git door. So `git-door` runs as
 `bun scripts/probe-kit/run.ts git-door` alike inside a
 workspace and on the host, with no wrapper.
 
+## No spec sees the session that started the run
+
+Started from a session's shell, `run.ts` runs again in a process without
+that session's variables (`caller-env.ts`): CawCo's (`CAWCO_HUB_URL`,
+`CAWCO_INSTANCE_ID`, `CAWCO_SESSION_CREDENTIAL`, `CAWCO_TOOL_SOCKET`) and
+Claude Code's (`CLAUDECODE`, `CLAUDE_CODE_*`, `CLAUDE_CONFIG_DIR`). A run
+on the host has none of them, so a spec reads the same either way. A spec
+that needs a hub names its own: `git-door` and `landing-faults` set
+`CAWCO_HUB_URL` to one nothing reaches, and the door `gitDoorEnv` gives is
+theirs. A `workspace` spec keeps the session's variables, in a process of
+its own, because its subject is that session's boundary.
+
 ## Files a delegate cannot read
 
 Logs, journal excerpts and transcripts a spec's delegate needs go in the

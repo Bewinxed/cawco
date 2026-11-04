@@ -28,6 +28,11 @@
  * scratch HOME set as it starts and no enclosing workspace's git settings,
  * so it runs alike in a workspace and on the host.
  *
+ * Started from a session's shell, the run runs again in a process without
+ * that session's variables (caller-env.ts), so every spec reads what it would
+ * on the host; a spec that runs inside a workspace (`workspace`) runs in a
+ * process of its own that keeps them.
+ *
  * Serves the dashboard as each spec needs it, once per run: the dev server
  * for the `/motion/` benches, the built dashboard (`vite preview`, built
  * once) for what a spec times, against no hub or a scratch fleet's hub.
@@ -48,6 +53,7 @@ import { join } from "node:path";
 import { ensureDeps } from "../lib/deps";
 import { holdAwake } from "../lib/hold-awake";
 import { runTied } from "../lib/tied-child";
+import { callerNames, withoutCaller } from "./caller-env";
 import type { Spec } from "./kit";
 
 // The dependencies first (lib/deps.ts): the kit and the fleet load after them.
@@ -60,8 +66,27 @@ const { ENCLOSING_GIT_ENV, OWN_HOME_ENV, OWN_PROCESS_ENV, Run } =
 const { nameProbeRun, probeSlot } = await import("./slot");
 
 const args = process.argv.slice(2);
+/**
+ * The variables of the session this run was started from (caller-env.ts);
+ * none in a spec's own process, which this run started with the ones it is
+ * to have.
+ */
+const caller = process.env[OWN_PROCESS_ENV] ? [] : callerNames(process.env);
+/** This run's `argv` again, tied to it, in a process without {@link caller}: its exit. */
+const againWithoutCaller = (argv: string[]): Promise<number> => {
+  console.log(
+    `… running again without the variables of the session it was started from (${caller.join(", ")})`
+  );
+  return runTied(
+    [process.execPath, import.meta.path, ...argv],
+    withoutCaller(process.env)
+  );
+};
 // The user journeys (journeys/suite.ts): every engine, every size, both data sets.
 if (args[0] === "journeys") {
+  if (caller.length > 0) {
+    process.exit(await againWithoutCaller(args));
+  }
   nameProbeRun(args.join(" "));
   const { runJourneys } = await import("./journeys/run");
   process.exit(await runJourneys(args.slice(1)));
@@ -178,6 +203,51 @@ const runOwnProcess = async (spec: Spec): Promise<number> => {
   removeHome();
   return code;
 };
+
+/**
+ * The specs in order without {@link caller}: each `workspace` spec in a
+ * process of its own that keeps them (its subject is that session's
+ * boundary), and the specs between them in one run of their own without
+ * them, as the run was asked for when no `workspace` spec is among them.
+ * Answers 1 when any failed, else 3 when one was not run here, else 0.
+ */
+const runWithoutCaller = async (): Promise<number> => {
+  const groups: (Spec | string[])[] = [];
+  for (const name of chosen) {
+    const spec = specs.get(name) as Spec;
+    const last = groups.at(-1);
+    if (spec.workspace) {
+      groups.push(spec);
+    } else if (Array.isArray(last)) {
+      last.push(name);
+    } else {
+      groups.push([name]);
+    }
+  }
+  const [only] = groups;
+  if (groups.length === 1 && Array.isArray(only)) {
+    return await againWithoutCaller(args);
+  }
+  const codes: number[] = [];
+  for (const group of groups) {
+    codes.push(
+      Array.isArray(group)
+        ? await againWithoutCaller([
+            ...(web ? ["web"] : []),
+            ...group,
+            ...options,
+          ])
+        : await runOwnProcess(group)
+    );
+  }
+  if (codes.some((code) => code !== 0 && code !== 3)) {
+    return 1;
+  }
+  return codes.includes(3) ? 3 : 0;
+};
+if (caller.length > 0) {
+  process.exit(await runWithoutCaller());
+}
 
 const started = performance.now();
 // Folders of scratch fleets that died before they cleaned up (a SIGKILL), out

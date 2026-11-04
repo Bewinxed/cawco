@@ -400,7 +400,9 @@ export interface Spec {
    * Why the spec runs inside a workspace's boundary, when it does: it reads
    * what the boundary gives a command (its proxy, its tool door). Outside
    * every workspace such a spec is not run: the run says it runs in a
-   * workspace, with its command.
+   * workspace, with its command. Started from a session's shell, it runs in
+   * a process of its own that keeps that session's variables, which every
+   * other spec runs without (caller-env.ts).
    */
   workspace?: string;
 }

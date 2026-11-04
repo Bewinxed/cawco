@@ -1567,9 +1567,13 @@ const sshRefusalOf = (id: string): string =>
   join(gitHelperDirOf(id), "cawco-ssh");
 
 /**
- * Serves workspace `ref`'s git door and writes its helper, once per agent:
- * a socket an earlier agent left is replaced. Without a hub there is
- * nothing to reach, and no door.
+ * Serves workspace `ref`'s git door and writes its helper and git's ssh
+ * ({@link SSH_REFUSAL}), once per agent: a socket an earlier agent left is
+ * replaced. It is served whether or not the agent knows a hub: a remote
+ * outside the hub needs none, and a command finds the door only by the
+ * socket {@link gitDoorEnv} names, which it names while the agent knows a
+ * hub. The agent knows one from its start (daemon.ts sets `CAWCO_HUB_URL`,
+ * the default hub's when none was given), before any boundary is armed.
  */
 export const openGitDoor = async (ref: WorkspaceRef): Promise<void> => {
   if (doors.has(ref.id)) {
