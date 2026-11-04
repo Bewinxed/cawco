@@ -2691,7 +2691,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       };
     }
     if (held.until === null) {
-      return { words: words.signedOut(name) };
+      return { words: words.refused(name) };
     }
     const carry = later.get(held.instanceId);
     if (carry) {

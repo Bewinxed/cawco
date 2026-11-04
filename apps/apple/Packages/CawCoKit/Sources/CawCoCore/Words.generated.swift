@@ -150,14 +150,19 @@ public enum Words {
             "\(from) was removed"
         }
 
-        /// A session's transcript line once it moved off an account a person signed out on its machine (core `AccountMove` `signedOut`). Placeholder copy.
-        public static func signedOutMove(to: String, from: String) -> String {
-            "Moved to \(to): \(from) was signed out on this machine"
+        /// A session's transcript line once it moved off an account a person signed out on its machine, `machine` (core `AccountMove` `signedOut`, `signedOutOn`); null for a line written before moves named it.
+        public static func signedOutMove(to: String, from: String, machine: String?) -> String {
+            "Moved to \(to): \(from) was signed out on \(machine ?? "its machine")"
         }
 
-        /// The same move as a line's last clause says why it went. Placeholder copy.
-        public static func signedOutFrom(from: String) -> String {
-            "\(from) was signed out on this machine"
+        /// The same move as a line's last clause says why it went.
+        public static func signedOutFrom(from: String, machine: String?) -> String {
+            "\(from) was signed out on \(machine ?? "its machine")"
+        }
+
+        /// Why a session moved off an account Claude Code refused for good, as a line's last clause says it; its move line is "Moved to B: " and this.
+        public static func refusedFrom(from: String) -> String {
+            "\(from)’s sign-in was refused"
         }
 
         public static let add = "Add account"
@@ -727,7 +732,7 @@ public enum Words {
             }
 
             /// Claude Code refused its account's sign-in, and no other account can take it yet.
-            public static func signedOut(from: String) -> String {
+            public static func refused(from: String) -> String {
                 "Stopped: \(from)’s sign-in was refused; continues once an account can take it"
             }
 
@@ -736,9 +741,9 @@ public enum Words {
                 "Stopped: \(from) was removed; continues once an account can take it"
             }
 
-            /// A person signed its account out on its machine and no other there could take it. Placeholder copy.
-            public static func signedOutHere(from: String) -> String {
-                "Stopped: \(from) was signed out on this machine; continues once an account can take it"
+            /// A person signed its account out on its machine, `machine`, and no other account there could take it (hub `strandedStall`).
+            public static func signedOut(from: String, machine: String) -> String {
+                "Stopped: \(from) was signed out on \(machine); continues once an account can take it"
             }
 
             /// Held past the cutoff (core `AtLimit.staleAfterHours`) since `day` ("2 Oct"): nothing carries it on until a person or its parent writes.

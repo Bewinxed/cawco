@@ -49310,6 +49310,10 @@
                     "const": true,
                     "type": "boolean"
                   },
+                  "signedOutOn": {
+                    "description": "With `signedOut`: that machine, as it was named then.",
+                    "type": "string"
+                  },
                   "compact": {
                     "$ref": "#/components/schemas/BlockMetadataCompact",
                     "description": "Moved to another organization with a context of the policy's\n`moveWholeUnderK` or more, compacted natively ({@link Compaction}):\nit files its open items, then its harness's `/compact` runs, as its\nfirst steps on `to`, or on `from` before the move\n({@link compactFirst}). The line is said again under its id as that\ngoes."
@@ -58281,6 +58285,10 @@
                     "description": "Moved because a person signed `from` out on its machine (`DELETE /api/accounts/:id/machines/:machineId`): every session on it there moves off.",
                     "const": true,
                     "type": "boolean"
+                  },
+                  "signedOutOn": {
+                    "description": "With `signedOut`: that machine, as it was named then.",
+                    "type": "string"
                   },
                   "compact": {
                     "$ref": "#/components/schemas/BlockMetadataCompact",

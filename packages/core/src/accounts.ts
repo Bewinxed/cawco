@@ -1315,6 +1315,8 @@ export type AccountMove =
       removed?: true;
       /** Moved because a person signed `from` out on its machine (`DELETE /api/accounts/:id/machines/:machineId`): every session on it there moves off. */
       signedOut?: true;
+      /** With `signedOut`: that machine, as it was named then. */
+      signedOutOn?: string;
       /**
        * Moved to another organization with a context of the policy's
        * `moveWholeUnderK` or more, compacted natively ({@link Compaction}):
@@ -1669,22 +1671,29 @@ const movedWords = (
   if (move.compact) {
     return compactedMoveWords(move, cost, now);
   }
-  if (move.removed || move.signedOut) {
+  const reread = move.sameOrganization
+    ? "Same organization, cache kept"
+    : `Re-read ${tokenWords(move.tokens)}${cost}`;
+  if (move.removed) {
     return {
-      line: move.removed
-        ? accountsWords.removedMove(move.to.name, move.from.name)
-        : accountsWords.signedOutMove(move.to.name, move.from.name),
-      detail: move.sameOrganization
-        ? "Same organization, cache kept"
-        : `Re-read ${tokenWords(move.tokens)}${cost}`,
+      line: accountsWords.removedMove(move.to.name, move.from.name),
+      detail: reread,
+    };
+  }
+  if (move.signedOut) {
+    return {
+      line: accountsWords.signedOutMove(
+        move.to.name,
+        move.from.name,
+        move.signedOutOn ?? null
+      ),
+      detail: reread,
     };
   }
   if (move.because?.kind === "refused") {
     return {
-      line: `Moved to ${move.to.name}: ${move.from.name}'s sign-in was refused`,
-      detail: move.sameOrganization
-        ? "Same organization, cache kept"
-        : `Re-read ${tokenWords(move.tokens)}${cost}`,
+      line: `Moved to ${move.to.name}: ${accountsWords.refusedFrom(move.from.name)}`,
+      detail: reread,
     };
   }
   const line = move.sameOrganization
@@ -1731,6 +1740,7 @@ interface MoveSent {
   removed?: true;
   resetsAt: number | null;
   signedOut?: true;
+  signedOutOn?: string;
   window: string | null;
 }
 
@@ -1759,10 +1769,13 @@ const costWords = (
  */
 const hitWords = (move: MoveSent, now: number): string => {
   if (move.because?.kind === "refused") {
-    return `${move.from.name}’s sign-in was refused`;
+    return accountsWords.refusedFrom(move.from.name);
   }
   if (move.signedOut) {
-    return accountsWords.signedOutFrom(move.from.name);
+    return accountsWords.signedOutFrom(
+      move.from.name,
+      move.signedOutOn ?? null
+    );
   }
   return move.removed
     ? accountsWords.removedFrom(move.from.name)

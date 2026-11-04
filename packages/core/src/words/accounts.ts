@@ -36,11 +36,18 @@ export const accountsWords = {
     `Moved to ${to}: ${from} was removed`,
   /** The same move as a line's last clause says why it went. */
   removedFrom: (from: string) => `${from} was removed`,
-  /** A session's transcript line once it moved off an account a person signed out on its machine (core `AccountMove` `signedOut`). Placeholder copy. */
-  signedOutMove: (to: string, from: string) =>
-    `Moved to ${to}: ${from} was signed out on this machine`,
-  /** The same move as a line's last clause says why it went. Placeholder copy. */
-  signedOutFrom: (from: string) => `${from} was signed out on this machine`,
+  /**
+   * A session's transcript line once it moved off an account a person signed
+   * out on its machine, `machine` (core `AccountMove` `signedOut`,
+   * `signedOutOn`); null for a line written before moves named it.
+   */
+  signedOutMove: (to: string, from: string, machine: string | null) =>
+    `Moved to ${to}: ${from} was signed out on ${machine ?? "its machine"}`,
+  /** The same move as a line's last clause says why it went. */
+  signedOutFrom: (from: string, machine: string | null) =>
+    `${from} was signed out on ${machine ?? "its machine"}`,
+  /** Why a session moved off an account Claude Code refused for good, as a line's last clause says it; its move line is "Moved to B: " and this. */
+  refusedFrom: (from: string) => `${from}’s sign-in was refused`,
   // ── The list (accounts/+page.svelte, AccountListRow) ──────────────────
   add: "Add account",
   addFirst: "Add your first account",
@@ -424,14 +431,14 @@ export const accountsWords = {
     waitingOn: (from: string, on: string, clock: string) =>
       `Stopped at ${from}’s limit; continues on ${on} at ${clock}`,
     /** Claude Code refused its account's sign-in, and no other account can take it yet. */
-    signedOut: (from: string) =>
+    refused: (from: string) =>
       `Stopped: ${from}’s sign-in was refused; continues once an account can take it`,
     /** A person removed its account and no other could take it: it runs on no account (hub `strandedStall`). */
     removed: (from: string) =>
       `Stopped: ${from} was removed; continues once an account can take it`,
-    /** A person signed its account out on its machine and no other there could take it. Placeholder copy. */
-    signedOutHere: (from: string) =>
-      `Stopped: ${from} was signed out on this machine; continues once an account can take it`,
+    /** A person signed its account out on its machine, `machine`, and no other account there could take it (hub `strandedStall`). */
+    signedOut: (from: string, machine: string) =>
+      `Stopped: ${from} was signed out on ${machine}; continues once an account can take it`,
     /**
      * Held past the cutoff (core `AtLimit.staleAfterHours`) since `day`
      * ("2 Oct"): nothing carries it on until a person or its parent writes.

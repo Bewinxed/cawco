@@ -29854,7 +29854,7 @@ export const createServer = (
       words:
         left.why === "removed"
           ? words.removed(left.accountName)
-          : words.signedOutHere(left.accountName),
+          : words.signedOut(left.accountName, machineName(row.machineId)),
     };
   };
   stallOf = (instanceId) =>
@@ -29947,7 +29947,7 @@ export const createServer = (
         tokens: row.contextTokens,
         window: null,
         resetsAt: null,
-        ...moveOffMark[why],
+        ...moveOffMark(why, row.machineId),
       },
       waits: "turn",
     });
@@ -29956,12 +29956,25 @@ export const createServer = (
 
   /** Why a session leaves its account ({@link oweMoveOff}). */
   type MoveOffWhy = "refused" | "removed" | "signed-out";
-  /** What a move off an account says of why it went ({@link oweMoveOff}). */
-  const moveOffMark = {
-    refused: { because: { kind: "refused" } },
-    removed: { removed: true },
-    "signed-out": { signedOut: true },
-  } as const satisfies Record<MoveOffWhy, Partial<AccountMove>>;
+  /** What a move off an account on `machineId` says of why it went ({@link oweMoveOff}). */
+  const moveOffMark = (
+    why: MoveOffWhy,
+    machineId: string
+  ): Pick<
+    Extract<AccountMove, { kind: "moved" }>,
+    "because" | "removed" | "signedOut" | "signedOutOn"
+  > => {
+    switch (why) {
+      case "refused":
+        return { because: { kind: "refused" } };
+      case "removed":
+        return { removed: true };
+      case "signed-out":
+        return { signedOut: true, signedOutOn: machineName(machineId) };
+      default:
+        throw unreachable(why);
+    }
+  };
 
   /**
    * What removing `account` does with the sessions on it: every kept row
