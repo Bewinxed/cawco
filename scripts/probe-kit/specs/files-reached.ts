@@ -19,7 +19,11 @@
  * (b) A decision page whose option embeds a page as a Preview: the page is
  *     listed, the Preview it embeds has no row of its own (the menu keeps
  *     it), though it was shown first.
- * (c) A delegate's browser artifact is no file: its menu has it, Files never.
+ * (c) A delegate's browser artifact is the session's as soon as it is
+ *     listed: its menu has it, and so do its Files, where the person finds
+ *     it and takes it over (Projects spec §5.11, "listed in the panel of
+ *     every session of the project"; artifacts service.ts `reachedPerson`);
+ *     the parent's Files never hold it.
  * (d) The parent's artifact_delete of a live delegate's canvas is refused,
  *     naming that its item is still live; an outsider's of an ended one is
  *     refused, naming who deletes it; the parent's of the ended one, and of
@@ -264,10 +268,13 @@ mockup = Preview("${mock.id}", "The mock")`,
   const liveMenu = await menu(live);
   const browser = liveMenu.find((one) => one.kind === "browser");
   const liveFiles = await files(live);
+  const parentFiles = await files(parent);
   check(
-    "(c) the delegate's browser artifact is in its panel's menu, never in its Files",
-    !!browser && !liveFiles.some((one) => one.kind === "browser"),
-    `menu [${liveMenu.map((one) => `${one.kind} ${one.name}`).join(", ")}]; files [${liveFiles.map((one) => `${one.kind} ${one.name}`).join(", ")}]`
+    "(c) the delegate's browser artifact is in its panel's menu and its own Files, never in its parent's Files",
+    !!browser &&
+      liveFiles.some((one) => one.id === browser.id) &&
+      !parentFiles.some((one) => one.id === browser.id),
+    `menu [${liveMenu.map((one) => `${one.kind} ${one.name}`).join(", ")}]; files [${liveFiles.map((one) => `${one.kind} ${one.name}`).join(", ")}]; the parent's files [${parentFiles.map((one) => `${one.kind} ${one.name}`).join(", ")}]`
   );
 
   // (d) One canvas in each delegate's own panel; the ended one's item ends.
@@ -351,6 +358,7 @@ mockup = Preview("${mock.id}", "The mock")`,
     "the delegate's browser artifact gone",
     async () => ({
       menu: await menu(live),
+      files: await files(live),
       rows: fleet.query<{ id: string }>(
         "SELECT id FROM artifacts WHERE instance_id = ? AND kind = 'browser'",
         live
@@ -358,16 +366,18 @@ mockup = Preview("${mock.id}", "The mock")`,
     }),
     (read) =>
       read.rows.length === 0 &&
-      !read.menu.some((one) => one.kind === "browser"),
+      !read.menu.some((one) => one.kind === "browser") &&
+      !read.files.some((one) => one.kind === "browser"),
     30_000
   );
   check(
-    "(e) once its item ended, the delegate's browser artifact is gone from its panel's menu and the hub, and listing it again makes none",
+    "(e) once its item ended, the delegate's browser artifact is gone from its panel's menu, its Files and the hub, and listing either again makes none",
     gone.rows.length === 0 &&
       !gone.menu.some((one) => one.kind === "browser") &&
+      !gone.files.some((one) => one.kind === "browser") &&
       !!browser &&
       !rowOf(browser.id),
-    `menu [${gone.menu.map((one) => `${one.kind} ${one.name}`).join(", ")}]`
+    `menu [${gone.menu.map((one) => `${one.kind} ${one.name}`).join(", ")}]; files [${gone.files.map((one) => `${one.kind} ${one.name}`).join(", ")}]`
   );
   // By its handle, the id's first eight.
   const deletedLive = await callAs(fleet, parent, "artifact_delete", {
