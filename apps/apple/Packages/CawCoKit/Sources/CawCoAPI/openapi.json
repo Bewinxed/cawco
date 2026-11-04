@@ -27558,6 +27558,11 @@
                               "whole"
                             ]
                           },
+                          "fileAtPct": {
+                            "minimum": 0,
+                            "maximum": 100,
+                            "type": "integer"
+                          },
                           "summarizer": {
                             "type": "object",
                             "properties": {
@@ -55455,7 +55460,7 @@
         ]
       },
       "Compaction": {
-        "description": "How a session is compacted when it moves, by the moment the hub moves it\n(hub at-limit.ts `compactionPlan`, the one rule every mover reads). A\ncontext under {@link AtLimit.moveWholeUnderK} thousand tokens, or one whose\ncache carries to the account it moves to, moves whole whatever this says.\nA session that stays on its organization is left to its harness's own\nautomatic compaction.",
+        "description": "How a session is compacted when it moves, by the moment the hub moves it\n(hub at-limit.ts `compactionPlan`, the one rule every mover reads). A\ncontext under {@link AtLimit.moveWholeUnderK} thousand tokens, or one whose\ncache carries to the account it moves to, moves whole whatever this says.\nA session that stays on its organization is compacted by its harness on\nits own; before that, once a turn ends with its context at\n{@link Compaction.fileAtPct} of its model's window, the hub gives it one\nturn to file its open items (hub at-limit.ts `fileDue`).",
         "type": "object",
         "properties": {
           "atLimit": {
@@ -55465,6 +55470,10 @@
           "beforeMove": {
             "$ref": "#/components/schemas/CompactMethod",
             "description": "Its account can run it still (forecast to run out, on extra usage past\nits plan, a person's move): `native` files its open items and compacts\nit there, warm, then moves it; `summary` files them, then goes on from a\nsummary on the target; `whole` moves it as it is."
+          },
+          "fileAtPct": {
+            "description": "The share of its model's window, in percent, at which a session files\nits open items into its records before its harness compacts it on its\nown: once per rise, at the end of the first turn whose reading reaches\nit, the next compaction re-arming it (hub at-limit.ts `fileDue`). 0\nfiles none.",
+            "type": "number"
           },
           "summarizer": {
             "description": "Who writes a summary: its harness and model, placed as any start is.",
@@ -55486,6 +55495,7 @@
         "required": [
           "atLimit",
           "beforeMove",
+          "fileAtPct",
           "summarizer"
         ]
       },

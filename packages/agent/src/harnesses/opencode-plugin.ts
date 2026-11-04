@@ -52,6 +52,16 @@
  *   answers at once in words that name no one, the command runs on, and its
  *   output reaches the session as a synthetic message when it ends
  *   (`asideShell`).
+ * - `ctx.event.subscribe` and `ctx.session.synthetic`: after each compaction
+ *   of a CawCo session in this location (its `session.compaction.ended`),
+ *   its open items, word for word, read from the hub's `open_items` tool
+ *   with the session's credential, as synthetic input that starts no turn
+ *   (`listOpenItems`), as Claude Code's SessionStart hook on `compact` and
+ *   pi's `compaction_end` list theirs. OpenCode 2.0.29 has no
+ *   `experimental.session.compacting` hook (1.x's); its 2.0 hook on the
+ *   summary request, `ctx.session.hook("compaction")`, would hand the
+ *   records to the summary model to reword, where this lists them as they
+ *   are.
  * - `ctx.shell.hook("create.before")`: every shell a session's `shell` call
  *   opens acts as that session (its instance and credential, for `cawco
  *   tool` and git), and none gets the server's password or CawCo's wiring.
@@ -91,7 +101,12 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import { JUDGE_SCRIPT } from "../boundary";
 import { CHROME_DEVTOOLS } from "../browser/door";
-import { delegationHubUrl, harnessMcpUrl } from "../delegation";
+import {
+  delegationHubUrl,
+  harnessMcpUrl,
+  OPEN_ITEMS_TOOL,
+  TOOL_DOOR,
+} from "../delegation";
 import { readJson } from "../fleet";
 import { GATE_PREFIX } from "../mcp-gate";
 import { hostKeyFile } from "../mcp-host";
@@ -134,6 +149,9 @@ const BOUNDED_SHELL_DESCRIPTION =
 /** The `shell` a person's session in a place sees: the built-in's, on this machine. */
 const HOST_SHELL_DESCRIPTION =
   "Runs a bash command on this machine, in the session's directory unless workdir says otherwise. Each call is a fresh shell. The output is stdout and stderr together, cut at 30000 characters.";
+
+/** The `metadata.source` of the synthetic input that lists a session's open items after its compaction. */
+const OPEN_ITEMS_SOURCE = "cawco-open-items";
 
 /** The plugin's module source, as every server on this machine loads it. */
 export const buildPluginSource =
@@ -720,14 +738,43 @@ export default {
       const shell = holding ? boundedShell(holding.id, holding.root, directory, bounded, inPlace ? host?.execute : undefined, ctx.permission) : host;
       if (shell?.execute) editor.add(asideShell(shell, ctx.session));
     });
+    // A CawCo session's open items, word for word, after each of its
+    // compactions: what the hub's open_items tool answers, read with the
+    // session's own credential (the agent's delegation.ts callDelegationTool),
+    // written as synthetic input that starts no turn and reaches the model
+    // with its next step. A session of another location, or one the agent
+    // holds no credential for (a person's own, a subagent's), is not this
+    // location's to list.
+    const listOpenItems = async (sessionID) => {
+      const held = sessionHeld(sessionID);
+      if (typeof held?.instanceId !== "string" || typeof held.credential !== "string" || !held.credential) return;
+      const session = await ctx.session.get({ sessionID });
+      if (realOf(session?.location?.directory ?? "") !== realOf(directory)) return;
+      const response = await fetch(cawcoBase + ${JSON.stringify(TOOL_DOOR)} + encodeURIComponent(held.instanceId), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + held.credential },
+        body: JSON.stringify({ name: ${JSON.stringify(OPEN_ITEMS_TOOL)}, arguments: {} }),
+      });
+      if (!response.ok) throw new Error("the hub answered " + response.status + ": " + (await response.text().catch(() => "")));
+      const answer = await response.json();
+      const text = (answer.content ?? []).flatMap((part) => (part?.type === "text" ? [part.text] : [])).join("\\n");
+      if (answer.isError) throw new Error(text);
+      await ctx.session.synthetic({ sessionID, text, description: "Open items", metadata: { source: ${JSON.stringify(OPEN_ITEMS_SOURCE)} }, resume: false });
+    };
+
     // A send of the person's own words admitted to a session's inbox moves its
-    // running shell commands aside, so the turn's next step reads it.
+    // running shell commands aside, so the turn's next step reads it; a
+    // compaction's end lists the session's open items.
     const events = new AbortController();
     void (async () => {
       try {
         for await (const event of ctx.event.subscribe({ signal: events.signal })) {
           if (event.type === "session.inbox.enqueued" && event.data?.item?.type === "user" && event.data.item.payload?.metadata?.[${JSON.stringify(SEND_NOW_METADATA)}] === true) {
             moveAside(event.data.sessionID);
+          }
+          if (event.type === "session.compaction.ended" && typeof event.data?.sessionID === "string") {
+            const sessionID = event.data.sessionID;
+            listOpenItems(sessionID).catch((error) => console.error("cawco: session " + sessionID + "'s open items could not be listed after its compaction: " + said(error)));
           }
         }
       } catch (error) {

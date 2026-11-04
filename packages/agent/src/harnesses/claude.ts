@@ -40,6 +40,7 @@ import {
   type SessionStore,
   type SessionStoreEntry,
   type Settings,
+  type SyncHookJSONOutput,
   tagSession,
 } from "@anthropic-ai/claude-agent-sdk";
 import type {
@@ -177,7 +178,7 @@ import {
   versionRefusal,
 } from "../claude-version";
 import { reportDamaged } from "../damaged-records";
-import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
+import { delegationMcp, MCP_SERVER_NAME, openItemsText } from "../delegation";
 import { sessionFleetDenials } from "../denied-tools";
 import { claudeSpillDir, takeFirstSession } from "../first-session";
 import {
@@ -1174,6 +1175,13 @@ const CREDENTIAL_REFUSED_WORDS =
 
 /** How long the CLI waits on the `Stop` hook this adapter registers, in seconds. */
 const STOP_HOOK_TIMEOUT_S = 5;
+
+/**
+ * How long the CLI waits on the `SessionStart` hook on `compact` this
+ * adapter registers ({@link ClaudeSession}'s `#openItemsAfterCompaction`),
+ * in seconds: one read of the hub's records.
+ */
+const OPEN_ITEMS_HOOK_TIMEOUT_S = 15;
 
 /**
  * How long an attached session whose scheduled wake-ups are not known must
@@ -2324,6 +2332,17 @@ class ClaudeSession implements HarnessSession {
               ],
             },
           ],
+          // Its open items, word for word, after each compaction whoever
+          // asked for it (hub open-items.ts): "SessionStart hooks that match
+          // the `compact` source: Claude Code runs them and adds their output
+          // to the compacted context" (code.claude.com/docs/en/context-window).
+          SessionStart: [
+            {
+              matcher: "compact",
+              timeout: OPEN_ITEMS_HOOK_TIMEOUT_S,
+              hooks: [async () => await this.#openItemsAfterCompaction()],
+            },
+          ],
         },
         // Fleet baseline (from supervisor_config.denied_tools, cached in the
         // sidecar) + delegate-type denials + any the caller itself carried.
@@ -3248,6 +3267,32 @@ class ClaudeSession implements HarnessSession {
     this.#crons = wakeups;
     this.#restingSince = since;
     this.#wakeupsKnown(wakeups);
+  }
+
+  /**
+   * The SessionStart hook on `compact`: the session's open items, word for
+   * word (the `open_items` tool, hub open-items.ts), added to its compacted
+   * context, as pi's and OpenCode's are listed after theirs. None when the
+   * hub's records can't be read: the compaction goes on without them, and
+   * the log says why.
+   */
+  async #openItemsAfterCompaction(): Promise<SyncHookJSONOutput> {
+    try {
+      return {
+        hookSpecificOutput: {
+          hookEventName: "SessionStart",
+          additionalContext: await openItemsText(
+            this.instanceId,
+            this.#launchCredential
+          ),
+        },
+      };
+    } catch (error) {
+      console.warn(
+        `[claude] ${this.instanceId}: its open items could not be listed after its compaction: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return {};
+    }
   }
 
   /** A turn's end said which wake-ups it scheduled: kept, so an agent that attaches later knows too. */

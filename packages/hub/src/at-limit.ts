@@ -346,6 +346,29 @@ export const compactionPlan = (how: {
 };
 
 /**
+ * THE ONE FILING RULE: whether a turn's end finds a session's context at its
+ * policy's `fileAtPct` of its model's window, so that it files its open
+ * items before its harness compacts it on its own (server.ts
+ * `fileAtThreshold`, which sends it only between turns, once per rise, and
+ * never beside a compaction, a continuation or a hold at its limit). Its
+ * reading is capped at its window, as {@link compactionPlan} reads it. A
+ * reading never reported, a window the fleet does not know, and a policy of
+ * 0 file nothing: the threshold is never guessed.
+ */
+export const fileDue = (how: {
+  fileAtPct: number;
+  /** Its context as its harness last reported it; null when never. */
+  reported: number | null;
+  /** Its model's window; undefined when the fleet does not know it. */
+  window: number | undefined;
+}): boolean =>
+  how.reported !== null &&
+  how.window !== undefined &&
+  how.window > 0 &&
+  how.fileAtPct > 0 &&
+  Math.min(how.reported, how.window) * 100 >= how.window * how.fileAtPct;
+
+/**
  * How long a move whole the policy chose for a large context waits after it
  * is announced in the session's transcript (core `AccountMove` `moving`):
  * a person who stops the session meanwhile keeps it where it is.

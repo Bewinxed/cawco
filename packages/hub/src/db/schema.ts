@@ -69,6 +69,7 @@ import {
   CheckoutMoveSchema,
   ClaudeModelUsageSchema,
   ConnectAccessSchema,
+  ContextFillSchema,
   DelegateEventPayloadSchema,
   EndedBySchema,
   EnvelopeShape,
@@ -2686,25 +2687,37 @@ export const owedMoves = sqliteTable("owed_moves", {
 });
 
 /**
- * A session moved at its account's limit that compacts once there (core
- * `AccountMove` `moved` with `compact`), from the move until its compaction
- * has ended (server.ts `compactions`): its filing turn (`filing`, the send
- * `filingUuid`), then Claude Code's `/compact` (`compacting`, the send
- * `compactUuid`). Everything else sent to it waits at the hub meanwhile. Kept
- * here so a hub restart carries it on from where its sends stand.
+ * A session's compaction plan (server.ts `compactions`), its steps going
+ * first and alone, everything else sent to it waiting at the hub meanwhile:
+ *
+ * - a move's (`move`), at its account's limit or ahead of one, that compacts
+ *   it (core `AccountMove` `moved` with `compact`), from the move until its
+ *   compaction has ended: its filing turn (`filing`, the send `filingUuid`),
+ *   then its harness's `/compact` (`compacting`, the send `compactUuid`);
+ * - its filing at its context threshold (`fill`, core `Compaction.fileAtPct`):
+ *   the filing turn alone, no `/compact` (`compactUuid` null), its harness
+ *   compacting it later on its own.
+ *
+ * Kept here so a hub restart carries it on from where its sends stand.
  */
 export const limitCompactions = sqliteTable("limit_compactions", {
   instanceId: text("instance_id").primaryKey(),
   /** `carrying`: its carry-on answers the turn its limit refused, before it files anything. */
   stage: text("stage").$type<"carrying" | "filing" | "compacting">().notNull(),
-  /** The `limit_events` id of the move's line, said again as the compaction goes. */
+  /**
+   * Its line, said again as it goes: a move's `limit_events` id, or a
+   * filing's `session_lines` id (kind `context`).
+   */
   lineId: text("line_id").notNull(),
-  /** The move's line as written, which each stage restates. */
-  move: storedJson(AccountMoveSchema)("move").notNull(),
+  /** The move's line as written, which each stage restates; null for a filing at the threshold. */
+  move: storedJson(AccountMoveSchema)("move"),
+  /** The reading a filing at the threshold fired at; null for a move's. */
+  fill: storedJson(ContextFillSchema)("fill"),
   /** Its carry-on's send, when its limit or sign-in stopped it: the first step. */
   carryUuid: text("carry_uuid"),
   filingUuid: text("filing_uuid").notNull(),
-  compactUuid: text("compact_uuid").notNull(),
+  /** Its `/compact`'s send; null for a filing at the threshold, which sends none. */
+  compactUuid: text("compact_uuid"),
   /** Claude Code said its compaction boundary after the `/compact` went: it compacted. */
   compacted: integer("compacted", { mode: "boolean" }).notNull().default(false),
   /**
@@ -2715,6 +2728,25 @@ export const limitCompactions = sqliteTable("limit_compactions", {
    */
   endedStep: text("ended_step"),
   createdAt: stampedNow("created_at"),
+});
+
+/**
+ * A session whose context reached its compaction policy's `fileAtPct` since
+ * its harness last compacted it (core context-filing.ts): one per session,
+ * written as its filing turn at the threshold is sent and kept after it
+ * ends, so one rise files once; any compaction boundary its harness says
+ * takes it away, re-arming the threshold (server.ts `observeCompaction`).
+ * A harness's compaction that failed after its boundary writes it back
+ * (`lineId` that compaction's line), so a session that cannot compact is
+ * not asked to file every turn.
+ */
+export const contextRises = sqliteTable("context_rises", {
+  instanceId: text("instance_id")
+    .primaryKey()
+    .references(() => instances.id, { onDelete: "cascade" }),
+  /** The `session_lines` id (kind `context`) of the line that says it: its filing's, else the failed compaction's. */
+  lineId: text("line_id").notNull(),
+  at: timestamp("at").notNull(),
 });
 
 /**
@@ -3489,8 +3521,12 @@ export type ContinuationAsker =
  *   transcript opens on it; one per session.
  * - `room`: its start waits for its machine's memory (core `ROOM_HELD`),
  *   the line its machine said, with the machine's readings.
+ * - `context`: what the hub did as its context filled (core `CONTEXT_LINE`,
+ *   context-filing.ts `ContextLine` as JSON): a filing at the threshold,
+ *   said again in its place as it ends, or its harness's compaction.
  */
-export type SessionLineKind = "limit" | "outdated" | "watch" | "moved" | "room";
+export type SessionLineKind =
+  "limit" | "outdated" | "watch" | "moved" | "room" | "context";
 
 /** The lines a session's machine says about it, which the hub keeps as said. */
 export type MachineLineKind = Extract<

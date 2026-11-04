@@ -179,6 +179,7 @@ import {
   CONFIGURE_BINARY_UPDATES,
   CONTAINERS_ENDED,
   CONTAINERS_UNTRACKED,
+  CONTEXT_LINE,
   CONTROL_ABANDON,
   CONTROL_ACCOUNT_LENT,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
@@ -249,6 +250,7 @@ import {
   type CommandQueue,
   type CommandQueueFrame,
   type CommandRun,
+  type Compaction,
   type ContinuationRead,
   type ContinuationReadOptions,
   CUSTODY_HELD,
@@ -453,6 +455,11 @@ import {
 } from "@cawco/core/canvas";
 import { COMMENT_LIMITS, SEND_CONTROLS } from "@cawco/core/comments";
 import { compressAnswer } from "@cawco/core/compress-answer";
+import type {
+  ContextFill,
+  ContextLine,
+  FilingStage,
+} from "@cawco/core/context-filing";
 import { decidesFileProblems } from "@cawco/core/decides";
 import { PICTURES_TAG } from "@cawco/core/decisions-library";
 import { detach } from "@cawco/core/detach";
@@ -516,13 +523,17 @@ import {
   type StageStatus,
   storiesKey,
 } from "@cawco/core/stage";
-import { NeutralSessionInfoSchema } from "@cawco/core/stored-shapes";
+import {
+  ContextLineSchema,
+  NeutralSessionInfoSchema,
+} from "@cawco/core/stored-shapes";
 import type { RelayFrame } from "@cawco/core/stream-relay";
 import { CAPABILITY_KINDS } from "@cawco/core/suggest";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { containerWords } from "@cawco/core/words/containers";
+import { contextWords } from "@cawco/core/words/context";
 import { turnCutWords } from "@cawco/core/words/cuts";
 import { leakWords } from "@cawco/core/words/leaks";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
@@ -603,6 +614,7 @@ import {
   compactedLine,
   compactionPlan,
   createAtLimit,
+  fileDue,
   type Kept,
   type MoveHow,
   refusedUntil,
@@ -829,12 +841,7 @@ import {
   notificationRoutes,
   turnCollapseId,
 } from "./notifications";
-import {
-  COMPACT_FOCUS,
-  COMPACT_KEEP,
-  createOpenItems,
-  filingPrompt,
-} from "./open-items";
+import { COMPACT_FOCUS, createOpenItems, filingPrompt } from "./open-items";
 import { watchPairingRequests } from "./pairing-requests";
 import {
   type AnswerFrom,
@@ -2435,6 +2442,35 @@ const watchLine = (
 ): HubLineMessage => ({
   type: "system",
   subtype: FLEET_WATCH,
+  uuid: line.id,
+  session_id: row.sessionId ?? "",
+  content: line.content,
+  timestamp: new Date(line.at).toISOString(),
+});
+
+/**
+ * The compaction policy a routing save asks for: what it sent, the
+ * threshold saved before when it sent none (a tab from before
+ * `fileAtPct`), or the policy saved before when it sent none at all (the
+ * shipped apps).
+ */
+const compactionAsked = (
+  sent: (Omit<Compaction, "fileAtPct"> & { fileAtPct?: number }) | undefined,
+  saved: Compaction
+): Compaction =>
+  sent ? { ...sent, fileAtPct: sent.fileAtPct ?? saved.fileAtPct } : saved;
+
+/**
+ * The hub's line about a session's context (core `CONTEXT_LINE`), as its row
+ * keeps it (`content` the line as JSON): the same on the live stream and a
+ * later transcript read.
+ */
+const contextLine = (
+  row: { sessionId: string | null },
+  line: { at: number; id: string; content: string }
+): HubLineMessage => ({
+  type: "system",
+  subtype: CONTEXT_LINE,
   uuid: line.id,
   session_id: row.sessionId ?? "",
   content: line.content,
@@ -10023,7 +10059,9 @@ export const createServer = (
    * limit: held there until an account takes it (the at-limit controller's
    * hold), where a turn would only be refused; or, moved, its compaction
    * there under way ({@link compactions}), whose steps go first and alone, so
-   * Claude Code never joins anything into its `/compact`. The controller's
+   * Claude Code never joins anything into its `/compact`; or its filing turn
+   * at its context threshold ({@link fileAtThreshold}), a plan of the same
+   * kind, so the turn files and does nothing else. The controller's
    * own word at the reset is not held by its hold; a compaction holds
    * everything but its own steps, which go `ahead` and, handed back by a
    * machine with no process for them, go to the session's next one
@@ -10163,9 +10201,11 @@ export const createServer = (
     }
     const origin = (record.body as SentMessage | null)?.origin;
     if (origin && heldAtLimit(record.instanceId, origin, record.uuid)) {
-      // Behind its compaction after a move, not its old account's limit.
-      if (db.atLimit.compaction(record.instanceId)) {
-        return "compacting";
+      // Behind its compaction after a move, or its filing turn at its
+      // context threshold, not its old account's limit.
+      const plan = db.atLimit.compaction(record.instanceId);
+      if (plan) {
+        return plan.fill ? "filing" : "compacting";
       }
       // Held with no reset to wait for: its credential was refused.
       return db.atLimit.hold(record.instanceId)?.until === null
@@ -10324,7 +10364,7 @@ export const createServer = (
     console.info(
       `[at-limit] ${sessionName(row)}'s process ended before it took its ${stepWords(plan.stage)}, so the hub starts it again on ${accountWords(row.accountId)} to take it; what waits behind the compaction goes once that ends.`
     );
-    if (plan.move.kind === "moved") {
+    if (plan.move?.kind === "moved") {
       const move = { ...plan.move, relaunched: true as const };
       db.atLimit.patchCompaction(plan.instanceId, { move });
       sayCompaction(
@@ -24245,8 +24285,8 @@ export const createServer = (
    * `HubLine`, `line_anchors`): the account lines but the one between two of
    * its conversations, which stands between them already ({@link readOlder}),
    * the lines its machine said ({@link noteMachineLine}), fleet watch's
-   * ({@link noteWatch}), and where it started again fresh
-   * ({@link noteFreshStart}).
+   * ({@link noteWatch}), its context's ({@link noteContext}), and where it
+   * started again fresh ({@link noteFreshStart}).
    */
   const readRowHistory = (
     row: InstanceRow,
@@ -24274,6 +24314,9 @@ export const createServer = (
     }
     for (const said of db.watchLinesOf(row.id)) {
       lines.push(placed(lineEntry(row, watchLine(row, said)), said.at));
+    }
+    for (const said of db.contextLinesOf(row.id)) {
+      lines.push(placed(lineEntry(row, contextLine(row, said)), said.at));
     }
     for (const kept of db.projectNotes.of(row.id)) {
       lines.push(placed(lineEntry(row, projectNoteLine(row, kept)), kept.at));
@@ -26756,7 +26799,11 @@ export const createServer = (
           windowWhy: error instanceof Error ? error.message : String(error),
         })
       );
-      return { tokens: row.contextTokens, ...window };
+      return {
+        tokens: row.contextTokens,
+        ...window,
+        ...filingOf(row.id),
+      };
     },
     activity: (row) => {
       const state = followupState(row);
@@ -28014,10 +28061,15 @@ export const createServer = (
    * 2. `compacting`: its harness's own `/compact`, with the hub's focus
    *    ({@link COMPACT_FOCUS}), sent once the filing turn has ended. After
    *    the move, its summary reads the whole conversation, the one uncached
-   *    read the move pays anyway; before it, it reads it warm. For Claude
-   *    Code the fleet's SessionStart hook on the `compact` source lists the
-   *    open items after it (`cawco tool open_items`); OpenCode's takes no
-   *    focus, and neither it nor pi lists them, which the move's line says.
+   *    read the move pays anyway; before it, it reads it warm. Every harness
+   *    lists the open items after it: Claude Code through the agent's
+   *    SessionStart hook on the `compact` source, pi on its
+   *    `compaction_end`, OpenCode through CawCo's plugin on its
+   *    `session.compaction.ended` (each reads the `open_items` tool).
+   *
+   * A filing at the session's context threshold ({@link fileAtThreshold},
+   * the plan's `fill`) is step 1 alone: no `/compact` follows it, its
+   * harness compacting it later on its own.
    *
    * Each goes `ahead` of everything the session is owed, alone: every
    * other send waits at the hub until the compaction ends ({@link
@@ -28062,7 +28114,7 @@ export const createServer = (
   const stepUuids = (plan: LimitCompaction): string[] => [
     ...(plan.carryUuid ? [plan.carryUuid] : []),
     plan.filingUuid,
-    plan.compactUuid,
+    ...(plan.compactUuid ? [plan.compactUuid] : []),
   ];
 
   /** A compaction step's send, by its stage. */
@@ -28073,7 +28125,7 @@ export const createServer = (
       case "filing":
         return plan.filingUuid;
       case "compacting":
-        return plan.compactUuid;
+        return plan.compactUuid ?? plan.filingUuid;
     }
   };
 
@@ -28100,7 +28152,7 @@ export const createServer = (
           row,
           stepUuid(plan),
           CARRY_ON[
-            plan.move.kind === "moved" && plan.move.because?.kind === "refused"
+            plan.move?.kind === "moved" && plan.move.because?.kind === "refused"
               ? "signin"
               : "limit"
           ],
@@ -28108,25 +28160,19 @@ export const createServer = (
         );
         return;
       case "filing":
-        compactionSend(row, plan.filingUuid, filingPrompt("compacted"));
-        return;
-      case "compacting":
         compactionSend(
           row,
-          plan.compactUuid,
-          `/compact ${compactFocus(plan.move)}`
+          plan.filingUuid,
+          filingPrompt("compacted", plan.fill ?? undefined)
         );
+        return;
+      case "compacting":
+        if (plan.compactUuid) {
+          compactionSend(row, plan.compactUuid, `/compact ${COMPACT_FOCUS}`);
+        }
         return;
     }
   };
-
-  /**
-   * The focus a compaction's `/compact` carries: {@link COMPACT_FOCUS},
-   * whose last sentence promises the open items listed after, which only
-   * Claude Code's hook does; pi's keeps the rest. (OpenCode's takes none.)
-   */
-  const compactFocus = (move: AccountMove): string =>
-    move.kind === "moved" && move.compactBy ? COMPACT_KEEP : COMPACT_FOCUS;
 
   /**
    * Starts `row`'s compaction, just relaunched on its new account: its
@@ -28144,6 +28190,7 @@ export const createServer = (
       stage: stopped ? "carrying" : "filing",
       lineId: line,
       move,
+      fill: null,
       carryUuid: stopped ? crypto.randomUUID() : null,
       filingUuid: crypto.randomUUID(),
       compactUuid: crypto.randomUUID(),
@@ -28160,11 +28207,11 @@ export const createServer = (
 
   /** Says a compaction's move line again at `stage`, under its id and where it stands. */
   const sayCompaction = (
-    plan: { instanceId: string; lineId: string; move: AccountMove },
+    plan: { instanceId: string; lineId: string; move: AccountMove | null },
     stage: CompactStage
   ): void => {
     const [row] = db.getInstancesByIds([plan.instanceId]);
-    if (!(row && plan.move.kind === "moved")) {
+    if (!(row && plan.move?.kind === "moved")) {
       return;
     }
     const at = db.atLimit
@@ -28176,14 +28223,24 @@ export const createServer = (
   /**
    * Ends a compaction as `stage`, `why` in the hub's log, and lets what
    * waited for it go; one ahead of its move makes that move first
-   * ({@link moveCompacted}), what waited going to it there.
+   * ({@link moveCompacted}), what waited going to it there. A filing at the
+   * threshold ends with its turn: its line says it filed, or stopped.
    */
   const endCompaction = (
-    plan: { instanceId: string; lineId: string; move: AccountMove },
+    plan: LimitCompaction,
     stage: "compacted" | "stopped",
     why: string
   ): void => {
     db.atLimit.dropCompaction(plan.instanceId);
+    if (plan.move === null) {
+      sayFiling(plan, stage === "stopped" ? "stopped" : "filed");
+      const [row] = db.getInstancesByIds([plan.instanceId]);
+      console.info(
+        `[context] ${row ? sessionName(row) : plan.instanceId}: ${why}. What was sent to it meanwhile goes now.`
+      );
+      releaseOwed({ instanceId: plan.instanceId });
+      return;
+    }
     if (plan.move.kind === "moved" && plan.move.compactFirst) {
       console.info(
         `[at-limit] ${plan.instanceId.slice(0, 8)}: ${why}. It moves to ${accountWords(plan.move.to.id)} now.`
@@ -28327,6 +28384,16 @@ export const createServer = (
       sendStep(row, { ...plan, stage: "filing" });
       return;
     }
+    // A filing at the threshold is its filing turn alone: its harness
+    // compacts it later, on its own.
+    if (plan.stage === "filing" && plan.fill) {
+      endCompaction(
+        plan,
+        "compacted",
+        "it filed its open items at its context threshold; its harness compacts it later, on its own"
+      );
+      return;
+    }
     if (plan.stage === "filing") {
       db.atLimit.patchCompaction(instanceId, { stage: "compacting" });
       sayCompaction(plan, "compacting");
@@ -28425,16 +28492,26 @@ export const createServer = (
   };
 
   /**
-   * A frame of a compacting session: its harness's compaction boundary after
-   * its `/compact` went is the compaction done (Claude Code's and pi's at its
-   * end, OpenCode's as it starts); a failure said after it (OpenCode's
-   * `compact_result: "failed"`) undoes that.
+   * A compaction boundary or failure of a session's harness: one after a
+   * move's `/compact` went is that compaction done (Claude Code's and pi's
+   * at its end, OpenCode's as it starts); a failure said after it
+   * (OpenCode's `compact_result: "failed"`) undoes that.
+   *
+   * Any boundary re-arms its context threshold ({@link fileAtThreshold}):
+   * its rise is taken away. One no move's `/compact` asked for is its
+   * harness compacting it on its own (or a person's `/compact`), said in one
+   * line with whether a filing came since its compaction before. A failure
+   * OpenCode says after its boundary says that line again as failed, and
+   * writes the rise back when a filing had come, so a session that cannot
+   * compact is not asked to file again until its next boundary.
    */
   const observeCompaction = (instanceId: string, message: unknown): void => {
     const frame = message as {
+      compact_metadata?: { pre_tokens?: number; trigger?: string };
       compact_result?: string;
       subtype?: string;
       type?: string;
+      uuid?: string;
     };
     if (frame.type !== "system") {
       return;
@@ -28447,6 +28524,328 @@ export const createServer = (
     if (plan?.stage === "compacting") {
       db.atLimit.patchCompaction(instanceId, { compacted: !failed });
     }
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (!row) {
+      return;
+    }
+    const byMove = plan?.stage === "compacting";
+    if (!failed) {
+      compactedBy(row, frame, byMove);
+    } else if (!byMove && row.harness === "opencode") {
+      compactionFailedAfterBoundary(row);
+    }
+  };
+
+  /**
+   * Its harness said a compaction boundary ({@link observeCompaction}): its
+   * rise goes, re-arming its threshold, its context reading goes with what
+   * it measured, and one no move's `/compact` asked for is said in its line,
+   * once, with whether a filing came before it.
+   */
+  const compactedBy = (
+    row: InstanceRow,
+    frame: {
+      compact_metadata?: { pre_tokens?: number; trigger?: string };
+      uuid?: string;
+    },
+    byMove: boolean
+  ): void => {
+    const rise = db.atLimit.rise(row.id);
+    db.atLimit.dropRise(row.id);
+    // What its last request sent is no longer its context: unknown until a
+    // request after the compaction says it, as pi itself rules ("context
+    // token count is unknown until the next LLM response", 1.4.0
+    // AgentSession `getContextUsage`). Kept, a turn that sends none after it
+    // (a `/compact` of its own) would leave the reading from before, and the
+    // threshold just re-armed would file again on it.
+    lastRequestContext.delete(row.id);
+    db.updateKeepAlive(row.id, { contextTokens: null, contextReadAt: null });
+    // A move's `/compact`: its own line says it.
+    if (byMove) {
+      return;
+    }
+    const lineId = `compacted-${frame.uuid ?? crypto.randomUUID()}`;
+    // Said once, whatever brings its frame again.
+    if (db.contextLinesOf(row.id).some((line) => line.id === lineId)) {
+      return;
+    }
+    const trigger = frame.compact_metadata?.trigger;
+    noteContext(row, lineId, {
+      kind: "compacted",
+      filed: rise ? filedBy(row.id, rise.lineId) : null,
+      harness: row.harness as HarnessKind,
+      tokens: frame.compact_metadata?.pre_tokens ?? null,
+      trigger: trigger === "auto" || trigger === "manual" ? trigger : null,
+    });
+  };
+
+  /**
+   * OpenCode's compaction failed after the boundary it said as it started
+   * ({@link observeCompaction}): its line says so, and when a filing had
+   * come before it, its rise is written back under that line.
+   */
+  const compactionFailedAfterBoundary = (row: InstanceRow): void => {
+    const last = db.contextLinesOf(row.id).at(-1);
+    const said = last ? contextLineOf(last.content) : null;
+    if (!(last && said?.kind === "compacted") || said.failed) {
+      return;
+    }
+    noteContext(row, last.id, { ...said, failed: true }, last.at);
+    if (said.filed !== null) {
+      db.atLimit.putRise({
+        instanceId: row.id,
+        lineId: last.id,
+        at: Date.now(),
+      });
+    }
+  };
+
+  /** A context line as its row keeps it (JSON); null for one that reads as none. */
+  const contextLineOf = (content: string): ContextLine | null => {
+    try {
+      const parsed = ContextLineSchema.safeParse(JSON.parse(content));
+      return parsed.success ? parsed.data : null;
+    } catch {
+      return null;
+    }
+  };
+
+  /**
+   * How the filing a rise's line names ended: a filing line's stage, or the
+   * one a failed compaction's line carried on; null for any other line.
+   */
+  const filedBy = (instanceId: string, lineId: string): FilingStage | null => {
+    const kept = db.contextLinesOf(instanceId).find((one) => one.id === lineId);
+    const said = kept ? contextLineOf(kept.content) : null;
+    switch (said?.kind) {
+      case "filing":
+        return said.stage;
+      case "compacted":
+        return said.filed;
+      case undefined:
+        return null;
+      default:
+        throw unreachable(said);
+    }
+  };
+
+  /**
+   * Writes a line about a session's context into its transcript (core
+   * `CONTEXT_LINE`), kept on its row and folded into what its screens show
+   * now; one already written under `id` is what it says now, where it
+   * stood (`at`, when it was first said).
+   */
+  const noteContext = (
+    row: { harness: string; id: string; sessionId: string | null },
+    id: string,
+    line: ContextLine,
+    at: number = Date.now()
+  ): void => {
+    const kept = { id, at, content: JSON.stringify(line) };
+    if (!db.noteContextLine(row.id, kept)) {
+      return;
+    }
+    transcripts.line(
+      row.id,
+      contextLine(row, kept),
+      row.harness as HarnessKind
+    );
+    console.info(
+      `[context] ${row.id.slice(0, 8)}: ${contextWords.line(line).title}`
+    );
+  };
+
+  /**
+   * A session's filing at its threshold since its harness last compacted
+   * it, as `delegate_list`'s Context line says it: its line's stage and the
+   * share it fired at; none when no filing came.
+   */
+  const filingOf = (
+    instanceId: string
+  ): { filing?: { percent: number; stage: FilingStage } } => {
+    const rise = db.atLimit.rise(instanceId);
+    const kept = rise
+      ? db.contextLinesOf(instanceId).find((one) => one.id === rise.lineId)
+      : undefined;
+    const said = kept ? contextLineOf(kept.content) : null;
+    return said?.kind === "filing"
+      ? {
+          filing: {
+            stage: said.stage,
+            percent: Math.round((said.fill.tokens / said.fill.window) * 100),
+          },
+        }
+      : {};
+  };
+
+  /** Says a filing's line again at `stage`, where it stood. */
+  const sayFiling = (
+    plan: { fill: ContextFill | null; instanceId: string; lineId: string },
+    stage: FilingStage
+  ): void => {
+    const [row] = db.getInstancesByIds([plan.instanceId]);
+    if (!(row && plan.fill)) {
+      return;
+    }
+    const at = db
+      .contextLinesOf(row.id)
+      .find((line) => line.id === plan.lineId)?.at;
+    noteContext(
+      row,
+      plan.lineId,
+      { kind: "filing", fill: plan.fill, stage },
+      at
+    );
+  };
+
+  /**
+   * Whether a session's filing at its context threshold may start now, by
+   * what the hub holds of it: it has not filed since its harness last
+   * compacted it (its rise), no compaction plan of a move's or a filing's
+   * runs, no continuation of it is under way, it is not held at its
+   * account's limit nor handled or owed a move there, it is not ending, it
+   * is no summariser, and it takes the hub's word (a finished work item's
+   * session takes none).
+   */
+  const fileMayStart = (row: InstanceRow): boolean =>
+    row.kind !== "summariser" &&
+    !db.ownedInstance(row.id)?.endIntent &&
+    !db.atLimit.rise(row.id) &&
+    !db.atLimit.compaction(row.id) &&
+    !db.atLimit.hold(row.id) &&
+    !atLimit.handling(row.id) &&
+    !owedMoves.has(row.id) &&
+    !db
+      .continuationRows()
+      .some(
+        (job) => job.sourceInstanceId === row.id && !SETTLED.has(job.stage)
+      ) &&
+    !inputRefusal(row.id, { kind: "system", name: COMPACTION_ORIGIN });
+
+  /** The compaction policy's threshold for `row`: its account's provider's, else its model's, else the default. */
+  const fileAtPctOf = (row: InstanceRow): number => {
+    const provider =
+      (row.accountId ? accountOf(row.accountId)?.provider : undefined) ??
+      accountProvidersOf(row.harness, row.model)[0];
+    return provider
+      ? db.accounts.routing(provider).atLimit.compaction.fileAtPct
+      : DEFAULT_COMPACTION.fileAtPct;
+  };
+
+  /**
+   * The windows of the models pi and OpenCode sessions ran on, read off
+   * their machine's catalog ({@link contextWindowOf}) at most once every
+   * {@link WINDOW_KEPT_MS} for each machine and model: every turn's end of
+   * theirs asks ({@link fileAtThreshold}).
+   */
+  const windowsRead = new Map<
+    string,
+    { at: number; window: number | undefined }
+  >();
+  const WINDOW_KEPT_MS = 10 * 60_000;
+  const windowOf = async (row: InstanceRow): Promise<number | undefined> => {
+    const model = row.model ?? undefined;
+    if (row.harness === "claude") {
+      return await contextWindowOf(row.machineId, "claude", model);
+    }
+    const key = `${row.machineId} ${row.harness} ${model ?? ""}`;
+    const kept = windowsRead.get(key);
+    if (kept && Date.now() - kept.at < WINDOW_KEPT_MS) {
+      return kept.window;
+    }
+    try {
+      const window = await contextWindowOf(
+        row.machineId,
+        row.harness as HarnessKind,
+        model
+      );
+      windowsRead.set(key, { at: Date.now(), window });
+      return window;
+    } catch (error) {
+      console.warn(
+        `[context] ${row.id.slice(0, 8)}: its model's window could not be read, so its threshold is not checked this turn: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  };
+
+  /** Sessions a threshold check runs for now: two turn ends close together check once. */
+  const thresholdChecks = new Set<string>();
+
+  /**
+   * A turn of `instanceId` ended with its context written: when its reading
+   * is at its compaction policy's `fileAtPct` of its model's window
+   * (at-limit.ts `fileDue`) and its filing may start ({@link fileMayStart}),
+   * it is sent its filing turn, between turns only ({@link sessionIdle}): a
+   * session found mid-turn is asked again at its next turn's end. One rise
+   * files once ({@link startFiling}); its harness compacts it later, on its
+   * own, and the boundary it says re-arms it ({@link observeCompaction}).
+   */
+  const fileAtThreshold = async (instanceId: string): Promise<void> => {
+    if (thresholdChecks.has(instanceId)) {
+      return;
+    }
+    thresholdChecks.add(instanceId);
+    try {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (!(row && fileMayStart(row))) {
+        return;
+      }
+      const window = await windowOf(row);
+      const fileAtPct = fileAtPctOf(row);
+      if (!fileDue({ fileAtPct, reported: row.contextTokens, window })) {
+        return;
+      }
+      if (!(await sessionIdle(row))) {
+        console.info(
+          `[context] ${sessionName(row)} is at its context threshold (${fileAtPct}% of ${window} tokens) but its machine says it is not between turns; it is asked again at its next turn's end.`
+        );
+        return;
+      }
+      const [now] = db.getInstancesByIds([instanceId]);
+      if (
+        now?.contextTokens === null ||
+        now?.contextTokens === undefined ||
+        window === undefined ||
+        !fileMayStart(now)
+      ) {
+        return;
+      }
+      startFiling(now, {
+        tokens: Math.min(now.contextTokens, window),
+        window,
+      });
+    } finally {
+      thresholdChecks.delete(instanceId);
+    }
+  };
+
+  /**
+   * Starts `row`'s filing at its context threshold: its rise, so this rise
+   * files once; its line; and its plan, the filing turn alone ({@link
+   * compactionSend}), which goes ahead of everything it is owed while all
+   * else waits until that turn ends.
+   */
+  const startFiling = (row: InstanceRow, fill: ContextFill): void => {
+    const lineId = `filing-${crypto.randomUUID()}`;
+    db.atLimit.putRise({ instanceId: row.id, lineId, at: Date.now() });
+    noteContext(row, lineId, { kind: "filing", fill, stage: "filing" });
+    const plan: LimitCompaction = {
+      instanceId: row.id,
+      stage: "filing",
+      lineId,
+      move: null,
+      fill,
+      carryUuid: null,
+      filingUuid: crypto.randomUUID(),
+      compactUuid: null,
+      compacted: false,
+      endedStep: null,
+    };
+    db.atLimit.putCompaction(plan);
+    console.info(
+      `[context] ${sessionName(row)} is at ${Math.round((fill.tokens / fill.window) * 100)}% of its ${fill.window}-token window: it files its open items now; everything else it is sent waits until that turn ends, and its harness compacts it later, on its own.`
+    );
+    sendStep(row, plan);
   };
 
   /**
@@ -29989,10 +30388,18 @@ export const createServer = (
       db.atLimit.compaction(row.id) !== undefined || continuingAsMove(row.id),
     dropCompaction: (row) => {
       const plan = db.atLimit.compaction(row.id);
-      if (plan) {
-        db.atLimit.dropCompaction(row.id);
-        unnoteAtLimit(row, plan.lineId);
+      if (!plan) {
+        return;
       }
+      db.atLimit.dropCompaction(row.id);
+      // A filing at its threshold stopped by its limit: its line says so,
+      // and the rise stands, so it is not asked again before its next
+      // compaction.
+      if (plan.fill) {
+        sayFiling(plan, "stopped");
+        return;
+      }
+      unnoteAtLimit(row, plan.lineId);
     },
     resume: carryOn,
     // A stale hold's notice in Needs you, kept and gone as a held item's is.
@@ -31659,8 +32066,8 @@ export const createServer = (
         }
       )
       // A session's Open items section, built now from its records
-      // (open-items.ts): what the `open_items` tool answers, and with it the
-      // fleet's SessionStart hook on Claude Code's `compact` source.
+      // (open-items.ts): what the `open_items` tool answers, which every
+      // harness's listing after a compaction reads.
       .get(
         "/api/instances/:id/open-items",
         hidden,
@@ -35521,6 +35928,10 @@ export const createServer = (
                 t.Object({
                   beforeMove: compactMethod,
                   atLimit: compactMethod,
+                  // A tab from before it sends none: it keeps the one saved.
+                  fileAtPct: t.Optional(
+                    t.Integer({ minimum: 0, maximum: 100 })
+                  ),
                   summarizer: t.Object({
                     harness: harnessSchema,
                     model: t.String({ minLength: 1 }),
@@ -35567,7 +35978,10 @@ export const createServer = (
               ...body.atLimit,
               staleAfterHours:
                 body.atLimit.staleAfterHours ?? saved.staleAfterHours,
-              compaction: body.atLimit.compaction ?? saved.compaction,
+              compaction: compactionAsked(
+                body.atLimit.compaction,
+                saved.compaction
+              ),
               delegateWork: DEFAULT_AT_LIMIT.delegateWork,
             },
           };
@@ -38323,6 +38737,11 @@ export const createServer = (
                         db.noteClaudeContextWindow(model, usage.contextWindow);
                       }
                     }
+                  }
+                  // Its context as this turn left it, against its window:
+                  // at its policy's threshold, it files its open items.
+                  if (cacheRow) {
+                    detach(fileAtThreshold(cacheRow.id), "context threshold");
                   }
                   const parts = finalMessage.get(message.instanceId);
                   const text = parts?.length ? parts.join("\n\n") : undefined;

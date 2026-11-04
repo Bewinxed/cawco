@@ -66,7 +66,11 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { type Boundary, boundaryCommand } from "../boundary";
 import type { BrowserDoor } from "../browser/door";
-import { callDelegationTool, delegationTools } from "../delegation";
+import {
+  callDelegationTool,
+  delegationTools,
+  openItemsText,
+} from "../delegation";
 import { configAt, hooksAt, readFleetHarnessSet } from "../fleet-harness-set";
 import { type HookPlace, runFleetHooks } from "../fleet-hook-run";
 import { fleetMcpAt } from "../fleet-mcp-set";
@@ -548,6 +552,13 @@ const AGAIN: ReadonlySet<FleetMcpChange["kind"]> = new Set([
 
 /** What CawCo's fleet hooks put in a pi session's conversation, by this custom type. */
 const FLEET_HOOK_MESSAGE = "cawco-fleet-hook";
+
+/**
+ * The custom type of the message that lists a session's open items after a
+ * compaction (`PiSession` `#listOpenItems`): it reaches the model as the
+ * user's words, and no transcript draws it.
+ */
+const OPEN_ITEMS_MESSAGE = "cawco-open-items";
 
 /** A tool result's text, for a PostToolUseFailure hook's `error`. */
 const resultText = (content: readonly { type: string; text?: string }[]) =>
@@ -1037,6 +1048,7 @@ class PiSession implements HarnessSession {
           compactSummary: true,
           message: { role: "user", content: event.result.summary },
         });
+        this.#listOpenItems();
         break;
       }
       case "tool_execution_end": {
@@ -1120,6 +1132,32 @@ class PiSession implements HarnessSession {
       case "turn_start":
         break;
     }
+  }
+
+  /**
+   * The session's open items, word for word (the `open_items` tool, hub
+   * open-items.ts), listed after a compaction whoever asked for it, as
+   * Claude Code's SessionStart hook on `compact` lists them: a message that
+   * starts no turn (pi 1.4.0 `sendCustomMessage`: "Not streaming + no
+   * trigger: appends to state/session, no turn"). One that ends mid-run, at
+   * pi's threshold before its next request, joins once the turn's tool
+   * results are in ("Streaming + triggerTurn false: appended to
+   * state/session once the current turn ends"), before that request is
+   * sent.
+   */
+  #listOpenItems(): void {
+    openItemsText(this.#ctx.instanceId, this.#credential.value)
+      .then((text) =>
+        this.#session.sendCustomMessage(
+          { customType: OPEN_ITEMS_MESSAGE, content: text, display: false },
+          { triggerTurn: false }
+        )
+      )
+      .catch((error: unknown) =>
+        console.warn(
+          `[pi] ${this.#ctx.instanceId}: its open items could not be listed after its compaction: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
   }
 
   /**

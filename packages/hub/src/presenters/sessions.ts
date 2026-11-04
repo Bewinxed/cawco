@@ -15,6 +15,7 @@ import {
   startsAny,
   workWords,
 } from "@cawco/core";
+import { contextWords } from "@cawco/core/words/context";
 import type { DelegateResult, HandoffResult } from "../delegation-actions";
 import {
   type DelegateList,
@@ -171,7 +172,10 @@ const contextLine = (look: DelegatePeek): string => {
   } else if (context.windowWhy) {
     share = peek.contextWindowUnknown(context.windowWhy);
   }
-  return peek.context(NUMBER.format(context.tokens), share);
+  const filing = context.filing
+    ? contextWords.peek(context.filing.stage, context.filing.percent)
+    : "";
+  return peek.context(NUMBER.format(context.tokens), `${share}${filing}`);
 };
 
 /** What its workspace holds so far, and what it handed up. */

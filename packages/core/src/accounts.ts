@@ -351,8 +351,10 @@ export const COMPACT_METHODS: readonly CompactMethod[] = [
  * (hub at-limit.ts `compactionPlan`, the one rule every mover reads). A
  * context under {@link AtLimit.moveWholeUnderK} thousand tokens, or one whose
  * cache carries to the account it moves to, moves whole whatever this says.
- * A session that stays on its organization is left to its harness's own
- * automatic compaction.
+ * A session that stays on its organization is compacted by its harness on
+ * its own; before that, once a turn ends with its context at
+ * {@link Compaction.fileAtPct} of its model's window, the hub gives it one
+ * turn to file its open items (hub at-limit.ts `fileDue`).
  */
 export interface Compaction {
   /**
@@ -371,6 +373,14 @@ export interface Compaction {
    * summary on the target; `whole` moves it as it is.
    */
   beforeMove: CompactMethod;
+  /**
+   * The share of its model's window, in percent, at which a session files
+   * its open items into its records before its harness compacts it on its
+   * own: once per rise, at the end of the first turn whose reading reaches
+   * it, the next compaction re-arming it (hub at-limit.ts `fileDue`). 0
+   * files none.
+   */
+  fileAtPct: number;
   /** Who writes a summary: its harness and model, placed as any start is. */
   summarizer: { harness: HarnessKind; model: string };
 }
@@ -378,6 +388,7 @@ export interface Compaction {
 export const DEFAULT_COMPACTION: Compaction = {
   beforeMove: "native",
   atLimit: "summary",
+  fileAtPct: 85,
   summarizer: { harness: "claude", model: "claude-sonnet-5-5" },
 };
 
@@ -1805,17 +1816,15 @@ const afterFirst = (line: string, clause: string | undefined): string => {
   return [head, clause, ...rest].join(" · ");
 };
 
-/** What a harness's own /compact left out, after the open items were filed: said for OpenCode and pi. */
-const compactedWords = (by: "opencode" | "pi" | undefined): string => {
-  switch (by) {
-    case "opencode":
-      return "Its open items were filed first, not listed after · OpenCode’s /compact chose what to keep on its own";
-    case "pi":
-      return "Its open items were filed first, not listed after";
-    case undefined:
-      return "Its open items were filed first and listed after";
-  }
-};
+/**
+ * What a harness's own /compact did with the open items: filed first and
+ * listed after on every harness; OpenCode's takes no focus, so it chose
+ * what to keep on its own.
+ */
+const compactedWords = (by: "opencode" | "pi" | undefined): string =>
+  by === "opencode"
+    ? "Its open items were filed first and listed after · OpenCode’s /compact chose what to keep on its own"
+    : "Its open items were filed first and listed after";
 
 /**
  * A move compacted by its harness's own /compact, by where that stands:

@@ -12,6 +12,7 @@
 import { accountMoveWords } from "./accounts";
 import { ASK_ORIGIN, parseAskAnswered } from "./asks";
 import { attachedFiles, withoutPictureLines } from "./attachments";
+import type { ContextLine } from "./context-filing";
 import type {
   CompactionFailure,
   HarnessNote,
@@ -30,6 +31,7 @@ import {
   ARTIFACT_RESPONSES,
   CAWCO_NOTICE,
   CLI_OUTDATED,
+  CONTEXT_LINE,
   CONTINUATION_ORIGIN,
   CONVERSATION_RESET,
   CUSTODY_HELD,
@@ -59,7 +61,7 @@ import { invariant } from "./invariant";
 import { CAW_EVENT_NOTE, type ProjectNote } from "./project-conversation";
 import { parseReference } from "./references";
 import { parseRuleMarker } from "./rules";
-import { ProjectNoteSchema } from "./stored-shapes";
+import { ContextLineSchema, ProjectNoteSchema } from "./stored-shapes";
 import type {
   BlockMetadata,
   BlockType,
@@ -67,6 +69,7 @@ import type {
   TranscriptBlock,
   TranscriptBranch,
 } from "./transcript-types";
+import { contextWords } from "./words/context";
 import { noticeLine, noticeWords } from "./words/notices";
 
 type AssistantBlock = NeutralAssistantMessage["message"]["content"][number];
@@ -636,6 +639,18 @@ function projectNoteOf(content: string): ProjectNote | null {
   return note.success ? note.data : null;
 }
 
+/** A context line as its hub line carries it (JSON); null for text that is none. */
+function contextLineOf(content: string): ContextLine | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  const line = ContextLineSchema.safeParse(parsed);
+  return line.success ? line.data : null;
+}
+
 /** What a project note's line carries: its title, and what its event offers to act on. */
 function noteMetadata(note: ProjectNote): BlockMetadata {
   const { event } = note;
@@ -1097,6 +1112,22 @@ export function mapFrame(
               systemLine(base, "ui.system_note", note.body ?? "", {
                 ...noteMetadata(note),
                 subtype: PROJECT_NOTE,
+              })
+            );
+          }
+          break;
+        }
+        // The hub's line about the session's context (core
+        // context-filing.ts): titled by what happened, its detail under it.
+        case CONTEXT_LINE: {
+          const line = contextLineOf(sdk.content ?? "");
+          if (line) {
+            const said = contextWords.line(line);
+            mapping.blocks.push(
+              systemLine(base, "ui.system_note", said.detail, {
+                subtype: CONTEXT_LINE,
+                noteKind: contextWords.noteKind,
+                noteTitle: said.title,
               })
             );
           }

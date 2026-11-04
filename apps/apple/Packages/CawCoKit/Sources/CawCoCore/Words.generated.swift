@@ -692,6 +692,13 @@ public enum Words {
 
             public static let terms = "Moving a conversation between Claude subscriptions is subject to Anthropic’s terms"
 
+            /// The share of its model's window at which a session files its open items before its harness compacts it (core `Compaction.fileAtPct`). Placeholder words.
+            public static let fileAt = "File a session’s open items when its context reaches"
+
+            public static let fileAtUnit = "% of its window"
+
+            public static let fileAtOff = "0 files none."
+
             /// The cutoff past which a held session is no longer carried on by itself (core `AtLimit.staleAfterHours`).
             public static let stale = "Carry a stopped session on by itself up to"
 
@@ -934,6 +941,8 @@ public enum Words {
                     public static let beforeMove = "native"
 
                     public static let atLimit = "summary"
+
+                    public static let fileAtPct = 85
 
                     public enum Summarizer {
                         public static let harness = "claude"

@@ -7,6 +7,7 @@
  * (§5.3 conversation authority).
  */
 import type { InstanceRow, TranscriptPage, WorkItemState } from "@cawco/core";
+import type { FilingStage } from "@cawco/core/context-filing";
 import { HOUR_MS } from "@cawco/core/time";
 import type { DbShape, WorkItemRow } from "./db";
 import { byHandle } from "./handles";
@@ -93,6 +94,12 @@ export interface DelegateNode {
 /** Its context window now, as its harness last reported the request it sent. */
 export type PeekContext =
   | {
+      /**
+       * Its filing at its context threshold since its harness last compacted
+       * it (server.ts `fileAtThreshold`): where it stands, and the share of
+       * its window it fired at. Absent when none came.
+       */
+      filing?: { percent: number; stage: FilingStage };
       /** Tokens its last request sent. */
       tokens: number;
       /** Its model's window; null when the fleet does not know it, with why. */

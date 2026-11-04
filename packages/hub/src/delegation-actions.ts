@@ -45,6 +45,7 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { ForgeWrite } from "@cawco/core/forge-post";
 import type { MachinePath } from "@cawco/core/machine-path";
 import { unhandled } from "@cawco/core/unhandled";
+import { contextWords } from "@cawco/core/words/context";
 import type { Started } from "./call-cuts";
 import type { WorkBudget, WorkItemSubmission } from "./db/schema";
 import type {
@@ -609,7 +610,9 @@ function resolve(peers: Peer[], target: string): Peer {
  * take it, so it waits for a sign-in or a free account (`signin`); or it
  * moved accounts at its limit and files its open items and is compacted
  * there first, so it waits for that to end, or for a stop of its turn
- * (`compacting`); or the
+ * (`compacting`); or its context reached its compaction policy's threshold
+ * and it takes one turn of its own to file its open items, so it waits for
+ * that turn to end, or for a stop of it (`filing`); or the
  * owner paused its machine until a time (`paused`, machine-pause.ts); or its
  * work item is finishing (`finishing`: its landing gate runs, or the turn
  * that called `finish_item` is still ending, work-items.ts `finishingFor`),
@@ -629,6 +632,7 @@ export type SendHold =
   | "blocked"
   | "build"
   | "compacting"
+  | "filing"
   | "finishing"
   | "held"
   | "hub"
@@ -684,6 +688,7 @@ const HOLD_WORDS: Record<Exclude<SendHold, "paused">, string> = {
     "Its account's sign-in was refused and no other account can take it, so the message is kept at the hub and goes to the session once its account is signed in again or another account comes free.",
   compacting:
     "It moved to another account at its limit and is filing its open items, then compacting, as its first turns there, so the message is kept at the hub and goes to the session as soon as that ends; stopping its turn ends the compaction and sends it now.",
+  filing: contextWords.held,
 };
 
 /** What the hub did with a hand-off, as its sender is told. */

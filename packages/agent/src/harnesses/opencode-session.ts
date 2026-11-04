@@ -213,6 +213,9 @@ export const splitModel = (
 const WHITESPACE_RE = /\s+/u;
 const MCP_USAGE = "Usage: /mcp connect|disconnect <server>";
 
+/** Where a slash command's name ends. */
+const WHITESPACE = /\s/u;
+
 /** `/name rest` → its parts; undefined for anything that is not a slash command. */
 const parseCommand = (
   text: string
@@ -221,7 +224,10 @@ const parseCommand = (
     return;
   }
   const rest = text.slice(1);
-  const sp = rest.indexOf(" ");
+  // Its name ends at the first whitespace: the hub hands every send with its
+  // reminder block after its text (server.ts `presenced`), so a bare
+  // `/compact` arrives as "/compact\n\n<system-reminder>…".
+  const sp = rest.search(WHITESPACE);
   return sp === -1
     ? { name: rest, args: "" }
     : { name: rest.slice(0, sp), args: rest.slice(sp + 1) };
@@ -1397,6 +1403,10 @@ export class OpencodeSession implements HarnessSession {
       case "session.compaction.ended": {
         const id = this.#compacting ?? event.id;
         this.#compacting = undefined;
+        // What the last request sent is no longer the session's context:
+        // unknown until a request after the compaction says it, so the turn
+        // that ran it reports none.
+        this.#lastSent = undefined;
         this.#ctx.frame({
           type: "system",
           subtype: "status",

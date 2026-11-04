@@ -538,6 +538,15 @@ export const FLEET_WATCH = "fleet_watch";
  */
 export const PROJECT_NOTE = "project_note";
 
+/**
+ * The hub's line in a session's transcript about its context (core
+ * context-filing.ts `ContextLine`): it filed its open items at its
+ * compaction policy's threshold, or its harness compacted it, and whether a
+ * filing came first. `content` is the line as JSON, drawn as a note titled
+ * by what happened, its detail under it. Never sent to the session.
+ */
+export const CONTEXT_LINE = "context_line";
+
 /** Which limit a keeper's child reached: its task limit, or its memory limit (an OOM kill inside it). */
 export type ChildLimit = "tasks" | "memory";
 

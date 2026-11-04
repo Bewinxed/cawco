@@ -1,7 +1,13 @@
 import type { AccountMove } from "@cawco/core";
+import type { ContextFill } from "@cawco/core/context-filing";
 import { asc, eq, inArray } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { limitCompactions, limitEvents, limitHolds } from "./schema";
+import {
+  contextRises,
+  limitCompactions,
+  limitEvents,
+  limitHolds,
+} from "./schema";
 
 /** A session waiting out its account's limit. */
 export interface LimitHold {
@@ -23,15 +29,11 @@ export interface LimitHold {
   until: number | null;
 }
 
-/**
- * A session's compaction after a move at its limit, from the move until it
- * has ended (schema `limitCompactions`).
- */
-export interface LimitCompaction {
+/** What every compaction plan has: its steps, by their sends, and where it stands. */
+interface CompactionSteps {
   /** Its carry-on's send (`carrying`), when its limit or sign-in stopped it; null when it carries nothing on. */
   carryUuid: string | null;
   compacted: boolean;
-  compactUuid: string;
   /**
    * The step (its send's uuid) whose turn the hub heard end, its result
    * read after the step was: kept so a hub that restarts before the next
@@ -40,9 +42,33 @@ export interface LimitCompaction {
   endedStep: string | null;
   filingUuid: string;
   instanceId: string;
+  /** Its line, said again as it goes: a move's `limit_events` id, a filing's `session_lines` id. */
   lineId: string;
-  move: AccountMove;
   stage: "carrying" | "filing" | "compacting";
+}
+
+/**
+ * A session's compaction plan (schema `limitCompactions`), until it has
+ * ended: a move's that compacts it (`move`, its line), its filing turn then
+ * its harness's `/compact` (`compactUuid`); or its filing at its context
+ * threshold (`fill`, the reading it fired at), the filing turn alone, its
+ * harness compacting it later on its own.
+ */
+export type LimitCompaction = CompactionSteps &
+  (
+    | { compactUuid: string; fill: null; move: AccountMove }
+    | { compactUuid: null; fill: ContextFill; move: null }
+  );
+
+/**
+ * A session whose context reached its policy's `fileAtPct` since its
+ * harness last compacted it (schema `contextRises`): one rise files once.
+ */
+export interface ContextRise {
+  at: number;
+  instanceId: string;
+  /** The line that says it: its filing's, else the failed compaction's. */
+  lineId: string;
 }
 
 /** One line the hub wrote into a session's transcript at its account's limit. */
@@ -61,6 +87,8 @@ export interface AtLimitDb {
   /** Takes one line back. */
   readonly dropEvent: (id: string) => void;
   readonly dropHold: (instanceId: string) => void;
+  /** Takes `instanceId`'s rise away: its harness compacted it, so the threshold files again. */
+  readonly dropRise: (instanceId: string) => void;
   /** The lines written into these sessions' transcripts, oldest first. */
   readonly events: (instanceIds: string[]) => LimitEvent[];
   readonly forget: (instanceIds: string[]) => void;
@@ -68,12 +96,14 @@ export interface AtLimitDb {
   readonly holds: () => LimitHold[];
   /** Records that `instanceId`'s hold went stale at `at`. */
   readonly markStale: (instanceId: string, at: number) => void;
-  /** Moves a compaction on: its stage, the step whose turn ended, that it compacted, or its line as it now reads. */
+  /** Moves a compaction on: its stage, the step whose turn ended, that it compacted, or its move's line as it now reads. */
   readonly patchCompaction: (
     instanceId: string,
     patch: Partial<
-      Pick<LimitCompaction, "compacted" | "endedStep" | "move" | "stage">
-    >
+      Pick<CompactionSteps, "compacted" | "endedStep" | "stage">
+    > & {
+      move?: AccountMove;
+    }
   ) => void;
   /** Starts a session's compaction, in place of any it had. */
   readonly putCompaction: (compaction: LimitCompaction) => void;
@@ -81,6 +111,10 @@ export interface AtLimitDb {
   readonly putEvent: (event: LimitEvent) => void;
   /** Holds a session, its stale mark cleared: a put is a decision made now. */
   readonly putHold: (hold: Omit<LimitHold, "staleAt">) => void;
+  /** Marks a session's context risen to its threshold, in place of any rise it had. */
+  readonly putRise: (rise: ContextRise) => void;
+  /** The session's rise since its last compaction; undefined when none. */
+  readonly rise: (instanceId: string) => ContextRise | undefined;
   /**
    * The line of `instanceId`'s move waiting for work in flight, while it
    * waits ({@link waitsLine}): one per session, said again in its place.
@@ -106,19 +140,32 @@ const toHold = (row: HoldRow): LimitHold => ({
   staleAt: row.staleAt?.getTime() ?? null,
 });
 
+/** A stored plan, by what it is for: a move's, or a filing's at the threshold. Undefined for a row that is neither, as no write makes. */
 const toCompaction = (
   row: typeof limitCompactions.$inferSelect
-): LimitCompaction => ({
-  instanceId: row.instanceId,
-  stage: row.stage,
-  lineId: row.lineId,
-  move: row.move,
-  carryUuid: row.carryUuid,
-  filingUuid: row.filingUuid,
-  compactUuid: row.compactUuid,
-  compacted: row.compacted,
-  endedStep: row.endedStep,
-});
+): LimitCompaction | undefined => {
+  const steps: CompactionSteps = {
+    instanceId: row.instanceId,
+    stage: row.stage,
+    lineId: row.lineId,
+    carryUuid: row.carryUuid,
+    filingUuid: row.filingUuid,
+    compacted: row.compacted,
+    endedStep: row.endedStep,
+  };
+  if (row.move && row.compactUuid) {
+    return {
+      ...steps,
+      move: row.move,
+      compactUuid: row.compactUuid,
+      fill: null,
+    };
+  }
+  if (row.fill) {
+    return { ...steps, fill: row.fill, compactUuid: null, move: null };
+  }
+  return undefined;
+};
 
 const toEvent = (row: typeof limitEvents.$inferSelect): LimitEvent => ({
   id: row.id,
@@ -158,7 +205,12 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
   dropHold: (instanceId) => {
     db.delete(limitHolds).where(eq(limitHolds.instanceId, instanceId)).run();
   },
-  compactions: () => db.select().from(limitCompactions).all().map(toCompaction),
+  compactions: () =>
+    db
+      .select()
+      .from(limitCompactions)
+      .all()
+      .flatMap((row) => toCompaction(row) ?? []),
   compaction: (instanceId) => {
     const row = db
       .select()
@@ -166,6 +218,28 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
       .where(eq(limitCompactions.instanceId, instanceId))
       .get();
     return row ? toCompaction(row) : undefined;
+  },
+  rise: (instanceId) => {
+    const row = db
+      .select()
+      .from(contextRises)
+      .where(eq(contextRises.instanceId, instanceId))
+      .get();
+    return row
+      ? { instanceId: row.instanceId, lineId: row.lineId, at: row.at.getTime() }
+      : undefined;
+  },
+  putRise: ({ instanceId, lineId, at }) => {
+    const values = { lineId, at: new Date(at) };
+    db.insert(contextRises)
+      .values({ instanceId, ...values })
+      .onConflictDoUpdate({ target: contextRises.instanceId, set: values })
+      .run();
+  },
+  dropRise: (instanceId) => {
+    db.delete(contextRises)
+      .where(eq(contextRises.instanceId, instanceId))
+      .run();
   },
   putCompaction: (compaction) => {
     const values = { ...compaction, createdAt: new Date() };
@@ -228,6 +302,9 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
       .run();
     db.delete(limitEvents)
       .where(inArray(limitEvents.instanceId, instanceIds))
+      .run();
+    db.delete(contextRises)
+      .where(inArray(contextRises.instanceId, instanceIds))
       .run();
   },
 });

@@ -65,6 +65,11 @@ import type {
   ConnectionView as ConnectionViewType,
 } from "./connections";
 import { CONNECTION_AUTHS, CONNECTION_TRANSPORTS } from "./connections";
+import type {
+  ContextFill as ContextFillType,
+  ContextLine as ContextLineType,
+  FilingStage as FilingStageType,
+} from "./context-filing";
 import type { Extracted as ExtractedType } from "./continuation-read";
 import type {
   MayStart as MayStartType,
@@ -1153,6 +1158,28 @@ const ReleaseManifestShape = z.object({
 export const ReleaseManifestSchema: z.ZodType<ReleaseManifestType> =
   ReleaseManifestShape;
 
+const ContextFillShape = z.object({ tokens: z.number(), window: z.number() });
+export const ContextFillSchema: z.ZodType<ContextFillType> = ContextFillShape;
+
+const FilingStageShape = z.enum(["filing", "filed", "stopped"]);
+
+const ContextLineShape = z.union([
+  z.object({
+    kind: z.literal("filing"),
+    fill: ContextFillShape,
+    stage: FilingStageShape,
+  }),
+  z.object({
+    kind: z.literal("compacted"),
+    failed: z.literal(true).optional(),
+    filed: FilingStageShape.nullable(),
+    harness: HarnessKindShape,
+    tokens: z.number().nullable(),
+    trigger: z.enum(["auto", "manual"]).nullable(),
+  }),
+]);
+export const ContextLineSchema: z.ZodType<ContextLineType> = ContextLineShape;
+
 const RoutineScheduleShape = z.object({
   cron: z.string(),
   nextAt: z.number().nullable(),
@@ -1450,6 +1477,7 @@ const CompactMethodShape = z.enum(["native", "summary", "whole"]);
 const CompactionShape = z.object({
   atLimit: CompactMethodShape,
   beforeMove: CompactMethodShape,
+  fileAtPct: z.number(),
   summarizer: z.object({ harness: HarnessKindShape, model: z.string() }),
 });
 
@@ -2379,6 +2407,9 @@ prove<
     Same<z.output<typeof RelayStateShape>, RelayStateType>,
     Same<z.output<typeof RelayViewShape>, RelayViewType>,
     Same<z.output<typeof ReleaseManifestShape>, ReleaseManifestType>,
+    Same<z.output<typeof ContextFillShape>, ContextFillType>,
+    Same<z.output<typeof FilingStageShape>, FilingStageType>,
+    Same<z.output<typeof ContextLineShape>, ContextLineType>,
     Same<z.output<typeof RoutineScheduleShape>, RoutineScheduleType>,
     Same<z.output<typeof WorkItemStateShape>, WorkItemStateType>,
     Same<z.output<typeof ItemEndShape>, ItemEndType>,

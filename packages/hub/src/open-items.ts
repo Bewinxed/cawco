@@ -4,9 +4,12 @@
  * so that no summary decides what survives a compaction.
  *
  * - **Filing** ({@link filingPrompt}): before the hub compacts a session
- *   (after a move at its account's limit) and before a person's Continue
- *   opens a new session, the session takes one turn whose only job is to
- *   file what is open into its records. On a real 13-hour chat, native
+ *   (after a move at its account's limit), before a person's Continue opens
+ *   a new session, and once a turn ends with its context at its compaction
+ *   policy's `fileAtPct` of its model's window (its harness compacting it
+ *   later, on its own: server.ts `fileAtThreshold`), the session takes one
+ *   turn whose only job is to file what is open into its records. On a
+ *   real 13-hour chat, native
  *   compaction alone answered 16% of probes, CawCo's summary 35%, native
  *   compaction with the open items filed first 47%, and with only the
  *   records that already existed 17% (the continuation evaluation,
@@ -16,10 +19,13 @@
  *   steps and its spec), its task's open to-dos, the open tasks it filed, its
  *   decision pages not yet decided with their cards, and its notes still in
  *   the project's memory inbox, and its asks still waiting on the person
- *   (asks.ts). Claude Code adds it to every compacted
- *   context through the fleet's SessionStart hook on the `compact` source
- *   (`cawco tool open_items`); a person's Continue opens the new session on
- *   it.
+ *   (asks.ts). Every harness has it listed after each of its compactions,
+ *   whoever asked for it, each reading the `open_items` tool: Claude Code
+ *   through the agent's SessionStart hook on the `compact` source (claude.ts
+ *   `openItemsAfterCompaction`), pi as a message that starts no turn on its
+ *   `compaction_end` (pi-runtime.ts), OpenCode as synthetic input that starts
+ *   no turn on its `session.compaction.ended` (CawCo's plugin,
+ *   opencode-plugin.ts). A person's Continue opens the new session on it.
  */
 import {
   artifactLink,
@@ -33,7 +39,9 @@ import {
   todoLink,
 } from "@cawco/core";
 import { askLink } from "@cawco/core/asks";
+import type { ContextFill } from "@cawco/core/context-filing";
 import type { DecisionCard, DecisionPageRead } from "@cawco/core/decisions";
+import { contextWords } from "@cawco/core/words/context";
 import type { DbShape } from "./db";
 import type { Decisions } from "./decisions";
 import type { Note } from "./memory";
@@ -43,10 +51,25 @@ import type { Tasks } from "./tasks";
  * The filing turn's message: the hub's word to the session, standing alone.
  * It names every record a session has, by the tool that writes it, and asks
  * for nothing else. `then`: what follows the turn, a compaction of this
- * conversation, or a new session continuing it.
+ * conversation, or a new session continuing it. `fill`: the reading a
+ * filing at the session's context threshold fired at, whose turn opens on
+ * how full its context is and closes on its harness compacting it later,
+ * on its own; the body between is the same.
  */
-export const filingPrompt = (then: "compacted" | "continued"): string =>
+export const filingPrompt = (
+  then: "compacted" | "continued",
+  fill?: ContextFill
+): string =>
   [
+    ...(fill
+      ? [
+          contextWords.filingFact(
+            Math.round((fill.tokens / fill.window) * 100),
+            fill.window
+          ),
+          "",
+        ]
+      : []),
     `Before this conversation is ${then === "compacted" ? "compacted" : "continued in a new session"}, file everything still open into your records, so it outlives the ${then === "compacted" ? "compaction" : "move"}: the hub lists those records word for word ${then === "compacted" ? "after it" : "in the new session's opening"}. This turn does only that.`,
     "",
     "- Every open step, every promise made, and every question still waiting on an answer: your plan, `todo_write` with `steps`, one line each, pending or in_progress.",
@@ -54,20 +77,16 @@ export const filingPrompt = (then: "compacted" | "continued"): string =>
     "- In a project: work that must outlive this conversation, `task_create`; your task's to-dos, `todo_write` with `task`; a lasting fact for the project's later sessions (a convention, a decision), `memory_note`.",
     "",
     "Write again only what changed or is missing. Then end your turn.",
+    ...(fill ? ["", contextWords.filingLater] : []),
   ].join("\n");
 
 /**
- * What the hub's `/compact` asks its summary to keep, for a harness that
- * lists no open items after it (pi).
+ * The focus the hub's `/compact` carries, on every harness: what its summary
+ * keeps. The open items themselves come back from the records after it,
+ * which every harness lists (the module's doc).
  */
-export const COMPACT_KEEP =
-  "Keep, word for word where short: what the person asked, decided, ruled out or set as a constraint, with their reasons; what was tried and why it was set aside; where the work stands; the names, numbers, paths, commands, ids and links in play.";
-
-/**
- * The focus the hub's `/compact` carries for Claude Code: what its summary
- * keeps. The open items themselves come back from the records after it.
- */
-export const COMPACT_FOCUS = `${COMPACT_KEEP} Open questions, promises and next steps are listed again after this from the session's records.`;
+export const COMPACT_FOCUS =
+  "Keep, word for word where short: what the person asked, decided, ruled out or set as a constraint, with their reasons; what was tried and why it was set aside; where the work stands; the names, numbers, paths, commands, ids and links in play. Open questions, promises and next steps are listed again after this from the session's records.";
 
 /** The heading every Open items section opens with. */
 const OPEN_ITEMS_HEADING =

@@ -391,6 +391,8 @@ const LIMIT_NOTES_KEPT = 20;
 type WatchLine = LimitNote;
 /** How many of a session's fleet-watch lines are kept. */
 const WATCH_LINES_KEPT = 20;
+/** How many of a session's lines about its context are kept ({@link DbShape.noteContextLine}). */
+const CONTEXT_LINES_KEPT = 20;
 /** A session's move line ({@link DbShape.noteMovedHere}). */
 interface MovedHere {
   at: number;
@@ -805,6 +807,8 @@ export interface DbShape {
   readonly confirmInstanceEnd: (id: string, reason?: string) => void;
   /** Connections and the projects that grant them (connections.ts). */
   readonly connections: ConnectionsDb;
+  /** The session's lines about its context ({@link DbShape.noteContextLine}), oldest first. */
+  readonly contextLinesOf: (id: string) => LimitNote[];
   readonly continuationRow: (id: string) => ContinuationRow | undefined;
   /** Every continuation job, oldest first. */
   readonly continuationRows: () => ContinuationRow[];
@@ -1360,6 +1364,13 @@ export interface DbShape {
     model: string,
     contextWindow: number
   ) => void;
+  /**
+   * Keeps a line about the session's context on its row (core
+   * `CONTEXT_LINE`, its `content` the line as JSON), the last {@link
+   * CONTEXT_LINES_KEPT}: one already kept under its id is what it says now,
+   * where it stood. False when the hub keeps no row for the session.
+   */
+  readonly noteContextLine: (id: string, line: LimitNote) => boolean;
   /**
    * The name the session's first user message gives it, for a row nobody named.
    * Write-once and never over a given title: a spawn's headline, or a custom
@@ -3401,7 +3412,9 @@ const make = async (path: string): Promise<DbShape> => {
     instanceId: string,
     kind: SessionLineKind,
     line: LimitNote,
-    kept: number
+    kept: number,
+    /** One already kept under its id says this now, where it stood: true for a line said again as it goes. */
+    again = false
   ): boolean =>
     db.transaction((tx) => {
       if (
@@ -3426,7 +3439,19 @@ const make = async (path: string): Promise<DbShape> => {
         .returning({ id: sessionLines.id })
         .all();
       if (added.length === 0) {
-        return false;
+        if (again) {
+          tx.update(sessionLines)
+            .set({ content: line.content })
+            .where(
+              and(
+                eq(sessionLines.instanceId, instanceId),
+                eq(sessionLines.kind, kind),
+                eq(sessionLines.id, line.id)
+              )
+            )
+            .run();
+        }
+        return again;
       }
       tx.run(
         sql`DELETE FROM ${sessionLines} WHERE instance_id = ${instanceId} AND kind = ${kind} AND rowid NOT IN (SELECT rowid FROM ${sessionLines} WHERE instance_id = ${instanceId} AND kind = ${kind} ORDER BY rowid DESC LIMIT ${kept})`
@@ -9241,6 +9266,14 @@ const make = async (path: string): Promise<DbShape> => {
     noteWatchLine: (id, line) => {
       keepLine(id, "watch", line, WATCH_LINES_KEPT);
     },
+    noteContextLine: (id, line) =>
+      keepLine(id, "context", line, CONTEXT_LINES_KEPT, true),
+    contextLinesOf: (id) =>
+      linesOf(id, "context").map(({ id: lineId, at, content }) => ({
+        id: lineId,
+        at,
+        content,
+      })),
     watchLinesOf: (id) =>
       linesOf(id, "watch").map(({ id: lineId, at, content }) => ({
         id: lineId,

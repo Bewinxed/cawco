@@ -79,6 +79,37 @@ export async function delegationTools(instanceId?: string, lister?: "pi") {
   ).tools;
 }
 
+/**
+ * A session's Open items section, word for word (hub open-items.ts): what
+ * its `open_items` tool answers, which every harness lists after each of its
+ * compactions (claude.ts on the `compact` source, pi-runtime.ts on
+ * `compaction_end`; CawCo's OpenCode plugin reads the same call).
+ */
+export const openItemsText = async (
+  instanceId: string,
+  credential: string | undefined
+): Promise<string> => {
+  const answer = await callDelegationTool(
+    instanceId,
+    OPEN_ITEMS_TOOL,
+    {},
+    credential
+  );
+  return answer.content
+    .flatMap((part) => (part.type === "text" ? [part.text] : []))
+    .join("\n");
+};
+
+/** The CawCo tool that answers a session's open items (hub delegation-tools.ts). */
+export const OPEN_ITEMS_TOOL = "open_items";
+
+/**
+ * The hub's tool door through this agent's gateway, a session's instance id
+ * after it: {@link callDelegationTool}'s, and CawCo's OpenCode plugin's,
+ * which hands the open items' words to the model as they are.
+ */
+export const TOOL_DOOR = "/api/delegation/call/";
+
 export async function callDelegationTool(
   instanceId: string,
   name: string,
@@ -87,9 +118,7 @@ export async function callDelegationTool(
   /** The harness's own id for this call (pi's `toolCallId`): the hub runs a keyed tool once per id (hub call-keys.ts). */
   callId?: string
 ) {
-  const url = harnessMcpUrl(
-    `/api/delegation/call/${encodeURIComponent(instanceId)}`
-  );
+  const url = harnessMcpUrl(`${TOOL_DOOR}${encodeURIComponent(instanceId)}`);
   const init = {
     method: "POST",
     headers: {
