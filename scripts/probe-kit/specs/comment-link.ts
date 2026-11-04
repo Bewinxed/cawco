@@ -551,6 +551,25 @@ const writeComment = async (
     5000
   );
   await settle(page, 300);
+  // The pointer may rest on an earlier comment's pill (the last one written
+  // stands under it), whose peek stands beside it and stays while the
+  // pointer passes onto it (PreviewPane.svelte `heardPeek`): the pointer
+  // leaves the page first, as a person's does, and comes in from above once
+  // no peek stands and the next would wait its own rest.
+  await page.mouse.move(0, 0);
+  await page
+    .locator('[data-slot="pin-peek"]')
+    .waitFor({ state: "detached", timeout: 5000 });
+  await page.waitForTimeout(
+    await page.evaluate(
+      () =>
+        Number.parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue(
+            "--dur-peek"
+          )
+        ) + 100
+    )
+  );
   const b = await screenBox(page, frame, "#here");
   const x = b.x + b.w * across;
   const y = b.y + b.h / 2;
