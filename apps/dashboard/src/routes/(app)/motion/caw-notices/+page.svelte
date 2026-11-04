@@ -176,6 +176,7 @@
    * step's act.
    */
   const RELAY_JOURNEY: RelayJourneyView = {
+    answered: true,
     asks: true,
     candidates: 1,
     done: false,
