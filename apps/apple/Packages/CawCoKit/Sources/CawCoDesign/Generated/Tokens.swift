@@ -1070,6 +1070,8 @@ public enum Size {
     public static let cBoardColMin: Double = 240
     /// A task board column's widest, and the open Archived column's cap.
     public static let cBoardColMax: Double = 352
+    /// A stage of Caw's setup draft drawn as its board column (SetupDraft, DraftColumn): its head (mark, name, kind) and two lines of what happens to work in it, so a column of one line and one of two stand at one height in their row, and the skeleton of a stage still coming stands at it.
+    public static let cDraftColH: Double = 120
     /// The key column of a task's Fields and Relations, so the two parts' values stand on one line.
     public static let cTaskKeyW: Double = 96
     /// The Filter popover's name column.

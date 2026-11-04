@@ -27,8 +27,8 @@
         view: "h-40",
         chart: "h-48",
         board: "h-64",
-        /** A board column still being drafted: the board's own height. */
-        column: "h-full",
+        /** A stage of Caw's setup draft still coming: a draft column's height. */
+        "draft-column": "h-c-draft-col-h",
         /** A word's bar at its text's x-height, so it sits like the word's body. */
         "x-height": "h-c-skeleton-x-height",
         /** A card's picture well, at the ghost picture's 16:10. */

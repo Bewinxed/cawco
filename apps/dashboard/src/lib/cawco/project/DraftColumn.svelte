@@ -66,8 +66,9 @@
 
 <section
   aria-label={setupWords.draftStage(stage.name)}
-  class="group/col flex min-h-0 flex-col gap-space-1 rounded-lg bg-surface-band p-space-1 inset-ring inset-ring-border-hairline max-phone:snap-start"
+  class="group/col flex min-h-c-draft-col-h flex-col gap-space-1 rounded-lg bg-surface-band p-space-1 inset-ring inset-ring-border-hairline"
   data-kind={stage.kind}
+  data-share="stage:{stage.name}"
   data-slot="draft-column"
 >
   <header class="flex flex-col gap-0 ps-space-2 pe-0 pt-space-1">
@@ -143,7 +144,7 @@
     >
   </header>
   <p
-    class="m-0 flex flex-auto items-start px-space-2 pt-space-3 pb-space-2 type-body text-pretty text-ink-muted"
+    class="m-0 px-space-2 pt-space-2 pb-space-2 type-body text-pretty text-ink-muted"
     data-slot="holds"
   >
     {holds}

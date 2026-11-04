@@ -85,7 +85,7 @@
   import { startConversation } from "./conversation";
   import SetupWell from "./SetupWell.svelte";
   import StarterCards from "./StarterCards.svelte";
-  import type { SetupProgress } from "./setup-progress";
+  import { handedOver, type SetupProgress } from "./setup-progress";
 
   let {
     lead,
@@ -180,7 +180,7 @@
   // He is drawn in his setup element while it stands with the panel open:
   // the seat stands empty meanwhile, and he goes back to it as it goes.
   $effect(() => {
-    const here = setup !== null && setup.phase !== "page" && lead.open;
+    const here = setup !== null && !handedOver(setup) && lead.open;
     lead.inPanel = here;
     return () => {
       lead.inPanel = false;
@@ -496,7 +496,7 @@
             browsingHarness={undefined}
             docked={{ draft: lead.draft }}
             focused={!onPreview}
-            afterRows={setup && setup.phase !== "page" ? setupTail : undefined}
+            afterRows={setup && !handedOver(setup) ? setupTail : undefined}
             viewId={shown}
             visible={!onPreview}
           />

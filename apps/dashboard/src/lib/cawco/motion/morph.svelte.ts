@@ -344,30 +344,30 @@ export function morph({
           frames[0].width = `${from.w}px`;
           frames[1].width = `${to.w}px`;
         }
-        const held = children.map(({ child, blockSize, inlineSize }) => ({
-          child,
-          blockSize,
-          inlineSize,
-          was: child.style.blockSize,
-          wasInline: child.style.inlineSize,
-          shrink: child.style.flexShrink,
-        }));
-        for (const { child, blockSize, inlineSize } of held) {
-          child.style.flexShrink = "0";
-          child.style.blockSize = `${blockSize}px`;
-          if (width) {
-            child.style.inlineSize = `${inlineSize}px`;
-          }
-        }
+        // Each child is held by an animation of its own, never by writing
+        // its inline style: whatever its owner writes there meanwhile (a
+        // `style:block-size` that follows a measure) stands once the hold
+        // is let go. Written and restored inline, the hold put back the
+        // value it read at the start, and a box resized during the tween
+        // kept its old size (New project's field, 96px over a 50px folded
+        // composer).
+        const held = children.map(({ child, blockSize, inlineSize }) =>
+          child.animate(
+            [
+              {
+                flexShrink: "0",
+                blockSize: `${blockSize}px`,
+                ...(width ? { inlineSize: `${inlineSize}px` } : {}),
+              },
+            ],
+            { duration: 0, fill: "forwards" }
+          )
+        );
         const animation = play(frames, moves(from, to), clock);
         running = animation;
         const letGo = () => {
-          for (const { child, was, wasInline, shrink } of held) {
-            child.style.flexShrink = shrink;
-            child.style.blockSize = was;
-            if (width) {
-              child.style.inlineSize = wasInline;
-            }
+          for (const hold of held) {
+            hold.cancel();
           }
         };
         release = letGo;

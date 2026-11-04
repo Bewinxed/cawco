@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { PulseFrame } from "@cawco/core/frames";
   import type { InstanceRow } from "@cawco/core/protocol";
+  import type { Stage as BoardStage } from "@cawco/core/task-views";
   import { projectWords } from "@cawco/core/words/project";
   /**
    * ONBOARDING BENCH (dev only): a project's page in its first minutes and
@@ -34,6 +35,7 @@
   import type { Stage as DraftStage } from "#lib/cawco/decisions/host/setup/stage.js";
   import SetupPagePreview from "#lib/cawco/decisions/SetupPagePreview.svelte";
   import FirstRun from "#lib/cawco/home/FirstRun.svelte";
+  import { depart } from "#lib/cawco/motion/share.svelte.js";
   import CawFloat from "#lib/cawco/project/CawFloat.svelte";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
@@ -46,7 +48,10 @@
     PR_STAGES,
     SETUP_CALLS,
   } from "#lib/cawco/project/setup.fixtures.js";
-  import { setupProgressOf } from "#lib/cawco/project/setup-progress.js";
+  import {
+    handedOver,
+    setupProgressOf,
+  } from "#lib/cawco/project/setup-progress.js";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
   import type { Message } from "#lib/cawco/types.js";
   import { IconFolder } from "#lib/icons.js";
@@ -111,8 +116,12 @@
     sent: 0,
     page: DRAFT.length,
   };
-  const written = WRITTEN[beat] ?? 5;
-  let draft = $state(DRAFT.slice(0, written));
+  /** Where the bench stands now: its beat, moved on by an answer or Set up. */
+  let at = $state<Beat>(beat);
+  let written = $state(WRITTEN[beat] ?? 5);
+  let draft = $state(DRAFT.slice(0, WRITTEN[beat] ?? 5));
+  /** Set up is on its way to the bench's hub. */
+  let sending = $state(false);
   let draftAim = $state(beat === "sent" ? "" : AIM);
 
   const WORDS =
@@ -129,13 +138,20 @@
   const first = said(
     "caw-first",
     "assistant",
-    "A personal PR team: your job search, visa applications and renewals, travel, and a public voice, with every message going out only once you send it. A page opens to confirm how it runs."
+    way === "board"
+      ? "A personal PR team: your job search, visa applications and renewals, travel, and a public voice, with every message going out only once you send it. The board shows how it runs as I draft it."
+      : "A personal PR team: your job search, visa applications and renewals, travel, and a public voice, with every message going out only once you send it. A page opens to confirm how it runs."
   );
-  const done = said(
-    "set-up",
-    "assistant",
-    "Your PR team is set up: eight stages from Inbox to Done, a researcher and a writer, and what it's for as the project's notes. Tell me the first thing to work on, or add it to Inbox."
-  );
+  /** What he calls once drafted: the board way's draft is the board, so no page of his opens. */
+  const drafted = way === "board" ? SETUP_CALLS.named : SETUP_CALLS.page;
+  /** His words once it is set up, counting the stages it was set up with. */
+  const doneOf = (stages: number) =>
+    said(
+      "set-up",
+      "assistant",
+      `Your PR team is set up: ${stages} stages from Inbox to Done, a researcher and a writer, and what it's for as the project's notes. Tell me the first thing to work on, or add it to Inbox.`
+    );
+  const done = doneOf(8);
   const MESSAGES: Record<Beat, Message[]> = {
     sent: [sent],
     drafting: [
@@ -150,19 +166,8 @@
       first,
       ...SETUP_CALLS.named.slice(1),
     ],
-    page: [
-      sent,
-      ...SETUP_CALLS.page.slice(0, 1),
-      first,
-      ...SETUP_CALLS.page.slice(1),
-    ],
-    set: [
-      sent,
-      ...SETUP_CALLS.page.slice(0, 1),
-      first,
-      ...SETUP_CALLS.page.slice(1),
-      done,
-    ],
+    page: [sent, ...drafted.slice(0, 1), first, ...drafted.slice(1)],
+    set: [sent, ...drafted.slice(0, 1), first, ...drafted.slice(1), done],
     "first-run": [],
   };
 
@@ -176,6 +181,10 @@
           sessions: Record<string, ReturnType<typeof blankSession>>;
         };
         adoptInstances: (rows: InstanceRow[]) => void;
+        standHub: (
+          answer: (instanceId: string, kind: string, intent: unknown) => void
+        ) => void;
+        leaveHub: () => void;
       };
     }
   ).__cawcoDebug;
@@ -224,8 +233,9 @@
       session.pending = PR_ASKS.map((ask) => ask.request);
     }
     debug.state.sessions[ID] = session;
-    // The setup page open: his panel's Preview holds it (`?beat=page`).
-    if (beat === "page") {
+    // The setup page open: his panel's Preview holds it (`?beat=page`), in
+    // the ways where it is his Preview's.
+    if (beat === "page" && (way === undefined || way === "panel")) {
       debug.state.previews[ID] = {
         kind: "preview",
         instanceId: ID,
@@ -239,19 +249,95 @@
         state: "open",
       };
     }
+    pulse(beat === "set" || beat === "page" ? "idle" : "working");
+  }
+
+  /** His pulse, as the hub frames it: at work, or idle. */
+  function pulse(activity: "idle" | "working") {
     debug.frame({
       kind: "pulse",
       instanceId: ID,
       pulse: {
-        activity: beat === "set" || beat === "page" ? "idle" : "working",
-        at: now,
-        busy: beat !== "set" && beat !== "page",
+        activity,
+        at: Date.now(),
+        busy: activity === "working",
         currentTool: null,
         instanceId: ID,
         runningSubagents: 0,
       },
     } as PulseFrame);
   }
+
+  // The bench's hub: the page stands on it (no socket, so no band says the
+  // hub is out of reach), and it answers the page's commands as the hub
+  // would. An answer to one of his questions takes it off his queue; once
+  // none holds him, he writes the rest of the draft, a stage a beat, and
+  // hands it over.
+  const STAGE_BEAT_MS = 900;
+  let writing: ReturnType<typeof setInterval> | undefined;
+  function answered(requestId: string) {
+    const session = debug.state.sessions[ID];
+    if (!session) {
+      return;
+    }
+    session.pending = session.pending.filter(
+      (one) => one.requestId !== requestId
+    );
+    const holding = session.pending.some(
+      (one) => (one.input as { blocks?: unknown }).blocks === true
+    );
+    if (way !== "board" || holding || writing || at === "page") {
+      return;
+    }
+    if (at === "questions" || at === "drafting") {
+      pulse("working");
+      writing = setInterval(() => {
+        written += 1;
+        draft = [...draft, DRAFT[written - 1]];
+        if (written >= DRAFT.length) {
+          clearInterval(writing);
+          writing = undefined;
+          at = "page";
+          pulse("idle");
+        }
+      }, STAGE_BEAT_MS);
+    }
+  }
+  debug.standHub((_instanceId, kind, intent) => {
+    if (kind === "permission.answer") {
+      answered((intent as { requestId: string }).requestId);
+    }
+  });
+
+  /** Set up, on the bench's hub: a moment on its way, then the board it made, its columns landing from the draft's. */
+  const SET_UP_MS = 700;
+  function setUp() {
+    sending = true;
+    setTimeout(() => {
+      for (const column of document.querySelectorAll<HTMLElement>(
+        "[data-share^='stage:']"
+      )) {
+        depart(column);
+      }
+      sending = false;
+      at = "set";
+      const session = debug.state.sessions[ID];
+      if (session) {
+        session.messages = [...session.messages, doneOf(draft.length)];
+      }
+      pulse("idle");
+    }, SET_UP_MS);
+  }
+  /** The draft as the board's stages, once it is set up. */
+  const boardStages = $derived<BoardStage[]>(
+    draft.map((stage) => ({
+      name: stage.name,
+      kind: stage.kind,
+      hooks: { ...stage.hooks },
+      ...(stage.icon ? { icon: stage.icon } : {}),
+      ...(stage.color ? { color: stage.color } : {}),
+    }))
+  );
 
   const lead = new CawLead({
     id: () => PROJECT,
@@ -272,23 +358,22 @@
   });
 
   const asks = $derived(lead.asks);
-  const notSetUp = beat !== "set";
+  const blocks = (one: (typeof asks)[number]): boolean =>
+    (one.request.input as { blocks?: unknown }).blocks === true;
+  const notSetUp = $derived(at !== "set");
   const progress = $derived(
     notSetUp
       ? setupProgressOf({
           messages: cawco.session(ID)?.messages ?? [],
           name,
           named,
-          open: asks.map((one) => ({
-            blocks: (one.request.input as { blocks?: unknown }).blocks === true,
-          })),
-          page: beat === "page",
+          open: asks.map((one) => ({ blocks: blocks(one) })),
+          page: at === "page",
+          ends: way === "board" ? "board" : "page",
         })
       : null
   );
-  const setup = $derived(
-    progress && progress.phase !== "page" ? progress : null
-  );
+  const setup = $derived(progress && !handedOver(progress) ? progress : null);
   /**
    * A phone, read off the screen as it changes, as the project page reads
    * it (its `sheetQuery` line is CawFloat's sheet's): the bench follows a
@@ -301,6 +386,8 @@
   const none = () => undefined;
 
   onMount(() => () => {
+    clearInterval(writing);
+    debug.leaveHub();
     delete debug.state.sessions[ID];
     delete debug.state.previews[ID];
     debug.adoptInstances([]);
@@ -341,7 +428,7 @@
         >
           {name}
         </h1>
-        {#if beat === "set" || way === "board" || (way === "page" && beat === "page")}
+        {#if at === "set" || way === "board" || (way === "page" && at === "page")}
           <span class="ms-auto" data-box>
             <CawSeat {lead} projectId={PROJECT} projectName={name} />
           </span>
@@ -350,25 +437,34 @@
       <div
         class="flex min-h-0 flex-auto flex-col ps-space-7 pe-space-6 max-desk:px-space-5"
       >
-        {#if way === "board" && beat !== "set"}
-          <SetupDraft
-            aim={draftAim}
-            coming={DRAFT.length - written}
-            {name}
-            onaim={(next) => {
-              draftAim = next;
-            }}
-            onsetup={none}
-            onstages={(next) => {
-              draft = next;
-            }}
-            stages={draft}
-          />
-        {:else if way === "page" && beat === "page"}
+        {#if way === "board" && at !== "set"}
+          <div class="min-h-0 flex-auto overflow-y-auto">
+            <SetupDraft
+              aim={draftAim}
+              asking={asks.length}
+              coming={Math.max(DRAFT.length - written, 0)}
+              {name}
+              onaim={(next) => {
+                draftAim = next;
+              }}
+              onanswer={() => {
+                lead.tab = "assistant";
+                lead.open = true;
+              }}
+              onsetup={setUp}
+              onstages={(next) => {
+                draft = next;
+              }}
+              {sending}
+              stages={draft}
+              waiting={asks.filter(blocks).length}
+            />
+          </div>
+        {:else if way === "page" && at === "page"}
           <div class="min-h-0 flex-auto overflow-y-auto">
             <SetupPagePreview />
           </div>
-        {:else if beat === "set"}
+        {:else if at === "set"}
           <TaskBoard
             allowedFrom={() => new Set<string>()}
             hrefOf={() => "#"}
@@ -376,12 +472,12 @@
             oncreate={async () => undefined}
             onmove={none}
             onopen={none}
-            stages={PR_STAGES}
+            stages={way === "board" ? boardStages : PR_STAGES}
             tasks={[]}
           />
         {:else}
           <SetupScene
-            act={beat === "page"
+            act={at === "page"
               ? { kind: "page", open: none }
               : { kind: "drafting" }}
             asks={asksOnBoard ? asks : []}

@@ -90,6 +90,7 @@
   import SetupScene from "#lib/cawco/project/SetupScene.svelte";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
   import {
+    handedOver,
     SETUP_PAGE,
     setupProgressOf,
   } from "#lib/cawco/project/setup-progress.js";
@@ -1544,7 +1545,7 @@
       lead.status === "working" ||
       lead.status === "needs-you" ||
       setupAsks.length > 0;
-    return progress.phase === "page" || going ? progress : null;
+    return handedOver(progress) || going ? progress : null;
   });
   /** The setup page, opened where Caw showed it: his panel's Preview, else its place in Decisions. */
   async function openSetupPage() {

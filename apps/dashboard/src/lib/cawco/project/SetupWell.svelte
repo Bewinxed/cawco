@@ -33,7 +33,11 @@
     ThinkingSteps,
   } from "#lib/components/ui/thinking-steps/index.js";
   import { IconNeedsYou, IconSuccess } from "#lib/icons.js";
-  import type { SetupProgress, SetupStep } from "./setup-progress";
+  import {
+    handedOver,
+    type SetupProgress,
+    type SetupStep,
+  } from "./setup-progress";
 
   let {
     progress,
@@ -78,7 +82,7 @@
     <span data-slot="rail-cell" class="rail-cell">
       {#if progress.phase === "waiting"}
         <IconNeedsYou class="size-icon-md text-status-attn-glyph" />
-      {:else if progress.phase !== "page"}
+      {:else if !handedOver(progress)}
         <LiveDot />
       {/if}
     </span>

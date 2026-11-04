@@ -6,7 +6,12 @@
  * first-run row on the fleet board. The person's picks on the decision
  * page `onboarding-design` set each.
  */
-import type { StageColor, StageIcon, StageKind } from "../views";
+import type {
+  OfferedTemplate,
+  StageColor,
+  StageIcon,
+  StageKind,
+} from "../views";
 
 export const onboardingWords = {
   /** New project's one question, over the field. */
@@ -30,8 +35,20 @@ export const onboardingWords = {
   noMachine: "No machine has joined yet, so Caw can't start.",
   /** Machines registered, none online. */
   noneOnline: "No machine is online, so Caw can't start.",
-  /** Over the template row under the field: the other way in. */
-  templates: "Or start from a template",
+  /** Over the template row under the field: a template shapes what the words start. */
+  templates: "Shape it with a template",
+  /**
+   * The field's placeholder once a template is picked and the field is
+   * empty: what that work needs said before Caw can start it.
+   */
+  templateAsks: {
+    code: "Which repo, and what should land?",
+    launch: "What are you launching, and when?",
+    seo: "Which site, and what should it rank for?",
+    brand: "Whose brand, and where does its voice live?",
+    design: "What are you designing, and for whom?",
+    social: "Which accounts, and what should they say?",
+  } satisfies Record<OfferedTemplate, string>,
   /** The fold that opens the template row, where it stands folded. */
   showTemplates: "Start from a template",
   addMachine: "Add machine",
@@ -54,6 +71,7 @@ export const setupWords = {
     named: (name: string) => `Named it ${name}`,
     draft: "Draft the stages and who does the work",
     page: "Open the setup page",
+    board: "Hand you the draft",
   },
   /** Said before a done step's label, for a screen reader. */
   stepDone: "Done:",
@@ -65,6 +83,7 @@ export const setupWords = {
     asking: "Drafting the rest while you decide",
     waiting: "Waiting on your answer",
     page: "The setup page is open",
+    board: "The draft is on the board",
   },
   /** His element's name, for a screen reader. */
   element: "Caw setting up the project",
@@ -99,6 +118,17 @@ export const setupWords = {
   draftedHow: (name: string) => `Caw drafted how ${name} runs`,
   /** Under the draft bar's line: where a change is made. */
   draftHint: "Change a stage here, or tell Caw.",
+  /** The draft bar while a question of his holds his work. */
+  waitingOn: (count: number) =>
+    count === 1
+      ? "Caw is waiting on your answer"
+      : `Caw is waiting on ${count} answers`,
+  waitingWhy: "He goes on drafting once you answer.",
+  /** Under the bar's line while questions that hold nothing are open. */
+  asksOpen: (count: number) =>
+    count === 1 ? "1 question from Caw" : `${count} questions from Caw`,
+  /** The bar's act while he asks: his questions, where they are asked. */
+  answer: "Answer Caw",
   /** A draft column's name, for a screen reader. */
   draftStage: (name: string) => `${name}, a stage in Caw's draft`,
   /** What a draft column says in its body: what happens to work in it. */

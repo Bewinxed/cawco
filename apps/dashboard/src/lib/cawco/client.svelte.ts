@@ -1303,7 +1303,46 @@ const pageReads = new Map<
 // taken as the socket takes it: a session's pulse lives in the store's own
 // `Pulse`s, which no bench can write into `state`).
 if (import.meta.env.DEV) {
-  devDebug({ state, inflight, adoptInstances, frame: handleFrame });
+  devDebug({
+    state,
+    inflight,
+    adoptInstances,
+    frame: handleFrame,
+    standHub,
+    leaveHub,
+  });
+}
+
+/**
+ * A bench's own hub (dev only): what a command from the page does there,
+ * while a bench stands the page on it. No socket runs meanwhile, so no
+ * band says the hub is out of reach and no command goes to the wire: each
+ * goes to the bench, which answers it as the hub would.
+ */
+type BenchHub = (
+  instanceId: string,
+  kind: CommandKind,
+  intent: unknown
+) => void;
+let benchHub: BenchHub | null = null;
+
+/** Stands the page on a bench's hub: the socket closed, the hub said reached (dev only). */
+function standHub(answer: BenchHub): void {
+  benchHub = answer;
+  globalThis.__cawcoDisposing = true;
+  teardown();
+  state.status = "connected";
+  state.failed = false;
+  state.outageAt = null;
+  // What the bench stood in is the fleet as read, live and stored alike.
+  state.fleetRead = true;
+  state.liveRead = true;
+}
+
+/** The bench is gone: the page reaches for the real hub again (dev only). */
+function leaveHub(): void {
+  benchHub = null;
+  connect();
 }
 
 // HMR-persistent socket references, so a module reload never leaves an orphan.
@@ -4420,6 +4459,11 @@ export function submitCommand<K extends CommandKind>(
    */
   commandId = newId()
 ): string {
+  // A bench's hub answers it in place of the wire (dev only).
+  if (import.meta.env.DEV && benchHub) {
+    benchHub(instanceId, kind, intent);
+    return commandId;
+  }
   // Everything below either reaches the ledger or becomes a record in it;
   // nothing reaches the caller as an exception.
   const settlesAt = SETTLES_AT[kind];
@@ -5499,6 +5543,10 @@ export function hubSocketUrl(): string {
 }
 
 function connect(): void {
+  // A bench stands the page on its own hub (dev only): no socket while it does.
+  if (import.meta.env.DEV && benchHub) {
+    return;
+  }
   globalThis.__cawcoDisposing = false;
   teardown();
   state.status = "connecting";

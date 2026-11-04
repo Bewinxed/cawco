@@ -8,11 +8,11 @@ import { OFFERED_TEMPLATES, type OfferedTemplate } from "@cawco/core/views";
 import type { Component } from "svelte";
 import {
   IconChat,
+  IconFileCode,
   IconPalette,
   IconPenLine,
   IconRocket,
   IconSearch,
-  IconToolCode,
 } from "#lib/icons.js";
 
 /** A template New project offers: core's one list, which `project_setup` lists too. */
@@ -32,7 +32,7 @@ export interface TemplateCard {
 /** Each offered template's card, by name: a template added to core's list is a type error here until it has one. */
 const CARDS: Record<TemplateName, Omit<TemplateCard, "template">> = {
   code: {
-    icon: IconToolCode,
+    icon: IconFileCode,
     hue: "var(--hue-cyan-500)",
     name: "Code",
     meta: "Tasks worked on, reviewed by you, then landed",

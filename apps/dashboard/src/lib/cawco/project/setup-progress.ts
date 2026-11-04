@@ -10,7 +10,7 @@ import { setupWords } from "@cawco/core/words/onboarding";
 import type { Message } from "../types";
 
 /** The setup's four steps, in the skill's order. */
-type SetupStepId = "read" | "name" | "draft" | "page";
+type SetupStepId = "read" | "name" | "draft" | "page" | "board";
 
 export interface SetupStep {
   done: boolean;
@@ -47,6 +47,13 @@ const openedPage = (message: Message): boolean =>
     SETUP_PAGE;
 
 export interface SetupFacts {
+  /**
+   * Where the draft is handed over (decision page
+   * `onboarding-first-minutes`, card `draft-where`): the setup page he
+   * opens (`page`, as today), or the board drawn from it (`board`), where
+   * the last step is the draft handed to the person, not a page opened.
+   */
+  ends?: "page" | "board";
   /** His conversation's messages, oldest first. */
   messages: readonly Message[];
   /** The project's name, and whether it is still the placeholder. */
@@ -58,6 +65,10 @@ export interface SetupFacts {
   page: boolean;
 }
 
+/** The draft is handed over: its page is open, or it stands on the board. */
+export const handedOver = (progress: SetupProgress): boolean =>
+  progress.phase === "page" || progress.phase === "board";
+
 /** The setup's steps and what he is on, from what has happened so far. */
 export function setupProgressOf(facts: SetupFacts): SetupProgress {
   const read = facts.messages.some((message) =>
@@ -67,7 +78,8 @@ export function setupProgressOf(facts: SetupFacts): SetupProgress {
     facts.named ||
     facts.messages.some((message) => calls(message, "project_name"));
   const page = facts.page || facts.messages.some(openedPage);
-  const phase = phaseOf(read, named, page, facts.open);
+  const board = facts.ends === "board";
+  const phase = phaseOf(read, named, page, facts.open, board);
   const steps: SetupStep[] = [
     {
       id: "read",
@@ -89,7 +101,9 @@ export function setupProgressOf(facts: SetupFacts): SetupProgress {
       done: page,
       live: phase === "drafting" || phase === "asking" || phase === "waiting",
     },
-    { id: "page", label: setupWords.steps.page, done: page, live: false },
+    board
+      ? { id: "board", label: setupWords.steps.board, done: page, live: false }
+      : { id: "page", label: setupWords.steps.page, done: page, live: false },
   ];
   return { phase, steps, doing: setupWords.doing[phase] };
 }
@@ -98,10 +112,11 @@ function phaseOf(
   read: boolean,
   named: boolean,
   page: boolean,
-  open: { blocks: boolean }[]
+  open: { blocks: boolean }[],
+  board: boolean
 ): SetupPhase {
   if (page) {
-    return "page";
+    return board ? "board" : "page";
   }
   if (!read) {
     return "reading";
