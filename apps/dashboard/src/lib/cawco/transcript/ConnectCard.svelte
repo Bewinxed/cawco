@@ -214,12 +214,6 @@
     name: string
   ): { happened: string; next: string; details: string | null } {
     switch (fault.kind) {
-      case "closed":
-        return {
-          happened: askWords.connectTabClosed(name),
-          next: askWords.connectFailedNext(asker),
-          details: null,
-        };
       case "expired":
         return {
           happened: askWords.connectPageExpired(name),

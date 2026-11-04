@@ -912,7 +912,6 @@ const BesideShape = z.object({ projectId: z.string(), taskId: z.string() });
 export const BesideSchema: z.ZodType<BesideType> = BesideShape;
 
 const ConnectFaultShape = z.union([
-  z.object({ kind: z.literal("closed") }),
   z.object({ kind: z.literal("refused"), reason: z.string() }),
   z.object({ kind: z.literal("expired") }),
 ]);

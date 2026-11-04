@@ -14,12 +14,15 @@
  *
  * 1. The row shows Sign in before, in both tabs.
  * 1b. The start page's opener policy (as a provider's sign-in page has)
- *    cuts the sign-in tab off from the dashboard, which reads its handle
- *    closed and says so on the row (McpSignIn.svelte) while the sign-in
- *    goes on.
+ *    cuts the sign-in tab off from the dashboard, whose handle on it reads
+ *    closed while the sign-in goes on: the row still waits on it and says
+ *    no fault (McpSignIn.svelte reads no handle).
  * 2. Once the hand-back's tab closed, the row in the tab that pressed shows
  *    signed in, no Sign in and no fault, without a reload.
  * 3. The other tab's row shows signed in too, without a reload.
+ * 4. The pressing tab turns the server off (its page writes the hub's
+ *    answer into its own rows); the hub then turns it on again from
+ *    elsewhere, and its `fleet_mcp` frame turns the row on in both tabs.
  *
  *   bun scripts/probe-kit/run.ts mcp-sign-in-live
  */
@@ -159,6 +162,16 @@ const run = async (kit: Kit) => {
           headers: { "cross-origin-opener-policy": "same-origin" },
         })
       );
+      // The press's own handle on the sign-in tab, kept where the probe
+      // can read it: what the dashboard would read, were it to look.
+      await pressing.evaluate(() => {
+        const open = window.open.bind(window);
+        window.open = (...args) => {
+          const opened = open(...args);
+          (globalThis as { probeTab?: Window | null }).probeTab = opened;
+          return opened;
+        };
+      });
       const [tab] = await Promise.all([
         pressing.context().waitForEvent("page"),
         signInIn(pressing).click(),
@@ -167,19 +180,33 @@ const run = async (kit: Kit) => {
       const state = stateOf(tab.url());
       kit.note(`${view}: the sign-in's state is ${state.slice(0, 8)}…`);
       // The start page's opener policy cuts the tab off from the page that
-      // opened it, as a provider's sign-in page does: that page reads its
-      // handle closed, and says so on the row while the sign-in goes on.
-      const severed = await rowIn(pressing)
-        .locator("[data-sign-in-fault]")
-        .getByText(mcpWords.signInClosed)
-        .waitFor({ timeout: 30_000 })
-        .then(
-          () => true,
-          () => false
-        );
+      // opened it, as a provider's sign-in page does: its handle reads
+      // closed while the sign-in goes on.
+      const severed = await until(
+        "the sign-in tab's handle reads closed",
+        () =>
+          pressing.evaluate(
+            () =>
+              (globalThis as { probeTab?: Window | null }).probeTab?.closed ===
+              true
+          ),
+        Boolean,
+        30_000
+      ).catch(() => false);
+      // Past the beat the row once gave a closed handle before calling the
+      // sign-in over (2 s, polled each 0.5 s).
+      await pressing.waitForTimeout(3000);
+      const underWay = {
+        severed,
+        fault: await rowIn(pressing).locator("[data-sign-in-fault]").count(),
+        waiting: await rowIn(pressing)
+          .getByRole("button", { name: mcpWords.signingIn(SERVER) })
+          .count(),
+      };
       kit.check(
-        `${view} 1b: with the sign-in tab cut off from its opener, the row says the tab closed`,
-        severed
+        `${view} 1b: with the sign-in tab cut off from its opener, the row still waits on the sign-in and says no fault`,
+        underWay.severed && underWay.fault === 0 && underWay.waiting === 1,
+        JSON.stringify(underWay)
       );
       const closed = tab.waitForEvent("close", { timeout: 30_000 }).then(
         () => true,
@@ -196,10 +223,7 @@ const run = async (kit: Kit) => {
       const read = async (page: typeof pressing) => ({
         shown: await signedInIn(page).count(),
         signIn: await signInIn(page).count(),
-        fault: await rowIn(page)
-          .locator("[data-sign-in-fault]")
-          .getByText(mcpWords.signInClosed)
-          .count(),
+        fault: await rowIn(page).locator("[data-sign-in-fault]").count(),
         sameLoad: await page.evaluate(
           () => (globalThis as { probeMark?: boolean }).probeMark === true
         ),
@@ -225,6 +249,44 @@ const run = async (kit: Kit) => {
         `${view} 3: another open tab shows the row signed in, without a reload`,
         watching.shown === 1 && watching.signIn === 0 && watching.sameLoad,
         JSON.stringify(watching)
+      );
+
+      // A local edit: the pressing tab turns the server off, and its page
+      // writes the hub's answer into its own rows. The hub then turns it
+      // back on from elsewhere: its frame must still reach both rows.
+      const switchIn = (page: typeof pressing) =>
+        rowIn(page).getByRole("switch");
+      const checked = (page: typeof pressing) =>
+        switchIn(page).getAttribute("aria-checked");
+      await switchIn(pressing).click();
+      const off = await until(
+        "the pressing tab's row turned off",
+        () => checked(pressing),
+        (now) => now === "false",
+        10_000
+      ).catch(() => checked(pressing));
+      const back = await fetch(`${fleet.base}/api/fleet/mcp/${SERVER}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          config: { type: "http", url: `${providerOrigin}/mcp` },
+          enabled: true,
+        }),
+      });
+      const on = await Promise.all(
+        [pressing, other].map((page) =>
+          until(
+            "the row turned on",
+            () => checked(page),
+            (now) => now === "true",
+            10_000
+          ).catch(() => checked(page))
+        )
+      );
+      kit.check(
+        `${view} 4: after the pressing tab's own edit turned the row off, the hub turning it on again reaches both tabs' rows`,
+        off === "false" && back.ok && on.every((one) => one === "true"),
+        JSON.stringify({ off, back: back.status, on })
       );
       await pressing.close();
       await other.close();

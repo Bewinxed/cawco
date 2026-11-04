@@ -35,7 +35,7 @@ export const connectionsWords = {
   stateSignedIn: "Signed in",
   stateNeedsSignIn: "Not signed in",
   stateError: "Failing",
-  /** A row's line while its sign-in is open, and when it stops. */
+  /** A row's line while its sign-in is open, and (the native app's) when its sheet was dismissed. */
   signingInTab: (service: string) =>
     `${service}'s sign-in is open in a new tab; this row turns signed in when you finish there.`,
   signInClosed:

@@ -1160,10 +1160,6 @@ public enum Words {
         public static let connected = "Connected"
 
         /// A sign-in that did not come back, in the card's centre, in the error formula: what happened, then what is safe and the way on.
-        public static func connectTabClosed(server: String) -> String {
-            "The \(server) tab closed before the sign-in finished."
-        }
-
         public static func connectRefused(server: String) -> String {
             "Couldn't start the \(server) sign-in."
         }
@@ -3063,7 +3059,7 @@ public enum Words {
 
         public static let stateError = "Failing"
 
-        /// A row's line while its sign-in is open, and when it stops.
+        /// A row's line while its sign-in is open, and (the native app's) when its sheet was dismissed.
         public static func signingInTab(service: String) -> String {
             "\(service)'s sign-in is open in a new tab; this row turns signed in when you finish there."
         }
@@ -3433,7 +3429,11 @@ public enum Words {
 
         public static let signedIn = "Signed in for the fleet"
 
+        /// The native app's: its own sign-in sheet was dismissed.
         public static let signInClosed = "The sign-in tab closed before it finished."
+
+        /// The dashboard's: the hub did not hear back before the start's expiry.
+        public static let signInLapsed = "The sign-in ran out of time before it finished."
 
         /// The hub refuses to start a sign-in to a server switched off.
         public static let enableBeforeSignIn = "Enable this server before signing in."

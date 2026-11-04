@@ -25,10 +25,13 @@
   let { children } = $props();
 
   const store = provideConfig(new ConfigStore());
+  // The hub's list, as the socket last said it, copied: a page's own edit to
+  // its rows (an upsert, a removal) never writes into the socket's store,
+  // whose next frame is compared against what the hub said before.
   $effect(() => {
     const servers = cawco.fleetMcp;
     if (servers && store.fleet.value) {
-      store.fleet.value.config.mcp = servers;
+      store.fleet.value.config.mcp = $state.snapshot(servers);
     }
   });
   onMount(() => {

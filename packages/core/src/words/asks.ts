@@ -56,8 +56,6 @@ export const askWords = {
    * A sign-in that did not come back, in the card's centre, in the error
    * formula: what happened, then what is safe and the way on.
    */
-  connectTabClosed: (server: string) =>
-    `The ${server} tab closed before the sign-in finished.`,
   connectRefused: (server: string) => `Couldn't start the ${server} sign-in.`,
   connectPageExpired: (server: string) =>
     `${server}'s sign-in page expired before it finished.`,

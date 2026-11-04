@@ -2,10 +2,13 @@
   /**
    * A fleet MCP server's sign-in, on its row. Sign in opens the provider in
    * a tab of its own (fleet.ts `signInToMcp`) and the page stays here: the
-   * button waits for the provider until the hub reports the server signed
-   * in (`server.auth.state`, over the socket), and then the row says so. A
-   * sign-in tab closed before it finished, or a start the hub refused, is
-   * said under the button, which tries again.
+   * button waits until the hub reports the server signed in
+   * (`server.auth.state`, over the socket), and then the row says so. The
+   * tab's handle is never read: a provider's page that sends
+   * Cross-Origin-Opener-Policy cuts it off from this page, which then reads
+   * it closed while the sign-in goes on. A sign-in the hub has not heard
+   * back by its start's `expiresAt` can no longer finish, and is said under
+   * the button, which tries again; so is a start the hub refused.
    */
   import type { FleetMcpServer } from "@cawco/core/fleet";
   import { mcpWords as words } from "@cawco/core/words/mcp";
@@ -19,45 +22,42 @@
   let waiting = $state(false);
   let problem = $state<string | null>(null);
   const signedIn = $derived(server.auth?.state === "signed-in");
-  let watch: ReturnType<typeof setInterval> | undefined;
+  /** The wait for the hub's word, ended by the start's expiry. */
+  let lapse: ReturnType<typeof setTimeout> | undefined;
 
   // Signed in on the hub's word: the wait is over.
   $effect(() => {
     if (signedIn) {
       waiting = false;
       problem = null;
-      clearInterval(watch);
+      clearTimeout(lapse);
     }
   });
-  $effect(() => () => clearInterval(watch));
+  $effect(() => () => clearTimeout(lapse));
 
   async function signIn() {
     waiting = true;
     problem = null;
-    let tab: Window;
+    clearTimeout(lapse);
+    let expiresAt: number;
     try {
-      ({ tab } = await signInToMcp(server.name));
+      ({ expiresAt } = await signInToMcp(server.name));
     } catch (error) {
       problem = failureWords(error);
       waiting = false;
       return;
     }
-    clearInterval(watch);
-    // A tab closed before the hub said signed in: it did not finish.
-    watch = setInterval(() => {
-      if (!tab.closed) {
-        return;
-      }
-      clearInterval(watch);
-      // The hand-back closes its tab as the hub answers: a beat for the
-      // socket's word to arrive before calling it unfinished.
-      setTimeout(() => {
+    // Past its start's expiry the provider's answer is refused: the sign-in
+    // that has not landed by then never will.
+    lapse = setTimeout(
+      () => {
         if (waiting && !signedIn) {
           waiting = false;
-          problem = words.signInClosed;
+          problem = words.signInLapsed;
         }
-      }, 2000);
-    }, 500);
+      },
+      Math.max(0, expiresAt - Date.now())
+    );
   }
 </script>
 

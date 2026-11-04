@@ -1,15 +1,18 @@
 /**
  * Where each connect ask's sign-in stands on this tab, by the ask's request
  * id: asked, waiting on the provider's tab, landed, or failed and why. The
- * sign-in is the hub's (fleet.ts `signInToMcp`): this opens its tab and
- * watches it, and the hub's own word that it landed settles the ask, which
- * turns the card (ConnectCard) into its record.
+ * sign-in is the hub's (fleet.ts `signInToMcp`): this opens its tab, and
+ * the hub's own word that it landed settles the ask, which turns the card
+ * (ConnectCard) into its record. The tab's handle is never read: a
+ * provider's page with Cross-Origin-Opener-Policy cuts it off from this
+ * page, which then reads it closed while the sign-in goes on. A sign-in not
+ * landed by its start's `expiresAt` never will, and fails then.
  *
  * Kept in this tab's sessionStorage (The Work Outlives Its Surface Rule): a
  * reload finds the card still waiting on the provider's page until that
  * page runs out, and a failure still said with its way on. The tab a reload
- * leaves open is no longer this one's to watch, so only its expiry is; a
- * landing still reaches the card through the hub.
+ * leaves open goes on as before: its expiry is kept, and a landing still
+ * reaches the card through the hub.
  */
 import type { ConnectAccess } from "@cawco/core/frames";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
@@ -31,8 +34,6 @@ type ConnectStage =
 
 /** Why a sign-in did not come back. */
 export type ConnectFault =
-  /** Its tab closed before the hub heard back. */
-  | { kind: "closed" }
   /** The hub refused to start it, in its own words. */
   | { kind: "refused"; reason: string }
   /** The provider's page stopped taking its answer while it waited. */
@@ -48,21 +49,12 @@ export interface ConnectSignIn {
 const ASKING: ConnectSignIn = { stage: "asking", fault: null };
 const KEY = "cawco:connect-sign-ins";
 
-/**
- * After the tab closes, how long the hub's word is waited for: the hand-back
- * page closes its own tab as the hub answers (routes/oauth/mcp), and the
- * socket's word can follow the close.
- */
-const CLOSE_GRACE_MS = 2000;
-/** How often an open tab is looked at. */
-const TAB_POLL_MS = 500;
-
 const signIns = new SvelteMap<string, ConnectSignIn>(
   Object.entries(
     readJson(KEY, z.record(z.string(), ConnectSignInSchema), {}, "session")
   ).filter(([, kept]) => kept.stage === "waiting" || kept.stage === "failed")
 );
-/** Each waiting sign-in's watch on its tab and its page's expiry, stopped once it is over. */
+/** Each waiting sign-in's expiry, stopped once it is over. */
 const watches = new Map<string, () => void>();
 
 const keep = (): void => {
@@ -118,8 +110,8 @@ export const connectSignIns = {
   /**
    * Connect: the hub's sign-in to `server` with `access`, in a tab of its
    * own, opened in the press itself (a pop-up blocker lets it through). It
-   * waits on the hub's word; a tab closed first, a start the hub refused
-   * and a provider's page that ran out each fail it, Connect free again.
+   * waits on the hub's word; a start the hub refused and a sign-in its
+   * start's expiry overtook each fail it, Connect free again.
    */
   async connect(
     requestId: string,
@@ -148,22 +140,7 @@ export const connectSignIns = {
       fault: null,
       expiresAt: opened.expiresAt,
     });
-    let grace: ReturnType<typeof setTimeout> | undefined;
-    const poll = setInterval(() => {
-      if (!opened.tab.closed || grace !== undefined) {
-        return;
-      }
-      grace = setTimeout(
-        () => fail(requestId, { kind: "closed" }),
-        CLOSE_GRACE_MS
-      );
-    }, TAB_POLL_MS);
-    const unexpire = expireAt(requestId, opened.expiresAt);
-    watches.set(requestId, () => {
-      clearInterval(poll);
-      clearTimeout(grace);
-      unexpire();
-    });
+    watches.set(requestId, expireAt(requestId, opened.expiresAt));
   },
 
   /**

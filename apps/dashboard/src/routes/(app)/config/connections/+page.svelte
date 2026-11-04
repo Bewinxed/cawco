@@ -294,28 +294,20 @@
 
   /** A sign-in asked for and not yet answered by the hub. */
   let signing = $state<Record<string, boolean>>({});
-  /** The tabs this page opened for sign-ins under way, by connection. */
-  const tabs: Record<string, Window> = {};
   /** How often a sign-in under way re-reads the hub. Our choice. */
   const WATCH_MS = 2000;
 
   // While any row's sign-in is under way the hub is read again, until each
-  // moves on; a tab this page opened that closes first is said on its row.
+  // moves on: signed in, or lapsed past its start's expiry, which the hub
+  // says on the row (`signInLapsed`). The tab's handle is never read: a
+  // provider's page with Cross-Origin-Opener-Policy cuts it off from this
+  // page, which then reads it closed while the sign-in goes on.
   const underWay = $derived(rows.some((row) => row.signIn !== undefined));
   $effect(() => {
     if (!underWay) {
       return;
     }
-    const watch = setInterval(async () => {
-      const closed = Object.entries(tabs).filter(([, tab]) => tab.closed);
-      await read();
-      for (const [name] of closed) {
-        delete tabs[name];
-        if (rows.find((each) => each.name === name)?.signIn) {
-          problems[name] = words.signInClosed;
-        }
-      }
-    }, WATCH_MS);
+    const watch = setInterval(() => detach(read(), "read"), WATCH_MS);
     return () => clearInterval(watch);
   });
 
@@ -339,10 +331,7 @@
           ...(organization ? { organization } : {}),
         })
       );
-      if (tab) {
-        tab.location.assign(authorizationUrl);
-        tabs[name] = tab;
-      }
+      tab?.location.assign(authorizationUrl);
     } catch (error) {
       tab?.close();
       problems[name] = failureWords(error);
@@ -371,7 +360,6 @@
     }
     if (open) {
       delete problems[row.name];
-      tabs[row.name] = tab;
       return;
     }
     detach(startSignIn(row.name, tab), "startSignIn");
@@ -682,7 +670,6 @@
     delete problems[row.name];
     try {
       const deleted = await send<Deleted>(path(row.name), { method: "DELETE" });
-      delete tabs[row.name];
       // The hub puts it back whole, key and projects with it; the list is
       // read again, as after every change here.
       offerUndo(

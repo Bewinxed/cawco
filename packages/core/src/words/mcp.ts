@@ -27,7 +27,10 @@ export const mcpWords = {
   signIn: "Sign in",
   signingIn: (name: string) => `Waiting for ${name}…`,
   signedIn: "Signed in for the fleet",
+  /** The native app's: its own sign-in sheet was dismissed. */
   signInClosed: "The sign-in tab closed before it finished.",
+  /** The dashboard's: the hub did not hear back before the start's expiry. */
+  signInLapsed: "The sign-in ran out of time before it finished.",
   /** The hub refuses to start a sign-in to a server switched off. */
   enableBeforeSignIn: "Enable this server before signing in.",
   /** The machines card's line for a server waiting on the fleet's sign-in, once however many machines report it. */
