@@ -41,7 +41,9 @@
   import CurveChoices from "./CurveChoices.svelte";
   import { figureOf } from "./figures";
   import {
+    bezierOf,
     type Clip,
+    cubic,
     curveGlyph,
     curveTokenOf,
     delayOf,
@@ -128,20 +130,40 @@
   ] as const;
   const houseEasing = (token: (typeof HOUSE)[number]) =>
     token === "linear" ? "linear" : ease(token);
-  /** A curve's choice: a token's, the spring, or as the agent wrote it. */
+  /** A curve's choice: a token's, the spring, the agent's own as written, or one he drew. */
   const curveOf = (clip: Clip): string => {
     if (clip.spring) {
       return "spring";
     }
     const token = clip.framed ? null : curveTokenOf(clip.easing);
-    return token ?? "written";
+    if (token) {
+      return token;
+    }
+    const ran = untune(clip);
+    return clip.was &&
+      (clip.easing !== ran.easing || clip.framed !== ran.framed)
+      ? "own"
+      : "written";
   };
   const curve = $derived(curveOf(first));
+  /**
+   * The chosen curve's four numbers, drawn over the list with its two
+   * control points to drag (his pick, animation-face-questions#curve-draw:
+   * "The list with a curve to drag"); a spring or a curve kept in a
+   * transition's frames has none to bend. A bent curve is his own, sent to
+   * the agent off the design system's tokens.
+   */
+  const bent = $derived(
+    first.spring || first.framed ? null : bezierOf(first.easing)
+  );
   /** The agent's own curve stands in the list while it is none of the design system's. */
   const written = $derived(curveOf(was) === "written");
   const curveName = (choice: string) => {
     if (choice === "spring") {
       return words.spring;
+    }
+    if (choice === "own") {
+      return words.yourCurve;
     }
     return choice === "written"
       ? words.agentsCurve
@@ -154,6 +176,9 @@
     if (choice === "written") {
       return clip.framed ? framesGlyph(clip.frames) : curveGlyph(clip.easing);
     }
+    if (choice === "own") {
+      return curveGlyph(clip.easing);
+    }
     return curveGlyph(houseEasing(choice as (typeof HOUSE)[number]));
   };
   /** A spring drawn on every clip of the row, the clips as long as it takes to come to rest. */
@@ -162,7 +187,7 @@
     onretime(reshape(track, drawn.easing, spring, drawn.duration));
   };
   const pickCurve = (choice: string) => {
-    if (choice === curve) {
+    if (choice === curve || choice === "own") {
       return;
     }
     if (choice === "written") {
@@ -411,13 +436,16 @@
               open = null;
             }
           }}
-          options={[...HOUSE, "spring", ...(written ? ["written"] : [])].map(
-            (choice) => ({
-              value: choice,
-              name: curveName(choice),
-              glyph: glyphOf(choice, was),
-            })
-          )}
+          options={[
+            ...HOUSE,
+            "spring",
+            ...(written ? ["written"] : []),
+            ...(curve === "own" ? ["own"] : []),
+          ].map((choice) => ({
+            value: choice,
+            name: curveName(choice),
+            glyph: glyphOf(choice, was),
+          }))}
           spring={first.spring
             ? {
                 bounce: first.spring.bounce,
@@ -429,6 +457,12 @@
                     mass: spring.mass,
                   });
                 },
+              }
+            : null}
+          bend={bent
+            ? {
+                at: bent,
+                onbend: (at) => onretime(reshape(track, cubic(at), null)),
               }
             : null}
           value={curve}

@@ -1,5 +1,6 @@
 /**
- * The decision page's second option on the Curve chip: the chosen curve
+ * The Curve chip open (his pick on animation-face-questions, "The list with
+ * a curve to drag"): the chosen curve
  * drawn over the same list, its two control points dragged (or moved with
  * the arrow keys) to bend a curve of his own, as Jitter's easing popover
  * draws its preset over its intensity.
