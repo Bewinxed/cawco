@@ -32,21 +32,43 @@
  *   database; a check answered on one machine brings the account back on
  *   every machine, and placement takes it.
  *
- * An in-process hub on a scratch database; no fleet.
+ * - E, end to end (a scratch fleet: real hub, agent and sessiond, Claude
+ *   Code against the mock model, which answers each account's token as
+ *   Anthropic does): accounts R (refused), W and V, R first in placement,
+ *   each also signed in on a far machine. A delegate starts on R and its
+ *   first request is refused 403 "OAuth authentication is currently not
+ *   allowed for this organization", which Claude Code ends the turn on as
+ *   `oauth_org_not_allowed`. R is signed out on both machines with Claude
+ *   Code's words; the delegate moves to W and carries on there, its item
+ *   live; a session already on R moves to an account that works at its
+ *   own refused turn; placement starts the next delegate on W. Then W's
+ *   token is revoked (403 "OAuth token has been revoked",
+ *   `authentication_failed`): W is signed out on this machine only, and
+ *   the delegate on it moves to V, its item live.
+ *
+ * Legs A to D run on an in-process hub on a scratch database; E on a fleet.
  *
  *   bun scripts/probe-kit/run.ts account-refused
  */
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
   Account,
   AccountSignin,
 } from "../../../packages/core/src/accounts";
-import { HOUR_MS } from "../../../packages/core/src/time";
+import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
+import { DAY_MS, HOUR_MS } from "../../../packages/core/src/time";
 import { accountsWords } from "../../../packages/core/src/words/accounts";
 import type { ClaudeRefusal } from "../../../packages/hub/src/accounts";
-import type { Kit, Spec } from "../kit";
+import {
+  ACCOUNT,
+  MODEL,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
+import type { Kit, KitFleet, Spec } from "../kit";
 
 const MACHINE_A = "machine-a";
 const MACHINE_B = "machine-b";
@@ -55,6 +77,9 @@ const spec: Spec = {
   group: "The hub and machines",
   name: "account-refused",
   run: async (kit: Kit) => {
+    // First: the in-process hub below points this process's HOME at its
+    // scratch, and the fleet's processes take theirs from it.
+    await throughTheAgent(kit);
     const scratch = await mkdtemp(
       join(process.env.TMPDIR ?? tmpdir(), "account-refused-")
     );
@@ -477,5 +502,373 @@ const wayBack = async (
     JSON.stringify(placedBack)
   );
 };
+
+/** E's accounts beside the fleet's own (R, its first): each a fake login and token. */
+const W = "acct-refused-w";
+const V = "acct-refused-v";
+const R_TOKEN = "sk-ant-oat01-fake-scratch-fleet";
+const W_TOKEN = "sk-ant-oat01-fake-refused-w";
+const V_TOKEN = "sk-ant-oat01-fake-refused-v";
+/** A machine the fleet has none of: each account is signed in there too. */
+const FAR = "machine-far";
+/** What opens the first delegate's brief, so the mock knows its requests. */
+const DELEGATE = "PROBE-REFUSED-DELEGATE";
+/** Anthropic's words for an organization whose subscription access is refused. */
+const ORG_REFUSED =
+  "OAuth authentication is currently not allowed for this organization.";
+/** Anthropic's words for a revoked OAuth token. */
+const REVOKED = "OAuth token has been revoked.";
+
+/** What opens the next delegate's brief: its turns are held, on W until W is revoked, on V for good. */
+const NEXT = "PROBE-REFUSED-NEXT";
+
+/**
+ * E's mock state: whether W's token is revoked (`revoke` lets the next
+ * delegate's held turn on W go, refused), and what holds the delegates'
+ * turns once they reach the account they moved to, so their items stay
+ * live while the legs read them and no quiet turns pile up.
+ */
+const e = {
+  revoked: false,
+  revoke: Promise.withResolvers<void>(),
+  held: Promise.withResolvers<void>(),
+};
+
+const limitsNow = (): Reply["limits"] => ({
+  fiveHour: { resetsAt: Date.now() + 3 * HOUR_MS, utilization: 0.1 },
+  sevenDay: { resetsAt: Date.now() + 5 * DAY_MS, utilization: 0.1 },
+});
+
+/** The mock as Anthropic answers each account's token. */
+const respondE = async (request: Seen): Promise<Reply> => {
+  if (request.auth.includes(R_TOKEN)) {
+    return {
+      everyMs: 5,
+      words: [],
+      deny: { status: 403, message: ORG_REFUSED },
+    };
+  }
+  if (request.tools && request.all.includes(NEXT)) {
+    if (request.auth.includes(W_TOKEN)) {
+      await e.revoke.promise;
+    } else {
+      await e.held.promise;
+    }
+  }
+  if (request.auth.includes(W_TOKEN) && e.revoked) {
+    return { everyMs: 5, words: [], deny: { status: 403, message: REVOKED } };
+  }
+  // The first delegate's turn on W is held open: its item stays live while
+  // the legs read it, and no quiet turns pile up.
+  if (request.tools && request.all.includes(DELEGATE)) {
+    await e.held.promise;
+  }
+  return { everyMs: 5, words: ["ok"], limits: limitsNow() };
+};
+
+/** A store of `id` in the fleet's HOME: a fake login, `token` its credential. */
+const furnish = async (
+  home: string,
+  id: string,
+  token: string,
+  n: string
+): Promise<void> => {
+  const dir = join(home, ".cawco", "accounts", id, "claude");
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, ".credentials.json"),
+    JSON.stringify({
+      claudeAiOauth: {
+        accessToken: token,
+        refreshToken: `sk-ant-ort01-fake-refused-${n}`,
+        expiresAt: Date.now() + 365 * DAY_MS,
+        scopes: ["user:inference", "user:profile"],
+        subscriptionType: "max",
+      },
+    })
+  );
+  await writeFile(
+    join(dir, CLAUDE_JSON_NAME),
+    JSON.stringify({
+      hasCompletedOnboarding: true,
+      oauthAccount: {
+        emailAddress: `${n}@scratch-fleet.test`,
+        organizationName: `${n} Organization`,
+        accountUuid: `00000000-0000-4000-8000-0000000000${n}1`,
+        organizationUuid: `00000000-0000-4000-8000-0000000000${n}2`,
+      },
+    })
+  );
+};
+
+/** A reading of `id` (one session window, 10% used), so a move may weigh it. */
+const fileReading = (fleet: KitFleet, id: string): void => {
+  fleet.write(
+    "INSERT OR REPLACE INTO account_readings (account_id, subscription, window_kinds, last_seen_at) VALUES (?, 'Claude Max', '[\"session\"]', ?)",
+    id,
+    Date.now()
+  );
+  fleet.write(
+    "INSERT OR REPLACE INTO account_windows (account_id, kind, scope_label, \"group\", is_active, percent, severity, resets_at) VALUES (?, 'session', '', 'session', 1, 10, 'normal', ?)",
+    id,
+    new Date(Date.now() + 3 * HOUR_MS).toISOString()
+  );
+};
+
+const signinOn = (fleet: KitFleet, id: string, machineId: string) =>
+  fleet.query<{
+    reason: string | null;
+    refusal_reach: string | null;
+    state: string;
+  }>(
+    "SELECT state, reason, refusal_reach FROM account_signins WHERE account_id = ? AND machine_id = ?",
+    id,
+    machineId
+  )[0];
+
+const accountOfRow = (fleet: KitFleet, id: string) =>
+  fleet.query<{ account_id: string | null }>(
+    "SELECT account_id FROM instances WHERE id = ?",
+    id
+  )[0]?.account_id;
+
+/** The requests that reached the mock on `token` since `since`. */
+const requestsOn = (fleet: KitFleet, token: string, since: number) =>
+  fleet.seen.filter((one) => one.auth.includes(token) && one.at >= since);
+
+/** E: the refusal through the real agent → hub path. */
+const throughTheAgent = async (kit: Kit): Promise<void> => {
+  e.revoked = false;
+  e.revoke = Promise.withResolvers<void>();
+  e.held = Promise.withResolvers<void>();
+  const fleet = await kit.fleet(respondE);
+  try {
+    const home = fleet.env.HOME as string;
+    fleet.launch("sessiond");
+    await fleet.sessiondUp();
+    fleet.launch("hub");
+    await fleet.hubUp();
+    fleet.fileAccount();
+    for (const [id, order] of [
+      [W, 1],
+      [V, 2],
+    ] as const) {
+      fleet.write(
+        "INSERT OR IGNORE INTO accounts (id, provider, kind, label, hue, \"order\", never_backup, created_at) VALUES (?, 'anthropic', 'console', ?, 'green', ?, 0, ?)",
+        id,
+        id,
+        order,
+        Date.now()
+      );
+    }
+    const routed = await fetch(`${fleet.base}/api/accounts/routing/anthropic`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        yours: { strategy: "fill-first" },
+        delegates: { strategy: "fill-first" },
+        atLimit: { move: true, waitMinutes: 15, moveWholeUnderK: 200 },
+      }),
+    });
+    kit.check(
+      "E setup: routing fills R first, then W, then V",
+      routed.ok,
+      `${routed.status} ${await routed.text()}`
+    );
+    await furnish(home, W, W_TOKEN, "w");
+    await furnish(home, V, V_TOKEN, "v");
+    fleet.launch("agent");
+    await fleet.agentUp();
+    await fleet.accountSignedIn();
+    for (const id of [W, V]) {
+      await until(
+        `${id} signed in`,
+        () => signinOn(fleet, id, machineOf(fleet))?.state,
+        (state) => state === "signed-in",
+        120_000
+      );
+    }
+    for (const id of [ACCOUNT, W, V]) {
+      fileReading(fleet, id);
+      fleet.write(
+        "INSERT OR REPLACE INTO account_signins (account_id, machine_id, state, checked_at) VALUES (?, ?, 'signed-in', ?)",
+        id,
+        FAR,
+        Date.now()
+      );
+    }
+
+    // A session on R before any refusal: placed there, no turn yet.
+    const resting = await fleet.spawn("claude", "Resting on R");
+    kit.check(
+      "E setup: a session starts on R, placement's first",
+      accountOfRow(fleet, resting) === ACCOUNT,
+      String(accountOfRow(fleet, resting))
+    );
+
+    // The delegate's first turn on R is refused.
+    const startedAt = Date.now();
+    const delegate = await fleet.api<{
+      instanceId: string;
+      workItemId: string;
+    }>("/api/work-items", {
+      parentInstanceId: resting,
+      title: "refused delegate",
+      prompt: `${DELEGATE}: say ok.`,
+      harness: "claude",
+      model: MODEL.claude,
+      host: true,
+    });
+    const refusedTo = await until(
+      "R signed out on both machines",
+      () => [
+        signinOn(fleet, ACCOUNT, machineOf(fleet)),
+        signinOn(fleet, ACCOUNT, FAR),
+      ],
+      (both) => both.every((one) => one?.state === "signed-out"),
+      180_000
+    ).catch(() => [
+      signinOn(fleet, ACCOUNT, machineOf(fleet)),
+      signinOn(fleet, ACCOUNT, FAR),
+    ]);
+    kit.check(
+      "E1: the first refused turn (403 org not allowed, oauth_org_not_allowed) signs R out on every machine, reach account, with Claude Code's words",
+      refusedTo.every(
+        (one) =>
+          one?.state === "signed-out" &&
+          one.refusal_reach === "account" &&
+          !!one.reason
+      ) && requestsOn(fleet, R_TOKEN, startedAt).length > 0,
+      JSON.stringify(refusedTo)
+    );
+    const onW = await until(
+      "the delegate's turn reaches the mock on W",
+      () =>
+        requestsOn(fleet, W_TOKEN, startedAt).filter((one) =>
+          one.all.includes(DELEGATE)
+        ).length,
+      (n) => n > 0,
+      180_000
+    ).catch(() => 0);
+    const [item] = fleet.query<{ state: string; error: string | null }>(
+      "SELECT state, error FROM work_items WHERE id = ?",
+      delegate.workItemId
+    );
+    kit.check(
+      "E2: the refused delegate moves to W and carries on there, and its work item stays live",
+      accountOfRow(fleet, delegate.instanceId) === W &&
+        onW > 0 &&
+        item?.state !== "failed" &&
+        item?.state !== "cancelled",
+      JSON.stringify({
+        account: accountOfRow(fleet, delegate.instanceId),
+        onW,
+        item,
+      })
+    );
+
+    // The session already on R: its own turn meets the same refusal.
+    const sentAt = Date.now();
+    await fleet.send(resting, "PROBE-REFUSED-RESTING hello");
+    const tokenOf = { [W]: W_TOKEN, [V]: V_TOKEN } as Record<string, string>;
+    const restingAnswered = await until(
+      "the resting session answers on an account that works",
+      () => {
+        const now = accountOfRow(fleet, resting) ?? "";
+        const token = tokenOf[now];
+        return token
+          ? requestsOn(fleet, token, sentAt).filter((one) =>
+              one.all.includes("PROBE-REFUSED-RESTING")
+            ).length
+          : 0;
+      },
+      (n) => n > 0,
+      180_000
+    ).catch(() => 0);
+    kit.check(
+      "E2: a session already on R moves to an account that works at its own refused turn, and carries on there",
+      accountOfRow(fleet, resting) !== ACCOUNT && restingAnswered > 0,
+      JSON.stringify({ account: accountOfRow(fleet, resting), restingAnswered })
+    );
+
+    // Placement takes R no more.
+    const next = await fleet.api<{ instanceId: string; workItemId: string }>(
+      "/api/work-items",
+      {
+        parentInstanceId: resting,
+        title: "next delegate",
+        prompt: `${NEXT}: say ok.`,
+        harness: "claude",
+        model: MODEL.claude,
+        host: true,
+      }
+    );
+    kit.check(
+      "E3: placement starts the next delegate on W, never on R",
+      accountOfRow(fleet, next.instanceId) === W,
+      String(accountOfRow(fleet, next.instanceId))
+    );
+
+    // authentication_failed: W's token revoked, on this machine alone. The
+    // next delegate's turn, held on W, is answered with the refusal.
+    await until(
+      "the next delegate's turn held on W",
+      () =>
+        requestsOn(fleet, W_TOKEN, 0).filter(
+          (one) => one.tools && one.all.includes(NEXT)
+        ).length,
+      (n) => n > 0,
+      180_000
+    );
+    e.revoked = true;
+    const revokedAt = Date.now();
+    e.revoke.resolve();
+    const wOut = await until(
+      "W signed out here",
+      () => signinOn(fleet, W, machineOf(fleet)),
+      (one) => one?.state === "signed-out",
+      180_000
+    ).catch(() => signinOn(fleet, W, machineOf(fleet)));
+    const nextOnV = await until(
+      "the next delegate answers on V",
+      () =>
+        requestsOn(fleet, V_TOKEN, revokedAt).filter((one) =>
+          one.all.includes(NEXT)
+        ).length,
+      (n) => n > 0,
+      180_000
+    ).catch(() => 0);
+    const [nextItem] = fleet.query<{ state: string }>(
+      "SELECT state FROM work_items WHERE id = ?",
+      next.workItemId
+    );
+    kit.check(
+      "E4: a revoked token (authentication_failed) signs W out on this machine only, reach machine; the delegate on W moves to V and carries on, its item live",
+      wOut?.state === "signed-out" &&
+        wOut.refusal_reach === "machine" &&
+        signinOn(fleet, W, FAR)?.state === "signed-in" &&
+        accountOfRow(fleet, next.instanceId) === V &&
+        nextOnV > 0 &&
+        nextItem?.state !== "failed",
+      JSON.stringify({
+        here: wOut,
+        far: signinOn(fleet, W, FAR),
+        account: accountOfRow(fleet, next.instanceId),
+        nextOnV,
+        nextItem,
+      })
+    );
+  } finally {
+    e.revoke.resolve();
+    e.held.resolve();
+  }
+};
+
+/** The fleet's one machine. */
+const machineOf = (fleet: KitFleet): string =>
+  fleet.query<{ machine_id: string }>(
+    "SELECT machine_id FROM agents WHERE machine_id != ?",
+    FAR
+  )[0]?.machine_id ?? "";
 
 export default spec;

@@ -10577,8 +10577,13 @@ export const createServer = (
     string,
     { accountId: string; words: string }
   >();
-  /** Work items whose session a refused credential has already moved once. */
-  const refusalMoved = new Set<string>();
+  /**
+   * Work items whose session a refused account has already moved once, by
+   * item: the account it moved off. A turn refused on that same account
+   * before the move lands (a send started it while the move waited for the
+   * turn's end) is the same refusal, and the move it already has takes it.
+   */
+  const refusalMoved = new Map<string, string>();
   /**
    * Installs somebody is waiting on, by `requestId`: what keeps a machine from
    * being sent the same install twice while the first is still running, and
@@ -30031,13 +30036,16 @@ export const createServer = (
     let stays: string | undefined;
     if (workedTurns.has(instanceId)) {
       stays = "its turn had already done work, so it was not run again";
-    } else if (refusalMoved.has(itemId)) {
+    } else if (
+      refusalMoved.has(itemId) &&
+      refusalMoved.get(itemId) !== from.id
+    ) {
       stays = "it was already moved once for this item";
     } else if (atLimit.credentialMoveTo(row.id) === undefined) {
       stays = `no other account it may run on is signed in on ${machineName(row.machineId)} with room for it`;
     }
     if (!stays) {
-      refusalMoved.add(itemId);
+      refusalMoved.set(itemId, from.id);
       take();
       return;
     }

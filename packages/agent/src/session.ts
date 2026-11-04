@@ -443,11 +443,24 @@ const shellCallsOf = (
   return started;
 };
 
-const accountReading = (message: NeutralMessage): boolean =>
-  message.type === "system" &&
-  (message.subtype === ACCOUNT_READ ||
-    message.subtype === RATE_LIMIT_READ ||
-    message.subtype === SESSION_DIR_READ);
+/**
+ * A frame that speaks for the session's account, which the hub takes only
+ * from the launch it names (its `processGeneration`): a read of the account
+ * (its catalog, its limits, its session's dir), or Claude Code's error in
+ * the model's place, which the hub reads for a refusal of the account (hub
+ * server.ts `settleRefusal`, which settles nothing for a frame naming no
+ * launch). Without the error here, no refusal was ever settled: on
+ * 2026-11-04 an account Anthropic refused (`oauth_org_not_allowed`) stayed
+ * signed in, sessions were carried onto it, and a delegate's item failed.
+ */
+const speaksForAccount = (message: NeutralMessage): boolean =>
+  (message.type === "system" &&
+    (message.subtype === ACCOUNT_READ ||
+      message.subtype === RATE_LIMIT_READ ||
+      message.subtype === SESSION_DIR_READ)) ||
+  (message.type === "assistant" &&
+    !message.parent_tool_use_id &&
+    message.error !== undefined);
 
 const warn = (message: string): void => {
   Effect.runFork(Effect.logWarning(message));
@@ -3617,7 +3630,7 @@ export class SessionSupervisor {
         : {}),
     });
     const launchOf = (message: NeutralMessage) =>
-      accountReading(message) ? { processGeneration } : {};
+      speaksForAccount(message) ? { processGeneration } : {};
     return {
       recordSessionAddress: (sessionId) => {
         const known = this.#addressAcknowledged.get(instanceId);
