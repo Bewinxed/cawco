@@ -215,7 +215,7 @@
 
 <div
   class="relative h-c-badge-h w-full select-none"
-  data-slot="bar-lane"
+  data-slot="run-lane"
   {@attach frameSize((node: HTMLElement) => {
     wide = node.clientWidth;
     grip =
@@ -271,7 +271,7 @@
         ring,
       ]}
       data-run={run.id}
-      data-slot="bar"
+      data-slot="run-bar"
       onkeydown={keyOf(run, "body")}
       onpointerdown={onselect}
       role="slider"
@@ -314,7 +314,7 @@
             end === "start"
               ? "coarse:-translate-x-full coarse:justify-items-end coarse:rtl:translate-x-full"
               : "coarse:translate-x-full coarse:justify-items-start coarse:rtl:-translate-x-full",
-            ring,
+            "focus-inset focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring",
           ]}
           data-run-end={end}
           data-slot={end}

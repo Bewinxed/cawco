@@ -424,7 +424,7 @@
   /** A line's name for a reader: a row's words, an animation's property and run. */
   const lineName = (line: Line) =>
     line.part
-      ? words.clipName(line.track.name, line.part.property)
+      ? words.clipName(line.track.name, propertyName(line.part.property))
       : nameOf(line.track);
 
   /** Each kind's bar in As written: its wash and its edge. */
@@ -625,14 +625,14 @@
 
 {#snippet writtenLane(track: Track)}
   <!-- As written: the agent's timing, drawn and played, never moved. -->
-  <div class="relative h-c-badge-h w-full" data-slot="bar-lane">
+  <div class="relative h-c-badge-h w-full" data-slot="run-lane">
     {#each track.runs as run (run.id)}
       <span
         class={[
           "absolute inset-y-0 start-(--from) w-(--wide) rounded-xs border",
           BAR[track.kind],
         ]}
-        data-slot="bar"
+        data-slot="run-bar"
         style:--from={pct(run.from)}
         style:--wide={pct(run.to - run.from)}
       ></span>
@@ -774,7 +774,12 @@
            least, the lane takes a line of its own under its row's words. -->
         <!-- Under a finger the scroller keeps its scrollbar's room, so the
            lengths at the trailing edge never stand under it. -->
-        <div class="min-h-0 min-w-0 overflow-y-auto coarse:pe-space-4">
+        <!-- Its scroller clips: it stands a step out on every side and pads
+             the step back, so a focus ring on its edge (Play's, the first
+             row's) is drawn whole (The One Ring Rule). -->
+        <div
+          class="-m-space-1 min-h-0 min-w-0 overflow-y-auto p-space-1 coarse:pe-space-4"
+        >
           <div
             data-slot="timeline"
             class="grid min-w-0 grid-cols-(--cols) gap-x-space-3 @max-timeline/move:grid-cols-1"
@@ -864,7 +869,7 @@
               >
                 <div
                   class={[
-                    "flex min-h-c-btn-h min-w-0 items-center",
+                    "flex min-h-c-btn-h-lg min-w-0 items-center",
                     line.part && "ps-c-btn-h-xs",
                   ]}
                 >
@@ -884,7 +889,8 @@
                       type="button"
                       aria-expanded={open}
                       aria-label={name}
-                      class="pointer-hit touch-hit flex h-c-btn-h-sm min-w-0 flex-1 items-center rounded-sm pe-space-1 text-start type-label transition-control aria-expanded:bg-selected-bg can-hover:not-aria-expanded:hover:bg-surface-hover"
+                      class="pointer-hit touch-hit flex h-c-btn-h-sm min-w-0 flex-1 items-center rounded-sm pe-space-1 text-start type-label transition-control data-chosen:bg-selected-bg can-hover:not-data-chosen:hover:bg-surface-hover"
+                      data-chosen={chosen || undefined}
                       onclick={() => press(line)}
                       title={name}
                     >
@@ -896,13 +902,12 @@
                           aria-hidden="true"
                           class={[
                             "size-icon-sm transition-transform duration-(--dur-control) ease-out rtl:-scale-x-100",
-                            open
-                              ? "rotate-90 text-selected-ink rtl:-rotate-90"
-                              : "text-ink-muted",
+                            open && "rotate-90 rtl:-rotate-90",
+                            chosen ? "text-selected-ink" : "text-ink-muted",
                           ]}
                         />
                       </span>
-                      {@render rowWords(line, open ? "open" : "rest")}
+                      {@render rowWords(line, chosen ? "open" : "rest")}
                     </button>
                   {/if}
                   {#if edited}
@@ -961,7 +966,7 @@
                 </div>
                 {#if chosen}
                   <div
-                    class="col-span-full min-w-0 ps-c-btn-h-xs pb-space-3"
+                    class="col-span-full min-w-0 ps-c-btn-h-xs pt-space-2 pb-space-3"
                     in:unfold
                     out:unfold
                   >
