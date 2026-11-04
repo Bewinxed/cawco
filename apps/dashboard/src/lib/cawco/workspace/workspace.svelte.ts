@@ -806,9 +806,19 @@ export const workspace = {
     remove(sessionId, "replace");
   },
 
-  /** Whether the hub has named tab `id` (Naming the tabs): until it has, nothing reads it. */
+  /**
+   * Whether the hub has named tab `id` (Naming the tabs): until it has,
+   * nothing reads it. Before `restore` has asked, a tab of the tree the
+   * server drew is named only when the server found the hub listing it
+   * (`serve`): the other tabs read behind the active one from its first
+   * paint (SessionSurface), and one that names nothing was read, a 404,
+   * before its name was asked. An id no tab holds is no tab's to name.
+   */
   named(id: string): boolean {
-    return !unnamed.has(id);
+    if (unnamed.has(id)) {
+      return false;
+    }
+    return restored || resolved.has(id) || leafHolding(id) === null;
   },
 
   /**

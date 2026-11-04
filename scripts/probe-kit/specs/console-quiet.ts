@@ -15,20 +15,24 @@
  * has). The page opens on B.
  *
  * a. Tabs kept: the hub names each tab before anything reads it
- *    (workspace.svelte.ts, Naming the tabs). No response is a 404, nothing
- *    is logged, the strip holds B and Q under their full ids, and the cookie
- *    holds neither the dead id nor the `run:` tab.
+ *    (workspace.svelte.ts, Naming the tabs), from the first paint on: the
+ *    other tabs read behind the active one as soon as it has its rows. No
+ *    response is a 404, nothing is logged, the strip holds B and Q under
+ *    their full ids, and the cookie holds neither the dead id nor the `run:`
+ *    tab.
  * b. A tab switch to Q and back logs nothing and fails nothing.
  * c. Ten reloads while B's turn streams: each logs nothing, fails nothing,
- *    and reads B's newest page exactly once, with no separate tooling read
- *    (the tooling rides the page). The pane reads the page before the socket
- *    is up, and the socket's first connection resumes B's stream from that
- *    page's seq, the board naming the page's hub run (client.svelte.ts
- *    `followHeld`, `TranscriptPage.hubRun`).
+ *    and B's newest page is the server's read alone: the page paints it
+ *    from the HTML and nothing in the page reads it again (session page
+ *    `+page.server.ts`, client.svelte.ts `keepServedPage`), with no separate
+ *    tooling read (the tooling rides the page). The socket's first
+ *    connection resumes B's stream from that page's seq, the board naming
+ *    the page's hub run (client.svelte.ts `followHeld`,
+ *    `TranscriptPage.hubRun`).
  * d. A reload whose socket is held until the hub has restarted after the
- *    page was read: the page's run is not the socket's, so B's newest page is
- *    read once more after the socket opens (`because reconnect`), and only
- *    once.
+ *    server read the page: the page's run is not the socket's, so B's newest
+ *    page is read once in the page after the socket opens (`because
+ *    reconnect`), and none before it.
  * f. The page's socket drops and comes back to the same hub run: no
  *    transcript page is read; B's stream resumes from its place (the hub
  *    answers with its backlog, no reset; client.svelte.ts `followHeld`).
@@ -342,11 +346,12 @@ const run = async (kit: Kit): Promise<void> => {
     const reads = load.asked.filter((path) => path === newest).length;
     const tooling = load.asked.filter((path) => path.endsWith("/tooling"));
     kit.check(
-      `c. reload ${at} while the turn streams: nothing logged, nothing failed, the newest page read exactly once, no tooling read`,
+      `c. reload ${at} while the turn streams: nothing logged, nothing failed, the newest page the server's read alone (the page reads it never), no tooling read`,
       streaming &&
         load.said.length === 0 &&
         load.failed.length === 0 &&
-        reads === 1 &&
+        reads === 0 &&
+        !load.read.some((line) => line.startsWith(busy.slice(0, 8))) &&
         tooling.length === 0,
       JSON.stringify({
         streaming,
@@ -388,10 +393,9 @@ const run = async (kit: Kit): Promise<void> => {
   );
   const isNewest = (response: Response) =>
     new URL(response.url()).pathname === newest;
-  const pageRead = page.waitForResponse(isNewest, { timeout: 60_000 });
-  await page.reload({ waitUntil: "domcontentloaded" });
-  const before = await pageRead;
-  await before.finished();
+  // The server reads the newest page for the document; the page paints it.
+  const served = await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForSelector(COMPOSER, { timeout: 60_000 });
   const readBefore = take(heard);
   await fleet.stop("hub");
   fleet.launch("hub");
@@ -405,14 +409,14 @@ const run = async (kit: Kit): Promise<void> => {
   const readsBefore = readBefore.asked.filter((path) => path === newest);
   const readsAfter = restarted.asked.filter((path) => path === newest);
   kit.check(
-    "d. the hub restarted between the page's read and its socket: the newest page is read once before the socket opens and once after, because the run moved",
-    before.status() === 200 &&
+    "d. the hub restarted between the server's read and the page's socket: the page reads the newest page none before the socket opens and once after, because the run moved",
+    served?.status() === 200 &&
       after?.status() === 200 &&
-      readsBefore.length === 1 &&
+      readsBefore.length === 0 &&
       readsAfter.length === 1 &&
       restarted.read.includes(`${busy.slice(0, 8)} reconnect`),
     JSON.stringify({
-      before: before.status(),
+      served: served?.status() ?? null,
       after: after?.status() ?? null,
       readsBefore: readsBefore.length,
       readsAfter: readsAfter.length,
