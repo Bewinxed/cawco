@@ -1,7 +1,7 @@
 /**
  * THE REFUSED HARNESS. Whether a machine refuses every start of one of its
- * harness CLIs, and why, read off its report alone (HarnessReport
- * `refused`, `authReason`): the one rule the machine's surfaces (dashboard
+ * harness CLIs, and why, read off its report (HarnessReport `refused`,
+ * `authReason`) and the machine's cell for the harness's tool: the one rule the machine's surfaces (dashboard
  * harness-block.svelte.ts) and the hub's refusal of a start there (hub
  * server.ts `placeSpawn`) say it by, so the two say the same sentence. Not
  * installed when the report says so; else the machine's own sentence
@@ -10,7 +10,7 @@
  */
 
 import { HARNESS_TOOL, type HarnessKind, type HarnessReport } from "./harness";
-import { type ToolSpec, toolSpec } from "./tools";
+import { type ToolSpec, type ToolStatus, toolRuns, toolSpec } from "./tools";
 import { harnessRefusedWords } from "./words/harness";
 import { toolWords } from "./words/tools";
 
@@ -35,14 +35,19 @@ export const harnessSpec = (harness: HarnessKind): ToolSpec => {
 
 /**
  * Why `machine` (by its name) refuses every start of the report's harness;
- * undefined when it runs it.
+ * undefined when it runs it. An install the machine's tool cell (`tool`)
+ * says landed, at a version CawCo runs other than the one the report read
+ * (or there, where the report found none), already counts as running: the agent reads that report again as the
+ * install ends (daemon.ts `reportTools`), and the gap is not the person's
+ * to wait out, nor a start's.
  */
 export const harnessRefusal = (
   report: Pick<
     HarnessReport,
     "authReason" | "harness" | "installed" | "refused" | "version"
   >,
-  machine: string
+  machine: string,
+  tool?: Pick<ToolStatus, "state" | "version">
 ): HarnessRefusal | undefined => {
   const kind =
     report.refused ?? (report.installed ? undefined : "not-installed");
@@ -50,6 +55,18 @@ export const harnessRefusal = (
     return;
   }
   const spec = harnessSpec(report.harness);
+  // Only against a report that said what it found: one still waiting for
+  // the version (none said) is no older than the cell, which keeps the
+  // last version any read answered, of whatever file was there then.
+  const said = kind === "not-installed" || report.version !== undefined;
+  if (
+    said &&
+    tool?.state === "installed" &&
+    toolRuns(spec, tool.version) &&
+    tool.version !== report.version
+  ) {
+    return;
+  }
   if (kind === "not-installed") {
     return {
       kind,

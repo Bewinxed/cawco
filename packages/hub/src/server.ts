@@ -4846,6 +4846,24 @@ export const createServer = (
     return reports?.find((report) => report.harness === harness);
   };
   /**
+   * Why `machineId` refuses every start of `harness`'s CLI, in the words its
+   * row says (core harness-refusal.ts `harnessRefusal`, read off its report
+   * and its tool cell); undefined when it runs it or has not reported it.
+   */
+  const refusedHarness = (
+    machineId: string,
+    harness: HarnessKind
+  ): string | undefined => {
+    const report = harnessReportOf(machineId, harness);
+    return report
+      ? harnessRefusal(
+          report,
+          machineName(machineId),
+          db.agentTools(machineId)[HARNESS_TOOL[harness]]
+        )?.why
+      : undefined;
+  };
+  /**
    * A pi session's model as pi itself resolves it on `machineId`: a bare id
    * becomes `provider/id` by the machine's report of pi's own resolution
    * ({@link HarnessReport.modelNames}). `default` depends on the session's
@@ -5170,7 +5188,17 @@ export const createServer = (
     use: AccountUse
   ):
     | { accountId?: string; homeLoginMove?: { accountId: string } }
-    | { refusal: string; cause: SendRefusal } => {
+    | { refusal: string; cause?: SendRefusal } => {
+    // A machine that refuses every start of the harness's CLI is refused
+    // for that, in its row's words, before any account is asked about: its
+    // refused report is filed signed out, which reads as no account.
+    const refused = refusedHarness(machineId, row.harness);
+    if (refused) {
+      // No cause: none of SendRefusal's ways back meets it, and the apps
+      // read that union closed. The session's surface says the machine's
+      // block, with its fix, in place of the start (dashboard HarnessBlock).
+      return { refusal: refused };
+    }
     // The machine's own Claude login is moving into an account and has not
     // yet: a session that runs on it runs on it until it lands.
     const move = homeLoginMoveOf(machineId, row);
@@ -8522,7 +8550,12 @@ export const createServer = (
     // wakes there, never refused for the account it leaves.
     const launch = launchAccount(machineId, owedOn(row), sessionName(row), use);
     if ("refusal" in launch) {
-      return { refused: { reason: launch.refusal, refusal: launch.cause } };
+      return {
+        refused: {
+          reason: launch.refusal,
+          ...(launch.cause ? { refusal: launch.cause } : {}),
+        },
+      };
     }
     const plan = relaunchOf(row);
     if (plan.kind === "refused") {
@@ -16437,9 +16470,9 @@ export const createServer = (
     // for that, in the words its row says: its report is filed signed out
     // then (no dir was asked), which the account's check would read as no
     // account at all.
-    const refused = harnessRefusal(report, machineName(machineId));
+    const refused = refusedHarness(machineId, harness);
     if (refused) {
-      return { refusal: refused.why };
+      return { refusal: refused };
     }
     // Held, resumed, forked or placed: an account with no sign-in on the
     // machine has no dir there to run in, so the start is refused.
@@ -36721,6 +36754,12 @@ export const createServer = (
           const asked = await askedStart(query);
           if ("refusal" in asked) {
             return status(asked.status, asked.refusal);
+          }
+          // Where a start would go says what its start would: a machine
+          // that refuses the harness refuses it ({@link placeSpawn}).
+          const refused = refusedHarness(query.machineId, asked.harness);
+          if (refused) {
+            return status(400, refused);
           }
           const input = placementInput(
             query.machineId,

@@ -36,6 +36,10 @@
  * (e) The stand-in is slow again: the next read's `auth status` runs out of
  *     time, said once, naming the dir and how long it waited, and the
  *     account still reads signed in, the machine still authenticated.
+ * (h) Claude Code's file changes and it is slow to say its version again:
+ *     another session's hand-off to a sleeping session there is refused by
+ *     the hub before it is taken, in the row's sentence, and nothing is
+ *     launched for it (hub server.ts `launchAccount`).
  * (f) Reconnect: the hub restarts, and the agent reads online within 3 s of
  *     the hub answering.
  * (g) A new agent process (what a binary update starts) reads online within
@@ -53,11 +57,14 @@ import { versionRefusal } from "../../../packages/agent/src/claude-version";
 import { type Bounded, readWithin } from "../../../packages/core/src/bounded";
 import { harnessRefusal } from "../../../packages/core/src/harness-refusal";
 import { machineLabel } from "../../../packages/core/src/machine-names";
+import type { ToolState } from "../../../packages/core/src/tools";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { unreportedHarnessRefusal } from "../../../packages/hub/src/placement";
-import { ACCOUNT, type Fleet, MACHINE } from "../../scratch-fleet";
-import type { Spec } from "../kit";
+import { toolWords } from "../../lib/tool-call";
+import { ACCOUNT, type Fleet, MACHINE, until } from "../../scratch-fleet";
+import type { KitFleet, Spec } from "../kit";
+import { atRest } from "../phone";
 
 const SLOW_S = 30;
 const ONLINE_MS = 3000;
@@ -85,6 +92,8 @@ interface AgentRow {
   machineCapabilities?: { items: { id: string; available: boolean }[] };
   machineId: string;
   status: string;
+  /** Each tool's cell, by its id (dashboard harness-block.svelte.ts reads `claude`'s). */
+  tools?: Record<string, { state: ToolState; version?: string }>;
 }
 
 /** The stand-in `claude`: while `flag` exists, 30 s before `--version` and `auth status`; then the real one. */
@@ -247,7 +256,8 @@ const rowSentence = (agent: AgentRow | undefined): string | undefined => {
         : {}),
       ...(version ? { version } : {}),
     },
-    machineLabel(agent?.hostname ?? MACHINE)
+    machineLabel(agent?.hostname ?? MACHINE),
+    agent?.tools?.claude
   )?.why;
 };
 
@@ -351,13 +361,14 @@ const spec: Spec = {
       `row: ${JSON.stringify(fleet.instance(before.id))}; held: ${JSON.stringify(held)}`
     );
 
-    await timeouts({
+    const helper = await timeouts({
       check,
       fleet,
       flag,
       expected,
       calls: () => calls(started),
     });
+    await stoppedSend({ check, fleet, helper, standIn: join(bin, "claude") });
     await reconnects({ check, fleet, slowPath });
   },
 };
@@ -378,7 +389,7 @@ const timeouts = async ({
   calls: () => Promise<string>;
   expected: string;
   flag: string;
-}): Promise<void> => {
+}): Promise<string> => {
   const { row, claudeReport, signin, startClaude } = drive(fleet);
   {
     // (c) The first read: `--version` gives no answer within its wait, so
@@ -485,7 +496,86 @@ const timeouts = async ({
         claudeReport(machine)?.auth === "authenticated",
       `said: ${JSON.stringify(cutOnce)}; sign-in: ${signin() ?? "none"}; machine: ${machine?.auth}; report: ${JSON.stringify(claudeReport(machine) ?? null)}; the stand-in: ${await calls()}`
     );
+    return after.id;
   }
+};
+
+/**
+ * (h) The machine's Claude Code changes under it and is slow to say its
+ * version again, so Claude stands refused once more, its account still
+ * signed in. Another session's hand-off to a sleeping session there, which
+ * would wake it, is refused by the hub before it is taken, in the sentence the machine's row
+ * says (hub server.ts `launchAccount`), and nothing is launched for it.
+ */
+const stoppedSend = async ({
+  check,
+  fleet,
+  helper,
+  standIn: path,
+}: Pick<Phase, "check"> & {
+  fleet: KitFleet;
+  helper: string;
+  standIn: string;
+}): Promise<void> => {
+  const { row } = drive(fleet);
+  // Asleep, not stopped: another session's word to a stopped one is kept
+  // until a person or its parent starts it, while one to a sleeping one
+  // wakes it, which is the launch this leg holds the hub to.
+  const target = await fleet.spawn("claude", "Asleep before the hand-off");
+  // A turn first: a session with no conversation yet has nothing to sleep on.
+  await fleet.send(target, "PROBE-FIRST-TURN");
+  await until(
+    "the target's first turn",
+    () => fleet.seen.find((one) => one.last.includes("PROBE-FIRST-TURN")),
+    (one) => one !== undefined,
+    120_000
+  );
+  await atRest(fleet, target);
+  // Asked again every 15 s: a machine refuses a sleep of one not at rest.
+  let askedAt = 0;
+  await until(
+    "the target session asleep",
+    async () => {
+      const status = fleet.instance(target)?.status;
+      if (status !== "sleeping" && Date.now() - askedAt > 15_000) {
+        askedAt = Date.now();
+        await fleet.control(target, "sleep");
+      }
+      return status;
+    },
+    (status) => status === "sleeping",
+    90_000
+  );
+  // A new file where `claude` is (its mtime moved): its version is read
+  // again, and the stand-in, still slow, takes 30 s to say it.
+  await writeFile(path, await readFile(path, "utf8"));
+  const why = await poll(async () => rowSentence(await row()), 120_000);
+  const credential = await fleet.sessionCredential(helper);
+  const door = { base: fleet.base, credential: credential ?? "", id: helper };
+  // A hub that finds the target's cache cold refuses the first call; the
+  // same call again is delivered, or refused for what stops it.
+  let answer = await toolWords(
+    door,
+    "handoff",
+    { target, message: "PROBE-STOPPED-HANDOFF" },
+    { via: "mcp" }
+  );
+  if (!(why && answer.text.includes(why))) {
+    answer = await toolWords(
+      door,
+      "handoff",
+      { target, message: "PROBE-STOPPED-HANDOFF" },
+      { via: "mcp" }
+    );
+  }
+  check(
+    "(h) with Claude Code's version unsaid again, a hand-off to a sleeping session there is refused by the hub in the machine row's sentence, and nothing is launched for it",
+    why !== undefined &&
+      answer.refused &&
+      answer.text.includes(why) &&
+      fleet.instance(target)?.status === "sleeping",
+    `answer: ${answer.text}; the row's sentence: ${why ?? "(none within 120 s)"}; the target: ${JSON.stringify(fleet.instance(target) ?? null)}; helper credential: ${credential ? "yes" : "none"}`
+  );
 };
 
 /** (f) and (g): a reconnect, and a new agent process, each online within seconds. */

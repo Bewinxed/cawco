@@ -78,19 +78,12 @@ export function harnessBlockOf(
     return null;
   }
   const name = machineLabel(machine.hostname);
-  const refusal = harnessRefusal(report, name);
+  const tool = machine.tools?.[HARNESS_TOOL[harness]];
+  const refusal = harnessRefusal(report, name, tool);
   if (!refusal) {
     return null;
   }
   const { kind, spec, why } = refusal;
-  const tool = machine.tools?.[spec.id];
-  if (
-    tool?.state === "installed" &&
-    toolRuns(spec, tool.version) &&
-    tool.version !== report.version
-  ) {
-    return null;
-  }
   return {
     harness,
     kind,
