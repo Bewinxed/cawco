@@ -36,6 +36,9 @@
  *  - bar-ground: a popover's foot, its top hairline parting it from the
  *    content (DESIGN.md, Borders are graded).
  *
+ *  - overflow (impeccable's `text-occlusion`, read where its launcher is):
+ *    a popover over the page's words, as the new-session bench opens one.
+ *
  * The mistake each rule is for, still named: two coral acts, two in one
  * specimen, a worded chip edged in coral, a worded chip
  * on coral beside the act; an outlined mark beside filled ones; a scroller
@@ -43,7 +46,8 @@
  * strip with nothing peeking; a list stretched apart; one-line rows grown
  * tall; a bar's padding uneven under a filled button; a label on the shelf
  * itself; a pane with nothing in it; a bar's title over a second line; a
- * bar's hairline under its head, a foot's fill.
+ * bar's hairline under its head, a foot's fill; an opaque box laid over a
+ * button.
  *
  *   bun scripts/probe-kit/run.ts web rendered-reads
  */
@@ -378,6 +382,64 @@ const FIXTURES: Record<string, Fixture> = {
   },
 };
 
+/**
+ * The pair read through impeccable's `text-occlusion`, the overflow rule's
+ * other reader, so read where its launcher is: words under an open layer
+ * (a popover over the page, as the new-session bench opens one over its own
+ * button) are named; words under an opaque box laid over them still fail.
+ */
+const LAYER_FIXTURES: Record<string, Fixture> = {
+  "overflow, a popover over the page's words": {
+    rule: "overflow",
+    html: `${BASE}<main><button class="filled" type="button">New session</button></main><div data-slot="popover-content" role="dialog" aria-label="New session" style="position: absolute; inset: 24px auto auto 24px; z-index: 50"><div class="sheet" style="inline-size: 400px; block-size: 300px; overflow: auto; border-radius: 12px; background: #fdfbf7"><p style="margin: 0; padding: 21px">Start a session on obelisk</p></div></div>`,
+    named: "words under an open layer",
+    want: null,
+  },
+  "overflow, an opaque box laid over a button": {
+    rule: "overflow",
+    html: `${BASE}<main style="position: relative"><button class="filled" type="button">New session</button><div class="cover" style="position: absolute; inset: 0 auto auto 0; inline-size: 400px; block-size: 300px; background: #fdfbf7"></div></main>`,
+    want: "button",
+  },
+};
+
+/** One fixture read for its rule alone, and checked: the mistake named, or the page drawn right found clean (and named where it says). */
+async function readFixture(
+  kit: Parameters<Spec["run"]>[0],
+  page: Page,
+  checks: RenderedChecks,
+  label: string,
+  fixture: Fixture
+): Promise<void> {
+  await page.setContent(fixture.html);
+  await fixture.act?.(page);
+  const why = `rendered-reads: ${label} reads ${fixture.rule} alone`;
+  const read = await checks.at(page, label, {
+    exempt: Object.fromEntries(
+      RULES.filter((rule) => rule !== fixture.rule).map((rule) => [rule, why])
+    ),
+  });
+  const found = read.findings.filter((one) => one.rule === fixture.rule);
+  const said =
+    found.length > 0
+      ? found.map((one) => `${one.element}: ${one.measured}`).join(" | ")
+      : `0 findings${fixture.named ? `; named: ${read.named.filter((one) => one.includes(fixture.named ?? "")).join(" | ") || "none"}` : ""}`;
+  const { want, named } = fixture;
+  if (want) {
+    kit.check(
+      `rendered-reads: ${label}, ${fixture.rule} names ${want}`,
+      found.some((one) => one.element.includes(want)),
+      said
+    );
+  } else {
+    kit.check(
+      `rendered-reads: ${label}, ${fixture.rule} finds nothing${named ? ` and names it (${named})` : ""}`,
+      found.length === 0 &&
+        (!named || read.named.some((one) => one.includes(named))),
+      said
+    );
+  }
+}
+
 const spec: Spec = {
   group: "The probe kit's own rig",
   name: "rendered-reads",
@@ -387,37 +449,27 @@ const spec: Spec = {
       noImpeccable: "rendered-reads proves the kit's own reads",
     });
     for (const [label, fixture] of Object.entries(FIXTURES)) {
-      await page.setContent(fixture.html);
-      await fixture.act?.(page);
-      const why = `rendered-reads: ${label} reads ${fixture.rule} alone`;
-      const read = await checks.at(page, label, {
-        exempt: Object.fromEntries(
-          RULES.filter((rule) => rule !== fixture.rule).map((rule) => [
-            rule,
-            why,
-          ])
-        ),
-      });
-      const found = read.findings.filter((one) => one.rule === fixture.rule);
-      const said =
-        found.length > 0
-          ? found.map((one) => `${one.element}: ${one.measured}`).join(" | ")
-          : `0 findings${fixture.named ? `; named: ${read.named.filter((one) => one.includes(fixture.named ?? "")).join(" | ") || "none"}` : ""}`;
-      const { want, named } = fixture;
-      if (want) {
-        kit.check(
-          `rendered-reads: ${label}, ${fixture.rule} names ${want}`,
-          found.some((one) => one.element.includes(want)),
-          said
-        );
-      } else {
-        kit.check(
-          `rendered-reads: ${label}, ${fixture.rule} finds nothing${named ? ` and names it (${named})` : ""}`,
-          found.length === 0 &&
-            (!named || read.named.some((one) => one.includes(named))),
-          said
-        );
+      await readFixture(kit, page, checks, label, fixture);
+    }
+    // impeccable's pair, where its launcher is; said, not failed, where not.
+    const withImpeccable = new RenderedChecks(kit, "rendered-reads impeccable");
+    await page.setContent(BASE);
+    const probe = await withImpeccable.at(page, "impeccable's launcher", {
+      exempt: Object.fromEntries(
+        RULES.map((rule) => [
+          rule,
+          "rendered-reads asks only whether impeccable runs",
+        ])
+      ),
+    });
+    if (probe.impeccable.ran) {
+      for (const [label, fixture] of Object.entries(LAYER_FIXTURES)) {
+        await readFixture(kit, page, withImpeccable, label, fixture);
       }
+    } else {
+      kit.note(
+        `rendered-reads: the open-layer pair not read here: ${probe.impeccable.said}`
+      );
     }
     await page.close();
   },

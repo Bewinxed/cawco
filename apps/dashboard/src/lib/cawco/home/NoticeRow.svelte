@@ -41,7 +41,9 @@
      padding round the 12px glyph plus the glyph's own side bearing (Close:
      its stroke ends at 18.75 of 24). The ✕ hangs past the trailing edge by
      that much, so its ink ends on the panel's one trailing edge, where a
-     wait's figures and Approve's fill end; its box keeps its size. An entry of
+     wait's figures and Approve's fill end; its box keeps its size, and its
+     focus ring stands inside it (`focus-inset`), clear of the list's clip, as
+     Peek's does (DESIGN.md, The One Ring Rule). An entry of
      a group (`nested`): the same columns, less air between entries. -->
 <article
   data-slot="notice"
@@ -77,7 +79,7 @@
     <button
       data-slot="x"
       aria-label={dismissLabel}
-      class="select-none touch-hit pointer-hit grid size-c-btn-h-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press motion-safe:active:transform-(--tpress) coarse:after:start-(--hit-start) coarse:after:end-(--hit-end) hover:bg-surface-hover hover:text-ink-strong"
+      class="select-none touch-hit pointer-hit focus-inset grid size-c-btn-h-xs place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press motion-safe:active:transform-(--tpress) coarse:after:start-(--hit-start) coarse:after:end-(--hit-end) hover:bg-surface-hover hover:text-ink-strong"
       onclick={ondismiss}
       style:--tpress="scale(var(--press-scale))"
       style:--hit-start={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 - var(--x-ink))"}

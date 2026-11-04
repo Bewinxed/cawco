@@ -99,7 +99,8 @@
            edge: it hangs past the edge by the kit's 1px transparent border,
            its inline-end padding (the xs size's 1.5 spacing steps beside an
            icon) and the chevron's side bearing (its stroke ends at 19.75 of
-           24 of the icon's box), so its box keeps its size. -->
+           24 of the icon's box), so its box keeps its size and its ring
+           stands inside it (`ring="inset"`), clear of the list's clip. -->
       <div
         data-slot="more"
         class="flex justify-end ps-(--text-column) pe-space-3 coarse:pb-space-1"
@@ -116,6 +117,7 @@
           aria-controls="moved-done"
           aria-expanded={open}
           class="me-(--hang)"
+          ring="inset"
           expanded="unfilled"
           onclick={() => {
             open = !open;

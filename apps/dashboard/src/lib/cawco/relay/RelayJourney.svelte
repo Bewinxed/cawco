@@ -850,8 +850,12 @@
       {/if}
       {#if later}
         <div class="flex justify-end">
+          <!-- Hung by its end padding onto the card's edge: its ring stands
+               inside its box (`ring="inset"`), clear of what clips the card
+               (DESIGN.md, The One Ring Rule). -->
           <Button
             class="-me-space-3"
+            ring="inset"
             disabled={pending !== null}
             label={words.later}
             onclick={() => act("later")}

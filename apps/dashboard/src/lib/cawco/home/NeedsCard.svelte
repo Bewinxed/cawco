@@ -907,7 +907,9 @@
              ink on the trailing edge: it hangs past by what stands between
              its box and that ink (the kit's 1px transparent border, its
              padding, `space-2` a side so it never hangs past the row's own
-             `space-3`, and the figure's side bearing, --figure-bearing). -->
+             `space-3`, and the figure's side bearing, --figure-bearing),
+             its ring inside its box (`ring="inset"`), clear of the list's
+             clip. -->
           <span
             data-slot="send"
             class="relative col-3 row-3 flex items-center self-center justify-self-end"
@@ -916,6 +918,7 @@
             <Button
               data-needs-card-send
               class="me-(--send-hang)"
+              ring="inset"
               pad="more"
               style="--more-px: var(--space-2);"
               aria-label={artifactWords.sendNamed(item.unsent, item.title)}

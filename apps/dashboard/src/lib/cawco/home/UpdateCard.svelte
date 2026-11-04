@@ -294,6 +294,7 @@
             ]}
             href="/config/updates"
             label="Configure update behaviour"
+            ring={notes === null ? "inset-last" : undefined}
             size="sm"
             style="--settings-hang: calc(-1 * (1px + var(--space-3)));"
             variant="link"
@@ -307,7 +308,8 @@
                and out of the list, which then scrolled sideways: so it
                hangs by `space-3` exactly, and what its end padding gives
                up for that its start padding takes, so its box is the sm
-               size's as ever (11px and 8px padding). The chevron flips
+               size's as ever (11px and 8px padding); so hung, its ring
+               stands inside its box (`ring="inset-last"`). The chevron flips
                from ⌄ to ⌃ with the fold (scaleY through a flat line), its
                stroke kept even through the flip. -->
           <Button
@@ -316,6 +318,7 @@
             aria-expanded={open}
             onclick={toggle}
             class="last:-me-space-3"
+            ring="inset-last"
             expanded="unfilled"
             size="sm"
             toggle="last"

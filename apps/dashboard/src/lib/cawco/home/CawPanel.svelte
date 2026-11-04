@@ -255,13 +255,15 @@
                what stands between its box and its last letter's ink (the
                kit's 1px transparent border, the xs size's two spacing steps of padding and
                the l's side bearing in Figtree, 0.07em), so its box and its
-               hover fill keep their size. It rides the head's line without
-               making it taller. -->
+               hover fill keep their size. Hung flush with the list's clip,
+               it rings inside its box (`ring="inset"`, The One Ring Rule).
+               It rides the head's line without making it taller. -->
           <Button
             data-clear
             aria-label="Clear all {noticeCount} notices"
             data-box
             class="ms-auto me-(--clear-hang) -my-space-1 self-center"
+            ring="inset"
             onclick={clearAll}
             size="xs"
             tone="quiet"

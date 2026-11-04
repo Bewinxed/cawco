@@ -23,7 +23,7 @@
  *
  * | rule        | read by                     | what it reads |
  * | ----------- | --------------------------- | ------------- |
- * | overflow    | scan.ts + impeccable `text-occlusion` | boxes past the screen, out of their control or box, a control out of its row, card or panel, text under a control or an opaque box; what is hidden (a 1px box, `sr-only`'s `clip-path: inset(50%)`) is not read |
+ * | overflow    | scan.ts + impeccable `text-occlusion` | boxes past the screen, out of their control or box, a control out of its row, card or panel, text under a control or an opaque box; what is hidden (a 1px box, `sr-only`'s `clip-path: inset(50%)`) is not read, and words an open layer covers (a popover, menu or dialog over the page) are named |
  * | coral       | own code                    | each view's (the spec's `views`, else the scope; and each `data-specimen`) controls and grounded chips whose fill, border or (a control's) ink resolves to a coral token from tokens.css; at most one; a checked checkbox, switch or radio, a chosen record (`data-chosen`), an identity tile on its mark hue, a mark out of the accessibility tree (`data-mark`: a comment's pin) and a region's one coral hairline side (the vermillion section rule) are allowed and named |
  * | glyph       | own code                    | a control whose only content is a glyph: no fill, border or shadow on it or on a wrapper that holds it alone; its svg holds no solid disc, tile or rounded shape spanning 70% of its viewBox |
  * | bar-ground  | own code                    | bars (toolbars, the bar data-slots, foot bars, and a `header` that does not scroll with its content: one that does, or one under another bar of its surface, heads a group of it, no bar) paint no fill, border or shadow; a folder-tab shelf (DESIGN.md, Shapes, Folder tabs), a group's capsule (DESIGN.md, The Title Bars Follow Liquid Glass Rule: Floating groups) and a foot's lone top hairline (DESIGN.md, Borders are graded) are named, not failed |
@@ -3553,11 +3553,30 @@ function excuseIn(args: {
 function placeIn(args: {
   scope: string;
   selectors: string[];
-}): { inScope: boolean; at: number }[] {
+}): { inScope: boolean; at: number; layer: string | null }[] {
   const scope = document.querySelector(args.scope) ?? document.body;
   const w = window as unknown as { __checkEls?: Element[] };
   w.__checkEls ??= [];
   const els = w.__checkEls;
+  // A layer that floats over the page by design: a popover, a menu, a list
+  // it opens, a dialog, sheet or drawer.
+  const LAYER =
+    '[data-popover], [data-slot="popover-content"], [role="menu"], [role="listbox"], [role="dialog"], [role="alertdialog"], [data-slot="dialog-content"], [data-slot="sheet-content"], [data-slot="drawer-content"]';
+  /** The open layer drawn over `el`'s middle, when one is and does not hold it. */
+  const layerOver = (el: Element): string | null => {
+    const r = el.getBoundingClientRect();
+    const [top] = document.elementsFromPoint(
+      r.left + r.width / 2,
+      r.top + r.height / 2
+    );
+    const layer = top?.closest(LAYER);
+    if (!layer || layer.contains(el)) {
+      return null;
+    }
+    const slot = layer.getAttribute("data-slot");
+    const role = layer.getAttribute("role");
+    return `${layer.tagName.toLowerCase()}${slot ? `[data-slot=${slot}]` : ""}${role ? `[role=${role}]` : ""}`;
+  };
   return args.selectors.map((selector) => {
     let found: Element | null = null;
     try {
@@ -3569,10 +3588,10 @@ function placeIn(args: {
       found = null;
     }
     if (!found) {
-      return { inScope: false, at: -1 };
+      return { inScope: false, at: -1, layer: null };
     }
     els.push(found);
-    return { inScope: true, at: els.length - 1 };
+    return { inScope: true, at: els.length - 1, layer: layerOver(found) };
   });
 }
 
@@ -3924,6 +3943,16 @@ async function renderedChecks(
         return;
       }
       const rule = IMPECCABLE_CHECKS[f.antipattern];
+      // Words an open layer covers (a popover, a menu, a dialog) are under
+      // it by design: the layer floats over the page (DESIGN.md, Elevation
+      // & Depth), and what it covers is the page it was opened over, not
+      // text one box laid over another.
+      if (f.antipattern === "text-occlusion" && where.layer) {
+        named.push(
+          `words under an open layer, which floats over the page: ${f.selector} under ${where.layer}`
+        );
+        return;
+      }
       if (rule && !exempt.includes(rule)) {
         findings.push({
           rule,

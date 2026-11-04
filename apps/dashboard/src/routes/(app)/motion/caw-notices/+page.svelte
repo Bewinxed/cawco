@@ -17,8 +17,16 @@
    * The phone width is the same page in a 390×844 frame (`?frame`), whose
    * viewport is a phone's, so the panel's own phone rules apply. Every
    * switch is in the URL, so a script opens any state directly.
+   *
+   * The desk popover is the desk's specimen: under the desk line (900px,
+   * where the product's glass card takes its phone placement) the page is
+   * its own phone form, the stage alone as `?frame` draws it, placed by the
+   * viewport as GlassCard places it. A read at a phone's width (the bench
+   * sweep's 390) reads the phone panel, never the desk popover drawn over
+   * the switches.
    */
   import { cawHeadWords } from "@cawco/core/words/caw-head";
+  import { MediaQuery } from "svelte/reactivity";
   import type { MovedLogin } from "#lib/cawco/accounts/model.svelte.js";
   import { barGlass, glassPlacement } from "#lib/cawco/bar-glass.svelte.js";
   import CawPanel from "#lib/cawco/home/CawPanel.svelte";
@@ -37,6 +45,7 @@
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { page } from "$app/state";
 
   /* ── The switches, from the URL ────────────────────────────────────── */
@@ -48,6 +57,9 @@
 
   /** Inside the phone frame: the stage alone. */
   const framed = query.has("frame");
+  /** Under the desk line: the page is the phone form, the stage alone. */
+  const drawer = new MediaQuery(DRAWER_QUERY);
+  const stageOnly = $derived(framed || drawer.current);
   const firstFixture = pick<Fixture>("fixture", [
     "full",
     "update",
@@ -60,7 +72,7 @@
   /** The switches as a query: the frame's URL, and this page's. */
   const search = $derived(new URLSearchParams({ fixture, width }).toString());
   $effect(() => {
-    if (!framed) {
+    if (!stageOnly) {
       history.replaceState(history.state, "", `?${search}`);
     }
   });
@@ -405,15 +417,17 @@
   $effect(() => {
     glass = document.querySelector<HTMLElement>("[data-bar-group]");
   });
-  const placement = $derived(glassPlacement(glass, width === "phone"));
+  /** Placed by the viewport, as GlassCard places the product's card. */
+  const placement = $derived(glassPlacement(glass, drawer.current));
 </script>
 
 <svelte:head>
   <title>Caw's notices · CawCo</title>
 </svelte:head>
 
-<!-- On the desk, and inside the phone frame; the page around the frame has none. -->
-{#if glass && (framed || width === "desk")}
+<!-- On the desk, and as the stage alone (in the phone frame, or under the
+     desk line); the page around the frame has none. -->
+{#if glass && (stageOnly || width === "desk")}
   <Popover.Root bind:open>
     {#key generation}
       <HangCard
@@ -447,7 +461,7 @@
   </Popover.Root>
 {/if}
 
-{#if !framed}
+{#if !stageOnly}
   <main class="flex flex-wrap items-start gap-space-6 p-space-5">
     <div
       data-slot="controls"

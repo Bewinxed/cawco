@@ -128,6 +128,12 @@
       },
       /** Its words and mark spread apart. */
       gap: { loose: "gap-2" },
+      /** Its focus ring inside its box (DESIGN.md, The One Ring Rule: "inset
+          on rows, tabs and anything flush or clipped"): a button hung past
+          a row's trailing edge onto the clip of the list it stands in
+          (Caw's panel's Clear all, a fold's toggle, Send), or only while it
+          is its row's last (`inset-last`: the update notice's footer). */
+      ring: { inset: "focus-inset", "inset-last": "last:focus-inset" },
       /** Its inline padding: none (a link reading as text), or the caller's `--more-px`. */
       pad: { none: "px-0", more: "px-(--more-px)" },
       /** Shown only when its row is in reach: under the pointer, focused, or
@@ -260,6 +266,7 @@
     width,
     margin,
     gap,
+    ring,
     pad,
     reveal,
     align,
@@ -303,6 +310,7 @@
         width,
         margin,
         gap,
+        ring,
         pad,
         reveal,
         align,
