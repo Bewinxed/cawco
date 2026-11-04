@@ -173,8 +173,15 @@ const MOCK_SOCKET = "mock.sock";
 const SESSIOND_ENTRY = "packages/sessiond/src/main.ts";
 
 const PROCESS_ID = /^\d+$/u;
-/** The hub's connection to a machine: the master of its control socket (ssh-tunnels.ts `master`). */
-const MASTER = / -N .* -M -S /u;
+/**
+ * The hub's connection to a machine: the `ssh` that is the master of its
+ * control socket (ssh-tunnels.ts `master`), by its own argv. Since
+ * f7c383c00 it runs under the tether (core tether.ts), whose shell and
+ * reader subshell carry the same words after `sh -c …`: three processes
+ * for one connection, the shell the lowest pid, and a SIGKILL of that
+ * shell left the `ssh` running and the connection up.
+ */
+const MASTER = /^(?:\S*\/)?ssh -N .* -M -S /u;
 const LOOPBACK_HOST = /^(?:127\.[\d.]+|\[::1\]|::1)$/u;
 const WHITESPACE = /\s+/u;
 /** A line of Bun's source frame for an error it printed itself: `312 |   throw …`. */
@@ -692,7 +699,7 @@ const readers = (kit: Kit, fleet: KitFleet, box: Box) => {
         machine_id: string | null;
         ssh_port: number | null;
       }>("SELECT ssh_port, box_port, machine_id FROM ssh_machines"),
-    /** The hub's connections: each the master of a control socket in its dir. */
+    /** The hub's connections: each the `ssh` that is the master of a control socket in its dir ({@link MASTER}). */
     tunnels: () =>
       processList().filter(
         ({ argv }) => argv.includes(box.controlDir) && MASTER.test(argv)

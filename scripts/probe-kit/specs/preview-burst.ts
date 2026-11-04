@@ -38,12 +38,13 @@
  *    + Svelte folder makes a component canvas. Its stage runs in a place's
  *    boundary, reached by the agent's bridge through `nsenter` into that
  *    boundary's network (preview-bridge.ts, every line its own). The canvas
- *    opened through the session's preview origin draws; then
+ *    opened through the artifact's own preview origin draws; then
  *    {@link COST_GETS} GETs of one of its keyed modules, {@link COST_AT_ONCE}
- *    at a time, through the hub's and the agent's listeners and that
- *    bridge: every answer 200, and `pgrep -P <the relay>` empty
- *    throughout (sampled every 5 ms). Inside a workspace, where a boundary
- *    cannot start, it says so in one line and the legs above stand.
+ *    at a time, each with the person's pass, through the hub's and the
+ *    agent's listeners and that bridge: every answer 200, and `pgrep -P
+ *    <the relay>` empty throughout (sampled every 5 ms). Inside a
+ *    workspace, where a boundary cannot start, it says so in one line and
+ *    the legs above stand.
  * 4. 300 GETs of one immutable module (the largest prebundled dependency
  *    the canvas loads, at its `?v=`) through the hub's and the agent's listeners and the bridge,
  *    gzip taken, 50 at a time: the bridge opens no process of its own for
@@ -72,7 +73,7 @@ import {
 } from "../../scratch-fleet";
 import { CLOUDFLARE, scratchCertificate } from "../cloudflare-front";
 import { BOUNDARY_INSIDE, type Kit, ROOT, type Spec } from "../kit";
-import { passInto } from "../preview-pass";
+import { passedFetch, passInto } from "../preview-pass";
 
 const OPENS = 20;
 /**
@@ -874,7 +875,7 @@ const respond = (request: Seen): Reply => {
     : text(`${ask.name} is not offered`);
 };
 
-/** The relay of preview `instanceId`'s bridge: the process whose arguments end in its socket. */
+/** The relay of preview `instanceId`'s bridge (the hub's key for the origin, preview-bridge.ts names its socket by it): the process an argument of which ends in that socket. */
 const relayOf = async (instanceId: string): Promise<number | null> => {
   const ending = `/${instanceId}.sock`;
   const pids = (await processLineage())
@@ -965,7 +966,17 @@ async function realJoin(kit: Kit): Promise<void> {
     .then(() => true)
     .catch(() => false);
   await page.close();
-  const relay = await relayOf(session);
+  // The bridge is the preview's, named by the hub's key for the artifact's
+  // own origin (server.ts `frameOrigin`: `embedKey` of `artifacts.origin`),
+  // never by the session: a sheet has been served on its artifact's own
+  // origin since f536f2675, and that origin is the row's own since 9e9a255cf.
+  const { artifactOrigin } =
+    await import("../../../packages/hub/src/db/previews");
+  const [row] = fleet.query<{ origin: string }>(
+    "SELECT origin FROM artifacts WHERE id = ?",
+    id
+  );
+  const relay = row ? await relayOf(artifactOrigin(row.origin)) : null;
   const target =
     modules.find((one) => one.includes("Card.svelte")) ?? modules[0];
   const seen = new Set<number>();
@@ -982,7 +993,8 @@ async function realJoin(kit: Kit): Promise<void> {
   for (let sent = 0; target && sent < COST_GETS; sent += COST_AT_ONCE) {
     await Promise.all(
       Array.from({ length: COST_AT_ONCE }, async () => {
-        const status = await fetch(`${origin}${target}`)
+        // Behind the lock as every preview port is (f947f9a36): the person's pass.
+        const status = await passedFetch(fleet, `${origin}${target}`)
           .then(async (answer) => {
             await answer.arrayBuffer();
             return answer.status;
@@ -1001,7 +1013,7 @@ async function realJoin(kit: Kit): Promise<void> {
       !!target &&
       statuses.get(200) === COST_GETS &&
       seen.size === 0,
-    `artifact_create: ${created.replaceAll(/\s+/gu, " ").slice(0, 300)}`
+    `canvas drawn: ${drawn}; artifact_create: ${created.replaceAll(/\s+/gu, " ").slice(0, 300)}`
   );
 }
 
