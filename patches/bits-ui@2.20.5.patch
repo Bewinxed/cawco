@@ -1,8 +1,8 @@
 diff --git a/dist/bits/select/select.svelte.js b/dist/bits/select/select.svelte.js
-index 93d73e0..c5d6561 100644
+index 38facb3..7aa631e 100644
 --- a/dist/bits/select/select.svelte.js
 +++ b/dist/bits/select/select.svelte.js
-@@ -1258,6 +1258,26 @@ export class SelectViewportState {
+@@ -1265,6 +1265,26 @@ export class SelectViewportState {
          ...this.attachment,
      }));
  }
@@ -29,7 +29,7 @@ index 93d73e0..c5d6561 100644
  export class SelectScrollButtonImplState {
      opts;
      content;
-@@ -1350,7 +1370,15 @@ export class SelectScrollDownButtonState {
+@@ -1357,7 +1377,15 @@ export class SelectScrollDownButtonState {
              if (!viewport || !this.content.isPositioned)
                  return;
              this.handleScroll(true);
@@ -46,7 +46,7 @@ index 93d73e0..c5d6561 100644
          });
          /**
           * If the input value changes, this means that the filtered items may have changed,
-@@ -1409,7 +1437,9 @@ export class SelectScrollUpButtonState {
+@@ -1416,7 +1444,9 @@ export class SelectScrollUpButtonState {
              if (!this.root.viewportNode || !this.content.isPositioned)
                  return;
              this.handleScroll(true);
@@ -58,7 +58,7 @@ index 93d73e0..c5d6561 100644
      }
      /**
 diff --git a/dist/bits/utilities/dismissible-layer/use-dismissable-layer.svelte.js b/dist/bits/utilities/dismissible-layer/use-dismissable-layer.svelte.js
-index b3ea73b..1db12ff 100644
+index be8dcde..f40c9db 100644
 --- a/dist/bits/utilities/dismissible-layer/use-dismissable-layer.svelte.js
 +++ b/dist/bits/utilities/dismissible-layer/use-dismissable-layer.svelte.js
 @@ -125,7 +125,7 @@ export class DismissibleLayerState {

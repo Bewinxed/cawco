@@ -65,7 +65,7 @@
     "@types/node": "^26.6.4",
     "@types/pngjs": "^6.0.5",
     "@types/ssh2": "^1.15.6",
-    "bits-ui": "^2.19.5",
+    "bits-ui": "^2.20.5",
     "buffer": "^6.0.3",
     "colorjs.io": "^0.7.1",
     "events": "^3.3.0",
@@ -94,7 +94,7 @@
   },
   "patchedDependencies": {
     "vaul-svelte@1.0.0-next.7": "patches/vaul-svelte@1.0.0-next.7.patch",
-    "bits-ui@2.20.3": "patches/bits-ui@2.20.3.patch",
+    "bits-ui@2.20.5": "patches/bits-ui@2.20.5.patch",
     "openai@7.19.0": "patches/openai@7.19.0.patch",
     "@anthropic-ai/sdk@0.129.0": "patches/@anthropic-ai%2Fsdk@0.129.0.patch",
     "postcss-selector-parser@7.1.6": "patches/postcss-selector-parser@7.1.6.patch",
