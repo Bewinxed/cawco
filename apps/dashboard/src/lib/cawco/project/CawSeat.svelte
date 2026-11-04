@@ -35,14 +35,9 @@
     lead.holds || (lead.status === "working" && !cawLoop.on)
   );
 
-  /** The seat on screen anchors his panel; the one leaving hands it on. */
+  /** The seat on screen anchors his panel while it stands (CawLead `seat`). */
   function anchors(node: HTMLElement) {
-    lead.anchor = node;
-    return () => {
-      if (lead.anchor === node) {
-        lead.anchor = null;
-      }
-    };
+    return lead.seat(node);
   }
 </script>
 

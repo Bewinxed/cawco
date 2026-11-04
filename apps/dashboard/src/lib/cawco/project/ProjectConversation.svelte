@@ -74,6 +74,7 @@
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
@@ -130,6 +131,15 @@
     }
   });
   const shown = $derived(fresh ? null : (chosen ?? lead.conversationId));
+  /**
+   * His conversation on show is still starting (CawLead `starting`: from
+   * the hub's start until it has taken the words that started it): the
+   * well shows him starting, never a session nothing has been said in nor
+   * the hero asking for words already sent.
+   */
+  const startingHere = $derived(
+    lead.starting && !fresh && (shown === null || shown === lead.conversationId)
+  );
   function newConversation() {
     fresh = true;
     chosen = null;
@@ -208,6 +218,9 @@
   const said = $derived.by(() => {
     if (lead.capSays) {
       return lead.capSays;
+    }
+    if (startingHere) {
+      return conversationWords.status.starting;
     }
     if (shown) {
       return sessionStatusOf(shown).label;
@@ -332,6 +345,7 @@
   async function start(text: string, extras: SendExtras) {
     starting = true;
     startError = "";
+    lead.began();
     try {
       const id = await startConversation(projectId, text, extras);
       // A starter pressed into the field went: as its words stood, or
@@ -487,7 +501,29 @@
     </div>
   </div>
   <div data-slot="well" class="relative flex min-h-0 flex-auto flex-col">
-    {#if shown}
+    {#if startingHere}
+      <!-- His start, on the transcript's own columns where his conversation
+           will stand: setting the project up, his setup element at its first
+           step (SetupWell, the page's one live Caw meanwhile); else his
+           starting line. -->
+      <div
+        data-slot="caw-starting"
+        data-tx-columns
+        class="tx-columns flex min-h-0 flex-auto flex-col overflow-y-auto ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5"
+        in:crossIn
+      >
+        {#if setup}
+          {@render setupTail()}
+        {:else}
+          <p
+            class="mark-line flex items-center gap-space-2 py-space-5 text-size-meta font-normal text-ink-muted"
+            role="status"
+          >
+            <LiveDot /><span>{conversationWords.status.starting}</span>
+          </p>
+        {/if}
+      </div>
+    {:else if shown}
       <!-- The conversation stays laid out under Preview, so going back to it
            finds it as it was; only the tab on show takes the pointer. -->
       <div

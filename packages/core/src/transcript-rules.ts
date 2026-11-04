@@ -1615,11 +1615,15 @@ function systemNote(
 ): { kind: string; title: string; taskToolId?: string } | null {
   const head = text.trimStart().slice(0, 200);
   // A slash command's local echo (`<local-command-caveat>`, `<command-name>`,
-  // `<local-command-stdout>`): the harness's bookkeeping, not the human's words
-  // — raw XML in a user bubble otherwise.
+  // `<local-command-stdout>`), and a command or skill sent as a prompt, which
+  // Claude Code stores opening on `<command-message>` (a spawn's `skills`, each
+  // a quiet `/skill` before the brief: agent claude.ts): the harness's
+  // bookkeeping, not the human's words — raw XML in a user bubble otherwise,
+  // standing over the person's own words in Caw's conversation.
   if (
     head.startsWith("<local-command-caveat>") ||
     head.startsWith("<command-name>") ||
+    head.startsWith("<command-message>") ||
     head.startsWith("<local-command-stdout>")
   ) {
     const command = LOCAL_COMMAND_NAME.exec(text)?.[1]?.trim();

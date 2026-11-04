@@ -2915,6 +2915,9 @@ public enum Words {
 
             /// The hub is away.
             public static let reconnecting = "Reconnecting to the hub"
+
+            /// His conversation is starting: the words that start it are not taken yet.
+            public static let starting = "Starting…"
         }
     }
 

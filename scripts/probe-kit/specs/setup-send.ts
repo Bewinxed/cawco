@@ -35,11 +35,22 @@
  *    on: his view says `starting` as it answers, and his conversation
  *    starts after. (Nightly 6583: the answer waited on his session's start
  *    on its machine, about 14 s.)
+ * 7. That project's page at 1440, opened as the create answers: Caw's
+ *    panel shows him starting, then his conversation with the person's
+ *    words its first row of theirs (not the project-setup skill's
+ *    `<command-message>` echo), and never a session nothing has been said
+ *    in (nightly 6688: "Nothing has been said here yet · Ask Claude Code
+ *    about this folder"). Then his seat changes places, the head's going and coming
+ *    back while the one over the board lands and leaves within the head's
+ *    --dur-panel (Routines, then Board and Routines again 60ms apart): the
+ *    head's seat still opens and closes his panel, drawn with it at every
+ *    press. (Nightly 6688: the seat's `aria-expanded` changed and no panel
+ *    drew at 1440, its one anchor cleared by the seat that left.)
  */
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
+import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
 const WRITE = "mcp__cawco__folder_write";
 /** Caw's write of AGENTS.md in the turn the handed page starts, and its answer once it came. */
@@ -405,6 +416,128 @@ const run = async (kit: Kit) => {
     "6: New project with Caw answers once the project is made: his view says starting, and his conversation starts after",
     atAnswer.starting === true && started !== null,
     JSON.stringify({ answeredIn, atAnswer, started })
+  );
+
+  await panelAtDesk(kit, fleet);
+};
+
+/** What leg 7 sends as the person's words. */
+const WORDS7 = "Plan the garden for the summer, bed by bed.";
+/** A session's empty transcript (SessionPane `blank`), with its ask of its own agent. */
+const NOTHING_SAID = /Nothing has been said|about this folder/u;
+/** The words of the panel's first row of the person's, under its speaker line ("You", its time). */
+const FIRST_SAID = /^You\n[^\n]*\n+([^\n]+)/mu;
+
+/**
+ * Leg 7: a project made with Caw, its page at 1440 opened as the create
+ * answers, read for what his panel draws as he starts, then for his seat
+ * opening it after the seat changed places.
+ */
+const panelAtDesk = async (kit: Kit, fleet: KitFleet) => {
+  const base = await fleet.dashboard();
+  const page = await kit.page("desk");
+  // Every text his panel's well draws, from the page's first frame.
+  await page.addInitScript(() => {
+    const drawn = new Set<string>();
+    (window as unknown as { __cawWell: Set<string> }).__cawWell = drawn;
+    new MutationObserver(() => {
+      const well = document.querySelector(
+        '[data-caw-panel] [data-slot="well"]'
+      );
+      const text = (well as HTMLElement | null)?.innerText.trim();
+      if (text) {
+        drawn.add(text.replace(/\s+/gu, " ").slice(0, 200));
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
+  const made = await fleet.api<{ id: string }>("/api/projects", {
+    prompt: WORDS7,
+    promptId: crypto.randomUUID(),
+    caw: true,
+  });
+  await open(page, `${base}/project/${made.id}`, '[data-slot="caw-seat"]');
+  const panel = page.locator("[data-caw-panel]");
+  // A project just made opens on his panel (CawLead `arrive`, its board empty).
+  const words = await until(
+    "his panel showing the person's words",
+    async () => {
+      try {
+        return await panel.innerText({ timeout: 1000 });
+      } catch {
+        return "";
+      }
+    },
+    (text) => text.includes(WORDS7),
+    120_000
+  ).catch(() => "never");
+  const wells = await page.evaluate(() => [
+    ...(window as unknown as { __cawWell: Set<string> }).__cawWell,
+  ]);
+  kit.check(
+    "7: his panel at 1440 shows him starting, then his conversation with the person's words first, never a session nothing has been said in",
+    words !== "never" &&
+      FIRST_SAID.exec(words)?.[1]?.trim() === WORDS7 &&
+      !wells.some((text) => NOTHING_SAID.test(text)),
+    JSON.stringify({ wells: wells.slice(0, 12), words: words.slice(0, 300) })
+  );
+
+  // His start over (his turn ended), the board stands him at 80; Routines
+  // seats him in the head.
+  await page
+    .locator('[data-slot="caw-80"] [data-slot="caw-seat"]')
+    .waitFor({ timeout: 120_000 });
+  const tab = (name: string) =>
+    page
+      .locator('[data-slot="strip"]')
+      .getByRole("tab", { name, exact: true })
+      .first();
+  await tab("Routines").click();
+  const head = page.locator('[data-slot="seat"] [data-slot="caw-seat"]');
+  await head.waitFor({ timeout: 10_000 });
+  await page
+    .locator('[data-slot="caw-80"]')
+    .waitFor({ state: "detached", timeout: 10_000 });
+  // Board, then Routines again inside the head's --dur-panel: the head's
+  // seat slides out and is called back as it went, the 80 lands and leaves.
+  const raced = await page.evaluate(async () => {
+    // The strip's tabs on screen, not the inert copies it measures with.
+    const tabOf = (name: string) =>
+      [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find(
+        (one) =>
+          one.checkVisibility() &&
+          !one.closest('[inert], [aria-hidden="true"]') &&
+          one.querySelector('[data-slot="text"]')?.textContent?.trim() === name
+      );
+    const board = tabOf("Board");
+    const routines = tabOf("Routines");
+    board?.click();
+    await new Promise((done) => setTimeout(done, 60));
+    // The 80 stood, and the head's seat was still on its way out.
+    const crossed =
+      document.querySelector('[data-slot="caw-80"]') !== null &&
+      document.querySelector('[data-slot="seat"]') !== null;
+    routines?.click();
+    await new Promise((done) => setTimeout(done, 1000));
+    return { tabs: Boolean(board && routines), crossed };
+  });
+  /** The seat's `aria-expanded`, and whether his docked panel is drawn. */
+  const state = async () => ({
+    expanded: await head.getAttribute("aria-expanded"),
+    drawn: (await page.locator("[data-caw-dock]").count()) > 0,
+  });
+  const presses = [await state()];
+  for (let press = 0; press < 2; press += 1) {
+    await head.click();
+    await page.waitForTimeout(800);
+    presses.push(await state());
+  }
+  kit.check(
+    "7: after his seat changed places, the head's seat at 1440 opens and closes his panel, drawn with it at every press",
+    raced.tabs &&
+      raced.crossed &&
+      new Set(presses.map((one) => one.expanded)).size === 2 &&
+      presses.every((one) => one.drawn === (one.expanded === "true")),
+    JSON.stringify({ raced, presses })
   );
 };
 

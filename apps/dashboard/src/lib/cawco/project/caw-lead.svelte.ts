@@ -37,6 +37,7 @@ import {
 } from "@cawco/core/project-conversation";
 import type { StarterPlace } from "@cawco/core/starters";
 import { conversationWords } from "@cawco/core/words/project-conversation";
+import { untrack } from "svelte";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import { browser } from "$app/env";
 import { epochOf } from "../board.svelte";
@@ -143,7 +144,32 @@ export class CawLead {
       store("local", openKey(id), next ? "1" : "0");
     }
   }
-  anchor = $state<HTMLElement | null>(null);
+  /**
+   * The seats standing now, oldest first ({@link seat}). Two stand at once
+   * while one comes and the other goes (the head's slides out over
+   * --dur-panel as the 80 over the board lands), and an outro the page
+   * calls back resumes its seat as it stood, without standing it again:
+   * one slot that each seat wrote as it stood and cleared as it went was
+   * left empty under the head's seat, its panel never drawn at a desk
+   * (cockpit-eb72ec86, 0.1.12-nightly.6688).
+   */
+  #seats = $state<HTMLElement[]>([]);
+  /** The seat on screen, the newest still standing: focus goes back to it as his panel is put away; null while none stands. */
+  get anchor(): HTMLElement | null {
+    return this.#seats.at(-1) ?? null;
+  }
+  /** A seat stands (CawSeat): it anchors his panel until it goes, and the answer is its going. */
+  seat(node: HTMLElement): () => void {
+    // Written from the seat's attachment, which must not rerun on it.
+    untrack(() => {
+      this.#seats = [...this.#seats, node];
+    });
+    return () => {
+      untrack(() => {
+        this.#seats = this.#seats.filter((one) => one !== node);
+      });
+    };
+  }
   /**
    * His panel's tab (decision page `onboarding-design`, card
    * `artifact-open`): his conversation, or what it shows (a preview, a
@@ -292,6 +318,7 @@ export class CawLead {
       this.draft.text = "";
     }
     this.view = null;
+    this.#startSeen = null;
     this.#for = id;
   }
 
@@ -323,6 +350,9 @@ export class CawLead {
       if (id === this.#projectId()) {
         this.view = view;
         this.refused = null;
+        if (view.starting) {
+          this.#startSeen = id;
+        }
       }
     } catch (error) {
       this.refused = failureWords(error);
@@ -370,16 +400,63 @@ export class CawLead {
     cawco.liveRead ? cawco.onlineMachines.length > 0 : this.#loadedOnline()
   );
   /**
-   * His conversation is being started: a project just made with Caw answers
-   * before his start ends (hub server.ts `startProject`), so the page reads
-   * his view's `starting` until his session's row is there, then the row's
-   * own status.
+   * His conversation is being started, until it has taken the words that
+   * started it. A project just made with Caw answers before his start ends
+   * (hub server.ts `startProject`), so the page reads his view's `starting`
+   * until his session's row is there. The row is listed as his spawn
+   * answers, and the words that started him are sent after it (caw.ts
+   * `startConversation`), so a running row is still his start until those
+   * words are taken: a turn under way, one ended (`turnEndedAt`), an ask
+   * of his, or anything said in it as this tab read it (its turn's end
+   * lands on the row after the pulse that says it is over). Read off the
+   * row's status alone, the page held him started
+   * and idle in between, and his panel drew a session nothing had been
+   * said in (cockpit-eb72ec86, 0.1.12-nightly.6688).
    */
-  readonly starting = $derived(
-    this.conversation
-      ? this.conversation.status === "starting"
-      : this.view?.starting === true && this.view.problem === null
-  );
+  readonly starting = $derived.by((): boolean => {
+    const row = this.conversation;
+    if (!row) {
+      return this.view?.starting === true && this.view.problem === null;
+    }
+    if (row.status === "moving" || row.status === "starting") {
+      return true;
+    }
+    if (
+      this.#startSeen !== this.#projectId() ||
+      row.status !== "running" ||
+      row.stalled ||
+      this.#begun.has(row.id)
+    ) {
+      return false;
+    }
+    const took =
+      Boolean(row.turnEndedAt) ||
+      cawco.busyOf(row.id) ||
+      this.asks.length > 0 ||
+      Boolean(cawco.session(row.id)?.messages.length);
+    if (took) {
+      this.#begun.add(row.id);
+    }
+    return !took;
+  });
+  /**
+   * The project whose start this page saw begin: his view said `starting`
+   * ({@link read}), or the words his panel sent started him ({@link began}).
+   * Only such a start runs on past his row's arrival: a conversation found
+   * running is his, said or not.
+   */
+  #startSeen = $state<string | null>(null);
+  /** His panel's words are on their way to start a conversation (ProjectConversation). */
+  began(): void {
+    this.#startSeen = this.#projectId();
+  }
+  /**
+   * The conversations seen past their start on this page: once taken, his
+   * words stay taken, whatever lands first after (his turn's end on the
+   * row, or the pulse that says it is over). Not reactive: it only keeps
+   * an answer {@link starting} already gave.
+   */
+  readonly #begun = new Set<string>();
   /** Why he cannot start now, or why his last start failed (his view's `problem`), in a sentence; null when he can. */
   readonly problem = $derived(
     this.#machinesOnline ? (this.view?.problem ?? null) : CAW_NO_MACHINE

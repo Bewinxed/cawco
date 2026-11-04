@@ -36,5 +36,7 @@ export const conversationWords = {
     reading: "Reading the board…",
     /** The hub is away. */
     reconnecting: "Reconnecting to the hub",
+    /** His conversation is starting: the words that start it are not taken yet. */
+    starting: "Starting…",
   },
 };
