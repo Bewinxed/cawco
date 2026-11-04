@@ -11,5 +11,5 @@ export const gitDoorWords = {
    * `seconds` (agent hub-git.ts `withHostLogin`): stopped, and git refused.
    */
   credentialSilent: (url: string, host: string, seconds: number) =>
-    `cawco: git did not run against ${url}: ${gitDoorWords.helperSilent(host, seconds)} (it may be waiting on a prompt, such as a keychain's, that nobody is there to answer), so it was stopped. Answer or unlock it on this machine, or store a login for ${host} there, then run the command again.`,
+    `cawco: git did not run against ${url}: ${gitDoorWords.helperSilent(host, seconds)}, so it was stopped. It was waiting on a prompt nobody answered, such as a keychain's. Unlock the keychain or sign in at this machine, or store a login for ${host} in a helper there, then run the command again.`,
 };
