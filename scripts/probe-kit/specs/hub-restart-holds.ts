@@ -20,9 +20,13 @@
  *   starts again: still completing, nothing on main. Its delegate lands, and
  *   only then does it land.
  * - (d) A gate cut between steps: three gate steps, the hub killed while the
- *   second runs. Started again, the landing resumes at its step: the first
- *   step never runs again (its pass was kept), the second and third run, and
- *   the item lands, its report saying where the first passed.
+ *   second runs (the steps' log in the workspace's scratch dir says one, then
+ *   two, as it is cut). Started again, the landing resumes at its step: the
+ *   first step never runs again (its pass was kept), the second and third
+ *   run, and the item lands. Read from its report, which outlives the
+ *   workspace its landing retires (and the step log with it): step one
+ *   "not run again", where it passed; steps two and three each ran and
+ *   passed.
  * - (e) A deleted delegate type: an item's type is deleted while its session
  *   sleeps, and the hub restarts. A message to it does not start it: the item
  *   is blocked, not failed, the message kept at the hub under `blocked`, and
@@ -552,12 +556,18 @@ const legD = async (legs: Legs) => {
   const item = await delegate(legs, legs.parent, "D");
   const workspace = itemOf(fleet, item)?.workspace_id ?? "";
   stepsOf("D").armed = true;
-  await until(
-    "(d) its second gate step runs",
-    () => stepLogOf(legs, workspace),
-    (read) => read.includes("two"),
-    600_000
-  );
+  // The steps' log as the cut finds it: the workspace's scratch dir goes
+  // with the workspace once the item lands, so it is read here, never after.
+  const atCut = (
+    await until(
+      "(d) its second gate step runs",
+      () => stepLogOf(legs, workspace),
+      (read) => read.includes("two"),
+      600_000
+    )
+  )
+    .trim()
+    .split("\n");
   const phase = itemOf(fleet, item)?.landing_phase;
   const passes = fleet.query<{ gate_passes: string | null }>(
     "SELECT gate_passes FROM work_items WHERE id = ?",
@@ -565,24 +575,26 @@ const legD = async (legs: Legs) => {
   )[0]?.gate_passes;
   await restartHub(fleet);
   const end = await ended(legs, item, "D");
-  const log = (await stepLogOf(legs, workspace)).trim().split("\n");
-  const count = (line: string) => log.filter((one) => one === line).length;
+  const report = end?.result ?? "";
+  // Each step as the report's gate section says it (work-items.ts
+  // `stepLine`): a kept pass "pass (not run again: …)", a run "pass (exit
+  // 0, …)". Step two's run there is its second: the first was cut.
+  const ran = (step: string) => report.includes(`- ${step}: pass (exit 0,`);
   check(
     "(d) a gate cut inside its second step resumes at that step after the restart: the first step's pass was kept and it never runs again, the second and third run, and the item lands",
     phase === "gating" &&
       (passes ?? "").includes('echo \\"one\\"') &&
-      count("one") === 1 &&
-      count("two") >= 2 &&
-      count("three") === 1 &&
+      atCut.join(",") === "one,two" &&
+      report.includes("- step one: pass (not run again:") &&
+      ran("step two") &&
+      ran("step three") &&
       end?.state === "done",
-    `phase at the cut: ${phase}; passes kept: ${passes}; step log: ${log.join(", ")}; item: ${end?.state} ${end?.error ?? ""}`
+    `phase at the cut: ${phase}; passes kept: ${passes}; step log at the cut: ${atCut.join(", ")}; item: ${end?.state} ${end?.error ?? ""}\n${report.slice(0, 1500)}`
   );
   check(
     "(d) its report says where the first step passed, and that it was not run again",
-    (end?.result ?? "").includes(
-      "step one: pass (not run again: passed on this tree"
-    ),
-    (end?.result ?? "").slice(0, 1500)
+    report.includes("step one: pass (not run again: passed on this tree"),
+    report.slice(0, 1500)
   );
   await declareGate(fleet.base, legs.projectId, "---\n---\n");
 };
