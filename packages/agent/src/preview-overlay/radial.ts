@@ -51,6 +51,8 @@ const GLYPH_R = (INNER + OUTER) / 2;
 const WORD_GAP = 8;
 /** The menu stays this far inside the viewport, words and all. */
 const EDGE = 8;
+/** The nearest the icon's centre stands to the page's edge, px: half its 24px, whole on the page. */
+const ICON_IN = 12;
 /** Each sector's word, by its edge nearest the ring: where it stands and which way it runs. */
 const WORDS_AT = [
   { x: 0, y: -(OUTER + WORD_GAP), translate: "-50% -100%" },
@@ -302,6 +304,13 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
   };
 
   /**
+   * The part of the viewport the page stands in: the host's box, `inset: 0`
+   * and fixed. `innerWidth` counts a scrollbar and the gutter kept for one
+   * (core preview-proxy `GUTTER_FLOOR`), where a press reaches no element.
+   */
+  const room = () => shadow.host.getBoundingClientRect();
+
+  /**
    * A stroke that ends near the viewport's edge would put the ring or a word
    * past it: the menu and its icon move in until all of it is EDGE inside.
    * Picks read from the menu's own centre, so a drag still runs true.
@@ -320,8 +329,9 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
       }
       return high > size - EDGE ? size - EDGE - high : 0;
     };
-    const dx = shift(left, right, innerWidth);
-    const dy = shift(top, bottom, innerHeight);
+    const { width, height } = room();
+    const dx = shift(left, right, width);
+    const dy = shift(top, bottom, height);
     // The icon is the ring's centre: it moves in with it.
     for (const el of [built, icon]) {
       if (el) {
@@ -439,8 +449,10 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
     made.setAttribute("aria-haspopup", "menu");
     made.setAttribute("aria-expanded", "false");
     made.innerHTML = svg(GLYPHS.pen);
-    made.style.left = `${x}px`;
-    made.style.top = `${y}px`;
+    // A stroke may lift over the gutter or past the page's edge: the icon stands where a press reaches it.
+    const { width, height } = room();
+    made.style.left = `${Math.max(ICON_IN, Math.min(x, width - ICON_IN))}px`;
+    made.style.top = `${Math.max(ICON_IN, Math.min(y, height - ICON_IN))}px`;
     let press: { id: number; x: number; y: number } | null = null;
     made.addEventListener("pointerdown", (event) => {
       if (event.pointerType === "pen") {

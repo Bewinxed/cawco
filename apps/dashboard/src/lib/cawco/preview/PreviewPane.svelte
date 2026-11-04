@@ -1516,6 +1516,12 @@
    * trades it for the foot sheet.
    */
   const railPlaced = $derived(sheet || phone.current || paneW > 0);
+  /**
+   * What the sheet covers told again as it comes to rest (ThreadSheet
+   * `onmoved`): measured as it mounts it stood below the well, covering
+   * nothing, so no pin was lifted clear of it.
+   */
+  let sayCovered: (() => void) | null = null;
   /** A composer and a thread are the well's foot sheet: on a phone, and under a finger (comment design §3). */
   const coarse = new MediaQuery("(pointer: coarse)");
   const floatSheet = $derived(sheet || phone.current || coarse.current);
@@ -1954,7 +1960,11 @@
       sized.observe(el);
     }
     sized.request();
-    return () => sized.disconnect();
+    sayCovered = sayNow;
+    return () => {
+      sayCovered = null;
+      sized.disconnect();
+    };
   });
   /** Pins the agent is working on: the last delivery carried them and its turn runs. */
   const live = $derived.by(() => {
@@ -4725,6 +4735,7 @@
                 closingPin = null;
               }
             }}
+            onmoved={() => sayCovered?.()}
             open={openPin !== null}
             bind:surface={cardFloat}
           >

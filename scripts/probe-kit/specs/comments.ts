@@ -333,6 +333,8 @@ const COMMAND = /PROBE-CALL:(\d+)/gu;
 const SAY = /PROBE-SAY:(\d+)/u;
 const says = new Map<string, string>();
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
+/** Claude Code's answer in place of a tool's, once it moved the running call to the background. */
+const BACKGROUNDED = /was moved to the background as task/u;
 /** The person's comments, delivered by themselves (core injected.ts `artifactCommentsNotice`). */
 const NOTICE =
   /\[CawCo\] The person commented on the page "[a-z0-9-]+" \(artifact [0-9a-f-]{36}\)\./u;
@@ -462,12 +464,18 @@ const setUp = async (kit: Kit): Promise<On> => {
       input: { response_format: "detailed", ...input },
     });
     await fleet.send(session, `PROBE-CALL:${marker}`);
-    return (await until(
+    const said = (await until(
       `the ${tool} call (${marker})`,
       () => answered.get(marker),
       Boolean,
       180_000
     )) as string;
+    // A delivery of the person's marks reached the session as the tool ran, so
+    // Claude Code took it to the background with no answer yet. Creating an
+    // artifact by its name again answers with the same artifact.
+    return tool === CREATE && BACKGROUNDED.test(said)
+      ? await call(tool, input)
+      : said;
   };
   const base = await fleet.dashboard();
   const desk = await kit.page("desk");
@@ -615,6 +623,13 @@ const commentAt = async (
 };
 
 /** Pin `number`'s pill pressed on the page: its thread opens beside it. */
+/** Pin `number`'s thread on `screen`: its card, or on a phone and under a finger the well's bottom sheet (ThreadSheet). */
+const threadOn = (screen: Page, number: number) =>
+  screen
+    .locator(
+      `:is([data-slot="pin-card"][data-pin-card="${number}"], [data-slot="thread-sheet"])`
+    )
+    .first();
 const openThread = async (on: On, frame: Frame, number: number) => {
   const face = frame
     .locator(
@@ -665,9 +680,7 @@ const openThread = async (on: On, frame: Frame, number: number) => {
       y: pill.y + pill.height / 2,
     });
   }
-  const card = on.page.locator(
-    `[data-slot="pin-card"][data-pin-card="${number}"]`
-  );
+  const card = threadOn(on.page, number);
   await card.waitFor({ timeout: 5000 }).catch(() => undefined);
   return card;
 };
@@ -4107,7 +4120,11 @@ const roomChecks = async (on: On) => {
       room: room
         ? { scroll: room.scrollHeight, height: room.clientHeight }
         : null,
-      cardScrolls: el.scrollHeight > el.clientHeight + 1,
+      // Its body is the one part of it that scrolls (PinFloat `pin-body`).
+      cardScrolls: ((body) =>
+        !!body && body.scrollHeight > body.clientHeight + 1)(
+        el.querySelector('[data-slot="pin-body"]')
+      ),
     };
   });
   await on.page.evaluate(() => {
@@ -4394,7 +4411,7 @@ const sizingRead = (screen: Page, number: number) =>
         : null;
     };
     const card = document.querySelector<HTMLElement>(
-      `[data-slot="pin-card"][data-pin-card="${n}"]`
+      `:is([data-slot="pin-card"][data-pin-card="${n}"], [data-slot="thread-sheet"])`
     );
     const room = card?.querySelector<HTMLElement>("[data-pin-room]");
     const head = card?.querySelector('[data-slot="head"]');
@@ -4418,7 +4435,7 @@ const sizingRead = (screen: Page, number: number) =>
     return {
       card: boxOf(card),
       well: boxOf(document.querySelector('[data-slot="pin-room"]')),
-      sheet: card?.dataset.sheet !== undefined,
+      sheet: card?.matches('[data-sheet], [data-slot="thread-sheet"]') ?? false,
       side: card?.dataset.side ?? null,
       maxHeight: card ? getComputedStyle(card).maxHeight : "",
       cardScrolls: card ? card.scrollHeight > card.clientHeight + 1 : false,
@@ -4694,7 +4711,9 @@ const cardStill = (screen: Page, n: number) =>
     .waitForFunction(
       (pin) => {
         const r = document
-          .querySelector(`[data-slot="pin-card"][data-pin-card="${pin}"]`)
+          .querySelector(
+            `:is([data-slot="pin-card"][data-pin-card="${pin}"], [data-slot="thread-sheet"])`
+          )
           ?.getBoundingClientRect();
         const now = r ? `${r.left},${r.top},${r.width},${r.height}` : "";
         const held = window as unknown as {
@@ -4722,7 +4741,9 @@ const openFromRow = async (screen: Page, n: number) => {
     .locator(`${RAIL} [data-slot="pin-row"][data-pin-row="${n}"]`)
     .click();
   await screen
-    .locator(`[data-slot="pin-card"][data-pin-card="${n}"]`)
+    .locator(
+      `:is([data-slot="pin-card"][data-pin-card="${n}"], [data-slot="thread-sheet"])`
+    )
     .waitFor({ timeout: 5000 })
     .catch(() => undefined);
   return cardStill(screen, n);
@@ -4819,6 +4840,19 @@ const switchRead = (frames: CardFrames, a: number, b: number) => {
   };
 };
 
+/** A phone's thread is the well's bottom sheet, which rises: no card to hold a place, only the one sheet on pin `n`. */
+const switchedSheet = async (on: On, screen: Page, tag: string, n: number) => {
+  const named = await screen
+    .getByRole("dialog", { name: `Comment ${n}` })
+    .count();
+  const sheets = await screen.locator('[data-slot="thread-sheet"]').count();
+  on.kit.check(
+    `${tag}: a press on pin B's pill brings up its thread as the one sheet`,
+    sheets === 1 && named === 1,
+    `${sheets} sheet(s), ${named} named Comment ${n}`
+  );
+};
+
 /**
  * The owner's report (2026-10-23: "clicking between comments flashes the
  * comment popover from where it was in the previously opened comment to
@@ -4836,88 +4870,107 @@ const switchChecks = async (
   on: On,
   made: { id: string; number: number; second: number }
 ) => {
-  const { origin } = new URL(on.page.url());
   for (const engine of ["chromium", "webkit"] as const) {
     for (const view of ["desk", "phone"] as const) {
-      const tag = `switch (${engine}, ${view})`;
-      const screen = await on.kit.page(view, { engine });
-      try {
-        await open(screen, `${origin}/artifact/${made.id}`, PANE);
-        const frame = await frameHolding(screen, made.id, `${tag}: the page`);
-        if (!frame) {
-          on.kit.check(`${tag}: the page`, false, "not shown");
-          continue;
-        }
-        await frame.waitForSelector("#retry");
-        await settle(screen, 600);
-        await openFromRow(screen, made.number);
-        if (view === "phone") {
-          // A's pill lifted clear of its drawer leaves B's above it at the
-          // well's top edge: the page brought down a little, as a person
-          // scrolls to the pill they mean to tap.
-          await frame.evaluate(() => scrollBy(0, -96));
-          await settle(screen, 400);
-        }
-        // The pane at rest first: a bar over the page still folding away
-        // (the changes bar, as the page loaded) moves the whole well.
-        await screen
-          .waitForFunction(
-            () => {
-              const top = document
-                .querySelector('[data-slot="pin-room"]')
-                ?.getBoundingClientRect().top;
-              const held = window as unknown as {
-                roomAt?: number;
-                roomN?: number;
-              };
-              held.roomN = held.roomAt === top ? (held.roomN ?? 0) + 1 : 0;
-              held.roomAt = top;
-              return top !== undefined && held.roomN >= 10;
-            },
-            undefined,
-            { polling: "raf", timeout: 10_000 }
-          )
-          .catch(() => undefined);
-        const pill = await frame
-          .locator(
-            `:is(svg[data-cawco-pins], svg[data-cawco-pins-fixed]) g[data-pin="${made.second}"] [data-face]`
-          )
-          .first()
-          .boundingBox()
-          .catch(() => null);
-        if (!pill) {
-          on.kit.check(`${tag}: pin B's pill on screen`, false, "none");
-          continue;
-        }
-        await recordCards(screen, 900);
-        await pressFramePoint(
-          frame,
-          { x: pill.x + pill.width / 2, y: pill.y + pill.height / 2 },
-          { how: view === "phone" ? "tap" : "click" }
-        );
-        await screen.waitForTimeout(1100);
-        const frames = (await screen.evaluate(
-          () => (window as unknown as { cardFrames: CardFrames }).cardFrames
-        )) as CardFrames;
-        const read = switchRead(frames, made.number, made.second);
-        on.kit.check(
-          `${tag}: pin B's card stands where it stays from its first frame (${read.withB} of ${read.frames} frames hold it, from ${read.firstAt}ms; ${read.strays} off its last place), never beside pin A's card (${read.both}) nor followed by it (${read.aAfter}), and no frame without a card (${read.empty})`,
-          read.withB > 0 &&
-            read.strays === 0 &&
-            read.empty === 0 &&
-            read.both === 0 &&
-            read.aAfter === 0,
-          JSON.stringify({
-            ...read,
-            seen: frames
-              .map((f) => f.cards.map((c) => `${c.n}:${c.laid}`).join("|"))
-              .filter((one, at, all) => one !== all[at - 1]),
-          })
-        );
-      } finally {
-        await screen.close();
-      }
+      await switchOn(on, made, engine, view);
     }
+  }
+};
+
+/** One engine's one view of {@link switchChecks}. */
+const switchOn = async (
+  on: On,
+  made: { id: string; number: number; second: number },
+  engine: "chromium" | "webkit",
+  view: "desk" | "phone"
+) => {
+  const { origin } = new URL(on.page.url());
+  const tag = `switch (${engine}, ${view})`;
+  const screen = await on.kit.page(view, { engine });
+  if (view === "desk") {
+    // Room for A's card beside its pill in either engine's words: 8px less
+    // and WebKit stands it on its other side, over B's pill.
+    await screen.setViewportSize({ width: 1600, height: 900 });
+  }
+  try {
+    await open(screen, `${origin}/artifact/${made.id}`, PANE);
+    const frame = await frameHolding(screen, made.id, `${tag}: the page`);
+    if (!frame) {
+      on.kit.check(`${tag}: the page`, false, "not shown");
+      return;
+    }
+    await frame.waitForSelector("#retry");
+    await settle(screen, 600);
+    await openFromRow(screen, made.number);
+    if (view === "phone") {
+      // A's pill lifted clear of its drawer leaves B's above it at the
+      // well's top edge: the page brought down a little, as a person
+      // scrolls to the pill they mean to tap.
+      await frame.evaluate(() => scrollBy(0, -96));
+      await settle(screen, 400);
+    }
+    // The pane at rest first: a bar over the page still folding away
+    // (the changes bar, as the page loaded) moves the whole well.
+    await screen
+      .waitForFunction(
+        () => {
+          const top = document
+            .querySelector('[data-slot="pin-room"]')
+            ?.getBoundingClientRect().top;
+          const held = window as unknown as {
+            roomAt?: number;
+            roomN?: number;
+          };
+          held.roomN = held.roomAt === top ? (held.roomN ?? 0) + 1 : 0;
+          held.roomAt = top;
+          return top !== undefined && held.roomN >= 10;
+        },
+        undefined,
+        { polling: "raf", timeout: 10_000 }
+      )
+      .catch(() => undefined);
+    const pill = await frame
+      .locator(
+        `:is(svg[data-cawco-pins], svg[data-cawco-pins-fixed]) g[data-pin="${made.second}"] [data-face]`
+      )
+      .first()
+      .boundingBox()
+      .catch(() => null);
+    if (!pill) {
+      on.kit.check(`${tag}: pin B's pill on screen`, false, "none");
+      return;
+    }
+    await recordCards(screen, 900);
+    await pressFramePoint(
+      frame,
+      { x: pill.x + pill.width / 2, y: pill.y + pill.height / 2 },
+      { how: view === "phone" ? "tap" : "click" }
+    );
+    await screen.waitForTimeout(1100);
+    if (view === "phone") {
+      await switchedSheet(on, screen, tag, made.second);
+      return;
+    }
+    const frames = (await screen.evaluate(
+      () => (window as unknown as { cardFrames: CardFrames }).cardFrames
+    )) as CardFrames;
+    const read = switchRead(frames, made.number, made.second);
+    on.kit.check(
+      `${tag}: pin B's card stands where it stays from its first frame (${read.withB} of ${read.frames} frames hold it, from ${read.firstAt}ms; ${read.strays} off its last place), never beside pin A's card (${read.both}) nor followed by it (${read.aAfter}), and no frame without a card (${read.empty})`,
+      read.withB > 0 &&
+        read.strays === 0 &&
+        read.empty === 0 &&
+        read.both === 0 &&
+        read.aAfter === 0,
+      JSON.stringify({
+        ...read,
+        seen: frames
+          .map((f) => f.cards.map((c) => `${c.n}:${c.laid}`).join("|"))
+          .filter((one, at, all) => one !== all[at - 1]),
+      })
+    );
+  } finally {
+    await screen.close();
   }
 };
 
@@ -5040,13 +5093,15 @@ const edgesOn = async (
   await settle(screen, 600);
   for (const n of numbers) {
     const still = await openFromRow(screen, n);
-    const card = screen.locator(`[data-slot="pin-card"][data-pin-card="${n}"]`);
+    const card = screen.locator(
+      `:is([data-slot="pin-card"][data-pin-card="${n}"], [data-slot="thread-sheet"])`
+    );
     const read = await card
       .evaluate((el) => {
         const r = el.getBoundingClientRect();
         return {
           rect: { top: r.top, bottom: r.bottom, left: r.left, right: r.right },
-          sheet: el.dataset.sheet !== undefined,
+          sheet: el.matches('[data-sheet], [data-slot="thread-sheet"]'),
           side: el.dataset.side ?? null,
           headPill: !!el.querySelector('[data-slot="head-pill"]'),
         };
@@ -5116,7 +5171,7 @@ const sizingOpen = async (
     .locator(`${RAIL} [data-slot="pin-row"][data-pin-row="${made.number}"]`)
     .click();
   const card = screen.locator(
-    `[data-slot="pin-card"][data-pin-card="${made.number}"]`
+    `:is([data-slot="pin-card"][data-pin-card="${made.number}"], [data-slot="thread-sheet"])`
   );
   await card.waitFor({ timeout: 5000 });
   await until(
@@ -5134,7 +5189,9 @@ const sizingOpen = async (
   await screen.waitForFunction(
     (n) => {
       const r = document
-        .querySelector(`[data-slot="pin-card"][data-pin-card="${n}"]`)
+        .querySelector(
+          `:is([data-slot="pin-card"][data-pin-card="${n}"], [data-slot="thread-sheet"])`
+        )
         ?.getBoundingClientRect();
       const now = r ? `${r.left},${r.top},${r.width},${r.height}` : "";
       const held = window as unknown as { sizingAt?: string; sizingN?: number };
@@ -6020,41 +6077,40 @@ const targetChecks = async (on: On) => {
     JSON.stringify({ rowHovered, rowLeft })
   );
 
-  // Opened from the keyboard (Enter on its row) or by a press, the card's field takes the focus and draws no ring.
+  // A thread opens to be read (PinCard): opened from the keyboard or by a
+  // press, its reply takes the focus only when he reaches for it, and its
+  // caret is its focus.
+  const threadField = '[data-slot="pin-card"] form[data-slot="cin"]';
   await row.focus();
   await on.page.keyboard.press("Enter");
-  // Read on the thread's own field: a composer still going out is not it.
-  const keyOpened = await until(
-    "the key-opened card's field",
-    () => readRing('[data-slot="pin-card"]'),
-    (seen) => seen.focused,
-    5000
-  ).catch(() => null);
+  await on.page.locator(threadField).waitFor({ timeout: 5000 });
+  await settle(on.page, 300);
+  const keyOpened = await readRing('[data-slot="pin-card"]');
   on.kit.check(
-    "7c: a thread opened from the keyboard (Enter on its row) focuses its reply, no ring (its caret is its focus)",
-    !!keyOpened &&
-      keyOpened.focused &&
-      keyOpened.style === "none" &&
-      keyOpened.field === "none" &&
-      !keyOpened.shadow,
+    "7c: a thread opened from the keyboard (Enter on its row) leaves its reply unfocused",
+    !keyOpened.focused,
     JSON.stringify(keyOpened)
   );
   await on.page.keyboard.press("Escape");
   await (await rowsOf(on)).locator('[data-slot="pin-row"]').first().click();
-  const pressOpened = await until(
-    "the press-opened card's field",
+  await on.page.locator(threadField).waitFor({ timeout: 5000 });
+  await settle(on.page, 300);
+  const pressOpened = await readRing('[data-slot="pin-card"]');
+  await on.page.locator(threadField).getByRole("combobox").click();
+  const reached = await until(
+    "the reply reached for",
     () => readRing('[data-slot="pin-card"]'),
     (seen) => seen.focused,
     5000
   ).catch(() => null);
   on.kit.check(
-    "7c: the same thread opened by a press on its row focuses its reply with no ring",
-    !!pressOpened &&
-      pressOpened.focused &&
-      pressOpened.style === "none" &&
-      pressOpened.field === "none" &&
-      !pressOpened.shadow,
-    JSON.stringify(pressOpened)
+    "7c: a thread opened by a press on its row leaves its reply unfocused; a press in its field focuses it with no ring",
+    !pressOpened.focused &&
+      !!reached &&
+      reached.style === "none" &&
+      reached.field === "none" &&
+      !reached.shadow,
+    JSON.stringify({ pressOpened, reached })
   );
   await on.page.keyboard.press("Escape");
   await on.page.keyboard.press("Escape");
@@ -6226,6 +6282,8 @@ const ownWork = (tasks: MainTask[], from: number, to: number) => {
   };
 };
 
+/** How far a pin's picture reaches either way from its press (pins.ts `PIN_REACH`), px. */
+const PICTURE_REACH = 960;
 /** (g) Presses on test-map: on its intro paragraph, and in the page's padding beside it. */
 const mapPressChecks = async (on: On) => {
   await on.call(CREATE, {
@@ -6329,14 +6387,19 @@ const mapPressChecks = async (on: On) => {
       w: intro.w + 2 * CROP_PAD,
       h: intro.h + 2 * CROP_PAD,
     };
-    const scale = onText.size ? onText.size.w / crop.w : 0;
+    // Its height sets the scale: on a paragraph this wide the crop stands
+    // within 960px of the pin's point (pins.ts `roundPoint`), and the pin
+    // stands at its line's end.
+    const scale = onText.size ? onText.size.h / crop.h : 0;
+    const wide = onText.size && scale > 0 ? onText.size.w / scale : 0;
     on.kit.check(
-      "g: the pin's picture is the paragraph's box with its 24px margin (±2px at its scale, at most 2×), never the page",
+      "g: the pin's picture is the paragraph's box with its 24px margin (±2px at its scale, at most 2×), within its reach of the pin, never the page",
       !!onText.size &&
         scale > 0 &&
         scale <= 2.01 &&
-        Math.abs(onText.size.h / scale - crop.h) <= 2,
-      `picture ${JSON.stringify(onText.size)}; crop ${JSON.stringify(crop)} at ${scale.toFixed(3)}×`
+        wide >= Math.min(crop.w, PICTURE_REACH) - 2 &&
+        wide <= crop.w + 2,
+      `picture ${JSON.stringify(onText.size)}; ${wide.toFixed(0)} wide of ${crop.w}×${crop.h} at ${scale.toFixed(3)}×`
     );
   } finally {
     pictures.stop();
@@ -6969,7 +7032,7 @@ const keyOpenChecks = async (on: On) => {
   /** Pin `n`'s thread's reply field: focused, and whether any ring draws; null while it isn't drawn. */
   const ringRead = async (n: number) => {
     const shell = on.page.locator(
-      `[data-slot="pin-card"][data-pin-card="${n}"] form[data-slot="cin"]`
+      `:is([data-slot="pin-card"][data-pin-card="${n}"], [data-slot="thread-sheet"]) form[data-slot="cin"]`
     );
     try {
       return await shell.evaluate(
@@ -6999,13 +7062,14 @@ const keyOpenChecks = async (on: On) => {
   /** Pin `n`'s thread's reply, once it holds the focus (5 s). */
   const ringOf = (n: number) =>
     until(
-      `pin ${n}'s thread's reply focused`,
+      `pin ${n}'s thread's reply drawn`,
       () => ringRead(n),
-      (seen) => !!seen?.focused,
+      Boolean,
       5000
     ).catch(() => ringRead(n));
+  // A thread opens to be read: its reply takes the focus only when he reaches for it (PinCard).
   const keyed = (seen: Awaited<ReturnType<typeof ringOf>>) =>
-    !!seen && seen.focused && !seen.ringed;
+    !!seen && !seen.focused && !seen.ringed;
   /** Enter on pin `n`'s row, the row itself holding the focus. */
   const enterOn = async (n: number) => {
     const row = (await rowsOf(on)).locator(
@@ -7039,17 +7103,17 @@ const keyOpenChecks = async (on: On) => {
     .count();
   await closeThread();
   on.kit.check(
-    "7g: a comment Esc'd before the page's answer is written all the same; after a fresh load (the comment kit and MessageBody not loaded), Enter on its row opens its thread with the reply focused, no ring",
+    "7g: a comment Esc'd before the page's answer is written all the same; after a fresh load (the comment kit and MessageBody not loaded), Enter on its row opens its thread, its reply unfocused, no ring",
     written === 2 && keyed(first),
     JSON.stringify({ written, first })
   );
   on.kit.check(
-    "7g: reopened from the keyboard, the thread focuses its reply again, no ring",
+    "7g: reopened from the keyboard, the thread opens the same, its reply unfocused, no ring",
     keyed(again),
     JSON.stringify(again)
   );
   on.kit.check(
-    "7g: Enter on a row is that row's: pin 1's row opens pin 1's thread, its reply focused, while J and K stand on pin 2",
+    "7g: Enter on a row is that row's: pin 1's row opens pin 1's thread, its reply unfocused, while J and K stand on pin 2",
     keyed(other) && wrongCard === 0,
     JSON.stringify({ other, wrongCard })
   );
@@ -8174,24 +8238,22 @@ const railScenes = async (on: On, artifactId: string) => {
       const row = rail.locator('[data-slot="pin-row"]').first();
       const number = Number(await row.getAttribute("data-pin-row"));
       await row.click();
-      const card = screen.locator(
-        `[data-slot="pin-card"][data-pin-card="${number}"]`
-      );
+      // On a phone a thread is the well's bottom sheet (ThreadSheet).
+      const card = screen.locator('[data-slot="thread-sheet"]');
       await card.waitFor({ timeout: 5000 }).catch(() => undefined);
       await settle(screen, 900);
       const sheet = await screen.evaluate(
-        ({ railSel, n }) => {
-          const el = document.querySelector(
-            `[data-slot="pin-card"][data-pin-card="${n}"]`
-          );
-          const r = el?.getBoundingClientRect();
+        ({ railSel }) => {
+          const r = document
+            .querySelector('[data-slot="thread-sheet"]')
+            ?.getBoundingClientRect();
           return {
-            sheet: el?.hasAttribute("data-sheet") ?? false,
+            sheet: !!r,
             card: r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null,
             rail: document.querySelectorAll(railSel).length,
           };
         },
-        { railSel: RAIL, n: number }
+        { railSel: RAIL }
       );
       const pill = await shown
         .locator(`svg[data-cawco-pins] g[data-pin="${number}"] [data-face]`)
@@ -8355,7 +8417,12 @@ const chipThread = (screen: Page, pinId: string) =>
         head: await head.boundingBox(),
       };
     },
-    (now) => now?.figure === pinId.split("/").at(-1) && !!now?.where,
+    // Read once its sheet has risen, its head inside the screen.
+    (now) =>
+      now?.figure === pinId.split("/").at(-1) &&
+      !!now?.where &&
+      !!now.head &&
+      now.head.y + now.head.height <= (screen.viewportSize()?.height ?? 0) + 1,
     10_000
   ).catch(() => null);
 
@@ -8825,7 +8892,7 @@ const pointChecks = async (
     .click()
     .catch(() => undefined);
   const onPhone = await frameHolding(phone, id, "the pin's page on the phone");
-  const phoneCard = phone.locator('[data-slot="pin-card"][data-pin-card="2"]');
+  const phoneCard = threadOn(phone, 2);
   const phoneOpen = await phoneCard
     .waitFor({ timeout: 10_000 })
     .then(() => true)
@@ -10815,9 +10882,9 @@ const restartChecks = async (on: On) => {
   await shutList(on);
 };
 
-/** What a page says while the hub is down for a restart: a failed request or socket to it. */
+/** What a page says while the hub is down for a restart: a failed request or socket to it, or one refused by the hub as it comes back up. */
 const HUB_DOWN =
-  /status of 502|ERR_CONNECTION_REFUSED|Connection closed before receiving a handshake response|WebSocket is closed before the connection is established/u;
+  /status of 502|ERR_CONNECTION_REFUSED|Connection closed before receiving a handshake response|WebSocket is closed before the connection is established|HTTP Authentication failed/u;
 
 /** The thread head's controls by their names, and each one's top. */
 const threadHead = (card: Locator) =>
@@ -12024,7 +12091,9 @@ const footRead = async (
           ? {
               top: r.top,
               bottom: r.bottom,
-              isSheet: el?.hasAttribute("data-sheet") ?? false,
+              isSheet:
+                el?.matches('[data-sheet], [data-slot="thread-sheet"]') ??
+                false,
             }
           : null,
         top: f && framed ? f.top + framed.clientTop : null,
@@ -12168,6 +12237,7 @@ const footSheetChecks = async (on: On) => {
   const { origin } = new URL(on.page.url());
   for (const engine of ["chromium", "webkit"] as const) {
     const made: Partial<Record<FootKind, string>> = {};
+    const answers: string[] = [];
     for (const kind of FOOT_KINDS) {
       const said = await on.call(CREATE, {
         kind: "page",
@@ -12177,12 +12247,13 @@ const footSheetChecks = async (on: On) => {
         html: footPage(kind),
       });
       made[kind] = said.match(ANSWERED_ID)?.[1];
+      answers.push(said.slice(0, 300));
     }
     if (!FOOT_KINDS.every((kind) => made[kind])) {
       on.kit.check(
         `foot sheet (${engine}): the pages are made`,
         false,
-        "no id"
+        answers.join(" | ")
       );
       continue;
     }
@@ -12448,7 +12519,7 @@ const footThread = async (rig: FootRig, number: number) => {
     { x: pill.x + pill.width / 2, y: pill.y + pill.height / 2 },
     { how: "tap" }
   );
-  const card = `[data-slot="pin-card"][data-pin-card="${number}"]`;
+  const card = '[data-slot="thread-sheet"]';
   await phone
     .locator(card)
     .waitFor({ timeout: 8000 })

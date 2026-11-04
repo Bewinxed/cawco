@@ -284,19 +284,18 @@ export const clipOf = (el: Element, own = false): DOMRect | null => {
 };
 
 /**
- * Whether `el`, or anything holding it out through its frames, is fixed or
- * sticky: the top page's scroll carries the marks' layers and leaves it
- * where it stands in the viewport.
+ * Whether the top page's scroll leaves `el` where it stands in the viewport
+ * while it carries the marks' layers on: it, or what holds it in the top
+ * document (its outermost frame's), is fixed or sticky. A frame's own fixed
+ * box moves with the frame.
  */
 export const staysInView = (el: Element): boolean => {
   for (
-    let at: Element | null = el;
+    let at: Element | null = framesOf(el)[0] ?? el;
     at;
-    at = at.parentElement ?? framesOf(at).at(-1) ?? null
+    at = at.parentElement
   ) {
-    const { position } = (
-      at.ownerDocument.defaultView ?? window
-    ).getComputedStyle(at);
+    const { position } = getComputedStyle(at);
     if (position === "fixed" || position === "sticky") {
       return true;
     }
@@ -364,8 +363,8 @@ export function sizesIn(
 }
 
 /**
- * Calls `changed` whenever a same-origin frame's document scrolls, resizes,
- * goes back or forward, ends a transition or an animation, or loads
+ * Calls `scrolled` whenever a same-origin frame's document scrolls, and
+ * `changed` whenever it resizes, goes back or forward, ends a transition or an animation, or loads
  * something (an image, its fonts, the frame itself on a navigation, a frame
  * added later), at any depth: the marks standing in it are placed again.
  * The top document's own scroll and size are the overlay's, and so is every
@@ -379,6 +378,7 @@ export function sizesIn(
  */
 export function watchFrames(
   changed: () => void,
+  scrolled: () => void,
   each: (view: Window) => void
 ): void {
   const docs = new WeakSet<Document>();
@@ -418,7 +418,7 @@ export function watchFrames(
       each(view);
     }
     if (doc !== document && view) {
-      view.addEventListener("scroll", changed, {
+      view.addEventListener("scroll", scrolled, {
         capture: true,
         passive: true,
       });

@@ -45,6 +45,7 @@
     label,
     onclose,
     onclosed,
+    onmoved,
     surface = $bindable(),
     children,
   }: {
@@ -55,6 +56,8 @@
     onclose: () => void;
     /** Closed and done sliding down: its holder may stop drawing it. */
     onclosed?: () => void;
+    /** It came to rest (risen, or settled on a stop): vaul slides it by a transform, which no size observer hears. */
+    onmoved?: () => void;
     /** The sheet as drawn: what covers the page, for its holder to tell. */
     surface?: HTMLElement;
     children: Snippet;
@@ -87,6 +90,36 @@
   /** How much of the sheet stands below its room at its stop: what it holds is that much shorter. */
   const below = $derived(Math.round(room * (1 - (SHARES[stop] ?? 1))));
 
+  /** Frames it stands still for before it has come to rest. Our call. */
+  const REST_FRAMES = 5;
+  let watchingRest = false;
+  /**
+   * It has moved or is about to, by vaul's animation or its transition, on
+   * itself or on what it holds: its place read each frame until it has stood
+   * still, then told once. Read at the event, it may not stand there yet: at
+   * an animation's end its own transform has only just come back.
+   */
+  function watchRest() {
+    if (watchingRest) {
+      return;
+    }
+    watchingRest = true;
+    let last = surface?.getBoundingClientRect().top;
+    let still = 0;
+    const look = () => {
+      const now = surface?.getBoundingClientRect().top;
+      still = now === last ? still + 1 : 0;
+      last = now;
+      if (still < REST_FRAMES) {
+        requestAnimationFrame(look);
+        return;
+      }
+      watchingRest = false;
+      onmoved?.();
+    };
+    requestAnimationFrame(look);
+  }
+
   let grabbedAt = 0;
   let dragged = false;
   /** A tap on the grabber steps the sheet to its other stop; a drag is vaul's. */
@@ -104,6 +137,10 @@
   bind:this={host}
   class="pointer-events-none absolute inset-x-0 top-0 bottom-(--keyboard-lift,0px) overflow-clip"
   data-slot="thread-sheet-host"
+  onanimationend={watchRest}
+  onanimationstart={watchRest}
+  ontransitionend={watchRest}
+  ontransitionrun={watchRest}
   {@attach measured}
 ></div>
 <!-- Drawn once its room is measured: its stops are px of it. -->

@@ -58,6 +58,7 @@ import { runSvelteCheck } from "./svelte-sources";
 const ALLOW = /^\s*mark-line:\s*\S/u;
 const SPLIT = /[^\w-]+/u;
 const CLASS_PREFIX = /^class=/u;
+const CLASS_NAME = /^\{([A-Z][A-Z0-9_]*)\}$/u;
 /** The recipe's utilities (app.css, the mark line). */
 const RECIPE = /(?:^|[\s"'`{[,])(?:mark-line|rail-line)(?=$|[\s"'`},\]])/u;
 /** Kit recipes whose base draws the mark line (ui/chip, ui/menu-item, ui/section-header). */
@@ -207,9 +208,20 @@ function classText(node: Node, source: string): string {
     .map((a) =>
       a.type === "ClassDirective"
         ? ` ${a.name} `
-        : source.slice(a.start, a.end).replace(CLASS_PREFIX, "")
+        : namedClass(
+            source.slice(a.start, a.end).replace(CLASS_PREFIX, ""),
+            source
+          )
     )
     .join(" ");
+}
+
+/** `class={NAME}`, where the file writes `const NAME = …;`, as that value's words: a row's recipe in a constant is the row's (the attachment chip's ✕ stood 4.17px low unseen). */
+function namedClass(written: string, source: string): string {
+  const name = written.match(CLASS_NAME)?.[1];
+  const value =
+    name && source.match(new RegExp(`const ${name} =([\\s\\S]*?);`, "u"))?.[1];
+  return value || written;
 }
 
 function classes(node: Node, source: string): string[] {

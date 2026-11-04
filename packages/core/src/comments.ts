@@ -1682,7 +1682,12 @@ export interface AnchorLookup<E, D> {
 
 /** Where an anchor stands now, and by which part of it ({@link findAnchor}). */
 export interface AnchorFound<E> {
-  by: "source" | "selector" | "text" | "page";
+  /**
+   * `place`: the element it last found, still named by its selector, whose
+   * words changed in place, which its text test cannot tell from another
+   * element standing there.
+   */
+  by: "source" | "selector" | "text" | "page" | "place";
   el: E;
 }
 
@@ -1913,10 +1918,40 @@ export const changedAnchor = (
   was.selector !== now.selector ||
   (was.frames ?? []).join("\u0000") !== (now.frames ?? []).join("\u0000") ||
   was.embed?.artifact !== now.embed?.artifact ||
-  (by !== "selector" && (was.text ?? "") !== (now.text ?? "")) ||
+  (by !== "selector" &&
+    by !== "place" &&
+    (was.text ?? "") !== (now.text ?? "")) ||
   JSON.stringify(was.source) !== JSON.stringify(now.source) ||
   JSON.stringify(was.chain ?? []) !== JSON.stringify(now.chain ?? []) ||
   JSON.stringify(was.sheet ?? null) !== JSON.stringify(now.sheet ?? null);
+
+/**
+ * Whether a mark's anchor takes its element's words as they read now, its
+ * selector naming that element only by place (`place`): else a reload finds
+ * no element reading them, and the mark is said gone (tsk-22). Only when the
+ * element's words changed under this view: two views reading their own words
+ * at their own widths write nothing back and forth (`changedAnchor`). One
+ * reader per overlay's marks, by mark.
+ */
+export function wordsFollow() {
+  const read = new Map<string, string>();
+  return (
+    id: string,
+    was: PageAnchor,
+    now: PageAnchor,
+    by: AnchorFound<unknown>["by"]
+  ): boolean => {
+    const words = now.text ?? "";
+    const before = read.get(id);
+    read.set(id, words);
+    return (
+      by === "place" &&
+      before !== undefined &&
+      before !== words &&
+      (was.text ?? "") !== words
+    );
+  };
+}
 
 /**
  * One pin's part of a delivery: a pin the session already has, where only

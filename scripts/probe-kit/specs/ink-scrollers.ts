@@ -28,6 +28,15 @@
  *    stroke on the document's content moves with it. Over nothing on a document
  *    that scrolls itself: the body, as before.
  * 9. A body that is its own scroller carries a stroke over nothing.
+ * 10. A comment with no ink on a fixed bar or a sticky head stays on it through
+ *    the document's scroll; on the page's words it moves with them.
+ * 11. Strokes drawn end to end join one group at any width (a box read back
+ *    from rounded fractions stood a tenth of a px short); a stroke lifted over
+ *    the root's gutter leaves its icon whole on the page, where a press opens
+ *    its menu.
+ * 12. Moving 30 groups through 180 frames of an inner scroller lays the page
+ *    out at most three times a frame, the scroll's own among them (33 a frame
+ *    when each group drew itself again), and outlines no stroke again.
  */
 import type { Frame, Page } from "playwright-core";
 import { bundleOverlay } from "../../../packages/core/src/preview-proxy";
@@ -84,6 +93,26 @@ ${frame(BARE, "bare", "/bare")}
 const documentPage = `<!doctype html><html><head>${SEEDED_TAG}</head><body style="margin:0;font:16px sans-serif;height:3000px">
 <div id="fixed" style="position:fixed;top:0;left:0;right:0;height:60px;background:#fcc">a fixed bar with words</div>
 <p id="words" style="margin-top:200px;width:300px">words of the document page</p>
+</body></html>`;
+
+const staysPage = `<!doctype html><html><head>${SEEDED_TAG}</head><body style="margin:0;font:16px sans-serif;height:3000px">
+<div id="fixed" style="position:fixed;top:0;left:0;right:0;height:60px;background:#fcc">a fixed bar with words</div>
+<div id="sticky" style="position:sticky;top:70px;height:40px;background:#cfc;margin-top:100px">a sticky head with words</div>
+<p id="words" style="margin-top:600px;width:300px">plain words of the page</p>
+</body></html>`;
+
+/** The root's gutter the preview proxy keeps on every page (core preview-proxy `GUTTER_FLOOR`). */
+const gutterPage = `<!doctype html><html style="scrollbar-gutter:stable"><head>${SEEDED_TAG}</head><body style="margin:0;font:18px/1.6 sans-serif;height:3000px">
+<main style="padding:24px"><p id="line" style="width:70%;margin:0">The third paragraph, to draw over end to end.</p></main>
+</body></html>`;
+
+/** An inner scroller holding many cards, marked in its first screen. */
+const manyPage = `<!doctype html><html><head>${SEEDED_TAG}</head><body style="margin:0;font:16px sans-serif">
+<div id="scroller" style="height:100dvh;overflow-y:auto">${Array.from(
+  { length: 800 },
+  (_, i) =>
+    `<section style="padding:8px"><h3 style="margin:0">Card ${i}</h3><p style="margin:0">Words of the card, enough to stand a stroke on.</p></section>`
+).join("")}</div>
 </body></html>`;
 
 const bodyScrollerPage = `<!doctype html><html style="height:100%;overflow:hidden"><head>${SEEDED_TAG}</head><body style="margin:0;height:100%;overflow:auto;font:16px sans-serif">
@@ -453,6 +482,181 @@ const pillChecks = async (kit: Kit, page: Page, at: string) => {
   );
 };
 
+/** Check 10: the pills of comments with no ink, as the document scrolls. */
+const pinChecks = async (kit: Kit, page: Page, at: string) => {
+  const hand = handOn(page);
+  await hand.open(`${at}/stays`);
+  await page.evaluate(() =>
+    window.postMessage({ type: "cawco:mode", mode: "comment" }, location.origin)
+  );
+  await hand.settle(150);
+  for (const selector of ["#fixed", "#sticky", "#words"]) {
+    const box = await hand.boxOf(selector);
+    await page.mouse.click(box.x + 60, box.y + box.h / 2);
+    await hand.settle(200);
+    await page.evaluate(() =>
+      window.postMessage(
+        { type: "cawco:comment", text: "here" },
+        location.origin
+      )
+    );
+    await hand.settle(300);
+  }
+  const pills = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll("svg[data-cawco-pins] [data-pin]")].map(
+        (pill) => pill.getBoundingClientRect().y
+      )
+    );
+  const [onBar, onSticky, onWords] = await pills();
+  await hand.scroll(null, 400);
+  await hand.settle(200);
+  const [barThen, stickyThen, wordsThen] = await pills();
+  const stuck = await hand.boxOf("#sticky");
+  kit.check(
+    "10: a comment on a fixed bar stays on it through the document's scroll",
+    onBar !== undefined && barThen !== undefined && near(onBar, barThen),
+    `${onBar} then ${barThen}`
+  );
+  kit.check(
+    "10: a comment on a sticky head stays on it where it sticks",
+    onSticky !== undefined &&
+      stickyThen !== undefined &&
+      stickyThen >= stuck.y - 40 &&
+      stickyThen <= stuck.y + stuck.h,
+    `${onSticky} then ${stickyThen}; the head at ${stuck.y}`
+  );
+  kit.check(
+    "10: a comment on the page's words moves with them",
+    onWords !== undefined &&
+      wordsThen !== undefined &&
+      near(wordsThen - onWords, -400),
+    `${onWords} then ${wordsThen}`
+  );
+};
+
+/** Check 11: strokes end to end, and an icon at the gutter. */
+const strokeEndChecks = async (kit: Kit, page: Page, at: string) => {
+  const hand = handOn(page);
+  let split = 0;
+  for (const width of [963, 1017, 1211, 1313]) {
+    await page.setViewportSize({ width, height: 800 });
+    await hand.open(`${at}/gutter`);
+    const { x, y } = await hand.boxOf("#line");
+    for (const reach of [120, 147, 163]) {
+      const before = (await hand.groups()).length;
+      await hand.stroke(
+        line([x + reach - 100, y + 10], [x + reach, y + 10], 6)
+      );
+      await hand.stroke(
+        line([x + reach, y + 10], [x + reach + 100, y + 10], 6)
+      );
+      split += (await hand.groups()).length - before - 1;
+      await hand.settle(4200);
+    }
+  }
+  kit.check(
+    "11: strokes drawn end to end are one group at every width",
+    split === 0,
+    `${split} of 12 split`
+  );
+  await page.setViewportSize({ width: 1200, height: 800 });
+  await hand.open(`${at}/gutter`);
+  const { y } = await hand.boxOf("#line");
+  await hand.stroke(line([1130, y + 40], [1196, y + 40]));
+  const icon = await page.evaluate(() => {
+    const host = document.querySelector("cawco-overlay");
+    const r = host?.shadowRoot
+      ?.querySelector(".ink-icon")
+      ?.getBoundingClientRect();
+    const room = host?.getBoundingClientRect();
+    return r && room
+      ? {
+          x: r.x + r.width / 2,
+          y: r.y + r.height / 2,
+          right: r.right,
+          room: room.right,
+        }
+      : null;
+  });
+  if (icon) {
+    await page.mouse.click(icon.x, icon.y);
+    await hand.settle(400);
+  }
+  const opened = await page.evaluate(
+    () =>
+      !!document
+        .querySelector("cawco-overlay")
+        ?.shadowRoot?.querySelector(".ink-menu")
+  );
+  kit.check(
+    "11: a stroke lifted over the gutter leaves its icon whole on the page, and a press opens its menu",
+    !!icon && icon.right <= icon.room && opened,
+    JSON.stringify({ icon, opened })
+  );
+};
+
+/** Check 12: what a frame of an inner scroller costs with marks standing. */
+const costChecks = async (kit: Kit, page: Page, at: string) => {
+  const hand = handOn(page);
+  await hand.open(`${at}/many`);
+  const groups = 30;
+  for (let i = 0; i < groups; i += 1) {
+    const y = 40 + (i % 14) * 50;
+    const x = 40 + ((i * 17) % 200);
+    await hand.stroke(line([x, y], [x + 120, y + 6], 6));
+  }
+  await hand.settle(800);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Performance.enable");
+  const layouts = async () =>
+    (await cdp.send("Performance.getMetrics")).metrics.find(
+      (one) => one.name === "LayoutCount"
+    )?.value ?? 0;
+  const paths = () =>
+    page.evaluate(() => {
+      (window as unknown as { kept?: Element[] }).kept ??= [
+        ...document.querySelectorAll("svg[data-cawco-ink] path[data-stroke]"),
+      ];
+      return (window as unknown as { kept: Element[] }).kept.filter(
+        (one) => one.isConnected
+      ).length;
+    });
+  const held = await paths();
+  const frames = 180;
+  const before = await layouts();
+  await page.evaluate(
+    (count) =>
+      new Promise<void>((done) => {
+        const scroller = document.querySelector("#scroller");
+        let drawn = 0;
+        const step = () => {
+          if (scroller) {
+            scroller.scrollTop += 23;
+          }
+          drawn += 1;
+          if (drawn < count) {
+            requestAnimationFrame(step);
+          } else {
+            done();
+          }
+        };
+        requestAnimationFrame(step);
+      }),
+    frames
+  );
+  const spent = (await layouts()) - before;
+  const kept = await paths();
+  kit.check(
+    `12: ${groups} groups through ${frames} frames of an inner scroller lay the page out at most ${3 * frames} times, and keep their paths`,
+    (await hand.groups()).length === groups &&
+      spent <= 3 * frames &&
+      kept === held,
+    `${spent} layouts; ${kept} of ${held} paths kept`
+  );
+  await cdp.detach();
+};
+
 /** Checks 8 and 9: a document that scrolls itself, and a body that does. */
 const otherScrollers = async (kit: Kit, page: Page, at: string) => {
   const hand = handOn(page);
@@ -521,6 +725,9 @@ const onOwnOrigins = async (
         "/decision?late": decisionPage(embedAt, true),
         "/document": documentPage,
         "/body": bodyScrollerPage,
+        "/stays": staysPage,
+        "/gutter": gutterPage,
+        "/many": manyPage,
       })[address] ?? null
   );
   try {
@@ -549,6 +756,15 @@ const run = async (kit: Kit) => {
   );
   await onOwnOrigins(overlay, async (at) =>
     otherScrollers(kit, await kit.page("desk"), at)
+  );
+  await onOwnOrigins(overlay, async (at) =>
+    pinChecks(kit, await kit.page("desk"), at)
+  );
+  await onOwnOrigins(overlay, async (at) =>
+    strokeEndChecks(kit, await kit.page("desk"), at)
+  );
+  await onOwnOrigins(overlay, async (at) =>
+    costChecks(kit, await kit.page("desk"), at)
   );
 };
 

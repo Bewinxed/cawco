@@ -68,6 +68,7 @@ import {
   frameWindows,
   isFrame,
   rectOf,
+  staysInView,
   watchFrames,
 } from "./frames";
 import { hold, isHeld } from "./hold";
@@ -468,6 +469,32 @@ const changes: Changes = startChanges({
 });
 
 /**
+ * The overlay's boxes that stand on an anchor, behind the page's body. The
+ * overlay runs in the head, before the parser has made the body, so they
+ * stood ahead of it; and an absolutely positioned box anchors only to what
+ * comes before it in the tree ("acceptable anchor element", css-anchor-position-1
+ * §3.2), so inside an absolute pane or a modal the One Target and a change's
+ * ring had no anchor and stood at 0 by 0, unseen.
+ */
+function anchoredAfterBody() {
+  const { body } = document;
+  if (
+    body &&
+    // biome-ignore lint/suspicious/noBitwiseOperators: compareDocumentPosition answers a bitmask
+    host.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING
+  ) {
+    document.documentElement.append(host, changes.layer);
+  }
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", anchoredAfterBody, {
+    once: true,
+  });
+} else {
+  anchoredAfterBody();
+}
+
+/**
  * Whether a press that is not a pen's inks: in Draw mode, the main button or
  * a first finger on the overlay's own layer. One on the ink's icon or menu is
  * theirs, and one on a pin's disc opens that pin (the blockers below).
@@ -515,21 +542,34 @@ const ink = startInk({
  * container of the page's own (a transcript, a pane) scrolled: the marks in
  * it stand where its elements are now, and the outline Comment mode drew
  * over one of them follows, once per frame. The window's own scroll moves
- * the marks with it: their layers are the page's.
+ * the marks with it, their layers being the page's, unless one stands on what
+ * that scroll leaves where it is (`marksStayInView`).
  */
 let framesFrame = 0;
-function framesChanged() {
+/** Whether more than a scroll is waiting on the next frame. */
+let framesWhole = false;
+/** On the next frame: every mark placed again, or, with only a scroller having moved them, moved (ink.ts `follow`). */
+function placeMarks(whole: boolean) {
+  framesWhole ||= whole;
   if (framesFrame) {
     return;
   }
   framesFrame = requestAnimationFrame(() => {
     framesFrame = 0;
     embeds.fit();
-    ink.replace();
+    if (framesWhole) {
+      ink.replace();
+    } else {
+      ink.follow();
+    }
+    framesWhole = false;
     if (!highlight.hidden) {
       paint();
     }
   });
+}
+function framesChanged() {
+  placeMarks(true);
 }
 
 /** How often the parent is told the person's hand is on the page, at most: its beat reads the last, to the second. Our call. */
@@ -560,7 +600,7 @@ const hearTouches = (view: Window): void => {
     view.addEventListener(kind, touched, { capture: true, passive: true });
   }
 };
-watchFrames(framesChanged, hearTouches);
+watchFrames(framesChanged, () => placeMarks(false), hearTouches);
 // A sheet's stage swapped a component in place (its sheet module says so on
 // each Vite HMR update), or a decision page's host drew a revision of its
 // program (decision-host, naming the program's hash): every pin's anchor is
@@ -581,11 +621,20 @@ addEventListener("cawco:hmr", (event) => {
   pins.keepClear();
   changes.draw();
 });
+/**
+ * Whether a mark stands on a fixed bar or a sticky head, which the page's own
+ * scroll leaves in the viewport as it carries the layers on. Read as it scrolls
+ * and never as a draw: a page whose document never scrolls pays nothing.
+ */
+const marksStayInView = () =>
+  [...ink.standingOn(), ...pins.standingOn()].some(
+    (el) => !!el && staysInView(el)
+  );
 addEventListener(
   "scroll",
   (event) => {
-    if (event.target !== document) {
-      framesChanged();
+    if (event.target !== document || marksStayInView()) {
+      placeMarks(false);
     }
   },
   { capture: true, passive: true }
@@ -1030,6 +1079,7 @@ let latest = "";
 
 function morphTo(html: string) {
   const held = morphPage(html, kept);
+  anchoredAfterBody();
   // A morph keeps nodes by their place, whatever they hold now.
   forgetFound();
   pageHash = html.match(SERVED_HASH)?.[1] ?? pageHash;
@@ -1988,7 +2038,7 @@ function stillThere(
   } catch {
     return null;
   }
-  return named === el ? { by: "selector", el } : null;
+  return named === el ? { by: "place", el } : null;
 }
 
 /**

@@ -602,7 +602,9 @@ const strokeChecks = async (on: On, frame: Frame) => {
       const across = (x: number, y: number) => {
         let filled = 0;
         for (let dy = -6; dy <= 6; dy += 0.05) {
-          if (path.isPointInFill(new DOMPoint(x + scrollX, y + scrollY + dy))) {
+          const at = new DOMPoint(x + scrollX, y + scrollY + dy);
+          const inPath = at.matrixTransform(path.getCTM()?.inverse());
+          if (path.isPointInFill(inPath)) {
             filled += 0.05;
           }
         }
@@ -908,7 +910,10 @@ const edgeChecks = async (on: On, frame: Frame) => {
         Math.abs(i.top + i.height / 2 - cy) < 1,
       expanded: icon.getAttribute("aria-expanded"),
       inside: [m, ...words].every(
-        (r) => r.left >= 7.5 && r.right <= innerWidth - 7.5
+        (r) =>
+          r.left >= 7.5 &&
+          r.right <=
+            document.documentElement.getBoundingClientRect().width - 7.5
       ),
       words: words.map((w) => w.clear),
     };

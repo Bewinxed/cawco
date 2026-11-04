@@ -73,6 +73,7 @@ import {
   readPins,
   goneOf as tombstonesOf,
   wholePage,
+  wordsFollow,
   writePin,
 } from "@cawco/core/comments";
 import type { InkGroup } from "@cawco/core/ink";
@@ -119,6 +120,8 @@ const LINE_READ_MOST = 4000;
 const CROP_PAD = 24;
 /** How far a pin's crop reaches from the point it was made at, each way, px: a big element is cropped round the point. Our call. */
 const PIN_REACH = { x: 960, y: 640 } as const;
+/** How long a scroller's glide has before a pill it should have lifted is looked at again, ms: past the browsers' own, about 750ms at most. Our call. */
+const GLIDE_MS = 1000;
 /** How many pins of a stack stand behind its front one. */
 const BEHIND = 2;
 /** A finger's hit area round a pill, px. */
@@ -191,7 +194,8 @@ export interface Pins {
   /** The comment being written stands here (its hollow pill, no number yet), or none. */
   draft: (target: DraftTarget | null) => void;
   /** Pins drawn again where their elements stand now: done once they are painted (Floating UI places them in a promise). */
-  draw: () => Promise<void>;
+  /** Drawn where their elements stand now; `following`, a scroller moved them and nothing else changed. */
+  draw: (following?: boolean) => Promise<void>;
   /** The layer fixed to the viewport, where pins on the page as a whole stand. */
   fixed: SVGSVGElement;
   /** The pin the host focused (J, K, its row), outlined and brought into view out from under the host's chrome; or none. */
@@ -228,6 +232,8 @@ export interface Pins {
   pointOn: (el: Element, x: number, y: number) => { x: number; y: number };
   /** Every pin shown on the page, or hidden (⇧C). */
   show: (shown: boolean) => void;
+  /** The elements its pins stand on now. */
+  standingOn: () => Iterable<Element | null>;
   /** The pin whose thread the host shows, whose place it hears as the page scrolls; or none. */
   track: (id: string | null) => void;
 }
@@ -794,6 +800,7 @@ export function startPins(deps: PinsDeps): Pins {
    * page drew it back, a revision restored it) stands on the page again,
    * out of the moved tray. Each as it is to be written.
    */
+  const liveWords = wordsFollow();
   const reanchor = (pins: Pin[]) => {
     const moves: Pin[] = [];
     for (const pin of pins) {
@@ -802,7 +809,12 @@ export function startPins(deps: PinsDeps): Pins {
       }
       const found = deps.locate(pin.anchor);
       const now = found && deps.anchorOf(found.el);
-      if (now && (pin.movedAt || changedAnchor(pin.anchor, now, found.by))) {
+      if (
+        now &&
+        (pin.movedAt ||
+          changedAnchor(pin.anchor, now, found.by) ||
+          liveWords(pin.id, pin.anchor, now, found.by))
+      ) {
         const { movedAt: _moved, ...rest } = pin;
         moves.push({ ...rest, anchor: now });
       }
@@ -1406,13 +1418,24 @@ export function startPins(deps: PinsDeps): Pins {
    * promise); a draw a later one overtook while they were placed paints
    * nothing, and is done when that later one is.
    */
-  function draw(): Promise<void> {
+  function draw(following = false): Promise<void> {
     draws += 1;
-    lastDraw = drawNow(draws);
+    lastDraw = drawNow(draws, following);
     return lastDraw;
   }
 
-  async function drawNow(asked: number): Promise<void> {
+  /** The paint of the last whole draw: a scroller moving the pills changes no token. */
+  let painted: Paint | null = null;
+  /**
+   * The paint is read off the page's style, which forces its style and
+   * layout there and then: a page with no pins is not made to pay for it.
+   */
+  const paintFor = (drawing: boolean, following: boolean) => {
+    painted = drawing ? ((following ? painted : null) ?? paintOf()) : null;
+    return painted;
+  };
+
+  async function drawNow(asked: number, following: boolean): Promise<void> {
     if (!(onPage() && artifact.keeps())) {
       placed.clear();
       holdIn(layer, []);
@@ -1422,14 +1445,16 @@ export function startPins(deps: PinsDeps): Pins {
       return;
     }
     const read = [...pinsMap().values()].sort((a, b) => a.number - b.number);
-    const moves = settled() ? reanchor(read) : [];
+    // A scroller moved the page's elements and changed none of them: no
+    // anchor reads otherwise, the page is no taller, and no token moved.
+    const moves = !following && settled() ? reanchor(read) : [];
     const found = new Map(moves.map((pin) => [pin.id, pin]));
     const all = read.map((pin) => found.get(pin.id) ?? pin);
     const drawing = all.length > 0 || !!drafted;
-    fitToPage(layer, drawing);
-    // The paint is read off the page's style, which forces its style and
-    // layout there and then: a page with no pins is not made to pay for it.
-    const paint = drawing ? paintOf() : null;
+    if (!following) {
+      fitToPage(layer, drawing);
+    }
+    const paint = paintFor(drawing, following);
     const [pinsAt, draftAt] = paint
       ? await Promise.all([placeAll(all, paint), placeDraft(paint)])
       : [null, null];
@@ -1620,8 +1645,28 @@ export function startPins(deps: PinsDeps): Pins {
     // Out from under nothing (nothing round it takes room): at least in the viewport.
     const moves = landed ?? bringInto(chain, y, bandsAt(x, [], r));
     if (moves) {
-      scrollMoves(moves, motionOk() && !instant ? "smooth" : "auto");
+      const smooth = motionOk() && !instant;
+      scrollMoves(moves, smooth ? "smooth" : "auto");
+      if (smooth) {
+        lookAfterGlide();
+      }
     }
+  };
+
+  let glideLook: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * A glide can stop short of where it was sent, and the pill then stands
+   * under the sheet for good (WebKit, a short page: 43px short for 15 s): once
+   * it has had its time, a pill still under is brought out in one step.
+   */
+  const lookAfterGlide = () => {
+    clearTimeout(glideLook);
+    glideLook = setTimeout(() => {
+      lastDraw.then(
+        () => bringOutUnder(true),
+        () => bringOutUnder(true)
+      );
+    }, GLIDE_MS);
   };
 
   /**
@@ -1687,18 +1732,21 @@ export function startPins(deps: PinsDeps): Pins {
    */
   const keepClear = () => {
     // Where they stand once the draw in hand has placed them.
-    lastDraw.then(bringOutUnder, bringOutUnder);
+    lastDraw.then(
+      () => bringOutUnder(),
+      () => bringOutUnder()
+    );
   };
-  const bringOutUnder = () => {
+  const bringOutUnder = (instant = false) => {
     const under = (at: Standing, face: Pill) =>
       !at.page && covered.some((one) => meets(shownBox(at, face), one));
     const where = tracked ? placed.get(tracked) : undefined;
     if (tracked && where?.pill && under(where, where.pill)) {
-      reveal(tracked);
+      reveal(tracked, instant);
     }
     const draft = drafted?.parked ? undefined : drafted;
     if (draft?.standing && draft.pill && under(draft.standing, draft.pill)) {
-      bringOut({ ...draft.standing, pill: draft.pill }, DRAFT_PIN);
+      bringOut({ ...draft.standing, pill: draft.pill }, DRAFT_PIN, instant);
     }
   };
 
@@ -1796,6 +1844,7 @@ export function startPins(deps: PinsDeps): Pins {
       open(pin.id, true);
       return pin.id;
     },
+    standingOn: () => [...placed.values()].map(({ el }) => el),
     pinInk: (group, kind, elements) => {
       // A comment is composed first, but the apps' radial Comment pins the
       // ink at once and opens its card (until tsk-59).
@@ -1905,7 +1954,7 @@ export function startPins(deps: PinsDeps): Pins {
       // stands only while its thread is open. Its pills are put back under a
       // tap that may be landing, so the page waits a frame: iOS WebKit, seeing
       // new content as a tap lands, takes it for a hover and sends no click.
-      requestAnimationFrame(draw);
+      requestAnimationFrame(() => draw());
     },
     show: (shown) => {
       layer.style.display = shown ? "" : "none";

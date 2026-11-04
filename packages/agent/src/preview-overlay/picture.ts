@@ -1040,9 +1040,14 @@ function paintInk(ctx: CanvasRenderingContext2D) {
     "svg[data-cawco-ink] g[data-ink-group] path"
   )) {
     const d = path.getAttribute("d");
-    if (d) {
+    // A path is drawn from its element's origin, its group moved to the element.
+    const at = path.getCTM();
+    if (d && at) {
+      ctx.save();
+      ctx.transform(at.a, at.b, at.c, at.d, at.e, at.f);
       ctx.fillStyle = path.getAttribute("fill") ?? "currentColor";
       ctx.fill(new Path2D(d));
+      ctx.restore();
     }
   }
 }

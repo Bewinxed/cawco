@@ -243,6 +243,7 @@
         <button
           aria-label="Remove the canvas"
           class={REMOVE}
+          data-box
           onclick={onremovecanvas}
           type="button"
         >
@@ -266,6 +267,7 @@
               press: "scale",
               class: [BODY, "press-tint hover:bg-surface-hover"],
             })}
+            data-box
             onclick={chip.press.run}
             type="button"
           >
@@ -275,18 +277,20 @@
           <span
             aria-label={`Uploading ${chip.name}`}
             class="inline-flex items-center gap-space-2 min-w-0"
+            data-box
             role="status"
           >
             {@render face(chip)}
           </span>
         {:else}
-          <span class="inline-flex items-center gap-space-2 min-w-0">
+          <span class="inline-flex items-center gap-space-2 min-w-0" data-box>
             {@render face(chip)}
           </span>
         {/if}
         <button
           aria-label={`Remove ${chip.name}`}
           class={REMOVE}
+          data-box
           onclick={chip.onremove}
           type="button"
         >

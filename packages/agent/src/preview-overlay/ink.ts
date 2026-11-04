@@ -30,7 +30,12 @@
  * it is drawn again from the element's box wherever the element stands now:
  * on load, on a resize, when the element itself resizes, when the page's
  * content changes round it or a transition ends, when a scroller moves the
- * element, after a re-publish; and never while nothing changes.
+ * element, after a re-publish; and never while nothing changes. Its paths
+ * are drawn once, from the element's origin, and kept: a scroller only moves
+ * them ({@link Ink.follow}), reading every group's place before writing any,
+ * so a frame of a scroller lays the page out once however many groups stand
+ * (a 12,660-element decision page at a phone's CPU: 33 layouts a frame with 30
+ * groups, its frames at 84 ms, each path outlined again in each).
  *
  * So what it stands on moves with what the stroke covers. The body stands
  * still in a page whose scroller is inside it (a decision page's first row),
@@ -55,6 +60,7 @@ import {
   type Pin,
   type PinnedElement,
   readPins,
+  wordsFollow,
 } from "@cawco/core/comments";
 import type { DocMap } from "@cawco/core/doc-maps";
 import { INK_LIMITS, type InkGroup, type InkPoint } from "@cawco/core/ink";
@@ -70,10 +76,10 @@ import {
   frameWindows,
   grow,
   isFrame,
+  meets,
   pageBox,
   rectOf,
   sizesIn,
-  staysInView,
 } from "./frames";
 import type { Pins } from "./pins";
 import type { InkChrome, Pick } from "./radial";
@@ -127,6 +133,8 @@ const REACH = [
   [0, 4],
   [0, -4],
 ] as const;
+/** How far apart two strokes' boxes may read and still touch, px. Our call: more than the kept fractions' rounding, less than a stroke's width. */
+const TOUCH_SLACK = 1;
 /** A stroke the eraser has crossed, until it lifts. Our call. */
 const ERASING_OPACITY = "0.3";
 
@@ -138,6 +146,28 @@ interface Marks {
   anchor: Element;
   onOwnScroll: boolean;
   over: Element[];
+}
+
+/** A group as it stands now: read in one pass, then written. */
+interface Stand {
+  /** What is shown of it, in the page's px; null where nothing clips it. */
+  clip: Box | null;
+  el: Element;
+  group: InkGroup;
+  /** The box its fractions are of, in the page's px. */
+  under: Box;
+}
+
+/** A group's nodes in the layer. */
+interface DrawnGroup {
+  clip: SVGRectElement | null;
+  g: SVGGElement;
+  /** What its paths were drawn at: its element's size, the ink's colour. */
+  look: string;
+  moved: SVGGElement;
+  /** Its strokes' box from its element's origin, px. */
+  own: Box;
+  strokes: InkGroup["strokes"] | null;
 }
 
 /** The page's points in the viewport as it is scrolled now. */
@@ -177,12 +207,16 @@ export interface InkDeps {
 export interface Ink {
   /** The doc's ink changed, or the doc was replaced: drawn again. */
   changed: () => void;
+  /** A scroller moved them: every group, and its pins, stands where its element is now, nothing else read. */
+  follow: () => void;
   /** A placed group's box in the page, px; null when it is not on the page. */
   groupBox: (id: string) => Box | null;
   /** The svg the ink is drawn in: a re-publish keeps it (overlay `kept`). */
   layer: SVGSVGElement;
   /** Draw every group again where its element stands now (after a morph). */
   replace: () => void;
+  /** The elements its groups stand on now. */
+  standingOn: () => Iterable<Element | null>;
 }
 
 /** `el`'s parent, out of its frame's document into the frame itself at the frame's root. */
@@ -230,8 +264,13 @@ const union = (a: Box, b: Box): Box => {
   };
 };
 
-const touches = (a: Box, b: Box) =>
-  a.x <= b.x + b.w && b.x <= a.x + a.w && a.y <= b.y + b.h && b.y <= a.y + a.h;
+/**
+ * Whether two boxes touch. Within `TOUCH_SLACK`: a placed group's box is read
+ * back from fractions rounded to four places, a tenth of a px on a wide
+ * element, so strokes drawn end to end stood apart in 19 of 30 tries and split
+ * into two groups.
+ */
+const touches = (a: Box, b: Box) => meets(grow(a, TOUCH_SLACK), b);
 
 const contains = (outer: Box, inner: Box, slack = 1) =>
   inner.x >= outer.x - slack &&
@@ -486,10 +525,10 @@ export function startInk(deps: InkDeps): Ink {
     };
   };
 
-  /** Whether a group stands on an element that stays in the viewport as the page scrolls. */
-  let inView = false;
-  /** Each placed group: its points in the page, its box, the element it stands on. */
-  const placed = new Map<string, { box: Box; anchor: Element | null }>();
+  /** Each placed group: its box in the page, the element it stands on, the box its paths were drawn from. */
+  const placed = new Map<string, { anchor: Element; box: Box; under: Box }>();
+  /** Each group's nodes, kept while it stands and redrawn only when what they show changes. */
+  const drawn = new Map<string, DrawnGroup>();
   /** Each clipped group's clip in the page, px: the part of it that is drawn. */
   const clips = new Map<string, Box>();
   /**
@@ -603,10 +642,16 @@ export function startInk(deps: InkDeps): Ink {
     for (const path of layer.querySelectorAll<SVGPathElement>(
       "path[data-stroke]"
     )) {
-      const crossed = REACH.some(([dx, dy]) =>
-        path.isPointInFill(new DOMPoint(x + dx, y + dy))
-      );
-      const group = path.parentElement?.getAttribute("data-ink-group");
+      const group = path
+        .closest("[data-ink-group]")
+        ?.getAttribute("data-ink-group");
+      const under = group ? placed.get(group)?.under : null;
+      // A path is drawn from its element's origin.
+      const crossed =
+        !!under &&
+        REACH.some(([dx, dy]) =>
+          path.isPointInFill(new DOMPoint(x + dx - under.x, y + dy - under.y))
+        );
       if (!(crossed && group)) {
         continue;
       }
@@ -728,7 +773,11 @@ export function startInk(deps: InkDeps): Ink {
       if (event.type === "pointerup") {
         erase(hits);
       } else {
-        draw();
+        for (const path of layer.querySelectorAll<SVGPathElement>(
+          "path[data-stroke]"
+        )) {
+          path.style.removeProperty("opacity");
+        }
       }
       return;
     }
@@ -1155,15 +1204,10 @@ export function startInk(deps: InkDeps): Ink {
   };
 
   function draw() {
-    for (const node of [...layer.children]) {
-      if (!node.hasAttribute("data-live")) {
-        node.remove();
-      }
-    }
     placed.clear();
     clips.clear();
-    inView = false;
     if (onCanvas()) {
+      forgetDrawn(new Set());
       watchAnchors(new Set());
       watchMoves();
       return;
@@ -1184,17 +1228,22 @@ export function startInk(deps: InkDeps): Ink {
     const gone = goneOf(located);
     const found: InkGroup[] = [];
     const standing = new Set<Element>();
+    const stands: Stand[] = [];
     for (const { group, el, by } of located) {
       if (!el) {
         continue;
       }
-      inView ||= staysInView(el);
       const reread = rereadOn(group, el, by);
       if (reread) {
         found.push(reread);
       }
-      drawGroup(group, el, brand);
+      stands.push(standOf(group, el));
       standing.add(el);
+    }
+    forgetDrawn(new Set(stands.map((stand) => stand.group.id)));
+    for (const stand of stands) {
+      paintGroup(stand, brand);
+      placeGroup(stand);
     }
     watchAnchors(standing);
     if (settled()) {
@@ -1209,63 +1258,169 @@ export function startInk(deps: InkDeps): Ink {
    * anchor (moved, renamed, reworded); null when it reads as it was, since
    * a write draws the ink again.
    */
+  const liveWords = wordsFollow();
   function rereadOn(
     group: InkGroup,
     el: Element,
     by: AnchorFound<Element>["by"]
   ): InkGroup | null {
     const now = deps.anchorOf(el);
-    return "selector" in group.anchor && changedAnchor(group.anchor, now, by)
+    return "selector" in group.anchor &&
+      (changedAnchor(group.anchor, now, by) ||
+        liveWords(group.id, group.anchor, now, by))
       ? { ...group, anchor: now }
       : null;
   }
 
   /**
-   * One group's strokes over `el`, where `el` stands now, clipped to what
-   * `el`'s frames and scroll containers show (frames.ts `clipOf`), as its
-   * pins are: a stroke a transcript has scrolled under its edge is not
-   * drawn over what stands there.
+   * Where a group stands now, read and nothing written: its element's box,
+   * and what `el`'s frames and scroll containers show of it (frames.ts
+   * `clipOf`), as its pins are: a stroke a transcript has scrolled under its
+   * edge is not drawn over what stands there.
    */
-  function drawGroup(group: InkGroup, el: Element, brand: string) {
-    const strokes = strokesInPage(group);
-    const g = document.createElementNS(SVG, "g");
-    g.setAttribute("data-ink-group", group.id);
+  function standOf(group: InkGroup, el: Element): Stand {
     // Words its element has scrolled are held to its box; unscrolled, a stroke past it stands as it was drawn.
     const moved =
       !!group.scrolled &&
       (el.scrollLeft !== group.scrolled.x || el.scrollTop !== group.scrolled.y);
     const shown = clipOf(el, moved);
-    if (shown) {
-      const box = {
-        x: shown.x + scrollX,
-        y: shown.y + scrollY,
-        w: shown.width,
-        h: shown.height,
-      };
-      const clip = document.createElementNS(SVG, "clipPath");
-      clip.id = `cawco-ink-clip-${group.id}`;
-      const rect = document.createElementNS(SVG, "rect");
-      rect.setAttribute("x", String(box.x));
-      rect.setAttribute("y", String(box.y));
-      rect.setAttribute("width", String(box.w));
-      rect.setAttribute("height", String(box.h));
-      clip.append(rect);
-      layer.append(clip);
-      g.setAttribute("clip-path", `url(#${clip.id})`);
-      clips.set(group.id, box);
+    return {
+      clip: shown
+        ? {
+            x: shown.x + scrollX,
+            y: shown.y + scrollY,
+            w: shown.width,
+            h: shown.height,
+          }
+        : null,
+      el,
+      group,
+      under: boxUnder(el, group),
+    };
+  }
+
+  /** A group's nodes: the outer one takes its clip in the page's px, the inner its place, so the clip stays where it is as the strokes move. */
+  const nodesOf = (id: string): DrawnGroup => {
+    const known = drawn.get(id);
+    if (known) {
+      return known;
     }
-    for (const [index, stroke] of strokes.entries()) {
-      const path = document.createElementNS(SVG, "path");
-      path.setAttribute("data-stroke", String(index));
-      path.setAttribute("d", pathOf(stroke.points));
-      path.setAttribute("fill", brand);
-      g.append(path);
-    }
+    const g = document.createElementNS(SVG, "g");
+    g.setAttribute("data-ink-group", id);
+    const moved = document.createElementNS(SVG, "g");
+    g.append(moved);
     layer.append(g);
+    const made: DrawnGroup = {
+      clip: null,
+      g,
+      look: "",
+      moved,
+      own: { x: 0, y: 0, w: 1, h: 1 },
+      strokes: null,
+    };
+    drawn.set(id, made);
+    return made;
+  };
+
+  /** A group's paths, from its element's origin, drawn again only when its strokes, its element's size or the ink's colour changed. */
+  function paintGroup({ group, under }: Stand, brand: string) {
+    const nodes = nodesOf(group.id);
+    const look = `${under.w} ${under.h} ${brand}`;
+    if (nodes.strokes === group.strokes && nodes.look === look) {
+      return;
+    }
+    const strokes = group.strokes.map((stroke) =>
+      stroke.points.map(([fx, fy, p]): Point => [fx * under.w, fy * under.h, p])
+    );
+    nodes.moved.replaceChildren(
+      ...strokes.map((points, index) => {
+        const path = document.createElementNS(SVG, "path");
+        path.setAttribute("data-stroke", String(index));
+        path.setAttribute("d", pathOf(points));
+        path.setAttribute("fill", brand);
+        return path;
+      })
+    );
+    nodes.own = strokes.map(strokeBox).reduce(union);
+    nodes.strokes = group.strokes;
+    nodes.look = look;
+  }
+
+  /** A group's nodes moved to where it stands, writing only what moved. */
+  function placeGroup({ clip, el, group, under }: Stand) {
+    const nodes = nodesOf(group.id);
+    const at = `translate(${under.x} ${under.y})`;
+    if (nodes.moved.getAttribute("transform") !== at) {
+      nodes.moved.setAttribute("transform", at);
+    }
+    clipGroup(group.id, nodes, clip);
+    const { own } = nodes;
     placed.set(group.id, {
-      box: strokes.map((one) => strokeBox(one.points)).reduce(union),
       anchor: el,
+      box: { ...own, x: own.x + under.x, y: own.y + under.y },
+      under,
     });
+  }
+
+  /** A group's clip, in the page's px; none where nothing clips its element. */
+  function clipGroup(id: string, nodes: DrawnGroup, box: Box | null) {
+    if (!box) {
+      if (nodes.clip) {
+        nodes.clip.parentElement?.remove();
+        nodes.clip = null;
+        nodes.g.removeAttribute("clip-path");
+      }
+      clips.delete(id);
+      return;
+    }
+    if (!nodes.clip) {
+      const clip = document.createElementNS(SVG, "clipPath");
+      clip.id = `cawco-ink-clip-${id}`;
+      nodes.clip = document.createElementNS(SVG, "rect");
+      clip.append(nodes.clip);
+      layer.append(clip);
+      nodes.g.setAttribute("clip-path", `url(#${clip.id})`);
+    }
+    for (const [name, value] of [
+      ["x", box.x],
+      ["y", box.y],
+      ["width", box.w],
+      ["height", box.h],
+    ] as const) {
+      if (nodes.clip.getAttribute(name) !== String(value)) {
+        nodes.clip.setAttribute(name, String(value));
+      }
+    }
+    clips.set(id, box);
+  }
+
+  /** The nodes of the groups no longer standing let go. */
+  function forgetDrawn(standing: Set<string>) {
+    for (const [id, nodes] of drawn) {
+      if (!standing.has(id)) {
+        nodes.clip?.parentElement?.remove();
+        nodes.g.remove();
+        drawn.delete(id);
+      }
+    }
+  }
+
+  /** Every group moved to where its element stands now; all read before any is written. */
+  function follow() {
+    const { ink } = maps();
+    const stands: Stand[] = [];
+    for (const [id, { anchor }] of placed) {
+      const group = ink.get(id);
+      if (!(group && anchor.isConnected)) {
+        draw();
+        return;
+      }
+      stands.push(standOf(group, anchor));
+    }
+    for (const stand of stands) {
+      placeGroup(stand);
+    }
+    deps.pins().draw(true);
   }
 
   /** Writes the groups found again by their source or text, and moves aside those no anchor finds. */
@@ -1373,19 +1528,6 @@ export function startInk(deps: InkDeps): Ink {
   // The window resizes or the page grows: every group stands where its element is now.
   addEventListener("resize", later);
   sizesIn(document, later)?.observe(document.documentElement);
-  // The page's own scroll moves the layer with it, and draws nothing again
-  // unless a group stands on what stays in the viewport as the layer goes (a
-  // fixed bar, a sticky head). Every other scroller's scroll is page.ts's
-  // `framesChanged`.
-  addEventListener(
-    "scroll",
-    (event) => {
-      if (inView && event.target === document) {
-        later();
-      }
-    },
-    { capture: true, passive: true }
-  );
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", changed, { once: true });
   } else {
@@ -1395,7 +1537,9 @@ export function startInk(deps: InkDeps): Ink {
   return {
     layer,
     replace: () => draw(),
+    follow,
     groupBox: (id) => placed.get(id)?.box ?? null,
+    standingOn: () => [...placed.values()].map(({ anchor }) => anchor),
     changed,
   };
 }
