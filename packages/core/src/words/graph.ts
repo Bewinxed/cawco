@@ -59,6 +59,9 @@ export const graphWords = {
   sameAs: (state: string) => `No difference from ${state}.`,
   /** The list of differences at the stage's head, its name for a screen reader. */
   differences: "Differences",
+  /** The count that leads the differences, a press that shows or folds their lines. */
+  differenceCount: (n: number, figure: Figure) =>
+    n === 1 ? `${figure} difference` : `${figure} differences`,
 
   /** The move into the kept state. */
   move: (from: string, to: string) => `${from} → ${to}`,
