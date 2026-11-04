@@ -120,6 +120,39 @@ const SERVED_DIRS = (() => {
 })();
 
 /**
+ * The workspace packages the dashboard imports (`workspace:*` in its
+ * package.json: @cawco/core, @cawco/icons), each watched as a folder. Their
+ * sources live outside Vite's root, so Vite watches each such file alone as
+ * it loads it (vite 8.3.5 `ensureWatchedFile`: "if (file &&
+ * !normalizePath(file).startsWith(withTrailingSlash(root)) && …)
+ * watcher.add(path.resolve(file))"), and a watched file that is unlinked and
+ * written again, as a checkout or a rebase writes it, is watched no more: a
+ * running preview served words/graph.ts as it stood before the rebase, and a
+ * page reading a word added since answered 500 ("words.runsSpan is not a
+ * function"). Watched as folders, a file written again is seen.
+ */
+const WORKSPACE_PACKAGES = (() => {
+  const manifest = z
+    .object({ dependencies: z.record(z.string(), z.string()) })
+    .parse(
+      JSON.parse(
+        readFileSync(join(import.meta.dirname, "package.json"), "utf8")
+      )
+    );
+  return Object.entries(manifest.dependencies)
+    .filter(([, version]) => version.startsWith("workspace:"))
+    .map(([name]) =>
+      realpathSync(join(import.meta.dirname, "node_modules", name))
+    );
+})();
+const workspacePackagesWatched = (): Plugin => ({
+  name: "cawco-workspace-packages-watched",
+  configureServer(server) {
+    server.watcher.add(WORKSPACE_PACKAGES);
+  },
+});
+
+/**
  * The vite servers' (`vite dev`, and `vite preview`, the built dashboard the
  * probes drive) hold on the hub: the hub's `/ws` socket goes through
  * `server.proxy` below, and on a server started without `CAWCO_DEV_HUB_URL`
@@ -499,6 +532,7 @@ export default defineConfig(({ command }) => {
   }
   return {
     plugins: [
+      workspacePackagesWatched(),
       houseFaces(),
       vendorComponentSheets(),
       streamdownOverlayOwn(),
