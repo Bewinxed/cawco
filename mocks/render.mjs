@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 /**
  * Deterministic 2x mock renderer for the fidelity gate.
  *
- * fidelity.py downsamples any image wider than 2000px back to CSS px with
+ * The old fidelity gate downsampled any image wider than 2000px back to CSS px with
  * LANCZOS, and the reference comps are 2x exports. Rendering at DPR 1 changes
  * glyph antialiasing enough to move measured ink by ~13 luminance steps, so the
  * gate must be fed a 2x render.

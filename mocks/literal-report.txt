@@ -1,4 +1,0 @@
-  v2-fleet.html          0 hand-typed colour literal(s)
-  v3-assistant.html      0 hand-typed colour literal(s)
-  v4-transcript.html     0 hand-typed colour literal(s)
-  every colour in every mock resolves through a token

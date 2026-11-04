@@ -6,7 +6,7 @@ a literal. This rewrites them onto the token system WITHOUT touching geometry:
 the local `:root` alias layer and the hand-written `.dark` block are deleted
 outright, every `var(--local)` is renamed to its token, and the remaining raw
 literals are mapped by value. Geometry, markup and class names are untouched, so
-fidelity.py measures the same layout before and after and any delta is a colour
+the fidelity gate measured the same layout before and after and any delta is a colour
 delta, which is exactly what needs to be proven.
 
 usage: python3 mocks/retoken.py

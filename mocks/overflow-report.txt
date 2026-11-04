@@ -1,4 +1,0 @@
-  v2-fleet.html        320:320/320  390:390/390  768:768/768  1024:1024/1024  1440:1440/1440
-  v3-assistant.html    320:320/320  390:390/390  768:768/768  1024:1024/1024  1440:1440/1440
-  v4-transcript.html   320:320/320  390:390/390  768:768/768  1024:1024/1024  1440:1440/1440
-  no document overflow and no content trapped behind a non-scrolling ancestor

@@ -1,5 +1,0 @@
-    computed leading ratios seen: 1.400x6180  1.250x800  1.000x280   (* = measured line box)
-    skipped 80 element-passes, by reason:
-      x 60  SCRIPT. (display/visibility hidden)
-      x 20  P.sr (visually-hidden idiom)
-    no clipped text, nothing escaping a constrained box, all body leading inside 1.2-1.4

@@ -328,7 +328,7 @@
 
      They do not collide with status because they differ in FORM as well as hue:
      status is a pale tint carrying dark ink, an item mark is a saturated solid
-     carrying a white glyph. Separation is measured in colorcheck.py. */
+     carrying a white glyph. Separation was measured by the old colour check. */
   /* Light marks were L*0.50 / C0.155 and read as dark, muddy squares against the
      near-white sidebar — legible glyph, but heavy identity. Lifted to L*0.56 and
      saturated to C0.165 so each mark reads as a vivid identity colour; the white

@@ -12,7 +12,7 @@ import { execFileSync } from "node:child_process";
  * relative `oklch(from …)`. It exists because the generator's fixed lightness
  * spec (L_LIGHT = [0.993, 0.981, 0.956, 0.93, …]) has no step between 249 and
  * 241 mean-channel luminance, and the reference system needs a content field at
- * 244 that is simultaneously below fidelity.py's card threshold (>248) and
+ * 244 that is simultaneously below the old fidelity gate's card threshold (>248) and
  * outside its band-detection window (239.5–242.5).
  *
  *   node mocks/build-tokens.mjs
@@ -228,7 +228,7 @@ ${global.trim()}
 
      They do not collide with status because they differ in FORM as well as hue:
      status is a pale tint carrying dark ink, an item mark is a saturated solid
-     carrying a white glyph. Separation is measured in colorcheck.py. */
+     carrying a white glyph. Separation was measured by the old colour check. */
   /* Light marks were L*0.50 / C0.155 and read as dark, muddy squares against the
      near-white sidebar — legible glyph, but heavy identity. Lifted to L*0.56 and
      saturated to C0.165 so each mark reads as a vivid identity colour; the white
