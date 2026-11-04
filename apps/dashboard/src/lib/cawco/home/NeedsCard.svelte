@@ -101,6 +101,7 @@
     IconMaximize,
     IconMonitor,
     IconNeedsYou,
+    IconPhone,
     IconSend,
     IconServer,
     IconSuccess,
@@ -126,7 +127,7 @@
   import { notices } from "../notices.svelte";
   import OriginText from "../OriginText.svelte";
   import OsMark from "../OsMark.svelte";
-  import { allowHere, person, skipHere } from "../person.svelte";
+  import { allowHere, onPhone, person, skipHere } from "../person.svelte";
   import { sendArtifact } from "../preview/artifact-doc";
   import RowFault from "../RowFault.svelte";
   import { artifactOpenKey, openArtifactIn } from "../reference-open.svelte";
@@ -199,11 +200,14 @@
           : tailnetWords.lead;
       case "desk":
         if (item.done) {
-          return presenceWords.done(item.agent !== null || item.idle);
+          return presenceWords.done(
+            item.agent !== null || item.idle,
+            onPhone()
+          );
         }
         return item.unavailable
-          ? presenceWords.unavailable(item.notify)
-          : presenceWords.lead(item);
+          ? presenceWords.unavailable(onPhone())
+          : presenceWords.lead(item, onPhone());
       case "relay":
         return "";
       case "artifact":
@@ -724,6 +728,9 @@
             aria-hidden="true"
             class="size-icon-md text-status-done-ink"
           />
+        {:else if onPhone()}
+          <!-- The device asked about: this phone, or this computer. -->
+          <IconPhone aria-hidden="true" class="size-icon-md" />
         {:else}
           <IconMonitor aria-hidden="true" class="size-icon-md" />
         {/if}

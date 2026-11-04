@@ -70,7 +70,7 @@ import { signInWarning } from "../machine";
 import { type MarkHue, markHue } from "../mark";
 import { heldOrder } from "../motion/held-order.svelte";
 import { notices } from "../notices.svelte";
-import { asksHere, deskAsks, person } from "../person.svelte";
+import { asksHere, deskAsks, onPhone, person } from "../person.svelte";
 import {
   listTasksWaiting,
   stageLabel,
@@ -1407,7 +1407,8 @@ class Home {
               agent: ask.agent,
               done: person.ticked,
               title: presenceWords.title(
-                ask.agent !== null || ask.idle || ask.unavailable
+                ask.agent !== null || ask.idle || ask.unavailable,
+                onPhone()
               ),
               place: "Onboarding",
               raisedAt: undefined,

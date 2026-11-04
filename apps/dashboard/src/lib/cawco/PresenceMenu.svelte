@@ -38,6 +38,7 @@
     blockedHere,
     deskAsks,
     deskState,
+    onPhone,
     person,
     setAppearAway,
     setAtComputer,
@@ -244,7 +245,8 @@
       </DropdownMenu.CheckboxItem>
       {#if desk === "unavailable"}
         <DropdownMenu.Label data-slot="at-computer-instead" kind="line"
-          ><span class="text-ink-muted">{presenceWords.unavailable(false)}</span
+          ><span class="text-ink-muted"
+            >{presenceWords.countsHere(onPhone())}</span
           ></DropdownMenu.Label
         >
       {/if}
