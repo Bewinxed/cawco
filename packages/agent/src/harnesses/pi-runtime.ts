@@ -79,6 +79,7 @@ import type { HarnessContext, HarnessSession, TurnExtras } from "../harness";
 import type { McpGate } from "../mcp-gate";
 import { placedMemoryIn } from "../placed-memory";
 import { acknowledgeSessionCredential } from "../session-identity";
+import { piCompactsAt } from "./compaction-points";
 import { accountRuntime } from "./pi-accounts";
 import { piMcpServers } from "./pi-mcp";
 import {
@@ -893,6 +894,21 @@ class PiSession implements HarnessSession {
     return undefined;
   }
 
+  /**
+   * Where pi compacts the session on its own: its model's window less the
+   * reserve of the session's own compaction setting, as pi reads it
+   * (`_exceedsCompactionThreshold`: `this.settingsManager
+   * .getCompactionSettings(this.model)`); none with compaction off.
+   */
+  #compactsAt(): { compactsAt?: number } {
+    const { model, settingsManager } = this.#session;
+    const at = piCompactsAt(
+      model?.contextWindow,
+      settingsManager.getCompactionSettings(model)
+    );
+    return at === undefined ? {} : { compactsAt: at };
+  }
+
   #setBusy(active: boolean): void {
     this.#ctx.busy(active);
     if (active) {
@@ -1110,6 +1126,7 @@ class PiSession implements HarnessSession {
           ...(failed ? { errors } : {}),
           ...(failed && atProviderLimit({ status }) ? { atLimit: true } : {}),
           ...(context === undefined ? {} : { contextTokens: context }),
+          ...this.#compactsAt(),
         });
         break;
       }
@@ -1194,6 +1211,7 @@ class PiSession implements HarnessSession {
         ...(done.estimatedTokensAfter === undefined
           ? {}
           : { contextTokens: done.estimatedTokensAfter }),
+        ...this.#compactsAt(),
       });
     } catch (error) {
       this.#turnUsage = [];

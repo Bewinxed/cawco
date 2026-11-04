@@ -29,6 +29,7 @@ import {
   listSessions,
   type McpServerConfig,
   type McpServerStatus,
+  type ModelUsage,
   type PermissionResult,
   type Query,
   query,
@@ -270,6 +271,7 @@ import {
   type SDKSessionMessage,
   withHarnessNote,
 } from "./claude-transcript";
+import { claudeCompactsAt } from "./compaction-points";
 import { tailLines } from "./transcript-tail";
 
 /**
@@ -2180,6 +2182,14 @@ class ClaudeSession implements HarnessSession {
   readonly #conversationKept: (() => Promise<boolean>) | undefined;
   readonly instanceId: string;
   #lastRequestAt: number | undefined;
+  /**
+   * The model that answered the session's last request of its own (a
+   * top-level assistant message), and the one its CLI started on (`init`):
+   * whose usage, of the result's `modelUsage`, says where Claude Code
+   * compacts it ({@link claudeCompactsAt}).
+   */
+  #answeredBy: string | undefined;
+  #startedOn: string | undefined;
   /** The permission mode: the one it started (or was adopted) with, each `setPermissionMode`, and the CLI's own word. */
   readonly #mode: SessionMode;
   /** The MCP servers it was launched with that are not the fleet's (CawCo's, a caller's): the CLI's own to keep, never changed by a fleet change. */
@@ -2652,6 +2662,9 @@ class ClaudeSession implements HarnessSession {
         ) {
           this.#lastRequestAt = Date.now();
         }
+        if (message.type === "assistant" && !message.parent_tool_use_id) {
+          this.#answeredBy = message.message.model;
+        }
         let started = false;
         const lifecycle =
           (message as { type: string }).type === "command_lifecycle"
@@ -2784,6 +2797,7 @@ class ClaudeSession implements HarnessSession {
         }
         if (message.type === "system" && message.subtype === "init") {
           this.sessionId = message.session_id;
+          this.#startedOn = message.model;
           ctx.session(message.session_id);
         }
         // The CLI's own word on its mode, which it changes itself too (plan
@@ -2806,6 +2820,16 @@ class ClaudeSession implements HarnessSession {
         if (message.type === "result") {
           if (neutral.type === "result" && this.#lastRequestAt !== undefined) {
             neutral.lastRequestAt = this.#lastRequestAt;
+          }
+          // Where Claude Code compacts it on its own: its model's window and
+          // output, as this turn's usage of the model that answered it says.
+          const usage = message.modelUsage as
+            Record<string, ModelUsage | undefined> | undefined;
+          const served =
+            usage?.[this.#answeredBy ?? ""] ?? usage?.[this.#startedOn ?? ""];
+          const compactsAt = served ? claudeCompactsAt(served) : undefined;
+          if (neutral.type === "result" && compactsAt !== undefined) {
+            neutral.compactsAt = compactsAt;
           }
           // What will wake it as the turn ends: the CLI's background tasks
           // (its `background_tasks_changed` list, ambient ones left out) and

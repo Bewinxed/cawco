@@ -392,13 +392,13 @@ export const accountsWords = {
     terms:
       "Moving a conversation between Claude subscriptions is subject to Anthropic’s terms",
     /**
-     * The share of its model's window at which a session files its open
-     * items before its harness compacts it (core `Compaction.fileAtPct`).
-     * Placeholder words.
+     * The room short of where its harness compacts a session at which it
+     * files its open items (core `Compaction.fileRoom`), in thousands of
+     * tokens. Placeholder words.
      */
-    fileAt: "File a session’s open items when its context reaches",
-    fileAtUnit: "% of its window",
-    fileAtOff: "0 files none.",
+    fileRoom: "File a session’s open items when its context comes within",
+    fileRoomUnit: "k tokens of where its harness compacts it",
+    fileRoomOff: "0 files none.",
     /** The cutoff past which a held session is no longer carried on by itself (core `AtLimit.staleAfterHours`). */
     stale: "Carry a stopped session on by itself up to",
     staleHours: "hours after its reset",

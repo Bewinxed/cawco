@@ -1416,6 +1416,15 @@ export interface NeutralResultMessage {
   /** Prompt-cache tokens the turn read from / wrote to, when the harness reports them. */
   cache?: { read: number; write: number; write5m?: number; write1h?: number };
   /**
+   * Where its harness compacts the session on its own, in tokens of context,
+   * as its settings and its model stood at the turn's end: Claude Code's
+   * auto-compact point, pi's `contextWindow - reserveTokens`, OpenCode's
+   * window less its buffer (the agent's harnesses/compaction-points.ts).
+   * Absent when the harness compacts on its own at no point it says, or
+   * the agent did not say one.
+   */
+  compactsAt?: number;
+  /**
    * pi and OpenCode: the tokens the turn's last request sent (uncached input
    * plus cache reads and writes, as the harness reports that request's
    * usage), which is the session's context as it stood. Claude's is read off

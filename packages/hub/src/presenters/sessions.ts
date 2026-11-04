@@ -173,7 +173,7 @@ const contextLine = (look: DelegatePeek): string => {
     share = peek.contextWindowUnknown(context.windowWhy);
   }
   const filing = context.filing
-    ? contextWords.peek(context.filing.stage, context.filing.percent)
+    ? contextWords.peek(context.filing.stage, context.filing.compactsAt)
     : "";
   return peek.context(NUMBER.format(context.tokens), `${share}${filing}`);
 };

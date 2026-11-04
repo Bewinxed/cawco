@@ -157,7 +157,7 @@ export const HarnessKindSchema: z.ZodType<HarnessKindType> = HarnessKindShape;
 const CompactionShape = z.object({
   atLimit: CompactMethodShape,
   beforeMove: CompactMethodShape,
-  fileAtPct: z.number(),
+  fileRoom: z.number(),
   summarizer: z.object({ harness: HarnessKindShape, model: z.string() }),
 });
 

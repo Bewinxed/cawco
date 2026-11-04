@@ -96,10 +96,10 @@ export type PeekContext =
   | {
       /**
        * Its filing at its context threshold since its harness last compacted
-       * it (server.ts `fileAtThreshold`): where it stands, and the share of
-       * its window it fired at. Absent when none came.
+       * it (server.ts `fileAtThreshold`): where it stands, and where its
+       * harness compacts it. Absent when none came.
        */
-      filing?: { percent: number; stage: FilingStage };
+      filing?: { compactsAt: number; stage: FilingStage };
       /** Tokens its last request sent. */
       tokens: number;
       /** Its model's window; null when the fleet does not know it, with why. */

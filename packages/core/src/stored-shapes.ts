@@ -1158,7 +1158,10 @@ const ReleaseManifestShape = z.object({
 export const ReleaseManifestSchema: z.ZodType<ReleaseManifestType> =
   ReleaseManifestShape;
 
-const ContextFillShape = z.object({ tokens: z.number(), window: z.number() });
+const ContextFillShape = z.object({
+  compactsAt: z.number(),
+  tokens: z.number(),
+});
 export const ContextFillSchema: z.ZodType<ContextFillType> = ContextFillShape;
 
 const FilingStageShape = z.enum(["filing", "filed", "stopped"]);
@@ -1477,7 +1480,7 @@ const CompactMethodShape = z.enum(["native", "summary", "whole"]);
 const CompactionShape = z.object({
   atLimit: CompactMethodShape,
   beforeMove: CompactMethodShape,
-  fileAtPct: z.number(),
+  fileRoom: z.number(),
   summarizer: z.object({ harness: HarnessKindShape, model: z.string() }),
 });
 

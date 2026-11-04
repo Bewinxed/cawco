@@ -5,12 +5,11 @@
  *
  * - **Filing** ({@link filingPrompt}): before the hub compacts a session
  *   (after a move at its account's limit), before a person's Continue opens
- *   a new session, and once a turn ends with its context at its compaction
- *   policy's `fileAtPct` of its model's window (its harness compacting it
- *   later, on its own: server.ts `fileAtThreshold`), the session takes one
- *   turn whose only job is to file what is open into its records. On a
- *   real 13-hour chat, native
- *   compaction alone answered 16% of probes, CawCo's summary 35%, native
+ *   a new session, and once a turn ends with its context within its
+ *   compaction policy's `fileRoom` of where its harness compacts it on its
+ *   own, later (server.ts `fileAtThreshold`), the session takes one turn
+ *   whose only job is to file what is open into its records. On a real
+ *   13-hour chat, native compaction alone answered 16% of probes, CawCo's summary 35%, native
  *   compaction with the open items filed first 47%, and with only the
  *   records that already existed 17% (the continuation evaluation,
  *   2026-10-16): the filing is what carries.
@@ -62,13 +61,7 @@ export const filingPrompt = (
 ): string =>
   [
     ...(fill
-      ? [
-          contextWords.filingFact(
-            Math.round((fill.tokens / fill.window) * 100),
-            fill.window
-          ),
-          "",
-        ]
+      ? [contextWords.filingFact(fill.tokens, fill.compactsAt), ""]
       : []),
     `Before this conversation is ${then === "compacted" ? "compacted" : "continued in a new session"}, file everything still open into your records, so it outlives the ${then === "compacted" ? "compaction" : "move"}: the hub lists those records word for word ${then === "compacted" ? "after it" : "in the new session's opening"}. This turn does only that.`,
     "",

@@ -352,9 +352,9 @@ export const COMPACT_METHODS: readonly CompactMethod[] = [
  * context under {@link AtLimit.moveWholeUnderK} thousand tokens, or one whose
  * cache carries to the account it moves to, moves whole whatever this says.
  * A session that stays on its organization is compacted by its harness on
- * its own; before that, once a turn ends with its context at
- * {@link Compaction.fileAtPct} of its model's window, the hub gives it one
- * turn to file its open items (hub at-limit.ts `fileDue`).
+ * its own; before that, once a turn ends with its context within
+ * {@link Compaction.fileRoom} tokens of where that harness compacts it, the
+ * hub gives it one turn to file its open items (hub at-limit.ts `fileDue`).
  */
 export interface Compaction {
   /**
@@ -374,13 +374,13 @@ export interface Compaction {
    */
   beforeMove: CompactMethod;
   /**
-   * The share of its model's window, in percent, at which a session files
-   * its open items into its records before its harness compacts it on its
-   * own: once per rise, at the end of the first turn whose reading reaches
-   * it, the next compaction re-arming it (hub at-limit.ts `fileDue`). 0
-   * files none.
+   * The room, in tokens, short of the point where its harness compacts it
+   * on its own (core harness.ts `NeutralResultMessage.compactsAt`), at which
+   * a session files its open items into its records: once per rise, at the
+   * end of the first turn whose reading is within it, the next compaction
+   * re-arming it (hub at-limit.ts `fileDue`). 0 files none.
    */
-  fileAtPct: number;
+  fileRoom: number;
   /** Who writes a summary: its harness and model, placed as any start is. */
   summarizer: { harness: HarnessKind; model: string };
 }
@@ -388,7 +388,7 @@ export interface Compaction {
 export const DEFAULT_COMPACTION: Compaction = {
   beforeMove: "native",
   atLimit: "summary",
-  fileAtPct: 85,
+  fileRoom: 30_000,
   summarizer: { harness: "claude", model: "claude-sonnet-5-5" },
 };
 

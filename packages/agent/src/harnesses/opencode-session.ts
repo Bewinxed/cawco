@@ -98,6 +98,7 @@ import type { HarnessContext, HarnessSession } from "../harness";
 import { placedMemoryIn } from "../placed-memory";
 import { holdRestart, withRestartHold } from "../restart";
 import { acknowledgeSessionCredential } from "../session-identity";
+import { opencodeCompactsAt } from "./compaction-points";
 import {
   at,
   CAWCO_MCP_SERVER,
@@ -826,6 +827,13 @@ export class OpencodeSession implements HarnessSession {
   /** The kind of each inbox item, by id, so a delivered send is read and a compaction is not. */
   readonly #inbox = new Map<string, string>();
   /**
+   * Each `/compact` send admitted to the inbox, by the compaction's inbox id:
+   * read when OpenCode delivers that compaction ({@link #compact}).
+   */
+  readonly #compactions = new Map<string, string>();
+  /** Where OpenCode compacts this session on its own, as its last turn started ({@link #readCompactsAt}). */
+  #compactsAt: number | undefined;
+  /**
    * The session's work running in the background ({@link #backgrounded}),
    * by job: a shell command (`shell:<shellID>`) or a subagent
    * (`subagent:<child session id>`), until its completion note
@@ -1197,15 +1205,17 @@ export class OpencodeSession implements HarnessSession {
         // CawCo never asks it.
         break;
       case "session.inbox.delivered": {
-        // The model is given the send now: it is read. A compaction or a
-        // synthetic note is no one's send.
+        // The model is given the send now: it is read. A synthetic note is
+        // no one's send; a compaction is its `/compact`'s ({@link #compact}).
         const kind = this.#inbox.get(event.data.inboxID) ?? "user";
         this.#inbox.delete(event.data.inboxID);
-        if (kind === "user") {
+        const compact = this.#compactions.get(event.data.inboxID);
+        this.#compactions.delete(event.data.inboxID);
+        if (kind === "user" || compact) {
           this.#ctx.frame({
             type: "system",
             subtype: MESSAGES_READ,
-            read: [event.data.inboxID],
+            read: [compact ?? event.data.inboxID],
             session_id: this.sessionId ?? undefined,
           });
         }
@@ -1220,6 +1230,7 @@ export class OpencodeSession implements HarnessSession {
         this.#busyValue = true;
         this.#turnOpen = true;
         this.#ctx.busy(true);
+        detach(this.#readCompactsAt(), "where OpenCode compacts");
         // Sends a retiring server's hold kept while the session was idle join
         // the turn it has started there.
         this.#drainQueue();
@@ -1407,6 +1418,10 @@ export class OpencodeSession implements HarnessSession {
         // unknown until a request after the compaction says it, so the turn
         // that ran it reports none.
         this.#lastSent = undefined;
+        const timestamp = new Date(event.created).toISOString();
+        // The turn's result is named by its summary until a step after it
+        // names it ({@link #compactionTurn}).
+        this.#compactionTurn(summaryId(id), timestamp);
         this.#ctx.frame({
           type: "system",
           subtype: "status",
@@ -1416,7 +1431,7 @@ export class OpencodeSession implements HarnessSession {
         this.#ctx.frame({
           type: "assistant",
           uuid: summaryId(id),
-          timestamp: new Date(event.created).toISOString(),
+          timestamp,
           compactSummary: true,
           message: { content: [{ type: "text", text: event.data.text }] },
         });
@@ -1424,7 +1439,12 @@ export class OpencodeSession implements HarnessSession {
       }
       case "session.compaction.failed":
         // A compaction that failed did not compact: said so, the way Claude
-        // Code does, so its divider never reads "Compacted".
+        // Code does, so its divider never reads "Compacted". Its turn's
+        // result is named by the compaction.
+        this.#compactionTurn(
+          this.#compacting ?? event.id,
+          new Date(event.created).toISOString()
+        );
         this.#compacting = undefined;
         this.#ctx.frame({
           type: "system",
@@ -1577,6 +1597,19 @@ export class OpencodeSession implements HarnessSession {
       case "worktree.updated":
         break;
     }
+  }
+
+  /**
+   * A compaction's own identity for the turn that runs it, when no model step
+   * of the turn has named one: a `/compact` (a person's, a move's) runs no
+   * step and stores no prompt, so its result went with none, and the hub,
+   * which takes no result without one, never closed its turn ("completion
+   * … has no harness result identity"): a move's `/compact` then waited on
+   * its machine's idle reading. A step after the compaction (one mid-run)
+   * names the turn as it starts.
+   */
+  #compactionTurn(uuid: string, timestamp: string): void {
+    this.#completion ??= { uuid, timestamp };
   }
 
   /** A turn ended on the server: its blocks drawn, its result, and the held sends go. */
@@ -1964,6 +1997,9 @@ export class OpencodeSession implements HarnessSession {
       ...(this.#lastSent === undefined
         ? {}
         : { contextTokens: this.#lastSent }),
+      ...(this.#compactsAt === undefined
+        ? {}
+        : { compactsAt: this.#compactsAt }),
       wakes: { background: this.#background.size, scheduled: 0 },
     });
     this.#costBase += turnCost;
@@ -3085,25 +3121,27 @@ export class OpencodeSession implements HarnessSession {
   /**
    * Compacts the session (`POST …/compact`: 2.0 admits it to the inbox and
    * runs it at the next step boundary, or now when idle, on the session's own
-   * model). OpenCode keeps no user message for it, so the hub is told the
-   * send was read here; the turn it runs opens and ends on its events.
+   * model). OpenCode keeps no user message for it, so the send is said read
+   * as OpenCode delivers the compaction, under the inbox id CawCo names it
+   * by: inside the execution that runs it, whose end is the turn's result.
+   * Said once the call returned instead, it came after that result when the
+   * compaction ran at once (an idle session's): it opened a turn of the
+   * hub's that no result closed, and a move's `/compact` waited on its
+   * machine's idle reading to go on.
    */
   async #compact(uuid: string): Promise<void> {
+    const id = messageId();
+    this.#compactions.set(id, uuid);
     try {
       await this.#prepareDispatch();
       await this.#client.session.compact({
         sessionID: this.#opencodeSessionId(),
+        id,
       });
     } catch (error) {
+      this.#compactions.delete(id);
       this.#ctx.rejected(uuid, error);
-      return;
     }
-    this.#ctx.frame({
-      type: "system",
-      subtype: MESSAGES_READ,
-      read: [uuid],
-      session_id: this.sessionId ?? undefined,
-    });
   }
 
   /** The session's skills loaded before its first prompt, each as a message of its own, in order. */
@@ -3136,6 +3174,50 @@ export class OpencodeSession implements HarnessSession {
   }
 
   // ------------------------------------------------------------- controls
+
+  /**
+   * Where OpenCode compacts this session on its own (agent
+   * compaction-points.ts `opencodeCompactsAt`): its model's limit, from the
+   * location's catalog, and the location's compaction config, each document
+   * in turn as OpenCode configures it. Read as each turn starts, so its
+   * result says it; a read that fails says none.
+   */
+  async #readCompactsAt(): Promise<void> {
+    const ref = this.#model ? splitModel(this.#model) : undefined;
+    if (!ref?.providerID) {
+      this.#compactsAt = undefined;
+      return;
+    }
+    try {
+      const [listed, entries] = await Promise.all([
+        this.#client.model.list(at(this.#directory)),
+        this.#client.config.get(at(this.#directory)),
+      ]);
+      const model = listed.data.find(
+        (one) => one.providerID === ref.providerID && one.id === ref.id
+      );
+      let compaction: { auto?: boolean; buffer?: number } = {};
+      for (const entry of entries) {
+        const set =
+          entry.type === "document" ? entry.info.compaction : undefined;
+        if (set) {
+          compaction = {
+            ...compaction,
+            ...(set.auto === undefined ? {} : { auto: set.auto }),
+            ...(set.buffer === undefined ? {} : { buffer: set.buffer }),
+          };
+        }
+      }
+      this.#compactsAt = model
+        ? opencodeCompactsAt(model.limit, compaction)
+        : undefined;
+    } catch (error) {
+      this.#compactsAt = undefined;
+      console.warn(
+        `[opencode] ${this.instanceId}: where OpenCode compacts this session could not be read: ${errorText(error)}`
+      );
+    }
+  }
 
   /** The model's context window, from the location's catalog. */
   async #contextLimit(): Promise<number> {

@@ -346,27 +346,28 @@ export const compactionPlan = (how: {
 };
 
 /**
- * THE ONE FILING RULE: whether a turn's end finds a session's context at its
- * policy's `fileAtPct` of its model's window, so that it files its open
- * items before its harness compacts it on its own (server.ts
- * `fileAtThreshold`, which sends it only between turns, once per rise, and
- * never beside a compaction, a continuation or a hold at its limit). Its
- * reading is capped at its window, as {@link compactionPlan} reads it. A
- * reading never reported, a window the fleet does not know, and a policy of
- * 0 file nothing: the threshold is never guessed.
+ * THE ONE FILING RULE: whether a turn's end finds a session's context within
+ * its policy's `fileRoom` of the point where its harness compacts it on its
+ * own (core `NeutralResultMessage.compactsAt`), so that it files its open
+ * items before that (server.ts `fileAtThreshold`, which sends it only
+ * between turns, once per rise, and never beside a compaction, a
+ * continuation or a hold at its limit). A reading never reported, a point
+ * its harness did not say, and a room of 0 file nothing: the point is never
+ * guessed. A reading past the point files too (one turn overshot it).
  */
 export const fileDue = (how: {
-  fileAtPct: number;
+  /** Where its harness compacts it on its own; undefined when it said none. */
+  compactsAt: number | undefined;
   /** Its context as its harness last reported it; null when never. */
   reported: number | null;
-  /** Its model's window; undefined when the fleet does not know it. */
-  window: number | undefined;
+  /** The policy's room, in tokens, short of that point. */
+  room: number;
 }): boolean =>
   how.reported !== null &&
-  how.window !== undefined &&
-  how.window > 0 &&
-  how.fileAtPct > 0 &&
-  Math.min(how.reported, how.window) * 100 >= how.window * how.fileAtPct;
+  how.compactsAt !== undefined &&
+  how.compactsAt > 0 &&
+  how.room > 0 &&
+  how.reported >= how.compactsAt - how.room;
 
 /**
  * How long a move whole the policy chose for a large context waits after it

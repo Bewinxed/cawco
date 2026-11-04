@@ -225,12 +225,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    line may announce a move whole (`moving`) or say a compaction ran before
  *    its move. A page built for 44 reads a `prepareAtPct` the hub no longer
  *    sends and draws lines it does not know, so it reloads first.
+ * 46: a provider's compaction policy files a session's open items within a
+ *    room of its harness's own compaction point (`Compaction.fileRoom`, in
+ *    tokens), where a share of its window stood (`fileAtPct`). A page built
+ *    for 45 reads a `fileAtPct` the hub no longer sends, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 45;
+export const WIRE_PROTOCOL = 46;
 
 /**
  * What a session's stream carries: the changes each frame made to its

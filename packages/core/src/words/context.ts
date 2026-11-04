@@ -14,15 +14,9 @@ import { accountsWords } from "./accounts";
 
 const NUMBER = new Intl.NumberFormat("en-US");
 
-/** A window as a line names it: "1M", "200K", "258K". */
-const windowShort = (tokens: number): string =>
-  tokens >= 1_000_000 && tokens % 1_000_000 === 0
-    ? `${tokens / 1_000_000}M`
-    : `${Math.round(tokens / 1000)}K`;
-
-/** A reading as a share of its window, whole percent. */
-const shareOf = (tokens: number, window: number): number =>
-  Math.round((tokens / window) * 100);
+/** A count of tokens as a line names it: "137K", "967K". */
+const kTokens = (tokens: number): string =>
+  `${NUMBER.format(Math.round(tokens / 1000))}K`;
 
 /** A filing line's title, by its stage: how full the context was, and what it does. */
 const FILING_TITLE: Record<FilingStage, (fill: string) => string> = {
@@ -52,10 +46,10 @@ const COMPACTED_FILED: Record<FilingStage | "none", string> = {
 export const contextWords = {
   /**
    * The filing turn's opening fact, before its proven body: how full the
-   * context is, of which window.
+   * context is, and where its harness compacts it on its own.
    */
-  filingFact: (percent: number, window: number) =>
-    `Your context is at ${percent}% of its ${NUMBER.format(window)}-token window.`,
+  filingFact: (tokens: number, compactsAt: number) =>
+    `Your context is at ${NUMBER.format(tokens)} tokens; your harness compacts it on its own at ${NUMBER.format(compactsAt)}.`,
   /**
    * The filing turn's closing clause, after its proven body: no compaction
    * follows this turn; the harness compacts the conversation later, on its
@@ -66,7 +60,7 @@ export const contextWords = {
   /** A line in the session's transcript (core `CONTEXT_LINE`): its title, and the detail under it. */
   line: (line: ContextLine): { title: string; detail: string } => {
     if (line.kind === "filing") {
-      const fill = `${shareOf(line.fill.tokens, line.fill.window)}% of ${windowShort(line.fill.window)}`;
+      const fill = `${kTokens(line.fill.tokens)} of ${kTokens(line.fill.compactsAt)}`;
       return {
         title: FILING_TITLE[line.stage](fill),
         detail: FILING_DETAIL[line.stage],
@@ -97,18 +91,19 @@ export const contextWords = {
   /**
    * Where its filing stands, after `delegate_list`'s Context line's share
    * (hub presenters/sessions.ts): its filing turn runs, or how its filing
-   * since its last compaction ended.
+   * since its last compaction ended, and where its harness compacts it.
    */
-  peek: (stage: FilingStage, percent: number) => {
+  peek: (stage: FilingStage, compactsAt: number) => {
+    const at = NUMBER.format(compactsAt);
     switch (stage) {
       case "filing":
-        return `; filing its open items, at ${percent}%, before its harness compacts it`;
+        return `; filing its open items before its harness compacts it at ${at} tokens`;
       case "filed":
-        return `; its open items filed at ${percent}%, its harness compacts it later`;
+        return `; its open items filed, its harness compacts it at ${at} tokens`;
       case "stopped":
-        return `; its filing at ${percent}% stopped before it finished`;
+        return `; its filing stopped before it finished, its harness compacts it at ${at} tokens`;
     }
   },
   /** What a sender is told of a send held behind a session's filing turn (hub delegation-actions.ts `HOLD_WORDS`). */
-  held: "Its context reached its compaction policy's threshold, so it is filing its open items in one turn of its own; the message is kept at the hub and goes to the session as soon as that turn ends. Stopping its turn ends the filing and sends it now.",
+  held: "Its context came within its compaction policy's room of where its harness compacts it, so it is filing its open items in one turn of its own; the message is kept at the hub and goes to the session as soon as that turn ends. Stopping its turn ends the filing and sends it now.",
 };

@@ -7,10 +7,10 @@
    * limit, or at it; its own /compact, a summary, or whole. Who writes
    * summaries is the New session form's model picker. The figure under the
    * numbers plays that policy, rebuilt as they change. Off, the numbers fold
-   * away with the figure and the terms. Under them, on or off, the share of
-   * its model's window at which a session files its open items before its
-   * harness compacts it (core `Compaction.fileAtPct`), and how long past its
-   * reset a stopped session is still carried on by itself (core
+   * away with the figure and the terms. Under them, on or off, the room, in
+   * thousands of tokens, short of where its harness compacts a session at
+   * which it files its open items (core `Compaction.fileRoom`), and how long
+   * past its reset a stopped session is still carried on by itself (core
    * `AtLimit.staleAfterHours`).
    */
   import {
@@ -207,27 +207,23 @@
   <p
     class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-ink-row"
   >
-    <label for="{id}-file-at">{words.fileAt}</label>
+    <label for="{id}-file-room">{words.fileRoom}</label>
     <Input
       data-num
       data-field
       class="flex-none"
       field="number"
-      id="{id}-file-at"
+      id="{id}-file-room"
       inputmode="numeric"
-      max="100"
       min="0"
       oninput={(event) => {
-        atLimit.compaction.fileAtPct = Math.min(
-          100,
-          whole(event.currentTarget.value)
-        );
+        atLimit.compaction.fileRoom = whole(event.currentTarget.value) * 1000;
       }}
       type="number"
-      value={atLimit.compaction.fileAtPct}
+      value={atLimit.compaction.fileRoom / 1000}
     />
-    <span>{words.fileAtUnit}</span>
-    <span class="type-meta text-ink-muted">{words.fileAtOff}</span>
+    <span>{words.fileRoomUnit}</span>
+    <span class="type-meta text-ink-muted">{words.fileRoomOff}</span>
   </p>
   <p
     class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-ink-row"

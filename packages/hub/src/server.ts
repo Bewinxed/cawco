@@ -2449,16 +2449,15 @@ const watchLine = (
 });
 
 /**
- * The compaction policy a routing save asks for: what it sent, the
- * threshold saved before when it sent none (a tab from before
- * `fileAtPct`), or the policy saved before when it sent none at all (the
- * shipped apps).
+ * The compaction policy a routing save asks for: what it sent, the room
+ * saved before when it sent none (a tab from before `fileRoom`), or the
+ * policy saved before when it sent none at all (the shipped apps).
  */
 const compactionAsked = (
-  sent: (Omit<Compaction, "fileAtPct"> & { fileAtPct?: number }) | undefined,
+  sent: (Omit<Compaction, "fileRoom"> & { fileRoom?: number }) | undefined,
   saved: Compaction
 ): Compaction =>
-  sent ? { ...sent, fileAtPct: sent.fileAtPct ?? saved.fileAtPct } : saved;
+  sent ? { ...sent, fileRoom: sent.fileRoom ?? saved.fileRoom } : saved;
 
 /**
  * The hub's line about a session's context (core `CONTEXT_LINE`), as its row
@@ -28667,12 +28666,12 @@ export const createServer = (
 
   /**
    * A session's filing at its threshold since its harness last compacted
-   * it, as `delegate_list`'s Context line says it: its line's stage and the
-   * share it fired at; none when no filing came.
+   * it, as `delegate_list`'s Context line says it: its line's stage and
+   * where its harness compacts it; none when no filing came.
    */
   const filingOf = (
     instanceId: string
-  ): { filing?: { percent: number; stage: FilingStage } } => {
+  ): { filing?: { compactsAt: number; stage: FilingStage } } => {
     const rise = db.atLimit.rise(instanceId);
     const kept = rise
       ? db.contextLinesOf(instanceId).find((one) => one.id === rise.lineId)
@@ -28680,10 +28679,7 @@ export const createServer = (
     const said = kept ? contextLineOf(kept.content) : null;
     return said?.kind === "filing"
       ? {
-          filing: {
-            stage: said.stage,
-            percent: Math.round((said.fill.tokens / said.fill.window) * 100),
-          },
+          filing: { stage: said.stage, compactsAt: said.fill.compactsAt },
         }
       : {};
   };
@@ -28732,65 +28728,34 @@ export const createServer = (
       ) &&
     !inputRefusal(row.id, { kind: "system", name: COMPACTION_ORIGIN });
 
-  /** The compaction policy's threshold for `row`: its account's provider's, else its model's, else the default. */
-  const fileAtPctOf = (row: InstanceRow): number => {
+  /** The compaction policy's room for `row`: its account's provider's, else its model's, else the default. */
+  const fileRoomOf = (row: InstanceRow): number => {
     const provider =
       (row.accountId ? accountOf(row.accountId)?.provider : undefined) ??
       accountProvidersOf(row.harness, row.model)[0];
     return provider
-      ? db.accounts.routing(provider).atLimit.compaction.fileAtPct
-      : DEFAULT_COMPACTION.fileAtPct;
-  };
-
-  /**
-   * The windows of the models pi and OpenCode sessions ran on, read off
-   * their machine's catalog ({@link contextWindowOf}) at most once every
-   * {@link WINDOW_KEPT_MS} for each machine and model: every turn's end of
-   * theirs asks ({@link fileAtThreshold}).
-   */
-  const windowsRead = new Map<
-    string,
-    { at: number; window: number | undefined }
-  >();
-  const WINDOW_KEPT_MS = 10 * 60_000;
-  const windowOf = async (row: InstanceRow): Promise<number | undefined> => {
-    const model = row.model ?? undefined;
-    if (row.harness === "claude") {
-      return await contextWindowOf(row.machineId, "claude", model);
-    }
-    const key = `${row.machineId} ${row.harness} ${model ?? ""}`;
-    const kept = windowsRead.get(key);
-    if (kept && Date.now() - kept.at < WINDOW_KEPT_MS) {
-      return kept.window;
-    }
-    try {
-      const window = await contextWindowOf(
-        row.machineId,
-        row.harness as HarnessKind,
-        model
-      );
-      windowsRead.set(key, { at: Date.now(), window });
-      return window;
-    } catch (error) {
-      console.warn(
-        `[context] ${row.id.slice(0, 8)}: its model's window could not be read, so its threshold is not checked this turn: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
+      ? db.accounts.routing(provider).atLimit.compaction.fileRoom
+      : DEFAULT_COMPACTION.fileRoom;
   };
 
   /** Sessions a threshold check runs for now: two turn ends close together check once. */
   const thresholdChecks = new Set<string>();
 
   /**
-   * A turn of `instanceId` ended with its context written: when its reading
-   * is at its compaction policy's `fileAtPct` of its model's window
-   * (at-limit.ts `fileDue`) and its filing may start ({@link fileMayStart}),
+   * A turn of `instanceId` ended with its context written, its harness
+   * saying where it compacts it on its own (`compactsAt`, its result's):
+   * when its reading is within its compaction policy's `fileRoom` of that
+   * point (at-limit.ts `fileDue`) and its filing may start ({@link
+   * fileMayStart}),
    * it is sent its filing turn, between turns only ({@link sessionIdle}): a
    * session found mid-turn is asked again at its next turn's end. One rise
    * files once ({@link startFiling}); its harness compacts it later, on its
    * own, and the boundary it says re-arms it ({@link observeCompaction}).
    */
-  const fileAtThreshold = async (instanceId: string): Promise<void> => {
+  const fileAtThreshold = async (
+    instanceId: string,
+    compactsAt: number | undefined
+  ): Promise<void> => {
     if (thresholdChecks.has(instanceId)) {
       return;
     }
@@ -28800,14 +28765,13 @@ export const createServer = (
       if (!(row && fileMayStart(row))) {
         return;
       }
-      const window = await windowOf(row);
-      const fileAtPct = fileAtPctOf(row);
-      if (!fileDue({ fileAtPct, reported: row.contextTokens, window })) {
+      const room = fileRoomOf(row);
+      if (!fileDue({ compactsAt, reported: row.contextTokens, room })) {
         return;
       }
       if (!(await sessionIdle(row))) {
         console.info(
-          `[context] ${sessionName(row)} is at its context threshold (${fileAtPct}% of ${window} tokens) but its machine says it is not between turns; it is asked again at its next turn's end.`
+          `[context] ${sessionName(row)} is within ${room} tokens of where its harness compacts it (${compactsAt}) but its machine says it is not between turns; it is asked again at its next turn's end.`
         );
         return;
       }
@@ -28815,15 +28779,12 @@ export const createServer = (
       if (
         now?.contextTokens === null ||
         now?.contextTokens === undefined ||
-        window === undefined ||
+        compactsAt === undefined ||
         !fileMayStart(now)
       ) {
         return;
       }
-      startFiling(now, {
-        tokens: Math.min(now.contextTokens, window),
-        window,
-      });
+      startFiling(now, { tokens: now.contextTokens, compactsAt });
     } finally {
       thresholdChecks.delete(instanceId);
     }
@@ -28853,7 +28814,7 @@ export const createServer = (
     };
     db.atLimit.putCompaction(plan);
     console.info(
-      `[context] ${sessionName(row)} is at ${Math.round((fill.tokens / fill.window) * 100)}% of its ${fill.window}-token window: it files its open items now; everything else it is sent waits until that turn ends, and its harness compacts it later, on its own.`
+      `[context] ${sessionName(row)} is at ${fill.tokens} tokens, its harness compacting it at ${fill.compactsAt}: it files its open items now; everything else it is sent waits until that turn ends, and its harness compacts it later, on its own.`
     );
     sendStep(row, plan);
   };
@@ -35939,9 +35900,7 @@ export const createServer = (
                   beforeMove: compactMethod,
                   atLimit: compactMethod,
                   // A tab from before it sends none: it keeps the one saved.
-                  fileAtPct: t.Optional(
-                    t.Integer({ minimum: 0, maximum: 100 })
-                  ),
+                  fileRoom: t.Optional(t.Integer({ minimum: 0 })),
                   summarizer: t.Object({
                     harness: harnessSchema,
                     model: t.String({ minLength: 1 }),
@@ -38751,7 +38710,10 @@ export const createServer = (
                   // Its context as this turn left it, against its window:
                   // at its policy's threshold, it files its open items.
                   if (cacheRow) {
-                    detach(fileAtThreshold(cacheRow.id), "context threshold");
+                    detach(
+                      fileAtThreshold(cacheRow.id, neutral.compactsAt),
+                      "context threshold"
+                    );
                   }
                   const parts = finalMessage.get(message.instanceId);
                   const text = parts?.length ? parts.join("\n\n") : undefined;

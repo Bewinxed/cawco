@@ -1,18 +1,19 @@
 /**
  * A session's context filling up, as the hub answers it: once a turn ends
- * with its context at its compaction policy's {@link
- * import("./accounts").Compaction.fileAtPct} of its model's window, the
- * session takes one turn to file its open items into its records (hub
+ * with its context within its compaction policy's {@link
+ * import("./accounts").Compaction.fileRoom} of the point where its harness
+ * compacts it on its own (harness.ts `NeutralResultMessage.compactsAt`),
+ * the session takes one turn to file its open items into its records (hub
  * at-limit.ts `fileDue`, server.ts `fileAtThreshold`), and its harness
  * compacts it later on its own. What the person reads of it is the hub's
  * {@link ContextLine}s in its transcript.
  */
 import type { HarnessKind } from "./harness";
 
-/** A session's context as its harness last reported it, against its model's window: the reading a filing fired at. */
+/** A session's context as its harness last reported it, and where that harness compacts it on its own: the reading a filing fired at. */
 export interface ContextFill {
+  compactsAt: number;
   tokens: number;
-  window: number;
 }
 
 /**
