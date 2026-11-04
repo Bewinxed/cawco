@@ -11,6 +11,9 @@ export const projectTrashWords = {
   /** Nothing in the trash under that id. */
   notForgotten: (id: string) =>
     `There is no forgotten project ${id} in the trash.`,
+  /** A duplicate folded into another project: its rows and tasks live on there. */
+  foldedInto: (id: string, into: string) =>
+    `Project ${id} was folded into ${into}, which holds its tasks, so there is nothing of it to bring back.`,
   /** A live project has the id now. */
   idTaken: (name: string, id: string) =>
     `${name} is a project on this hub with the id ${id}, so the forgotten one was not brought back.`,

@@ -22643,11 +22643,12 @@ export const createServer = (
   };
 
   /**
-   * A project's browsers removed (their profiles, its sign-ins) as it is
-   * forgotten: undefined once they are, else what kept one, in the hub's
-   * words, and the project is kept.
+   * A project's browsers stopped as it is forgotten, their profiles (its
+   * sign-ins) kept on their machines for its restore: undefined once they
+   * are, else what kept one running, in the hub's words, and the project
+   * is kept.
    */
-  const browsersKept = async (
+  const stopProjectBrowsers = async (
     projectId: string
   ): Promise<string | undefined> => {
     try {
@@ -35485,12 +35486,14 @@ export const createServer = (
               : `${still} sessions still run in ${project.name}; stop them first.`
           );
         }
-        // Its browsers go first (their profiles, its sign-ins): one that
-        // can't be removed keeps the project, in the hub's words.
-        const kept = project ? await browsersKept(params.id) : undefined;
-        if (kept) {
+        // Its browsers stop first, their profiles (its sign-ins) kept: one
+        // that can't be stopped keeps the project, in the hub's words.
+        const running = project
+          ? await stopProjectBrowsers(params.id)
+          : undefined;
+        if (running) {
           said("refused browsers");
-          return status(409, kept);
+          return status(409, running);
         }
         const machines = new Set(
           db.project(params.id)?.places.map((place) => place.machineId)
@@ -35506,7 +35509,7 @@ export const createServer = (
           return { ok: true };
         }
         said(
-          `forgotten name=${JSON.stringify(forgot.name)} trash=${forgot.entry} rows=${forgot.rows} sessions=${forgot.sessions} folder=${forgot.folder ? "moved" : "none"}`
+          `forgotten name=${JSON.stringify(forgot.name)} trash=${forgot.entry} rows=${forgot.rows} sessions=${forgot.sessions} browsers=${forgot.browsers} folder=${forgot.folder ? "moved" : "none"}`
         );
         // Its pages' origin goes with it (its port's row went in the
         // delete); each machine preview its pages showed keeps its own,

@@ -269,8 +269,20 @@ export const fileTaskNumber = (path: string): number | undefined => {
   return found ? Number(found[1]) : undefined;
 };
 
+/** What a task file's name holds around its slug: its id and its extension. */
+const SLUG_OF_NAME = /^tsk-\d{1,9}-?|\.md$/gu;
+
+/** The slug in a task file's name (`tasks/tsk-12-fix-it.md` → `fix-it`, `""` with none), or undefined for any other file. */
+export const fileTaskSlug = (path: string): string | undefined => {
+  const name = path.split("/").at(-1) ?? "";
+  if (!FILE_NAME.test(name)) {
+    return;
+  }
+  return name.replace(SLUG_OF_NAME, "");
+};
+
 /** A title as a file name's slug: lowercase words joined by `-`, cut at a word. */
-const slugOf = (title: string): string => {
+export const taskSlug = (title: string): string => {
   const slug = title
     .toLowerCase()
     .normalize("NFKD")
@@ -292,7 +304,7 @@ export const archivePath = (path: string): string =>
   `${ARCHIVE_DIR}/${path.split("/").at(-1) ?? path}`;
 
 export const taskPath = (number: number, title: string): string => {
-  const slug = slugOf(title);
+  const slug = taskSlug(title);
   return `tasks/${taskId(number)}${slug ? `-${slug}` : ""}.md`;
 };
 

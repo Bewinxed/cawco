@@ -55898,6 +55898,10 @@
               "string"
             ]
           },
+          "browsers": {
+            "description": "Its browsers, each stopped with its profile (its sign-ins) kept on its machine.",
+            "type": "number"
+          },
           "folder": {
             "description": "Its folder on the hub, history and all: its task files, stages, pages' sources, memory and design.",
             "type": "boolean"
@@ -55941,10 +55945,31 @@
           "tasks": {
             "description": "Its tasks.",
             "type": "number"
+          },
+          "tasksIn": {
+            "description": "A live project some of its tasks already live in, under that project's\nnumbers: a folder from before the hub kept records that may have been a\nduplicate folded into it (hub project-merge.ts) but can't be told for\nsure. Null for every other.",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "tasks": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "tasks"
+            ]
           }
         },
         "required": [
           "account",
+          "browsers",
           "folder",
           "memoryDocs",
           "notes",

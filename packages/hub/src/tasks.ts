@@ -1494,6 +1494,23 @@ const commitMessage = (
   ].join("\n");
 };
 
+/**
+ * The commit that takes a folded duplicate's tasks in (`adopt`), under
+ * their new ids: its `CawCo-Change: merge` trailer is what tells a fold
+ * afterwards (project-trash.ts).
+ */
+export const mergedInMessage = (
+  actor: TaskActor,
+  ids: readonly string[],
+  from: string
+): string =>
+  commitMessage(
+    actor,
+    `tasks ${ids.join(", ")}`,
+    `${from}'s ${ids.length === 1 ? "task" : "tasks"}, merged in`,
+    { change: CHANGES.merge }
+  );
+
 /** The longest reason a move takes. */
 const REASON_LIMIT = 500;
 
@@ -2990,11 +3007,10 @@ export const createTasks = (store: TaskStore) => {
       written.map(({ path, content }) => ({ path, content })),
       {
         author: actor.author,
-        message: commitMessage(
+        message: mergedInMessage(
           actor,
-          `tasks ${written.map((each) => taskId(each.number)).join(", ")}`,
-          `${from}'s ${written.length === 1 ? "task" : "tasks"}, merged in`,
-          { change: CHANGES.merge }
+          written.map((each) => taskId(each.number)),
+          from
         ),
         exclusive: sameNumber,
       }

@@ -7,8 +7,8 @@
  *   a rule, a page (a blob in its log), an account (its own and its allowed
  *   one) and a session is forgotten (`DELETE /api/projects/:id`, a tab's
  *   presence id sent): every one of them is gone, the trash holds its
- *   folder and its record, and the journal's line names the project and
- *   the presence. No read that outlived the forget (its task's triage) makes
+ *   folder and its record, its browser stays on its machine with its
+ *   profile, and the journal's line names the project and the presence. No read that outlived the forget (its task's triage) makes
  *   its folder again.
  * - b. `GET /api/projects/forgotten` lists it with its name and what a
  *   restore brings back.
@@ -24,6 +24,12 @@
  *   trash, its row gone, nothing beside it) is listed with no name and what
  *   its folder alone brings; its restore needs a name, then brings its row
  *   back under its id with its folder and the task its folder holds.
+ * - f. A project whose browser runs on a machine the hub can't reach is
+ *   kept: its browser can't be stopped, as before.
+ * - g. Duplicates folded before the hub kept records: one whose every task
+ *   a fold's commit wrote into the project that kept it is neither listed
+ *   nor restored; one only some of whose tasks one wrote is listed with
+ *   that project in `tasksIn`.
  *
  *   bun scripts/probe-kit/run.ts project-restore
  */
@@ -191,6 +197,17 @@ const seed = async (rig: Rig): Promise<Seeded> => {
   });
   // Ended, as a forget asks: nothing of a project still runs.
   db.endInstance(session, "stop");
+  // Its browser on the machine, asleep there, its profile (its sign-ins)
+  // on the machine's disk: as the machine's frame told the hub.
+  db.browsers.put(MACHINE, {
+    key: `project:${id}`,
+    name: "Probe browser",
+    host: "local",
+    state: "asleep",
+    lastUsedAt: now,
+    projectId: id,
+    takeover: null,
+  });
   rig.kit.check(
     "a. seeded: a task, a routine, a rule, an account (own and allowed)",
     [task, routine, rule, account, allowed, own].every(
@@ -248,6 +265,7 @@ const held = async (rig: Rig, seeded: Seeded) => {
     blob: update ? Buffer.from(update.bytes).toString("hex") : null,
     session: session?.project_id ?? null,
     folder: await there(rig.root(id)),
+    browser: db.browsers.get(MACHINE, `project:${id}`)?.name ?? null,
   };
 };
 type Held = Awaited<ReturnType<typeof held>>;
@@ -269,7 +287,8 @@ const forgetLeg = async (rig: Rig, seeded: Seeded): Promise<Held> => {
       before.page === `probe-page:${id}` &&
       before.blob === Buffer.from(seeded.blob).toString("hex") &&
       before.session === id &&
-      before.folder,
+      before.folder &&
+      before.browser === "Probe browser",
     JSON.stringify(before)
   );
 
@@ -288,6 +307,11 @@ const forgetLeg = async (rig: Rig, seeded: Seeded): Promise<Held> => {
       gone.page === null &&
       gone.session === null,
     JSON.stringify({ forgot: forgot.status, gone })
+  );
+  kit.check(
+    "a. its browser is kept on its machine, its profile with it, not removed",
+    gone.browser === "Probe browser",
+    JSON.stringify(gone.browser)
   );
   const entries = (await rig.trash()).filter((one) => one.startsWith(`${id}-`));
   kit.check(
@@ -316,6 +340,7 @@ const forgetLeg = async (rig: Rig, seeded: Seeded): Promise<Held> => {
       JSON.stringify(entry.brings) ===
         JSON.stringify({
           account: seeded.accountId,
+          browsers: 1,
           folder: true,
           memoryDocs: 0,
           notes: 0,
@@ -327,6 +352,7 @@ const forgetLeg = async (rig: Rig, seeded: Seeded): Promise<Held> => {
           sessions: 1,
           settings: true,
           tasks: 1,
+          tasksIn: null,
         }),
     JSON.stringify(entry)
   );
@@ -395,7 +421,12 @@ const restoreLeg = async (
     rig,
     "d. restored: 200, its name in the answer",
     restored.status === 200 &&
-      (restored.json as { name?: string } | undefined)?.name === NAME,
+      (
+        restored.json as
+          { brought?: { browsers?: number }; name?: string } | undefined
+      )?.name === NAME &&
+      (restored.json as { brought: { browsers: number } }).brought.browsers ===
+        1,
     restored.text
   );
   for (const part of Object.keys(before) as (keyof Held)[]) {
@@ -490,6 +521,123 @@ const oldFolderLeg = async (rig: Rig): Promise<void> => {
   );
 };
 
+/** f: a project whose browser runs on a machine the hub can't reach stays, as a forget that can't stop it always has. */
+const runningBrowserLeg = async (rig: Rig): Promise<void> => {
+  const { call, db } = rig;
+  const id = crypto.randomUUID();
+  db.createProject({ id, name: "Probe running browser", remote: null });
+  db.browsers.put(MACHINE, {
+    key: `project:${id}`,
+    name: "Probe live browser",
+    host: "local",
+    state: "live",
+    lastUsedAt: Date.now(),
+    projectId: id,
+    takeover: null,
+  });
+  const forgot = await call("DELETE", `/api/projects/${id}`);
+  check(
+    rig,
+    "f. a browser that runs and can't be stopped keeps the project, its browser as it was",
+    forgot.status === 409 &&
+      db.project(id) !== undefined &&
+      db.browsers.get(MACHINE, `project:${id}`)?.state === "live" &&
+      !(await listed(rig)).some((one) => one.id === id),
+    JSON.stringify({ forgot })
+  );
+};
+
+/** A project with tasks of these titles, made through the hub's own routes. */
+const projectWithTasks = async (
+  rig: Rig,
+  name: string,
+  titles: readonly string[]
+): Promise<string> => {
+  const id = crypto.randomUUID();
+  rig.db.createProject({ id, name, remote: null });
+  rig.db.setProjectTemplate(id, "code");
+  for (const title of titles) {
+    await rig.call("POST", `/api/projects/${id}/tasks`, { title });
+  }
+  return id;
+};
+
+/** A forget as a hub before records left it: the folder in the trash, nothing beside it. */
+const forgetAsBefore = async (rig: Rig, id: string): Promise<void> => {
+  await rig.call("DELETE", `/api/projects/${id}`);
+  for (const one of await rig.trash()) {
+    if (one.startsWith(`${id}-`) && one.endsWith(".json")) {
+      await rm(join(rig.trashDir, one));
+    }
+  }
+};
+
+/**
+ * g: duplicates folded before the hub kept records. The keeper's folder
+ * holds the fold's commit (tasks.ts `mergedInMessage`, the dup's task files
+ * under the keeper's next numbers, as `adopt` writes them); the dup's folder
+ * went to the trash with nothing beside it. One whose every task the fold
+ * wrote is no project a person forgot: not listed, not restored. One only
+ * some of whose tasks it wrote is listed, with the project they live in.
+ */
+const foldLeg = async (rig: Rig): Promise<void> => {
+  const { call } = rig;
+  const { writeFolderFiles, readFolderFile } =
+    await import("../../../packages/hub/src/project-folder");
+  const { hubActor, mergedInMessage } =
+    await import("../../../packages/hub/src/tasks");
+  const { taskPath } = await import("../../../packages/hub/src/task-file");
+  const keeper = await projectWithTasks(rig, "Probe keeper", ["Keeper's own"]);
+  const dupTitles = ["Fold me in", "And me too"];
+  const dup = await projectWithTasks(rig, "Probe dup", dupTitles);
+  const partly = await projectWithTasks(rig, "Probe partly", [
+    "Fold me in",
+    "Only mine",
+  ]);
+  const files = await Promise.all(
+    dupTitles.map(async (title, at) => ({
+      path: taskPath(at + 2, title),
+      content: (await readFolderFile(dup, taskPath(at + 1, title))).content,
+    }))
+  );
+  await writeFolderFiles(keeper, files, {
+    author: hubActor("Probe dup shares a repository with this project").author,
+    message: mergedInMessage(
+      hubActor("Probe dup shares a repository with this project"),
+      ["tsk-2", "tsk-3"],
+      "Probe dup"
+    ),
+  });
+  await forgetAsBefore(rig, dup);
+  await forgetAsBefore(rig, partly);
+  const list = await listed(rig);
+  const partlyListed = list.find((one) => one.id === partly);
+  check(
+    rig,
+    "g. a duplicate whose every task the fold wrote is not listed",
+    !list.some((one) => one.id === dup),
+    JSON.stringify(list.map((one) => [one.id, one.name]))
+  );
+  check(
+    rig,
+    "g. one only some of whose tasks a fold wrote is listed, its tasks said to live in the keeper",
+    JSON.stringify(partlyListed?.brings.tasksIn) ===
+      JSON.stringify({ id: keeper, name: "Probe keeper", tasks: 1 }),
+    JSON.stringify(partlyListed)
+  );
+  const folded = await call("POST", `/api/projects/${dup}/restore`, {
+    name: "Probe dup, back",
+  });
+  check(
+    rig,
+    "g. the fold is not restored: refused in core's words",
+    folded.status === 409 &&
+      folded.text === projectTrashWords.foldedInto(dup, "Probe keeper") &&
+      rig.db.project(dup) === undefined,
+    folded.text
+  );
+};
+
 export default {
   group: "The hub and machines",
   name: "project-restore",
@@ -551,6 +699,8 @@ export default {
         const forgottenAt = await refusedLeg(rig, seeded);
         await restoreLeg(rig, seeded, before, forgottenAt);
         await oldFolderLeg(rig);
+        await runningBrowserLeg(rig);
+        await foldLeg(rig);
       } finally {
         raw.close();
       }

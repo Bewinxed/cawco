@@ -1454,6 +1454,33 @@ export const folderHistory = async (
 };
 
 /**
+ * Every commit of a project's folder whose message holds `line` (a trailer,
+ * like `CawCo-Change: merge`), newest first, with the paths each wrote.
+ * Read for a project that has a folder: a read makes one where none is.
+ */
+export const folderCommitsCarrying = async (
+  projectId: string,
+  line: string
+): Promise<{ paths: string[]; sha: string }[]> => {
+  const root = await forReading(projectId);
+  const out = await git(root, [
+    "log",
+    "--fixed-strings",
+    `--grep=${line}`,
+    "--name-only",
+    "--format=%x1e%H",
+  ]);
+  return out
+    .split("\x1e")
+    .map((record) => record.trim())
+    .filter(Boolean)
+    .map((record) => {
+      const [sha = "", ...paths] = record.split("\n").filter(Boolean);
+      return { sha, paths };
+    });
+};
+
+/**
  * The name of every entry in one folder as the disk holds it now, committed
  * or not, uncapped and unsorted; none when the folder is not there. A read of
  * the directory alone: no git, no stat per file.

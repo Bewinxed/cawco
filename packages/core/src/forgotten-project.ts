@@ -8,6 +8,8 @@
 export interface ForgottenBrings {
   /** The account its sessions start on, by id; null: the fleet's routing, or none kept. */
   account: string | null;
+  /** Its browsers, each stopped with its profile (its sign-ins) kept on its machine. */
+  browsers: number;
   /** Its folder on the hub, history and all: its task files, stages, pages' sources, memory and design. */
   folder: boolean;
   /** Memory documents scoped to it alone. */
@@ -34,6 +36,13 @@ export interface ForgottenBrings {
   settings: boolean;
   /** Its tasks. */
   tasks: number;
+  /**
+   * A live project some of its tasks already live in, under that project's
+   * numbers: a folder from before the hub kept records that may have been a
+   * duplicate folded into it (hub project-merge.ts) but can't be told for
+   * sure. Null for every other.
+   */
+  tasksIn: { id: string; name: string; tasks: number } | null;
 }
 
 export interface ForgottenProject {

@@ -18,7 +18,8 @@
  * - `POST /api/browsers/:key/remove`: the browser stopped and its profile
  *   deleted on its machine (its sign-ins forgotten), refused while the
  *   person holds it; answered once its row is gone. Forgetting a project
- *   removes each of its browsers this way first.
+ *   stops each of its browsers and keeps its profile, which its restore
+ *   finds where it was (project-trash.ts).
  *
  * What a machine says of a browser right now and the hub keeps nowhere
  * else (why it failed, how far its image is, the origin of the page it
@@ -55,6 +56,7 @@ import {
   type BrowserListFrame,
   type BrowserRow,
   type BrowserShieldArgs,
+  type BrowserState,
   isBrowserKey,
   type ListedBrowser,
   SHIELD_WORDS,
@@ -75,6 +77,9 @@ const HANDED_BACK_BY: Record<BrowserHandedBackFrame["why"], string> = {
 
 /** What a browser artifact is called in a panel. */
 const BROWSER_ARTIFACT_NAME = "browser";
+
+/** The states in which a browser runs nothing: a forget has nothing of it to stop. */
+const RESTING: ReadonlySet<BrowserState> = new Set(["asleep", "failed"]);
 
 /** How long a take-over, a start or a stop has on its machine: a start may build the image first. */
 const CALL_MS = 15 * 60_000;
@@ -533,25 +538,28 @@ export const createBrowsers = (deps: BrowsersDeps) => {
 
     /**
      * A project being forgotten: each of its browsers, on every machine,
-     * handed back when the person holds it, then removed. The first that
-     * can't be is the forget's refusal, the project kept.
+     * handed back when the person holds it and stopped when it runs, its
+     * profile (its sign-ins) kept on its machine for the project's restore
+     * (project-trash.ts keeps which). One asleep or failed has nothing to
+     * stop. The first that can't be stopped is the forget's refusal, the
+     * project kept.
      */
     async forgetProject(projectId: string): Promise<void> {
       const key: BrowserKey = `project:${projectId}`;
       for (const row of db.browsers.list()) {
-        if (row.key !== key) {
+        if (row.key !== key || RESTING.has(row.state)) {
           continue;
         }
         try {
           if (row.takeover) {
             await browsers.handback(key, row.machineId);
           }
-          await browsers.remove(key, row.machineId);
+          await browsers.stop(key, row.machineId);
         } catch (error) {
           // biome-ignore lint/style/useErrorCause: the cause rides the refusal's options, its third argument.
           throw new BrowserRefusal(
             error instanceof BrowserRefusal ? error.status : 503,
-            `Its browser on ${deps.machineName(row.machineId)} wasn't removed: ${error instanceof Error ? error.message : String(error)} The project is kept; Forget tries again.`,
+            `Its browser on ${deps.machineName(row.machineId)} wasn't stopped: ${error instanceof Error ? error.message : String(error)} The project is kept; Forget tries again.`,
             { cause: error }
           );
         }
