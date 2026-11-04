@@ -9,7 +9,9 @@
  *   checks.report();                       // one PASS/FAIL line per rule
  *
  * From the command line, on any page, once per width (under 640 a phone's
- * touch screen), in the kit's Chromium; exits 1 on any finding:
+ * touch screen), in the kit's Chromium, once the page has drawn
+ * (`untilDrawn`); exits 1 on any finding, and fails every rule on a scope
+ * that drew nothing:
  *
  *   bun scripts/probe-kit/rendered-checks.ts <url> [--width 1540] [--width 390x844] [--scope <selector>]
  *
@@ -200,6 +202,8 @@ interface CheckFinding {
 }
 
 export interface CheckRead {
+  /** The scope drew nothing to read: no rule passes on it. */
+  drewNothing: boolean;
   /** Findings excused by `except`, each with its reason. */
   excused: (CheckFinding & { reason: string })[];
   findings: CheckFinding[];
@@ -281,6 +285,8 @@ interface InPageArgs {
 }
 
 interface InPageRead {
+  /** The scope drew nothing: no word, mark, control or box that paints. */
+  drewNothing: boolean;
   edges: {
     band: { height: number; width: number; x: number; y: number };
     element: string;
@@ -3044,7 +3050,18 @@ function readInPage(args: InPageArgs): InPageRead {
     }
   }
 
-  return { findings, edges: edgesOut, lowest, named, unread };
+  // A scope that draws nothing would pass every rule on nothing (a dev
+  // route read before vite compiled it held 3 elements), so it says so.
+  const drewNothing =
+    texts.length === 0 &&
+    !inFlowBoxes.some(
+      (el) =>
+        el.matches(
+          `svg, img, canvas, video, iframe, object, embed, ${CONTROL}`
+        ) || paints(el).length > 0
+    );
+
+  return { drewNothing, findings, edges: edgesOut, lowest, named, unread };
 }
 
 /** Whether each finding's element (by its kept index) or words match an exemption; the reason if so. */
@@ -3438,6 +3455,7 @@ async function renderedChecks(
     }
   });
   return {
+    drewNothing: read.drewNothing,
     findings: kept,
     excused,
     impeccable: { ran: imp.ran, said: imp.said },
@@ -3467,6 +3485,8 @@ export class RenderedChecks {
   private lowest: { element: string; ratio: number; where: string } | null =
     null;
   private states = 0;
+  /** The states whose scope drew nothing: no rule passes over them. */
+  private readonly blank: string[] = [];
   private readonly kit: Kit;
   private readonly label: string;
   private readonly opts: CheckOptions;
@@ -3494,6 +3514,9 @@ export class RenderedChecks {
       ],
     });
     this.states += 1;
+    if (read.drewNothing) {
+      this.blank.push(where);
+    }
     for (const f of read.findings) {
       const byKey = this.found.get(f.rule) ?? new Map();
       const key = `${f.element}: ${f.measured}`;
@@ -3547,9 +3570,13 @@ export class RenderedChecks {
         rule === "contrast" && this.lowest
           ? `, lowest ${this.lowest.ratio.toFixed(2)}:1 at ${this.lowest.where}: ${this.lowest.element}`
           : "";
+      const blank =
+        this.blank.length > 0
+          ? `, ${this.blank.length} state(s) drew nothing to read (${this.blank.slice(0, 3).join(", ")})`
+          : "";
       this.kit.check(
-        `${this.label} rendered check ${rule}, ${says} (${by}): ${total} finding(s), ${list.length} distinct, over ${this.states} state(s)${extra}`,
-        total === 0 && this.states > 0,
+        `${this.label} rendered check ${rule}, ${says} (${by}): ${total} finding(s), ${list.length} distinct, over ${this.states} state(s)${extra}${blank}`,
+        total === 0 && this.states > 0 && this.blank.length === 0,
         list.slice(0, 5).join(" | ")
       );
     }
@@ -3591,6 +3618,100 @@ export class RenderedChecks {
   }
 }
 
+/** How long a page's elements stand still before it counts as drawn. */
+const DRAWN_QUIET_MS = 1000;
+/** The longest a read waits for a page to draw; past it the read says so and reads what is there. */
+const DRAWN_BOUND_MS = 30_000;
+
+/** The page's elements, an open shadow root's included, and whether `scope` draws a word, a mark or a painted box. */
+function drawnNow(scope: string): { drew: boolean; elements: number } {
+  const count = (under: Document | ShadowRoot): number => {
+    let n = 0;
+    for (const el of under.querySelectorAll("*")) {
+      n += 1 + (el.shadowRoot ? count(el.shadowRoot) : 0);
+    }
+    return n;
+  };
+  const root = document.querySelector(scope) ?? document.body;
+  const painted = (el: Element) => {
+    const s = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    return (
+      r.width > 1 &&
+      r.height > 1 &&
+      s.visibility === "visible" &&
+      (s.backgroundImage !== "none" ||
+        !/rgba?\(0, 0, 0, 0\)|transparent/u.test(s.backgroundColor) ||
+        ["top", "right", "bottom", "left"].some(
+          (side) =>
+            Number.parseFloat(s.getPropertyValue(`border-${side}-width`)) > 0 &&
+            s.getPropertyValue(`border-${side}-style`) !== "none"
+        ))
+    );
+  };
+  const drew =
+    (root instanceof HTMLElement && root.innerText.trim().length > 0) ||
+    [...root.querySelectorAll("*")].some(
+      (el) =>
+        (el.matches("svg, img, canvas, video, iframe") &&
+          el.getBoundingClientRect().width > 1) ||
+        painted(el)
+    );
+  return { drew, elements: count(document) };
+}
+
+/** What {@link untilDrawn} saw: the elements it ended on, how long it waited, and whether the page drew and then stood still. */
+export interface Drawn {
+  drew: boolean;
+  elements: number;
+  ms: number;
+  /** It drew and no element came or went for the quiet window, inside the bound. */
+  still: boolean;
+}
+
+/**
+ * Waits until the page has drawn: something in `scope` to read, and no
+ * element added or taken away for `quiet` ms, up to `bound` ms. A page read
+ * at `load` is not one drawn: vite compiles a dev route's modules on its
+ * first load, and 25 of 32 dev benches read at `load` held 3 elements, every
+ * rule passing on nothing (2026-11-04).
+ */
+export async function untilDrawn(
+  page: Page,
+  scope = "body",
+  { bound = DRAWN_BOUND_MS, quiet = DRAWN_QUIET_MS } = {}
+): Promise<Drawn> {
+  const start = Date.now();
+  let last = -1;
+  let changed = start;
+  for (;;) {
+    const now = await page.evaluate(drawnNow, scope);
+    const at = Date.now();
+    if (now.elements !== last) {
+      last = now.elements;
+      changed = at;
+    }
+    if (now.drew && at - changed >= quiet) {
+      return { ...now, ms: at - start, still: true };
+    }
+    if (at - start >= bound) {
+      return { ...now, ms: at - start, still: false };
+    }
+    await page.waitForTimeout(150);
+  }
+}
+
+/** What a read says of the wait before it: how long the page took to draw, or that it did not. */
+export const saidOfDrawn = (drawn: Drawn): string => {
+  const s = (drawn.ms / 1000).toFixed(1);
+  if (drawn.still) {
+    return `drawn: ${drawn.elements} elements, still for ${DRAWN_QUIET_MS / 1000}s, after ${s}s`;
+  }
+  return drawn.drew
+    ? `still drawing after ${s}s (${drawn.elements} elements): read as it stood`
+    : `drew nothing to read in ${s}s (${drawn.elements} elements)`;
+};
+
 /** Below this width a page is read as a phone's: touch and a coarse pointer (DESIGN.md's 640px line). */
 const PHONE_LINE = 640;
 const USAGE =
@@ -3631,6 +3752,14 @@ const askedOf = (
 /** One width's read, said: each rule's PASS or FAIL and what it found, then the rest. The findings' count. */
 const sayRead = (read: CheckRead): number => {
   let found = 0;
+  if (read.drewNothing) {
+    for (const rule of RULES) {
+      console.log(
+        `UNREAD ${rule}, ${CHECKS[rule].says}: the page drew nothing in its scope to read`
+      );
+    }
+    return RULES.length;
+  }
   for (const rule of RULES) {
     const mine = read.findings.filter((one) => one.rule === rule);
     found += mine.length;
@@ -3685,10 +3814,14 @@ async function main(args: string[]): Promise<number> {
         await context.addInitScript(installRuns);
         const page = await context.newPage();
         await page.goto(url, { waitUntil: "load" });
+        const drawn = await untilDrawn(page, scope);
         await settle(page);
         const read = await renderedChecks(page, scope ? { scope } : {});
+        if (!drawn.still) {
+          read.unread.push(`every rule: ${saidOfDrawn(drawn)}`);
+        }
         console.log(
-          `\n${size.width}×${size.height}${phone ? " touch" : ""}: ${page.url()}`
+          `\n${size.width}×${size.height}${phone ? " touch" : ""}: ${page.url()}\n${saidOfDrawn(drawn)}`
         );
         found += sayRead(read);
       } finally {
