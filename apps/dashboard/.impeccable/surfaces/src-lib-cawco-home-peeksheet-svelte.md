@@ -1,7 +1,7 @@
 ---
 version: 1
-slug: "apps-dashboard-src-lib-cawco-home-peeksheet-svelte"
-primary_target: "apps/dashboard/src/lib/cawco/home/PeekSheet.svelte"
+slug: "src-lib-cawco-home-peeksheet-svelte"
+primary_target: "src/lib/cawco/home/PeekSheet.svelte"
 related_targets: []
 ---
 

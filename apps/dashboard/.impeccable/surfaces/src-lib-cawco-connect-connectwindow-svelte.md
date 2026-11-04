@@ -1,7 +1,7 @@
 ---
 version: 1
-slug: "rc-lib-cawco-connect-connectwindow-svelte-3a562f6a"
-primary_target: "apps/dashboard/src/lib/cawco/connect/ConnectWindow.svelte"
+slug: "src-lib-cawco-connect-connectwindow-svelte"
+primary_target: "src/lib/cawco/connect/ConnectWindow.svelte"
 related_targets: []
 ---
 

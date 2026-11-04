@@ -1,7 +1,7 @@
 ---
 version: 1
-slug: "lib-cawco-updates-update-toast-svelte-ts-ff939e87"
-primary_target: "apps/dashboard/src/lib/cawco/updates/update-toast.svelte.ts"
+slug: "src-lib-cawco-updates-update-toast-svelte-ts"
+primary_target: "src/lib/cawco/updates/update-toast.svelte.ts"
 related_targets: []
 ---
 

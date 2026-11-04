@@ -1,7 +1,7 @@
 ---
 version: 1
-slug: "c-lib-cawco-decisions-decisionpage-svelte-298d85ca"
-primary_target: "apps/dashboard/src/lib/cawco/decisions/DecisionPage.svelte"
+slug: "src-lib-cawco-decisions-decisionpage-svelte"
+primary_target: "src/lib/cawco/decisions/DecisionPage.svelte"
 related_targets: []
 ---
 

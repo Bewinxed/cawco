@@ -1,8 +1,8 @@
 ---
 version: 1
-slug: "src-lib-cawco-preview-previewpane-svelte-46fef32e"
-primary_target: "apps/dashboard/src/lib/cawco/preview/PreviewPane.svelte"
-related_targets: ["apps/dashboard/src/lib/cawco/preview/CommentRail.svelte","apps/dashboard/src/lib/cawco/preview/PinCard.svelte","apps/dashboard/src/lib/cawco/preview/CommentComposer.svelte","apps/dashboard/src/lib/cawco/preview/ThreadSheet.svelte","apps/dashboard/src/lib/cawco/preview/CanvasView.svelte"]
+slug: "src-lib-cawco-preview-previewpane-svelte"
+primary_target: "src/lib/cawco/preview/PreviewPane.svelte"
+related_targets: ["src/lib/cawco/preview/CommentRail.svelte","src/lib/cawco/preview/PinCard.svelte","src/lib/cawco/preview/CommentComposer.svelte","src/lib/cawco/preview/ThreadSheet.svelte","src/lib/cawco/preview/CanvasView.svelte"]
 ---
 
 # Artifact panel, comments, canvas and ink

@@ -1,8 +1,8 @@
 ---
 version: 1
-slug: "oard-src-lib-cawco-files-filesface-svelte-57bb2d21"
-primary_target: "apps/dashboard/src/lib/cawco/files/FilesFace.svelte"
-related_targets: ["apps/dashboard/src/lib/cawco/files/FilesList.svelte","apps/dashboard/src/lib/cawco/files/FilesSheet.svelte"]
+slug: "src-lib-cawco-files-filesface-svelte"
+primary_target: "src/lib/cawco/files/FilesFace.svelte"
+related_targets: ["src/lib/cawco/files/FilesList.svelte","src/lib/cawco/files/FilesSheet.svelte"]
 ---
 
 # Files: a session's artifacts and attachments

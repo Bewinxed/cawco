@@ -1,8 +1,8 @@
 ---
 version: 1
-slug: "apps-dashboard-src-lib-cawco-glasscard-svelte"
-primary_target: "apps/dashboard/src/lib/cawco/GlassCard.svelte"
-related_targets: ["apps/dashboard/src/lib/cawco/bar-glass.svelte.ts"]
+slug: "src-lib-cawco-glasscard-svelte"
+primary_target: "src/lib/cawco/GlassCard.svelte"
+related_targets: ["src/lib/cawco/bar-glass.svelte.ts"]
 ---
 
 # The top bar's glass, Caw's head and its cards

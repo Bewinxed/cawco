@@ -1,7 +1,7 @@
 ---
 version: 1
-slug: "src-lib-cawco-transcript-composer-svelte-596aa151"
-primary_target: "apps/dashboard/src/lib/cawco/transcript/Composer.svelte"
+slug: "src-lib-cawco-transcript-composer-svelte"
+primary_target: "src/lib/cawco/transcript/Composer.svelte"
 related_targets: []
 ---
 

@@ -1,8 +1,8 @@
 ---
 version: 1
-slug: "d-src-lib-cawco-workspace-panetabs-svelte-2873f1ea"
-primary_target: "apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte"
-related_targets: ["apps/dashboard/src/lib/components/ui/fluid-tabs/TabItem.svelte"]
+slug: "src-lib-cawco-workspace-panetabs-svelte"
+primary_target: "src/lib/cawco/workspace/PaneTabs.svelte"
+related_targets: ["src/lib/components/ui/fluid-tabs/TabItem.svelte"]
 ---
 
 # Session tabs, the session card and the tab's menu

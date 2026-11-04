@@ -1,8 +1,8 @@
 ---
 version: 1
-slug: "apps-dashboard-src-lib-cawco-home-cawpanel-svelte"
-primary_target: "apps/dashboard/src/lib/cawco/home/CawPanel.svelte"
-related_targets: ["apps/dashboard/src/lib/cawco/home/UpdateCard.svelte","apps/dashboard/src/lib/cawco/home/MovedLogins.svelte"]
+slug: "src-lib-cawco-home-cawpanel-svelte"
+primary_target: "src/lib/cawco/home/CawPanel.svelte"
+related_targets: ["src/lib/cawco/home/UpdateCard.svelte","src/lib/cawco/home/MovedLogins.svelte"]
 ---
 
 # Caw's panel: needs you, notices and the update notice

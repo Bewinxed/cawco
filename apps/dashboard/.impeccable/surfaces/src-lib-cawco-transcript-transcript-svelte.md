@@ -1,7 +1,7 @@
 ---
 version: 1
-slug: "rc-lib-cawco-transcript-transcript-svelte-eb603024"
-primary_target: "apps/dashboard/src/lib/cawco/transcript/Transcript.svelte"
+slug: "src-lib-cawco-transcript-transcript-svelte"
+primary_target: "src/lib/cawco/transcript/Transcript.svelte"
 related_targets: []
 ---
 

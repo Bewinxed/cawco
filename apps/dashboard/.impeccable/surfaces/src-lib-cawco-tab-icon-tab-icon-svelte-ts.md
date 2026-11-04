@@ -1,7 +1,7 @@
 ---
 version: 1
-slug: "src-lib-cawco-tab-icon-tab-icon-svelte-ts-074ac392"
-primary_target: "apps/dashboard/src/lib/cawco/tab-icon/tab-icon.svelte.ts"
+slug: "src-lib-cawco-tab-icon-tab-icon-svelte-ts"
+primary_target: "src/lib/cawco/tab-icon/tab-icon.svelte.ts"
 related_targets: []
 ---
 

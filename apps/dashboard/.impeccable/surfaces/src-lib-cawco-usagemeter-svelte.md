@@ -1,7 +1,7 @@
 ---
 version: 1
-slug: "apps-dashboard-src-lib-cawco-usagemeter-svelte"
-primary_target: "apps/dashboard/src/lib/cawco/UsageMeter.svelte"
+slug: "src-lib-cawco-usagemeter-svelte"
+primary_target: "src/lib/cawco/UsageMeter.svelte"
 related_targets: []
 ---
 

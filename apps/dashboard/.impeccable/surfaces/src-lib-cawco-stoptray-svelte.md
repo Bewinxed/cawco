@@ -1,8 +1,8 @@
 ---
 version: 1
-slug: "apps-dashboard-src-lib-cawco-stoptray-svelte"
-primary_target: "apps/dashboard/src/lib/cawco/StopTray.svelte"
-related_targets: ["apps/dashboard/src/lib/cawco/ForgetProjectTray.svelte","apps/dashboard/src/lib/cawco/stop-work.svelte.ts"]
+slug: "src-lib-cawco-stoptray-svelte"
+primary_target: "src/lib/cawco/StopTray.svelte"
+related_targets: ["src/lib/cawco/ForgetProjectTray.svelte","src/lib/cawco/stop-work.svelte.ts"]
 ---
 
 # Stopping running work: forgetting a project, turning Caw off
