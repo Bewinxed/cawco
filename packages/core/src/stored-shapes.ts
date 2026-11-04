@@ -1046,6 +1046,7 @@ const BinaryUpdateStateShape = declared(
     heldChildren: z.number().optional(),
     hostsHub: z.boolean(),
     hubFetch: BinaryDownloadShape.optional(),
+    hubSilentTrials: z.number().optional(),
     hubWait: HubWaitShape.optional(),
     installedVersion: z.string(),
     keeperFailedVersion: z.string().optional(),

@@ -47,6 +47,7 @@ import {
   type BinaryUpdatePhase,
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
+  failedForGood,
   hubWaitWords,
   type KeptProcess,
   mergeHolds,
@@ -1387,6 +1388,13 @@ export class BinaryUpdater {
    * or auto-update attempts it: staged, then applied. An attempt that fails
    * is recorded with its retry time ({@link AttemptFailed}).
    *
+   * A BUILD ROLLED BACK FOR ITS HUB'S SILENCE IS TAKEN UP AGAIN. Auto-update
+   * never takes up a build rolled back for its own fault; one whose trial
+   * ended only because the hub gave no answer for this machine's row is
+   * taken up again here, which runs only once the hub has answered for its
+   * settings and its offer, up to core `HUB_SILENT_TRIALS` trials in a row
+   * (`failedForGood`).
+   *
    * AN INSTALL THE HUB CANNOT SPEAK TO YET WAITS FOR THE HUB. On a machine
    * other than the hub's own, an attempt at a build whose wire protocol its
    * hub does not speak, or while its hub does not say which it speaks
@@ -1403,8 +1411,11 @@ export class BinaryUpdater {
     const { version, notes } = release.manifest;
     this.#spendCommandFor(version);
     const failedBefore = this.#state.failedVersion === version;
+    // A build rolled back for its hub's silence alone is taken up again on
+    // this pass, which the hub answered (core HUB_SILENT_TRIALS bounds it).
     const attempt =
-      this.#flags.commanded || (this.#policy.autoUpdate && !failedBefore);
+      this.#flags.commanded ||
+      (this.#policy.autoUpdate && !failedForGood(this.#state, version));
     if (attempt && hubWait) {
       const moved = await this.#setChanged({
         phase: "waiting-for-hub",

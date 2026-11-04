@@ -198,6 +198,42 @@ export const waitedOut = (since: number, now = Date.now()): boolean =>
  */
 export const UPDATE_TRIAL_MS = 180_000;
 
+/**
+ * How many trials of one build may end on the hub's silence before the
+ * build is failed for good: 3. A rollback only the hub's silence decided
+ * (a hub hung through the machine's trial) is no verdict on the build, so
+ * auto-update takes the build up again on its first pass the hub answers
+ * (agent binary-update.ts `#takeUp`, which runs only after the hub answered
+ * for its settings and its offer). A build whose own agent hangs the hub
+ * would be retried forever on that rule, each retry hanging the hub again:
+ * the third such rollback in a row marks it failed as the build's own fault
+ * does, until a person installs it. A rollback for the build's own fault
+ * marks it failed at once, whatever came before.
+ */
+export const HUB_SILENT_TRIALS = 3;
+
+/** What a rollback of `version` writes of it: failed, and how many trials of it in a row the hub's silence ended. */
+export function rolledBack(
+  before: Pick<BinaryUpdateState, "failedVersion" | "hubSilentTrials">,
+  version: string,
+  hubSilent: boolean
+): Pick<BinaryUpdateState, "failedVersion" | "hubSilentTrials"> {
+  if (!hubSilent) {
+    return { failedVersion: version, hubSilentTrials: undefined };
+  }
+  const earlier =
+    before.failedVersion === version ? (before.hubSilentTrials ?? 0) : 0;
+  return { failedVersion: version, hubSilentTrials: earlier + 1 };
+}
+
+/** Whether `version` failed and auto-update does not take it up again by itself ({@link HUB_SILENT_TRIALS}). */
+export const failedForGood = (
+  state: Pick<BinaryUpdateState, "failedVersion" | "hubSilentTrials">,
+  version: string
+): boolean =>
+  state.failedVersion === version &&
+  (state.hubSilentTrials ?? HUB_SILENT_TRIALS) >= HUB_SILENT_TRIALS;
+
 /** What a request refused by a raised fence answers: it was not started. */
 export const AGENT_RESTARTING =
   "The agent is restarting. This request was not started; retry it in a minute.";
@@ -348,7 +384,11 @@ export interface BinaryUpdateState {
    */
   download?: BinaryDownload;
   error?: string;
-  /** The build that failed to come up and was rolled back; not retried by itself. */
+  /**
+   * The build that failed to come up and was rolled back (or whose trial
+   * ended undecided). Not retried by itself, unless `hubSilentTrials` says
+   * its trials ended on the hub's silence ({@link failedForGood}).
+   */
   failedVersion?: string;
   /** Children a keeper the new build cannot speak to holds, while they are the reason for waiting (`waiting-sessions`). */
   heldChildren?: number;
@@ -360,6 +400,13 @@ export interface BinaryUpdateState {
    * on. Absent in every other phase, and once the hub holds the build.
    */
   hubFetch?: BinaryDownload;
+  /**
+   * How many trials of `failedVersion` in a row were rolled back because
+   * the hub gave no answer for this machine's row (core binary-health.ts
+   * `HealthProblem`), not for the build's own fault; absent when its last
+   * rollback was the build's own. Written with `failedVersion`, always.
+   */
+  hubSilentTrials?: number;
   /** What `waiting-for-hub` waits for ({@link HubWait}). */
   hubWait?: HubWait;
   installedVersion: string;

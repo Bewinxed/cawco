@@ -6,7 +6,9 @@
  * its hub, each started after the swap.
  *
  * A problem names what was asked, how long it was waited on and what came
- * back, so the sentence a rollback is filed under says why on its own.
+ * back, so the sentence a rollback is filed under says why on its own, and
+ * whether it is the hub's silence rather than the build's own
+ * ({@link HealthProblem}).
  */
 import type { BinaryInstallation } from "./binary-installation";
 import { type Bounded, readWithin } from "./bounded";
@@ -93,6 +95,21 @@ async function ask<T>(
 
 const json = <T>(response: Response) => response.json() as Promise<T>;
 
+/**
+ * What stands between the new build and healthy. `hubSilent`: the hub gave
+ * no answer for this machine's row, on a machine other than the hub's own,
+ * where the hub is another machine's build and its silence says nothing of
+ * this one (the 6688 rollout, 2026-11-04: the hub hung for twenty minutes
+ * and every other machine rolled 6688 back for it). On the hub's machine the
+ * hub is the new build, so its silence is the build's own.
+ */
+export interface HealthProblem {
+  hubSilent: boolean;
+  said: string;
+}
+
+const own = (said: string): HealthProblem => ({ said, hubSilent: false });
+
 /** The first thing wrong, or `undefined` when everything is up on `version` since `sinceMs`. */
 export async function probeHealth(options: {
   /** The agent's process must have started after this (default: `sinceMs`). */
@@ -103,14 +120,14 @@ export async function probeHealth(options: {
   requireCustody?: boolean;
   sinceMs: number;
   version: string;
-}): Promise<string | undefined> {
+}): Promise<HealthProblem | undefined> {
   const { installation, sinceMs } = options;
   const local =
     installation.role === "hub"
       ? await probeHubMachine(installation, options.version, sinceMs)
       : undefined;
   return (
-    local ??
+    (local === undefined ? undefined : own(local)) ??
     probeAgentRow({
       ...options,
       agentSince: options.agentStartedAfterMs ?? sinceMs,
@@ -166,11 +183,11 @@ async function probeHubMachine(
 /** This machine's agent, online on `version`, started after `agentSince`, and (when asked) holding its keeper. */
 async function probeAgentRow(options: {
   agentSince: number;
-  installation: Pick<BinaryInstallation, "hubUrl">;
+  installation: Pick<BinaryInstallation, "hubUrl" | "role">;
   machineId: string;
   requireCustody?: boolean;
   version: string;
-}): Promise<string | undefined> {
+}): Promise<HealthProblem | undefined> {
   const { installation, machineId, version, agentSince } = options;
   // This machine's own row: the fleet's list is the person's (hub hub-auth.ts).
   const asked = await ask(
@@ -180,7 +197,10 @@ async function probeAgentRow(options: {
   switch (asked.kind) {
     case "unanswered":
     case "failed":
-      return `this machine's agent is not registered with the hub on the new build (the hub did not answer for its row; ${asked.said})`;
+      return {
+        said: `this machine's agent is not registered with the hub on the new build (the hub did not answer for its row; ${asked.said})`,
+        hubSilent: installation.role !== "hub",
+      };
     case "answered":
       break;
     default:
@@ -195,10 +215,14 @@ async function probeAgentRow(options: {
     const seen = row
       ? `its row says ${row.status} on ${row.build?.version ?? "no version"}`
       : "no row came back";
-    return `this machine's agent is not registered with the hub on the new build (${seen}; ${asked.said})`;
+    return own(
+      `this machine's agent is not registered with the hub on the new build (${seen}; ${asked.said})`
+    );
   }
   if (options.requireCustody && row.custody?.state !== "available") {
-    return `this machine's agent isn't connected to the process that keeps its sessions running (its row says ${row.custody?.state ?? "nothing about that connection"})`;
+    return own(
+      `this machine's agent isn't connected to the process that keeps its sessions running (its row says ${row.custody?.state ?? "nothing about that connection"})`
+    );
   }
   return undefined;
 }

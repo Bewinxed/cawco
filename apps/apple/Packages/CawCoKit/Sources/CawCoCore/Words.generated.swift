@@ -2091,6 +2091,16 @@ public enum Words {
             "\(what) did not end within \(seconds) s, so it was stopped"
         }
 
+        /// A rollback only the hub's silence decided (core binary-updates.ts `HUB_SILENT_TRIALS`): what comes of it, after the reason.
+        public static func triedAgainOnceHubAnswers(version: String) -> String {
+            "the hub didn't answer, so \(version) is installed again once it does"
+        }
+
+        /// The same, once `tries` trials in a row ended so: the build is failed for good.
+        public static func hubSilentTooOften(version: String, tries: Int) -> String {
+            "the hub didn't answer through \(tries) tries of \(version), so it isn't installed again by itself"
+        }
+
         /// An update's trial whose resumed deciders each failed: the trial is ended, the machine left on the build it runs.
         public static func trialUndecided(version: String, tries: Int, why: String) -> String {
             "\(version)'s health could not be checked after \(tries) tries: \(why)."

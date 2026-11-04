@@ -40,7 +40,7 @@ import { basename, dirname, join } from "node:path";
 import { type KeeperJob, keeperJob } from "@cawco/agent/keeper-jobs";
 import { forgetPins, runBinaryPins } from "@cawco/agent/pin-record";
 import { SessiondClient } from "@cawco/agent/sessiond-client";
-import { probeHealth } from "@cawco/core/binary-health";
+import { type HealthProblem, probeHealth } from "@cawco/core/binary-health";
 import {
   binaryRoot,
   currentDirectory,
@@ -65,6 +65,8 @@ import {
 } from "@cawco/core/binary-installation";
 import {
   type BinaryUpdateState,
+  failedForGood,
+  rolledBack,
   UPDATE_TRIAL_MS,
 } from "@cawco/core/binary-updates";
 import { readWithin } from "@cawco/core/bounded";
@@ -372,6 +374,7 @@ async function endUndecided(
   await writeState({
     phase: "failed",
     failedVersion: trial.version,
+    hubSilentTrials: undefined,
     unconfirmedVersion: trial.version,
     heldChildren: undefined,
     error: updatesWords.trialUndecided(trial.version, tries, why),
@@ -779,12 +782,17 @@ async function decide(start: TrialMarker, resumed: boolean): Promise<void> {
     const problem = await settle(trial);
     trial = (await readTrial()) ?? trial;
     trial = problem
-      ? { ...trial, decision: "roll-back", reason: problem }
+      ? {
+          ...trial,
+          decision: "roll-back",
+          reason: problem.said,
+          ...(problem.hubSilent ? { hubSilent: true as const } : {}),
+        }
       : { ...trial, decision: "confirm" };
     await writeJsonAtomic(trialPath(), trial);
     await say(
       problem
-        ? `decide ${trial.version}: roll back (${problem})`
+        ? `decide ${trial.version}: roll back (${problem.said})${problem.hubSilent ? "; the hub's silence, not the build's" : ""}`
         : `decide ${trial.version}: confirm`
     );
   }
@@ -801,7 +809,7 @@ async function decide(start: TrialMarker, resumed: boolean): Promise<void> {
  * A keeper that cannot start is no verdict on the build: the keeper before
  * stays the machine's, untouched, and the state says so.
  */
-async function settle(start: TrialMarker): Promise<string | undefined> {
+async function settle(start: TrialMarker): Promise<HealthProblem | undefined> {
   const up = await verify(start, 0);
   if (up) {
     return up;
@@ -852,10 +860,13 @@ async function settle(start: TrialMarker): Promise<string | undefined> {
 async function verify(
   start: TrialMarker,
   holdMs: number
-): Promise<string | undefined> {
+): Promise<HealthProblem | undefined> {
   const installation = await readInstallation();
   if (!installation) {
-    return "This machine has no binary installation";
+    return {
+      said: "This machine has no binary installation",
+      hubSilent: false,
+    };
   }
   const id = await machineId();
   const watch = new TrialWatch(start, holdMs);
@@ -865,7 +876,7 @@ async function verify(
   for (;;) {
     const stuck = await watch.followMigration();
     if (stuck) {
-      return stuck;
+      return { said: stuck, hubSilent: false };
     }
     const verdict = await watch.weigh(
       await probeHealth({
@@ -932,24 +943,24 @@ class TrialWatch {
 
   /** One probe's answer, weighed: done with the problem that decides it, or done healthy, or not done. */
   weigh(
-    problem: string | undefined
-  ): Promise<{ done: boolean; problem?: string }> {
+    problem: HealthProblem | undefined
+  ): Promise<{ done: boolean; problem?: HealthProblem }> {
     this.#attempts += 1;
     return problem ? this.#unhealthy(problem) : this.#healthy();
   }
 
   async #unhealthy(
-    problem: string
-  ): Promise<{ done: boolean; problem?: string }> {
+    problem: HealthProblem
+  ): Promise<{ done: boolean; problem?: HealthProblem }> {
     this.#healthySince = undefined;
     const { version } = this.trial;
     if (Date.now() / 1000 > (this.trial.decideBy ?? 0)) {
       await say(
-        `verify ${version}: not healthy at its deadline, ${this.#elapsed()} after ${this.#attempts} attempts: ${problem}`
+        `verify ${version}: not healthy at its deadline, ${this.#elapsed()} after ${this.#attempts} attempts: ${problem.said}`
       );
       return { done: true, problem };
     }
-    const gist = problem.replace(TIMING, "");
+    const gist = problem.said.replace(TIMING, "");
     const said = this.#lastSaid;
     if (
       !said ||
@@ -958,7 +969,7 @@ class TrialWatch {
     ) {
       this.#lastSaid = { at: Date.now(), problem: gist };
       await say(
-        `verify ${version}: attempt ${this.#attempts} at ${this.#elapsed()}: ${problem}`
+        `verify ${version}: attempt ${this.#attempts} at ${this.#elapsed()}: ${problem.said}`
       );
     }
     return { done: false };
@@ -1023,6 +1034,10 @@ async function confirm(trial: TrialMarker): Promise<void> {
  * over again, to the build rolled back to, which keeps the sessions the failed
  * build's keeper started where they run until each ends or sleeps: the keeper
  * follows the build the machine runs, and no session is cut for it.
+ * The build is then the failed one (core binary-updates.ts `rolledBack`):
+ * for good when its own fault decided the rollback; when only the hub's
+ * silence did, auto-update takes it up again once the hub answers, up to
+ * `HUB_SILENT_TRIALS` trials in a row.
  */
 async function rollBack(start: TrialMarker): Promise<void> {
   let trial = start;
@@ -1062,19 +1077,44 @@ async function rollBack(start: TrialMarker): Promise<void> {
     );
   }
   const manifest = await readStaged(trial.version).catch(() => undefined);
+  const failed = rolledBack(
+    (await readUpdateState()) ?? {},
+    trial.version,
+    trial.hubSilent === true
+  );
   await writeState({
     phase: "failed-rolled-back",
     installedVersion: trial.previous,
     sessiondVersion: await readKeeperVersion(),
-    failedVersion: trial.version,
+    ...failed,
     availableVersion: trial.version,
     ...(manifest ? { channel: manifest.channel, notes: manifest.notes } : {}),
-    error: `${trial.reason ?? "The new build did not become healthy"}${pinsBack ? `; ${pinsBack}` : ""}`,
+    error: [
+      trial.reason ?? "The new build did not become healthy",
+      hubSilentWords(failed, trial.version),
+      pinsBack,
+    ]
+      .filter(Boolean)
+      .join("; "),
     landed: { at: Date.now(), outcome: "rolled-back", version: trial.version },
   });
   await rm(trialPath(), { force: true });
   await say(`rolled back ${trial.version}`);
   await prune();
+}
+
+/** What a rollback the hub's silence decided says of the build's next try ({@link rolledBack}); nothing for the build's own fault. */
+function hubSilentWords(
+  failed: Pick<BinaryUpdateState, "failedVersion" | "hubSilentTrials">,
+  version: string
+): string | undefined {
+  const tries = failed.hubSilentTrials;
+  if (tries === undefined) {
+    return undefined;
+  }
+  return failedForGood(failed, version)
+    ? updatesWords.hubSilentTooOften(version, tries)
+    : updatesWords.triedAgainOnceHubAnswers(version);
 }
 
 /**

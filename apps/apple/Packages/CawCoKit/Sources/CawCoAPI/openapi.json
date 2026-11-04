@@ -48160,7 +48160,7 @@
             "type": "string"
           },
           "failedVersion": {
-            "description": "The build that failed to come up and was rolled back; not retried by itself.",
+            "description": "The build that failed to come up and was rolled back (or whose trial\nended undecided). Not retried by itself, unless `hubSilentTrials` says\nits trials ended on the hub's silence ({@link failedForGood}).",
             "type": "string"
           },
           "heldChildren": {
@@ -48174,6 +48174,10 @@
           "hubFetch": {
             "$ref": "#/components/schemas/BinaryDownload",
             "description": "While `downloading`, and the hub still fetches the build from its\nrelease host: how far the hub's own fetch is, which the machine waits\non. Absent in every other phase, and once the hub holds the build."
+          },
+          "hubSilentTrials": {
+            "description": "How many trials of `failedVersion` in a row were rolled back because\nthe hub gave no answer for this machine's row (core binary-health.ts\n`HealthProblem`), not for the build's own fault; absent when its last\nrollback was the build's own. Written with `failedVersion`, always.",
+            "type": "number"
           },
           "hubWait": {
             "$ref": "#/components/schemas/BinaryUpdateStateHubWait",

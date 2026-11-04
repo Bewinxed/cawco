@@ -52,6 +52,12 @@ export const updatesWords = {
   /** A step of an install (a service manager call, a build's `binary-units`) given its bound, and stopped past it. */
   didNotEnd: (what: string, seconds: number) =>
     `${what} did not end within ${seconds} s, so it was stopped`,
+  /** A rollback only the hub's silence decided (core binary-updates.ts `HUB_SILENT_TRIALS`): what comes of it, after the reason. */
+  triedAgainOnceHubAnswers: (version: string) =>
+    `the hub didn't answer, so ${version} is installed again once it does`,
+  /** The same, once `tries` trials in a row ended so: the build is failed for good. */
+  hubSilentTooOften: (version: string, tries: number) =>
+    `the hub didn't answer through ${tries} tries of ${version}, so it isn't installed again by itself`,
   /** An update's trial whose resumed deciders each failed: the trial is ended, the machine left on the build it runs. */
   trialUndecided: (version: string, tries: number, why: string) =>
     `${version}'s health could not be checked after ${tries} tries: ${why}.`,
