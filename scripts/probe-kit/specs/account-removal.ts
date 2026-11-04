@@ -5,9 +5,9 @@
  * refused, telling him to stop its 220 sessions first).
  *
  * On a scratch fleet (real hub, agent and sessiond; Claude Code against the
- * mock model) with two Claude accounts, A and B, each with its own fake
- * login and token, so the mock says which account a request ran on. New
- * sessions fill A first. On A: one session asleep (at rest), one stopped
+ * mock model) with three Claude accounts, A, B and C, each with its own
+ * fake login and token, so the mock says which account a request ran on.
+ * New sessions fill A first, then B, then C. On A: one session asleep (at rest), one stopped
  * three days ago (archived: no listing names it any more), and one in a
  * turn the mock holds open. Then:
  * - (a) the confirm's read says 3 sessions move and none stays, and Remove
@@ -21,8 +21,15 @@
  * - (d) at that turn's end it moves to B, and A's store goes from the
  *   machine; its next turn runs on B's token;
  * - (e) the one asleep, sent a message, wakes on B and answers there;
- * - (f) B, now the last Claude account, is removed too: 200, its sessions
- *   have none to go to, and a message to one is refused with the way back
+ * - (g) one machine's sign-out (`DELETE /api/accounts/B/machines/<it>`),
+ *   with a third account C signed in there: 200 with one session asleep
+ *   and one in a held turn on B; B stays an account, its sign-in there
+ *   goes at once and no report brings it back, its store waits
+ *   (`account_leaves`); released, the turn ends on B's token, then the
+ *   session moves to C and B's store goes; the one asleep wakes on C;
+ * - (f) B, then C, the last Claude account, are removed too: 200, C's
+ *   sessions have none to go to, the one at rest says it stopped
+ *   (`stalled.removed`), and a message to it is refused with the way back
  *   (`no-account`).
  *
  *   bun scripts/probe-kit/run.ts account-removal
@@ -36,38 +43,49 @@ import { DAY_MS } from "../../../packages/core/src/time";
 import { accountsWords } from "../../../packages/core/src/words/accounts";
 import { configureWords } from "../../../packages/core/src/words/configure";
 import { noAccountRefusal } from "../../../packages/hub/src/placement";
-import { ACCOUNT, type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  ACCOUNT,
+  MACHINE,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const A = ACCOUNT;
 const B = "acct-removal-b";
-const B_TOKEN = "sk-ant-oat01-fake-removal-b";
+const C = "acct-removal-c";
 const A_TOKEN = "sk-ant-oat01-fake-scratch-fleet";
-/** The words that open the turn the mock holds. */
+const B_TOKEN = "sk-ant-oat01-fake-removal-b";
+const C_TOKEN = "sk-ant-oat01-fake-removal-c";
+/** The words that open a turn the mock holds: the removal's, then the one machine's sign-out's. */
 const HOLD = "PROBE-REMOVAL-HOLD";
+const HOLD_MACHINE = "PROBE-SIGNOUT-HOLD";
 
-/** The held turn's answer waits on this; {@link release} lets it go. */
-let held = Promise.withResolvers<void>();
-const release = () => held.resolve();
+/** Each held turn's answer waits on its own promise; {@link release} lets it go. */
+let held = new Map<string, PromiseWithResolvers<void>>();
+const release = (words: string) => held.get(words)?.resolve();
 
 const respond = async (request: Seen): Promise<Reply> => {
-  if (request.tools && request.last.includes(HOLD)) {
-    await held.promise;
-    return { everyMs: 5, words: ["held turn answered"] };
+  for (const [words, hold] of held) {
+    if (request.tools && request.last.includes(words)) {
+      await hold.promise;
+      return { everyMs: 5, words: ["held turn answered"] };
+    }
   }
   return { everyMs: 5, words: ["ok"] };
 };
 
-/** B's store on the fleet's machine: a fake login of its own, its own token and organization. */
-const furnishB = async (home: string) => {
-  const dir = join(home, ".cawco", "accounts", B, "claude");
+/** An account's store on the fleet's machine: a fake login of its own, its own token and organization. */
+const furnish = async (home: string, id: string, token: string, n: string) => {
+  const dir = join(home, ".cawco", "accounts", id, "claude");
   await mkdir(dir, { recursive: true });
   await writeFile(
     join(dir, ".credentials.json"),
     JSON.stringify({
       claudeAiOauth: {
-        accessToken: B_TOKEN,
-        refreshToken: "sk-ant-ort01-fake-removal-b",
+        accessToken: token,
+        refreshToken: `sk-ant-ort01-fake-removal-${n}`,
         expiresAt: Date.now() + 365 * DAY_MS,
         scopes: ["user:inference", "user:profile"],
         subscriptionType: "max",
@@ -79,14 +97,20 @@ const furnishB = async (home: string) => {
     JSON.stringify({
       hasCompletedOnboarding: true,
       oauthAccount: {
-        emailAddress: "second@scratch-fleet.test",
-        organizationName: "Second Organization",
-        accountUuid: "00000000-0000-4000-8000-0000000000b1",
-        organizationUuid: "00000000-0000-4000-8000-0000000000b2",
+        emailAddress: `${n}@scratch-fleet.test`,
+        organizationName: `Organization ${n}`,
+        accountUuid: `00000000-0000-4000-8000-0000000000${n}1`,
+        organizationUuid: `00000000-0000-4000-8000-0000000000${n}2`,
       },
     })
   );
 };
+
+const signinOf = (fleet: KitFleet, id: string) =>
+  fleet.query<{ state: string }>(
+    "SELECT state FROM account_signins WHERE account_id = ?",
+    id
+  )[0]?.state;
 
 const accountOf = (fleet: KitFleet, id: string) =>
   fleet.query<{ account_id: string | null }>(
@@ -131,10 +155,11 @@ const asleep = async (fleet: KitFleet, id: string) => {
   );
 };
 
-const removeAccount = async (fleet: KitFleet, id: string) => {
-  const response = await fetch(`${fleet.base}/api/accounts/${id}`, {
-    method: "DELETE",
-  });
+const removeAccount = async (fleet: KitFleet, id: string, machine = "") => {
+  const response = await fetch(
+    `${fleet.base}/api/accounts/${id}${machine ? `/machines/${machine}` : ""}`,
+    { method: "DELETE" }
+  );
   const text = await response.text();
   return { status: response.status, text };
 };
@@ -143,7 +168,10 @@ const spec: Spec = {
   group: "The hub and machines",
   name: "account-removal",
   run: async (kit: Kit) => {
-    held = Promise.withResolvers<void>();
+    held = new Map([
+      [HOLD, Promise.withResolvers<void>()],
+      [HOLD_MACHINE, Promise.withResolvers<void>()],
+    ]);
     const fleet = await kit.fleet(respond);
     const home = fleet.env.HOME as string;
     fleet.launch("sessiond");
@@ -152,8 +180,10 @@ const spec: Spec = {
     await fleet.hubUp();
     fleet.fileAccount();
     fleet.write(
-      "INSERT OR IGNORE INTO accounts (id, provider, kind, label, hue, \"order\", never_backup, created_at) VALUES (?, 'anthropic', 'console', 'Second', 'green', 1, 0, ?)",
+      "INSERT OR IGNORE INTO accounts (id, provider, kind, label, hue, \"order\", never_backup, created_at) VALUES (?, 'anthropic', 'console', 'Second', 'green', 1, 0, ?), (?, 'anthropic', 'console', 'Third', 'violet', 2, 0, ?)",
       B,
+      Date.now(),
+      C,
       Date.now()
     );
     // New sessions fill A first: B is where they move.
@@ -171,20 +201,19 @@ const spec: Spec = {
       routed.ok,
       `${routed.status} ${await routed.text()}`
     );
-    await furnishB(home);
+    await furnish(home, B, B_TOKEN, "b");
+    await furnish(home, C, C_TOKEN, "c");
     fleet.launch("agent");
     await fleet.agentUp();
     await fleet.accountSignedIn();
-    await until(
-      "B signed in",
-      () =>
-        fleet.query<{ state: string }>(
-          "SELECT state FROM account_signins WHERE account_id = ?",
-          B
-        )[0],
-      (row) => row?.state === "signed-in",
-      120_000
-    );
+    for (const id of [B, C]) {
+      await until(
+        `${id} signed in`,
+        () => signinOf(fleet, id),
+        (state) => state === "signed-in",
+        120_000
+      );
+    }
 
     // On A: one asleep, one stopped three days ago, one in a held turn.
     const resting = await fleet.spawn("claude", "Resting");
@@ -312,7 +341,7 @@ const spec: Spec = {
         account: accountOf(fleet, running),
       })
     );
-    release();
+    release(HOLD);
     await turnOver(fleet, running).catch(() => undefined);
     const [heldTurn] = turnsWith(fleet, HOLD);
     kit.check(
@@ -390,20 +419,150 @@ const spec: Spec = {
       })
     );
 
-    // (f) The last Claude account goes too.
+    // (g) One machine's sign-out: B on the fleet's machine, C signed in there.
+    await asleep(fleet, resting);
+    await fleet.send(running, `${HOLD_MACHINE} work on`);
+    await until(
+      "the second held turn reaches the mock",
+      () => turnsWith(fleet, HOLD_MACHINE).length,
+      (n) => n > 0,
+      60_000
+    );
+    const bStore = join(home, ".cawco", "accounts", B);
+    const signedOut = await removeAccount(fleet, B, MACHINE);
+    kit.check(
+      "(g) signing B out on the machine with a session asleep and one in a turn answers 200: both move",
+      signedOut.status === 200 &&
+        JSON.parse(signedOut.text).moving === 2 &&
+        JSON.parse(signedOut.text).staying === 0,
+      `${signedOut.status} ${signedOut.text}`
+    );
+    const owedC = [resting, running].map((id) => owedTo(fleet, id));
+    kit.check(
+      "(g) B stays an account; its sign-in there goes at once, its store waits on the turn, and both sessions owe a move to C",
+      fleet.query("SELECT id FROM accounts WHERE id = ?", B).length === 1 &&
+        signinOf(fleet, B) === undefined &&
+        existsSync(bStore) &&
+        fleet.query(
+          "SELECT account_id FROM account_leaves WHERE account_id = ?",
+          B
+        ).length === 1 &&
+        accountOf(fleet, running) === B &&
+        owedC.every((one) => one?.to_account_id === C),
+      JSON.stringify({
+        signin: signinOf(fleet, B),
+        store: existsSync(bStore),
+        leaves: fleet.query("SELECT * FROM account_leaves"),
+        owed: owedC,
+      })
+    );
+    release(HOLD_MACHINE);
+    await turnOver(fleet, running).catch(() => undefined);
+    const [machineTurn] = turnsWith(fleet, HOLD_MACHINE);
+    kit.check(
+      "(g) released, the held turn ends with its answer and no error, on B's token",
+      fleet.instance(running)?.last_error === null &&
+        machineTurn?.auth.includes(B_TOKEN) === true,
+      JSON.stringify({ row: fleet.instance(running), auth: machineTurn?.auth })
+    );
+    await until(
+      "the running session moved to C",
+      () => accountOf(fleet, running),
+      (account) => account === C,
+      120_000
+    ).catch(() => undefined);
+    await until(
+      "B signed out on the machine",
+      () =>
+        existsSync(bStore) ||
+        fleet.query("SELECT * FROM account_leaves").length > 0,
+      (still) => !still,
+      120_000
+    ).catch(() => undefined);
+    kit.check(
+      "(g) at the turn's end the session runs on C, B's store is gone from the machine, and no report brought its sign-in back",
+      accountOf(fleet, running) === C &&
+        !existsSync(bStore) &&
+        fleet.query("SELECT * FROM account_leaves").length === 0 &&
+        signinOf(fleet, B) === undefined,
+      JSON.stringify({
+        account: accountOf(fleet, running),
+        store: existsSync(bStore),
+        leaves: fleet.query("SELECT * FROM account_leaves"),
+        signin: signinOf(fleet, B),
+      })
+    );
+    await until(
+      "the moved session up on C",
+      () => fleet.instance(running),
+      (row) => row?.status === "running" && row.turn_open_at === null,
+      120_000
+    ).catch(() => undefined);
+    await fleet.send(running, "PROBE-SIGNOUT-AFTER next");
+    await until(
+      "its next turn on C at the mock",
+      () => turnsWith(fleet, "PROBE-SIGNOUT-AFTER").length,
+      (n) => n > 0,
+      120_000
+    ).catch(() => undefined);
+    await turnOver(fleet, running).catch(() => undefined);
+    const [afterC] = turnsWith(fleet, "PROBE-SIGNOUT-AFTER");
+    kit.check(
+      "(g) its next turn runs on C's token",
+      afterC?.auth.includes(C_TOKEN) === true,
+      JSON.stringify({ auth: afterC?.auth })
+    );
+    await fleet.send(resting, "PROBE-SIGNOUT-WAKE now");
+    await until(
+      "the rested session's turn on C at the mock",
+      () => turnsWith(fleet, "PROBE-SIGNOUT-WAKE").length,
+      (n) => n > 0,
+      180_000
+    ).catch(() => undefined);
+    const [wokeOnC] = turnsWith(fleet, "PROBE-SIGNOUT-WAKE");
+    await turnOver(fleet, resting).catch(() => undefined);
+    kit.check(
+      "(g) the session that was asleep wakes on C and answers there",
+      wokeOnC?.auth.includes(C_TOKEN) === true &&
+        accountOf(fleet, resting) === C,
+      JSON.stringify({
+        auth: wokeOnC?.auth,
+        account: accountOf(fleet, resting),
+      })
+    );
+
+    // (f) B goes, then C, the last Claude account.
     await asleep(fleet, resting);
     await asleep(fleet, running);
+    const bGone = await removeAccount(fleet, B);
     const lastRead = await fleet.api<{ moving: number; staying: number }>(
-      `/api/accounts/${B}/removal`
+      `/api/accounts/${C}/removal`
     );
-    const last = await removeAccount(fleet, B);
+    const last = await removeAccount(fleet, C);
     kit.check(
-      "(f) the last Claude account is removed: 200, and its sessions have none to go to",
-      last.status === 200 &&
+      "(f) B is removed, then C, the last Claude account: 200, and its sessions have none to go to",
+      bGone.status === 200 &&
+        last.status === 200 &&
         lastRead.moving === 0 &&
-        lastRead.staying >= 2 &&
+        lastRead.staying === 2 &&
         fleet.query("SELECT id FROM accounts").length === 0,
-      JSON.stringify({ last, lastRead })
+      JSON.stringify({ bGone, last, lastRead })
+    );
+    const boardRow = await until(
+      "the stranded session's line on the board",
+      async () =>
+        (
+          await fleet.api<{ id: string; stalled?: { words: string } }[]>(
+            "/api/instances"
+          )
+        ).find((one) => one.id === resting),
+      (one) => one?.stalled !== undefined,
+      30_000
+    ).catch(() => undefined);
+    kit.check(
+      "(f) the session at rest that no account can take says it stopped, and why",
+      boardRow?.stalled?.words === accountsWords.stalled.removed("Third"),
+      JSON.stringify(boardRow?.stalled)
     );
     const refused = await fleet.send(resting, "PROBE-REMOVAL-NONE hello");
     const settled = await until(

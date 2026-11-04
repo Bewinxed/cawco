@@ -36,6 +36,7 @@ import {
   loginMoves,
   movedFromSessions,
   removedAccounts,
+  strandedSessions,
   usageLimitHistory,
 } from "./schema";
 
@@ -74,6 +75,13 @@ export interface AccountLeave {
   machineId: string;
   provider: AccountProvider;
   since: number;
+}
+
+/** A session left on no account by its account's removal or sign-out there (`stranded_sessions`). */
+export interface StrandedSession {
+  accountName: string;
+  instanceId: string;
+  why: "removed" | "signed-out";
 }
 
 export interface AccountsDb {
@@ -118,6 +126,13 @@ export interface AccountsDb {
     since?: number;
     until?: number;
   }) => AccountHistoryRow[];
+  /**
+   * Drops the account's sign-in on `machineId` and keeps its store there as
+   * a leave ({@link AccountLeave}), in one step: a process there still runs
+   * in it. No report puts that sign-in back while the leave stands
+   * ({@link putSignin}). False when the account is gone.
+   */
+  readonly leaveMachine: (accountId: string, machineId: string) => boolean;
   /** The removed accounts' stores machines still hold under a running process. */
   readonly leaves: () => AccountLeave[];
   readonly list: () => Account[];
@@ -205,6 +220,18 @@ export interface AccountsDb {
   readonly setRefusalCheckedAt: (id: string, at: number) => void;
   readonly setRouting: (routing: ProviderRouting) => void;
   readonly signins: () => AccountSignin[];
+  /** `instanceIds` were left on no account: `accountName` was removed, or signed out on their machine (`why`). */
+  readonly strand: (
+    instanceIds: readonly string[],
+    accountName: string,
+    why: StrandedSession["why"]
+  ) => void;
+  /** The sessions left on no account, stopped until one can take them. */
+  readonly stranded: () => StrandedSession[];
+  /** `instanceId`'s {@link StrandedSession}, when it is one. */
+  readonly strandedOf: (instanceId: string) => StrandedSession | undefined;
+  /** `instanceId` runs on an account again. Whether it was stranded. */
+  readonly unstrand: (instanceId: string) => boolean;
 }
 
 type AccountRow = typeof accounts.$inferSelect;
@@ -316,6 +343,18 @@ const toWindow = (
 });
 
 export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
+  /** Whether a leave keeps `accountId`'s store on `machineId` ({@link AccountLeave}). */
+  const leaving = (accountId: string, machineId: string): boolean =>
+    db
+      .select({ accountId: accountLeaves.accountId })
+      .from(accountLeaves)
+      .where(
+        and(
+          eq(accountLeaves.accountId, accountId),
+          eq(accountLeaves.machineId, machineId)
+        )
+      )
+      .get() !== undefined;
   const get = (id: string): Account | undefined => {
     const row = db.select().from(accounts).where(eq(accounts.id, id)).get();
     return row ? toAccount(row) : undefined;
@@ -536,7 +575,9 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
       reason = null,
       refusalReach = null,
     }) => {
-      if (!get(accountId)) {
+      // A store being signed out there under a running process is not a
+      // sign-in, whatever the machine reports of it.
+      if (!get(accountId) || leaving(accountId, machineId)) {
         return false;
       }
       const before = db
@@ -643,6 +684,74 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         .where(eq(movedFromSessions.instanceId, instanceId))
         .run();
     },
+    stranded: () =>
+      db
+        .select({
+          instanceId: strandedSessions.instanceId,
+          accountName: strandedSessions.accountName,
+          why: strandedSessions.why,
+        })
+        .from(strandedSessions)
+        .all(),
+    strandedOf: (instanceId) =>
+      db
+        .select({
+          instanceId: strandedSessions.instanceId,
+          accountName: strandedSessions.accountName,
+          why: strandedSessions.why,
+        })
+        .from(strandedSessions)
+        .where(eq(strandedSessions.instanceId, instanceId))
+        .get(),
+    strand: (instanceIds, accountName, why) => {
+      if (instanceIds.length === 0) {
+        return;
+      }
+      db.insert(strandedSessions)
+        .values(
+          instanceIds.map((instanceId) => ({ instanceId, accountName, why }))
+        )
+        .onConflictDoUpdate({
+          target: strandedSessions.instanceId,
+          set: { accountName, why, since: new Date() },
+        })
+        .run();
+    },
+    unstrand: (instanceId) =>
+      db
+        .delete(strandedSessions)
+        .where(eq(strandedSessions.instanceId, instanceId))
+        .returning()
+        .all().length > 0,
+    leaveMachine: (accountId, machineId) =>
+      db.transaction((tx) => {
+        const account = tx
+          .select({ provider: accounts.provider })
+          .from(accounts)
+          .where(eq(accounts.id, accountId))
+          .get();
+        if (!account) {
+          return false;
+        }
+        tx.delete(accountSignins)
+          .where(
+            and(
+              eq(accountSignins.accountId, accountId),
+              eq(accountSignins.machineId, machineId)
+            )
+          )
+          .run();
+        tx.insert(accountLeaves)
+          .values({
+            accountId,
+            machineId,
+            provider: account.provider,
+            since: new Date(),
+          })
+          .onConflictDoNothing()
+          .run();
+        return true;
+      }),
     removeSignin: (accountId, machineId) =>
       db
         .delete(accountSignins)

@@ -7826,6 +7826,9 @@ export const createServer = (
     if ("refusal" in where) {
       return { refusal: where.refusal };
     }
+    if (where.accountId) {
+      unstrand(read.id);
+    }
     let account: Pick<SpawnPayload, "accountDir" | "homeLoginMove"> = {};
     if (where.homeLoginMove) {
       account = { homeLoginMove: where.homeLoginMove };
@@ -11394,6 +11397,23 @@ export const createServer = (
   const CARRY_TIMEOUT_MS = 120_000;
 
   /**
+   * `instanceId` is placed on an account: whatever left it on none
+   * ({@link strandedStall}) is over.
+   */
+  const unstrand = (instanceId: string): void => {
+    if (db.accounts.unstrand(instanceId)) {
+      publishStalls();
+    }
+  };
+  /** `instanceId`'s row names `accountId` from now on ({@link unstrand} when it is one). */
+  const onAccount = (instanceId: string, accountId: string | null): void => {
+    db.patchInstance(instanceId, { accountId });
+    if (accountId) {
+      unstrand(instanceId);
+    }
+  };
+
+  /**
    * Puts `rows`, all on `machineId`, on `accountId` (null: on none). A Claude
    * session's own data lives in its account's dir (core paths.ts
    * `sessionConfigDir`), so each one's machine carries it there first
@@ -11481,7 +11501,7 @@ export const createServer = (
       if (outcome?.state === "carried") {
         keepEnded(row.id, outcome.ended, ended);
       }
-      db.patchInstance(row.id, { accountId });
+      onAccount(row.id, accountId);
       moved.push(row.id);
     }
     return { moved, kept, ended };
@@ -11931,12 +11951,16 @@ export const createServer = (
   const rowsLeave = (
     accountId: string,
     into: string | null,
-    machines?: readonly string[]
+    machines?: readonly string[],
+    /** `at-rest`: only rows whose process is gone ({@link processMayRun}); a running one reads the store until its machine signs it out. */
+    which: "all" | "at-rest" = "all"
   ): void => {
     const rows = db
       .instancesOnAccount(accountId)
       .filter(
-        (row) => machines === undefined || machines.includes(row.machineId)
+        (row) =>
+          (machines === undefined || machines.includes(row.machineId)) &&
+          (which === "all" || !processMayRun(row))
       );
     for (const row of rows) {
       db.patchInstance(row.id, { accountId: into });
@@ -12007,6 +12031,8 @@ export const createServer = (
       `[accounts] ${machineName(machineId)} signed out ${accountId}, removed while a session there still ran on it: none does now.`
     );
     rowsLeave(accountId, null, [machineId]);
+    // A session it left on no account is stopped from now on.
+    publishStalls();
   };
   /**
    * Each of `rows` that owes no move and whose process is up is asked to
@@ -29811,8 +29837,34 @@ export const createServer = (
     },
   });
   accountsMoved = atLimit.accountsChanged;
-  stallOf = (instanceId) => atLimit.stall(instanceId);
-  stalledNow = () => atLimit.stalled();
+  /**
+   * A session its account's removal (or sign-out on its machine) left on no
+   * account, in its stalled words ({@link moveOff}), once its process is
+   * gone: one still running reads its old store and answers what it is sent
+   * until then.
+   */
+  const strandedStall = (instanceId: string): Stall | undefined => {
+    const left = db.accounts.strandedOf(instanceId);
+    const [row] = left ? db.getInstancesByIds([instanceId]) : [];
+    if (!(left && row) || processMayRun(row)) {
+      return undefined;
+    }
+    const words = accountsWords.stalled;
+    return {
+      words:
+        left.why === "removed"
+          ? words.removed(left.accountName)
+          : words.signedOutHere(left.accountName),
+    };
+  };
+  stallOf = (instanceId) =>
+    atLimit.stall(instanceId) ?? strandedStall(instanceId);
+  stalledNow = () => [
+    ...new Set([
+      ...atLimit.stalled(),
+      ...db.accounts.stranded().map((one) => one.instanceId),
+    ]),
+  ];
 
   /**
    * Who answers the end of a turn of `instanceId` its live launch's Claude
@@ -29875,7 +29927,7 @@ export const createServer = (
   const oweMoveOff = (
     instanceId: string,
     accountId: string,
-    why: "refused" | "removed"
+    why: MoveOffWhy
   ): boolean => {
     const [row] = db.getInstancesByIds([instanceId]);
     const from = db.accounts.get(accountId);
@@ -29895,14 +29947,21 @@ export const createServer = (
         tokens: row.contextTokens,
         window: null,
         resetsAt: null,
-        ...(why === "removed"
-          ? { removed: true as const }
-          : { because: { kind: "refused" as const } }),
+        ...moveOffMark[why],
       },
       waits: "turn",
     });
     return true;
   };
+
+  /** Why a session leaves its account ({@link oweMoveOff}). */
+  type MoveOffWhy = "refused" | "removed" | "signed-out";
+  /** What a move off an account says of why it went ({@link oweMoveOff}). */
+  const moveOffMark = {
+    refused: { because: { kind: "refused" } },
+    removed: { removed: true },
+    "signed-out": { signedOut: true },
+  } as const satisfies Record<MoveOffWhy, Partial<AccountMove>>;
 
   /**
    * What removing `account` does with the sessions on it: every kept row
@@ -29921,35 +29980,49 @@ export const createServer = (
   };
 
   /**
-   * Every session on `account`, which a person is removing, owes a move to
-   * the account placement carries it to ({@link oweMoveOff}): one at rest
-   * is never woken for it, one in a turn moves at its end. A move owed to
-   * `account` is dropped. Answers the counts {@link removalOf} says, and
-   * the rows whose process may still run (`live`).
+   * Every session on `account` (on `machineId` alone, when a person signs it
+   * out there; on every machine, when he removes it) owes a move to the
+   * account placement carries it to ({@link oweMoveOff}): one at rest is
+   * never woken for it, one in a turn moves at its end. A move owed to
+   * `account` there is dropped. Answers how many move and how many have no
+   * account to go to, and the rows whose process may still run (`live`).
    */
   const moveOff = (
-    account: Account
+    account: Account,
+    why: "removed" | "signed-out",
+    machineId?: string
   ): {
     live: PublicInstanceRow[];
     moving: number;
     staying: number;
   } => {
+    const named = accountNameAmong(account, db.accounts.list());
+    const there = (row: { machineId: string }) =>
+      machineId === undefined || row.machineId === machineId;
     for (const [id, owed] of owedMoves.list()) {
-      if (owed.to === account.id) {
+      const [row] = owed.to === account.id ? db.getInstancesByIds([id]) : [];
+      if (row && there(row)) {
         owedMoves.delete(id);
       }
     }
-    const rows = db.instancesOnAccount(account.id);
+    const rows = db.instancesOnAccount(account.id).filter(there);
     let moving = 0;
+    const strandedIds: string[] = [];
     for (const row of rows) {
       // One a person (or rebalance) already moves elsewhere goes there.
       if (
         owedMoves.get(row.id)?.to !== undefined ||
-        oweMoveOff(row.id, account.id, "removed")
+        oweMoveOff(row.id, account.id, why)
       ) {
         moving += 1;
+      } else if (row.harness === "claude") {
+        // Its next send is refused for want of an account (placement's
+        // `noAccountRefusal`): its line says it stopped, and why.
+        strandedIds.push(row.id);
       }
     }
+    db.accounts.strand(strandedIds, named, why);
+    publishStalls();
     return {
       live: rows.filter(processMayRun),
       moving,
@@ -29971,7 +30044,7 @@ export const createServer = (
     named: string,
     leavesOn: readonly string[]
   ): { moving: number; staying: number } => {
-    const { moving, staying, live } = moveOff(account);
+    const { moving, staying, live } = moveOff(account, "removed");
     db.accounts.remove(account.id, "removed", leavesOn);
     forgetPendingOf(account.id);
     const settled = new Set(
@@ -29982,16 +30055,10 @@ export const createServer = (
       null,
       [...settled].filter((machineId) => !leavesOn.includes(machineId))
     );
-    for (const row of live) {
-      detach(
-        (async () => {
-          if (owedMoves.has(row.id) && (await sessionIdle(row))) {
-            relaunchOnAccount(row.id);
-          }
-        })(),
-        "removed account's move"
-      );
-    }
+    // Where a process still runs in its store, the rows at rest name no
+    // account now too; the running ones once their machine signs it out.
+    rowsLeave(account.id, null, leavesOn, "at-rest");
+    carryBetweenTurns(live);
     if (leavesOn.length > 0) {
       tickLeaves();
     }
@@ -30001,6 +30068,57 @@ export const createServer = (
         : "";
     console.log(
       `[accounts] ${named} removed: ${moving} session${moving === 1 ? " owes" : "s owe"} a move to another account, ${staying} ${staying === 1 ? "has" : "have"} none to go to${signsOutLater}.`
+    );
+    publishUsage();
+    return { moving, staying };
+  };
+
+  /**
+   * Each of `live` whose process is up between turns and owes a move is
+   * carried now, as at a turn's end; one in a turn moves at that end.
+   */
+  const carryBetweenTurns = (live: readonly PublicInstanceRow[]): void => {
+    for (const row of live) {
+      detach(
+        (async () => {
+          if (owedMoves.has(row.id) && (await sessionIdle(row))) {
+            relaunchOnAccount(row.id);
+          }
+        })(),
+        "account move between turns"
+      );
+    }
+  };
+
+  /**
+   * Signs `account` (`named`) out on `machineId` alone, as a person asked:
+   * every session on it there owes its move ({@link moveOff}). With a
+   * process there still running in its store (`leaves`), its sign-in goes
+   * now and its store once none does ({@link leaveAccounts}), the rows at
+   * rest there naming no account at once; otherwise the machine has
+   * already signed it out, and every row there names no account. A row that
+   * names no account is placed at its next wake like a new session, among
+   * the accounts signed in on its machine, and is refused with the way back
+   * (core `SendRefusal` `no-account`) when there is none.
+   */
+  const signOutMachine = (
+    account: Account,
+    named: string,
+    machineId: string,
+    leaves: boolean
+  ): { moving: number; staying: number } => {
+    const { moving, staying, live } = moveOff(account, "signed-out", machineId);
+    if (leaves) {
+      db.accounts.leaveMachine(account.id, machineId);
+      rowsLeave(account.id, null, [machineId], "at-rest");
+      carryBetweenTurns(live);
+      tickLeaves();
+    } else {
+      db.accounts.removeSignin(account.id, machineId);
+      rowsLeave(account.id, null, [machineId]);
+    }
+    console.log(
+      `[accounts] ${named} signed out on ${machineName(machineId)}: ${moving} session${moving === 1 ? " owes" : "s owe"} a move to another account there, ${staying} ${staying === 1 ? "has" : "have"} none to go to${leaves ? "; its store goes once no session there runs on it" : ""}.`
     );
     publishUsage();
     return { moving, staying };
@@ -35047,7 +35165,9 @@ export const createServer = (
       })
       // Signs an account out on one machine and drops that sign-in: the same
       // sign-out the account's removal runs on each of its machines, here on
-      // one, the account and its other machines left as they are.
+      // one, the account and its other machines left as they are. Every
+      // session on it there moves off it as a removal's do ({@link
+      // signOutMachine}).
       .delete(
         "/api/accounts/:id/machines/:machineId",
         { params: t.Object({ id: t.String(), machineId: t.String() }) },
@@ -35068,19 +35188,20 @@ export const createServer = (
           if (!signin) {
             return status(404, `${named} is not signed in on ${machine}.`);
           }
-          const live = db
-            .listInstances()
-            .filter(
-              (row) =>
-                row.accountId === account.id &&
-                row.machineId === params.machineId &&
-                ["starting", "running", "sleeping"].includes(row.status)
+          // A process there still running in its store keeps the store
+          // until none does ({@link leaveAccounts}), as an account's
+          // removal does: signed out under a turn, the turn would lose its
+          // credential and its transcript.
+          const leaves = db
+            .instancesOnAccount(account.id)
+            .some(
+              (row) => row.machineId === params.machineId && processMayRun(row)
             );
-          if (live.length > 0) {
-            return status(
-              409,
-              `${live.length} session${live.length === 1 ? "" : "s"} still run on ${named} on ${machine}; stop them first.`
-            );
+          if (leaves) {
+            return {
+              ok: true,
+              ...signOutMachine(account, named, params.machineId, true),
+            };
           }
           const answer = await forgetOn(account, params.machineId);
           switch (answer.kind) {
@@ -35105,10 +35226,10 @@ export const createServer = (
             default:
               throw unreachable(answer);
           }
-          db.accounts.removeSignin(account.id, params.machineId);
-          rowsLeave(account.id, null, [params.machineId]);
-          publishUsage();
-          return { ok: true };
+          return {
+            ok: true,
+            ...signOutMachine(account, named, params.machineId, false),
+          };
         }
       )
       .put(
@@ -35335,6 +35456,9 @@ export const createServer = (
               `${accountNameAmong(account, db.accounts.list())} is a key account: send its key to the machines that use it.`
             );
           }
+          // Signed in there again while a sign-out waited on a process there
+          // ({@link leaveAccounts}): the store stays.
+          db.accounts.dropLeave(account.id, params.machineId);
           // The machine's sign-in runs under the id it was asked for, the id
           // `…/signin/complete` finishes it under: one a join removed
           // finishes into the account it joined ({@link finishJoined}).
@@ -35490,6 +35614,9 @@ export const createServer = (
           }
           const machines = await Promise.all(
             body.machineIds.map(async (machineId) => {
+              // Its key sent there again while a sign-out waited on a process
+              // there ({@link leaveAccounts}): the store stays.
+              db.accounts.dropLeave(account.id, machineId);
               const answer = await callAgent(
                 machineId,
                 CONTROL_SET_PROVIDER_KEY,

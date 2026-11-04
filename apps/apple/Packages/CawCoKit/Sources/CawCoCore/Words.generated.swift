@@ -140,14 +140,24 @@ public enum Words {
         /// A session moved to another account, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`).
         public static let notMovedThen = "so the session stayed on its account."
 
-        /// A session's transcript line once it moved off an account a person removed (core `MoveBecause` `removed`). Placeholder copy.
+        /// A session's transcript line once it moved off an account a person removed (core `AccountMove` `removed`).
         public static func removedMove(to: String, from: String) -> String {
             "Moved to \(to): \(from) was removed"
         }
 
-        /// The same move as a line's last clause says why it went. Placeholder copy.
+        /// The same move as a line's last clause says why it went.
         public static func removedFrom(from: String) -> String {
             "\(from) was removed"
+        }
+
+        /// A session's transcript line once it moved off an account a person signed out on its machine (core `AccountMove` `signedOut`). Placeholder copy.
+        public static func signedOutMove(to: String, from: String) -> String {
+            "Moved to \(to): \(from) was signed out on this machine"
+        }
+
+        /// The same move as a line's last clause says why it went. Placeholder copy.
+        public static func signedOutFrom(from: String) -> String {
+            "\(from) was signed out on this machine"
         }
 
         public static let add = "Add account"
@@ -259,9 +269,9 @@ public enum Words {
                 machines.count > 0 ? "\(Words.andList(machines)) \(machines.count == 1 ? "is" : "are") signed in to it: \(machines.count == 1 ? "it signs" : "each signs") it out of \(harnesses) and forgets it. New sessions stop being placed on it." : "No machine is signed in to it. New sessions stop being placed on it."
             }
 
-            /// What the removal does with the sessions on it, after `removeBody`: how many move to another account (one in a turn when that turn ends) and how many no account can take. Placeholder copy.
+            /// What the removal does with the sessions on it, after `removeBody`: how many move to another account and how many no account can take.
             public static func removeSessions(moving: Int, staying: Int) -> String {
-                "\(moving > 0 ? "\(moving == 1 ? "1 session on it moves" : "\(moving) sessions on it move") to another account; one in a turn moves when that turn ends." : "")\(moving > 0 && staying > 0 ? " " : "")\(staying > 0 ? "\(staying == 1 ? "1 session has" : "\(staying) sessions have") no other account to run on and \(staying == 1 ? "waits" : "wait") until one is signed in." : "")"
+                "\(moving > 0 ? "\(moving == 1 ? "1 session on it moves" : "\(moving) sessions on it move") to another account." : "")\(moving > 0 && staying > 0 ? " " : "")\(staying > 0 ? "\(staying == 1 ? "1 session on it has" : "\(staying) sessions on it have") no other account to go to and \(staying == 1 ? "stops" : "stop") until one is signed in." : "")"
             }
 
             public static let machines = "Machines"
@@ -719,6 +729,16 @@ public enum Words {
             /// Claude Code refused its account's sign-in, and no other account can take it yet.
             public static func signedOut(from: String) -> String {
                 "Stopped: \(from)’s sign-in was refused; continues once an account can take it"
+            }
+
+            /// A person removed its account and no other could take it: it runs on no account (hub `strandedStall`).
+            public static func removed(from: String) -> String {
+                "Stopped: \(from) was removed; continues once an account can take it"
+            }
+
+            /// A person signed its account out on its machine and no other there could take it. Placeholder copy.
+            public static func signedOutHere(from: String) -> String {
+                "Stopped: \(from) was signed out on this machine; continues once an account can take it"
             }
 
             /// Held past the cutoff (core `AtLimit.staleAfterHours`) since `day` ("2 Oct"): nothing carries it on until a person or its parent writes.

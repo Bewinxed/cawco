@@ -2415,6 +2415,22 @@ export const accountLeaves = sqliteTable(
   (table) => [primaryKey({ columns: [table.accountId, table.machineId] })]
 );
 
+/**
+ * A session a person's removal of its account (or sign-out of it on its
+ * machine) left on no account, as no other could take it: stopped, its
+ * line says so (server.ts `strandedStall`), until a launch of it is placed
+ * on an account. `accountName` is the account as it was named then: a
+ * removed one has no row left to name it by.
+ */
+export const strandedSessions = sqliteTable("stranded_sessions", {
+  instanceId: text("instance_id")
+    .primaryKey()
+    .references(() => instances.id, { onDelete: "cascade" }),
+  accountName: text("account_name").notNull(),
+  why: text("why").$type<"removed" | "signed-out">().notNull(),
+  since: stampedNow("since"),
+});
+
 /** Where each account is signed in, as each machine's agent last reported it. */
 export const accountSignins = sqliteTable(
   "account_signins",

@@ -1313,6 +1313,8 @@ export type AccountMove =
       asked?: true;
       /** Moved because a person removed `from` (`DELETE /api/accounts/:id`): every session on it moves off. */
       removed?: true;
+      /** Moved because a person signed `from` out on its machine (`DELETE /api/accounts/:id/machines/:machineId`): every session on it there moves off. */
+      signedOut?: true;
       /**
        * Moved to another organization with a context of the policy's
        * `moveWholeUnderK` or more, compacted natively ({@link Compaction}):
@@ -1667,9 +1669,11 @@ const movedWords = (
   if (move.compact) {
     return compactedMoveWords(move, cost, now);
   }
-  if (move.removed) {
+  if (move.removed || move.signedOut) {
     return {
-      line: accountsWords.removedMove(move.to.name, move.from.name),
+      line: move.removed
+        ? accountsWords.removedMove(move.to.name, move.from.name)
+        : accountsWords.signedOutMove(move.to.name, move.from.name),
       detail: move.sameOrganization
         ? "Same organization, cache kept"
         : `Re-read ${tokenWords(move.tokens)}${cost}`,
@@ -1726,6 +1730,7 @@ interface MoveSent {
   from: { name: string };
   removed?: true;
   resetsAt: number | null;
+  signedOut?: true;
   window: string | null;
 }
 
@@ -1755,6 +1760,9 @@ const costWords = (
 const hitWords = (move: MoveSent, now: number): string => {
   if (move.because?.kind === "refused") {
     return `${move.from.name}’s sign-in was refused`;
+  }
+  if (move.signedOut) {
+    return accountsWords.signedOutFrom(move.from.name);
   }
   return move.removed
     ? accountsWords.removedFrom(move.from.name)

@@ -31,11 +31,16 @@ export interface SwatchWords {
 export const accountsWords = {
   /** A session moved to another account, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`). */
   notMovedThen: "so the session stayed on its account.",
-  /** A session's transcript line once it moved off an account a person removed (core `MoveBecause` `removed`). Placeholder copy. */
+  /** A session's transcript line once it moved off an account a person removed (core `AccountMove` `removed`). */
   removedMove: (to: string, from: string) =>
     `Moved to ${to}: ${from} was removed`,
-  /** The same move as a line's last clause says why it went. Placeholder copy. */
+  /** The same move as a line's last clause says why it went. */
   removedFrom: (from: string) => `${from} was removed`,
+  /** A session's transcript line once it moved off an account a person signed out on its machine (core `AccountMove` `signedOut`). Placeholder copy. */
+  signedOutMove: (to: string, from: string) =>
+    `Moved to ${to}: ${from} was signed out on this machine`,
+  /** The same move as a line's last clause says why it went. Placeholder copy. */
+  signedOutFrom: (from: string) => `${from} was signed out on this machine`,
   // ── The list (accounts/+page.svelte, AccountListRow) ──────────────────
   add: "Add account",
   addFirst: "Add your first account",
@@ -113,12 +118,11 @@ export const accountsWords = {
         ? `${andList(machines)} ${machines.length === 1 ? "is" : "are"} signed in to it: ${machines.length === 1 ? "it signs" : "each signs"} it out of ${harnesses} and forgets it. New sessions stop being placed on it.`
         : "No machine is signed in to it. New sessions stop being placed on it.",
     /**
-     * What the removal does with the sessions on it, after `removeBody`:
-     * how many move to another account (one in a turn when that turn
-     * ends) and how many no account can take. Placeholder copy.
+     * What the removal does with the sessions on it, after `removeBody`: how
+     * many move to another account and how many no account can take.
      */
     removeSessions: (moving: number, staying: number) =>
-      `${moving > 0 ? `${moving === 1 ? "1 session on it moves" : `${moving} sessions on it move`} to another account; one in a turn moves when that turn ends.` : ""}${moving > 0 && staying > 0 ? " " : ""}${staying > 0 ? `${staying === 1 ? "1 session has" : `${staying} sessions have`} no other account to run on and ${staying === 1 ? "waits" : "wait"} until one is signed in.` : ""}`,
+      `${moving > 0 ? `${moving === 1 ? "1 session on it moves" : `${moving} sessions on it move`} to another account.` : ""}${moving > 0 && staying > 0 ? " " : ""}${staying > 0 ? `${staying === 1 ? "1 session on it has" : `${staying} sessions on it have`} no other account to go to and ${staying === 1 ? "stops" : "stop"} until one is signed in.` : ""}`,
     machines: "Machines",
     looks: "Looks",
     limits: "Limits",
@@ -422,6 +426,12 @@ export const accountsWords = {
     /** Claude Code refused its account's sign-in, and no other account can take it yet. */
     signedOut: (from: string) =>
       `Stopped: ${from}’s sign-in was refused; continues once an account can take it`,
+    /** A person removed its account and no other could take it: it runs on no account (hub `strandedStall`). */
+    removed: (from: string) =>
+      `Stopped: ${from} was removed; continues once an account can take it`,
+    /** A person signed its account out on its machine and no other there could take it. Placeholder copy. */
+    signedOutHere: (from: string) =>
+      `Stopped: ${from} was signed out on this machine; continues once an account can take it`,
     /**
      * Held past the cutoff (core `AtLimit.staleAfterHours`) since `day`
      * ("2 Oct"): nothing carries it on until a person or its parent writes.

@@ -33206,12 +33206,20 @@
       "deleteApiAccountsByIdMachinesByMachineId200": {
         "type": "object",
         "properties": {
+          "moving": {
+            "type": "number"
+          },
           "ok": {
             "type": "boolean"
+          },
+          "staying": {
+            "type": "number"
           }
         },
         "required": [
-          "ok"
+          "moving",
+          "ok",
+          "staying"
         ]
       },
       "putApiAccountsRoutingByProvider200": {
@@ -49237,6 +49245,11 @@
                     "const": true,
                     "type": "boolean"
                   },
+                  "signedOut": {
+                    "description": "Moved because a person signed `from` out on its machine (`DELETE /api/accounts/:id/machines/:machineId`): every session on it there moves off.",
+                    "const": true,
+                    "type": "boolean"
+                  },
                   "compact": {
                     "$ref": "#/components/schemas/BlockMetadataCompact",
                     "description": "Moved to another organization with a context of the policy's\n`moveWholeUnderK` or more, compacted natively ({@link Compaction}):\nit files its open items, then its harness's `/compact` runs, as its\nfirst steps on `to`, or on `from` before the move\n({@link compactFirst}). The line is said again under its id as that\ngoes."
@@ -58201,6 +58214,11 @@
                   },
                   "removed": {
                     "description": "Moved because a person removed `from` (`DELETE /api/accounts/:id`): every session on it moves off.",
+                    "const": true,
+                    "type": "boolean"
+                  },
+                  "signedOut": {
+                    "description": "Moved because a person signed `from` out on its machine (`DELETE /api/accounts/:id/machines/:machineId`): every session on it there moves off.",
                     "const": true,
                     "type": "boolean"
                   },
