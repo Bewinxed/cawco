@@ -4,6 +4,8 @@
     /** What a person does to make the move ("Try again"), when the agent named it. */
     label: string | null;
     labelAt: { x: number; y: number } | null;
+    /** Opens its move on the Animation face: a press on the arrow or on its act. */
+    open: () => void;
     /** The states file plays it: a solid line; one the agent only named is dashed. */
     played: boolean;
     points: { x: number; y: number }[];
@@ -16,7 +18,9 @@
    * B-spline through its points (d3's curveBasis, the curve dagre's routes
    * are made for), its arrowhead at the state it reaches, and the act that
    * makes it (its label) where dagre left room for it, so no arrow crosses
-   * a card's title and no label stands on a card.
+   * a card's title and no label stands on a card. A press on the arrow
+   * (a band `--space-5` wide along it, the line itself being 1.5px) or on
+   * its act opens its move.
    */
   import { EdgeLabel, type EdgeProps } from "@xyflow/svelte";
 
@@ -55,17 +59,24 @@
 </script>
 
 <path
+  class="fill-none stroke-transparent stroke-(length:--space-5)"
+  d={path}
+  data-slot="route-hit"
+/>
+<path
   {id}
-  class="fill-none stroke-border-contrast stroke-(length:--c-graph-edge)"
+  class="pointer-events-none fill-none stroke-border-contrast stroke-(length:--c-graph-edge)"
   d={path}
   marker-end={markerEnd}
   stroke-dasharray={route.played ? undefined : "4 4"}
 />
 {#if route.label && route.labelAt}
   <EdgeLabel transparent x={route.labelAt.x} y={route.labelAt.y}>
-    <span
-      class="block max-w-c-graph-label rounded-sm border border-border-hairline bg-surface-raised px-space-1 type-meta text-ink-row"
-      >{route.label}</span
+    <button
+      class="pointer-hit block max-w-c-graph-label rounded-sm border border-border-hairline bg-surface-raised px-space-1 text-start type-meta text-ink-row transition-control can-hover:hover:bg-surface-hover"
+      onclick={route.open}
+      tabindex="-1"
+      type="button">{route.label}</button
     >
   </EdgeLabel>
 {/if}

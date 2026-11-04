@@ -587,6 +587,8 @@ public enum Size {
     public static let cGraphNodeW: Double = 208
     /// The widest a move's act stands on its arrow in the design graph's whole set ("Each run an orchestrator" on one line, a longer act wrapping), so dagre leaves it room between the ranks and it never stands on a card.
     public static let cGraphLabel: Double = 160
+    /// The design graph's clip editor: the column its values' names stand in, as wide as its longest ("Curve numbers" in the label role), so opening Advanced moves no control.
+    public static let cGraphEditorLabel: Double = 104
     /// A value's field in the design graph's clip editor: a figure with its unit and its two steppers inside the field ("− 1,250 ms +"), and the curve list beside it at the same width, so the editor's values read down one column.
     public static let cGraphFigureW: Double = 168
     /// The design graph's drawer at its head stop under the desk line: the grabber, the faces' segmented row and the journey's steps, each 44px to a finger, so the stage above stands whole (spec, Widths: 390).

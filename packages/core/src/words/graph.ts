@@ -73,7 +73,10 @@ export const graphWords = {
   /** A move's arrow on the map, for a reader: its two states and the act that makes it. */
   moveEdge: (from: string, to: string, act: string | null) =>
     act ? `${from} → ${to}, ${act}` : `${from} → ${to}`,
-  noMove: (state: string) => `${state} has no animation.`,
+  noMove: (state: string) =>
+    `${state} has no animation. Choose a move above, or press an arrow on the map.`,
+  /** The Animation face's list of moves: its name, and its words while none is chosen. */
+  chooseMove: "Choose a move",
   play: "Play",
   pause: "Pause",
   /** The playhead's time over the move's length, tabular figures; a narrow corner breaks it after the slash, never between a figure and its unit. */
