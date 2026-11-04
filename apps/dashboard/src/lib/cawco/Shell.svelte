@@ -917,6 +917,28 @@
     });
   });
 
+  /**
+   * The New Session form, opened from the phone's sheet (its header's Start
+   * session, the Working list's empty state, a project's +): the sheet goes
+   * as the form's sheet rises, as it does for Add machine, so one modal
+   * stands at a time, and the form gives the focus back to the burger.
+   */
+  $effect(() => {
+    if (!(spawning.open || continuing.source !== null)) {
+      return;
+    }
+    // biome-ignore lint/complexity/noVoid: read-only dependency, a reopen while open
+    void spawning.opening;
+    untrack(() => {
+      if (railOpen && !railed) {
+        if (!spawning.anchor || spawning.anchor.closest("[data-rail-sheet]")) {
+          spawning.anchor = burger;
+        }
+        railOpen = false;
+      }
+    });
+  });
+
   /** Files' drawer, from the sidebar's row: the sidebar goes as it rises. */
   function openFilesSheet() {
     files.returnTo = burger;
