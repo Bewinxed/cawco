@@ -71,6 +71,7 @@
     scheme,
     stale = false,
     lit = null,
+    at = 0,
     lang,
     need = $bindable(0),
   }: {
@@ -86,6 +87,8 @@
     stale?: boolean;
     /** What a row rested on names: ringed on the stage, nothing else changed. */
     lit?: Element | null;
+    /** The move's time on the stage, ms: the ring is read again as it changes. */
+    at?: number;
     /** The page's language, for its figures. */
     lang: string | undefined;
     /**
@@ -642,36 +645,20 @@
   }
 
   /**
-   * Where `el` stands once every animation in the drawing has run to its
-   * end: the move's replays hold their frames (a scrub at 0 holds the
-   * failure line folded, 10px tall), and an element mid-move is not its
-   * whole box. Each is stood at its end for the read and put back at
-   * once, before anything paints; a loop is the state's own and is left.
+   * The ring on what a rested row names: its box as it stands at the
+   * move's time (`at`), read again at each frame of a play or a scrub and
+   * as the drawing lays out anew. Read at the move's end, it stood 26px
+   * below the button while the stage held the move at 0.
    */
-  function restBoxOf(el: Element) {
-    const held: [Animation, CSSNumberish | null][] = [];
-    for (const animation of (frame as HTMLElement).getAnimations({
-      subtree: true,
-    })) {
-      const end = animation.effect?.getComputedTiming().endTime;
-      if (typeof end === "number" && Number.isFinite(end)) {
-        held.push([animation, animation.currentTime]);
-        animation.currentTime = end;
-      }
-    }
-    const box = boxOf(el);
-    for (const [animation, at] of held) {
-      animation.currentTime = at;
-    }
-    return box;
-  }
-
-  /** The ring on what a rested row names: its whole box at rest, read again as the drawing lays out anew. */
   const litBox = $derived.by(() => {
-    if (laidOut < 0 || !(lit && frame && mounted && frame.contains(lit))) {
+    if (
+      laidOut < 0 ||
+      at < 0 ||
+      !(lit && frame && mounted && frame.contains(lit))
+    ) {
       return null;
     }
-    return restBoxOf(lit);
+    return boxOf(lit);
   });
 
   /** Reduced motion's Play: the end state fades in where it stands (DESIGN.md, The Reduced Motion Rule). */

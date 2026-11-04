@@ -156,7 +156,7 @@ export const graphWords = {
     "--dur-settle": "Settle",
   } as Record<string, string>,
   /** The curve the agent wrote, when it is none of the design system's: offered to go back to. */
-  asWritten: "As written",
+  agentsCurve: "Agent's curve",
   /** A clip's element when nothing names it. */
   element: "Element",
 
@@ -202,6 +202,27 @@ export const graphWords = {
   /** One run of a row that runs more than once: its bar's name for a reader. */
   runOf: (clip: string, at: number, of: number) =>
     `${clip}, run ${at} of ${of}`,
+  /** What an animation changes, by its CSS property, for the rows under a row; any other is said from its own name. */
+  properties: {
+    opacity: "Opacity",
+    transform: "Position",
+    translate: "Position",
+    scale: "Size",
+    rotate: "Turn",
+    height: "Height",
+    "block-size": "Height",
+    width: "Width",
+    "inline-size": "Width",
+    "clip-path": "Reveal",
+    filter: "Blur",
+    "background-color": "Fill",
+    color: "Text colour",
+    "border-color": "Edge colour",
+    "box-shadow": "Shadow",
+  } as Record<string, string>,
+  /** The As written view, under its rows: the agent's timing stands read only. */
+  readOnly:
+    "The agent's timing as written, read only. Switch to Yours to change it.",
   /** A row under a row that moves several parts of its thing at once (a morphed text's letters): how many. */
   partsCount: (n: number) => `${n} parts`,
   /** A drawn curve's two handles, for a reader. */

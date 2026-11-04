@@ -123,7 +123,6 @@
     undoable = false,
     onundo,
     selected = $bindable(null),
-    opened = $bindable({}),
   }: {
     move: MoveState;
     /** The playhead, ms into the move. */
@@ -169,8 +168,6 @@
     onundo: () => void;
     /** The line whose settings stand open under it, by its key (a row's first clip's id; an animation's `row/clip`). */
     selected?: string | null;
-    /** The rows opened into one row per animation, by row. */
-    opened?: Record<string, boolean>;
   } = $props();
 
   const clips = $derived(move.kind === "ready" ? move.clips : []);
@@ -321,6 +318,24 @@
     onseekend(landed);
   };
 
+  /**
+   * What an animation changes, in words: the property's own name where
+   * the words have one ("Opacity", "Position"), else the property's name
+   * said plainly ("--swap-away" is "Swap away"), never the CSS in code type.
+   */
+  const LEADING_DASHES = /^-+/u;
+  const JOINERS = /[-_]+/gu;
+  const propertyName = (property: string): string => {
+    const said = words.properties[property];
+    if (said) {
+      return said;
+    }
+    const plain = property
+      .replace(LEADING_DASHES, "")
+      .replace(JOINERS, " ")
+      .trim();
+    return plain.charAt(0).toUpperCase() + plain.slice(1);
+  };
   /** A row as a person says it: what moves and how. */
   const nameOf = (track: Track) => words.clipName(track.name, track.how);
   // Another move on the face: its rows are other rows, none selected.
@@ -354,12 +369,14 @@
     part: Part | null;
     track: Track;
   }
-  /** The timeline's lines, in order: each row, and under an opened one its animations by run and property, in the order the engine ran them, so retiming one never moves it. */
+  /** The row open on the face: the selected line's row, a row itself or one of its animations. */
+  const openRow = $derived(selected ? selected.split("/")[0] : null);
+  /** The timeline's lines, in order: each row, and under the open one its animations by run and property, in the order the engine ran them, so retiming one never moves it. */
   const lines = $derived(
     tracks.flatMap((track): Line[] => {
       const own: Line = { key: track.id, track, part: null };
       const parts = partsOf(track);
-      if (!(opened[track.id] && parts.length > 1)) {
+      if (!(openRow === track.id && parts.length > 1)) {
         return [own];
       }
       return [
@@ -368,6 +385,26 @@
       ];
     })
   );
+  /**
+   * One press on a row does one thing: it opens the row or closes it, its
+   * chevron turning. An open row shows its settings under it and, where its
+   * thing moves more than once, a row per animation under those; each of
+   * those opens and closes its own settings the same way. Closing an
+   * animation's row leaves its row open; closing a row closes all of it.
+   * (A row's words and its chevron opened two different things, and
+   * nothing said which: his words, "if I click the button it opens one
+   * thing, but if I open the chevron it opens something completely
+   * different".)
+   */
+  const isOpen = (line: Line) =>
+    line.part ? selected === line.key : openRow === line.key;
+  const press = (line: Line) => {
+    if (line.part) {
+      selected = selected === line.key ? (openRow ?? null) : line.key;
+    } else {
+      selected = openRow === line.key ? null : line.key;
+    }
+  };
   /** The kinds of change the bars show, in the key's order: their colours named. */
   const KINDS: ClipKind[] = ["size", "move", "fade", "tint", "effect", "other"];
   const kindsShown = $derived(
@@ -410,6 +447,11 @@
   });
   let titleOpen = $state(false);
   let movesList = $state<HTMLElement>();
+  /** The time's widest reading, in characters of its monospaced figures: the length over the length. */
+  const timeWidth = $derived(
+    words.playhead(figure(Math.round(length)), figure(Math.round(length)))
+      .length
+  );
   const bare =
     "pointer-hit touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-md text-ink-strong transition-control can-hover:hover:bg-surface-hover";
 </script>
@@ -507,9 +549,12 @@
         </Toggle>
       {/snippet}
     </Tip>
+    <!-- As wide as its widest reading, so nothing beside it moves while
+         it counts (the move's name on a phone shifted at each figure). -->
     <span
-      class="ms-space-1 type-code whitespace-nowrap text-ink-muted num"
+      class="ms-space-1 min-w-(--time-w) type-code whitespace-nowrap text-ink-muted num"
       data-slot="time"
+      style:--time-w="{timeWidth}ch"
       >{words.playhead(figure(handle), figure(Math.round(length)))}</span
     >
     {#if still}
@@ -550,6 +595,32 @@
     data-slot="playhead"
     style:--at={pct(Math.min(playhead, length))}
   ></span>
+{/snippet}
+
+{#snippet rowWords(line: Line, tone: "open" | "rest" | "read")}
+  <!-- A row's words: what moves in the row ink, how in muted; an
+       animation's row says what it changes in words, its run and its
+       parts; open, all in selected ink; read only (As written), all muted. -->
+  {@const name = {
+    open: "text-selected-ink",
+    read: "text-ink-muted",
+    rest: "text-ink-row",
+  }[tone]}
+  {@const rest = tone === "open" ? "text-selected-ink" : "text-ink-muted"}
+  <span class="min-w-0 truncate">
+    {#if line.part}
+      <span class={name}>{propertyName(line.part.property)}</span>
+      {#if line.part.run !== null}
+        <span class={rest}>{words.runAt(line.part.run)}</span>
+      {/if}
+      {#if line.part.count > 1}
+        <span class={rest}>{words.partsCount(line.part.count)}</span>
+      {/if}
+    {:else}
+      <span class={name}>{line.track.name}</span>
+      <span class={rest}>{line.track.how}</span>
+    {/if}
+  </span>
 {/snippet}
 
 {#snippet writtenLane(track: Track)}
@@ -594,10 +665,16 @@
     {:else}
       <!-- The head: the move as the face's title, and once he changed any
          timing, the two versions and Reset all. -->
+      <!-- One line of one height, whatever it holds (the title alone, Undo
+           reset, or the versions and Reset all), never wrapping: the rows
+           under it stood 6px lower once the versions came, and on a phone
+           the versions fell under the transport where no finger reached
+           them. The title gives way first, its whole name in its menu. -->
       <header
-        class="flex min-h-c-btn-h-sm min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2"
+        class="flex h-c-btn-h min-w-0 flex-none items-center gap-x-space-3"
+        data-slot="move-head"
       >
-        <div class="flex min-w-0 flex-1 basis-c-graph-node-w items-center">
+        <div class="flex min-w-0 flex-1 items-center">
           {@render title()}
         </div>
         {#if move.kind === "ready" && changedCount === 0 && undoable}
@@ -638,18 +715,31 @@
                 >
               </ToggleGroup.Item>
             </ToggleGroup.Root>
-            <Button
-              aria-label={words.resetAllSaid}
-              data-slot="reset-all"
-              onclick={() =>
-                onreset(
-                  clips.filter((clip) => clip.was).map((clip) => clip.id)
-                )}
-              size="sm"
-              variant="ghost"
-            >
-              {words.resetAll}
-            </Button>
+            <!-- Reset all: its words on a desk; on a narrow face its glyph,
+                 its words in its tooltip and its name. -->
+            <Tip label={words.resetAllSaid}>
+              {#snippet children(tip)}
+                <Button
+                  {...tip}
+                  aria-label={words.resetAllSaid}
+                  data-slot="reset-all"
+                  onclick={() =>
+                    onreset(
+                      clips.filter((clip) => clip.was).map((clip) => clip.id)
+                    )}
+                  size="sm"
+                  variant="ghost"
+                >
+                  <IconReset
+                    aria-hidden="true"
+                    class="hidden size-icon-md @max-timeline/move:block"
+                  />
+                  <span class="@max-timeline/move:sr-only"
+                    >{words.resetAll}</span
+                  >
+                </Button>
+              {/snippet}
+            </Tip>
           </div>
         {/if}
       </header>
@@ -688,7 +778,7 @@
           <div
             data-slot="timeline"
             class="grid min-w-0 grid-cols-(--cols) gap-x-space-3 @max-timeline/move:grid-cols-1"
-            style:--cols="var(--c-graph-move-name-w) minmax(0, 1fr)"
+            style:--cols="minmax(var(--c-graph-move-name-w), 38%) minmax(0, 1fr)"
           >
             <div
               class="sticky top-0 z-2 col-span-full grid min-h-c-btn-h grid-cols-subgrid bg-surface-raised"
@@ -759,8 +849,7 @@
             {#each lines as line (line.key)}
               {@const track = line.track}
               {@const name = lineName(line)}
-              {@const parts = line.part ? [] : partsOf(track)}
-              {@const many = parts.length > 1}
+              {@const open = !written && isOpen(line)}
               {@const chosen = picked?.key === line.key}
               {@const edited = !written && editsOf(track).size > 0}
               <!-- A row: one thing that moves, or under it one animation; one
@@ -779,85 +868,43 @@
                     line.part && "ps-c-btn-h-xs",
                   ]}
                 >
-                  <!-- The disclosure slot: a triangle where the thing moves
-                     more than once, else its width kept, so every name
-                     starts on one edge. -->
-                  <span class="grid w-c-btn-h-xs flex-none place-items-center">
-                    {#if many}
-                      {@const said = opened[track.id]
-                        ? words.hideClips
-                        : words.showClips}
-                      <Tip label={said}>
-                        {#snippet children(tip)}
-                          <button
-                            {...tip}
-                            type="button"
-                            aria-expanded={opened[track.id] ?? false}
-                            aria-label={said}
-                            class="pointer-hit touch-hit grid size-c-btn-h-xs place-items-center rounded-sm text-ink-muted transition-control can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
-                            onclick={() => {
-                              opened = {
-                                ...opened,
-                                [track.id]: !opened[track.id],
-                              };
-                            }}
-                          >
-                            <IconChevronRight
-                              aria-hidden="true"
-                              class={[
-                                "size-icon-sm transition-transform duration-(--dur-control) ease-out rtl:-scale-x-100",
-                                opened[track.id] && "rotate-90 rtl:-rotate-90",
-                              ]}
-                            />
-                          </button>
-                        {/snippet}
-                      </Tip>
-                    {/if}
-                  </span>
-                  <!-- The row's words: a press selects it, its settings
-                     opening under it. -->
-                  <button
-                    type="button"
-                    aria-expanded={written ? undefined : chosen}
-                    aria-label={name}
-                    class="pointer-hit touch-hit flex h-c-btn-h-sm min-w-0 flex-1 items-center rounded-sm px-space-1 text-start type-label transition-control aria-expanded:bg-selected-bg disabled:cursor-default can-hover:enabled:not-aria-expanded:hover:bg-surface-hover"
-                    disabled={written}
-                    onclick={() => {
-                      selected = chosen ? null : line.key;
-                    }}
-                    title={name}
-                  >
-                    <span class="min-w-0 truncate">
-                      {#if line.part}
-                        <span
-                          class={[
-                            "type-code",
-                            chosen ? "text-selected-ink" : "text-ink-row",
-                          ]}>{line.part.property}</span
-                        >
-                        {#if line.part.run !== null}
-                          <span class="text-ink-muted"
-                            >{words.runAt(line.part.run)}</span
-                          >
-                        {/if}
-                        {#if line.part.count > 1}
-                          <span class="text-ink-muted"
-                            >{words.partsCount(line.part.count)}</span
-                          >
-                        {/if}
-                      {:else}
-                        <span
-                          class={chosen ? "text-selected-ink" : "text-ink-row"}
-                          >{track.name}</span
-                        >
-                        <span
-                          class={chosen
-                            ? "text-selected-ink"
-                            : "text-ink-muted"}>{track.how}</span
-                        >
-                      {/if}
+                  {#if written}
+                    <!-- As written: the agent's timing, read only. The row
+                         stands as words alone, no chevron and no press. -->
+                    <span
+                      class="flex h-c-btn-h-sm min-w-0 flex-1 cursor-default items-center ps-c-btn-h-xs pe-space-1 type-label"
+                      title={name}
+                    >
+                      {@render rowWords(line, "read")}
                     </span>
-                  </button>
+                  {:else}
+                    <!-- The row's one press: it opens or closes the row, its
+                         chevron turning; what opens is under it. -->
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      aria-label={name}
+                      class="pointer-hit touch-hit flex h-c-btn-h-sm min-w-0 flex-1 items-center rounded-sm pe-space-1 text-start type-label transition-control aria-expanded:bg-selected-bg can-hover:not-aria-expanded:hover:bg-surface-hover"
+                      onclick={() => press(line)}
+                      title={name}
+                    >
+                      <span
+                        class="grid w-c-btn-h-xs flex-none place-items-center"
+                        data-box
+                      >
+                        <IconChevronRight
+                          aria-hidden="true"
+                          class={[
+                            "size-icon-sm transition-transform duration-(--dur-control) ease-out rtl:-scale-x-100",
+                            open
+                              ? "rotate-90 text-selected-ink rtl:-rotate-90"
+                              : "text-ink-muted",
+                          ]}
+                        />
+                      </span>
+                      {@render rowWords(line, open ? "open" : "rest")}
+                    </button>
+                  {/if}
                   {#if edited}
                     <!-- A changed row: its restore glyph at the name's end,
                          inside the name's own column, so the lanes never
@@ -900,7 +947,9 @@
                         onretime={(run, from, to, replay) =>
                           onretime(retimeRun(run, from, to), replay)}
                         onselect={() => {
-                          selected = line.key;
+                          if (!open) {
+                            press(line);
+                          }
                         }}
                         {scale}
                         selected={chosen}
@@ -947,6 +996,12 @@
               </li>
             {/each}
           </ul>
+          {#if written}
+            <!-- Why the rows take no press in As written. -->
+            <p class="m-0 pt-space-2 type-meta text-ink-muted text-pretty">
+              {words.readOnly}
+            </p>
+          {/if}
         </div>
       {/if}
     {/if}

@@ -206,11 +206,11 @@ export const AtRest = {};
 export const Selected = { args: { selected: "5" } };
 
 /** A row with two runs opened: Button “Create routine” as one row per animation, each named by its property and its run. */
-export const TwoRuns = { args: { opened: { "1": true } } };
+export const TwoRuns = { args: { selected: "1" } };
 
 /** One animation of a two-run row chosen: its own settings under it. */
 export const TwoRunsOneChosen = {
-  args: { opened: { "1": true }, selected: "1/1/--swap-away" },
+  args: { selected: "1/1/--swap-away" },
 };
 
 /** At rest beside a 2529 stage: the room at 800. */
