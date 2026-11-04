@@ -60,22 +60,26 @@
  * (j) The owner's switches, in the settings Claude Code's own engine
  *     resolves (the Agent SDK's `resolveSettings`): DISABLE_AUTOUPDATER in
  *     `~/.claude/settings.json` declines CawCo's automatic update and says
- *     why, while a press still updates; DISABLE_UPDATES in the environment
- *     declines a press too. End to end, a machine whose agent runs with
- *     DISABLE_AUTOUPDATER on (the scratch fleet's default) is never updated,
- *     and its row says why.
+ *     why, that Retry updates it now, and what keeps it current, while a
+ *     press still updates; DISABLE_UPDATES in the environment declines a
+ *     press too. End to end, a machine whose agent runs with
+ *     DISABLE_AUTOUPDATER on (the scratch fleet's default) is never updated
+ *     on its own, its row says why, and Retry on that row runs its update.
  * (k) A copy Homebrew holds is updated with `brew upgrade claude-code`,
  *     never `claude update`; a brew that refuses leaves its words on the
  *     row. End to end, the hub updates such a machine with no press.
  * (l) CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, set to anything, `0` too,
- *     declines CawCo's automatic update; a press still updates.
+ *     declines CawCo's automatic update as an automatic switch; a press
+ *     still updates.
  * (m) Where the engine says a switch is set, as a row names it: Claude
  *     Code's macOS profile, HKLM and HKCU registry policies, managed
  *     settings files and server-managed settings each stand over the
  *     user's settings, and the settings' `env` over the environment's. Each
- *     row ends on how an unset there reaches CawCo: a Retry for a place the
- *     next read reads as it stands, a Claude Code session's fetch first for
- *     the server-managed settings, a restart of CawCo first for its
+ *     row ends on what an unset there takes to reach CawCo, said for the
+ *     list the switch is in: nothing more than a Retry, or for the
+ *     automatic updates nothing more than the unset, in a place the next
+ *     read reads as it stands; a Claude Code session's fetch first for the
+ *     server-managed settings; a restart of CawCo first for its
  *     environment. The read's process answers the settings it printed, or
  *     none.
  * (n) A read of the settings that fails decides nothing: neither CawCo's
@@ -784,11 +788,11 @@ const fleetLegs = async (kit: Kit): Promise<void> => {
       declined?.state === "installed" &&
         declined.version === BEHIND &&
         declined.detail ===
-          toolWords.updatesOff(
+          toolWords.autoUpdatesOff(
             NAME,
             "DISABLE_AUTOUPDATER",
             toolWords.inEnvironment,
-            toolWords.thenRestarted
+            toolWords.keepRestarted
           ) &&
         (await off.calls()).length === 0,
       `row: ${JSON.stringify(declined)}; its updater ran: ${(await off.calls()).join(", ") || "never"}`
@@ -851,7 +855,7 @@ const fleetLegs = async (kit: Kit): Promise<void> => {
       `row: ${JSON.stringify(moved)}; the off machine's row: ${JSON.stringify(row(OFF))}`
     );
 
-    await cliToolsPage(kit, fleet, behind, row);
+    await cliToolsPage(kit, fleet, { behind, off }, row);
 
     // (i) The fleet pins a version, and a press carrying none installs it.
     const pinned = await fetch(`${fleet.base}/api/tools/claude`, {
@@ -908,7 +912,7 @@ const namesWhole = (
 const cliToolsPage = async (
   kit: Kit,
   fleet: KitFleet,
-  behind: StandIn,
+  { behind, off }: { behind: StandIn; off: StandIn },
   row: (machine: string) => CellRow | undefined
 ): Promise<void> => {
   const { check } = kit;
@@ -985,6 +989,9 @@ const cliToolsPage = async (
     await offSays(kit, page, offHead, view);
     if (view === "phone" && shown) {
       await retried(kit, page, checks, { behind, head, row });
+    }
+    if (view === "phone") {
+      await offRetried(kit, page, { off, offHead, row });
     }
     await page.close();
   }
@@ -1076,6 +1083,57 @@ const retried = async (
   await checks.at(page, `${view}: landed`);
 };
 
+/**
+ * (j) at 390: Retry on the row of the machine whose only switches set are
+ * automatic ones (its agent's DISABLE_AUTOUPDATER and nonessential traffic,
+ * the scratch fleet's): a press, which runs past them as Claude Code's own
+ * `claude update` does, so its update runs and lands.
+ */
+const offRetried = async (
+  kit: Kit,
+  page: import("playwright-core").Page,
+  {
+    off,
+    offHead,
+    row,
+  }: {
+    off: StandIn;
+    offHead: string;
+    row: (machine: string) => CellRow | undefined;
+  }
+): Promise<void> => {
+  const offMark = page.locator(LEDGER).getByRole("button", { name: offHead });
+  const before = (await off.calls()).length;
+  let pressed = false;
+  if ((await offMark.count()) > 0) {
+    await offMark.click();
+    pressed = await page
+      .locator(POPOVER)
+      .filter({ hasText: offHead })
+      .getByRole("button", { name: "Retry" })
+      .click({ timeout: 10_000 })
+      .then(
+        () => true,
+        () => false
+      );
+  }
+  const landed = await until(
+    "the retried update of the machine whose automatic updates are off",
+    () => row(OFF),
+    (cell) => cell.state === "installed" && cell.version === NEWER,
+    60_000
+  ).catch(() => row(OFF));
+  const ran = (await off.calls()).slice(before);
+  kit.check(
+    `(j, phone) Retry on the row of the machine whose only switches set are automatic ones runs its update: its updater ran once, and the row lands ${NEWER} with no reason left`,
+    pressed &&
+      landed?.version === NEWER &&
+      landed.detail === null &&
+      ran.join(",") === `update from ${BEHIND}`,
+    `pressed: ${pressed}; row: ${JSON.stringify(landed)}; what ran: ${ran.join(", ") || "nothing"}`
+  );
+};
+
 /** (j) on the page: the machine whose updates are off says why on its row, under its mark. */
 const offSays = async (
   kit: Kit,
@@ -1098,11 +1156,11 @@ const offSays = async (
   kit.check(
     `(j, ${view}) the machine whose updates are off says why on its row`,
     offSaid.includes(
-      toolWords.updatesOff(
+      toolWords.autoUpdatesOff(
         NAME,
         "DISABLE_AUTOUPDATER",
         toolWords.inEnvironment,
-        toolWords.thenRestarted
+        toolWords.keepRestarted
       )
     ),
     there
@@ -1136,11 +1194,11 @@ const switchLegs = async (kit: Kit, fresh: Fresh): Promise<void> => {
       read.declined?.state === "installed" &&
         read.declined.version === BEHIND &&
         read.declined.detail ===
-          toolWords.updatesOff(
+          toolWords.autoUpdatesOff(
             NAME,
             "DISABLE_AUTOUPDATER",
             join("~", CLAUDE_DIR_NAME, "settings.json"),
-            toolWords.thenRetry
+            toolWords.keepUnset
           ),
       JSON.stringify(read.declined)
     );
@@ -1179,11 +1237,11 @@ const switchLegs = async (kit: Kit, fresh: Fresh): Promise<void> => {
       read.declined?.state === "installed" &&
         read.declined.version === BEHIND &&
         read.declined.detail ===
-          toolWords.updatesOff(
+          toolWords.autoUpdatesOff(
             NAME,
             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
             toolWords.inEnvironment,
-            toolWords.thenRestarted
+            toolWords.keepRestarted
           ),
       JSON.stringify(read.declined)
     );
@@ -1458,22 +1516,48 @@ const settingsLegs = (kit: Kit): void => {
     off: switchedOffIn(switches, true, {}, read),
   }));
   check(
-    `(m) a switch in a place the next read reads as it stands ends "${toolWords.thenRetry}": the user's settings file, the profile, HKLM, HKCU, the managed settings files, and managed settings the engine names no place for`,
-    tails.every(({ off }) => off?.next === toolWords.thenRetry),
+    `(m) a switch in a place the next read reads as it stands ends "${toolWords.thenRetry}", or for the automatic updates "${toolWords.keepUnset}": the user's settings file, the profile, HKLM, HKCU, the managed settings files, and managed settings the engine names no place for`,
+    tails.every(
+      ({ off }) =>
+        off?.next === toolWords.thenRetry && off.keep === toolWords.keepUnset
+    ),
     JSON.stringify(tails)
   );
   const fetched = switchedOffIn(switches, true, {}, managed("remote"));
   check(
-    `(m) a switch in the server-managed settings ends "${toolWords.thenFetched}": the read sees the copy Claude Code last fetched`,
+    `(m) a switch in the server-managed settings ends "${toolWords.thenFetched}", or for the automatic updates "${toolWords.keepFetched}": the read sees the copy Claude Code last fetched`,
     fetched?.where === toolWords.inServerManaged &&
-      fetched.next === toolWords.thenFetched,
+      fetched.next === toolWords.thenFetched &&
+      fetched.keep === toolWords.keepFetched,
     JSON.stringify(fetched)
   );
   check(
-    `(m) a switch only the environment CawCo runs in sets ends "${toolWords.thenRestarted}": that environment is the daemon's own, held from its start`,
+    `(m) a switch only the environment CawCo runs in sets ends "${toolWords.thenRestarted}", or for the automatic updates "${toolWords.keepRestarted}": that environment is the daemon's own, held from its start`,
     envOnly?.where === toolWords.inEnvironment &&
-      envOnly.next === toolWords.thenRestarted,
+      envOnly.next === toolWords.thenRestarted &&
+      envOnly.keep === toolWords.keepRestarted,
     JSON.stringify(envOnly)
+  );
+  // Which list a switch is in, which picks the row's sentence; an automatic
+  // switch alone is no switch at all to a press, as to `claude update`.
+  const lists = {
+    every: envOnly?.list,
+    autoupdater: switchedOffIn(switches, true, {}, managed("plist"))?.list,
+    traffic: switchedOffIn(
+      switches,
+      true,
+      { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "0" },
+      { effective: {}, sources: [] }
+    )?.list,
+    pressed: switchedOffIn(switches, false, {}, managed("plist")),
+  };
+  check(
+    "(m) the answer says the list its switch is in: DISABLE_UPDATES every update's, DISABLE_AUTOUPDATER and CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC the automatic ones', which a press reads as no switch at all",
+    lists.every === "every" &&
+      lists.autoupdater === "automatic" &&
+      lists.traffic === "automatic" &&
+      lists.pressed === undefined,
+    JSON.stringify(lists)
   );
 };
 

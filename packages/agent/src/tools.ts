@@ -629,11 +629,15 @@ const SETTINGS_ENGINES: Record<
 };
 
 /**
- * Where a switch is set, in the words a row says it with, and `next`, how an
- * unset there reaches CawCo's next read of it (core words
- * `toolWords.updatesOff`'s `where` and `then`).
+ * Where a switch is set, in the words a row says it with (core words
+ * `toolWords.updatesOff`'s and `toolWords.autoUpdatesOff`'s `where`), and
+ * what an unset there takes to reach CawCo: `next`, for a switch of every
+ * update, how its next read sees it unset (`updatesOff`'s `then`); `keep`,
+ * for one of the automatic updates, which a Retry runs past already, what
+ * has CawCo keep it current (`autoUpdatesOff`'s `keep`).
  */
 interface SwitchPlace {
+  keep: string;
   next: string;
   where: string;
 }
@@ -641,9 +645,10 @@ interface SwitchPlace {
 /**
  * A place CawCo's next read of the settings reads as it stands: that read
  * is a process of its own (`SETTINGS_ENGINES`), so an unset there counts at
- * the Retry after it.
+ * the Retry after it, and at CawCo's next update of its own.
  */
 const retried = (where: string): SwitchPlace => ({
+  keep: toolWords.keepUnset,
   next: toolWords.thenRetry,
   where,
 });
@@ -685,7 +690,11 @@ const sourcePlace = (
     hkcu: retried(toolWords.inRegistry(registry.value, registry.hkcu)),
     hklm: retried(toolWords.inRegistry(registry.value, registry.hklm)),
     plist: retried(toolWords.inProfile(places.profile)),
-    remote: { next: toolWords.thenFetched, where: toolWords.inServerManaged },
+    remote: {
+      keep: toolWords.keepFetched,
+      next: toolWords.thenFetched,
+      where: toolWords.inServerManaged,
+    },
   } satisfies Partial<Record<PolicySettingsOrigin, SwitchPlace>>;
   const { policyOrigin } = source;
   return (
@@ -708,8 +717,14 @@ const turnsOff = (
     ? value !== undefined && value !== null && String(value) !== ""
     : switchOn(value);
 
-/** The switch that turned a tool's updates off, where it is set, and how an unset there reaches CawCo. */
-type SwitchedOff = SwitchPlace & { variable: string };
+/** Which of a tool's lists of switches one is in: every update's, or the automatic ones' (core `ToolUpdateSwitches`). */
+type SwitchList = Extract<keyof ToolUpdateSwitches, "automatic" | "every">;
+
+/**
+ * The switch that turned a tool's updates off, the list it is in, where it
+ * is set, and what an unset there takes to reach CawCo.
+ */
+type SwitchedOff = SwitchPlace & { list: SwitchList; variable: string };
 
 /**
  * The switch with which a machine's owner turned the tool's own updates off,
@@ -721,7 +736,8 @@ type SwitchedOff = SwitchPlace & { variable: string };
  * `env` sets it ({@link sourcePlace}), or in the environment, which is this
  * daemon's own, held from its start (`toolEnv`), so only a restart reads it
  * unset. One of `every` turns off any update; one of `automatic`, an
- * automatic one (CawCo's own) too. None set: undefined.
+ * automatic one (CawCo's own) too, and the answer says which list it is in.
+ * None set: undefined.
  */
 export const switchedOffIn = (
   switches: ToolUpdateSwitches,
@@ -730,10 +746,16 @@ export const switchedOffIn = (
   settings: SettingsRead
 ): SwitchedOff | undefined => {
   const resolved = settings.effective.env ?? {};
-  for (const variable of [
-    ...switches.every,
-    ...(automatic ? switches.automatic : []),
-  ]) {
+  const asked = [
+    ...switches.every.map((variable) => ({ list: "every" as const, variable })),
+    ...(automatic
+      ? switches.automatic.map((variable) => ({
+          list: "automatic" as const,
+          variable,
+        }))
+      : []),
+  ];
+  for (const { list, variable } of asked) {
     const inSettings = Object.hasOwn(resolved, variable);
     const value = inSettings ? resolved[variable] : env[variable];
     if (!turnsOff(switches, variable, value)) {
@@ -741,7 +763,9 @@ export const switchedOffIn = (
     }
     if (!inSettings) {
       return {
+        list,
         variable,
+        keep: toolWords.keepRestarted,
         next: toolWords.thenRestarted,
         where: toolWords.inEnvironment,
       };
@@ -752,12 +776,28 @@ export const switchedOffIn = (
         Object.hasOwn(one.settings.env, variable)
     );
     return {
+      list,
       variable,
       ...(source
         ? sourcePlace(switches.places, source)
         : retried(toolWords.inManaged)),
     };
   }
+};
+
+/**
+ * What a row says of the switch that turned the tool's updates off, or of
+ * the read that couldn't tell (core words): a switch of every update says
+ * how an unset reaches CawCo; one of the automatic updates says that Retry
+ * updates it now, and what keeps it current.
+ */
+const offWords = (name: string, off: SwitchedOff | SettingsUnread): string => {
+  if ("unread" in off) {
+    return toolWords.settingsUnread(name, off.unread);
+  }
+  return off.list === "every"
+    ? toolWords.updatesOff(name, off.variable, off.where, off.next)
+    : toolWords.autoUpdatesOff(name, off.variable, off.where, off.keep);
 };
 
 /**
@@ -1252,19 +1292,7 @@ const install = async (
       : undefined;
   if (off) {
     return remember(
-      await standing(
-        spec,
-        () =>
-          "unread" in off
-            ? toolWords.settingsUnread(spec.name, off.unread)
-            : toolWords.updatesOff(
-                spec.name,
-                off.variable,
-                off.where,
-                off.next
-              ),
-        undefined
-      )
+      await standing(spec, () => offWords(spec.name, off), undefined)
     );
   }
 

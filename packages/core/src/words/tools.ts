@@ -4,7 +4,8 @@
  * the release it was after, updates its owner turned off, a pin its method
  * can't install, and how a refused harness and its row read when CawCo
  * updates it with no press. The agent says {@link toolWords.behind},
- * {@link toolWords.updatesOff}, {@link toolWords.cannotPin},
+ * {@link toolWords.updatesOff}, {@link toolWords.autoUpdatesOff},
+ * {@link toolWords.cannotPin},
  * {@link toolWords.updatesItself} and {@link toolWords.updatingItself}
  * (agent tools.ts, claude-version.ts); the dashboard says the rest
  * (ToolMatrix.svelte, harness-block.svelte.ts). The app draws none of it,
@@ -20,14 +21,40 @@ export const toolWords = {
   behind: (method: string, version: string, newest: string, said: string) =>
     `The newest release is ${newest}. ${said ? `${method} said: ${said}` : `${method} said nothing about why`}. Sessions still start on ${version}. CawCo tries again when a newer release is out.`,
   /**
-   * The machine's owner turned the tool's own updates off (core
-   * `ToolSpec.updatesOff`): which switch, where it is set, and `then`, how
-   * an unset there reaches CawCo's next read of it: {@link toolWords.thenRetry},
+   * The machine's owner turned off every update of the tool, a press's too:
+   * a switch of core `ToolUpdateSwitches.every` (DISABLE_UPDATES). Which
+   * switch, where it is set, and `then`, how an unset there reaches CawCo's
+   * next read of it: {@link toolWords.thenRetry},
    * {@link toolWords.thenFetched} or {@link toolWords.thenRestarted}, by
    * where it is set (agent tools.ts `switchedOffIn`).
    */
   updatesOff: (name: string, variable: string, where: string, then: string) =>
     `${variable} in ${where} turns ${name}'s updates off, and CawCo follows it. ${then}`,
+  /**
+   * The machine's owner turned off the tool's automatic updates, and so
+   * CawCo's own: a switch of core `ToolUpdateSwitches.automatic`
+   * (DISABLE_AUTOUPDATER, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC). A press,
+   * Retry among them, still updates it, as the tool's own `claude update`
+   * does. Which switch, where it is set, and `keep`, what an unset there
+   * takes for CawCo to keep it current: {@link toolWords.keepUnset},
+   * {@link toolWords.keepFetched} or {@link toolWords.keepRestarted}, by
+   * where it is set (agent tools.ts `switchedOffIn`).
+   */
+  autoUpdatesOff: (
+    name: string,
+    variable: string,
+    where: string,
+    keep: string
+  ) =>
+    `${variable} in ${where} turns ${name}'s automatic updates off, and CawCo follows it. Retry updates it now. ${keep}`,
+  /** {@link toolWords.autoUpdatesOff}'s `keep` where {@link toolWords.updatesOff} says {@link toolWords.thenRetry}. */
+  keepUnset: "To have CawCo keep it current, unset it there.",
+  /** {@link toolWords.autoUpdatesOff}'s `keep` where {@link toolWords.updatesOff} says {@link toolWords.thenFetched}. */
+  keepFetched:
+    "To have CawCo keep it current, unset it there and start a Claude Code session on this machine so it fetches them again.",
+  /** {@link toolWords.autoUpdatesOff}'s `keep` where {@link toolWords.updatesOff} says {@link toolWords.thenRestarted}. */
+  keepRestarted:
+    "To have CawCo keep it current, unset it there and restart CawCo.",
   /**
    * {@link toolWords.updatesOff}'s `then` for a switch in a place CawCo's
    * next read of the settings reads as it stands: a settings file, a
@@ -47,30 +74,31 @@ export const toolWords = {
    * CawCo runs in: its daemon's own, which holds what it started with.
    */
   thenRestarted: "Unset it there and restart CawCo, then Retry.",
-  /** {@link toolWords.updatesOff}'s `where` for a switch set in the environment rather than a settings file. */
+  /** {@link toolWords.updatesOff}'s and {@link toolWords.autoUpdatesOff}'s `where` for a switch set in the environment rather than a settings file. */
   inEnvironment: "the environment CawCo runs in",
-  /** {@link toolWords.updatesOff}'s `where` for a switch set in a macOS configuration profile (core `ToolUpdateSwitches.places`). */
+  /** {@link toolWords.updatesOff}'s and {@link toolWords.autoUpdatesOff}'s `where` for a switch set in a macOS configuration profile (core `ToolUpdateSwitches.places`). */
   inProfile: (domain: string) =>
     `the configuration profile that manages ${domain}`,
-  /** {@link toolWords.updatesOff}'s `where` for a switch set in a Windows registry policy, HKLM's or HKCU's (core `ToolUpdateSwitches.places`). */
+  /** {@link toolWords.updatesOff}'s and {@link toolWords.autoUpdatesOff}'s `where` for a switch set in a Windows registry policy, HKLM's or HKCU's (core `ToolUpdateSwitches.places`). */
   inRegistry: (value: string, key: string) =>
     `the registry's ${value} value under ${key}`,
   /**
-   * {@link toolWords.updatesOff}'s `where` for a switch set in the tool's
-   * managed settings files: the system directory's `managed-settings.json`
-   * and its folder of `.json` files (core `ToolUpdateSwitches.places`).
+   * {@link toolWords.updatesOff}'s and {@link toolWords.autoUpdatesOff}'s
+   * `where` for a switch set in the tool's managed settings files: the system
+   * directory's `managed-settings.json` and its folder of `.json` files (core
+   * `ToolUpdateSwitches.places`).
    */
   inManagedFiles: (file: string, folder: string) =>
     `${file} or a .json file in ${folder}`,
   /**
-   * {@link toolWords.updatesOff}'s `where` for a switch set in the
-   * server-managed settings, as Claude Code last fetched them: from the
-   * claude.ai console or from a Claude apps gateway, both of which the
-   * engine names `remote`.
+   * {@link toolWords.updatesOff}'s and {@link toolWords.autoUpdatesOff}'s
+   * `where` for a switch set in the server-managed settings, as Claude Code
+   * last fetched them: from the claude.ai console or from a Claude apps
+   * gateway, both of which the engine names `remote`.
    */
   inServerManaged:
     "the managed settings Claude Code last fetched from the organization it signs in to (the claude.ai console's Organization settings → Claude Code → Managed settings, or its Claude apps gateway)",
-  /** {@link toolWords.updatesOff}'s `where` for a switch set in managed settings whose source the tool's engine names as none of the others. */
+  /** {@link toolWords.updatesOff}'s and {@link toolWords.autoUpdatesOff}'s `where` for a switch set in managed settings whose source the tool's engine names as none of the others. */
   inManaged:
     "the managed settings Claude Code reads on the machine (its /status names the source)",
   /**
