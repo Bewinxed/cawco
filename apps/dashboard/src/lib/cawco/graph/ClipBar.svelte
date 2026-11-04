@@ -261,7 +261,7 @@
          sliders of their own, the whole one interact.js target. -->
     <div
       {@attach grabbable(run)}
-      aria-label={words.moveClip(runName(at))}
+      aria-label={runName(at)}
       aria-valuemax={Math.round(scale - (span.to - span.from))}
       aria-valuemin={Math.round(run.floor)}
       aria-valuenow={Math.round(span.from)}

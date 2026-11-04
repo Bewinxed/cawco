@@ -68,6 +68,7 @@
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconChevronDown,
@@ -524,351 +525,364 @@
   </div>
 {/snippet}
 
-<div
-  data-slot="move"
-  class="@container/move flex min-h-0 min-w-0 flex-1 flex-col gap-space-3"
->
-  {#if peek}
-    <!-- The drawer at its head stop: Play, the time and the move on one
+<!-- Its own tooltips' provider, so the face stands whole wherever it is
+     mounted (its states file draws it alone). -->
+<TooltipProvider>
+  <div
+    data-slot="move"
+    class="@container/move flex min-h-0 min-w-0 flex-1 flex-col gap-space-3"
+  >
+    {#if peek}
+      <!-- The drawer at its head stop: Play, the time and the move on one
          line over the stage, so the move plays in sight of the stage. -->
-    {#if move.kind === "ready" && clips.length > 0}
-      <div class="flex min-h-c-btn-h min-w-0 items-center gap-space-3">
-        {@render transport()}
-        <span class="min-w-0 flex-1 truncate type-label text-ink-strong"
-          >{words.move(move.from, move.to)}</span
-        >
-      </div>
-    {:else}
-      <p class="m-0 min-w-0 truncate type-label text-ink-muted">
-        {peekLine}
-      </p>
-    {/if}
-  {:else}
-    <!-- The head: the move as the face's title, and once he changed any
-         timing, the two versions and Reset all. -->
-    <header
-      class="flex min-h-c-btn-h-sm min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2"
-    >
-      <div class="flex min-w-0 flex-1 basis-c-graph-node-w items-center">
-        {@render title()}
-      </div>
-      {#if move.kind === "ready" && changedCount > 0}
-        <div class="flex flex-none items-center gap-space-2">
-          <ToggleGroup.Root
-            aria-label={words.versions}
-            onValueChange={(next: string) => {
-              if (next === "yours" || next === "written") {
-                onversion(next);
-              }
-            }}
-            type="single"
-            value={version}
+      {#if move.kind === "ready" && clips.length > 0}
+        <div class="flex min-h-c-btn-h min-w-0 items-center gap-space-3">
+          {@render transport()}
+          <span class="min-w-0 flex-1 truncate type-label text-ink-strong"
+            >{words.move(move.from, move.to)}</span
           >
-            <ToggleGroup.Item value="written">{words.written}</ToggleGroup.Item>
-            <ToggleGroup.Item
-              aria-label="{words.yours}, {words.changedCount(
-                figure(changedCount)
-              )}"
-              value="yours"
-            >
-              <span>{words.yours}</span>
-              <span
-                class="type-meta text-ink-muted num"
-                data-slot="changed-count">{figure(changedCount)}</span
-              >
-            </ToggleGroup.Item>
-          </ToggleGroup.Root>
-          <Button
-            aria-label={words.resetAllSaid}
-            data-slot="reset-all"
-            onclick={() =>
-              onreset(clips.filter((clip) => clip.was).map((clip) => clip.id))}
-            size="sm"
-            variant="ghost"
-          >
-            {words.resetAll}
-          </Button>
         </div>
-      {/if}
-    </header>
-
-    {#if move.kind === "none"}
-      <p class="m-0 max-w-c-measure type-body text-ink-muted text-pretty">
-        {words.noMove(move.state)}
-      </p>
-    {:else if move.kind === "reading"}
-      <p class="m-0 type-meta text-ink-muted" role="status">{words.reading}</p>
-    {:else if move.kind === "failed"}
-      <!-- Why it didn't play, and the way back: Try again plays it once
-           more from its from state, as it played on arrival. -->
-      <div class="flex min-w-0 flex-col items-start gap-space-3" role="alert">
-        <p class="m-0 type-body text-status-fail-ink wrap-anywhere">
-          {words.moveFailed(move.why)}
+      {:else}
+        <p class="m-0 min-w-0 truncate type-label text-ink-muted">
+          {peekLine}
         </p>
-        <Button onclick={onretry} size="sm" variant="outline"
-          >{words.tryAgain}</Button
-        >
-      </div>
-    {:else if clips.length === 0}
-      <p class="m-0 type-body text-ink-muted text-pretty">
-        {words.nothingAnimated(move.from, move.to)}
-      </p>
+      {/if}
     {:else}
-      <!-- The timeline: one grid of three fixed columns (what moves, its
+      <!-- The head: the move as the face's title, and once he changed any
+         timing, the two versions and Reset all. -->
+      <header
+        class="flex min-h-c-btn-h-sm min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2"
+      >
+        <div class="flex min-w-0 flex-1 basis-c-graph-node-w items-center">
+          {@render title()}
+        </div>
+        {#if move.kind === "ready" && changedCount > 0}
+          <div class="flex flex-none items-center gap-space-2">
+            <ToggleGroup.Root
+              aria-label={words.versions}
+              onValueChange={(next: string) => {
+                if (next === "yours" || next === "written") {
+                  onversion(next);
+                }
+              }}
+              type="single"
+              value={version}
+            >
+              <ToggleGroup.Item value="written"
+                >{words.written}</ToggleGroup.Item
+              >
+              <ToggleGroup.Item
+                aria-label="{words.yours}, {words.changedCount(
+                  figure(changedCount)
+                )}"
+                value="yours"
+              >
+                <span>{words.yours}</span>
+                <span
+                  class="type-meta text-ink-muted num"
+                  data-slot="changed-count">{figure(changedCount)}</span
+                >
+              </ToggleGroup.Item>
+            </ToggleGroup.Root>
+            <Button
+              aria-label={words.resetAllSaid}
+              data-slot="reset-all"
+              onclick={() =>
+                onreset(
+                  clips.filter((clip) => clip.was).map((clip) => clip.id)
+                )}
+              size="sm"
+              variant="ghost"
+            >
+              {words.resetAll}
+            </Button>
+          </div>
+        {/if}
+      </header>
+
+      {#if move.kind === "none"}
+        <p class="m-0 max-w-c-measure type-body text-ink-muted text-pretty">
+          {words.noMove(move.state)}
+        </p>
+      {:else if move.kind === "reading"}
+        <p class="m-0 type-meta text-ink-muted" role="status">
+          {words.reading}
+        </p>
+      {:else if move.kind === "failed"}
+        <!-- Why it didn't play, and the way back: Try again plays it once
+           more from its from state, as it played on arrival. -->
+        <div class="flex min-w-0 flex-col items-start gap-space-3" role="alert">
+          <p class="m-0 type-body text-status-fail-ink wrap-anywhere">
+            {words.moveFailed(move.why)}
+          </p>
+          <Button onclick={onretry} size="sm" variant="outline"
+            >{words.tryAgain}</Button
+          >
+        </div>
+      {:else if clips.length === 0}
+        <p class="m-0 type-body text-ink-muted text-pretty">
+          {words.nothingAnimated(move.from, move.to)}
+        </p>
+      {:else}
+        <!-- The timeline: one grid of three fixed columns (what moves, its
            length, its lane), the ruler's row then a row per thing, each a
            subgrid of the timeline's columns. Narrower than a timeline's
            least, the lane takes a line of its own under its row's words. -->
-      <!-- Under a finger the scroller keeps its scrollbar's room, so the
+        <!-- Under a finger the scroller keeps its scrollbar's room, so the
            lengths at the trailing edge never stand under it. -->
-      <div class="min-h-0 min-w-0 overflow-y-auto coarse:pe-space-4">
-        <div
-          data-slot="timeline"
-          class="grid min-w-0 grid-cols-(--cols) gap-x-space-3 @max-timeline/move:grid-cols-(--narrow)"
-          style:--cols="fit-content(40%) auto minmax(0, 1fr)"
-          style:--narrow="minmax(0, 1fr) auto"
-        >
+        <div class="min-h-0 min-w-0 overflow-y-auto coarse:pe-space-4">
           <div
-            class="sticky top-0 z-2 col-span-full grid min-h-c-btn-h grid-cols-subgrid bg-surface-raised"
+            data-slot="timeline"
+            class="grid min-w-0 grid-cols-(--cols) gap-x-space-3 @max-timeline/move:grid-cols-(--narrow)"
+            style:--cols="fit-content(40%) auto minmax(0, 1fr)"
+            style:--narrow="minmax(0, 1fr) auto"
           >
-            <div class="col-span-2 flex min-w-0 items-center">
-              {@render transport()}
-            </div>
             <div
-              class="relative col-start-3 flex min-w-0 items-end px-space-2 @max-timeline/move:col-span-full @max-timeline/move:col-start-1"
-              data-slot="ruler"
+              class="sticky top-0 z-2 col-span-full grid min-h-c-btn-h grid-cols-subgrid bg-surface-raised"
             >
-              <Slider.Root
-                class="relative block h-space-7 w-full cursor-ew-resize touch-none select-none coarse:h-c-btn-h-lg"
-                max={scale}
-                min={0}
-                onValueChange={(next: number) => onseek(Math.min(next, length))}
-                onValueCommit={(next: number) => letGo(Math.min(next, length))}
-                step={1}
-                thumbPositioning="exact"
-                type="single"
-                value={handle}
+              <div class="col-span-2 flex min-w-0 items-center">
+                {@render transport()}
+              </div>
+              <div
+                class="relative col-start-3 flex min-w-0 items-end px-space-2 @max-timeline/move:col-span-full @max-timeline/move:col-start-1"
+                data-slot="ruler"
               >
-                <div
-                  bind:this={ruler}
-                  class="absolute inset-0 type-code leading-none num"
-                  aria-hidden="true"
-                  {@attach frameSize((node: HTMLElement) => {
-                    lane = node.clientWidth;
-                  })}
+                <Slider.Root
+                  class="relative block h-space-7 w-full cursor-ew-resize touch-none select-none coarse:h-c-btn-h-lg"
+                  max={scale}
+                  min={0}
+                  onValueChange={(next: number) =>
+                    onseek(Math.min(next, length))}
+                  onValueCommit={(next: number) =>
+                    letGo(Math.min(next, length))}
+                  step={1}
+                  thumbPositioning="exact"
+                  type="single"
+                  value={handle}
                 >
-                  {#each marks as mark (mark)}
-                    <span
-                      class="absolute start-(--at) bottom-0 h-space-1 w-px -translate-x-1/2 bg-border-control rtl:translate-x-1/2"
-                      data-mark={mark}
-                      style:--at={pct(mark)}
-                    ></span>
-                    {#if figured.has(mark)}
+                  <div
+                    bind:this={ruler}
+                    class="absolute inset-0 type-code leading-none num"
+                    aria-hidden="true"
+                    {@attach frameSize((node: HTMLElement) => {
+                      lane = node.clientWidth;
+                    })}
+                  >
+                    {#each marks as mark (mark)}
                       <span
-                        class="absolute start-(--at) top-0 -translate-x-1/2 text-ink-muted rtl:translate-x-1/2 coarse:top-space-2"
-                        style:--at={pct(mark)}>{figure(mark)}</span
-                      >
-                    {/if}
-                  {/each}
-                </div>
-                <!-- The playhead's flag: a pill standing on the ruler's
+                        class="absolute start-(--at) bottom-0 h-space-1 w-px -translate-x-1/2 bg-border-control rtl:translate-x-1/2"
+                        data-mark={mark}
+                        style:--at={pct(mark)}
+                      ></span>
+                      {#if figured.has(mark)}
+                        <span
+                          class="absolute start-(--at) top-0 -translate-x-1/2 text-ink-muted rtl:translate-x-1/2 coarse:top-space-2"
+                          style:--at={pct(mark)}>{figure(mark)}</span
+                        >
+                      {/if}
+                    {/each}
+                  </div>
+                  <!-- The playhead's flag: a pill standing on the ruler's
                      foot, its line running down the rows; under a finger
                      its area stays inside the ruler, never over a bar. -->
-                <Slider.Thumb
-                  aria-label={words.scrub}
-                  aria-valuetext={words.playhead(
-                    figure(handle),
-                    figure(Math.round(length))
-                  )}
-                  class="pointer-hit bottom-0 block h-space-4 w-space-2 cursor-ew-resize rounded-pill bg-ink-strong shadow-xs focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2 coarse:w-space-3"
-                  data-slot="playhead-head"
-                  index={0}
-                  onkeydown={pageKey}
-                />
-              </Slider.Root>
+                  <Slider.Thumb
+                    aria-label={words.scrub}
+                    aria-valuetext={words.playhead(
+                      figure(handle),
+                      figure(Math.round(length))
+                    )}
+                    class="pointer-hit bottom-0 block h-space-4 w-space-2 cursor-ew-resize rounded-pill bg-ink-strong shadow-xs focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2 coarse:w-space-3"
+                    data-slot="playhead-head"
+                    index={0}
+                    onkeydown={pageKey}
+                  />
+                </Slider.Root>
+              </div>
             </div>
-          </div>
 
-          {#each lines as line (line.key)}
-            {@const track = line.track}
-            {@const name = lineName(line)}
-            {@const many = !line.part && track.clips.length > 1}
-            {@const chosen = picked?.key === line.key}
-            {@const edited = !written && editsOf(track).size > 0}
-            <!-- A row: one thing that moves, or under it one animation; one
+            {#each lines as line (line.key)}
+              {@const track = line.track}
+              {@const name = lineName(line)}
+              {@const many = !line.part && track.clips.length > 1}
+              {@const chosen = picked?.key === line.key}
+              {@const edited = !written && editsOf(track).size > 0}
+              <!-- A row: one thing that moves, or under it one animation; one
                  comment target named by its words, as a person says it. -->
-            <div
-              data-slot="clip"
-              data-selected={chosen || undefined}
-              class={[
-                "col-span-full grid min-w-0 grid-cols-subgrid border-t border-border-hairline",
-              ]}
-              {...lights(track)}
-            >
               <div
+                data-slot="clip"
+                data-selected={chosen || undefined}
                 class={[
-                  "flex min-h-c-btn-h min-w-0 items-center",
-                  line.part && "ps-c-btn-h-xs",
+                  "col-span-full grid min-w-0 grid-cols-subgrid border-t border-border-hairline",
                 ]}
+                {...lights(track)}
               >
-                <!-- The disclosure slot: a triangle where the thing moves
+                <div
+                  class={[
+                    "flex min-h-c-btn-h min-w-0 items-center",
+                    line.part && "ps-c-btn-h-xs",
+                  ]}
+                >
+                  <!-- The disclosure slot: a triangle where the thing moves
                      more than once, else its width kept, so every name
                      starts on one edge. -->
-                <span class="grid w-c-btn-h-xs flex-none place-items-center">
-                  {#if many}
-                    {@const said = opened[track.id]
-                      ? words.hideClips(track.clips.length)
-                      : words.showClips(track.clips.length)}
+                  <span class="grid w-c-btn-h-xs flex-none place-items-center">
+                    {#if many}
+                      {@const said = opened[track.id]
+                        ? words.hideClips(track.clips.length)
+                        : words.showClips(track.clips.length)}
+                      <Tip label={said}>
+                        {#snippet children(tip)}
+                          <button
+                            {...tip}
+                            type="button"
+                            aria-expanded={opened[track.id] ?? false}
+                            aria-label={said}
+                            class="pointer-hit touch-hit grid size-c-btn-h-xs place-items-center rounded-sm text-ink-muted transition-control can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
+                            onclick={() => {
+                              opened = {
+                                ...opened,
+                                [track.id]: !opened[track.id],
+                              };
+                            }}
+                          >
+                            <IconChevronRight
+                              aria-hidden="true"
+                              class={[
+                                "size-icon-sm transition-transform duration-(--dur-control) ease-out rtl:-scale-x-100",
+                                opened[track.id] && "rotate-90 rtl:-rotate-90",
+                              ]}
+                            />
+                          </button>
+                        {/snippet}
+                      </Tip>
+                    {/if}
+                  </span>
+                  <!-- The row's words: a press selects it, its settings
+                     opening under it. -->
+                  <button
+                    type="button"
+                    aria-expanded={written ? undefined : chosen}
+                    aria-label={name}
+                    class="pointer-hit touch-hit flex h-c-btn-h-sm min-w-0 flex-1 items-center rounded-sm px-space-1 text-start type-label transition-control aria-expanded:bg-selected-bg disabled:cursor-default can-hover:enabled:not-aria-expanded:hover:bg-surface-hover"
+                    disabled={written}
+                    onclick={() => {
+                      selected = chosen ? null : line.key;
+                    }}
+                    title={name}
+                  >
+                    <span class="min-w-0 truncate">
+                      {#if line.part}
+                        <span
+                          class={[
+                            "type-code",
+                            chosen ? "text-selected-ink" : "text-ink-row",
+                          ]}>{track.clips[0]?.property}</span
+                        >
+                        {#if line.run !== null}
+                          <span class="text-ink-muted"
+                            >{words.runAt(line.run)}</span
+                          >
+                        {/if}
+                      {:else}
+                        <span
+                          class={chosen ? "text-selected-ink" : "text-ink-row"}
+                          >{track.name}</span
+                        >
+                        <span
+                          class={chosen
+                            ? "text-selected-ink"
+                            : "text-ink-muted"}>{track.how}</span
+                        >
+                      {/if}
+                    </span>
+                  </button>
+                </div>
+                <!-- Its own length, a tabular figure on the column's end
+                   edge; changed, in strong ink with the restore glyph
+                   before it (every value of the row back). -->
+                <div
+                  class="flex min-w-0 items-center justify-end gap-space-1"
+                  data-slot="length"
+                >
+                  {#if edited}
+                    {@const said = words.resetRow(name)}
                     <Tip label={said}>
                       {#snippet children(tip)}
-                        <button
+                        <Button
                           {...tip}
-                          type="button"
-                          aria-expanded={opened[track.id] ?? false}
                           aria-label={said}
-                          class="pointer-hit touch-hit grid size-c-btn-h-xs place-items-center rounded-sm text-ink-muted transition-control can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
-                          onclick={() => {
-                            opened = {
-                              ...opened,
-                              [track.id]: !opened[track.id],
-                            };
-                          }}
-                        >
-                          <IconChevronRight
-                            aria-hidden="true"
-                            class={[
-                              "size-icon-sm transition-transform duration-(--dur-control) ease-out rtl:-scale-x-100",
-                              opened[track.id] && "rotate-90 rtl:-rotate-90",
-                            ]}
-                          />
-                        </button>
+                          data-edited
+                          icon={IconReset}
+                          onclick={() =>
+                            onreset(
+                              track.clips
+                                .filter((clip) => clip.was)
+                                .map((clip) => clip.id)
+                            )}
+                          press="pressable"
+                          size="icon-xs"
+                          variant="ghost"
+                        />
                       {/snippet}
                     </Tip>
                   {/if}
-                </span>
-                <!-- The row's words: a press selects it, its settings
-                     opening under it. -->
-                <button
-                  type="button"
-                  aria-expanded={written ? undefined : chosen}
-                  aria-label={name}
-                  class="pointer-hit touch-hit flex h-c-btn-h-sm min-w-0 flex-1 items-center rounded-sm px-space-1 text-start type-label transition-control aria-expanded:bg-selected-bg disabled:cursor-default can-hover:enabled:not-aria-expanded:hover:bg-surface-hover"
-                  disabled={written}
-                  onclick={() => {
-                    selected = chosen ? null : line.key;
-                  }}
-                  title={name}
+                  <span
+                    class={[
+                      "type-code leading-none whitespace-nowrap num",
+                      edited ? "text-ink-strong" : "text-ink-muted",
+                    ]}>{lengthShown(track)}</span
+                  >
+                </div>
+                <div
+                  class="relative flex min-w-0 items-center px-space-2 @max-timeline/move:col-span-full @max-timeline/move:min-h-c-btn-h"
+                  data-slot="lane"
                 >
-                  <span class="min-w-0 truncate">
-                    {#if line.part}
-                      <span
-                        class={[
-                          "type-code",
-                          chosen ? "text-selected-ink" : "text-ink-row",
-                        ]}>{track.clips[0]?.property}</span
-                      >
-                      {#if line.run !== null}
-                        <span class="text-ink-muted"
-                          >{words.runAt(line.run)}</span
-                        >
-                      {/if}
+                  <div class="relative flex size-full min-w-0 items-center">
+                    {@render back()}
+                    {#if written}
+                      {@render writtenLane(track)}
                     {:else}
-                      <span
-                        class={chosen ? "text-selected-ink" : "text-ink-row"}
-                        >{track.name}</span
-                      >
-                      <span
-                        class={chosen ? "text-selected-ink" : "text-ink-muted"}
-                        >{track.how}</span
-                      >
-                    {/if}
-                  </span>
-                </button>
-              </div>
-              <!-- Its own length, a tabular figure on the column's end
-                   edge; changed, in strong ink with the restore glyph
-                   before it (every value of the row back). -->
-              <div
-                class="flex min-w-0 items-center justify-end gap-space-1"
-                data-slot="length"
-              >
-                {#if edited}
-                  {@const said = words.resetRow(name)}
-                  <Tip label={said}>
-                    {#snippet children(tip)}
-                      <Button
-                        {...tip}
-                        aria-label={said}
-                        data-edited
-                        icon={IconReset}
-                        onclick={() =>
-                          onreset(
-                            track.clips
-                              .filter((clip) => clip.was)
-                              .map((clip) => clip.id)
-                          )}
-                        press="pressable"
-                        size="icon-xs"
-                        variant="ghost"
+                      <ClipBar
+                        edges={edgesBesides}
+                        {lang}
+                        {name}
+                        onhold={(run, span) => {
+                          holding = span
+                            ? { id: track.id, run: run.id, ...span }
+                            : null;
+                        }}
+                        onretime={(run, from, to, replay) =>
+                          onretime(retimeRun(run, from, to), replay)}
+                        onselect={() => {
+                          selected = line.key;
+                        }}
+                        {scale}
+                        selected={chosen}
+                        {track}
                       />
-                    {/snippet}
-                  </Tip>
-                {/if}
-                <span
-                  class={[
-                    "type-code leading-none whitespace-nowrap num",
-                    edited ? "text-ink-strong" : "text-ink-muted",
-                  ]}>{lengthShown(track)}</span
-                >
-              </div>
-              <div
-                class="relative flex min-w-0 items-center px-space-2 @max-timeline/move:col-span-full @max-timeline/move:min-h-c-btn-h"
-                data-slot="lane"
-              >
-                <div class="relative flex size-full min-w-0 items-center">
-                  {@render back()}
-                  {#if written}
-                    {@render writtenLane(track)}
-                  {:else}
-                    <ClipBar
-                      edges={edgesBesides}
+                    {/if}
+                    {@render playheadLine()}
+                  </div>
+                </div>
+                {#if chosen}
+                  <div
+                    class="col-span-full min-w-0 ps-c-btn-h-xs pb-space-3"
+                    in:unfold
+                    out:unfold
+                  >
+                    <ClipSettings
                       {lang}
                       {name}
-                      onhold={(run, span) => {
-                        holding = span
-                          ? { id: track.id, run: run.id, ...span }
-                          : null;
-                      }}
-                      onretime={(run, from, to, replay) =>
-                        onretime(retimeRun(run, from, to), replay)}
-                      onselect={() => {
-                        selected = line.key;
-                      }}
-                      {scale}
-                      selected={chosen}
+                      onretime={(next) => onretime(next)}
                       {track}
                     />
-                  {/if}
-                  {@render playheadLine()}
-                </div>
+                  </div>
+                {/if}
               </div>
-              {#if chosen}
-                <div
-                  class="col-span-full min-w-0 ps-c-btn-h-xs pb-space-3"
-                  in:unfold
-                  out:unfold
-                >
-                  <ClipSettings
-                    {lang}
-                    {name}
-                    onretime={(next) => onretime(next)}
-                    {track}
-                  />
-                </div>
-              {/if}
-            </div>
-          {/each}
+            {/each}
+          </div>
         </div>
-      </div>
+      {/if}
     {/if}
-  {/if}
-</div>
+  </div>
+</TooltipProvider>

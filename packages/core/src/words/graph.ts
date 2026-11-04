@@ -87,7 +87,7 @@ export const graphWords = {
   moveEdge: (from: string, to: string, act: string | null) =>
     act ? `${from} → ${to}, ${act}` : `${from} → ${to}`,
   /** A state no animated move leads into. */
-  noMove: (state: string) => `Nothing animates into ${state}.`,
+  noMove: (state: string) => `No move into ${state}.`,
   /** The face's title while no move is on it: the menu of moves. */
   chooseMove: "Choose a move",
   /** The title's menu, for a reader. */
@@ -103,7 +103,7 @@ export const graphWords = {
   clipStarts: (clip: string) => `Start of ${clip}`,
   clipEnds: (clip: string) => `End of ${clip}`,
   /** While the move is read off the stage. */
-  reading: "Playing the move once to read its timing…",
+  reading: "Reading the move's timing…",
   /** The move played but the engine saw nothing animate. */
   nothingAnimated: (from: string, to: string) =>
     `Nothing animates from ${from} to ${to}.`,
@@ -199,8 +199,6 @@ export const graphWords = {
   springFigure: (ms: Figure) => `~${ms} ms`,
   /** A row whose animations run for different lengths: the shortest and the longest. */
   lengthRange: (low: Figure, high: Figure) => `${low}–${high}\u00a0ms`,
-  /** The bar's body, dragged: the whole animation along the lane. */
-  moveClip: (clip: string) => `Move ${clip}`,
   /** One run of a row that runs more than once: its bar's name for a reader. */
   runOf: (clip: string, at: number, of: number) =>
     `${clip}, run ${at} of ${of}`,
