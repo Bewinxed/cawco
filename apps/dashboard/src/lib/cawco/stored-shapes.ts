@@ -752,6 +752,12 @@ const SendPayloadShape = z.object({
     .optional(),
   instanceId: z.string(),
   message: SentMessageShape,
+  provenance: z
+    .object({
+      clientId: z.string().optional(),
+      presenceId: z.string().optional(),
+    })
+    .optional(),
 });
 
 const SendExtrasShape = SendPayloadShape.pick({

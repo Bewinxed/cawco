@@ -31,6 +31,9 @@ import {
   type PlaceRepo,
   type ProjectNote,
 } from "@cawco/core";
+import { received } from "@cawco/core/stored-json";
+import { PlaceLfsRowSchema } from "@cawco/core/stored-shapes";
+import { z } from "zod";
 import type { DbShape } from "./db";
 
 /** What {@link createPlaceRepos} needs of the hub. */
@@ -110,7 +113,12 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
         projectId: place.projectId,
         machineId: place.machineId,
         root: made.root,
-        rows: made.lfs,
+        // The machine's rows, taken into CawCo's type as they are kept.
+        rows: received(
+          z.array(PlaceLfsRowSchema),
+          made.lfs,
+          "a machine's place repository (its LFS rows)"
+        ),
         offeredAt: new Date(),
       });
     }

@@ -28,6 +28,7 @@ import {
   type SQLiteTable,
 } from "drizzle-orm/sqlite-core";
 import { z } from "zod";
+import { typeAt } from "./stored-types";
 
 /** Which way a value failed its schema: read back from a row, or on its way into one. */
 export type StoredDirection = "read" | "write";
@@ -101,11 +102,161 @@ const placeOf = (column: unknown): { table: string; column: string } =>
 
 const issueOf = (error: z.ZodError): string => z.prettifyError(error);
 
+/** Where a key is in a stored value, from its column's root: each key or index on the way, the key itself last. */
+type KeyPath = readonly (string | number)[];
+
+/** A JSON object as code builds one: a plain object, not a Date, a Map or a class's. */
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const proto: unknown = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+};
+
+/**
+ * Each key `value` holds that `parsed`, its schema's output, does not hold
+ * at all: a key the schema does not declare, which an object schema drops
+ * without a word (zod's object strips the keys it does not name). A key
+ * whose value is undefined is none: JSON writes no such key.
+ */
+const droppedKeys = (
+  value: unknown,
+  parsed: unknown,
+  at: KeyPath = []
+): KeyPath[] => {
+  if (Array.isArray(value)) {
+    return Array.isArray(parsed)
+      ? value.flatMap((one, index) =>
+          droppedKeys(one, parsed[index], [...at, index])
+        )
+      : [];
+  }
+  if (!(isPlainObject(value) && isPlainObject(parsed))) {
+    return [];
+  }
+  return Object.entries(value).flatMap(([key, one]) => {
+    if (one === undefined) {
+      return [];
+    }
+    return Object.hasOwn(parsed, key)
+      ? droppedKeys(one, parsed[key], [...at, key])
+      : [[...at, key]];
+  });
+};
+
+const IDENTIFIER = /^[A-Za-z_$][\w$]*$/u;
+
+/** A key's path as code reads it: `notice`, `steps[2].input`, `files["a.b"]`. */
+const pathText = (path: KeyPath): string =>
+  path
+    .map((key, at) => {
+      if (typeof key === "number") {
+        return `[${key}]`;
+      }
+      if (IDENTIFIER.test(key)) {
+        return at === 0 ? key : `.${key}`;
+      }
+      return `[${JSON.stringify(key)}]`;
+    })
+    .join("");
+
+/** A key a stored value holds that its type does not declare. */
+export interface UndeclaredKey {
+  /** Its path from the column's root, as code reads it ({@link pathText}). */
+  key: string;
+  /** The declared type that reads the object holding it, where it is to be declared: `X (its file)`. */
+  type: string;
+}
+
+/**
+ * The keys `value` holds that `parsed`, `schema`'s output of it, dropped
+ * ({@link droppedKeys}), each with the declared type that reads the object
+ * holding it (stored-types.ts `typeAt`). What a write is refused for; what
+ * an old row holds that its read strips (hub scripts/stored-rows.ts).
+ */
+export const undeclaredKeys = (
+  schema: z.ZodType,
+  value: unknown,
+  parsed: unknown
+): UndeclaredKey[] =>
+  droppedKeys(value, parsed).map((path) => {
+    const type = typeAt(schema, value, path.slice(0, -1));
+    return {
+      key: pathText(path),
+      type: type ? `${type.type} (${type.declaredIn})` : "the column's type",
+    };
+  });
+
+/** An array's every index read as one: `steps[3].input` is `steps[].input`. */
+const INDEX = /\[\d+\]/gu;
+
+/** What a write holding `undeclared` keys is told: each key, an array's indices as one, and the type to declare it in. */
+const undeclaredIssue = (undeclared: readonly UndeclaredKey[]): string => {
+  const byType = new Map<string, Set<string>>();
+  for (const { key, type } of undeclared) {
+    const keys = byType.get(type) ?? new Set<string>();
+    keys.add(`\`${key.replace(INDEX, "[]")}\``);
+    byType.set(type, keys);
+  }
+  const held = [...byType]
+    .map(
+      ([type, keys]) =>
+        `${[...keys].join(", ")}, which ${type} does not declare`
+    )
+    .join("; ");
+  const one = [...byType.values()].reduce((n, keys) => n + keys.size, 0) === 1;
+  return `it holds ${held}, so the write would drop ${one ? "it" : "them"}. Declare ${one ? "it in its type" : "each in its type"}, then run \`bun run stored-shapes\` in packages/hub.`;
+};
+
+/** Each key {@link received} has said it left out, by where from, its type and its path: said once a process. */
+const leftOut = new Set<string>();
+
+/**
+ * `value`, which another program sent (an agent's frame or answer, a
+ * harness's own report carried in one), as `schema`'s type, to be stored:
+ * the keys its type declares, each other one left out here and said once
+ * in the log, naming `from` and the type to declare it in. A stored write
+ * refuses a key its type does not declare ({@link checkStored}): CawCo's
+ * own code never builds one. What another program sends may carry one
+ * that is no fault of CawCo's, a field Claude Code added (its model list's
+ * `supportsThinkingOff`, 2026-11-04), or one an older agent still sends
+ * after it left the type, so it is taken into the type where it arrives.
+ * A value that is not its type at all comes back as it was, for its write
+ * to refuse with the column's name.
+ */
+export const received = <S extends z.ZodType>(
+  schema: S,
+  value: unknown,
+  from: string
+): z.output<S> => {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) {
+    return value as z.output<S>;
+  }
+  for (const { key, type } of undeclaredKeys(schema, value, parsed.data)) {
+    const path = key.replace(INDEX, "[]");
+    const said = `${from}\n${type}\n${path}`;
+    if (!leftOut.has(said)) {
+      leftOut.add(said);
+      console.log(
+        `[stored] ${from} sent \`${path}\`, which ${type} does not declare: left out of what CawCo keeps`
+      );
+    }
+  }
+  return parsed.data;
+};
+
 /**
  * `value`, parsed by `schema`: the checked value, or {@link StoredShapeError}
  * naming `place`. The one check a stored JSON value passes, by a column
  * ({@link storedJson}) and by the stored-shape check over a whole database
- * (scripts/stored-json-check.ts).
+ * (scripts/stored-json-check.ts). A write is refused a key its schema would
+ * drop ({@link droppedKeys}), as it is a value of the wrong shape: on
+ * 2026-11-04 a report's `notice` had been dropped from every write for
+ * nine days, the type it was stored by never declaring it. A read keeps
+ * stripping: a row written before a key was taken out of its type still
+ * reads.
  */
 const checkStored = <S extends z.ZodType>(
   schema: S,
@@ -116,6 +267,12 @@ const checkStored = <S extends z.ZodType>(
   const parsed = schema.safeParse(value);
   if (!parsed.success) {
     throw new StoredShapeError(place, direction, issueOf(parsed.error));
+  }
+  if (direction === "write") {
+    const undeclared = undeclaredKeys(schema, value, parsed.data);
+    if (undeclared.length > 0) {
+      throw new StoredShapeError(place, direction, undeclaredIssue(undeclared));
+    }
   }
   return parsed.data;
 };

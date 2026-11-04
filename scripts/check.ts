@@ -629,6 +629,12 @@ const gated: Gated[] = [
   ]),
   run("packages/hub", "migrations:check", []),
   run("packages/hub", "stored-shapes:check", [...PKG, "apps/dashboard/src/"]),
+  run("packages/hub", "stored-writes:check", [
+    "packages/core/src/stored-json.ts",
+    "packages/core/src/stored-types.ts",
+    "packages/core/src/stored-shapes.ts",
+    "packages/hub/scripts/stored-writes-check.ts",
+  ]),
   run("packages/hub", "roles:check", PKG),
   run("packages/core", "openui:check", []),
   run("packages/core", "tools:check", ["apps/apple/"]),

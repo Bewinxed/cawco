@@ -61,6 +61,12 @@ import {
 } from "@cawco/core/machine-path";
 import { runCaptured } from "@cawco/core/run-captured";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
+import { received } from "@cawco/core/stored-json";
+import {
+  MoveInspectionSchema,
+  MoveLfsResultShape,
+  MoveSnapshotResultShape,
+} from "@cawco/core/stored-shapes";
 import { DAY_MS } from "@cawco/core/time";
 import {
   checkoutOf,
@@ -557,13 +563,21 @@ export const createMoves = (deps: MovesDeps) => {
         )) as MoveRemoteAuth)
       : {};
 
-  const inspect = (machineId: string, path: string) =>
-    deps.call(
-      machineId,
-      CONTROL_MOVE_INSPECT,
-      [path],
-      INSPECT_TIMEOUT_MS
-    ) as Promise<MoveInspection>;
+  /** A machine's inspection of `path`, taken into CawCo's type: its large files, LFS and ignores are kept in the move's record. */
+  const inspect = async (
+    machineId: string,
+    path: string
+  ): Promise<MoveInspection> =>
+    received(
+      MoveInspectionSchema,
+      await deps.call(
+        machineId,
+        CONTROL_MOVE_INSPECT,
+        [path],
+        INSPECT_TIMEOUT_MS
+      ),
+      "a machine's move inspection"
+    );
 
   /** Whether the hub's repository `key` already holds `commit` on a branch. */
   const onHub = async (key: HubRepoKey, commit: string): Promise<boolean> => {
@@ -1234,11 +1248,17 @@ export const createMoves = (deps: MovesDeps) => {
           ],
           STEP_TIMEOUT_MS
         )) as MoveSnapshotResult;
+        // The machine's answer, taken into CawCo's type as it is kept.
+        const kept = received(
+          MoveSnapshotResultShape,
+          snapshot,
+          "a machine's move snapshot"
+        );
         // A repository with no origin has the hub's as its remote from here.
-        if (snapshot.hub) {
-          db.addProjectLink(row.projectId, hubRemoteIdentity(snapshot.hub));
+        if (kept.hub) {
+          db.addProjectLink(row.projectId, hubRemoteIdentity(kept.hub));
         }
-        return { snapshot };
+        return { snapshot: kept };
       }
       case "clone": {
         if (!state.snapshot) {
@@ -1265,7 +1285,10 @@ export const createMoves = (deps: MovesDeps) => {
           STEP_TIMEOUT_MS
         )) as MoveLfsResult;
         return state.steps.includes("lfs")
-          ? { lfs, progress: undefined }
+          ? {
+              lfs: received(MoveLfsResultShape, lfs, "a machine's move clone"),
+              progress: undefined,
+            }
           : { progress: undefined };
       }
       case "lfs": {
@@ -1284,7 +1307,11 @@ export const createMoves = (deps: MovesDeps) => {
           ],
           STEP_TIMEOUT_MS
         )) as MoveLfsResult;
-        return { lfs, progress: undefined, lfsFile: undefined };
+        return {
+          lfs: received(MoveLfsResultShape, lfs, "a machine's move LFS step"),
+          progress: undefined,
+          lfsFile: undefined,
+        };
       }
       case "start":
         return await startSession(row);

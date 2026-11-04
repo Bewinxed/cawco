@@ -63,7 +63,6 @@ import type {
   SessionRole,
   WorkItemSummary,
   WorkspaceArchive,
-  WorkspaceArchived,
   WorkspaceChanges,
   WorkspaceCheckout,
   WorkspaceCommit,
@@ -143,6 +142,8 @@ import {
 import { ownCommitsShell } from "@cawco/core/own-commits";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { StageCloneFrame } from "@cawco/core/stage";
+import { received } from "@cawco/core/stored-json";
+import { WorkspaceArchivedSchema } from "@cawco/core/stored-shapes";
 import type { WaitWitness } from "@cawco/core/task-views";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
@@ -4064,11 +4065,17 @@ export const createWorkItems = ({
       skip,
       ...(landed.length > 0 ? { landed } : {}),
     };
-    const { carry, head, held } = (await call(
-      workspace.machineId,
-      discard ? CONTROL_WORKSPACE_DISCARD : CONTROL_WORKSPACE_ARCHIVE,
-      [request]
-    )) as WorkspaceArchived;
+    // The machine's answer, taken into CawCo's type: what it holds and where
+    // its HEAD was are kept on the workspace's row.
+    const { carry, head, held } = received(
+      WorkspaceArchivedSchema,
+      await call(
+        workspace.machineId,
+        discard ? CONTROL_WORKSPACE_DISCARD : CONTROL_WORKSPACE_ARCHIVE,
+        [request]
+      ),
+      "a machine's workspace archive"
+    );
     if (held) {
       const kept =
         db.updateWorkspace(workspace.id, {

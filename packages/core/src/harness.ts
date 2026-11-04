@@ -666,6 +666,12 @@ export interface ModelInfo {
    */
   supportsEffort?: boolean;
   supportsFastMode?: boolean;
+  /**
+   * Whether the model's thinking can be turned off, as Claude Code's model
+   * list says (its initialize answer carries it; the Agent SDK's
+   * `ModelInfo` does not name it yet).
+   */
+  supportsThinkingOff?: boolean;
   value: string;
 }
 

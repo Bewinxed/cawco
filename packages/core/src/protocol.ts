@@ -332,6 +332,13 @@ export interface SendPayload {
   instanceId: string;
   /** The user turn, under the uuid it keeps everywhere it is shown. */
   message: import("./harness").SentMessage;
+  /**
+   * Which page and tab sent it (the dashboard's `submitCommand`): the page's
+   * client id and its tab's presence, which the hub's send line names, so a
+   * send that landed on the wrong session is read against what its own tab
+   * showed.
+   */
+  provenance?: { clientId?: string; presenceId?: string };
 }
 
 /**

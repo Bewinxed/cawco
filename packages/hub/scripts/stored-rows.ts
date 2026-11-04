@@ -15,6 +15,7 @@ import {
   readStoredText,
   type StoredShape,
   storedShapeOf,
+  undeclaredKeys,
 } from "@cawco/core/stored-json";
 import { is } from "drizzle-orm";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
@@ -28,6 +29,17 @@ interface StoredFailure {
   table: string;
 }
 
+/** A key a column's rows hold that its type does not declare (its read strips it), its array indices as `[]`. */
+interface StoredUndeclared {
+  column: string;
+  /** Rows holding it. */
+  count: number;
+  key: string;
+  table: string;
+  /** Where it is to be declared: `X (its file)`. */
+  type: string;
+}
+
 export interface StoredRows {
   /** Rows read, every column. */
   checked: number;
@@ -38,9 +50,19 @@ export interface StoredRows {
   missing: string[];
   /** Sealed columns not read, with no key to open them (`table.column`). */
   sealed: string[];
+  /**
+   * Keys rows hold that their column's type does not declare: written
+   * before its writes were checked (2026-10-26) or refused one
+   * (2026-11-04), or a key taken out of the type since. A read strips them;
+   * a write is refused them (core stored-json.ts `checkStored`).
+   */
+  undeclared: StoredUndeclared[];
   /** Sealed values the given key did not open: read as no secret, as the hub reads them. */
   unopened: number;
 }
+
+/** An array's every index read as one: `steps[3].input` is `steps[].input`. */
+const INDEX = /\[\d+\]/gu;
 
 const quote = (name: string): string => `"${name.replaceAll('"', '""')}"`;
 
@@ -61,6 +83,7 @@ const readColumn = (
     )
     .iterate();
   let failed: StoredFailure | undefined;
+  const undeclared = new Map<string, StoredUndeclared>();
   for (const row of rows) {
     result.checked += 1;
     const raw = String(row.v);
@@ -70,7 +93,21 @@ const readColumn = (
       continue;
     }
     try {
-      readStoredText(shape.schema, text, at);
+      const parsed = readStoredText(shape.schema, text, at);
+      const keys = undeclaredKeys(shape.schema, JSON.parse(text), parsed);
+      for (const [key, type] of new Map(
+        keys.map((one) => [one.key.replace(INDEX, "[]"), one.type])
+      )) {
+        const held = undeclared.get(key) ?? {
+          table: at.table,
+          column: at.column,
+          key,
+          type,
+          count: 0,
+        };
+        held.count += 1;
+        undeclared.set(key, held);
+      }
     } catch (error) {
       if (!isStoredShapeError(error)) {
         throw error;
@@ -91,6 +128,7 @@ const readColumn = (
   if (failed) {
     result.failures.push(failed);
   }
+  result.undeclared.push(...undeclared.values());
 };
 
 /**
@@ -109,6 +147,7 @@ export const storedRows = async (
     failures: [],
     missing: [],
     sealed: [],
+    undeclared: [],
     unopened: 0,
   };
   for (const table of Object.values(schema)) {
@@ -154,6 +193,10 @@ export const storedRowsReport = (result: StoredRows): string[] => [
     `${failure.table}.${failure.column}: ${failure.count} row${failure.count === 1 ? "" : "s"} fail, first ${failure.row}:`,
     ...failure.issue.split("\n").map((line) => `  ${line}`),
   ]),
+  ...result.undeclared.map(
+    (one) =>
+      `${one.table}.${one.column}: ${one.count} row${one.count === 1 ? "" : "s"} hold \`${one.key}\`, which ${one.type} does not declare: read without it, and a write of it is refused`
+  ),
   ...(result.missing.length > 0
     ? [`not in this database: ${result.missing.join(", ")}`]
     : []),

@@ -17,6 +17,7 @@ import {
   HookMatchTestShape,
   MediaPathShape,
 } from "@cawco/core/stored-shapes";
+import { declared } from "@cawco/core/stored-types";
 import { z } from "zod";
 import type { MediaMeasurement as MediaMeasurementType } from "./browser/media-forwarding";
 import type { BrowserRecord as BrowserRecordType } from "./browser/state";
@@ -28,90 +29,118 @@ import type {
 import type { FleetMcpSet as FleetMcpSetType } from "./fleet-mcp-set";
 import type { FleetPlaceSet as FleetPlaceSetType } from "./fleet-place-set";
 
-const MediaMeasurementShape = z.object({
-  at: z.number(),
-  endpoint: z.string(),
-  media: MediaPathShape,
-  socket: z.string(),
-});
+const MediaMeasurementShape = declared(
+  z.object({
+    at: z.number(),
+    endpoint: z.string(),
+    media: MediaPathShape,
+    socket: z.string(),
+  }),
+  "MediaMeasurement",
+  "packages/agent/src/browser/media-forwarding.ts"
+);
 export const MediaMeasurementSchema: z.ZodType<MediaMeasurementType> =
   MediaMeasurementShape;
 
-const BrowserRecordShape = z.object({
-  container: z
-    .object({
-      address: z.string().optional(),
-      adminPassword: z.string(),
-      id: z.string(),
-      image: z.string(),
-      media: MediaPathShape,
-      hostRules: z.string().optional(),
-      ports: BrowserPortsShape.optional(),
-      runtime: z
-        .object({ endpoint: z.string(), kind: z.enum(["docker", "podman"]) })
-        .optional(),
-      stun: z.string().optional(),
-      userPassword: z.string(),
-      volume: z.string(),
-    })
-    .optional(),
-  host: BrowserHostKindShape,
-  key: BrowserKeyShape,
-  lastUsedAt: z.number(),
-  local: z
-    .object({
-      bootId: z.string().optional(),
-      pid: z.number(),
-      procStart: z.string(),
-    })
-    .optional(),
-  name: z.string(),
-  relay: BrowserRelayShape.optional(),
-  relayExpiresAt: z.number().optional(),
-  relayKey: z.string().optional(),
-  runtimeAway: z.literal(true).optional(),
-  slot: z.number().optional(),
-  state: BrowserStateShape,
-  takeover: BrowserRowShape.shape.takeover,
-  why: z.string().optional(),
-});
+const BrowserRecordShape = declared(
+  z.object({
+    container: z
+      .object({
+        address: z.string().optional(),
+        adminPassword: z.string(),
+        id: z.string(),
+        image: z.string(),
+        media: MediaPathShape,
+        hostRules: z.string().optional(),
+        ports: BrowserPortsShape.optional(),
+        runtime: z
+          .object({ endpoint: z.string(), kind: z.enum(["docker", "podman"]) })
+          .optional(),
+        stun: z.string().optional(),
+        userPassword: z.string(),
+        volume: z.string(),
+      })
+      .optional(),
+    host: BrowserHostKindShape,
+    key: BrowserKeyShape,
+    lastUsedAt: z.number(),
+    local: z
+      .object({
+        bootId: z.string().optional(),
+        pid: z.number(),
+        procStart: z.string(),
+      })
+      .optional(),
+    name: z.string(),
+    relay: BrowserRelayShape.optional(),
+    relayExpiresAt: z.number().optional(),
+    relayKey: z.string().optional(),
+    runtimeAway: z.literal(true).optional(),
+    slot: z.number().optional(),
+    state: BrowserStateShape,
+    takeover: BrowserRowShape.shape.takeover,
+    why: z.string().optional(),
+  }),
+  "BrowserRecord",
+  "packages/agent/src/browser/state.ts"
+);
 export const BrowserRecordSchema: z.ZodType<BrowserRecordType> =
   BrowserRecordShape;
 
-const SetHarnessConfigShape = z.object({
-  cwd: z.string().optional(),
-  entry: z.string().optional(),
-  kind: HarnessConfigKindShape,
-  name: z.string(),
-  settings: z.record(z.string(), z.unknown()).optional(),
-});
+const SetHarnessConfigShape = declared(
+  z.object({
+    cwd: z.string().optional(),
+    entry: z.string().optional(),
+    kind: HarnessConfigKindShape,
+    name: z.string(),
+    settings: z.record(z.string(), z.unknown()).optional(),
+  }),
+  "SetHarnessConfig",
+  "packages/agent/src/fleet-harness-set.ts"
+);
 
-const SetHookShape = z.object({
-  event: HookEventShape,
-  handler: HookHandlerSchema,
-  id: z.string(),
-  matcher: z.string().optional(),
-  name: z.string(),
-  test: HookMatchTestShape,
-});
+const SetHookShape = declared(
+  z.object({
+    event: HookEventShape,
+    handler: HookHandlerSchema,
+    id: z.string(),
+    matcher: z.string().optional(),
+    name: z.string(),
+    test: HookMatchTestShape,
+  }),
+  "SetHook",
+  "packages/agent/src/fleet-harness-set.ts"
+);
 
-export const FleetHarnessSetShape = z.object({
-  config: z.record(z.string(), SetHarnessConfigShape),
-  hooks: z.record(z.string(), SetHookShape),
-});
+export const FleetHarnessSetShape = declared(
+  z.object({
+    config: z.record(z.string(), SetHarnessConfigShape),
+    hooks: z.record(z.string(), SetHookShape),
+  }),
+  "FleetHarnessSet",
+  "packages/agent/src/fleet-harness-set.ts"
+);
 
-export const FleetMcpSetShape = z.object({
-  servers: z.record(z.string(), FleetMcpConfigSchema),
-  signedOut: z.array(z.string()),
-});
+export const FleetMcpSetShape = declared(
+  z.object({
+    servers: z.record(z.string(), FleetMcpConfigSchema),
+    signedOut: z.array(z.string()),
+  }),
+  "FleetMcpSet",
+  "packages/agent/src/fleet-mcp-set.ts"
+);
 
-export const FleetPlaceSetShape = z.object({
-  config: z.record(z.string(), SetHarnessConfigShape),
-  cwd: z.string(),
-  hooks: z.record(z.string(), SetHookShape),
-  mcp: z.record(z.string(), FleetMcpConfigSchema),
-  skills: z.record(z.string(), z.string()),
-});
+export const FleetPlaceSetShape = declared(
+  z.object({
+    config: z.record(z.string(), SetHarnessConfigShape),
+    cwd: z.string(),
+    hooks: z.record(z.string(), SetHookShape),
+    mcp: z.record(z.string(), FleetMcpConfigSchema),
+    skills: z.record(z.string(), z.string()),
+  }),
+  "FleetPlaceSet",
+  "packages/agent/src/fleet-place-set.ts"
+);
 
 /**
  * Each property, through every level, as a plain object type. `readonly`

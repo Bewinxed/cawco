@@ -24,6 +24,7 @@ import {
   SendPayloadShape,
   SendRefusalShape,
 } from "@cawco/core/stored-shapes";
+import { declared } from "@cawco/core/stored-types";
 import type {
   OAuthDiscoveryState as OAuthDiscoveryStateType,
   OAuthServerInfo as OAuthServerInfoType,
@@ -77,330 +78,446 @@ import type {
   WorkspaceFrom as WorkspaceFromType,
 } from "./schema";
 
-const OAuthMetadataShape = OAuthMetadataPublished;
+const OAuthMetadataShape = declared(
+  OAuthMetadataPublished,
+  "OAuthMetadata",
+  "@modelcontextprotocol/sdk/shared/auth"
+);
 
-const OpenIdProviderDiscoveryMetadataShape =
-  OpenIdProviderDiscoveryMetadataPublished;
+const OpenIdProviderDiscoveryMetadataShape = declared(
+  OpenIdProviderDiscoveryMetadataPublished,
+  "OpenIdProviderDiscoveryMetadata",
+  "@modelcontextprotocol/sdk/shared/auth"
+);
 
-const AuthorizationServerMetadataShape = z.union([
-  OAuthMetadataShape,
-  OpenIdProviderDiscoveryMetadataShape,
-]);
+const AuthorizationServerMetadataShape = declared(
+  z.union([OAuthMetadataShape, OpenIdProviderDiscoveryMetadataShape]),
+  "AuthorizationServerMetadata",
+  "@modelcontextprotocol/sdk/shared/auth"
+);
 export const AuthorizationServerMetadataSchema: z.ZodType<AuthorizationServerMetadataType> =
   AuthorizationServerMetadataShape;
 
-const ConnectionAppSecretShape = z.union([
-  z.object({
-    appId: z.string(),
-    clientId: z.string().optional(),
-    clientSecret: z.string().optional(),
-    installationId: z.string().optional(),
-    privateKey: z.string(),
-    service: z.literal("github"),
-    slug: z.string().optional(),
-    webhookSecret: z.string().optional(),
-  }),
-  z.object({
-    clientId: z.string(),
-    clientSecret: z.string(),
-    service: z.literal("linear"),
-  }),
-]);
+const ConnectionAppSecretShape = declared(
+  z.union([
+    z.object({
+      appId: z.string(),
+      clientId: z.string().optional(),
+      clientSecret: z.string().optional(),
+      installationId: z.string().optional(),
+      privateKey: z.string(),
+      service: z.literal("github"),
+      slug: z.string().optional(),
+      webhookSecret: z.string().optional(),
+    }),
+    z.object({
+      clientId: z.string(),
+      clientSecret: z.string(),
+      service: z.literal("linear"),
+    }),
+  ]),
+  "ConnectionAppSecret",
+  "packages/hub/src/db/schema.ts"
+);
 
-const OAuthClientInformationShape = OAuthClientInformationPublished;
+const OAuthClientInformationShape = declared(
+  OAuthClientInformationPublished,
+  "OAuthClientInformation",
+  "@modelcontextprotocol/sdk/shared/auth"
+);
 
-const OAuthClientInformationFullShape = OAuthClientInformationFullPublished;
+const OAuthClientInformationFullShape = declared(
+  OAuthClientInformationFullPublished,
+  "OAuthClientInformationFull",
+  "@modelcontextprotocol/sdk/shared/auth"
+);
 export const OAuthClientInformationFullSchema: z.ZodType<OAuthClientInformationFullType> =
   OAuthClientInformationFullShape;
 
-const OAuthClientInformationMixedShape = z.union([
-  OAuthClientInformationFullShape,
-  OAuthClientInformationShape,
-]);
+const OAuthClientInformationMixedShape = declared(
+  z.union([OAuthClientInformationFullShape, OAuthClientInformationShape]),
+  "OAuthClientInformationMixed",
+  "@modelcontextprotocol/sdk/shared/auth"
+);
 
-const OAuthTokensShape = OAuthTokensPublished;
+const OAuthTokensShape = declared(
+  OAuthTokensPublished,
+  "OAuthTokens",
+  "@modelcontextprotocol/sdk/shared/auth"
+);
 export const OAuthTokensSchema: z.ZodType<OAuthTokensType> = OAuthTokensShape;
 
-const ConnectionSecretShape = z.object({
-  app: ConnectionAppSecretShape.optional(),
-  client: OAuthClientInformationMixedShape.optional(),
-  device: z
-    .object({
-      deviceCode: z.string(),
-      expiresAt: z.number(),
-      interval: z.number(),
-      userCode: z.string(),
-      verificationUri: z.string(),
-    })
-    .optional(),
-  gh: z
-    .object({ host: z.string(), login: z.string(), machineId: z.string() })
-    .optional(),
-  key: z.string().optional(),
-  org: z.string().optional(),
-  tokens: OAuthTokensShape.optional(),
-  verifier: z.string().optional(),
-});
+const ConnectionSecretShape = declared(
+  z.object({
+    app: ConnectionAppSecretShape.optional(),
+    client: OAuthClientInformationMixedShape.optional(),
+    device: z
+      .object({
+        deviceCode: z.string(),
+        expiresAt: z.number(),
+        interval: z.number(),
+        userCode: z.string(),
+        verificationUri: z.string(),
+      })
+      .optional(),
+    gh: z
+      .object({ host: z.string(), login: z.string(), machineId: z.string() })
+      .optional(),
+    key: z.string().optional(),
+    org: z.string().optional(),
+    tokens: OAuthTokensShape.optional(),
+    verifier: z.string().optional(),
+  }),
+  "ConnectionSecret",
+  "packages/hub/src/db/schema.ts"
+);
 export const ConnectionSecretSchema: z.ZodType<ConnectionSecretType> =
   ConnectionSecretShape;
 
-const ContinuationAskerShape = z.union([
-  z.object({ kind: z.literal("person") }),
-  z.object({ kind: z.literal("session"), id: z.string() }),
-  z.object({ kind: z.literal("task"), id: z.string() }),
-  z.object({
-    kind: z.literal("move"),
-    line: z.string(),
-    move: AccountMoveSchema,
-    stopped: z.union([
-      z.literal(false),
-      z.literal("limit"),
-      z.literal("signin"),
-    ]),
-    to: z.string(),
-  }),
-]);
+const ContinuationAskerShape = declared(
+  z.union([
+    z.object({ kind: z.literal("person") }),
+    z.object({ kind: z.literal("session"), id: z.string() }),
+    z.object({ kind: z.literal("task"), id: z.string() }),
+    z.object({
+      kind: z.literal("move"),
+      line: z.string(),
+      move: AccountMoveSchema,
+      stopped: z.union([
+        z.literal(false),
+        z.literal("limit"),
+        z.literal("signin"),
+      ]),
+      to: z.string(),
+    }),
+  ]),
+  "ContinuationAsker",
+  "packages/hub/src/db/schema.ts"
+);
 export const ContinuationAskerSchema: z.ZodType<ContinuationAskerType> =
   ContinuationAskerShape;
 
-const ContinueRequestShape = z.object({
-  asksOnly: z.literal(true).optional(),
-  attachments: z.array(SendAttachmentShape).optional(),
-  images: SendPayloadShape.shape.images.optional(),
-  note: z.string().optional(),
-  summarizer: z
-    .object({
-      harness: HarnessKindShape,
-      model: z.string().optional(),
-      account: z.string().optional(),
-    })
-    .optional(),
-  target: z.object({
-    account: z.string().optional(),
-    bootstrap: z.object({ repo: z.string(), baseDir: z.string() }).optional(),
-    cwd: z.string().optional(),
-    effort: EffortLevelShape.optional(),
-    harness: HarnessKindShape,
-    machineId: z.string().optional(),
-    model: z.string().optional(),
-    permissionMode: PermissionModeShape.optional(),
-    fallbackPermissionMode: PermissionModeShape.optional(),
-    projectId: z.string().optional(),
-    scratch: z
+const ContinueRequestShape = declared(
+  z.object({
+    asksOnly: z.literal(true).optional(),
+    attachments: z.array(SendAttachmentShape).optional(),
+    images: SendPayloadShape.shape.images.optional(),
+    note: z.string().optional(),
+    summarizer: z
       .object({
-        worktree: z.boolean().optional(),
-        baseCwd: z.string().optional(),
+        harness: HarnessKindShape,
+        model: z.string().optional(),
+        account: z.string().optional(),
       })
       .optional(),
+    target: z.object({
+      account: z.string().optional(),
+      bootstrap: z.object({ repo: z.string(), baseDir: z.string() }).optional(),
+      cwd: z.string().optional(),
+      effort: EffortLevelShape.optional(),
+      harness: HarnessKindShape,
+      machineId: z.string().optional(),
+      model: z.string().optional(),
+      permissionMode: PermissionModeShape.optional(),
+      fallbackPermissionMode: PermissionModeShape.optional(),
+      projectId: z.string().optional(),
+      scratch: z
+        .object({
+          worktree: z.boolean().optional(),
+          baseCwd: z.string().optional(),
+        })
+        .optional(),
+    }),
   }),
-});
+  "ContinueRequest",
+  "packages/hub/src/continuation.ts"
+);
 export const ContinueRequestSchema: z.ZodType<ContinueRequestType> =
   ContinueRequestShape;
 
-const DesignFindingShape = z.object({
-  file: z.string(),
-  line: z.number(),
-  problem: z.string(),
-  selector: z.string(),
-});
+const DesignFindingShape = declared(
+  z.object({
+    file: z.string(),
+    line: z.number(),
+    problem: z.string(),
+    selector: z.string(),
+  }),
+  "DesignFinding",
+  "packages/hub/src/db/schema.ts"
+);
 export const DesignFindingSchema: z.ZodType<DesignFindingType> =
   DesignFindingShape;
 
-const DesignPickShape = z.object({ variant: z.string(), why: z.string() });
+const DesignPickShape = declared(
+  z.object({ variant: z.string(), why: z.string() }),
+  "DesignPick",
+  "packages/hub/src/db/schema.ts"
+);
 export const DesignPickSchema: z.ZodType<DesignPickType> = DesignPickShape;
 
-const DesignProposalFileShape = z.object({
-  after: z.string(),
-  before: z.string(),
-  path: z.string(),
-});
+const DesignProposalFileShape = declared(
+  z.object({ after: z.string(), before: z.string(), path: z.string() }),
+  "DesignProposalFile",
+  "packages/hub/src/db/schema.ts"
+);
 export const DesignProposalFileSchema: z.ZodType<DesignProposalFileType> =
   DesignProposalFileShape;
 
-const GatePassShape = z.object({ command: z.string(), stage: z.string() });
+const GatePassShape = declared(
+  z.object({ command: z.string(), stage: z.string() }),
+  "GatePass",
+  "packages/hub/src/db/schema.ts"
+);
 export const GatePassSchema: z.ZodType<GatePassType> = GatePassShape;
 
-const ItemBlockShape = z.object({
-  kind: z.enum(["type", "machine", "account"]),
-  name: z.string(),
-  since: z.number(),
-});
+const ItemBlockShape = declared(
+  z.object({
+    kind: z.enum(["type", "machine", "account"]),
+    name: z.string(),
+    since: z.number(),
+  }),
+  "ItemBlock",
+  "packages/hub/src/db/schema.ts"
+);
 export const ItemBlockSchema: z.ZodType<ItemBlockType> = ItemBlockShape;
 
-export const MoveStateShape = z.object({
-  approved: z.boolean().optional(),
-  ask: MoveAskShape.optional(),
-  askId: z.string().optional(),
-  bigFiles: z.array(MoveLargeFileShape),
-  bytes: z.number(),
-  cloneCredential: z.literal(true).optional(),
-  cloneUrl: z.string().optional(),
-  error: MoveErrorShape.optional(),
-  from: MoveJobShape.shape.from,
-  ignoredSecrets: z.array(z.string()),
-  ignores: z.boolean(),
-  kept: z.string().optional(),
-  lfs: MoveLfsResultShape.optional(),
-  lfsFile: MoveJobShape.shape.lfsFile.optional(),
-  moved: z.string().optional(),
-  progress: MoveJobShape.shape.progress.optional(),
-  promptUuid: z.string(),
-  root: z.string().optional(),
-  snapshot: MoveSnapshotResultShape.optional(),
-  snapshotBranch: z.string(),
-  sourceHome: z.string(),
-  sourceMachineId: z.string(),
-  sourcePath: z.string(),
-  stayed: z.string().optional(),
-  steps: z.array(MoveStepShape),
-  stopOn: z.string().optional(),
-  stoppedAt: MoveStepShape.optional(),
-  targetHome: z.string(),
-  targetInstanceId: z.string(),
-  targetMachineId: z.string(),
-  targetPath: MachinePathShape,
-});
+export const MoveStateShape = declared(
+  z.object({
+    approved: z.boolean().optional(),
+    ask: MoveAskShape.optional(),
+    askId: z.string().optional(),
+    bigFiles: z.array(MoveLargeFileShape),
+    bytes: z.number(),
+    cloneCredential: z.literal(true).optional(),
+    cloneUrl: z.string().optional(),
+    error: MoveErrorShape.optional(),
+    from: MoveJobShape.shape.from,
+    ignoredSecrets: z.array(z.string()),
+    ignores: z.boolean(),
+    kept: z.string().optional(),
+    lfs: MoveLfsResultShape.optional(),
+    lfsFile: MoveJobShape.shape.lfsFile.optional(),
+    moved: z.string().optional(),
+    progress: MoveJobShape.shape.progress.optional(),
+    promptUuid: z.string(),
+    root: z.string().optional(),
+    snapshot: MoveSnapshotResultShape.optional(),
+    snapshotBranch: z.string(),
+    sourceHome: z.string(),
+    sourceMachineId: z.string(),
+    sourcePath: z.string(),
+    stayed: z.string().optional(),
+    steps: z.array(MoveStepShape),
+    stopOn: z.string().optional(),
+    stoppedAt: MoveStepShape.optional(),
+    targetHome: z.string(),
+    targetInstanceId: z.string(),
+    targetMachineId: z.string(),
+    targetPath: MachinePathShape,
+  }),
+  "MoveState",
+  "packages/hub/src/moves.ts"
+);
 
-const OAuthProtectedResourceMetadataShape =
-  OAuthProtectedResourceMetadataPublished;
+const OAuthProtectedResourceMetadataShape = declared(
+  OAuthProtectedResourceMetadataPublished,
+  "OAuthProtectedResourceMetadata",
+  "@modelcontextprotocol/sdk/shared/auth"
+);
 export const OAuthProtectedResourceMetadataSchema: z.ZodType<OAuthProtectedResourceMetadataType> =
   OAuthProtectedResourceMetadataShape;
 
-const OAuthServerInfoShape = z.object({
-  authorizationServerUrl: z.string(),
-  authorizationServerMetadata: AuthorizationServerMetadataShape.optional(),
-  resourceMetadata: OAuthProtectedResourceMetadataShape.optional(),
-});
+const OAuthServerInfoShape = declared(
+  z.object({
+    authorizationServerUrl: z.string(),
+    authorizationServerMetadata: AuthorizationServerMetadataShape.optional(),
+    resourceMetadata: OAuthProtectedResourceMetadataShape.optional(),
+  }),
+  "OAuthServerInfo",
+  "@modelcontextprotocol/sdk/client/auth"
+);
 
-const OAuthDiscoveryStateShape = OAuthServerInfoShape.extend({
-  resourceMetadataUrl: z.string().optional(),
-});
+const OAuthDiscoveryStateShape = declared(
+  OAuthServerInfoShape.extend({ resourceMetadataUrl: z.string().optional() }),
+  "OAuthDiscoveryState",
+  "@modelcontextprotocol/sdk/client/auth"
+);
 export const OAuthDiscoveryStateSchema: z.ZodType<OAuthDiscoveryStateType> =
   OAuthDiscoveryStateShape;
 
-const ContinuationSourceShape = z.object({
-  cwd: z.string(),
-  harness: HarnessKindShape,
-  instanceId: z.string(),
-  model: z.string(),
-  title: z.string(),
-});
+const ContinuationSourceShape = declared(
+  z.object({
+    cwd: z.string(),
+    harness: HarnessKindShape,
+    instanceId: z.string(),
+    model: z.string(),
+    title: z.string(),
+  }),
+  "ContinuationSource",
+  "packages/hub/src/continuation.ts"
+);
 
-const PreparedContinuationShape = z.object({
-  compacted: z.boolean(),
-  entries: z.object({ live: z.number(), whole: z.number(), scope: z.number() }),
-  extracted: ExtractedShape,
-  liveContextTokens: z.number(),
-  openingTokens: z.number(),
-  prompt: z.string().or(z.undefined()),
-  source: ContinuationSourceShape.extend({ machineId: z.string() }),
-  summariseInputTokens: z.number(),
-});
+const PreparedContinuationShape = declared(
+  z.object({
+    compacted: z.boolean(),
+    entries: z.object({
+      live: z.number(),
+      whole: z.number(),
+      scope: z.number(),
+    }),
+    extracted: ExtractedShape,
+    liveContextTokens: z.number(),
+    openingTokens: z.number(),
+    prompt: z.string().or(z.undefined()),
+    source: ContinuationSourceShape.extend({ machineId: z.string() }),
+    summariseInputTokens: z.number(),
+  }),
+  "PreparedContinuation",
+  "packages/hub/src/continuation.ts"
+);
 export const PreparedContinuationSchema: z.ZodType<PreparedContinuationType> =
   PreparedContinuationShape;
 
-const StoredSendRefusalShape = z.union([
-  SendRefusalShape,
-  z.intersection(z.object({ kind: z.literal("mode-ask") }), ModeAskShape),
-]);
+const StoredSendRefusalShape = declared(
+  z.union([
+    SendRefusalShape,
+    z.intersection(z.object({ kind: z.literal("mode-ask") }), ModeAskShape),
+  ]),
+  "StoredSendRefusal",
+  "packages/hub/src/db/schema.ts"
+);
 export const StoredSendRefusalSchema: z.ZodType<StoredSendRefusalType> =
   StoredSendRefusalShape;
 
-const TrackerCursorShape = z.object({
-  commentsEtag: z.string().nullable(),
-  commentsSince: z.number(),
-  etag: z.string().nullable(),
-  since: z.number(),
-});
+const TrackerCursorShape = declared(
+  z.object({
+    commentsEtag: z.string().nullable(),
+    commentsSince: z.number(),
+    etag: z.string().nullable(),
+    since: z.number(),
+  }),
+  "TrackerCursor",
+  "packages/hub/src/db/schema.ts"
+);
 export const TrackerCursorSchema: z.ZodType<TrackerCursorType> =
   TrackerCursorShape;
 
-const TrackerSyncedShape = z.object({
-  description: z.string(),
-  labels: z.array(z.string()),
-  stage: z.string(),
-  state: z.string(),
-  status: z.string().nullable().optional(),
-  title: z.string(),
-});
+const TrackerSyncedShape = declared(
+  z.object({
+    description: z.string(),
+    labels: z.array(z.string()),
+    stage: z.string(),
+    state: z.string(),
+    status: z.string().nullable().optional(),
+    title: z.string(),
+  }),
+  "TrackerSynced",
+  "packages/hub/src/db/schema.ts"
+);
 export const TrackerSyncedSchema: z.ZodType<TrackerSyncedType> =
   TrackerSyncedShape;
 
-const TrashedRowsShape = z.object({
-  rows: z.array(
-    z.record(z.string(), z.union([z.string(), z.number()]).nullable())
-  ),
-  table: z.string(),
-});
+const TrashedRowsShape = declared(
+  z.object({
+    rows: z.array(
+      z.record(z.string(), z.union([z.string(), z.number()]).nullable())
+    ),
+    table: z.string(),
+  }),
+  "TrashedRows",
+  "packages/hub/src/db/schema.ts"
+);
 export const TrashedRowsSchema: z.ZodType<TrashedRowsType> = TrashedRowsShape;
 
-const WorkBudgetShape = z.object({
-  minutes: z.number().optional(),
-  turns: z.number().optional(),
-  usd: z.number().optional(),
-});
+const WorkBudgetShape = declared(
+  z.object({
+    minutes: z.number().optional(),
+    turns: z.number().optional(),
+    usd: z.number().optional(),
+  }),
+  "WorkBudget",
+  "packages/hub/src/db/schema.ts"
+);
 export const WorkBudgetSchema: z.ZodType<WorkBudgetType> = WorkBudgetShape;
 
-const WorkItemSubmissionShape = z.object({
-  blocked: z.object({ command: z.string(), error: z.string() }).optional(),
-  findings: z
-    .array(z.object({ title: z.string(), detail: z.string() }))
-    .optional(),
-  headline: z.string(),
-  ship: z.object({ notes: z.string() }).optional(),
-  summary: z.string(),
-});
+const WorkItemSubmissionShape = declared(
+  z.object({
+    blocked: z.object({ command: z.string(), error: z.string() }).optional(),
+    findings: z
+      .array(z.object({ title: z.string(), detail: z.string() }))
+      .optional(),
+    headline: z.string(),
+    ship: z.object({ notes: z.string() }).optional(),
+    summary: z.string(),
+  }),
+  "WorkItemSubmission",
+  "packages/hub/src/db/schema.ts"
+);
 export const WorkItemSubmissionSchema: z.ZodType<WorkItemSubmissionType> =
   WorkItemSubmissionShape;
 
-const WorkLandingShape = z.object({
-  at: z.number().optional(),
-  gate: z.object({ passed: z.array(z.string()), tree: z.string() }).optional(),
-  onto: z.string().nullable(),
-  sha: z.string(),
-});
+const WorkLandingShape = declared(
+  z.object({
+    at: z.number().optional(),
+    gate: z
+      .object({ passed: z.array(z.string()), tree: z.string() })
+      .optional(),
+    onto: z.string().nullable(),
+    sha: z.string(),
+  }),
+  "WorkLanding",
+  "packages/hub/src/db/schema.ts"
+);
 export const WorkLandingSchema: z.ZodType<WorkLandingType> = WorkLandingShape;
 
-const WorkspaceFromShape = z.object({
-  commit: z.string(),
-  landed: z.boolean(),
-  workspace: z.string(),
-});
+const WorkspaceFromShape = declared(
+  z.object({ commit: z.string(), landed: z.boolean(), workspace: z.string() }),
+  "WorkspaceFrom",
+  "packages/hub/src/db/schema.ts"
+);
 export const WorkspaceFromSchema: z.ZodType<WorkspaceFromType> =
   WorkspaceFromShape;
 
-const InstallsRecordShape = z.object({
-  draft: InstallDraftShape.nullable(),
-  installs: z.array(
-    InstallShape.omit({ keys: true }).extend({
-      code: z.string().nullable().optional(),
-      keys: InstallShape.shape.keys.optional(),
-    })
-  ),
-});
+const InstallsRecordShape = declared(
+  z.object({
+    draft: InstallDraftShape.nullable(),
+    installs: z.array(
+      InstallShape.omit({ keys: true }).extend({
+        code: z.string().nullable().optional(),
+        keys: InstallShape.shape.keys.optional(),
+      })
+    ),
+  }),
+  "InstallsRecord",
+  "packages/hub/src/installs.ts"
+);
 export const InstallsRecordSchema: z.ZodType<InstallsRecordType> =
   InstallsRecordShape;
 
-const ProposalFileShape = z.object({
-  before: z.string(),
-  content: z.string(),
-  path: z.string(),
-});
+const ProposalFileShape = declared(
+  z.object({ before: z.string(), content: z.string(), path: z.string() }),
+  "ProposalFile",
+  "packages/hub/src/memory.ts"
+);
 
-const ProposalShape = z.object({
-  base: z.string(),
-  by: z.string(),
-  files: z.array(ProposalFileShape),
-  id: z.string(),
-  kind: z.enum(["archive", "rewrite"]).optional(),
-  notes: z.array(z.string()),
-  projectId: z.string(),
-  session: z.string(),
-  time: z.string(),
-  toolUseId: z.string().optional(),
-  why: z.string(),
-  withdraws: z.string().optional(),
-});
+const ProposalShape = declared(
+  z.object({
+    base: z.string(),
+    by: z.string(),
+    files: z.array(ProposalFileShape),
+    id: z.string(),
+    kind: z.enum(["archive", "rewrite"]).optional(),
+    notes: z.array(z.string()),
+    projectId: z.string(),
+    session: z.string(),
+    time: z.string(),
+    toolUseId: z.string().optional(),
+    why: z.string(),
+    withdraws: z.string().optional(),
+  }),
+  "Proposal",
+  "packages/hub/src/memory.ts"
+);
 export const ProposalSchema: z.ZodType<ProposalType> = ProposalShape;
 
 /**

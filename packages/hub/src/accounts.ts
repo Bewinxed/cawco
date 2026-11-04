@@ -25,11 +25,14 @@ import {
   type UsageLimitsResponse,
   windowKey,
 } from "@cawco/core";
+import { received } from "@cawco/core/stored-json";
+import { ModelInfoSchema } from "@cawco/core/stored-shapes";
 import { HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import {
   type ObservedRateLimitInfo,
   observedReading,
 } from "@cawco/core/usage/observed";
+import { z } from "zod";
 import type { DbShape } from "./db";
 
 /**
@@ -59,9 +62,15 @@ export const keepReading = (
   }
 };
 
+/** A catalog as Claude Code's model list gives it. */
+const MODELS = z.array(ModelInfoSchema);
+
 /**
  * Keeps what a probe read of an account: its models, as its catalog
- * (replacing the one before, rows and all), and its plan.
+ * (replacing the one before, rows and all), and its plan. The models are
+ * Claude Code's own list, taken into CawCo's type here (core stored-json.ts
+ * `received`): a field its release adds is left out and said, never a
+ * catalog its write refuses.
  */
 export const keepProbe = (
   db: DbShape,
@@ -70,7 +79,11 @@ export const keepProbe = (
   at = Date.now()
 ): void => {
   if (probe.models.length > 0) {
-    db.accounts.putCatalog(accountId, probe.models, at);
+    db.accounts.putCatalog(
+      accountId,
+      received(MODELS, probe.models, "Claude Code's model list"),
+      at
+    );
   }
   keepReading(db, accountId, probe, at);
 };

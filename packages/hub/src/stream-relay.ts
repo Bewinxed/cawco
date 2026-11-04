@@ -32,6 +32,8 @@ import type { Bounded } from "@cawco/core/bounded";
 import type { BrowserRelay } from "@cawco/core/browser";
 import type { MachineCapabilities } from "@cawco/core/capabilities";
 import { isPublicAddress, plainAddress } from "@cawco/core/public-address";
+import { received } from "@cawco/core/stored-json";
+import { RelayPortsSchema, RelayReachSchema } from "@cawco/core/stored-shapes";
 import {
   RELAY_CERTIFY,
   RELAY_REMOVE,
@@ -369,12 +371,21 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       return;
     }
     ({ progress } = frame);
+    // The machine's word on its relay, taken into CawCo's types as it is kept.
     update({
       state: frame.state,
-      ports: frame.ports,
+      ports: received(RelayPortsSchema, frame.ports, "a machine's relay frame"),
       why: frame.why ?? null,
       whyCommand: frame.command ?? null,
-      ...(frame.reach ? { reach: frame.reach } : {}),
+      ...(frame.reach
+        ? {
+            reach: received(
+              RelayReachSchema,
+              frame.reach,
+              "a machine's relay frame"
+            ),
+          }
+        : {}),
     });
   };
 

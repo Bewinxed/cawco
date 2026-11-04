@@ -534,9 +534,19 @@ import {
   type StageStatus,
   storiesKey,
 } from "@cawco/core/stage";
+import { received } from "@cawco/core/stored-json";
 import {
+  BuildInfoSchema,
   ContextLineSchema,
+  ContinuationReadSchema,
+  FleetSyncReportSchema,
+  HarnessReportSchema,
+  MachineCapabilitiesSchema,
   NeutralSessionInfoSchema,
+  OpenCodeGoLimitsSchema,
+  ScratchWorktreeSchema,
+  SkillFileSchema,
+  ToolSigninSchema,
 } from "@cawco/core/stored-shapes";
 import type { RelayFrame } from "@cawco/core/stream-relay";
 import { CAPABILITY_KINDS } from "@cawco/core/suggest";
@@ -557,6 +567,7 @@ import { turnWords } from "@cawco/core/words/turns";
 import { isPlace } from "@cawco/core/workspace-policy";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
+import { z } from "zod";
 import {
   type AccountProber,
   accountOfIdentity,
@@ -2231,6 +2242,10 @@ const resolveDelegatePermissionMode = (
   return undefined;
 };
 
+/** A skill's files as a machine read them, taken into CawCo's type as they are kept (core stored-json.ts `received`). */
+const machineSkillFiles = (result: unknown): SkillFile[] =>
+  received(z.array(SkillFileSchema), result, "a machine's skill files");
+
 /** The report beat's word on what each harness adapter on the machine can do. */
 const peekHarnesses = (
   payload: unknown
@@ -2583,7 +2598,7 @@ const peekBuild = (payload: unknown): BuildInfo | undefined => {
     return undefined;
   }
   return typeof (build as BuildInfo).version === "string"
-    ? (build as BuildInfo)
+    ? received(BuildInfoSchema, build, "a machine's register (its build)")
     : undefined;
 };
 
@@ -2616,7 +2631,11 @@ const peekMachineCapabilities = (
       typeof item.available === "boolean" &&
       typeof item.installCommand === "string"
   )
-    ? value
+    ? received(
+        MachineCapabilitiesSchema,
+        value,
+        "a machine's report beat (its capabilities)"
+      )
     : undefined;
 };
 
@@ -2674,7 +2693,20 @@ const peekTools = (payload: unknown): ToolStatus[] => {
     return [];
   }
   const value = (payload as { tools?: unknown }).tools;
-  return Array.isArray(value) ? value.filter(isToolStatus) : [];
+  return Array.isArray(value)
+    ? value.filter(isToolStatus).map((tool) =>
+        tool.signin
+          ? {
+              ...tool,
+              signin: received(
+                ToolSigninSchema,
+                tool.signin,
+                "a machine's report beat (a tool's sign-in)"
+              ),
+            }
+          : tool
+      )
+    : [];
 };
 
 /** A `control` asking a machine to install a tool, and the tool it names. */
@@ -11220,7 +11252,7 @@ export const createServer = (
         asked.value.error ?? `${machineName(machineId)} could not read ${path}`
       );
     }
-    return asked.value.result as SkillFile[];
+    return machineSkillFiles(asked.value.result);
   };
 
   /**
@@ -17990,7 +18022,13 @@ export const createServer = (
             `${machineName(where.machineId)} could not read session ${where.sessionId}'s transcript: ${answer.value.error ?? "it gave no reason"}`
           );
         }
-        return answer.value.result as ContinuationRead;
+        // Its read is kept in the continuation's record: taken into
+        // CawCo's type as it is.
+        return received(
+          ContinuationReadSchema,
+          answer.value.result,
+          "a machine's continuation read"
+        );
       default:
         throw unreachable(answer);
     }
@@ -22409,7 +22447,11 @@ export const createServer = (
     // A project's rows are placed at each of its places on the machine,
     // which says each place's state; the hub keeps one state per row, the
     // worst of its places.
-    const report = foldPlaced(peeked);
+    const report = received(
+      FleetSyncReportSchema,
+      foldPlaced(peeked),
+      "a machine's fleet report"
+    );
     // Compare the machine's persisted content before overwriting its report;
     // timestamps and insertion order cannot cause a reload.
     const previous = db
@@ -22561,9 +22603,7 @@ export const createServer = (
     // suspected.
     // `presenceId` is the tab's presence, cut as the `[presence]` lines cut
     // it: the send reads against what that tab said it had in front.
-    const { provenance } = message.payload as {
-      provenance?: { clientId?: string; presenceId?: string };
-    };
+    const { provenance } = message.payload;
     // The person's own words are their input, on the device they came
     // from, before the send is handed on: its presence line, and the recap
     // of a return, read them.
@@ -33983,7 +34023,7 @@ export const createServer = (
               );
             }
 
-            const files = answer.result as SkillFile[];
+            const files = machineSkillFiles(answer.result);
             const skill = db.putSkill({
               name: params.name,
               source: `machine:${body.fromMachine}`,
@@ -34112,7 +34152,7 @@ export const createServer = (
               );
             }
 
-            const files = answer.result as SkillFile[];
+            const files = machineSkillFiles(answer.result);
             const skill = db.putSkill({
               name: stored.name,
               source: stored.source,
@@ -34246,7 +34286,7 @@ export const createServer = (
             );
           }
           if (answer.ok) {
-            const theirs = answer.result as SkillFile[];
+            const theirs = machineSkillFiles(answer.result);
             const hash = hashFiles(theirs);
             if (hash !== fleetCopy.hash) {
               db.recordFleetSkill({
@@ -37427,7 +37467,15 @@ export const createServer = (
                     report.auth ??
                     harnessReportOf(message.machineId, report.harness)?.auth ??
                     (report.refused ? "unauthenticated" : undefined);
-                  return auth ? [{ ...report, auth }] : [];
+                  return auth
+                    ? [
+                        received(
+                          HarnessReportSchema,
+                          { ...report, auth },
+                          "a machine's report beat (a harness's report)"
+                        ),
+                      ]
+                    : [];
                 });
                 db.mergeAgentHarnesses(message.machineId, filed);
                 capabilityReports.delete(message.machineId);
@@ -37584,7 +37632,15 @@ export const createServer = (
                 caps.recheck();
               }
               if (openCodeGo !== undefined) {
-                db.putOpenCodeGoLimits(message.machineId, openCodeGo);
+                db.putOpenCodeGoLimits(
+                  message.machineId,
+                  openCodeGo &&
+                    received(
+                      OpenCodeGoLimitsSchema,
+                      openCodeGo,
+                      "a machine's usage report (OpenCode Go)"
+                    )
+                );
               }
               publishUsage(message.machineId);
               break;
@@ -37757,7 +37813,15 @@ export const createServer = (
                   frame.processGeneration === processGeneration(row) &&
                   reportedMachinePath(message.machineId, frame.worktree.dir);
                 if (row && dir) {
-                  db.recordScratchWorktree(row.id, frame.worktree, dir);
+                  db.recordScratchWorktree(
+                    row.id,
+                    received(
+                      ScratchWorktreeSchema,
+                      frame.worktree,
+                      "a machine's scratch worktree frame"
+                    ),
+                    dir
+                  );
                 }
                 break;
               }

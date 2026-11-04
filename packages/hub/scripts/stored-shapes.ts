@@ -760,10 +760,22 @@ const declarationSchema = (declaration: Declaration): string => {
 /** How a generated file names the declared type it proves a schema against. */
 const alias = (name: string) => `${name}Type`;
 
+/** One schema as made: its type's name, where that type is declared, and the schema's expression. */
+interface Made {
+  declaredIn: string;
+  name: string;
+  schema: string;
+}
 /** Each file's schemas, in order, and the core schemas the others read. */
-const made = new Map<string, { name: string; schema: string }[]>(
-  OUTS.map((out) => [out, []])
-);
+const made = new Map<string, Made[]>(OUTS.map((out) => [out, []]));
+/** Records each machine-side schema's declared type (core stored-types.ts `declared`), which a refused write names. */
+const DECLARED = join(CORE_SRC, "stored-types.ts");
+/** Where a declaration is, as a refused write names it: its path from the repository's root, or the MCP SDK's module. */
+const declaredInOf = (declaration: Declaration): string => {
+  const file = declaration.getSourceFile().fileName;
+  const sdk = SDK.exec(file);
+  return sdk ? `@modelcontextprotocol/sdk/${sdk[1]}` : relative(ROOT, file);
+};
 const proved = new Map<string, string[]>(OUTS.map((out) => [out, []]));
 const coreNames = new Set(
   order.filter((d) => outOf(d) === CORE_OUT).map((d) => `${d.name.text}Shape`)
@@ -798,7 +810,14 @@ for (const declaration of order) {
       }
     }
   }
-  made.get(target)?.push({ name, schema });
+  if (!DASHBOARD) {
+    add("values", DECLARED, "declared");
+  }
+  made.get(target)?.push({
+    name,
+    schema,
+    declaredIn: declaredInOf(declaration),
+  });
 }
 
 /**
@@ -806,16 +825,16 @@ for (const declaration of order) {
  * (`.extend`, `.shape`, `.partial`) other schemas use; `XSchema` is the same
  * schema typed as `X`, so a column or a read of it is typed by the declared
  * name, which the OpenAPI document reads. Each is exported only when a file
- * outside this one imports it by that name.
+ * outside this one imports it by that name. On the machine's side the shape
+ * is recorded as made from its type (core stored-types.ts `declared`), so a
+ * write a stored column refuses a key names the type to declare it in; the
+ * dashboard's own file stores in the browser, and records none.
  */
-const linesOf = ({
-  name,
-  schema,
-}: {
-  name: string;
-  schema: string;
-}): string => {
-  const shape = `${imported.has(`${name}Shape`) ? "export " : ""}const ${name}Shape = ${schema};`;
+const linesOf = ({ name, schema, declaredIn }: Made): string => {
+  const expression = DASHBOARD
+    ? schema
+    : `declared(${schema}, ${JSON.stringify(name)}, ${JSON.stringify(declaredIn)})`;
+  const shape = `${imported.has(`${name}Shape`) ? "export " : ""}const ${name}Shape = ${expression};`;
   return imported.has(`${name}Schema`)
     ? `${shape}\nexport const ${name}Schema: z.ZodType<${alias(name)}> = ${name}Shape;`
     : shape;

@@ -35430,6 +35430,18 @@
           "message": {
             "$ref": "#/components/schemas/SentMessage",
             "description": "The user turn, under the uuid it keeps everywhere it is shown."
+          },
+          "provenance": {
+            "description": "Which page and tab sent it (the dashboard's `submitCommand`): the page's\nclient id and its tab's presence, which the hub's send line names, so a\nsend that landed on the wrong session is read against what its own tab\nshowed.",
+            "type": "object",
+            "properties": {
+              "clientId": {
+                "type": "string"
+              },
+              "presenceId": {
+                "type": "string"
+              }
+            }
           }
         },
         "required": [
@@ -35675,6 +35687,10 @@
             "type": "boolean"
           },
           "supportsFastMode": {
+            "type": "boolean"
+          },
+          "supportsThinkingOff": {
+            "description": "Whether the model's thinking can be turned off, as Claude Code's model\nlist says (its initialize answer carries it; the Agent SDK's\n`ModelInfo` does not name it yet).",
             "type": "boolean"
           },
           "value": {

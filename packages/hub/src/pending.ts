@@ -6,6 +6,8 @@ import type {
 } from "@cawco/core";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import type { AskRecord } from "@cawco/core/asks";
+import { received } from "@cawco/core/stored-json";
+import { EnvelopeShape } from "@cawco/core/stored-shapes";
 import { Context, Effect, Layer } from "effect";
 import { Db, type DbShape } from "./db";
 import { parkedToolAsk } from "./parked-ask";
@@ -200,7 +202,18 @@ const ownedAsks = (db: DbShape): Envelope[] => {
 };
 
 const make = (db: DbShape): PendingShape => {
-  const kept = db.parkedAsks;
+  const parked = db.parkedAsks;
+  // A machine's envelope, taken into CawCo's type as it is kept: what the
+  // machine stamped beside its declared keys is left out (core
+  // stored-json.ts `received`).
+  const kept = {
+    ...parked,
+    save: (requestId: string, envelope: Envelope) =>
+      parked.save(
+        requestId,
+        received(EnvelopeShape, envelope, "a machine's permission ask")
+      ),
+  };
   // What the hub held parked when it last stopped, by request id.
   const requests = new Map<string, Envelope>(
     [...kept.list(), ...ownedAsks(db)].flatMap((envelope) =>

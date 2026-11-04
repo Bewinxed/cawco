@@ -2548,6 +2548,7 @@ export interface DbShape {
         | "heldAt"
         | "heldAsleepAt"
         | "stoppingAt"
+        | "landed"
         | "prUrl"
         | "groupReportedAt"
         | "digest"
