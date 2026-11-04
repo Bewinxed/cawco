@@ -17,7 +17,9 @@
    * Rule): the map on the room's raised surface, each group recessed on
    * it, the cards raised on the group. The map opens fitted to every card,
    * by Svelte Flow's own `fitView` with the house's fit (flow/fit.ts
-   * `FIT`), and fits again in place as the cards' measured heights lay it
+   * `FIT`), never under the zoom its notes stay readable at (`READABLE`):
+   * a set too big for the room at that zoom stands on the kept card, the
+   * rest a pan away. It fits again in place as the cards' measured heights lay it
    * out anew or the room changes size, while the view is still a fit
    * (FlowAutoFit). The Fit tool frames the same way, so a view he has not
    * moved is already its frame. No zoom figure. The kept card wears the
@@ -238,6 +240,26 @@
       .join(";")
   );
   let zoom = $state(1);
+  /** The least size a word draws at anywhere (the probe kit's small-text rule), px. */
+  const LEAST_TEXT = 10;
+  /**
+   * The least zoom a fit takes: the cards' notes, in the meta role, drawn
+   * at the least size a word draws at. Fitted whole into a desk's room,
+   * the routine form's four machines drew at half size, their notes at 6px:
+   * a set too big for the room stands at this zoom on the kept card instead
+   * (FlowAutoFit `focus`), the rest a pan away and the Fit tool's frame the
+   * same; a set that fits whole above it opens whole, as before.
+   */
+  const READABLE = browser
+    ? LEAST_TEXT /
+      (numberOf("--text-meta") *
+        Number.parseFloat(getComputedStyle(document.documentElement).fontSize))
+    : 1;
+  /** The kept card's middle, where a fit held at READABLE stands. */
+  const keptMiddle = () => {
+    const box = layout.states[kept];
+    return box ? { x: box.x + box.w / 2, y: box.y + box.h / 2 } : null;
+  };
 </script>
 
 {#if narrow}
@@ -256,7 +278,7 @@
       elementsSelectable={false}
       {edgeTypes}
       fitView
-      fitViewOptions={FIT}
+      fitViewOptions={{ ...FIT, minZoom: READABLE }}
       {...ZOOM}
       nodesConnectable={false}
       nodesDraggable={false}
@@ -281,7 +303,9 @@
       />
       <FlowAutoFit
         bind:this={fit}
+        focus={keptMiddle}
         {held}
+        minZoom={READABLE}
         layout={placed}
         nodeCount={nodes.length}
       />
