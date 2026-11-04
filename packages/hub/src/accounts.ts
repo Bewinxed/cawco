@@ -409,21 +409,88 @@ export const reconcileAccounts = async (
 };
 
 /**
- * Whether Claude Code's error in place of an answer refused its account's
- * credential for good, read on the message's own `error` alone (the Agent
- * SDK's `SDKAssistantMessageError`): `authentication_failed` is a credential
- * the API turned down, so the account is signed out there, the message's
- * words its reason. Every other error (`server_error` among them, a refresh
- * another of its processes held as well as a server's failure) says nothing
- * of the credential, and is no sign-out.
+ * A Claude account refused for good ({@link claudeCredentialRefused}): the
+ * words its session met, and how far the refusal reaches. `machine`: the
+ * credential one machine holds, which another machine's sign-in of the same
+ * account does not share. `account`: the account's own access, refused
+ * whatever credential asks.
+ */
+export interface ClaudeRefusal {
+  reach: "machine" | "account";
+  reason: string;
+}
+
+/** How far each refusing `SDKAssistantMessageError` reaches ({@link claudeCredentialRefused}). */
+const REFUSAL_REACH = new Map<string, ClaudeRefusal["reach"]>([
+  ["authentication_failed", "machine"],
+  ["oauth_org_not_allowed", "account"],
+]);
+
+/**
+ * Whether Claude Code's error in place of an answer refused its account for
+ * good, read on the message's own `error` alone (the Agent SDK's
+ * `SDKAssistantMessageError`), the message's words its reason:
+ * - `authentication_failed`: the API turned down this machine's credential
+ *   (revoked, or a refresh that can't succeed). Reach `machine`.
+ * - `oauth_org_not_allowed`: the API refused Claude Code's subscription
+ *   access for the account's organization, whatever credential asks. Claude
+ *   Code raises it only on a 401 or 403 whose message says "OAuth
+ *   authentication is currently not allowed for this organization" (2.1.308
+ *   `h3t`, 2.1.311 `$9t`); its words are 2.1.311's "can't use your Claude
+ *   subscription, usually because a payment is past due" for a Pro or Max
+ *   credential, and "Your organization has disabled Claude subscription
+ *   access for Claude Code" otherwise (2.1.311 `j2o`; 2.1.308 says the
+ *   second for all). On 2026-11-04 one Max account met it on niftybot
+ *   (2.1.308) and on obelisk (2.1.311), each on its own credential. Reach
+ *   `account`.
+ * Every other error (`server_error` among them, a refresh another of its
+ * processes held as well as a server's failure) says nothing of the
+ * account, and is no sign-out.
  */
 export const claudeCredentialRefused = (
   error: string | undefined,
   text: string
-): { reason: string } | undefined =>
-  error === "authentication_failed"
-    ? { reason: text.trim() || "Claude Code's sign-in was refused" }
+): ClaudeRefusal | undefined => {
+  const reach = error ? REFUSAL_REACH.get(error) : undefined;
+  return reach
+    ? { reach, reason: text.trim() || "Claude Code's sign-in was refused" }
     : undefined;
+};
+
+/**
+ * Signs `accountId` out where `refusal` reaches ({@link ClaudeRefusal}): on
+ * `machineId` alone, or on every machine it is signed in on. Each keeps the
+ * refusal's words as its reason, and stays signed out whatever its store
+ * reads until it is signed in again through CawCo ({@link squaredState}):
+ * placement, the at-limit controller and the rebalancer take only an
+ * account signed in on the session's machine. Answers the machines it
+ * signed out now.
+ */
+export const signOutRefused = (
+  db: DbShape,
+  machineId: string,
+  accountId: string,
+  refusal: ClaudeRefusal
+): string[] => {
+  const out = db.accounts
+    .signins()
+    .filter(
+      (one) =>
+        one.accountId === accountId &&
+        one.state === "signed-in" &&
+        (refusal.reach === "account" || one.machineId === machineId)
+    )
+    .map((one) => one.machineId);
+  for (const machine of out) {
+    db.accounts.putSignin({
+      accountId,
+      machineId: machine,
+      state: "signed-out",
+      reason: refusal.reason,
+    });
+  }
+  return out;
+};
 
 /** Why extra usage is off, by Claude Code's `overageDisabledReason`, in words. */
 const OFF_REASONS: Record<string, string> = {

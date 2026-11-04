@@ -45,6 +45,11 @@ export const accountsWords = {
   problem: {
     someoneElse: (machine: string) => `${machine} is signed in as someone else`,
     nowhere: "Not signed in on any machine",
+    /**
+     * Signed in nowhere because Claude Code refused the account (its
+     * sign-in's `reason`, Claude Code's own words): placeholder copy.
+     */
+    refused: (reason: string) => `Refused by Claude Code: ${reason}`,
     missingOn: (machine: string, others: number) =>
       others === 0
         ? `Not signed in on ${machine}`

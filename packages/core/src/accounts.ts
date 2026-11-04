@@ -291,9 +291,11 @@ export interface AccountSignin {
   movedFrom: HomeStore | null;
   /**
    * Why the hub signed it out there itself: the words a session on it met
-   * when Claude Code refused its credential for good (revoked, or a refresh
-   * that can't succeed). It stays signed out, whatever the store says, until
-   * it is signed in again through CawCo. Null for any other state.
+   * when Claude Code refused it for good: this machine's credential (revoked,
+   * or a refresh that can't succeed), or the account's own subscription
+   * access, which signs it out on every machine (hub accounts.ts
+   * `claudeCredentialRefused`). It stays signed out, whatever the store says,
+   * until it is signed in again through CawCo. Null for any other state.
    */
   reason: string | null;
   state: SigninState;

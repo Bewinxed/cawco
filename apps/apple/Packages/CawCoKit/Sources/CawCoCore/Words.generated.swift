@@ -165,6 +165,11 @@ public enum Words {
 
             public static let nowhere = "Not signed in on any machine"
 
+            /// Signed in nowhere because Claude Code refused the account (its sign-in's `reason`, Claude Code's own words): placeholder copy.
+            public static func refused(reason: String) -> String {
+                "Refused by Claude Code: \(reason)"
+            }
+
             public static func missingOn(machine: String, others: Int) -> String {
                 others == 0 ? "Not signed in on \(machine)" : "Not signed in on \(machine) and \(others) other\(others == 1 ? "" : "s")"
             }

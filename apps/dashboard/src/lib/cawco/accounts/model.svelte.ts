@@ -172,7 +172,8 @@ export function signinState(
 
 /**
  * What is wrong with an account, in its row's one line, or null: a machine
- * signed it in as somebody else, it is signed in nowhere, or an online
+ * signed it in as somebody else, it is signed in nowhere (with Claude
+ * Code's words when the hub signed it out on a refusal), or an online
  * machine that runs its harnesses doesn't have it. An offline machine is
  * not a problem.
  */
@@ -189,7 +190,9 @@ export function problemOf(account: Account): string | null {
     return words.problem.someoneElse(machineName(someoneElse));
   }
   if (!signins.some((one) => one.state === "signed-in")) {
-    return words.problem.nowhere;
+    // Signed out by the hub on a refusal: its words say why.
+    const refused = signins.find((one) => one.reason)?.reason;
+    return refused ? words.problem.refused(refused) : words.problem.nowhere;
   }
   const missing = online.filter(
     (machine) =>

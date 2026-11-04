@@ -549,6 +549,7 @@ import {
   reconcileAccounts,
   refreshCatalog,
   sessionLimitsReader,
+  signOutRefused,
   uncompared,
   usageLimits,
   withOrgIdFrom,
@@ -5701,10 +5702,13 @@ export const createServer = (
   ): string => JSON.stringify([row.id, row.spawnedAt]);
   /**
    * A Claude session's error in place of an answer, read for what it says of
-   * its account's credential ({@link claudeCredentialRefused}). Refused for
-   * good: the account is signed out on the session's machine with the
+   * its account ({@link claudeCredentialRefused}). Refused for good: the
+   * account is signed out where the refusal reaches ({@link signOutRefused}),
+   * the session's machine or every machine it is signed in on, with the
    * refusal's words, so no new session is placed on it there and Configure →
-   * Accounts offers to sign it in again; any other error changes nothing.
+   * Accounts offers to sign it in again; the sessions resting on it there
+   * owe a move to the account placement carries each to
+   * ({@link moveRestingOff}). Any other error changes nothing.
    * Only the row's live launch speaks for its account, and only one
    * reading the account's own credential: not one on the machine's own login
    * while it moves into CawCo, nor one still running from a credential that
@@ -5732,30 +5736,50 @@ export const createServer = (
     ) {
       return;
     }
-    const named = accountWords(accountId);
-    const where = `${named} on ${machineName(machineId)}`;
-    const signedIn = db.accounts
-      .signins()
-      .some(
-        (one) =>
-          one.accountId === accountId &&
-          one.machineId === machineId &&
-          one.state === "signed-in"
-      );
-    if (!signedIn) {
+    const out = signOutRefused(db, machineId, accountId, word);
+    if (out.length === 0) {
       return word;
     }
-    db.accounts.putSignin({
-      accountId,
-      machineId,
-      state: "signed-out",
-      reason: word.reason,
-    });
+    const named = accountWords(accountId);
     console.warn(
-      `[accounts] ${where} is signed out: ${sessionName(row)}'s Claude Code refused its credential (${word.reason}). Nothing new is placed on ${named} there until it is signed in again on ${machineName(machineId)} in ${configurePage("accounts")}; the session it stopped is moved to another account.`
+      word.reach === "account"
+        ? `[accounts] ${named} is signed out on ${out.map(machineName).join(", ")}: ${sessionName(row)}'s Claude Code on ${machineName(machineId)} was refused the account itself, whatever credential asks (${word.reason}). Nothing new is placed on ${named} until it is signed in again in ${configurePage("accounts")}; the session it stopped, and every session resting on it, moves to another account.`
+        : `[accounts] ${named} on ${machineName(machineId)} is signed out: ${sessionName(row)}'s Claude Code refused its credential (${word.reason}). Nothing new is placed on ${named} there until it is signed in again on ${machineName(machineId)} in ${configurePage("accounts")}; the session it stopped, and every session resting on it there, moves to another account.`
     );
-    publishUsage(machineId);
+    for (const one of out) {
+      publishUsage(one);
+    }
+    moveRestingOff(accountId, out, row.id);
     return word;
+  };
+  /**
+   * The sessions on `accountId` on `machines`, its sign-in just refused
+   * there ({@link settleRefusal}), other than `refused` (whose own turn's
+   * end moves it, {@link takeCredentialTurn}): each whose process is gone
+   * owes a move to the account placement carries it to now
+   * ({@link oweRefusedMove}), so its next wake launches there and what it
+   * is sent goes to it ({@link wakeOf} reads the owed account). One with a
+   * process moves when its next turn meets the same refusal. One no account
+   * can take stays, and a send to it is refused with the way back
+   * (`account-signed-out`).
+   */
+  const moveRestingOff = (
+    accountId: string,
+    machines: readonly string[],
+    refused: string
+  ): void => {
+    for (const row of db.listInstances()) {
+      if (
+        row.id !== refused &&
+        row.accountId === accountId &&
+        row.harness === "claude" &&
+        machines.includes(row.machineId) &&
+        wakesForSend(row) &&
+        !owedMoves.has(row.id)
+      ) {
+        oweRefusedMove(row.id, accountId);
+      }
+    }
   };
   /** Why an ask arriving from a machine is not this row's live process's; none when it is. */
   const askRefusal = (
@@ -8236,7 +8260,10 @@ export const createServer = (
         plan: Relaunch;
         settled: { payload: SettledSpawn; permissionMode: string | null };
       } => {
-    const launch = launchAccount(machineId, row, sessionName(row), use);
+    // On the account a move owed to it names, as its launch takes it
+    // ({@link grantLaunch}): a session owed a move off a refused account
+    // wakes there, never refused for the account it leaves.
+    const launch = launchAccount(machineId, owedOn(row), sessionName(row), use);
     if ("refusal" in launch) {
       return { refused: { reason: launch.refusal, refusal: launch.cause } };
     }
