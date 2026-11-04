@@ -539,6 +539,17 @@ const unionOf = (node: ts.UnionTypeNode, scope: Scope): string => {
     schema = `${schema}.nullable()`;
   }
   if (node.types.some(isUndefined)) {
+    // JSON keeps no undefined: a property's is left out of what is written,
+    // an array's becomes null. A required property read back without its
+    // key fails the read (zod: "expected nonoptional, received undefined";
+    // r420, continuations.prepared without its `prompt`).
+    const { parent } = node;
+    if (!(ts.isPropertySignature(parent) && parent.questionToken)) {
+      refuse(
+        node,
+        "undefined where JSON keeps none: a value written as undefined is left out (an array's becomes null), so its read fails. A property that may be unset is optional (`name?:`)"
+      );
+    }
     schema = `${schema}.or(z.undefined())`;
   }
   return schema;

@@ -14,6 +14,9 @@
  *   whose value is undefined is no key: JSON writes none.
  * - Law D: a row written before, holding a key no type declares, reads, the
  *   key stripped.
+ * - Law E: a row as written reads back: Law C's, its undefined key left out
+ *   of the JSON, which only an optional property may be (scripts/
+ *   stored-shapes.ts refuses `undefined` anywhere else in a stored type).
  *
  * Run by `bun run check` (scripts/check.ts, `stored-writes:check`); it fails on any law broken.
  */
@@ -106,6 +109,21 @@ const declared = write({
 });
 law("Law C", declared === "written" && rows() === 1, declared);
 
+// Law E: that row reads back as it was written.
+try {
+  const back = db.select().from(planted).where(eq(planted.id, 3)).get();
+  law(
+    "Law E",
+    back !== undefined &&
+      "notice" in back.payload &&
+      back.payload.notice === true &&
+      !("headline" in back.payload),
+    JSON.stringify(back)
+  );
+} catch (error) {
+  law("Law E", false, `the read threw: ${String(error)}`);
+}
+
 // Law D: an old row holding an undeclared key still reads.
 sqlite.run("INSERT INTO planted (id, payload, models) VALUES (4, ?, ?)", [
   JSON.stringify({ body: "old", failed: false, bogus: 1 }),
@@ -132,5 +150,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(
-  "stored-writes-check: laws A–D held: a planted key no type declares fails its write, at the column's root and in an array of a declared type, naming the column, the key and the type; declared keys write; an old row holding one reads"
+  "stored-writes-check: laws A–E held: a planted key no type declares fails its write, at the column's root and in an array of a declared type, naming the column, the key and the type; declared keys write, and read back as written; an old row holding one reads"
 );

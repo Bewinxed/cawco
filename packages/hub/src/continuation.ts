@@ -82,7 +82,7 @@ export interface PreparedContinuation {
   extracted: Extracted;
   liveContextTokens: number;
   openingTokens: number;
-  prompt: string | undefined;
+  prompt?: string;
   source: ContinuationSource & { machineId: string };
   summariseInputTokens: number;
 }

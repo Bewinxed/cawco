@@ -368,7 +368,7 @@ const PreparedContinuationShape = declared(
     extracted: ExtractedShape,
     liveContextTokens: z.number(),
     openingTokens: z.number(),
-    prompt: z.string().or(z.undefined()),
+    prompt: z.string().optional(),
     source: ContinuationSourceShape.extend({ machineId: z.string() }),
     summariseInputTokens: z.number(),
   }),

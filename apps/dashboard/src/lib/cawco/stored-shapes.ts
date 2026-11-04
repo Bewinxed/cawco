@@ -793,12 +793,10 @@ const SessionDraftShape = z.object({
   model: z.string(),
   moveFrom: z.string().optional(),
   permissionMode: PermissionModeShape.nullable(),
-  projectId: z.string().or(z.undefined()),
+  projectId: z.string().optional(),
   prompt: z.string(),
-  repo: z.string().or(z.undefined()),
-  scratch: z
-    .object({ baseCwd: z.string(), worktree: z.boolean() })
-    .or(z.undefined()),
+  repo: z.string().optional(),
+  scratch: z.object({ baseCwd: z.string(), worktree: z.boolean() }).optional(),
   summarizer: z.object({ harness: HarnessKindShape, model: z.string() }),
   usedModel: z.string(),
 });

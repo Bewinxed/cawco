@@ -55,10 +55,10 @@ export interface SessionDraft {
   moveFrom?: string;
   /** None for a harness with no modes (pi), the one thing it may be. */
   permissionMode: PermissionMode | null;
-  projectId: string | undefined;
+  projectId?: string;
   prompt: string;
-  repo: string | undefined;
-  scratch: { baseCwd: string; worktree: boolean } | undefined;
+  repo?: string;
+  scratch?: { baseCwd: string; worktree: boolean };
   summarizer: { harness: HarnessKind; model: string };
   usedModel: string;
 }
