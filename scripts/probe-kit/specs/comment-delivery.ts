@@ -216,7 +216,7 @@ const COMMENT_ITEM = /^Comment/u;
 const LATER_WORDS = "And one more word after you read it.";
 /** The delivery routed to Caw: the writer's page, a pin's id, and that it comes to him. */
 const ROUTED =
-  /The person commented on the page "ended-writer"[\s\S]*?- Pin: ([0-9a-f-]{36})[\s\S]*?so these come to you/u;
+  /The person commented on the page "ended-writer"[\s\S]*?- Pin: ([0-9a-f-]{36})[\s\S]*?These come to you/u;
 /** The hub's log lines step 7 reads. */
 const HUB_LINE = /caw|artifacts|marks|lead/iu;
 /** The host's refusal of a sandbox inside another (core boundary-nesting.ts). */
@@ -322,7 +322,9 @@ const busyReply = (request: Seen): Reply => {
     tool: {
       name: "Bash",
       input: {
-        command: `sleep ${next}; echo ${sleptLine(next)}`,
+        // A wait that is no `sleep`: Claude Code 2.1.318 refuses a Bash
+        // call that leads with one ("Blocked: sleep 45 followed by: …").
+        command: `timeout ${next} tail -f /dev/null; echo ${sleptLine(next)}`,
         description: "A long command",
         timeout: 120_000,
       },
@@ -1193,7 +1195,9 @@ const busyDecisionChecks = async (
   // A pin on the card, and no Send: it joins the turn in seconds, the
   // command moved aside for it.
   const before = busyTurn.heard.length;
-  await pinWith(on, frame, "#decision-how", 1, BUSY_PIN_WORDS);
+  // On the card's question: a press on an option's pick picks it in
+  // Comment mode too (overlay page.ts `optionOf`, c8dc06448).
+  await pinWith(on, frame, "#decision-how h2", 1, BUSY_PIN_WORDS);
   const pinnedAt = Date.now();
   const boundary = await until(
     "the request answering the long command",
