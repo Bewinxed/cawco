@@ -1,7 +1,7 @@
 /**
- * The agent's loop, watched from a thread of its own (loop-watch.ts
- * `startWatchdog`): what the loop's own watch cannot say, because it
- * runs on the loop it watches.
+ * A process's loop, watched from a thread of its own (loop-watch.ts
+ * `watchFromItsOwnThread`): what the loop's own watch cannot say, because
+ * it runs on the loop it watches. The agent's, and the hub's.
  *
  * The loop's own tick says a stall once it has ended. Two never end and so
  * were never said: on 2026-10-25 obelisk's agent stopped at 12:35 and at
@@ -35,12 +35,34 @@
  * descriptor, and so "outside any system call" for a page fault. A hold
  * shorter than {@link SAY_MS} is said once it ends with what the looks
  * during it read.
+ *
+ * A loop that never comes back ends its process, when the loop asked for
+ * that (`LoopEnd`, the hub does): on 2026-11-04 obelisk's hub sat 18
+ * minutes at 100% CPU in a loop of microtasks, answering nothing and saying
+ * nothing, until a person killed it. Held past its bound, this thread says
+ * so with the work the loop started last (`doing`), keeps what it read in
+ * the end's record for the next process to say, and kills the process
+ * with SIGKILL: its supervisor starts it again (the hub's service restarts
+ * it always: systemd's `Restart=always`, launchd's `KeepAlive`). SIGKILL,
+ * since nothing the held thread would run can be waited for, and systemd
+ * counts SIGTERM a clean end.
  */
 
+import { mkdirSync, writeFileSync } from "node:fs";
 import { readFile, readlink } from "node:fs/promises";
-import { unhandled } from "@cawco/core/unhandled";
-import { loopWords } from "@cawco/core/words/loop";
-import { BEAT, LEFT, SECTION, type WatchdogMessage } from "./loop-watch-shared";
+import { dirname } from "node:path";
+import {
+  BEAT,
+  LEFT,
+  type LoopEnd,
+  type LoopEnded,
+  readDoing,
+  SECTION,
+  type WatchdogMessage,
+} from "./loop-watch-shared";
+import { ownPid, signal } from "./signal-wall";
+import { unhandled } from "./unhandled";
+import { loopWords } from "./words/loop";
 
 declare const self: Worker;
 
@@ -155,6 +177,12 @@ const SYSCALLS: Partial<Record<string, Record<number, string>>> = {
 };
 
 let shared: Float64Array | undefined;
+/** The memory the loop names the work it started last in. */
+let doingMemory: SharedArrayBuffer | undefined;
+/** Whose loop: "agent", "hub". */
+let who = "agent";
+/** When the loop is held past this, the process is ended ({@link endProcess}). */
+let end: LoopEnd | undefined;
 const sections = new Map<number, string>();
 let phase = "starting";
 let flying = "nothing counted";
@@ -299,10 +327,13 @@ let stall: { kind: "held" | "deaf"; since: number; said: number } | undefined;
 const say = async (kind: "held" | "deaf", ms: number): Promise<void> => {
   const what =
     kind === "held"
-      ? loopWords.heldNow(Math.round(ms / 1000))
-      : loopWords.deafNow(Math.round(ms / 1000));
+      ? loopWords.heldNow(who, Math.round(ms / 1000))
+      : loopWords.deafNow(who, Math.round(ms / 1000));
   const parts = [
     thread,
+    ...(doingMemory && readDoing(doingMemory)
+      ? [loopWords.doing(readDoing(doingMemory))]
+      : []),
     `phase: ${phase}`,
     `in flight: ${flying}`,
     lastSection(),
@@ -331,7 +362,7 @@ const sayNoted = (now: number): void => {
     .map(([what, n]) => `${what} (${n} of ${looks})`)
     .join("; ");
   console.warn(
-    `${loopWords.heldSeen(Math.round((now - noted.since) / 1000))}: ${seen}`
+    `${loopWords.heldSeen(who, Math.round((now - noted.since) / 1000))}: ${seen}`
   );
   noted = undefined;
 };
@@ -361,7 +392,7 @@ const look = async (): Promise<void> => {
   if (!kind) {
     if (stall && stall.said > 0) {
       console.warn(
-        loopWords.answersAgain(Math.round((now - stall.since) / 1000))
+        loopWords.answersAgain(who, Math.round((now - stall.since) / 1000))
       );
     }
     stall = undefined;
@@ -369,6 +400,12 @@ const look = async (): Promise<void> => {
   }
   // Said while it lasts from here on: not again once it ends.
   noted = undefined;
+  if (kind === "held" && end && held >= end.afterMs) {
+    const bound = end;
+    end = undefined;
+    await endProcess(bound, held);
+    return;
+  }
   const ms = kind === "held" ? held : deaf;
   if (stall?.kind !== kind) {
     stall = { kind, since: now - ms, said: 0 };
@@ -380,6 +417,34 @@ const look = async (): Promise<void> => {
     stall.said += 1;
     await say(kind, ms);
   }
+};
+
+/**
+ * The loop held past its bound: said, its reading kept in `end.record` for
+ * the next process ({@link LoopEnded}), and the process killed. Each step
+ * synchronous on this thread, so nothing waits on the held one.
+ */
+const endProcess = async (bound: LoopEnd, held: number): Promise<void> => {
+  const kept: LoopEnded = {
+    at: Date.now(),
+    doing: doingMemory ? readDoing(doingMemory) : "",
+    heldMs: held,
+    memory: await memory(),
+    pid: process.pid,
+    thread,
+    who,
+  };
+  await say("held", held);
+  try {
+    mkdirSync(dirname(bound.record), { recursive: true });
+    writeFileSync(bound.record, `${JSON.stringify(kept)}\n`);
+  } catch (error) {
+    console.warn(
+      `[loop] what the watch read could not be kept at ${bound.record}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+  console.warn(loopWords.ending(who, Math.round(held / 1000)));
+  signal(ownPid(), "SIGKILL");
 };
 
 /** Sends the loop's echo a byte every {@link ECHO_EVERY_MS}, one owed at a time. */
@@ -409,6 +474,8 @@ self.onmessage = (event: MessageEvent<WatchdogMessage>) => {
   switch (message.kind) {
     case "start":
       shared = new Float64Array(message.beat);
+      doingMemory = message.doing;
+      ({ who, end } = message);
       echo(message.port).catch((error: unknown) =>
         console.warn(
           `[loop] the loop's watch from its own thread reads only the loop's beat: its echo did not connect (${error instanceof Error ? error.message : String(error)})`

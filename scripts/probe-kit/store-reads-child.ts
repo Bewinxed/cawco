@@ -30,6 +30,10 @@ if (!(agent && db && msArg && lateArg)) {
     "usage: store-reads-child.ts <agent src> <db> <ms> <late ms>"
   );
 }
+/** The loop watch the tree at `<agent src>` has: core's, or (an older checkout) the agent's own. */
+const loopWatch = existsSync(join(agent, "../../core/src/loop-watch.ts"))
+  ? join(agent, "../../core/src/loop-watch.ts")
+  : join(agent, "loop-watch.ts");
 const ms = Number(msArg);
 const late = Number(lateArg);
 
@@ -40,7 +44,7 @@ const SESSIONS_SQL = `SELECT id, title, directory, time_created, time_updated FR
   WHERE (CASE WHEN ?2 IS NULL THEN parent_id IS NULL ELSE id = ?2 END)
     AND (?1 IS NULL OR directory = ?1)`;
 
-const { watchLoop } = await import(join(agent, "loop-watch.ts"));
+const { watchLoop } = await import(loopWatch);
 const accounts = await import(join(agent, "provider-accounts.ts"));
 const storesClient = join(agent, "stores/client.ts");
 const onTheLoop = join(agent, "harnesses/opencode-db.ts");
@@ -58,7 +62,7 @@ const listing: () => Promise<number | undefined> = existsSync(storesClient)
     })()
   : await (async () => {
       const { readOpencodeDb } = await import(onTheLoop);
-      const { syncSection } = await import(join(agent, "loop-watch.ts"));
+      const { syncSection } = await import(loopWatch);
       return () =>
         Promise.resolve(
           syncSection("OpenCode sessions listed (SQLite)", () =>

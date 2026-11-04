@@ -1,7 +1,7 @@
 /**
  * The agent's loop is never held a second as it comes up into a machine's
  * worth of stored work, nor under a wave of the hub's transcript reads
- * (agent loop-watch.ts says each stall of a second or more, and what ran).
+ * (core loop-watch.ts says each stall of a second or more, and what ran).
  *
  * 2026-10-23 19:33, obelisk: the agent was held ~75 s (its 10 s bounds said
  * "within 84 s") as it came up with 2,964 stored Claude sessions on disk,
@@ -37,9 +37,9 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { LATE_MS } from "../../../packages/agent/src/loop-watch";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import type { TranscriptAnswer } from "../../../packages/core/src/find";
+import { LATE_MS } from "../../../packages/core/src/loop-watch";
 import { delay, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 

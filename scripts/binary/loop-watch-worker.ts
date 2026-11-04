@@ -1,1 +1,1 @@
-import "../../packages/agent/src/loop-watch-worker";
+import "../../packages/core/src/loop-watch-worker";

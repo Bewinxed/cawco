@@ -498,6 +498,7 @@ import {
   isHubPreview,
   originsFor,
 } from "@cawco/core/hub-previews";
+import { doing } from "@cawco/core/loop-watch";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
@@ -1740,6 +1741,23 @@ class MachineAway extends Error {
   constructor(machineId: string, words: string) {
     super(words);
     this.name = "MachineAway";
+    this.machineId = machineId;
+  }
+}
+
+/**
+ * A start the hub's own work asked of a machine that is connected but takes
+ * no start now (server.ts `startHold`: paused by its owner, installing an
+ * update, or on a build older than its hub's). Not the machine away: a
+ * continuation waits for the hold to end (`flushOwedStarts`), never for a
+ * register that is not coming.
+ */
+class StartsHeld extends Error {
+  readonly machineId: string;
+  /** `words`: the hold, in `startHold`'s words. */
+  constructor(machineId: string, words: string) {
+    super(words);
+    this.name = "StartsHeld";
     this.machineId = machineId;
   }
 }
@@ -4515,7 +4533,14 @@ export const createServer = (
     for (const owed of db.owedSpawns(machineId)) {
       queueStart(machineId, owed.id);
     }
+    startsFreed(machineId);
   };
+  /**
+   * The hub's own work that waits for a machine's held starts to end (a
+   * continuation, {@link StartsHeld}) goes on: bound once that work exists
+   * below. {@link flushOwedStarts} is the one place a hold is seen to end.
+   */
+  let startsFreed = (_machineId: string): void => undefined;
 
   /**
    * A kept start bound as it goes ({@link flushOwedStarts}), or, when it may
@@ -16886,8 +16911,9 @@ export const createServer = (
     if (!agent) {
       throw awayError(machineId);
     }
-    if (holdingStarts(machineId)) {
-      throw awayError(machineId);
+    const held = startHold(machineId);
+    if (held) {
+      throw new StartsHeld(machineId, held.words);
     }
     const named = await piDefaultFor(machineId, asked);
     if ("refusal" in named) {
@@ -16998,6 +17024,18 @@ export const createServer = (
     } satisfies Envelope<SendPayload>);
   };
 
+  /** A dashboard message's kind, as the loop's watch names it: its type, verb or kind. */
+  const frameKind = (message: unknown): string => {
+    const raw =
+      typeof message === "object" && message !== null
+        ? (message as Record<string, unknown>)
+        : {};
+    return (
+      [raw.type, raw.verb, raw.kind]
+        .filter((part): part is string => typeof part === "string")
+        .join(" ") || "message"
+    );
+  };
   const refreshingCustody = new Set<string>();
   const guardedDashboardMessage =
     <
@@ -17012,6 +17050,7 @@ export const createServer = (
       // A message too long for one frame arrives as parts, read in order
       // through the socket's inbox (`wire-socket.ts`).
       receiveFrame(ws, incoming, (message) => {
+        doing(`a dashboard's ${frameKind(message)}`);
         try {
           handle(ws, message);
         } catch (error) {
@@ -18634,25 +18673,53 @@ export const createServer = (
    * summarising takes the summary (see {@link continuationSummary}) and
    * keeps it on the record; starting starts the target and hands it the
    * opening, once. A job whose machine is away waits where it is, and the
-   * machine's next register moves it on; anything else that goes wrong fails
-   * it, in the failure's own words.
+   * machine's next register moves it on; one whose machine holds its starts
+   * waits for that hold to end ({@link StartsHeld}); anything else that goes
+   * wrong fails it, in the failure's own words.
    */
   const advanceContinuation = async (id: string): Promise<void> => {
     if (advancing.has(id)) {
+      // Its machine came back (a register, a hold's end) while this job was
+      // busy: it goes on once that run has unwound ({@link advanceAgain}).
+      advanceAgain.add(id);
       return;
     }
     advancing.add(id);
-    let away = false;
+    let waits = false;
     try {
       await continuationSteps(id);
     } catch (error) {
-      away = continuationStepFailed(id, error);
+      waits = continuationStepFailed(id, error);
     } finally {
       advancing.delete(id);
-      // A machine that went away and is back already registered while this
-      // was unwinding; its register found the job busy, so it goes on here.
-      const row = away ? db.continuationRow(id) : undefined;
-      if (row && registry.agent(machineFor(row))) {
+      // ONE RULE FOR A WAITING JOB: it goes on only when its machine says it
+      // can (its register, or its held starts ending), never because the
+      // machine looks connected. A job that waits on a machine connected
+      // throughout would advance again at once, fail the same way, and so
+      // on in microtasks that never yield: the hub froze 18 minutes that
+      // way (2026-11-04, a start held on a machine on an older build).
+      if (advanceAgain.delete(id) && waits) {
+        detach(advanceContinuation(id), "continuation");
+      }
+    }
+  };
+
+  /**
+   * The jobs whose machine came back while they were advancing: each goes on
+   * once more as its run unwinds, if that run ended waiting.
+   */
+  const advanceAgain = new Set<string>();
+
+  /**
+   * The jobs waiting on a machine's held starts, by job id: their machine,
+   * so the hold's end moves them on ({@link startsFreed}), and their wait is
+   * said once.
+   */
+  const heldJobs = new Map<string, string>();
+  startsFreed = (machineId) => {
+    for (const [id, on] of heldJobs) {
+      if (on === machineId) {
+        heldJobs.delete(id);
         detach(advanceContinuation(id), "continuation");
       }
     }
@@ -18665,6 +18732,11 @@ export const createServer = (
    */
   const continuationSteps = async (id: string): Promise<void> => {
     let row = db.continuationRow(id);
+    if (row) {
+      doing(
+        `continuation ${id.slice(0, 8)} of ${row.prepared.source.title} at ${row.stage}`
+      );
+    }
     if (row?.stage === "waiting") {
       row = await waitStep(row);
     }
@@ -18818,12 +18890,22 @@ export const createServer = (
    * A step that threw: nothing, when the job has settled meanwhile (a
    * Cancel); a wait, when its machine went away before the job changed
    * anything that cannot wait; otherwise the job fails at its step, in the
-   * error's own words. True when it waits for its machine.
+   * error's own words. True when it waits for its machine: its register, or
+   * the end of the hold on its starts ({@link StartsHeld}).
    */
   const continuationStepFailed = (id: string, error: unknown): boolean => {
     const row = db.continuationRow(id);
     if (!row || SETTLED.has(row.stage)) {
       return false;
+    }
+    if (error instanceof StartsHeld) {
+      if (heldJobs.get(id) !== error.machineId) {
+        heldJobs.set(id, error.machineId);
+        console.info(
+          `[continuation] ${row.prepared.source.title}'s continuation can't start a session at ${row.stage} now: ${error.message}. The job waits until it ends; it goes on by itself then.`
+        );
+      }
+      return true;
     }
     if (error instanceof MachineAway || !registry.agent(machineFor(row))) {
       return true;
@@ -19056,7 +19138,7 @@ export const createServer = (
     const to = job.targetInstanceId;
     atLimit.forget(from);
     owedMoves.delete(from);
-    stopCompaction(from);
+    forgetCompaction(source, to);
     for (const send of db.sendsIn(from, ["pending"])) {
       if (!send.owed && send.envelope) {
         db.holdSend(send.uuid, send.envelope);
@@ -28751,6 +28833,28 @@ export const createServer = (
     releaseOwed({ instanceId: row.id });
   };
 
+  /**
+   * A compacting session folded into its continuation `to` ({@link foldContinued}):
+   * its compaction is dropped, its line with it, and nothing moves it. The
+   * continuation is its move now, and its row goes with the fold; ended as
+   * a stop instead, a compaction ahead of a move would carry the row the
+   * fold is deleting (2026-11-04: `[move after compaction] failed:
+   * SQLiteError: FOREIGN KEY constraint failed`).
+   */
+  const forgetCompaction = (row: { id: string }, to: string): void => {
+    const plan = db.atLimit.compaction(row.id);
+    if (!plan) {
+      return;
+    }
+    db.atLimit.dropCompaction(row.id);
+    if (plan.move !== null) {
+      unnoteAtLimit(row, plan.lineId);
+    }
+    console.info(
+      `[at-limit] ${row.id.slice(0, 8)}: its ${stepWords(plan.stage)} ends unfinished, as it goes on as ${to.slice(0, 8)}: that continuation is its move, and nothing moves it again.`
+    );
+  };
+
   /** A person's interrupt or stop of a compacting session: the compaction ends there. */
   const stopCompaction = (instanceId: string): void => {
     const plan = db.atLimit.compaction(instanceId);
@@ -30436,6 +30540,17 @@ export const createServer = (
     | { ended?: MoveEnded; move?: Extract<AccountMove, { kind: "moved" }> }
     | { later: true }
   > => {
+    doing(`the move of ${sessionName(row)} to ${accountWords(accountId)}`);
+    // A move already under way as a continuation from a summary is this
+    // session's move: a second one beside it (an owed move taken up, a
+    // person's) would compact or carry the row that job folds away.
+    const job = moveJobOf(row.id);
+    if (job?.askedBy.kind === "move") {
+      console.info(
+        `[at-limit] ${sessionName(row)} isn't moved to ${accountWords(accountId)}: it is going on from a summary as its move to ${accountWords(job.askedBy.to)} already (${job.stage}), and that move stands.`
+      );
+      return { later: true };
+    }
     if (!asked || asked.plan.method === "whole") {
       return carryTo(row, accountId, stopped, undefined, laterSince);
     }
@@ -31511,6 +31626,8 @@ export const createServer = (
       // No page of another origin calls the hub with the browser's cookies:
       // a previewed app on its own port of this host least of all.
       .onRequest(({ request }) => {
+        // The work the hub started last, for its loop's watch (hub-loop.ts).
+        doing(`${request.method} ${new URL(request.url).pathname}`);
         const refused = crossSiteRefusal(
           request.method,
           (name) => request.headers.get(name),
@@ -37092,6 +37209,7 @@ export const createServer = (
             return;
           }
 
+          doing(`${message.verb} from machine ${message.machineId}`);
           // Word from the machine (machine-contact.ts); its beat also says
           // whether sessions run there.
           contact.heard(

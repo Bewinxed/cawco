@@ -1,6 +1,6 @@
 /**
  * A reader's marker for this package's long synchronous steps: the agent's
- * loop watch (agent loop-watch.ts `syncSection`) names one that held its
+ * loop watch (core loop-watch.ts `syncSection`) names one that held its
  * loop. Unset, a step just runs.
  */
 type Marker = <T>(name: string, run: () => T) => T;

@@ -13,7 +13,7 @@ import {
   syncSection,
   watchFromItsOwnThread,
   watchLoop,
-} from "../../packages/agent/src/loop-watch";
+} from "../../packages/core/src/loop-watch";
 
 /** How long the loop is held: past the watch's second saying, at 30 s. */
 export const HOLD_MS = 35_000;

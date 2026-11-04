@@ -127,6 +127,12 @@ import {
 import { machineEndpoint } from "@cawco/core/keepers";
 import { capLaunchdLogs, sweepLaunchdLogs } from "@cawco/core/launchd";
 import { endProcess } from "@cawco/core/listeners";
+import {
+  phase,
+  syncSection,
+  watchFromItsOwnThread,
+  watchLoop,
+} from "@cawco/core/loop-watch";
 import { machineId } from "@cawco/core/machine-id";
 import {
   machineKeyPath,
@@ -254,12 +260,6 @@ import {
 import { KeeperWatchdog } from "./keeper-watchdog";
 import { type HeldProc, type KeeperReading, withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
-import {
-  phase,
-  syncSection,
-  watchFromItsOwnThread,
-  watchLoop,
-} from "./loop-watch";
 import { holdHubLink, isMachineAgent } from "./machine-agent";
 import { setAccountFreshener, startMcpGateway } from "./mcp-oauth";
 import { MEMORY_LOG_INTERVAL_MS, memoryLine } from "./memory";

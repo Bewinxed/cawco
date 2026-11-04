@@ -22,6 +22,7 @@
  */
 
 import type { WindowAsk } from "@cawco/core";
+import { inFlight } from "@cawco/core/loop-watch";
 import {
   type BytePrefilter,
   type Checkpoint,
@@ -29,7 +30,6 @@ import {
   type LocatedRecord,
   scanFile,
 } from "@cawco/jsonl-parser";
-import { inFlight } from "../loop-watch.ts";
 import { gauge } from "../memory.ts";
 
 /** One file's index. */

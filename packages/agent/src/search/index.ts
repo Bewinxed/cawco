@@ -14,8 +14,8 @@ import type {
   TranscriptTurnsQuery,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { inFlight } from "@cawco/core/loop-watch";
 import { unhandled } from "@cawco/core/unhandled";
-import { inFlight } from "../loop-watch";
 import { SearchProcess } from "./process";
 
 /**

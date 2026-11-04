@@ -68,6 +68,7 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { canonicalJson } from "@cawco/core/canonical-json";
 import { detach } from "@cawco/core/detach";
 import { LONG_CALL_WALL_MS } from "@cawco/core/long-calls";
+import { syncSection } from "@cawco/core/loop-watch";
 import {
   credentialAccountIds,
   opencodeAccountHome,
@@ -125,7 +126,6 @@ import {
 } from "../harness";
 import { KeeperPool } from "../keepers";
 import { enterSpawn, inView, overlaySync, viewMember } from "../layer";
-import { syncSection } from "../loop-watch";
 import { isMachineAgent } from "../machine-agent";
 import { fleetMcpMoved, MCP_CONNECT_MS } from "../mcp-status";
 import { gaugeTables } from "../memory";

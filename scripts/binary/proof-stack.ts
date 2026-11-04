@@ -87,13 +87,15 @@ async function loopHeldSaid() {
     .split("\n")
     .filter((line) => line.includes("[loop]"));
   const held = lines.filter((line) =>
-    [10, 30].some((at) => line.includes(loopWords.heldNow(at)))
+    [10, 30].some((at) => line.includes(loopWords.heldNow("agent", at)))
   );
-  const atTen = held.find((line) => line.includes(loopWords.heldNow(10)));
+  const atTen = held.find((line) =>
+    line.includes(loopWords.heldNow("agent", 10))
+  );
   const seconds = SHORT_HOLD_MS / 1000;
   const again = lines.find((line) =>
     [seconds - 1, seconds, seconds + 1, seconds + 2].some((at) =>
-      line.includes(loopWords.answersAgain(at))
+      line.includes(loopWords.answersAgain("agent", at))
     )
   );
   if (

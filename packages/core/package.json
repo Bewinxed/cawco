@@ -5,6 +5,8 @@
   "type": "module",
   "exports": {
     "./runtime": "./src/runtime.ts",
+    "./loop-watch": "./src/loop-watch.ts",
+    "./loop-watch-shared": "./src/loop-watch-shared.ts",
     "./remote-credential": "./src/remote-credential.ts",
     "./stage-play": "./src/stage-play.ts",
     "./bring-into-view": "./src/bring-into-view.ts",

@@ -223,6 +223,8 @@ export default {
         "scripts/probe-kit/sleep-listener-child.ts",
         // scripts/probe-kit/specs/store-reads-loop.ts:308
         "scripts/probe-kit/store-reads-child.ts",
+        // scripts/probe-kit/specs/hub-loop-ends.ts:31
+        "scripts/probe-kit/hub-loop-child.ts",
         // scripts/probe-kit/specs/tether.ts:48
         "scripts/probe-kit/tether-child.ts",
         // scripts/probe-kit/specs/atomic-writes.ts:26
@@ -341,8 +343,6 @@ export default {
         "src/boundary-judge.ts",
         // Run as plain Bun by a macOS workspace's `log` shim: src/boundary.ts:1552.
         "src/boundary-log.ts",
-        // A Worker started from its path: src/loop-watch.ts:134.
-        "src/loop-watch-worker.ts",
         // A Worker started from its path: src/stores/client.ts:29.
         "src/stores/worker.ts",
         // Resolved for `cawco:pi-runtime` by the binary build: scripts/build-binary.ts:490.
@@ -389,6 +389,8 @@ export default {
     "packages/core": {
       // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.
       includeEntryExports: true,
+      // A Worker started from its path: src/loop-watch.ts `WATCHDOG_URL`.
+      entry: ["src/loop-watch-worker.ts"],
     },
     "packages/cli": {
       // knip.dev/reference/configuration: "When a repository (or workspace) is self-contained or private, you may want to include entry files when reporting unused exports". This package is private and consumed only inside the repo, so its `exports` map is no public API.

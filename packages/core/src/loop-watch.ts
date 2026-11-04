@@ -1,5 +1,6 @@
 /**
- * The agent's own loop, watched: a stall names itself.
+ * A process's own loop, watched: a stall names itself. The agent's and the
+ * hub's, each under its own name (`who`).
  *
  * Every timer, socket read and answer of this process runs on one loop, so
  * synchronous work that holds it holds them all: on 2026-10-23 19:33,
@@ -21,16 +22,25 @@
  */
 
 import { heapSize } from "bun:jsc";
-import { standalone } from "@cawco/core/runtime";
-import { loopWords } from "@cawco/core/words/loop";
-import { BEAT, LEFT, SECTION, type WatchdogMessage } from "./loop-watch-shared";
+import {
+  BEAT,
+  DOING_BYTES,
+  LEFT,
+  type LoopEnd,
+  SECTION,
+  type WatchdogMessage,
+} from "./loop-watch-shared";
+import { standalone } from "./runtime";
+import { loopWords } from "./words/loop";
 
 /** How often the loop is looked at. */
 const TICK_MS = 250;
 /** A tick this late found the loop held. Ours: four ticks, past any GC pause or burst of frames the agent should have. */
 export const LATE_MS = 1000;
 
-/** What the agent is doing, as its startup and connection say. */
+/** Whose loop this is, as its lines say it: "agent", "hub". */
+let who = "agent";
+/** What the process is doing, as its startup and connection say. */
 let currentPhase = "starting";
 /** Work in flight, by kind. */
 const flying = new Map<string, number>();
@@ -66,7 +76,8 @@ export const inFlight = <T>(kind: string, work: Promise<T>): Promise<T> => {
  * The watch from its own thread (loop-watch-worker.ts): the memory it reads
  * the loop's beat and last section from, and the ids it knows sections by.
  */
-let watchdog: { shared: Float64Array; worker: Worker } | undefined;
+let watchdog:
+  { doing: Uint8Array; shared: Float64Array; worker: Worker } | undefined;
 const sectionIds = new Map<string, number>();
 
 /** Section `name` entered, or left, as the watch from its own thread reads it. */
@@ -107,6 +118,22 @@ export const syncSection = <T>(name: string, run: () => T): T => {
   }
 };
 
+const encoder = new TextEncoder();
+
+/**
+ * Names the work the loop starts now (a continuation's step, a request, a
+ * frame), for the watch from its own thread to say if the loop never comes
+ * back from it: the last name written stands until the next. Cheap enough
+ * for every request: one encode into memory both threads share.
+ */
+export const doing = (name: string): void => {
+  if (!watchdog) {
+    return;
+  }
+  const { written } = encoder.encodeInto(name, watchdog.doing.subarray(4));
+  new Int32Array(watchdog.doing.buffer, 0, 1)[0] = written;
+};
+
 /** The work in flight, in words. */
 const flyingWords = (): string =>
   [...flying].map(([kind, count]) => `${kind} ${count}`).join(", ");
@@ -124,7 +151,7 @@ const stallLine = (heldMs: number): string => {
   const lastWords = last
     ? `; the last entered: ${last.name}${last.left ? "" : " (not left)"}`
     : "";
-  return `${loopWords.heldEnded(heldMs)}; phase: ${currentPhase}; in flight: ${work || "nothing counted"}; ${section}${lastWords}${unnamed}; heap ${Math.round(heapSize() / 1024 / 1024)} MB`;
+  return `${loopWords.heldEnded(who, heldMs)}; phase: ${currentPhase}; in flight: ${work || "nothing counted"}; ${section}${lastWords}${unnamed}; heap ${Math.round(heapSize() / 1024 / 1024)} MB`;
 };
 
 /** Where the watch from its own thread is: the binary's own entry when compiled, the source beside this file otherwise. */
@@ -139,7 +166,9 @@ const WATCHDOG_URL = new URL(
  * Starts the watch from its own thread (loop-watch-worker.ts): it reads the
  * beat each tick writes, and a byte it sends the echo opened here comes
  * back only while this loop takes in sockets. Unreferenced, as the echo
- * is: neither keeps the agent from exiting.
+ * is: neither keeps the process from exiting. `who` names the loop in its
+ * lines ("agent", "hub"); `end`, when given, ends the process once its loop
+ * has been held that long ({@link LoopEnd}): its supervisor starts it again.
  *
  * The daemon starts it once its MCP gateway listens, never before: the echo
  * listens on a port the kernel picks from its ephemeral range, Linux's
@@ -149,10 +178,14 @@ const WATCHDOG_URL = new URL(
  * ("MCP gateway port … is held by pid 473", its own pid) and it never
  * registered.
  */
-export const watchFromItsOwnThread = (): void => {
+export const watchFromItsOwnThread = (
+  options: { end?: LoopEnd; who?: string } = {}
+): (() => void) => {
+  who = options.who ?? who;
   const shared = new Float64Array(new SharedArrayBuffer(3 * 8));
   shared[BEAT] = Date.now();
   shared[SECTION] = -1;
+  const doingMemory = new Uint8Array(new SharedArrayBuffer(DOING_BYTES));
   const echo = Bun.listen({
     hostname: "127.0.0.1",
     port: 0,
@@ -167,9 +200,17 @@ export const watchFromItsOwnThread = (): void => {
   worker.postMessage({
     kind: "start",
     beat: shared.buffer as SharedArrayBuffer,
+    doing: doingMemory.buffer as SharedArrayBuffer,
     port: echo.port,
+    who,
+    ...(options.end ? { end: options.end } : {}),
   } satisfies WatchdogMessage);
-  watchdog = { shared, worker };
+  watchdog = { doing: doingMemory, shared, worker };
+  return () => {
+    worker.terminate();
+    echo.stop(true);
+    watchdog = undefined;
+  };
 };
 
 /**
@@ -181,8 +222,11 @@ export const watchFromItsOwnThread = (): void => {
  */
 export const watchLoop = (
   say: (line: string) => void,
-  lateMs = LATE_MS
+  lateMs = LATE_MS,
+  /** Whose loop, as its lines say it. */
+  name = who
 ): (() => void) => {
+  who = name;
   let expected = performance.now() + TICK_MS;
   let posted = "";
   const timer = setInterval(() => {

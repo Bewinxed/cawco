@@ -1,6 +1,6 @@
 /**
  * A stall of the agent's loop is said while it lasts, from a thread of its
- * own (agent loop-watch-worker.ts), with what the process says of the main
+ * own (core loop-watch-worker.ts), with what the process says of the main
  * thread: the loop's own watch says a stall only once it has ended, and the
  * two of 2026-10-25 on obelisk (12:35, 13:48) never ended, so nothing said
  * what held the loop for 45 and 67 minutes, its thread on the CPU and
@@ -76,11 +76,15 @@ export default {
     for (const line of lines) {
       kit.note(line);
     }
-    const atTen = lines.find((line) => line.includes(loopWords.heldNow(10)));
-    const atThirty = lines.find((line) => line.includes(loopWords.heldNow(30)));
+    const atTen = lines.find((line) =>
+      line.includes(loopWords.heldNow("agent", 10))
+    );
+    const atThirty = lines.find((line) =>
+      line.includes(loopWords.heldNow("agent", 30))
+    );
     // Said at 10 s and 30 s, and not again before 60 s.
     const held = lines.filter((line) =>
-      [10, 30, 60].some((at) => line.includes(loopWords.heldNow(at)))
+      [10, 30, 60].some((at) => line.includes(loopWords.heldNow("agent", at)))
     );
     const onCpu = (line: string | undefined) =>
       process.platform !== "linux" ||
@@ -97,10 +101,12 @@ export default {
       `${JSON.stringify(lines)}${err ? `\n${err}` : ""}`
     );
     const again = lines.find((line) =>
-      [34, 35, 36, 37].some((at) => line.includes(loopWords.answersAgain(at)))
+      [34, 35, 36, 37].some((at) =>
+        line.includes(loopWords.answersAgain("agent", at))
+      )
     );
     // The loop's own line up to its number of ms.
-    const endedAt = loopWords.heldEnded(0).slice(0, -"0 ms".length);
+    const endedAt = loopWords.heldEnded("agent", 0).slice(0, -"0 ms".length);
     const ended = lines.find((line) => line.startsWith(endedAt));
     check(
       "b: let go, the watch says it answers again, and the loop's own watch says the stall it ended",

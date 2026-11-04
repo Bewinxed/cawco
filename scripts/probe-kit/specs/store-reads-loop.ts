@@ -206,7 +206,7 @@ const evict = (paths: string[]): Promise<number> =>
 
 /** Every hold the loop watch logged, in ms: its own line once a hold ended (loop-watch.ts `stallLine`). */
 const holdsIn = (lines: string[]): number[] => {
-  const said = loopWords.heldEnded(0).slice(0, -"0 ms".length);
+  const said = loopWords.heldEnded("agent", 0).slice(0, -"0 ms".length);
   return lines
     .filter((line) => line.startsWith(said))
     .map((line) => Number(line.slice(said.length).split(" ")[0]));

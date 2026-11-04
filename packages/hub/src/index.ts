@@ -12,6 +12,7 @@ import {
   MAX_REQUEST_BYTES,
 } from "./config";
 import { Db, DbLayer } from "./db";
+import { loopRecord, watchHubLoop } from "./hub-loop";
 import { HubLifetime, HubLifetimeLayer } from "./lifetime";
 import { advertise } from "./mdns";
 import { Pending, PendingLayer } from "./pending";
@@ -54,6 +55,9 @@ const main = Effect.gen(function* () {
   // HTTPS on the machine's tailnet name, once its preview listeners stand.
   server.tailnet.start();
   yield* Effect.log(`cawco hub ${HUB_VERSION} listening on :${HUB_PORT}`);
+  // Its loop watched from here on: a hold that never ends ends the hub, and
+  // its service starts it again (hub-loop.ts).
+  lifetime.onClose(watchHubLoop(loopRecord(DB_PATH)));
   advertise(HUB_PORT);
   // Off the boot path: a month of transcripts is read once, then never again.
   detach(backfillUsage(db), "usage backfill");
