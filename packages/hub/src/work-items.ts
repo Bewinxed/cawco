@@ -4242,7 +4242,7 @@ export const createWorkItems = ({
     }
     const prepared = items.find((item) => continuing.has(item.id));
     const job = db
-      .continuationRows()
+      .continuationSlips()
       .find(
         (row) => CONTINUING.has(row.stage) && sessions.has(row.sourceInstanceId)
       );
@@ -4701,7 +4701,7 @@ export const createWorkItems = ({
       [...sessions].some((id) => sendWakes(id)) ||
       items.some((item) => continuing.has(item.id)) ||
       db
-        .continuationRows()
+        .continuationSlips()
         .some(
           (row) =>
             CONTINUING.has(row.stage) && sessions.has(row.sourceInstanceId)

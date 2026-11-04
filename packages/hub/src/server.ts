@@ -715,6 +715,7 @@ import type {
   AgentAuth,
   BoardInstanceRow,
   ContinuationRow,
+  ContinuationSlip,
   DbShape,
   InstanceKind,
   MachineLine,
@@ -2151,6 +2152,16 @@ const peekResume = (payload: unknown): string | undefined => {
   const key = (resume as { sessionKey?: unknown }).sessionKey;
   return typeof key === "string" ? key : undefined;
 };
+
+/**
+ * Whether a start's first turn names its session: a fresh one its start
+ * left untitled. A start that carries its title (a summariser, a delegate)
+ * is named already, so its first message, a summariser's whole transcript
+ * prompt among them, is never read for one; a resumed one's next turn is
+ * not its first.
+ */
+const awaitsItsName = (payload: unknown): boolean =>
+  !(peekResume(payload) || peek(payload, "title"));
 
 /**
  * The hub row is the single authority for an instance's session key. A spawn
@@ -16830,7 +16841,7 @@ export const createServer = (
       instanceId: payload.instanceId,
       payload,
     } satisfies Envelope<SpawnPayload>);
-    if (!peekResume(payload)) {
+    if (awaitsItsName(payload)) {
       awaitingFirstTurn.add(payload.instanceId);
     }
     publishInstances(machineId);
@@ -18511,7 +18522,7 @@ export const createServer = (
   ]);
 
   /** A job as every dashboard follows it. */
-  const continuationJob = (row: ContinuationRow): ContinuationJob => ({
+  const continuationJob = (row: ContinuationSlip): ContinuationJob => ({
     id: row.id,
     sourceInstanceId: row.sourceInstanceId,
     targetInstanceId: row.targetInstanceId,
@@ -18533,7 +18544,17 @@ export const createServer = (
 
   /** The job table, from its one record: what dashboards are handed. */
   const continuationTable = (): ContinuationJob[] =>
-    db.continuationRows().map(continuationJob);
+    db.continuationSlips().map(continuationJob);
+
+  /**
+   * The jobs settled (`settled`) or open, each read whole: for a hub's start
+   * and a machine's register, never a send ({@link ContinuationSlip}).
+   */
+  const continuationsWhole = (settled: boolean): ContinuationRow[] =>
+    db
+      .continuationSlips()
+      .filter((slip) => SETTLED.has(slip.stage) === settled)
+      .flatMap((slip) => db.continuationRow(slip.id) ?? []);
 
   /** Where a job's new session starts: the machine the caller named, or the source's. */
   const targetMachineOf = (row: ContinuationRow): string =>
@@ -18586,7 +18607,7 @@ export const createServer = (
 
   /** Whether a Cancel has ended the job while a step of it was in flight. */
   const cancelledContinuation = (id: string): boolean =>
-    db.continuationRow(id)?.stage === "cancelled";
+    db.continuationStage(id) === "cancelled";
 
   /**
    * The opening a job's new session is handed: the same words however often
@@ -19385,10 +19406,8 @@ export const createServer = (
   };
 
   // Jobs that settled before this hub started are kept out their time, then go.
-  for (const row of db.continuationRows()) {
-    if (SETTLED.has(row.stage)) {
-      forgetContinuationLater(row);
-    }
+  for (const row of continuationsWhole(true)) {
+    forgetContinuationLater(row);
   }
 
   /**
@@ -20825,9 +20844,9 @@ export const createServer = (
   };
 
   /**
-   * Sessions this hub started fresh and has not yet heard a word from. A title
-   * derived from a live turn is only the session's *first* message while this
-   * holds the id — a resumed session's next turn is somewhere in the middle of
+   * Sessions this hub started fresh, with no title, and has not yet heard a
+   * word from. A title derived from a live turn is only the session's *first*
+   * message while this holds the id — a resumed session's next turn is somewhere in the middle of
    * a conversation, and naming the row after it would be a wrong name that then
    * outranks the transcript's own. Those get named from the transcript instead,
    * where the first message is unambiguous.
@@ -29156,7 +29175,7 @@ export const createServer = (
     !atLimit.handling(row.id) &&
     !owedMoves.has(row.id) &&
     !db
-      .continuationRows()
+      .continuationSlips()
       .some(
         (job) => job.sourceInstanceId === row.id && !SETTLED.has(job.stage)
       ) &&
@@ -29528,7 +29547,7 @@ export const createServer = (
       db.atLimit.compaction(row.id) !== undefined ||
       owedMoves.has(row.id) ||
       db
-        .continuationRows()
+        .continuationSlips()
         .some(
           (job) => job.sourceInstanceId === row.id && !SETTLED.has(job.stage)
         ) ||
@@ -30734,9 +30753,9 @@ export const createServer = (
     moveJobOf(instanceId) !== undefined;
 
   /** The job going on from a summary as `instanceId`'s move ({@link continuingAsMove}), while it has not settled. */
-  const moveJobOf = (instanceId: string): ContinuationRow | undefined =>
+  const moveJobOf = (instanceId: string): ContinuationSlip | undefined =>
     db
-      .continuationRows()
+      .continuationSlips()
       .find(
         (row) =>
           row.sourceInstanceId === instanceId &&
@@ -31495,7 +31514,7 @@ export const createServer = (
       projectId,
     });
     // A conversation that starts here: its first turn is its name.
-    if (!peekResume(message.payload)) {
+    if (awaitsItsName(message.payload)) {
       awaitingFirstTurn.add(message.instanceId);
     }
     publishInstances(message.machineId);
@@ -37622,7 +37641,7 @@ export const createServer = (
               const restoredIds = new Set(revivable.map(({ row }) => row.id));
               const named = new Set(
                 db
-                  .continuationRows()
+                  .continuationSlips()
                   .filter((job) => !SETTLED.has(job.stage))
                   .map((job) => job.summariserInstanceId)
               );
@@ -37769,11 +37788,8 @@ export const createServer = (
               detach(keepAliveScheduler.wake(), "keepalive wake");
               // Continuations waiting on this machine — for their summary, or
               // for their new session — go on from where their record says.
-              for (const job of db.continuationRows()) {
-                if (
-                  !SETTLED.has(job.stage) &&
-                  machineFor(job) === message.machineId
-                ) {
+              for (const job of continuationsWhole(false)) {
+                if (machineFor(job) === message.machineId) {
                   detach(advanceContinuation(job.id), "continuation");
                 }
               }

@@ -469,6 +469,27 @@ export type SessionTaintRow = typeof sessionTaints.$inferSelect & {
 };
 
 export type ContinuationRow = typeof continuations.$inferSelect;
+/**
+ * A continuation job without its request, its prepared transcript and
+ * prompt, its summary and its open items: what is read of every job on
+ * every send and every board publish ({@link DbShape.continuationSlips}).
+ * `prepared` runs to megabytes for a long session, and its column parses
+ * and checks it whole on every read (core stored-json.ts), so a read that
+ * needs a job's session, stage and ids never selects it.
+ */
+export type ContinuationSlip = Pick<
+  ContinuationRow,
+  | "id"
+  | "sourceInstanceId"
+  | "summariserInstanceId"
+  | "targetInstanceId"
+  | "stage"
+  | "error"
+  | "askedBy"
+  | "waiting"
+  | "createdAt"
+  | "updatedAt"
+>;
 /** A project move as moves.ts reads it: its state whole, the machines it names put back in it. */
 export type MoveRow = Omit<
   typeof moves.$inferSelect,
@@ -819,8 +840,12 @@ export interface DbShape {
   /** The session's lines about its context ({@link DbShape.noteContextLine}), oldest first. */
   readonly contextLinesOf: (id: string) => LimitNote[];
   readonly continuationRow: (id: string) => ContinuationRow | undefined;
-  /** Every continuation job, oldest first. */
-  readonly continuationRows: () => ContinuationRow[];
+  /** Every continuation job, oldest first, as its slip: a job whole is {@link continuationRow}'s. */
+  readonly continuationSlips: () => ContinuationSlip[];
+  /** A job's stage alone, for the steps that look for a Cancel while they wait ({@link ContinuationSlip}). */
+  readonly continuationStage: (
+    id: string
+  ) => ContinuationRow["stage"] | undefined;
   /**
    * A project, with its folder on the hub as its first place, and the
    * checkout it was made from (`checkout`), its primary, when it has one.
@@ -10310,10 +10335,31 @@ const make = async (path: string): Promise<DbShape> => {
           .all()
           .map((row) => [row.model, row.contextWindow])
       ),
-    continuationRows: () =>
-      db.select().from(continuations).orderBy(continuations.createdAt).all(),
+    continuationSlips: () =>
+      db
+        .select({
+          id: continuations.id,
+          sourceInstanceId: continuations.sourceInstanceId,
+          summariserInstanceId: continuations.summariserInstanceId,
+          targetInstanceId: continuations.targetInstanceId,
+          stage: continuations.stage,
+          error: continuations.error,
+          askedBy: continuations.askedBy,
+          waiting: continuations.waiting,
+          createdAt: continuations.createdAt,
+          updatedAt: continuations.updatedAt,
+        })
+        .from(continuations)
+        .orderBy(continuations.createdAt)
+        .all(),
     continuationRow: (id) =>
       db.select().from(continuations).where(eq(continuations.id, id)).get(),
+    continuationStage: (id) =>
+      db
+        .select({ stage: continuations.stage })
+        .from(continuations)
+        .where(eq(continuations.id, id))
+        .get()?.stage,
     moveRows: () =>
       db.select().from(moves).orderBy(moves.createdAt).all().map(moveOf),
     moveRowsOn: (machineId) =>
