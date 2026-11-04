@@ -1694,6 +1694,15 @@ export const PREVIEW_WHY_META = "cawco-preview-why";
  */
 export const SHOWN_FAILURES = [...PREVIEW_DOWNS, "page"] as const;
 export type ShownFailure = (typeof SHOWN_FAILURES)[number];
+/**
+ * Why a preview handed to a parent was refused (hub preview.ts
+ * `loadedOnce`): a hop that did not answer ({@link PreviewDown}), or
+ * `error`: every hop answered, and its page came back with an error status
+ * (4xx or 5xx), as a server whose render throws answers 500. Not a
+ * {@link PreviewDown}: no proxy page names it, and no pane can read a
+ * frame's status to report it.
+ */
+export type HandUpFailure = PreviewDown | "error";
 
 export interface PreviewElement {
   classes: string[];

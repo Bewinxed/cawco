@@ -29,6 +29,14 @@ export const artifactToolWords = {
     `This read shows its next version, artifact ${next}: decision pages draw it, and the panel keeps the opened version, where the person's picks are, until artifact_show opens it.`,
   /** A preview that never loaded, so nothing went to the parent. */
   notHanded: "It wasn't handed to your parent.",
+  /**
+   * A hand-up's check loaded `subject`'s page and it answered an error
+   * status (core `HandUpFailure` `error`, hub preview.ts `loadedOnce`): the
+   * refusal goes on with the status and the error's first line in brackets,
+   * then {@link artifactToolWords.notHanded}.
+   */
+  pageErrored: (subject: string) =>
+    `${subject} answered its page with an error.`,
   /** A view couldn't load `subject` as its workspace is gone (core `PreviewDown` `gone`): a show's or a hand-up check's refusal. */
   workspaceGone: (subject: string) =>
     `${subject} is gone with its workspace, so this version can't be shown again. Make it again from a workspace that runs and hand that up; showing this one again changes nothing.`,

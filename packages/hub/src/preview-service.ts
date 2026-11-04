@@ -1,4 +1,4 @@
-import { PREVIEW_START, PREVIEW_STOP, type PreviewDown } from "@cawco/core";
+import { type HandUpFailure, PREVIEW_START, PREVIEW_STOP } from "@cawco/core";
 import type { Bounded } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { DOWN_WORDS, isFolderGone } from "@cawco/core/preview-proxy";
@@ -380,7 +380,7 @@ export function createPreviewService(deps: PreviewServiceDeps) {
      */
     reachable: async (
       row: ArtifactRow
-    ): Promise<{ failure: PreviewDown; why: string | null } | null> => {
+    ): Promise<{ failure: HandUpFailure; why: string | null } | null> => {
       if (!servedByMachine(row)) {
         return null;
       }

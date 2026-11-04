@@ -41,6 +41,7 @@ import {
   DESK_CAPTURES_PER_PAGE,
   decisionLink,
   fileHash,
+  type HandUpFailure,
   type InstanceRow,
   machineLabel,
   noteText,
@@ -1800,12 +1801,14 @@ export interface ArtifactServiceDeps {
    * load would be (its machine's listener started for what its row names
    * now: hub preview-service.ts): null when nothing stands in its way (a
    * page its server is still making among that), else the hop that failed
-   * and the machine's words for it. A preview handed to a parent is checked
+   * and the machine's words for it, or `error` and the page's status and
+   * first error line when it answered an error status (4xx, 5xx). A
+   * preview handed to a parent is checked
    * so before it reaches them.
    */
   reachable: (
     row: ArtifactRow
-  ) => Promise<{ failure: ShownFailure; why: string | null } | null>;
+  ) => Promise<{ failure: HandUpFailure; why: string | null } | null>;
   /**
    * Every view of session `instanceId`'s panel hears its artifacts again on
    * the frame it follows (the panel's open frame, unchanged otherwise); none
@@ -4143,7 +4146,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /** Why a view could not load the artifact, in DESIGN.md's error formula: what failed, and why. */
-  const notLoaded = (row: Placed, failure: ShownFailure): string => {
+  const notLoaded = (
+    row: Placed,
+    failure: ShownFailure | HandUpFailure
+  ): string => {
     const { source } = row;
     const machine = machineOf(row);
     const subject =
@@ -4168,6 +4174,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return `${subject} did not show: the panel was closed or showed something else first.`;
       case "gone":
         return artifactToolWords.workspaceGone(subject);
+      case "error":
+        return artifactToolWords.pageErrored(subject);
       case "page":
         break;
     }
@@ -6060,7 +6068,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /**
    * A preview handed to a parent, loaded first on its own origin as the
    * parent will open it (server.ts `reachable`): no panel loads it to say
-   * it failed, so one with a hop down is refused here, its placement let go
+   * it failed, so one with a hop down, or whose page answers an error
+   * status (a render that throws answers 500), is refused here with the
+   * status and the error's first line, its placement let go
    * ({@link unplace}), and it never reaches the parent. A page its server
    * is still making goes up as it does to a panel. Nothing for a page
    * artifact.

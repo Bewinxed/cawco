@@ -111,9 +111,11 @@
  *    artifact_show merges the last version in.
  * H13. A change to a page the parent opened that the panel no longer shows
  *    is held all the same.
- * P1–P3. The delegate's `to: "parent"` preview of a folder that isn't there,
- *    and one of a port nothing listens on, are refused, and the parent gets
- *    no artifact and no send of either.
+ * P1–P5. The delegate's `to: "parent"` preview of a folder that isn't there,
+ *    one of a port nothing listens on, and one whose page answers 500 are
+ *    refused, the 500's with its status and the error's first line, and the
+ *    parent gets no artifact and no send of any; one whose page answers 200
+ *    is handed up.
  *
  * Every artifact carries its ask (the artifact purpose spec's §4 legs 12 to
  * 18, named "ask 12" to "ask 18" here), each the hub's own answer:
@@ -682,8 +684,9 @@ interface Listed {
  * H1–H13: a delegate's `to: "parent"` artifact reaches its parent listed,
  * not opened, a canvas drawn all the same; only the parent's own
  * artifact_show puts it in its panel.
- * P1–P3: a `to: "parent"` preview that can't start or doesn't answer is
- * refused, and nothing reaches the parent. Read from the hub
+ * P1–P5: a `to: "parent"` preview that can't start, doesn't answer or
+ * answers its page 500 is refused, and nothing reaches the parent; one
+ * answering 200 is handed up. Read from the hub
  * (`/api/artifacts/:id`'s `shown`, the parent's `sent_messages`) and the
  * tools' answers; no dashboard is open.
  */
@@ -1357,9 +1360,10 @@ const heldChecks = async ({
 };
 
 /**
- * P1–P3: a delegate's `to: "parent"` preview that can't start, or whose
- * port nothing answers on, is refused, and nothing of it reaches `parent`:
- * no artifact, no send.
+ * P1–P5: a delegate's `to: "parent"` preview that can't start, whose port
+ * nothing answers on, or whose page answers 500 is refused, and nothing of
+ * it reaches `parent`: no artifact, no send. One whose page answers 200 is
+ * handed up.
  */
 const refusedHandChecks = async ({
   kit,
@@ -1422,7 +1426,45 @@ const refusedHandChecks = async ({
     deaf.slice(-400)
   );
 
-  // P2. Nothing of either reaches the parent: no artifact, no send.
+  // P4. A preview whose server answers its page 500, as a render that
+  // throws does (SvelteKit's own error page, the error's message its
+  // heading): every hop answered, and it is refused all the same, with the
+  // status and the error's first line.
+  const failing = Bun.serve({
+    port: 0,
+    fetch: () =>
+      new Response(
+        `<!doctype html><html lang="en"><head><meta charset="utf-8" /><title>${THROWN}</title><style>.status{font-weight:200}</style></head><body><div class="error"><span class="status">500</span><div class="message"><h1>${THROWN}</h1></div></div></body></html>`,
+        { status: 500, headers: { "content-type": "text/html" } }
+      ),
+  });
+  const failingPort = failing.port;
+  let errored: string;
+  try {
+    errored = await callDelegate(CREATE, {
+      kind: "preview",
+      name: "failing-preview",
+      does: "try",
+      ask: "Try this page and say whether it works",
+      port: failingPort,
+      to: "parent",
+    });
+  } finally {
+    failing.stop(true);
+  }
+  kit.check(
+    "P4: a delegate's to: parent preview whose page answers 500 is refused with the status and the error's first line",
+    !ANSWERED_ID.test(errored) &&
+      errored.includes(
+        artifactToolWords.serverOnPort(String(failingPort), "on ")
+      ) &&
+      errored.includes(artifactToolWords.pageErrored("")) &&
+      errored.includes(`(500: ${THROWN})`) &&
+      errored.includes(artifactToolWords.notHanded),
+    errored.slice(-400)
+  );
+
+  // P2. Nothing of the three reaches the parent: no artifact, no send.
   await Bun.sleep(LISTEN_MS);
   const after2 = reached();
   kit.check(
@@ -1430,7 +1472,42 @@ const refusedHandChecks = async ({
     after2.artifacts === before.artifacts && after2.sends === before.sends,
     `artifacts ${before.artifacts} → ${after2.artifacts}; sends ${before.sends} → ${after2.sends}`
   );
+
+  // P5. The same check passes a preview whose page answers 200: it is
+  // handed up, and the parent holds one artifact more.
+  const working = Bun.serve({
+    port: 0,
+    fetch: () =>
+      new Response(
+        "<!doctype html><html><head><title>Works</title></head><body><h1>It works</h1></body></html>",
+        { headers: { "content-type": "text/html" } }
+      ),
+  });
+  let handed: string;
+  try {
+    handed = await callDelegate(CREATE, {
+      kind: "preview",
+      name: "working-preview",
+      does: "try",
+      ask: "Try this page and say whether it works",
+      port: working.port,
+      to: "parent",
+    });
+  } finally {
+    working.stop(true);
+  }
+  const after5 = reached();
+  kit.check(
+    "P5: a delegate's to: parent preview whose page answers 200 is handed up",
+    ANSWERED_ID.test(handed) &&
+      !handed.includes(artifactToolWords.notHanded) &&
+      after5.artifacts === (after2.artifacts ?? 0) + 1,
+    `${handed.slice(-400)}; artifacts ${after2.artifacts} → ${after5.artifacts}`
+  );
 };
+
+/** The error P4's server throws in its render, as the owner's preview answered it. */
+const THROWN = "words.runsSpan is not a function";
 
 /** A decision page's program with one question, as the decision library takes it. */
 const ONE_QUESTION = `root = Decisions("Pick a hero", [hero])
