@@ -24871,7 +24871,7 @@ export const createServer = (
     projectId: string
   ): Promise<{ machineId: string; cwd: string } | undefined> => {
     const machines = onAccountMachines(
-      onlineMachines().map((machineId) => ({ machineId })),
+      onlineMachines().map((id) => ({ machineId: id })),
       db.project(projectId)?.account,
       db.accounts.signins()
     ).map((one) => one.machineId);
@@ -30009,6 +30009,24 @@ export const createServer = (
   };
 
   /**
+   * Whether a cold wake leaves `row` on `accountId`: a person moved it there,
+   * its start named that account, or it is its project's account.
+   */
+  const keptAtWake = (
+    row: ReturnType<typeof db.getInstancesByIds>[number],
+    accountId: string
+  ): boolean => {
+    const last = db.atLimit
+      .events([row.id])
+      .findLast((one) => one.move.kind === "moved")?.move;
+    if (last?.kind === "moved" && last.asked) {
+      return true;
+    }
+    const project = row.projectId ? db.project(row.projectId) : undefined;
+    return row.namedAccount === accountId || project?.account === accountId;
+  };
+
+  /**
    * A Claude session woken for a send with its cache cold is re-placed
    * first, by its kind's strategy: its first request re-reads its whole
    * context wherever it runs, so moving it costs nothing extra (fleet
@@ -30019,9 +30037,9 @@ export const createServer = (
    * one admitted onto its account in this window stays. The move is owed to its launch
    * ({@link owedMoves}), which carries its conversation into the
    * new account's dir; its line is written once that has. A fork stays with
-   * its origin, a session a person moved stays where they put it, one on the
-   * account its start named stays there, and only Claude's conversations are
-   * carried this way.
+   * its origin, and one a person moved, whose start named its account or on
+   * its project's account stays ({@link keptAtWake}); only Claude's
+   * conversations are carried this way.
    */
   const replaceAtWake = (
     row: ReturnType<typeof db.getInstancesByIds>[number]
@@ -30040,14 +30058,7 @@ export const createServer = (
     ) {
       return;
     }
-    const last = db.atLimit
-      .events([row.id])
-      .findLast((one) => one.move.kind === "moved")?.move;
-    if (last?.kind === "moved" && last.asked) {
-      return;
-    }
-    // An account its start named keeps it, as a person's move does.
-    if (row.namedAccount === from.id) {
+    if (keptAtWake(row, from.id)) {
       return;
     }
     const toId = replaceRow(row, from.id);
@@ -35300,6 +35311,10 @@ export const createServer = (
             // null: the fleet's routing.
             account: t.Optional(
               t.Union([t.String({ maxLength: 320 }), t.Null()])
+            ),
+            // What its sessions on that account do at its limit.
+            accountAtLimit: t.Optional(
+              t.Union([t.Literal("wait"), t.Literal("move")])
             ),
             // Where its large files live; null: each origin's own LFS.
             lfs: t.Optional(

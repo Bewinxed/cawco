@@ -37,6 +37,16 @@ export type AccountProvider = string;
 export const CLAUDE_PROVIDER = "anthropic";
 
 /**
+ * What a project's sessions on its account do when that account reaches its
+ * limit (hub placement.ts `runningAccounts`): `wait` holds them there until
+ * it resets, keeping its connectors; `move` moves them to an account with
+ * room, as a session on an account its start named moves, and they lose the
+ * project's account's connectors there.
+ */
+export const PROJECT_AT_LIMIT = ["wait", "move"] as const;
+export type ProjectAtLimit = (typeof PROJECT_AT_LIMIT)[number];
+
+/**
  * How the account signs in. Claude: a subscription (`claude auth login`) or a
  * Console organization (`claude auth login --console`). Any other provider:
  * its own OAuth sign-in through pi-ai (`oauth`), or a key (`api_key`).

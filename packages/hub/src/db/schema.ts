@@ -34,6 +34,7 @@ import type {
   OnCap,
   PermissionMode,
   PresenceClient,
+  ProjectAtLimit,
   RefusalReach,
   RoutineMadeEvent,
   RuleMatchKind,
@@ -515,6 +516,15 @@ export const projects = sqliteTable("projects", {
   account: text("account").references(() => accounts.id, {
     onDelete: "set null",
   }),
+  /**
+   * What its sessions on {@link account} do at that account's limit (core
+   * `ProjectAtLimit`, placement.ts `runningAccounts`): wait for the reset
+   * there, or move as a session on an account its start named moves.
+   */
+  accountAtLimit: text("account_at_limit")
+    .$type<ProjectAtLimit>()
+    .notNull()
+    .default("wait"),
   /**
    * When the person answered a move's ask "Don't move" (moves.ts): a folder
    * that still needs that ask can't move, and the New session modal says so

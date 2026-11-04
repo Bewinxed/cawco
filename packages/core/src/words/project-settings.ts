@@ -30,6 +30,8 @@ const onOff = (on: boolean): string => (on ? "on" : "off");
 export interface SettingsRead {
   /** The account its sessions start on, by name; null: the fleet's routing. */
   account: string | null;
+  /** What its sessions on that account do at its limit. */
+  accountAtLimit: "wait" | "move";
   budget: SettingsBudget | null;
   /** Connections granted to the project. */
   connections: string[];
@@ -69,6 +71,7 @@ export const projectSettingsWords = {
       `- Repositories: ${now.links.length > 0 ? now.links.join(", ") : "none linked"} (link_repo, create_repo with folder)`,
       `- Connections granted: ${now.connections.length > 0 ? now.connections.join(", ") : "none"} (grant_connection)`,
       projectAccountWords.read(now.account),
+      projectAccountWords.atLimit.read(now.accountAtLimit),
       "",
       `Now: ${now.live} ${now.live === 1 ? "attempt is" : "attempts are"} live and ${now.reviewing} ${now.reviewing === 1 ? "task waits" : "tasks wait"} for review. ${
         now.paused === null

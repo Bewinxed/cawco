@@ -18,6 +18,7 @@ import type {
   AccountSigninResult,
   PendingAccountSignin,
   PlacementPreview,
+  ProjectAtLimit,
   ProviderChoice,
   ProviderRouting,
   ProviderSigninChallenge,
@@ -304,6 +305,8 @@ export interface ProjectPlace {
 export interface ProjectRow {
   /** The account its sessions start on when a start names none (hub project-edit.ts); null: the fleet's routing. */
   account: string | null;
+  /** What its sessions on {@link account} do at that account's limit. */
+  accountAtLimit: ProjectAtLimit;
   /** Its spend cap as it stands, kept by `project.cap` frames; null: none. */
   cap?: ProjectCap | null;
   /** The harness its Caw runs on. */
@@ -6562,6 +6565,8 @@ export async function editProject(
   change: {
     /** The account its sessions start on, by id; null: the fleet's routing. */
     account?: string | null;
+    /** What its sessions on that account do at its limit. */
+    accountAtLimit?: ProjectAtLimit;
     lands?: LandsMode;
     /** Where its large files live, and the connection that signs in there; null: each origin's own LFS. */
     lfs?: { connection: string; url: string } | null;

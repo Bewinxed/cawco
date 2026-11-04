@@ -18,10 +18,36 @@ export const projectAccountWords = {
   routed: "Each session starts where the fleet's routing places it.",
   /** Under the row with one set. */
   set: (name: string) =>
-    `Caw, routines and delegates start on ${name}, with its connectors, and stay there at its limit. A session that names its own account runs there.`,
+    `Caw, routines and delegates start on ${name}, with its connectors. A session that names its own account runs there.`,
   /** Under the row when the one set is not signed in on any machine. */
   signedOut: (name: string) =>
     `${name} isn't signed in on any machine, so nothing in this project can start until it is.`,
+
+  /**
+   * What its sessions on its account do at that account's limit (core
+   * `ProjectAtLimit`): its row under Account, shown while one is named, and
+   * Caw's `set_account_at_limit`.
+   */
+  atLimit: {
+    label: "At its limit",
+    wait: "Wait for the reset",
+    move: "Move",
+    /** Under the row, by what is picked. */
+    says: {
+      wait: "Its sessions hold on it until it resets, and keep its connectors.",
+      move: "Its sessions move to an account with room, and lose its connectors there.",
+    },
+    change: (atLimit: "wait" | "move") =>
+      atLimit === "wait"
+        ? "At its account's limit, hold this project's sessions there until the reset, keeping its connectors"
+        : "At its account's limit, move this project's sessions to an account with room, without its connectors",
+    read: (atLimit: "wait" | "move") =>
+      `- At its account's limit, its sessions: ${atLimit === "wait" ? "wait for the reset" : "move to an account with room"} (set_account_at_limit)`,
+    needs:
+      'set_account_at_limit names at_limit: "wait" for the reset, or "move" to an account with room.',
+    already: (atLimit: "wait" | "move") =>
+      `At its account's limit, this project's sessions ${atLimit === "wait" ? "wait for the reset" : "move"} already.`,
+  },
 
   // ── project_settings, and the project note ──
   change: (name: string | null) =>

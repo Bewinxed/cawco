@@ -47,6 +47,9 @@
  *   names none (an account's id, nickname or email; null for the fleet's
  *   routing), checked and written as the person's own edit is
  *   (project-edit.ts), which moves its running conversation there too.
+ * - `set_account_at_limit`: what the project's sessions on that account do
+ *   at its limit (core `ProjectAtLimit`): wait for the reset, or move to an
+ *   account with room; through the same edit.
  * Called with no changes, it answers the project's settings as they stand,
  * each named by the change that sets it, and what dispatch would do now.
  * Only the session's own project, named by its id or its name in any case:
@@ -57,6 +60,7 @@ import {
   type Account,
   accountNameAmong,
   type InstanceRow,
+  PROJECT_AT_LIMIT,
   PROJECT_LANDS,
   PROJECT_SETTING_KINDS,
   type ProjectNote,
@@ -148,9 +152,8 @@ const ASKED_CHANGE = z.object({
     .string()
     .nullable()
     .optional()
-    .describe(
-      "set_account: an account's id, nickname or email; null: the fleet's routing"
-    ),
+    .describe("set_account: id, nickname or email; null: routing"),
+  at_limit: z.enum(PROJECT_AT_LIMIT).optional(),
 });
 type AskedChange = z.infer<typeof ASKED_CHANGE>;
 
@@ -201,6 +204,8 @@ const askedOf = (change: ProjectSettingChange): AskedChange => {
       return { kind: change.kind, events: change.events };
     case "set_account":
       return { kind: change.kind, account: change.account };
+    case "set_account_at_limit":
+      return { kind: change.kind, at_limit: change.atLimit };
     default:
       return unhandled("project setting", change);
   }
@@ -467,6 +472,18 @@ export const createProjectSettings = ({
     };
   };
 
+  /** What its sessions on its account do at that account's limit, refused when it is that already. */
+  const atLimitSet = (
+    project: ProjectRow,
+    asked: AskedChange
+  ): ProjectSettingChange => {
+    const atLimit = asked.at_limit ?? refuse(projectAccountWords.atLimit.needs);
+    if (atLimit === project.accountAtLimit) {
+      refuse(projectAccountWords.atLimit.already(atLimit));
+    }
+    return { kind: "set_account_at_limit", atLimit };
+  };
+
   /** One asked change, checked against the project as it stands, as the hub stores it. */
   const checked = async (
     project: ProjectRow,
@@ -520,6 +537,8 @@ export const createProjectSettings = ({
         return eventsSet(project, asked);
       case "set_account":
         return accountSet(project, asked);
+      case "set_account_at_limit":
+        return atLimitSet(project, asked);
       case "set_lands":
         break;
       default:
@@ -607,6 +626,9 @@ export const createProjectSettings = ({
             : []),
         ];
       }
+      case "set_account_at_limit":
+        await edit(project.id, { accountAtLimit: change.atLimit });
+        break;
       case "set_lands":
         await edit(project.id, { lands: change.lands });
         break;
@@ -685,6 +707,7 @@ export const createProjectSettings = ({
     return projectSettingsWords.read({
       name: project.name,
       account: accountName(project.account),
+      accountAtLimit: project.accountAtLimit,
       events: project.eventsOn,
       dispatch: now.dispatch,
       maxAttempts: now.maxAttempts,

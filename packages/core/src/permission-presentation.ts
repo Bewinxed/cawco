@@ -12,6 +12,7 @@
  * exist (so a put says whether it adds or replaces).
  */
 
+import type { ProjectAtLimit } from "./accounts";
 import { askStanceLine } from "./asks";
 import {
   SHELL_TOOLS,
@@ -1269,6 +1270,7 @@ export const PROJECT_SETTING_KINDS = [
   "set_budget",
   "set_events",
   "set_account",
+  "set_account_at_limit",
 ] as const;
 
 /**
@@ -1304,6 +1306,8 @@ export type ProjectSettingChange =
    * fleet's routing.
    */
   | { account: string | null; kind: "set_account"; name: string | null }
+  /** What its sessions on its account do at that account's limit (core `ProjectAtLimit`). */
+  | { atLimit: ProjectAtLimit; kind: "set_account_at_limit" }
   | {
       /** The account the GitHub connection signs in as: the repository's owner. */
       account?: string;
@@ -1364,6 +1368,8 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
       return projectSettingsWords.eventsOn(change.events);
     case "set_account":
       return projectAccountWords.change(change.name);
+    case "set_account_at_limit":
+      return projectAccountWords.atLimit.change(change.atLimit);
     case "set_lands":
       break;
   }

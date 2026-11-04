@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `account_at_limit` text DEFAULT 'wait' NOT NULL;

@@ -26737,6 +26737,13 @@
                       "null"
                     ]
                   },
+                  "accountAtLimit": {
+                    "type": "string",
+                    "enum": [
+                      "wait",
+                      "move"
+                    ]
+                  },
                   "lfs": {
                     "type": [
                       "object",
@@ -30643,6 +30650,12 @@
               "modelUsageSeen": {
                 "type": "object"
               },
+              "namedAccount": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
               "origin": {
                 "$ref": "#/components/schemas/SessionOrigin"
               },
@@ -30730,6 +30743,7 @@
               "launchDir",
               "machineId",
               "model",
+              "namedAccount",
               "origin",
               "parentInstanceId",
               "parentToolUseId",
@@ -30877,6 +30891,12 @@
             "modelUsageSeen": {
               "type": "object"
             },
+            "namedAccount": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
             "origin": {
               "$ref": "#/components/schemas/SessionOrigin"
             },
@@ -30992,6 +31012,7 @@
             "launchDir",
             "machineId",
             "model",
+            "namedAccount",
             "origin",
             "parentInstanceId",
             "parentToolUseId",
@@ -32159,6 +32180,9 @@
                 "string"
               ]
             },
+            "accountAtLimit": {
+              "$ref": "#/components/schemas/GetApiProjects200AccountAtLimit"
+            },
             "accounts": {
               "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
               "type": "array",
@@ -32335,6 +32359,7 @@
           },
           "required": [
             "account",
+            "accountAtLimit",
             "appleGate",
             "capUsd",
             "cawHarness",
@@ -32368,6 +32393,9 @@
               "null",
               "string"
             ]
+          },
+          "accountAtLimit": {
+            "$ref": "#/components/schemas/GetApiProjects200AccountAtLimit"
           },
           "accounts": {
             "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
@@ -32591,6 +32619,7 @@
         },
         "required": [
           "account",
+          "accountAtLimit",
           "appleGate",
           "capUsd",
           "cawHarness",
@@ -32650,6 +32679,9 @@
               "null",
               "string"
             ]
+          },
+          "accountAtLimit": {
+            "$ref": "#/components/schemas/GetApiProjects200AccountAtLimit"
           },
           "accounts": {
             "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
@@ -32827,6 +32859,7 @@
         },
         "required": [
           "account",
+          "accountAtLimit",
           "appleGate",
           "capUsd",
           "cawHarness",
@@ -32870,6 +32903,9 @@
               "null",
               "string"
             ]
+          },
+          "accountAtLimit": {
+            "$ref": "#/components/schemas/GetApiProjects200AccountAtLimit"
           },
           "accounts": {
             "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
@@ -33090,6 +33126,7 @@
         },
         "required": [
           "account",
+          "accountAtLimit",
           "appleGate",
           "capUsd",
           "cawHarness",
@@ -33124,6 +33161,9 @@
               "null",
               "string"
             ]
+          },
+          "accountAtLimit": {
+            "$ref": "#/components/schemas/GetApiProjects200AccountAtLimit"
           },
           "accounts": {
             "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
@@ -33298,6 +33338,7 @@
         },
         "required": [
           "account",
+          "accountAtLimit",
           "appleGate",
           "capUsd",
           "cawHarness",
@@ -63936,6 +63977,13 @@
           "mainline",
           "scratch",
           "summariser"
+        ]
+      },
+      "GetApiProjects200AccountAtLimit": {
+        "type": "string",
+        "enum": [
+          "move",
+          "wait"
         ]
       },
       "GetApiRulesByIdActivity200Status": {

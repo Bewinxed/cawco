@@ -2254,7 +2254,12 @@ export interface DbShape {
     change: Partial<
       Pick<
         ProjectRow,
-        "account" | "lfsConnection" | "lfsUrl" | "name" | "review"
+        | "account"
+        | "accountAtLimit"
+        | "lfsConnection"
+        | "lfsUrl"
+        | "name"
+        | "review"
       >
     >
   ) => void;

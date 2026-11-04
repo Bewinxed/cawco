@@ -5641,10 +5641,10 @@ export const createWorkItems = ({
       return request;
     }
     const checkouts = (db.project(projectId)?.places ?? []).filter(
-      (place) =>
-        place.kind === "checkout" &&
-        online(place.machineId) &&
-        signedInOn(signins, account, place.machineId)
+      (each) =>
+        each.kind === "checkout" &&
+        online(each.machineId) &&
+        signedInOn(signins, account, each.machineId)
     );
     const place = checkouts.find((each) => each.isPrimary) ?? checkouts[0];
     return place

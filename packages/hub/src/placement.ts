@@ -16,6 +16,7 @@ import {
   openedAt,
   type PlacementExplain,
   type PlacementStrategy,
+  type ProjectAtLimit,
   type ProviderRouting,
   type StrategyChoice,
   spanWords,
@@ -811,14 +812,26 @@ const projectPick = (
 /**
  * The accounts a running session in a project may run on, as its project's
  * list for placement (`projectAccounts`): the project's account alone for
- * one on it, so it stays there at a cold wake, a rebalance and its limit;
- * else the project's own list (null: every account).
+ * one on it while the project waits there at its limit (core
+ * `ProjectAtLimit`), so it stays there at a rebalance and its limit; else
+ * the project's own list (null: every account), so one that moves at the
+ * limit moves as a session on an account its start named does.
  */
 export const runningAccounts = (
-  project: { account: string | null; accounts: string[] | null } | undefined,
+  project:
+    | {
+        account: string | null;
+        accountAtLimit: ProjectAtLimit;
+        accounts: string[] | null;
+      }
+    | undefined,
   on: string | null | undefined
 ): string[] | null => {
-  if (project?.account && project.account === on) {
+  if (
+    project?.account &&
+    project.account === on &&
+    project.accountAtLimit === "wait"
+  ) {
     return [project.account];
   }
   return project?.accounts ?? null;

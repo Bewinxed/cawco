@@ -38,6 +38,9 @@
    * - Caw: whether events reach a conversation (CawLeadSwitch), its ways off with it.
    * - Account: the account its sessions start on, or the fleet's routing
    *   (hub project-edit.ts), and whether it is signed in anywhere.
+   * - At its limit: while an account is named, whether its sessions wait
+   *   there for the reset or move to an account with room (core
+   *   `ProjectAtLimit`).
    * - Review before done.
    *
    * A change shows what was asked while the hub answers (the segment's thumb
@@ -46,7 +49,11 @@
    * (RowFault). Every value is the project as the hub last said it, which
    * `projects.changed` brings to every open dashboard.
    */
-  import { accountNameAmong } from "@cawco/core/accounts";
+  import {
+    accountNameAmong,
+    PROJECT_AT_LIMIT,
+    type ProjectAtLimit,
+  } from "@cawco/core/accounts";
   import { type ConnectionView, readsGitHubApi } from "@cawco/core/connections";
   import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
   import { machineLabel } from "@cawco/core/machine-names";
@@ -201,6 +208,30 @@
       accountFault = failureWords(error);
     } finally {
       accountAsked = undefined;
+    }
+  }
+
+  /* ── At its limit ──────────────────────────────────────────────── */
+
+  let atLimitAsked = $state<ProjectAtLimit | null>(null);
+  let atLimitFault = $state<string | null>(null);
+  const atLimit = $derived(atLimitAsked ?? project.accountAtLimit);
+  /** Try again: the last way asked, once more. */
+  let atLimitTried: ProjectAtLimit | null = null;
+
+  async function setAtLimit(next: ProjectAtLimit): Promise<void> {
+    if (atLimitAsked !== null || next === project.accountAtLimit) {
+      return;
+    }
+    atLimitTried = next;
+    atLimitAsked = next;
+    atLimitFault = null;
+    try {
+      await editProject(project.id, { accountAtLimit: next });
+    } catch (error) {
+      atLimitFault = failureWords(error);
+    } finally {
+      atLimitAsked = null;
     }
   }
 
@@ -1551,6 +1582,56 @@
         />
       </div>
     </div>
+
+    {#if project.account}
+      <!-- At its limit: what its sessions on the account do when it runs out. -->
+      <div
+        data-slot="row"
+        class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+        data-detail="account-at-limit"
+      >
+        <p
+          data-slot="project-details-label"
+          class="type-label pt-space-1 text-ink-muted"
+          id="{uid}-at-limit"
+        >
+          {projectAccountWords.atLimit.label}
+        </p>
+        <div
+          data-slot="value"
+          class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+        >
+          <ToggleGroup.Root
+            aria-labelledby="{uid}-at-limit"
+            class="max-w-full self-start"
+            data-pending={atLimitAsked === null ? undefined : ""}
+            type="single"
+            bind:value={
+              () => atLimit,
+              (next) => {
+                if (next) {
+                  setAtLimit(next as ProjectAtLimit);
+                }
+              }
+            }
+          >
+            {#each PROJECT_AT_LIMIT as way (way)}
+              <ToggleGroup.Item value={way}
+                >{projectAccountWords.atLimit[way]}</ToggleGroup.Item
+              >
+            {/each}
+          </ToggleGroup.Root>
+          <p data-slot="note" class="type-meta text-ink-muted">
+            {projectAccountWords.atLimit.says[atLimit]}
+          </p>
+          <RowFault
+            again={() => (atLimitTried ? setAtLimit(atLimitTried) : undefined)}
+            data-at-limit-fault
+            reason={atLimitFault}
+          />
+        </div>
+      </div>
+    {/if}
 
     <!-- Review before done. -->
     <div

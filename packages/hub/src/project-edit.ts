@@ -21,6 +21,8 @@ import {
   accountNameAmong,
   LANDS_MODES,
   type LandsMode,
+  PROJECT_AT_LIMIT,
+  type ProjectAtLimit,
 } from "@cawco/core";
 import { projectAccountWords } from "@cawco/core/words/project-account";
 import type { DbShape, ProjectRow } from "./db";
@@ -37,6 +39,8 @@ export interface ProjectEdit {
    * fleet's routing.
    */
   account?: string | null;
+  /** What its sessions on that account do at its limit (placement.ts `runningAccounts`). */
+  accountAtLimit?: ProjectAtLimit;
   /** Where its attempts land when their task says nothing. */
   lands?: LandsMode;
   /**
@@ -244,6 +248,14 @@ const changeOf = (project: ProjectRow, asked: ProjectEdit): ProjectEdit => {
   if (asked.review !== undefined && asked.review !== project.review) {
     change.review = asked.review;
   }
+  if (asked.accountAtLimit !== undefined) {
+    if (!PROJECT_AT_LIMIT.includes(asked.accountAtLimit)) {
+      throw new ProjectEditRefusal(400, projectAccountWords.atLimit.needs);
+    }
+    if (asked.accountAtLimit !== project.accountAtLimit) {
+      change.accountAtLimit = asked.accountAtLimit;
+    }
+  }
   if (asked.lands !== undefined) {
     if (!LANDS_MODES.includes(asked.lands)) {
       throw new ProjectEditRefusal(
@@ -293,11 +305,12 @@ export const createProjectEdits = ({
       asked.review === undefined &&
       asked.lands === undefined &&
       asked.lfs === undefined &&
-      asked.account === undefined
+      asked.account === undefined &&
+      asked.accountAtLimit === undefined
     ) {
       throw new ProjectEditRefusal(
         400,
-        "Name what changes: the project's name, whether it reviews before done, where its work lands, where its large files live, or the account its sessions start on."
+        "Name what changes: the project's name, whether it reviews before done, where its work lands, where its large files live, the account its sessions start on, or what they do at its limit."
       );
     }
     const {
