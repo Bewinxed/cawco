@@ -127,15 +127,20 @@ async function proxyToHub(
   // whose server answers a range with the whole file (hub `rangedResponse`).
   const range = request.headers.get("range");
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
+  // The body's own type as the browser said it (JSON for the API's calls,
+  // the file's for a file the reader attached, `POST /api/files`), and none
+  // when it said none. A type is never supplied here: the hub parses a
+  // request's body by its type before any handler runs, so a bodiless POST
+  // given `application/json` is refused as "Unexpected end of JSON input"
+  // on every route that takes a body, its sign-in to an MCP server among
+  // them (`POST /api/fleet/mcp/:name/sign-in`).
+  const contentType = request.headers.get("content-type");
 
   try {
     const response = await fetch(targetUrl, {
       method: request.method,
       headers: {
-        // The body's own type: JSON for the API's calls, the file's for a
-        // file the reader attached (`POST /api/files`, raw bytes).
-        "Content-Type":
-          request.headers.get("content-type") || "application/json",
+        ...(contentType && { "Content-Type": contentType }),
         // The hub's bytes as they are: fetch would undo the hub's encoding
         // here, and this server compresses the answer for the browser once
         // (hooks.server.ts), so a compressed hop on loopback is work twice.

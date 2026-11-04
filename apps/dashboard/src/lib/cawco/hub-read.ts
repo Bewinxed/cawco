@@ -117,7 +117,10 @@ export async function hubFailure(response: Response): Promise<HubFailure> {
     : unquoted(text);
   return {
     status,
-    detail: sentenceOf(said) ?? noAnswer(status),
+    detail:
+      problem?.type === PARSE_PROBLEM
+        ? UNREAD_REQUEST
+        : (sentenceOf(said) ?? noAnswer(status)),
     ...(problem?.type ? { type: problem.type } : {}),
     ...(problem?.title ? { title: problem.title } : {}),
   };
@@ -156,12 +159,24 @@ export async function hubCall<T>(
 ): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {
-    throw (
-      (await awayOf(response)) ??
-      new Error(`Could not ${attempt}. ${await hubSaid(response)}.`)
-    );
+    throw (await awayOf(response)) ?? (await couldNot(attempt, response));
   }
   return (await response.json()) as T;
+}
+
+/**
+ * A refused Configure write as the error it throws: "Could not `attempt`."
+ * and then the hub's words in the error formula, its status after them
+ * ({@link failureSentence}): "Could not start sign-in to ElevenLabs. This
+ * server refused client registration (400)."
+ */
+export async function couldNot(
+  attempt: string,
+  response: Response
+): Promise<Error> {
+  return new Error(
+    `Could not ${attempt}. ${failureSentence(await hubFailure(response))}`
+  );
 }
 
 /** A request's JSON body and its type, spread into a {@link hubCall}'s init. */
@@ -177,6 +192,18 @@ export const jsonBody = (body: unknown): RequestInit => ({
  */
 export const failureSentence = ({ detail, status }: HubFailure): string =>
   detail === noAnswer(status) ? `${detail}.` : `${detail} (${status}).`;
+
+/**
+ * The problem type the hub's framework writes when a request's body does not
+ * parse as the type it came with (Elysia's `ParseError`, code `parse`, thrown
+ * before any route of the hub runs). Its detail is the parser's exception
+ * ("Unexpected end of JSON input"), and in production there is none, so it is
+ * never a reason a person reads. No route of the hub writes this type.
+ */
+const PARSE_PROBLEM = "parse";
+
+/** What a {@link PARSE_PROBLEM} says to the person, without its stop: the hub answered, refusing what this page sent as unreadable. */
+const UNREAD_REQUEST = "The hub couldn't read the request this page sent";
 
 /** That the hub didn't answer, naming the status that came instead, without a closing stop. */
 export const noAnswer = (status: number): string =>

@@ -39,7 +39,7 @@ import type { FsEntry } from "@cawco/core/protocol";
 import { unhandled } from "@cawco/core/unhandled";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { skillsWords } from "@cawco/core/words/skills";
-import { awayOf, hubCall, hubSaid } from "#lib/cawco/hub-read.js";
+import { awayOf, couldNot, hubCall } from "#lib/cawco/hub-read.js";
 import { machineFs, onFleetFetch } from "./client.svelte";
 import type { ListedVersion } from "./config/PreviousVersions.svelte";
 
@@ -842,7 +842,7 @@ async function agentWrite<T>(
     return { ok: false, latest: (await response.json()) as FleetAgent };
   }
   if (!response.ok) {
-    throw new Error(`Could not ${attempt}. ${await hubSaid(response)}.`);
+    throw await couldNot(attempt, response);
   }
   return { ok: true, done: (await response.json()) as T };
 }
@@ -1043,7 +1043,7 @@ export async function saveMemory(
     return { ok: false, latest: (await response.json()) as FleetMemoryRow };
   }
   if (!response.ok) {
-    throw new Error(`Could not save the memory. ${await hubSaid(response)}.`);
+    throw await couldNot("save the memory", response);
   }
   return { ok: true, memory: (await response.json()) as FleetMemoryRow };
 }
@@ -1065,9 +1065,7 @@ export async function peekMemory(
   if (!response.ok) {
     throw (
       (await awayOf(response)) ??
-      new Error(
-        `Could not read this machine's memory. ${await hubSaid(response)}.`
-      )
+      (await couldNot("read this machine's memory", response))
     );
   }
   if (response.status === 204) {
@@ -1139,7 +1137,7 @@ export async function saveMemoryDoc(
     return { ok: false, latest: (await response.json()) as FleetMemoryDocRow };
   }
   if (!response.ok) {
-    throw new Error(`Could not save ${path}. ${await hubSaid(response)}.`);
+    throw await couldNot(`save ${path}`, response);
   }
   return { ok: true, doc: (await response.json()) as FleetMemoryDocRow };
 }
@@ -1214,9 +1212,7 @@ export async function peekHook(
   if (!response.ok) {
     throw (
       (await awayOf(response)) ??
-      new Error(
-        `Could not read this machine's script. ${await hubSaid(response)}.`
-      )
+      (await couldNot("read this machine's script", response))
     );
   }
   if (response.status === 204) {
