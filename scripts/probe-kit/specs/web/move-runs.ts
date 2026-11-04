@@ -5,7 +5,7 @@
  * at 390 by touch:
  *
  * 1. "Button “Create routine” changes" stands as two runs, each its own bar
- *    (`[data-slot="bar"]`, `data-run`).
+ *    (`[data-slot="run-bar"]`, `data-run`).
  * 2. A drag on run A's body moves run A, and run B's start and end
  *    (`aria-valuenow` and its box) stay where they were.
  * 3. An arrow key on run B moves run B, and run A stays.
@@ -31,7 +31,7 @@ const barsOf = (page: Page): Promise<Bar[]> =>
     const lane = [...document.querySelectorAll('[data-slot="clip"]')].find(
       (one) => one.textContent?.includes(row)
     );
-    return [...(lane?.querySelectorAll('[data-slot="bar"]') ?? [])].map(
+    return [...(lane?.querySelectorAll('[data-slot="run-bar"]') ?? [])].map(
       (bar) => {
         const box = bar.getBoundingClientRect();
         return {
@@ -63,7 +63,7 @@ async function leg(kit: Kit, bench: string, width: number) {
       await settle(page);
     }
   }
-  await page.waitForSelector('[data-slot="bar"]');
+  await page.waitForSelector('[data-slot="run-bar"]');
   await settle(page);
   const at = `${width}px${touch ? " touch" : ""}`;
   const before = await barsOf(page);
@@ -77,7 +77,13 @@ async function leg(kit: Kit, bench: string, width: number) {
     await page.close();
     return;
   }
-  const body = page.locator(`[data-slot="bar"][data-run="${a.run}"]`);
+  // The row's own bars: once a press opens the row, its animations' rows
+  // under it carry bars of the same runs.
+  const row = page
+    .locator('[data-slot="clip"]')
+    .filter({ hasText: ROW })
+    .first();
+  const body = row.locator(`[data-slot="run-bar"][data-run="${a.run}"]`);
   const box = await body.boundingBox();
   if (box) {
     const x = box.x + box.width / 2;
@@ -111,8 +117,8 @@ async function leg(kit: Kit, bench: string, width: number) {
     dragged[0]?.now !== a.now && same(dragged[1], b),
     `before ${JSON.stringify(before)} after ${JSON.stringify(dragged)}`
   );
-  await page
-    .locator(`[data-slot="bar"][data-run="${b.run}"]`)
+  await row
+    .locator(`[data-slot="run-bar"][data-run="${b.run}"]`)
     .focus({ focusVisible: true } as never);
   await page.keyboard.press("ArrowRight");
   await settle(page);
