@@ -1,48 +1,70 @@
 /**
  * A project's first minutes as the hub holds them, for the stories of its
- * setup (SetupScene, SetupWell) and the preview page: the person's own test
+ * setup (SetupWell) and the onboarding bench: the person's own test
  * case, a personal PR team that fits no template, typed on the live fleet
  * (2026-11-02). Their words, the calls Caw makes as he sets it up, the
  * questions he asks as he drafts (his `ask` calls, parked as the hub parks
- * them: pending.ts `askEnvelope`), and the stages he drafts with their look.
+ * them: pending.ts `askEnvelope`), and the draft his setup page holds.
  */
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
-import type { Stage } from "@cawco/core/task-views";
-import { DAY_MS } from "@cawco/core/time";
 import type { BlockedRequest } from "../client.svelte";
+import type {
+  Stage as DraftStage,
+  SetupDelegate,
+} from "../decisions/host/setup/stage";
 import type { Message } from "../types";
 
 /** The name Caw gives it in his first turn. */
 export const PR_NAME = "Your PR team";
 
-/** The stages Caw drafts from their words, each with the look he gives it. */
-export const PR_STAGES: Stage[] = [
-  { name: "inbox", kind: "todo", hooks: {}, icon: "inbox", color: "cyan" },
+/** The stages Caw drafts from their words, as his setup page holds them, each with its look. */
+export const PR_DRAFT: DraftStage[] = [
+  { name: "Inbox", kind: "todo", icon: "inbox", color: "cyan" },
   {
-    name: "researching",
+    name: "Researching",
     kind: "active",
-    hooks: { runs: "researcher" },
     icon: "search",
     color: "cyan",
+    hooks: { runs: "researcher" },
   },
   {
-    name: "drafted",
+    name: "Drafted",
     kind: "active",
-    hooks: { runs: "writer" },
     icon: "pen",
     color: "amber",
+    hooks: { runs: "writer" },
   },
-  { name: "your-call", kind: "you", hooks: {} },
-  { name: "sent", kind: "waiting", hooks: {}, icon: "send", color: "orange" },
+  { name: "Your call", kind: "you" },
+  { name: "Sent", kind: "waiting", icon: "send", color: "orange" },
   {
-    name: "waiting-on-reply",
+    name: "Waiting on reply",
     kind: "waiting",
-    hooks: { after: "7d", afterMs: 7 * DAY_MS },
     icon: "hourglass",
     color: "orange",
+    hooks: { after: "7d" },
   },
-  { name: "done", kind: "done", hooks: {}, icon: "done", color: "green" },
-  { name: "dropped", kind: "dropped", hooks: {}, icon: "trash" },
+  { name: "Done", kind: "done", icon: "done", color: "green" },
+  { name: "Dropped", kind: "dropped", icon: "trash" },
+];
+
+/** What it is for, as his setup page holds it. */
+export const PR_AIM =
+  "A personal PR team: the job search, visa applications and renewals, travel booked around them, and a public voice. Research and drafts are done by delegates; every message, post and application goes out only once you send it.";
+
+/** The delegate types he proposes, as his setup page holds them. */
+export const PR_DELEGATES: SetupDelegate[] = [
+  {
+    id: "researcher",
+    name: "Researcher",
+    brief: "Finds roles, visa rules and travel options, with sources.",
+    runs: "Claude Code · Sonnet",
+  },
+  {
+    id: "writer",
+    name: "Writer",
+    brief: "Drafts applications, posts and replies in your voice.",
+    runs: "Claude Code · Opus",
+  },
 ];
 
 const call = (id: string, tool: string, input: object, second: number) =>
@@ -67,22 +89,6 @@ export const SETUP_CALLS = {
   named: [
     call("t1", "mcp__cawco__project_setup", {}, 9),
     call("t2", "mcp__cawco__project_name", { name: PR_NAME }, 11),
-  ],
-  page: [
-    call("t1", "mcp__cawco__project_setup", {}, 9),
-    call("t2", "mcp__cawco__project_name", { name: PR_NAME }, 11),
-    call(
-      "t6",
-      "mcp__cawco__folder_write",
-      { path: "decisions/setup/page.html" },
-      96
-    ),
-    call(
-      "t7",
-      "mcp__cawco__artifact_create",
-      { kind: "page", name: "setup" },
-      118
-    ),
   ],
 };
 

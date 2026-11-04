@@ -61,8 +61,14 @@
 
   // Never flush with the screen's edge, as the popover: it keeps the pages'
   // gutter from it, pushed back in when its place would run it off a phone.
+  // A menu of tiles, the screen less its margin wide on a phone, keeps that
+  // margin instead, so it stands centred on the screen and never past it
+  // on one side (DESIGN.md, Breakpoints).
   const inset = $derived(
-    collisionPadding ?? (browser ? numberOf("--space-5") : 0)
+    collisionPadding ??
+      (browser
+        ? numberOf(width === "tiles" ? "--c-screen-margin" : "--space-5")
+        : 0)
   );
 
   const away = menuSurface({

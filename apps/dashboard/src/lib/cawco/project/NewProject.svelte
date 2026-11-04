@@ -60,15 +60,7 @@
     words: firstWords = "",
     tapped: firstTapped = null,
     refusal,
-    under = "cards",
   }: {
-    /**
-     * What stands under the field while the decision page
-     * `onboarding-first-minutes` (card `new-under`) is open: today's chips
-     * and cards with Caw's peek, one quiet row of the templates, or that
-     * row folded behind one press.
-     */
-    under?: "cards" | "row" | "fold";
     /**
      * Where the fleet stands (home-state `machines`): `reading` until the
      * hub is live and has listed them, so no line claims an empty fleet
@@ -114,15 +106,7 @@
   $effect(() =>
     typed.run(words.length === 0 && !still && !starting && !tapped)
   );
-  /** The row and the fold carry no fit: Caw stays on the page, whatever the words say. */
-  const fitting = (text: string): TemplateName | null =>
-    under === "cards" ? fitOf(text) : null;
-  let fit = $state<TemplateName | null>(fitting(firstWords));
-  /** The folded row, opened. */
-  let unfolded = $state(false);
-  const tappedCard = $derived(
-    TEMPLATE_CARDS.find((card) => card.template === tapped) ?? null
-  );
+  let fit = $state<TemplateName | null>(fitOf(firstWords));
   /**
    * The card the person tapped, the one pick: the frame stands on it and
    * nowhere else, whatever the words fit.
@@ -133,14 +117,14 @@
     tapped = next;
     // The template shapes what the words start: the caret goes to the
     // field, whose placeholder asks for what that work needs said.
-    if (next && under !== "cards") {
+    if (next) {
       draft.focusWanted = true;
     }
   }
 
   /** The prompt's fit, now: where Caw peeks, never the pick. */
   function refit(text: string) {
-    fit = fitting(text);
+    fit = fitOf(text);
   }
 
   // The fit runs once typing has rested.
@@ -155,7 +139,7 @@
    * (`peek`); `leaving` while the one on screen goes, so the other comes
    * only once he has.
    */
-  let caw = $state<"page" | "peek">(fitting(firstWords) ? "peek" : "page");
+  let caw = $state<"page" | "peek">(fitOf(firstWords) ? "peek" : "page");
   let leaving = $state(false);
   $effect(() => {
     if ((caw === "page") === (fit !== null)) {
@@ -267,9 +251,7 @@
           detach(start(text, id), "start");
         }}
         label={onboardingWords.ask.replace(/\?$/u, "")}
-        placeholder={tapped && under !== "cards"
-          ? onboardingWords.templateAsks[tapped]
-          : typed.text}
+        placeholder={tapped ? onboardingWords.templateAsks[tapped] : typed.text}
         sendAgain={again}
         sendError={refused}
         sending={starting}
@@ -305,102 +287,43 @@
       </div>
     {/if}
     <!-- As wide as the field, so the chips stand on its composer's column. -->
-    {#if under === "cards"}
-      <div class="relative w-full max-w-c-new-project-field-w">
-        <div
-          data-slot="chips"
-          class={chipsVariants({
-            class: "px-(--chips-px) max-desk:px-space-3",
-          })}
-          style:--chips-px="calc((100% - var(--c-composer-w)) / 2)"
-        >
-          {#each STARTERS as text (text)}
-            <button
-              class={chipVariants({ class: "select-none" })}
-              onclick={() => starter(text)}
-              type="button"
-            >
-              {text}
-            </button>
-          {/each}
-        </div>
+    <div class="relative w-full max-w-c-new-project-field-w">
+      <div
+        data-slot="chips"
+        class={chipsVariants({
+          class: "px-(--chips-px) max-desk:px-space-3",
+        })}
+        style:--chips-px="calc((100% - var(--c-composer-w)) / 2)"
+      >
+        {#each STARTERS as text (text)}
+          <button
+            class={chipVariants({ class: "select-none" })}
+            disabled={starting}
+            onclick={() => starter(text)}
+            type="button"
+          >
+            {text}
+          </button>
+        {/each}
       </div>
-    {:else}
-      {@render templateRow()}
-    {/if}
+    </div>
   </div>
 
-  {#if under === "cards"}
-    <div data-slot="cards" class="w-full">
-      <TemplateCards
-        cards={TEMPLATE_CARDS}
-        {fit}
-        metaOf={(card) => card.meta}
-        onpeekgone={gone}
-        peek={caw === "peek"}
-        peekPresent={!leaving}
-        peekShare={made ? `caw:${made}` : undefined}
-        peekSize={CAW_SIZE}
-        bind:selected={() => tapped, tap}
-      />
-    </div>
-  {/if}
+  <!-- On a phone the field fills the column, inset as the house
+       composer is from its dock: the cards' edges stand on the field's, as
+       the chips' do. -->
+  <div data-slot="cards" class="w-full max-phone:px-space-3">
+    <TemplateCards
+      cards={TEMPLATE_CARDS}
+      {fit}
+      metaOf={(card) => card.meta}
+      onpeekgone={gone}
+      peek={caw === "peek"}
+      peekPresent={!leaving}
+      peekShare={made ? `caw:${made}` : undefined}
+      peekSize={CAW_SIZE}
+      bind:selected={() => tapped, tap}
+      disabled={starting}
+    />
+  </div>
 </main>
-
-{#snippet templateRow()}
-  <!-- One quiet row on the field's column: each template a toggle chip with
-       its glyph in its section hue; a tap picks it (coral edge, the chip's
-       own pressed state) and a second tap clears it; what the picked one
-       runs reads under the row. Folded, one ghost press opens it. -->
-  <div class="w-full max-w-c-new-project-field-w" data-slot="templates">
-    <!-- The field's own width (c-composer-w), so the row starts on its text's edge. -->
-    <div
-      class="mx-auto flex w-c-composer-w flex-col gap-space-2 border-s border-transparent px-space-3 max-desk:mx-space-3 max-desk:w-auto"
-    >
-      {#if under === "fold" && !unfolded && !tapped}
-        <Button
-          class="self-start"
-          label={onboardingWords.showTemplates}
-          onclick={() => {
-            unfolded = true;
-          }}
-          size="sm"
-          variant="ghost"
-        />
-      {:else}
-        <fieldset class="m-0 flex min-w-0 flex-col gap-space-2 border-0 p-0">
-          <legend class="mb-space-2 p-0 type-meta text-ink-muted"
-            >{onboardingWords.templates}</legend
-          >
-          <div class={chipsVariants()}>
-            {#each TEMPLATE_CARDS as card (card.template)}
-              {@const Glyph = card.icon}
-              <!-- Held while the project is made: the send went with the
-                   template it had. -->
-              <button
-                aria-pressed={tapped === card.template}
-                class={chipVariants({ class: "select-none" })}
-                disabled={starting}
-                onclick={() =>
-                  tap(tapped === card.template ? null : card.template)}
-                type="button"
-              >
-                <Glyph
-                  aria-hidden="true"
-                  class="size-icon-md flex-none text-(--hue)"
-                  style="--hue: {card.hue}"
-                />
-                <span>{card.name}</span>
-              </button>
-            {/each}
-          </div>
-        </fieldset>
-        {#if tappedCard}
-          <span aria-live="polite" class="type-meta text-ink-muted"
-            >{tappedCard.meta}</span
-          >
-        {/if}
-      {/if}
-    </div>
-  </div>
-{/snippet}

@@ -88,19 +88,20 @@ export const noticeWords = {
   /** A session reaches a container runtime with no door of CawCo's. */
   containersUntracked: "Containers it starts won't stop with it",
   /**
-   * Your answer to one of its asks (core asks.ts), by how it went. A
+   * Your answer to one of its asks (core asks.ts), by how it went, said to
+   * you in your own conversation: what you did, then what came of it. A
    * permit's line moves from granted to lapsed when its turn ends unspent
    * (hub asks.ts `turnEnded`), as the hub writes it again on the send.
    */
   askAnswered: {
-    ran: "Told you approved it; it ran",
-    failed: "Told you approved it; it failed",
-    declined: "Told you declined it",
-    cut: "Told you approved it; the hub restarted before it finished",
-    granted: "Told you approved it; it may make the call once this turn",
-    lapsed: "Told you approved it; it lapsed unused when the turn ended",
-    answered: "Told you their answer",
-    dismissed: "Told you they dismissed it",
+    ran: "You approved it; it ran",
+    failed: "You approved it; it failed",
+    declined: "You declined it",
+    cut: "You approved it; the hub restarted before it finished",
+    granted: "You approved it; it may make the call once this turn",
+    lapsed: "You approved it; it lapsed unused when the turn ended",
+    answered: "You answered it",
+    dismissed: "You dismissed it",
   } satisfies Record<AskOutcome, string>,
   /**
    * A question's answer told to the session, with the answers given, in
