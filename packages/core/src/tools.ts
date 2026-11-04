@@ -173,6 +173,12 @@ export interface ToolSpec {
   /** Set on no tool; declared for installable apps only, as {@link ToolInstallMethod.native} is. */
   requires?: ToolRequirement[];
   /**
+   * For a tool that signs in to its own service with the machine's person's
+   * own login, which CawCo never holds: how a machine reads whether it is
+   * signed in, and runs its own sign-in.
+   */
+  signin?: ToolSigninSpec;
+  /**
    * How a machine turns this tool's own updates off, for a tool CawCo keeps
    * current ({@link release}): the switches its owner set are CawCo's too.
    */
@@ -187,6 +193,49 @@ export interface ToolSpec {
    */
   wellKnownPaths?: string[];
 }
+
+/**
+ * A tool's own sign-in, run as the tool itself on the machine (agent
+ * tool-signin.ts): CawCo reads what it prints and types what the person
+ * pasted into it, and never sees or keeps the login it stores.
+ */
+export interface ToolSigninSpec {
+  /** Arguments after the binary for the tool's own interactive sign-in: it prints a link, takes the code pasted on its input, and ends once signed in. */
+  login: string[];
+  /** The hosts its sign-in link may be on; no other link on its screen is read. */
+  loginHosts: string[];
+  /** Words, any case, in what {@link status} prints when it is not signed in. */
+  signedOut: string[];
+  /** Arguments after the binary for a read that spends nothing and exits 0 only when signed in. */
+  status: string[];
+}
+
+/**
+ * Whether a tool on a machine is signed in, as its own {@link
+ * ToolSigninSpec.status} read said when it was last read (`at`, ms epoch):
+ * `unknown` when that read said neither, with its words in `detail`.
+ */
+export interface ToolSignin {
+  at: number;
+  detail?: string;
+  state: "signed-in" | "signed-out" | "unknown";
+}
+
+/** A tool's sign-in begun on a machine: the link the person opens, and until when it is kept (ms epoch). */
+export interface ToolSigninChallenge {
+  expiresAt: number;
+  url: string;
+}
+
+/**
+ * A tool sign-in's controls, each the hub's to the machine (agent
+ * tool-signin.ts). Begin (args: tool id) starts the tool's own sign-in and
+ * answers a {@link ToolSigninChallenge}; Complete (args: tool id, the
+ * pasted code) types the code into it, waits for it to end, and answers the
+ * tool's {@link ToolStatus} with its sign-in read again.
+ */
+export const CONTROL_BEGIN_TOOL_SIGNIN = "beginToolSignin";
+export const CONTROL_COMPLETE_TOOL_SIGNIN = "completeToolSignin";
 
 /** What a probe or an install attempt found. The unit every surface renders. */
 export type ToolState =
@@ -208,6 +257,8 @@ export interface ToolStatus {
   id: string;
   /** The {@link ToolInstallMethod.label} that installed it or failed trying. */
   method?: string;
+  /** For a tool with its own sign-in ({@link ToolSpec.signin}), installed here: whether it is signed in. */
+  signin?: ToolSignin;
   state: ToolState;
   /**
    * The version the copy here says: on `installed`; on `failed`, a copy
@@ -558,6 +609,19 @@ export const TOOL_CATALOG: ToolSpec[] = [
     homepage: "https://antigravity.google",
     bin: "agy",
     versionCommand: "agy --version",
+    // Its own reads and sign-in, never a request of CawCo's to Google
+    // (Antigravity's terms §6, https://antigravity.google/terms). `/usage`
+    // in print mode is answered by the CLI itself, spends nothing, and
+    // prints the quota buckets only when signed in; signed out, headless
+    // runs exit with "authentication required"
+    // (https://antigravity.google/docs/cli/headless/). `acp --login`: "Log
+    // in with Google interactively, then exit" (`agy acp --help`, 1.5.0).
+    signin: {
+      status: ["-p", "/usage", "--output-format", "json"],
+      signedOut: ["authentication required"],
+      login: ["acp", "--login"],
+      loginHosts: ["accounts.google.com"],
+    },
     // The official scripts: ~/.local/bin on linux/darwin, LocalAppData on
     // Windows. A static Go binary — no runtime to require.
     wellKnownPaths: ["~/.local/bin/agy", "~/AppData/Local/agy/bin/agy.exe"],

@@ -103,6 +103,7 @@ import {
   SkillFileSchema,
   SpawnPayloadSchema,
   StoppedCommandsSchema,
+  ToolSigninSchema,
   WaitWitnessSchema,
   WorkspaceCutSchema,
   WorkspaceHoldingSchema,
@@ -304,6 +305,8 @@ export const agentTools = sqliteTable(
     version: text("version"),
     method: text("method"),
     detail: text("detail"),
+    /** For a tool with its own sign-in: whether it is signed in there, as the machine last read it. */
+    signin: storedJson(ToolSigninSchema)("signin"),
     /** When this was learnt. */
     at: timestamp("at").notNull(),
   },

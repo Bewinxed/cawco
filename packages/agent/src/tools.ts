@@ -18,6 +18,7 @@ import type {
   ToolFootprint,
   ToolInstallMethod,
   ToolPlatform,
+  ToolSignin,
   ToolSpec,
   ToolStatus,
   ToolUpdateSwitches,
@@ -881,7 +882,114 @@ const probeTool = async (
  */
 export const probeTools = async (): Promise<ToolStatus[]> => {
   probeStarted();
-  return await Promise.all(TOOL_CATALOG.map(probeReported));
+  return await Promise.all(TOOL_CATALOG.map((spec) => probeToolStatus(spec)));
+};
+
+/**
+ * One catalog tool as {@link probeTools} reports it: for a tool with its own
+ * sign-in that is installed here, with whether it is signed in
+ * ({@link toolSignin}).
+ */
+export const probeToolStatus = async (
+  spec: ToolSpec,
+  { fresh = false }: { fresh?: boolean } = {}
+): Promise<ToolStatus> => {
+  const status = await probeReported(spec);
+  return spec.signin && status.state === "installed"
+    ? {
+        ...status,
+        signin: await toolSignin(spec, { fresh, version: status.version }),
+      }
+    : status;
+};
+
+/** How long a tool's sign-in read stands before a probe reads it again. */
+const SIGNIN_FRESH_MS = 10 * 60_000;
+
+/** How long a tool's sign-in read may run: it starts the tool, which may start its own server. */
+const SIGNIN_READ_MS = 60_000;
+
+/** Each tool's last sign-in read, and the version of the copy it read. */
+const signins = new Map<string, { signin: ToolSignin; version?: string }>();
+
+/**
+ * Whether `spec`'s copy here is signed in, by its own read
+ * ({@link ToolSigninSpec.status}): signed in when it exits 0 saying none of
+ * its signed-out words; signed out when it says one; else unknown, in its
+ * own words. A read stands {@link SIGNIN_FRESH_MS} for the same copy
+ * (`version`); `fresh` reads again. Spends nothing of the person's: the
+ * read is the tool's own, run as it is.
+ */
+const toolSignin = async (
+  spec: ToolSpec,
+  { fresh = false, version }: { fresh?: boolean; version?: string } = {}
+): Promise<ToolSignin> => {
+  const kept = signins.get(spec.id);
+  if (
+    !fresh &&
+    kept &&
+    kept.version === version &&
+    Date.now() - kept.signin.at < SIGNIN_FRESH_MS
+  ) {
+    return kept.signin;
+  }
+  const signin = await readSignin(spec);
+  signins.set(spec.id, { signin, ...(version ? { version } : {}) });
+  return signin;
+};
+
+/** {@link toolSignin}'s read itself. */
+const readSignin = async (spec: ToolSpec): Promise<ToolSignin> => {
+  const words = spec.signin;
+  const bin = await toolBinary(spec);
+  if (!(words && bin)) {
+    return {
+      state: "unknown",
+      detail: toolWords.signinNoCopy(spec.name),
+      at: Date.now(),
+    };
+  }
+  const read = await readWithin(SIGNIN_READ_MS, async (signal) => {
+    const child = Bun.spawn([bin, ...words.status], {
+      env: toolEnv(),
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      signal,
+    });
+    const [code, out, err] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    return { code, out, err };
+  }).catch(() => undefined);
+  const asked = read?.kind === "answered" ? read.value : undefined;
+  if (!asked) {
+    return {
+      state: "unknown",
+      detail: toolWords.signinSilent(spec.name, SIGNIN_READ_MS / 1000),
+      at: Date.now(),
+    };
+  }
+  const said = Bun.stripANSI(`${asked.out}\n${asked.err}`).trim();
+  const lower = said.toLowerCase();
+  if (words.signedOut.some((word) => lower.includes(word.toLowerCase()))) {
+    return { state: "signed-out", detail: tail(said), at: Date.now() };
+  }
+  return asked.code === 0
+    ? { state: "signed-in", at: Date.now() }
+    : {
+        state: "unknown",
+        detail: toolWords.signinUnread(spec.name, asked.code, tail(said)),
+        at: Date.now(),
+      };
+};
+
+/** A tool's sign-in may have moved (its own sign-in ended here): its next read is fresh, and the hub hears. */
+export const signinMoved = (id: string): void => {
+  signins.delete(id);
+  toolsMoved();
 };
 
 /**

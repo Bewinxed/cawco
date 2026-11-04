@@ -329,6 +329,7 @@ import {
 } from "./stage";
 import { setStageCloneSink } from "./stage-clone";
 import type { RenderAsk } from "./stage-render";
+import { endToolSignins } from "./tool-signin";
 import { onToolsMoved, probeTools } from "./tools";
 import { UsageScans } from "./usage/scans";
 import {
@@ -4053,6 +4054,7 @@ export const runDaemon = (rediscover = false): void => {
   process.on("exit", () => {
     endSignIns();
     endProviderSignIns();
+    endToolSignins();
   });
   // Said, then ended: a throw nothing caught may be a listener's error
   // event, and an agent that carried on past one stayed up without serving

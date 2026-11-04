@@ -101,6 +101,7 @@ import type {
   SkillFile,
   SpawnPayload,
   TabNamed,
+  ToolSigninChallenge,
   ToolSpec,
   ToolState,
   ToolStatus,
@@ -184,12 +185,14 @@ import {
   CONTROL_ACCOUNT_LENT,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
   CONTROL_BEGIN_PROVIDER_LOGIN,
+  CONTROL_BEGIN_TOOL_SIGNIN,
   CONTROL_BORROW_ACCOUNT,
   CONTROL_CANCEL_COMMAND,
   CONTROL_CARRY_SESSIONS,
   CONTROL_CHECK_ACCOUNT,
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
+  CONTROL_COMPLETE_TOOL_SIGNIN,
   CONTROL_CONTEXT_USAGE,
   CONTROL_FORGET_ACCOUNT,
   CONTROL_FORGET_CREDENTIALS,
@@ -12301,6 +12304,18 @@ export const createServer = (
   /** A machine that did not answer a sign-in step, in a sentence. */
   const awayWords = (machineId: string, answer: Unanswered) =>
     `${silentWords(machineId, answer)}.`;
+
+  /**
+   * A tool's own sign-in a machine has begun and not finished (core
+   * `ToolSpec.signin`), by `machineId:toolId`: its link, kept until it is
+   * used or lapses, so a screen that reloads or reopens shows that link
+   * again instead of starting another.
+   */
+  const pendingToolSignins = new Map<string, ToolSigninChallenge>();
+  /** How long the machine may take to show a tool's sign-in link. */
+  const TOOL_SIGNIN_BEGIN_MS = 90_000;
+  /** How long the machine may take to finish a tool's sign-in once its code is typed. */
+  const TOOL_SIGNIN_COMPLETE_MS = 180_000;
 
   /**
    * Starts moving one credential out of a machine's own store into the
@@ -33149,6 +33164,87 @@ export const createServer = (
         catalog: TOOL_CATALOG,
         policies: db.listToolPolicies(),
       }))
+      // A tool's own sign-in on a machine (core `ToolSpec.signin`: the
+      // Antigravity CLI's Google sign-in): the machine runs the tool's own
+      // sign-in and answers its link, which the person opens in their own
+      // browser. A sign-in already waiting there answers its kept link.
+      .post(
+        "/api/machines/:machineId/tools/:toolId/signin",
+        async ({ params, status }) => {
+          const spec = toolSpec(params.toolId);
+          if (!spec?.signin) {
+            return status(404, `${params.toolId} has no sign-in of its own.`);
+          }
+          const key = `${params.machineId}:${params.toolId}`;
+          const kept = pendingToolSignins.get(key);
+          if (kept && kept.expiresAt > Date.now()) {
+            return kept;
+          }
+          pendingToolSignins.delete(key);
+          const answer = await callAgent(
+            params.machineId,
+            CONTROL_BEGIN_TOOL_SIGNIN,
+            [params.toolId],
+            TOOL_SIGNIN_BEGIN_MS
+          );
+          switch (answer.kind) {
+            case "unanswered":
+              return status(503, awayWords(params.machineId, answer));
+            case "answered": {
+              if (!answer.value.ok) {
+                return status(
+                  422,
+                  answer.value.error ?? "The sign-in did not start."
+                );
+              }
+              const challenge = answer.value.result as ToolSigninChallenge;
+              pendingToolSignins.set(key, challenge);
+              return challenge;
+            }
+            default:
+              throw unreachable(answer);
+          }
+        }
+      )
+      // The code the person pasted, typed into the machine's waiting
+      // sign-in; answered with the tool's status there, its sign-in read
+      // again, which is the machine's cell from now.
+      .post(
+        "/api/machines/:machineId/tools/:toolId/signin/complete",
+        { body: t.Object({ code: t.String() }) },
+        async ({ params, body, status }) => {
+          const spec = toolSpec(params.toolId);
+          if (!spec?.signin) {
+            return status(404, `${params.toolId} has no sign-in of its own.`);
+          }
+          const answer = await callAgent(
+            params.machineId,
+            CONTROL_COMPLETE_TOOL_SIGNIN,
+            [params.toolId, body.code],
+            TOOL_SIGNIN_COMPLETE_MS
+          );
+          switch (answer.kind) {
+            case "unanswered":
+              return status(503, awayWords(params.machineId, answer));
+            case "answered": {
+              // Used or refused, the machine's sign-in is spent.
+              pendingToolSignins.delete(`${params.machineId}:${params.toolId}`);
+              const tool = peekToolStatus({ result: answer.value.result });
+              if (!(answer.value.ok && tool)) {
+                return status(
+                  422,
+                  answer.value.error ?? "The sign-in did not finish."
+                );
+              }
+              db.setAgentToolCell(params.machineId, tool);
+              publishInstances(params.machineId);
+              return tool;
+            }
+            default:
+              throw unreachable(answer);
+          }
+        }
+      )
       .put(
         "/api/tools/:id",
         {

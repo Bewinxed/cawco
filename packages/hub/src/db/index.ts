@@ -4241,6 +4241,7 @@ const make = async (path: string): Promise<DbShape> => {
     ...(row.version === null ? {} : { version: row.version }),
     ...(row.method === null ? {} : { method: row.method }),
     ...(row.detail === null ? {} : { detail: row.detail }),
+    ...(row.signin === null ? {} : { signin: row.signin }),
   });
 
   /** Each machine's tool statuses by catalog id; one machine's with `machineId`. */
@@ -4281,6 +4282,7 @@ const make = async (path: string): Promise<DbShape> => {
           version: status.version ?? null,
           method: status.method ?? null,
           detail: status.detail ?? null,
+          signin: status.signin ?? null,
           at: new Date(status.at),
         };
         tx.insert(agentTools)

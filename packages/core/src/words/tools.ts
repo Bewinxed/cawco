@@ -70,4 +70,33 @@ export const toolWords = {
   /** That mark's name for a screen reader, and its popover's head. */
   notUpdatedHead: (name: string, version: string, machine: string) =>
     `${name} ${version} on ${machine} didn't update`,
+
+  /** A tool's sign-in read (agent tools.ts `toolSignin`) found no copy to ask. */
+  signinNoCopy: (name: string) =>
+    `${name} isn't on this machine, so whether it is signed in can't be read.`,
+  /** The read ended saying neither signed in nor signed out: its exit and last lines. */
+  signinUnread: (name: string, code: number, said: string) =>
+    `${name} didn't say whether it is signed in (exit ${code})${said ? `: ${said}` : ""}`,
+  /** The read did not end in time. */
+  signinSilent: (name: string, seconds: number) =>
+    `${name} didn't say whether it is signed in within ${seconds} s, or couldn't be started.`,
+  /** A sign-in asked of a tool without one of its own. */
+  signinNone: (name: string) => `${name} has no sign-in of its own.`,
+  /** A sign-in asked of a tool not on the machine. */
+  signinNotInstalled: (name: string) =>
+    `${name} isn't installed on this machine. Install it in Configure › Command-line tools, then sign in.`,
+  /** The tool's sign-in printed no link it may be signed in at, or ended first: what its screen said. */
+  signinNoLink: (name: string, said: string) =>
+    `${name}'s sign-in showed no sign-in link, so it was stopped. ${said ? `Its screen said: ${said}` : "Its screen said nothing."}`,
+  /** A code sent with no sign-in waiting for it. */
+  signinNotWaiting: (name: string) =>
+    `No ${name} sign-in is waiting for a code on this machine: it ended or was never started. Start the sign-in again.`,
+  /** A code that was empty. */
+  signinNoCode: "Paste the code from the sign-in page.",
+  /** The sign-in did not end in time after the code. */
+  signinNotEnded: (name: string, seconds: number) =>
+    `${name} didn't finish signing in within ${seconds} s of the code, so the sign-in was stopped. Start it again.`,
+  /** The sign-in ended without signing in: its exit and what its screen said, the code never shown. */
+  signinFailed: (name: string, code: number, said: string) =>
+    `${name}'s sign-in ended without signing in (exit ${code}). Start it again for a new link.${said ? ` Its screen said: ${said}` : ""}`,
 } as const;

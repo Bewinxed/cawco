@@ -64,7 +64,9 @@ import {
   CONTAINERS_ENDED,
   CONTAINERS_UNTRACKED,
   CONTROL_ABANDON,
+  CONTROL_BEGIN_TOOL_SIGNIN,
   CONTROL_CARRY_SESSIONS,
+  CONTROL_COMPLETE_TOOL_SIGNIN,
   CONTROL_FLEET_SETTINGS,
   CONTROL_FORGET_CREDENTIALS,
   CONTROL_GIT_CHANGES,
@@ -267,6 +269,7 @@ import { endProc, keeperLimits, procEpoch } from "./sessiond-client";
 import { stopStages } from "./stage";
 import { StreamsSoFar } from "./stream-so-far";
 import { forgetTaken, hasTaken, noteTaken } from "./taken-sends";
+import { beginToolSignin, completeToolSignin } from "./tool-signin";
 import { installTool, probeTools } from "./tools";
 import { cloneHolding, workspaceHolding } from "./workspace-records";
 
@@ -6576,6 +6579,12 @@ export class SessionSupervisor {
       }
       if (method === "listTools") {
         return await probeTools();
+      }
+      if (method === CONTROL_BEGIN_TOOL_SIGNIN) {
+        return await beginToolSignin(String(args[0]));
+      }
+      if (method === CONTROL_COMPLETE_TOOL_SIGNIN) {
+        return await completeToolSignin(String(args[0]), String(args[1] ?? ""));
       }
       if (method === "installTool") {
         // The policy's pin, the newest release the hub sends a tool it keeps

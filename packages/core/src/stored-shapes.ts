@@ -253,6 +253,7 @@ import type {
 } from "./stream-relay";
 import type { WaitWitness as WaitWitnessType } from "./task-views";
 import type {
+  ToolSignin as ToolSigninType,
   ToolState as ToolStateType,
   ToolStatus as ToolStatusType,
 } from "./tools";
@@ -1003,6 +1004,13 @@ const MachineCapabilitiesShape = z.object({
 export const MachineCapabilitiesSchema: z.ZodType<MachineCapabilitiesType> =
   MachineCapabilitiesShape;
 
+const ToolSigninShape = z.object({
+  at: z.number(),
+  detail: z.string().optional(),
+  state: z.enum(["signed-in", "signed-out", "unknown"]),
+});
+export const ToolSigninSchema: z.ZodType<ToolSigninType> = ToolSigninShape;
+
 const ToolStateShape = z.enum([
   "installed",
   "missing",
@@ -1016,6 +1024,7 @@ const ToolStatusShape = z.object({
   detail: z.string().optional(),
   id: z.string(),
   method: z.string().optional(),
+  signin: ToolSigninShape.optional(),
   state: ToolStateShape,
   version: z.string().optional(),
 });
@@ -2397,6 +2406,7 @@ prove<
     Same<z.output<typeof WorkspaceToolShape>, WorkspaceToolType>,
     Same<z.output<typeof MachineCapabilityShape>, MachineCapabilityType>,
     Same<z.output<typeof MachineCapabilitiesShape>, MachineCapabilitiesType>,
+    Same<z.output<typeof ToolSigninShape>, ToolSigninType>,
     Same<z.output<typeof ToolStateShape>, ToolStateType>,
     Same<z.output<typeof ToolStatusShape>, ToolStatusType>,
     Same<z.output<typeof AgentRowShape>, AgentRowType>,

@@ -22649,6 +22649,159 @@
         }
       }
     },
+    "/api/machines/{machineId}/tools/{toolId}/signin": {
+      "post": {
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "toolId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiMachinesByMachineIdToolsByToolIdSignin",
+        "responses": {
+          "200": {
+            "description": "postApiMachinesByMachineIdToolsByToolIdSignin 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolSigninChallenge"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiMachinesByMachineIdToolsByToolIdSignin 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiMachinesByMachineIdToolsByToolIdSignin 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiMachinesByMachineIdToolsByToolIdSignin 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/machines/{machineId}/tools/{toolId}/signin/complete": {
+      "post": {
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "toolId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiMachinesByMachineIdToolsByToolIdSigninComplete",
+        "responses": {
+          "200": {
+            "description": "postApiMachinesByMachineIdToolsByToolIdSigninComplete 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolStatus"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiMachinesByMachineIdToolsByToolIdSigninComplete 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiMachinesByMachineIdToolsByToolIdSigninComplete 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiMachinesByMachineIdToolsByToolIdSigninComplete 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tools/{id}": {
       "put": {
         "parameters": [
@@ -35543,6 +35696,10 @@
           "method": {
             "description": "The {@link ToolInstallMethod.label} that installed it or failed trying.",
             "type": "string"
+          },
+          "signin": {
+            "$ref": "#/components/schemas/ToolSignin",
+            "description": "For a tool with its own sign-in ({@link ToolSpec.signin}), installed here: whether it is signed in."
           },
           "state": {
             "$ref": "#/components/schemas/ToolState"
@@ -53476,6 +53633,10 @@
               "$ref": "#/components/schemas/ToolRequirement"
             }
           },
+          "signin": {
+            "$ref": "#/components/schemas/ToolSigninSpec",
+            "description": "For a tool that signs in to its own service with the machine's person's\nown login, which CawCo never holds: how a machine reads whether it is\nsigned in, and runs its own sign-in."
+          },
           "updatesOff": {
             "$ref": "#/components/schemas/ToolUpdateSwitches",
             "description": "How a machine turns this tool's own updates off, for a tool CawCo keeps\ncurrent ({@link release}): the switches its owner set are CawCo's too."
@@ -53638,6 +53799,46 @@
           "id"
         ]
       },
+      "ToolSigninSpec": {
+        "description": "A tool's own sign-in, run as the tool itself on the machine (agent\ntool-signin.ts): CawCo reads what it prints and types what the person\npasted into it, and never sees or keeps the login it stores.",
+        "type": "object",
+        "properties": {
+          "login": {
+            "description": "Arguments after the binary for the tool's own interactive sign-in: it prints a link, takes the code pasted on its input, and ends once signed in.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "loginHosts": {
+            "description": "The hosts its sign-in link may be on; no other link on its screen is read.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "signedOut": {
+            "description": "Words, any case, in what {@link status} prints when it is not signed in.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "description": "Arguments after the binary for a read that spends nothing and exits 0 only when signed in.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "login",
+          "loginHosts",
+          "signedOut",
+          "status"
+        ]
+      },
       "ToolUpdateSwitches": {
         "description": "How a machine turns a tool's own updates off, as the tool itself decides\nit: a variable whose value is on ({@link switchOn}; any value at all for\none of `anyValue`) in the `env` of the tool's settings, else in the\nenvironment the tool runs with, which its settings' `env` stands over.\nThe settings are what the tool's own merge engine resolves (`engine`):\nthe user's and every managed source, ranked as the tool ranks them.\n`automatic` turns off the tool's own automatic updates, and so CawCo's;\n`every` turns off every update, a press's included.",
         "type": "object",
@@ -53731,6 +53932,52 @@
           "id",
           "pinnedVersion",
           "required"
+        ]
+      },
+      "ToolSigninChallenge": {
+        "description": "A tool's sign-in begun on a machine: the link the person opens, and until when it is kept (ms epoch).",
+        "type": "object",
+        "properties": {
+          "expiresAt": {
+            "type": "number"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expiresAt",
+          "url"
+        ]
+      },
+      "ToolSignin": {
+        "description": "Whether a tool on a machine is signed in, as its own {@link * ToolSigninSpec.status} read said when it was last read (`at`, ms epoch):\n`unknown` when that read said neither, with its words in `detail`.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ToolSigninState"
+          }
+        },
+        "required": [
+          "at",
+          "state"
+        ]
+      },
+      "ToolState": {
+        "description": "What a probe or an install attempt found. The unit every surface renders.",
+        "type": "string",
+        "enum": [
+          "failed",
+          "installed",
+          "installing",
+          "missing",
+          "unsupported"
         ]
       },
       "FleetMcpServer": {
@@ -62565,17 +62812,6 @@
           "path"
         ]
       },
-      "ToolState": {
-        "description": "What a probe or an install attempt found. The unit every surface renders.",
-        "type": "string",
-        "enum": [
-          "failed",
-          "installed",
-          "installing",
-          "missing",
-          "unsupported"
-        ]
-      },
       "AccountSetupStep": {
         "type": "string",
         "enum": [
@@ -63368,6 +63604,14 @@
           "routine",
           "session",
           "you"
+        ]
+      },
+      "ToolSigninState": {
+        "type": "string",
+        "enum": [
+          "signed-in",
+          "signed-out",
+          "unknown"
         ]
       },
       "TranscriptBlockState": {
