@@ -3986,6 +3986,33 @@ export const createTasks = (store: TaskStore) => {
     }
   };
 
+  /**
+   * Catches up a project's index from its folder, when it has one: as the
+   * hub starts, and as a forgotten project's folder comes back
+   * (project-trash.ts). A stages.md that names the retired mover is
+   * written again first, and one that is only the code template then goes,
+   * so the project reads the template as the hub has it. A failure is
+   * said in the log; the index stands as it was.
+   */
+  const catchUp = async (projectId: string): Promise<void> => {
+    if (!(await hasProjectFolder(projectId))) {
+      return;
+    }
+    try {
+      await inTurn(projectId, async () => {
+        await retireMover(projectId);
+        await dropTemplateCopy(projectId);
+        await fillTypes(projectId);
+        await migrateLinks(projectId);
+      });
+      await sync(projectId);
+    } catch (error) {
+      console.warn(
+        `[tasks] project ${projectId}'s task index was not caught up: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  };
+
   return {
     /** The project's tasks from the index, caught up with the files first. */
     list: listTasks,
@@ -4690,29 +4717,15 @@ export const createTasks = (store: TaskStore) => {
 
     /**
      * Catches up the index of every project that has a folder: what the hub
-     * does as it starts. A stages.md that names the retired mover is
-     * written again first, and one that is only the code template then goes,
-     * so the project reads the template as the hub has it.
+     * does as it starts ({@link catchUp}, each in turn).
      */
     async syncAll(): Promise<void> {
       for (const projectId of store.projectIds()) {
-        if (await hasProjectFolder(projectId)) {
-          try {
-            await inTurn(projectId, async () => {
-              await retireMover(projectId);
-              await dropTemplateCopy(projectId);
-              await fillTypes(projectId);
-              await migrateLinks(projectId);
-            });
-            await sync(projectId);
-          } catch (error) {
-            console.warn(
-              `[tasks] project ${projectId}'s task index was not caught up: ${error instanceof Error ? error.message : String(error)}`
-            );
-          }
-        }
+        await catchUp(projectId);
       }
     },
+
+    catchUp,
   };
 };
 

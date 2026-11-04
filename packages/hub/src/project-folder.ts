@@ -45,6 +45,7 @@ import { type Ran, runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
+import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { Elysia, status, t } from "elysia";
 
 /**
@@ -52,8 +53,8 @@ import { Elysia, status, t } from "elysia";
  * core's one rule, which the agent's workspace policy reads them by too.
  */
 const PROJECTS_DIR = hubProjectsDir();
-/** A deleted project's folder, kept rather than erased. */
-const TRASH_DIR = join(PROJECTS_DIR, ".trash");
+/** What forgetting a project set aside, kept rather than erased (project-trash.ts). */
+export const PROJECT_TRASH_DIR = join(PROJECTS_DIR, ".trash");
 
 /**
  * Reads and writes stop here, text or bytes: the folder is a git repository
@@ -521,6 +522,8 @@ export const turnTaker = () => {
 const inTurn = turnTaker();
 /** Projects whose folder this process has seen made, so a read skips the check. */
 const ready = new Set<string>();
+/** Projects whose folder went to the trash since the hub started: never made again until it comes back. */
+const forgotten = new Set<string>();
 
 /** `lstat`, with undefined for a path that is not there. */
 const lstatIfThere = async (path: string): Promise<Stats | undefined> => {
@@ -545,6 +548,11 @@ const exists = async (path: string): Promise<boolean> =>
 const prepare = async (projectId: string, root: string): Promise<void> => {
   if (ready.has(projectId)) {
     return;
+  }
+  // A read that outlived its project's forget (a task's triage, a waits
+  // read) would make a new empty folder in the place its own goes back to.
+  if (forgotten.has(projectId)) {
+    throw new FolderRefusal(404, projectTrashWords.forgottenFolder(projectId));
   }
   await mkdir(root, { recursive: true });
   if (!(await exists(join(root, ".git")))) {
@@ -1843,16 +1851,19 @@ export const hasProjectFolder = (projectId: string): Promise<boolean> =>
   exists(join(projectRoot(projectId), ".git"));
 
 /**
- * Moves a deleted project's folder, history and all, to
- * `<data>/projects/.trash/<projectId>-<time>` (never erased). Answers where it
- * went, or undefined when the project never had a folder.
+ * Moves a forgotten project's folder, history and all, to
+ * `<data>/projects/.trash/<entry>` (never erased; project-trash.ts names the
+ * entry). Answers where it went, or undefined when the project never had a
+ * folder.
  */
 export const trashProjectFolder = async (
-  projectId: string
+  projectId: string,
+  entry: string
 ): Promise<string | undefined> => {
   const root = projectRoot(projectId);
   return await inTurn(projectId, async () => {
     ready.delete(projectId);
+    forgotten.add(projectId);
     for (const key of timesRead.keys()) {
       if (key.startsWith(`${projectId}\0`)) {
         timesRead.delete(key);
@@ -1861,13 +1872,40 @@ export const trashProjectFolder = async (
     if (!(await exists(root))) {
       return;
     }
-    await mkdir(TRASH_DIR, { recursive: true });
-    const target = join(
-      TRASH_DIR,
-      `${projectId}-${new Date().toISOString().replaceAll(":", "-")}`
-    );
+    await mkdir(PROJECT_TRASH_DIR, { recursive: true });
+    const target = join(PROJECT_TRASH_DIR, entry);
     await rename(root, target);
     return target;
+  });
+};
+
+/**
+ * Moves a forgotten project's folder back from `<data>/projects/.trash/<entry>`
+ * to its place, and lets it be made again on first use; `entry` null: the
+ * project had no folder, which is now made on first use as any project's.
+ * Refused (409) when something stands there already: a move would put the
+ * one folder over the other.
+ */
+export const untrashProjectFolder = async (
+  projectId: string,
+  entry: string | null
+): Promise<void> => {
+  const root = projectRoot(projectId);
+  await inTurn(projectId, async () => {
+    if (entry === null) {
+      forgotten.delete(projectId);
+      return;
+    }
+    if (await exists(root)) {
+      throw new FolderRefusal(
+        409,
+        projectTrashWords.folderTaken(projectId, root)
+      );
+    }
+    await mkdir(PROJECTS_DIR, { recursive: true });
+    await rename(join(PROJECT_TRASH_DIR, entry), root);
+    ready.delete(projectId);
+    forgotten.delete(projectId);
   });
 };
 

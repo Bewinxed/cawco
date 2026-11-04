@@ -458,6 +458,8 @@ import {
   crossSiteRefusal,
   dashboardOriginOf,
   GATED_PAGE_PARAM,
+  PRESENCE_HEADER,
+  PRESENCE_ID,
   pageOrigin,
 } from "@cawco/core/browser-gate";
 import {
@@ -482,6 +484,7 @@ import {
   type ForgeVerdict,
   readForgeAsk,
 } from "@cawco/core/forge-post";
+import type { ForgottenProject } from "@cawco/core/forgotten-project";
 import {
   type HandoverCommand,
   type HandoverEvent,
@@ -563,6 +566,7 @@ import { leakWords } from "@cawco/core/words/leaks";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
 import { noticeWords } from "@cawco/core/words/notices";
 import { projectWords } from "@cawco/core/words/project";
+import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { type RelaunchFor, relaunchWords } from "@cawco/core/words/relaunch";
 import { spawnWords } from "@cawco/core/words/spawn";
 import { turnWords } from "@cawco/core/words/turns";
@@ -932,7 +936,6 @@ import {
   projectFolderRoutes,
   projectRoot,
   readFolderFile,
-  trashProjectFolder,
 } from "./project-folder";
 import { type MergeDeps, mergeSameRemote } from "./project-merge";
 import { createProjectOffers, projectOfferRoutes } from "./project-offers";
@@ -949,6 +952,7 @@ import {
 } from "./project-settings";
 import { createProjectStarters, starterRoutes } from "./project-starters";
 import { createProjectStops } from "./project-stops";
+import { projectTrash, RestoreRefusal } from "./project-trash";
 import { cloneRepository, NOTHING_READ, readCheckout } from "./projects";
 import { createProviderRetries } from "./provider-retries";
 import { createPush, pushRoutes } from "./push";
@@ -22552,6 +22556,81 @@ export const createServer = (
     fleetSyncs.changed("a project folder moved", { recheck: true });
   };
 
+  /** Forgotten projects, set aside in the trash and brought back (project-trash.ts). */
+  const forgottenProjects = projectTrash(db);
+
+  /**
+   * The presence id a request's tab sent (core `PRESENCE_HEADER`), when it is
+   * one: the journal names who asked by it.
+   */
+  const presenceSaid = (request: Request): string | null => {
+    const said = request.headers.get(PRESENCE_HEADER);
+    return said && PRESENCE_ID.test(said) ? said : null;
+  };
+
+  /** Who asked, as a journal line names them: the tab's presence and the caller the gate read. */
+  const askerOf = (request: Request): string => {
+    const caller = hubAuth.callerOf(request, null);
+    return `presence=${presenceSaid(request) ?? "none"} caller=${callerWords(caller)}`;
+  };
+
+  /**
+   * A project forgotten or brought back: every dashboard hears of the
+   * projects again, each machine it has or had a place on takes its places
+   * (and their hooks) again, and a folder that moved has every boundary that
+   * read it checked.
+   */
+  const projectMoved = (
+    projectId: string,
+    machines: Iterable<string>,
+    folderMoved: boolean
+  ): void => {
+    projectsChanged();
+    for (const machineId of new Set(machines)) {
+      placesChanged(machineId, projectId);
+    }
+    if (folderMoved) {
+      projectFolderMoved();
+    }
+  };
+
+  /**
+   * A project's browsers removed (their profiles, its sign-ins) as it is
+   * forgotten: undefined once they are, else what kept one, in the hub's
+   * words, and the project is kept.
+   */
+  const browsersKept = async (
+    projectId: string
+  ): Promise<string | undefined> => {
+    try {
+      await browsers.forgetProject(projectId);
+    } catch (error) {
+      if (error instanceof BrowserRefusal) {
+        return error.message;
+      }
+      throw error;
+    }
+  };
+
+  /** A caller as a journal line names it: its kind, and its device, session or machine. */
+  const callerWords = (caller: Caller): string => {
+    switch (caller.kind) {
+      case "owner":
+        return caller.device
+          ? `owner:${JSON.stringify(caller.device.name)}`
+          : "owner";
+      case "session":
+        return `session:${caller.instanceId ?? "unknown"}`;
+      case "machine":
+        return `machine:${caller.machineId}`;
+      case "hub":
+      case "anonymous":
+        return caller.kind;
+      default:
+        throw unreachable(caller);
+    }
+  };
+
   const mcpChanges = new FleetMcpChanges(db.fleetConfig().mcp);
   /**
    * Every change of the fleet's MCP servers passes here: a write, a removal, a
@@ -35339,11 +35418,22 @@ export const createServer = (
           }
         }
       )
-      .delete("/api/projects/:id", async ({ params, status }) => {
+      // Every project forgotten that the trash can bring back, newest
+      // first, with what each brings (project-trash.ts).
+      .get("/api/projects/forgotten", (): Promise<ForgottenProject[]> =>
+        forgottenProjects.forgotten()
+      )
+      .delete("/api/projects/:id", async ({ params, status, request }) => {
+        const asked = askerOf(request);
+        const said = (outcome: string) =>
+          console.log(
+            `${projectTrashWords.forgetLine(params.id)} ${asked} outcome=${outcome}`
+          );
         // Never orphaned: a project is forgotten only once nothing of it runs.
         const project = db.project(params.id);
         const still = project ? projectStops.stillRunning(params.id) : 0;
         if (project && still > 0) {
+          said(`refused running=${still}`);
           return status(
             409,
             still === 1
@@ -35353,42 +35443,84 @@ export const createServer = (
         }
         // Its browsers go first (their profiles, its sign-ins): one that
         // can't be removed keeps the project, in the hub's words.
-        if (project) {
-          try {
-            await browsers.forgetProject(params.id);
-          } catch (error) {
-            // The project is kept: a conflict, whatever stopped its
-            // browser's removal, said in the hub's words.
-            if (error instanceof BrowserRefusal) {
-              return status(409, error.message);
-            }
-            throw error;
-          }
+        const kept = project ? await browsersKept(params.id) : undefined;
+        if (kept) {
+          said("refused browsers");
+          return status(409, kept);
         }
         const machines = new Set(
           db.project(params.id)?.places.map((place) => place.machineId)
         );
-        db.deleteProject(params.id);
+        // What its delete takes is kept in the trash beside its folder, for
+        // a restore (project-trash.ts).
+        const forgot = await forgottenProjects.forget(
+          params.id,
+          presenceSaid(request)
+        );
+        if (!forgot) {
+          said("none");
+          return { ok: true };
+        }
+        said(
+          `forgotten name=${JSON.stringify(forgot.name)} trash=${forgot.entry} rows=${forgot.rows} sessions=${forgot.sessions} folder=${forgot.folder ? "moved" : "none"}`
+        );
         // Its pages' origin goes with it (its port's row went in the
         // delete); each machine preview its pages showed keeps its own,
         // which ends with that artifact.
         previewListeners.release(projectOrigin(params.id));
-        projectsChanged();
         // Its hooks leave every place it had.
-        for (const machineId of machines) {
-          placesChanged(machineId, params.id);
-        }
-        // The project is gone either way; a folder that could not be moved
-        // stays where it was, and the hub says so in its log.
-        await trashProjectFolder(params.id).then(
-          projectFolderMoved,
-          (error: unknown) =>
-            console.warn(
-              `[hub] project ${params.id}'s folder was not moved to the trash: ${error instanceof Error ? error.message : String(error)}`
-            )
-        );
+        projectMoved(params.id, machines, forgot.folder !== undefined);
         return { ok: true };
       })
+      // A forgotten project brought back from the trash, as it was when it
+      // was forgotten (project-trash.ts): its newest entry, or the one
+      // forgotten at `forgottenAt`; `name` names one forgotten before the hub
+      // kept its name. Refused, in the hub's words, while a live project
+      // holds its id, a place of it or its folder's place.
+      .post(
+        "/api/projects/:id/restore",
+        {
+          body: t.Optional(
+            t.Object({
+              name: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
+              forgottenAt: t.Optional(t.Number()),
+            })
+          ),
+        },
+        async ({ params, body, status, request }) => {
+          const asked = askerOf(request);
+          try {
+            const restored = await forgottenProjects.restore(
+              params.id,
+              body ?? {}
+            );
+            // Its folder's task files, read into the index again.
+            await tasks.catchUp(params.id);
+            console.log(
+              `${projectTrashWords.restoreLine(params.id)} ${asked} outcome=restored name=${JSON.stringify(restored.name)} rows=${restored.brought.rows} sessions=${restored.brought.sessions} left=${JSON.stringify(restored.left)}`
+            );
+            // Its hooks go back to every place it has.
+            projectMoved(
+              params.id,
+              db.project(params.id)?.places.map((place) => place.machineId) ??
+                [],
+              restored.brought.folder
+            );
+            return restored;
+          } catch (error) {
+            if (
+              error instanceof RestoreRefusal ||
+              error instanceof FolderRefusal
+            ) {
+              console.log(
+                `${projectTrashWords.restoreLine(params.id)} ${asked} outcome=refused status=${error.status}: ${error.message}`
+              );
+              return status(error.status, error.message);
+            }
+            throw error;
+          }
+        }
+      )
       // Another checkout of the project's repository, named by hand.
       .post(
         "/api/projects/:id/places",

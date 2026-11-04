@@ -26849,6 +26849,175 @@
         }
       }
     },
+    "/api/projects/forgotten": {
+      "get": {
+        "operationId": "getApiProjectsForgotten",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsForgotten 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiProjectsForgotten200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/restore": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "forgottenAt": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdRestore",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdRestore 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRestored"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdRestore 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdRestore 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdRestore 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdRestore 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdRestore 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdRestore 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdRestore 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdRestore 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdRestore 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiProjectsByIdRestore 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/places": {
       "post": {
         "parameters": [
@@ -32894,6 +33063,12 @@
         "required": [
           "ok"
         ]
+      },
+      "getApiProjectsForgotten200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/ForgottenProject"
+        }
       },
       "postApiProjectsByIdPlaces200": {
         "type": "object",
@@ -55668,6 +55843,140 @@
           "offline",
           "parentId",
           "title"
+        ]
+      },
+      "ForgottenProject": {
+        "type": "object",
+        "properties": {
+          "brings": {
+            "$ref": "#/components/schemas/ForgottenBrings",
+            "description": "What it brings back."
+          },
+          "by": {
+            "description": "The presence id of the client that forgot it; null when none said, or before the hub kept it.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "forgottenAt": {
+            "description": "When it was forgotten, ms since the epoch.",
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "description": "Null: forgotten before the hub kept its name; a restore names it.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "brings",
+          "by",
+          "forgottenAt",
+          "id",
+          "name"
+        ]
+      },
+      "ForgottenBrings": {
+        "description": "What bringing a forgotten project back brings, counted.",
+        "type": "object",
+        "properties": {
+          "account": {
+            "description": "The account its sessions start on, by id; null: the fleet's routing, or none kept.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "folder": {
+            "description": "Its folder on the hub, history and all: its task files, stages, pages' sources, memory and design.",
+            "type": "boolean"
+          },
+          "memoryDocs": {
+            "description": "Memory documents scoped to it alone.",
+            "type": "number"
+          },
+          "notes": {
+            "description": "Its notes.",
+            "type": "number"
+          },
+          "pages": {
+            "description": "Its pages.",
+            "type": "number"
+          },
+          "places": {
+            "description": "Its places: its folder on the hub and its checkouts.",
+            "type": "number"
+          },
+          "routines": {
+            "description": "Its routines.",
+            "type": "number"
+          },
+          "rows": {
+            "description": "Every row it brings, of any table.",
+            "type": "number"
+          },
+          "rules": {
+            "description": "Rules scoped to it.",
+            "type": "number"
+          },
+          "sessions": {
+            "description": "Sessions started from it, counted its own again.",
+            "type": "number"
+          },
+          "settings": {
+            "description": "Its row and settings as they were. False for a project forgotten before\nthe hub kept them: its folder alone comes back, under a new row that\ntakes the name the restore gives it.",
+            "type": "boolean"
+          },
+          "tasks": {
+            "description": "Its tasks.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "account",
+          "folder",
+          "memoryDocs",
+          "notes",
+          "pages",
+          "places",
+          "routines",
+          "rows",
+          "rules",
+          "sessions",
+          "settings",
+          "tasks"
+        ]
+      },
+      "ProjectRestored": {
+        "description": "A restore's answer: the project back, and what came back of it.",
+        "type": "object",
+        "properties": {
+          "brought": {
+            "$ref": "#/components/schemas/ForgottenBrings",
+            "description": "What came back."
+          },
+          "id": {
+            "type": "string"
+          },
+          "left": {
+            "type": "object",
+            "description": "Rows left out, by table: a row made since holds their key, or what they named went since."
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "brought",
+          "id",
+          "left",
+          "name"
         ]
       },
       "HeldWork": {

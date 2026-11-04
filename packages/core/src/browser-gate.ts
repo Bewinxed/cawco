@@ -53,6 +53,15 @@ const FRAMED = new Set(["object", "embed"]);
  */
 export const PAGE_ORIGIN_HEADER = "x-cawco-page-origin";
 
+/**
+ * The presence id of the tab a request came from (dashboard presence.ts
+ * `presenceClientId`), which its relay passes on: the hub's journal names
+ * who asked by it, as a send's line names its presence.
+ */
+export const PRESENCE_HEADER = "x-cawco-presence";
+/** What a presence id is (a uuid, or the id an older tab minted): anything else is not written into a journal line. */
+export const PRESENCE_ID = /^[A-Za-z0-9_-]{1,64}$/u;
+
 /** The origin of the page behind a request: its relay's word, else the browser's own `Origin` when it reached the hub directly. */
 export const pageOrigin = (
   headers: Record<string, string | undefined>

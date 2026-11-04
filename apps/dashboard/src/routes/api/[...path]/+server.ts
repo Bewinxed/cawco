@@ -1,4 +1,4 @@
-import { PAGE_ORIGIN_HEADER } from "@cawco/core/browser-gate";
+import { PAGE_ORIGIN_HEADER, PRESENCE_HEADER } from "@cawco/core/browser-gate";
 import { CAWCO_ENV, readEnv } from "@cawco/core/cawco-env";
 import {
   PREVIEW_PASS_COOKIE,
@@ -51,6 +51,8 @@ const PROXY_HEADERS = [
   "cf-connecting-ip",
   "cf-ray",
 ];
+/** What the page itself says of the request, carried as it came: its tab's presence, which the hub's journal names who asked by. */
+const PAGE_HEADERS = [PRESENCE_HEADER];
 
 /**
  * The hub's HTTP origin, derived from CAWCO_HUB_URL. That variable is a
@@ -159,9 +161,9 @@ async function proxyToHub(
         // A proxy in front's own words (a TLS terminator's scheme, Cloudflare's
         // client address and ray): the hub reads from them that the page
         // came through a domain, and the address it asked from (hub
-        // relay-journey.ts `domainOf`, `askedFrom`).
+        // relay-journey.ts `domainOf`, `askedFrom`). And the page's own.
         ...Object.fromEntries(
-          PROXY_HEADERS.flatMap((name) => {
+          [...PROXY_HEADERS, ...PAGE_HEADERS].flatMap((name) => {
             const value = request.headers.get(name);
             return value === null ? [] : [[name, value]];
           })

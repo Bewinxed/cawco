@@ -153,6 +153,7 @@ import {
   GRAPH_PLACES_MIGRATION_WHEN,
 } from "./drop-graph-places";
 import { type FindDb, findDb } from "./find";
+import { type ForgetDb, forgetDb } from "./forget";
 import { type HubAuthDb, hubAuthDb } from "./hub-auth";
 import { type IngressDb, ingressDb } from "./ingress";
 import { type LfsOffersDb, lfsOffersDb } from "./lfs-offers";
@@ -907,8 +908,6 @@ export interface DbShape {
   /** A fleet MCP relay session closed: its `initialize` params go. */
   readonly deleteMcpSession: (id: string) => void;
   readonly deleteMove: (id: string) => void;
-  /** The project and its places; the sessions started from it stay, unattached. */
-  readonly deleteProject: (id: string) => void;
   /** Design checks and design proposals (design-verify.ts, design-system.ts). */
   readonly designChecks: DesignChecksDb;
   /** Caw's one design-system offer per project (design-offers.ts). */
@@ -1008,6 +1007,11 @@ export interface DbShape {
   ) => { places: number; sessions: number; workItems: number };
   /** Forgets every briefer document a session was handed: its context no longer holds them. */
   readonly forgetBriefings: (instanceId: string) => void;
+  /**
+   * A project forgotten, every row its delete takes and every link it cuts
+   * handed to `keep` first (forget.ts); and those rows put back.
+   */
+  readonly forgetProject: ForgetDb["forget"];
   /** Every former id, by the id its session has now ({@link instanceIdOf}). */
   readonly formerIds: () => Record<string, string>;
   /** When a session last started again fresh; null when it never did. */
@@ -2095,6 +2099,7 @@ export interface DbShape {
    * stays and the old one goes. Answers the plugin ids that moved, old → new.
    */
   readonly renameMarketplace: (from: string, to: string) => [string, string][];
+  readonly restoreProject: ForgetDb["restore"];
   readonly restoreRemovedSessions: (
     machineId: string,
     held: string[],
@@ -4779,6 +4784,8 @@ const make = async (path: string): Promise<DbShape> => {
     return moving.length;
   };
 
+  /** A project's forget and restore, over every table its keys reach (forget.ts). */
+  const forgetting = forgetDb(db, dropArtifacts);
   const store: DbShape = {
     close: () => closeWal(db.$client),
     delegateTypes,
@@ -8865,46 +8872,6 @@ const make = async (path: string): Promise<DbShape> => {
         return moved;
       }),
     removedMachines: () => db.select().from(removedMachines).all(),
-    deleteProject: (id) => {
-      db.transaction((tx) => {
-        // Its places, tasks, notes and the rules scoped to it go
-        // with it (cascade); the sessions started from it outlive it and stop
-        // being its (set null).
-        tx.delete(queuedTaskStarts)
-          .where(eq(queuedTaskStarts.projectId, id))
-          .run();
-        // Where those rules stood with each session, which no key ties to them.
-        tx.delete(ruleState)
-          .where(
-            inArray(
-              ruleState.ruleId,
-              tx
-                .select({ id: rules.id })
-                .from(rules)
-                .where(eq(rules.scopeProjectId, id))
-            )
-          )
-          .run();
-        // A memory document scoped to it alone goes with it: losing its last
-        // project must not widen it to every session.
-        const links = tx.select().from(fleetMemoryDocProjects).all();
-        for (const link of links) {
-          if (
-            link.projectId === id &&
-            !links.some(
-              (other) => other.path === link.path && other.projectId !== id
-            )
-          ) {
-            tx.delete(fleetMemoryDocs)
-              .where(eq(fleetMemoryDocs.path, link.path))
-              .run();
-          }
-        }
-        // Its pages go with it: their sources were its folder's.
-        dropArtifacts(tx, and(projectPage, eq(artifacts.projectId, id)));
-        tx.delete(projects).where(eq(projects.id, id)).run();
-      });
-    },
     foldProject: (dupId, keepId, taskIds) =>
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one transaction moves every project-scoped table, so a fold is all or nothing
       db.transaction((tx) => {
@@ -10774,6 +10741,8 @@ const make = async (path: string): Promise<DbShape> => {
     },
 
     trash: trashDb(db),
+    forgetProject: forgetting.forget,
+    restoreProject: forgetting.restore,
 
     ruleStats: () => {
       const rows = db

@@ -1,0 +1,562 @@
+/**
+ * Forgetting a project can be undone (hub project-trash.ts, db forget.ts),
+ * on an in-process hub over a scratch database, through the hub's own
+ * routes:
+ *
+ * - a. A project carrying a checkout, a task (its folder made), a routine,
+ *   a rule, a page (a blob in its log), an account (its own and its allowed
+ *   one) and a session is forgotten (`DELETE /api/projects/:id`, a tab's
+ *   presence id sent): every one of them is gone, the trash holds its
+ *   folder and its record, and the journal's line names the project and
+ *   the presence. No read that outlived the forget (its task's triage) makes
+ *   its folder again.
+ * - b. `GET /api/projects/forgotten` lists it with its name and what a
+ *   restore brings back.
+ * - c. A project made since at its checkout holds its place: the restore is
+ *   refused in core's words; one made since under its id: refused too.
+ * - d. Those gone, `POST /api/projects/:id/restore` brings it back, every
+ *   row as it was: the row with its account and allowed accounts, its
+ *   places, the task, the routine, the rule, the page and its log's blob,
+ *   the session counted its own again, its folder back in place and no
+ *   entry left in the trash; the journal's line names it. A second restore
+ *   finds nothing to bring back.
+ * - e. A project forgotten before the hub kept records (a folder in the
+ *   trash, its row gone, nothing beside it) is listed with no name and what
+ *   its folder alone brings; its restore needs a name, then brings its row
+ *   back under its id with its folder and the task its folder holds.
+ *
+ *   bun scripts/probe-kit/run.ts project-restore
+ */
+import { Database } from "bun:sqlite";
+import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { PRESENCE_HEADER } from "../../../packages/core/src/browser-gate";
+import {
+  type MachinePath,
+  machinePath,
+} from "../../../packages/core/src/machine-path";
+import { projectTrashWords } from "../../../packages/core/src/words/project-trash";
+import type { hubInProcess as inProcess } from "../../../packages/hub/scripts/hub-in-process";
+import type { Kit, Spec } from "../kit";
+
+const MACHINE = "probe-restore-machine";
+const PRESENCE = "probe-presence-4f2a";
+const NAME = "Probe restore";
+const TASK = "Bring the project back";
+
+interface Answer {
+  json: unknown;
+  status: number;
+  text: string;
+}
+
+/** The in-process hub and what the legs read it with. */
+interface Rig {
+  call: (method: string, path: string, body?: object) => Promise<Answer>;
+  db: Awaited<ReturnType<typeof inProcess>>["db"];
+  /** Every journal line the hub wrote. */
+  journal: string[];
+  kit: Kit;
+  /** The hub's database, read beside the hub. */
+  raw: Database;
+  /** A project's folder on the hub. */
+  root: (projectId: string) => string;
+  /** The trash's entries, by name. */
+  trash: () => Promise<string[]>;
+  trashDir: string;
+}
+
+/** The seeded project: its id, and the ids of what it carries. */
+interface Seeded {
+  accountId: string;
+  blob: Uint8Array;
+  checkout: MachinePath;
+  id: string;
+  pageId: string;
+  routineId: string;
+  ruleId: string;
+  session: string;
+}
+
+/** A forgotten project as the list answers it. */
+interface Listed {
+  brings: Record<string, unknown>;
+  by: string | null;
+  forgottenAt: number;
+  id: string;
+  name: string | null;
+}
+
+const idOf = (answer: Answer): string =>
+  (answer.json as { id?: string } | undefined)?.id ?? "";
+
+const there = (path: string): Promise<boolean> =>
+  stat(path).then(
+    () => true,
+    () => false
+  );
+
+/** The forgotten projects the hub lists now. */
+const listed = async (rig: Rig): Promise<Listed[]> =>
+  ((await rig.call("GET", "/api/projects/forgotten")).json as
+    Listed[] | undefined) ?? [];
+
+/** A project carrying a checkout, a task, a routine, a rule, an account, a page and a session. */
+const seed = async (rig: Rig): Promise<Seeded> => {
+  const { call, db, raw } = rig;
+  db.upsertAgent({
+    machineId: MACHINE,
+    hostname: `${MACHINE}.local`,
+    os: "linux",
+    auth: "unknown",
+  });
+  const checkout = machinePath(
+    "/home/probe",
+    "/home/probe/src/restore",
+    MACHINE
+  );
+  const id = crypto.randomUUID();
+  db.createProject({
+    id,
+    name: NAME,
+    checkout: { machineId: MACHINE, path: checkout },
+    remote: null,
+  });
+  // Set up on the code template, so its tasks have stages.
+  db.setProjectTemplate(id, "code");
+  const task = await call("POST", `/api/projects/${id}/tasks`, {
+    title: TASK,
+  });
+  const routine = await call("POST", "/api/routines", {
+    projectId: id,
+    name: "Probe routine",
+    cron: "0 9 * * *",
+    timeZone: "UTC",
+    target: "conversation",
+    prompt: "Say how the project stands.",
+    keep: true,
+  });
+  const rule = await call("POST", "/api/rules", {
+    name: "Probe rule",
+    enabled: true,
+    pattern: "probe phrase",
+    matchKind: "phrase",
+    caseSensitive: false,
+    wholeWord: false,
+    watch: "text",
+    reply: "The probe rule fired.",
+    timing: "turn",
+    repeat: true,
+    scope: { projectId: id },
+  });
+  const account = await call("POST", "/api/accounts", {
+    provider: "anthropic",
+    kind: "subscription",
+    label: "Probe account",
+  });
+  const accountId = idOf(account);
+  const allowed = await call("PUT", `/api/projects/${id}/accounts`, {
+    accounts: [accountId],
+  });
+  const own = await call("PATCH", `/api/projects/${id}`, {
+    account: accountId,
+  });
+  const pageId = crypto.randomUUID();
+  const now = Date.now();
+  raw
+    .prepare(
+      "INSERT INTO artifacts (id, origin, kind, name, project_id, created_at, updated_at) VALUES (?, ?, 'page', 'probe-page', ?, ?, ?)"
+    )
+    .run(pageId, crypto.randomUUID(), id, now, now);
+  const blob = new Uint8Array([0, 1, 2, 250, 251, 255, 7]);
+  raw
+    .prepare(
+      'INSERT INTO artifact_updates (artifact_id, seq, "update") VALUES (?, 1, ?)'
+    )
+    .run(pageId, blob);
+  const session = crypto.randomUUID();
+  db.openInstance({
+    id: session,
+    machineId: MACHINE,
+    cwd: checkout,
+    sessionId: crypto.randomUUID(),
+    harness: "claude",
+    origin: "person",
+    projectId: id,
+    title: "Probe session",
+    kind: "mainline",
+    permissionMode: "bypassPermissions",
+    model: "model-a",
+  });
+  // Ended, as a forget asks: nothing of a project still runs.
+  db.endInstance(session, "stop");
+  rig.kit.check(
+    "a. seeded: a task, a routine, a rule, an account (own and allowed)",
+    [task, routine, rule, account, allowed, own].every(
+      (one) => one.status === 200
+    ),
+    JSON.stringify(
+      [task, routine, rule, account, allowed, own].map((one) => one.status)
+    )
+  );
+  return {
+    accountId,
+    blob,
+    checkout,
+    id,
+    pageId,
+    routineId: idOf(routine),
+    ruleId: idOf(rule),
+    session,
+  };
+};
+
+/** What the hub holds of the seeded project now, read through its own reads and its rows. */
+const held = async (rig: Rig, seeded: Seeded) => {
+  const { call, db, raw } = rig;
+  const { id } = seeded;
+  const project = db.project(id);
+  const tasks = await call("GET", `/api/projects/${id}/tasks`);
+  const routines = await call("GET", `/api/routines?projectId=${id}`);
+  const { rules } = (await call("GET", "/api/rules")).json as {
+    rules: { id: string; scope: { projectId?: string } }[];
+  };
+  const page = raw
+    .query("SELECT name, project_id FROM artifacts WHERE id = ?")
+    .get(seeded.pageId) as { name: string; project_id: string } | null;
+  const update = raw
+    .query(
+      'SELECT "update" AS bytes FROM artifact_updates WHERE artifact_id = ?'
+    )
+    .get(seeded.pageId) as { bytes: Uint8Array } | null;
+  const session = raw
+    .query("SELECT project_id FROM instances WHERE id = ?")
+    .get(seeded.session) as { project_id: string | null } | null;
+  return {
+    name: project?.name ?? null,
+    account: project?.account ?? null,
+    accounts: project?.accounts ?? null,
+    places: (project?.places ?? [])
+      .map((place) => `${place.kind}:${place.machineId}:${place.path}`)
+      .sort(),
+    tasks: tasks.status === 200 && tasks.text.includes(TASK),
+    routine: routines.text.includes(seeded.routineId),
+    rule:
+      rules.find((one) => one.id === seeded.ruleId)?.scope.projectId ?? null,
+    page: page ? `${page.name}:${page.project_id}` : null,
+    blob: update ? Buffer.from(update.bytes).toString("hex") : null,
+    session: session?.project_id ?? null,
+    folder: await there(rig.root(id)),
+  };
+};
+type Held = Awaited<ReturnType<typeof held>>;
+
+/** a and b: forgotten, gone, kept in the trash, named in the journal, listed. */
+const forgetLeg = async (rig: Rig, seeded: Seeded): Promise<Held> => {
+  const { call, journal, kit } = rig;
+  const { id } = seeded;
+  const before = await held(rig, seeded);
+  kit.note(`before: ${JSON.stringify(before)}`);
+  kit.check(
+    "a. before: each one is the project's",
+    before.name === NAME &&
+      before.account === seeded.accountId &&
+      before.places.length === 2 &&
+      before.tasks &&
+      before.routine &&
+      before.rule === id &&
+      before.page === `probe-page:${id}` &&
+      before.blob === Buffer.from(seeded.blob).toString("hex") &&
+      before.session === id &&
+      before.folder,
+    JSON.stringify(before)
+  );
+
+  const forgot = await call("DELETE", `/api/projects/${id}`);
+  // What the task's filing started (its triage, its waits) reads on after
+  // the forget: none of it makes the folder again.
+  await Bun.sleep(1000);
+  const gone = await held(rig, seeded);
+  check(
+    rig,
+    "a. forgotten: the project, its task, routine, rule, page and folder gone, its session unlinked",
+    forgot.status === 200 &&
+      gone.name === null &&
+      !(gone.tasks || gone.routine || gone.folder) &&
+      gone.rule === null &&
+      gone.page === null &&
+      gone.session === null,
+    JSON.stringify({ forgot: forgot.status, gone })
+  );
+  const entries = (await rig.trash()).filter((one) => one.startsWith(`${id}-`));
+  kit.check(
+    "a. the trash holds its folder and its record beside it",
+    entries.length === 2 &&
+      entries.some((one) => one.endsWith(".json")) &&
+      entries.some((one) => !one.endsWith(".json")),
+    JSON.stringify(entries)
+  );
+  const lines = journal.filter((line) =>
+    line.startsWith(projectTrashWords.forgetLine(id))
+  );
+  kit.check(
+    "a. one journal line names the forget, its project and the presence that asked",
+    lines.length === 1 &&
+      lines[0]?.includes(`presence=${PRESENCE}`) === true &&
+      lines[0].includes("outcome=forgotten"),
+    lines.join(" | ")
+  );
+
+  const entry = (await listed(rig)).find((one) => one.id === id);
+  kit.check(
+    "b. listed with its name, who forgot it and what it brings back",
+    entry?.name === NAME &&
+      entry.by === PRESENCE &&
+      JSON.stringify(entry.brings) ===
+        JSON.stringify({
+          account: seeded.accountId,
+          folder: true,
+          memoryDocs: 0,
+          notes: 0,
+          pages: 1,
+          places: 2,
+          routines: 1,
+          rows: entry.brings.rows,
+          rules: 1,
+          sessions: 1,
+          settings: true,
+          tasks: 1,
+        }),
+    JSON.stringify(entry)
+  );
+  return before;
+};
+
+/** `kit.check`, its detail cut to a line a person reads. */
+const check = (rig: Rig, name: string, ok: boolean, detail: string): void => {
+  rig.kit.check(name, ok, detail.slice(0, 600));
+};
+
+/** c: refused while a live project holds its checkout, then its id. Answers when its own entry was forgotten. */
+const refusedLeg = async (rig: Rig, seeded: Seeded): Promise<number> => {
+  const { call, db } = rig;
+  const { id } = seeded;
+  const blocker = crypto.randomUUID();
+  db.createProject({
+    id: blocker,
+    name: "Probe blocker",
+    checkout: { machineId: MACHINE, path: seeded.checkout },
+    remote: null,
+  });
+  const placeTaken = await call("POST", `/api/projects/${id}/restore`);
+  check(
+    rig,
+    "c. a live project at its checkout: refused in core's words",
+    placeTaken.status === 409 &&
+      placeTaken.text ===
+        projectTrashWords.placeTaken(NAME, "Probe blocker", seeded.checkout),
+    placeTaken.text
+  );
+  await call("DELETE", `/api/projects/${blocker}`);
+  db.createProject({ id, name: "Probe usurper", remote: null });
+  const idTaken = await call("POST", `/api/projects/${id}/restore`);
+  check(
+    rig,
+    "c. a live project under its id: refused in core's words",
+    idTaken.status === 409 &&
+      idTaken.text === projectTrashWords.idTaken("Probe usurper", id),
+    idTaken.text
+  );
+  await call("DELETE", `/api/projects/${id}`);
+  // The usurper's own forget is in the trash now, newer: the restore names
+  // the probe's own by when it was forgotten.
+  return (
+    (await listed(rig)).find((one) => one.id === id && one.name === NAME)
+      ?.forgottenAt ?? 0
+  );
+};
+
+/** d: brought back, every part as it was, its entry gone from the trash. */
+const restoreLeg = async (
+  rig: Rig,
+  seeded: Seeded,
+  before: Held,
+  forgottenAt: number
+): Promise<void> => {
+  const { call, journal, kit } = rig;
+  const { id } = seeded;
+  const restored = await call("POST", `/api/projects/${id}/restore`, {
+    forgottenAt,
+  });
+  const after = await held(rig, seeded);
+  kit.note(`after: ${JSON.stringify(after)}`);
+  check(
+    rig,
+    "d. restored: 200, its name in the answer",
+    restored.status === 200 &&
+      (restored.json as { name?: string } | undefined)?.name === NAME,
+    restored.text
+  );
+  for (const part of Object.keys(before) as (keyof Held)[]) {
+    kit.check(
+      `d. its ${part} is back as it was`,
+      JSON.stringify(after[part]) === JSON.stringify(before[part]),
+      `${JSON.stringify(before[part])} → ${JSON.stringify(after[part])}`
+    );
+  }
+  // The usurper never had a folder: its record alone is its entry.
+  const left = (await rig.trash()).filter((one) => one.startsWith(`${id}-`));
+  const names = (await listed(rig))
+    .filter((one) => one.id === id)
+    .map((one) => one.name);
+  kit.check(
+    "d. its own entry left the trash; the usurper's record stays",
+    left.length === 1 &&
+      left[0]?.endsWith(".json") === true &&
+      JSON.stringify(names) === JSON.stringify(["Probe usurper"]),
+    JSON.stringify({ left, names })
+  );
+  const lines = journal.filter((line) =>
+    line.startsWith(projectTrashWords.restoreLine(id))
+  );
+  kit.check(
+    "d. one journal line names the restore, its project and the presence",
+    lines.filter(
+      (line) =>
+        line.includes(`presence=${PRESENCE}`) &&
+        line.includes("outcome=restored")
+    ).length === 1,
+    lines.join(" | ")
+  );
+  const again = await call("POST", `/api/projects/${id}/restore`, {
+    forgottenAt,
+  });
+  check(
+    rig,
+    "d. a second restore finds nothing to bring back",
+    again.status === 404 && again.text === projectTrashWords.notForgotten(id),
+    again.text
+  );
+};
+
+/** e: a project forgotten before the hub kept records, its folder alone in the trash. */
+const oldFolderLeg = async (rig: Rig): Promise<void> => {
+  const { call, db } = rig;
+  const old = crypto.randomUUID();
+  db.createProject({ id: old, name: "Probe old", remote: null });
+  db.setProjectTemplate(old, "code");
+  const oldTask = await call("POST", `/api/projects/${old}/tasks`, {
+    title: "Kept in the folder alone",
+  });
+  await call("DELETE", `/api/projects/${old}`);
+  // As a hub before this change left it: the folder, nothing beside it.
+  for (const one of await rig.trash()) {
+    if (one.startsWith(`${old}-`) && one.endsWith(".json")) {
+      await rm(join(rig.trashDir, one));
+    }
+  }
+  const entry = (await listed(rig)).find((one) => one.id === old);
+  check(
+    rig,
+    "e. an old trash folder is listed: no name, its folder and its task file",
+    oldTask.status === 200 &&
+      entry?.name === null &&
+      entry.brings.settings === false &&
+      entry.brings.folder === true &&
+      entry.brings.tasks === 1,
+    JSON.stringify({ oldTask: oldTask.status, entry })
+  );
+  const unnamed = await call("POST", `/api/projects/${old}/restore`);
+  check(
+    rig,
+    "e. its restore needs a name: refused in core's words",
+    unnamed.status === 400 &&
+      unnamed.text === projectTrashWords.nameNeeded(old),
+    unnamed.text
+  );
+  const named = await call("POST", `/api/projects/${old}/restore`, {
+    name: "Probe old, back",
+  });
+  const tasks = await call("GET", `/api/projects/${old}/tasks`);
+  check(
+    rig,
+    "e. named, it comes back under its id with its folder and its task",
+    named.status === 200 &&
+      db.project(old)?.name === "Probe old, back" &&
+      (await there(rig.root(old))) &&
+      tasks.text.includes("Kept in the folder alone"),
+    JSON.stringify({ named: named.text, tasks: tasks.status })
+  );
+};
+
+export default {
+  group: "The hub and machines",
+  name: "project-restore",
+  ownProcess:
+    "its in-process hub (hub-in-process.ts) reads CAWCO_DB_PATH and HOME once, as the hub's modules load",
+  run: async (kit: Kit) => {
+    const scratch = await mkdtemp(
+      join(process.env.TMPDIR ?? tmpdir(), "project-restore-")
+    );
+    const dbPath = join(scratch, "hub", "hub.db");
+    // Every journal line the hub writes while the spec runs.
+    const journal: string[] = [];
+    const { log } = console;
+    console.log = (...parts: unknown[]) => {
+      journal.push(parts.map(String).join(" "));
+      log(...parts);
+    };
+    try {
+      const { hubInProcess } =
+        await import("../../../packages/hub/scripts/hub-in-process");
+      const { db, hub } = await hubInProcess(dbPath, join(scratch, "home"));
+      const { PROJECT_TRASH_DIR, projectRoot } =
+        await import("../../../packages/hub/src/project-folder");
+      const raw = new Database(dbPath);
+      raw.run("PRAGMA busy_timeout = 5000");
+      const rig: Rig = {
+        call: async (method, path, body) => {
+          const response = await hub.handle(
+            new Request(`http://127.0.0.1${path}`, {
+              method,
+              headers: {
+                [PRESENCE_HEADER]: PRESENCE,
+                ...(body ? { "content-type": "application/json" } : {}),
+              },
+              ...(body ? { body: JSON.stringify(body) } : {}),
+            })
+          );
+          const text = await response.text();
+          let json: unknown;
+          try {
+            json = JSON.parse(text);
+          } catch {
+            // Words, not JSON: a refusal.
+          }
+          return { status: response.status, text, json };
+        },
+        db,
+        journal,
+        kit,
+        raw,
+        root: projectRoot,
+        trash: async () =>
+          (await readdir(PROJECT_TRASH_DIR).catch(() => [] as string[])).sort(),
+        trashDir: PROJECT_TRASH_DIR,
+      };
+      try {
+        const seeded = await seed(rig);
+        const before = await forgetLeg(rig, seeded);
+        const forgottenAt = await refusedLeg(rig, seeded);
+        await restoreLeg(rig, seeded, before, forgottenAt);
+        await oldFolderLeg(rig);
+      } finally {
+        raw.close();
+      }
+    } finally {
+      console.log = log;
+      await rm(scratch, { recursive: true, force: true });
+    }
+  },
+} satisfies Spec;

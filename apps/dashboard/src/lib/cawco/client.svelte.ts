@@ -36,7 +36,11 @@ import { ASK_USER_QUESTION, RESOLVE_PERMISSION } from "@cawco/core/ask-tools";
 import type { SendAttachment } from "@cawco/core/attachments";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { ListedBrowser } from "@cawco/core/browser";
-import { GATED_PAGE_MARK, GATED_PAGE_PARAM } from "@cawco/core/browser-gate";
+import {
+  GATED_PAGE_MARK,
+  GATED_PAGE_PARAM,
+  PRESENCE_HEADER,
+} from "@cawco/core/browser-gate";
 import type { ConnectionView } from "@cawco/core/connections";
 import { detach } from "@cawco/core/detach";
 import type { AvailableCommand } from "@cawco/core/fleet";
@@ -7130,7 +7134,11 @@ export const setProjectBudget = (
  * list no longer has.
  */
 export async function deleteProject(id: string): Promise<void> {
-  const response = await fetch(`/api/projects/${id}`, { method: "DELETE" });
+  // Its tab's presence, which the hub's journal names the forget by.
+  const response = await fetch(`/api/projects/${id}`, {
+    method: "DELETE",
+    headers: { [PRESENCE_HEADER]: presenceClientId() },
+  });
   if (!response.ok) {
     throw await hubRefusal(response, projectWords.notForgottenThen);
   }

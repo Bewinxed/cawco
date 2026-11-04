@@ -13,7 +13,7 @@
  * places, sessions, work items, notes and fleet rows move and its row goes
  * (db `foldProject`), its connections are granted to the kept project
  * (connections.ts `projectFolded`, so its GitHub poller follows them), and
- * its folder is trashed. A duplicate that could not
+ * its folder is trashed (project-trash.ts, marked folded). A duplicate that could not
  * be read whole or whose tasks did not move is left as it is, said in the
  * log, and tried again at the next start: only an emptied duplicate is
  * removed. Run once at hub start and whenever a project gains a link;
@@ -27,9 +27,9 @@ import {
   listFolder,
   projectRoot,
   readFolderFile,
-  trashProjectFolder,
   writeFolderFiles,
 } from "./project-folder";
+import { trashFoldedFolder } from "./project-trash";
 import { fileTaskNumber, TaskDoc } from "./task-file";
 import { CHANGES, TRAILERS } from "./task-history";
 import { hubActor, STAGES_FILE, type Tasks } from "./tasks";
@@ -247,7 +247,9 @@ const fold = async (
   const moved = deps.db.foldProject(dup.id, keep.id, ids);
   deps.connections.projectFolded(grants, keep.id);
   if (await hasProjectFolder(dup.id)) {
-    await trashProjectFolder(dup.id);
+    // Marked folded, never listed as a forgotten project: its rows live on
+    // in the kept one.
+    await trashFoldedFolder(dup.id, keep.id);
     deps.folderMoved();
   }
   log(
