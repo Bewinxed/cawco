@@ -181,6 +181,17 @@ export const graphWords = {
   springSettles: (ms: Figure) => `A spring, settled by ${ms} ms`,
   /** The bar's body, dragged: the whole animation along the lane. */
   moveClip: (clip: string) => `Move ${clip}`,
+  /** One run of a row that runs more than once: its bar's name for a reader. */
+  runOf: (clip: string, at: number, of: number) =>
+    `${clip}, run ${at} of ${of}`,
+  /** An animation's row under its row, by the run it is in: "Run 2". */
+  runShort: (at: number) => `Run ${at}`,
+  /** A run's bar's tooltip: its name and where it runs. */
+  runSpan: (run: string, from: Figure, to: Figure) =>
+    `${run}: ${from}–${to} ms`,
+  /** A row of several runs: its length figure is its whole span; its tooltip says so. */
+  runsSpan: (n: number, from: Figure, to: Figure) =>
+    `${n} runs, ${from}–${to} ms`,
   /** The editor's curve sections: the house's curves, then the shapes. */
   designSystem: "Design system",
   shapesHead: "Shapes",

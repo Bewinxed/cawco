@@ -67,7 +67,7 @@
     editsOf,
     lengthOf,
     restore,
-    retime,
+    retimeRun,
     type Track,
     tracksOf,
     untune,
@@ -117,15 +117,6 @@
   const clips = $derived(move.kind === "ready" ? move.clips : []);
   const changed = $derived(clips.some((clip) => clip.was));
   const tracks = $derived(tracksOf(clips));
-  /** Each thing's stretches as the engine ran them, by the thing: the outlines under a tuned bar. */
-  const read = $derived(
-    new Map(
-      tracksOf(clips.map(untune)).map((track) => [
-        track.thing ?? track.id,
-        track.spans,
-      ])
-    )
-  );
   const length = $derived(Math.max(1, lengthOf(clips)));
   /**
    * How far the lane reaches: the move's end, or, once he changed it, the
@@ -207,7 +198,12 @@
    * The stretch a bar's drag holds, by its row: the row's words follow the
    * drag, as Jitter's Duration follows its bar's end handle.
    */
-  let holding = $state<{ from: number; id: string; to: number } | null>(null);
+  let holding = $state<{
+    from: number;
+    id: string;
+    run: string;
+    to: number;
+  } | null>(null);
   /** `n` as a figure in the page's language. */
   const figure = (n: number) => figureOf(n, lang);
 
@@ -217,12 +213,29 @@
   /** A row's length as its column shows it: its figure (a spring's where it settles), and once he changed it, the press that puts it back. */
   const lengthShown = (track: Track) => {
     const held = holding?.id === track.id ? holding : null;
-    // A row whose animations share one length says that length, as its
-    // editor's Duration does; else its whole span.
+    // A row of several runs says its whole span, its runs in its tooltip
+    // ("2 runs, 25–809 ms"): "180 ms" over a row spanning 0–784 read as
+    // one run's length.
+    if (track.runs.length > 1) {
+      const runs = track.runs.map((run) => (held?.run === run.id ? held : run));
+      const from = Math.min(...runs.map((run) => run.from));
+      const to = Math.max(...runs.map((run) => run.to));
+      return {
+        text: words.ms(figure(Math.round(to - from))),
+        said: words.runsSpan(
+          runs.length,
+          figure(Math.round(from)),
+          figure(Math.round(to))
+        ),
+        reset: null,
+      };
+    }
+    // A run whose animations share one length says that length, as its
+    // editor's Duration does; else its span.
     const shared = new Set(track.clips.map((clip) => clip.duration));
     const one = track.sprung || shared.size !== 1 ? null : [...shared][0];
     const span = track.ends - track.begins;
-    // A drag on an end stretches every animation by its share (motion `retime`).
+    // A drag on an end stretches every animation by its share (motion `retimeRun`).
     const stretch = held ? (held.to - held.from) / Math.max(1, span) : 1;
     const ms = Math.round((one ?? span) * stretch);
     const was = editsOf(track).has("length")
@@ -278,10 +291,19 @@
   /** The timeline's lines, in order: each row, and under an opened one a row per animation. */
   const lines = $derived(
     tracks.flatMap((track) => {
-      const own = { key: track.id, track, part: false };
+      const own = { key: track.id, track, part: false, run: null };
       if (!(opened[track.id] && track.clips.length > 1)) {
         return [own];
       }
+      // Each animation of a row of several runs says which run it is in:
+      // "changes", "fades", "changes", "fades" differed only by place.
+      const runAt = (clip: Clip) =>
+        track.runs.length > 1
+          ? {
+              at: track.runs.findIndex((run) => run.clips.includes(clip)) + 1,
+              of: track.runs.length,
+            }
+          : null;
       return [
         own,
         ...track.clips.flatMap((clip) =>
@@ -289,6 +311,7 @@
             key: `${track.id}/${clip.id}`,
             track: part,
             part: true,
+            run: runAt(clip),
           }))
         ),
       ];
@@ -486,7 +509,9 @@
 
           {#each lines as line (line.key)}
             {@const track = line.track}
-            {@const name = nameOf(track)}
+            {@const name = line.run
+              ? words.runOf(nameOf(track), line.run.at, line.run.of)
+              : nameOf(track)}
             {@const long = lengthShown(track)}
             {@const many = !line.part && track.clips.length > 1}
             {@const open = editing === line.key}
@@ -514,7 +539,9 @@
                 >
                   <span class="min-w-0 truncate"
                     ><span class={open ? "text-selected-ink" : "text-ink-row"}
-                      >{track.name}</span
+                      >{line.run
+                        ? words.runShort(line.run.at)
+                        : track.name}</span
                     >
                     <span class={open ? "text-selected-ink" : "text-ink-muted"}
                       >{track.how}</span
@@ -578,13 +605,13 @@
                   <ClipBar
                     {lang}
                     {name}
-                    onhold={(span) => {
-                      holding = span ? { id: track.id, ...span } : null;
+                    onhold={(run, span) => {
+                      holding = span
+                        ? { id: track.id, run: run.id, ...span }
+                        : null;
                     }}
-                    onretime={(from, to) => onretime(retime(track, from, to))}
-                    original={track.clips.some((clip) => clip.was)
-                      ? (read.get(track.thing ?? track.id) ?? null)
-                      : null}
+                    onretime={(run, from, to) =>
+                      onretime(retimeRun(run, from, to))}
                     {scale}
                     {track}
                   />
