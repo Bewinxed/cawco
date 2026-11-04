@@ -234,12 +234,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    `places`), where its settings folder, files and policies to read stood
  *    (`configDir`, `settings`, `policies`). A page built for 46 reads fields
  *    the hub no longer sends, so it reloads first.
+ * 48: a generated image names its `provider`, `model` and `format` (and the
+ *    `asked` path when its format's extension replaced the asked one), where
+ *    `billing: "chatgpt_subscription"` stood. A page built for 47 reads a
+ *    `billing` the hub no longer sends, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 47;
+export const WIRE_PROTOCOL = 48;
 
 /**
  * What a session's stream carries: the changes each frame made to its

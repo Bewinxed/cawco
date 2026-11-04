@@ -296,6 +296,7 @@ import {
   harnessNamed,
   hookProblem,
   IMAGE_GENERATION_TIMEOUT_MS,
+  IMAGE_PROVIDERS,
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
   invariant,
@@ -31777,6 +31778,10 @@ export const createServer = (
                 t.Literal("high"),
               ])
             ),
+            provider: t.Optional(
+              t.Union(IMAGE_PROVIDERS.map((id) => t.Literal(id)))
+            ),
+            model: t.Optional(t.String()),
           }),
         },
         async ({ params, body, status, request, server }) => {

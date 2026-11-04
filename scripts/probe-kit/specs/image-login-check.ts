@@ -1,7 +1,8 @@
 /**
  * `generate_image` checks whether this machine's ChatGPT logins can make an
  * image before it sends an image request (agent image-generation.ts
- * `usableLogin`): a login ChatGPT's usage endpoint says is on the Free plan
+ * through the ChatGPT provider's `readiness`, image-providers/chatgpt.ts):
+ * a login ChatGPT's usage endpoint says is on the Free plan
  * is skipped without a call, a paid one wins over a free one, and when none
  * can, the error names each login with its plan, what stops it and its fix.
  *
@@ -162,9 +163,16 @@ export default {
       check(
         "a. free only: refused, naming the login's email and the Free plan with its fix",
         freeError ===
-          imageGenerationWords.noUsableLogin([
-            { block: { kind: "free" }, email: "free@probe.test", plan: "free" },
-          ]),
+          imageGenerationWords.refused(
+            "chatgpt",
+            imageGenerationWords.noUsableLogin([
+              {
+                block: { kind: "free" },
+                email: "free@probe.test",
+                plan: "free",
+              },
+            ])
+          ),
         freeError
       );
       check(
@@ -199,7 +207,11 @@ export default {
       kit.note(`d: ${noneError}`);
       check(
         "d. no account: says no login is held, and nothing reached the mock",
-        noneError === imageGenerationWords.noLogin() && asked.length === 0,
+        noneError ===
+          imageGenerationWords.refused(
+            "chatgpt",
+            imageGenerationWords.noLogin()
+          ) && asked.length === 0,
         JSON.stringify({ noneError, asked })
       );
 
@@ -222,13 +234,16 @@ export default {
       check(
         "f. a token the usage endpoint refuses (401): says ChatGPT rejected it, no image request",
         rejectedError ===
-          imageGenerationWords.noUsableLogin([
-            {
-              block: { kind: "rejected" },
-              email: "gone@probe.test",
-              plan: "plus",
-            },
-          ]) && imageAsks().length === 0,
+          imageGenerationWords.refused(
+            "chatgpt",
+            imageGenerationWords.noUsableLogin([
+              {
+                block: { kind: "rejected" },
+                email: "gone@probe.test",
+                plan: "plus",
+              },
+            ])
+          ) && imageAsks().length === 0,
         JSON.stringify({ rejectedError, asked })
       );
     } finally {

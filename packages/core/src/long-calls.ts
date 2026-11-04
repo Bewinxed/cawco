@@ -14,7 +14,7 @@ export const LONG_CALL_WALL_MS = DAY_MS;
 /** Tools that run for minutes, and what the hub's progress heartbeat says meanwhile. */
 export const LONG_CALLS: Readonly<Record<string, string>> = {
   delegate: "Creating the delegate's workspace",
-  generate_image: "Generating image through ChatGPT",
+  generate_image: "Generating the image",
   continue_session: "Summarising the session",
   finish_item: "Running the merge checks of the work item",
   task_start: "Creating the attempt's workspace",

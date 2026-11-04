@@ -1,4 +1,5 @@
 {
+  "superseded": "Superseded 2026-11-04: `generate_image` now runs through image providers (agent `image-providers/`), ChatGPT the default and Antigravity CLI (`provider: \"antigravity\"`) beside it, and keeps each provider's own format. The live tool's description is core `IMAGE_GENERATION_DESCRIPTION`; this record is the ChatGPT-only design it replaced.",
   "name": "generate_image",
   "description": "Generate one PNG image or a reference-guided edit using the owner's ChatGPT subscription, regardless of the calling model or harness. Use for requested photos, illustrations, textures, and raster assets. Pass previous images as reference_images and describe what to preserve or change. Saves on the calling session's machine; returns the absolute path and actual dimensions. Display it with show_image. Requires that machine's OpenCode ChatGPT OAuth login; never uses API-key billing or another provider. Does not expose an image-model selector. For SVGs, icons, or code-native graphics, edit source instead.",
   "input_schema": {
@@ -18,7 +19,10 @@
       },
       "reference_images": {
         "type": "array",
-        "items": { "type": "string", "minLength": 1 },
+        "items": {
+          "type": "string",
+          "minLength": 1
+        },
         "description": "Ordered local PNG/JPEG/WebP/GIF paths. Assign each a role in the prompt, e.g. 'Image 1: person to preserve; Image 2: clothing to apply.' For follow-up edits, attach the previous output and restate preservation constraints. Limit: 50 MiB per image, 100 MiB combined."
       },
       "size": {

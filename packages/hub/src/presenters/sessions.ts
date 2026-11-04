@@ -16,6 +16,7 @@ import {
   workWords,
 } from "@cawco/core";
 import { contextWords } from "@cawco/core/words/context";
+import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import type { DelegateResult, HandoffResult } from "../delegation-actions";
 import {
   type DelegateList,
@@ -324,6 +325,6 @@ export const delegateTypesWords = (catalog: {
         catalog.types.map((type) => typeLine(type, catalog.accountNames))
       );
 
-/** `generate_image`: where it is, how big. */
+/** `generate_image`: where it is, how big, in what format, through what. */
 export const imageWords = (image: GeneratedImage): string =>
-  `Saved ${image.width} × ${image.height} PNG at ${image.path}; show it with show_image.`;
+  imageGenerationWords.saved(image);

@@ -64,9 +64,13 @@ import type { Tasks } from "./tasks";
  * and their facts to tools: project_setup answers data, project_name names a
  * project made from New project's words, view_guide answers how a view is
  * written (worker 29,365 measured).
+ * 2026-11-04: generate_image takes a `provider` (ChatGPT by default, the
+ * Antigravity CLI on asking), so an agent can make an image through the
+ * owner's Gemini subscription too, and says a JPEG lands as .jpg (worker
+ * 29,452 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 29_400,
+  worker: 29_500,
   delegate: 10_600,
   overseer: 770,
   "web-facing": 3400,

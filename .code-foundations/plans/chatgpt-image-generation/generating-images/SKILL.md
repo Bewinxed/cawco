@@ -5,6 +5,8 @@ description: Generates raster images and reference-guided variations through Caw
 
 # Generating images
 
+> Superseded 2026-11-04: `generate_image` now runs through image providers (agent `image-providers/`), ChatGPT the default and Antigravity CLI (`provider: "antigravity"`) beside it, and keeps each provider's own format. The live tool's description is core `IMAGE_GENERATION_DESCRIPTION`; this record is the ChatGPT-only design it replaced.
+
 Use CawCo's `generate_image` tool directly. Claude Code exposes it as
 `mcp__cawco__generate_image`; OpenCode exposes it as `cawco_generate_image`.
 The calling model does not need native image-generation support.

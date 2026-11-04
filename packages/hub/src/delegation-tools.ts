@@ -1,12 +1,15 @@
 import {
   DECIDES_RULE,
+  DEFAULT_IMAGE_PROVIDER,
   HARNESSES,
   type HarnessKind,
   IMAGE_GENERATION_DESCRIPTION,
+  IMAGE_PROVIDERS,
   IMAGE_QUALITIES,
   type Kind,
   kindsLine,
   LANDS_MODES,
+  MAX_REFERENCE_IMAGES,
   NO_REPLY_OWED,
   NO_REPLY_TOOL,
   REFERENCE_GUIDANCE,
@@ -308,11 +311,11 @@ export function handoffTools(deps: HandoffDeps) {
           .string()
           .min(1)
           .describe(
-            "A new .png path, relative to your directory; in a workspace, in its clone or `$TMPDIR/`."
+            "A new .png path, relative to your directory; in a workspace, in its clone or `$TMPDIR/`. A JPEG lands beside it as .jpg."
           ),
         reference_images: z
           .array(z.string().min(1))
-          .max(5)
+          .max(MAX_REFERENCE_IMAGES)
           .optional()
           .describe(
             "Local image paths, each given its role in the prompt ('Image 1: person to preserve')."
@@ -327,6 +330,12 @@ export function handoffTools(deps: HandoffDeps) {
           .enum(IMAGE_QUALITIES)
           .optional()
           .describe("low for drafts; high for dense text or fine detail."),
+        provider: z
+          .enum(IMAGE_PROVIDERS)
+          .optional()
+          .describe(
+            `Default ${DEFAULT_IMAGE_PROVIDER}; another only when asked.`
+          ),
       },
       (request) => actions.generateImage(request),
       imageWords,
@@ -1326,7 +1335,7 @@ export function handoffInstructions(
   // Sessions said image generation was unavailable on models without it:
   // the tool is the hub's, on every model, and stays the session's own.
   const images = names.includes("generate_image")
-    ? "\n\ngenerate_image makes images on any model through the machine's ChatGPT login: this session makes its own."
+    ? `\n\ngenerate_image makes images on any model through this machine's own sign-in to an image provider (${DEFAULT_IMAGE_PROVIDER} unless provider names another): this session makes its own.`
     : "";
   const loading = `\n\n${loadingLine(listable)}`;
   const mayStart = sessionMayStart(deps);

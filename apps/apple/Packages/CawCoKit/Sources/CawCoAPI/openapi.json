@@ -19840,6 +19840,15 @@
                       "medium",
                       "high"
                     ]
+                  },
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "chatgpt"
+                    ]
+                  },
+                  "model": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -48485,27 +48494,54 @@
       "GeneratedImage": {
         "type": "object",
         "properties": {
-          "billing": {
-            "type": "string",
-            "enum": [
-              "chatgpt_subscription"
-            ]
+          "asked": {
+            "description": "The `output_path` asked for, when the image was saved beside it under\nits format's extension instead ({@link IMAGE_EXTENSIONS}).",
+            "type": "string"
+          },
+          "format": {
+            "$ref": "#/components/schemas/ImageFormat"
           },
           "height": {
             "type": "number"
           },
+          "model": {
+            "description": "The provider's model that made it.",
+            "type": "string"
+          },
+          "notes": {
+            "description": "What the provider said of the run that the caller should know, in words.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "path": {
             "type": "string"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "chatgpt"
+            ]
           },
           "width": {
             "type": "number"
           }
         },
         "required": [
-          "billing",
+          "format",
           "height",
+          "model",
           "path",
+          "provider",
           "width"
+        ]
+      },
+      "ImageFormat": {
+        "type": "string",
+        "enum": [
+          "jpeg",
+          "png"
         ]
       },
       "ContinuationJob": {

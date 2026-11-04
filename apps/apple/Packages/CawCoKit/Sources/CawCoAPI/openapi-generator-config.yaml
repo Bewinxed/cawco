@@ -107,6 +107,7 @@ typeOverrides:
     HookCommandHandlerShell: OpenEnums.HookCommandHandlerShell
     HookEvent: OpenEnums.HookEvent
     HubAuthMode: OpenEnums.HubAuthMode
+    ImageFormat: OpenEnums.ImageFormat
     InboundVia: OpenEnums.InboundVia
     InstallCheck: OpenEnums.InstallCheck
     InstallRoute: OpenEnums.InstallRoute

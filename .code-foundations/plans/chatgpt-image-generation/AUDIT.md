@@ -1,5 +1,7 @@
 # Shared image tool audit
 
+> Superseded 2026-11-04: `generate_image` now runs through image providers (agent `image-providers/`), ChatGPT the default and Antigravity CLI (`provider: "antigravity"`) beside it, and keeps each provider's own format. The live tool's description is core `IMAGE_GENERATION_DESCRIPTION`; this record is the ChatGPT-only design it replaced.
+
 Audited against the installed Designing Skills and Tools guidance and
 [OpenAI's image-prompting guide](https://developers.openai.com/api/docs/guides/image-prompting).
 
