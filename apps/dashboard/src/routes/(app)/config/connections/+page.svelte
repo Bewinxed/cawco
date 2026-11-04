@@ -290,7 +290,7 @@
   //
   // The sign-in under way is the hub's (`signIn` on its row: the page it
   // was sent to, until it lapses), so a reload still shows it, and the
-  // row's button opens that same page again rather than starting another.
+  // row's button starts a fresh one, which replaces it at the hub.
 
   /** A sign-in asked for and not yet answered by the hub. */
   let signing = $state<Record<string, boolean>>({});
@@ -343,23 +343,27 @@
   const BLOCKED = words.blocked;
 
   /**
-   * The row's one press: the sign-in under way, opened again where it was,
-   * or a new one when none can still finish.
+   * The row's one press: a fresh sign-in, in a new tab, whose start
+   * replaces any under way at the hub (connections.ts: each start writes
+   * the row's `signInState` anew, so the old one's answer finds nothing).
+   * A code sign-in under way is the exception: its code stands on the row,
+   * and the press opens the page it is typed into.
    */
   function signIn(row: ConnectionView) {
-    const open = row.signIn;
-    if (row.auth === "device" && !open) {
+    if (row.auth === "device") {
+      if (row.signIn) {
+        if (!window.open(row.signIn.url, "_blank")) {
+          problems[row.name] = BLOCKED;
+        }
+        return;
+      }
       // A new code: shown on the row, its page opened from there.
       detach(startSignIn(row.name, null), "startSignIn");
       return;
     }
-    const tab = window.open(open ? open.url : "", "_blank");
+    const tab = window.open("", "_blank");
     if (!tab) {
       problems[row.name] = BLOCKED;
-      return;
-    }
-    if (open) {
-      delete problems[row.name];
       return;
     }
     detach(startSignIn(row.name, tab), "startSignIn");
@@ -1266,9 +1270,9 @@
                 variant="outline"
               />
             {:else if row.state !== "signed-in" && signsIn(row)}
-              <!-- One press returns to the sign-in under way, the same
-                   page; only when none can still finish does it start one. -->
-              {@const again = row.device ? words.deviceOpen : words.openSignIn}
+              <!-- While one is under way the press starts a fresh sign-in;
+                   a code sign-in's opens the page its code is typed into. -->
+              {@const again = row.device ? words.deviceOpen : words.signInAgain}
               <Button
                 aria-label="{row.signIn ? again : words.signIn} {labelOf(
                   row

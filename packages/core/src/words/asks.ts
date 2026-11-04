@@ -5,6 +5,8 @@
  * `Words.Asks`, CawCoCore/Words.generated.swift), and the probe kit finds
  * them by these same words (scripts/probe-words-check.ts refuses a copy).
  */
+import { commonWords } from "./common";
+
 export const askWords = {
   /** The card's title, as a screen reader names it. */
   permissionFrom: (who: string) => `Permission request from ${who}`,
@@ -47,6 +49,8 @@ export const askWords = {
   declining: "Declining…",
   signingIn: (server: string) => `Signing in to ${server}…`,
   /** Under the address while the provider's page is open. */
+  /** Connect's label while its sign-in is under way: a fresh one, in a new tab. */
+  connectAgain: commonWords.signInAgain,
   connectWaiting: (server: string) =>
     `Finish in the ${server} tab. This card waits for it.`,
   /** The beat in the card once the hub has signed in, before it becomes the record. */

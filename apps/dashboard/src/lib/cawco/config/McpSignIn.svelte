@@ -2,8 +2,11 @@
   /**
    * A fleet MCP server's sign-in, on its row. Sign in opens the provider in
    * a tab of its own (fleet.ts `signInToMcp`) and the page stays here: the
-   * button waits until the hub reports the server signed in
-   * (`server.auth.state`, over the socket), and then the row says so. The
+   * row waits until the hub reports the server signed in
+   * (`server.auth.state`, over the socket), and then says so. While it
+   * waits, `waiting` is bound out for the row's line, and the button stays
+   * pressable as Sign in again: a fresh sign-in in a new tab, whose start
+   * replaces the one under way at the hub (fleet-mcp.ts `#start`). The
    * tab's handle is never read: a provider's page that sends
    * Cross-Origin-Opener-Policy cuts it off from this page, which then reads
    * it closed while the sign-in goes on. A sign-in the hub has not heard
@@ -18,8 +21,13 @@
   import { signInToMcp } from "../fleet.js";
   import RowFault from "../RowFault.svelte";
 
-  let { server }: { server: FleetMcpServer } = $props();
-  let waiting = $state(false);
+  let {
+    server,
+    // No fallback: the page binds a record's entry, unset until a press.
+    waiting = $bindable(),
+  }: { server: FleetMcpServer; waiting?: boolean } = $props();
+  /** The hub is asked to start one: the press's own work. */
+  let starting = $state(false);
   let problem = $state<string | null>(null);
   const signedIn = $derived(server.auth?.state === "signed-in");
   /** The wait for the hub's word, ended by the start's expiry. */
@@ -36,7 +44,7 @@
   $effect(() => () => clearTimeout(lapse));
 
   async function signIn() {
-    waiting = true;
+    starting = true;
     problem = null;
     clearTimeout(lapse);
     let expiresAt: number;
@@ -46,7 +54,10 @@
       problem = failureWords(error);
       waiting = false;
       return;
+    } finally {
+      starting = false;
     }
+    waiting = true;
     // Past its start's expiry the provider's answer is refused: the sign-in
     // that has not landed by then never will.
     lapse = setTimeout(
@@ -69,9 +80,9 @@
       disabled={!server.enabled}
       failed={problem !== null}
       icon={IconKey}
-      label={words.signIn}
+      label={waiting ? words.restartSignIn : words.signIn}
       onclick={signIn}
-      pending={waiting}
+      pending={starting}
       pendingLabel={words.signingIn(server.name)}
       size="sm"
       variant="outline"

@@ -33,4 +33,9 @@ export const commonWords = {
   copyLink: "Copy link",
   /** Sends again what the hub never took: a message's, a comment's line. */
   sendAgain: "Send again",
+  /**
+   * A sign-in's button while one is under way: a fresh sign-in in a new
+   * tab, the one under way dropped at the hub.
+   */
+  signInAgain: "Sign in again",
 };

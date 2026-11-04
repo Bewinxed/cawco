@@ -15,9 +15,14 @@
  * 1. The row shows Sign in before, in both tabs.
  * 1b. The start page's opener policy (as a provider's sign-in page has)
  *    cuts the sign-in tab off from the dashboard, whose handle on it reads
- *    closed while the sign-in goes on: the row still waits on it and says
- *    no fault (McpSignIn.svelte reads no handle).
- * 2. Once the hand-back's tab closed, the row in the tab that pressed shows
+ *    closed while the sign-in goes on: the row still waits on it, says no
+ *    fault (McpSignIn.svelte reads no handle), and its button stays
+ *    pressable as Sign in again.
+ * 1c. The person closes the sign-in tab and presses Sign in again: a new
+ *    tab opens on a fresh start, the hub refuses the first one's state,
+ *    and the row says no fault.
+ * 2. The second sign-in is handed back; once its tab closed, the row in the
+ *    tab that pressed shows
  *    signed in, no Sign in and no fault, without a reload.
  * 3. The other tab's row shows signed in too, without a reload.
  * 4. The pressing tab turns the server off (its page writes the hub's
@@ -126,8 +131,18 @@ const run = async (kit: Kit) => {
       const other = await kit.page(view);
       const rowIn = (page: typeof pressing) =>
         page.locator(`[data-row-name="${SERVER}"]`);
+      // A button's name leads with its label: Sign in, and not Sign in again.
       const signInIn = (page: typeof pressing) =>
-        rowIn(page).getByRole("button", { name: mcpWords.signIn });
+        rowIn(page).getByRole("button", {
+          name: new RegExp(
+            `^(?!${mcpWords.restartSignIn})${mcpWords.signIn}`,
+            "u"
+          ),
+        });
+      const againIn = (page: typeof pressing) =>
+        rowIn(page).getByRole("button", {
+          name: new RegExp(`^${mcpWords.restartSignIn}`, "u"),
+        });
       const signedInIn = (page: typeof pressing) =>
         rowIn(page).getByRole("status").filter({ hasText: mcpWords.signedIn });
       for (const page of [pressing, other]) {
@@ -200,29 +215,63 @@ const run = async (kit: Kit) => {
         severed,
         fault: await rowIn(pressing).locator("[data-sign-in-fault]").count(),
         waiting: await rowIn(pressing)
-          .getByRole("button", { name: mcpWords.signingIn(SERVER) })
+          .getByRole("status")
+          .filter({ hasText: mcpWords.signingIn(SERVER) })
           .count(),
+        again: await againIn(pressing)
+          .isEnabled()
+          .catch(() => false),
       };
       kit.check(
-        `${view} 1b: with the sign-in tab cut off from its opener, the row still waits on the sign-in and says no fault`,
-        underWay.severed && underWay.fault === 0 && underWay.waiting === 1,
+        `${view} 1b: with the sign-in tab cut off from its opener, the row still waits on the sign-in, says no fault, and its button stays pressable as Sign in again`,
+        underWay.severed &&
+          underWay.fault === 0 &&
+          underWay.waiting === 1 &&
+          underWay.again,
         JSON.stringify(underWay)
       );
-      const closed = tab.waitForEvent("close", { timeout: 30_000 }).then(
+
+      // The person closes the sign-in tab and presses again: a fresh
+      // sign-in, in a new tab, its start replacing the first at the hub.
+      await tab.close();
+      const [fresh] = await Promise.all([
+        pressing.context().waitForEvent("page"),
+        againIn(pressing).click(),
+      ]);
+      await fresh.waitForURL(`${CAWCO_OAUTH_URL}/start#*`, {
+        timeout: 30_000,
+      });
+      const freshState = stateOf(fresh.url());
+      const first = await fetch(`${fleet.base}/api/fleet/mcp/oauth/complete`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: "probe-code", state }),
+      });
+      const retried = {
+        newState: freshState !== "" && freshState !== state,
+        firstRefused: first.status,
+        fault: await rowIn(pressing).locator("[data-sign-in-fault]").count(),
+      };
+      kit.check(
+        `${view} 1c: pressed again after closing its tab, the row starts a fresh sign-in in a new tab, the first one dropped at the hub, with no fault`,
+        retried.newState && retried.firstRefused === 400 && retried.fault === 0,
+        JSON.stringify(retried)
+      );
+      const closed = fresh.waitForEvent("close", { timeout: 30_000 }).then(
         () => true,
         () => false
       );
-      await tab.goto(
-        `${dashboard}/oauth/mcp?code=probe-code&state=${encodeURIComponent(state)}`
+      await fresh.goto(
+        `${dashboard}/oauth/mcp?code=probe-code&state=${encodeURIComponent(freshState)}`
       );
       kit.check(
-        `${view} 2a: the hand-back finishes the sign-in and closes its tab`,
+        `${view} 2a: the second sign-in's hand-back finishes it and closes its tab`,
         await closed
       );
 
       const read = async (page: typeof pressing) => ({
         shown: await signedInIn(page).count(),
-        signIn: await signInIn(page).count(),
+        signIn: (await signInIn(page).count()) + (await againIn(page).count()),
         fault: await rowIn(page).locator("[data-sign-in-fault]").count(),
         sameLoad: await page.evaluate(
           () => (globalThis as { probeMark?: boolean }).probeMark === true

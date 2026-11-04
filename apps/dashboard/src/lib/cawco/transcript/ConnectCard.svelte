@@ -15,7 +15,8 @@
    * the composer, so there is no Other line.
    *
    * Connect is the hub's sign-in (connect-sign-ins): the card waits in
-   * place while the provider's page is open, a sign-in that did not come
+   * place while the provider's page is open, its button Sign in again (a
+   * fresh sign-in in a new tab), a sign-in that did not come
    * back takes the card's centre in the error formula with Try again and
    * Show details, and while the session's machine is offline both wait.
    * The hub's landing answers the call: Connect holds "Connected as …" for
@@ -180,16 +181,27 @@
   );
   const declining = $derived(declined !== null && declineRefused === null);
 
-  function pressConnect(): void {
-    if (
-      !(card && connect && reachable) ||
-      declining ||
-      signIn.stage === "waiting" ||
-      done
-    ) {
+  /** The hub is asked to start a sign-in: the press's own work. */
+  let starting = $state(false);
+
+  /**
+   * Connect, or while a sign-in is under way Sign in again: a fresh one in
+   * a new tab, whose start replaces the one under way at the hub.
+   */
+  async function pressConnect(): Promise<void> {
+    if (!(card && connect && reachable) || declining || done) {
       return;
     }
-    connectSignIns.connect(card.requestId, connect.server, connect.access);
+    starting = true;
+    try {
+      await connectSignIns.connect(
+        card.requestId,
+        connect.server,
+        connect.access
+      );
+    } finally {
+      starting = false;
+    }
   }
 
   function notNow(): void {
@@ -276,6 +288,9 @@
     }
     if (failed) {
       return configureWords.tryAgain;
+    }
+    if (signingIn) {
+      return askWords.connectAgain;
     }
     return connect.again
       ? askWords.reconnect(connect.server)
@@ -422,9 +437,10 @@
         {/if}
         <!-- Connect at the start, a worded Not now at the end: a parked call
              must be answered, so the refusal is a word, not a cross. The
-             yes is the one coral control; it pends while the provider's page
-             is open, and ends in the kit's done morph once the hub signed
-             in. Not now stays live while that page is open. -->
+             yes is the one coral control; it pends while the hub starts the
+             sign-in, reads Sign in again while the provider's page is open
+             (a fresh sign-in), and ends in the kit's done morph once the hub
+             signed in. Not now stays live while that page is open. -->
         <div
           data-slot="choice"
           class="flex flex-wrap justify-between gap-x-space-8 gap-y-space-2 mt-space-1"
@@ -440,7 +456,7 @@
             icon={connectIcon}
             label={connectLabel}
             onclick={pressConnect}
-            pending={signingIn}
+            pending={starting}
             pendingLabel={askWords.signingIn(connect.server)}
             size="sm"
             variant="secondary"

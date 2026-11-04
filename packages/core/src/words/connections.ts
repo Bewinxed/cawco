@@ -9,6 +9,7 @@
  * chain when that file is stale. So a word is changed here or nowhere.
  */
 import type { ConnectionAuth } from "../connections";
+import { commonWords } from "./common";
 
 export const connectionsWords = {
   list: "Connections",
@@ -40,8 +41,8 @@ export const connectionsWords = {
     `${service}'s sign-in is open in a new tab; this row turns signed in when you finish there.`,
   signInClosed:
     "The sign-in tab closed before it finished. Open sign-in to go on where it was, until it lapses.",
-  /** The row's own button while its sign-in can still finish: the same page again, never another sign-in. */
-  openSignIn: "Open sign-in",
+  /** The row's own button while its sign-in is under way: a fresh one, the one under way dropped. */
+  signInAgain: commonWords.signInAgain,
   /** The hub still says a sign-in is under way, but it ran past its time. */
   signInLapsed:
     "The last sign-in ran out of time before it finished. Sign in to start another.",

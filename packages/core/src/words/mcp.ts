@@ -25,7 +25,10 @@ export const mcpWords = {
 
   /** A row's sign-in, for a server that signs in with OAuth. */
   signIn: "Sign in",
+  /** The row's line while a sign-in is under way. */
   signingIn: (name: string) => `Waiting for ${name}…`,
+  /** The row's button while a sign-in is under way: a fresh one. */
+  restartSignIn: commonWords.signInAgain,
   signedIn: "Signed in for the fleet",
   /** The native app's: its own sign-in sheet was dismissed. */
   signInClosed: "The sign-in tab closed before it finished.",

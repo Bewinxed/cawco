@@ -1007,6 +1007,9 @@ public enum Words {
 
         /// Sends again what the hub never took: a message's, a comment's line.
         public static let sendAgain = "Send again"
+
+        /// A sign-in's button while one is under way: a fresh sign-in in a new tab, the one under way dropped at the hub.
+        public static let signInAgain = "Sign in again"
     }
 
     public enum Transcript {
@@ -1147,7 +1150,9 @@ public enum Words {
             "Signing in to \(server)…"
         }
 
-        /// Under the address while the provider's page is open.
+        /// Connect's label while its sign-in is under way: a fresh one, in a new tab.
+        public static let connectAgain = "Sign in again"
+
         public static func connectWaiting(server: String) -> String {
             "Finish in the \(server) tab. This card waits for it."
         }
@@ -3066,8 +3071,8 @@ public enum Words {
 
         public static let signInClosed = "The sign-in tab closed before it finished. Open sign-in to go on where it was, until it lapses."
 
-        /// The row's own button while its sign-in can still finish: the same page again, never another sign-in.
-        public static let openSignIn = "Open sign-in"
+        /// The row's own button while its sign-in is under way: a fresh one, the one under way dropped.
+        public static let signInAgain = "Sign in again"
 
         /// The hub still says a sign-in is under way, but it ran past its time.
         public static let signInLapsed = "The last sign-in ran out of time before it finished. Sign in to start another."
@@ -3423,9 +3428,13 @@ public enum Words {
         /// A row's sign-in, for a server that signs in with OAuth.
         public static let signIn = "Sign in"
 
+        /// The row's line while a sign-in is under way.
         public static func signingIn(name: String) -> String {
             "Waiting for \(name)…"
         }
+
+        /// The row's button while a sign-in is under way: a fresh one.
+        public static let restartSignIn = "Sign in again"
 
         public static let signedIn = "Signed in for the fleet"
 

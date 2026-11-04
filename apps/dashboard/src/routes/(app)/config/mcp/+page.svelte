@@ -43,6 +43,8 @@
   const HUE = section.hue;
 
   const servers = $derived(store.fleet.value?.config.mcp ?? []);
+  /** The rows whose sign-in is under way (McpSignIn's `waiting`), by name: their line says so. */
+  let waiting = $state<Record<string, boolean>>({});
   const machines = $derived(orderMachines(cawco.machines));
   let syncing = $state(false);
   let syncFailed = $state(false);
@@ -146,6 +148,9 @@
               )
             : describeMcp(row.config)}
           name={row.name}
+          note={waiting[row.name]
+            ? { tone: "busy", text: words.signingIn(row.name) }
+            : undefined}
           ontoggle={(next) => acts.toggle(row, next)}
           toggling={acts.busy[row.name] === true}
         >
@@ -177,7 +182,7 @@
             />
           {/snippet}
           {#snippet trailing()}
-            <McpSignIn server={row} />
+            <McpSignIn server={row} bind:waiting={waiting[row.name]} />
           {/snippet}
           {#snippet below()}
             <RowActFaults {acts} {row} />
