@@ -493,6 +493,7 @@ import {
   presenceOf,
 } from "@cawco/core/handover";
 import type { NeutralMessage } from "@cawco/core/harness";
+import { harnessRefusal } from "@cawco/core/harness-refusal";
 import {
   type HubPreviewOrigins,
   isHubPreview,
@@ -16425,10 +16426,20 @@ export const createServer = (
     // harness has reported, nothing says it is installed there or who is
     // signed in to it, so nothing starts on it.
     const { harness } = payload;
-    if (!harnessReportOf(machineId, harness)) {
+    const report = harnessReportOf(machineId, harness);
+    if (!report) {
       return {
         refusal: unreportedHarnessRefusal(machineName(machineId), harness),
       };
+    }
+    // A machine that refuses every start of this harness's CLI (not
+    // installed, Claude Code's version not said yet or too old) is refused
+    // for that, in the words its row says: its report is filed signed out
+    // then (no dir was asked), which the account's check would read as no
+    // account at all.
+    const refused = harnessRefusal(report, machineName(machineId));
+    if (refused) {
+      return { refusal: refused.why };
     }
     // Held, resumed, forked or placed: an account with no sign-in on the
     // machine has no dir there to run in, so the start is refused.

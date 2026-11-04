@@ -14,14 +14,14 @@
 
 import type { Bounded } from "@cawco/core/bounded";
 import { HARNESS_TOOL, HARNESSES, type HarnessKind } from "@cawco/core/harness";
-import { machineLabel } from "@cawco/core/machine-names";
 import {
-  type ToolSpec,
-  type ToolStatus,
-  toolRuns,
-  toolSpec,
-} from "@cawco/core/tools";
-import { toolWords } from "@cawco/core/words/tools";
+  type HarnessRefusalKind,
+  harnessRefusal,
+  harnessSpec,
+} from "@cawco/core/harness-refusal";
+import { machineLabel } from "@cawco/core/machine-names";
+import { type ToolSpec, type ToolStatus, toolRuns } from "@cawco/core/tools";
+import { harnessRefusedWords } from "@cawco/core/words/harness";
 import { z } from "zod";
 import { HarnessKindSchema } from "#lib/cawco/stored-shapes.js";
 import {
@@ -46,7 +46,7 @@ export interface HarnessBlock {
   /** What fixes it: an update, or an install. */
   fix: HarnessFix;
   harness: HarnessKind;
-  kind: "not-installed" | "version";
+  kind: HarnessRefusalKind;
   /** The machine, by its name. */
   machine: string;
   /** The harness's CLI, as the catalog holds it. */
@@ -56,13 +56,7 @@ export interface HarnessBlock {
 }
 
 /** A harness's catalog entry; every harness has one (core `HARNESS_TOOL`). */
-const specOf = (harness: HarnessKind): ToolSpec => {
-  const spec = toolSpec(HARNESS_TOOL[harness]);
-  if (!spec) {
-    throw new Error(`The tool catalog names no ${harness}`);
-  }
-  return spec;
-};
+const specOf = harnessSpec;
 
 /** The machine's report of one harness, as its agent last sent it. */
 const reportOf = (machine: Machine, harness: HarnessKind) =>
@@ -83,12 +77,12 @@ export function harnessBlockOf(
   if (!report) {
     return null;
   }
-  const kind =
-    report.refused ?? (report.installed ? undefined : "not-installed");
-  if (!kind) {
+  const name = machineLabel(machine.hostname);
+  const refusal = harnessRefusal(report, name);
+  if (!refusal) {
     return null;
   }
-  const spec = specOf(harness);
+  const { kind, spec, why } = refusal;
   const tool = machine.tools?.[spec.id];
   if (
     tool?.state === "installed" &&
@@ -97,17 +91,12 @@ export function harnessBlockOf(
   ) {
     return null;
   }
-  const name = machineLabel(machine.hostname);
   return {
     harness,
     kind,
     machine: name,
     spec,
-    why:
-      kind === "not-installed"
-        ? `${spec.name} isn't installed on ${name}, so CawCo can't start ${spec.name} sessions${harness === "claude" ? " or sign an account in" : ""} there. Install ${spec.name}, and CawCo runs it as soon as it's on.`
-        : (report.authReason ??
-          `${spec.name}${report.version ? ` ${report.version}` : ""} on ${name} isn't one CawCo runs. ${keptCurrent(spec) ? `${toolWords.updatesItself(spec.name)}.` : `${harnessWords.press({ kind, spec })} on this machine, and CawCo runs it again.`}`),
+    why,
     fix: fixOf(spec, tool),
   };
 }
@@ -178,14 +167,12 @@ export const offersPress = (block: HarnessBlock): boolean =>
 
 /** A block's words for the press, its progress and its outcome. */
 export const harnessWords = {
-  press: (block: Pick<HarnessBlock, "kind" | "spec">): string => {
-    if (block.kind === "not-installed") {
-      return `Install ${block.spec.name}`;
-    }
-    return block.spec.exactVersion
-      ? `Install ${block.spec.name} ${block.spec.exactVersion}`
-      : `Update ${block.spec.name}`;
-  },
+  press: (block: Pick<HarnessBlock, "kind" | "spec">): string =>
+    harnessRefusedWords.press(
+      block.kind,
+      block.spec.name,
+      block.spec.exactVersion
+    ),
   pressing: (block: HarnessBlock): string =>
     installs(block) ? "Installing…" : "Updating…",
   running: (block: HarnessBlock): string =>

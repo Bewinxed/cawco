@@ -17,3 +17,46 @@ export const harnessWords = {
   claudeExited: (code: number, said: string) =>
     `Claude Code stopped on its own (exit ${code}) and said “${said}”. A message to it starts it again.`,
 };
+
+/**
+ * Why a machine's harness CLI stands refused (core HarnessReport `refused`),
+ * as every place that says it reads it: the machine's own surfaces
+ * (dashboard harness-block.svelte.ts) and the hub's refusal of a start there
+ * (hub server.ts `placeSpawn`), from one sentence (core harness-refusal.ts
+ * `harnessRefusal`). Claude Code's version sentences the agent says itself
+ * (agent claude-version.ts `versionRefusal`), and the report carries them.
+ */
+export const harnessRefusedWords = {
+  /** The press that fixes it: its install, OpenCode's one version, or its update. */
+  press: (
+    kind: "not-installed" | "version",
+    name: string,
+    exactVersion: string | undefined
+  ): string => {
+    if (kind === "not-installed") {
+      return `Install ${name}`;
+    }
+    return exactVersion ? `Install ${name} ${exactVersion}` : `Update ${name}`;
+  },
+  /** A harness not on the machine (`claude`: no account can sign in there either). */
+  notInstalled: (name: string, machine: string, claude: boolean) =>
+    `${name} isn't installed on ${machine}, so CawCo can't start ${name} sessions${claude ? " or sign an account in" : ""} there. Install ${name}, and CawCo runs it as soon as it's on.`,
+  /** The fix {@link harnessRefusedWords.notRun} ends on for a CLI its press updates. */
+  pressFix: (press: string) =>
+    `${press} on this machine, and CawCo runs it again.`,
+  /** One at a version CawCo doesn't run, when the machine gave no sentence of its own; `fix` ends it. */
+  notRun: (
+    name: string,
+    version: string | undefined,
+    machine: string,
+    fix: string
+  ) =>
+    `${name}${version ? ` ${version}` : ""} on ${machine} isn't one CawCo runs. ${fix}`,
+  /**
+   * The machine's Claude Code still answering `claude --version` after the
+   * wait (`seconds`): no start until it answers, and the agent's next read
+   * of Claude (each minute) carries the answer, which clears it by itself.
+   */
+  claudeVersionUnsaid: (seconds: number, floor: string) =>
+    `Claude Code on this machine hasn't said its version yet (\`claude --version\` gave no answer in ${seconds} s), and CawCo runs only ${floor} or newer. CawCo is still waiting for its answer, and within a minute of it reads the sign-ins here and can start Claude sessions. Nothing was started or signed in.`,
+};

@@ -9,6 +9,7 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { claudeVersionPath } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { harnessRefusedWords } from "@cawco/core/words/harness";
 import { toolWords } from "@cawco/core/words/tools";
 import type { Subprocess } from "bun";
 import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "./auth";
@@ -184,7 +185,8 @@ export const claudeHostVersion = async (): Promise<
 };
 
 /**
- * The fix a refusal ends on when the machine's Claude Code said no version:
+ * The fix a refusal ends on when the machine's Claude Code answered with no
+ * version (one still answering clears by itself, `claudeVersionUnsaid`):
  * the press that runs Claude Code's own updater on the machine (core
  * TOOL_CATALOG's `claude`), wherever the refusal stands in the dashboard
  * (`HarnessBlock`). With no version to compare, the hub sends no update of
@@ -210,7 +212,10 @@ export const versionRefusal = (
 ): string | undefined => {
   switch (version.kind) {
     case "unanswered":
-      return `Claude Code on this machine hasn't said its version yet (\`claude --version\` gave no answer in ${Math.round(version.after / 1000)} s), so CawCo can't tell it is ${CLAUDE_VERSION_FLOOR} or newer, the oldest it runs. ${UPDATE_FIX}`;
+      return harnessRefusedWords.claudeVersionUnsaid(
+        Math.round(version.after / 1000),
+        CLAUDE_VERSION_FLOOR
+      );
     case "answered":
       if (!version.value) {
         return `Claude Code on this machine didn't say its version, so CawCo can't tell it is ${CLAUDE_VERSION_FLOOR} or newer, the oldest it runs. ${UPDATE_FIX}`;

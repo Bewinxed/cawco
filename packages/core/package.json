@@ -94,6 +94,7 @@
     "./words/graph": "./src/words/graph.ts",
     "./words/leaks": "./src/words/leaks.ts",
     "./words/tools": "./src/words/tools.ts",
+    "./words/harness": "./src/words/harness.ts",
     "./words/preview-ports": "./src/words/preview-ports.ts",
     "./words/loop": "./src/words/loop.ts",
     "./words/tether": "./src/words/tether.ts",
@@ -228,6 +229,7 @@
       "default": "./src/decisions-library.ts"
     },
     "./harness": "./src/harness.ts",
+    "./harness-refusal": "./src/harness-refusal.ts",
     "./model-names": "./src/model-names.ts",
     "./fleet": "./src/fleet.ts",
     "./words/common": "./src/words/common.ts",

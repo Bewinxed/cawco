@@ -23,8 +23,11 @@
  *     says once that the account's dir was not read, naming the dir and
  *     why, and reports Claude refused for the version it hasn't said
  *     (`versionRefusal`). The hub keeps no sign-in for the account, and a
- *     Claude start is still refused. The machine's capabilities arrive as
- *     their own update.
+ *     Claude start is still refused, in the sentence the machine's row says
+ *     (core harness-refusal.ts `harnessRefusal`): its version not said yet,
+ *     clearing within a minute of its answer, not "no account" (hub
+ *     server.ts `placeSpawn`). The machine's capabilities arrive as their
+ *     own update.
  * (d) The stand-in answers at once from here, and the `--version` it was
  *     already asked goes on to its answer: Claude's report on the agent's
  *     next read carries that version and no refusal, the account reads
@@ -48,6 +51,8 @@ import {
 } from "../../../packages/agent/src/accounts";
 import { versionRefusal } from "../../../packages/agent/src/claude-version";
 import { type Bounded, readWithin } from "../../../packages/core/src/bounded";
+import { harnessRefusal } from "../../../packages/core/src/harness-refusal";
+import { machineLabel } from "../../../packages/core/src/machine-names";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { unreportedHarnessRefusal } from "../../../packages/hub/src/placement";
@@ -221,6 +226,31 @@ const drive = (fleet: Fleet) => {
   return { row, claudeReport, onlineAt, signin, startClaude };
 };
 
+/**
+ * What the machine's row says of its Claude Code while it stands refused
+ * (core harness-refusal.ts `harnessRefusal`, which dashboard
+ * harness-block.svelte.ts says); undefined while it runs or has not reported.
+ */
+const rowSentence = (agent: AgentRow | undefined): string | undefined => {
+  const report = agent?.harnesses?.find((one) => one.harness === "claude");
+  if (!report) {
+    return;
+  }
+  const { authReason, refused, version } = report;
+  return harnessRefusal(
+    {
+      harness: "claude",
+      installed: refused !== "not-installed",
+      ...(authReason ? { authReason } : {}),
+      ...(refused === "version" || refused === "not-installed"
+        ? { refused }
+        : {}),
+      ...(version ? { version } : {}),
+    },
+    machineLabel(agent?.hostname ?? MACHINE)
+  )?.why;
+};
+
 /** Whether the hub refused a start in `expected`'s words; a start it did not answer was not. */
 const refusedWith = (said: Bounded<string>, expected: string): boolean => {
   switch (said.kind) {
@@ -373,12 +403,16 @@ const timeouts = async ({
         signin() === undefined,
       `report: ${JSON.stringify(report ?? null)}; sign-in: ${signin() ?? "none"}`
     );
+    // The row's sentence, which the hub's refusal says too: the version
+    // not said, not "no account".
+    const why = rowSentence(await row());
     const afterCut = await startClaude();
     check(
-      "(c) a Claude start is still refused, and nothing is left of it",
-      afterCut.said.kind === "answered" &&
+      "(c) a Claude start is still refused, in the machine row's own sentence: Claude Code hasn't said its version yet, and it starts within a minute of the answer; nothing is left of it",
+      why === VERSION_UNSAID &&
+        refusedWith(afterCut.said, VERSION_UNSAID) &&
         fleet.instance(afterCut.id) === undefined,
-      `said: ${heard(afterCut.said)}; row: ${JSON.stringify(fleet.instance(afterCut.id) ?? null)}`
+      `said: ${heard(afterCut.said)}; the row's sentence: ${why ?? "(none)"}; row: ${JSON.stringify(fleet.instance(afterCut.id) ?? null)}`
     );
     const caps = await poll(
       async () => (await row())?.machineCapabilities,
