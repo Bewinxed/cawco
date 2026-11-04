@@ -26,8 +26,8 @@
  * One landing at a time per repository and branch, and a turn never waits:
  * fetch, rebase onto the branch again, run again only the commands whose
  * inputs the rebase changed, push, and, while someone keeps pushing in
- * between, the same again, three tries in all. A push (and a push check) the
- * remote fails on its own fault, a 5xx or a dropped connection, is tried
+ * between, the same again, three tries in all. A fetch, push check or push
+ * the remote fails on its own fault, a 5xx or a dropped connection, is tried
  * again as it is, a few times with backoff ({@link triedOnFault}); one
  * refused for a reason is not. A command due in the turn that
  * would wait for a machine slot or a pause, or run on another machine (a
@@ -309,9 +309,9 @@ const CONFLICT_MARK = "cawco-conflict";
 const ATTEMPTS = 3;
 
 /**
- * The waits before each push tried again after the remote failed it on its
- * own fault ({@link remoteFault}): three more pushes, 5 s, 15 s and 45 s
- * apart. On 2026-11-04, between about 12:40 and 13:20, three landings were
+ * The waits before each push or fetch tried again after the remote failed
+ * it on its own fault ({@link remoteFault}): three more tries, 5 s, 15 s and
+ * 45 s apart. On 2026-11-04, between about 12:40 and 13:20, three landings were
  * refused `[remote rejected] (Internal Server Error)` and one `(failure)`,
  * GitHub's own report-status for the ref (`ng <ref> <reason>`, git
  * send-pack.c `receive_status`), while its status page said all was
@@ -338,9 +338,9 @@ const FAULT_WORDS =
 const REASONED_REFUSAL = /\[rejected\]|^remote: (?:error|fatal):/imu;
 
 /**
- * Whether a push that failed did so on the remote's own fault ({@link
- * FAULT_WORDS}) and never for a reason ({@link REASONED_REFUSAL}): only such
- * a push is tried again. Read from git's words, as nothing else says it: a
+ * Whether a push or fetch that failed did so on the remote's own fault
+ * ({@link FAULT_WORDS}) and never for a reason ({@link REASONED_REFUSAL}):
+ * only such a one is tried again. Read from git's words, as nothing else says it: a
  * 5xx and a non-fast-forward both exit 1. Through a workspace's git door the
  * host's git's ref line is the reason the door gives (agent hub-git.ts
  * `pushAnswers`), so `[remote rejected] HEAD -> main ([remote rejected]
@@ -352,10 +352,10 @@ const remoteFault = (result: CommandResult): boolean => {
 };
 
 /**
- * A push, tried again while the remote fails it on its own fault
+ * A push or fetch, tried again while the remote fails it on its own fault
  * ({@link remoteFault}) and the landing is not stopped, after each wait of
- * {@link FAULT_WAITS_MS}, each try logged. `settled` is whether a push that
- * answered needs no other: it landed (0, or the branch holds the commit
+ * {@link FAULT_WAITS_MS}, each try logged. `settled` is whether one that
+ * answered needs no other: a fetch that answered 0; a push that it landed (0, or the branch holds the commit
  * when read after it: a 5xx can come after the remote took the ref), or its
  * boundary cut it off ({@link CUT_OFF}), which is read once and never tried
  * again. Answers the last push; a push that failed every time is refused in
@@ -384,6 +384,22 @@ async function triedOnFault(
     await Bun.sleep(wait);
   }
 }
+
+/**
+ * `git fetch origin <base>`, tried again on the remote's own fault
+ * ({@link triedOnFault}): every fetch of a landing, and of a branch push.
+ */
+const fetchBase = (
+  run: (cmd: string, timeoutMs: number) => Promise<CommandResult>,
+  base: string,
+  stopped?: () => boolean
+): Promise<CommandResult> =>
+  triedOnFault(
+    `the fetch of ${base}`,
+    () => run(`git fetch origin ${quote(base)}`, NETWORK_MS),
+    async (fetched) => fetched.exitCode === 0,
+    stopped
+  );
 
 /** A command git refused at `step`, in its words. */
 const refusal = (step: Refusal["step"], result: CommandResult): Refusal => ({
@@ -699,7 +715,7 @@ async function onBase<F>(
   const run = (cmd: string, timeoutMs: number) =>
     deps.run(cmd, timeoutMs, inTurn);
   const target = quote(`origin/${base}`);
-  const fetched = await run(`git fetch origin ${quote(base)}`, NETWORK_MS);
+  const fetched = await fetchBase(run, base, deps.stopped);
   if (fetched.exitCode !== 0) {
     return refusal("fetch", fetched);
   }
@@ -837,7 +853,7 @@ async function movedOn(
   base: string,
   onto: string
 ): Promise<boolean> {
-  const fetched = await run(`git fetch origin ${quote(base)}`, NETWORK_MS);
+  const fetched = await fetchBase(run, base);
   if (fetched.exitCode !== 0) {
     return false;
   }
@@ -1063,7 +1079,7 @@ async function pushOwnBranch(
     if (deps.stopped?.()) {
       return { kind: "stopped" };
     }
-    const fetched = await run(`git fetch origin ${quote(base)}`, NETWORK_MS);
+    const fetched = await fetchBase(run, base, deps.stopped);
     if (fetched.exitCode !== 0) {
       return refusal("fetch", fetched);
     }

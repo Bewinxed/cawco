@@ -578,7 +578,9 @@ const spec: Spec = {
       check(
         "(y) when the host's credential helper never answers, the push ends within the door's silence limit, refused in words that say so; nothing lands and the helper is gone",
         stalled.exitCode !== 0 &&
-          said(stalled).includes("said nothing for 120 s and was stopped") &&
+          said(stalled).includes(
+            "said nothing on stdout or stderr for 120 s, so it was stopped"
+          ) &&
           stallTook < 180 &&
           (await tip(ELSE, "door-lfs-stall")) === "" &&
           !http.lfs(ELSE_LFS).some((one) => one.oid === stallLfs.oid) &&

@@ -16,7 +16,9 @@
  *   bun scripts/probe-kit/run.ts landing-faults
  *
  * (a) a push answered HTTP 500 once, then taken: the landing lands, after
- *     two pushes, the first logged as tried again;
+ *     two pushes, the first logged as tried again in words naming the
+ *     status (the door carries git's `RPC failed; HTTP 500` line, agent
+ *     hub-git.ts `pushAnswers`);
  * (b) a push answered as GitHub did, `ng refs/heads/main Internal Server
  *     Error` in its report-status, once, then taken: the landing lands, after
  *     two pushes;
@@ -26,7 +28,9 @@
  *     wait and nothing logged as tried again; origin's main is unchanged;
  * (d) a push the remote refuses with a reason in its report-status
  *     (`pre-receive hook declined`): refused at once, one push sent, in
- *     words naming that reason.
+ *     words naming that reason;
+ * (e) the landing's fetch answered HTTP 500 once: the fetch is tried again,
+ *     logged, and the landing lands.
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -38,6 +42,7 @@ const ORIGIN = "probe/origin.git";
 const THEIRS = "probe/theirs.git";
 const IDENTITY = ["-c", "user.name=Probe", "-c", "user.email=probe@probe.test"];
 const RECEIVE_PACK = /\/git-receive-pack$/u;
+const UPLOAD_PACK = /\/git-upload-pack$/u;
 /** The repository a request names: `/<owner>/<repo>.git` and the rest. */
 const REPO_PATH = /^\/([^/]+\/[^/]+\.git)(\/.*)?$/u;
 /** The longest any leg refused at once may take: well under the first wait (5 s). */
@@ -122,6 +127,8 @@ const spec: Spec = {
     let theirs = false;
     /** The pushes the proxy was sent, failed or not. */
     let pushes = 0;
+    /** How many fetch requests (`git-upload-pack`) the proxy answers HTTP 500 next. */
+    let fetchFaults = 0;
     const proxy = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
@@ -134,6 +141,13 @@ const spec: Spec = {
           request.method === "POST"
             ? new Uint8Array(await request.arrayBuffer())
             : undefined;
+        const upload =
+          UPLOAD_PACK.test(url.pathname) ||
+          url.searchParams.get("service") === "git-upload-pack";
+        if (upload && fetchFaults > 0) {
+          fetchFaults -= 1;
+          return new Response("Internal Server Error\n", { status: 500 });
+        }
         if (request.method === "POST" && RECEIVE_PACK.test(url.pathname)) {
           pushes += 1;
           const now = fault;
@@ -217,13 +231,18 @@ const spec: Spec = {
      * fetched it; `inTurn` runs as the landing's turn gates, after the push
      * check and before the push.
      */
-    const landing = async (name: string, inTurn?: () => Promise<void>) => {
+    const landing = async (
+      name: string,
+      inTurn?: () => Promise<void>,
+      armed?: () => void
+    ) => {
       await run("git fetch -q origin");
       const made = (
         await Bun.$`git -C ${clone} ${IDENTITY} commit-tree -p refs/remotes/origin/main -m ${name} HEAD^{tree}`.text()
       ).trim();
       await Bun.$`git -C ${clone} checkout -q --detach ${made}`.quiet();
       const before = { pushes, logged: logged.length };
+      armed?.();
       const started = performance.now();
       const outcome = await land("main", {
         check: async (turn) => {
@@ -257,7 +276,8 @@ const spec: Spec = {
           (await tip(ORIGIN)) === a.head &&
           a.pushed === 2 &&
           a.tried.length === 1 &&
-          (a.tried[0] ?? "").includes("try 1 of 4"),
+          (a.tried[0] ?? "").includes("try 1 of 4") &&
+          (a.tried[0] ?? "").includes("HTTP 500"),
         `${shown(a)}; main ${await tip(ORIGIN)} (HEAD ${a.head})`
       );
 
@@ -307,6 +327,20 @@ const spec: Spec = {
           d.ms < AT_ONCE_MS &&
           (await tip(ORIGIN)) === mainBefore,
         `${shown(d)}; main ${await tip(ORIGIN)} (was ${mainBefore})`
+      );
+
+      const e = await landing("leg-e", undefined, () => {
+        fetchFaults = 1;
+      });
+      check(
+        "(e) the landing's fetch answered HTTP 500 once is tried again, logged, and the landing lands",
+        e.outcome.kind === "landed" &&
+          (await tip(ORIGIN)) === e.head &&
+          fetchFaults === 0 &&
+          e.tried.length === 1 &&
+          (e.tried[0] ?? "").includes("the fetch of main") &&
+          (e.tried[0] ?? "").includes("500"),
+        `${shown(e)}; main ${await tip(ORIGIN)} (HEAD ${e.head})`
       );
     } finally {
       console.warn = warn;

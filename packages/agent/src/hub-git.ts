@@ -119,7 +119,9 @@ export const gitHelperDirOf = (id: string): string =>
  * the door, reads the door's word (`ok`, or why not), then copies stdin to
  * the door (half-closing it when git closes stdin) and the door's frames to
  * stdout ({@link doorChannel}: a length, then that many bytes; an empty one
- * is the door's keepalive), and ends when the host closes the door. Every
+ * is the door's keepalive; one whose length has {@link SAID_BIT} set is the
+ * door's words on why it stopped, printed to git's stderr before the helper
+ * ends git's command), and ends when the host closes the door. Every
  * read of the door waits at most {@link HELPER_SILENCE_S}: a door that says
  * nothing for that long, not even a keepalive, ends git's command with a
  * refusal on its stderr, so no push or fetch through the door waits forever.
@@ -184,8 +186,11 @@ while (1) {
   last unless defined $head;
   my $length = unpack('N', $head);
   next if $length == 0;
+  my $toStderr = $length & ${SAID_BIT};
+  $length &= ~${SAID_BIT} & 0xffffffff;
   my $body = exactly($length);
   die "cawco: the workspace's git door ended mid-answer\\n" unless defined $body;
+  if ($toStderr) { print STDERR $body; kill 'TERM', $writer; waitpid($writer, 0); exit 128; }
   put(\\*STDOUT, $body);
 }
 kill 'TERM', $writer;
@@ -960,7 +965,21 @@ const hostBackend = (
   },
 });
 
-/** A `push` batch's answer, a line per ref, from `git push --porcelain`'s run of it. */
+/**
+ * remote-curl's line naming the HTTP status a request failed with
+ * (remote-curl.c `error(_("RPC failed; %s"), msg.buf)`: `RPC failed; HTTP
+ * 500 curl 22 The requested URL returned error: 500`), which git follows
+ * with more lines (`fatal: the remote end hung up unexpectedly`).
+ */
+const RPC_FAILED = /RPC failed; [^\r\n]*/u;
+
+/**
+ * A `push` batch's answer, a line per ref, from `git push --porcelain`'s run
+ * of it. A ref with no porcelain line (git's push ended before the remote
+ * reported on it) is refused in git's last words, with its `RPC failed`
+ * line first when it said one ({@link RPC_FAILED}), so the refusal names the
+ * HTTP status and not only the dropped connection after it.
+ */
 const pushAnswers = (
   lines: readonly string[],
   pushed: { code: number; err: string; out: string }
@@ -976,7 +995,9 @@ const pushAnswers = (
       );
     }
   }
-  const why = lastSaid(pushed.err, `git push exited ${pushed.code}`);
+  const last = lastSaid(pushed.err, `git push exited ${pushed.code}`);
+  const status = RPC_FAILED.exec(withoutCredential(pushed.err))?.[0];
+  const why = status && !last.includes(status) ? `${status}; ${last}` : last;
   return lines.map((line) => {
     const { dst } = refspecOf(line);
     return results.get(dst) ?? `error ${dst} ${oneLine(why)}`;
@@ -1152,6 +1173,13 @@ const HELPER_SILENCE_S = 60;
 const FRAME_HEAD = 4;
 
 /**
+ * The bit of a frame's length that marks the door's words for git's stderr
+ * ({@link DoorChannel} `say`), not bytes of git's helper protocol: a frame
+ * is never that long.
+ */
+const SAID_BIT = 0x80_00_00_00;
+
+/**
  * The door's side of a connection once it has said `ok`: every byte for
  * git goes to the helper in a frame (its length, then that many bytes), and
  * an empty frame every {@link DOOR_KEEPALIVE_MS} while the connection is
@@ -1162,14 +1190,16 @@ const FRAME_HEAD = 4;
  */
 interface DoorChannel {
   readonly end: () => void;
+  /** The door's words on why it stopped, for git's stderr; the helper ends git's command on them. */
+  readonly say: (words: string) => void;
   readonly write: (bytes: Buffer | string) => boolean;
 }
 
 const doorChannel = (socket: Socket): DoorChannel => {
-  const frame = (bytes: Buffer | string): Buffer => {
+  const frame = (bytes: Buffer | string, said = false): Buffer => {
     const body = typeof bytes === "string" ? Buffer.from(bytes) : bytes;
     const head = Buffer.alloc(FRAME_HEAD);
-    head.writeUInt32BE(body.length);
+    head.writeUInt32BE((said ? SAID_BIT : 0) + body.length);
     return Buffer.concat([head, body]);
   };
   const open = () => !(socket.destroyed || socket.writableEnded);
@@ -1181,6 +1211,11 @@ const doorChannel = (socket: Socket): DoorChannel => {
   socket.once("close", () => clearInterval(keepalive));
   return {
     write: (bytes) => (open() ? socket.write(frame(bytes)) : false),
+    say: (words) => {
+      if (open()) {
+        socket.write(frame(words, true));
+      }
+    },
     end: () => {
       clearInterval(keepalive);
       socket.end();
@@ -1193,8 +1228,17 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
   let head = Buffer.alloc(0);
   /** The door has said `ok`: everything after goes in frames ({@link doorChannel}). */
   let answered = false;
+  let channel: DoorChannel | undefined;
+  /** Past `ok`, the door's words reach git's stderr in a frame of their own before it closes. */
   const fail = (why: string) => {
     console.warn(`[hub-git] ${ref.id}: ${why}`);
+    if (channel) {
+      channel.say(
+        `${oneLine(why.startsWith("cawco:") ? why : `cawco: ${why}`)}\n`
+      );
+      channel.end();
+      return;
+    }
     socket.destroy();
   };
   const onData = (chunk: Buffer) => {
@@ -1262,7 +1306,7 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
     }
     socket.write("ok\n");
     answered = true;
-    const channel = doorChannel(socket);
+    channel = doorChannel(socket);
     switch (target.kind) {
       case "hub":
         pipeHubHelper(ref, socket, channel, url, rest, lfs);
