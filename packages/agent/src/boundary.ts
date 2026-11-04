@@ -783,6 +783,27 @@ const watchedJudges = new Map<string, SessiondClient>();
  * lives (`boundary-judge.ts`). One that exits otherwise is started again
  * ({@link watchJudge}). Refuses the workspace when it cannot start.
  */
+/**
+ * What workspace `id`'s judge is handed between its socket and its build
+ * (boundary-judge.ts: `HOOK GRACE_S EXEC PREFIX CLAUDE_TMP POLICY CAT RM`),
+ * for the executor at `exec`, the hook at `hook` and the policy at `policy`.
+ */
+const judgeHanded = (
+  id: string,
+  exec: string,
+  hook: string,
+  policy: string
+): string[] => [
+  hook,
+  String(HOOK_TIMEOUT_S),
+  exec,
+  claudePrefixOf(id),
+  workspaceClaudeTmpDir(id),
+  policy,
+  systemProgram("cat"),
+  systemProgram("rm"),
+];
+
 const judgeFor = async (
   id: string,
   held: Pick<Held, "exec">,
@@ -793,16 +814,7 @@ const judgeFor = async (
   const scripts = await judgeScripts();
   const [judgeText, serverText] = scripts;
   const server = join(stateDir(id), JUDGE_SERVER);
-  const handed = [
-    hook,
-    String(HOOK_TIMEOUT_S),
-    held.exec,
-    claudePrefixOf(id),
-    workspaceClaudeTmpDir(id),
-    policy,
-    systemProgram("cat"),
-    systemProgram("rm"),
-  ];
+  const handed = judgeHanded(id, held.exec, hook, policy);
   // The keeper it runs on is part of its form: after a keeper handover, the
   // next arming starts the workspace's judge on the current keeper, beside the
   // one a retiring keeper runs, which leaves once the hook no longer names it.
@@ -7426,8 +7438,10 @@ exit "$status"
  * cawco <fifo>`, its pid both of the boundary's in `place`, `guarded`
  * naming no bind. With them, what a claude session runs under (the
  * claude-prefix spec): the paths and text of its shell prefix
- * ({@link claudePrefixScript}, for the executor at `execAt`) and its hook
- * ({@link hookScript}, for a judge listening on `socket`).
+ * ({@link claudePrefixScript}, for the executor at `execAt`), its hook
+ * ({@link hookScript}, for a judge listening on `socket`), and what its
+ * judge is handed after its socket for a policy at `policy`
+ * ({@link judgeHanded}), its build to follow.
  */
 export const executorUnsandboxed = async (
   ref: WorkspaceRef,
@@ -7441,6 +7455,7 @@ export const executorUnsandboxed = async (
   guarded: string;
   hook: (socket: string) => Promise<string>;
   hookAt: string;
+  judgeHanded: (policy: string) => string[];
   place: string;
   prefix: string;
   prefixAt: string;
@@ -7470,6 +7485,7 @@ export const executorUnsandboxed = async (
         address: await socketAddress(ref.id, socket),
       }),
     hookAt,
+    judgeHanded: (policy) => judgeHanded(ref.id, execAt, hookAt, policy),
     place: placeOf(ref.id, gen),
     prefix: claudePrefixScript(ref.id, execAt),
     prefixAt: claudePrefixOf(ref.id),

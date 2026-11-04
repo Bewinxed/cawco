@@ -238,18 +238,7 @@ const run = async (kit: Kit) => {
   );
   const script = join(state, "boundary-judge.ts");
   const judge = Bun.spawn(
-    [
-      bun,
-      script,
-      socket,
-      parts.hookAt,
-      "90",
-      parts.execAt,
-      parts.prefixAt,
-      parts.claudeTmp,
-      policy,
-      "probe-build",
-    ],
+    [bun, script, socket, ...parts.judgeHanded(policy), "probe-build"],
     { cwd: dirname(script), stdout: "pipe", stderr: "inherit" }
   );
   const ready = judge.stdout.getReader();

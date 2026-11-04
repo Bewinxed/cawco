@@ -359,12 +359,7 @@ const run = async (kit: Kit) => {
     join(state, "workspace-judge.ts")
   );
   const socket = await startJudge(join(state, "boundary-judge.ts"), [
-    parts.hookAt,
-    "90",
-    parts.execAt,
-    parts.prefixAt,
-    parts.claudeTmp,
-    policy,
+    ...parts.judgeHanded(policy),
     "probe-build",
   ]);
   await writeFile(parts.hookAt, await parts.hook(socket));
