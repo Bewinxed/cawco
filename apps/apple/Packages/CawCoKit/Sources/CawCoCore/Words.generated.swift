@@ -3428,10 +3428,13 @@ public enum Words {
         /// A row's sign-in, for a server that signs in with OAuth.
         public static let signIn = "Sign in"
 
-        /// The row's line while a sign-in is under way.
+        /// The row's line while a sign-in is under way: where it is finished.
         public static func signingIn(name: String) -> String {
-            "Waiting for \(name)…"
+            "Finish in the \(name) tab."
         }
+
+        /// The button's word between the press and the sign-in tab opening.
+        public static let startingSignIn = "Signing in…"
 
         /// The row's button while a sign-in is under way: a fresh one.
         public static let restartSignIn = "Sign in again"

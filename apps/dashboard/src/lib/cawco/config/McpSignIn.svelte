@@ -83,7 +83,7 @@
       label={waiting ? words.restartSignIn : words.signIn}
       onclick={signIn}
       pending={starting}
-      pendingLabel={words.signingIn(server.name)}
+      pendingLabel={words.startingSignIn}
       size="sm"
       variant="outline"
     />
