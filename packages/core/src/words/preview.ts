@@ -16,27 +16,31 @@ export const previewWords = {
   /** Its machine, when the hub's last read couldn't reach it. */
   machineNotAnswering: (machine: string) => `${machine} isn't answering`,
   /**
-   * WORDS OWED (placeholders until they are written): a preview whose
+   * A preview whose
    * workspace is gone (core `PreviewDown` `gone`: archived or discarded),
    * so this version can't be shown again. `goneTitle` and `goneLine` are the
    * pane's down state (dashboard PreviewPane); `gonePage` the sentence on
    * the proxy's own page, read in an artifact's tab of its own and by the
    * hub (core preview-proxy `DOWN_WORDS`).
    */
-  goneTitle: "[words owed: goneTitle]",
-  goneLine: "[words owed: goneLine]",
-  gonePage: "[words owed: gonePage]",
+  goneTitle: "This preview's workspace is gone",
+  goneLine:
+    "This version can't be shown again. Its session can make it again from another workspace.",
+  gonePage:
+    "This preview's workspace is gone, so this version can't be shown again. Ask its session to make it again from another workspace.",
   /**
-   * WORDS OWED (placeholders): its one action, the session asked to make it
+   * Its one action, the session asked to make it
    * again (The Empty Starts Work Rule). `goneAskLabel` the button, `agent`
    * the session's agent by name; `goneAskWords` what goes in that session's
    * composer, unsent, `name` the artifact's; `goneCantAsk` why it can't be
    * asked from here (no composer of its session beside the pane), over the
    * link that opens the session.
    */
-  goneAskLabel: (agent: string) => `[words owed: goneAskLabel] ${agent}`,
-  goneAskWords: (name: string) => `[words owed: goneAskWords] ${name}`,
-  goneCantAsk: "[words owed: goneCantAsk]",
+  goneAskLabel: (agent: string) => `Ask ${agent} to make it again`,
+  goneAskWords: (name: string) =>
+    `Show me ${name} again: its workspace is gone, so make it again from a workspace that runs.`,
+  goneCantAsk:
+    "Its session isn't open here, so it can only be asked from there.",
   /** Its server is down: the port it listened on, and the way back from its session. */
   nothingOnPort: (port: number) => `Nothing is running on port ${port}`,
   startFromSession: "Start it again from its session, then try again.",

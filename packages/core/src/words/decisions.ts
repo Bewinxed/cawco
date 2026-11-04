@@ -91,8 +91,9 @@ export const decisionsWords = {
     `its server stopped answering (${why}). Start it again from its session, then try again.`,
   previewWorkspaceDown:
     "its workspace isn't running. Once a session runs there again, try again.",
-  /** WORDS OWED (a placeholder): its workspace is gone (core `PreviewDown` `gone`), so this version can't be shown again. */
-  previewGone: "[words owed: previewGone]",
+  /** Its workspace is gone (core `PreviewDown` `gone`), so this version can't be shown again. */
+  previewGone:
+    "its workspace is gone, so this version can't be shown again. Ask its session to make it again from another workspace.",
   previewMachineDown:
     "its machine isn't answering the hub. Once it answers, try again.",
   previewMachineDownWhy: (why: string) =>

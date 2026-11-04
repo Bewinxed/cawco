@@ -43,6 +43,7 @@ import { downOf } from "../../../packages/core/src/preview-proxy";
 import { toolRecord, toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import { writePagePins } from "../pins";
 import { passedFetch } from "../preview-pass";
 
 /** The artifact panel's frame (PreviewPane), in an artifact's own tab. */
@@ -98,8 +99,8 @@ const want = (request: Seen, tag: Tag, name: string, input: object): Reply => {
 /** Delegate `tag`'s hand-up of `p`: its own page, served in its workspace. */
 const handUp = (tag: Tag): object => ({
   kind: "preview",
-  does: "try",
-  ask: "Try this page and say whether it reads right",
+  does: "judge",
+  ask: "Judge whether this page reads right",
   name: "p",
   port: tag === "A" ? PORT_A : PORT_B,
   serve: { command: served(tag === "A" ? WORD_A : WORD_B) },
@@ -176,7 +177,12 @@ const tabReads = async (page: Parameters<typeof open>[0]) => {
   return { word, down, kind, said };
 };
 
-/** What `p`'s own origin answers at its root: its status, its down page's hop when it is one, and its first words. */
+/**
+ * What `p`'s own origin answers at its root: its status, its down page's
+ * hop when it is one, which delegate's page it is (read off the whole
+ * body: the overlay the hub keys into its head comes first), and its first
+ * words.
+ */
 const originReads = async (fleet: KitFleet, id: string) => {
   const { port } = await fleet.api<{ port: number }>(
     `/api/artifacts/${id}/preview-address`,
@@ -189,6 +195,7 @@ const originReads = async (fleet: KitFleet, id: string) => {
   return {
     status: response.status,
     down: downOf(body)?.down ?? null,
+    page: [WORD_A, WORD_B].find((word) => body.includes(word)) ?? null,
     body: body.slice(0, 200),
   };
 };
@@ -363,11 +370,53 @@ const spec: Spec = {
         !readsB.down &&
         originB.status === 200 &&
         originB.down === null &&
-        originB.body.includes(WORD_B),
+        originB.page === WORD_B,
       JSON.stringify({ readsB, originB })
     );
 
-    // (5) B stopped, WB's discard is refused while p waits on the person.
+    // (5) The person leaves a pin on p and has not sent it, so p waits on
+    // them (needs.ts: a page to judge with marks not sent); B stopped, WB's
+    // discard is refused.
+    const page = await (
+      await tab.locator(FRAME).first().elementHandle()
+    )
+      ?.contentFrame()
+      .catch(() => null);
+    const pinnedAt = new Date().toISOString();
+    if (page) {
+      await writePagePins(page, {
+        id: crypto.randomUUID(),
+        number: 1,
+        kind: "comment",
+        by: "person",
+        at: pinnedAt,
+        anchor: { selector: "#word", source: null, text: WORD_B },
+        elements: [],
+        thread: [
+          {
+            id: crypto.randomUUID(),
+            by: "person",
+            text: "Say it bigger",
+            at: pinnedAt,
+          },
+        ],
+      });
+    }
+    const waitingOn = async () => {
+      const listed = await toolRecord<{
+        artifacts: { id: string; waitingOn: string[] }[];
+      }>(await as(parent), "artifact_list", {});
+      return listed.refused
+        ? [listed.text]
+        : (listed.record.artifacts.find((one) => one.id === p)?.waitingOn ??
+            []);
+    };
+    const asking = await until(
+      "p waiting on the person",
+      waitingOn,
+      (on) => on.includes("person"),
+      30_000
+    ).catch(waitingOn);
     const stoppedB = await toolWords(await as(parent), "stop_delegate", {
       target: b.instanceId,
     });
@@ -375,12 +424,15 @@ const spec: Spec = {
       workspace: b.workspaceId,
     });
     check(
-      "(5) the parent's discard_workspace of WB is refused while p waits on the person, its words naming p, and WB stays",
-      !stoppedB.refused &&
+      "(5) with an unsent pin of the person's on p, so p waits on the person, the parent's discard_workspace of WB is refused, its words naming p, and WB stays",
+      asking.includes("person") &&
+        !stoppedB.refused &&
         refused.refused &&
         refused.text.includes(p) &&
         workspaceState(b.workspaceId) === "active",
       JSON.stringify({
+        pinned: !!page,
+        waitingOn: asking,
         stopped: stoppedB.text.slice(0, 200),
         refused: refused.text.slice(0, 400),
         wb: workspaceState(b.workspaceId),

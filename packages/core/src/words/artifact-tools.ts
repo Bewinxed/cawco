@@ -29,8 +29,9 @@ export const artifactToolWords = {
     `This read shows its next version, artifact ${next}: decision pages draw it, and the panel keeps the opened version, where the person's picks are, until artifact_show opens it.`,
   /** A preview that never loaded, so nothing went to the parent. */
   notHanded: "It wasn't handed to your parent.",
-  /** WORDS OWED (a placeholder): a view couldn't load `subject` as its workspace is gone (core `PreviewDown` `gone`). */
-  workspaceGone: (subject: string) => `[words owed: workspaceGone] ${subject}`,
+  /** A view couldn't load `subject` as its workspace is gone (core `PreviewDown` `gone`): a show's or a hand-up check's refusal. */
+  workspaceGone: (subject: string) =>
+    `${subject} is gone with its workspace, so this version can't be shown again. Make it again from a workspace that runs and hand that up; showing this one again changes nothing.`,
   /** An artifact another session in the tree made: `what` ("The page …"), `session` its short id. */
   othersArtifact: (what: string, session: string) =>
     `${what} is session ${session}'s: your delegation tree reads it, and only that session changes it.`,
