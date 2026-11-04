@@ -191,6 +191,7 @@ import {
   branchPushCheck,
   type Failed,
   type GateStep,
+  keptCommits,
   type LandingTurn,
   land,
   landingQueue,
@@ -1515,20 +1516,6 @@ const GATE_TIMEOUT_SEC = 600;
 /** How long the report's git reads may take. */
 const GIT_TIMEOUT_MS = 60_000;
 
-/**
- * The commits a worktree's session made since `since` (unix seconds) that
- * HEAD still holds, one hash per line. It runs on the machine and prints
- * only the hashes, so the whole reflog never crosses the wire: its HEAD entries whose
- * action made or rewrote a commit (commit, amend, merge, cherry-pick, a
- * rebase pick), written at or after `since`, each once, kept while
- * `git merge-base --is-ancestor` says HEAD holds it.
- */
-const keptCommits = (since: number): string =>
-  `git reflog --date=unix --format='%H %gd %gs' HEAD` +
-  ` | grep -E '^[0-9a-f]{40} HEAD@\\{[0-9]+\\} (commit|commit \\((amend|merge)\\)|cherry-pick|rebase( -i)? \\((pick|reword|edit|squash|fixup)\\)): '` +
-  ` | awk -v since=${since} '{ t = $2; gsub(/[^0-9]/, "", t) } t + 0 >= since && !seen[$1]++ { print $1 }'` +
-  ` | while read -r c; do git merge-base --is-ancestor "$c" HEAD && echo "$c"; done`;
-
 /** Lines of diffstat a report keeps: the last, its summary, always among them. */
 const DIFFSTAT_LINES = 40;
 
@@ -1966,6 +1953,12 @@ const passKey = (
 
 /** A git tree's name, as `git rev-parse <commit>^{tree}` prints it. */
 const TREE_SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u;
+
+/** Where a workspace's checkout is: HEAD, and the tree it holds. */
+interface CheckoutHead {
+  commit: string;
+  tree: string;
+}
 
 /**
  * Why `step` need not run where `passed` passed (all kept under its
@@ -7893,9 +7886,10 @@ export const createWorkItems = ({
    * newer main pulls other people's commits into it, and after the push that
    * lands the work, `merge-base origin/<base> HEAD` is HEAD itself. The
    * worktree's HEAD reflog can: every commit its session made, or rewrote by
-   * rebasing, is an entry there. The ones since the item began that HEAD still
-   * holds are the item's ({@link keptCommits}); the diffstat runs from the
-   * oldest of them. Each command prints only what the report shows.
+   * rebasing, is an entry there. The ones since the item began, as HEAD holds
+   * them now, the landing's own rewrite of them included, are the item's
+   * ({@link keptCommits}); the diffstat runs from the oldest of them. Each
+   * command prints only what the report shows.
    */
   const changesSince = async (
     workspace: WorkspaceRow,
@@ -7984,40 +7978,55 @@ export const createWorkItems = ({
     return { tree, passed: [...new Set(passed)] };
   };
 
-  /** HEAD of the workspace's checkout, read whatever stops the item's landing; nothing when git cannot say. */
+  /** HEAD of the workspace's checkout and the tree it holds, read whatever stops the item's landing; nothing when git cannot say. */
   const headOf = async (
     workspace: WorkspaceRow,
     item: WorkItemRow
-  ): Promise<string | undefined> => {
+  ): Promise<CheckoutHead | undefined> => {
     const read = await runIn(workspace, item)(
-      "git rev-parse HEAD",
+      "git rev-parse HEAD HEAD^{tree}",
       GIT_TIMEOUT_MS,
       false,
       true
     );
-    return read.exitCode === 0 ? read.stdout.trim() : undefined;
+    const [commit = "", tree = ""] = read.stdout.trim().split("\n");
+    return read.exitCode === 0 && COMMIT_ID.test(commit) && TREE_SHA.test(tree)
+      ? { commit, tree }
+      : undefined;
   };
 
   /**
    * The landing rebased workspace `id`'s commits onto origin's `base`, HEAD
    * going `from` → `to` (landing.ts `onBase`, landed or not): its row's
    * `movedUntold` says so to the next message its session reads
-   * ({@link WorkItems.movedTold}). One still untold keeps where it started:
-   * a clone cut again stays the new clone it is, at `to` now; an earlier
-   * landing's move keeps its `from`.
+   * ({@link WorkItems.movedTold}), when the move changed a file. A stamp
+   * alone (landing.ts `stampCommand`, every commit's first landing) rewrites
+   * each commit's message and leaves the tree as it was: HEAD moved, no file
+   * did, and there is nothing to install again, so it is told nothing. One
+   * still untold keeps where it started and follows HEAD: a clone cut again
+   * stays the new clone it is, at `to` now; an earlier landing's move keeps
+   * its `from`.
    */
   const movedByLanding = (
     id: string,
     base: string,
-    from: string,
-    to: string
+    from: CheckoutHead,
+    to: CheckoutHead
   ): void => {
     const [row] = db.workspacesNamed(id);
     const prior = row?.movedUntold ?? undefined;
+    if (!prior && from.tree === to.tree) {
+      return;
+    }
     const move: CheckoutMove =
       prior?.kind === "recut"
-        ? { ...prior, commit: to }
-        : { kind: "landing", branch: base, from: prior?.from ?? from, to };
+        ? { ...prior, commit: to.commit }
+        : {
+            kind: "landing",
+            branch: base,
+            from: prior?.from ?? from.commit,
+            to: to.commit,
+          };
     db.updateWorkspace(id, { movedUntold: move });
   };
 
@@ -8120,7 +8129,7 @@ export const createWorkItems = ({
       stopped: landingStopped(item),
     });
     const after = await headOf(workspace, item);
-    if (before && after && before !== after) {
+    if (before && after && before.commit !== after.commit) {
       movedByLanding(workspace.id, base, before, after);
     }
     const ran = runs.gate;

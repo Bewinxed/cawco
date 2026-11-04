@@ -44,8 +44,10 @@
  *   from the HEAD it committed to the HEAD the landing left, with the
  *   install to run, and no later message repeats it;
  * - K: main stays put and its delegate's commit fails typecheck on its own,
- *   so the landing leaves HEAD where it was, and nothing it reads after
- *   carries such a line.
+ *   so the landing only stamps its commit (hub landing.ts `stampCommand`):
+ *   HEAD moves, its tree does not, no file changed under the session, and
+ *   nothing it reads after carries such a line (hub work-items.ts
+ *   `movedByLanding`).
  *
  *   bun scripts/probe-kit/run.ts landing-recut
  */
@@ -507,7 +509,8 @@ const leg = async (
  * that moved past its cut, K's on the main it was cut from; the item stays
  * open in the same clone. The next message its session reads (the hub's
  * still-open reminder) opens with the hub's move line for M, once, naming
- * the HEAD it committed and the HEAD the landing left; K's carries none.
+ * the HEAD it committed and the HEAD the landing left; K's, whose landing
+ * stamped its commit and changed no file, carries none.
  */
 const moveLeg = async (
   kit: Kit,
@@ -552,6 +555,15 @@ const moveLeg = async (
   const to = (
     await Bun.$`git -C ${path} rev-parse HEAD`.quiet().nothrow().text()
   ).trim();
+  /** The trees HEAD held before and after the landing: the files the session has. */
+  const [fromTree = "", toTree = ""] = (
+    await Bun.$`git -C ${path} rev-parse ${`${from}^{tree}`} ${`${to}^{tree}`}`
+      .quiet()
+      .nothrow()
+      .text()
+  )
+    .trim()
+    .split("\n");
   check(
     `${tag}: its finish_item comes back not landed, its gate failing on ${tag === "M" ? "its commit rebased onto the main that moved past its cut" : "its own commit"}, its clone standing`,
     landed.refused !== undefined && existsSync(path),
@@ -574,7 +586,7 @@ const moveLeg = async (
   const next = mine.slice(refusedAt + 1).find((one) => !one.afterTool);
   const words = next?.last ?? "";
   const told = (mine.at(-1)?.all ?? "").split(MOVED_OPENING).length - 1;
-  const detail = `item ${ended}; HEAD ${from.slice(0, 9)} → ${to.slice(0, 9)}; told ${told} time(s); the next message read: ${JSON.stringify(words.slice(0, 700))}`;
+  const detail = `item ${ended}; HEAD ${from.slice(0, 9)} → ${to.slice(0, 9)}; tree ${fromTree.slice(0, 9)} → ${toTree.slice(0, 9)}; told ${told} time(s); the next message read: ${JSON.stringify(words.slice(0, 700))}`;
   if (tag === "M") {
     const line = movedLine({ kind: "landing", branch: "main", from, to });
     check(
@@ -587,8 +599,12 @@ const moveLeg = async (
     );
   } else {
     check(
-      "K: after a landing that left its checkout where it was, no message it reads carries the move line",
-      to === from && words.includes(STILL_OPEN) && told === 0,
+      "K: after a landing that stamped its commit and changed no file (HEAD moved, its tree the same), no message it reads carries the move line",
+      to !== from &&
+        fromTree !== "" &&
+        fromTree === toTree &&
+        words.includes(STILL_OPEN) &&
+        told === 0,
       detail
     );
   }

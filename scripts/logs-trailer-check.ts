@@ -35,6 +35,11 @@
  *   were.
  * - Law I: no landing leaves its rebase's worktree behind: `git worktree
  *   list` names the repository's own alone, and the scratch dir is empty.
+ * - Law J: after each landing, the report's commits (`keptCommits`, from
+ *   the moment the branch's work began) are the branch's own as HEAD holds
+ *   them now, stamped and rebased, and none of upstream's: upstream's
+ *   commit is made outside this checkout, as another session's lands on
+ *   main.
  *
  * Run by `bun run check` (scripts/check.ts); it fails on any law broken.
  */
@@ -50,7 +55,11 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { CommandResult } from "../packages/core/src/harness";
 import { SAFE_GIT_SHELL } from "../packages/core/src/safe-git";
-import { LOGS_TRAILER, landedRebase } from "../packages/hub/src/landing";
+import {
+  keptCommits,
+  LOGS_TRAILER,
+  landedRebase,
+} from "../packages/hub/src/landing";
 
 const URL_NOW = "https://hub.example.ts.net:3455/session/3f2a9c1e";
 const URL_OLD = "http://old-host:3455/session/77aa00bb";
@@ -159,13 +168,47 @@ const leftNothing = (when: string): void => {
   );
 };
 
+/** The next commit's author date, a minute on from the last. */
+const nextAuthored = (): void => {
+  authored += 60_000;
+  env.GIT_AUTHOR_DATE = `${new Date(authored).toISOString().slice(0, 19)}${ZONES[(authored / 60_000) % 2]}`;
+};
+
 const commit = (file: string, message: string): void => {
   mkdirSync(dirname(join(dir, file)), { recursive: true });
   writeFileSync(join(dir, file), `${file} ${message}\n`);
-  authored += 60_000;
-  env.GIT_AUTHOR_DATE = `${new Date(authored).toISOString().slice(0, 19)}${ZONES[(authored / 60_000) % 2]}`;
+  nextAuthored();
   sh(
     `git add -A && printf '%s\\n' ${JSON.stringify(message)} | git commit -q --cleanup=verbatim -F -`
+  );
+};
+
+/**
+ * A commit on `main` made outside this checkout, as another session's lands
+ * there: through an index of its own, so HEAD, its reflog and the working
+ * tree never see it.
+ */
+const upstreamCommit = (file: string, message: string): void => {
+  nextAuthored();
+  sh(
+    `export GIT_INDEX_FILE="$(git rev-parse --absolute-git-dir)/upstream-index" && git read-tree main && b=$(printf '%s\\n' ${JSON.stringify(`${file} ${message}`)} | git hash-object -w --stdin) && git update-index --add --cacheinfo "100644,$b,${file}" && t=$(git write-tree) && rm -f "$GIT_INDEX_FILE" && c=$(printf '%s\\n' ${JSON.stringify(message)} | git commit-tree "$t" -p main) && git update-ref refs/heads/main "$c"`
+  );
+};
+
+/** When the branch's work began, in unix seconds: the report reads its commits from here (work-items.ts `changesSince`). */
+const began = Math.floor(Date.now() / 1000);
+
+/** Law J's look, after each landing: the report's commits, read as the hub reads them (its stdout, whatever it exits with), against `range`, the branch's own. */
+const reportedAsOwn = async (when: string, range: string): Promise<void> => {
+  const reported = (await run(keptCommits(began))).stdout
+    .split("\n")
+    .filter(Boolean)
+    .sort();
+  const own = sh(`git rev-list ${range}`).split("\n").filter(Boolean).sort();
+  law(
+    `Law J (${when})`,
+    reported.length > 0 && reported.join(" ") === own.join(" "),
+    `the report names ${JSON.stringify(reported)}, the branch's own are ${JSON.stringify(own)}`
   );
 };
 
@@ -259,6 +302,7 @@ try {
   let files = written();
   await landed("main");
   stampedAsBefore("first stamp", "main..ws", before);
+  await reportedAsOwn("first stamp", "main..ws");
   law(
     "Law F (first stamp)",
     touched(files, written()).length === 0,
@@ -275,6 +319,7 @@ try {
     "HEAD moved"
   );
   stampedAsBefore("second stamp", "main..ws", before);
+  await reportedAsOwn("second stamp", "main..ws");
   law(
     "Law F (second stamp)",
     touched(files, written()).length === 0,
@@ -282,9 +327,7 @@ try {
   );
   leftNothing("second stamp");
 
-  sh("git checkout -q main");
-  commit("src/deep/e", "Upstream e");
-  sh("git checkout -q ws");
+  upstreamCommit("src/deep/e", "Upstream e");
   const stamped = shapes("main..ws");
   const old = sh("git rev-parse HEAD").trim();
   files = written();
@@ -301,6 +344,7 @@ try {
     `the trees differ in ${JSON.stringify([...differ])}; it also wrote ${JSON.stringify(touched(files, written(), differ))}; status ${JSON.stringify(sh("git status --porcelain"))}`
   );
   leftNothing("rebased");
+  await reportedAsOwn("rebased", "main..ws");
   const rebased = shapes("main..ws");
   law(
     "Law B (rebased)",
@@ -331,6 +375,7 @@ try {
     "the commits moved off the commit they started from"
   );
   stampedAsBefore("keep base", "main..own", ownBefore);
+  await reportedAsOwn("keep base", "main..own");
   law(
     "Law F (keep base)",
     touched(files, written()).length === 0,
@@ -363,6 +408,7 @@ try {
     `it came to ${JSON.stringify(clash)}; it wrote ${JSON.stringify(touched(files, written()))}; status ${JSON.stringify(sh("git status --porcelain"))}`
   );
   leftNothing("conflict");
+  await reportedAsOwn("conflict", "main..clash");
 } finally {
   rmSync(dir, { recursive: true, force: true });
   rmSync(scratch, { recursive: true, force: true });
@@ -375,5 +421,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(
-  "logs-trailer-check: laws A–I held over 6 landings of 6 commits (first, again, rebased onto a newer upstream, kept on its base, again) and one that conflicts"
+  "logs-trailer-check: laws A–J held over 6 landings of 6 commits (first, again, rebased onto a newer upstream, kept on its base, again) and one that conflicts"
 );

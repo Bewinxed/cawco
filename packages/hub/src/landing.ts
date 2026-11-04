@@ -450,6 +450,31 @@ export const LOGS_TRAILER = "Agent-Logs-Url";
 const stampCommand = (url: string): string =>
   `m=$(git log -1 --format=%B) && t=$(git log -1 --format=%aI | sed 's/+/%2B/') && s=$(printf '%s\\n' "$m" | git interpret-trailers --if-exists replace --trailer ${quote(`${LOGS_TRAILER}: ${url}?at=`)}"$t") && { test "$m" = "$s" || printf '%s\\n' "$s" | git commit --amend --no-verify --allow-empty --cleanup=whitespace --quiet --file=-; }`;
 
+/**
+ * The commits a worktree's session made since `since` (unix seconds), as
+ * HEAD holds them now, one hash per line. It runs on the machine and prints
+ * only the hashes, so the whole reflog never crosses the wire.
+ *
+ * What the session made is its HEAD reflog's entries whose action made or
+ * rewrote a commit (commit, amend, merge, cherry-pick, a rebase pick),
+ * written at or after `since`, each once. A landing rewrites them where
+ * that reflog never sees: its rebase and stamp run in a worktree of their
+ * own, whose reflog goes with it ({@link stampedRebase}), and the
+ * workspace's HEAD moves to the result in one `reset` entry
+ * ({@link landedRebase}). A rewrite keeps a commit's author and author date
+ * (git-rebase(1): only `--ignore-date` changes it; the stamp amends the
+ * message alone, its subject kept), so of HEAD's commits made or rewritten
+ * since `since` (`--since`, the committer date), the session's are those
+ * whose author, author date and subject are those of one it made.
+ */
+export const keptCommits = (since: number): string =>
+  `m=$(git reflog --date=unix --format='%H %gd %gs' HEAD` +
+  ` | grep -E '^[0-9a-f]{40} HEAD@\\{[0-9]+\\} (commit|commit \\((amend|merge)\\)|cherry-pick|rebase( -i)? \\((pick|reword|edit|squash|fixup)\\)): '` +
+  ` | awk -v since=${since} '{ t = $2; gsub(/[^0-9]/, "", t) } t + 0 >= since && !seen[$1]++ { print $1 }')` +
+  ` && if [ -n "$m" ]; then k=$(git log --no-walk --ignore-missing --format='%ae %at %s' $m)` +
+  ` && git log --since=@${since} --format='%H %ae %at %s' HEAD` +
+  ` | K="$k" awk 'BEGIN { n = split(ENVIRON["K"], k, "\\n"); for (i = 1; i <= n; i++) made[k[i]] = 1 } { h = $1; sub(/^[^ ]+ /, "") } $0 in made { print h }'; fi`;
+
 /** The line before the rebased commit in {@link stampedRebase}'s output. */
 const HEAD_MARK = "cawco-head";
 /** A full commit name, SHA-1's or SHA-256's. */

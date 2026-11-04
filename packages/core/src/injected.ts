@@ -386,7 +386,8 @@ export const withDashboardLine = (
  * - `landing`: the hub rebased the workspace's commits onto origin's `branch`
  *   as it landed them (hub landing.ts `onBase`), HEAD going `from` → `to`,
  *   so the tree holds every file main gained in between, its lockfile and
- *   package manifests among them.
+ *   package manifests among them. Only a move that changed the tree is one
+ *   (hub work-items.ts `movedByLanding`): the stamp alone rewrites messages.
  */
 export type CheckoutMove =
   | {
