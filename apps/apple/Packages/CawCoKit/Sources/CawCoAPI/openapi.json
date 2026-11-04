@@ -8823,6 +8823,7 @@
                       "workspace",
                       "reach",
                       "closed",
+                      "gone",
                       "page"
                     ]
                   }
@@ -40751,10 +40752,11 @@
         ]
       },
       "PreviewDown": {
-        "description": "A preview whose page nothing serves: the hop that did not answer, as the\nproxy's own page names it in a `<meta name=\"cawco-preview-down\">` (core\n`preview-proxy` `downResponse`), so the pane beside the conversation can\ndraw what happened instead of the proxy's page. `server`: the dev server\non the session's machine is not answering its port. `machine`: the\nmachine's preview listener is not answering the hub, or the machine is\naway. `workspace`: the port is a workspace's, and no boundary of that\nworkspace runs, so nothing in its network can answer. `reach`: the\nmachine could not open the way to the server (its listener did not start,\nor the bridge into the workspace's network did not open); the page names\nwhy in {@link PREVIEW_WHY_META}. `closed`: the session shows no preview\nnow (it was closed, or the session ended).",
+        "description": "A preview whose page nothing serves: the hop that did not answer, as the\nproxy's own page names it in a `<meta name=\"cawco-preview-down\">` (core\n`preview-proxy` `downResponse`), so the pane beside the conversation can\ndraw what happened instead of the proxy's page. `server`: the dev server\non the session's machine is not answering its port. `machine`: the\nmachine's preview listener is not answering the hub, or the machine is\naway. `workspace`: the port is a workspace's, and no boundary of that\nworkspace runs, so nothing in its network can answer. `reach`: the\nmachine could not open the way to the server (its listener did not start,\nor the bridge into the workspace's network did not open); the page names\nwhy in {@link PREVIEW_WHY_META}. `closed`: the session shows no preview\nnow (it was closed, or the session ended). `gone`: the workspace that\nserved it is not on its machine any more (archived, discarded), so this\nversion of it can't be shown again; only its session making it again\nbrings it back.",
         "type": "string",
         "enum": [
           "closed",
+          "gone",
           "machine",
           "reach",
           "server",

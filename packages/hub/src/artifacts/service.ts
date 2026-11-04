@@ -3127,6 +3127,36 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * The workspaces a create is making a preview from, by how many creates:
+   * from its server's start ({@link serveFirst}) until its row names the
+   * workspace ({@link placed}), when the row holds it instead. Its
+   * retirement waits while any does (work-items.ts `previewedBy`).
+   */
+  const makingIn = new Map<string, number>();
+
+  /** `source`'s workspace held while a create makes a preview from it ({@link makingIn}); what lets it go. */
+  const makingFrom = (source: PreviewSource): (() => void) => {
+    const workspace = "port" in source ? source.workspace : undefined;
+    if (workspace === undefined) {
+      return () => undefined;
+    }
+    makingIn.set(workspace, (makingIn.get(workspace) ?? 0) + 1);
+    let done = false;
+    return () => {
+      if (done) {
+        return;
+      }
+      done = true;
+      const left = (makingIn.get(workspace) ?? 1) - 1;
+      if (left > 0) {
+        makingIn.set(workspace, left);
+      } else {
+        makingIn.delete(workspace);
+      }
+    };
+  };
+
+  /**
    * A workspace preview's server, up before anything shows it (core
    * `ServeSpec`): its state. One that can't start is the refusal, and nothing
    * is kept. None for any other source.
@@ -4122,6 +4152,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return `${subject} did not answer: ${machine} couldn't open the way to it.`;
       case "closed":
         return `${subject} did not show: the panel was closed or showed something else first.`;
+      case "gone":
+        return artifactToolWords.workspaceGone(subject);
       case "page":
         break;
     }
@@ -5956,6 +5988,28 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * A create's server started ({@link serveFirst}) and its row placed
+   * ({@link placed}), a held next version opened first ({@link
+   * openNextFirst}); its workspace held from the server's start until the
+   * row names it ({@link makingFrom}), as a retirement in between would end
+   * the server under the create.
+   */
+  const servedAndPlaced = async (
+    making: Making,
+    input: ArtifactInput,
+    at: { machineId: string | null; source: PreviewSource }
+  ): Promise<{ placement: Placement; stage: StageState | undefined }> => {
+    const madeFrom = makingFrom(at.source);
+    try {
+      const stage = await serveFirst(at.source, at.machineId);
+      await openNextFirst(making, input.kind, input.name);
+      return { stage, placement: placed(making, input, at) };
+    } finally {
+      madeFrom();
+    }
+  };
+
+  /**
    * A create's placement let go, as if it was never made: a row it made (a
    * new artifact, a fresh next version) discarded, its served server with
    * it; one it made again put back as it was, its machine and source
@@ -6753,6 +6807,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     /** The server artifact `id`'s source moved off, let go once nothing else shows it ({@link letGoMoved}). */
     letGoMoved,
 
+    /** Whether a create is making a preview from workspace `id` now, its row not yet written ({@link makingIn}). */
+    makingFrom: (id: string): boolean => makingIn.has(id),
+
     /**
      * Of `served` (the artifacts a workspace serves: work-items.ts
      * `servedFrom`), each one waiting on the person (Needs you's rule,
@@ -7224,9 +7281,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ? await deps.folderWeight(machineId, source.dir, source.path)
           : undefined;
       await deliversItsAsk(input, { html, program, weight });
-      const stage = await serveFirst(source, machineId);
-      await openNextFirst(making, input.kind, input.name);
-      const placement = placed(making, input, { source, machineId });
+      const { stage, placement } = await servedAndPlaced(making, input, {
+        source,
+        machineId,
+      });
       const { before, holding, movedFrom, row } = placement;
       if (handing(making)) {
         await answersFirst(placement);

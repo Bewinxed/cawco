@@ -580,8 +580,10 @@ const ping = (): Response =>
  * meets in its console, so a pane holding a preview that is down would fill
  * the person's console at each of its probes.
  */
-const pingDown = (why: string): Response =>
-  Response.json({ why } satisfies PreviewPingDown, { headers: PING_HEADERS });
+const pingDown = (why: string, down?: PreviewDown): Response =>
+  Response.json({ why, ...(down ? { down } : {}) } satisfies PreviewPingDown, {
+    headers: PING_HEADERS,
+  });
 
 /** A sentence's last stop: the pane's words put their own after `why` (core `previewUnreachedWords`). */
 const TRAILING_STOP = /\.$/u;
@@ -654,7 +656,7 @@ async function pingSession(
     const words = said
       ? (said.why ?? DOWN_WORDS[said.down])
       : `its machine's listener answered ${read.value.status}`;
-    return pingDown(words.replace(TRAILING_STOP, ""));
+    return pingDown(words.replace(TRAILING_STOP, ""), said?.down);
   } catch (error) {
     return failed(causeOf(error), codeOf(error));
   }

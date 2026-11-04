@@ -1014,6 +1014,12 @@ export interface WorkItemDeps {
    */
   readonly machinePaused: (machineId: string) => string | undefined;
   /**
+   * Whether a create is making a preview from workspace `id` now, its
+   * server started and its row not yet written (artifacts service
+   * `makingFrom`): its retirement waits for it ({@link previewedBy}).
+   */
+  readonly makingFrom?: (id: string) => boolean;
+  /**
    * What `row`'s session cannot be started again without and is missing
    * now: its delegate type, its machine, or its account (server.ts); none
    * when nothing is ({@link WorkItems.blockIfMissing}).
@@ -2493,6 +2499,7 @@ export const createWorkItems = ({
   types,
   untellYou,
   waitingOnPerson,
+  makingFrom,
   workspaceChanged,
 }: WorkItemDeps) => {
   /**
@@ -4195,6 +4202,12 @@ export const createWorkItems = ({
     if (shown.length > 0) {
       return `${shown.length === 1 ? "the artifact" : "the artifacts"} ${shown.join(", ")} ${shown.length === 1 ? "shows" : "show"} what it serves`;
     }
+    // A create's server started there before its row names it: on
+    // 2026-11-04 a hand-up's workspace retired between the two, its server
+    // ended under the hand-up's check (probe preview-rehand).
+    if (makingFrom?.(workspace.id)) {
+      return "a preview is being made from it";
+    }
   };
 
   /**
@@ -4728,7 +4741,10 @@ export const createWorkItems = ({
    * that commits it held are on its base branch through a workspace cut from
    * it ({@link vouchLanded}): held, it is closed again with those left out
    * ({@link landedFrom}), and retires when they were all it held; active, its
-   * settle reads it the same way.
+   * settle reads it the same way. A held one that something still holds
+   * ({@link holdOn}: an artifact showing what it serves among them) is not
+   * closed again: it stays held, as every retirement waits for that hold,
+   * until it is discarded.
    */
   const resettleSoon = (id: string): void => {
     const [workspace] = db.workspacesNamed(id);
@@ -4742,6 +4758,13 @@ export const createWorkItems = ({
     const again = inWorkspaceTurn(id, async (): Promise<void> => {
       const [now] = db.workspacesNamed(id);
       if (now?.state !== "held") {
+        return;
+      }
+      const hold = holdOn(now, db.workItemsIn(now.id));
+      if (hold) {
+        console.log(
+          `[workspaces] ${now.id} on ${machineName(now.machineId)}: its commits landed through the workspace cut from it, and it stays held: ${hold}`
+        );
         return;
       }
       const closed = await closeWorkspace(now, "keep", handedOver(now));

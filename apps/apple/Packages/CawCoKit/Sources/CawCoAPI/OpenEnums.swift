@@ -6551,6 +6551,7 @@ public enum OpenEnums {
     /// `#/components/schemas/PreviewDown`.
     public enum PreviewDown: OpenEnum {
         case closed
+        case gone
         case machine
         case reach
         case server
@@ -6561,6 +6562,7 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "closed": self = .closed
+            case "gone": self = .gone
             case "machine": self = .machine
             case "reach": self = .reach
             case "server": self = .server
@@ -6572,6 +6574,7 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .closed: "closed"
+            case .gone: "gone"
             case .machine: "machine"
             case .reach: "reach"
             case .server: "server"
@@ -6584,7 +6587,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.closed, .machine, .reach, .server, .workspace]
+        public static let allCases: [Self] = [.closed, .gone, .machine, .reach, .server, .workspace]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

@@ -13,6 +13,7 @@ import {
   type PreviewDown,
 } from "./index";
 import { embeddedFile, standalone } from "./runtime";
+import { previewWords } from "./words/preview";
 
 const HEAD_OPEN = /<head(\s[^>]*)?\s*>/iu;
 const HTML_OPEN = /<html(\s[^>]*)?\s*>/iu;
@@ -203,6 +204,7 @@ export const DOWN_WORDS: Record<PreviewDown, string> = {
     "The way to this preview's server didn't open. Reload to try again; if it fails again, open its session.",
   closed:
     "This preview is closed: its session shows something else now, or has ended. Open its session to show it again.",
+  gone: previewWords.gonePage,
 };
 
 /**

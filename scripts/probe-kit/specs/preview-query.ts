@@ -14,14 +14,20 @@
  * on a raw socket too, as a browser sends it, so nothing on either end
  * parses or rebuilds the URL. Needs no boundary: it runs anywhere.
  *
+ * A machine's preview is served on its artifact's own origin alone (hub
+ * preview.ts `embedKey`, since f536f2675), never its session's: the hops
+ * here are the artifact's origin ({@link ORIGIN}), its row read off it as
+ * the hub reads it on every request, and its machine's listener keyed by it.
+ *
  * For each query form a page sends (Vite's `?import&url`, a glob's `?url`,
  * `?a&b=1`, vite-plugin-svelte's `?svelte&type=style&lang.css`), the request
  * line the server reads names the path and query the client wrote, to the
  * byte:
- * 1. in port mode, through the session's own port;
- * 2. in host mode, through the session's name on the first port, past its
- *    lock with the pass a ticket gives (preview-access.ts): the entry
- *    answers 302 and sets `__Secure-cawco-pass` on the names' domain,
+ * 1. in port mode, through the artifact origin's own port, past its lock
+ *    with the pass a ticket gives there;
+ * 2. in host mode, through the artifact origin's name on the first port,
+ *    past its lock with the pass a ticket gives (preview-access.ts): the
+ *    entry answers 302 and sets `__Secure-cawco-pass` on the names' domain,
  *    `Secure; HttpOnly; SameSite=Lax`.
  *
  * Host mode's lock, on the same hops:
@@ -37,12 +43,13 @@
  *    each such name for a site of its own, so no frame carries the pass),
  *    one under a public suffix (`ts.net`), and an http:// one;
  * 7. a session's own pass (`artifact_browse`): its ticket entered on a name
- *    of its scope sets `__Secure-cawco-session-pass-<session>` for 15
- *    minutes, beside the person's pass and never in its place; it opens
- *    that name, and answers another session's name and a name nobody holds
- *    as a stranger is answered; a ticket spent outside its scope, or once
- *    its session ended, sets nothing; past its end it opens nothing; and
- *    revoking by the session takes it.
+ *    of its scope (its artifact's origin) sets
+ *    `__Secure-cawco-session-pass-<session>` for 15 minutes, beside the
+ *    person's pass and never in its place; it opens that name, and answers
+ *    another session's name and a name nobody holds as a stranger is
+ *    answered; a ticket spent outside its scope, or once its session ended,
+ *    sets nothing; past its end it opens nothing; and revoking by the
+ *    session takes it.
  *
  * The names are localtest.me's, which resolve to 127.0.0.1 ("The entire
  * domain name localtest.me—and all wildcard entries—point to 127.0.0.1",
@@ -64,7 +71,13 @@ const FORMS = [
   "/src/x.ts?a&b=1",
   "/src/lib/cawco/Sidebar.svelte?svelte&type=style&lang.css",
 ];
+/** The session that made the preview: its pass's session (leg 7). */
 const INSTANCE = "00000000-0000-4000-8000-0000000a0e71";
+/** The preview's artifact, and its own origin (schema.ts `artifacts.origin`). */
+const ARTIFACT = "00000000-0000-4000-8000-0000000a0e73";
+const ARTIFACT_ORIGIN = "00000000-0000-4000-8000-0000000a0e74";
+/** The artifact origin's key (hub preview.ts `embedKey`): what the hub's and the machine's listeners are keyed by. */
+const ORIGIN = `embed-${ARTIFACT_ORIGIN}`;
 /** Another session the hub holds a name for, showing nothing. */
 const OTHER = "00000000-0000-4000-8000-0000000a0e72";
 /** The sessions that still run, as the hub reads them (preview.ts `sessionLive`). */
@@ -146,7 +159,7 @@ const rawGet = async (...args: Parameters<typeof rawText>): Promise<string[]> =>
  */
 const DOMAIN = "localtest.me";
 const PATTERN = `https://p-{session}.${DOMAIN}:${HOST_PORT}`;
-const NAME = `p-${INSTANCE}.${DOMAIN}:${HOST_PORT}`;
+const NAME = `p-${ORIGIN}.${DOMAIN}:${HOST_PORT}`;
 const OTHER_NAME = `p-${OTHER}.${DOMAIN}:${HOST_PORT}`;
 /** A name of the pattern no origin holds. */
 const UNHELD = `p-00000000-0000-4000-8000-00000000dead.${DOMAIN}:${HOST_PORT}`;
@@ -206,7 +219,7 @@ const sessionPassLegs = async (kit: Kit, hub: SessionLegHub) => {
     .join("\n")
     .match(PASS)?.[1];
   const sessionEntry = await enterWith(
-    mintSessionTicket(INSTANCE, [INSTANCE]).ticket,
+    mintSessionTicket(INSTANCE, [ORIGIN]).ticket,
     NAME,
     person
   );
@@ -273,7 +286,7 @@ const sessionPassLegs = async (kit: Kit, hub: SessionLegHub) => {
     `the person's pass beside the session's on another session's name: ${status(personAfter)}`
   );
   const outside = await enterWith(
-    mintSessionTicket(INSTANCE, [INSTANCE]).ticket,
+    mintSessionTicket(INSTANCE, [ORIGIN]).ticket,
     OTHER_NAME
   );
   kit.check(
@@ -301,14 +314,14 @@ const sessionPassLegs = async (kit: Kit, hub: SessionLegHub) => {
   kit.check(
     "7e: the session's pass past its end: its own name answers 401 with the locked page",
     sessionRow?.instanceId === INSTANCE &&
-      JSON.stringify(sessionRow.scope) === JSON.stringify([INSTANCE]) &&
+      JSON.stringify(sessionRow.scope) === JSON.stringify([ORIGIN]) &&
       status(lapsed).startsWith("HTTP/1.1 401") &&
       lapsed.includes(LOCKED_PAGE),
     `row ${JSON.stringify({ instanceId: sessionRow?.instanceId, scope: sessionRow?.scope })}; answered ${status(lapsed)}`
   );
   live.delete(INSTANCE);
   const endedEntry = await enterWith(
-    mintSessionTicket(INSTANCE, [INSTANCE]).ticket,
+    mintSessionTicket(INSTANCE, [ORIGIN]).ticket,
     NAME
   );
   const gone = hub.revoke({ instanceId: INSTANCE });
@@ -353,18 +366,21 @@ const run = async (kit: Kit) => {
   const server = recorder();
   const source = { port: server.port };
   const startedFor = sourceKeyOf({ machineId: "probe", source });
+  // The machine's listener, keyed by the artifact's origin.
   const { port: agentPort } = await startPreview({
-    instanceId: INSTANCE,
+    instanceId: ORIGIN,
     port: server.port,
     token: TOKEN,
     for: startedFor,
   });
   // What the hub reads off the origin's row on every request.
   const shown = {
-    id: INSTANCE,
+    id: ARTIFACT,
+    instanceId: INSTANCE,
     kind: "preview",
     name: "probe",
     machineId: "probe",
+    origin: ARTIFACT_ORIGIN,
     source,
   };
   const upstream = {
@@ -376,7 +392,10 @@ const run = async (kit: Kit) => {
   const deps = {
     reach: () => Promise.resolve({ ok: true, upstream }),
     upstream: () => upstream,
-    rowAt: (key: string) => (key === INSTANCE ? shown : undefined),
+    rowAt: (key: string) => (key === ORIGIN ? shown : undefined),
+    artifactAt: (key: string) => (key === ORIGIN ? ARTIFACT : undefined),
+    originOf: (id: string) => (id === ARTIFACT ? INSTANCE : undefined),
+    sessionUsed: (id: string) => live.has(id),
     unreachable: () => undefined,
     ownerOf: () => undefined,
     kindOf: () => undefined,
@@ -385,7 +404,7 @@ const run = async (kit: Kit) => {
   } as unknown as Deps;
   // The ports the hub keeps, as its db does: host mode finds an origin by
   // the label of one it keeps (preview.ts `sessionOfHost`). Every origin
-  // here is a session the hub holds.
+  // here, the artifact's and the sessions', is one the hub holds.
   const kept = new Map<string, number>();
   const db = {
     settings: () => ({ mode: "port", pattern: null }),
@@ -455,12 +474,26 @@ const run = async (kit: Kit) => {
     );
   };
   try {
-    // 1. Port mode: the session's own port.
-    const sessionPort = listeners.address(INSTANCE).port;
+    // 1. Port mode: the artifact origin's own port, past its lock.
+    const ownPort = listeners.embed(ORIGIN, INSTANCE).port;
+    const portPass = (
+      await rawGet(
+        ownPort,
+        `${PREVIEW_ENTER_PATH}?ticket=${encodeURIComponent(mintTicket(null).ticket)}&next=%2F`
+      )
+    )
+      .join("\n")
+      .match(PASS)?.[1];
     for (const target of FORMS) {
-      await through("1 (port mode)", sessionPort, target);
+      await through(
+        "1 (port mode)",
+        ownPort,
+        target,
+        undefined,
+        `cookie: ${portPass}\r\n`
+      );
     }
-    // 2. Host mode: the session's name on the first port, behind its lock.
+    // 2. Host mode: the artifact origin's name on the first port, behind its lock.
     await listeners.set({ mode: "host", pattern: PATTERN });
     const entered = await rawGet(
       HOST_PORT,
@@ -575,9 +608,10 @@ const run = async (kit: Kit) => {
     });
   } finally {
     await listeners.set({ mode: "port" });
-    listeners.release(INSTANCE);
+    listeners.release(ORIGIN);
+    listeners.release(OTHER);
     (Bun.dns as { lookup: unknown }).lookup = lookup;
-    await stopPreview({ instanceId: INSTANCE });
+    await stopPreview({ instanceId: ORIGIN });
     server.stop(true);
     await rm(scratch, { recursive: true, force: true });
   }

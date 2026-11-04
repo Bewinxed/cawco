@@ -12970,6 +12970,7 @@ export const createServer = (
     workspace: 500,
     reach: 500,
     server: 500,
+    gone: 409,
   };
 
   /**
@@ -24844,6 +24845,7 @@ export const createServer = (
     // or discard (work-items.ts `waitingFrom`); the artifacts service is
     // made above.
     waitingOnPerson: (served) => artifacts.waitingOnPerson(served),
+    makingFrom: (id) => artifacts.makingFrom(id),
     startHeld: startHeldWords,
     // The design check (design-verify.ts), made further down; nothing
     // finishes an item before the hub is up.

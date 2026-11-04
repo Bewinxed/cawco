@@ -71,6 +71,7 @@
   import { Toggle } from "#lib/components/ui/toggle/index.js";
   import {
     IconAlert,
+    IconArchive,
     IconChat,
     IconChevronLeft,
     IconChevronRight,
@@ -116,6 +117,7 @@
     letGo,
     type Stage,
   } from "../canvas/stage.svelte";
+  import EmptyAsk from "../EmptyAsk.svelte";
   import { artifactReached } from "../files/reached";
   import { frameObserver, frameSize } from "../frame-observer";
   import { resolveSessionTitle } from "../links";
@@ -477,7 +479,10 @@
     const failed = await probePreview(origin, (asked) =>
       askHubReach(`${PREVIEW_REACH_API}?origin=${encodeURIComponent(asked)}`)
     );
-    if (failed) {
+    // A version whose workspace is gone is reached all the same: its load
+    // gets the proxy's page naming the hop (`heardDown`), so the pane says
+    // so in its down state, never as an origin it is trying to reach.
+    if (failed && !(failed.cause === "down" && failed.down === "gone")) {
       return previewUnreachedWords(
         new URL(origin).host,
         failed,
@@ -727,7 +732,9 @@
   }
   /*
    * A down page comes back by itself: while the frame stands on the proxy's
-   * down page (any hop but `closed`, which only a show reopens) in a pane
+   * down page (any hop but `closed`, which only a show reopens, and `gone`,
+   * whose workspace no longer is: only its session making it again brings
+   * it back, as a new open) in a pane
    * someone has on screen, the origin's ping is probed on the unreached
    * state's backoff (`PROBE_FIRST_MS` doubling to `PROBE_MOST_MS`), and once
    * it answers the frame loads again. Only a pane on screen asks, so a
@@ -744,7 +751,7 @@
     const origin = paneOrigin;
     const seen = pageVisible.current && onScreen;
     track(downProbe);
-    if (!(hop && hop !== "closed" && origin && seen)) {
+    if (!(hop && hop !== "closed" && hop !== "gone" && origin && seen)) {
       return;
     }
     let live = true;
@@ -805,6 +812,8 @@
         return `${ownerMachine} couldn't reach the page's server`;
       case "closed":
         return "This preview is closed";
+      case "gone":
+        return previewWords.goneTitle;
       case "machine":
       case null:
         break;
@@ -3683,15 +3692,37 @@
       variant="outline"
     />
     {#if offerSession && owner}
-      <Button
-        href={fleet.sessionHref(owner.id)}
-        pad="none"
-        label={`Open ${ownerName}`}
-        size="sm"
-        variant="link"
-      />
+      {@render sessionOpen()}
     {/if}
   </div>
+{/snippet}
+
+<!-- Its session, beside Try again, or the way by hand where it can't be asked here. -->
+{#snippet sessionOpen()}
+  {#if owner}
+    <Button
+      href={fleet.sessionHref(owner.id)}
+      pad="none"
+      label={`Open ${ownerName}`}
+      size="sm"
+      variant="link"
+    />
+  {/if}
+{/snippet}
+
+<!-- A version whose workspace is gone fills again only as its session makes
+     it again (The Empty Starts Work Rule): asked in that session's composer
+     where it stands beside this pane, unsent; else its session opened. -->
+{#snippet goneAsk()}
+  {@const composer = fleet.composer?.(instanceId)}
+  <EmptyAsk
+    byHand={sessionOpen}
+    canStart={!!composer}
+    label={previewWords.goneAskLabel(composer?.agent ?? ownerName)}
+    onask={() => composer?.ask(previewWords.goneAskWords(artifact?.name ?? ""))}
+    reason={previewWords.goneCantAsk}
+    size="sm"
+  />
 {/snippet}
 
 <!-- A stage that went down or never drew: Try again, and its own words
@@ -4508,13 +4539,21 @@
     <!-- What happened, why and the way back, where the page would be; a stage in error says it above. -->
     <div
       data-slot="down"
+      data-down={shownDown}
       class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
       role="alert"
       transition:appear
     >
-      <EmptyState icon={IconAlert} title={downTitle}>
+      <!-- A version whose workspace is gone is no fault that may pass: it is archived, and says so. -->
+      <EmptyState
+        icon={shownDown === "gone" ? IconArchive : IconAlert}
+        title={downTitle}
+        action={shownDown === "gone" ? goneAsk : frameRetry}
+      >
         {#snippet line()}
-          {#if shownDown === "workspace"}
+          {#if shownDown === "gone"}
+            {previewWords.goneLine}
+          {:else if shownDown === "workspace"}
             Its server can't be reached until the workspace runs again. Once a
             session there is back, try again.
           {:else if shownDown === "server"}
@@ -4551,9 +4590,6 @@
               )}</span
             >
           {/if}
-        {/snippet}
-        {#snippet action()}
-          {@render frameRetry()}
         {/snippet}
       </EmptyState>
     </div>

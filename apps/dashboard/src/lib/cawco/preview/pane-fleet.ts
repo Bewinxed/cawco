@@ -50,6 +50,15 @@ export interface PaneFleet {
   browser: (instanceId: string) => ListedBrowser | null;
   /** Closes the session's panel. */
   closePreview: (instanceId: string) => Promise<void>;
+  /**
+   * The session's own composer beside the pane, where an empty state's ask
+   * goes unsent (empty-asks.ts): its agent by name and the ask; undefined
+   * where none stands beside it (an artifact's own tab, which holds none of
+   * the conversation's code). Absent from a fleet with no composers.
+   */
+  composer?: (
+    instanceId: string
+  ) => { agent: string; ask: (words: string) => void } | undefined;
   /** A machine's folders, for a page's place picker. */
   readonly folders: FolderReader;
   /** Every machine of the fleet. */

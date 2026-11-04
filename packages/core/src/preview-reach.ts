@@ -21,6 +21,7 @@
  */
 import { readWithin } from "./bounded";
 import { PREVIEW_PING_PATH } from "./frames";
+import { PREVIEW_DOWNS, type PreviewDown } from "./protocol";
 
 /**
  * Where the hub answers whether it reaches a preview origin itself:
@@ -55,6 +56,8 @@ export const PREVIEW_PING_HEADER = "x-cawco-ping";
  * 200 says it serves.
  */
 export interface PreviewPingDown {
+  /** The hop the listener's down page named (core `PreviewDown`), when it named one. */
+  down?: PreviewDown;
   why: string;
 }
 
@@ -105,8 +108,8 @@ export type PreviewUnreached =
   | { cause: "timeout"; seconds: number; hub: HubReach | null }
   /** Answered to a `no-cors` request, but not readable to a `cors` one: no CORS header. */
   | { cause: "unreadable" }
-  /** The hub answered, and what serves the page doesn't answer it ({@link PreviewPingDown}): `why` its words. */
-  | { cause: "down"; why: string }
+  /** The hub answered, and what serves the page doesn't answer it ({@link PreviewPingDown}): `why` its words, `down` the hop it named. */
+  | { cause: "down"; down: PreviewDown | null; why: string }
   /** Answered with an error status, which the hub never sends: something in front of it answered. */
   | { cause: "status"; status: number };
 
@@ -221,13 +224,18 @@ const answeredWith = async (
     await answer.body?.cancel();
     return { cause: "status", status: answer.status };
   }
-  const why = await answer
+  const said = await answer
     .json()
     .then((body: Partial<PreviewPingDown> | null) =>
-      typeof body?.why === "string" ? body.why.replace(TRAILING_STOP, "") : null
+      typeof body?.why === "string"
+        ? {
+            why: body.why.replace(TRAILING_STOP, ""),
+            down: PREVIEW_DOWNS.find((hop) => hop === body.down) ?? null,
+          }
+        : null
     )
     .catch(() => null);
-  return why === null ? null : { cause: "down", why };
+  return said === null ? null : { cause: "down", ...said };
 };
 
 /** The hub's answer at `url` (a {@link PREVIEW_REACH_PATH} or {@link PREVIEW_REACH_API} with `?origin=`), or null when the hub can't be asked. */

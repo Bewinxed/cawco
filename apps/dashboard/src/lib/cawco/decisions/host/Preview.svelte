@@ -422,6 +422,8 @@
           : decisionsWords.previewReachDownWhy(why);
       case "closed":
         return decisionsWords.previewClosed;
+      case "gone":
+        return decisionsWords.previewGone;
       default:
         return hop satisfies never;
     }

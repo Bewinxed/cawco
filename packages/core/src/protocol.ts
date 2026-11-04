@@ -1655,6 +1655,7 @@ export const PREVIEW_DOWNS = [
   "workspace",
   "reach",
   "closed",
+  "gone",
 ] as const;
 /**
  * A preview whose page nothing serves: the hop that did not answer, as the
@@ -1668,7 +1669,10 @@ export const PREVIEW_DOWNS = [
  * machine could not open the way to the server (its listener did not start,
  * or the bridge into the workspace's network did not open); the page names
  * why in {@link PREVIEW_WHY_META}. `closed`: the session shows no preview
- * now (it was closed, or the session ended).
+ * now (it was closed, or the session ended). `gone`: the workspace that
+ * served it is not on its machine any more (archived, discarded), so this
+ * version of it can't be shown again; only its session making it again
+ * brings it back.
  */
 export type PreviewDown = (typeof PREVIEW_DOWNS)[number];
 export const PREVIEW_DOWN_META = "cawco-preview-down";

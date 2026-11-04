@@ -261,8 +261,8 @@ export class StageRefusal extends Error {}
 /**
  * A stage refused because the workspace it runs in is not on this machine
  * any more (archived, discarded): nothing here can start its server again,
- * so its preview says its server isn't running, never that the way to it
- * failed (agent preview.ts `staged`, `pinged`).
+ * so its preview says its workspace is gone (core `PreviewDown` `gone`),
+ * never that the way to it failed (agent preview.ts `staged`, `pinged`).
  */
 export class WorkspaceNotHere extends StageRefusal {}
 

@@ -760,7 +760,7 @@ async function start(
     } catch (error) {
       previewFailed("agent listener", instanceId, causeOf(error));
       return error instanceof WorkspaceNotHere
-        ? downResponse("server", 503)
+        ? downResponse("gone", 410)
         : downResponse("reach", 502, causeOf(error));
     }
   };
@@ -769,8 +769,8 @@ async function start(
    * the page would be met, short of waking a stage: "ok", or the down page
    * the load would get, which the hub reads (core `downOf`). A folder
    * answers at once; a port a stage serves once the stage could be woken
-   * (its workspace is on this machine: one archived or discarded is a
-   * server that isn't running, as `staged` answers its load); any other
+   * (its workspace is on this machine: one archived or discarded is `gone`,
+   * as `staged` answers its load); any other
    * port needs its workspace running and its server answering on it.
    */
   const pinged = async (): Promise<Response> => {
@@ -784,7 +784,7 @@ async function start(
         return ok;
       } catch (error) {
         return error instanceof WorkspaceNotHere
-          ? downResponse("server", 503)
+          ? downResponse("gone", 410)
           : downResponse("reach", 502, causeOf(error));
       }
     }

@@ -170,16 +170,15 @@ export const workWords = {
   /** That notice's headline. */
   notRetiredHeadline: (ws: string) => `Workspace ${ws} could not be retired.`,
   /**
-   * WORDS OWED (a placeholder until they are written): a workspace's
-   * archive or discard on purpose refused (hub work-items.ts
+   * A workspace's archive or discard on purpose refused (hub work-items.ts
    * `waitingFrom`) while what it serves waits on the person, read by the
    * person in the dashboard and by a session from `discard_workspace`:
    * `ws` the workspace's handle, `links` each waiting artifact by its link.
-   * The words name each artifact and the two ways forward: hand it up
-   * again from another workspace, or ask the person to settle or delete it.
    */
   servesWaiting: (ws: string, links: readonly string[]) =>
-    `[words owed: servesWaiting] workspace ${ws}; waiting on the person: ${links.join(", ")}`,
+    links.length === 1
+      ? `Workspace ${ws} was not archived: ${links[0]} still waits on the person. Archive the workspace again once a session has handed that up from another workspace, or once the person has settled or deleted it.`
+      : `Workspace ${ws} was not archived: ${links.join(", ")} still wait on the person. Archive the workspace again once a session has handed each up from another workspace, or once the person has settled or deleted them.`,
   /** The hub's log line as a settle ends what an ended item's awake sessions left running (hub work-items.ts `endLeftWork`). */
   workEnding: (sessions: readonly string[], hold: string) =>
     `its items have all ended, so what ${sessions.length === 1 ? `its session ${sessions[0]}` : `its sessions ${sessions.join(", ")}`} left running there ends; not retired while ${hold}`,

@@ -1381,6 +1381,24 @@ public enum Words {
             "\(machine) isn't answering"
         }
 
+        /// WORDS OWED (placeholders until they are written): a preview whose workspace is gone (core `PreviewDown` `gone`: archived or discarded), so this version can't be shown again. `goneTitle` and `goneLine` are the pane's down state (dashboard PreviewPane); `gonePage` the sentence on the proxy's own page, read in an artifact's tab of its own and by the hub (core preview-proxy `DOWN_WORDS`).
+        public static let goneTitle = "[words owed: goneTitle]"
+
+        public static let goneLine = "[words owed: goneLine]"
+
+        public static let gonePage = "[words owed: gonePage]"
+
+        /// WORDS OWED (placeholders): its one action, the session asked to make it again (The Empty Starts Work Rule). `goneAskLabel` the button, `agent` the session's agent by name; `goneAskWords` what goes in that session's composer, unsent, `name` the artifact's; `goneCantAsk` why it can't be asked from here (no composer of its session beside the pane), over the link that opens the session.
+        public static func goneAskLabel(agent: String) -> String {
+            "[words owed: goneAskLabel] \(agent)"
+        }
+
+        public static func goneAskWords(name: String) -> String {
+            "[words owed: goneAskWords] \(name)"
+        }
+
+        public static let goneCantAsk = "[words owed: goneCantAsk]"
+
         /// Its server is down: the port it listened on, and the way back from its session.
         public static func nothingOnPort(port: Int) -> String {
             "Nothing is running on port \(port)"
@@ -2137,6 +2155,9 @@ public enum Words {
         }
 
         public static let previewWorkspaceDown = "its workspace isn't running. Once a session runs there again, try again."
+
+        /// WORDS OWED (a placeholder): its workspace is gone (core `PreviewDown` `gone`), so this version can't be shown again.
+        public static let previewGone = "[words owed: previewGone]"
 
         public static let previewMachineDown = "its machine isn't answering the hub. Once it answers, try again."
 

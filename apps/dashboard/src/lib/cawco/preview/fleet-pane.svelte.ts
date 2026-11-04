@@ -9,6 +9,8 @@ import type { FsEntry } from "@cawco/core/protocol";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
 import { cawco, closePreview, didntAnswer, machineFs } from "../client.svelte";
 import { conversationHref } from "../links";
+import { paneDrafts } from "../transcript/composer-draft.svelte";
+import { speakerName } from "../transcript/speaker";
 import { TRY_AGAIN } from "../unanswered";
 import type { PaneFleet, PaneMachine } from "./pane-fleet";
 
@@ -70,5 +72,15 @@ export const fleetPane: PaneFleet = {
   sessionHref: (instanceId) =>
     conversationHref(instanceId, cawco.instanceIndex),
   closePreview,
+  // The conversation's composer beside the pane, while it stands.
+  composer: (instanceId) => {
+    const draft = paneDrafts.get(instanceId);
+    return draft
+      ? {
+          agent: speakerName(cawco.instanceIndex.byId.get(instanceId)?.harness),
+          ask: (words) => draft.ask(words),
+        }
+      : undefined;
+  },
   folders: fleetFolders,
 };

@@ -12,8 +12,14 @@
  * mock model), boundaries included: it delegates, so it runs on the host.
  * Two delegates, A and B, of one parent, each in a workspace of its own
  * (WA, WB), hand up a preview named `p` whose server CawCo's stage runs in
- * their workspace (`serve`), each page saying its own word. Read off the
- * hub's answers, the preview's own origin and the artifact's own tab:
+ * their workspace (`serve`), each page saying its own word: each calls
+ * artifact_create itself, in its own turn, as a delegate does, then rests
+ * in a wait, its item live. (Its first run, round 403, called the create
+ * from outside the delegate's turn: the hub ended the delegate's item for
+ * three empty turns meanwhile, retired WA between the server's start and
+ * the row that names it, and the check met a boundary already stopped.)
+ * Read off the hub's answers, the preview's own origin and the artifact's
+ * own tab:
  *
  * - (1) A hands `p` up from WA and the parent opens it: its tab reads A's
  *   word.
@@ -27,15 +33,15 @@
  * - (5) B stopped, the parent's discard_workspace of WB is refused while
  *   `p` waits on the person, its words naming `p`; nothing is deleted.
  * - (6) The person sends `p`: it waits on the person no more.
- * - (7) The discard goes through, and `p`'s tab, reloaded, says its server
- *   isn't running (the pane's `server` down state), its origin answering
+ * - (7) The discard goes through, and `p`'s tab, reloaded, says its
+ *   workspace is gone (the pane's `gone` down state), its origin answering
  *   that down page, never a 502.
  *
  *   bun scripts/probe-kit/run.ts preview-rehand
  */
 import { downOf } from "../../../packages/core/src/preview-proxy";
 import { toolRecord, toolWords } from "../../lib/tool-call";
-import { MACHINE, type Reply, until } from "../../scratch-fleet";
+import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 import { passedFetch } from "../preview-pass";
 
@@ -47,8 +53,14 @@ const PORT_A = 47_641;
 const PORT_B = 47_642;
 const WORD_A = "rehand page A";
 const WORD_B = "rehand page B";
-/** A delegate's turn to its end, a workspace's settle once nothing holds it. */
+/** A workspace's settle once nothing holds it. */
 const SETTLE_MS = 180_000;
+/** A delegate's ask to its hand-up answered: its server's start and the check of its page. */
+const HAND_UP_MS = 300_000;
+const CREATE = "mcp__cawco__artifact_create";
+const WAIT = "mcp__cawco__wait_item";
+const TAG = /PROBE-REHAND-([AB]):/u;
+type Tag = "A" | "B";
 
 /** `word` as one single-quoted shell word. */
 const quoted = (word: string): string => `'${word.replaceAll("'", `'\\''`)}'`;
@@ -59,8 +71,73 @@ const served = (word: string): string =>
     `const page=${JSON.stringify(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${word}</title></head><body><h1 id="word">${word}</h1></body></html>`)};Bun.serve({hostname:"127.0.0.1",port:Number(process.env.PORT),fetch:()=>new Response(page,{headers:{"content-type":"text/html"}})});`
   )}`;
 
-/** Every delegate and the parent end their turns at once: the probe calls their tools itself. */
-const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
+/** Each delegate's step: 1 once it asked for its hand-up, 2 once it asked for its wait. */
+const steps: Partial<Record<Tag, number>> = {};
+/** The CawCo tool a delegate asked for once ToolSearch has loaded it. */
+const pending: Partial<Record<Tag, { input: object; name: string }>> = {};
+
+const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
+const tool = (name: string, input: object): Reply => ({
+  everyMs: 5,
+  words: [],
+  tool: { name, input },
+});
+
+/** A call of `name`, through ToolSearch while it is not loaded yet. */
+const want = (request: Seen, tag: Tag, name: string, input: object): Reply => {
+  if (request.toolNames.includes(name)) {
+    delete pending[tag];
+    return tool(name, input);
+  }
+  pending[tag] = { name, input };
+  return request.toolNames.includes("ToolSearch")
+    ? tool("ToolSearch", { query: `select:${name}`, max_results: 1 })
+    : text(`${name} is not offered`);
+};
+
+/** Delegate `tag`'s hand-up of `p`: its own page, served in its workspace. */
+const handUp = (tag: Tag): object => ({
+  kind: "preview",
+  does: "try",
+  ask: "Try this page and say whether it reads right",
+  name: "p",
+  port: tag === "A" ? PORT_A : PORT_B,
+  serve: { command: served(tag === "A" ? WORD_A : WORD_B) },
+  to: "parent",
+});
+
+/** A delegate: its hand-up, in its own turn, then a wait, its item live. */
+const work = (request: Seen, tag: Tag): Reply => {
+  const step = steps[tag] ?? 0;
+  if (step === 0) {
+    steps[tag] = 1;
+    return want(request, tag, CREATE, handUp(tag));
+  }
+  if (!request.afterTool) {
+    return text("ok");
+  }
+  const asked = pending[tag];
+  if (asked) {
+    return want(request, tag, asked.name, asked.input);
+  }
+  if (step === 1) {
+    steps[tag] = 2;
+    return want(request, tag, WAIT, {
+      minutes: 30,
+      reason: "its parent's word on the page",
+    });
+  }
+  return text("ok");
+};
+
+/** The delegates work by their tag; the parent ends its turns at once (the probe calls its tools). */
+const respond = (request: Seen): Reply => {
+  if (!request.tools) {
+    return text("Probe title");
+  }
+  const tag = TAG.exec(request.all)?.[1];
+  return tag === "A" || tag === "B" ? work(request, tag) : text("ok");
+};
 
 interface Started {
   instanceId: string;
@@ -88,7 +165,15 @@ const tabReads = async (page: Parameters<typeof open>[0]) => {
         .innerText({ timeout: 1000 })
         .catch(() => "")
     : "";
-  return { word, down, said };
+  /** The hop the pane's down state draws (PreviewPane `data-down`). */
+  const kind = down
+    ? await page
+        .locator(DOWN)
+        .first()
+        .getAttribute("data-down", { timeout: 1000 })
+        .catch(() => null)
+    : null;
+  return { word, down, kind, said };
 };
 
 /** What `p`'s own origin answers at its root: its status, its down page's hop when it is one, and its first words. */
@@ -146,11 +231,11 @@ const spec: Spec = {
       id,
       credential: await fleet.sessionCredential(id),
     });
-    const delegate = (tag: "A" | "B") =>
+    const delegate = (tag: Tag) =>
       fleet.api<Started>("/api/work-items", {
         parentInstanceId: parent,
         title: `Hand up page ${tag}`,
-        prompt: `PROBE-REHAND-${tag}: wait.`,
+        prompt: `PROBE-REHAND-${tag}: hand up your page, then wait.`,
         harness: "claude",
         model: "claude-haiku-4-5",
         cwd: repo,
@@ -165,31 +250,42 @@ const spec: Spec = {
         "SELECT source_workspace FROM artifacts WHERE id = ?",
         id
       )[0]?.source_workspace;
-    const handUp = async (tag: "A" | "B", by: string) =>
-      await toolRecord<{ held?: string; id: string }>(
-        await as(by),
-        "artifact_create",
-        {
-          kind: "preview",
-          does: "try",
-          ask: "Try this page and say whether it reads right",
-          name: "p",
-          port: tag === "A" ? PORT_A : PORT_B,
-          serve: { command: served(tag === "A" ? WORD_A : WORD_B) },
-          to: "parent",
-        }
-      );
+    /** `p`'s artifact row, or a version held for it (`held`), as the hub holds it. */
+    const rowOf = (held?: string) =>
+      fleet.query<{ id: string; made_by: string | null }>(
+        held
+          ? "SELECT id, made_by FROM artifacts WHERE held_for = ?"
+          : "SELECT id, made_by FROM artifacts WHERE name = 'p' AND kind = 'preview' AND held_for IS NULL",
+        ...(held ? [held] : [])
+      )[0];
+    /** Delegate `tag`'s hand-up answered and the delegate resting in its wait: its row, read when it rests. */
+    const handedUp = async (tag: Tag, held?: string) => {
+      await until(
+        `${tag} resting in its wait after its hand-up`,
+        () => steps[tag] ?? 0,
+        (step) => step >= 2,
+        HAND_UP_MS
+      ).catch(() => undefined);
+      return rowOf(held);
+    };
 
+    for (const tag of ["A", "B"] as const) {
+      delete steps[tag];
+      delete pending[tag];
+    }
     const a = await delegate("A");
-    const b = await delegate("B");
 
-    // (1) A hands p up from WA; the parent opens it.
-    const fromA = await handUp("A", a.instanceId);
-    if (fromA.refused) {
-      check("(1) A hands p up from WA", false, fromA.text);
+    // (1) A hands p up from WA, in its own turn; the parent opens it.
+    const fromA = await handedUp("A");
+    if (!fromA || fromA.made_by !== a.instanceId) {
+      check(
+        "(1) A hands p up from WA",
+        false,
+        JSON.stringify({ row: fromA ?? null, step: steps.A ?? 0 })
+      );
       return;
     }
-    const p = fromA.record.id;
+    const p = fromA.id;
     const shownA = await toolWords(await as(parent), "artifact_show", {
       id: p,
     });
@@ -211,19 +307,16 @@ const spec: Spec = {
     );
 
     // (2) B hands p up from WB while the parent has it open: held.
-    const fromB = await handUp("B", b.instanceId);
+    const b = await delegate("B");
+    const fromB = await handedUp("B", p);
     const heldTab = await tabReads(tab);
     check(
       "(2) B's hand-up of p from WB is held as its next version, and the tab still reads A's page",
-      !fromB.refused &&
-        fromB.record.id === p &&
-        !!fromB.record.held &&
+      fromB?.made_by === b.instanceId &&
+        sourceOf(fromB.id) === b.workspaceId &&
         sourceOf(p) === a.workspaceId &&
         heldTab.word === WORD_A,
-      JSON.stringify({
-        fromB: fromB.refused ? fromB.text : fromB.record,
-        heldTab,
-      })
+      JSON.stringify({ held: fromB ?? null, step: steps.B ?? 0, heldTab })
     );
 
     // (3) The parent opens it: p names WB, and WA retires once A stops.
@@ -320,25 +413,25 @@ const spec: Spec = {
       JSON.stringify({ sent: sent.status, waiting })
     );
 
-    // (7) The discard goes through; p's tab says its server isn't running.
+    // (7) The discard goes through; p's tab says its workspace is gone.
     const discarded = await toolWords(await as(parent), "discard_workspace", {
       workspace: b.workspaceId,
     });
     await tab.reload({ waitUntil: "domcontentloaded" });
     const gone = await until(
-      "p's tab saying its server isn't running",
+      "p's tab saying its workspace is gone",
       () => tabReads(tab),
       (now) => now.down,
       60_000
     ).catch(() => tabReads(tab));
     const originGone = await originReads(fleet, p);
     check(
-      "(7) WB's discard goes through, and p's tab says its server isn't running (the pane's server state), its origin answering that down page, never a 502",
+      "(7) WB's discard goes through, and p's tab says its workspace is gone (the pane's gone state), its origin answering that down page, never a 502",
       !discarded.refused &&
         workspaceState(b.workspaceId) === "archived" &&
-        gone.down &&
+        gone.kind === "gone" &&
         originGone.status !== 502 &&
-        originGone.down === "server",
+        originGone.down === "gone",
       JSON.stringify({
         discarded: discarded.text.slice(0, 200),
         wb: workspaceState(b.workspaceId),

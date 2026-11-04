@@ -168,7 +168,7 @@ const CAUSES: Cause[] = [
         headers: { "access-control-allow-origin": "*" },
         body: JSON.stringify({ why: HUB_WHY }),
       }),
-    found: { cause: "down", why: HUB_WHY },
+    found: { cause: "down", down: null, why: HUB_WHY },
     paneMs: 15_000,
     previewMs: STATUS_SAID_MS,
   },
