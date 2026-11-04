@@ -2232,9 +2232,7 @@ const attach = (
     > => {
       const claude = harness("claude");
       const report = claude ? await readHarness(claude) : undefined;
-      const old = reportedHarnesses.find(
-        (one) => one.harness === "claude"
-      );
+      const old = reportedHarnesses.find((one) => one.harness === "claude");
       return report && old && Bun.deepEquals(report, old) ? undefined : report;
     };
 
