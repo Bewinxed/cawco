@@ -682,7 +682,10 @@ export function moveRun(
   const length = run.to - run.from;
   const edges = free ? null : near;
   if (part === "body") {
-    const snapped = snapRun("body", run.from + by, free);
+    // On 10 ms steps of its delay, from the moment the move set it off: a
+    // step of the time since the move began left delays of 397 ms.
+    const snapped =
+      run.floor + snapRun("body", run.from + by - run.floor, free);
     // Either edge of the body may meet a neighbour; the nearer one wins.
     const byStart = toEdge(snapped, edges) - snapped;
     const byEnd = toEdge(snapped + length, edges) - (snapped + length);
