@@ -10,7 +10,7 @@
  */
 
 import { accountMoveWords } from "./accounts";
-import { ASK_ORIGIN, answersOf, parseAskAnswered } from "./asks";
+import { ASK_ORIGIN, answersOf, dismissedOf, parseAskAnswered } from "./asks";
 import { attachedFiles, withoutPictureLines } from "./attachments";
 import type { ContextLine } from "./context-filing";
 import type {
@@ -2168,8 +2168,10 @@ function cawcoRow(
 
 /**
  * What the person reads of an answer CawCo told a session: for a question
- * answered, the answers themselves ("Your answer: A renewal"), so they stay
- * in the conversation where it was asked; else the outcome in words.
+ * answered, the answers themselves ("Your answer: A renewal"), and for one
+ * dismissed, what it asked ("You dismissed: Where are you job hunting?"), so
+ * each stays in the conversation where it was asked; else the outcome in
+ * words.
  */
 export function askAnsweredTitle(
   answered: Pick<
@@ -2178,12 +2180,16 @@ export function askAnsweredTitle(
   >,
   text: string
 ): string {
+  const question = answered.kind === "question";
   const answers =
-    answered.kind === "question" && answered.outcome === "answered"
-      ? answersOf(text)
-      : [];
-  return answers.length > 0
-    ? noticeWords.askAnsweredWith(answers.join(" · "))
+    question && answered.outcome === "answered" ? answersOf(text) : [];
+  if (answers.length > 0) {
+    return noticeWords.askAnsweredWith(answers.join(" · "));
+  }
+  const dismissed =
+    question && answered.outcome === "dismissed" ? dismissedOf(text) : [];
+  return dismissed.length > 0
+    ? noticeWords.askDismissedWith(dismissed.join(" · "))
     : noticeWords.askAnswered[answered.outcome];
 }
 

@@ -560,6 +560,7 @@
 @custom-variant slot-session-row-note (&[data-slot="session-row-note"]);
 @custom-variant slot-session-status (&[data-slot="session-status"]);
 @custom-variant slot-settings (&[data-slot="settings"]);
+@custom-variant slot-setup-asks (&[data-slot="setup-asks"]);
 @custom-variant slot-shade (&[data-slot="shade"]);
 @custom-variant slot-shead (&[data-slot="shead"]);
 @custom-variant slot-sheen (&[data-slot="sheen"]);

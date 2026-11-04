@@ -154,6 +154,12 @@ export function autosize(
     const fit = () => {
       width = node.offsetWidth;
       twin.style.width = `${width}px`;
+      // Its padding as the field resolves it, in px. The twin stands out of
+      // flow, so a padding the stylesheet gives in percent (or a calc with
+      // one, as design.css `pe-measure`) resolves against another box there
+      // and would wrap the twin's text at another width than the field's.
+      const style = getComputedStyle(node);
+      twin.style.padding = `${style.paddingTop} ${style.paddingRight} ${style.paddingBottom} ${style.paddingLeft}`;
       if (area) {
         (twin as HTMLTextAreaElement).value = area.value;
       } else {
@@ -172,8 +178,7 @@ export function autosize(
       // Set no taller than the ceiling, so the glide runs over the height
       // the field shows rather than spending its start past the ceiling.
       const cap =
-        Number.parseFloat(getComputedStyle(node).maxHeight) ||
-        Number.POSITIVE_INFINITY;
+        Number.parseFloat(style.maxHeight) || Number.POSITIVE_INFINITY;
       const next = folded ? "" : `${Math.min(natural, cap)}px`;
       // Marked before the height is written, so the style that starts the
       // change already has the fold's clock.

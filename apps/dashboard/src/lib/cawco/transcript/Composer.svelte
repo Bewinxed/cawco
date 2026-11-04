@@ -460,6 +460,10 @@
         frame = requestAnimationFrame(land);
         return;
       }
+      // A field that already held the focus fires no focus event as it is
+      // asked for it again: what it holds is read here, so its fold rule
+      // knows the person is in it.
+      focused = document.activeElement === el;
       tick().then(() => mentionField?.select(draft.text.length));
       el.animate([{ opacity: 0 }, { opacity: 1 }], {
         duration: dur("--dur-control"),
@@ -3098,6 +3102,13 @@
    * it, and nothing was sent.
    */
   let focused = $state(false);
+  // The focus the field has as it comes in, which no focus event will say:
+  // given before the page woke, or by a caller on arrival.
+  $effect(() => {
+    if (field && document.activeElement === field) {
+      focused = true;
+    }
+  });
   const folds = (whole: number) => !focused && whole > floor + 0.5;
   const folded = $derived(folds(natural));
 
