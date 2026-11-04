@@ -386,6 +386,15 @@ export interface Spec {
    * workspace's git door.
    */
   ownHome?: string;
+  /**
+   * Why the spec runs in a process of its own, when it does: it sets
+   * variables a module reads once as it loads (the hub's config reads
+   * `CAWCO_PREVIEW_PORTS` and `CAWCO_DB_PATH` into constants), and in a run's
+   * shared process a spec before it has loaded that module already. run.ts
+   * starts it fresh ({@link OWN_PROCESS_ENV}), HOME and git settings as the
+   * run's; an {@link Spec.ownHome} spec gets a process of its own too.
+   */
+  ownProcess?: string;
   run: (kit: Kit) => Promise<void>;
   /**
    * Why the spec runs inside a workspace's boundary, when it does: it reads
@@ -398,6 +407,9 @@ export interface Spec {
 
 /** Set on the process run.ts starts for an {@link Spec.ownHome} spec: its scratch HOME. */
 export const OWN_HOME_ENV = "CAWCO_PROBE_OWN_HOME";
+
+/** Set on every process run.ts starts for one spec ({@link Spec.ownProcess}, {@link Spec.ownHome}). */
+export const OWN_PROCESS_ENV = "CAWCO_PROBE_OWN_PROCESS";
 
 /**
  * The variables of an enclosing workspace's git and gh an

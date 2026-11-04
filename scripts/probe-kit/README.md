@@ -266,6 +266,15 @@ MobileBuildMCP `launch_mac_app` is refused as a write to
 /Applications/Safari.app. A macOS Safari sample runs from a session started
 outside every workspace on the Mac, with the screen unlocked.
 
+## A spec in a process of its own
+
+A spec that sets a variable a module reads once as it loads (the hub's
+config reads `CAWCO_PREVIEW_PORTS` and `CAWCO_DB_PATH` into constants) says
+so with `ownProcess` (its reason), and `run.ts` starts it in a fresh
+process: in the run's shared one, a spec before it has loaded that module
+already, and the variable it sets moves nothing. So `preview-query` passes
+after any spec in the same run.
+
 ## A spec with its own git and HOME
 
 A spec that stands up its own git repositories, doors or forge sign-ins

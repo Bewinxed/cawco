@@ -68,8 +68,8 @@ let lowered = false;
  * starts and held until it ends. Every later call answers the same lease,
  * and a run whose wait ran out fails each heavy start after it at once.
  * From the first call with `background` on, this process and what it
- * starts run in the background ({@link holdSlot}); run.ts takes an
- * `ownHome` spec's slot with it off.
+ * starts run in the background ({@link holdSlot}); run.ts takes the slot
+ * of a spec it runs in a process of its own with it off.
  */
 export const probeSlot = async (
   background = true

@@ -22,10 +22,11 @@
  * The second form runs every spec named, in order, each a spec of its own in
  * `specs/<spec>.ts`, beside the web specs: a feature's probe (`artifacts`),
  * on the same kit. A name found only in `specs/web/` runs as that web spec.
- * One that stands up its own git
- * and HOME (`ownHome`) runs in a process of its own, a scratch HOME set as
- * it starts and no enclosing workspace's git settings, so it runs alike in
- * a workspace and on the host.
+ * One that sets what a module reads
+ * once as it loads (`ownProcess`) runs in a process of its own, started
+ * fresh. One that stands up its own git and HOME (`ownHome`) does too, a
+ * scratch HOME set as it starts and no enclosing workspace's git settings,
+ * so it runs alike in a workspace and on the host.
  *
  * Serves the dashboard as each spec needs it, once per run: the dev server
  * for the `/motion/` benches, the built dashboard (`vite preview`, built
@@ -54,7 +55,8 @@ import type { Spec } from "./kit";
 holdAwake(`bun scripts/probe-kit/run.ts ${process.argv.slice(2).join(" ")}`);
 await ensureDeps();
 const { sweepDeadFleets } = await import("../scratch-fleet");
-const { ENCLOSING_GIT_ENV, OWN_HOME_ENV, Run } = await import("./kit");
+const { ENCLOSING_GIT_ENV, OWN_HOME_ENV, OWN_PROCESS_ENV, Run } =
+  await import("./kit");
 const { nameProbeRun, probeSlot } = await import("./slot");
 
 const args = process.argv.slice(2);
@@ -135,33 +137,42 @@ for (const name of chosen) {
   specs.set(name, spec);
 }
 /**
- * A spec of its own that stands up its own git and HOME (kit.ts
- * `Spec.ownHome`) runs in a process of its own: a scratch HOME set as it
- * starts, and none of an enclosing workspace's git or gh settings. Its
- * output is this run's; its exit says how it went (0 passed, 3 runs on the
- * host, anything else failed).
+ * A spec that runs in a process of its own (kit.ts `Spec.ownProcess`, or
+ * `Spec.ownHome`): started fresh, so nothing an earlier spec loaded is
+ * loaded there. One that stands up its own git and HOME (`ownHome`) gets a
+ * scratch HOME set as it starts, and none of an enclosing workspace's git or
+ * gh settings. Its output is this run's; its exit says how it went (0
+ * passed, 3 runs on the host, anything else failed).
  */
-const runOwnHome = async (spec: Spec): Promise<number> => {
-  // Its probe slot is this run's, taken here: its own process reads the
-  // machine's slots under its scratch HOME, where none of them are. That
-  // process starts at this run's priority and lowers itself as its first
-  // heavy work takes the slot it inherits (slot.ts `holdSlot`), so a spec
-  // that reads what lowers a command's priority starts from the machine's.
+const runOwnProcess = async (spec: Spec): Promise<number> => {
+  // Its probe slot is this run's, taken here: its own process runs under
+  // this run's lease (slot.ts `holdSlot`), never taking one of its own, and
+  // an `ownHome` one could not see the machine's slots under its scratch
+  // HOME. That process starts at this run's priority and lowers itself as
+  // its first heavy work takes the slot it inherits, so a spec that reads
+  // what lowers a command's priority starts from the machine's.
   await probeSlot(false);
-  const home = mkdtempSync(join(tmpdir(), `probe-${spec.name}-`));
-  const env = Object.fromEntries(
+  const own: Record<string, string> = { [OWN_PROCESS_ENV]: "1" };
+  let removeHome: () => void = () => undefined;
+  let env = Object.fromEntries(
     Object.entries(process.env).filter(
-      (entry): entry is [string, string] =>
-        entry[1] !== undefined && !ENCLOSING_GIT_ENV.test(entry[0])
+      (entry): entry is [string, string] => entry[1] !== undefined
     )
   );
-  // A stop signal reaching this run while the spec runs ends it here, once
-  // the spec's own run has torn down (lib/tied-child.ts): its HOME goes then.
-  const removeHome = () => rmSync(home, { recursive: true, force: true });
-  process.once("exit", removeHome);
+  if (spec.ownHome) {
+    const home = mkdtempSync(join(tmpdir(), `probe-${spec.name}-`));
+    env = Object.fromEntries(
+      Object.entries(env).filter(([name]) => !ENCLOSING_GIT_ENV.test(name))
+    );
+    Object.assign(own, { HOME: home, [OWN_HOME_ENV]: home });
+    // A stop signal reaching this run while the spec runs ends it here, once
+    // the spec's own run has torn down (lib/tied-child.ts): its HOME goes then.
+    removeHome = () => rmSync(home, { recursive: true, force: true });
+    process.once("exit", removeHome);
+  }
   const code = await runTied(
     [process.execPath, import.meta.path, spec.name, ...options],
-    { ...env, HOME: home, [OWN_HOME_ENV]: home }
+    { ...env, ...own }
   );
   process.off("exit", removeHome);
   removeHome();
@@ -183,8 +194,8 @@ const failedSpecs: string[] = [];
 try {
   for (const name of chosen) {
     const spec = specs.get(name) as Spec;
-    if (spec.ownHome && !process.env[OWN_HOME_ENV]) {
-      const code = await runOwnHome(spec);
+    if ((spec.ownHome || spec.ownProcess) && !process.env[OWN_PROCESS_ENV]) {
+      const code = await runOwnProcess(spec);
       if (code === 3) {
         // Its own run said where it runs.
         run.notHere.push(spec.name);

@@ -345,7 +345,8 @@ const run = async (kit: Kit) => {
     name.endsWith(`.${DOMAIN}`)
       ? Promise.resolve([{ address: "127.0.0.1", family: 4, ttl: 0 }])
       : (lookup as (...all: unknown[]) => unknown)(name, ...rest);
-  // Before the hub's config is read: its secret key in scratch, its preview ports clear of any hub's.
+  // Before the hub's config is read (in this spec's own process, `ownProcess`):
+  // its secret key in scratch, its preview ports clear of any hub's.
   const scratch = await mkdtemp(join(tmpdir(), "preview-query-"));
   process.env.CAWCO_DB_PATH = join(scratch, "hub.db");
   process.env.CAWCO_PREVIEW_PORTS = `${HOST_PORT}-${HOST_PORT + 9}`;
@@ -620,6 +621,8 @@ const run = async (kit: Kit) => {
 const spec: Spec = {
   group: "Previews, pages and comments",
   name: "preview-query",
+  ownProcess:
+    "the hub's config reads CAWCO_PREVIEW_PORTS and CAWCO_DB_PATH once, as it loads: a spec before it in a run would have fixed host mode's port elsewhere",
   run,
 };
 export default spec;
