@@ -724,22 +724,24 @@ const run = async (kit: Kit): Promise<void> => {
   );
 
   // 14. While one is owed, no_reply_needed is refused, and allowed after an answer.
-  const refusals = () => fleet.seen.filter(isRefusal).length;
-  // A model step that wrote nothing may be asked again: more than before, not how many.
+  // Read by the words that woke the call, never counted: a request can read an
+  // earlier refusal again after its turn has ended, its conversation stopping
+  // there, so a count moves with no new call.
+  const refusedOn = (tag: string) =>
+    fleet.seen.some((one) => isRefusal(one) && one.all.includes(tag));
   const owedCleared = () =>
     fleet.query<{ open: number }>(
       "SELECT count(*) AS open FROM sent_messages WHERE instance_id = ? AND answered_at IS NULL AND json_extract(body, '$.origin.kind') = 'human'",
       chat
     )[0]?.open === 0;
-  let refused = refusals();
-  await say(chat, `${ANSWERS}-own`);
+  const ownTag = `${ANSWERS}-own`;
+  await say(chat, ownTag);
   check(
     "14: on his own message, no_reply_needed is refused with its words, and the model goes on",
-    refusals() > refused && owedCleared(),
-    `${refusals() - refused} refusal(s)`
+    refusedOn(ownTag) && owedCleared()
   );
   await say(chat, `${SILENT}-woken`);
-  refused = refusals();
+  const wakeTag = `PROBE-BACKGROUND-${tags + 1} `;
   const wakesOwed = await background(chat, ` ${SILENT}`);
   check(
     "14: a turn that wrote nothing after the refusal leaves him owed: the next send says so",
@@ -748,18 +750,18 @@ const run = async (kit: Kit): Promise<void> => {
   );
   check(
     "14: a send that wakes the session while he is owed: no_reply_needed is refused",
-    refusals() > refused,
-    `${refusals() - refused} refusal(s)`
+    refusedOn(wakeTag)
   );
-  refused = refusals();
-  const allowedTag = `PROBE-BACKGROUND-${tags + 2}`;
+  const allowedTag = `PROBE-BACKGROUND-${tags + 2} `;
   await background(chat);
   await background(chat, ` ${SILENT}`);
+  const stepsAfter = fleet.seen.filter(
+    (one) => one.afterTool && one.all.includes(allowedTag)
+  ).length;
   check(
     "14: after an answer, no_reply_needed is allowed and ends the turn at the call",
-    refusals() === refused &&
-      !fleet.seen.some((one) => one.afterTool && one.all.includes(allowedTag)),
-    `${refusals() - refused} refusal(s)`
+    !refusedOn(allowedTag) && stepsAfter === 0,
+    `refused: ${refusedOn(allowedTag)}, ${stepsAfter} model step(s) after the call`
   );
 
   // 11, elsewhere: a chat he left.

@@ -16,10 +16,10 @@ export const NO_REPLY_TOOL = "no_reply_needed";
 /**
  * {@link NO_REPLY_TOOL}'s refusal while the person's last message to the
  * session, which it has read, has no reply after it (hub db
- * `personUnanswered`). Placeholder words, for the owner's review.
+ * `personUnanswered`).
  */
 export const NO_REPLY_OWED =
-  "Refused: the person's last message to you has no reply yet, so this turn can't end here. Answer them in this turn's closing words.";
+  "Refused: the person's last message has no reply yet. Answer them in this turn's closing words.";
 
 /**
  * The mark on a tool result that ends the turn at the call: the model takes
