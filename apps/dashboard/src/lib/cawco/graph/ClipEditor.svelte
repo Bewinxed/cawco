@@ -5,23 +5,33 @@
    * owner's pick: the clip's controls open in its row), so the bars he
    * changes stay in view on a desk and in the phone's drawer alike.
    *
-   * Duration first: a figure he can type or step, over three plain presets
-   * with their figure beside each. Then the curve: the design system's own
-   * curves first (DESIGN.md's tokens), then the named shapes, drawn
-   * (Jitter's presets: jitter.video/changelog/2023-11-08-easings-intensity),
-   * and one slider for the chosen shape: its intensity, or a spring's
-   * bounce. The chosen curve is drawn large, and a cubic curve's two
-   * control points drag on it (DialKit's easing editor), the four numbers
-   * under Advanced following. Under Advanced: the delay, the curve's four
-   * numbers, and a spring's mass, stiffness and damping. The house's own
-   * timing, when it is one, is named on the last line. Every change plays
-   * on the stage once, and the row's chip for the value marks it changed.
+   * One pattern for every value, as a motion tool's inspector lays its
+   * properties out (Jitter's Duration and Easing rows, Motion Studio's
+   * Transition): the value's name in a column of its own, its control
+   * beside it, every control one field's height. Duration and Delay are a
+   * figure he types or steps; Duration's presets stand beside it. Curve is
+   * one list: the design system's own curves, then the named shapes (Jitter's
+   * presets: jitter.video/changelog/2023-11-08-easings-intensity), each with
+   * its glyph; the chosen curve is drawn under it, its two control points
+   * dragged on it (DialKit's easing editor), and one slider for the chosen
+   * shape: its intensity, or a spring's bounce. Under Advanced: the curve's
+   * four numbers, or a spring's mass, stiffness and damping.
+   *
+   * A value he changed is marked on itself (his pin 26): its figure in the
+   * edit's coral, and its name a press, dashed underneath, that puts that
+   * one value back (motion `restore`), named for what it goes back to, as
+   * a property inspector's changed label resets its property. Every change
+   * plays on the stage once.
    */
   import { graphWords as words } from "@cawco/core/words/graph";
   import { Slider } from "bits-ui";
   import { ease } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { IconMinus, IconPlus } from "#lib/icons.js";
+  import * as InputGroup from "#lib/components/ui/input-group/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import { IconChevronDown, IconMinus, IconPlus } from "#lib/icons.js";
+  import { figureOf } from "./figures";
   import {
     bezierOf,
     type Clip,
@@ -29,33 +39,76 @@
     curveGlyph,
     curveTokenOf,
     delayOf,
+    deltaOf,
     easingOf,
+    editsOf,
     redelay,
     relength,
     reshape,
+    restore,
     type Shape,
     type Spring,
     shapeOfCurve,
     springEasing,
     springOf,
+    type Timing,
     type Track,
+    untune,
   } from "./motion";
 
   let {
     track,
     name,
     onretime,
-    onreset,
+    lang,
   }: {
     track: Track;
     /** The row as a person says it. */
     name: string;
     onretime: (clips: Clip[]) => void;
-    onreset: () => void;
+    /** The page's language, for the figures. */
+    lang: string | undefined;
   } = $props();
 
   const first = $derived(track.clips[0] as Clip);
-  const tuned = $derived(track.clips.some((clip) => clip.was));
+  const figure = (n: number) => figureOf(Math.round(n), lang);
+  /** The values he changed on this row. */
+  const edits = $derived(editsOf(track));
+  /** The row's first clip as the engine ran it. */
+  const was = $derived(track.clips.find((clip) => clip.was)?.was ?? null);
+  /** A curve's name: its token's, a spring's, or its own. */
+  const curveWord = (clip: Clip) => {
+    if (clip.spring) {
+      return words.shapes.spring;
+    }
+    return (!clip.framed && clip.curve) || words.ownCurve;
+  };
+  /** Each changed value's press, named for what it goes back to. */
+  const resets = $derived<Partial<Record<Timing, string>>>(
+    was
+      ? {
+          ...(edits.has("length") && {
+            length: words.resetLength(figure(was.duration)),
+          }),
+          ...(edits.has("start") && {
+            start: words.resetDelay(
+              figure(
+                Math.min(
+                  ...track.clips.map(
+                    (clip) => untune(clip).start + untune(clip).delay
+                  )
+                ) - track.setOff
+              )
+            ),
+          }),
+          ...(edits.has("curve") && {
+            curve: words.resetCurve(curveWord(was)),
+          }),
+        }
+      : {}
+  );
+  /** What the clip changes, when it is one plain number. */
+  const delta = $derived(track.clips.length === 1 ? deltaOf(first) : null);
   /** The row's length: its clips' one length, else its first's. */
   const duration = $derived(first.duration);
   /** A curve drawn into a clip's frames is its own until he picks a shape. */
@@ -92,6 +145,11 @@
     (2 * Math.PI) / Math.sqrt(spring.stiffness / spring.mass);
 
   let advanced = $state(false);
+  /** The row's delay, ms after the move set it off. */
+  const delay = $derived(Math.round(delayOf(track)));
+  const setDelay = (ms: number) => {
+    onretime(redelay(track, Math.max(0, Math.round(ms))));
+  };
 
   /** A spring drawn on every clip of the row, the clips as long as it takes to come to rest. */
   const sendSpring = (spring: Spring) => {
@@ -167,14 +225,40 @@
     return curveGlyph(easingOf(shape, 0.9)) ?? "";
   };
   const SHAPES: Shape[] = ["linear", "smooth", "slowDown", "speedUp", "spring"];
-  /** The house's own timing, named only when the clip's timing is one (its length a token, its curve a token's or its frames'). */
+  /** The design system's name for the row's length, when it is one: "pop". */
   const token = $derived(
-    first.adHoc
-      ? ""
-      : [first.token?.replace("--dur-", ""), first.framed ? null : first.curve]
-          .filter(Boolean)
-          .join(" · ")
+    !first.spring && track.length === first.duration
+      ? (first.token?.replace("--dur-", "") ?? null)
+      : null
   );
+  /**
+   * The curve list's value: a design system curve's token, else a shape,
+   * else the clip's own (a curve drawn into its frames, or one no shape is
+   * near), which the list names but never offers.
+   */
+  const curveValue = $derived(
+    houseCurve ? `house:${houseCurve}` : `shape:${curve.shape}`
+  );
+  const pickCurve = (value: string) => {
+    const [kind, named] = value.split(":") as [string, string];
+    if (kind === "house") {
+      onretime(
+        reshape(track, houseEasing(named as (typeof HOUSE)[number]), null)
+      );
+    } else if (kind === "shape" && named !== "own") {
+      pickShape(named as Shape);
+    }
+  };
+  /** The curve as the list's trigger names it, with its glyph. */
+  const curveShown = $derived.by(() => {
+    if (curve.shape === "own") {
+      return { name: words.ownCurve, glyph: curveGlyph(first.easing) };
+    }
+    return {
+      name: houseCurve ? words.curves[houseCurve] : words.shapes[curve.shape],
+      glyph: glyphOf(curve.shape),
+    };
+  });
   const slider = $derived.by(() => {
     if (curve.shape === "spring") {
       return { label: words.bounce, max: BOUNCE_MOST, value: curve.intensity };
@@ -291,290 +375,375 @@
     dragging = null;
     bending = null;
   };
-
-  const field =
-    "hit-under touch-hit h-c-btn-h-sm w-full min-w-0 rounded-md border border-border-control bg-surface-raised px-space-2 type-label text-ink-strong num";
-  const chip = (on: boolean) => [
-    "pointer-hit touch-hit flex h-c-btn-h-sm min-w-0 items-center justify-center gap-space-1 rounded-sm px-space-2 type-label transition-control",
-    on
-      ? "bg-selected-bg text-selected-ink"
-      : "text-ink-row can-hover:hover:bg-surface-hover",
-  ];
-  const stepper =
-    "pointer-hit touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-md text-ink-strong transition-control can-hover:hover:bg-surface-hover";
 </script>
+
+{#snippet glyph(path: string | null)}
+  {#if path}
+    <svg
+      aria-hidden="true"
+      class="size-icon-md flex-none"
+      fill="none"
+      stroke="currentColor"
+      stroke-linecap="round"
+      stroke-width="1.5"
+      viewBox="0 0 24 24"
+    >
+      <path d={path} />
+    </svg>
+  {/if}
+{/snippet}
+
+{#snippet named(text: string, key: Timing | null, forId?: string)}
+  <!-- A value's name in its column; once he changed the value, the press
+       that puts it back, its edge dashed as the bar's original is. -->
+  {#if key && resets[key]}
+    <button
+      type="button"
+      aria-label={resets[key]}
+      class="pointer-hit touch-hit flex min-h-c-input-h items-center justify-self-start rounded-xs type-label text-selected-ink underline decoration-selected-ink decoration-dashed underline-offset-4 transition-control can-hover:hover:bg-selected-bg"
+      data-edited={key}
+      onclick={() => onretime(restore(track, key))}
+      title={resets[key]}
+    >
+      {text}
+    </button>
+  {:else if forId}
+    <label
+      class="flex min-h-c-input-h items-center type-label text-ink-muted"
+      for={forId}>{text}</label
+    >
+  {:else}
+    <span class="flex min-h-c-input-h items-center type-label text-ink-muted"
+      >{text}</span
+    >
+  {/if}
+{/snippet}
+
+{#snippet stepped(
+  id: string,
+  label: string,
+  value: number,
+  edited: boolean,
+  min: number,
+  set: (ms: number) => void
+)}
+  <InputGroup.Root class="w-c-graph-figure-w flex-none">
+    <InputGroup.Addon>
+      <InputGroup.Button
+        aria-label={words.shorter}
+        onclick={() => set(value - STEP)}
+        size="icon-xs"
+      >
+        <IconMinus aria-hidden="true" />
+      </InputGroup.Button>
+    </InputGroup.Addon>
+    <InputGroup.Input
+      {id}
+      aria-label={label}
+      field="number"
+      text="label"
+      tone={edited ? "edited" : undefined}
+      {min}
+      onchange={(event: Event) =>
+        set(Number((event.currentTarget as HTMLInputElement).value))}
+      step={STEP}
+      type="number"
+      {value}
+    />
+    <InputGroup.Addon align="inline-end">
+      <span class="type-meta text-ink-muted">{words.msUnit}</span>
+      <InputGroup.Button
+        aria-label={words.longer}
+        onclick={() => set(value + STEP)}
+        size="icon-xs"
+      >
+        <IconPlus aria-hidden="true" />
+      </InputGroup.Button>
+    </InputGroup.Addon>
+  </InputGroup.Root>
+{/snippet}
 
 <section
   data-slot="clip-editor"
   aria-label={name}
-  class="flex min-w-0 flex-col gap-space-4 rounded-md bg-surface-recess p-space-3"
+  class="grid min-w-0 grid-cols-(--cols) items-start gap-x-space-5 gap-y-space-3 rounded-md bg-surface-recess p-space-3"
+  style:--cols="auto minmax(0, 1fr)"
 >
-  <fieldset class="m-0 flex min-w-0 flex-col gap-space-2 border-0 p-0">
-    <legend class="mb-space-2 type-label text-ink-muted">{words.length}</legend>
-    <div class="flex min-w-0 items-center gap-space-1 coarse:gap-space-3">
-      <button
-        type="button"
-        aria-label={words.shorter}
-        class={stepper}
-        onclick={() => setLength(shownLength - STEP)}
-      >
-        <IconMinus aria-hidden="true" class="size-icon-md" />
-      </button>
-      <label class="flex min-w-0 flex-1 items-center gap-space-2">
-        <span class="sr-only">{words.length}</span>
-        <input
-          class={field}
-          min={STEP}
-          step={STEP}
-          type="number"
-          value={shownLength}
-          onchange={(event) => setLength(Number(event.currentTarget.value))}
-        />
-        <span class="type-meta text-ink-muted">{words.msUnit}</span>
-      </label>
-      <button
-        type="button"
-        aria-label={words.longer}
-        class={stepper}
-        onclick={() => setLength(shownLength + STEP)}
-      >
-        <IconPlus aria-hidden="true" class="size-icon-md" />
-      </button>
-    </div>
-    <div class="grid grid-cols-3 gap-space-1 coarse:gap-space-3">
+  {@render named(words.length, "length", `${track.id}-length`)}
+  <div class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2">
+    {@render stepped(
+      `${track.id}-length`,
+      words.length,
+      shownLength,
+      edits.has("length"),
+      STEP,
+      setLength
+    )}
+    <ToggleGroup.Root
+      aria-label={words.length}
+      onValueChange={(next: string) => {
+        if (next) {
+          setLength(Number(next));
+        }
+      }}
+      type="single"
+      value={String(shownLength)}
+    >
       {#each words.lengths as one (one.name)}
-        <!-- mark-line: a preset's name and its figure, both words -->
-        <button
-          type="button"
-          aria-pressed={shownLength === one.ms}
-          class={chip(shownLength === one.ms)}
-          onclick={() => setLength(one.ms)}
-        >
-          <span>{one.name}</span>
-          <span class="type-meta text-ink-muted num">{one.ms}</span>
-        </button>
+        <ToggleGroup.Item value={String(one.ms)}>{one.name}</ToggleGroup.Item>
       {/each}
-    </div>
-  </fieldset>
-
-  <!-- mark-line: a column; the curve's graph stands under the shapes, beside no words -->
-  <fieldset class="m-0 flex min-w-0 flex-col gap-space-2 border-0 p-0">
-    <legend class="mb-space-2 type-label text-ink-muted">{words.curve}</legend>
-    <span class="type-meta text-ink-muted">{words.designSystem}</span>
-    <div class="grid grid-cols-3 gap-space-1 coarse:gap-space-3">
-      {#each HOUSE as house (house)}
-        {@const on = houseCurve === house}
-        <button
-          type="button"
-          aria-pressed={on}
-          class={chip(on)}
-          onclick={() => onretime(reshape(track, houseEasing(house), null))}
-        >
-          <span>{words.curves[house]}</span>
-        </button>
-      {/each}
-    </div>
-    <span class="type-meta text-ink-muted">{words.shapesHead}</span>
-    <div class="grid grid-cols-5 gap-space-1">
-      {#each SHAPES as shape (shape)}
-        {@const on = curve.shape === shape}
-        <!-- mark-line: the shape's glyph stands over its name, not beside it -->
-        <button
-          type="button"
-          aria-pressed={on}
-          class={[
-            "pointer-hit touch-hit flex min-w-0 flex-col items-center gap-space-1 rounded-sm px-space-1 py-space-2 transition-control",
-            on
-              ? "bg-selected-bg text-selected-ink"
-              : "text-ink-row can-hover:hover:bg-surface-hover",
-          ]}
-          onclick={() => pickShape(shape)}
-        >
-          <svg
-            aria-hidden="true"
-            class="size-icon-lg"
-            fill="none"
-            stroke="currentColor"
-            stroke-linecap="round"
-            stroke-width="1.5"
-            viewBox="0 0 24 24"
-          >
-            <path d={glyphOf(shape)} />
-          </svg>
-          <span class="text-center type-meta text-balance"
-            >{words.shapes[shape]}</span
-          >
-        </button>
-      {/each}
-    </div>
-    {#if preview}
-      <div
-        bind:this={graph}
-        class="relative aspect-16/10 w-full"
-        onpointercancel={letPoint}
-        onpointermove={movePoint}
-        onpointerup={letPoint}
-        role="presentation"
+    </ToggleGroup.Root>
+    {#if token}
+      <span class="type-meta text-ink-muted" title={words.durationOf(token)}
+        >{token}</span
       >
-        <svg
-          aria-hidden="true"
-          class="size-full overflow-visible rounded-md bg-surface-raised text-ink-strong"
-          data-slot="curve-graph"
-          fill="none"
-          preserveAspectRatio="none"
-          viewBox="0 0 {GRAPH.w} {GRAPH.h}"
-        >
-          <path
-            class="stroke-border-control"
-            d="M0 {yOf(0)} H{GRAPH.w} M0 {yOf(1)} H{GRAPH.w}"
-            stroke-dasharray="2 3"
-            vector-effect="non-scaling-stroke"
-          />
-          {#if points}
-            <path
-              class="stroke-ink-muted"
-              d="M0 {yOf(0)} L{points[0]?.x} {points[0]?.y} M{GRAPH.w} {yOf(
-                1
-              )} L{points[1]?.x} {points[1]?.y}"
-              vector-effect="non-scaling-stroke"
-            />
-          {/if}
-          <path
-            d={preview}
-            stroke="currentColor"
-            stroke-linecap="round"
-            stroke-width="1.5"
-            vector-effect="non-scaling-stroke"
-          />
-        </svg>
-        {#if points}
-          <!-- The curve's two control points, dragged on the graph; the
-                 four numbers under Advanced are their keyboard's way. -->
-          {#each points as point, at (at)}
-            <span
-              aria-hidden="true"
-              class="pointer-hit touch-hit absolute start-(--x) top-(--y) size-space-3 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-pill border border-border-control-strong bg-surface-raised shadow-xs rtl:translate-x-1/2"
-              onpointerdown={(event) => takePoint(at, event)}
-              style:--x="{(point.x / GRAPH.w) * 100}%"
-              style:--y="{(point.y / GRAPH.h) * 100}%"
-            ></span>
-          {/each}
-        {/if}
-      </div>
     {/if}
-    {#if curve.shape === "own"}
-      <p class="m-0 type-meta text-ink-muted">{words.ownShape}</p>
-    {/if}
-    {#if slider}
-      <div class="flex min-w-0 items-center gap-space-3">
-        <span class="type-label text-ink-muted">{slider.label}</span>
-        <Slider.Root
-          class="relative flex h-c-btn-h-sm min-w-0 flex-1 touch-none items-center select-none"
-          max={slider.max}
-          min={0}
-          onValueChange={(next: number) => {
-            held = next;
-          }}
-          onValueCommit={(next: number) => {
-            held = null;
-            setIntensity(next);
-          }}
-          step={0.05}
-          type="single"
-          value={held ?? Math.min(slider.max, slider.value)}
-        >
-          <span
-            class="relative h-space-1 w-full overflow-clip rounded-pill bg-surface-fill"
-          >
-            <Slider.Range class="absolute h-full rounded-pill bg-ink-muted" />
-          </span>
-          <Slider.Thumb
-            aria-label={slider.label}
-            class="pointer-hit touch-hit block size-space-4 cursor-ew-resize rounded-pill border border-border-control bg-surface-raised shadow-xs focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2"
-            index={0}
-          />
-        </Slider.Root>
-        <span class="w-space-7 text-end type-meta text-ink-muted num"
-          >{Math.round((held ?? slider.value) * 100)}%</span
-        >
-      </div>
-    {/if}
-  </fieldset>
+  </div>
 
-  <button
-    type="button"
-    aria-expanded={advanced}
-    class="pointer-hit touch-hit self-start rounded-sm type-label text-link-ink"
-    onclick={() => {
-      advanced = !advanced;
-    }}
-  >
-    {words.advanced}
-  </button>
-  {#if advanced}
-    <div class="grid grid-cols-2 gap-space-2" in:unfold out:unfold>
-      <label class="flex flex-col gap-space-1 type-meta text-ink-muted">
-        {words.delay}
-        <input
-          class={field}
-          min="0"
-          step={STEP}
-          type="number"
-          value={delayOf(track)}
-          onchange={(event) =>
-            onretime(
-              redelay(track, Math.max(0, Number(event.currentTarget.value)))
-            )}
-        />
-      </label>
-      {#if first.spring}
-        {#each [["mass", words.mass, 0.1], ["stiffness", words.stiffness, 10], ["damping", words.damping, 1]] as const as [key, label, step] (key)}
-          <label class="flex flex-col gap-space-1 type-meta text-ink-muted">
-            {label}
-            <input
-              class={field}
-              min="0"
-              {step}
-              type="number"
-              value={Number(first.spring[key].toFixed(2))}
-              onchange={(event) =>
-                setSpring(key, Number(event.currentTarget.value))}
-            />
-          </label>
-        {/each}
-      {:else if bezier}
-        <fieldset
-          class="col-span-2 m-0 grid grid-cols-4 gap-space-1 border-0 p-0"
+  {@render named(words.delay, "start", `${track.id}-delay`)}
+  <div class="flex min-w-0 items-center">
+    {@render stepped(
+      `${track.id}-delay`,
+      words.delay,
+      delay,
+      edits.has("start"),
+      0,
+      setDelay
+    )}
+  </div>
+
+  {@render named(words.curve, "curve")}
+  <div class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2">
+    <Select.Root onValueChange={pickCurve} type="single" value={curveValue}>
+      <Select.Trigger
+        aria-label={words.curve}
+        class="w-c-graph-figure-w flex-none"
+        tone={edits.has("curve") ? "edited" : undefined}
+      >
+        <span
+          class="flex min-w-0 items-center gap-space-2"
+          data-slot="select-value"
         >
-          <legend class="mb-space-1 type-meta text-ink-muted"
-            >{words.custom}</legend
-          >
-          {#each bezier as value, at (at)}
-            <input
-              aria-label={`${words.custom} ${at + 1}`}
-              class={field}
-              step="0.01"
-              type="number"
-              value={Number(value.toFixed(3))}
-              onchange={(event) =>
-                setNumber(at, Number(event.currentTarget.value))}
-            />
+          {@render glyph(curveShown.glyph)}
+          <span class="truncate">{curveShown.name}</span>
+        </span>
+      </Select.Trigger>
+      <Select.Content>
+        <Select.Group>
+          <Select.GroupHeading>{words.designSystem}</Select.GroupHeading>
+          {#each HOUSE as house (house)}
+            <Select.Item label={words.curves[house]} value="house:{house}">
+              {@render glyph(curveGlyph(houseEasing(house)))}
+              {words.curves[house]}
+            </Select.Item>
           {/each}
-        </fieldset>
+        </Select.Group>
+        <Select.Group>
+          <Select.GroupHeading>{words.shapesHead}</Select.GroupHeading>
+          {#each SHAPES as shape (shape)}
+            <Select.Item label={words.shapes[shape]} value="shape:{shape}">
+              {@render glyph(glyphOf(shape))}
+              {words.shapes[shape]}
+            </Select.Item>
+          {/each}
+        </Select.Group>
+      </Select.Content>
+    </Select.Root>
+    {#if curve.shape === "own"}
+      <span class="type-meta text-ink-muted">{words.ownShape}</span>
+    {/if}
+  </div>
+
+  {#if preview}
+    <span aria-hidden="true"></span>
+    <div
+      bind:this={graph}
+      class="relative aspect-16/9 w-full max-w-c-graph-node-w"
+      onpointercancel={letPoint}
+      onpointermove={movePoint}
+      onpointerup={letPoint}
+      role="presentation"
+    >
+      <svg
+        aria-hidden="true"
+        class="size-full overflow-visible rounded-md border border-border-hairline bg-surface-raised text-ink-strong"
+        data-slot="curve-graph"
+        fill="none"
+        preserveAspectRatio="none"
+        viewBox="0 0 {GRAPH.w} {GRAPH.h}"
+      >
+        <path
+          class="stroke-border-control"
+          d="M0 {yOf(0)} H{GRAPH.w} M0 {yOf(1)} H{GRAPH.w}"
+          stroke-dasharray="2 3"
+          vector-effect="non-scaling-stroke"
+        />
+        {#if points}
+          <path
+            class="stroke-ink-muted"
+            d="M0 {yOf(0)} L{points[0]?.x} {points[0]?.y} M{GRAPH.w} {yOf(
+              1
+            )} L{points[1]?.x} {points[1]?.y}"
+            vector-effect="non-scaling-stroke"
+          />
+        {/if}
+        <path
+          d={preview}
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-width="1.5"
+          vector-effect="non-scaling-stroke"
+        />
+      </svg>
+      {#if points}
+        <!-- The curve's two control points, dragged on the graph; the
+             four numbers under Advanced are their keyboard's way. -->
+        {#each points as point, at (at)}
+          <span
+            aria-hidden="true"
+            class="pointer-hit touch-hit absolute start-(--x) top-(--y) size-space-3 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-pill border border-border-control-strong bg-surface-raised shadow-xs rtl:translate-x-1/2"
+            onpointerdown={(event) => takePoint(at, event)}
+            style:--x="{(point.x / GRAPH.w) * 100}%"
+            style:--y="{(point.y / GRAPH.h) * 100}%"
+          ></span>
+        {/each}
       {/if}
     </div>
   {/if}
 
-  {#if token}
-    <p class="m-0 type-meta text-ink-muted">{words.tokenLine(token)}</p>
+  {#if slider}
+    <span class="flex min-h-c-input-h items-center type-label text-ink-muted"
+      >{slider.label}</span
+    >
+    <div class="flex min-h-c-input-h min-w-0 items-center gap-space-3">
+      <Slider.Root
+        class="relative flex h-c-btn-h-sm w-full max-w-c-graph-node-w min-w-0 touch-none items-center select-none"
+        max={slider.max}
+        min={0}
+        onValueChange={(next: number) => {
+          held = next;
+        }}
+        onValueCommit={(next: number) => {
+          held = null;
+          setIntensity(next);
+        }}
+        step={0.05}
+        type="single"
+        value={held ?? Math.min(slider.max, slider.value)}
+      >
+        <span
+          class="relative h-space-1 w-full overflow-clip rounded-pill bg-surface-fill"
+        >
+          <Slider.Range class="absolute h-full rounded-pill bg-ink-muted" />
+        </span>
+        <Slider.Thumb
+          aria-label={slider.label}
+          class="pointer-hit touch-hit block size-space-4 cursor-ew-resize rounded-pill border border-border-control bg-surface-raised shadow-xs focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2"
+          index={0}
+        />
+      </Slider.Root>
+      <span class="type-meta text-ink-muted num"
+        >{Math.round((held ?? slider.value) * 100)}%</span
+      >
+    </div>
   {/if}
-  {#if tuned}
+
+  {#if delta}
+    <span class="flex min-h-c-input-h items-center type-label text-ink-muted"
+      >{words.changesHead}</span
+    >
+    <span
+      class="flex min-h-c-input-h min-w-0 items-center type-code text-ink-row num wrap-anywhere"
+      title={words.propertyOf(
+        delta.property,
+        figure(delta.from),
+        figure(delta.to),
+        delta.unit
+      )}
+      >{words.property(
+        delta.property,
+        figure(delta.from),
+        figure(delta.to),
+        delta.unit
+      )}</span
+    >
+  {/if}
+
+  {#if bezier || first.spring}
+    <span aria-hidden="true"></span>
     <button
       type="button"
-      class="pointer-hit touch-hit self-start rounded-sm type-label text-link-ink"
-      onclick={onreset}
+      aria-expanded={advanced}
+      class="mark-line pointer-hit touch-hit -ms-space-1 flex h-c-btn-h-sm items-center gap-space-1 justify-self-start rounded-sm px-space-1 type-label text-ink-row transition-control can-hover:hover:bg-surface-hover"
+      onclick={() => {
+        advanced = !advanced;
+      }}
     >
-      {words.reset}
+      <span>{words.advanced}</span>
+      <IconChevronDown
+        aria-hidden="true"
+        class={[
+          "size-icon-md flex-none text-ink-muted transition-transform duration-(--dur-control) ease-out",
+          advanced && "rotate-180",
+        ]}
+        data-box
+      />
     </button>
+  {/if}
+  {#if advanced}
+    <div
+      class="col-span-full grid min-w-0 grid-cols-subgrid gap-y-space-3"
+      in:unfold
+      out:unfold
+    >
+      {#if first.spring}
+        {#each [["mass", words.mass, 0.1], ["stiffness", words.stiffness, 10], ["damping", words.damping, 1]] as const as [key, label, step] (key)}
+          <label
+            class="flex min-h-c-input-h items-center type-label text-ink-muted"
+            for="{track.id}-{key}">{label}</label
+          >
+          <InputGroup.Root class="w-c-graph-figure-w">
+            <InputGroup.Input
+              id="{track.id}-{key}"
+              field="number"
+              text="label"
+              min="0"
+              onchange={(event: Event) =>
+                setSpring(
+                  key,
+                  Number((event.currentTarget as HTMLInputElement).value)
+                )}
+              {step}
+              type="number"
+              value={Number(first.spring[key].toFixed(2))}
+            />
+          </InputGroup.Root>
+        {/each}
+      {:else if bezier}
+        <span
+          class="flex min-h-c-input-h items-center type-label text-ink-muted"
+          >{words.custom}</span
+        >
+        <div class="grid min-w-0 grid-cols-4 gap-space-1">
+          {#each bezier as value, at (at)}
+            <InputGroup.Root>
+              <InputGroup.Input
+                aria-label={`${words.custom} ${at + 1}`}
+                field="number"
+                text="label"
+                onchange={(event: Event) =>
+                  setNumber(
+                    at,
+                    Number((event.currentTarget as HTMLInputElement).value)
+                  )}
+                step="0.01"
+                type="number"
+                value={Number(value.toFixed(3))}
+              />
+            </InputGroup.Root>
+          {/each}
+        </div>
+      {/if}
+    </div>
   {/if}
 </section>

@@ -143,7 +143,10 @@
   </div>
 
   {#if stepper}
-    <div class="border-t border-border-hairline pt-space-2">
+    <!-- The room's foot: a hairline the room's width, as its head's. -->
+    <div
+      class="-mx-space-4 -mb-space-4 border-t border-border-hairline px-space-4 py-space-1"
+    >
       <Stepper {at} {lang} {onstep} {path} />
     </div>
   {/if}

@@ -113,7 +113,7 @@ export const graphWords = {
   /** A clip's element when nothing names it. */
   element: "Element",
 
-  /** A row of the move, one per thing that moves, named as a person says it: "Form failure unfolds". Its length lives in its chip; its words are the press that opens its editor. */
+  /** A row of the move, one per thing that moves, named as a person says it: "Form failure unfolds". Its length stands in its own column; its words are the press that opens its editor. */
   clipName: (element: string, how: string) => `${element} ${how}`,
   length: "Duration",
   /** Lengths offered first, in plain words with their figure beside each. */
@@ -137,8 +137,6 @@ export const graphWords = {
   ownShape: "Custom curve: none of these shapes matches it",
   /** How strongly the chosen shape bends. */
   intensity: "Intensity",
-  /** The house's own token, when the clip's timing is one: CawCo's words, said inside the editor only. */
-  tokenLine: (token: string) => `From the design system: ${token}`,
   advanced: "Advanced",
   custom: "Curve numbers",
   bounce: "Bounce",
@@ -150,19 +148,15 @@ export const graphWords = {
   ms: (value: Figure) => `${value} ms`,
   /** A length's unit, beside its figure in the editor. */
   msUnit: "ms",
-  /** An edited chip, coral and dashed: pressing it puts that one value back as the agent built it. Its name and tooltip. */
+  /** A value he changed, marked on itself (the row's length, the editor's value names): pressing it puts that one value back as the agent built it. Its name and tooltip. */
   resetLength: (ms: Figure) => `Reset length to ${ms} ms`,
   resetCurve: (curve: string) => `Reset curve to ${curve}`,
-  /** The start chip's value is its delay; 0 when the agent set none. */
   resetDelay: (ms: Figure) => `Reset delay to ${ms} ms`,
   /** Reset, every value back: the visible word is `reset`; a reader hears its object. */
   resetAll: "Reset all edits",
-  /** The start chip, shown only when the clip starts after the move sets it off. */
-  startsAt: (ms: Figure) => `+${ms} ms`,
-  startsAfter: (ms: Figure) => `Starts ${ms} ms after the move sets it off`,
-  /** The curve chip's name for a reader; its glyph is drawn, so the word says what the name is. */
-  curveOf: (curve: string) => `Curve: ${curve}`,
-  /** The property chip: what the clip changes, when it is one number. */
+  /** The editor's row naming what the clip changes, when it is one number. */
+  changesHead: "Changes",
+  /** What the clip changes, when it is one number: the editor's Changes row. */
   property: (name: string, from: Figure, to: Figure, unit: string) =>
     `${name} ${from} → ${to} ${unit}`,
   propertyOf: (name: string, from: Figure, to: Figure, unit: string) =>
@@ -171,11 +165,9 @@ export const graphWords = {
   /** A row with several animations, opened into one row each. */
   showClips: (n: number) => `Show ${n} animations`,
   hideClips: (n: number) => `Hide ${n} animations`,
-  /** The length chip's badge, when the length is a design system duration: the badge's tooltip and reader name. */
+  /** The design system's name beside the editor's Duration, when the length is one of its durations: its tooltip. */
   durationOf: (name: string) => `The design system's “${name}” duration`,
-  /** A length no token names: the figure's tooltip. */
-  freeOf: "Not a design system duration",
-  /** A spring row: its chip's figure; a spring has no set length, so its figure is when it settles. */
+  /** A spring row: its length's figure; a spring has no set length, so its figure is when it settles. */
   springFigure: (ms: Figure) => `~${ms} ms`,
   springSettles: (ms: Figure) => `A spring, settled by ${ms} ms`,
   /** The bar's body, dragged: the whole animation along the lane. */

@@ -45,6 +45,9 @@
             "h-c-btn-h-sm text-ellipsis border-transparent bg-transparent px-c-field-inline-inset text-ink-row shadow-none not-focus-visible:hover:bg-surface-hover focus-visible:bg-surface-raised",
         },
       },
+      /** A value the person changed from what it was: the edit's ink, as
+          the design graph marks a changed timing on itself. */
+      tone: { edited: { field: "text-selected-ink" } },
     },
   });
 
@@ -93,12 +96,13 @@
     measure,
     flex,
     look,
+    tone,
     area = true,
     "data-slot": dataSlot = "input",
     ...restProps
   }: Props = $props();
   const looks = $derived(
-    inputVariants({ face, text, field: kind, measure, flex, look })
+    inputVariants({ face, text, field: kind, measure, flex, look, tone })
   );
   /** The field's own look, the same for a file picker and a text field.
       Typed in, its edge steps up (`field-edge`): the caret is its focus. */
