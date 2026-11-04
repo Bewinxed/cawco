@@ -211,9 +211,21 @@ class StopWork {
     if (typeof window === "undefined") {
       return;
     }
+    // A job kept before a delete could be asked holds no files box and no
+    // places: it reads as a forget with neither, so a stop parked across
+    // the update is not dropped with the record it sits in.
     const kept = readJson(
       KEY,
-      z.record(z.string(), StopJobSchema),
+      z.record(
+        z.string(),
+        z.preprocess(
+          (raw) =>
+            raw && typeof raw === "object"
+              ? { fromDisk: false, places: [], ...raw }
+              : raw,
+          StopJobSchema
+        )
+      ),
       {},
       "session"
     );
