@@ -313,7 +313,18 @@ export default {
         ],
         {
           cwd: kit.out,
-          env: { ...process.env, XDG_DATA_HOME: data },
+          // The listing reads every OpenCode database on the machine (core
+          // paths.ts `opencodeDatabases`): the data home's, each account
+          // server's under the sessiond's session-identity dir, each view's
+          // under HOME. All three are the run's own here, so only <db> is
+          // listed; with the host's, its real sessions joined the count
+          // (10001 on obelisk, 2026-11-04).
+          env: {
+            ...process.env,
+            XDG_DATA_HOME: data,
+            HOME: join(kit.out, "home"),
+            CAWCO_SESSIOND_ENDPOINT: join(kit.out, "run", "sessiond.sock"),
+          },
           stdout: "pipe",
           stderr: "pipe",
         }

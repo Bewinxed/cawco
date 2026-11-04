@@ -34,6 +34,7 @@ import {
   tryShare,
   unlock,
 } from "../../packages/core/src/flock";
+import { HEAVY_SLOT_ENV } from "../../packages/core/src/heavy-slots";
 import { unhandled } from "../../packages/core/src/unhandled";
 import {
   type Fleet,
@@ -429,6 +430,28 @@ export const ENCLOSING_GIT_ENV =
  */
 export const BOUNDARY_INSIDE =
   "a workspace boundary cannot start inside another (bwrap on Linux is refused its namespaces, macOS's Seatbelt does not nest)";
+
+/**
+ * `process.env` put back as `before` held it, once a spec and its cleanups
+ * have run: what a spec set or deleted ends with it, so the next spec in the
+ * run's process, and every child it starts with `env: process.env`, reads
+ * the run's own. preview-bridge left XDG_RUNTIME_DIR at a scratch dir it had
+ * removed, and store-reads-loop's `systemd-run --user` after it reached no
+ * user bus (2026-11-04). The run's slot lease ({@link HEAVY_SLOT_ENV}) is the
+ * run's, taken by the first heavy work whichever spec starts it, and stays.
+ */
+const restoreEnv = (before: Readonly<Record<string, string | undefined>>) => {
+  for (const name of Object.keys(process.env)) {
+    if (!(name in before) && name !== HEAVY_SLOT_ENV) {
+      delete process.env[name];
+    }
+  }
+  for (const [name, value] of Object.entries(before)) {
+    if (value !== undefined && process.env[name] !== value) {
+      process.env[name] = value;
+    }
+  }
+};
 
 export interface Kit {
   /** The dev server against no hub: the `/motion/` benches, which need none. */
@@ -1339,6 +1362,7 @@ export class Run {
       },
     };
     const started = performance.now();
+    const envBefore = { ...process.env };
     // A browser the memory cap kills while this spec runs fails it, by name.
     reportCapsTo(spec.name, (line) =>
       kit.check("its browsers stay under the kit's memory cap", false, line)
@@ -1360,6 +1384,7 @@ export class Run {
       }
       // The browsers the spec launched itself (launchEnv) are closed by now.
       await noneLeft(takeLaunches(this.sharedLaunches), kit.check);
+      restoreEnv(envBefore);
       console.log(
         `  ${spec.name}: ${((performance.now() - started) / 1000).toFixed(0)}s`
       );

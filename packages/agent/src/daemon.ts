@@ -3332,8 +3332,13 @@ const startDaemon = (rediscover = false) =>
     // The hub on this computer's loopback, started by each register (hub-loopback.ts `carryHub`).
     yield* Effect.addFinalizer(() => Effect.promise(() => stopCarrying()));
     const machineIdValue = yield* Effect.promise(() => machineId());
-    // Child processes — the opencode server and its plugins most of all — read
-    // the machine's identity and the hub off the environment they inherit.
+    // Set for this process's own readers (core machine-id.ts `machineId` takes
+    // the id from here; git-credential.ts `hubOrigin`, move.ts and host-lfs.ts
+    // read the hub) and for what it starts with an env built from this one.
+    // A session gets the hub alone (core session-env.ts `sessionEnvironment`),
+    // pi's host gets it from its own env (pi-sessiond.ts), a host tool gets
+    // both (`hostEnvironment`), and a harness server (OpenCode's) gets no
+    // `CAWCO_*` at all (`serverEnvironment`).
     process.env[CAWCO_ENV.machineId] = machineIdValue;
     process.env[CAWCO_ENV.hubUrl] = url;
     // The sessions this daemon spawns carry the deny list in their own options;
