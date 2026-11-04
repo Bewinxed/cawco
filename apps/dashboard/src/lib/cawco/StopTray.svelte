@@ -95,6 +95,7 @@
     job,
     activityOf = (id: string) => cawco.activityOf(id),
     nameOf = machineName,
+    onconfirm = (pressed: StopJob) => stopWork.press(pressed),
   }: {
     /** The host's indent for the tray (`--ask-indent`, `--ask-end`). */
     class?: string;
@@ -103,6 +104,8 @@
     activityOf?: (id: string) => Activity;
     /** A machine's name by its id; the board's, unless a story names it. */
     nameOf?: (machineId: string) => string;
+    /** The confirm's press: the job's next step (stop-work), unless a preview plays it. */
+    onconfirm?: (job: StopJob) => void;
   } = $props();
 
   /** This tray's own: its rows' tiles fly under it into the button, and its title is named by it. */
@@ -202,7 +205,7 @@
         inert = false;
       });
     }
-    stopWork.press(job);
+    onconfirm(job);
   }
 
   /* ── A stopped row's flight ─────────────────────────────────────── */
