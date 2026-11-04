@@ -88,13 +88,16 @@ export type ToolFootprint =
 
 /**
  * How a machine turns a tool's own updates off, as the tool itself reads it:
- * a variable whose value is on ({@link switchOn}) in the environment the tool
- * runs with, or in the `env` of one of its settings files, a settings file's
- * over the environment and a later file's over an earlier one, as the tool
- * applies them. `automatic` turns off the tool's own automatic updates, and
- * so CawCo's; `every` turns off every update, a press's included.
+ * a variable whose value is on ({@link switchOn}; any value at all for one
+ * of `anyValue`) in the environment the tool runs with, or in the `env` of
+ * one of its settings files or managed policies, each later source's over
+ * an earlier one's, as the tool applies them. `automatic` turns off the
+ * tool's own automatic updates, and so CawCo's; `every` turns off every
+ * update, a press's included.
  */
 export interface ToolUpdateSwitches {
+  /** Of the variables, those on whatever they are set to, rather than by {@link switchOn}. */
+  anyValue?: string[];
   automatic: string[];
   /**
    * The folder of the user's settings file, `<folder>/settings.json`: the
@@ -103,12 +106,32 @@ export interface ToolUpdateSwitches {
   configDir: { default: string; variable: string };
   every: string[];
   /**
+   * The managed policies that are no file of the tool's own, read after its
+   * files, on each platform ({@link ToolPolicySource}): they rank above
+   * them, so a variable one sets stands over the files'.
+   */
+  policies?: Partial<Record<ToolPlatform, ToolPolicySource[]>>;
+  /**
    * The settings files read after the user's, on each platform, in the
    * order the tool applies them; a file named `*.json` stands for every
    * `.json` file in its folder, in name order.
    */
   settings: Partial<Record<ToolPlatform, string[]>>;
 }
+
+/**
+ * A managed policy that is no file of the tool's own, and how its settings
+ * are read on the machine, as the tool reads them:
+ * - `plist`: a macOS managed preferences domain, as plutil converts it to
+ *   JSON: the user's own profile (`/Library/Managed Preferences/<user>/
+ *   <domain>.plist`), else the device's (`/Library/Managed Preferences/
+ *   <domain>.plist`), the first plutil can read;
+ * - `registry`: a Windows registry value holding the settings as JSON, as
+ *   `reg.exe query <key> /v <value>` prints it.
+ */
+export type ToolPolicySource =
+  | { domain: string; kind: "plist" }
+  | { key: string; kind: "registry"; value: string };
 
 /**
  * Whether a switch's value turns it on, as Claude Code reads one: 2.1.311's
@@ -318,11 +341,38 @@ export const TOOL_CATALOG: ToolSpec[] = [
     // macOS", "`C:\Program Files\ClaudeCode\` on Windows", and "Claude Code
     // merges `managed-settings.json` first, then every `*.json` file in the
     // directory in alphabetical order"
-    // (code.claude.com/docs/en/managed-settings, read 2026-11-04). The mac
-    // profile and Windows registry policies are not files, and not read.
+    // (code.claude.com/docs/en/managed-settings, read 2026-11-04).
+    // CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC turns its automatic updates
+    // off too, on any value: 2.1.311's `Ph()` asks `xxt()`, which is
+    // `if(process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC)return…`, and
+    // the docs' "Set to any non-empty value, such as `1`, to disable
+    // nonessential network traffic: auto-updates, … Setting it to `0` or
+    // `false` still disables this traffic" (code.claude.com/docs/en/env-vars,
+    // read 2026-11-04). Its managed policies that are no file: "the
+    // `com.anthropic.claudecode` managed preferences domain" and "the JSON as
+    // a `REG_SZ` or `REG_EXPAND_SZ` value named `Settings` under
+    // `HKLM\SOFTWARE\Policies\ClaudeCode`", ranked "2. MDM or OS-level
+    // policies: the macOS plist or the HKLM registry key 3. Managed settings
+    // files", with "`env`, merged per variable across the admin sources: each
+    // variable comes from the highest-priority source that defines it"
+    // (code.claude.com/docs/en/managed-settings, read 2026-11-04).
     updatesOff: {
-      automatic: ["DISABLE_AUTOUPDATER"],
+      automatic: [
+        "DISABLE_AUTOUPDATER",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+      ],
+      anyValue: ["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"],
       every: ["DISABLE_UPDATES"],
+      policies: {
+        darwin: [{ kind: "plist", domain: "com.anthropic.claudecode" }],
+        win32: [
+          {
+            kind: "registry",
+            key: "HKLM\\SOFTWARE\\Policies\\ClaudeCode",
+            value: "Settings",
+          },
+        ],
+      },
       configDir: {
         variable: "CLAUDE_CONFIG_DIR",
         default: `~/${CLAUDE_DIR_NAME}`,

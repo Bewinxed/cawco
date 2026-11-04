@@ -21,25 +21,27 @@ export const toolWords = {
     `The newest release is ${newest}. ${said ? `${method} said: ${said}` : `${method} said nothing about why`}. Sessions still start on ${version}. CawCo tries again when a newer release is out.`,
   /**
    * The machine's owner turned the tool's own updates off (core
-   * `ToolSpec.updatesOff`): which switch, where it is set, and the version
-   * CawCo leaves it on (none for a copy that says no version). A
-   * placeholder until reviewed.
+   * `ToolSpec.updatesOff`): which switch, and where it is set.
    */
-  updatesOff: (
-    name: string,
-    variable: string,
-    where: string,
-    version: string | undefined
-  ) =>
-    `${name}'s own updates are turned off on this machine (${variable} in ${where}), so CawCo leaves it ${version ? `on ${version}` : "as it is"}.`,
-  /** {@link toolWords.updatesOff}'s `where` for a switch set in the environment rather than a settings file. A placeholder until reviewed. */
-  inEnvironment: "the environment CawCo starts it with",
+  updatesOff: (name: string, variable: string, where: string) =>
+    `${variable} in ${where} turns ${name}'s updates off, and CawCo follows it. Unset it there and CawCo updates it.`,
+  /** {@link toolWords.updatesOff}'s `where` for a switch set in the environment rather than a settings file. */
+  inEnvironment: "the environment CawCo runs in",
   /**
-   * A pinned version the copy's method can't install (a Homebrew cask
-   * carries one version): nothing was run. A placeholder until reviewed.
+   * {@link toolWords.updatesOff}'s `where` for a switch set in a macOS
+   * configuration profile (core `ToolPolicySource` `plist`). A placeholder
+   * until reviewed.
    */
+  inProfile: (domain: string) => `the ${domain} configuration profile`,
+  /**
+   * {@link toolWords.updatesOff}'s `where` for a switch set in a Windows
+   * registry policy (core `ToolPolicySource` `registry`). A placeholder
+   * until reviewed.
+   */
+  inRegistry: (value: string, key: string) => `the ${value} value under ${key}`,
+  /** A pinned version the copy's method can't install (a Homebrew cask carries one version): nothing was run. */
   cannotPin: (method: string, name: string, version: string) =>
-    `${method} installs only the version it carries, so CawCo can't put ${name} ${version} on here, the version the fleet pins. Nothing was changed.`,
+    `${method} installs only the version it carries, not ${name} ${version}, the version the fleet pins. Pin the version ${method} carries, or install ${name} there without ${method}.`,
   /**
    * The fix a refused harness's sentence ends on when CawCo updates its CLI
    * with no press (Claude Code older than CawCo's floor).

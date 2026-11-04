@@ -31,11 +31,11 @@ import {
   toolRuns,
   toolSpec,
 } from "@cawco/core";
-import { readWithin } from "@cawco/core/bounded";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { toolWords } from "@cawco/core/words/tools";
 import { expandHome } from "./fs";
 import { probeStarted } from "./probe-count";
+import { askProgram, readPolicy } from "./tool-policies";
 
 /** Where the curl-script installers put their binaries (Claude Code's, Antigravity's). */
 const LOCAL_BIN = expandHome("~/.local/bin");
@@ -314,22 +314,12 @@ const asksHold = async (
   if (!(manager && method.holds)) {
     return false;
   }
-  const question = [manager, ...method.holds, file];
-  const read = await readWithin(HOLDS_WAIT_MS, async (signal) => {
-    const child = Bun.spawn(question, {
-      env: toolEnv(),
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "ignore",
-      signal,
-    });
-    const [out, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      child.exited,
-    ]);
-    return code === 0 && out.trim() !== "";
-  });
-  return read.kind === "answered" && read.value;
+  const ran = await askProgram(
+    [manager, ...method.holds, file],
+    toolEnv(),
+    HOLDS_WAIT_MS
+  );
+  return ran?.code === 0 && ran.out.trim() !== "";
 };
 
 /** Whether a method is for the copies it holds: a footprint, or a question for its package manager. */
@@ -626,10 +616,25 @@ const settingsEnv = async (
 };
 
 /**
+ * Whether a switch's value turns it on, as the tool reads that switch (core
+ * `ToolUpdateSwitches`): set to anything at all for one of `anyValue`, else
+ * by {@link switchOn}.
+ */
+const turnsOff = (
+  switches: ToolUpdateSwitches,
+  variable: string,
+  value: unknown
+): boolean =>
+  switches.anyValue?.includes(variable)
+    ? value !== undefined && value !== null && String(value) !== ""
+    : switchOn(value);
+
+/**
  * The switch with which this machine's owner turned the tool's own updates
  * off, and where it is set, as the tool itself reads it (core
- * `ToolUpdateSwitches`, `switchOn`): each variable's value is the
- * environment's, then each settings file's `env` over it, in order. One of
+ * `ToolUpdateSwitches`): each variable's value is the environment's, then
+ * each settings file's `env` over it, then each managed policy's that is no
+ * file (tool-policies.ts), which ranks above the files, in order. One of
  * `every` turns off any update; one of `automatic`, an automatic one (CawCo's
  * own) too. None set: undefined.
  */
@@ -651,15 +656,27 @@ const switchedOff = async (
       });
     }
   }
+  const sources: { env: Record<string, unknown> | undefined; where: string }[] =
+    [];
   for (const file of await switchFiles(switches)) {
-    const fileEnv = await settingsEnv(file);
+    sources.push({ env: await settingsEnv(file), where: shownPath(file) });
+  }
+  for (const source of switches.policies?.[platform() as ToolPlatform] ?? []) {
+    const policy = await readPolicy(source, env);
+    if (policy) {
+      sources.push(policy);
+    }
+  }
+  for (const source of sources) {
     for (const variable of variables) {
-      if (fileEnv && Object.hasOwn(fileEnv, variable)) {
-        set.set(variable, { value: fileEnv[variable], where: shownPath(file) });
+      if (source.env && Object.hasOwn(source.env, variable)) {
+        set.set(variable, { value: source.env[variable], where: source.where });
       }
     }
   }
-  const on = variables.find((variable) => switchOn(set.get(variable)?.value));
+  const on = variables.find((variable) =>
+    turnsOff(switches, variable, set.get(variable)?.value)
+  );
   const where = on ? set.get(on)?.where : undefined;
   return on && where ? { variable: on, where } : undefined;
 };
@@ -1032,8 +1049,7 @@ const install = async (
     return remember(
       await standing(
         spec,
-        (copy) =>
-          toolWords.updatesOff(spec.name, off.variable, off.where, copy),
+        () => toolWords.updatesOff(spec.name, off.variable, off.where),
         undefined
       )
     );

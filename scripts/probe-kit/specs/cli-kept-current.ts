@@ -81,11 +81,21 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  plistPaths,
+  policyEnv,
+  readPolicy,
+  registryText,
+} from "../../../packages/agent/src/tool-policies";
 import { type Bounded, readWithin } from "../../../packages/core/src/bounded";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import { machineLabel } from "../../../packages/core/src/machine-names";
 import type { ToolStatus } from "../../../packages/core/src/tools";
-import { TOOL_CATALOG, toolSpec } from "../../../packages/core/src/tools";
+import {
+  switchOn,
+  TOOL_CATALOG,
+  toolSpec,
+} from "../../../packages/core/src/tools";
 import { toolWords } from "../../../packages/core/src/words/tools";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import {
@@ -146,7 +156,8 @@ const buildPath = (dir: string, layout: Layout, version: string): string =>
  * and leaves the old one in place; in a cask it says Homebrew manages it,
  * as Claude Code's does ("Claude is managed by Homebrew."). `serve` runs, as
  * a session's process does, until `dir/stop`; any other ask goes to `real`,
- * the host's Claude Code, when there is one.
+ * the host's Claude Code, when there is one, with its updates and
+ * nonessential traffic off, as the scratch fleet starts it.
  */
 const build = (
   version: string,
@@ -186,7 +197,7 @@ ${
     while [ ! -e "$S/stop" ]; do sleep 0.1; done
     echo "$V" > "$S/served"
     ;;
-  *) ${real ? `exec ${JSON.stringify(real)} "$@"` : "exit 1"} ;;
+  *) ${real ? `DISABLE_AUTOUPDATER=1 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 exec ${JSON.stringify(real)} "$@"` : "exit 1"} ;;
 esac
 `;
 
@@ -419,6 +430,16 @@ const SWITCH_SCRIPT = `
   writeFileSync(join(S, "release"), ${JSON.stringify(NEWER)});
   process.env.DISABLE_UPDATES = "yes";
   out.blocked = await installTool("claude", undefined, { newest: ${JSON.stringify(NEWER)} });
+  console.log(JSON.stringify(out));
+`;
+
+/** (l): CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, on whatever it is set to: "0" too. */
+const TRAFFIC_SCRIPT = `
+  const out = {};
+  writeFileSync(join(S, "release"), ${JSON.stringify(NEWEST)});
+  process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "0";
+  out.declined = await installTool("claude", undefined, { newest: ${JSON.stringify(NEWEST)}, automatic: true });
+  out.pressed = await installTool("claude", undefined, { newest: ${JSON.stringify(NEWEST)} });
   console.log(JSON.stringify(out));
 `;
 
@@ -690,11 +711,14 @@ const fleetLegs = async (kit: Kit): Promise<void> => {
       until(`${machine}'s Claude Code row`, () => row(machine), accept, 90_000)
         .then((cell) => cell)
         .catch(() => row(machine));
-    // The scratch fleet starts every process with DISABLE_AUTOUPDATER on
-    // (scratch-fleet.ts); each machine kept current here runs with it off.
+    // The scratch fleet starts every process with DISABLE_AUTOUPDATER and
+    // CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC on (scratch-fleet.ts); each
+    // machine kept current here runs with both off, the second empty, since
+    // any value turns it on.
     const kept = (claude: StandIn) => ({
       PATH: `${claude.bin}:${fleet.env.PATH}`,
       DISABLE_AUTOUPDATER: "0",
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "",
     });
 
     fleet.launch("sessiond");
@@ -740,8 +764,7 @@ const fleetLegs = async (kit: Kit): Promise<void> => {
           toolWords.updatesOff(
             NAME,
             "DISABLE_AUTOUPDATER",
-            toolWords.inEnvironment,
-            BEHIND
+            toolWords.inEnvironment
           ) &&
         (await off.calls()).length === 0,
       `row: ${JSON.stringify(declined)}; its updater ran: ${(await off.calls()).join(", ") || "never"}`
@@ -1051,12 +1074,7 @@ const offSays = async (
   kit.check(
     `(j, ${view}) the machine whose updates are off says why on its row`,
     offSaid.includes(
-      toolWords.updatesOff(
-        NAME,
-        "DISABLE_AUTOUPDATER",
-        toolWords.inEnvironment,
-        BEHIND
-      )
+      toolWords.updatesOff(NAME, "DISABLE_AUTOUPDATER", toolWords.inEnvironment)
     ),
     there
       ? offSaid.replaceAll("\n", " ").slice(0, 400)
@@ -1064,7 +1082,90 @@ const offSays = async (
   );
 };
 
-/** (c) to (e), (i), (j) and (k) on machines of their own, each a child. */
+/** A machine of a leg's own: its folder, and its stand-in Claude Code there. */
+type Fresh = (
+  name: string,
+  start: string,
+  layout: Layout
+) => Promise<{ claude: StandIn; dir: string }>;
+
+/** (j) and (l) on machines of their own: the owner's switches, each where Claude Code reads it. */
+const switchLegs = async (kit: Kit, fresh: Fresh): Promise<void> => {
+  const { check } = kit;
+  {
+    const { dir, claude } = await fresh("switches", BEHIND, "native");
+    const read = await onMachine<{
+      blocked?: ToolStatus;
+      declined?: ToolStatus;
+      pressed?: ToolStatus;
+    }>(kit, dir, claude, SWITCH_SCRIPT, {
+      env: { DISABLE_AUTOUPDATER: "1" },
+    });
+    const calls = await claude.calls();
+    check(
+      "(j) DISABLE_AUTOUPDATER in Claude Code's user settings declines CawCo's automatic update, says why, and runs nothing",
+      read.declined?.state === "installed" &&
+        read.declined.version === BEHIND &&
+        read.declined.detail ===
+          toolWords.updatesOff(
+            NAME,
+            "DISABLE_AUTOUPDATER",
+            join("~", CLAUDE_DIR_NAME, "settings.json")
+          ),
+      JSON.stringify(read.declined)
+    );
+    check(
+      `(j) a press still updates it, to ${NEWEST}`,
+      read.pressed?.state === "installed" &&
+        read.pressed.version === NEWEST &&
+        read.pressed.detail === undefined,
+      `${JSON.stringify(read.pressed)}; what ran: ${calls.join(", ")}`
+    );
+    check(
+      "(j) DISABLE_UPDATES in the environment declines a press too, says why, and runs nothing",
+      read.blocked?.state === "installed" &&
+        read.blocked.version === NEWEST &&
+        read.blocked.detail ===
+          toolWords.updatesOff(
+            NAME,
+            "DISABLE_UPDATES",
+            toolWords.inEnvironment
+          ) &&
+        calls.join(",") === `update from ${BEHIND}`,
+      `${JSON.stringify(read.blocked)}; what ran: ${calls.join(", ")}`
+    );
+  }
+
+  {
+    const { dir, claude } = await fresh("traffic", BEHIND, "native");
+    const read = await onMachine<{
+      declined?: ToolStatus;
+      pressed?: ToolStatus;
+    }>(kit, dir, claude, TRAFFIC_SCRIPT);
+    const calls = await claude.calls();
+    check(
+      "(l) CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, set even to 0, declines CawCo's automatic update, says why, and runs nothing",
+      read.declined?.state === "installed" &&
+        read.declined.version === BEHIND &&
+        read.declined.detail ===
+          toolWords.updatesOff(
+            NAME,
+            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+            toolWords.inEnvironment
+          ),
+      JSON.stringify(read.declined)
+    );
+    check(
+      `(l) a press still updates it, to ${NEWEST}: only DISABLE_UPDATES stops a press`,
+      read.pressed?.state === "installed" &&
+        read.pressed.version === NEWEST &&
+        calls.join(",") === `update from ${BEHIND}`,
+      `${JSON.stringify(read.pressed)}; what ran: ${calls.join(", ")}`
+    );
+  }
+};
+
+/** (c) to (e), (i), (j), (k) and (l) on machines of their own, each a child. */
 const machineLegs = async (kit: Kit, root: string): Promise<void> => {
   const { check } = kit;
   const fresh = async (name: string, start: string, layout: Layout) => {
@@ -1172,51 +1273,7 @@ const machineLegs = async (kit: Kit, root: string): Promise<void> => {
     );
   }
 
-  {
-    const { dir, claude } = await fresh("switches", BEHIND, "native");
-    const read = await onMachine<{
-      blocked?: ToolStatus;
-      declined?: ToolStatus;
-      pressed?: ToolStatus;
-    }>(kit, dir, claude, SWITCH_SCRIPT, {
-      env: { DISABLE_AUTOUPDATER: "1" },
-    });
-    const calls = await claude.calls();
-    check(
-      "(j) DISABLE_AUTOUPDATER in Claude Code's user settings declines CawCo's automatic update, says why, and runs nothing",
-      read.declined?.state === "installed" &&
-        read.declined.version === BEHIND &&
-        read.declined.detail ===
-          toolWords.updatesOff(
-            NAME,
-            "DISABLE_AUTOUPDATER",
-            join("~", CLAUDE_DIR_NAME, "settings.json"),
-            BEHIND
-          ),
-      JSON.stringify(read.declined)
-    );
-    check(
-      `(j) a press still updates it, to ${NEWEST}`,
-      read.pressed?.state === "installed" &&
-        read.pressed.version === NEWEST &&
-        read.pressed.detail === undefined,
-      `${JSON.stringify(read.pressed)}; what ran: ${calls.join(", ")}`
-    );
-    check(
-      "(j) DISABLE_UPDATES in the environment declines a press too, says why, and runs nothing",
-      read.blocked?.state === "installed" &&
-        read.blocked.version === NEWEST &&
-        read.blocked.detail ===
-          toolWords.updatesOff(
-            NAME,
-            "DISABLE_UPDATES",
-            toolWords.inEnvironment,
-            NEWEST
-          ) &&
-        calls.join(",") === `update from ${BEHIND}`,
-      `${JSON.stringify(read.blocked)}; what ran: ${calls.join(", ")}`
-    );
-  }
+  await switchLegs(kit, fresh);
 
   {
     const { dir, claude } = await fresh("cask", BEHIND, "brew");
@@ -1247,6 +1304,166 @@ const machineLegs = async (kit: Kit, root: string): Promise<void> => {
   }
 };
 
+/** The hive's short name in a key, as reg.exe prints the key in full. */
+const HKLM = /^HKLM\\/u;
+
+/**
+ * What reg.exe prints for `reg query <key> /v Settings`, as Windows lays
+ * it out: a blank line, the key, the value indented four spaces with its
+ * type and data four apart, a blank line; CRLF throughout.
+ */
+const regQueryOutput = (key: string, type: string, data: string): string =>
+  [
+    "",
+    key.replace(HKLM, "HKEY_LOCAL_MACHINE\\"),
+    `    Settings    ${type}    ${data}`,
+    "",
+    "",
+  ].join("\r\n");
+
+/** A stand-in program: logs its arguments, one line each call, then answers as `body` says. */
+const program = async (file: string, log: string, body: string) =>
+  executable(
+    file,
+    `#!${systemProgram("bash")}
+printf '%s\\n' "$*" >> ${JSON.stringify(log)}
+${body}
+`
+  );
+
+/**
+ * (m) Claude Code's managed policies that are no file, read where it reads
+ * them: neither macOS nor Windows runs here, so each reader's parse is held
+ * to its tool's real output shape, and its command to the one Claude Code
+ * runs, through stand-ins for plutil and reg.exe.
+ */
+const policyLegs = async (kit: Kit, root: string): Promise<void> => {
+  const { check } = kit;
+  const switches = toolSpec("claude")?.updatesOff;
+  const profile = switches?.policies?.darwin?.[0];
+  const registry = switches?.policies?.win32?.[0];
+  if (profile?.kind !== "plist" || registry?.kind !== "registry") {
+    check(
+      "(m) the catalog names Claude Code's macOS profile and Windows registry policy",
+      false,
+      JSON.stringify(switches?.policies)
+    );
+    return;
+  }
+  const json = '{"env":{"DISABLE_AUTOUPDATER":"1"}}';
+  check(
+    "(m) a REG_SZ value as reg.exe prints it reads as its JSON, as Claude Code's Fe reads it",
+    registryText(
+      regQueryOutput(registry.key, "REG_SZ", json),
+      registry.value
+    ) === json,
+    JSON.stringify(regQueryOutput(registry.key, "REG_SZ", json))
+  );
+  check(
+    "(m) so does a REG_EXPAND_SZ value; a key with no Settings value reads as none",
+    registryText(
+      regQueryOutput(registry.key, "REG_EXPAND_SZ", json),
+      registry.value
+    ) === json &&
+      registryText(
+        regQueryOutput(registry.key, "REG_SZ", json).replace(
+          "Settings",
+          "Other"
+        ),
+        registry.value
+      ) === undefined
+  );
+  const plutilJson =
+    '{"env":{"DISABLE_UPDATES":true,"DISABLE_AUTOUPDATER":1},"permissions":{"deny":["Read(./.env)"]}}';
+  const env = policyEnv(plutilJson);
+  check(
+    "(m) plutil's JSON of a profile reads as its env, a plist's booleans and integers on as Claude Code reads them",
+    switchOn(env?.DISABLE_UPDATES) &&
+      switchOn(env?.DISABLE_AUTOUPDATER) &&
+      policyEnv('{"permissions":{}}') === undefined &&
+      policyEnv("not json") === undefined,
+    JSON.stringify(env)
+  );
+  const user = "alice";
+  check(
+    "(m) the profile is the user's own managed preferences, then the device's",
+    JSON.stringify(plistPaths(profile.domain, user)) ===
+      JSON.stringify([
+        join("/Library/Managed Preferences", user, `${profile.domain}.plist`),
+        join("/Library/Managed Preferences", `${profile.domain}.plist`),
+      ])
+  );
+
+  const dir = join(root, "policies");
+  await mkdir(dir, { recursive: true });
+  const plutilLog = join(dir, "plutil.log");
+  const regLog = join(dir, "reg.log");
+  // plutil as macOS has it: a file that isn't there fails, as plutil says
+  // "file does not exist"; the device's profile converts.
+  await program(
+    join(dir, "plutil"),
+    plutilLog,
+    `case "\${@: -1}" in
+  "/Library/Managed Preferences/"*/*) echo "\${@: -1}: file does not exist or is not readable or is not a regular file" >&2; exit 1 ;;
+  *) printf '%s' ${JSON.stringify(json)} ;;
+esac`
+  );
+  // reg.exe prints its CRLF output byte for byte, read whole by builtins.
+  const regOutput = join(dir, "reg-output.txt");
+  await writeFile(regOutput, regQueryOutput(registry.key, "REG_SZ", json));
+  await program(
+    join(dir, "reg.exe"),
+    regLog,
+    `IFS= read -r -d '' out < ${JSON.stringify(regOutput)}
+printf '%s' "$out"`
+  );
+  await program(
+    join(dir, "reg-absent.exe"),
+    join(dir, "reg-absent.log"),
+    `echo "ERROR: The system was unable to find the specified registry key or value." >&2
+exit 1`
+  );
+  const stands = {
+    plutil: () => join(dir, "plutil"),
+    reg: () => join(dir, "reg.exe"),
+  };
+  const fromProfile = await readPolicy(profile, {}, stands);
+  const plutilRan = (await readFile(plutilLog, "utf8")).trim().split("\n");
+  check(
+    "(m) the profile is read with plutil -convert json -o - --, the user's first, and the device's stands when the user has none",
+    fromProfile?.env.DISABLE_AUTOUPDATER === "1" &&
+      fromProfile.where === toolWords.inProfile(profile.domain) &&
+      plutilRan.length === 2 &&
+      plutilRan.every((line) => line.startsWith("-convert json -o - -- ")) &&
+      plutilRan[1]?.endsWith(plistPaths(profile.domain, undefined)[0] ?? "") ===
+        true,
+    `${JSON.stringify(fromProfile)}; plutil ran: ${plutilRan.join(" | ")}`
+  );
+  const fromRegistry = await readPolicy(registry, {}, stands);
+  const regRan = (await readFile(regLog, "utf8")).trim();
+  check(
+    `(m) the registry is read with reg.exe query ${registry.key} /v ${registry.value}, and its JSON's env stands`,
+    fromRegistry?.env.DISABLE_AUTOUPDATER === "1" &&
+      fromRegistry.where ===
+        toolWords.inRegistry(registry.value, registry.key) &&
+      regRan === `query ${registry.key} /v ${registry.value}`,
+    `${JSON.stringify(fromRegistry)}; reg.exe ran: ${regRan}`
+  );
+  const absent = await readPolicy(
+    registry,
+    {},
+    {
+      ...stands,
+      reg: () => join(dir, "reg-absent.exe"),
+    }
+  );
+  check(
+    "(m) a key reg.exe can't find is no policy",
+    absent === undefined,
+    JSON.stringify(absent)
+  );
+};
+
 const spec: Spec = {
   group: "The hub and machines",
   name: "cli-kept-current",
@@ -1257,6 +1474,7 @@ const spec: Spec = {
     );
     try {
       await machineLegs(kit, root);
+      await policyLegs(kit, root);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

@@ -53603,9 +53603,16 @@
         ]
       },
       "ToolUpdateSwitches": {
-        "description": "How a machine turns a tool's own updates off, as the tool itself reads it:\na variable whose value is on ({@link switchOn}) in the environment the tool\nruns with, or in the `env` of one of its settings files, a settings file's\nover the environment and a later file's over an earlier one, as the tool\napplies them. `automatic` turns off the tool's own automatic updates, and\nso CawCo's; `every` turns off every update, a press's included.",
+        "description": "How a machine turns a tool's own updates off, as the tool itself reads it:\na variable whose value is on ({@link switchOn}; any value at all for one\nof `anyValue`) in the environment the tool runs with, or in the `env` of\none of its settings files or managed policies, each later source's over\nan earlier one's, as the tool applies them. `automatic` turns off the\ntool's own automatic updates, and so CawCo's; `every` turns off every\nupdate, a press's included.",
         "type": "object",
         "properties": {
+          "anyValue": {
+            "description": "Of the variables, those on whatever they are set to, rather than by {@link switchOn}.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "automatic": {
             "type": "array",
             "items": {
@@ -53633,6 +53640,30 @@
             "items": {
               "type": "string"
             }
+          },
+          "policies": {
+            "type": "object",
+            "properties": {
+              "linux": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ToolPolicySource"
+                }
+              },
+              "darwin": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ToolPolicySource"
+                }
+              },
+              "win32": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ToolPolicySource"
+                }
+              }
+            },
+            "description": "The managed policies that are no file of the tool's own, read after its\nfiles, on each platform ({@link ToolPolicySource}): they rank above\nthem, so a variable one sets stands over the files'."
           },
           "settings": {
             "type": "object",
@@ -53664,6 +53695,51 @@
           "configDir",
           "every",
           "settings"
+        ]
+      },
+      "ToolPolicySource": {
+        "description": "A managed policy that is no file of the tool's own, and how its settings\nare read on the machine, as the tool reads them:\n- `plist`: a macOS managed preferences domain, as plutil converts it to\n  JSON: the user's own profile (`/Library/Managed Preferences/<user>/\n  <domain>.plist`), else the device's (`/Library/Managed Preferences/\n  <domain>.plist`), the first plutil can read;\n- `registry`: a Windows registry value holding the settings as JSON, as\n  `reg.exe query <key> /v <value>` prints it.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "domain": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "plist"
+                ]
+              }
+            },
+            "required": [
+              "domain",
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "registry"
+                ]
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "key",
+              "kind",
+              "value"
+            ]
+          }
         ]
       },
       "ToolPolicy": {
