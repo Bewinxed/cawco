@@ -569,6 +569,70 @@ async function openJump(page: Page, view: View) {
 }
 
 /**
+ * The bar's ground, read against what the system lets it draw: none of its
+ * own, whatever the hub does (DESIGN.md, "No bar ground. A bar draws no
+ * fill, hairline or shadow"): no fill, no border, no shadow, no image. Its
+ * one hairline is the shelf's, on a wide bar that hosts a conversation's
+ * tabs (Shell.svelte, `data-hosting:shelf-hairline`), drawn as a 1px
+ * gradient in `--border-hairline` at the bar's foot over `--surface-shelf`
+ * (design.css `@utility shelf-hairline`), never a border. `hairline` and
+ * `shelf` are that shelf's layers (image, position, size) and surface as
+ * this page computes them, read through a probe in the bar drawn as the
+ * utility draws it, so both sides are in one colour space and one layering.
+ */
+const barGround = (page: Page) =>
+  page.evaluate(() => {
+    const bar = document.querySelector<HTMLElement>('header[data-slot="top"]');
+    if (!bar) {
+      return null;
+    }
+    // The shelf as design.css draws it: a 1px hairline layer at the foot
+    // over a layer of the shelf's surface, whose own image is none.
+    const probe = document.createElement("i");
+    probe.style.background =
+      "linear-gradient(var(--border-hairline), var(--border-hairline)) bottom / 100% 1px no-repeat, var(--surface-shelf)";
+    bar.append(probe);
+    const tokens = getComputedStyle(probe);
+    const hairline = `${tokens.backgroundImage} at ${tokens.backgroundPosition} sized ${tokens.backgroundSize}`;
+    const shelf = tokens.backgroundColor;
+    probe.remove();
+    const style = getComputedStyle(bar);
+    return {
+      hosting: bar.dataset.hosting !== undefined,
+      image:
+        style.backgroundImage === "none"
+          ? "none"
+          : `${style.backgroundImage} at ${style.backgroundPosition} sized ${style.backgroundSize}`,
+      fill: style.backgroundColor,
+      border: style.borderBottomWidth,
+      shadow: style.boxShadow,
+      hairline,
+      shelf,
+    };
+  });
+
+/**
+ * Whether the bar's ground is the system's: no border or shadow; a bar that
+ * hosts no tabs draws nothing; one that hosts draws nothing, or the shelf
+ * whole (its surface and its hairline). `shelf` asks for the shelf itself:
+ * a wide bar hosting tabs on a fine pointer, which must draw it.
+ */
+const groundHolds = (
+  seam: Awaited<ReturnType<typeof barGround>>,
+  shelf = false
+): boolean => {
+  if (!(seam && seam.border === "0px" && seam.shadow === "none")) {
+    return false;
+  }
+  const bare = seam.image === "none" && seam.fill === "rgba(0, 0, 0, 0)";
+  const shelved = seam.image === seam.hairline && seam.fill === seam.shelf;
+  if (shelf) {
+    return seam.hosting && shelved;
+  }
+  return seam.hosting ? bare || shelved : bare;
+};
+
+/**
  * A project's board read through a tunnel's HTML 502: one sentence, said
  * once, with one Retry; the bar's foot its own divider. The sweep's count.
  */
@@ -640,41 +704,10 @@ async function boardRead(kit: Kit, page: Page, name: string, project: string) {
     !COLON_JOIN.test(board),
     board.replace(/\s+/gu, " ").slice(0, 240)
   );
-  // The bar draws no ground of its own, whatever the hub does (DESIGN.md,
-  // "No bar ground. A bar draws no fill, hairline or shadow"): no fill, no
-  // border, no shadow, no image. Its one hairline is the shelf's, on a wide
-  // bar that hosts a conversation's tabs (Shell.svelte, `data-hosting:
-  // shelf-hairline`), drawn as a 1px gradient in `--border-hairline` at the
-  // bar's foot (design.css `@utility shelf-hairline`), never a border.
-  const seam = await page.evaluate(() => {
-    const bar = document.querySelector<HTMLElement>('header[data-slot="top"]');
-    if (!bar) {
-      return null;
-    }
-    const probe = document.createElement("i");
-    probe.style.backgroundImage =
-      "linear-gradient(var(--border-hairline), var(--border-hairline))";
-    bar.append(probe);
-    const hairline = getComputedStyle(probe).backgroundImage;
-    probe.remove();
-    const style = getComputedStyle(bar);
-    return {
-      hosting: bar.dataset.hosting !== undefined,
-      image: style.backgroundImage,
-      fill: style.backgroundColor,
-      border: style.borderBottomWidth,
-      shadow: style.boxShadow,
-      hairline,
-    };
-  });
+  const seam = await barGround(page);
   kit.check(
     `${name}, board 502: the bar draws no ground of its own, its only hairline the hosting shelf's --border-hairline`,
-    seam !== null &&
-      seam.border === "0px" &&
-      seam.shadow === "none" &&
-      (seam.hosting
-        ? seam.image === "none" || seam.image === seam.hairline
-        : seam.image === "none" && seam.fill === "rgba(0, 0, 0, 0)"),
+    groundHolds(seam),
     JSON.stringify(seam)
   );
   // Caw's own read was refused with the rest. He is drawn from the project's
@@ -1505,6 +1538,17 @@ async function conversationLeg(
   const rest = await restBoxes(page);
   await searchOrder(kit, page, name, view);
   kit.note(`${name}: at rest ${JSON.stringify(rest)}`);
+  // The bar over a conversation hosts its tabs: on a desk it draws the
+  // shelf, its one hairline in --border-hairline; on a phone it floats
+  // over them and draws nothing.
+  const seam = await barGround(page);
+  kit.check(
+    view === "desk"
+      ? `${name}: at rest the bar hosting the tabs draws the shelf, its one hairline --border-hairline, no border or shadow`
+      : `${name}: at rest the bar floating over the tabs draws no ground of its own`,
+    groundHolds(seam, view === "desk"),
+    JSON.stringify(seam)
+  );
   kit.check(
     `${name}: at rest the band's row lays out nothing, and the page starts where it did`,
     rest.slot !== null &&
