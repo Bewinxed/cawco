@@ -106,12 +106,12 @@
   $effect(() =>
     typed.run(words.length === 0 && !still && !starting && !tapped)
   );
-  let fit = $state<TemplateName | null>(fitOf(firstWords));
+  let fit = $derived<TemplateName | null>(fitOf(firstWords));
   /**
    * The card the person tapped, the one pick: the frame stands on it and
    * nowhere else, whatever the words fit.
    */
-  let tapped = $state<TemplateName | null>(firstTapped);
+  let tapped = $derived<TemplateName | null>(firstTapped);
   /** A card picked on the cards, or the picked one tapped again (null). */
   function tap(next: TemplateName | null) {
     tapped = next;
@@ -139,7 +139,7 @@
    * (`peek`); `leaving` while the one on screen goes, so the other comes
    * only once he has.
    */
-  let caw = $state<"page" | "peek">(fitOf(firstWords) ? "peek" : "page");
+  let caw = $derived<"page" | "peek">(fitOf(firstWords) ? "peek" : "page");
   let leaving = $state(false);
   $effect(() => {
     if ((caw === "page") === (fit !== null)) {
@@ -173,9 +173,9 @@
 
   /** The send is out; it stays so through the navigation it ends in. */
   let starting = $state(false);
-  let refused = $state(refusal?.reason ?? "");
+  let refused = $derived(refusal?.reason ?? "");
   /** The send never reached the hub: its line offers Send again. */
-  let again = $state(refusal?.again ?? false);
+  let again = $derived(refusal?.again ?? false);
   /** What the Composer stands over its foot: its box holds that much room. */
   let footHeight = $state(0);
   /**

@@ -54,7 +54,7 @@
    * its body and its foot come up out of a slight blur one after the other
    * as the shape grows (`shown`), and sink back as it folds.
    */
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
