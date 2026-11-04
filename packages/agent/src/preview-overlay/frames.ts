@@ -214,7 +214,7 @@ const UNCLIPPED = new Set(["inline", "contents", "none"]);
  * which stands in the viewport, not in them. The root's overflow is the
  * viewport's, and so is the body's while the root's is visible.
  */
-const clipsIn = (el: Element): DOMRect[] => {
+const clipsIn = (el: Element, own = false): DOMRect[] => {
   const doc = el.ownerDocument;
   const view = doc.defaultView ?? window;
   const root = doc.documentElement;
@@ -225,8 +225,8 @@ const clipsIn = (el: Element): DOMRect[] => {
   const boxes: DOMRect[] = [];
   let style = view.getComputedStyle(el);
   for (
-    let up = el.parentElement;
-    up && up !== root && style.position !== "fixed";
+    let up = own ? el : el.parentElement;
+    up && up !== root && (up === el || style.position !== "fixed");
     up = up.parentElement
   ) {
     style = view.getComputedStyle(up);
@@ -248,10 +248,11 @@ const clipsIn = (el: Element): DOMRect[] => {
 /**
  * The part of the top viewport where a mark on `el` may be seen: each
  * frame's viewport and each box clipping it in its own document (an inner
- * scroll container), mapped to the top one, intersected. Null for an element
- * of the top document nothing clips, which the whole page shows.
+ * scroll container), mapped to the top one, intersected; with `own`, `el`'s
+ * own box too (a mark on what `el` itself scrolls). Null for an element of the
+ * top document nothing clips, which the whole page shows.
  */
-export const clipOf = (el: Element): DOMRect | null => {
+export const clipOf = (el: Element, own = false): DOMRect | null => {
   const boxes: DOMRect[] = [];
   let to = TOP;
   for (const frame of framesOf(el)) {
@@ -260,7 +261,7 @@ export const clipOf = (el: Element): DOMRect | null => {
     boxes.push(mapped(to, new DOMRect(box.x, box.y, box.w, box.h)));
     to = into(to, frame);
   }
-  boxes.push(...clipsIn(el).map((clip) => mapped(to, clip)));
+  boxes.push(...clipsIn(el, own).map((clip) => mapped(to, clip)));
   if (boxes.length === 0) {
     return null;
   }
@@ -280,6 +281,27 @@ export const clipOf = (el: Element): DOMRect | null => {
     Math.max(0, right - left),
     Math.max(0, bottom - top)
   );
+};
+
+/**
+ * Whether `el`, or anything holding it out through its frames, is fixed or
+ * sticky: the top page's scroll carries the marks' layers and leaves it
+ * where it stands in the viewport.
+ */
+export const staysInView = (el: Element): boolean => {
+  for (
+    let at: Element | null = el;
+    at;
+    at = at.parentElement ?? framesOf(at).at(-1) ?? null
+  ) {
+    const { position } = (
+      at.ownerDocument.defaultView ?? window
+    ).getComputedStyle(at);
+    if (position === "fixed" || position === "sticky") {
+      return true;
+    }
+  }
+  return false;
 };
 
 /**

@@ -79,6 +79,45 @@ export function pageScrolls(): boolean {
   );
 }
 
+/** Overflows that scroll by the person's hand. */
+const SCROLLED = /^(auto|scroll|overlay)$/u;
+
+/**
+ * Whether `el` scrolls what it holds under its own box. Never the root, whose
+ * scroll is the viewport's, nor the body while the root's overflow is
+ * `visible`, which carries the body's up to the viewport. `hidden` is left
+ * out: a truncated line overflows it, and scrolls nothing.
+ */
+export function scrollsContent(el: Element): boolean {
+  const doc = el.ownerDocument;
+  const view = doc.defaultView ?? window;
+  if (el === doc.documentElement) {
+    return false;
+  }
+  if (el === doc.body) {
+    const root = view.getComputedStyle(doc.documentElement);
+    if (root.overflowX === "visible" && root.overflowY === "visible") {
+      return false;
+    }
+  }
+  const { overflowX, overflowY } = view.getComputedStyle(el);
+  return SCROLLED.test(overflowX) || SCROLLED.test(overflowY);
+}
+
+/** The innermost element scrolling `el` in its own document, `el` itself among them; null where none does, or a fixed box stops them short. */
+export function scrollerRound(el: Element): Element | null {
+  const view = el.ownerDocument.defaultView ?? window;
+  for (let at: Element | null = el; at; at = at.parentElement) {
+    if (scrollsContent(at)) {
+      return at;
+    }
+    if (view.getComputedStyle(at).position === "fixed") {
+      return null;
+    }
+  }
+  return null;
+}
+
 /** The innermost scroll container round a mark in `chain` (core `scrollersOf`), none a document's own; null when it has none. */
 export function innerScroller(
   chain: Scroller[]

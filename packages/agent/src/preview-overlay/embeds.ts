@@ -58,6 +58,8 @@ const PICTURED = "cawco:embed-pictured";
 
 /** The attribute a frame showing an artifact carries (decisions host Preview.svelte): its id. */
 export const EMBED_ARTIFACT = "data-cawco-artifact";
+/** What holds a Preview's place on the page whether or not its frame has mounted (decisions host Preview.svelte): the artifact's id. */
+export const EMBED_PLACE = "data-cawco-embed-place";
 /** The layer of stand-ins over a frame: the overlay's own, never the page's (ink.ts `OVERLAY_OWN`). */
 export const STAND_INS = "data-cawco-stand-ins";
 

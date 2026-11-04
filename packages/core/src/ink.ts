@@ -9,7 +9,10 @@
  *   of them that holds the rest (their nearest container when it is not much
  *   bigger than the marks), else to the first, its points kept as fractions
  *   of that element's box, so a reflow, a resize or a re-publish carries the
- *   ink with the element.
+ *   ink with the element. An element that keeps its place while what it holds
+ *   scrolls is never the anchor of a stroke on that content: the content is;
+ *   only one with no elements inside (a `pre`, a `textarea`) is, with its
+ *   scroll kept (`scrolled`).
  *   On a canvas the ink is the canvas's own freedraw, and a group names it.
  * - `moved`: groups whose anchor no longer matches anything on the page
  *   (core comments.ts `findAnchor`), kept for the moved tray.
@@ -52,6 +55,8 @@ export interface InkGroup {
   over?: PageAnchor[];
   /** Where the group stood in the page when it was drawn, px. */
   page: { x: number; y: number; w: number; h: number };
+  /** On the words the anchor itself scrolls: the anchor's scroll its points were read at, px; they move by what it has scrolled since. */
+  scrolled?: { x: number; y: number };
   sentAt?: string;
   strokes: InkStroke[];
 }

@@ -243,10 +243,23 @@ const showsAt = (el: Element | null, at: [number, number]): boolean => {
   return x >= clip.left && x <= clip.right && y >= clip.top && y <= clip.bottom;
 };
 
+/** Whether any of the page's box lies where `el`'s frames and scroll containers show it; always, where nothing clips it. */
+const showsAny = (el: Element | null, box: Box): boolean => {
+  const clip = el ? clipOf(el) : null;
+  return (
+    !clip ||
+    meets(
+      { x: box.x - scrollX, y: box.y - scrollY, w: box.w, h: box.h },
+      { x: clip.x, y: clip.y, w: clip.width, h: clip.height }
+    )
+  );
+};
+
 /**
  * Where a pin stands: the point its tail stands on in the page (or, on the
  * page as a whole, the viewport), its element, what it stands on in the
- * page's coordinates, and whether its frames show that point now.
+ * page's coordinates, and whether its frames show that point now (for a pin
+ * on ink, any of its strokes).
  */
 interface Standing {
   at: [number, number];
@@ -766,7 +779,9 @@ export function startPins(deps: PinsDeps): Pins {
       el: spot.el,
       page: spot.page,
       pill,
-      shown: spot.page || !!spot.ink || showsAt(spot.el, at),
+      shown:
+        spot.page ||
+        (spot.ink ? showsAny(spot.el, spot.box) : showsAt(spot.el, at)),
     };
   };
 

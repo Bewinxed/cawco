@@ -794,7 +794,10 @@
 >
   {#if pageAddress !== null}
     <!-- A page taller than its frame scrolls inside it, under the house edge fade (its 40px, `--c-edge-fade-len`) at its head and foot while more is past them. Wider than its well, its well scrolls it sideways. Until its frame has loaded it holds a screen's skeleton at the frame's own box, and past the grace the wait's line stands over it (`status`), as a screen's embed does: never a blank box. -->
-    <div class={["relative", picture === undefined ? "w-full" : "flex-none"]}>
+    <div
+      class={["relative", picture === undefined ? "w-full" : "flex-none"]}
+      data-cawco-embed-place={id}
+    >
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load measures the page, so the frame is as tall as it, and says it stands drawn. -->
       <!-- biome-ignore lint/security/useIframeSandbox: a page CawCo serves itself under /__cawco, which needs scripts and its own origin to run, and with both a sandbox holds nothing back. -->
       <iframe
@@ -840,6 +843,7 @@
         picture === undefined ? "w-full" : "flex-none",
         reserved && (heldHeight === null ? "aspect-16/10" : "min-h-(--held-h)"),
       ]}
+      data-cawco-embed-place={id}
       style:--held-h={reserved ? heldHeight : undefined}
       style:inline-size={picture === undefined ? undefined : `${picture}px`}
     >

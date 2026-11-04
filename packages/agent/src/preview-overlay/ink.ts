@@ -5,8 +5,10 @@
  * they pin, in Interact they are the page's).
  *
  * The ink is an `<svg>` in the page's own document, at its origin and as big
- * as its scroll, so it scrolls with the page and never shifts; it takes the
- * pointer only while a stroke is down. Strokes are Pointer Events, a pen's
+ * as its scroll, so it scrolls with the page and never shifts; what stands past
+ * that (a group on content an inner scroller holds below the page's foot) it
+ * hides, or it would give the page a scroll of its own. It takes the pointer
+ * only while a stroke is down. Strokes are Pointer Events, a pen's
  * or, in Draw, the main button's or a first finger's (`freehand`): their
  * coalesced events are the points (WebKit hands UIKit's coalesced touches,
  * WebKit PR 31329), their predicted events the live tail, drawn and never
@@ -27,8 +29,15 @@
  * ink.ts) and kept in the doc's `ink` as fractions of that element's box, so
  * it is drawn again from the element's box wherever the element stands now:
  * on load, on a resize, when the element itself resizes, when the page's
- * content changes round it or a transition ends, after a re-publish; and
- * never while nothing changes.
+ * content changes round it or a transition ends, when a scroller moves the
+ * element, after a re-publish; and never while nothing changes.
+ *
+ * So what it stands on moves with what the stroke covers. The body stands
+ * still in a page whose scroller is inside it (a decision page's first row),
+ * and a scroller stands still over what it scrolls: a stroke over no content
+ * in one stands on the content nearest it ({@link contentNear}), and a stroke
+ * over a frame of another origin on the element its embed names there
+ * ({@link reachIn}), so the frame's own scroll carries it too.
  * The element is found as a pin's is (core comments.ts `findAnchor`); a
  * page's group whose element stands missing for a while (absent.ts) goes to
  * `moved`. Its pins are pins.ts's.
@@ -60,11 +69,15 @@ import {
   framesOf,
   frameWindows,
   grow,
+  isFrame,
   pageBox,
+  rectOf,
   sizesIn,
+  staysInView,
 } from "./frames";
 import type { Pins } from "./pins";
 import type { InkChrome, Pick } from "./radial";
+import { scrollerRound, scrollsContent } from "./scrollers";
 
 const SVG = "http://www.w3.org/2000/svg";
 
@@ -91,6 +104,10 @@ const LOOP_MIN = 24;
 const LOOP_GRID = 16;
 /** Points a line is hit-tested at along itself, at most. Our call. */
 const LINE_SAMPLES = 48;
+/** Points a group asks the embeds under it about: no more than a frame holds unanswered (embeds.ts `ASKING_MOST`), so none overtakes another. */
+const EMBED_ASKS = 8;
+/** The grid a loop's inside is asked of an embed on: 3 by 3. Our call. */
+const EMBED_GRID = 3;
 /** How far past a loop's box an element may stand and still be enclosed, px. Our call. */
 const ENCLOSE_SLACK = 8;
 /** How far either side of a line an element may reach and still be crossed whole, px: about a line of text. Our call. */
@@ -116,6 +133,17 @@ const ERASING_OPACITY = "0.3";
 /** A point in the page, px, with its pressure. */
 type Point = [x: number, y: number, pressure: number];
 
+/** What strokes mark: the element they stand on, whether on the words it scrolls itself (core `scrolled`), the elements they mark. */
+interface Marks {
+  anchor: Element;
+  onOwnScroll: boolean;
+  over: Element[];
+}
+
+/** The page's points in the viewport as it is scrolled now. */
+const viewOf = (points: [number, number][]): [number, number][] =>
+  points.map(([x, y]) => [x - scrollX, y - scrollY]);
+
 /** What the overlay lends the ink: its own describers, the pins, the host's chrome. */
 export interface InkDeps {
   /** What a page's mark stands on, read from `el` as it is now. */
@@ -124,10 +152,18 @@ export interface InkDeps {
   describe: (el: Element) => PinnedElement;
   /** The deepest element at each of the viewport's points, inside same-origin frames; one hit test pass. */
   elementsAt: (points: [x: number, y: number][]) => (Element | null)[];
+  /** What the embed in frame `el` names at the viewport's `x`, `y`, as its stand-in; the frame for its page as a whole; null when it was overtaken. Null at once for any other element. */
+  embedAt: (
+    el: Element,
+    x: number,
+    y: number
+  ) => Promise<Element | null> | null;
   /** A group's stroke has just been kept (its id): the page draws its picture now, once. */
   ended: (id: string) => void;
   /** Whether a press that is not a pen's inks: the pane's Draw mode, on the overlay's own layer. */
   freehand: (event: PointerEvent) => boolean;
+  /** What holds a stand-in, innermost first, as its embed says, then its frame; none for any other element. */
+  inEmbed: (el: Element) => Element[];
   /** Where a page's anchor stands now, and by what; null when nothing on the page matches it. */
   locate: (anchor: PageAnchor) => AnchorFound<Element> | null;
   /** Whether `el` is the page's own box rather than content on it. */
@@ -152,6 +188,30 @@ export interface Ink {
 /** `el`'s parent, out of its frame's document into the frame itself at the frame's root. */
 const outward = (el: Element): Element | null =>
   el.parentElement ?? framesOf(el).at(-1) ?? null;
+
+/** A viewport point's distance from a box. */
+const distanceTo = (r: DOMRect, x: number, y: number) =>
+  Math.hypot(
+    Math.max(r.left - x, 0, x - r.right),
+    Math.max(r.top - y, 0, y - r.bottom)
+  );
+
+/** The child of `el` with a box nearest the viewport's `x`, `y`, the overlay's own left out; null when it has none. */
+const nearestChild = (el: Element, x: number, y: number): Element | null => {
+  let nearest: Element | null = null;
+  let least = Number.POSITIVE_INFINITY;
+  for (const child of el.children) {
+    const r = rectOf(child);
+    if (r.width > 0 && r.height > 0 && !child.closest(OVERLAY_OWN)) {
+      const far = distanceTo(r, x, y);
+      if (far < least) {
+        nearest = child;
+        least = far;
+      }
+    }
+  }
+  return nearest;
+};
 
 /** The box around a stroke's points, at least 1 px each way. */
 const strokeBox = (points: Point[]): Box => {
@@ -220,17 +280,19 @@ const every = <T>(items: T[], most: number): T[] => {
 const samplesOf = (
   points: Point[],
   box: Box,
-  loop: boolean
+  loop: boolean,
+  grid = LOOP_GRID,
+  line = LINE_SAMPLES
 ): [number, number][] => {
   if (!loop) {
-    return every(points, LINE_SAMPLES).map(([x, y]) => [x, y]);
+    return every(points, line).map(([x, y]) => [x, y]);
   }
   const ring = every(points, 200);
   const inside: [number, number][] = [];
-  for (let i = 0; i < LOOP_GRID; i += 1) {
-    for (let j = 0; j < LOOP_GRID; j += 1) {
-      const x = box.x + ((i + 0.5) * box.w) / LOOP_GRID;
-      const y = box.y + ((j + 0.5) * box.h) / LOOP_GRID;
+  for (let i = 0; i < grid; i += 1) {
+    for (let j = 0; j < grid; j += 1) {
+      const x = box.x + ((i + 0.5) * box.w) / grid;
+      const y = box.y + ((j + 0.5) * box.h) / grid;
       if (insideLoop(ring, x, y)) {
         inside.push([x, y]);
       }
@@ -238,14 +300,6 @@ const samplesOf = (
   }
   return inside;
 };
-
-/** The elements none of the others holds, in document order. */
-const outermost = (els: Element[]) =>
-  inOrder(els.filter((el) => !els.some((o) => o !== el && o.contains(el))));
-
-/** The elements that hold none of the others, in document order. */
-const innermost = (els: Element[]) =>
-  inOrder(els.filter((el) => !els.some((o) => o !== el && el.contains(o))));
 
 const inOrder = (els: Element[]) =>
   els.sort((a, b) =>
@@ -266,22 +320,6 @@ const blockOf = (el: Element): Element => {
   }
   return at;
 };
-
-/** The nearest element holding every one of `els`, through the frames they stand in; null when none does. */
-const containerOf = (els: Element[]): Element | null => {
-  const [first, ...rest] = els;
-  for (let at: Element | null = first ?? null; at; at = outward(at)) {
-    const holder = at;
-    if (rest.every((el) => holder.contains(el) || holdsAcross(holder, el))) {
-      return holder;
-    }
-  }
-  return null;
-};
-
-/** Whether `holder` holds `el` through the same-origin frames `el` stands in. */
-const holdsAcross = (holder: Element, el: Element) =>
-  framesOf(el).some((frame) => holder === frame || holder.contains(frame));
 
 /** perfect-freehand's outline as a closed path of quadratic curves through its points' midpoints. */
 const pathOf = (points: Point[]): string => {
@@ -389,11 +427,50 @@ const pressureOf = (event: PointerEvent) =>
 
 export function startInk(deps: InkDeps): Ink {
   const { chrome } = deps;
+
+  /** What holds `el`, innermost first: out of an embed by what it names, then parents and frames. */
+  const holdersOf = (el: Element): Element[] => {
+    const held = deps.inEmbed(el);
+    const holders = [...held];
+    for (let at = outward(held.at(-1) ?? el); at; at = outward(at)) {
+      holders.push(at);
+    }
+    return holders;
+  };
+  /** Whether `holder` holds `el`, a stand-in held by what its embed names too. */
+  const holds = (holder: Element, el: Element) =>
+    holder !== el && (holder.contains(el) || deps.inEmbed(el).includes(holder));
+  /** The elements none of the others holds, in document order. */
+  const outermost = (els: Element[]) =>
+    inOrder(els.filter((el) => !els.some((o) => holds(o, el))));
+  /** The elements that hold none of the others, in document order. */
+  const innermost = (els: Element[]) =>
+    inOrder(els.filter((el) => !els.some((o) => holds(el, o))));
+  /** The nearest element holding every one of `els`, through the frames and embeds they stand in; null when none does. */
+  const containerOf = ([first, ...rest]: Element[]): Element | null =>
+    (first ? [first, ...holdersOf(first)] : []).find((holder) =>
+      rest.every(
+        (el) =>
+          holder === el || holder.contains(el) || holdersOf(el).includes(holder)
+      )
+    ) ?? null;
+  /** The content nearest the viewport's `x`, `y` inside `el`: down through what is only the page's box; null when it holds none. */
+  const contentNear = (el: Element, x: number, y: number): Element | null => {
+    let at = nearestChild(el, x, y);
+    while (at && deps.pageSized(at)) {
+      at = nearestChild(at, x, y);
+    }
+    return at;
+  };
+  /** What a stroke at the viewport's `x`, `y` stands on where it lands on a scroller's own box: what the scroller scrolls, there. */
+  const onContent = (el: Element, x: number, y: number): Element =>
+    scrollsContent(el) ? (contentNear(el, x, y) ?? el) : el;
+
   const layer = document.createElementNS(SVG, "svg");
   layer.setAttribute("data-cawco-ink", "");
   layer.setAttribute("aria-hidden", "true");
   layer.style.cssText =
-    "position:absolute;left:0;top:0;z-index:2147483646;overflow:visible;pointer-events:none;margin:0;padding:0;border:0";
+    "position:absolute;left:0;top:0;z-index:2147483646;overflow:hidden;pointer-events:none;margin:0;padding:0;border:0";
   document.documentElement.append(layer);
 
   const onCanvas = () => artifact.kind() === "canvas";
@@ -409,6 +486,8 @@ export function startInk(deps: InkDeps): Ink {
     };
   };
 
+  /** Whether a group stands on an element that stays in the viewport as the page scrolls. */
+  let inView = false;
   /** Each placed group: its points in the page, its box, the element it stands on. */
   const placed = new Map<string, { box: Box; anchor: Element | null }>();
   /** Each clipped group's clip in the page, px: the part of it that is drawn. */
@@ -561,6 +640,7 @@ export function startInk(deps: InkDeps): Ink {
             ...kept,
             ...(group.sentAt ? { sentAt: group.sentAt } : {}),
           });
+          reachIn(id);
           continue;
         }
         ink.delete(id);
@@ -701,6 +781,7 @@ export function startInk(deps: InkDeps): Ink {
   /** One stroke's hits, each sorted into what it encloses (taken out as far as it still does) and what it crosses; its reach. */
   const hitsOf = (
     points: Point[],
+    named: Element[],
     boxed: (el: Element) => Box,
     into: { crossed: Set<Element>; enclosed: Set<Element> }
   ): Box => {
@@ -709,31 +790,41 @@ export function startInk(deps: InkDeps): Ink {
     const reach = grow(box, loop ? ENCLOSE_SLACK : LINE_REACH);
     const encloses = (el: Element) =>
       !deps.pageSized(el) && contains(reach, boxed(el), 0);
-    const hits = new Set(
-      deps.elementsAt(
-        samplesOf(points, box, loop).map(([x, y]) => [x - scrollX, y - scrollY])
-      )
-    );
-    for (const hit of hits) {
-      if (!hit || deps.pageSized(hit)) {
+    const hits = hitsAt(viewOf(samplesOf(points, box, loop)), named);
+    for (const [hit, [x, y]] of hits) {
+      if (deps.pageSized(hit)) {
         continue;
       }
-      if (!encloses(hit)) {
-        into.crossed.add(hit);
-        continue;
+      if (encloses(hit)) {
+        into.enclosed.add(takenOut(hit, encloses));
+      } else {
+        into.crossed.add(onContent(hit, x, y));
       }
-      let el = hit;
-      for (let up = outward(el); up && encloses(up); up = outward(up)) {
-        el = up;
-      }
-      into.enclosed.add(el);
     }
     return reach;
   };
 
-  const marksOf = (
-    strokes: Point[][]
-  ): { anchor: Element; over: Element[] } => {
+  /** The elements at the viewport's points, each with the first it was hit at; `named`, what an embed named, among them. */
+  const hitsAt = (views: [number, number][], named: Element[]) => {
+    const hits = new Map<Element, [number, number]>(
+      named.map((el) => [el, [0, 0]])
+    );
+    for (const [index, hit] of deps.elementsAt(views).entries()) {
+      if (hit && !hits.has(hit)) {
+        hits.set(hit, views[index] as [number, number]);
+      }
+    }
+    return hits;
+  };
+
+  /** `el` taken out to the largest of what holds it that `encloses` still holds true of. */
+  const takenOut = (el: Element, encloses: (one: Element) => boolean) => {
+    const holders = holdersOf(el);
+    const past = holders.findIndex((up) => !encloses(up));
+    return (past === -1 ? holders.at(-1) : holders[past - 1]) ?? el;
+  };
+
+  const marksOf = (strokes: Point[][], named: Element[][]): Marks | null => {
     const boxes = new Map<Element, Box>();
     const boxed = (el: Element) => {
       const known = boxes.get(el);
@@ -746,8 +837,8 @@ export function startInk(deps: InkDeps): Ink {
     };
     const enclosed = new Set<Element>();
     const crossed = new Set<Element>();
-    const reaches = strokes.map((points) =>
-      hitsOf(points, boxed, { crossed, enclosed })
+    const reaches = strokes.map((points, index) =>
+      hitsOf(points, named[index] ?? [], boxed, { crossed, enclosed })
     );
     const over =
       enclosed.size > 0
@@ -756,25 +847,56 @@ export function startInk(deps: InkDeps): Ink {
     const reach =
       reaches.length > 0 ? reaches.reduce(union) : strokeBox(strokes.flat());
     if (over.length === 0) {
-      const [centre] = deps.elementsAt([
-        [reach.x + reach.w / 2 - scrollX, reach.y + reach.h / 2 - scrollY],
-      ]);
-      // Over no content: the ink stands on the page as a whole, its document's body (core `wholePage`).
-      const el =
-        centre && !deps.pageSized(centre)
-          ? centre
-          : (centre?.ownerDocument.body ?? document.body);
-      return { anchor: el, over: [el] };
+      const x = reach.x + reach.w / 2 - scrollX;
+      const y = reach.y + reach.h / 2 - scrollY;
+      const [centre] = deps.elementsAt([[x, y]]);
+      if (!centre) {
+        return null;
+      }
+      const el = overNothing(centre, x, y);
+      return { anchor: el, onOwnScroll: scrollsContent(el), over: [el] };
     }
     const marked = over.slice(0, MARKED_MAX);
+    const first = marked[0] as Element;
     const common = marked.length > 1 ? containerOf(marked) : null;
     const anchor =
       common &&
+      movesWith(common, first) &&
       !deps.pageSized(common) &&
       area(boxed(common)) <= CONTAINER_MOST * area(reach)
         ? common
-        : (marked[0] as Element);
-    return { anchor, over: marked };
+        : first;
+    return {
+      anchor,
+      onOwnScroll: !enclosed.has(anchor) && scrollsContent(anchor),
+      over: marked,
+    };
+  };
+
+  /**
+   * What a stroke over no content stands on, `hit` being what is at its
+   * centre: the content nearest it in the scroller holding `hit`; the page
+   * as a whole, its document's body (core `wholePage`), only where no scroller
+   * holds it, the body then moving with what the stroke covers. The scroller
+   * itself where it holds no element to stand on.
+   */
+  const overNothing = (hit: Element, x: number, y: number): Element => {
+    if (!deps.pageSized(hit)) {
+      return onContent(hit, x, y);
+    }
+    const scroller = scrollerRound(hit);
+    return scroller
+      ? (contentNear(scroller, x, y) ?? scroller)
+      : hit.ownerDocument.body;
+  };
+
+  /** Whether the container `holder` moves with `el` as `el`'s document and scroller scroll: nothing that scrolls stands between them. */
+  const movesWith = (holder: Element, el: Element): boolean => {
+    const scroller = scrollerRound(el);
+    return (
+      holder.ownerDocument === el.ownerDocument &&
+      (!scroller || (holder !== scroller && scroller.contains(holder)))
+    );
   };
 
   /** Why a stroke may not be kept (DESIGN.md's error formula), or null: the bounds the hub keeps. */
@@ -808,11 +930,13 @@ export function startInk(deps: InkDeps): Ink {
   const regroup = (
     open: InkGroup | undefined,
     strokes: { at: string; points: Point[] }[],
-    at: string
+    at: string,
+    named: Element[][] = []
   ): InkGroup => {
     const all = strokes.map((one) => one.points);
     const groupBox = all.map(strokeBox).reduce(union);
-    const { anchor, over } = marksOf(all);
+    const { anchor, onOwnScroll, over } =
+      marksOf(all, named) ?? marksKept(open);
     const ab = pageBox(anchor);
     const fraction = (p: Point): InkPoint => [
       round((p[0] - ab.x) / ab.w),
@@ -841,7 +965,91 @@ export function startInk(deps: InkDeps): Ink {
       at: open?.at ?? at,
       over: over.map(deps.anchorOf),
       ...(open?.illustration ? { illustration: true as const } : {}),
+      ...(onOwnScroll
+        ? { scrolled: { x: anchor.scrollLeft, y: anchor.scrollTop } }
+        : {}),
     };
+  };
+
+  /**
+   * What `open` marks as it stands, for strokes the viewport shows none of
+   * (the eraser left only what is scrolled out of it), which no hit test can
+   * read; the body for one that stands nowhere.
+   */
+  const marksKept = (open: InkGroup | undefined): Marks => {
+    const anchor = (open && elementOf(open)) ?? document.body;
+    const over = (open?.over ?? [])
+      .map((one) => deps.locate(one)?.el ?? null)
+      .filter((el): el is Element => el !== null);
+    return {
+      anchor,
+      onOwnScroll: !!open?.scrolled,
+      over: over.length > 0 ? over : [anchor],
+    };
+  };
+
+  /**
+   * A group over a frame of another origin stands on what its embed names
+   * under it, once it has answered: only the embed can read that, a message
+   * away, so the group is kept on the frame at its lift and moves onto the
+   * elements when the answers come, unless its strokes have changed since.
+   * A frame whose overlay does not answer stays the group's anchor.
+   */
+  const reachIn = (id: string) => {
+    const group = maps().ink.get(id);
+    if (!group) {
+      return;
+    }
+    const strokes = strokesInPage(group).map((one) => one.points);
+    const asks = strokes.flatMap((points, index) => {
+      const box = strokeBox(points);
+      const loop = isLoop(points, box);
+      const views = viewOf(
+        samplesOf(points, box, loop, EMBED_GRID, EMBED_ASKS)
+      );
+      return deps
+        .elementsAt(views)
+        .flatMap((hit, at) =>
+          isFrame(hit)
+            ? [{ hit, index, point: views[at] as [number, number] }]
+            : []
+        );
+    });
+    const answers = every(asks, EMBED_ASKS).flatMap(({ hit, index, point }) => {
+      const answer = deps.embedAt(hit, point[0], point[1]);
+      return answer ? [answer.then((el) => ({ el, index }))] : [];
+    });
+    if (answers.length === 0) {
+      return;
+    }
+    Promise.all(answers).then((named) => {
+      const inside = strokes.map((_, index) =>
+        named.flatMap((one) =>
+          one.index === index && one.el && deps.inEmbed(one.el).length > 0
+            ? [one.el]
+            : []
+        )
+      );
+      const { doc, ink } = maps();
+      const now = ink.get(id);
+      if (
+        !now ||
+        now.strokes.length !== group.strokes.length ||
+        inside.every((els) => els.length === 0)
+      ) {
+        return;
+      }
+      const moved = regroup(now, strokesInPage(now), now.at, inside);
+      doc.transact(
+        () =>
+          ink.set(id, {
+            ...moved,
+            ...(now.sentAt ? { sentAt: now.sentAt } : {}),
+          }),
+        PLACED
+      );
+      draw();
+    });
   };
 
   /** A finished stroke joins the group it touches within two breaths, or starts one; the icon comes to its end. */
@@ -867,6 +1075,7 @@ export function startInk(deps: InkDeps): Ink {
     doc.transact(() => ink.set(group.id, group));
     last = { id: group.id, at: now };
     deps.ended(group.id);
+    reachIn(group.id);
     chrome.showIcon(end[0] - scrollX, end[1] - scrollY, (choice) =>
       act(group.id, choice)
     );
@@ -881,13 +1090,29 @@ export function startInk(deps: InkDeps): Ink {
   /** A group's strokes where its element stands now, in the page's px. */
   const strokesInPage = (group: InkGroup) => {
     const el = elementOf(group);
-    const ab = el ? pageBox(el) : null;
+    const ab = el ? boxUnder(el, group) : null;
     return group.strokes.map((stroke) => ({
       at: stroke.at,
       points: stroke.points.map(([fx, fy, p]): Point =>
         ab ? [ab.x + fx * ab.w, ab.y + fy * ab.h, p] : [0, 0, p]
       ),
     }));
+  };
+
+  /** The box a group's fractions are of: its element's, moved by what the element has scrolled since, for words it scrolls itself. */
+  const boxUnder = (el: Element, { scrolled }: InkGroup): Box => {
+    const box = pageBox(el);
+    if (!scrolled) {
+      return box;
+    }
+    const own = el.getBoundingClientRect();
+    const sx = own.width > 0 ? box.w / own.width : 1;
+    const sy = own.height > 0 ? box.h / own.height : 1;
+    return {
+      ...box,
+      x: box.x - (el.scrollLeft - scrolled.x) * sx,
+      y: box.y - (el.scrollTop - scrolled.y) * sy,
+    };
   };
 
   let frame = 0;
@@ -937,6 +1162,7 @@ export function startInk(deps: InkDeps): Ink {
     }
     placed.clear();
     clips.clear();
+    inView = false;
     if (onCanvas()) {
       watchAnchors(new Set());
       watchMoves();
@@ -962,6 +1188,7 @@ export function startInk(deps: InkDeps): Ink {
       if (!el) {
         continue;
       }
+      inView ||= staysInView(el);
       const reread = rereadOn(group, el, by);
       if (reread) {
         found.push(reread);
@@ -1003,7 +1230,11 @@ export function startInk(deps: InkDeps): Ink {
     const strokes = strokesInPage(group);
     const g = document.createElementNS(SVG, "g");
     g.setAttribute("data-ink-group", group.id);
-    const shown = clipOf(el);
+    // Words its element has scrolled are held to its box; unscrolled, a stroke past it stands as it was drawn.
+    const moved =
+      !!group.scrolled &&
+      (el.scrollLeft !== group.scrolled.x || el.scrollTop !== group.scrolled.y);
+    const shown = clipOf(el, moved);
     if (shown) {
       const box = {
         x: shown.x + scrollX,
@@ -1142,17 +1373,14 @@ export function startInk(deps: InkDeps): Ink {
   // The window resizes or the page grows: every group stands where its element is now.
   addEventListener("resize", later);
   sizesIn(document, later)?.observe(document.documentElement);
-  // A scroll container inside the page scrolled (a decision page's cards
-  // scroll in its first row, a transcript in its pane): every group over
-  // what it holds stands where its element is now. The page's own scroll
-  // moves the layer with it, so it draws nothing again.
+  // The page's own scroll moves the layer with it, and draws nothing again
+  // unless a group stands on what stays in the viewport as the layer goes (a
+  // fixed bar, a sticky head). Every other scroller's scroll is page.ts's
+  // `framesChanged`.
   addEventListener(
     "scroll",
     (event) => {
-      if (
-        event.target instanceof Element &&
-        event.target !== document.scrollingElement
-      ) {
+      if (inView && event.target === document) {
         later();
       }
     },

@@ -48,6 +48,7 @@ import { type Changes, startChanges } from "./changes";
 import {
   answerEmbedder,
   EMBED_ARTIFACT,
+  EMBED_PLACE,
   type Remote,
   startEmbeds,
 } from "./embeds";
@@ -489,6 +490,11 @@ const ink = startInk({
   chrome,
   describe,
   elementsAt,
+  embedAt: (el, x, y) => (embeds.bridged(el) ? embeds.at(el, x, y) : null),
+  inEmbed: (el) => {
+    const standIn = embeds.read(el);
+    return standIn ? [...standIn.chain, standIn.frame] : [];
+  },
   // Drawn once its group is on the page: the next frame, after the ink layer drew it.
   ended: (id) => requestAnimationFrame(() => groupPicture(id)),
   pageSized,
@@ -1610,14 +1616,17 @@ const PAGE_SHARE = 0.9;
  * words of its own is content whatever it covers: a page of one card, its
  * margins collapsed through the body, has a body exactly the card's height
  * (decision-pages (h): the mockup's `.box` read as the page, so a Comment
- * tap on it pinned the whole page).
+ * tap on it pinned the whole page). So is a frame, and what an embed names
+ * in one: a decision page's Preview at a desk's 1440 by 900 is nearly as big
+ * as the panel's body, and read as the page, a stroke on it stood on the body,
+ * which never moves as the page's scroller does.
  */
 function pageSized(el: Element): boolean {
   const doc = el.ownerDocument;
   if (el === doc.documentElement || el === doc.body || !doc.body) {
     return true;
   }
-  if (drawsWords(el)) {
+  if (isContent(el)) {
     return false;
   }
   const page = doc.body.getBoundingClientRect();
@@ -1671,9 +1680,7 @@ const NEAR_WAYS = [
  */
 function contentAt(x: number, y: number): Element | null {
   const [hit = null] = elementsAt([[x, y]]);
-  // A frame of another origin is content however big it stands: what is in
-  // it is its embed's to name (embeds.ts), never this page's as a whole.
-  if (!(hit && pageSized(hit)) || (isFrame(hit) && !frameDocument(hit))) {
+  if (!(hit && pageSized(hit))) {
     return hit;
   }
   const round = NEAR_RINGS.flatMap((r) =>
@@ -1800,6 +1807,23 @@ function frameIn(within: Document, selector: string): Document | null {
 }
 
 /**
+ * Whether the artifact a mark stands in or on holds its place on this page
+ * and its frame has yet to come (decisions host Preview.svelte: a frame mounts
+ * on its turn, as its card nears the view).
+ */
+function embedToCome(anchor: PageAnchor): boolean {
+  const shown = anchor.embed?.artifact;
+  if (!shown) {
+    return false;
+  }
+  const named = `"${CSS.escape(shown)}"`;
+  return (
+    !document.querySelector(`iframe[${EMBED_ARTIFACT}=${named}]`) &&
+    !!document.querySelector(`[${EMBED_PLACE}=${named}]`)
+  );
+}
+
+/**
  * Whether an anchor's frames lead to one still loading: its mark is not
  * found yet, and is not gone either.
  */
@@ -1807,6 +1831,9 @@ function waiting(anchor: PageAnchor): boolean {
   const remote = embeds.find(anchor);
   if (remote) {
     return remote.state === "waiting";
+  }
+  if (embedToCome(anchor)) {
+    return true;
   }
   let within: Document | null = document;
   for (const selector of anchor.frames ?? []) {
@@ -2035,7 +2062,7 @@ function findAnchorHere(anchor: PageAnchor) {
     frame: frameIn,
     page: (within) => within.body,
     pageSized: pageSizedBox,
-    content: drawsWords,
+    content: isContent,
     bySource: (within, file, line) => {
       const read = pageRead(within);
       read.sources ??= byKey(read.elements, (el) => {
@@ -2236,6 +2263,10 @@ const drawsWords = (el: Element): boolean =>
   [...el.childNodes].some(
     (node) => node.nodeType === Node.TEXT_NODE && !!node.textContent?.trim()
   );
+
+/** Whether `el` is content however big it stands: it draws words, it is a frame, or an embed named it. */
+const isContent = (el: Element): boolean =>
+  drawsWords(el) || isFrame(el) || !!embeds.read(el);
 
 /**
  * What the hover label says of `el` (the page's root: {@link WHOLE_PAGE}):

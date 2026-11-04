@@ -1696,6 +1696,7 @@ export const ANCHOR_IDENTITIES = [
   "data-testid",
   "data-cawco-choice",
   "data-option",
+  "data-cawco-artifact",
 ] as const;
 
 /**
