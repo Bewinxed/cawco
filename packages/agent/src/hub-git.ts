@@ -19,10 +19,13 @@
  *   machine's credential, env-only (move.ts {@link hubGitEnv}), after the
  *   clone's own config passed `repositoryConfigProblem` and only for the
  *   clone's own `origin`. Before a push reaches it, the push's large files
- *   go to the hub's LFS ({@link pushLfs}); after a fetch, the large files of
- *   the refs it moved come from there ({@link fetchLfs}). Landing's fetch and push,
- *   `workspaceAt`'s fetch and a session's own `git fetch`/`git push` all run
- *   inside the boundary, so all take this one path.
+ *   go to the hub's LFS ({@link pushOriginLfs}); after a fetch, the large
+ *   files of the refs it moved come from there ({@link fetchLfs}). Only a
+ *   command whose refs mark large files asks the hub where they live
+ *   ({@link LfsSide}): every other one answers whatever state the hub is
+ *   in. Landing's fetch and push, `workspaceAt`'s fetch and a session's own
+ *   `git fetch`/`git push` all run inside the boundary, so all take this
+ *   one path.
  *
  * A workspace holds no credential of any host (boundary.ts: the home dir's
  * stores are hidden, no key agent is reached, no command gets a forge's
@@ -340,6 +343,40 @@ const pushLfs = async (
 };
 
 /**
+ * {@link pushLfs} to the clone's own origin, for a push whose `sources` mark
+ * large files ({@link marksLfs}, against `origin`'s remote-tracking refs),
+ * in git-lfs's environment for that origin ({@link LfsSide}); a push that
+ * marks none sends nothing and asks the hub nothing. When the hub does not
+ * say where the project's large files live (host-lfs.ts `declaredLfs`,
+ * within its 15 s), the push is refused in its words: pointers never land
+ * without their objects. Answers why the files did not go, or nothing.
+ */
+const pushOriginLfs = async (
+  ref: WorkspaceRef,
+  sources: string[],
+  side: LfsSide
+): Promise<string | undefined> => {
+  if (
+    sources.length === 0 ||
+    !Bun.which("git-lfs") ||
+    !marksLfs(ref, sources, "origin")
+  ) {
+    return;
+  }
+  const made = await side().then(
+    (value) => ({ value }),
+    (error: unknown) => ({
+      why: error instanceof Error ? error.message : String(error),
+    })
+  );
+  if ("why" in made) {
+    console.warn(`[hub-git] ${ref.id}: ${made.why}`);
+    return `the large files did not go: ${made.why}`;
+  }
+  return pushLfs(ref, sources, made.value.env);
+};
+
+/**
  * How long a git or git-lfs the door runs on the host may say nothing
  * before it is stopped. Our choice: each runs with its progress forced on
  * ({@link runOnHost}), so a live transfer speaks every few hundred ms
@@ -629,6 +666,90 @@ const doorLfsOf = async (
 };
 
 /**
+ * One door connection's git-lfs side: {@link DoorLfs} and the environment
+ * git-lfs runs in for the clone's origin, pinned to its endpoint. Made on
+ * first call and kept for the connection, and called only once a command's
+ * refs mark LFS ({@link marksLfs}): the project's declared endpoint is the
+ * hub's answer (host-lfs.ts `declaredLfs`, bounded by its `HUB_MS`, 15 s),
+ * so a command that moves no large file never waits on the hub. Before
+ * 2026-11-04 the door asked it before answering any command, and every git
+ * in every workspace stopped while the hub was wedged.
+ */
+type LfsSide = () => Promise<{ env: Record<string, string>; lfs: DoorLfs }>;
+
+const lfsSideOf = (
+  ref: WorkspaceRef,
+  envFor: (declared: DeclaredLfs | undefined) => Promise<Record<string, string>>
+): LfsSide => {
+  let made: ReturnType<LfsSide> | undefined;
+  return () => {
+    made ??= (async () => {
+      const lfs = await doorLfsOf(ref, originOf(ref.id, ref.path));
+      return { lfs, env: await envFor(lfs.declared) };
+    })();
+    return made;
+  };
+};
+
+/** `git grep`'s exit when it found nothing (git-grep(1): "1 … no match"). */
+const GREP_NONE = 1;
+
+/**
+ * Whether `refs` (refs or commits of `ref`'s clone) mark large files: the
+ * tree at any of them has a `.gitattributes`, at any depth, naming git-lfs's
+ * filter (`filter=lfs`, what `git lfs track` writes), or, given `upstream`
+ * (the remote-tracking refs a push's commits are new against), a commit
+ * between them and it changed such a line. A tree that marks none holds no
+ * pointer git-lfs would fetch or push. A run git cannot answer counts as
+ * marking: the hub is asked, as before.
+ */
+const marksLfs = (
+  ref: WorkspaceRef,
+  refs: readonly string[],
+  upstream?: string
+): boolean => {
+  const git = (args: string[]) => {
+    const run = inCopySync(ref.id, ref.path, safeGitArgv(args));
+    return Bun.spawnSync(run.argv, {
+      cwd: run.cwd,
+      env: { ...hostEnvironment(), ...SAFE_GIT_ENV, ...GIT_LOCALE },
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+  };
+  const inTrees = git([
+    "grep",
+    "-q",
+    "-I",
+    "-F",
+    "-e",
+    "filter=lfs",
+    ...refs,
+    "--",
+    "*.gitattributes",
+  ]);
+  if (inTrees.exitCode !== GREP_NONE) {
+    return true;
+  }
+  if (!upstream) {
+    return false;
+  }
+  const changed = git([
+    "log",
+    "-1",
+    "--format=%H",
+    "-G",
+    "filter=lfs",
+    ...refs,
+    "--not",
+    `--remotes=${upstream}`,
+    "--",
+    "*.gitattributes",
+  ]);
+  return changed.exitCode !== 0 || changed.stdout.toString().trim() !== "";
+};
+
+/**
  * The large files the trees of `refs` point at, fetched from the hub's LFS
  * into the clone's own store (`git lfs fetch origin <ref>…`, this machine's
  * credential): inside the boundary git-lfs reaches no hub, so a checkout or
@@ -642,8 +763,7 @@ const doorLfsOf = async (
 const fetchLfs = async (
   ref: WorkspaceRef,
   refs: string[],
-  env: Record<string, string>,
-  lfs: DoorLfs
+  side: LfsSide
 ): Promise<void> => {
   if (refs.length === 0 || !Bun.which("git-lfs")) {
     return;
@@ -652,6 +772,10 @@ const fetchLfs = async (
   if (gone) {
     throw new Error(`git lfs fetch of ${refs.join(" ")} did not run: ${gone}`);
   }
+  if (!marksLfs(ref, refs)) {
+    return;
+  }
+  const { env, lfs } = await side();
   const refused = await undeclaredEndpoint(ref.path, refs, lfs.allowed);
   if (refused) {
     await noteRefused(lfs.projectId, ref.path, refused);
@@ -682,7 +806,7 @@ const protocolFeed = (
   ref: WorkspaceRef,
   channel: DoorChannel,
   write: (bytes: Buffer | string) => void,
-  env: Record<string, string>
+  side: LfsSide
 ) => {
   let raw = false;
   let pending = Buffer.alloc(0);
@@ -698,10 +822,10 @@ const protocolFeed = (
       write(`${lines.join("\n")}\n\n`);
       return;
     }
-    const refused = await pushLfs(
+    const refused = await pushOriginLfs(
       ref,
       lines.map((line) => refspecOf(line).src).filter(Boolean),
-      env
+      side
     );
     if (refused) {
       channel.write(
@@ -892,20 +1016,26 @@ const hostGitEnv = async (): Promise<Record<string, string>> => {
 export const hostOriginGitEnv = async (
   origin: string,
   declared?: DeclaredLfs
-): Promise<Record<string, string>> => {
-  const env = await hostGitEnv();
+): Promise<Record<string, string>> =>
+  withGitConfig(await hostGitEnv(), await originLfsPins(origin, declared));
+
+/** The git-lfs pins of {@link hostOriginGitEnv}, for `origin` and its project's `declared` endpoint. */
+const originLfsPins = async (
+  origin: string,
+  declared: DeclaredLfs | undefined
+): Promise<[string, string][]> => {
   if (declared) {
-    return withGitConfig(env, declaredPins(declared, urlOrigin(origin)));
+    return declaredPins(declared, urlOrigin(origin));
   }
   const web = urlOrigin(origin);
   if (!web?.startsWith("http")) {
-    return withGitConfig(env, lfsConfigFor(origin));
+    return lfsConfigFor(origin);
   }
   const endpoint = lfsEndpointOf(origin);
   const signed =
     (web === "https://github.com" && (await hostGh()) !== undefined) ||
     (await hostSigns(endpoint));
-  return withGitConfig(env, lfsPins(endpoint, signed));
+  return lfsPins(endpoint, signed);
 };
 
 /**
@@ -988,14 +1118,16 @@ const PORCELAIN_REF = /^([ +\-*=!])\t[^\t]*:([^\t]+)\t(.*)$/u;
  * the clone's own objects (git writes the refs itself once the batch is
  * answered), and a push by `git push --porcelain` of the batch's refspecs,
  * read per ref. A push that
- * goes sends its large files first ({@link pushLfs}): to the clone's own
- * origin's LFS when `origin`, else to the LFS of the repository at `url`.
+ * goes sends its large files first: to the clone's own origin's LFS when
+ * `origin` (its git-lfs side, {@link pushOriginLfs}), else to the LFS of the
+ * repository at `url` ({@link pushLfs}). `env` is git's own, with no LFS
+ * pin: git itself reads none.
  */
 const hostBackend = (
   ref: WorkspaceRef,
   url: string,
   env: Record<string, string>,
-  origin: boolean
+  origin: LfsSide | undefined
 ): HelperBackend => ({
   list: async (forPush) => {
     const listed = await runOnHost(
@@ -1042,14 +1174,13 @@ const hostBackend = (
   push: async (lines, dryRun, leases) => {
     const specs = lines.map((line) => line.slice("push ".length));
     // A dry run sends no large file: the remote's own `--dry-run` answers it.
-    const refused = dryRun
-      ? undefined
-      : await pushLfs(
-          ref,
-          lines.map((line) => refspecOf(line).src).filter(Boolean),
-          env,
-          origin ? undefined : url
-        );
+    const sources = lines.map((line) => refspecOf(line).src).filter(Boolean);
+    let refused: string | undefined;
+    if (!dryRun) {
+      refused = origin
+        ? await pushOriginLfs(ref, sources, origin)
+        : await pushLfs(ref, sources, env, url);
+    }
     if (refused) {
       return lines.map((line) => `error ${refspecOf(line).dst} ${refused}`);
     }
@@ -1397,52 +1528,45 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
       throw new Error(`git did not run in ${ref.path}: ${problem}`);
     }
     const target = doorTarget(ref, url);
-    // git-lfs held to the clone's origin's LFS, or its project's declared
-    // one (host-lfs.ts): read before the door answers, so a run whose
-    // endpoint the hub could not say does not start.
-    const lfs = await doorLfsOf(ref, originOf(ref.id, ref.path));
-    // Read before the door answers too: what fails after `ok` reaches git
-    // only as a connection cut short.
+    // git's own environment, read before the door answers: what fails after
+    // `ok` reaches git only as a connection cut short. git-lfs's, held to
+    // the clone's origin's LFS or its project's declared one (host-lfs.ts),
+    // is made only for a command whose refs mark large files ({@link LfsSide}).
     let env: Record<string, string> = {};
     if (target.kind === "host") {
-      env = await withHostLogin(
-        ref,
-        url,
-        target.origin
-          ? await hostOriginGitEnv(url, lfs.declared)
-          : await hostGitEnv()
-      );
+      env = await withHostLogin(ref, url, await hostGitEnv());
     }
     socket.write("ok\n");
     answered = true;
     channel = doorChannel(socket);
     switch (target.kind) {
       case "hub":
-        pipeHubHelper(ref, socket, channel, url, rest, lfs);
+        pipeHubHelper(ref, socket, channel, url, rest);
         return;
       case "host": {
         const before = remoteRefs(ref);
+        const side = target.origin
+          ? lfsSideOf(ref, async (declared) =>
+              withGitConfig(env, await originLfsPins(url, declared))
+            )
+          : undefined;
         serveHelper(
           socket,
           channel,
           rest,
-          hostBackend(ref, url, env, target.origin),
+          hostBackend(ref, url, env, side),
           fail,
           async () => {
-            if (!target.origin) {
+            if (!side) {
               return;
             }
             // git has written the refs it fetched by the time it ends the
             // connection: their large files come here before it closes.
-            await fetchLfs(
-              ref,
-              movedRefs(before, remoteRefs(ref)),
-              env,
-              lfs
-            ).catch((error: unknown) =>
-              console.warn(
-                `[hub-git] ${ref.id}: ${error instanceof Error ? error.message : String(error)}`
-              )
+            await fetchLfs(ref, movedRefs(before, remoteRefs(ref)), side).catch(
+              (error: unknown) =>
+                console.warn(
+                  `[hub-git] ${ref.id}: ${error instanceof Error ? error.message : String(error)}`
+                )
             );
           }
         );
@@ -1458,18 +1582,19 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
 
 /**
  * The hub's own remote: git's http helper on the host with this machine's
- * hub credential, piped both ways, the hub's LFS with it, or the project's
- * declared LFS with its connection's credential (move.ts `hubGitEnv`).
+ * hub credential, piped both ways (move.ts `hubGitEnv`). A push or fetch
+ * whose refs mark large files moves them with the hub's LFS, or the
+ * project's declared LFS with its connection's credential ({@link LfsSide}).
  */
 const pipeHubHelper = (
   ref: WorkspaceRef,
   socket: Socket,
   channel: DoorChannel,
   url: string,
-  rest: Buffer,
-  lfs: DoorLfs
+  rest: Buffer
 ): void => {
-  const env = hubGitEnv(url, [], lfs.declared);
+  const env = hubGitEnv(url);
+  const side = lfsSideOf(ref, async (declared) => hubGitEnv(url, [], declared));
   const scheme = new URL(url).protocol === "https:" ? "https" : "http";
   const run = inCopySync(
     ref.id,
@@ -1495,7 +1620,7 @@ const pipeHubHelper = (
     // git waits on the helper as it disconnects, after it has written the
     // refs it fetched: the door closes once their large files are here.
     const moved = code === 0 ? movedRefs(before, remoteRefs(ref)) : [];
-    fetchLfs(ref, moved, env, lfs)
+    fetchLfs(ref, moved, side)
       .catch((error: unknown) =>
         console.warn(
           `[hub-git] ${ref.id}: ${error instanceof Error ? error.message : String(error)}`
@@ -1523,7 +1648,7 @@ const pipeHubHelper = (
     ref,
     channel,
     (bytes) => child.stdin.write(bytes),
-    env
+    side
   );
   let chain = feed(rest);
   socket.on("data", (chunk: Buffer) => {

@@ -38,6 +38,14 @@
  *     says the workspace holds no key;
  * (h) a push to someone/else.git goes, with the host's credential, and
  *     lands there.
+ * The door asks the hub where a project's large files live only for a
+ * command whose refs mark them (agent hub-git.ts `LfsSide`), with the
+ * workspace in a project and the hub a stub that never answers:
+ * (hs) a `git fetch origin` that moves origin/main and a push of a commit,
+ *     neither carrying an LFS file, go at once, and the hub is asked
+ *     nothing (before 2026-11-04 both waited 15 s on it and failed);
+ * (hl) a push to the origin carrying an LFS file asks it, and is refused
+ *     within its 15 s in words naming the hub; nothing lands.
  * Large files, with the host holding a credential for the loopback host (a
  * git credential store under its HOME) and the clone committing a
  * `.lfsconfig` that names a trap endpoint:
@@ -66,8 +74,8 @@
  *     included, nor in any file of the workspace's, and gh's post is made by
  *     the GitHub door with the host's token.
  */
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { gitDoorWords } from "../../../packages/core/src/words/git-door";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { serveGitHttp } from "../git-http";
@@ -118,6 +126,8 @@ const spec: Spec = {
     await mkdir(process.env.XDG_RUNTIME_DIR, { recursive: true, mode: 0o700 });
     const { closeGitDoor, gitDoorEnv, gitHelperDirOf, openGitDoor } =
       await import("../../../packages/agent/src/hub-git");
+    const { workspaceProjectFile } =
+      await import("../../../packages/core/src/paths");
 
     const http = serveGitHttp(join(scratch, "srv"), HOST_LOGIN);
     const originUrl = await http.bare(ORIGIN);
@@ -163,6 +173,36 @@ const spec: Spec = {
         .filter((line) => HELPER_OPTION_TRACE.test(line))
         .map((line) => line.replace(HELPER_TRACE_HEAD, ""))
         .join(" | ");
+    /**
+     * `leg` run with the workspace's project set and the agent's hub a stub
+     * that takes every request and never answers (as the hub was while it
+     * was wedged on 2026-11-04); both put back after.
+     */
+    const stalledHubLeg = async (
+      leg: (hub: { asked: () => number }) => Promise<void>
+    ): Promise<void> => {
+      let asked = 0;
+      const stalled = Bun.serve({
+        port: 0,
+        idleTimeout: 0,
+        fetch: () => {
+          asked += 1;
+          return new Promise<Response>(() => undefined);
+        },
+      });
+      const hubUrl = process.env.CAWCO_HUB_URL;
+      process.env.CAWCO_HUB_URL = `ws://127.0.0.1:${stalled.port}/ws`;
+      const projectFile = workspaceProjectFile(id);
+      await mkdir(dirname(projectFile), { recursive: true });
+      await writeFile(projectFile, JSON.stringify("probe-project"));
+      try {
+        await leg({ asked: () => asked });
+      } finally {
+        process.env.CAWCO_HUB_URL = hubUrl;
+        await rm(projectFile, { force: true });
+        stalled.stop(true);
+      }
+    };
     const tip = async (repo: string, branch: string) =>
       (
         await Bun.$`git -C ${http.dir(repo)} rev-parse --verify --quiet refs/heads/${branch}`
@@ -412,6 +452,31 @@ const spec: Spec = {
         `exit ${pushedOwn.exitCode}; ${said(pushedOwn)}`
       );
 
+      // (hs)
+      await stalledHubLeg(async (hub) => {
+        await Bun.$`git -C ${seed} ${IDENTITY} commit -q --allow-empty -m while-stalled && git -C ${seed} push -q ${originUrl} main`.quiet();
+        const started = Date.now();
+        const fetchedStalled = await inside(clone, ["fetch", "origin"]);
+        const pushedStalled = await inside(clone, [
+          "push",
+          "origin",
+          "HEAD:refs/heads/door-stalled",
+        ]);
+        const took = Math.round((Date.now() - started) / 1000);
+        check(
+          "(hs) with the hub stalled, a fetch and a push that mark no large file go through the door at once, and the hub is asked nothing",
+          fetchedStalled.exitCode === 0 &&
+            (
+              await Bun.$`git -C ${clone} rev-parse refs/remotes/origin/main`.text()
+            ).trim() === (await tip(ORIGIN, "main")) &&
+            pushedStalled.exitCode === 0 &&
+            (await tip(ORIGIN, "door-stalled")) === head &&
+            took < 10 &&
+            hub.asked() === 0,
+          `fetch exit ${fetchedStalled.exitCode}, push exit ${pushedStalled.exitCode}, after ${took} s; hub asked ${hub.asked()} times; ${said(fetchedStalled)} ${said(pushedStalled)}`
+        );
+      });
+
       await originLegs();
       await branchLegs();
 
@@ -544,6 +609,29 @@ const spec: Spec = {
           !http.lfs(ORIGIN_LFS).some((one) => one.oid === onLfs.oid),
         `exit ${pushedLfs.exitCode}; else LFS ${JSON.stringify(elseObjects)}; trap calls ${http.lfsCalls("trap")}; origin LFS ${JSON.stringify(http.lfs(ORIGIN_LFS))}; ${said(pushedLfs)}`
       );
+
+      // (hl)
+      await stalledHubLeg(async (hub) => {
+        const started = Date.now();
+        const refusedLfs = await inside(clone, [
+          "push",
+          "origin",
+          "HEAD:refs/heads/door-lfs-stalled",
+        ]);
+        const took = Math.round((Date.now() - started) / 1000);
+        check(
+          "(hl) with the hub stalled, a push to the origin carrying an LFS file asks the hub, is refused within its 15 s in words naming it, and nothing lands",
+          refusedLfs.exitCode !== 0 &&
+            said(refusedLfs).includes(
+              "the hub did not say where project probe-project's large files live within 15s"
+            ) &&
+            took >= 14 &&
+            took < 25 &&
+            hub.asked() > 0 &&
+            (await tip(ORIGIN, "door-lfs-stalled")) === "",
+          `exit ${refusedLfs.exitCode} after ${took} s; hub asked ${hub.asked()} times; ${said(refusedLfs)}`
+        );
+      });
 
       // (y): the host's credential helper waits forever, as osxkeychain does
       // on a keychain prompt nobody answers.
