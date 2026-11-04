@@ -421,29 +421,33 @@ export class CawLead {
     if (row.status === "moving" || row.status === "starting") {
       return true;
     }
-    if (
-      this.#startSeen !== this.#projectId() ||
-      row.status !== "running" ||
-      row.stalled ||
-      this.#begun.has(row.id)
-    ) {
+    if (row.status !== "running" || row.stalled || this.#begun.has(row.id)) {
       return false;
     }
+    const held = cawco.session(row.id);
     const took =
       Boolean(row.turnEndedAt) ||
       cawco.busyOf(row.id) ||
       this.asks.length > 0 ||
-      Boolean(cawco.session(row.id)?.messages.length);
+      Boolean(held?.messages.length);
     if (took) {
       this.#begun.add(row.id);
+      return false;
     }
-    return !took;
+    // Not taken yet: his start, when this page saw it begin, or when his
+    // conversation, read whole, holds nothing yet (a page that came after
+    // the hub's start ended). Unread and unseen, it is any conversation.
+    return (
+      this.#startSeen === this.#projectId() ||
+      (held !== null && held.reads > 0 && held.cursor === null)
+    );
   });
   /**
    * The project whose start this page saw begin: his view said `starting`
    * ({@link read}), or the words his panel sent started him ({@link began}).
-   * Only such a start runs on past his row's arrival: a conversation found
-   * running is his, said or not.
+   * Such a start runs on past his row's arrival until his words are taken;
+   * one this page did not see is his start only once his conversation is
+   * read and holds nothing.
    */
   #startSeen = $state<string | null>(null);
   /** His panel's words are on their way to start a conversation (ProjectConversation). */

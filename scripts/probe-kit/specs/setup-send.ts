@@ -37,9 +37,9 @@
  *    on its machine, about 14 s.)
  * 7. That project's page at 1440, opened as the create answers: Caw's
  *    panel shows him starting, then his conversation with the person's
- *    words its first row of theirs (not the project-setup skill's
- *    `<command-message>` echo), and never a session nothing has been said
- *    in (nightly 6688: "Nothing has been said here yet · Ask Claude Code
+ *    words its first row, nothing above them (the project-setup skill
+ *    CawCo loads at his spawn leaves no row, live or read again after a
+ *    reload), and never a session nothing has been said in (nightly 6688: "Nothing has been said here yet · Ask Claude Code
  *    about this folder"). Then his seat changes places, the head's going and coming
  *    back while the one over the board lands and leaves within the head's
  *    --dur-panel (Routines, then Board and Routines again 60ms apart): the
@@ -479,6 +479,36 @@ const panelAtDesk = async (kit: Kit, fleet: KitFleet) => {
       FIRST_SAID.exec(words)?.[1]?.trim() === WORDS7 &&
       !wells.some((text) => NOTHING_SAID.test(text)),
     JSON.stringify({ wells: wells.slice(0, 12), words: words.slice(0, 300) })
+  );
+
+  // Nothing above the person's words: the skill CawCo loaded at his spawn
+  // (`/project-setup`, sent quietly) leaves no row, as his conversation is
+  // drawn live and as it is read again whole from the hub after a reload.
+  const firstRows = () =>
+    page.evaluate(() =>
+      [
+        ...document.querySelectorAll<HTMLElement>(
+          '[data-caw-panel] [data-slot="listing"] [data-item]'
+        ),
+      ]
+        .map((row) => row.innerText.replace(/\s+/gu, " ").trim())
+        .filter(Boolean)
+        .slice(0, 3)
+    );
+  const heads = (rows: string[]) =>
+    rows[0]?.startsWith("You") === true && rows[0].includes(WORDS7);
+  const live = await firstRows();
+  await page.reload({ waitUntil: "domcontentloaded" });
+  const reread = await until(
+    "his conversation read again after a reload",
+    firstRows,
+    (rows) => rows.some((row) => row.includes(WORDS7)),
+    60_000
+  ).catch(() => [] as string[]);
+  kit.check(
+    "7: the person's words are the first row of Caw's conversation, nothing above them, live and read again after a reload",
+    heads(live) && heads(reread),
+    JSON.stringify({ live, reread })
   );
 
   // His start over (his turn ended), the board stands him at 80; Routines

@@ -674,17 +674,23 @@
    * answered `skipped` and said nothing (tab-return, leg 3). Only once the
    * conversation's start is in hand: a newest page with no blocks and a page
    * still before it is a transcript being read, and the list asks for that
-   * page (`Transcript`).
+   * page (`Transcript`). A session at work has been told something: a read
+   * that landed before its first message was stored is behind, not blank
+   * (Caw's conversation, read as his first turn began, drew "Nothing has been
+   * said here yet" over the person's words on their way, nightly 6688).
    */
   const blank = $derived(
     !!session &&
       session.reads > 0 &&
       session.messages.length === 0 &&
-      session.cursor === null
+      session.cursor === null &&
+      !session.busy
   );
-  /** Nothing to draw yet: the history is still on its way. */
+  /** Nothing to draw yet: the history is still on its way, or its first turn's rows are. */
   const waiting = $derived(
-    !!session && !session.initialized && session.messages.length === 0
+    !!session &&
+      session.messages.length === 0 &&
+      (!session.initialized || session.busy)
   );
   /** A named state stands in the transcript area instead of a transcript; an ask alone stands there as nothing. */
   const namedState = $derived(!!(fault || unaddressable || blank || askAlone));

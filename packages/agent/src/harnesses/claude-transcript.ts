@@ -1027,6 +1027,27 @@ function compactBoundary(r: RawRecord): SDKSessionMessage | null {
   });
 }
 
+/**
+ * A slash command CawCo sent quietly: a skill a spawn loads before its brief
+ * (claude.ts, each `/skill` sent with `shouldQuery: false`). Claude Code
+ * stores its echo as a user record opening on `<command-message>` and marks
+ * it, as it marks the skill's text after it (`isMeta`), `queueTranscriptOnly`:
+ * appended to the transcript, no turn of its own. It is CawCo's mechanics,
+ * not the person's words, and leaves no row, as the skill's text leaves none.
+ * A command the person typed is sent to be answered: unmarked, it still shows.
+ */
+const quietCommand = (r: RawRecord): boolean => {
+  if (r.type !== "user" || r.queueTranscriptOnly !== true) {
+    return false;
+  }
+  const content = (r.message as { content?: unknown } | null | undefined)
+    ?.content;
+  return (
+    typeof content === "string" &&
+    content.trimStart().startsWith("<command-message>")
+  );
+};
+
 /** Map a chain-walked record to the SDK's output shape. */
 function toSDKMessage(r: RawRecord): SDKSessionMessage | null {
   if (r.type === "attachment") {
@@ -1038,7 +1059,7 @@ function toSDKMessage(r: RawRecord): SDKSessionMessage | null {
   if (r.type !== "user" && r.type !== "assistant") {
     return null;
   }
-  if (r.isMeta || r.isSidechain || r.teamName) {
+  if (r.isMeta || r.isSidechain || r.teamName || quietCommand(r)) {
     return null;
   }
   const timestamp = typeof r.timestamp === "string" ? r.timestamp : "";
