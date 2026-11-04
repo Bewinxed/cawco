@@ -114,7 +114,7 @@ export interface StopJob {
 /** A forget's or a delete's words, for its project, its files box as it stands. */
 export function endWordsOf(job: StopJob): EndWords {
   return job.kind === "delete"
-    ? projectEndWords.delete(job.projectName, job.fromDisk)
+    ? projectEndWords.delete(job.projectName)
     : projectEndWords.forget(job.projectName);
 }
 

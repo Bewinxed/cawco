@@ -28,7 +28,6 @@
   import { untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
-  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconFolder, IconTrash } from "#lib/icons.js";
@@ -185,20 +184,24 @@
       {/each}
     </div>
   {:else if list.length === 0}
-    <EmptyState
-      icon={IconTrash}
-      line={projectEndWords.noneBody}
-      title={projectEndWords.noneTitle}
+    <!-- Nothing forgotten: said where the rows would stand, its mark in the
+         lead column. No action: nothing here starts the work that fills it
+         (a forget does, from a project's menu). -->
+    <div
+      class="mark-line grid grid-cols-(--narrow-cols) items-center gap-x-space-3 gap-y-space-1 py-space-3"
+      data-forgotten-none
+      style:--narrow-cols={COLUMNS_NARROW}
     >
-      {#snippet action()}
-        <Button
-          href="/project/new"
-          label={projectEndWords.newProject}
-          size="sm"
-          variant="outline"
-        />
-      {/snippet}
-    </EmptyState>
+      <span class="grid place-items-center text-ink-muted" data-box>
+        <IconTrash aria-hidden="true" class="size-icon-md" />
+      </span>
+      <span class="block min-w-0 type-label text-ink-row"
+        >{projectEndWords.noneTitle}</span
+      >
+      <p class="col-start-2 m-0 min-w-0 type-meta text-pretty text-ink-muted">
+        {projectEndWords.noneBody}
+      </p>
+    </div>
   {:else}
     <ul
       class="m-0 grid list-none grid-cols-(--wide-cols) gap-x-space-3 p-0 @max-forgotten/forgotten:grid-cols-(--narrow-cols)"
