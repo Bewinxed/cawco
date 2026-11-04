@@ -72,7 +72,13 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import type { Pin } from "../../../packages/core/src/comments";
-import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  heardToolAnswer,
+  MACHINE,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import {
   COMPOSER,
   type Kit,
@@ -111,6 +117,8 @@ const requests: string[] = [];
 export const modelRequests = (): readonly string[] => requests;
 const issued = new Set<string>();
 const answered = new Map<string, string>();
+/** The calls Claude Code moved to the background, by marker: the task each runs as. */
+const movedCalls = new Map<string, string>();
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 
@@ -143,8 +151,15 @@ const respond = (request: Seen): Reply => {
     return text("ok");
   }
   if (issued.has(marker)) {
+    // A call Claude Code moved to the background (a send reached the
+    // session while it ran) answers in a later turn's task notification.
     if (!answered.has(marker)) {
-      answered.set(marker, request.last);
+      const said = heardToolAnswer(request, movedCalls.get(marker));
+      if (said.kind === "moved") {
+        movedCalls.set(marker, said.task);
+      } else {
+        answered.set(marker, said.text);
+      }
     }
     return text("done");
   }
@@ -423,10 +438,13 @@ const moreStands = (page: Page) =>
 const cardState = (page: Page) =>
   page.evaluate(() => {
     const card = document.querySelector<HTMLElement>('[data-slot="pin-card"]');
+    // The card's one scroller is its body; its edge is drawn by the surface
+    // behind it (PinFloat.svelte `pin-surface`), so the body has no border.
+    const body = card?.querySelector<HTMLElement>('[data-slot="pin-body"]');
     return {
       squeezed: !!card?.querySelector("[data-whole]"),
-      scrolls: !!card && card.scrollHeight > card.clientHeight,
-      scrollbar: card ? card.offsetWidth - card.clientWidth - 2 : null,
+      scrolls: !!body && body.scrollHeight > body.clientHeight,
+      scrollbar: body ? body.offsetWidth - body.clientWidth : null,
     };
   });
 
