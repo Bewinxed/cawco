@@ -30,6 +30,11 @@ import {
   withdrawPin,
 } from "@cawco/core/comments";
 import type { DocMap } from "@cawco/core/doc-maps";
+import {
+  PAGE_TOUCHED_MESSAGE,
+  PERSONS_INPUT,
+  personsInput,
+} from "@cawco/core/frames";
 import type { InkGroup } from "@cawco/core/ink";
 import { pinName, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
 import { paneKeyOf, shellShortcutOf } from "@cawco/core/shell-shortcuts";
@@ -525,7 +530,24 @@ function framesChanged() {
     }
   });
 }
-watchFrames(framesChanged);
+
+/** How often the host is told the person's hand is on the page, at most: its beat reads the last, to the second. Our call. */
+const TOUCHED_EVERY_MS = 5000;
+let touchedAt = Number.NEGATIVE_INFINITY;
+/** The person's input in `view`, to the host: the first at once, then one in {@link TOUCHED_EVERY_MS} (the dashboard's reload.svelte.ts `heardInput`). */
+const tellTouches = (view: Window): void => {
+  const touched = (event: Event) => {
+    const now = performance.now();
+    if (personsInput(event) && now - touchedAt >= TOUCHED_EVERY_MS) {
+      touchedAt = now;
+      post(PAGE_TOUCHED_MESSAGE);
+    }
+  };
+  for (const kind of PERSONS_INPUT) {
+    view.addEventListener(kind, touched, { capture: true, passive: true });
+  }
+};
+watchFrames(framesChanged, tellTouches);
 // A sheet's stage swapped a component in place (its sheet module says so on
 // each Vite HMR update), or a decision page's host drew a revision of its
 // program (decision-host, naming the program's hash): every pin's anchor is

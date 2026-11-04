@@ -2,8 +2,9 @@
  * The CawCo tool a turn with nothing for the person ends on, its name Claude
  * Code's own for the same act (its Remote Control bridge's `no_reply_needed`).
  * Only a session that talks with the person has it (hub roles.ts
- * `talksWithPerson`); it does nothing on the hub, and it counts as no work
- * and no repeat (hub work-items.ts `restsInWait`, fleet-watch.ts
+ * `talksWithPerson`); it does nothing on the hub but refuse while the person's
+ * message waits for its reply ({@link NO_REPLY_OWED}), and it counts as no
+ * work and no repeat (hub work-items.ts `restsInWait`, fleet-watch.ts
  * `neverRepeats`).
  *
  * A module of its own: injected.ts, whose presence line names it, loads while
@@ -11,6 +12,14 @@
  * level before `HARNESSES` exists.
  */
 export const NO_REPLY_TOOL = "no_reply_needed";
+
+/**
+ * {@link NO_REPLY_TOOL}'s refusal while the person's last message to the
+ * session, which it has read, has no reply after it (hub db
+ * `personUnanswered`). Placeholder words, for the owner's review.
+ */
+export const NO_REPLY_OWED =
+  "Refused: the person's last message to you has no reply yet, so this turn can't end here. Answer them in this turn's closing words.";
 
 /**
  * The mark on a tool result that ends the turn at the call: the model takes

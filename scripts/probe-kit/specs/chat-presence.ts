@@ -25,18 +25,28 @@
  *    screen is no chat the person is in.
  *
  * Their message with no reply (hub db `personUnanswered`):
- * 11. a turn that ends on no_reply_needed leaves it owed: the next send says
+ * 11. a turn that gives him no reply leaves it owed: the next send says
  *    so, on the chat, elsewhere and away alike;
  * 12. a turn's closing words answer it: the next send does not say so;
- * 13. a send of the session's own never makes one owed.
+ * 13. a send of the session's own never makes one owed;
+ * 14. while one is owed, no_reply_needed is refused with its words, on his
+ *    own message and on a send that wakes the session after it, and the model
+ *    takes its next step; a turn's closing words answer him, and the same call
+ *    then ends its turn at the call.
+ *
+ * Input inside a frame (agent preview-overlay page.ts, `PAGE_TOUCHED_MESSAGE`):
+ * 15. a touch inside a decision page, with no input anywhere else, brings the
+ *    person back from away, and a later one moves their last input on;
+ * 16. the same inside a preview in the panel, on a tab that had no input.
  *
  *   bun scripts/probe-kit/run.ts chat-presence
  */
-import type { Page } from "playwright-core";
+import type { Locator, Page } from "playwright-core";
 import {
   type PresenceSaid,
   presenceLine,
 } from "../../../packages/core/src/injected";
+import { NO_REPLY_OWED } from "../../../packages/core/src/no-reply";
 import type { PersonView } from "../../../packages/core/src/notifications";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -44,8 +54,16 @@ import { type Kit, type KitFleet, open, type Spec } from "../kit";
 import { atRest } from "../phone";
 
 const NO_REPLY = "mcp__cawco__no_reply_needed";
-/** A message the mock's turn ends on no_reply_needed for. */
+/** A message the mock calls no_reply_needed on; refused, it ends its turn with no words. */
 const SILENT = "PROBE-SILENT";
+/** The same, but refused, it answers in closing words. */
+const ANSWERS = "PROBE-ANSWERS";
+const CLOSING = "closing words";
+const DECISION_PAGE = "touched";
+const DECISION_PROGRAM = `root = Decisions("Touched", [colour])
+colour = Decision("colour", "Which colour?", [red, blue], "Either works.", [], [], false, null, "behaviour")
+red = Option("red", "Red", "Warm.", true, [], "Loud.")
+blue = Option("blue", "Blue", "Cool.", false, [], "Quiet.")`;
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 
 /** The line in full for the plain forms, the head alone for `away`, whose clock this spec does not set. */
@@ -58,11 +76,27 @@ const OWED = (() => {
   return presenceLine(said).slice(ON.length).trim();
 })();
 
+/**
+ * The model reading the refusal itself. A turn that ended with no words leaves
+ * the refusal at the conversation's end, so the next send's words join it in
+ * one message: that one is the send's, and names a `PROBE-` tag.
+ */
+const isRefusal = (request: Seen): boolean =>
+  request.last.includes(NO_REPLY_OWED) && !request.last.includes("PROBE-");
+
+/** What the mock does with the refusal of the call it made last. */
+let answersRefusal = false;
+
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return { everyMs: 5, words: ["Probe title"] };
   }
-  if (request.last.includes(SILENT) && !request.afterTool) {
+  if (isRefusal(request)) {
+    return { everyMs: 5, words: answersRefusal ? [CLOSING] : [] };
+  }
+  const answers = request.last.includes(ANSWERS);
+  if (answers || request.last.includes(SILENT)) {
+    answersRefusal = answers;
     return { everyMs: 5, words: [], tool: { name: NO_REPLY, input: {} } };
   }
   return { everyMs: 5, words: ["ok"] };
@@ -97,6 +131,18 @@ const touch = async (page: Page): Promise<void> => {
   await page.bringToFront();
   await page.mouse.move(300, 300);
   await page.mouse.move(340, 340);
+};
+
+/** The person's hand inside `frame` alone: the pointer arrives there, and moves on it. */
+const touchInside = async (page: Page, frame: Locator): Promise<void> => {
+  const box = await frame.boundingBox();
+  if (!box) {
+    throw new Error("the frame has no box to touch");
+  }
+  await page.bringToFront();
+  const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+  await page.mouse.move(x, y);
+  await page.mouse.move(x + 12, y + 12);
 };
 
 /** The page says it is hidden (headless pages cannot be: kit hidden-tab.ts) or visible again, as a browser tells it. */
@@ -162,6 +208,19 @@ const run = async (kit: Kit): Promise<void> => {
       40_000
     );
 
+  /** The person's last input on `page`'s own client, as the hub keeps it; null before any. */
+  const inputOn = async (page: Page): Promise<number | null> => {
+    const id = await page.evaluate(() =>
+      sessionStorage.getItem("cawco-presence-client")
+    );
+    return (
+      fleet.query<{ at: number | null }>(
+        "SELECT input_at AS at FROM presence_clients WHERE client_id = ?",
+        id ?? ""
+      )[0]?.at ?? null
+    );
+  };
+
   /** How many turns the session has ended, as the hub's row keeps the last. */
   const endedAt = (session: string): number | null =>
     fleet.query<{ at: number | null }>(
@@ -176,9 +235,9 @@ const run = async (kit: Kit): Promise<void> => {
    * its turn has ended. A hub that finds the target's cache cold refuses the
    * first call and delivers the same call again.
    */
-  const background = async (session: string): Promise<string> => {
+  const background = async (session: string, ask = ""): Promise<string> => {
     tags += 1;
-    const tag = `PROBE-BACKGROUND-${tags}`;
+    const tag = `PROBE-BACKGROUND-${tags}${ask}`;
     const before = endedAt(session);
     let answer = await handoff(session, tag);
     if (answer.refused) {
@@ -215,6 +274,66 @@ const run = async (kit: Kit): Promise<void> => {
   const reads = (what: string, read: string, line: string) =>
     check(what, read.includes(line), read.slice(-400));
 
+  // 15. Before any input anywhere: the person is away, and a load changes
+  // nothing. Only the pointer inside the decision page's frame brings them back.
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Docked",
+    machineId: MACHINE,
+    cwd: fleet.repo,
+  });
+  const conversation = await fleet.spawn(
+    "claude",
+    "The project's conversation",
+    fleet.repo,
+    { projectId: project.id }
+  );
+  await fleet.api(`/api/instances/${conversation}/artifacts`, {
+    kind: "page",
+    does: "pick",
+    ask: "Pick the colour",
+    name: DECISION_PAGE,
+    program: DECISION_PROGRAM,
+  });
+  const decisions = await kit.page("desk");
+  await open(
+    decisions,
+    `${base}/project/${project.id}?view=decisions&page=${DECISION_PAGE}`,
+    '[data-slot="decisions"] iframe'
+  );
+  const decisionFrame = decisions.locator('[data-slot="decisions"] iframe');
+  await (
+    await decisionFrame.contentFrame()
+  )
+    .getByText("Which colour?")
+    .waitFor({ timeout: 60_000 });
+  check(
+    "15: setup: with a decision page loaded and no input, the person is away",
+    (await person()).state === "away"
+  );
+  await touchInside(decisions, decisionFrame);
+  const backOnPage = await until(
+    "the touch inside the decision page to reach the hub",
+    person,
+    (view) => view.state === "here",
+    20_000
+  );
+  check(
+    "15: a touch inside a decision page holds the person here",
+    backOnPage.state === "here"
+  );
+  const firstTouch = await inputOn(decisions);
+  // Past the overlay's throttle, then the tab's next beat says the new input.
+  await decisions.waitForTimeout(5100);
+  await touchInside(decisions, decisionFrame);
+  await until(
+    "a later touch inside the page to move the last input on",
+    () => inputOn(decisions),
+    (at) => at !== firstTouch,
+    40_000
+  );
+  check("15: a later touch inside it moves their last input on", true);
+  await decisions.close();
+
   // 1. A tab in the chat.
   const tab = await tabOn(kit, base, chat);
   await touch(tab);
@@ -248,6 +367,28 @@ const run = async (kit: Kit): Promise<void> => {
     await background(chat),
     ON
   );
+
+  // 16. The same inside the preview, on a tab of its own with no input.
+  const previewTab = await tabOn(kit, base, chat);
+  const previewFrame = previewTab.locator(`${PANE} iframe`).first();
+  await (
+    await previewFrame.contentFrame()
+  )
+    .locator("h1")
+    .waitFor({ timeout: 60_000 });
+  check(
+    "16: setup: a tab with the preview open and no input has said none",
+    (await inputOn(previewTab)) === null
+  );
+  await touchInside(previewTab, previewFrame);
+  await until(
+    "the touch inside the preview to reach the hub",
+    () => inputOn(previewTab),
+    (at) => at !== null,
+    20_000
+  );
+  check("16: a touch inside a preview is input on its tab", true);
+  await previewTab.close();
 
   // 3. The window unfocused, still on screen.
   await blurWindow(tab);
@@ -314,17 +455,6 @@ const run = async (kit: Kit): Promise<void> => {
   await shows(chat, "the tab to draw the chat again");
 
   // 7. A project's conversation, docked on its page.
-  const project = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Docked",
-    machineId: MACHINE,
-    cwd: fleet.repo,
-  });
-  const conversation = await fleet.spawn(
-    "claude",
-    "The project's conversation",
-    fleet.repo,
-    { projectId: project.id }
-  );
   await second.goto(`${base}/project/${project.id}`, {
     waitUntil: "domcontentloaded",
   });
@@ -446,7 +576,7 @@ const run = async (kit: Kit): Promise<void> => {
   await say(chat, `${SILENT}-on`);
   const owedOn = await background(chat);
   reads(
-    "11: a turn that ended on no_reply_needed leaves the message owed: on this chat, the send says so",
+    "11: a turn that gave him no reply leaves the message owed: on this chat, the send says so",
     owedOn,
     `${ON} ${OWED}`
   );
@@ -461,6 +591,45 @@ const run = async (kit: Kit): Promise<void> => {
   check(
     "13: a send that is not the person's owes nothing",
     !(await background(chat)).includes(OWED)
+  );
+
+  // 14. While one is owed, no_reply_needed is refused, and allowed after an answer.
+  const refusals = () => fleet.seen.filter(isRefusal).length;
+  // A model step that wrote nothing may be asked again: more than before, not how many.
+  const owedCleared = () =>
+    fleet.query<{ open: number }>(
+      "SELECT count(*) AS open FROM sent_messages WHERE instance_id = ? AND answered_at IS NULL AND json_extract(body, '$.origin.kind') = 'human'",
+      chat
+    )[0]?.open === 0;
+  let refused = refusals();
+  await say(chat, `${ANSWERS}-own`);
+  check(
+    "14: on his own message, no_reply_needed is refused with its words, and the model goes on",
+    refusals() > refused && owedCleared(),
+    `${refusals() - refused} refusal(s)`
+  );
+  await say(chat, `${SILENT}-woken`);
+  refused = refusals();
+  const wakesOwed = await background(chat, ` ${SILENT}`);
+  check(
+    "14: a turn that wrote nothing after the refusal leaves him owed: the next send says so",
+    wakesOwed.includes(OWED),
+    wakesOwed.slice(-400)
+  );
+  check(
+    "14: a send that wakes the session while he is owed: no_reply_needed is refused",
+    refusals() > refused,
+    `${refusals() - refused} refusal(s)`
+  );
+  refused = refusals();
+  const allowedTag = `PROBE-BACKGROUND-${tags + 2}`;
+  await background(chat);
+  await background(chat, ` ${SILENT}`);
+  check(
+    "14: after an answer, no_reply_needed is allowed and ends the turn at the call",
+    refusals() === refused &&
+      !fleet.seen.some((one) => one.afterTool && one.all.includes(allowedTag)),
+    `${refusals() - refused} refusal(s)`
   );
 
   // 11, elsewhere: a chat he left.

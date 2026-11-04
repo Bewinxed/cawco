@@ -14,7 +14,7 @@
  * - **The person's input here** (`idleMs`): how long since their last key,
  *   pointer press or move, wheel or touch on this page or a preview frame
  *   in it, as the page's one input tracker hears it (reload.svelte.ts
- *   `watchInput`); absent until the first since the page loaded. Input
+ *   `heardInput`); absent until the first since the page loaded. Input
  *   decides whether the person is here: a tab open and focused with nobody
  *   at it says no input, and they go away once the away clock passes.
  * - **The computer** (`machine`, `deskIdleMs`): Chromium's Idle Detection,

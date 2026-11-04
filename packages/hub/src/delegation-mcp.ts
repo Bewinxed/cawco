@@ -388,6 +388,8 @@ export function createDelegationMcp(options: {
   ) => Promise<Record<string, unknown>>;
   /** The once-per-key rule of the calls that start or send (call-keys.ts). */
   callKeys: Pick<CallKeys, "once">;
+  /** The person's message `actor` has read still has no reply: `no_reply_needed` refuses. */
+  personOwed: (actor: InstanceRow) => boolean;
   /** `send_to_user`'s push to the person's paired devices (push.ts `userMessage`); its transcript row is the call itself. */
   sendToUser: (actor: InstanceRow, message: string) => void;
   /** Why `actor` may not show the person one of `paths` (shown-files.ts `shownRefusal`). */
@@ -484,6 +486,9 @@ export function createDelegationMcp(options: {
           throw new Error("Discovery cannot execute tools");
         },
         emit: () => {
+          throw new Error("Discovery cannot execute tools");
+        },
+        personOwed: () => {
           throw new Error("Discovery cannot execute tools");
         },
         sendToUser: () => {
@@ -787,6 +792,9 @@ export function createDelegationMcp(options: {
         emit: () => {
           throw new Error("Reading the catalog emits nothing");
         },
+        personOwed: () => {
+          throw new Error("Reading the catalog asks nothing");
+        },
         sendToUser: () => {
           throw new Error("Reading the catalog sends nothing");
         },
@@ -1042,6 +1050,7 @@ export function createDelegationMcp(options: {
       workItem: !!actor.workItemId,
       projectId: actor.projectId ?? undefined,
       delegateList: tree ? (query) => tree(actor, query) : undefined,
+      personOwed: () => options.personOwed(actor),
       sendToUser: (message) => options.sendToUser(actor, message),
       shownRefusal: (tool, paths) => options.shownRefusal?.(actor, tool, paths),
       instancesByShortId: options.instancesByShortId,
@@ -1202,6 +1211,9 @@ export function createDelegationMcp(options: {
           throw new Error("Instructions send nothing");
         },
         emit: () => undefined,
+        personOwed: () => {
+          throw new Error("Instructions ask nothing");
+        },
         sendToUser: () => {
           throw new Error("Instructions send nothing");
         },

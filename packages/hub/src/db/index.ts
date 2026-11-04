@@ -1654,12 +1654,13 @@ export interface DbShape {
     }
   ) => PublicInstanceRow | undefined;
   /**
-   * The person's last message to the session has no reply after it. His last
+   * The person's last message to the session, when it has no reply after it:
+   * `read`, the session has it, or `pending`, it waits to reach it. His last
    * words are his newest send that reached it or waits to (a failed, replaced
    * or cancelled one never did), a turn's, not a note or a slash command,
-   * which asks the harness and not the session.
+   * which asks the harness and not the session. Null when none is owed.
    */
-  readonly personUnanswered: (id: string) => boolean;
+  readonly personUnanswered: (id: string) => "read" | "pending" | null;
   /** A plan's latest `limit` changes, oldest first. */
   readonly planChangesOf: (
     instanceId: string,
@@ -9263,6 +9264,7 @@ const make = async (path: string): Promise<DbShape> => {
         .select({
           answeredAt: sentMessages.answeredAt,
           body: sentMessages.body,
+          state: sentMessages.state,
         })
         .from(sentMessages)
         .where(
@@ -9277,10 +9279,13 @@ const make = async (path: string): Promise<DbShape> => {
         .limit(1)
         .all();
       if (last?.answeredAt !== null) {
-        return false;
+        return null;
       }
       const words = last.body.message.content;
-      return !(typeof words === "string" && words.startsWith("/"));
+      if (typeof words === "string" && words.startsWith("/")) {
+        return null;
+      }
+      return last.state === "read" ? "read" : "pending";
     },
     handBackTurn: (id, from, at) =>
       db

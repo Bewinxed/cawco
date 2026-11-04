@@ -181,6 +181,9 @@ const standUp = (): { roles: RoleTools[]; unrouted: string[] } => {
     tasks: {} as Tasks,
     projectFromSession: () => Promise.reject(new Error("measuring")),
     askPerson: () => Promise.reject(new Error("measuring")),
+    personOwed: () => {
+      throw new Error("Listing the tools asks nothing");
+    },
     sendToUser: () => {
       throw new Error("measuring");
     },

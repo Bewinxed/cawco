@@ -374,9 +374,13 @@ export function sizesIn(
  * every frame at rest ("ResizeObserver loop completed with undelivered
  * notifications", 60 a second, the probe's b2), and a document with no root
  * yet (a navigation before its first bytes, `document.open()`) threw
- * "parameter 1 is not of type 'Element'".
+ * "parameter 1 is not of type 'Element'". `each` is handed every window as it
+ * comes: this one, and each such frame's, whose overlay stood down (overlay.ts).
  */
-export function watchFrames(changed: () => void): void {
+export function watchFrames(
+  changed: () => void,
+  each: (view: Window) => void
+): void {
   const docs = new WeakSet<Document>();
   const frames = new WeakSet<Element>();
 
@@ -410,6 +414,9 @@ export function watchFrames(changed: () => void): void {
       return;
     }
     docs.add(doc);
+    if (view) {
+      each(view);
+    }
     if (doc !== document && view) {
       view.addEventListener("scroll", changed, {
         capture: true,

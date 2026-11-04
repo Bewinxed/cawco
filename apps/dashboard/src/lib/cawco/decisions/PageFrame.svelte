@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { PREVIEW_LOCKED_MESSAGE } from "@cawco/core/frames";
+  import {
+    PAGE_TOUCHED_MESSAGE,
+    PREVIEW_LOCKED_MESSAGE,
+  } from "@cawco/core/frames";
   /**
    * A decision page in the Decisions tab's pane, live: the project's page, on
    * the project's own preview origin at `/__cawco/page/<id>/`, whichever
@@ -26,6 +29,7 @@
   import { pageSource } from "#lib/cawco/preview/page-source.js";
   import { enterPreviews, turnedAwayWords } from "#lib/cawco/preview/pass.js";
   import { previewError, previewErrorOf } from "#lib/cawco/preview/wire.js";
+  import { heardInput } from "#lib/cawco/reload.svelte.js";
   import { track } from "#lib/cawco/track.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -235,7 +239,12 @@
         type?: unknown;
       } | null;
       const type = told?.type;
-      if (type === "cawco:error" && previewErrorOf(told?.of) === "send") {
+      if (type === PAGE_TOUCHED_MESSAGE) {
+        heardInput();
+      } else if (
+        type === "cawco:error" &&
+        previewErrorOf(told?.of) === "send"
+      ) {
         notSent = previewError(told?.message);
       } else if (type === "cawco:resolved") {
         notSent = null;

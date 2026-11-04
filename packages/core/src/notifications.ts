@@ -66,7 +66,7 @@ export interface PresenceBeat {
    * How long since the person's last input on this client, ms as of
    * `saidAt`: on a tab, the page's own last key, pointer press or move,
    * wheel or touch, a preview frame's included (dashboard reload.svelte.ts
-   * `watchInput`); absent while it has had none since it loaded. Never the
+   * `heardInput`); absent while it has had none since it loaded. Never the
    * machine's idle reading: that is `machine`. Web only, for now.
    */
   readonly idleMs?: number;

@@ -13,6 +13,7 @@
   } from "@cawco/core/comments";
   import { detach } from "@cawco/core/detach";
   import {
+    PAGE_TOUCHED_MESSAGE,
     PREVIEW_LOCKED_MESSAGE,
     type PreviewSettings,
     previewRoute,
@@ -142,7 +143,7 @@
   import { pageVisible } from "../page-visible.svelte";
   import { pressOutside } from "../press-outside";
   import { refusals } from "../refusals.svelte";
-  import { watchInput } from "../reload.svelte";
+  import { heardInput } from "../reload.svelte";
   import { runShellShortcut } from "../shell-shortcut";
   import { sideExpand } from "../side/expand";
   import { HEAD_PRIORITY, type HeadItem } from "../side/head";
@@ -3037,6 +3038,10 @@
       return;
     }
     heardKey = frameKey;
+    if (event.data?.type === PAGE_TOUCHED_MESSAGE) {
+      heardInput();
+      return;
+    }
     if (event.data?.type === "cawco:down") {
       heardDown(event.data);
       return;
@@ -4355,19 +4360,8 @@
         allow="clipboard-write"
         inert={!current}
         onerror={() => arrived(key)}
-        onload={(event) => {
+        onload={() => {
           arrived(key);
-          // Input inside the frame never reaches this page: heard there, it
-          // keeps a tab in use from reloading under its reader.
-          try {
-            const inner = (event.currentTarget as HTMLIFrameElement)
-              .contentWindow;
-            if (inner) {
-              watchInput(inner);
-            }
-          } catch {
-            // A frame of another origin: its input is not ours to hear.
-          }
           if (key === frameKey) {
             loadedFrame(key);
             announce();

@@ -7,6 +7,7 @@ import {
   type Kind,
   kindsLine,
   LANDS_MODES,
+  NO_REPLY_OWED,
   NO_REPLY_TOOL,
   REFERENCE_GUIDANCE,
   SESSION_CHOSEN_MODES,
@@ -930,7 +931,14 @@ export function handoffTools(deps: HandoffDeps) {
       NO_REPLY_TOOL,
       NO_REPLY_WORDS[deps.harness].description,
       {},
-      () => Promise.resolve(NO_REPLY_WORDS[deps.harness].result),
+      () => {
+        // Thrown, the result is an error with no end-of-turn mark: the model
+        // takes its next step, on any harness (core no-reply.ts).
+        if (deps.personOwed()) {
+          throw new Error(NO_REPLY_OWED);
+        }
+        return Promise.resolve(NO_REPLY_WORDS[deps.harness].result);
+      },
       sentence,
       {
         endsTurn: true,

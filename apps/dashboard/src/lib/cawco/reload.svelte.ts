@@ -16,6 +16,7 @@
  * A reload at any moment is safe, since everything a person has in progress
  * comes back after it, save words no draft keeps ({@link unsavedWords}).
  */
+import { PERSONS_INPUT, personsInput } from "@cawco/core/frames";
 import { version } from "$app/env";
 import { leaveThePage } from "./leaving";
 import { store, stored } from "./storage";
@@ -86,42 +87,29 @@ export function onInput(
 }
 
 /**
- * A pointer move the person made: one that moved. A browser sends a move
- * of none to the element under a resting cursor when the page moves under
- * it (a streaming reply, a scroll), and that is no one's hand. Our call.
+ * The person's hand on this tab, now: heard on this page, or told by a preview
+ * frame's overlay (`PAGE_TOUCHED_MESSAGE`, each frame's own message handler),
+ * since input in a frame of another origin never reaches the page around it,
+ * and someone working in a preview would otherwise look idle.
  */
-const moved = (event: Event): boolean =>
-  event.type !== "pointermove" ||
-  (event as PointerEvent).movementX !== 0 ||
-  (event as PointerEvent).movementY !== 0;
+export function heardInput(): void {
+  const before = inputAt;
+  inputAt = Date.now();
+  for (const listener of inputHeard) {
+    listener(inputAt, before);
+  }
+}
 
-/**
- * Hears pointer, key, wheel and touch input, and fields being focused, in
- * `target`: this window, and each preview frame's window as it loads
- * (PreviewPane). Input inside a frame never reaches the page around it, so
- * someone working in a preview would otherwise look idle.
- */
-export function watchInput(target: Window): void {
+if (typeof window !== "undefined") {
   const touched = (event: Event) => {
-    if (!(event.isTrusted && moved(event))) {
-      return;
-    }
-    const before = inputAt;
-    inputAt = Date.now();
-    for (const listener of inputHeard) {
-      listener(inputAt, before);
+    if (personsInput(event)) {
+      heardInput();
     }
   };
-  for (const kind of [
-    "pointerdown",
-    "pointermove",
-    "keydown",
-    "wheel",
-    "touchstart",
-  ]) {
-    target.addEventListener(kind, touched, { capture: true, passive: true });
+  for (const kind of PERSONS_INPUT) {
+    window.addEventListener(kind, touched, { capture: true, passive: true });
   }
-  target.addEventListener(
+  window.addEventListener(
     "focusin",
     (event) => {
       const field = event.target as Element | null;
@@ -131,10 +119,6 @@ export function watchInput(target: Window): void {
     },
     { capture: true }
   );
-}
-
-if (typeof window !== "undefined") {
-  watchInput(window);
 }
 
 /** The element with the keyboard, looking into the frame that has it (a preview). */

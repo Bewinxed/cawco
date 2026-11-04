@@ -9765,7 +9765,7 @@ export const createServer = (
       return recapFor(instanceId);
     }
     const person = notifications.person();
-    const owed = db.personUnanswered(instanceId);
+    const owed = db.personUnanswered(instanceId) !== null;
     if (person.state === "here" && person.chats.includes(instanceId)) {
       return { kind: "on", unanswered: owed };
     }
@@ -27429,6 +27429,7 @@ export const createServer = (
       hubAsks.ask(actor, name, input, toolUseId),
     bindAdminInput: (actor, name, input) =>
       bindFolderInstall(actor, name, input),
+    personOwed: (actor) => db.personUnanswered(actor.id) === "read",
     sendToUser: (actor, message) => {
       db.noteAnswered(actor.id, new Date());
       push.userMessage(actor.id, message);

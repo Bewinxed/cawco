@@ -191,6 +191,37 @@ export const previewRoute = (
 /** The one path a preview origin answers with CORS and no credentials: the dashboard's reachability probe. */
 export const PREVIEW_PING_PATH = "/__cawco/ping";
 
+/**
+ * What says the person's hand is on a page: a key, a pointer press or move, a
+ * wheel, a touch. The dashboard hears them on its own window (reload.svelte.ts)
+ * and a previewed page's overlay on the page's (agent preview-overlay page.ts).
+ */
+export const PERSONS_INPUT = [
+  "pointerdown",
+  "pointermove",
+  "keydown",
+  "wheel",
+  "touchstart",
+] as const;
+
+/**
+ * An input of {@link PERSONS_INPUT} the person made. A browser sends a move of
+ * none to the element under a resting cursor when the page moves under it (a
+ * streaming reply, a scroll), and that is no one's hand. Our call.
+ */
+export const personsInput = (event: Event): boolean =>
+  event.isTrusted &&
+  (event.type !== "pointermove" ||
+    (event as PointerEvent).movementX !== 0 ||
+    (event as PointerEvent).movementY !== 0);
+
+/**
+ * A previewed page's overlay to its host: the person's hand is on the page.
+ * Input in a frame of another origin never reaches the page around it, and a
+ * preview is never the dashboard's origin, so this is how a dashboard hears it.
+ */
+export const PAGE_TOUCHED_MESSAGE = "cawco:touched";
+
 /** Where every previewed page loads the overlay from, on its own origin (core preview-proxy.ts `injectOverlay`). */
 export const OVERLAY_PATH = "/__cawco/overlay.js";
 

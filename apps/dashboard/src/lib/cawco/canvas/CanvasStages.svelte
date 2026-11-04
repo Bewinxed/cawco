@@ -12,15 +12,18 @@
    * Dock, Undock, Done and Remove, which go to whoever holds the slot it
    * stands in.
    */
-  import { PREVIEW_LOCKED_MESSAGE } from "@cawco/core/frames";
+  import {
+    PAGE_TOUCHED_MESSAGE,
+    PREVIEW_LOCKED_MESSAGE,
+  } from "@cawco/core/frames";
   import { Portal } from "bits-ui";
   import { untrack } from "svelte";
   import { theme } from "#lib/theme.svelte.js";
   import { previewShortcut, SHORTCUT_MESSAGE } from "../preview/wire";
-  import { watchInput } from "../reload.svelte";
+  import { heardInput } from "../reload.svelte";
   import { runShellShortcut } from "../shell-shortcut";
   import CanvasGrip from "./CanvasGrip.svelte";
-  import { type Handle, type Stage, slotSizes, stages } from "./stage.svelte";
+  import { type Handle, slotSizes, stages } from "./stage.svelte";
 
   /** The handles over the composer: the top grab, then each top corner's grip. */
   const HANDLES: Handle[] = ["top", "top-left", "top-right"];
@@ -36,6 +39,9 @@
     }
     const actions = stage.at ? stage.actions[stage.at] : undefined;
     switch (type) {
+      case PAGE_TOUCHED_MESSAGE:
+        heardInput();
+        break;
       case "cawco:ready":
         stage.connected = true;
         stage.admitted();
@@ -86,17 +92,6 @@
     }
   }
 
-  function loaded(stage: Stage, frame: HTMLIFrameElement): void {
-    try {
-      if (frame.contentWindow) {
-        watchInput(frame.contentWindow);
-      }
-    } catch {
-      // Its own origin: its input is not ours to hear.
-    }
-    stage.hello();
-  }
-
   // The dashboard's theme turning tells every canvas: it draws in the dashboard's scheme, never the OS's.
   $effect(() => {
     const now = theme.resolved;
@@ -141,8 +136,7 @@
         <iframe
           allow="clipboard-write"
           class="block size-full border-none border-current scheme-inherit"
-          onload={(event) =>
-            loaded(stage, event.currentTarget as HTMLIFrameElement)}
+          onload={() => stage.hello()}
           src={stage.src}
           title="Canvas"
           bind:this={stage.frame}

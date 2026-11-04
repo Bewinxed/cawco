@@ -775,6 +775,8 @@ export interface HandoffDeps {
    * list; absent, a session nobody delegated, which may start any.
    */
   readonly mayStart?: MayStart;
+  /** The person's message this session has read still has no reply: `no_reply_needed` refuses. */
+  readonly personOwed: () => boolean;
   /** The session's project: its delegate types shadow the fleet's. */
   readonly projectId?: string;
   /**
