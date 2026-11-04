@@ -214,7 +214,12 @@ const HOST_REACHES = new Set([
   "packages/core/src/mount-table.ts",
   "packages/core/src/boundary-nesting.ts",
   "packages/core/src/session-env.ts",
+  "packages/core/src/fetch-cap.ts",
+  "packages/core/src/words/fetch-cap.ts",
   "packages/core/src/cawco-env.ts",
+  "packages/core/src/workspace-needs.ts",
+  "packages/core/src/words/workspace-needs.ts",
+  "packages/core/src/words/helpers.ts",
   "packages/core/src/socat.ts",
   "packages/core/src/hub-previews.ts",
   "packages/core/src/git-dir.ts",
@@ -223,6 +228,8 @@ const HOST_REACHES = new Set([
   "packages/core/src/state-file.ts",
   "packages/core/src/signal-wall.ts",
   "packages/agent/src/proxy-relay.ts",
+  "packages/core/src/listeners.ts",
+  "packages/core/src/detach.ts",
   "packages/agent/src/sandbox-end.ts",
 ]);
 
