@@ -58,7 +58,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { userLayerPath } from "../../packages/core/src/paths";
+import { userSkillLayers } from "../../packages/core/src/paths";
 import { capture, type Raster } from "./ink";
 import { scan } from "./journeys/scan";
 import { devtoolsPort, installRuns, type Kit, ROOT, Run, settle } from "./kit";
@@ -264,18 +264,26 @@ const TOKEN_VALUES = (() => {
     names.map((name) => ({ name, value: out(raw.get(name) ?? "transparent") }));
 })();
 
-/** The impeccable skill's launcher in the user layer. */
-const IMPECCABLE_SKILL = userLayerPath(
-  "skills",
-  "impeccable",
-  "scripts",
-  "impeccable"
-);
+/** The impeccable skill's launcher, by its path inside the skill. */
+const IMPECCABLE_LAUNCHER = join("impeccable", "scripts", "impeccable");
 
-/** The impeccable launcher: `$IMPECCABLE`, else the impeccable skill's in the user layer. */
+/**
+ * The impeccable launcher: `$IMPECCABLE`, else the impeccable skill's in the
+ * first of the fleet's skill layers that holds it (core paths.ts
+ * `userSkillLayers`). The fleet may place impeccable as a plugin's skill, in
+ * a vendored marketplace, and no `skills/impeccable` stands in the user layer
+ * then: on the host every Chromium read said "no launcher" (r413).
+ */
 function impeccableBin(): string | null {
-  const bin = process.env.IMPECCABLE ?? IMPECCABLE_SKILL;
-  return existsSync(bin) ? bin : null;
+  const named = process.env.IMPECCABLE;
+  if (named !== undefined) {
+    return existsSync(named) ? named : null;
+  }
+  return (
+    userSkillLayers()
+      .map((dir) => join(dir, IMPECCABLE_LAUNCHER))
+      .find((bin) => existsSync(bin)) ?? null
+  );
 }
 
 interface InPageArgs {
@@ -3638,12 +3646,12 @@ async function impeccable(page: Page): Promise<{
   }
   const bin = impeccableBin();
   if (!bin) {
-    // The place, not the page: a workspace's boundary reads nothing of the
-    // home dir outside its clone, the user layer's skill included. Said as
-    // not run here, as a spec that runs on the host is (kit.ts `Spec.host`).
-    const why = process.env.CAWCO_WORKSPACE
-      ? `this workspace's boundary reads nothing of the home dir outside its clone, so ${IMPECCABLE_SKILL} is not here; it runs on the host, or with $IMPECCABLE set to a launcher inside the boundary`
-      : `$IMPECCABLE is unset and ${IMPECCABLE_SKILL} is missing`;
+    // The place, not the page: this machine holds no impeccable where the
+    // fleet places skills. A workspace's boundary reads every one of those
+    // layers (core paths.ts `fleetSyncedPaths`), so inside one the answer is
+    // the host's. Said as not run here, as a spec that runs on the host is
+    // (kit.ts `Spec.host`).
+    const why = `$IMPECCABLE is unset and none of the fleet's skill layers holds ${IMPECCABLE_LAUNCHER}: ${userSkillLayers().join(", ")}`;
     return {
       ran: false,
       said: `impeccable not run here: no launcher (${why})`,

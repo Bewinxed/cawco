@@ -114,11 +114,12 @@ settle, when the move is over, so a spec holds one on the clock with `anim.ts`.
 
 Impeccable runs as `impeccable detect --json --cdp <port>` on the page as it
 stands: every kit Chromium carries a DevTools port (`devtoolsPort(page)`),
-and the launcher is `$IMPECCABLE`, else the impeccable skill's. It reads
-Chromium only; on WebKit the report says so and the kit's own contrast and
-overflow reads stand alone. With no launcher it is not run here, said as a
-NOTE with why (inside a workspace the boundary reads nothing of the home dir
-outside its clone, so the user layer's skill is not there), the way a host
+and the launcher is `$IMPECCABLE`, else the impeccable skill's in the first
+of the fleet's skill layers that holds it (core `paths.ts` `userSkillLayers`:
+the user layer's skills, pi's, each vendored plugin's), which a workspace's
+boundary reads too. It reads Chromium only; on WebKit the report says so and
+the kit's own contrast and overflow reads stand alone. With no launcher it is
+not run here, said as a NOTE naming every layer it looked in, the way a host
 spec is not run in a workspace. Its findings outside the rendered checks
 (line length, nested cards…) print as a NOTE, never a failure. A Chromium
 read where its launcher ran and failed fails.

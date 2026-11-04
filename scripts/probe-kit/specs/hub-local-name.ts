@@ -37,8 +37,9 @@
  *    `http://<held name>:<dashboard port>`, with no command and no other
  *    field. On Linux, the built dashboard served at the fleet's dashboard
  *    port on this machine's LAN address answers `GET http://<held name>:<dashboard
- *    port>/` at the address mDNS gave the name, and neither hub holds a
- *    socket on a port below 1024.
+ *    port>/` at the address mDNS gave the name, the root's redirect to the
+ *    session index followed at that name, and neither hub holds a socket on
+ *    a port below 1024.
  * 7. macOS only, first, the Local Network grant legs 1 to 4 stand on there:
  *    one question for `cawco.local` (another hub's on the LAN), asked by the
  *    system's own responder (`dns-sd -G v4`) and by CawCo Agent, and who
@@ -175,6 +176,8 @@ const SPACES = /\s+/u;
 const PRIVILEGED = 1024;
 /** `/api/local-name`'s fields while a name is held: the name and its address, no step. */
 const LOCAL_NAME_FIELDS = "dashboardPort,host,name,state,url";
+/** Where the dashboard's root redirects: the session index (routes/(app)/+page.server.ts). */
+const SESSION_INDEX = "/session";
 
 /**
  * Leg 5's device: asks for `name`'s A and AAAA records from `from`, an
@@ -443,6 +446,12 @@ const localNameRead = async (
  * on the LAN address the fleet's hub is reached at, answers at `url` (the
  * held name with its port) at the address mDNS gives the name; then neither
  * hub (`pids`) holds a socket on a port below {@link PRIVILEGED}.
+ *
+ * The root is no page: it redirects (307) to the session index, the query
+ * kept (dashboard routes/(app)/+page.server.ts), so the GET follows it, as a
+ * browser does, and the page it lands on is the session index at the same
+ * name and port. A host `vite preview` refused would answer 403 before any
+ * route ran.
  */
 const dashboardAtName = async (
   kit: Kit,
@@ -460,15 +469,18 @@ const dashboardAtName = async (
   );
   const { port } = new URL(url);
   const body = join(process.env.TMPDIR ?? "/tmp", `local-name-${port}.html`);
-  const status =
-    await Bun.$`curl -s --noproxy ${"*"} --resolve ${`${name}:${port}:${at}`} -o ${body} -w ${"%{http_code}"} ${`${url}/`}`
+  const [status = "", landed = ""] = (
+    await Bun.$`curl -sL --noproxy ${"*"} --resolve ${`${name}:${port}:${at}`} -o ${body} -w ${"%{http_code} %{url_effective}"} ${`${url}/`}`
       .nothrow()
-      .text();
+      .text()
+  ).split(" ");
   const page = existsSync(body) ? readFileSync(body, "utf8") : "";
   kit.check(
-    `6: GET ${url}/ answers the dashboard`,
-    status === "200" && page.includes("<html"),
-    `status ${status}; ${page.slice(0, 160).replaceAll("\n", " ")}`
+    `6: GET ${url}/ answers the dashboard: the root's redirect lands on the session index at ${url}`,
+    status === "200" &&
+      landed.startsWith(`${url}${SESSION_INDEX}`) &&
+      page.includes("<html"),
+    `status ${status} at ${landed || "nothing"}; ${page.slice(0, 160).replaceAll("\n", " ")}`
   );
   const listing = await Bun.$`ss -ltnupH`.nothrow().text();
   const low = privilegedListeners(listing, pids);

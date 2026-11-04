@@ -26,15 +26,18 @@
  * - v8. Removing the layer ends every process of the view and leaves the
  *   folder as landed.
  * - v9 (timings, said, with a sanity check): a 100,000-file folder's layer
- *   start, and a walk of it in the copy against the same walk natively. A
- *   git repository's workspace is a clone of its own, never a layer (agent
- *   workspace.ts `kindAt`).
+ *   start, and a walk of it in the copy against the same walk natively. The
+ *   copy holds every file the folder does and, on Linux, beside them only
+ *   the view's stand-ins: an empty file for each of CawCo's and srt's deny
+ *   paths the folder lacks (core clone-denies.ts `cloneDenies`, agent
+ *   layer.ts `makeStandIns`). A git repository's workspace is a clone of its
+ *   own, never a layer (agent workspace.ts `kindAt`).
  *
  *   bun scripts/probe-kit/run.ts layer-view
  */
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import {
   applyChanges,
   changesOf,
@@ -47,6 +50,7 @@ import {
   removeLayer,
   viewArgv,
 } from "../../../packages/agent/src/layer";
+import { cloneDenies } from "../../../packages/core/src/clone-denies";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import type { Kit, Spec } from "../kit";
 
@@ -82,8 +86,85 @@ const text = (path: string): Promise<string> =>
 
 const ms = (from: number): number => Math.round(performance.now() - from);
 
-const run = async (kit: Kit) => {
+/** v9: timings, on a folder of 100,000 files under `home`, and a sanity check of what the copy's walk finds. */
+const walkTimed = async (kit: Kit, home: string): Promise<void> => {
   const { check, note } = kit;
+  const tree = join(home, "walk");
+  await rm(tree, { recursive: true, force: true });
+  await mkdir(tree, { recursive: true });
+  const made = Bun.spawnSync(
+    [
+      systemProgram("sh"),
+      "-c",
+      'for d in $(seq 1 100); do mkdir -p "$1/$d" && (cd "$1/$d" && seq 1 1000 | xargs touch) || exit 1; done',
+      "make-tree",
+      tree,
+    ],
+    { env: process.env }
+  );
+  if (made.exitCode !== 0) {
+    throw new Error(
+      `the 100,000-file tree was not made: ${made.stderr.toString()}`
+    );
+  }
+  const nativeAt = performance.now();
+  const native = Bun.spawnSync(
+    [systemProgram("sh"), "-c", `find ${tree} -type f | wc -l`],
+    { env: process.env }
+  );
+  const nativeMs = ms(nativeAt);
+  const walkId = crypto.randomUUID();
+  const walkPath = linux
+    ? tree
+    : join(home, ".worktrees", `walk-${walkId.slice(0, 8)}`);
+  const walkStartAt = performance.now();
+  const walkLayer = await makeLayer(walkId, tree, walkPath);
+  const walkStart = ms(walkStartAt);
+  await inCopy(walkId, walkLayer, "true");
+  const viewAt = performance.now();
+  const viewed = await inCopy(
+    walkId,
+    walkLayer,
+    `find ${walkPath} -type f | wc -l`
+  );
+  const viewMs = ms(viewAt);
+  note(
+    `v9: a 100,000-file folder's layer started in ${walkStart} ms; its walk took ${viewMs} ms in the copy against ${nativeMs} ms natively`
+  );
+  // The view's stand-ins (layer.ts `makeStandIns`) are its lowest layer, so
+  // the copy's walk finds them beside the folder's own files: each deny
+  // path the folder lacks that stands in as a file (`.git/config`'s too).
+  // The Mac's clone makes none.
+  const standIns = linux
+    ? cloneDenies(walkPath)
+        .filter((deny) => deny.empty.kind !== "dir")
+        .map((deny) => relative(walkPath, deny.path))
+        .sort()
+    : [];
+  // Every file outside the tree's numbered dirs, of which the folder has none.
+  const beside = await inCopy(
+    walkId,
+    walkLayer,
+    `find ${walkPath} -type f ! -path '${walkPath}/[0-9]*'`
+  );
+  const besides = beside.out
+    .split("\n")
+    .filter(Boolean)
+    .map((found) => relative(walkPath, found))
+    .sort();
+  check(
+    "v9: the walk in the copy finds every one of the 100,000 files the native walk finds, and beside them only the view's stand-ins for the deny paths the folder lacks",
+    native.stdout.toString().trim() === "100000" &&
+      viewed.out.trim() === String(100_000 + standIns.length) &&
+      besides.join() === standIns.join(),
+    `native ${native.stdout.toString().trim()}, copy ${viewed.out.trim()}; beside the folder's files the copy holds ${besides.join(", ") || "none"}; its ${standIns.length} stand-in file(s): ${standIns.join(", ") || "none"}`
+  );
+  await removeLayer(walkId, walkLayer);
+  await rm(tree, { recursive: true, force: true });
+};
+
+const run = async (kit: Kit) => {
+  const { check } = kit;
   const home = homedir();
   const folder = join(home, "site");
   await rm(folder, { recursive: true, force: true });
@@ -222,57 +303,7 @@ const run = async (kit: Kit) => {
     `left: ${left.join(", ")}`
   );
 
-  // v9: timings, on a folder of 100,000 files.
-  const tree = join(home, "walk");
-  await rm(tree, { recursive: true, force: true });
-  await mkdir(tree, { recursive: true });
-  const made = Bun.spawnSync(
-    [
-      systemProgram("sh"),
-      "-c",
-      'for d in $(seq 1 100); do mkdir -p "$1/$d" && (cd "$1/$d" && seq 1 1000 | xargs touch) || exit 1; done',
-      "make-tree",
-      tree,
-    ],
-    { env: process.env }
-  );
-  if (made.exitCode !== 0) {
-    throw new Error(
-      `the 100,000-file tree was not made: ${made.stderr.toString()}`
-    );
-  }
-  const nativeAt = performance.now();
-  const native = Bun.spawnSync(
-    [systemProgram("sh"), "-c", `find ${tree} -type f | wc -l`],
-    { env: process.env }
-  );
-  const nativeMs = ms(nativeAt);
-  const walkId = crypto.randomUUID();
-  const walkPath = linux
-    ? tree
-    : join(home, ".worktrees", `walk-${walkId.slice(0, 8)}`);
-  const walkStartAt = performance.now();
-  const walkLayer = await makeLayer(walkId, tree, walkPath);
-  const walkStart = ms(walkStartAt);
-  await inCopy(walkId, walkLayer, "true");
-  const viewAt = performance.now();
-  const viewed = await inCopy(
-    walkId,
-    walkLayer,
-    `find ${walkPath} -type f | wc -l`
-  );
-  const viewMs = ms(viewAt);
-  note(
-    `v9: a 100,000-file folder's layer started in ${walkStart} ms; its walk took ${viewMs} ms in the copy against ${nativeMs} ms natively`
-  );
-  check(
-    "v9: the walk in the copy finds every one of the 100,000 files the native walk finds",
-    native.stdout.toString().trim() === "100000" &&
-      viewed.out.trim() === "100000",
-    `native ${native.stdout.toString().trim()}, copy ${viewed.out.trim()}`
-  );
-  await removeLayer(walkId, walkLayer);
-  await rm(tree, { recursive: true, force: true });
+  await walkTimed(kit, home);
 };
 
 export default {

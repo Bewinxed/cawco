@@ -64,12 +64,23 @@ import {
   processLineage,
 } from "../../../packages/core/src/process-identity";
 import type { RenderReport } from "../../../packages/core/src/stage";
-import { type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  leasePortRange,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import { CLOUDFLARE, scratchCertificate } from "../cloudflare-front";
 import { BOUNDARY_INSIDE, type Kit, ROOT, type Spec } from "../kit";
 import { passInto } from "../preview-pass";
 
 const OPENS = 20;
+/**
+ * The preview ports this process's hub listeners take: a block of its own,
+ * leased from every other run on the machine (scratch-fleet.ts
+ * `leasePortRange`). A canvas's chain holds one at a time.
+ */
+const PREVIEW_PORTS = 4;
 const ICONS = 150;
 const SOCAT_BACKLOG = 5;
 /** The front's streams at once: RFC 9113 §6.5.2, "It is recommended that this value be no smaller than 100". */
@@ -994,7 +1005,7 @@ async function realJoin(kit: Kit): Promise<void> {
   );
 }
 
-const run = async (kit: Kit) => {
+const legs = async (kit: Kit) => {
   mkdirSync(SCRATCH, { recursive: true });
   const dir = project();
   const stagePort = await freePort();
@@ -1045,9 +1056,30 @@ const run = async (kit: Kit) => {
   await realJoin(kit);
 };
 
+/**
+ * The legs, on preview ports of this process's own, set before the hub's
+ * config loads: it reads `CAWCO_PREVIEW_PORTS` once, as it loads, and by
+ * default takes the hundred after the hub's port (3457–3556), the live hub's
+ * on this machine, which keeps a listener on every origin's port until its
+ * range is full (hub preview.ts `bindKept`, `reclaimOne`). On the host every
+ * one was taken ("Every preview port (3457–3556) is in use: 98 by other
+ * programs on the hub's machine", r413).
+ */
+const run = async (kit: Kit) => {
+  const ports = await leasePortRange(PREVIEW_PORTS);
+  process.env.CAWCO_PREVIEW_PORTS = ports.range;
+  try {
+    await legs(kit);
+  } finally {
+    ports.release();
+  }
+};
+
 const spec: Spec = {
   group: "Speed",
   name: "preview-burst",
+  ownProcess:
+    "its hub listeners take the preview ports it sets in CAWCO_PREVIEW_PORTS, which the hub's config reads once, as it loads: a spec before it in a run would have fixed the range at the default, a live hub's",
   run,
 };
 export default spec;
