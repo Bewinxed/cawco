@@ -429,7 +429,17 @@ function spansOf(sorted: readonly Clip[]): Track["spans"] {
   return spans;
 }
 
-/** The move's rows: its clips by the thing each moves, in the order each thing first moves. */
+/** Clips in the order the engine ran them: by where each began untuned, then as read. */
+const asRan = (a: Clip, b: Clip) =>
+  beginOf(untune(a)) - beginOf(untune(b)) || Number(a.id) - Number(b.id);
+
+/**
+ * The move's rows: its clips by the thing each moves, in the order each
+ * thing first moved as the engine ran it. The order is the untuned one, so
+ * a row he retimes stays where it stands, its editor open under it: sorted
+ * by the tuned start, a delay stepped up sent the row he was tuning below
+ * the fold and dropped its focus.
+ */
 export function tracksOf(clips: readonly Clip[]): Track[] {
   const by = new Map<Element | string, Clip[]>();
   for (const clip of clips) {
@@ -437,11 +447,13 @@ export function tracksOf(clips: readonly Clip[]): Track[] {
     by.set(key, [...(by.get(key) ?? []), clip]);
   }
   return [...by.values()]
-    .map((own): Track => {
-      const sorted = [...own].sort((a, b) => beginOf(a) - beginOf(b));
+    .map((own) => [...own].sort(asRan))
+    .sort((a, b) => asRan(a[0] as Clip, b[0] as Clip))
+    .map((ran): Track => {
+      const sorted = [...ran].sort((a, b) => beginOf(a) - beginOf(b));
       const spans = spansOf(sorted);
       const lengths = new Set(spans.map((span) => span.to - span.from));
-      const first = sorted[0] as Clip;
+      const first = ran[0] as Clip;
       return {
         id: first.id,
         clips: sorted,
@@ -451,13 +463,12 @@ export function tracksOf(clips: readonly Clip[]): Track[] {
         kind: kindOf(sorted),
         setOff: Math.min(...sorted.map((clip) => clip.start)),
         sprung: sorted.some((clip) => clip.spring !== null),
-        begins: beginOf(first),
+        begins: beginOf(sorted[0] as Clip),
         ends: Math.max(...sorted.map(endOf)),
         spans,
         length: lengths.size === 1 ? ([...lengths][0] ?? null) : null,
       };
-    })
-    .sort((a, b) => a.begins - b.begins);
+    });
 }
 
 /** When the track begins after the moment the move set it off, ms: its delay. */

@@ -425,6 +425,9 @@
       return;
     }
     stop();
+    // The move plays in sight: on a phone the thing it moves stood under
+    // the drawer, the stage scrolled to the form's head.
+    stage?.reveal(regionOf(clips));
     const length = lengthOf(clips);
     if (still) {
       replays.seek(clips, length);
@@ -526,6 +529,17 @@
       event.preventDefault();
     }
   };
+  /**
+   * Escape closes the card unless the stage is acting a move: bits-ui hands
+   * its layer a copy of the key (use-escape-layer `new KeyboardEvent(e.type,
+   * e)`), never trusted, so the trust test kept the card open on his own
+   * Escape; a play's keys land only while it arrives.
+   */
+  const personsEscape = (event: KeyboardEvent) => {
+    if (arriving) {
+      event.preventDefault();
+    }
+  };
 
   onMount(() => {
     const key = (event: KeyboardEvent) => {
@@ -584,10 +598,10 @@
   let glass = $state<HTMLElement | null>(null);
   let viewJoined = $state(false);
   /**
-   * The view card is open. It is kept mounted while shut (`forceMount`), as
-   * the glass's own card is (GlassCard), so it goes back up behind the
-   * glass's cut on its close and rests there (motion/hang), never cut off
-   * as bits-ui unmounted it.
+   * The view card is open. Shut, it is gone: kept mounted (`forceMount`)
+   * as the Shell's glass card is, it rested slid up behind a glass that
+   * here stands 4px under the window's top, its shadow a band across both
+   * panels until a reload.
    */
   let viewOpen = $state(false);
   /**
@@ -818,9 +832,14 @@
   {/if}
 {/snippet}
 
-{#snippet moveFace()}
+{#snippet moveFace(peek = false)}
   <MoveFace
     {move}
+    onfocusthing={(thing) => {
+      if (thing) {
+        stage?.reveal([thing]);
+      }
+    }}
     onlight={(thing) => {
       lit = thing;
     }}
@@ -837,6 +856,7 @@
     onseek={scrub}
     onseekend={scrubbed}
     {lang}
+    {peek}
     {playhead}
     {playing}
   />
@@ -989,7 +1009,9 @@
             </Tip>
           {/if}
           <Popover.Root bind:open={viewOpen}>
-            <Tip label={words.stageView}>
+            <!-- No tooltip over its own open card: shown, it took the
+                 card's Escape for itself. -->
+            <Tip disabled={viewOpen} label={words.stageView}>
               {#snippet children(tip)}
                 <Popover.Trigger>
                   {#snippet child({ props })}
@@ -1015,11 +1037,9 @@
               aria-label={words.stageView}
               bind:joined={viewJoined}
               customAnchor={glass}
-              forceMount
-              inert={!viewOpen}
               onCloseAutoFocus={(event: Event) =>
                 quietFocus(event, viewTrigger)}
-              onEscapeKeydown={personsOwn}
+              onEscapeKeydown={personsEscape}
               onInteractOutside={personsOwn}
               onOpenAutoFocus={(event: Event) => quietFocus(event, viewTrigger)}
               frame="settings"
@@ -1312,9 +1332,7 @@
                  map at a fit of 1.8px words with its tools cut, and the
                  animation's lines past the screen's foot. -->
             {#if face === "move"}
-              {#if !atHead}
-                {@render moveFace()}
-              {/if}
+              {@render moveFace(atHead)}
             {:else}
               {#if !single && face === "states"}
                 {@render stepper()}

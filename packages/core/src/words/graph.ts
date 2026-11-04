@@ -62,6 +62,9 @@ export const graphWords = {
 
   /** The move into the kept state. */
   move: (from: string, to: string) => `${from} → ${to}`,
+  /** A move's arrow on the map, for a reader: its two states and the act that makes it. */
+  moveEdge: (from: string, to: string, act: string | null) =>
+    act ? `${from} → ${to}, ${act}` : `${from} → ${to}`,
   noMove: (state: string) => `${state} has no animation.`,
   play: "Play",
   pause: "Pause",
@@ -72,7 +75,7 @@ export const graphWords = {
   clipStarts: (clip: string) => `Start of ${clip}`,
   clipEnds: (clip: string) => `End of ${clip}`,
   /** While the move is read off the stage. */
-  reading: "Reading the animation…",
+  reading: "Playing the move once to read its timing…",
   /** The move played but the engine saw nothing animate. */
   nothingAnimated: (from: string, to: string) =>
     `Nothing animates from ${from} to ${to}.`,
@@ -165,8 +168,6 @@ export const graphWords = {
   /** A row with several animations, opened into one row each. */
   showClips: (n: number) => `Show ${n} animations`,
   hideClips: (n: number) => `Hide ${n} animations`,
-  /** The design system's name beside the editor's Duration, when the length is one of its durations: its tooltip. */
-  durationOf: (name: string) => `The design system's “${name}” duration`,
   /** A spring row: its length's figure; a spring has no set length, so its figure is when it settles. */
   springFigure: (ms: Figure) => `~${ms} ms`,
   springSettles: (ms: Figure) => `A spring, settled by ${ms} ms`,
