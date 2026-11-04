@@ -11,8 +11,29 @@
 /** How long a title derived from a first message runs before it is cut. */
 export const TITLE_LIMIT = 80;
 
-const COMMAND_ECHO =
-  /<command-(?:message|name)>([\s\S]*?)<\/command-(?:message|name)>/u;
+const COMMAND_OPEN = /<command-(?:message|name)>/u;
+const COMMAND_CLOSE = /<\/command-(?:message|name)>/gu;
+
+/**
+ * What the harness echo of a slash command wraps: from the first
+ * `<command-message>` or `<command-name>` to the nearest closing tag of
+ * either after it. The same as
+ * `/<command-(?:message|name)>([\s\S]*?)<\/command-(?:message|name)>/u`'s
+ * first capture, in one pass: when the first opening tag has no close after
+ * it no later one has either, so an unclosed tag ends the search. That
+ * pattern scanned to the end from every unclosed opening tag, quadratic in
+ * their number.
+ */
+const commandEcho = (raw: string): string | undefined => {
+  const open = COMMAND_OPEN.exec(raw);
+  if (!open) {
+    return undefined;
+  }
+  const from = open.index + open[0].length;
+  COMMAND_CLOSE.lastIndex = from;
+  const close = COMMAND_CLOSE.exec(raw);
+  return close ? raw.slice(from, close.index) : undefined;
+};
 const ANY_TAG = /<[^>]+>/gu;
 const WHITESPACE_RUN = /\s+/gu;
 /**
@@ -44,7 +65,7 @@ const withoutAttached = (raw: string): string => {
  * started or delegated to is named by its caller, so it never gets here.
  */
 export function deriveTitleFromFirstMessage(raw: string): string {
-  const command = COMMAND_ECHO.exec(raw)?.[1]?.trim();
+  const command = commandEcho(raw)?.trim();
   // A file's or picture's line names what rode with the words, not what the session is about.
   const typed = withoutAttached(raw);
   const cleaned = (command ?? typed.replace(ANY_TAG, " "))

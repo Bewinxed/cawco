@@ -13,9 +13,14 @@
  *     without an attached line after them, derive in under {@link BOUND_MS} ms.
  * (b) Today's cases derive as before: typed words with a file's and a
  *     picture's lines after them, folded onto one line or not, an
- *     `Attached` that is not an attachment line, and a command echo.
+ *     `Attached` that is not an attachment line, and command echoes,
+ *     closed and not.
+ * (c) {@link UNCLOSED} `<command-message>` tags none of which closes derive
+ *     in under {@link BOUND_MS} ms: the command echo's pattern,
+ *     `/<command-…>([\s\S]*?)<\/command-…>/u`, scanned to the end from
+ *     each one.
  *
- * Main fails (a).
+ * Main fails (a) and (c).
  *
  *   bun scripts/probe-kit/run.ts title-long-whitespace
  */
@@ -26,6 +31,9 @@ import type { Kit, Spec } from "../kit";
 const BOUND_MS = 50;
 /** The run of whitespace the tracer timed. */
 const RUN = " ".repeat(100_000);
+
+/** How many unclosed command tags (c) times. */
+const UNCLOSED = 20_000;
 
 /** Each long message, by what it is, and the title it derives. */
 const LONG: [string, string, string][] = [
@@ -61,6 +69,10 @@ const SAME: [string, string][] = [
     "<command-message>review</command-message>\n<command-name>/review</command-name>",
     "review",
   ],
+  ["<command-name>/plan</command-name> then", "/plan"],
+  ["<command-message>a</command-name><command-name>b</command-name>", "a"],
+  ["<command-message>open only, never closed", "open only, never closed"],
+  ["<command-message>  </command-message>rest", ""],
 ];
 
 export default {
@@ -93,6 +105,15 @@ export default {
       `b: today's ${SAME.length} cases derive the titles they did`,
       wrong.length === 0,
       JSON.stringify(wrong)
+    );
+    const unclosed = "<command-message>x ".repeat(UNCLOSED);
+    const from = performance.now();
+    const got = deriveTitleFromFirstMessage(unclosed);
+    const ms = Math.round(performance.now() - from);
+    check(
+      `c: ${UNCLOSED} unclosed <command-message> tags derive in under ${BOUND_MS} ms, their words as the title`,
+      ms < BOUND_MS && got === "x ".repeat(40),
+      `${ms} ms: ${JSON.stringify(got)}`
     );
     return Promise.resolve();
   },
