@@ -11,7 +11,7 @@ import { ease } from "#lib/cawco/motion/curves.svelte.js";
 import { browser } from "$app/env";
 import type { MoveState } from "./MoveFace.svelte";
 import MoveFace from "./MoveFace.svelte";
-import { type Clip, retime, tracksOf } from "./motion";
+import { type Clip, retimeRun, tracksOf } from "./motion";
 
 /** One thing on the stage: an element a row names and rings. */
 const thing = (): Element | null =>
@@ -117,7 +117,11 @@ const edited = (): Clip[] => {
   if (!line) {
     return formMove;
   }
-  const by = new Map(retime(line, 700, 1100).map((one) => [one.id, one]));
+  const [run] = line.runs;
+  if (!run) {
+    return formMove;
+  }
+  const by = new Map(retimeRun(run, 700, 1100).map((one) => [one.id, one]));
   return formMove.map((one) => by.get(one.id) ?? one);
 };
 

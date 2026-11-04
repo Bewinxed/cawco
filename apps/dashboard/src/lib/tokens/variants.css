@@ -325,6 +325,8 @@
 @custom-variant role-label (&[data-role="label"]);
 @custom-variant role-meta (&[data-role="meta"]);
 @custom-variant role-title (&[data-role="title"]);
+@custom-variant run-end-end (&[data-run-end="end"]);
+@custom-variant run-end-start (&[data-run-end="start"]);
 @custom-variant scheme-dark (&[data-scheme="dark"]);
 @custom-variant session-hover-tone-done (&[data-session-hover-tone="done"]);
 @custom-variant session-hover-tone-failed (&[data-session-hover-tone="failed"]);

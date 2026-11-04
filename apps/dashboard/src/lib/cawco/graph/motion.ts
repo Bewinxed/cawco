@@ -98,7 +98,7 @@ const tokenOf = (ms: number): string | null =>
   LADDER.find((name) => Math.round(dur(name)) === Math.round(ms)) ?? null;
 
 /** The ladder's length nearest `ms`: where a held bar's length snaps (the owner's "Snap, and ⌥ frees it"). */
-export const snapLength = (ms: number): number =>
+const snapLength = (ms: number): number =>
   LADDER.map((name) => Math.round(dur(name))).reduce((best, one) =>
     Math.abs(one - ms) < Math.abs(best - ms) ? one : best
   );
@@ -307,9 +307,13 @@ export class Replays {
     for (const clip of clips) {
       const replay = this.#of(clip);
       if (replay) {
-        replay.currentTime = t - clip.start;
         replay.onfinish = () => this.#let(clip.id, replay);
+        // Played, then placed: `play()` on a paused animation whose time
+        // stands before 0 rewinds it to 0 (Web Animations, "play an
+        // animation", auto-rewind), so a clip the move set off later ran at
+        // once and every staggered move played collapsed.
         replay.play();
+        replay.currentTime = t - clip.start;
       }
     }
   }
@@ -395,9 +399,10 @@ export interface Track {
   /** The one length its stretches share, else null. */
   length: number | null;
   name: string;
+  /** Its runs, each grabbed, dragged and resized on its own. */
+  runs: Run[];
   /** The moment the move set it off, ms: its earliest clip's start, before any delay. */
   setOff: number;
-  spans: { from: number; to: number }[];
   /** It runs on a spring: its true end is where it settles. */
   sprung: boolean;
   thing: Element | null;
@@ -415,18 +420,58 @@ function howOf(clips: readonly Clip[]): string {
   return Object.values(words.how).find((how) => said.has(how)) ?? words.changes;
 }
 
-/** A track's stretches: its clips' windows, run together where they overlap. */
-function spansOf(sorted: readonly Clip[]): Track["spans"] {
-  const spans: Track["spans"] = [];
-  for (const clip of sorted) {
-    const last = spans.at(-1);
-    if (last && beginOf(clip) <= last.to) {
-      last.to = Math.max(last.to, endOf(clip));
+/**
+ * One run of a row: the clips of a thing that ran together as the engine
+ * ran them (their windows overlapping), a bar of its own on the lane
+ * (react-timeline-editor's `rows[].actions[]`). A run is what a drag, a
+ * resize or a key moves, and nothing else: a row of two runs dragged as
+ * one bar moved both ("Button “Create routine” changes", 80–260 and
+ * 690–870 ms).
+ */
+export interface Run {
+  clips: Clip[];
+  /** The earliest it may begin: the moment the move set its first clip off. */
+  floor: number;
+  /** Where it runs now, ms into the move. */
+  from: number;
+  /** Its first clip's id, as the engine ran it: the same run however he tunes it. */
+  id: string;
+  /** Where it ran as the engine ran it. */
+  ran: { from: number; to: number };
+  to: number;
+}
+
+/**
+ * A row's runs: its clips grouped by the windows they ran in as the engine
+ * ran them, untuned, so tuning one run never merges it into another; each
+ * run stands where its clips stand now.
+ */
+function runsOf(clips: readonly Clip[]): Run[] {
+  const groups: { clips: Clip[]; to: number }[] = [];
+  for (const clip of [...clips].sort(asRan)) {
+    const ran = untune(clip);
+    const last = groups.at(-1);
+    if (last && beginOf(ran) <= last.to) {
+      last.clips.push(clip);
+      last.to = Math.max(last.to, endOf(ran));
     } else {
-      spans.push({ from: beginOf(clip), to: endOf(clip) });
+      groups.push({ clips: [clip], to: endOf(ran) });
     }
   }
-  return spans;
+  return groups.map(({ clips: own }) => {
+    const ran = own.map(untune);
+    return {
+      id: (own[0] as Clip).id,
+      clips: own,
+      from: Math.min(...own.map(beginOf)),
+      to: Math.max(...own.map(endOf)),
+      ran: {
+        from: Math.min(...ran.map(beginOf)),
+        to: Math.max(...ran.map(endOf)),
+      },
+      floor: Math.min(...own.map((clip) => clip.start)),
+    };
+  });
 }
 
 /** Clips in the order the engine ran them: by where each began untuned, then as read. */
@@ -451,8 +496,8 @@ export function tracksOf(clips: readonly Clip[]): Track[] {
     .sort((a, b) => asRan(a[0] as Clip, b[0] as Clip))
     .map((ran): Track => {
       const sorted = [...ran].sort((a, b) => beginOf(a) - beginOf(b));
-      const spans = spansOf(sorted);
-      const lengths = new Set(spans.map((span) => span.to - span.from));
+      const runs = runsOf(sorted);
+      const lengths = new Set(runs.map((run) => run.to - run.from));
       const first = ran[0] as Clip;
       return {
         id: first.id,
@@ -465,7 +510,7 @@ export function tracksOf(clips: readonly Clip[]): Track[] {
         sprung: sorted.some((clip) => clip.spring !== null),
         begins: beginOf(sorted[0] as Clip),
         ends: Math.max(...sorted.map(endOf)),
-        spans,
+        runs,
         length: lengths.size === 1 ? ([...lengths][0] ?? null) : null,
       };
     });
@@ -475,15 +520,105 @@ export function tracksOf(clips: readonly Clip[]): Track[] {
 export const delayOf = (track: Track): number =>
   track.begins - Math.min(...track.clips.map((clip) => clip.start));
 
-/**
- * The track's clips moved and stretched so it runs from `from` to `to` ms
- * into the move: each clip keeps its place and share of the track. A clip
- * never begins before the moment the move set it off.
+/** A run's drag step and an arrow's, ms; Shift and an arrow, ms. */
+export const RUN_STEP = 10;
+export const RUN_BIG_STEP = 100;
+
+/*
+ * A run's clamps, one per gesture, after DialKit's timeline
+ * (`clampClipMove`, `clampClipResizeStart`, `clampClipResizeEnd`,
+ * dialkit/timeline, MIT): its three take seconds and hold a clip to 0,
+ * ours ms and hold a run to the moment the move set it off, so they are
+ * modelled on them rather than imported. The drag and the keys call the
+ * same ones.
  */
-export function retime(track: Track, from: number, to: number): Clip[] {
-  const scale = (to - from) / Math.max(1, track.ends - track.begins);
-  return track.clips.map((clip) => {
-    const begins = from + (beginOf(clip) - track.begins) * scale;
+const clamp = (n: number, low: number, high: number) =>
+  Math.min(Math.max(n, low), Math.max(low, high));
+
+/** A run's start as a body drag or an arrow leaves it: inside the lane, never before its floor. */
+const clampRunMove = (
+  at: number,
+  length: number,
+  floor: number,
+  end: number
+): number => clamp(at, floor, end - length);
+
+/** A run's length as its end's drag or arrow leaves it: a step at least, inside the lane. */
+const clampRunResizeEnd = (length: number, at: number, end: number): number =>
+  clamp(length, RUN_STEP, end - at);
+
+/** A run's start and length as its start's drag or arrow leaves them: never before its floor, a step long at least. */
+const clampRunResizeStart = (
+  next: number,
+  at: number,
+  length: number,
+  floor: number
+): { at: number; length: number } => {
+  const begins = clamp(next, floor, at + length - RUN_STEP);
+  return { at: begins, length: at + length - begins };
+};
+
+/** The part of a run a gesture holds. */
+export type RunPart = "body" | "start" | "end";
+
+/**
+ * The one snapper: a body on 10 ms steps; an end's length on the duration
+ * ladder (motion `snapLength`), on 10 ms steps while `free` (⌥ held).
+ */
+const snapRun = (part: RunPart, ms: number, free: boolean): number =>
+  part === "body" || free
+    ? Math.round(ms / RUN_STEP) * RUN_STEP
+    : snapLength(ms);
+
+/**
+ * Where a run stands after `part` is moved by `by` ms, snapped and held
+ * to the lane `[0, end]`: one rule for a drag and a key.
+ */
+export function moveRun(
+  run: Run,
+  part: RunPart,
+  by: number,
+  end: number,
+  free: boolean
+): { from: number; to: number } {
+  const length = run.to - run.from;
+  if (part === "body") {
+    const at = clampRunMove(
+      snapRun("body", run.from + by, free),
+      length,
+      run.floor,
+      end
+    );
+    return { from: at, to: at + length };
+  }
+  if (part === "end") {
+    const next = clampRunResizeEnd(
+      snapRun("end", length + by, free),
+      run.from,
+      end
+    );
+    return { from: run.from, to: run.from + next };
+  }
+  const moved = clampRunResizeStart(run.from + by, run.from, length, run.floor);
+  const snapped = snapRun("start", moved.length, free);
+  const begins = clampRunResizeStart(
+    run.to - snapped,
+    run.from,
+    length,
+    run.floor
+  );
+  return { from: begins.at, to: begins.at + begins.length };
+}
+
+/**
+ * A run's clips moved and stretched so it runs from `from` to `to` ms into
+ * the move, each keeping its place and share of the run; no other clip
+ * moves. A clip never begins before the moment the move set it off.
+ */
+export function retimeRun(run: Run, from: number, to: number): Clip[] {
+  const scale = (to - from) / Math.max(1, run.to - run.from);
+  return run.clips.map((clip) => {
+    const begins = from + (beginOf(clip) - run.from) * scale;
     return tune(clip, {
       delay: Math.max(0, Math.round(begins - clip.start)),
       duration: Math.max(1, Math.round(clip.duration * scale)),
