@@ -12,7 +12,13 @@ import type {
 import { machineLabel } from "@cawco/core/machine-names";
 import { updatesWords } from "@cawco/core/words/updates";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
-import { failureClause, hubFailure, hubRefusal } from "#lib/cawco/hub-read.js";
+import {
+  failureClause,
+  failureSentence,
+  hubFailure,
+  hubRefusal,
+  hubSaid,
+} from "#lib/cawco/hub-read.js";
 import { KeptUpdatesSchema } from "#lib/cawco/stored-shapes.js";
 import { newId } from "../id";
 import { readJson, writeJson } from "../storage";
@@ -137,7 +143,7 @@ class Updates {
       if (response.status === 409) {
         this.policy = null;
         this.damaged = true;
-        this.problem = `${(await hubFailure(response)).detail}.`;
+        this.problem = failureSentence(await hubFailure(response));
         return;
       }
       if (!response.ok) {
@@ -188,9 +194,7 @@ class Updates {
       }),
     }).catch(() => null);
     if (!response?.ok) {
-      const why = response
-        ? await errorText(response)
-        : "the hub did not answer";
+      const why = response ? await hubSaid(response) : "the hub did not answer";
       this.settingRefused.set(setting, {
         policy: next,
         reason:
@@ -223,9 +227,7 @@ class Updates {
       method: "POST",
     }).catch(() => null);
     if (!response?.ok) {
-      const why = response
-        ? await errorText(response)
-        : "the hub did not answer";
+      const why = response ? await hubSaid(response) : "the hub did not answer";
       this.settingRefused.set("check", {
         reason: updatesWords.noNewBuilds(why),
       });
@@ -272,7 +274,7 @@ class Updates {
     } else if (response.status === 500) {
       this.refuse(machineId, {
         act: "install",
-        reason: `${name} could not start the update: ${await errorText(response)}. It keeps the build it runs; Retry to install it again.`,
+        reason: `${name} could not start the update: ${await hubSaid(response)}. It keeps the build it runs; Retry to install it again.`,
       });
     }
   }
@@ -308,7 +310,7 @@ class Updates {
       // The install it meant to call off goes on: still this tab's to follow.
       this.refused.set(machineId, {
         act: "cancel",
-        reason: `The install on ${machineLabel(machine.hostname)} was not called off: ${response ? await errorText(response) : "the hub did not answer"}. It still installs; Retry to call it off.`,
+        reason: `The install on ${machineLabel(machine.hostname)} was not called off: ${response ? await hubSaid(response) : "the hub did not answer"}. It still installs; Retry to call it off.`,
       });
       this.keep();
       return;
@@ -316,11 +318,6 @@ class Updates {
     this.commanded.delete(machineId);
     this.keep();
   }
-}
-
-/** The hub's refusal in one sentence without its stop (hub-read `hubFailure`). */
-async function errorText(response: Response): Promise<string> {
-  return (await hubFailure(response)).detail;
 }
 
 export const updates = new Updates();

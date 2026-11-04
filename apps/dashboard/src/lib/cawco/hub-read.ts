@@ -1,3 +1,4 @@
+import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import { z } from "zod";
 /**
  * A read from the hub that says how it ended: the value, or the status the
@@ -90,7 +91,7 @@ export async function awayOf(
     ? new MachineAwayError(
         away,
         deadlineIn(reconnectingMs),
-        `${(await hubFailure(response)).detail}.`
+        failureSentence(await hubFailure(response))
       )
     : null;
 }
@@ -119,7 +120,7 @@ export async function hubFailure(response: Response): Promise<HubFailure> {
     status,
     detail:
       problem?.type === PARSE_PROBLEM
-        ? UNREAD_REQUEST
+        ? hubFailureWords.unreadRequest
         : (sentenceOf(said) ?? noAnswer(status)),
     ...(problem?.type ? { type: problem.type } : {}),
     ...(problem?.title ? { title: problem.title } : {}),
@@ -136,19 +137,22 @@ export async function hubRefusal(
   response: Response,
   then?: string
 ): Promise<Error> {
-  const { detail, status } = await hubFailure(response);
+  const failure = await hubFailure(response);
+  const { detail, status } = failure;
   return new Error(
-    then && detail === noAnswer(status) ? `${detail}, ${then}` : `${detail}.`
+    then && detail === noAnswer(status)
+      ? `${detail}, ${then}`
+      : failureSentence(failure)
   );
 }
 
-/** What the hub said went wrong, in one sentence without its stop ({@link hubFailure}). */
+/** What the hub said went wrong, in one clause without its stop, its status after it ({@link refusalClause}). */
 export async function hubSaid(response: Response): Promise<string> {
-  return (await hubFailure(response)).detail;
+  return refusalClause(await hubFailure(response));
 }
 
 /**
- * A Configure read or write: the hub's JSON answer; refused, "Could not
+ * A Configure read or write: the hub's JSON answer; refused, "Couldn't
  * `attempt`. The hub's words." thrown, or the {@link MachineAwayError} when
  * the hub says the machine it asked is away ({@link awayOf}).
  */
@@ -165,9 +169,9 @@ export async function hubCall<T>(
 }
 
 /**
- * A refused Configure write as the error it throws: "Could not `attempt`."
+ * A refused Configure write as the error it throws: "Couldn't `attempt`."
  * and then the hub's words in the error formula, its status after them
- * ({@link failureSentence}): "Could not start sign-in to ElevenLabs. This
+ * ({@link failureSentence}): "Couldn't start sign-in to ElevenLabs. This
  * server refused client registration (400)."
  */
 export async function couldNot(
@@ -175,7 +179,7 @@ export async function couldNot(
   response: Response
 ): Promise<Error> {
   return new Error(
-    `Could not ${attempt}. ${failureSentence(await hubFailure(response))}`
+    `Couldn't ${attempt}. ${failureSentence(await hubFailure(response))}`
   );
 }
 
@@ -186,28 +190,30 @@ export const jsonBody = (body: unknown): RequestInit => ({
 });
 
 /**
- * A refused read as a sentence with its stop: the hub's words with their
+ * A refused read as a clause without its stop: the hub's words with their
  * status after them for support (DESIGN.md, Voice, Error formula), or that it
- * didn't answer, which already names it.
+ * didn't answer, which already names it. Every refusal the dashboard shows
+ * says the hub's words so, through this or {@link failureSentence}.
  */
-export const failureSentence = ({ detail, status }: HubFailure): string =>
-  detail === noAnswer(status) ? `${detail}.` : `${detail} (${status}).`;
+export const refusalClause = ({ detail, status }: HubFailure): string =>
+  detail === noAnswer(status) ? detail : `${detail} (${status})`;
+
+/** {@link refusalClause} as a sentence with its stop. */
+export const failureSentence = (failure: HubFailure): string =>
+  `${refusalClause(failure)}.`;
 
 /**
  * The problem type the hub's framework writes when a request's body does not
  * parse as the type it came with (Elysia's `ParseError`, code `parse`, thrown
  * before any route of the hub runs). Its detail is the parser's exception
  * ("Unexpected end of JSON input"), and in production there is none, so it is
- * never a reason a person reads. No route of the hub writes this type.
+ * never a reason a person reads; core `hubFailureWords.unreadRequest` stands
+ * for it. No route of the hub writes this type.
  */
 const PARSE_PROBLEM = "parse";
 
-/** What a {@link PARSE_PROBLEM} says to the person, without its stop: the hub answered, refusing what this page sent as unreadable. */
-const UNREAD_REQUEST = "The hub couldn't read the request this page sent";
-
 /** That the hub didn't answer, naming the status that came instead, without a closing stop. */
-export const noAnswer = (status: number): string =>
-  `The hub didn't answer (${status})`;
+export const { noAnswer } = hubFailureWords;
 
 /** Elysia's refusal as a JSON string (`"No such rule"`) read as its words; any other text as it is. */
 function unquoted(text: string): string {
@@ -317,8 +323,7 @@ export function unreachedAnswer(response: Response): boolean {
  * again under the id it went as (id.ts `idForWords`), which the hub takes
  * as the same ask.
  */
-export const PROMPT_UNREACHED =
-  "Your message may not have gone: the hub didn't answer. Your words are back in the field. Send again once the hub answers, and it goes once.";
+export const PROMPT_UNREACHED = hubFailureWords.promptUnreached;
 
 /** Whether `error` is a request that never reached the hub, or never heard back from it. */
 export function unreachable(error: unknown): boolean {
@@ -333,8 +338,7 @@ export function unreachable(error: unknown): boolean {
  * formula"): what happened, why, and the way back. The browser's own words
  * ("Failed to fetch") are never the what-happened.
  */
-export const HUB_UNREACHABLE =
-  "The dashboard couldn't reach the hub: the request got no answer. Check that the hub's machine is up and this device is online, then try again.";
+export const HUB_UNREACHABLE = hubFailureWords.unreachable;
 
 /**
  * Why something failed, in the one wording every surface shows: a request

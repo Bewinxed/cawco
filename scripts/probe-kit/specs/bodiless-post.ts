@@ -27,7 +27,7 @@
  *    no phone (409), never a parse problem.
  * 4. A parse problem the hub writes (the body it answered these POSTs with
  *    before) reads in Configure as the hub's refusal in the error formula,
- *    never the parser's exception: "Could not start sign-in to ProbeOAuth.
+ *    never the parser's exception: "Couldn't start sign-in to ProbeOAuth.
  *    The hub couldn't read the request this page sent (400)."
  *
  *   bun scripts/probe-kit/run.ts bodiless-post
@@ -243,7 +243,7 @@ const run = async (kit: Kit) => {
     kit.check(
       "4: a parse problem from the hub reads in Configure as the hub's refusal with its status, never the parser's words",
       shown ===
-        `Could not start sign-in to ${SERVER}. The hub couldn't read the request this page sent (400).`,
+        `Couldn't start sign-in to ${SERVER}. The hub couldn't read the request this page sent (400).`,
       shown
     );
   } finally {

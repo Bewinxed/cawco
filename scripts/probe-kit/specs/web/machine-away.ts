@@ -62,7 +62,7 @@ const LINE_WITHIN_MS = 30_000;
 const BACK_WITHIN_MS = 60_000;
 /** The hub's refusal of a read, drawn as it was before a machine away was waited out. */
 const REFUSAL =
-  /whether it ran is not known|Could not read what this machine|Could not read this machine/u;
+  /whether it ran is not known|Couldn't read what this machine|Couldn't read this machine/u;
 /** The away line's words: the machine on its way back or offline, and that the read comes by itself. */
 const AWAY_WORDS =
   /is (reconnecting|offline)\. This reads again by itself once it's back\./u;

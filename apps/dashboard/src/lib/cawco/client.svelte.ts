@@ -188,6 +188,7 @@ import {
   hubRefusal,
   machineAway,
   failureWords as messageOf,
+  refusalClause,
 } from "./hub-read";
 import { newId } from "./id";
 import {
@@ -7684,7 +7685,7 @@ export function readFaultOf(
 ): ReadFault {
   return away
     ? awayFault(away, reconnectingUntil)
-    : { reason: "failed", message: failure.detail };
+    : { reason: "failed", message: refusalClause(failure) };
 }
 
 /** A read's machine away, as its fault says it ({@link readFaultOf}). */

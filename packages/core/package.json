@@ -219,6 +219,7 @@
     "./model-names": "./src/model-names.ts",
     "./fleet": "./src/fleet.ts",
     "./words/common": "./src/words/common.ts",
+    "./words/hub-failure": "./src/words/hub-failure.ts",
     "./question": "./src/question.ts",
     "./connect-ask": "./src/connect-ask.ts",
     "./asks": "./src/asks.ts",

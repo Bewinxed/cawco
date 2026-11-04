@@ -6,6 +6,13 @@
  */
 import type { FileAttachment } from "@cawco/core/attachments";
 import { z } from "zod";
+import {
+  HUB_UNREACHABLE,
+  HUB_UNREACHABLE_HEADER,
+  HubUnreachable,
+  hubRefusal,
+  unreachedAnswer,
+} from "../hub-read";
 
 export function uploadFile(
   blob: Blob,
@@ -29,7 +36,21 @@ export function uploadFile(
     };
     request.onload = () => {
       if (request.status !== 200) {
-        reject(new Error(request.responseText || `HTTP ${request.status}`));
+        // The hub's refusal read as every other is (hub-read `hubRefusal`):
+        // its words with their status, never its body as it came.
+        const answer = new Response(request.responseText, {
+          status: request.status,
+          headers: {
+            "content-type": request.getResponseHeader("content-type") ?? "",
+            [HUB_UNREACHABLE_HEADER]:
+              request.getResponseHeader(HUB_UNREACHABLE_HEADER) ?? "",
+          },
+        });
+        if (unreachedAnswer(answer)) {
+          reject(new HubUnreachable(HUB_UNREACHABLE));
+          return;
+        }
+        hubRefusal(answer).then(reject, reject);
         return;
       }
       const { ref, size, mediaType } = z
@@ -37,7 +58,7 @@ export function uploadFile(
         .parse(JSON.parse(request.responseText));
       resolve({ kind: "file", name, ref, size, mediaType });
     };
-    request.onerror = () => reject(new Error("The hub could not be reached."));
+    request.onerror = () => reject(new HubUnreachable(HUB_UNREACHABLE));
     request.send(blob);
   });
 }

@@ -588,7 +588,7 @@ const untilFetched = <T extends { fetching?: boolean }>(
         stop();
         reject(
           new Error(
-            `Could not ${attempt} — the connection to the hub dropped while it fetched. The row says what came of it once the page reconnects.`
+            `Couldn't ${attempt} — the connection to the hub dropped while it fetched. The row says what came of it once the page reconnects.`
           )
         );
       },

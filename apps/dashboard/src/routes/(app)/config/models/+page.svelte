@@ -11,8 +11,8 @@
   import {
     failureClause,
     failureWords,
-    hubFailure,
     hubRefusal,
+    hubSaid,
   } from "#lib/cawco/hub-read.js";
   import { leaveThePage } from "#lib/cawco/leaving.js";
   import { dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
@@ -108,7 +108,7 @@
       typesafeKey = "";
       takeJev((await response.json()) as JevState);
     } else {
-      jevError = `The key was not saved. ${(await hubFailure(response)).detail}. Jev's route is unchanged.`;
+      jevError = `The key was not saved. ${await hubSaid(response)}. Jev's route is unchanged.`;
     }
     savingKey = false;
   }
@@ -120,7 +120,7 @@
     if (response.ok) {
       takeJev((await response.json()) as JevState);
     } else {
-      jevError = `The key was not removed. ${(await hubFailure(response)).detail}. It is still held.`;
+      jevError = `The key was not removed. ${await hubSaid(response)}. It is still held.`;
     }
     removingKey = false;
   }

@@ -18,7 +18,7 @@ import type {
   FindKind,
   WaitingAnswer,
 } from "@cawco/core/find";
-import { hubFailure, unreachable, unreachedAnswer } from "../hub-read";
+import { hubSaid, unreachable, unreachedAnswer } from "../hub-read";
 
 export type {
   FindAnswer,
@@ -77,8 +77,7 @@ async function answer<T>(url: string, signal?: AbortSignal): Promise<Read<T>> {
     return { ok: false, unreached: true };
   }
   if (!response.ok) {
-    const { detail } = await hubFailure(response);
-    return { ok: false, unreached: false, detail };
+    return { ok: false, unreached: false, detail: await hubSaid(response) };
   }
   return { ok: true, value: (await response.json()) as T };
 }
