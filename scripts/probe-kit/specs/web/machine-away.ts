@@ -223,8 +223,19 @@ async function fixtures(fleet: KitFleet) {
     throw new Error("no hook template to start from");
   }
   await hubSend(fleet, "PUT", `/api/fleet/hooks/${HOOK_ID}`, template.draft);
+  // A hook's script lands in the machine's fleet hooks dir, outside the
+  // user layer (core paths.ts `fleetHooksDir`: `$XDG_DATA_HOME/cawco/
+  // fleet-hooks`; agent fleet.ts `hookScriptPath`), and the scratch fleet's
+  // XDG_DATA_HOME is its HOME's `.local/share` (scratch-fleet.ts).
   const script = await machineFile(
-    join(layer, "cawco-hooks", `${HOOK_ID}.sh`),
+    join(
+      fleet.home,
+      ".local",
+      "share",
+      "cawco",
+      "fleet-hooks",
+      `${HOOK_ID}.sh`
+    ),
     (template.draft.script ?? "").split("\n")[0] ?? ""
   );
   await writeFile(memory, `${MEMORY}${MEMORY_EDIT}\n`);

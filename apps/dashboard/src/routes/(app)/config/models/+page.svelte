@@ -55,7 +55,7 @@
     try {
       const response = await fetch("/api/openrouter");
       if (!response.ok) {
-        throw new Error(`the hub answered ${response.status}`);
+        throw await hubRefusal(response);
       }
 
       openrouter = (await response.json()) as OpenRouterState;
@@ -82,7 +82,7 @@
     try {
       const response = await fetch("/api/jev");
       if (!response.ok) {
-        throw new Error(`the hub answered ${response.status}`);
+        throw await hubRefusal(response);
       }
       takeJev((await response.json()) as JevState);
     } catch (error) {
@@ -231,7 +231,7 @@
     try {
       const response = await fetch("/api/fleet-watch");
       if (!response.ok) {
-        throw new Error(`the hub answered ${response.status}`);
+        throw await hubRefusal(response);
       }
       watch = (await response.json()) as FleetWatchSettings;
     } catch (error) {

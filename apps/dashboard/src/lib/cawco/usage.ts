@@ -13,6 +13,7 @@ import type {
   UsageSummary,
 } from "@cawco/core/usage/types";
 import { windowLabel, windowSpan } from "@cawco/core/usage/windows";
+import { hubRefusal } from "./hub-read";
 
 /**
  * The midnight `days` before the hub's today, in the hub's zone: the start
@@ -63,7 +64,7 @@ export function summaryReader(): (
       `/api/usage/summary?harness=${harness}&groupBy=${groupBy}&since=${since}`
     );
     if (!response.ok) {
-      throw new Error(`The hub answered ${response.status}.`);
+      throw await hubRefusal(response);
     }
     const summary = (await response.json()) as UsageSummary;
     cache.set(key, summary);

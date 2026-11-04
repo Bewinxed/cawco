@@ -16,7 +16,6 @@ export const hubFailureWords = {
    * The hub refused what the page sent as unreadable: its framework could
    * not parse the request's body (Elysia's `parse` problem), whose own detail
    * is the parser's exception. No stop, and no status: the reader adds it.
-   * A placeholder, waiting on review.
    */
   unreadRequest: "The hub couldn't read the request this page sent",
   /**

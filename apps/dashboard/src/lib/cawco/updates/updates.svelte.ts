@@ -147,7 +147,7 @@ class Updates {
         return;
       }
       if (!response.ok) {
-        throw new Error(`the hub answered ${response.status}`);
+        throw await hubRefusal(response);
       }
       this.policy = (await response.json()) as BinaryUpdatePolicy;
       this.damaged = false;

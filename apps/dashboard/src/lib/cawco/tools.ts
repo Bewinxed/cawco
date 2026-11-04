@@ -8,6 +8,7 @@ import type { Bounded } from "@cawco/core/bounded";
 import type { ToolPolicy, ToolSpec, ToolStatus } from "@cawco/core/tools";
 import { INSTALL_TIMEOUT_MS } from "#lib/config.js";
 import { machineControl } from "./client.svelte";
+import { couldNot } from "./hub-read";
 
 /** What `GET /api/tools` answers with. */
 export interface ToolsSnapshot {
@@ -41,9 +42,7 @@ export async function setPolicy(
     body: JSON.stringify(patch),
   });
   if (!response.ok) {
-    throw new Error(
-      `Could not save that policy — the hub answered ${response.status}. Try again.`
-    );
+    throw await couldNot("save that policy", response);
   }
   return (await response.json()) as ToolPolicy;
 }

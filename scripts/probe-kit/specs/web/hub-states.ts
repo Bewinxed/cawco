@@ -640,26 +640,41 @@ async function boardRead(kit: Kit, page: Page, name: string, project: string) {
     !COLON_JOIN.test(board),
     board.replace(/\s+/gu, " ").slice(0, 240)
   );
-  // The hairline under the bar here is the bar's own, drawn whatever the hub
-  // does, not a hub state's: `border-hairline`, the rule between regions
-  // (DESIGN.md, "Borders are graded. `border-hairline` separates rows and
-  // regions."; the shell's "44px top bar with a 1px hairline at every
-  // width").
+  // The bar draws no ground of its own, whatever the hub does (DESIGN.md,
+  // "No bar ground. A bar draws no fill, hairline or shadow"): no fill, no
+  // border, no shadow, no image. Its one hairline is the shelf's, on a wide
+  // bar that hosts a conversation's tabs (Shell.svelte, `data-hosting:
+  // shelf-hairline`), drawn as a 1px gradient in `--border-hairline` at the
+  // bar's foot (design.css `@utility shelf-hairline`), never a border.
   const seam = await page.evaluate(() => {
     const bar = document.querySelector<HTMLElement>('header[data-slot="top"]');
     if (!bar) {
       return null;
     }
     const probe = document.createElement("i");
-    probe.style.borderBottom = "1px solid var(--border-hairline)";
+    probe.style.backgroundImage =
+      "linear-gradient(var(--border-hairline), var(--border-hairline))";
     bar.append(probe);
-    const want = getComputedStyle(probe).borderBottomColor;
+    const hairline = getComputedStyle(probe).backgroundImage;
     probe.remove();
-    return { foot: getComputedStyle(bar).borderBottomColor, hairline: want };
+    const style = getComputedStyle(bar);
+    return {
+      hosting: bar.dataset.hosting !== undefined,
+      image: style.backgroundImage,
+      fill: style.backgroundColor,
+      border: style.borderBottomWidth,
+      shadow: style.boxShadow,
+      hairline,
+    };
   });
   kit.check(
-    `${name}, board 502: the hairline under the bar is its --border-hairline`,
-    seam !== null && seam.foot === seam.hairline,
+    `${name}, board 502: the bar draws no ground of its own, its only hairline the hosting shelf's --border-hairline`,
+    seam !== null &&
+      seam.border === "0px" &&
+      seam.shadow === "none" &&
+      (seam.hosting
+        ? seam.image === "none" || seam.image === seam.hairline
+        : seam.image === "none" && seam.fill === "rgba(0, 0, 0, 0)"),
     JSON.stringify(seam)
   );
   // Caw's own read was refused with the rest. He is drawn from the project's
