@@ -15,46 +15,25 @@
  */
 import type { Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import { COMPOSER, type Kit, open, type Spec } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/gu;
 const REFUSED = /HTTP Authentication failed/u;
 /** Past preview-access.ts `REPLACED_PASS_MS`. */
 const PAST_OVERLAP_MS = 11_000;
 /** Past PreviewPane `LINK_DOWN_MS`, where the page's link stands down and it enters again; and well short of it. */
 const DOWNS_MS = [1500, 13_000];
 
-let asked: { input: object; name: string } | null = null;
-let issued = false;
-let answer = "";
+/** The mock's one call (scripts/tool-calls.ts). */
+const calls = new ToolCalls();
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("Probe title");
   }
-  if (!(asked && [...request.all.matchAll(COMMAND)].length > 0)) {
-    return text("ok");
-  }
-  if (issued) {
-    answer ||= request.last;
-    return text("done");
-  }
-  if (request.toolNames.includes(asked.name)) {
-    issued = true;
-    return { everyMs: 5, words: [], tool: asked };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${asked.name}`, max_results: 1 },
-        },
-      }
-    : text(`${asked.name} is not offered`);
+  return calls.reply(request) ?? text("ok");
 };
 
 /** The browser's person's pass, as a cookie header, and a new entry made as the dashboard makes one. */
@@ -111,19 +90,14 @@ const run = async (kit: Kit) => {
   await fleet.agentUp();
   await fleet.accountSignedIn();
   const session = await fleet.spawn("claude", "Restart", fleet.repo);
-  asked = {
-    name: CREATE,
-    input: {
-      response_format: "detailed",
-      kind: "page",
-      does: "judge",
-      ask: "Judge this page: pin anything that reads wrong",
-      name: "restarted",
-      html: '<!doctype html><html><body><p id="one">A page across restarts.</p></body></html>',
-    },
-  };
-  await fleet.send(session, "PROBE-CALL:1");
-  await until("the page made", () => answer, Boolean, 180_000);
+  await calls.call(fleet, session, CREATE, {
+    response_format: "detailed",
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "restarted",
+    html: '<!doctype html><html><body><p id="one">A page across restarts.</p></body></html>',
+  });
   const base = await fleet.dashboard();
   const page = await kit.page("desk");
   const said: string[] = [];

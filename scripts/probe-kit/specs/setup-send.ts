@@ -50,13 +50,14 @@
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolAnswer, toolReply } from "../../tool-calls";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
 const WRITE = "mcp__cawco__folder_write";
-/** Caw's write of AGENTS.md in the turn the handed page starts, and its answer once it came. */
-const agentsWrite: { answer: string; issued: boolean } = {
+/** Caw's write of AGENTS.md in the turn the handed page starts, and its answer once it came (at once or from the background). */
+const agentsWrite: { answer: ToolAnswer; issued: boolean } = {
   issued: false,
-  answer: "",
+  answer: new ToolAnswer(),
 };
 
 /**
@@ -70,31 +71,17 @@ const respond = (request: Seen): Reply => {
     return say;
   }
   if (agentsWrite.issued) {
-    agentsWrite.answer ||= request.last;
+    agentsWrite.answer.read(request);
     return say;
   }
-  if (!request.toolNames.includes(WRITE)) {
-    return {
-      everyMs: 5,
-      words: [],
-      tool: {
-        name: "ToolSearch",
-        input: { query: `select:${WRITE}`, max_results: 1 },
-      },
-    };
+  const reply = toolReply(request, WRITE, {
+    path: "AGENTS.md",
+    content: "# Spring move\n\nFinding a flat to rent by spring.\n",
+  });
+  if (reply.tool?.name === WRITE) {
+    agentsWrite.issued = true;
   }
-  agentsWrite.issued = true;
-  return {
-    everyMs: 5,
-    words: [],
-    tool: {
-      name: WRITE,
-      input: {
-        path: "AGENTS.md",
-        content: "# Spring move\n\nFinding a flat to rent by spring.\n",
-      },
-    },
-  };
+  return reply;
 };
 
 /** A project's setup page as the project-setup skill opens it: its Setup alone. */
@@ -367,7 +354,7 @@ const run = async (kit: Kit) => {
   ).catch(() => false);
   const agents = await until(
     "Caw's write of AGENTS.md answered",
-    () => agentsWrite.answer,
+    () => agentsWrite.answer.answered?.text,
     Boolean,
     120_000
   ).catch(() => "no answer");

@@ -20,6 +20,7 @@ import type { Frame, Page } from "playwright-core";
 import type { Pin } from "../../../packages/core/src/comments";
 import { commentWords } from "../../../packages/core/src/words/comments";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import {
   COMPOSER,
   type Engine,
@@ -32,45 +33,18 @@ import {
 } from "../kit";
 import { writePagePins } from "../pins";
 
-const COMMAND = /PROBE-CALL:(\d+)/gu;
 const FRAME = 'iframe[title="Preview"]';
 const RAIL = '[data-slot="comment-rail"]';
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
+const calls = new ToolCalls();
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("Probe title");
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+  return calls.reply(request) ?? text("ok");
 };
 
 const pageHtml = (leg: string) => `<!doctype html>
@@ -103,11 +77,11 @@ const setUp = async (kit: Kit): Promise<Fleet> => {
   const call = async (tool: string, input: object): Promise<string> => {
     sent += 1;
     const marker = String(sent);
-    asks.set(marker, { name: tool, input });
-    await fleet.send(session, `PROBE-CALL:${marker}`);
+    calls.ask(marker, { name: tool, input });
+    await fleet.send(session, calls.words(marker));
     return (await until(
       `the ${tool} call (${marker})`,
-      () => answered.get(marker),
+      () => calls.answer(marker),
       Boolean,
       180_000
     )) as string;

@@ -35,12 +35,12 @@ import {
   previewEnterUrl,
 } from "../../../packages/core/src/frames";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import { type Kit, ROOT, type Spec } from "../kit";
 import { PASS_DOMAIN, storeHostMode } from "../pass-legs";
 import { passInto, previewPass } from "../preview-pass";
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/gu;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 const VITE = join(ROOT, "apps/dashboard/node_modules/vite/bin/vite.js");
 /** Vite's own words for a prebundled dep (vite.dev/guide/dep-pre-bundling#browser-cache). */
@@ -55,40 +55,14 @@ const ADD_WASM = new Uint8Array([
   0x6a, 0x0b,
 ]);
 
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
+const calls = new ToolCalls();
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("Probe title");
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+  return calls.reply(request) ?? text("ok");
 };
 
 /** Every Vite this spec started, ended as it ends. */
@@ -188,7 +162,7 @@ const probe = async (kit: Kit) => {
   await fleet.accountSignedIn();
   const session = await fleet.spawn("claude", "Cache", fleet.repo);
 
-  asks.set("1", {
+  calls.ask("1", {
     name: CREATE,
     input: {
       // The hub's record of the answer, which this spec reads (mcp-tool.ts).
@@ -200,10 +174,10 @@ const probe = async (kit: Kit) => {
       port: vitePort,
     },
   });
-  await fleet.send(session, "PROBE-CALL:1");
+  await fleet.send(session, calls.words("1"));
   const made = await until(
     "the preview made",
-    () => answered.get("1"),
+    () => calls.answer("1"),
     Boolean,
     180_000
   );

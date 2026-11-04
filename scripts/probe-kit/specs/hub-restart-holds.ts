@@ -50,6 +50,7 @@ import { Doc } from "yjs";
 import { writePin } from "../../../packages/core/src/comments";
 import { workWords } from "../../../packages/core/src/words/work";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls, toolReply } from "../../tool-calls";
 import { declareGate } from "../gate";
 import type { Kit, KitFleet, Spec } from "../kit";
 import { passedFetch } from "../preview-pass";
@@ -96,15 +97,6 @@ const tool = (name: string, input: object): Reply => ({
   words: [],
   tool: { name, input },
 });
-/** `name` called when offered, else found first through ToolSearch. */
-const offered = (request: Seen, name: string, input: object): Reply => {
-  if (request.toolNames.includes(name)) {
-    return tool(name, input);
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? tool("ToolSearch", { query: `select:${name}`, max_results: 1 })
-    : text(`${name} is not offered`);
-};
 
 /** A delegate's steps: it commits, waits until the spec arms it, then finishes. */
 interface Steps {
@@ -128,11 +120,8 @@ const stepsOf = (tag: string): Steps => {
   steps.set(tag, made);
   return made;
 };
-/** Tool calls the spec asks of a session, by marker; their answers once heard. */
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
-const CALL = /PROBE-RH-CALL:(\d+)/gu;
+/** Tool calls the spec asks of a session, by marker; their answers once heard (scripts/tool-calls.ts). */
+const calls = new ToolCalls("PROBE-RH-CALL");
 const TAG = /PROBE-RH-([A-Z0-9]+)\b/gu;
 /** Every request the model was asked with a tool list, in order. */
 const heard: Seen[] = [];
@@ -154,7 +143,7 @@ const delegateReply = (request: Seen, tag: string): Reply => {
     return tool("Bash", { command: "sleep 2", description: "Wait" });
   }
   if (!step.finished) {
-    const reply = offered(request, FINISH, {
+    const reply = toolReply(request, FINISH, {
       headline: `Committed ${tag}.`,
       summary: `Committed ${tag}.\n\nNot run: none.`,
     });
@@ -170,7 +159,7 @@ const delegateReply = (request: Seen, tag: string): Reply => {
 const restingReply = (request: Seen, tag: string): Reply => {
   const step = stepsOf(tag);
   if (!step.rested) {
-    const reply = offered(request, WAIT, {
+    const reply = toolReply(request, WAIT, {
       minutes: 60,
       reason: "the spec's word",
     });
@@ -182,31 +171,12 @@ const restingReply = (request: Seen, tag: string): Reply => {
   return text("Resting.");
 };
 
-const callReply = (request: Seen): Reply | undefined => {
-  const marker = [...request.all.matchAll(CALL)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return;
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-    }
-    return text("done");
-  }
-  const reply = offered(request, ask.name, ask.input);
-  if (reply.tool?.name === ask.name) {
-    issued.add(marker);
-  }
-  return reply;
-};
-
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Probe title");
   }
   heard.push(request);
-  const call = callReply(request);
+  const call = calls.reply(request);
   if (call) {
     return call;
   }
@@ -288,24 +258,13 @@ const asleep = async (fleet: KitFleet, id: string): Promise<string> => {
 };
 
 /** A tool call the mock makes in session `to`, and the tool's answer. */
-let calls = 0;
-const callIn = async (
+const callIn = (
   fleet: KitFleet,
   to: string,
   name: string,
   input: object
-): Promise<string> => {
-  calls += 1;
-  const marker = String(calls);
-  asks.set(marker, { name, input: { response_format: "detailed", ...input } });
-  await fleet.send(to, `PROBE-RH-CALL:${marker}`);
-  return await until(
-    `the ${name} call (${marker})`,
-    () => answered.get(marker),
-    Boolean,
-    180_000
-  );
-};
+): Promise<string> =>
+  calls.call(fleet, to, name, { response_format: "detailed", ...input });
 
 /** A delegate of `parent` in the project, tagged `tag`; its item id. */
 const delegate = async (

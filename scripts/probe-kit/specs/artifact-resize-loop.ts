@@ -72,13 +72,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import type { Pin } from "../../../packages/core/src/comments";
-import {
-  heardToolAnswer,
-  MACHINE,
-  type Reply,
-  type Seen,
-  until,
-} from "../../scratch-fleet";
+import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import {
   COMPOSER,
   type Kit,
@@ -94,7 +89,6 @@ import {
 import { pagePins, writePagePins } from "../pins";
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/gu;
 /** The id in artifact_create's answer, as the tool result carries it. */
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 const LOOP = /ResizeObserver loop/u;
@@ -110,64 +104,21 @@ const PAGE = `<!doctype html>
 </body>
 </html>`;
 
-const asks = new Map<string, { input: object; name: string }>();
 /** Each request a session's turn sent the model, its whole text, in order. */
 const requests: string[] = [];
 /** The requests the model was sent so far ({@link requests}). */
 export const modelRequests = (): readonly string[] => requests;
-const issued = new Set<string>();
-const answered = new Map<string, string>();
-/** The calls Claude Code moved to the background, by marker: the task each runs as. */
-const movedCalls = new Map<string, string>();
+/** The mock's calls: a call moved to the background answers from its task (scripts/tool-calls.ts). */
+const calls = new ToolCalls();
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
-
-/** Calls `name` with `input`, loading it through ToolSearch first when it is deferred. */
-const callTool = (request: Seen, name: string, input: object): Reply => {
-  if (request.toolNames.includes(name)) {
-    return { everyMs: 5, words: [], tool: { name, input } };
-  }
-  if (!request.toolNames.includes("ToolSearch")) {
-    return text(`${name} is not offered`);
-  }
-  return {
-    everyMs: 5,
-    words: [],
-    tool: {
-      name: "ToolSearch",
-      input: { query: `select:${name}`, max_results: 1 },
-    },
-  };
-};
 
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Probe title");
   }
   requests.push(request.all);
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    // A call Claude Code moved to the background (a send reached the
-    // session while it ran) answers in a later turn's task notification.
-    if (!answered.has(marker)) {
-      const said = heardToolAnswer(request, movedCalls.get(marker));
-      if (said.kind === "moved") {
-        movedCalls.set(marker, said.task);
-      } else {
-        answered.set(marker, said.text);
-      }
-    }
-    return text("done");
-  }
-  const reply = callTool(request, ask.name, ask.input);
-  if (reply.tool?.name === ask.name) {
-    issued.add(marker);
-  }
-  return reply;
+  return calls.reply(request) ?? text("ok");
 };
 
 /** One frame as painted, from the one the split first stands in. */
@@ -1209,14 +1160,14 @@ export const planOn = async (
   session: string,
   marker: string
 ): Promise<void> => {
-  asks.set(marker, {
+  calls.ask(marker, {
     name: TODO_WRITE,
     input: { steps: PLAN_STEPS },
   });
-  await fleet.send(session, `PROBE-CALL:${marker}`);
+  await fleet.send(session, calls.words(marker));
   await until(
     `the todo_write call (${marker})`,
-    () => answered.get(marker),
+    () => calls.answer(marker),
     Boolean,
     180_000
   );
@@ -1257,7 +1208,7 @@ export const runPhoneSheetLeaves = async (
   await page.locator(COMPOSER).click();
   await page.keyboard.type("a draft under way");
   const id = await made(kit, shown, `plan-chips-${engine}`, () =>
-    fleet.send(session, `PROBE-CALL:${shown}`)
+    fleet.send(session, calls.words(shown))
   );
   await page
     .frameLocator("[data-preview-sheet] iframe[title='Preview']")
@@ -1546,7 +1497,7 @@ export const made = async (
   name: string,
   send: () => Promise<unknown>
 ): Promise<string | null> => {
-  asks.set(marker, {
+  calls.ask(marker, {
     name: CREATE,
     input: {
       // The hub's record of the answer, which this spec reads (mcp-tool.ts).
@@ -1561,7 +1512,7 @@ export const made = async (
   await send();
   const created = (await until(
     `the artifact_create call (${marker})`,
-    () => answered.get(marker),
+    () => calls.answer(marker),
     Boolean,
     180_000
   )) as string;
@@ -1625,7 +1576,7 @@ const run = async (kit: Kit) => {
   });
   const session = await fleet.spawn("claude", "Chip wraps", fleet.repo);
   const id = await made(kit, "1", "chip-wraps", () =>
-    fleet.send(session, "PROBE-CALL:1")
+    fleet.send(session, calls.words("1"))
   );
   if (!id) {
     return;

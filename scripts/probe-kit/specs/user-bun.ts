@@ -68,6 +68,7 @@ import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { workWords } from "../../../packages/core/src/words/work";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { MODEL, type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import { declareGate, JS_GATE } from "../gate";
 import type { Kit, Spec } from "../kit";
 
@@ -113,11 +114,8 @@ const delegateSteps: Partial<
   Record<Tag, { finish?: boolean; searched?: boolean }>
 > = {};
 
-/** What each numbered message asks a session to call, and what it answered. */
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
-const COMMAND = /PROBE-CALL:(\w+)/gu;
+/** What each numbered message asks a session to call, and what it answered (scripts/tool-calls.ts). */
+const toolCalls = new ToolCalls();
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const tool = (name: string, input: object): Reply => ({
@@ -196,34 +194,13 @@ const delegateTurn = (request: Seen, tag: Tag): Reply => {
   return text("done");
 };
 
-/** A session's numbered call, as session-sheet.ts makes them. */
-const callTurn = (request: Seen, marker: string): Reply => {
-  const ask = asks.get(marker);
-  if (!ask) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? tool("ToolSearch", { query: `select:${ask.name}`, max_results: 1 })
-    : text(`${ask.name} is not offered`);
-};
-
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Probe title");
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  if (marker) {
-    return callTurn(request, marker);
+  // A session's numbered call, as session-sheet.ts makes them.
+  if (toolCalls.markerOf(request)) {
+    return toolCalls.reply(request) ?? text("ok");
   }
   const tag = TAG.exec(request.all)?.[1] as Tag | undefined;
   return tag ? delegateTurn(request, tag) : text("ok");
@@ -492,11 +469,14 @@ const run = async (kit: Kit) => {
   // B: a sheet's stage.
   const session = await fleet.spawn("claude", "Cards", bunCards);
   const call = async (n: string, name: string, input: object, who: string) => {
-    asks.set(n, { name, input: { response_format: "detailed", ...input } });
-    await fleet.send(who, `PROBE-CALL:${n}`);
+    toolCalls.ask(n, {
+      name,
+      input: { response_format: "detailed", ...input },
+    });
+    await fleet.send(who, toolCalls.words(n));
     return (await until(
       `${name}'s answer`,
-      () => answered.get(n),
+      () => toolCalls.answer(n),
       Boolean,
       300_000
     ).catch(() => "no answer")) as string;

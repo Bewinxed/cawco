@@ -80,6 +80,7 @@ import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolAnswer, ToolCalls, toolReply } from "../../tool-calls";
 import { type Kit, open, pressAt, pressIn, type Spec, settle } from "../kit";
 import { writePagePins } from "../pins";
 import { shaped } from "../words";
@@ -93,7 +94,6 @@ import {
 } from "./ink";
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/gu;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 const NAME = "comment-delivery";
 /**
@@ -224,9 +224,13 @@ const NESTED = /inside another (bwrap|macOS) sandbox|unpriv_bwrap/u;
 /** The project's conversation's reply in 7b. */
 const LEAD_WORDS = "The project's conversation: I'll take this one.";
 const CAW_WORDS = "Caw here: its writer has ended, so I'll take this one.";
-/** Caw's part (7): the pin the delivery named, his reply issued, and its answer. */
-const caw: { answer?: string; heard?: string; issued: boolean; pin?: string } =
-  { issued: false };
+/** Caw's part (7): the pin the delivery named, his reply issued, and its answer (at once or from the background). */
+const caw: {
+  answer: ToolAnswer;
+  heard?: string;
+  issued: boolean;
+  pin?: string;
+} = { answer: new ToolAnswer(), issued: false };
 
 /** Caw's turns on the routed delivery: comment_reply on the pin it names (loaded through ToolSearch first when deferred). */
 const cawReply = (request: Seen, routed: RegExpExecArray): Reply => {
@@ -234,29 +238,17 @@ const cawReply = (request: Seen, routed: RegExpExecArray): Reply => {
   caw.pin ??= routed[1];
   caw.heard ??= request.last;
   if (caw.issued) {
-    if (request.afterTool && !caw.answer) {
-      caw.answer = request.last;
-    }
+    caw.answer.read(request);
     return text("Answered in the pin's thread.");
   }
-  if (request.toolNames.includes(REPLY_TOOL)) {
+  const reply = toolReply(request, REPLY_TOOL, {
+    pin: caw.pin,
+    text: CAW_WORDS,
+  });
+  if (reply.tool?.name === REPLY_TOOL) {
     caw.issued = true;
-    return {
-      everyMs: 5,
-      words: [],
-      tool: { name: REPLY_TOOL, input: { pin: caw.pin, text: CAW_WORDS } },
-    };
   }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${REPLY_TOOL}`, max_results: 1 },
-        },
-      }
-    : text(`${REPLY_TOOL} is not offered`);
+  return reply;
 };
 
 /** Step 12's decision page, its program, and the session's long work it is pinned during. */
@@ -338,9 +330,7 @@ const busyReply = (request: Seen): Reply => {
   };
 };
 
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
+const calls = new ToolCalls();
 /** Every request the model was asked with, in order. */
 const heard: Seen[] = [];
 
@@ -361,31 +351,7 @@ const respond = (request: Seen): Reply => {
   if (routed) {
     return cawReply(request, routed);
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+  return calls.reply(request) ?? text("ok");
 };
 
 /** The session's artifact events since `from` (ms), from the hub's own table. */
@@ -1594,7 +1560,7 @@ const endedWriterChecks = async (
         inCard.includes(CAW_WORDS) &&
         !!outcome.pin?.sentAt &&
         !!outcome.pin.heard,
-      `thread ${JSON.stringify(outcome.pin?.thread)}; card ${JSON.stringify(inCard)}; tool answered ${caw.answer?.slice(0, 300)}`
+      `thread ${JSON.stringify(outcome.pin?.thread)}; card ${JSON.stringify(inCard)}; tool answered ${caw.answer.answered?.text.slice(0, 300)}`
     );
   }
 
@@ -1666,15 +1632,15 @@ const run = async (kit: Kit) => {
   ): Promise<string> => {
     sent += 1;
     const marker = String(sent);
-    asks.set(marker, {
+    calls.ask(marker, {
       name: tool,
       // The hub's record of the answer, which this spec reads (mcp-tool.ts).
       input: { response_format: "detailed", ...input },
     });
-    await fleet.send(to, `PROBE-CALL:${marker}`);
+    await fleet.send(to, calls.words(marker));
     return (await until(
       `the ${tool} call (${marker})`,
-      () => answered.get(marker),
+      () => calls.answer(marker),
       Boolean,
       180_000
     )) as string;

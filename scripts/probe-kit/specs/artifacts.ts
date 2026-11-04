@@ -155,6 +155,7 @@ import { shellWords } from "../../../packages/core/src/words/shell";
 import type { PromotedFile } from "../../../packages/hub/src/artifacts/service";
 import type { ArtifactTool } from "../../../packages/hub/src/artifacts/tools";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import {
   type Kit,
   type KitFleet,
@@ -176,7 +177,6 @@ const UPDATE = "mcp__cawco__artifact_update";
 const PROMOTE = "mcp__cawco__artifact_promote";
 /** The commit in artifact_promote's answer. */
 const ANSWERED_COMMIT = /"commit":"([0-9a-f]{40})"/u;
-const COMMAND = /PROBE-CALL:(\d+)/gu;
 /** Anything the hub would tell the session of the person's responses, or the person's picks as words. */
 const TOLD =
   /\[CawCo\] The (?:page|canvas|preview) "|changed my picks|sent my picks/u;
@@ -352,51 +352,23 @@ const watchShown = (on: Page) => {
   return posts;
 };
 
-/** What each numbered message asks the session to call, and what it answered. */
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
-/** When the model called each tool, and when its answer came back: the tool's own time. */
-const issuedAt = new Map<string, number>();
-const answeredAt = new Map<string, number>();
+/** The mock's calls on numbered messages (scripts/tool-calls.ts): when the model called each tool, and when its answer came. */
+const calls = new ToolCalls();
 let lastMarker = "";
 /** The last call's own time: from the model's call to its answer, ms. */
 const took = () =>
-  (answeredAt.get(lastMarker) ?? Number.NaN) -
-  (issuedAt.get(lastMarker) ?? Number.NaN);
+  (calls.answeredAt(lastMarker) ?? Number.NaN) -
+  (calls.issuedAt(lastMarker) ?? Number.NaN);
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("Probe title");
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask) || TOLD.test(request.last)) {
+  if (TOLD.test(request.last)) {
     return text("ok");
   }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-      answeredAt.set(marker, Date.now());
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    issuedAt.set(marker, Date.now());
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+  return calls.reply(request) ?? text("ok");
 };
 
 interface Read {
@@ -433,15 +405,15 @@ const run = async (kit: Kit) => {
       sent += 1;
       const marker = String(sent);
       lastMarker = marker;
-      asks.set(marker, {
+      calls.ask(marker, {
         name: tool,
         // The hub's record of the answer, which this spec reads (mcp-tool.ts).
         input: { response_format: "detailed", ...input },
       });
-      await fleet.send(on, `PROBE-CALL:${marker}`);
+      await fleet.send(on, calls.words(marker));
       return (await until(
         `the ${tool} call (${marker})`,
-        () => answered.get(marker),
+        () => calls.answer(marker),
         Boolean,
         180_000
       )) as string;
@@ -2341,7 +2313,7 @@ const fieldChecks = async ({
     kit.check("7: artifact_create answers the fields page's id", false, made);
     return;
   }
-  const madeAt = answeredAt.get(lastMarker) ?? Number.NaN;
+  const madeAt = calls.answeredAt(lastMarker) ?? Number.NaN;
   const readyAt = (
     await page.evaluate(
       () => (window as unknown as { __readyAt: number[] }).__readyAt

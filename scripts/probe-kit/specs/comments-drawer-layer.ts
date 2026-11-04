@@ -43,6 +43,7 @@
 import type { Frame, Page } from "playwright-core";
 import { commentWords } from "../../../packages/core/src/words/comments";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import {
   COMPOSER,
   type Engine,
@@ -57,7 +58,6 @@ import {
 } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/gu;
 const SHEET = "[data-preview-sheet]";
 const FRAME = `${SHEET} iframe[title="Preview"]`;
 const RAIL = '[data-slot="rail-sheet"]';
@@ -79,40 +79,14 @@ const PAGE = `<!doctype html>
   <div id="foot"><button type="button">Send</button></div>
 </body></html>`;
 
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
+const calls = new ToolCalls();
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("Probe title");
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+  return calls.reply(request) ?? text("ok");
 };
 
 interface Box {
@@ -708,7 +682,7 @@ const probe = async (kit: Kit) => {
   await fleet.accountSignedIn();
   const session = await fleet.spawn("claude", "Layer", fleet.repo);
   const base = await fleet.dashboard();
-  asks.set("1", {
+  calls.ask("1", {
     name: CREATE,
     input: {
       kind: "page",
@@ -718,8 +692,8 @@ const probe = async (kit: Kit) => {
       html: PAGE,
     },
   });
-  await fleet.send(session, "PROBE-CALL:1");
-  await until("the page made", () => answered.get("1"), Boolean, 180_000);
+  await fleet.send(session, calls.words("1"));
+  await until("the page made", () => calls.answer("1"), Boolean, 180_000);
   const url = `${base}/session/${session}`;
   for (const [engine, view] of [
     ["chromium", "phone"],

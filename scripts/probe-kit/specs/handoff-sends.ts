@@ -32,6 +32,7 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
+import { ToolAnswer } from "../../tool-calls";
 import type { Kit, Spec } from "../kit";
 
 /** The second machine, where the leaf runs. */
@@ -54,11 +55,11 @@ const useTool = (name: string, input: object): Reply => ({
 
 /** Who the leaf hands off to, and the file it hands; set once they stand. */
 const plan = { parent: "", stranger: "", file: "" };
-/** The leaf's steps done, and the answer its handoff got. */
-const leaf: { answers: string[]; searched: boolean; step: number } = {
+/** The leaf's steps done, and the answer its handoff got (at once or from the background). */
+const leaf: { handoff: ToolAnswer; searched: boolean; step: number } = {
   step: 0,
   searched: false,
-  answers: [],
+  handoff: new ToolAnswer(),
 };
 
 /** The leaf hands off to its parent with the file, then finishes; every other session says "ok". */
@@ -69,8 +70,8 @@ const respond = (request: Seen): Reply => {
   ) {
     return text("ok");
   }
-  if (request.afterTool && leaf.step === 1) {
-    leaf.answers[0] ??= request.last;
+  if (leaf.step >= 1) {
+    leaf.handoff.read(request);
   }
   switch (leaf.step) {
     case 0:
@@ -218,7 +219,7 @@ const spec: Spec = {
     check(
       "f3: its handoff to its parent lands the far machine's file in the parent's own inputs folder on the parent's machine, and the message names it",
       message !== null && landed === TOKEN && !folder.startsWith(far.home),
-      `${state}; landed ${JSON.stringify(landed.slice(0, 80))} at ${folder}; answer ${(leaf.answers[0] ?? "none").slice(0, 400)}`
+      `${state}; landed ${JSON.stringify(landed.slice(0, 80))} at ${folder}; answer ${(leaf.handoff.answered?.text ?? "none").slice(0, 400)}`
     );
 
     const many = Array.from(

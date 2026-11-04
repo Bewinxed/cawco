@@ -296,6 +296,7 @@ import { commentWords } from "../../../packages/core/src/words/comments";
 import { commonWords } from "../../../packages/core/src/words/common";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import { type BreathRead, readBreath } from "../breath";
 import { type MainTask, traceMain } from "../frames";
 import {
@@ -328,13 +329,10 @@ const READ = "mcp__cawco__comment_read";
 const REPLY = "mcp__cawco__comment_reply";
 const RESOLVE = "mcp__cawco__comment_resolve";
 const SHOW = "mcp__cawco__artifact_show";
-const COMMAND = /PROBE-CALL:(\d+)/gu;
 /** A message the model answers with the words kept under its number: an agent's line, written as the probe needs it. */
 const SAY = /PROBE-SAY:(\d+)/u;
 const says = new Map<string, string>();
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
-/** Claude Code's answer in place of a tool's, once it moved the running call to the background. */
-const BACKGROUNDED = /was moved to the background as task/u;
 /** The person's comments, delivered by themselves (core injected.ts `artifactCommentsNotice`). */
 const NOTICE =
   /\[CawCo\] The person commented on the page "[a-z0-9-]+" \(artifact [0-9a-f-]{36}\)\./u;
@@ -381,10 +379,8 @@ const page = (revision: "first" | "moved" | "renamed" | "gone") => {
 </main></body></html>`;
 };
 
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
-const answeredAt = new Map<string, number>();
+/** The mock's calls on numbered messages (scripts/tool-calls.ts). */
+const calls = new ToolCalls();
 /** Calls whose turn the model draws out after the tool's answer: the agent at work. */
 const slow = new Set<string>();
 /** Calls whose turn the model draws out for half a minute: long enough to read a live dot in both schemes. */
@@ -405,16 +401,8 @@ const respond = (request: Seen): Reply => {
   if (say && says.has(say) && !request.afterTool) {
     return text(says.get(say) as string);
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-      answeredAt.set(marker, Date.now());
-    }
+  // A call the model draws out after the tool's answer: the agent at work.
+  const atWork = (marker: string): Reply | undefined => {
     if (long.has(marker)) {
       return {
         everyMs: 600,
@@ -423,22 +411,9 @@ const respond = (request: Seen): Reply => {
     }
     return slow.has(marker)
       ? { everyMs: 600, words: ["Working", " on", " it", " now", "."] }
-      : text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+      : undefined;
+  };
+  return calls.reply(request, atWork) ?? text("ok");
 };
 
 let lastMarker = "";
@@ -458,24 +433,18 @@ const setUp = async (kit: Kit): Promise<On> => {
     sent += 1;
     const marker = String(sent);
     lastMarker = marker;
-    asks.set(marker, {
+    calls.ask(marker, {
       name: tool,
       // The hub's record of the answer, which this spec reads (mcp-tool.ts).
       input: { response_format: "detailed", ...input },
     });
-    await fleet.send(session, `PROBE-CALL:${marker}`);
-    const said = (await until(
+    await fleet.send(session, calls.words(marker));
+    return (await until(
       `the ${tool} call (${marker})`,
-      () => answered.get(marker),
+      () => calls.answer(marker),
       Boolean,
       180_000
     )) as string;
-    // A delivery of the person's marks reached the session as the tool ran, so
-    // Claude Code took it to the background with no answer yet. Creating an
-    // artifact by its name again answers with the same artifact.
-    return tool === CREATE && BACKGROUNDED.test(said)
-      ? await call(tool, input)
-      : said;
   };
   const base = await fleet.dashboard();
   const desk = await kit.page("desk");
@@ -1757,7 +1726,7 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     text: "Made it bolder in `src/Hero.svelte`.",
     files: ["src/Hero.svelte"],
   });
-  const done = answeredAt.get(lastMarker) ?? Date.now();
+  const done = calls.answeredAt(lastMarker) ?? Date.now();
   if ((await card.count()) === 0) {
     // Stacked: pin 1's card opens from its row.
     await rows.locator('[data-slot="pin-row"][data-pin-row="1"]').click();
@@ -10297,11 +10266,11 @@ const callIn = async (
 ): Promise<string> => {
   callsIn += 1;
   const marker = String(callsIn);
-  asks.set(marker, { name: tool, input });
-  await on.fleet.send(to, `PROBE-CALL:${marker}`);
+  calls.ask(marker, { name: tool, input });
+  await on.fleet.send(to, calls.words(marker));
   return (await until(
     `the ${tool} call (${marker})`,
-    () => answered.get(marker),
+    () => calls.answer(marker),
     Boolean,
     180_000
   )) as string;

@@ -31,16 +31,11 @@
  * point (`elementFromPoint`) and the pointer-events up its ancestors.
  */
 import type { CDPSession, Frame, Page } from "playwright-core";
-import {
-  heardToolAnswer,
-  type Reply,
-  type Seen,
-  until,
-} from "../../scratch-fleet";
+import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import { COMPOSER, type Kit, open, pressAt, type Spec, settle } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/gu;
 const FRAME = '[data-preview-sheet] iframe[title="Preview"]';
 const SHEET = "[data-preview-sheet]";
 
@@ -72,49 +67,15 @@ const PAGE = `<!doctype html>
   </script>
 </body></html>`;
 
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
-/** The calls Claude Code moved to the background, by marker: the task each runs as. */
-const movedCalls = new Map<string, string>();
+/** The mock's calls: a call moved to the background answers from its task (scripts/tool-calls.ts). */
+const calls = new ToolCalls();
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("Probe title");
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    // A call Claude Code moved to the background (a send reached the
-    // session while it ran) answers in a later turn's task notification.
-    if (!answered.has(marker)) {
-      const said = heardToolAnswer(request, movedCalls.get(marker));
-      if (said.kind === "moved") {
-        movedCalls.set(marker, said.task);
-      } else {
-        answered.set(marker, said.text);
-      }
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+  return calls.reply(request) ?? text("ok");
 };
 
 interface On {
@@ -295,7 +256,7 @@ const probe = async (kit: Kit) => {
   const cdp = await page.context().newCDPSession(page);
   const on: On = { kit, page };
 
-  asks.set("1", {
+  calls.ask("1", {
     name: CREATE,
     input: {
       // The hub's record of the answer, which this spec reads (mcp-tool.ts).
@@ -307,8 +268,8 @@ const probe = async (kit: Kit) => {
       html: PAGE,
     },
   });
-  await fleet.send(session, "PROBE-CALL:1");
-  await until("the page made", () => answered.get("1"), Boolean, 180_000);
+  await fleet.send(session, calls.words("1"));
+  await until("the page made", () => calls.answer("1"), Boolean, 180_000);
   await pageFrame(page);
   await settle(page, 400);
 

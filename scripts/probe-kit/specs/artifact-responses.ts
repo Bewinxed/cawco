@@ -39,11 +39,11 @@ import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolAnswer, ToolCalls, toolReply } from "../../tool-calls";
 import { type Kit, open, pressIn, ROOT, type Spec, settle } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
 const READ = "mcp__cawco__artifact_read";
-const COMMAND = /PROBE-CALL:(\d+)/gu;
 const BUSY = "PROBE-BUSY answer slowly";
 /** How long the busy turn's answer streams, s: every step of 1–4 happens inside it. */
 const BUSY_S = 60;
@@ -80,37 +80,18 @@ const kitPage = (): string =>
     )
     .replace("What is being decided", "The coconut song");
 
-/** What each numbered message asks the session to call, and what it answered. */
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
+/** The mock's calls on numbered messages (scripts/tool-calls.ts). */
+const calls = new ToolCalls();
 /** The agent's read of the responses: the notice it heard, then artifact_read's answer. */
 const reading: {
   answer?: string;
+  call: ToolAnswer;
   heard?: Seen;
   input?: { id: string; since: number };
   issued: boolean;
-} = { issued: false };
+} = { call: new ToolAnswer(), issued: false };
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
-
-/** Calls `name` with `input`, loading it through ToolSearch first when it is deferred. */
-const callTool = (request: Seen, name: string, input: object): Reply => {
-  if (request.toolNames.includes(name)) {
-    return { everyMs: 5, words: [], tool: { name, input } };
-  }
-  if (!request.toolNames.includes("ToolSearch")) {
-    return text(`${name} is not offered`);
-  }
-  return {
-    everyMs: 5,
-    words: [],
-    tool: {
-      name: "ToolSearch",
-      input: { query: `select:${name}`, max_results: 1 },
-    },
-  };
-};
 
 /** When the busy turn's slow answer began streaming. */
 const busy: { startedAt?: number } = {};
@@ -119,10 +100,14 @@ const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Probe title");
   }
-  // The agent's read, answered: what artifact_read returned.
-  if (reading.issued && request.afterTool && !reading.answer) {
-    reading.answer = request.last;
-    return text("Read the responses.");
+  // The agent's read, answered: what artifact_read returned, at once or
+  // from the background.
+  if (reading.issued && !reading.answer) {
+    const answered = reading.call.read(request);
+    reading.answer = answered?.text;
+    if (answered || request.afterTool) {
+      return text("Read the responses.");
+    }
   }
   const notice = NOTICE.exec(request.last);
   if (notice && !reading.answer) {
@@ -133,7 +118,7 @@ const respond = (request: Seen): Reply => {
   // deferred, so the notice's turn loads it through ToolSearch first, and
   // the request after that answers the search, the notice no longer last.
   if (reading.input && !reading.issued && !reading.answer) {
-    const reply = callTool(request, READ, reading.input);
+    const reply = toolReply(request, READ, reading.input);
     if (reply.tool?.name === READ) {
       reading.issued = true;
     }
@@ -147,22 +132,7 @@ const respond = (request: Seen): Reply => {
       words: Array.from({ length: BUSY_S }, (_, i) => `step ${i + 1}. `),
     };
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-    }
-    return text("done");
-  }
-  const reply = callTool(request, ask.name, ask.input);
-  if (reply.tool?.name === ask.name) {
-    issued.add(marker);
-  }
-  return reply;
+  return calls.reply(request) ?? text("ok");
 };
 
 interface SendRow {
@@ -237,15 +207,15 @@ const run = async (kit: Kit) => {
   const call = async (tool: string, input: object): Promise<string> => {
     sent += 1;
     const marker = String(sent);
-    asks.set(marker, {
+    calls.ask(marker, {
       name: tool,
       // The hub's record of the answer, which this spec reads (mcp-tool.ts).
       input: { response_format: "detailed", ...input },
     });
-    await fleet.send(session, `PROBE-CALL:${marker}`);
+    await fleet.send(session, calls.words(marker));
     return (await until(
       `the ${tool} call (${marker})`,
-      () => answered.get(marker),
+      () => calls.answer(marker),
       Boolean,
       180_000
     )) as string;

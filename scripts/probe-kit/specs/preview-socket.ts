@@ -57,13 +57,13 @@ import {
 import { RELAY_HEADER } from "../../../packages/core/src/preview-proxy";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import { cloudflareTo, scratchCertificate } from "../cloudflare-front";
 import { type Kit, ROOT, type Spec } from "../kit";
 import { PASS_DOMAIN, PASS_HOSTS, storeHostMode } from "../pass-legs";
 import { passedFetch, passInto, previewPass } from "../preview-pass";
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/gu;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 const TITLE = "Socket probe page";
 /** How long a socket has to echo after a load or a restart. Our call: the page retries every 300 ms, a register takes a few seconds. */
@@ -72,40 +72,14 @@ const ECHO_MS = 30_000;
 /** The page: a socket to its own `/echo` that says hello on each open, keeps every echo, and opens again 300 ms after any close. */
 const PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${TITLE}</title></head><body><h1>${TITLE}</h1><script>window.__heard=[];window.__opens=0;function connect(){var ws=new WebSocket(location.origin.replace(/^http/,"ws")+"/echo");ws.onopen=function(){window.__opens+=1;ws.send("hello")};ws.onmessage=function(e){window.__heard.push(String(e.data))};ws.onclose=function(){setTimeout(connect,300)}}connect();</script></body></html>`;
 
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
+const calls = new ToolCalls();
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("Probe title");
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+  return calls.reply(request) ?? text("ok");
 };
 
 /**
@@ -314,7 +288,7 @@ const probe = async (kit: Kit) => {
   await fleet.accountSignedIn();
   const session = await fleet.spawn("claude", "Socket", fleet.repo);
 
-  asks.set("1", {
+  calls.ask("1", {
     name: CREATE,
     input: {
       // The hub's record of the answer, which this spec reads (mcp-tool.ts).
@@ -326,10 +300,10 @@ const probe = async (kit: Kit) => {
       port: appPort,
     },
   });
-  await fleet.send(session, "PROBE-CALL:1");
+  await fleet.send(session, calls.words("1"));
   const made = await until(
     "the preview made",
-    () => answered.get("1"),
+    () => calls.answer("1"),
     Boolean,
     180_000
   );
@@ -516,7 +490,7 @@ const probe = async (kit: Kit) => {
   );
   await Bun.write(marks, "");
 
-  asks.set("2", {
+  calls.ask("2", {
     name: CREATE,
     input: {
       // The hub's record of the answer, which this spec reads (mcp-tool.ts).
@@ -529,10 +503,10 @@ const probe = async (kit: Kit) => {
     },
   });
   const wildcards = await listeningOnAll();
-  await fleet.send(session, "PROBE-CALL:2");
+  await fleet.send(session, calls.words("2"));
   const viteMade = await until(
     "the Vite preview made",
-    () => answered.get("2"),
+    () => calls.answer("2"),
     Boolean,
     180_000
   );

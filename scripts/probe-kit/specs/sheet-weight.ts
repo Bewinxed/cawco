@@ -39,6 +39,7 @@ import type { SheetWeight } from "../../../packages/core/src/stage";
 import { connectWords } from "../../../packages/core/src/words/connect";
 import { mcpWords } from "../../../packages/core/src/words/mcp";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 const APP = join(ROOT, "apps/dashboard");
@@ -384,10 +385,7 @@ const stageChecks = async (kit: Kit) => {
 };
 
 /** What each numbered message asks the session to call, and what it answered (artifacts.ts's mock). */
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
-const COMMAND = /PROBE-CALL:(\d+)/gu;
+const calls = new ToolCalls();
 /** The folder's weight in artifact_create's answer, as the tool result carries it. */
 const ANSWERED_WEIGHT = /"weight":(\{[^}]*\})/u;
 
@@ -396,31 +394,7 @@ const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Probe title");
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+  return calls.reply(request) ?? text("ok");
 };
 
 /** Check 5, on a scratch fleet. */
@@ -459,7 +433,7 @@ const folderCheck = async (kit: Kit) => {
     await fleet.agentUp();
     await fleet.accountSignedIn();
     const session = await fleet.spawn("claude", "Weight", fleet.repo);
-    asks.set("1", {
+    calls.ask("1", {
       name: "mcp__cawco__artifact_create",
       input: {
         // The hub's record of the answer, which this spec reads (mcp-tool.ts).
@@ -471,10 +445,10 @@ const folderCheck = async (kit: Kit) => {
         dir: folder,
       },
     });
-    await fleet.send(session, "PROBE-CALL:1");
+    await fleet.send(session, calls.words("1"));
     const created = (await until(
       "artifact_create's answer",
-      () => answered.get("1"),
+      () => calls.answer("1"),
       Boolean,
       180_000
     )) as string;

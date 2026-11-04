@@ -71,6 +71,7 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import { CLOUDFLARE, scratchCertificate } from "../cloudflare-front";
 import { BOUNDARY_INSIDE, type Kit, ROOT, type Spec } from "../kit";
 import { passedFetch, passInto } from "../preview-pass";
@@ -836,10 +837,7 @@ export const One = { args: {}, parameters: { viewport: 400 } };
 const PLACE_STORY = "src/Card.stories.js";
 
 /** What each numbered message asks leg 5's session to call, and what it answered. */
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
-const COMMAND = /PROBE-CALL:(\w+)/gu;
+const calls = new ToolCalls();
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 
 /** Leg 5's mock model: the call a `PROBE-CALL:<n>` names, then "done"; every other turn a word. */
@@ -848,31 +846,7 @@ const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Probe title");
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+  return calls.reply(request) ?? text("ok");
 };
 
 /** The relay of preview `instanceId`'s bridge (the hub's key for the origin, preview-bridge.ts names its socket by it): the process an argument of which ends in that socket. */
@@ -915,7 +889,7 @@ async function realJoin(kit: Kit): Promise<void> {
   await fleet.agentUp();
   await fleet.accountSignedIn();
   const session = await fleet.spawn("claude", "Cards", fleet.repo);
-  asks.set("5", {
+  calls.ask("5", {
     name: "mcp__cawco__artifact_create",
     input: {
       response_format: "detailed",
@@ -926,10 +900,10 @@ async function realJoin(kit: Kit): Promise<void> {
       ask: "Judge the card in each of its states",
     },
   });
-  await fleet.send(session, "PROBE-CALL:5");
+  await fleet.send(session, calls.words("5"));
   const created = (await until(
     "artifact_create's answer",
-    () => answered.get("5"),
+    () => calls.answer("5"),
     Boolean,
     300_000
   ).catch(() => "no answer")) as string;

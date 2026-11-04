@@ -57,19 +57,14 @@ import {
 } from "../../../packages/core/src/comments";
 import { commentWords } from "../../../packages/core/src/words/comments";
 import type { CommentRead } from "../../../packages/hub/src/artifacts/service";
-import {
-  heardToolAnswer,
-  type Reply,
-  type Seen,
-  until,
-} from "../../scratch-fleet";
+import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 import { pagePins, writePagePins } from "../pins";
 
 const CREATE = "mcp__cawco__artifact_create";
 const REPLY_TOOL = "mcp__cawco__comment_reply";
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
-const CALL = /PROBE-PR-CALL:(\d+)/gu;
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const RAIL = '[data-slot="comment-rail"]';
 const FRAME = `${PANE} iframe[title="Preview"]`;
@@ -81,74 +76,29 @@ const PAGE_HTML =
   "<!doctype html><html><body><main><h1>Refusal</h1><p>A page to pin.</p></main></body></html>";
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
-/** The calls Claude Code moved to the background, by marker: the task each runs as. */
-const movedCalls = new Map<string, string>();
+/**
+ * The mock's calls. The person's marks reach the session on their own
+ * clock, and one that lands while a call runs moves the call to the
+ * background: its answer is then the task's result, in a later turn
+ * (scripts/tool-calls.ts).
+ */
+const calls = new ToolCalls("PROBE-PR-CALL");
 
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Probe title");
   }
-  const marker = [...request.all.matchAll(CALL)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("Heard.");
-  }
-  if (issued.has(marker)) {
-    // The person's marks reach the session on their own clock, and one that
-    // lands while the call runs moves it to the background: its answer is
-    // the task's result, in a later turn.
-    if (!answered.has(marker)) {
-      const said = heardToolAnswer(request, movedCalls.get(marker));
-      if (said.kind === "moved") {
-        movedCalls.set(marker, said.task);
-      } else {
-        answered.set(marker, said.text);
-      }
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return {
-      everyMs: 5,
-      words: [],
-      tool: { name: ask.name, input: ask.input },
-    };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+  return calls.reply(request) ?? text("Heard.");
 };
 
-let calls = 0;
 /** A tool call the mock makes in session `to`, and the tool's answer. */
-const callIn = async (
+const callIn = (
   fleet: KitFleet,
   to: string,
   name: string,
   input: object
-): Promise<string> => {
-  calls += 1;
-  const marker = String(calls);
-  asks.set(marker, { name, input: { response_format: "detailed", ...input } });
-  await fleet.send(to, `PROBE-PR-CALL:${marker}`);
-  return await until(
-    `the ${name} call (${marker})`,
-    () => answered.get(marker),
-    Boolean,
-    180_000
-  );
-};
+): Promise<string> =>
+  calls.call(fleet, to, name, { response_format: "detailed", ...input });
 
 /** A doc client of the probe's own on the hub's pane socket, and what the hub told it. */
 interface Client {

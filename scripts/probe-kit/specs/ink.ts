@@ -58,6 +58,7 @@ import { join } from "node:path";
 import type { CDPSession, Frame, Page, Request } from "playwright-core";
 import { PIN_MAPS } from "../../../packages/core/src/comments";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import { type MainTask, traceMain } from "../frames";
 import {
   COMPOSER,
@@ -236,7 +237,6 @@ export const longestIn = (tasks: MainTask[], from: number, to: number) =>
 
 const CREATE = "mcp__cawco__artifact_create";
 const UPDATE = "mcp__cawco__artifact_update";
-const COMMAND = /PROBE-CALL:(\d+)/gu;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 const FRAME = 'iframe[title="Preview"]';
 const CANVAS_FRAME =
@@ -264,9 +264,7 @@ const page = (spacer: boolean, para: boolean) => `<!doctype html>
   <div class="tall"></div>
 </main></body></html>`;
 
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
+const calls = new ToolCalls();
 /** Every message the session was sent, as the model read it. */
 const heard: string[] = [];
 
@@ -276,31 +274,7 @@ const respond = (request: Seen): Reply => {
     return text("Probe title");
   }
   heard.push(request.last);
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+  return calls.reply(request) ?? text("ok");
 };
 
 export interface On {
@@ -516,15 +490,15 @@ const setUp = async (kit: Kit): Promise<On> => {
   const call = async (tool: string, input: object): Promise<string> => {
     sent += 1;
     const marker = String(sent);
-    asks.set(marker, {
+    calls.ask(marker, {
       name: tool,
       // The hub's record of the answer, which this spec reads (mcp-tool.ts).
       input: { response_format: "detailed", ...input },
     });
-    await fleet.send(session, `PROBE-CALL:${marker}`);
+    await fleet.send(session, calls.words(marker));
     return (await until(
       `the ${tool} call (${marker})`,
-      () => answered.get(marker),
+      () => calls.answer(marker),
       Boolean,
       180_000
     )) as string;

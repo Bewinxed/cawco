@@ -60,6 +60,7 @@ import type { CDPSession, Frame, Page } from "playwright-core";
 import { previewRoute } from "../../../packages/core/src/frames";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import {
   COMPOSER,
   type Kit,
@@ -74,7 +75,6 @@ import { emulateMotion } from "../motion";
 
 const CREATE = "mcp__cawco__artifact_create";
 const UPDATE = "mcp__cawco__artifact_update";
-const COMMAND = /PROBE-CALL:(\d+)/gu;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 /** The panel's canvas: its one iframe, on the stage over the panel's well (dashboard canvas/). */
 const PANEL_CANVAS =
@@ -116,40 +116,14 @@ const inks = (outline: string) =>
   }));
 
 /** What each numbered message asks the session to call, and what it answered. */
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
+const calls = new ToolCalls();
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("Probe title");
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+  return calls.reply(request) ?? text("ok");
 };
 
 /** The panel's canvas frame, once its host page has drawn. */
@@ -200,15 +174,15 @@ const setUp = async (kit: Kit): Promise<OnCanvas> => {
   const call = async (tool: string, input: object): Promise<string> => {
     sent += 1;
     const marker = String(sent);
-    asks.set(marker, {
+    calls.ask(marker, {
       name: tool,
       // The hub's record of the answer, which this spec reads (mcp-tool.ts).
       input: { response_format: "detailed", ...input },
     });
-    await fleet.send(session, `PROBE-CALL:${marker}`);
+    await fleet.send(session, calls.words(marker));
     return (await until(
       `the ${tool} call (${marker})`,
-      () => answered.get(marker),
+      () => calls.answer(marker),
       Boolean,
       180_000
     )) as string;

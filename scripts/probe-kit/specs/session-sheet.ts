@@ -201,6 +201,7 @@ import { artifactToolWords } from "../../../packages/core/src/words/artifact-too
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import { buttonNames, type Kit, open, ROOT, type Spec } from "../kit";
 import { passInto } from "../preview-pass";
 
@@ -310,11 +311,7 @@ const LONG_TITLE =
 const EDITED = `<script>\n  let { title } = $props();\n</script>\n\n<h2 data-probe="title">Edited {title}</h2>\n`;
 
 /** What each numbered message asks the session to call, and what it answered. */
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
-/** A call's marker: its leg's number, the letter of a leg's later calls (2c), and the count of a leg's repeated read (5b2). */
-const COMMAND = /PROBE-CALL:(\d+[a-z]?\d*)/gu;
+const calls = new ToolCalls();
 
 /** A verifier's brief opens this way (hub design-verify.ts `VERIFIER_BRIEF`). */
 const VERIFIER_BRIEF = "You are the design system verifier";
@@ -364,31 +361,7 @@ const respond = (request: Seen): Reply => {
   if (request.all.includes(VERIFIER_BRIEF)) {
     return verifierTurn(request);
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+  return calls.reply(request) ?? text("ok");
 };
 
 const STATUS = /"status":"(\w+)"/u;
@@ -1508,17 +1481,17 @@ const run = async (kit: Kit) => {
     input: object,
     who: string = session
   ) => {
-    asks.set(n, {
+    calls.ask(n, {
       name,
       // A CawCo tool answers the hub's record, which this spec reads, only when asked for detailed (mcp-tool.ts); the harness's own tools take no such argument.
       input: name.startsWith("mcp__cawco__")
         ? { response_format: "detailed", ...input }
         : input,
     });
-    await fleet.send(who, `PROBE-CALL:${n}`);
+    await fleet.send(who, calls.words(n));
     return (await until(
       `${name}'s answer`,
-      () => answered.get(n),
+      () => calls.answer(n),
       Boolean,
       240_000
     )) as string;

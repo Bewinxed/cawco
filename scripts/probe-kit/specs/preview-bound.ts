@@ -101,6 +101,7 @@ import { appendFile, cp, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Browser, Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import { traceMain } from "../frames";
 import { type Kit, open, type Spec } from "../kit";
 
@@ -495,42 +496,15 @@ function sheetOf(page: Page, origin: string, name: string) {
 }
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/gu;
 /** The calls the mock model makes, by the marker the message asking for each carries (artifact-reopen's). */
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
+const calls = new ToolCalls();
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("ok");
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+  return calls.reply(request) ?? text("ok");
 };
 
 /** The desk's workspace: one group of `tabs`, `active` in front. */
@@ -878,7 +852,7 @@ const run = async (kit: Kit) => {
   const madeDesk = await kit.page("desk", { init: [watchDashboard] });
   await tabsAt(madeDesk, [made], made);
   await open(madeDesk, `${base}/session/${made}`, '[data-slot="pane"]');
-  asks.set("1", {
+  calls.ask("1", {
     name: CREATE,
     input: {
       // The hub's record of the answer, which this spec reads (mcp-tool.ts).
@@ -890,8 +864,8 @@ const run = async (kit: Kit) => {
       html: pageOf("Made"),
     },
   });
-  await fleet.send(made, "PROBE-CALL:1");
-  await until("the page made", () => answered.get("1"), Boolean, 180_000);
+  await fleet.send(made, calls.words("1"));
+  await until("the page made", () => calls.answer("1"), Boolean, 180_000);
   const card = madeDesk.locator(
     '[data-slot="preview-tool"] [data-slot="page-thumb"] img'
   );
@@ -1256,7 +1230,7 @@ const run = async (kit: Kit) => {
   const easel = await kit.page("desk", { init: [watchDashboard] });
   await tabsAt(easel, [drawn, lightOne], drawn);
   await open(easel, `${base}/session/${drawn}`, '[data-slot="pane"]');
-  asks.set("2", {
+  calls.ask("2", {
     name: CREATE,
     input: {
       // The hub's record of the answer, which this spec reads (mcp-tool.ts).
@@ -1267,8 +1241,8 @@ const run = async (kit: Kit) => {
       name: "held",
     },
   });
-  await fleet.send(drawn, "PROBE-CALL:2");
-  await until("the canvas made", () => answered.get("2"), Boolean, 180_000);
+  await fleet.send(drawn, calls.words("2"));
+  await until("the canvas made", () => calls.answer("2"), Boolean, 180_000);
   const canvasFrame = easel.locator('iframe[title="Canvas"]').first();
   const docked = await until(
     "the canvas standing in the panel",

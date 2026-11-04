@@ -47,10 +47,10 @@ import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import { shellWords } from "../../../../packages/core/src/words/shell";
 import { type Reply, type Seen, until } from "../../../scratch-fleet";
+import { ToolCalls } from "../../../tool-calls";
 import { type Kit, open, type Spec } from "../../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/gu;
 /** Mean luminance a day picture is above, and a night one below. Our call. */
 const DAY_ABOVE = 0.6;
 const NIGHT_BELOW = 0.35;
@@ -82,9 +82,7 @@ const LATE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>
 const LATE_BELOW = 0.7;
 const LIGHT_ONLY = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Light only</title><style>html{background:#fafafa}body{margin:0;padding:24px;background:#fafafa;color:#111;font:16px/1.5 system-ui}</style></head><body>${CONTENT}</body></html>`;
 
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
+const calls = new ToolCalls();
 
 /** The mock model: a message carrying `PROBE-CALL:<n>` makes call `n` (preview-bound's). */
 const respond = (request: Seen): Reply => {
@@ -92,31 +90,7 @@ const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("ok");
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+  return calls.reply(request) ?? text("ok");
 };
 
 /** Counts the overlay's `cawco:captured` answers the dashboard hears, and keeps the last one's picture and scheme. */
@@ -334,7 +308,7 @@ const run = async (kit: Kit) => {
     // No emulated scheme: an emulated one is forced into every frame alike.
     await desk.emulateMedia({ colorScheme: null });
     await open(desk, `${base}/session/${id}`, '[data-slot="pane"]');
-    asks.set(marker, {
+    calls.ask(marker, {
       name: CREATE,
       input:
         typeof made === "string"
@@ -353,8 +327,8 @@ const run = async (kit: Kit) => {
               dir: made.dir,
             },
     });
-    await fleet.send(id, `PROBE-CALL:${marker}`);
-    await until("the page made", () => answered.get(marker), Boolean, 180_000);
+    await fleet.send(id, calls.words(marker));
+    await until("the page made", () => calls.answer(marker), Boolean, 180_000);
     // The page's root watched from its ready on: the capture must not touch it.
     await until(
       "the page's frame ready",

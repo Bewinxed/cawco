@@ -67,6 +67,7 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import {
   type Kit,
   type KitFleet,
@@ -80,7 +81,6 @@ import { publishBuild } from "../socket-served";
 import { shaped, startsWith } from "../words";
 
 const CREATE = "mcp__cawco__artifact_create";
-const COMMAND = /PROBE-CALL:(\d+)/gu;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 const SERVE = join(ROOT, "apps/dashboard/serve.js");
 /** The fleet board's ways into the New Session dialog. */
@@ -94,40 +94,14 @@ const CLAUDE_REFUSES = "probe: this Claude Code starts no session";
 /** How long a refused tab is watched for a socket it should not open. Our call: past the tab's longest retry wait (10 s). */
 const QUIET_MS = 12_000;
 
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
+const calls = new ToolCalls();
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("Probe title");
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+  return calls.reply(request) ?? text("ok");
 };
 
 const pageOf = (heading: string) =>
@@ -657,7 +631,7 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
   ): Promise<string | undefined> => {
     sent += 1;
     const marker = String(sent);
-    asks.set(marker, {
+    calls.ask(marker, {
       name: CREATE,
       input: {
         // The hub's record of the answer, which this spec reads (mcp-tool.ts).
@@ -669,10 +643,10 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
         html,
       },
     });
-    await fleet.send(session, `PROBE-CALL:${marker}`);
+    await fleet.send(session, calls.words(marker));
     const said = (await until(
       `the artifact_create call (${marker})`,
-      () => answered.get(marker),
+      () => calls.answer(marker),
       Boolean,
       180_000
     )) as string;

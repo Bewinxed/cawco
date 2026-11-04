@@ -182,45 +182,6 @@ export interface Seen {
 }
 
 /**
- * How Claude Code answers a tool call it moved to the background so that a
- * message that arrived while the call ran can reach the model (Claude Code
- * 2.1.318: `MCP tool "cawco/artifact_create" was moved to the background as
- * task kr5oov2q7 …`): the task's id. The call keeps running.
- */
-const MOVED_TO_BACKGROUND = /was moved to the background as task (\w+)/u;
-/**
- * A finished background task's notification, as Claude Code delivers it
- * as a later turn's words (`<task-notification>`): its id and the call's
- * result.
- */
-const TASK_RESULT =
-  /<task-id>(\w+)<\/task-id>[\s\S]*?<result>\n?([\s\S]*?)\n?<\/result>/gu;
-
-/**
- * A tool's answer, as a request that follows its call reads it: the
- * result (`last`, {@link Seen.last}), or, for a call Claude Code moved to
- * the background (a message reached the session while it ran: the hub's
- * delivery of the person's marks, a send), the task it runs as, whose
- * result comes in a later request's task notification. Pass that task
- * back as `moved` on each later request until it answers.
- */
-export const heardToolAnswer = (
-  request: Seen,
-  moved: string | undefined
-): { kind: "answered"; text: string } | { kind: "moved"; task: string } => {
-  const task = moved ?? MOVED_TO_BACKGROUND.exec(request.last)?.[1];
-  if (task === undefined) {
-    return { kind: "answered", text: request.last };
-  }
-  const result = [...request.all.matchAll(TASK_RESULT)].find(
-    (match) => match[1] === task
-  )?.[2];
-  return result === undefined
-    ? { kind: "moved", task }
-    : { kind: "answered", text: result };
-};
-
-/**
  * What the mock answers a request with: its words, one every `everyMs`; or,
  * with `tool`, one call of that tool (Anthropic messages and chat
  * completions alike), after its words when it has any, as a model says what

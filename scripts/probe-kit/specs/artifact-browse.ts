@@ -56,6 +56,7 @@ import { removeOwned } from "../../../packages/agent/src/browser/container-host"
 import type { Runtime } from "../../../packages/agent/src/browser/runtime";
 import { keptBrowserOwner } from "../../../packages/agent/src/browser/state";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import {
   browserTool,
   called,
@@ -67,13 +68,10 @@ import type { Kit, KitFleet, Spec } from "../kit";
 import { PASS_DOMAIN, storeHostMode } from "../pass-legs";
 
 const BROWSE = "mcp__cawco__artifact_browse";
-const COMMAND = /PROBE-CALL:(\d+)/gu;
 const MCP_VERSION = "1.11.0";
 
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-/** Each marker's tool result, as the next request carries it: its text, and whether it failed. */
-const answered = new Map<string, { failed: boolean; text: string }>();
+/** The mock's calls on numbered messages (scripts/tool-calls.ts). */
+const calls = new ToolCalls();
 
 /** The newest tool result's text in `request`'s body. */
 const resultText = (request: Seen): string => {
@@ -99,40 +97,13 @@ const resultText = (request: Seen): string => {
   }
 };
 
-/** The mock: a `PROBE-CALL:<n>` turn calls its ask's tool once (found by ToolSearch first when deferred), and its result is kept. */
+/** The mock: a numbered turn calls its ask's tool once (found by ToolSearch first when deferred), and its result is kept. */
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("Probe title");
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker) && request.afterTool) {
-      answered.set(marker, {
-        failed: request.toolFailed,
-        text: resultText(request),
-      });
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+  return calls.reply(request) ?? text("ok");
 };
 
 const STORY = "src/Toggle.stories.js";
@@ -848,20 +819,27 @@ const legs = async (
     program: program(sheet.id),
   });
 
-  /** The session `who` calls artifact_browse on `id` under marker `n`: its result. */
+  /**
+   * The session `who` calls artifact_browse on `id` under marker `n`: its
+   * result's own text (the tool_result block, none of what joined it) and
+   * whether it failed.
+   */
   const browse = async (who: string, n: string, id: string) => {
-    asks.set(n, {
-      name: BROWSE,
-      // The hub's record of the answer, which this spec reads (mcp-tool.ts).
-      input: { id, response_format: "detailed" },
-    });
-    await fleet.send(who, `PROBE-CALL:${n}`);
-    return await until(
-      `artifact_browse ${n} answered`,
-      () => answered.get(n),
-      Boolean,
-      180_000
+    // The hub's record of the answer, which this spec reads (mcp-tool.ts).
+    await calls.call(
+      fleet,
+      who,
+      BROWSE,
+      { id, response_format: "detailed" },
+      { marker: n }
     );
+    const answered = calls.answered(n);
+    return {
+      failed: answered?.failed ?? true,
+      text: answered?.request
+        ? resultText(answered.request)
+        : (answered?.text ?? ""),
+    };
   };
 
   // (a) The session's own artifact_browse.
@@ -920,7 +898,7 @@ const legs = async (
   const outside = await browse(outsider, "2", page.id);
   kit.check(
     "(d) a session outside the page's tree gets a refusal from artifact_browse for that page",
-    !!outside && outside.failed && !browsed(outside),
+    outside.failed && !browsed(outside),
     JSON.stringify(outside)
   );
 
