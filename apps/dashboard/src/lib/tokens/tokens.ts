@@ -566,6 +566,7 @@ export type TokenSize =
   | "size.c-post-media-max-h"
   | "size.c-board-col-min"
   | "size.c-board-col-max"
+  | "size.c-field-inline-inset"
   | "size.c-draft-col-h"
   | "size.c-task-key-w"
   | "size.c-filter-label-w"

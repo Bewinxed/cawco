@@ -24,9 +24,15 @@
       /** Its line length held to the reading measure (DESIGN.md: running text 60 to 72ch). */
       measure: { reading: "max-w-c-measure" },
       look: {
-        /** A paragraph edited where it stands (a setup page's description): text at rest, its edge only while it has focus. */
+        /** A paragraph edited where it stands (a setup's description): text
+            at rest, its edge only while it has focus. Its hover fill and
+            edge are its own box, laid where its container lays it: never
+            pulled past it by a margin into a neighbour or the container's
+            padding (owner's pin, onboarding-first-minutes #2). Its words
+            stand a boxed row's inset in (`c-field-inline-inset`, space-3
+            less its edge), on the text column of the rows beside it. */
         prose:
-          "-mx-space-2 min-h-0 border-transparent bg-transparent px-space-2 py-space-1 shadow-none hover:bg-surface-hover",
+          "min-h-0 border-transparent bg-transparent px-c-field-inline-inset py-space-1 shadow-none hover:bg-surface-hover",
         note: "max-h-c-textarea-max-h min-h-c-composer-field min-w-0 border-transparent bg-transparent px-0 py-space-2 leading-ui shadow-none placeholder-shown:truncate",
       },
     },

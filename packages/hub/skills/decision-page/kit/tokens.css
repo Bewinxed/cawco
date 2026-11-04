@@ -1242,6 +1242,8 @@
     --c-board-col-min: 15rem;
     /* A task board column's widest, and the open Archived column's cap. */
     --c-board-col-max: 22rem;
+    /* A field edited where it stands (the kit's `inline` input and `prose` textarea): its inline padding, so that inside its 1px edge its words stand where a boxed row's words stand (a row's space-3 inset), and its hover fill and focus edge are its own box, never past it into a neighbour or its container's padding. */
+    --c-field-inline-inset: calc(var(--space-3) - var(--border-width));
     /* A stage of Caw's setup draft drawn as its board column (SetupDraft, DraftColumn): its head (mark, name, kind) and two lines of what happens to work in it, so a column of one line and one of two stand at one height in their row, and the skeleton of a stage still coming stands at it. */
     --c-draft-col-h: 7.5rem;
     /* The key column of a task's Fields and Relations, so the two parts' values stand on one line. */

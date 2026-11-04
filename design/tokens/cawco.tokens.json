@@ -5967,6 +5967,19 @@
       },
       "$description": "A task board column's widest, and the open Archived column's cap."
     },
+    "c-field-inline-inset": {
+      "$type": "dimension",
+      "$value": {
+        "value": 10,
+        "unit": "px"
+      },
+      "$description": "A field edited where it stands (the kit's `inline` input and `prose` textarea): its inline padding, so that inside its 1px edge its words stand where a boxed row's words stand (a row's space-3 inset), and its hover fill and focus edge are its own box, never past it into a neighbour or its container's padding.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({space.space-3} - {size.border-width})"
+        }
+      }
+    },
     "c-draft-col-h": {
       "$type": "dimension",
       "$value": {

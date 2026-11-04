@@ -31,17 +31,18 @@
       },
       /** Its share of a row of code cells (`--code-flex`). */
       flex: { code: { box: "flex-(--code-flex)" } },
-      /** A name edited where it stands in a list row (a setup page's
-          stage): the row's words at rest, with no edge, fill or shadow, and
-          the field's edge only while it has the caret (`field-edge`), as
-          the prose textarea's (DESIGN.md, Inputs and fields, Field frame).
-          Its box bleeds space-2 past its words on each side, so the words
-          stand on the row's column and the edge, when it comes, clears them. */
+      /** A name edited where it stands in a list row (a setup's stage):
+          the row's words at rest, with no edge, fill or shadow, and the
+          field's edge only while it has the caret (`field-edge`), as the
+          prose textarea's (DESIGN.md, Inputs and fields, Field frame). Its
+          hover fill and edge are its own box, never pulled past it by a
+          margin into a neighbour or its row's padding (owner's pin,
+          onboarding-first-minutes #2); its words stand a row's inset in. */
       look: {
         inline: {
-          box: "-mx-space-2 min-w-0",
+          box: "min-w-0",
           field:
-            "h-c-btn-h-sm text-ellipsis border-transparent bg-transparent px-space-2 text-ink-row shadow-none not-focus-visible:hover:bg-surface-hover focus-visible:bg-surface-raised",
+            "h-c-btn-h-sm text-ellipsis border-transparent bg-transparent px-c-field-inline-inset text-ink-row shadow-none not-focus-visible:hover:bg-surface-hover focus-visible:bg-surface-raised",
         },
       },
     },
