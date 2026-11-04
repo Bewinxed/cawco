@@ -44,6 +44,11 @@ export interface ProjectConversationView {
   running: CawRunning[];
   /** Dollars every Caw session of the project has cost. */
   spendUsd: number;
+  /**
+   * His conversation is being started now (a project just made with Caw: its
+   * create answers once the project is made, and his start carries on).
+   */
+  starting: boolean;
 }
 
 /**

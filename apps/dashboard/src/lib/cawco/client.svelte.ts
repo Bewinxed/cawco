@@ -6771,14 +6771,15 @@ export async function machineFs<T>(
  * tapped, kept as tapped and written by nothing until the setup page is
  * sent; it carries no name (it holds the placeholder until Caw names it).
  * `prompt` starts its conversation, its first message (as the send
- * `promptId`), which sets it up: `conversation` is that session. The hub's
- * refusal is its own words.
+ * `promptId`), which sets it up. The hub answers once the project is made,
+ * Caw's start carrying on: its page shows him starting and why he couldn't
+ * (CawLead `starting`, `problem`). The hub's refusal is its own words.
  */
 export async function createProject(project: {
   template?: string;
   prompt: string;
   promptId: string;
-}): Promise<ProjectRow & { place: ProjectPlace; conversation?: string }> {
+}): Promise<ProjectRow & { place: ProjectPlace }> {
   const response = await fetch("/api/projects", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -6789,7 +6790,6 @@ export async function createProject(project: {
   }
   const created = (await response.json()) as ProjectRow & {
     place: ProjectPlace;
-    conversation?: string;
   };
   await refresh();
   return created;

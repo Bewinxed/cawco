@@ -369,8 +369,21 @@ export class CawLead {
   readonly #machinesOnline = $derived.by(() =>
     cawco.liveRead ? cawco.onlineMachines.length > 0 : this.#loadedOnline()
   );
-  /** Why he cannot start now, in a sentence; null when he can. */
-  readonly problem = $derived(this.#machinesOnline ? null : CAW_NO_MACHINE);
+  /**
+   * His conversation is being started: a project just made with Caw answers
+   * before his start ends (hub server.ts `startProject`), so the page reads
+   * his view's `starting` until his session's row is there, then the row's
+   * own status.
+   */
+  readonly starting = $derived(
+    this.conversation
+      ? this.conversation.status === "starting"
+      : this.view?.starting === true && this.view.problem === null
+  );
+  /** Why he cannot start now, or why his last start failed (his view's `problem`), in a sentence; null when he can. */
+  readonly problem = $derived(
+    this.#machinesOnline ? (this.view?.problem ?? null) : CAW_NO_MACHINE
+  );
   /** You can talk to him, on or off: the project is read and a machine is online for him to start on. */
   readonly canTalk = $derived(this.project !== null && this.#machinesOnline);
 

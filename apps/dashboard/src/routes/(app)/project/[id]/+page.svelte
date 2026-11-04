@@ -1360,6 +1360,19 @@
     });
   });
 
+  // His start carries on after a project is made (CawLead `starting`): each
+  // change of the project's row while it does (the hub's `projects.changed`
+  // as it ends, a refusal with it) reads his view again, for whether he is
+  // still starting and why he could not.
+  $effect(() => {
+    const row = project;
+    untrack(() => {
+      if (row && lead.view?.starting) {
+        lead.read();
+      }
+    });
+  });
+
   // Another hand flipped the project's events (another dashboard, the app):
   // the project row the hub's `projects.changed` brings says where they
   // stand, which every switch reads; the view is read again for what only it
@@ -1559,15 +1572,17 @@
   /**
    * How far he has got, while he drafts the setup in his conversation: his
    * setup element in his panel (SetupWell) reads it; none once the page is
-   * open, or while nothing of his runs on it.
+   * open, or while nothing of his runs on it. A project just made stands
+   * here from his start (CawLead `starting`): its first step, before his
+   * session has said anything.
    */
   const setupProgress = $derived.by(() => {
     const id = lead.conversationId;
-    if (!(notSetUp && id && project)) {
+    if (!(notSetUp && project && (id || lead.starting))) {
       return null;
     }
     const progress = setupProgressOf({
-      messages: cawco.session(id)?.messages ?? [],
+      messages: id ? (cawco.session(id)?.messages ?? []) : [],
       name: project.name,
       named: project.name !== projectWords.placeholderName,
       open: setupAsks.map((one) => ({
@@ -1578,6 +1593,7 @@
       page: setupPage !== null && lead.status !== "working",
     });
     const going =
+      lead.starting ||
       lead.status === "working" ||
       lead.status === "needs-you" ||
       setupAsks.length > 0;

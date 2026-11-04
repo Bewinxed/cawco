@@ -25079,8 +25079,6 @@ export const createServer = (
     tapped?: StagesTemplate;
   }
   interface ProjectMade {
-    /** The project's conversation setting it up, when it started. */
-    conversation?: string;
     joined: boolean;
     place: PlaceRow;
     placeAdded: boolean;
@@ -25170,28 +25168,31 @@ export const createServer = (
     });
     projectsChanged();
     projectStarters.touched(created.id, "project created");
-    const conversation = await startProject(created, asked);
+    startProject(created, asked);
     return {
       project: created,
       place: madeFrom(created),
       placeAdded: false,
       joined: false,
-      ...(conversation ? { conversation } : {}),
     };
   };
 
   /**
    * A new project's conversation set to set it up when it is made with
-   * your prompt: its session. Your prompt sets the project up whether its
-   * Caw is on or off.
+   * your prompt, started as the project is answered and carrying on after:
+   * the person's press answers once the project is made, and its page shows
+   * Caw starting (his view's `starting`, his session's row) and why he
+   * could not (his view's `problem`, caw.ts `startRefusals`). Your prompt
+   * sets the project up whether its Caw is on or off.
    */
-  const startProject = (
-    created: ProjectRow,
-    asked: ProjectAsk
-  ): Promise<string | undefined> =>
-    asked.setup
-      ? caw.setup(created.id, asked.setup)
-      : Promise.resolve(undefined);
+  const startProject = (created: ProjectRow, asked: ProjectAsk): void => {
+    if (asked.setup) {
+      detach(
+        caw.setup(created.id, asked.setup),
+        `set up ${created.id} with Caw`
+      );
+    }
+  };
 
   /**
    * A project as the API answers it: its places, and its primary checkout's
@@ -35310,8 +35311,9 @@ export const createServer = (
       // set up) its one place is its folder on the hub. `template` is the one
       // tapped, kept as tapped and written by nothing until the setup page is
       // sent; made with Caw, its conversation starts with `prompt`, the
-      // person's words alone (`conversation`, its session). A project made
-      // from a prompt with no `name` takes the placeholder Caw names it from.
+      // person's words alone, and carries on starting after the answer. A
+      // project made from a prompt with no `name` takes the placeholder Caw
+      // names it from.
       .post(
         "/api/projects",
         {
@@ -35370,7 +35372,11 @@ export const createServer = (
             ...projectOut(made.project),
             place: made.place,
             placeAdded: made.placeAdded,
-            ...(made.conversation ? { conversation: made.conversation } : {}),
+            // Read by nothing and never sent: the conversation a create with
+            // `prompt` started, before his start carried on past the answer.
+            // Kept in the shipped apps' schema (wire-compat.ts); it goes
+            // with the next WIRE_PROTOCOL.
+            conversation: undefined as string | undefined,
           };
         }
       )

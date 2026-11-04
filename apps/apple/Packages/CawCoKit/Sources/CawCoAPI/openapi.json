@@ -44287,6 +44287,10 @@
           "spendUsd": {
             "description": "Dollars every Caw session of the project has cost.",
             "type": "number"
+          },
+          "starting": {
+            "description": "His conversation is being started now (a project just made with Caw: its\ncreate answers once the project is made, and his start carries on).",
+            "type": "boolean"
           }
         },
         "required": [
@@ -44296,7 +44300,8 @@
           "on",
           "problem",
           "running",
-          "spendUsd"
+          "spendUsd",
+          "starting"
         ]
       },
       "CawRunning": {

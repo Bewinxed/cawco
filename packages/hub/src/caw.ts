@@ -1084,6 +1084,7 @@ export const createCaw = ({
       mode: project.cawMode,
       instanceId: project.conversationInstanceId,
       problem: problemOf(project) ?? startRefusals.get(projectId) ?? null,
+      starting: starting.has(projectId),
       running: initiated(project),
       spendUsd: db.cawSpentSince(projectId, 0),
     };

@@ -30,6 +30,11 @@
  *    write of AGENTS.md is approved by it (caw.ts `setupSent`). (Before:
  *    an ended writer's Send went to Caw as a note alone, applying nothing
  *    of the Setup and approving nothing.)
+ * 6. New project's create (`POST /api/projects` with the person's words and
+ *    `caw: true`) answers once the project is made, Caw's start carrying
+ *    on: his view says `starting` as it answers, and his conversation
+ *    starts after. (Nightly 6583: the answer waited on his session's start
+ *    on its machine, about 14 s.)
  */
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
 import { toolWords } from "../../lib/tool-call";
@@ -38,7 +43,10 @@ import type { Kit, KitFleet, Spec } from "../kit";
 
 const WRITE = "mcp__cawco__folder_write";
 /** Caw's write of AGENTS.md in the turn the handed page starts, and its answer once it came. */
-const agentsWrite = { issued: false, answer: "" };
+const agentsWrite: { answer: string; issued: boolean } = {
+  issued: false,
+  answer: "",
+};
 
 /**
  * Every request: a word; the probe calls the writer's tools itself. Caw,
@@ -370,6 +378,33 @@ const run = async (kit: Kit) => {
       cawHeard,
       agents: agents.slice(-300),
     })
+  );
+
+  // 6. New project with Caw: the answer before his start ends.
+  const createdAt = Date.now();
+  const made6 = await fleet.api<{ id: string }>("/api/projects", {
+    prompt: "Keep track of my flat hunt for next spring.",
+    promptId: crypto.randomUUID(),
+    caw: true,
+  });
+  const answeredIn = Date.now() - createdAt;
+  const atAnswer = await fleet.api<{
+    instanceId: string | null;
+    starting?: boolean;
+  }>(`/api/projects/${made6.id}/caw`);
+  const started = await until(
+    "Caw's conversation started",
+    () =>
+      fleet.api<{ instanceId: string | null; starting?: boolean }>(
+        `/api/projects/${made6.id}/caw`
+      ),
+    (view) => view.instanceId !== null && view.starting === false,
+    120_000
+  ).catch(() => null);
+  kit.check(
+    "6: New project with Caw answers once the project is made: his view says starting, and his conversation starts after",
+    atAnswer.starting === true && started !== null,
+    JSON.stringify({ answeredIn, atAnswer, started })
   );
 };
 
