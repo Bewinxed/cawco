@@ -1,7 +1,7 @@
 /**
- * The house rules read a drawn page as a person sees it: planted pages of
+ * The rendered checks read a drawn page as a person sees it: planted pages of
  * their own, each a case a rule once misread or the rule must still catch,
- * so a rule's fix never quiets what it is for (house-rules.ts).
+ * so a rule's fix never quiets what it is for (rendered-checks.ts).
  *
  *  1. fat-row, a field column: three labelled selects stacked, each its
  *     label over its control. A field is no one-line row: no finding.
@@ -23,10 +23,11 @@
  *  7. coral, a card not chosen: the same card with nothing saying it is
  *     chosen: two corals, named.
  *
- *   bun scripts/probe-kit/run.ts web house-rules-reads
+ *   bun scripts/probe-kit/run.ts web rendered-checks-reads
  */
-import { type HouseRule, HouseRules } from "../../house-rules";
+
 import type { Spec } from "../../kit";
+import { type CheckName, RenderedChecks } from "../../rendered-checks";
 
 const BASE = `<!doctype html>
 <meta name="viewport" content="width=device-width">
@@ -50,7 +51,7 @@ const CORAL = `<style>
 
 interface Case {
   html: string;
-  rule: HouseRule;
+  rule: CheckName;
   want: "finding" | "none";
 }
 
@@ -121,20 +122,20 @@ const CASES: Record<string, Case> = {
 
 const spec: Spec = {
   group: "The probe kit's own rig",
-  name: "house-rules-reads",
+  name: "rendered-checks-reads",
   run: async (kit) => {
     const page = await kit.page("phone");
-    const house = new HouseRules(kit, "house-rules-reads", {
+    const checks = new RenderedChecks(kit, "rendered-checks-reads", {
       noImpeccable: "planted pages, read by the house's own code",
     });
     for (const [label, { html, rule, want }] of Object.entries(CASES)) {
       await page.setContent(html);
-      const read = await house.at(page, label);
+      const read = await checks.at(page, label);
       const named = read.findings.filter((one) => one.rule === rule);
       kit.check(
         want === "finding"
-          ? `house-rules-reads: ${label}, ${rule} names it`
-          : `house-rules-reads: ${label}, ${rule} finds nothing`,
+          ? `rendered-checks-reads: ${label}, ${rule} names it`
+          : `rendered-checks-reads: ${label}, ${rule} finds nothing`,
         want === "finding" ? named.length > 0 : named.length === 0,
         named.length > 0
           ? named.map((one) => `${one.element}: ${one.measured}`).join(" | ")
