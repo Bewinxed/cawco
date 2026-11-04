@@ -57,15 +57,22 @@
  *     Homebrew holds can't take a pin, says so, and nothing runs. End to
  *     end, a press carrying no pin, on a fleet that pins one, installs it:
  *     the hub puts the fleet's pin in.
- * (j) The owner's switches, read where Claude Code reads them:
- *     DISABLE_AUTOUPDATER in `~/.claude/settings.json` declines CawCo's
- *     automatic update and says why, while a press still updates;
- *     DISABLE_UPDATES in the environment declines a press too. End to end,
- *     a machine whose agent runs with DISABLE_AUTOUPDATER on (the scratch
- *     fleet's default) is never updated, and its row says why.
+ * (j) The owner's switches, in the settings Claude Code's own engine
+ *     resolves (the Agent SDK's `resolveSettings`): DISABLE_AUTOUPDATER in
+ *     `~/.claude/settings.json` declines CawCo's automatic update and says
+ *     why, while a press still updates; DISABLE_UPDATES in the environment
+ *     declines a press too. End to end, a machine whose agent runs with
+ *     DISABLE_AUTOUPDATER on (the scratch fleet's default) is never updated,
+ *     and its row says why.
  * (k) A copy Homebrew holds is updated with `brew upgrade claude-code`,
  *     never `claude update`; a brew that refuses leaves its words on the
  *     row. End to end, the hub updates such a machine with no press.
+ * (l) CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, set to anything, `0` too,
+ *     declines CawCo's automatic update; a press still updates.
+ * (m) Where the engine says a switch is set, as a row names it: Claude
+ *     Code's macOS profile, HKLM and HKCU registry policies, managed
+ *     settings files and server-managed settings each stand over the
+ *     user's settings, and the settings' `env` over the environment's.
  *
  *   bun scripts/probe-kit/run.ts cli-kept-current
  */
@@ -79,23 +86,18 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  plistPaths,
-  policyEnv,
-  readPolicy,
-  registryText,
-} from "../../../packages/agent/src/tool-policies";
+import type {
+  PolicySettingsOrigin,
+  ResolvedSettings,
+} from "@anthropic-ai/claude-agent-sdk";
+import { switchedOffIn } from "../../../packages/agent/src/tools";
 import { type Bounded, readWithin } from "../../../packages/core/src/bounded";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import { machineLabel } from "../../../packages/core/src/machine-names";
 import type { ToolStatus } from "../../../packages/core/src/tools";
-import {
-  switchOn,
-  TOOL_CATALOG,
-  toolSpec,
-} from "../../../packages/core/src/tools";
+import { TOOL_CATALOG, toolSpec } from "../../../packages/core/src/tools";
 import { toolWords } from "../../../packages/core/src/words/tools";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import {
@@ -1304,163 +1306,86 @@ const machineLegs = async (kit: Kit, root: string): Promise<void> => {
   }
 };
 
-/** The hive's short name in a key, as reg.exe prints the key in full. */
-const HKLM = /^HKLM\\/u;
-
 /**
- * What reg.exe prints for `reg query <key> /v Settings`, as Windows lays
- * it out: a blank line, the key, the value indented four spaces with its
- * type and data four apart, a blank line; CRLF throughout.
+ * (m) Where Claude Code's own engine says a switch is set, as a row names it
+ * (agent tools.ts `switchedOffIn`): neither macOS nor Windows runs here, and
+ * no managed tier can be laid on this machine (its folder is root's), so
+ * each managed source is the engine's answer as its type has it, over the
+ * user's settings.
  */
-const regQueryOutput = (key: string, type: string, data: string): string =>
-  [
-    "",
-    key.replace(HKLM, "HKEY_LOCAL_MACHINE\\"),
-    `    Settings    ${type}    ${data}`,
-    "",
-    "",
-  ].join("\r\n");
-
-/** A stand-in program: logs its arguments, one line each call, then answers as `body` says. */
-const program = async (file: string, log: string, body: string) =>
-  executable(
-    file,
-    `#!${systemProgram("bash")}
-printf '%s\\n' "$*" >> ${JSON.stringify(log)}
-${body}
-`
-  );
-
-/**
- * (m) Claude Code's managed policies that are no file, read where it reads
- * them: neither macOS nor Windows runs here, so each reader's parse is held
- * to its tool's real output shape, and its command to the one Claude Code
- * runs, through stand-ins for plutil and reg.exe.
- */
-const policyLegs = async (kit: Kit, root: string): Promise<void> => {
+const settingsLegs = (kit: Kit): void => {
   const { check } = kit;
   const switches = toolSpec("claude")?.updatesOff;
-  const profile = switches?.policies?.darwin?.[0];
-  const registry = switches?.policies?.win32?.[0];
-  if (profile?.kind !== "plist" || registry?.kind !== "registry") {
-    check(
-      "(m) the catalog names Claude Code's macOS profile and Windows registry policy",
-      false,
-      JSON.stringify(switches?.policies)
-    );
+  if (!switches) {
+    check("(m) the catalog has Claude Code's switches", false);
     return;
   }
-  const json = '{"env":{"DISABLE_AUTOUPDATER":"1"}}';
-  check(
-    "(m) a REG_SZ value as reg.exe prints it reads as its JSON, as Claude Code's Fe reads it",
-    registryText(
-      regQueryOutput(registry.key, "REG_SZ", json),
-      registry.value
-    ) === json,
-    JSON.stringify(regQueryOutput(registry.key, "REG_SZ", json))
-  );
-  check(
-    "(m) so does a REG_EXPAND_SZ value; a key with no Settings value reads as none",
-    registryText(
-      regQueryOutput(registry.key, "REG_EXPAND_SZ", json),
-      registry.value
-    ) === json &&
-      registryText(
-        regQueryOutput(registry.key, "REG_SZ", json).replace(
-          "Settings",
-          "Other"
-        ),
-        registry.value
-      ) === undefined
-  );
-  const plutilJson =
-    '{"env":{"DISABLE_UPDATES":true,"DISABLE_AUTOUPDATER":1},"permissions":{"deny":["Read(./.env)"]}}';
-  const env = policyEnv(plutilJson);
-  check(
-    "(m) plutil's JSON of a profile reads as its env, a plist's booleans and integers on as Claude Code reads them",
-    switchOn(env?.DISABLE_UPDATES) &&
-      switchOn(env?.DISABLE_AUTOUPDATER) &&
-      policyEnv('{"permissions":{}}') === undefined &&
-      policyEnv("not json") === undefined,
-    JSON.stringify(env)
-  );
-  const user = "alice";
-  check(
-    "(m) the profile is the user's own managed preferences, then the device's",
-    JSON.stringify(plistPaths(profile.domain, user)) ===
-      JSON.stringify([
-        join("/Library/Managed Preferences", user, `${profile.domain}.plist`),
-        join("/Library/Managed Preferences", `${profile.domain}.plist`),
-      ])
-  );
-
-  const dir = join(root, "policies");
-  await mkdir(dir, { recursive: true });
-  const plutilLog = join(dir, "plutil.log");
-  const regLog = join(dir, "reg.log");
-  // plutil as macOS has it: a file that isn't there fails, as plutil says
-  // "file does not exist"; the device's profile converts.
-  await program(
-    join(dir, "plutil"),
-    plutilLog,
-    `case "\${@: -1}" in
-  "/Library/Managed Preferences/"*/*) echo "\${@: -1}: file does not exist or is not readable or is not a regular file" >&2; exit 1 ;;
-  *) printf '%s' ${JSON.stringify(json)} ;;
-esac`
-  );
-  // reg.exe prints its CRLF output byte for byte, read whole by builtins.
-  const regOutput = join(dir, "reg-output.txt");
-  await writeFile(regOutput, regQueryOutput(registry.key, "REG_SZ", json));
-  await program(
-    join(dir, "reg.exe"),
-    regLog,
-    `IFS= read -r -d '' out < ${JSON.stringify(regOutput)}
-printf '%s' "$out"`
-  );
-  await program(
-    join(dir, "reg-absent.exe"),
-    join(dir, "reg-absent.log"),
-    `echo "ERROR: The system was unable to find the specified registry key or value." >&2
-exit 1`
-  );
-  const stands = {
-    plutil: () => join(dir, "plutil"),
-    reg: () => join(dir, "reg.exe"),
+  const user: ResolvedSettings["sources"][number] = {
+    source: "user",
+    path: join(homedir(), CLAUDE_DIR_NAME, "settings.json"),
+    settings: { env: { DISABLE_AUTOUPDATER: "0" } },
   };
-  const fromProfile = await readPolicy(profile, {}, stands);
-  const plutilRan = (await readFile(plutilLog, "utf8")).trim().split("\n");
-  check(
-    "(m) the profile is read with plutil -convert json -o - --, the user's first, and the device's stands when the user has none",
-    fromProfile?.env.DISABLE_AUTOUPDATER === "1" &&
-      fromProfile.where === toolWords.inProfile(profile.domain) &&
-      plutilRan.length === 2 &&
-      plutilRan.every((line) => line.startsWith("-convert json -o - -- ")) &&
-      plutilRan[1]?.endsWith(plistPaths(profile.domain, undefined)[0] ?? "") ===
-        true,
-    `${JSON.stringify(fromProfile)}; plutil ran: ${plutilRan.join(" | ")}`
-  );
-  const fromRegistry = await readPolicy(registry, {}, stands);
-  const regRan = (await readFile(regLog, "utf8")).trim();
-  check(
-    `(m) the registry is read with reg.exe query ${registry.key} /v ${registry.value}, and its JSON's env stands`,
-    fromRegistry?.env.DISABLE_AUTOUPDATER === "1" &&
-      fromRegistry.where ===
-        toolWords.inRegistry(registry.value, registry.key) &&
-      regRan === `query ${registry.key} /v ${registry.value}`,
-    `${JSON.stringify(fromRegistry)}; reg.exe ran: ${regRan}`
-  );
-  const absent = await readPolicy(
-    registry,
-    {},
+  /** The engine's answer: the managed source `origin` names sets DISABLE_AUTOUPDATER on over the user's off. */
+  const managed = (policyOrigin: PolicySettingsOrigin): ResolvedSettings => ({
+    effective: { env: { DISABLE_AUTOUPDATER: "1" } },
+    provenance: {},
+    sources: [
+      user,
+      {
+        source: "managed",
+        policyOrigin,
+        settings: { env: { DISABLE_AUTOUPDATER: "1" } },
+      },
+    ],
+  });
+  // Where Claude Code keeps each, as the managed-settings docs name them.
+  const places: [PolicySettingsOrigin, string][] = [
+    ["plist", toolWords.inProfile("com.anthropic.claudecode")],
+    [
+      "hklm",
+      toolWords.inRegistry("Settings", "HKLM\\SOFTWARE\\Policies\\ClaudeCode"),
+    ],
+    [
+      "hkcu",
+      toolWords.inRegistry("Settings", "HKCU\\SOFTWARE\\Policies\\ClaudeCode"),
+    ],
+    ["file", toolWords.inManagedFiles],
+    ["remote", toolWords.inServerManaged],
+    ["helper", toolWords.inManaged],
+  ];
+  for (const [origin, words] of places) {
+    const off = switchedOffIn(switches, true, {}, managed(origin));
+    check(
+      `(m) DISABLE_AUTOUPDATER from the managed source the engine names ${origin} stands over the user's settings, said to be in ${words}`,
+      off?.variable === "DISABLE_AUTOUPDATER" && off.where === words,
+      JSON.stringify(off)
+    );
+  }
+  const settingsOver = switchedOffIn(
+    switches,
+    true,
+    { DISABLE_AUTOUPDATER: "1" },
     {
-      ...stands,
-      reg: () => join(dir, "reg-absent.exe"),
+      effective: { env: { DISABLE_AUTOUPDATER: "0" } },
+      sources: [user],
     }
   );
   check(
-    "(m) a key reg.exe can't find is no policy",
-    absent === undefined,
-    JSON.stringify(absent)
+    "(m) the settings' env stands over the environment's: DISABLE_AUTOUPDATER off in them is off, though the environment sets it on",
+    settingsOver === undefined,
+    JSON.stringify(settingsOver)
+  );
+  const envOnly = switchedOffIn(
+    switches,
+    false,
+    { DISABLE_UPDATES: "1" },
+    { effective: {}, sources: [] }
+  );
+  check(
+    "(m) a variable only the environment sets is the environment's",
+    envOnly?.variable === "DISABLE_UPDATES" &&
+      envOnly.where === toolWords.inEnvironment,
+    JSON.stringify(envOnly)
   );
 };
 
@@ -1474,7 +1399,7 @@ const spec: Spec = {
     );
     try {
       await machineLegs(kit, root);
-      await policyLegs(kit, root);
+      settingsLegs(kit);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

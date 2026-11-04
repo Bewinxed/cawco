@@ -229,12 +229,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    room of its harness's own compaction point (`Compaction.fileRoom`, in
  *    tokens), where a share of its window stood (`fileAtPct`). A page built
  *    for 45 reads a `fileAtPct` the hub no longer sends, so it reloads first.
+ * 47: a tool's update switches name the engine that resolves its settings
+ *    and where its managed policies are kept (`ToolUpdateSwitches.engine`,
+ *    `places`), where its settings folder, files and policies to read stood
+ *    (`configDir`, `settings`, `policies`). A page built for 46 reads fields
+ *    the hub no longer sends, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 46;
+export const WIRE_PROTOCOL = 47;
 
 /**
  * What a session's stream carries: the changes each frame made to its

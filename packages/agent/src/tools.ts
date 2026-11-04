@@ -6,16 +6,14 @@
  */
 
 import { existsSync, realpathSync } from "node:fs";
-import {
-  mkdtemp,
-  readdir,
-  readFile,
-  realpath,
-  rm,
-  stat,
-} from "node:fs/promises";
+import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { homedir, platform, tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, sep } from "node:path";
+import {
+  type PolicySettingsOrigin,
+  type ResolvedSettings,
+  resolveSettings,
+} from "@anthropic-ai/claude-agent-sdk";
 import type {
   ToolFootprint,
   ToolInstallMethod,
@@ -31,11 +29,11 @@ import {
   toolRuns,
   toolSpec,
 } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { toolWords } from "@cawco/core/words/tools";
 import { expandHome } from "./fs";
 import { probeStarted } from "./probe-count";
-import { askProgram, readPolicy } from "./tool-policies";
 
 /** Where the curl-script installers put their binaries (Claude Code's, Antigravity's). */
 const LOCAL_BIN = expandHome("~/.local/bin");
@@ -314,12 +312,22 @@ const asksHold = async (
   if (!(manager && method.holds)) {
     return false;
   }
-  const ran = await askProgram(
-    [manager, ...method.holds, file],
-    toolEnv(),
-    HOLDS_WAIT_MS
-  );
-  return ran?.code === 0 && ran.out.trim() !== "";
+  const question = [manager, ...method.holds, file];
+  const read = await readWithin(HOLDS_WAIT_MS, async (signal) => {
+    const child = Bun.spawn(question, {
+      env: toolEnv(),
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "ignore",
+      signal,
+    });
+    const [out, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      child.exited,
+    ]);
+    return code === 0 && out.trim() !== "";
+  });
+  return read.kind === "answered" && read.value;
 };
 
 /** Whether a method is for the copies it holds: a footprint, or a question for its package manager. */
@@ -569,50 +577,57 @@ const methodFor = (
 };
 
 /**
- * The settings files whose `env` a tool reads its switches from, in the
- * order it applies them (core `ToolUpdateSwitches`): the user's, then this
- * platform's own, each `*.json` stand-in read as the `.json` files in its
- * folder, by name.
+ * A tool's settings as its own engine resolves them on this machine: their
+ * `env` as the tool runs with it, and each source, by the engine's
+ * precedence, lowest first, with its `env`, its file when it is one, and
+ * the managed policy that supplied it when it is that.
  */
-const switchFiles = async (switches: ToolUpdateSwitches): Promise<string[]> => {
-  const env = toolEnv();
-  const userDir =
-    env[switches.configDir.variable] || expandHome(switches.configDir.default);
-  const files = [join(userDir, "settings.json")];
-  for (const file of switches.settings[platform() as ToolPlatform] ?? []) {
-    if (basename(file) !== "*.json") {
-      files.push(file);
-      continue;
-    }
-    const folder = dirname(file);
-    const names = await readdir(folder).catch(() => [] as string[]);
-    files.push(
-      ...names
-        .filter((name) => name.endsWith(".json") && !name.startsWith("."))
-        .sort()
-        .map((name) => join(folder, name))
-    );
-  }
-  return files;
+type SettingsRead = Pick<ResolvedSettings, "effective" | "sources">;
+
+/**
+ * Each engine a tool's switches name (core `ToolUpdateSwitches.engine`), as
+ * it reads the settings an owner turns updates off in:
+ * - `claude-code`: the Agent SDK's `resolveSettings`, which "Resolves the
+ *   effective Claude Code settings for a given directory using the same
+ *   merge engine as the CLI, without spawning the Claude CLI" and "reads MDM
+ *   sources, including macOS plist and Windows HKLM/HKCU"
+ *   (code.claude.com/docs/en/agent-sdk/typescript, read 2026-11-04), its
+ *   policy tier as at the CLI's start, "managed-settings.json,
+ *   remote-cached managed settings, MDM via macOS plist / Windows HKLM/HKCU"
+ *   (its sdk.d.ts). The user's settings alone of the filesystem's: a
+ *   project's apply where Claude Code runs in it, not to the machine.
+ */
+const SETTINGS_ENGINES: Record<
+  ToolUpdateSwitches["engine"],
+  () => Promise<SettingsRead>
+> = {
+  "claude-code": () => resolveSettings({ settingSources: ["user"] }),
 };
 
-/** A settings file's `env`, or none when it isn't there or isn't JSON. */
-const settingsEnv = async (
-  file: string
-): Promise<Record<string, unknown> | undefined> => {
-  let settings: unknown;
-  try {
-    settings = JSON.parse(await readFile(file, "utf8"));
-  } catch {
-    return;
+/**
+ * Where one source of a tool's settings is, in the words a row says it with
+ * (core `ToolUpdateSwitches.places`): a file by its path; a managed policy by
+ * the place the engine says it came from, the managed settings when it names
+ * none of these.
+ */
+const sourceWhere = (
+  places: ToolUpdateSwitches["places"],
+  source: SettingsRead["sources"][number]
+): string => {
+  if (source.path) {
+    return shownPath(source.path);
   }
-  const env =
-    typeof settings === "object" && settings !== null
-      ? (settings as { env?: unknown }).env
-      : undefined;
-  return typeof env === "object" && env !== null
-    ? (env as Record<string, unknown>)
-    : undefined;
+  const { registry } = places;
+  const named: Partial<Record<PolicySettingsOrigin, string>> = {
+    file: toolWords.inManagedFiles,
+    hkcu: toolWords.inRegistry(registry.value, registry.hkcu),
+    hklm: toolWords.inRegistry(registry.value, registry.hklm),
+    plist: toolWords.inProfile(places.profile),
+    remote: toolWords.inServerManaged,
+  };
+  return (
+    (source.policyOrigin && named[source.policyOrigin]) ?? toolWords.inManaged
+  );
 };
 
 /**
@@ -630,56 +645,59 @@ const turnsOff = (
     : switchOn(value);
 
 /**
- * The switch with which this machine's owner turned the tool's own updates
- * off, and where it is set, as the tool itself reads it (core
- * `ToolUpdateSwitches`): each variable's value is the environment's, then
- * each settings file's `env` over it, then each managed policy's that is no
- * file (tool-policies.ts), which ranks above the files, in order. One of
- * `every` turns off any update; one of `automatic`, an automatic one (CawCo's
- * own) too. None set: undefined.
+ * The switch with which a machine's owner turned the tool's own updates off,
+ * and where it is set (core `ToolUpdateSwitches`), from the environment the
+ * tool runs with (`env`) and its settings as its engine resolved them: a
+ * variable's value is the settings' `env`'s where they set it, which the
+ * tool applies over its environment, else the environment's; it is set in
+ * the highest source whose `env` sets it. One of `every` turns off any
+ * update; one of `automatic`, an automatic one (CawCo's own) too. None set:
+ * undefined.
  */
+export const switchedOffIn = (
+  switches: ToolUpdateSwitches,
+  automatic: boolean,
+  env: Readonly<Record<string, string | undefined>>,
+  settings: SettingsRead
+): { variable: string; where: string } | undefined => {
+  const resolved = settings.effective.env ?? {};
+  for (const variable of [
+    ...switches.every,
+    ...(automatic ? switches.automatic : []),
+  ]) {
+    const inSettings = Object.hasOwn(resolved, variable);
+    const value = inSettings ? resolved[variable] : env[variable];
+    if (!turnsOff(switches, variable, value)) {
+      continue;
+    }
+    if (!inSettings) {
+      return { variable, where: toolWords.inEnvironment };
+    }
+    const source = settings.sources.findLast(
+      (one) =>
+        one.settings.env !== undefined &&
+        Object.hasOwn(one.settings.env, variable)
+    );
+    return {
+      variable,
+      where: source
+        ? sourceWhere(switches.places, source)
+        : toolWords.inManaged,
+    };
+  }
+};
+
+/** {@link switchedOffIn} on this machine: its tools' environment, and the tool's settings as its engine resolves them now. */
 const switchedOff = async (
   switches: ToolUpdateSwitches,
   automatic: boolean
-): Promise<{ variable: string; where: string } | undefined> => {
-  const variables = [
-    ...switches.every,
-    ...(automatic ? switches.automatic : []),
-  ];
-  const env = toolEnv();
-  const set = new Map<string, { value: unknown; where: string }>();
-  for (const variable of variables) {
-    if (env[variable] !== undefined) {
-      set.set(variable, {
-        value: env[variable],
-        where: toolWords.inEnvironment,
-      });
-    }
-  }
-  const sources: { env: Record<string, unknown> | undefined; where: string }[] =
-    [];
-  for (const file of await switchFiles(switches)) {
-    sources.push({ env: await settingsEnv(file), where: shownPath(file) });
-  }
-  for (const source of switches.policies?.[platform() as ToolPlatform] ?? []) {
-    const policy = await readPolicy(source, env);
-    if (policy) {
-      sources.push(policy);
-    }
-  }
-  for (const source of sources) {
-    for (const variable of variables) {
-      if (source.env && Object.hasOwn(source.env, variable)) {
-        set.set(variable, { value: source.env[variable], where: source.where });
-      }
-    }
-  }
-  const on = variables.find((variable) =>
-    turnsOff(switches, variable, set.get(variable)?.value)
+): Promise<{ variable: string; where: string } | undefined> =>
+  switchedOffIn(
+    switches,
+    automatic,
+    toolEnv(),
+    await SETTINGS_ENGINES[switches.engine]()
   );
-  const where = on ? set.get(on)?.where : undefined;
-  return on && where ? { variable: on, where } : undefined;
-};
 
 /**
  * The tool as it stands after an install that ran nothing, with why: the

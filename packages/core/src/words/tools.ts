@@ -27,18 +27,31 @@ export const toolWords = {
     `${variable} in ${where} turns ${name}'s updates off, and CawCo follows it. Unset it there and CawCo updates it.`,
   /** {@link toolWords.updatesOff}'s `where` for a switch set in the environment rather than a settings file. */
   inEnvironment: "the environment CawCo runs in",
+  /** {@link toolWords.updatesOff}'s `where` for a switch set in a macOS configuration profile (core `ToolUpdateSwitches.places`). */
+  inProfile: (domain: string) =>
+    `the configuration profile that manages ${domain}`,
+  /** {@link toolWords.updatesOff}'s `where` for a switch set in a Windows registry policy, HKLM's or HKCU's (core `ToolUpdateSwitches.places`). */
+  inRegistry: (value: string, key: string) =>
+    `the registry's ${value} value under ${key}`,
   /**
-   * {@link toolWords.updatesOff}'s `where` for a switch set in a macOS
-   * configuration profile (core `ToolPolicySource` `plist`). A placeholder
-   * until reviewed.
+   * {@link toolWords.updatesOff}'s `where` for a switch set in the tool's
+   * managed settings files (`managed-settings.json` and its
+   * `managed-settings.d` folder). A placeholder until reviewed.
    */
-  inProfile: (domain: string) => `the ${domain} configuration profile`,
+  inManagedFiles: "the managed settings files",
   /**
-   * {@link toolWords.updatesOff}'s `where` for a switch set in a Windows
-   * registry policy (core `ToolPolicySource` `registry`). A placeholder
-   * until reviewed.
+   * {@link toolWords.updatesOff}'s `where` for a switch set in the
+   * server-managed settings an organization sets for the tool (on claude.ai
+   * or a gateway), as the tool last fetched them. A placeholder until
+   * reviewed.
    */
-  inRegistry: (value: string, key: string) => `the ${value} value under ${key}`,
+  inServerManaged: "the server-managed settings",
+  /**
+   * {@link toolWords.updatesOff}'s `where` for a switch set in managed
+   * settings whose source the tool's engine names as none of the others. A
+   * placeholder until reviewed.
+   */
+  inManaged: "the managed settings",
   /** A pinned version the copy's method can't install (a Homebrew cask carries one version): nothing was run. */
   cannotPin: (method: string, name: string, version: string) =>
     `${method} installs only the version it carries, not ${name} ${version}, the version the fleet pins. Pin the version ${method} carries, or install ${name} there without ${method}.`,

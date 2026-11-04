@@ -171,10 +171,7 @@ const PROGRAMS = {
     before: "walls",
     package: "perl",
   },
-  plutil: {
-    for: "reading which of Xcode's builds is a clone's, and a tool's managed preferences",
-    os: "darwin",
-  },
+  plutil: { for: "reading which of Xcode's builds is a clone's", os: "darwin" },
   python3: { for: "the probe kit's Simulator driver", os: "darwin" },
   rm: {
     trusted: true,
