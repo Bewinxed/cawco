@@ -600,7 +600,7 @@ export function handoffTools(deps: HandoffDeps) {
           .boolean()
           .optional()
           .describe(
-            "Run on `machine` in `cwd`, outside any clone or boundary: its network, processes and the agent user's groups (docker). For work on the machine. Lands nothing; $TMPDIR/outputs/ returns as assets/<item>/. Not with from, workspace, owns, outputs."
+            "Run on `machine` itself in `cwd`, outside any clone or boundary: its network, processes and the agent user's groups (docker). For work whose subject is the machine. Lands nothing; what it leaves in $TMPDIR/outputs/ comes back as assets/<item>/. Not with from, workspace, owns or outputs."
           ),
         outputs: z
           .array(z.string())

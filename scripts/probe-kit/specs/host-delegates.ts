@@ -33,11 +33,16 @@
  *   one, delegated with an input, finds it in `$TMPDIR/inputs/`.
  * - h8. host refuses a cwd inside a clone, in host's words naming the clone,
  *   filing nothing: (a) a folder inside a clone only the machine's own
- *   records hold (agent workspace-records.ts `cloneHolding`), and (b) the
- *   clone of the live workspace delegate of w1, as the hub files it.
+ *   records hold (agent workspace-records.ts `cloneHolding`), at the path a
+ *   clone is cut at, `~/.worktrees/<repo>-<id8>` (agent layer.ts
+ *   `clonePath`: a recorded path anywhere else, with no layer, is a
+ *   person's folder since 3235d847b, and no clone), and (b) the clone of the
+ *   live workspace delegate of w1, as the hub files it.
  * - w1. A workspace delegate in the same run is bounded: PID 1 is bwrap, its
  *   PID namespace is not the host's.
- * - t1. `delegate` offers `host`, and its description says when to pick it.
+ * - t1. `delegate` offers `host`, whose own text says when to pick it (the
+ *   machine is the work's subject), and its lands text names it. The tool's
+ *   description names no parameter (01d3864fe).
  * - r1. Claude Code's spawn environment as root carries IS_SANDBOX=1, on the
  *   host and in a boundary alike; not as root it carries none, even when the
  *   agent's own environment has it (claude.ts `sessionEnv`).
@@ -77,6 +82,8 @@ const HEADING = {
 
 /** A tool text that names the `host` parameter. */
 const NAMES_HOST = /\bhost\b/u;
+/** The host text's when: the machine is what the work is about, not where it runs. */
+const SUBJECT = /\bsubject\b/u;
 /** Where a summary's reading ends. */
 const READ_END = "HOSTPROBE-READ-END";
 /** The reading's JSON list, from its tag to {@link READ_END}. */
@@ -582,7 +589,7 @@ const recordedClone = async (
   home: string
 ): Promise<void> => {
   const id = crypto.randomUUID();
-  const clone = join(fleet.sandbox, "recorded-clone");
+  const clone = join(home, ".worktrees", `recorded-clone-${id.slice(0, 8)}`);
   const records = join(home, ".cawco", "workspaces", id);
   await mkdir(join(clone, "deep"), { recursive: true });
   await mkdir(records, { recursive: true });
@@ -602,6 +609,7 @@ const recordedClone = async (
     );
   } finally {
     await rm(records, { recursive: true, force: true });
+    await rm(clone, { recursive: true, force: true });
   }
 };
 
@@ -618,9 +626,9 @@ const toolLeg = (kit: Kit): void => {
     | undefined;
   const host = delegate?.inputSchema.properties?.host;
   kit.check(
-    "t1: delegate offers host, and its description and its lands text name it",
+    "t1: delegate offers host, whose own text says to pick it when the machine is the work's subject, and its lands text names it",
     host !== undefined &&
-      NAMES_HOST.test(delegate?.description ?? "") &&
+      SUBJECT.test(host.description ?? "") &&
       NAMES_HOST.test(
         delegate?.inputSchema.properties?.lands?.description ?? ""
       ),
