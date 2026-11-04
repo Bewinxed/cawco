@@ -3458,6 +3458,7 @@ export class OpencodeSession implements HarnessSession {
       containerEnv: this.#ctx.containerEnv ?? {},
       credential,
       instanceId: this.instanceId,
+      tmp: this.#ctx.hostTmp ?? null,
       workspace: this.#ctx.workspace ?? null,
     });
     await acknowledgeSessionCredential(credential);

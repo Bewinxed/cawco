@@ -38,6 +38,8 @@ import {
   CONTROL_FORGET_PROVIDER_ACCOUNT,
   CONTROL_GH_ACCOUNTS,
   CONTROL_GH_TOKEN,
+  CONTROL_HOST_OUTPUTS,
+  CONTROL_HOST_SCRATCH_REMOVE,
   CONTROL_INPUTS_ADMIT,
   CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
@@ -239,6 +241,7 @@ import {
 } from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { ghAccounts, ghAccountToken } from "./host-gh";
+import { hostOutputs, removeHostScratch } from "./host-scratch";
 import { cancelCommand, runHubCommand, setCommandQueue } from "./hub-command";
 import { serveHubCredential } from "./hub-git";
 import { carryHub, followHub, stopCarrying } from "./hub-loopback";
@@ -3580,6 +3583,13 @@ const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_OUTPUTS,
       workspaceOutputs
+    );
+    // A host-scope delegate's `$TMPDIR/outputs/`, read as it stands, and
+    // its scratch dir removed once those are kept (host-scratch.ts).
+    supervisor.registerDaemonFunction(CONTROL_HOST_OUTPUTS, hostOutputs);
+    supervisor.registerDaemonFunction(
+      CONTROL_HOST_SCRATCH_REMOVE,
+      removeHostScratch
     );
     // The hub's sweep: which folders under ~/.worktrees stand, so an
     // archived workspace whose clone is still there is closed again.

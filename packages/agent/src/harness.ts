@@ -140,6 +140,13 @@ export interface HarnessContext {
   failed: (error: unknown) => void;
   /** Ship one neutral frame toward the hub. */
   frame: (message: NeutralMessage) => void;
+  /**
+   * A host-scope work item's session's scratch dir (host-scratch.ts,
+   * core `SpawnPayload.hostScratch`): its commands' `TMPDIR`, with
+   * `inputs/` and `outputs/` in it, though they run on the host. Absent on
+   * every other session: a bounded one's `TMPDIR` is its boundary's.
+   */
+  readonly hostTmp?: string;
   readonly ingested?: import("@cawco/core").IngestMark;
   readonly instanceId: string;
   /**

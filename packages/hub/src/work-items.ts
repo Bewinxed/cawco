@@ -46,6 +46,7 @@ import type {
   EndedBy,
   Envelope,
   HarnessKind,
+  HostOutputListed,
   InputFile,
   InputNamed,
   InputsAdmitted,
@@ -61,6 +62,7 @@ import type {
   SendPayload,
   SendRefusal,
   SessionRole,
+  SpawnPayload,
   WorkItemSummary,
   WorkspaceArchive,
   WorkspaceChanges,
@@ -81,6 +83,8 @@ import {
   byPerson,
   CODE_MODE_TOOL,
   CONTROL_CLONE_HOLDING,
+  CONTROL_HOST_OUTPUTS,
+  CONTROL_HOST_SCRATCH_REMOVE,
   CONTROL_INPUTS_ADMIT,
   CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
@@ -101,6 +105,7 @@ import {
   holdingWords,
   INPUTS_LIMIT_BYTES,
   isWorkspaceNeedsRefusal,
+  knowsNotControl,
   type MayStart,
   machineCalled,
   mayStartType,
@@ -1363,6 +1368,17 @@ const refOf = (workspace: WorkspaceRow): WorkspaceRef => {
   return { id: workspace.id, path: workspace.path };
 };
 
+/**
+ * Where `workspace`'s scratch dir is, as its machine's inputs writer names it
+ * (agent inputs.ts `writeInto`, which reads its id alone): every workspace's,
+ * a host-scope one's too (agent host-scratch.ts), whose folder no call
+ * touches.
+ */
+const scratchRefOf = (workspace: WorkspaceRow): WorkspaceRef => ({
+  id: workspace.id,
+  path: workspace.path,
+});
+
 /** The boundary a session in `workspace` runs inside: none for a host-scope one. */
 const boundaryOf = (workspace: WorkspaceRow): WorkspaceRef | undefined =>
   workspace.host ? undefined : refOf(workspace);
@@ -1372,7 +1388,8 @@ const boundaryOf = (workspace: WorkspaceRow): WorkspaceRef | undefined =>
  * checkout, every shell command inside the workspace's boundary, and its
  * parent's project's, as the workspace is one of that project's places. A
  * host-scope item's session names no workspace: the machine starts it in
- * its folder on the host, unbounded (agent session.ts `#sessionContext`).
+ * its folder on the host, unbounded (agent session.ts `#sessionContext`),
+ * with its host workspace's scratch dir as its `TMPDIR` (`hostScratch`).
  */
 const spawnOf = (
   instanceId: string,
@@ -1386,6 +1403,7 @@ const spawnOf = (
     ...sessionOf(instanceId, title, parent, settings),
     cwd: workspace.path,
     ...(bound ? { workspace: bound } : {}),
+    ...(workspace.host ? { hostScratch: workspace.id } : {}),
   };
 };
 
@@ -1434,7 +1452,7 @@ const sessionOf = (
  */
 const placeOf = (workspace: WorkspaceRow): string =>
   workspace.host
-    ? `${workspace.path} on the host, no clone and no boundary`
+    ? `${workspace.path} on the host, no clone and no boundary; files it leaves in $TMPDIR/outputs/ come back as its item's assets`
     : `${workspace.path}, branch ${workspace.branch}${workspace.tmp ? `, TMPDIR ${workspace.tmp}` : ""}`;
 
 /** What a fork reads before its brief: its parent's turns are behind it, and they are not its orders. */
@@ -1623,8 +1641,12 @@ const fromProblem = (request: WorkItemRequest): string | undefined => {
 
 /**
  * A host-scope request with what needs a clone, each refused in a line of
- * its own: there is no workspace to cut, continue, own files in, hand files
- * into or collect from, and nothing lands.
+ * its own: there is no workspace to cut, continue or own files in, and
+ * nothing lands. Files go both ways through its scratch dir, as a
+ * workspace's do (agent host-scratch.ts): `inputs` into its
+ * `$TMPDIR/inputs/`, and what it leaves in `$TMPDIR/outputs/` back as its
+ * item's assets. Declared `outputs` are paths from a clone's root, which a
+ * host delegate has none of.
  */
 const hostProblem = (request: WorkItemRequest): string | undefined => {
   if (!request.host) {
@@ -1637,10 +1659,8 @@ const hostProblem = (request: WorkItemRequest): string | undefined => {
       "workspace: a host delegate is a new session; continue one with handoff.",
     request.owns?.length &&
       "owns: a host delegate has no clone whose files it could own.",
-    request.inputs?.length &&
-      "inputs: a host delegate has no $TMPDIR/inputs/; name the paths on its machine in the brief.",
     request.outputs?.length &&
-      "outputs: nothing is collected from a host delegate; its report carries the result.",
+      "outputs: a host delegate has no clone to name files from; it hands files back by leaving them in its $TMPDIR/outputs/, which the hub copies to its item's assets. Say so in the brief.",
     request.lands !== undefined &&
       request.lands !== "none" &&
       `lands ${request.lands}: a host delegate lands nothing; leave lands out.`,
@@ -3997,12 +4017,13 @@ export const createWorkItems = ({
    * first ({@link CONTROL_WORKSPACE_OUTPUTS}), as the archive after it reads
    * the copy: a workspace whose boundary cannot start closes all the same.
    * A copy that fails keeps the workspace: closing is
-   * refused with why, and the next settle tries again. A gate workspace and
-   * a host-scope one have no scratch outputs; an item of no project has no
-   * folder to copy into.
+   * refused with why, and the next settle tries again. A host-scope one's
+   * are read as they stand ({@link CONTROL_HOST_OUTPUTS}) before its scratch
+   * dir goes ({@link settleHost}). A gate workspace has no scratch outputs;
+   * an item of no project has no folder to copy into.
    */
   const keepScratchOutputs = async (workspace: WorkspaceRow): Promise<void> => {
-    if (workspace.host || workspace.checksFor) {
+    if (workspace.checksFor) {
       return;
     }
     const item = db.workItemsIn(workspace.id).find((one) => one.projectId);
@@ -4011,9 +4032,11 @@ export const createWorkItems = ({
     }
     const folder = outputsFolder(item);
     try {
-      const read = (await call(workspace.machineId, CONTROL_WORKSPACE_OUTPUTS, [
-        refOf(workspace),
-      ])) as WorkspaceOutputs;
+      const read = workspace.host
+        ? await hostOutputsRead(workspace)
+        : ((await call(workspace.machineId, CONTROL_WORKSPACE_OUTPUTS, [
+            refOf(workspace),
+          ])) as WorkspaceOutputs);
       const files = read.files.map((one) => ({
         path: `${folder}/${one.path}`,
         content: Buffer.from(one.content, "base64"),
@@ -4036,6 +4059,39 @@ export const createWorkItems = ({
       );
     }
   };
+
+  /**
+   * A control on a host-scope workspace's scratch dir (agent
+   * host-scratch.ts), answered `none` by an agent from before it
+   * ({@link knowsNotControl}): that agent gave the session no scratch dir,
+   * so it holds nothing to read or remove.
+   */
+  const onHostScratch = async <T>(
+    workspace: WorkspaceRow,
+    method: string,
+    args: unknown[],
+    none: T
+  ): Promise<T> => {
+    try {
+      return (await call(workspace.machineId, method, args)) as T;
+    } catch (error) {
+      if (knowsNotControl(error, method)) {
+        return none;
+      }
+      throw error;
+    }
+  };
+
+  /** A host-scope workspace's `$TMPDIR/outputs/`, each regular file with its bytes ({@link CONTROL_HOST_OUTPUTS}). */
+  const hostOutputsRead = (
+    workspace: WorkspaceRow
+  ): Promise<WorkspaceOutputs> =>
+    onHostScratch(
+      workspace,
+      CONTROL_HOST_OUTPUTS,
+      [{ id: workspace.id, read: true }],
+      { files: [] }
+    );
 
   /**
    * A workspace closed on its machine ({@link CONTROL_WORKSPACE_ARCHIVE}):
@@ -4689,15 +4745,13 @@ export const createWorkItems = ({
    */
   const settle = async (id: string): Promise<Settled> => {
     const [workspace] = db.workspacesNamed(id);
-    // A host-scope row has no clone to close: nothing of it settles.
-    if (
-      workspace?.state !== "active" ||
-      workspace.checksFor ||
-      workspace.host
-    ) {
+    if (workspace?.state !== "active" || workspace.checksFor) {
       return { kind: "none" };
     }
     const items = db.workItemsIn(workspace.id);
+    if (workspace.host) {
+      return await settleHost(workspace, items);
+    }
     if (!settlable(workspace, items)) {
       return { kind: "none" };
     }
@@ -4713,6 +4767,53 @@ export const createWorkItems = ({
       settleFailed(workspace, reason);
       return { kind: "failed", reason };
     }
+  };
+
+  /**
+   * A host-scope workspace settled ({@link settle}): it has no clone, so
+   * nothing of it closes but its scratch dir (agent host-scratch.ts). Once
+   * its items have all ended and nothing holds it (a landing that still
+   * runs, a session attached or about to be woken, a continuation under
+   * way: {@link sessionsHold}), what is in its `$TMPDIR/outputs/` is kept in
+   * its project's folder ({@link keepScratchOutputs}) and its machine
+   * removes the scratch dir; a later spawn of its session makes it again.
+   * Its row stays active: it is where its items ran.
+   */
+  const settleHost = async (
+    workspace: WorkspaceRow,
+    items: readonly WorkItemRow[]
+  ): Promise<Settled> => {
+    if (!settlable(workspace, items)) {
+      return { kind: "none" };
+    }
+    const landing = items.find((item) => finishing.has(item.id));
+    const hold = landing
+      ? `the landing of its item ${landing.id} still runs`
+      : sessionsHold(items);
+    if (hold) {
+      return { kind: "deferred", hold };
+    }
+    // A machine away keeps the dir until the session's next event settles
+    // it again: no sweep reads a host-scope row.
+    try {
+      await keepScratchOutputs(workspace);
+      await onHostScratch(
+        workspace,
+        CONTROL_HOST_SCRATCH_REMOVE,
+        [{ id: workspace.id }],
+        undefined
+      );
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[workspaces] ${workspace.id} on ${machineName(workspace.machineId)}: its host-scope scratch dir stays: ${reason}`
+      );
+      return { kind: "failed", reason };
+    }
+    console.log(
+      `[workspaces] ${workspace.id} on ${machineName(workspace.machineId)}: its host-scope scratch dir removed, its outputs kept`
+    );
+    return { kind: "none" };
   };
 
   /** The last step queued in each workspace's turn ({@link inWorkspaceTurn}); it only resolves. */
@@ -6290,7 +6391,7 @@ export const createWorkItems = ({
         }))
       );
       await call(workspace.machineId, CONTROL_INPUTS_WRITE, [
-        refOf(workspace),
+        scratchRefOf(workspace),
         files,
       ]);
     }
@@ -6301,7 +6402,7 @@ export const createWorkItems = ({
       const copied = (await call(workspace.machineId, CONTROL_INPUTS_COPY, [
         inputs.paths,
         inputs.bound,
-        refOf(workspace),
+        scratchRefOf(workspace),
         inputs.project,
       ])) as InputsAdmitted;
       if ("refused" in copied) {
@@ -6318,7 +6419,7 @@ export const createWorkItems = ({
       throw inputsRefused(read.refused);
     }
     await call(workspace.machineId, CONTROL_INPUTS_WRITE, [
-      refOf(workspace),
+      scratchRefOf(workspace),
       read.files satisfies InputFile[],
     ]);
   };
@@ -6392,7 +6493,7 @@ export const createWorkItems = ({
       }
     }
     if (request.host) {
-      return await startHost(request, parent);
+      return await startHost(request, parent, inputs);
     }
     return request.workspace
       ? await startFollowUp(request.workspace, request, parent, inputs)
@@ -6439,11 +6540,14 @@ export const createWorkItems = ({
    * there with no boundary ({@link spawnOf}). Its machine and model are
    * checked as a new workspace's are, and its folder refused inside a clone
    * ({@link hostFolderProblem}); the folder is the machine's own, so no
-   * project place, repository or clone is recorded for it.
+   * project place, repository or clone is recorded for it. Its inputs go
+   * into its scratch dir's `inputs/` (agent host-scratch.ts), as a
+   * workspace's do.
    */
   const startHost = async (
     request: WorkItemRequest,
-    parent: Parent
+    parent: Parent,
+    inputs: Inputs
   ): Promise<WorkItemStart> => {
     const machineId = targetMachine(request, parent);
     notPaused(machineId);
@@ -6468,7 +6572,7 @@ export const createWorkItems = ({
     console.log(
       `[workspaces] ${workspace.id} on ${machineName(machineId)}: a host-scope delegate's folder ${path}, no clone and no boundary`
     );
-    return spawnIn(workspace, settings, parent, request, NO_INPUTS);
+    return spawnIn(workspace, settings, parent, request, inputs);
   };
 
   /**
@@ -6765,7 +6869,8 @@ export const createWorkItems = ({
             ? withHostLine(
                 content,
                 workspace.path,
-                machineName(workspace.machineId)
+                machineName(workspace.machineId),
+                item.projectId ? outputsFolder(item) : undefined
               )
             : withWorkspaceLine(
                 content,
@@ -8573,15 +8678,21 @@ export const createWorkItems = ({
 
   /**
    * What the workspace's `$TMPDIR/outputs/` holds ({@link
-   * SCRATCH_OUTPUTS_LIST}); nothing for a host-scope workspace, which has no
-   * scratch dir of its own.
+   * SCRATCH_OUTPUTS_LIST}), read inside its boundary; a host-scope one's
+   * listed on its host ({@link CONTROL_HOST_OUTPUTS}), as it stands.
    */
   const scratchOutputs = async (
     workspace: WorkspaceRow,
     item: WorkItemRow
   ): Promise<ScratchOutput[]> => {
     if (workspace.host) {
-      return [];
+      const read = await onHostScratch<{ listed: HostOutputListed[] }>(
+        workspace,
+        CONTROL_HOST_OUTPUTS,
+        [{ id: workspace.id, read: false }],
+        { listed: [] }
+      );
+      return read.listed;
     }
     const listed = await runIn(workspace, item)(
       SCRATCH_OUTPUTS_LIST,
@@ -8598,13 +8709,22 @@ export const createWorkItems = ({
   /**
    * The files of `$TMPDIR/outputs/` read from the workspace, each at its
    * path under it within the item's assets `folder`: `$TMPDIR/outputs/x.md`
-   * lands at `assets/<item>/x.md`. Links are not read.
+   * lands at `assets/<item>/x.md`. Links are not read. A host-scope one's
+   * are read on its host as they stand ({@link CONTROL_HOST_OUTPUTS}): its
+   * scratch dir is no boundary's.
    */
   const scratchOutputFiles = async (
     workspace: WorkspaceRow,
     item: WorkItemRow,
     folder: string
   ): Promise<{ path: string; content: Uint8Array }[]> => {
+    if (workspace.host) {
+      const read = await hostOutputsRead(workspace);
+      return read.files.map((one) => ({
+        path: `${folder}/${one.path}`,
+        content: Buffer.from(one.content, "base64"),
+      }));
+    }
     const files: { path: string; content: Uint8Array }[] = [];
     for (const one of await scratchOutputs(workspace, item)) {
       if (one.link) {
@@ -9147,6 +9267,30 @@ export const createWorkItems = ({
   };
 
   /**
+   * A host-scope item's finish_item: no clone, so no gate, no landing and no
+   * diffstat; its report and its `$TMPDIR/outputs/` are the whole of it, a
+   * link or a file past the folder's limit there sent back first
+   * ({@link outputsProblem}).
+   */
+  const reportHost = async (
+    item: WorkItemRow,
+    row: InstanceRow,
+    workspace: WorkspaceRow,
+    submission: WorkItemSubmission
+  ): Promise<{ done: boolean; text: string }> => {
+    const unready = await outputsProblem(workspace, item);
+    if (unready) {
+      update(item.id, { landingSince: null, submission: null });
+      return { done: false, text: unready };
+    }
+    return await reportLanding(item, row, workspace, submission, {
+      kind: "done",
+      line: "Nothing landed: it ran with host scope.",
+      gate: { declared: false, outcomes: [] },
+    });
+  };
+
+  /**
    * {@link settleLanding}'s run: the gate's steps read, the gate at
    * finish_item run (none for an item landing on its base), and the landing.
    */
@@ -9157,14 +9301,8 @@ export const createWorkItems = ({
     const [row] = db.getInstancesByIds([item.instanceId]);
     const [workspace] = db.workspacesNamed(item.workspaceId);
     const settled = { landingSince: null, submission: null };
-    // Host scope: no clone, so no gate, no landing and no diffstat; the
-    // report is the whole of it.
     if (workspace.host) {
-      return await reportLanding(item, row, workspace, submission, {
-        kind: "done",
-        line: "Nothing landed: it ran with host scope.",
-        gate: { declared: false, outcomes: [] },
-      });
+      return await reportHost(item, row, workspace, submission);
     }
     const gate = await gateSteps(workspace, item);
     if ("refusal" in gate) {
@@ -10139,7 +10277,8 @@ export const createWorkItems = ({
 
     /**
      * A handoff's inputs (core handed-input.ts): written into the
-     * `$TMPDIR/inputs/` of the workspace `instanceId`'s item runs in, before
+     * `$TMPDIR/inputs/` of the workspace `instanceId`'s item runs in (a
+     * host-scope one's scratch dir, agent host-scratch.ts), before
      * the handoff that names them goes. Only the session that delegated the
      * item, or its project's conversation, hands it inputs; refused, too, for a
      * workspace whose work was discarded and an input that may not go
@@ -10166,12 +10305,6 @@ export const createWorkItems = ({
         );
       }
       const [named] = db.workspacesNamed(item.workspaceId);
-      if (named?.host) {
-        throw new WorkItemRefusal(
-          409,
-          `${item.title} (${handle(item.id)}) runs with host scope on ${machineName(named.machineId)}: it has no $TMPDIR/inputs/. Name the paths on its machine in the message, without inputs.`
-        );
-      }
       const [caller] = db.getInstancesByIds([from]);
       if (!caller) {
         throw new WorkItemRefusal(404, `unknown session ${from}`);
@@ -10305,6 +10438,25 @@ export const createWorkItems = ({
       const item = itemOf(row);
       const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
       return workspace ? boundaryOf(workspace) : undefined;
+    },
+
+    /**
+     * Where every spawn of a session runs ({@link spawnOf}): a work item's
+     * workspace whose boundary bounds it ({@link workspaceOf}), or a
+     * host-scope item's workspace whose scratch dir is its `TMPDIR` (core
+     * `SpawnPayload.hostScratch`); neither for any other session.
+     */
+    spawnPlace(
+      row: InstanceRow
+    ): Pick<SpawnPayload, "hostScratch" | "workspace"> {
+      const item = itemOf(row);
+      const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
+      if (!workspace) {
+        return {};
+      }
+      return workspace.host
+        ? { hostScratch: workspace.id }
+        : { workspace: refOf(workspace) };
     },
 
     /** Workspace `id` as a spawn or a stage is bounded to it; undefined when no workspace has that id. */

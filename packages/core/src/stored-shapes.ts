@@ -2638,6 +2638,7 @@ const SpawnPayloadShape = declared(
     fence: z.literal(true).optional(),
     harness: HarnessKindShape.optional(),
     homeLoginMove: z.object({ accountId: z.string() }).optional(),
+    hostScratch: z.string().optional(),
     ingested: IngestMarkShape.optional(),
     instanceId: z.string(),
     instructions: z.array(SessionInstructionShape).optional(),

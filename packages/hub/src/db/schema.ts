@@ -1286,8 +1286,10 @@ export const workspaces = sqliteTable("workspaces", {
    * boundary. `path` (and `repoRoot`) is the folder on the machine its
    * session runs in, on the host, with the machine's own network, processes
    * and the agent user's groups. Nothing is cut, landed, held or archived
-   * for it: no machine call names it, its row is where its items ran. Never
-   * listed among a machine's active or live workspaces.
+   * for it: no machine call names its folder, its row is where its items
+   * ran. Its scratch dir is its sessions' `TMPDIR` all the same (agent
+   * host-scratch.ts), settled once nothing of it is attached (work-items.ts
+   * `settleHost`). Never listed among a machine's active or live workspaces.
    */
   host: integer("host", { mode: "boolean" }).notNull().default(false),
   /**

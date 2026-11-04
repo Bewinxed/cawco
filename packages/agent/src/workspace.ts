@@ -47,7 +47,6 @@ import type {
 import {
   holdingWords,
   holdsNothing,
-  OUTPUTS_DIR,
   WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
@@ -124,6 +123,7 @@ import {
   noteRefused,
   undeclaredEndpoint,
 } from "./host-lfs";
+import { outputsOf } from "./host-scratch";
 import { ownConfigChanges, ownConfigWords, runHubCommand } from "./hub-command";
 import {
   createdAt,
@@ -2318,38 +2318,7 @@ export const workspaceOutputs = async (
   const workspace = ref as WorkspaceRef;
   await stopWorkspaceBoundary(workspace);
   await endLeftInside(workspace);
-  const root = join(workspaceScratchDir(workspace.id), OUTPUTS_DIR);
-  const files: WorkspaceOutputs["files"] = [];
-  const down = async (rel: string): Promise<void> => {
-    const entries = await readdir(join(root, rel), {
-      withFileTypes: true,
-    }).catch(() => []);
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-      const inner = rel ? join(rel, entry.name) : entry.name;
-      if (entry.isDirectory()) {
-        await down(inner);
-      } else if (entry.isFile()) {
-        const handle = await open(
-          join(root, inner),
-          // biome-ignore lint/suspicious/noBitwiseOperators: open(2) takes its flags as one bit set
-          constants.O_RDONLY | constants.O_NOFOLLOW
-        );
-        try {
-          files.push({
-            path: inner,
-            content: (await handle.readFile()).toString("base64"),
-          });
-        } finally {
-          await handle.close();
-        }
-      }
-    }
-  };
-  const top = await lstat(root).catch(() => undefined);
-  if (top?.isDirectory()) {
-    await down("");
-  }
-  return { files };
+  return await outputsOf(workspace.id);
 };
 
 /**

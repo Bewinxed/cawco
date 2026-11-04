@@ -605,6 +605,9 @@ export async function spawnPi(
         ...(ctx.boundary && ctx.workspace
           ? { TMPDIR: workspaceSpillDir(ctx.workspace, ctx.instanceId) }
           : {}),
+        // A host-scope delegate's scratch dir (host-scratch.ts), with its
+        // `inputs/` and `outputs/`: its commands' `TMPDIR` on the host.
+        ...(ctx.hostTmp ? { TMPDIR: ctx.hostTmp } : {}),
       },
     })
   );

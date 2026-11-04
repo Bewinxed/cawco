@@ -202,6 +202,8 @@ import {
   CONTROL_GH_ACCOUNTS,
   CONTROL_GH_TOKEN,
   CONTROL_GIT_CHANGES,
+  CONTROL_HOST_OUTPUTS,
+  CONTROL_HOST_SCRATCH_REMOVE,
   CONTROL_INPUTS_ADMIT,
   CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
@@ -1628,6 +1630,8 @@ const HUB_WORKSPACE_CONTROLS: ReadonlySet<string> = new Set([
   CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_OUTPUTS,
   CONTROL_WORKSPACE_WORK_END,
+  CONTROL_HOST_OUTPUTS,
+  CONTROL_HOST_SCRATCH_REMOVE,
 ]);
 /**
  * Stage controls only the hub sends (`onStage`), with the workspace or place
@@ -8163,7 +8167,6 @@ export const createServer = (
     // to mid-turn; a reattach takes the process as it runs.
     const stored = payload.reattachOnly ? read : takeOwedMove(read);
     const row = knownRow ?? stored;
-    const workspace = row ? sessionWorkspace(row) : undefined;
     // The row's harness, on every launch it sends: its conversation is that
     // harness's ({@link enforceRowSessionKey} refused any other).
     const { harness } = read;
@@ -8193,7 +8196,8 @@ export const createServer = (
         : {}),
       processGeneration: processGeneration(stored),
       ...(stored.keepAliveTurn ? { keepAliveTurn: stored.keepAliveTurn } : {}),
-      ...(workspace ? { workspace } : {}),
+      // Its work item's boundary, or a host-scope one's scratch dir.
+      ...workItems.spawnPlace(row),
       ...(payload.reattachOnly ? where : {}),
     };
   };
@@ -25103,6 +25107,7 @@ export const createServer = (
       method === CONTROL_WORKSPACE_ARCHIVE ||
       method === CONTROL_WORKSPACE_DISCARD ||
       method === CONTROL_WORKSPACE_OUTPUTS ||
+      method === CONTROL_HOST_OUTPUTS ||
       method === CONTROL_WORKSPACE_BUNDLE ||
       method === CONTROL_WORKSPACE_AT ||
       method === CONTROL_INPUTS_ADMIT ||

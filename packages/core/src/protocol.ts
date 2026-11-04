@@ -171,6 +171,17 @@ export interface SpawnPayload {
    * in the account's dir instead.
    */
   homeLoginMove?: { accountId: string };
+  /**
+   * A host-scope work item's session (hub work-items.ts `startHost`): the id
+   * of its host workspace, whose scratch dir (core paths.ts
+   * `workspaceScratchDir`) the machine makes, `outputs/` in it, and gives its
+   * commands as `TMPDIR`, though they run on the host with no boundary.
+   * What it leaves in `$TMPDIR/outputs/` the hub copies into its project's
+   * folder (core harness.ts `CONTROL_HOST_OUTPUTS`). Set on each
+   * spawn of such a session, as {@link workspace} is on a bounded one's, and
+   * on no other.
+   */
+  hostScratch?: string;
   /** Hub ingest cursor for a recovery sent after the registration handover. */
   ingested?: import("./stream").IngestMark;
   instanceId: string;

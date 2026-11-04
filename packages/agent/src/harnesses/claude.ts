@@ -1293,7 +1293,7 @@ export const sessionEnv = (
   specEnv: Record<string, string | undefined> | undefined,
   ctx: Pick<
     HarnessContext,
-    "boundary" | "containerEnv" | "instanceId" | "sessionCredential"
+    "boundary" | "containerEnv" | "hostTmp" | "instanceId" | "sessionCredential"
   >,
   root: boolean = runsAsRoot()
 ): Record<string, string | undefined> => ({
@@ -1319,6 +1319,10 @@ export const sessionEnv = (
         CLAUDE_CODE_SHELL_PREFIX: ctx.boundary.prefix,
       }
     : {}),
+  // A host-scope delegate's scratch dir (host-scratch.ts) is its shells'
+  // `TMPDIR`, `inputs/` and `outputs/` in it; the CLI's own temp root stays
+  // where it was, the agent's temp dir.
+  ...(ctx.hostTmp ? { TMPDIR: ctx.hostTmp, CLAUDE_CODE_TMPDIR: tmpdir() } : {}),
   // The session's git reaches the hub's remote as this session (git-credential.ts).
   ...sessionGitEnv({ ...process.env, ...specEnv }),
   // Its container runtimes through its own doors (session-containers.ts):

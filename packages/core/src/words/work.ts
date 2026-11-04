@@ -23,6 +23,16 @@ export const workWords = {
    */
   scratchOutputsCopied: (assets: string) =>
     `Files you leave in $TMPDIR/outputs/ are copied into the project's folder at ${assets}/ (each at its path under outputs/) when you finish and before this workspace goes; the hub's report names each path for your parent, and the project's delegates read them there with folder_read.`,
+  /**
+   * What a host-scope delegate is told of its `$TMPDIR/outputs/` (core
+   * injected.ts `withHostLine`): its one way to hand a file of its machine
+   * back, copied to `assets` as it finishes. Placeholder words, for a copy
+   * pass.
+   */
+  hostOutputsCopied: (assets: string) =>
+    `Your $TMPDIR is a scratch dir of your own on this machine. Files you leave in $TMPDIR/outputs/ are copied into the project's folder at ${assets}/ (each at its path under outputs/) when you finish: the one way a file of this machine reaches your parent, wherever it runs. The hub's report names each path for your parent, and the project's delegates read them there with folder_read.`,
+  /** A host-scope delegate's scratch dir asked for by a name that is no workspace id (agent host-scratch.ts): nothing is read, made or removed. */
+  hostScratchUnnamed: "a host scratch dir is named by its workspace's id",
   /** What a delegate of no project is told of its `$TMPDIR/outputs/`: nothing there is collected. */
   scratchOutputsNoProject:
     "This item belongs to no project, so nothing in $TMPDIR is collected: what your parent needs goes in your report or a commit.",

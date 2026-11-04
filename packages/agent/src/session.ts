@@ -70,6 +70,8 @@ import {
   CONTROL_FLEET_SETTINGS,
   CONTROL_FORGET_CREDENTIALS,
   CONTROL_GIT_CHANGES,
+  CONTROL_HOST_OUTPUTS,
+  CONTROL_HOST_SCRATCH_REMOVE,
   CONTROL_INTERRUPT,
   CONTROL_LIST_SESSIONS,
   CONTROL_MCP_FLEET_HEAL,
@@ -136,6 +138,7 @@ import {
   roomHeldSentence,
   SESSION_DIR_READ,
   SHELL_TOOLS,
+  unknownControlWords,
   VERIFY_SESSION_CREDENTIAL,
   WITHDRAW_PERMISSION,
   type WorkspaceRef,
@@ -232,6 +235,7 @@ import {
 import { harnesses, harness as harnessOf } from "./harnesses";
 import { writeJson } from "./harnesses/fleet-common";
 import { fetchDefaultBranch, hostGit } from "./host-git";
+import { hostScratchReady } from "./host-scratch";
 import { folderTurn, runHubCommand } from "./hub-command";
 import { generateImage } from "./image-generation";
 import { KeeperPool, type KeeperReading, withKeepers } from "./keepers";
@@ -1540,6 +1544,8 @@ export class SessionSupervisor {
       control?.method === CONTROL_WORKSPACE_ARCHIVE ||
       control?.method === CONTROL_WORKSPACE_DISCARD ||
       control?.method === CONTROL_WORKSPACE_OUTPUTS ||
+      control?.method === CONTROL_HOST_OUTPUTS ||
+      control?.method === CONTROL_HOST_SCRATCH_REMOVE ||
       control?.method === CONTROL_WORKSPACE_WORK_END ||
       control?.method === CONTROL_WORKSPACE_BUNDLE ||
       control?.method === CONTROL_WORKSPACE_AT
@@ -3572,6 +3578,12 @@ export class SessionSupervisor {
           return { env: {}, untracked: [] };
         });
     const containerEnv = doors?.env;
+    // A host-scope delegate's own scratch dir, its commands' `TMPDIR`
+    // (host-scratch.ts): made on each spawn, after a settle removed it too.
+    const hostTmp =
+      !boundary && spec.hostScratch
+        ? await hostScratchReady(spec.hostScratch)
+        : undefined;
     // A runtime it reaches with no door: it is told once, as it launches.
     const untracked = containersUntrackedWords(doors?.untracked ?? [], shut);
     if (untracked && !recovery) {
@@ -3605,7 +3617,8 @@ export class SessionSupervisor {
             place
               ? browserDoor(place.id)
               : browserDoor(spec.instanceId, spec.projectId),
-      containerEnv
+      containerEnv,
+      hostTmp
     );
     return { boundary, ctx };
   }
@@ -3627,7 +3640,8 @@ export class SessionSupervisor {
     sessionCredential?: string,
     recovery = false,
     browser?: () => Promise<BrowserDoor>,
-    containerEnv?: Readonly<Record<string, string>>
+    containerEnv?: Readonly<Record<string, string>>,
+    hostTmp?: string
   ): SessiondAwareContext {
     const boundary = bounded?.boundary;
     if (!processGeneration) {
@@ -3692,6 +3706,7 @@ export class SessionSupervisor {
       ...(sessionCredential ? { sessionCredential } : {}),
       ...(browser ? { browserDoor: browser } : {}),
       ...(containerEnv ? { containerEnv } : {}),
+      ...(hostTmp ? { hostTmp } : {}),
       ...(bounded ? { mcpGate: mcpGateOf(bounded.workspace) } : {}),
       /**
        * The sessiond line the NEXT frame is derived from. Optional on purpose:
@@ -6783,7 +6798,7 @@ export class SessionSupervisor {
           }
         }
       }
-      throw new Error(`unknown session function: ${method}`);
+      throw new Error(unknownControlWords(method));
     }
 
     if (method === RESOLVE_PERMISSION) {

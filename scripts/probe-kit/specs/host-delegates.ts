@@ -20,10 +20,17 @@
  * - h4. Its item is done, it lands none, its report reached the parent
  *   carrying that reading, and its row is a host-scope row in the agent
  *   user's home (cwd left out), with no clone and no boundary.
- * - h5. host refuses what needs a clone, each in a line: from, owns and lands
- *   main in one request, nothing filed.
+ * - h5. host refuses what needs a clone, each in a line: from, owns, lands
+ *   main and declared outputs in one request, nothing filed; inputs are not
+ *   among them.
  * - h6/h7. The same reading (h1, h2) from a host-scope delegate on OpenCode
  *   and on pi, each one's report reaching the parent.
+ * - h9. Each host-scope delegate (h1, h6, h7: Claude Code, OpenCode, pi)
+ *   has a `TMPDIR` of its own, its host workspace's scratch dir
+ *   (`~/.cawco/tmp/<id8>`, agent host-scratch.ts); the file its command
+ *   leaves in `$TMPDIR/outputs/` is in its project's `assets/<item>/` when
+ *   it finishes, at the path its parent's report names; and the Claude Code
+ *   one, delegated with an input, finds it in `$TMPDIR/inputs/`.
  * - h8. host refuses a cwd inside a clone, in host's words naming the clone,
  *   filing nothing: (a) a folder inside a clone only the machine's own
  *   records hold (agent workspace-records.ts `cloneHolding`), and (b) the
@@ -39,7 +46,7 @@
  */
 
 import { readFileSync, readlinkSync } from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sessionEnv } from "../../../packages/agent/src/harnesses/claude";
 import type { HarnessKind } from "../../../packages/core/src/harness";
@@ -75,8 +82,14 @@ const READ_END = "HOSTPROBE-READ-END";
 /** The reading's JSON list, from its tag to {@link READ_END}. */
 const READ_JSON = new RegExp(`^(\\[.*?\\]) ${READ_END}`, "u");
 
-/** The reading: namespaces, PID 1, groups, listening sockets, one per line. */
-const PROBE = `printf '${BEGIN}\\n'; echo "pidns $(readlink /proc/self/ns/pid)"; echo "netns $(readlink /proc/self/ns/net)"; echo "pid1 $(tr '\\000' '\\n' < /proc/1/cmdline | head -n 1)"; echo "groups $(id -G)"; ss -tlnH | awk '{print "listen " $4}'; printf '${END}\\n'`;
+/** The file each host delegate leaves in `$TMPDIR/outputs/`, and what it holds: only this run's command can have written it. */
+const OUT_FILE = "host-probe-out.txt";
+const OUT_TOKEN = `host-delegates-out-${crypto.randomUUID()}`;
+/** The input the Claude Code host delegate is delegated with. */
+const IN_FILE = "host-probe-in.txt";
+
+/** The reading: namespaces, PID 1, groups, listening sockets, its TMPDIR and inputs, one per line; then its output written. */
+const PROBE = `printf '${BEGIN}\\n'; echo "pidns $(readlink /proc/self/ns/pid)"; echo "netns $(readlink /proc/self/ns/net)"; echo "pid1 $(tr '\\000' '\\n' < /proc/1/cmdline | head -n 1)"; echo "groups $(id -G)"; ss -tlnH | awk '{print "listen " $4}'; echo "tmpdir $TMPDIR"; ls "$TMPDIR/inputs" 2>/dev/null | sed 's/^/input /'; printf %s ${OUT_TOKEN} > "$TMPDIR/outputs/${OUT_FILE}" && echo "wrote ${OUT_FILE}"; printf '${END}\\n'`;
 
 /** Each delegate's brief tag; its summary carries `<tag> READ <json>`. */
 const TAGS = {
@@ -239,10 +252,13 @@ interface Started {
 /** What one delegate read, parsed out of its parent's report. */
 interface Reading {
   groups: string;
+  inputs: string[];
   listen: string[];
   netns: string;
   pid1: string;
   pidns: string;
+  tmpdir: string;
+  wrote: boolean;
 }
 
 const parse = (lines: string[]): Reading => {
@@ -254,6 +270,11 @@ const parse = (lines: string[]): Reading => {
     netns: one("netns"),
     pid1: one("pid1").trim(),
     groups: one("groups"),
+    tmpdir: one("tmpdir"),
+    wrote: lines.includes(`wrote ${OUT_FILE}`),
+    inputs: lines
+      .filter((line) => line.startsWith("input "))
+      .map((line) => line.slice("input ".length)),
     listen: lines
       .filter((line) => line.startsWith("listen "))
       .map((line) => line.slice("listen ".length))
@@ -263,6 +284,9 @@ const parse = (lines: string[]): Reading => {
 
 /** The same reading, taken by this process: the host's. */
 const hostReading = async (): Promise<Reading> => ({
+  inputs: [],
+  tmpdir: "",
+  wrote: false,
   pidns: readlinkSync("/proc/self/ns/pid"),
   netns: readlinkSync("/proc/self/ns/net"),
   pid1: readFileSync("/proc/1/cmdline", "utf8").split("\0")[0] ?? "",
@@ -293,17 +317,24 @@ const probe = async (
   parent: string,
   harness: HarnessKind,
   tag: string,
-  how: { host: true } | { cwd: string },
+  how: { host: true; inputs?: string[] } | { cwd: string },
   /** Run as soon as the item is filed, while it is live. */
   live?: (started: Started) => Promise<void>
-): Promise<{ reading?: Reading; started: Started; state?: string }> => {
+): Promise<{
+  reading?: Reading;
+  report?: string;
+  started: Started;
+  state?: string;
+}> => {
   const started = await fleet.api<Started>("/api/work-items", {
     parentInstanceId: parent,
     title: `${tag.toLowerCase()} probe`,
     prompt: `${tag}: read the machine with one shell command, then finish.`,
     harness,
     model: MODEL[harness],
-    ...("host" in how ? { host: true } : { cwd: how.cwd, lands: "none" }),
+    ...("host" in how
+      ? { host: true, ...(how.inputs ? { inputs: how.inputs } : {}) }
+      : { cwd: how.cwd, lands: "none" }),
   });
   await live?.(started);
   const state = await until(
@@ -329,8 +360,44 @@ const probe = async (
   return {
     started,
     state,
+    report: report ?? undefined,
     reading: json ? parse(JSON.parse(json) as string[]) : undefined,
   };
+};
+
+/**
+ * h9's rule for one host delegate: its `TMPDIR` is its host workspace's
+ * scratch dir under `home`, and the file it left in `$TMPDIR/outputs/` is
+ * in its item's assets folder, at the path its parent's report lists
+ * (hub work-items.ts `collectOutputs`), holding what it wrote.
+ */
+const handsBack = async (
+  kit: Kit,
+  leg: string,
+  harness: string,
+  home: string,
+  read: { reading?: Reading; report?: string; started: Started }
+): Promise<void> => {
+  const scratch = join(
+    home,
+    ".cawco",
+    "tmp",
+    read.started.workspaceId.slice(0, 8)
+  );
+  const asset = `/assets/${read.started.workItemId.slice(0, 8)}/${OUT_FILE}`;
+  const listed = (read.report ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.startsWith("- /") && line.endsWith(asset))
+    ?.slice(2);
+  const held = listed ? await readFile(listed, "utf8").catch(() => "") : "";
+  kit.check(
+    `${leg}: a host-scope delegate on ${harness} has its scratch dir as TMPDIR, and what it left in $TMPDIR/outputs/ is in its item's assets at the path its parent's report names`,
+    read.reading?.tmpdir === scratch &&
+      read.reading.wrote &&
+      held === OUT_TOKEN,
+    `tmpdir ${read.reading?.tmpdir} (want ${scratch}); wrote ${read.reading?.wrote}; listed ${listed ?? "none"}; held ${JSON.stringify(held.slice(0, 80))}; report ${(read.report ?? "").slice(-600)}`
+  );
 };
 
 /** h2's rule: what listened both before and after is in the delegate's list, and nothing at neither. */
@@ -384,11 +451,20 @@ const claudeHost = async (
   home: string
 ): Promise<void> => {
   const before = (await hostReading()).listen;
+  const input = join(fleet.sandbox, IN_FILE);
+  await writeFile(input, "handed in\n");
   const read = await probe(fleet, parent, "claude", TAGS.claude, {
     host: true,
+    inputs: [input],
   });
   const host = await hostReading();
   sameMachine(kit, "h1/h2", "claude", read, host, before, host.listen);
+  await handsBack(kit, "h9", "claude", home, read);
+  kit.check(
+    "h9: the Claude Code host delegate, delegated with an input, finds it in $TMPDIR/inputs/",
+    read.reading?.inputs.includes(IN_FILE) === true,
+    JSON.stringify(read.reading?.inputs)
+  );
   kit.check(
     "h3: its groups are the agent user's",
     read.reading?.groups === host.groups,
@@ -426,6 +502,7 @@ const claudeHost = async (
       from: read.started.workspaceId,
       owns: ["src/**"],
       lands: "main",
+      outputs: ["report.md"],
     })
     .then(
       () => "filed",
@@ -433,12 +510,14 @@ const claudeHost = async (
         error instanceof Error ? error.message : String(error)
     );
   kit.check(
-    "h5: host refuses from, owns and lands main, one line each, and files nothing",
+    "h5: host refuses from, owns, lands main and outputs, one line each, and files nothing",
     refused.includes("400") &&
       refused.includes(HEADING.many) &&
       refused.includes("- from:") &&
       refused.includes("- owns:") &&
       refused.includes("- lands main:") &&
+      refused.includes("- outputs:") &&
+      !refused.includes("- inputs:") &&
       fleet.query(
         "SELECT id FROM work_items WHERE title = ?",
         "Refused host probe"
@@ -628,6 +707,7 @@ const spec: Spec = {
       });
       const host = await hostReading();
       sameMachine(kit, leg, harness, read, host, before, host.listen);
+      await handsBack(kit, `${leg}/h9`, harness, home, read);
     }
     await recordedClone(kit, fleet, parent, home);
     const bounded = await probe(

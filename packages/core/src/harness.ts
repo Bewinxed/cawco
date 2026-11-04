@@ -2560,6 +2560,51 @@ export const CONTROL_WORKSPACE_OUTPUTS = "workspaceOutputs";
  */
 export const CONTROL_WORKSPACE_CLONES = "workspaceClones";
 
+/**
+ * The files of a host-scope delegate's `$TMPDIR/outputs/` ({@link
+ * OUTPUTS_DIR}): its host workspace's scratch dir, which its session's
+ * commands get as `TMPDIR` though they run on the host
+ * (`SpawnPayload.hostScratch`). Read as they stand, no link followed and
+ * nothing stopped: the folder is the delegate's alone, and its session is
+ * the machine's own. The hub sends it as the item finishes and as its host
+ * workspace settles (hub work-items.ts `scratchOutputFiles`,
+ * `keepScratchOutputs`). Args `[{ id, read }]`, the host workspace's id:
+ * with `read`, answers {@link WorkspaceOutputs}, each regular file with its
+ * bytes; without, `{ listed: HostOutputListed[] }`, each file and link with
+ * its size alone, for the hub's checks before it copies. Only the hub sends
+ * it.
+ */
+export const CONTROL_HOST_OUTPUTS = "hostOutputs";
+
+/**
+ * What an agent answers a machine control it has no function for (agent
+ * session.ts): an agent from before a control was added says this of it,
+ * and the hub reads it as that agent's word that it holds nothing the
+ * control asks of ({@link knowsNotControl}).
+ */
+export const unknownControlWords = (method: string): string =>
+  `unknown session function: ${method}`;
+
+/** Whether `error` is a machine's answer that it has no function for control `method` ({@link unknownControlWords}). */
+export const knowsNotControl = (error: unknown, method: string): boolean =>
+  error instanceof Error && error.message.includes(unknownControlWords(method));
+
+/** One entry of a host-scope delegate's `$TMPDIR/outputs/` as {@link CONTROL_HOST_OUTPUTS} lists it: its path under `outputs/`, whether it is a link, and its size (a link's 0). */
+export interface HostOutputListed {
+  link: boolean;
+  path: string;
+  size: number;
+}
+
+/**
+ * A host-scope delegate's scratch dir removed, `outputs/` with it, once its
+ * outputs are in the project's folder and no session of it is attached (hub
+ * work-items.ts `settleHost`): a later spawn of its session makes it again.
+ * Args `[{ id }]`, the host workspace's id; answers nothing. Only the hub
+ * sends it.
+ */
+export const CONTROL_HOST_SCRATCH_REMOVE = "hostScratchRemove";
+
 /** What {@link CONTROL_WORKSPACE_OUTPUTS} answers: each regular file, by its path under `outputs/`, with base64 of its bytes. */
 export interface WorkspaceOutputs {
   files: { content: string; path: string }[];

@@ -35129,6 +35129,10 @@
               "accountId"
             ]
           },
+          "hostScratch": {
+            "description": "A host-scope work item's session (hub work-items.ts `startHost`): the id\nof its host workspace, whose scratch dir (core paths.ts\n`workspaceScratchDir`) the machine makes, `outputs/` in it, and gives its\ncommands as `TMPDIR`, though they run on the host with no boundary.\nWhat it leaves in `$TMPDIR/outputs/` the hub copies into its project's\nfolder (core harness.ts `CONTROL_HOST_OUTPUTS`). Set on each\nspawn of such a session, as {@link workspace} is on a bounded one's, and\non no other.",
+            "type": "string"
+          },
           "ingested": {
             "$ref": "#/components/schemas/IngestMark",
             "description": "Hub ingest cursor for a recovery sent after the registration handover."

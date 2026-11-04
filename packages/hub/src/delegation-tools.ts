@@ -173,7 +173,7 @@ const forgeWriteOf = (asked: {
  * deliverable and its proof, and what the hub does
  * with the work: the session's own work item's landing (`lands`), so a
  * delegate is never told the hub pushes to the base branch when it does not;
- * a host-scope item's report is all it hands in.
+ * a host-scope item hands in its report and its `$TMPDIR/outputs/`.
  */
 const finishItemDescription = (lands: ItemEnd = "main"): string => {
   const reads =
@@ -189,7 +189,7 @@ const finishItemDescription = (lands: ItemEnd = "main"): string => {
     " `blocked` only when something outside your control stops the work. A task attempt's first call lists its open to-dos once: tick the done ones with todo_write, explain the rest, call again.";
   switch (lands) {
     case "host":
-      return `Finish your work item. Nothing is landed: you ran on the machine itself.${reads} \`summary\` carries the findings and changes whole, then the proof: each command's real output, and what you could not run.${close}`;
+      return `Finish your work item. Nothing is landed: you ran on the machine itself.${reads} \`summary\` carries the findings and changes whole, then the proof: each command's real output, and what you could not run. In a project, files you leave in $TMPDIR/outputs/ are copied to its folder's assets/, readable from any machine; the report names each path.${close}`;
     case "branch":
       return `Finish your work item. Commit and do not push.${proof} Then ${gate} runs on your commits and the hub pushes your branch to origin, not the base branch.${back}${outputs}${close}`;
     case "pr":
@@ -596,13 +596,13 @@ export function handoffTools(deps: HandoffDeps) {
           .boolean()
           .optional()
           .describe(
-            "Run on `machine` itself in `cwd`, outside any clone or boundary: its network, processes and the agent user's groups (docker). For work whose subject is the machine. Lands nothing; not with from, workspace, owns, inputs or outputs."
+            "Run on `machine` itself in `cwd`, outside any clone or boundary: its network, processes and the agent user's groups (docker). For work whose subject is the machine. Lands nothing; files it leaves in its $TMPDIR/outputs/ come back to its project's folder under assets/<item>/, readable from any machine. Not with from, workspace, owns or outputs."
           ),
         outputs: z
           .array(z.string())
           .optional()
           .describe(
-            "Deliverables that are not commits, from the repository's root; copied into the project's folder under assets/<item>/, as is whatever the delegate leaves in its $TMPDIR/outputs/ without being named here."
+            "Deliverables that are not commits, from the repository's root; copied into the project's folder under assets/<item>/, as is whatever the delegate leaves in its $TMPDIR/outputs/ without being named here. With host: none; it hands files back in $TMPDIR/outputs/."
           ),
         group: groupParameter().optional(),
         owns: ownsParameter().optional(),

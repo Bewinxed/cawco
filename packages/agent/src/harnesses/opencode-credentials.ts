@@ -29,6 +29,12 @@ export interface HeldCredential {
   credential: string;
   instanceId: string;
   /**
+   * A host-scope delegate's scratch dir (agent `HarnessContext.hostTmp`),
+   * which the plugin sets as `TMPDIR` in each of its shells; null for any
+   * other session.
+   */
+  tmp: string | null;
+  /**
    * The workspace whose boundary the session's spawn put it in (agent
    * `HarnessContext.workspace`), or null for none. The plugin reads it for a
    * location a place holds (core `isPlace`): one OpenCode location serves
