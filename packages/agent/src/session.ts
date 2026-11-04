@@ -6578,16 +6578,17 @@ export class SessionSupervisor {
         return await probeTools();
       }
       if (method === "installTool") {
-        // The policy's pin, then the newest release the hub sends a tool it
-        // keeps current to reach (hub tool-releases.ts); JSON says an absent
+        // The policy's pin, the newest release the hub sends a tool it keeps
+        // current to reach, and whether the hub sent it to keep it current
+        // rather than a press (hub tool-releases.ts); JSON says an absent
         // one as null.
         const said = (at: number): string | undefined =>
           typeof args[at] === "string" ? (args[at] as string) : undefined;
-        const installed = await installTool(
-          args[0] as string,
-          said(1),
-          said(2)
-        );
+        const newest = said(2);
+        const installed = await installTool(args[0] as string, said(1), {
+          ...(newest ? { newest } : {}),
+          automatic: args[3] === true,
+        });
         // A harness CLI installed here converges what the machine holds of
         // the fleet, as every harness already here did.
         if (harnesses().some((adapter) => adapter.kind === args[0])) {

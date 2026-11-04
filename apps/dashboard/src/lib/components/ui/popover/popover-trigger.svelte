@@ -21,10 +21,11 @@
    *   home's raised card.
    * - `meter`: the composer's context meter, a glyph and its figure;
    *   `data-warn`, `data-critical` and `data-compacting` take their inks.
-   * - `mark`: a status mark that opens what it reports (a tool's update
-   *   that didn't land, Configure → CLI tools): the mark drawn inside it is
-   *   its whole look, no fill of its own ("Needs you is a mark, never a
-   *   surface", DESIGN.md), and it scales on press as a compact control.
+   * - `mark`: a status mark or badge that opens what it reports
+   *   (Configure → CLI tools: Not updated, Failed, Unsupported): the mark
+   *   drawn inside it is its whole look, no fill of its own ("Needs you is
+   *   a mark, never a surface", DESIGN.md), and it scales on press as a
+   *   compact control.
    */
   export const popoverTriggerVariants = tv({
     variants: {

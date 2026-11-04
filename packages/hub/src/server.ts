@@ -2676,13 +2676,6 @@ const peekInstall = (payload: unknown): string | undefined => {
   return typeof id === "string" ? id : undefined;
 };
 
-/** The version an install's `control` pins, when it pins one. */
-const peekInstallPin = (payload: unknown): string | undefined => {
-  const { args } = payload as { args?: unknown };
-  const pin = Array.isArray(args) ? args[1] : undefined;
-  return typeof pin === "string" ? pin : undefined;
-};
-
 /** A `control` asking a machine to delete a transcript, and the session it names. */
 const peekTranscriptDelete = (payload: unknown): string | undefined => {
   if (peek(payload, "method") !== "deleteSession") {
@@ -20835,8 +20828,7 @@ export const createServer = (
       }
       sendInstall(machineId, agent, {
         toolId: policy.id,
-        pin: policy.pinnedVersion ?? undefined,
-        newest: installTarget(policy.id, policy.pinnedVersion),
+        ...installAsk(policy.id),
       });
       sent = true;
     }
@@ -20870,20 +20862,37 @@ export const createServer = (
   offBoot.push(() => toolReleases.start());
 
   /**
-   * The release an install of `toolId` is sent to reach: its newest, for a
-   * tool CawCo keeps current that the policy pins to no version
-   * (tool-releases.ts `releaseTarget`); none for any other. The machine
-   * answers a copy left older than it with why (agent tools.ts `install`).
+   * What every install of `toolId` carries, the hub's own and a press alike
+   * (`installArgs`): the fleet's pin, which the machine installs exactly
+   * and never with an updater; else, for a tool CawCo keeps current, the
+   * release it is sent to reach (tool-releases.ts `releaseTarget`), a copy
+   * left older than it answering why (agent tools.ts `install`).
    */
-  const installTarget = (
-    toolId: string,
-    pinned: string | null | undefined
-  ): string | undefined => {
+  const installAsk = (toolId: string): { newest?: string; pin?: string } => {
+    const pin = db
+      .listToolPolicies()
+      .find((policy) => policy.id === toolId)?.pinnedVersion;
+    if (pin) {
+      return { pin };
+    }
     const spec = toolSpec(toolId);
-    return spec && !pinned
+    const newest = spec
       ? releaseTarget(spec, toolReleases.newest(toolId))
       : undefined;
+    return newest ? { newest } : {};
   };
+
+  /**
+   * An install control's arguments (agent session.ts `installTool`): the
+   * tool, its pin, the release to reach, and whether the hub sends it to
+   * keep the tool current rather than a press (a machine whose owner turned
+   * the tool's automatic updates off declines that one).
+   */
+  const installArgs = (
+    toolId: string,
+    ask: { newest?: string; pin?: string },
+    automatic: boolean
+  ): unknown[] => [toolId, ask.pin, ask.newest, automatic];
 
   /**
    * Sends the machine one install of the hub's own (a required tool it is
@@ -20908,7 +20917,7 @@ export const createServer = (
       payload: {
         requestId,
         method: "installTool",
-        args: [install.toolId, install.pin, install.newest],
+        args: installArgs(install.toolId, install, true),
       },
     } satisfies Envelope<ControlPayload>);
     db.setAgentToolCell(machineId, {
@@ -20971,11 +20980,11 @@ export const createServer = (
       return Promise.resolve({ kind: "unanswered", reason: "dead", after: 0 });
     }
     const requestId = crypto.randomUUID();
-    const newest = installTarget(toolId, undefined);
+    const ask = installAsk(toolId);
     pendingInstalls.set(requestId, {
       machineId,
       toolId,
-      ...(newest ? { newest } : {}),
+      ...(ask.newest ? { newest: ask.newest } : {}),
     });
     db.setAgentToolCell(machineId, {
       id: toolId,
@@ -20990,7 +20999,7 @@ export const createServer = (
         payload: {
           requestId,
           method: "installTool",
-          args: [toolId, undefined, newest],
+          args: installArgs(toolId, ask, false),
         },
       } satisfies Envelope<ControlPayload>;
       sendFrame(agent, frame);
@@ -23748,20 +23757,21 @@ export const createServer = (
       }
     }
     const requestId = message.requestId ?? message.payload.requestId;
-    // A press that installs a tool CawCo keeps current carries the release it
-    // is to reach, as the hub's own updates do (`installTarget`): a copy its
-    // updater leaves older answers why, and keeps its Retry.
+    // A press carries what the hub's own installs do (`installAsk`): the
+    // fleet's pin as the hub holds it, whatever the pressing surface had,
+    // else the release to reach, so a copy its updater leaves older answers
+    // why and keeps its Retry. A press is no automatic update.
     const toolId = peekInstall(message.payload);
-    const pin = toolId ? peekInstallPin(message.payload) : undefined;
-    const newest = toolId ? installTarget(toolId, pin) : undefined;
+    const ask = toolId ? installAsk(toolId) : {};
+    const { newest } = ask;
     const correlated = {
       ...message,
       requestId,
-      ...(toolId && newest
+      ...(toolId
         ? {
             payload: {
               ...message.payload,
-              args: [toolId, pin, newest],
+              args: installArgs(toolId, ask, false),
             },
           }
         : {}),

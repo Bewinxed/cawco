@@ -8,14 +8,21 @@
  * dashboard only renders {@link ToolStatus} rows it is handed.
  */
 
+import { CLAUDE_DIR_NAME } from "./claude-dirs";
+
 /** The platforms a daemon reports itself as — `platform()` from `node:os`. */
 export type ToolPlatform = "linux" | "darwin" | "win32";
 
 /**
- * One way to put a tool on a machine. Methods are tried in catalog order; the
- * first whose `platforms` match and whose `needs` is present wins. There is no
- * fallback past a method that ran and failed — a half-applied installer chain
- * is harder to reason about than one honest failure.
+ * One way to put a tool on a machine. A copy already there goes on again
+ * with the method that holds it (its `footprint`, or what `holds` asks);
+ * any other install takes, in catalog order, the first method whose
+ * `platforms` match and whose `needs` is present, among the methods that
+ * hold nothing when the tool has any (a package manager's method is for the
+ * copy it holds), else among all. A pinned install takes only a method with
+ * a `pinnedCommand`. There is no fallback past a method that ran and failed
+ * — a half-applied installer chain is harder to reason about than one
+ * honest failure.
  */
 export interface ToolInstallMethod {
   /** The install command, run through the Bun shell. */
@@ -28,6 +35,14 @@ export interface ToolInstallMethod {
    * one that wins is not the one just installed.
    */
   footprint?: ToolFootprint;
+  /**
+   * For a package manager whose copies can't be told apart by where they
+   * resolve (apk puts its files where other managers put theirs): the
+   * question that asks it whether it holds a copy, `<needs> <holds…>
+   * <file>`, which exits 0 and names the package when it does. A copy it
+   * holds is held to this method, as one bearing its footprint is.
+   */
+  holds?: string[];
   /** Names the method in status and errors: 'curl script', 'npm', 'winget'. */
   label: string;
   /**
@@ -47,7 +62,9 @@ export interface ToolInstallMethod {
    * The command when the policy pins a version — `{version}` becomes the pin.
    * Kept apart from `command` because "latest" is not a version most
    * installers accept: the curl scripts and winget want no version argument
-   * at all when they should take the newest.
+   * at all when they should take the newest. A method without one never runs
+   * for a pin: the install says it can't put that version on, rather than
+   * putting another on.
    */
   pinnedCommand?: string;
   platforms: ToolPlatform[];
@@ -60,13 +77,52 @@ export interface ToolInstallMethod {
  * - `bun-global`: the file is in a package of bun's global dir, and the PATH
  *   finds it through bun's global bin dir or beside the global dir's lockfile;
  * - `dir`: the binary or its file is under `path` (`~` expanded);
- * - `brew`: the file is in Homebrew's Cellar, under `formula`'s own dir.
+ * - `brew`: the file is in Homebrew's Cellar under the formula `formula`'s
+ *   own dir, or in its Caskroom under the cask of that name.
  */
 export type ToolFootprint =
   | { kind: "brew"; formula: string }
   | { kind: "bun-global" }
   | { kind: "dir"; path: string }
   | { kind: "npm-global" };
+
+/**
+ * How a machine turns a tool's own updates off, as the tool itself reads it:
+ * a variable whose value is on ({@link switchOn}) in the environment the tool
+ * runs with, or in the `env` of one of its settings files, a settings file's
+ * over the environment and a later file's over an earlier one, as the tool
+ * applies them. `automatic` turns off the tool's own automatic updates, and
+ * so CawCo's; `every` turns off every update, a press's included.
+ */
+export interface ToolUpdateSwitches {
+  automatic: string[];
+  /**
+   * The folder of the user's settings file, `<folder>/settings.json`: the
+   * variable's value when set, else its default (`~` expanded). Read first.
+   */
+  configDir: { default: string; variable: string };
+  every: string[];
+  /**
+   * The settings files read after the user's, on each platform, in the
+   * order the tool applies them; a file named `*.json` stands for every
+   * `.json` file in its folder, in name order.
+   */
+  settings: Partial<Record<ToolPlatform, string[]>>;
+}
+
+/**
+ * Whether a switch's value turns it on, as Claude Code reads one: 2.1.311's
+ * `function Le(e){if(!e)return!1;…let n=String(e).toLowerCase().trim();
+ * return["1","true","yes","on"].includes(n)}`, the parse of both
+ * DISABLE_AUTOUPDATER (`Ph(Le(process.env.DISABLE_AUTOUPDATER))`) and
+ * DISABLE_UPDATES (`H.bool()`, `i((n)=>Le(n))`).
+ */
+export const switchOn = (value: unknown): boolean =>
+  ["1", "true", "yes", "on"].includes(
+    String(value ?? "")
+      .toLowerCase()
+      .trim()
+  );
 
 /** The shape of {@link ToolSpec.requires}, which no tool sets. */
 export interface ToolRequirement {
@@ -110,6 +166,11 @@ export interface ToolSpec {
   release?: string;
   /** Set on no tool; declared for installable apps only, as {@link ToolInstallMethod.native} is. */
   requires?: ToolRequirement[];
+  /**
+   * How a machine turns this tool's own updates off, for a tool CawCo keeps
+   * current ({@link release}): the switches its owner set are CawCo's too.
+   */
+  updatesOff?: ToolUpdateSwitches;
   /** Probe for the version; the first `x.y.z` in its output is the answer. */
   versionCommand: string;
   /**
@@ -247,19 +308,56 @@ export const TOOL_CATALOG: ToolSpec[] = [
     // The native installer's link (code.claude.com/docs/en/setup), for a
     // daemon whose PATH lacks it.
     wellKnownPaths: ["~/.local/bin/claude"],
-    // No footprints: whatever put Claude Code here, its own updater is asked
-    // first, as the machine's user and with no sudo ("To apply an update
+    // Its own switches, read where it reads them: the docs' "Set
+    // `DISABLE_AUTOUPDATER` to `"1"` in the `env` key of your
+    // `settings.json`" and "`DISABLE_AUTOUPDATER` only stops the background
+    // check; `claude update` and `claude install` still work. To block all
+    // update paths, including manual updates, set `DISABLE_UPDATES`"
+    // (code.claude.com/docs/en/setup); its managed files: "`/etc/claude-code/`
+    // on Linux and WSL", "`/Library/Application Support/ClaudeCode/` on
+    // macOS", "`C:\Program Files\ClaudeCode\` on Windows", and "Claude Code
+    // merges `managed-settings.json` first, then every `*.json` file in the
+    // directory in alphabetical order"
+    // (code.claude.com/docs/en/managed-settings, read 2026-11-04). The mac
+    // profile and Windows registry policies are not files, and not read.
+    updatesOff: {
+      automatic: ["DISABLE_AUTOUPDATER"],
+      every: ["DISABLE_UPDATES"],
+      configDir: {
+        variable: "CLAUDE_CONFIG_DIR",
+        default: `~/${CLAUDE_DIR_NAME}`,
+      },
+      settings: {
+        linux: [
+          "/etc/claude-code/managed-settings.json",
+          "/etc/claude-code/managed-settings.d/*.json",
+        ],
+        darwin: [
+          "/Library/Application Support/ClaudeCode/managed-settings.json",
+          "/Library/Application Support/ClaudeCode/managed-settings.d/*.json",
+        ],
+        win32: [
+          "C:\\Program Files\\ClaudeCode\\managed-settings.json",
+          "C:\\Program Files\\ClaudeCode\\managed-settings.d\\*.json",
+        ],
+      },
+    },
+    // A copy a package manager holds goes on again with that manager, as
+    // Claude Code tells its own installs apart (2.1.311's
+    // `detectHomebrew`: `n.includes("/Caskroom/")` and the cask from
+    // `/\/Caskroom\/([^/]+)\//`; `detectWinget`: `Microsoft[/\\]WinGet[/\\]
+    // Packages` or `Links`; `detectApk`: `apk info --who-owns <execPath>`).
+    // Any other copy, a native one among them, takes Claude Code's own
+    // updater, as the machine's user and with no sudo ("To apply an update
     // immediately without waiting for the next background check, run:
-    // claude update", code.claude.com/docs/en/setup, read 2026-11-04). It
-    // keeps the person's channel and pins ("Control which release channel
-    // Claude Code follows for auto-updates and `claude update` with the
-    // `autoUpdatesChannel` setting", the same page). The same page:
-    // "Installs managed by Homebrew, WinGet, or apk report `Claude is up to
-    // date!` instead", so the version is read again after it, and a copy
-    // left older than the release it was after says what the updater said.
-    // A machine without one gets the official installer, which puts the
-    // newest build in ~/.local/bin, or the build a pin names ("curl -fsSL
-    // https://claude.ai/install.sh | bash -s 2.1.89", the same page).
+    // claude update", code.claude.com/docs/en/setup, read 2026-11-04), which
+    // keeps the person's channel ("Control which release channel Claude Code
+    // follows for auto-updates and `claude update` with the
+    // `autoUpdatesChannel` setting", the same page). A pin never runs it: it
+    // goes to the native installer, "To install a specific version number:
+    // curl -fsSL https://claude.ai/install.sh | bash -s 2.1.89" (the same
+    // page), or to npm for a copy npm holds. A machine without one gets that
+    // installer too, the newest build or the pinned one.
     install: [
       {
         label: "claude update",
@@ -275,6 +373,54 @@ export const TOOL_CATALOG: ToolSpec[] = [
           "curl -fsSL https://claude.ai/install.sh -o claude-install.sh && bash claude-install.sh",
         pinnedCommand:
           "curl -fsSL https://claude.ai/install.sh -o claude-install.sh && bash claude-install.sh {version}",
+      },
+      // "Claude Code runs npm without `sudo` when it updates itself", and "To
+      // upgrade an npm installation, run `npm install -g
+      // @anthropic-ai/claude-code@latest`" (the same page): its own updater
+      // for the newest, which keeps the channel; npm itself for a pin.
+      {
+        label: "npm",
+        platforms: ["linux", "darwin", "win32"],
+        needs: "npm",
+        footprint: { kind: "npm-global" },
+        command: "claude update",
+        pinnedCommand: "npm install -g @anthropic-ai/claude-code@{version}",
+      },
+      // "Run `brew upgrade claude-code` or `brew upgrade
+      // claude-code@latest`, depending on which cask you installed" (the
+      // same page). A cask carries one version, so no pin.
+      {
+        label: "brew",
+        platforms: ["darwin", "linux"],
+        needs: "brew",
+        footprint: { kind: "brew", formula: "claude-code" },
+        command: "brew upgrade claude-code",
+      },
+      {
+        label: "brew",
+        platforms: ["darwin", "linux"],
+        needs: "brew",
+        footprint: { kind: "brew", formula: "claude-code@latest" },
+        command: "brew upgrade claude-code@latest",
+      },
+      // "Run `winget upgrade Anthropic.ClaudeCode` periodically" (the same
+      // page), with the flags a run with no terminal needs.
+      {
+        label: "winget",
+        platforms: ["win32"],
+        needs: "winget",
+        footprint: { kind: "dir", path: "~/AppData/Local/Microsoft/WinGet" },
+        command:
+          "winget upgrade -e --id Anthropic.ClaudeCode --silent --accept-package-agreements --accept-source-agreements",
+      },
+      // "To upgrade later, run `apk update && apk upgrade claude-code`" (the
+      // same page). It needs root: as any other user apk says why not.
+      {
+        label: "apk",
+        platforms: ["linux"],
+        needs: "apk",
+        holds: ["info", "--who-owns"],
+        command: "apk update && apk upgrade claude-code",
       },
     ],
   },
@@ -403,8 +549,8 @@ export const TOOL_CATALOG: ToolSpec[] = [
     install: [
       // Verified 2026-08-06 (v1.1.10). The installer script takes no version
       // argument — the binary self-updates (AGY_CLI_DISABLE_AUTO_UPDATE=true
-      // turns that off), so a policy pin is best-effort here and only winget
-      // can honour one. Auth stays the user's: Google sign-in into the OS
+      // turns that off), so only winget can honour a policy pin; elsewhere a
+      // pinned install says it can't put that version on, and runs nothing. Auth stays the user's: Google sign-in into the OS
       // keyring, once per machine (`agy` prints an URL + code over SSH);
       // Google says API keys are not supported (antigravity-cli#78).
       {

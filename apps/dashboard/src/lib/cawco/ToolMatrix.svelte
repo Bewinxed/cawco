@@ -36,6 +36,14 @@
     policies: ToolPolicy[];
   } = $props();
 
+  /**
+   * A version with a mark beside it (Not updated, Updating…): on a phone's
+   * card the mark goes under the version, so the state stays narrow and
+   * the machine's name beside it reads whole.
+   */
+  const STACKED =
+    "flex items-center gap-space-2 @max-phone/table:flex-col @max-phone/table:items-end @max-phone/table:gap-space-1";
+
   let written = $state<Record<string, ToolPolicy>>({});
   const policyOf = (spec: ToolSpec): ToolPolicy =>
     written[spec.id] ?? policyFor(policies, spec.id);
@@ -62,11 +70,7 @@
     asked[key] = true;
     delete refused[key];
     try {
-      const read = await installTool(
-        machine.machineId,
-        spec.id,
-        policyOf(spec).pinnedVersion
-      );
+      const read = await installTool(machine.machineId, spec.id);
       switch (read.kind) {
         case "answered":
           break;
@@ -141,7 +145,7 @@
       toolStatus.version ?? "",
       where
     )}
-    <span class="flex items-center gap-space-2">
+    <span class={STACKED}>
       <code data-slot="num" class="num type-code text-ink-strong"
         >{toolStatus.version ?? "—"}</code
       >
@@ -199,7 +203,7 @@
     </span>
   {:else if shown === "installing"}
     <!-- An update keeps the copy's version in ink beside its progress. -->
-    <span class="flex items-center gap-space-2">
+    <span class={STACKED}>
       {#if toolStatus?.version}
         <code data-slot="num" class="num type-code text-ink-strong"
           >{toolStatus.version}</code
@@ -219,26 +223,23 @@
   {:else if shown === "failed"}
     <span class="flex items-center gap-space-1">
       <Popover.Root>
-        <Popover.Trigger>
-          {#snippet child({ props })}
-            <Badge
-              {...props}
-              aria-label="Why {spec.name} {outdated
-                ? `${toolStatus?.version} can't run`
-                : 'did not install'} on {where}"
-              size="cell"
-              variant="destructive"
-            >
-              <IconWarningTriangle class="size-icon-sm shrink-0" />
-              {#if outdated}
-                <code data-slot="num" class="num type-code"
-                  >{toolStatus?.version}</code
-                >
-              {:else}
-                <span>Failed</span>
-              {/if}
-            </Badge>
-          {/snippet}
+        <!-- A real button, its badge its whole look (the trigger's `mark`). -->
+        <Popover.Trigger
+          aria-label="Why {spec.name} {outdated
+            ? `${toolStatus?.version} can't run`
+            : 'did not install'} on {where}"
+          look="mark"
+        >
+          <Badge size="cell" variant="destructive">
+            <IconWarningTriangle class="size-icon-sm shrink-0" />
+            {#if outdated}
+              <code data-slot="num" class="num type-code"
+                >{toolStatus?.version}</code
+              >
+            {:else}
+              <span>Failed</span>
+            {/if}
+          </Badge>
         </Popover.Trigger>
         <Popover.Content
           align="start"
@@ -286,18 +287,13 @@
     </span>
   {:else if shown === "unsupported"}
     <Popover.Root>
-      <Popover.Trigger>
-        {#snippet child({ props })}
-          <Badge
-            {...props}
-            aria-label="Why {spec.name} cannot run on {where}"
-            size="cell"
-            tone="muted"
-            variant="ghost"
-          >
-            <span>Unsupported</span>
-          </Badge>
-        {/snippet}
+      <Popover.Trigger
+        aria-label="Why {spec.name} cannot run on {where}"
+        look="mark"
+      >
+        <Badge size="cell" tone="muted" variant="ghost">
+          <span>Unsupported</span>
+        </Badge>
       </Popover.Trigger>
       <Popover.Content align="start" frame="panel-high" width="wide">
         <p class="type-body text-ink-strong">

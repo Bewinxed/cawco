@@ -51,19 +51,17 @@ export async function setPolicy(
  * Puts one tool on one machine, answering with the status the attempt settled
  * on. A machine-scoped control, so the hub sees it go past,
  * marks the cell `installing` and publishes — which is how every other
- * dashboard follows an install nobody there clicked.
- *
- * The policy's pin rides along so a click installs the same version the hub's
- * auto-install would — two paths to one tool must not mean two versions.
+ * dashboard follows an install nobody there clicked. The hub puts in the
+ * fleet's pin, or the release to reach, as its own installs carry them
+ * (hub server.ts `installAsk`): one install, one version, whoever pressed.
  */
 export const installTool = (
   machineId: string,
-  id: string,
-  pinnedVersion?: string | null
+  id: string
 ): Promise<Bounded<ToolStatus>> =>
   machineControl<ToolStatus>(
     machineId,
     "installTool",
-    pinnedVersion ? [id, pinnedVersion] : [id],
+    [id],
     INSTALL_TIMEOUT_MS
   );

@@ -53427,6 +53427,10 @@
               "$ref": "#/components/schemas/ToolRequirement"
             }
           },
+          "updatesOff": {
+            "$ref": "#/components/schemas/ToolUpdateSwitches",
+            "description": "How a machine turns this tool's own updates off, for a tool CawCo keeps\ncurrent ({@link release}): the switches its owner set are CawCo's too."
+          },
           "versionCommand": {
             "description": "Probe for the version; the first `x.y.z` in its output is the answer.",
             "type": "string"
@@ -53449,7 +53453,7 @@
         ]
       },
       "ToolInstallMethod": {
-        "description": "One way to put a tool on a machine. Methods are tried in catalog order; the\nfirst whose `platforms` match and whose `needs` is present wins. There is no\nfallback past a method that ran and failed — a half-applied installer chain\nis harder to reason about than one honest failure.",
+        "description": "One way to put a tool on a machine. A copy already there goes on again\nwith the method that holds it (its `footprint`, or what `holds` asks);\nany other install takes, in catalog order, the first method whose\n`platforms` match and whose `needs` is present, among the methods that\nhold nothing when the tool has any (a package manager's method is for the\ncopy it holds), else among all. A pinned install takes only a method with\na `pinnedCommand`. There is no fallback past a method that ran and failed\n— a half-applied installer chain is harder to reason about than one\nhonest failure.",
         "type": "object",
         "properties": {
           "command": {
@@ -53525,6 +53529,13 @@
               }
             ]
           },
+          "holds": {
+            "description": "For a package manager whose copies can't be told apart by where they\nresolve (apk puts its files where other managers put theirs): the\nquestion that asks it whether it holds a copy, `<needs> <holds…>\n<file>`, which exits 0 and names the package when it does. A copy it\nholds is held to this method, as one bearing its footprint is.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "label": {
             "description": "Names the method in status and errors: 'curl script', 'npm', 'winget'.",
             "type": "string"
@@ -53538,7 +53549,7 @@
             "type": "string"
           },
           "pinnedCommand": {
-            "description": "The command when the policy pins a version — `{version}` becomes the pin.\nKept apart from `command` because \"latest\" is not a version most\ninstallers accept: the curl scripts and winget want no version argument\nat all when they should take the newest.",
+            "description": "The command when the policy pins a version — `{version}` becomes the pin.\nKept apart from `command` because \"latest\" is not a version most\ninstallers accept: the curl scripts and winget want no version argument\nat all when they should take the newest. A method without one never runs\nfor a pin: the install says it can't put that version on, rather than\nputting another on.",
             "type": "string"
           },
           "platforms": {
@@ -53576,6 +53587,70 @@
         },
         "required": [
           "id"
+        ]
+      },
+      "ToolUpdateSwitches": {
+        "description": "How a machine turns a tool's own updates off, as the tool itself reads it:\na variable whose value is on ({@link switchOn}) in the environment the tool\nruns with, or in the `env` of one of its settings files, a settings file's\nover the environment and a later file's over an earlier one, as the tool\napplies them. `automatic` turns off the tool's own automatic updates, and\nso CawCo's; `every` turns off every update, a press's included.",
+        "type": "object",
+        "properties": {
+          "automatic": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "configDir": {
+            "description": "The folder of the user's settings file, `<folder>/settings.json`: the\nvariable's value when set, else its default (`~` expanded). Read first.",
+            "type": "object",
+            "properties": {
+              "default": {
+                "type": "string"
+              },
+              "variable": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "default",
+              "variable"
+            ]
+          },
+          "every": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "settings": {
+            "type": "object",
+            "properties": {
+              "linux": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "darwin": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "win32": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The settings files read after the user's, on each platform, in the\norder the tool applies them; a file named `*.json` stands for every\n`.json` file in its folder, in name order."
+          }
+        },
+        "required": [
+          "automatic",
+          "configDir",
+          "every",
+          "settings"
         ]
       },
       "ToolPolicy": {

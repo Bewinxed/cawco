@@ -6,7 +6,14 @@
  */
 
 import { existsSync, realpathSync } from "node:fs";
-import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
+import {
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  stat,
+} from "node:fs/promises";
 import { homedir, platform, tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, sep } from "node:path";
 import type {
@@ -15,8 +22,16 @@ import type {
   ToolPlatform,
   ToolSpec,
   ToolStatus,
+  ToolUpdateSwitches,
 } from "@cawco/core";
-import { olderThan, TOOL_CATALOG, toolRuns, toolSpec } from "@cawco/core";
+import {
+  olderThan,
+  switchOn,
+  TOOL_CATALOG,
+  toolRuns,
+  toolSpec,
+} from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { toolWords } from "@cawco/core/words/tools";
 import { expandHome } from "./fs";
@@ -280,14 +295,58 @@ interface Found {
   path: string;
 }
 
+/** How long a package manager is given to say whether it holds a file. */
+const HOLDS_WAIT_MS = 5000;
+
+/**
+ * Whether the package manager a method runs (`needs`) says it holds `file`:
+ * `<needs> <holds…> <file>` exits 0 and names the package, within
+ * {@link HOLDS_WAIT_MS} (core `ToolInstallMethod.holds`). As Claude Code asks
+ * apk: `execFileNoThrow(n,[...a,this.sources.execPath()],{timeout:5000`, then
+ * `if(r.code===0&&r.stdout)` (2.1.311's `ownsExecutable`). A machine without
+ * the manager holds nothing of its.
+ */
+const asksHold = async (
+  method: ToolInstallMethod,
+  file: string
+): Promise<boolean> => {
+  const manager = method.needs ? resolveBin(method.needs) : undefined;
+  if (!(manager && method.holds)) {
+    return false;
+  }
+  const question = [manager, ...method.holds, file];
+  const read = await readWithin(HOLDS_WAIT_MS, async (signal) => {
+    const child = Bun.spawn(question, {
+      env: toolEnv(),
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "ignore",
+      signal,
+    });
+    const [out, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      child.exited,
+    ]);
+    return code === 0 && out.trim() !== "";
+  });
+  return read.kind === "answered" && read.value;
+};
+
+/** Whether a method is for the copies it holds: a footprint, or a question for its package manager. */
+const holdsCopies = (method: ToolInstallMethod): boolean =>
+  method.footprint !== undefined || method.holds !== undefined;
+
 const bears = async (
   footprint: ToolFootprint,
   { path, file }: Found
 ): Promise<boolean> => {
   if (footprint.kind === "brew") {
-    // Every prefix keeps a formula's files in `Cellar/<formula>/<version>`;
-    // its `bin` and `opt` links resolve there.
-    return file.includes(`${sep}Cellar${sep}${footprint.formula}${sep}`);
+    // Every prefix keeps a formula's files in `Cellar/<formula>/<version>`
+    // and a cask's in `Caskroom/<cask>/<version>`; its `bin` and `opt` links
+    // resolve there.
+    return ["Cellar", "Caskroom"].some((room) =>
+      file.includes(`${sep}${room}${sep}${footprint.formula}${sep}`)
+    );
   }
   if (footprint.kind === "dir") {
     const dir = expandHome(footprint.path);
@@ -385,7 +444,10 @@ const findCopy = async (spec: ToolSpec): Promise<Found | undefined> => {
     file: await realpath(path).catch(() => path),
   };
   for (const method of spec.install) {
-    if (method.footprint && (await bears(method.footprint, at))) {
+    if (
+      (method.footprint && (await bears(method.footprint, at))) ||
+      (method.holds && (await asksHold(method, at.file)))
+    ) {
       return { ...at, method };
     }
   }
@@ -394,11 +456,11 @@ const findCopy = async (spec: ToolSpec): Promise<Found | undefined> => {
 
 /**
  * Whether the catalog can tell how a present copy of this tool got here (its
- * methods carry footprints): only then is the copy held to its own method. A
- * tool without them installs with its first eligible method, as it always has.
+ * methods carry footprints, or ask their manager, {@link holdsCopies}): only
+ * then is the copy held to its own method. A tool without them installs with
+ * its first eligible method, as it always has.
  */
-const tracked = (spec: ToolSpec): boolean =>
-  spec.install.some((method) => method.footprint !== undefined);
+const tracked = (spec: ToolSpec): boolean => spec.install.some(holdsCopies);
 
 /**
  * Why a present tool will not be installed again here: it came some way the
@@ -414,6 +476,11 @@ const refusal = (
     return undefined;
   }
   if (!at.method) {
+    // A tool with methods that hold no copies (its own updater, its
+    // installer) takes any copy no package manager holds with one of those.
+    if (!spec.install.every(holdsCopies)) {
+      return undefined;
+    }
     const ways = spec.install.map((method) => method.label).join(", ");
     return `${at.path} came from none of the ways CawCo installs ${spec.name} (${ways}), and CawCo puts no second copy beside it: install ${spec.name}${version ? ` ${version}` : ""} there the way it got there`;
   }
@@ -452,19 +519,175 @@ export const installAdvice = async (
     return { refusal: `${id} is not in the tool catalog` };
   }
   const want = spec.exactVersion ?? version;
-  const at = await findCopy(spec);
+  const choice = methodFor(spec, await findCopy(spec), want);
+  if ("refused" in choice) {
+    return { refusal: choice.refused };
+  }
+  return "method" in choice
+    ? { command: commandOf(choice.method, want) }
+    : { refusal: `${spec.name}: ${noMethod(spec).detail}` };
+};
+
+/** Whether `version` is a policy pin: asked, and not the one version CawCo's build runs. */
+const isPin = (
+  spec: ToolSpec,
+  version: string | undefined
+): version is string => version !== undefined && version !== spec.exactVersion;
+
+/** What an install of a tool here runs, or why none. */
+type MethodChoice =
+  | { method: ToolInstallMethod }
+  | { method?: ToolInstallMethod; refused: string }
+  | { none: true };
+
+/**
+ * THE ONE CHOICE of what an install of `spec` at `version` runs here, for
+ * {@link install} and {@link installAdvice} alike (core
+ * `ToolInstallMethod`): a copy a method holds (its footprint, or its
+ * manager's answer, {@link holdsCopies}) takes that method, or why it can't
+ * run here (`refusal`); any other install takes the first method this
+ * machine can run among those that hold no copies, when the tool has any (a
+ * package manager's method is for the copy it holds), else among all. A pin takes only a method that installs a given version: a
+ * copy's own method that can't says so ({@link toolWords.cannotPin}), and
+ * nothing runs.
+ */
+const methodFor = (
+  spec: ToolSpec,
+  at: Found | undefined,
+  version: string | undefined
+): MethodChoice => {
+  const pinned = isPin(spec, version);
   if (at) {
-    const refused = refusal(spec, at, want);
+    const refused = refusal(spec, at, version);
     if (refused) {
-      return { refusal: refused };
+      return { refused, ...(at.method ? { method: at.method } : {}) };
+    }
+    if (at.method) {
+      return pinned && at.method.pinnedCommand === undefined
+        ? {
+            refused: toolWords.cannotPin(at.method.label, spec.name, version),
+            method: at.method,
+          }
+        : { method: at.method };
     }
   }
-  // The method an install here would run: the copy's own, else the first
-  // this machine can run (its `needs` present), as `install` picks.
-  const method = at?.method ?? spec.install.find(eligible);
-  return method
-    ? { command: commandOf(method, want) }
-    : { refusal: `${spec.name}: ${noMethod(spec).detail}` };
+  const unheld = spec.install.filter((one) => !holdsCopies(one));
+  const chosen = (unheld.length > 0 ? unheld : spec.install).find(
+    (one) => eligible(one) && !(pinned && one.pinnedCommand === undefined)
+  );
+  return chosen ? { method: chosen } : { none: true };
+};
+
+/**
+ * The settings files whose `env` a tool reads its switches from, in the
+ * order it applies them (core `ToolUpdateSwitches`): the user's, then this
+ * platform's own, each `*.json` stand-in read as the `.json` files in its
+ * folder, by name.
+ */
+const switchFiles = async (switches: ToolUpdateSwitches): Promise<string[]> => {
+  const env = toolEnv();
+  const userDir =
+    env[switches.configDir.variable] || expandHome(switches.configDir.default);
+  const files = [join(userDir, "settings.json")];
+  for (const file of switches.settings[platform() as ToolPlatform] ?? []) {
+    if (basename(file) !== "*.json") {
+      files.push(file);
+      continue;
+    }
+    const folder = dirname(file);
+    const names = await readdir(folder).catch(() => [] as string[]);
+    files.push(
+      ...names
+        .filter((name) => name.endsWith(".json") && !name.startsWith("."))
+        .sort()
+        .map((name) => join(folder, name))
+    );
+  }
+  return files;
+};
+
+/** A settings file's `env`, or none when it isn't there or isn't JSON. */
+const settingsEnv = async (
+  file: string
+): Promise<Record<string, unknown> | undefined> => {
+  let settings: unknown;
+  try {
+    settings = JSON.parse(await readFile(file, "utf8"));
+  } catch {
+    return;
+  }
+  const env =
+    typeof settings === "object" && settings !== null
+      ? (settings as { env?: unknown }).env
+      : undefined;
+  return typeof env === "object" && env !== null
+    ? (env as Record<string, unknown>)
+    : undefined;
+};
+
+/**
+ * The switch with which this machine's owner turned the tool's own updates
+ * off, and where it is set, as the tool itself reads it (core
+ * `ToolUpdateSwitches`, `switchOn`): each variable's value is the
+ * environment's, then each settings file's `env` over it, in order. One of
+ * `every` turns off any update; one of `automatic`, an automatic one (CawCo's
+ * own) too. None set: undefined.
+ */
+const switchedOff = async (
+  switches: ToolUpdateSwitches,
+  automatic: boolean
+): Promise<{ variable: string; where: string } | undefined> => {
+  const variables = [
+    ...switches.every,
+    ...(automatic ? switches.automatic : []),
+  ];
+  const env = toolEnv();
+  const set = new Map<string, { value: unknown; where: string }>();
+  for (const variable of variables) {
+    if (env[variable] !== undefined) {
+      set.set(variable, {
+        value: env[variable],
+        where: toolWords.inEnvironment,
+      });
+    }
+  }
+  for (const file of await switchFiles(switches)) {
+    const fileEnv = await settingsEnv(file);
+    for (const variable of variables) {
+      if (fileEnv && Object.hasOwn(fileEnv, variable)) {
+        set.set(variable, { value: fileEnv[variable], where: shownPath(file) });
+      }
+    }
+  }
+  const on = variables.find((variable) => switchOn(set.get(variable)?.value));
+  const where = on ? set.get(on)?.where : undefined;
+  return on && where ? { variable: on, where } : undefined;
+};
+
+/**
+ * The tool as it stands after an install that ran nothing, with why: the
+ * copy's own status with the words, `installed` while CawCo runs it, else
+ * `failed` keeping its version (a tool CawCo keeps current keeps its copy's
+ * version on a failure, core `ToolStatus.version`).
+ */
+const standing = async (
+  spec: ToolSpec,
+  words: (version: string | undefined) => string,
+  method: ToolInstallMethod | undefined
+): Promise<ToolStatus> => {
+  const probed = await probeTool(spec);
+  const label = method ? { method: method.label } : {};
+  if (probed.state === "installed") {
+    return { ...probed, ...label, detail: words(probed.version) };
+  }
+  return {
+    id: spec.id,
+    state: "failed",
+    detail: words(probed.version),
+    ...(probed.version ? { version: probed.version } : {}),
+    ...label,
+    at: Date.now(),
+  };
 };
 
 /**
@@ -761,12 +984,12 @@ const failedWords = (
 };
 
 /**
- * Puts `version` of a tool on: a copy already here goes on again with the
- * method that put it there, or not at all (`refusal`); with none here, the
- * first method this machine can run. What a method `needs` is never installed
- * here: a machine without it is told so ({@link noMethod}).
+ * Puts `version` of a tool on, with the method {@link methodFor} chooses, or
+ * says why not. What a method `needs` is never installed here: a machine
+ * without it is told so ({@link noMethod}). A copy whose owner turned its
+ * updates off ({@link switchedOff}) is left as it is, with why.
  *
- * `newest`: for a tool CawCo keeps at its newest release (core
+ * `ask.newest`: for a tool CawCo keeps at its newest release (core
  * `ToolSpec.release`), the release the hub sent this install to reach. A
  * copy that runs and is still older than it after the method answers
  * `installed` with why, in the method's words (`toolWords.behind`), kept
@@ -776,30 +999,49 @@ const failedWords = (
 const install = async (
   spec: ToolSpec,
   version: string | undefined,
-  newest: string | undefined
+  ask: InstallAsk
 ): Promise<ToolStatus> => {
   const at = tracked(spec) ? await findCopy(spec) : undefined;
-  let method = at?.method;
-  if (at) {
-    const refused = refusal(spec, at, version);
-    if (refused) {
-      return remember({
-        id: spec.id,
-        state: "failed",
-        detail: refused,
-        ...(at.method ? { method: at.method.label } : {}),
-        at: Date.now(),
-      });
-    }
-  } else {
-    method = spec.install.find(eligible);
+  const choice = methodFor(spec, at, version);
+  if ("refused" in choice) {
+    // A tool CawCo keeps current keeps its copy's standing (the words on a
+    // copy that still runs); any other fails, as it always has.
+    return remember(
+      spec.release && at
+        ? await standing(spec, () => choice.refused, choice.method)
+        : {
+            id: spec.id,
+            state: "failed",
+            detail: choice.refused,
+            ...(choice.method ? { method: choice.method.label } : {}),
+            at: Date.now(),
+          }
+    );
   }
-  if (!method) {
+  if (!("method" in choice)) {
     return remember(noMethod(spec));
+  }
+  const { method } = choice;
+  // A copy's owner may have turned its updates off: CawCo's own (automatic)
+  // with either switch, a press with the one that turns off every update.
+  const off =
+    at && spec.updatesOff
+      ? await switchedOff(spec.updatesOff, ask.automatic === true)
+      : undefined;
+  if (off) {
+    return remember(
+      await standing(
+        spec,
+        (copy) =>
+          toolWords.updatesOff(spec.name, off.variable, off.where, copy),
+        undefined
+      )
+    );
   }
 
   const ran = await runMethod(spec, method, version);
   const probed = await probeTool(spec, version ?? spec.exactVersion);
+  const { newest } = ask;
   if (probed.state === "installed") {
     if (
       spec.release &&
@@ -812,7 +1054,6 @@ const install = async (
         method: method.label,
         detail: toolWords.behind(
           method.label,
-          spec.name,
           probed.version,
           newest,
           oneLine(ran.said)
@@ -832,19 +1073,30 @@ const install = async (
 };
 
 /**
+ * What an install is asked for besides the version: `newest`, for a tool
+ * CawCo keeps current, the release the hub sent it to reach; `automatic`,
+ * sent by the hub itself to keep it current rather than pressed, which a
+ * machine whose owner turned the tool's automatic updates off declines.
+ */
+export interface InstallAsk {
+  automatic?: boolean;
+  newest?: string;
+}
+
+/**
  * Puts a catalog tool on this machine: with the method its present copy came
- * from, or with the first method its platform and prerequisites allow, and
- * answers with what the machine looks like afterwards. Every tool is probed
- * again for the hub then ({@link toolsMoved}). Never throws: a failure is a
- * {@link ToolStatus} carrying what the installer said, which is what the
- * dashboard shows and what the hub records. `version` is the policy's pin;
- * `newest`, for a tool CawCo keeps at its newest release, the release the
- * hub sent it to reach ({@link install}).
+ * from, or with the first method its platform and prerequisites allow
+ * ({@link methodFor}), and answers with what the machine looks like
+ * afterwards. Every tool is probed again for the hub then
+ * ({@link toolsMoved}). Never throws: a failure is a {@link ToolStatus}
+ * carrying what the installer said, which is what the dashboard shows and
+ * what the hub records. `version` is the policy's pin; `ask`, what else the
+ * hub asked ({@link InstallAsk}).
  */
 export const installTool = async (
   id: string,
   version?: string,
-  newest?: string
+  ask: InstallAsk = {}
 ): Promise<ToolStatus> => {
   const spec = toolSpec(id);
   if (!spec) {
@@ -862,13 +1114,11 @@ export const installTool = async (
     return await running;
   }
   // A tool CawCo is built against goes on at its one version, whatever is pinned.
-  const work = install(spec, spec.exactVersion ?? version, newest).finally(
-    () => {
-      installing.delete(spec.id);
-      installEnded.set(spec.id, Date.now());
-      toolsMoved();
-    }
-  );
+  const work = install(spec, spec.exactVersion ?? version, ask).finally(() => {
+    installing.delete(spec.id);
+    installEnded.set(spec.id, Date.now());
+    toolsMoved();
+  });
   installing.set(spec.id, work);
   return await work;
 };
@@ -913,7 +1163,7 @@ export const putOnPins = async (
     if (before.state === "missing" || before.state === "installed") {
       continue;
     }
-    const after = await install(spec, version, undefined);
+    const after = await install(spec, version, {});
     if (after.state !== "installed") {
       throw new Error(
         `${spec.name} ${version}, which ${build} runs, did not go on${after.method ? ` with ${after.method}` : ""}: ${oneLine(after.detail)}`
