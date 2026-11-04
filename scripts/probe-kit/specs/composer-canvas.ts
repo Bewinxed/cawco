@@ -675,6 +675,9 @@ const swapNow = (page: Page) =>
     });
   }, SWAP);
 
+/** How a swap read names a Svelte run beside a carrier's own (`swapNow`'s `others`), its keys in brackets. */
+const REVERSED_OUTRO = "svelte [";
+
 /**
  * 11. Send/Stop's glyph swap (DESIGN.md's Reduced Motion Rule: "opacity and
  * colour fades still run … It does not mean an instant swap"): pressing Send
@@ -855,6 +858,27 @@ const swapCheck = async (on: On, clock: Clock) => {
         one.scale === "none" &&
         one.filter === "none"
     );
+  /**
+   * The outgoing glyph's runs' keys, each sorted and joined: its own
+   * carrier's, or, where the hub answered while the swap ran and the glyph
+   * that was leaving comes back, the Svelte outro reversed on the incoming
+   * carrier (one of its `others`; a reversed run starts part-way, so the
+   * clock's scrub does not stand it at the fraction, and it has no carrier
+   * of its own to read).
+   */
+  const outgoingKeys = (looks: Awaited<ReturnType<typeof swapNow>>) => [
+    ...looks
+      .filter((one) => one.side === "out")
+      .map((one) => one.run.props.join()),
+    ...looks
+      .filter((one) => one.side === "in")
+      .flatMap((one) =>
+        one.others
+          .filter((other) => other.startsWith(REVERSED_OUTRO))
+          .map((other) => other.slice(REVERSED_OUTRO.length, -1))
+      ),
+  ];
+  const stillOut = outgoingKeys([...still0, ...stillHalf, ...still1]);
   const fades =
     side(still0, "in").every((one) => one.opacity === 0) &&
     side(stillHalf, "in").every((one) => one.opacity > 0 && one.opacity < 1) &&
@@ -864,20 +888,23 @@ const swapCheck = async (on: On, clock: Clock) => {
     "11: with reduced motion pressing Send swaps the glyph over --dur-control by opacity alone, scrubbed 0 → ½ → 1 with no scale, transform or blur",
     stillRuns.length > 0 &&
       stillRuns.some((run) => run.name.endsWith("icon-swap-still")) &&
-      stillRuns.some((run) => run.side === "out") &&
+      stillOut.length > 0 &&
+      stillOut.every((keys) => keys === "opacity") &&
       stillRuns.every(
         (run) => run.duration === control && run.props.join() === "opacity"
       ) &&
       fades &&
       [still0, stillHalf, still1].every(flat),
-    `--dur-control ${control} ms; runs ${JSON.stringify(stillRuns)}; ½ ${JSON.stringify(stillHalf)}; 1 ${JSON.stringify(still1)}`
+    `--dur-control ${control} ms; runs ${JSON.stringify(stillRuns)}; the outgoing glyph's keys ${JSON.stringify(stillOut)}; ½ ${JSON.stringify(stillHalf)}; 1 ${JSON.stringify(still1)}`
   );
   const incoming = movingRuns.filter((run) => run.side === "in");
   const outgoing = movingRuns.filter((run) => run.side === "out");
+  const movingOut = outgoingKeys([...moving0, ...movingHalf, ...moving1]);
   kit.check(
     "11: without reduced motion the incoming glyph's keys are opacity, transform and filter, the outgoing's opacity, scale and filter, over --dur-control, and they travel at ½",
     incoming.length > 0 &&
-      outgoing.length > 0 &&
+      movingOut.length > 0 &&
+      movingOut.every((keys) => keys === "filter,opacity,scale") &&
       incoming.every(
         (run) =>
           run.name === "icon-swap" &&
@@ -893,7 +920,9 @@ const swapCheck = async (on: On, clock: Clock) => {
       // only the way out `scale`, so a carrier going both ways shows both;
       // the shared `filter` is read where one run alone moves the carrier.
       movingHalf.some((one) => one.side === "in") &&
-      movingHalf.some((one) => one.side === "out") &&
+      // A reversed outro rides the incoming carrier: the way out travels
+      // on a carrier of its own only where it has one.
+      (outgoing.length === 0 || movingHalf.some((one) => one.side === "out")) &&
       movingHalf
         .filter((one) => one.side === "in")
         .every((one) => one.transform !== "none") &&
