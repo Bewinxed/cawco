@@ -41,6 +41,8 @@
  * | mixed-icons | own code                    | no outlined mark beside a filled one in a bar, nav or list; an open-stroked glyph (chevron, arrow, close, plus, tick) is allowed |
  * | small-text  | own code                    | at a width under 600, no words drawn under 10px |
  * | anchor-drift | own code, over reads        | an open popover, menu or listbox whose height changed between two reads of a page holds its top or its bottom |
+ * | decoration-spill | own code                 | an outline (offset past the border edge), a hard box-shadow (blur under 1px, by its spread and offsets), a dashed or dotted border, or an absolutely placed ::before/::after that draws, reaching 0.5px past the box it marks (a pseudo's own element, when that draws; not a pseudo flush outside it, which carries it on) or past the nearest box that clips it or rounded box that draws, its own box inside that one; a clip-path or mask is unread |
+ * | nested-radius | own code                    | a wash (a fill or gradient, an element's or an absolute pseudo's) that nearly fills a rounded box (one axis within its radius of both ends) and whose corner stands within that radius of the box's corner (the box drawing or clipping) is outer radius less the mean inset, within 1.5px or a quarter of it, plus half the two insets' difference |
  *
  * Two other unintended-looking lines are read already: cut by
  * the crop by `overflow` and `hidden-cue`, spills its slot by `overflow`. An
@@ -79,7 +81,9 @@ export type CheckName =
   | "clipped-glyph"
   | "mixed-icons"
   | "small-text"
-  | "anchor-drift";
+  | "anchor-drift"
+  | "decoration-spill"
+  | "nested-radius";
 
 /** Each rule, what it holds, and who reads it: the report's words. */
 const CHECKS: Record<CheckName, { says: string; by: string }> = {
@@ -145,9 +149,17 @@ const CHECKS: Record<CheckName, { says: string; by: string }> = {
     says: "an open popover holds an edge as its list changes (The Nothing Jumps Rule)",
     by: "own code",
   },
+  "decoration-spill": {
+    says: "a ring, a dashed edge or a drawn pseudo stays inside the wash it marks and the rounded or clipped box it sits in (The One Ring Rule)",
+    by: "own code",
+  },
+  "nested-radius": {
+    says: "a wash in a rounded corner takes the outer radius less its inset (The Concentric Rule)",
+    by: "own code",
+  },
 };
 
-const RULES = Object.keys(CHECKS) as CheckName[];
+export const RULES = Object.keys(CHECKS) as CheckName[];
 
 /** One element-level exemption: findings of `rule` on what `selector` matches, whose words hold `text`; either alone, or both together. */
 interface CheckExcept {
@@ -628,9 +640,8 @@ function readInPage(args: InPageArgs): InPageRead {
         (side) =>
           `border-${side} ${s.getPropertyValue(`border-${side}-width`)} ${s.getPropertyValue(`border-${side}-color`)}`
       );
-  /** What a box paints of its own at rest: its fill, edges, shadow; empty when nothing. */
-  const paints = (el: Element): string[] => {
-    const s = style(el);
+  /** What a style paints at rest, an element's or a pseudo-element's: its fill, edges, shadow; empty when nothing. */
+  const paintsOf = (s: CSSStyleDeclaration): string[] => {
     const out: string[] = [];
     if (fill(s)[3] > 0.02) {
       out.push(`background ${s.backgroundColor}`);
@@ -651,6 +662,8 @@ function readInPage(args: InPageArgs): InPageRead {
     }
     return out;
   };
+  /** What a box paints of its own at rest. */
+  const paints = (el: Element): string[] => paintsOf(style(el));
 
   const CONTROL =
     'button, a[href], input:not([type="hidden"]), select, textarea, summary, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="option"], [role="checkbox"], [role="radio"], [role="switch"], [role="combobox"], [role="slider"]';
@@ -2122,6 +2135,874 @@ function readInPage(args: InPageArgs): InPageRead {
       }
     }
   }
+
+  // ---- 12. the drawn contour: what a box draws past its edge, and its corners ----
+  /** A box as drawn, in the viewport: its edges, and each corner's radii [x, y] (top-left, top-right, bottom-right, bottom-left). */
+  interface Contour {
+    bottom: number;
+    left: number;
+    r: [number, number][];
+    right: number;
+    top: number;
+  }
+  const CORNERS = [
+    "top-left",
+    "top-right",
+    "bottom-right",
+    "bottom-left",
+  ] as const;
+  const num = (value: string) => Number.parseFloat(value) || 0;
+  /** How much larger than its CSS px the page draws `el` (a scaled canvas). */
+  const scaleOf = (el: Element) => {
+    const w = el instanceof HTMLElement ? el.offsetWidth : 0;
+    return w > 0 ? el.getBoundingClientRect().width / w : 1;
+  };
+  /**
+   * A box's used corner radii, drawn w×h at `scale`: a percentage of the
+   * side it runs along, and every radius scaled down where two meet past a
+   * side (CSS Backgrounds 3 §4.5: "Let f = min(Li/Si) … If f < 1, then all
+   * corner radii are reduced by multiplying them by f").
+   */
+  const radiiOf = (
+    s: CSSStyleDeclaration,
+    w: number,
+    h: number,
+    scale: number
+  ): [number, number][] => {
+    const raw = CORNERS.map((corner): [number, number] => {
+      const [x = "0px", y = x] = s
+        .getPropertyValue(`border-${corner}-radius`)
+        .trim()
+        .split(/\s+/u);
+      const len = (value: string, whole: number) =>
+        value.endsWith("%") ? (num(value) / 100) * whole : num(value) * scale;
+      return [len(x, w), len(y, h)];
+    });
+    const [tl = [0, 0], tr = [0, 0], br = [0, 0], bl = [0, 0]] = raw;
+    const f = Math.min(
+      1,
+      w / (tl[0] + tr[0]),
+      w / (bl[0] + br[0]),
+      h / (tl[1] + bl[1]),
+      h / (tr[1] + br[1])
+    );
+    return raw.map(([x, y]) => [x * f, y * f]);
+  };
+  const contours = new Map<Element, Contour>();
+  /** An element's border box and its corners, as drawn. */
+  const contourOf = (el: Element): Contour => {
+    const known = contours.get(el);
+    if (known) {
+      return known;
+    }
+    const b = el.getBoundingClientRect();
+    const c = {
+      left: b.left,
+      top: b.top,
+      right: b.right,
+      bottom: b.bottom,
+      r: radiiOf(style(el), b.width, b.height, scaleOf(el)),
+    };
+    contours.set(el, c);
+    return c;
+  };
+  const rounded = (c: Contour) => c.r.some(([x, y]) => x > 0.5 && y > 0.5);
+  /**
+   * A contour grown by `by` on every side (shrunk where negative), its
+   * corners as a spread shadow's: "increased … by adding … the spread
+   * distance (and flooring at zero)", the spread first "multiplied by the
+   * proportion 1 + (r-1)^3" where the radius is under it (CSS Backgrounds 3
+   * §6.1.1); an overflow clip edge's corners take the same shape (CSS
+   * Overflow 3 §3.2), and an outline's follow its box's radius out.
+   */
+  const grown = (c: Contour, by: number): Contour => {
+    const radius = (r: number) => {
+      if (by < 0) {
+        return Math.max(0, r + by);
+      }
+      const share = r / by;
+      return r + (share < 1 ? by * (1 + (share - 1) ** 3) : by);
+    };
+    return {
+      left: c.left - by,
+      top: c.top - by,
+      right: c.right + by,
+      bottom: c.bottom + by,
+      r: c.r.map(([x, y]) => [radius(x), radius(y)]),
+    };
+  };
+  const shifted = (c: Contour, x: number, y: number): Contour => ({
+    ...c,
+    left: c.left + x,
+    right: c.right + x,
+    top: c.top + y,
+    bottom: c.bottom + y,
+  });
+  /**
+   * Points along a contour's edge: each corner's curve in five steps (its
+   * corner point where square). A contour is convex, so its straight runs
+   * lie between them.
+   */
+  const rimOf = (c: Contour): [number, number][] =>
+    (
+      [
+        [c.left, c.top, 1, 1, 180],
+        [c.right, c.top, -1, 1, 270],
+        [c.right, c.bottom, -1, -1, 0],
+        [c.left, c.bottom, 1, -1, 90],
+      ] as const
+    ).flatMap(([x, y, sx, sy, from], i) => {
+      const [rx, ry] = c.r[i] ?? [0, 0];
+      return [0, 1, 2, 3, 4].map((k): [number, number] => {
+        const t = ((from + k * 22.5) * Math.PI) / 180;
+        return [x + sx * rx + rx * Math.cos(t), y + sy * ry + ry * Math.sin(t)];
+      });
+    });
+  /** How far a point stands outside a contour (0 or less inside), and where: past a side, or round a corner's curve. */
+  const pastOf = (
+    [x, y]: [number, number],
+    c: Contour
+  ): { by: number; where: string } => {
+    for (let i = 0; i < 4; i += 1) {
+      const [rx, ry] = c.r[i] ?? [0, 0];
+      const left = i === 0 || i === 3;
+      const top = i < 2;
+      const cx = left ? c.left + rx : c.right - rx;
+      const cy = top ? c.top + ry : c.bottom - ry;
+      if (
+        rx > 0.01 &&
+        ry > 0.01 &&
+        (left ? x < cx : x > cx) &&
+        (top ? y < cy : y > cy)
+      ) {
+        return {
+          by: (Math.hypot((x - cx) / rx, (y - cy) / ry) - 1) * ((rx + ry) / 2),
+          where: `${CORNERS[i]} corner`,
+        };
+      }
+    }
+    const sides: [string, number][] = [
+      ["left", c.left - x],
+      ["right", x - c.right],
+      ["top", c.top - y],
+      ["bottom", y - c.bottom],
+    ];
+    const [where, by] = sides.reduce((a, b) => (b[1] > a[1] ? b : a));
+    return { by, where };
+  };
+  /** The farthest `inner`'s edge stands outside `outer`, and where. */
+  const spillOf = (inner: Contour, outer: Contour) =>
+    rimOf(inner)
+      .map((p) => pastOf(p, outer))
+      .reduce((a, b) => (b.by > a.by ? b : a));
+  /**
+   * The hard outer shadows a style casts (blur under 1px: a ring, or a line
+   * a shadow draws), each by its offsets and spread; a blurred one is an
+   * elevation, and fades as it goes.
+   */
+  const hardShadows = (value: string) =>
+    value === "none"
+      ? []
+      : layersOf(value).flatMap((one) => {
+          const colour = one.match(COLOR_FN)?.[0];
+          if (/\binset\b/u.test(one) || (colour && rgba(colour)[3] <= 0.02)) {
+            return [];
+          }
+          const [x = 0, y = 0, blur = 0, spread = 0] = (
+            one.replace(COLOR_FN, "").match(/-?[\d.]+px/gu) ?? []
+          ).map(num);
+          return blur < 1 ? [{ x, y, blur, spread }] : [];
+        });
+  /**
+   * What a style draws past its box's border edge, each as a contour: its
+   * outline, "drawn starting just outside the border edge" and offset from
+   * it by `outline-offset` (CSS UI 4 §3.5; a negative offset draws it
+   * inside), and its hard outer shadows, "drawn outside the border edge
+   * only", grown by their spread and moved by their offsets (CSS
+   * Backgrounds 3 §6.1.1).
+   */
+  const reachOf = (
+    s: CSSStyleDeclaration,
+    own: Contour,
+    scale: number
+  ): { c: Contour; what: string }[] => {
+    const out: { c: Contour; what: string }[] = [];
+    const width = num(s.outlineWidth);
+    if (
+      s.outlineStyle !== "none" &&
+      width > 0 &&
+      rgba(s.outlineColor)[3] > 0.02
+    ) {
+      out.push({
+        what: `outline (${s.outlineWidth} ${s.outlineStyle}, offset ${s.outlineOffset})`,
+        c: grown(own, (num(s.outlineOffset) + width) * scale),
+      });
+    }
+    for (const one of hardShadows(s.boxShadow)) {
+      out.push({
+        what: `box-shadow ring (${px(one.x)} ${px(one.y)} ${px(one.blur)} ${px(one.spread)})`,
+        c: shifted(
+          grown(own, one.spread * scale),
+          one.x * scale,
+          one.y * scale
+        ),
+      });
+    }
+    return out.filter((one) => spillOf(one.c, own).by > 0.5);
+  };
+  /** A style's dashed or dotted edges: one border when all four are alike, else by side. */
+  const brokenEdges = (s: CSSStyleDeclaration): string[] => {
+    const said = (["top", "right", "bottom", "left"] as const)
+      .filter(
+        (side) =>
+          /dashed|dotted/u.test(s.getPropertyValue(`border-${side}-style`)) &&
+          num(s.getPropertyValue(`border-${side}-width`)) > 0 &&
+          rgba(s.getPropertyValue(`border-${side}-color`))[3] > 0.02
+      )
+      .map((side) => ({
+        side,
+        how: `${s.getPropertyValue(`border-${side}-width`)} ${s.getPropertyValue(`border-${side}-style`)}`,
+      }));
+    return said.length === 4 && said.every((one) => one.how === said[0]?.how)
+      ? [`border ${said[0]?.how}`]
+      : said.map((one) => `border-${one.side} ${one.how}`);
+  };
+  /**
+   * Whether a box makes the containing block of the boxes placed in it
+   * (CSS Position 3 §2.1: "Properties that can cause a box to establish an
+   * absolute positioning containing block include position, transform,
+   * will-change, contain…"); for fixed boxes, position alone does not.
+   */
+  const placesIn = (s: CSSStyleDeclaration, fixed: boolean) =>
+    s.display !== "contents" &&
+    ((!fixed && s.position !== "static") ||
+      [
+        s.transform,
+        s.translate,
+        s.scale,
+        s.rotate,
+        s.perspective,
+        s.filter,
+        s.backdropFilter,
+      ].some((one) => one && one !== "none") ||
+      /layout|paint|strict|content/u.test(s.contain) ||
+      Boolean(s.containerType && s.containerType !== "normal") ||
+      /transform|perspective|filter/u.test(s.willChange) ||
+      (!fixed && /position/u.test(s.willChange)));
+  /** The box a box placed absolutely (or fixed) in `from` is placed in: `from` or an ancestor; null for the initial containing block. */
+  const holderOf = (from: Element | null, fixed = false): Element | null => {
+    for (
+      let up = from;
+      up && up !== document.documentElement;
+      up = up.parentElement
+    ) {
+      if (placesIn(style(up), fixed)) {
+        return up;
+      }
+    }
+    return null;
+  };
+  /**
+   * Where a box cuts what it holds: its padding box, "rounded based on the
+   * border radius, adjusted to the padding edge" (CSS Overflow 3 §3.1.2),
+   * that radius "the outer border radius minus the corresponding border
+   * thickness" (CSS Backgrounds 3 §4.2); an axis it does not clip runs on,
+   * and a clip on one axis alone "is not rounded". Null when it clips nothing.
+   */
+  const clipOf = (el: Element): Contour | null => {
+    const s = style(el);
+    const cx = s.overflowX !== "visible";
+    const cy = s.overflowY !== "visible";
+    if (!(cx || cy)) {
+      return null;
+    }
+    const own = contourOf(el);
+    const k = scaleOf(el);
+    const [t, r, b, l] = [
+      s.borderTopWidth,
+      s.borderRightWidth,
+      s.borderBottomWidth,
+      s.borderLeftWidth,
+    ].map((one) => num(one) * k) as [number, number, number, number];
+    const both = cx && cy;
+    const cut: Contour = {
+      left: cx ? own.left + l : Number.NEGATIVE_INFINITY,
+      right: cx ? own.right - r : Number.POSITIVE_INFINITY,
+      top: cy ? own.top + t : Number.NEGATIVE_INFINITY,
+      bottom: cy ? own.bottom - b : Number.POSITIVE_INFINITY,
+      r: own.r.map(([x, y], i): [number, number] =>
+        both
+          ? [
+              Math.max(0, x - (i === 0 || i === 3 ? l : r)),
+              Math.max(0, y - (i < 2 ? t : b)),
+            ]
+          : [0, 0]
+      ),
+    };
+    // `overflow: clip` paints out to its overflow-clip-margin (CSS Overflow 3 §3.2).
+    const margin = num(s.overflowClipMargin ?? "0px") * k;
+    return s.overflowX === "clip" && s.overflowY === "clip" && margin > 0
+      ? grown(cut, margin)
+      : cut;
+  };
+  /**
+   * The nearest box that cuts what a box placed `position` in `from` draws:
+   * a placed box escapes the clip of every box between it and its
+   * containing block (CSS 2.1 §11.1.1), so the walk goes by containing
+   * blocks; up to the scope, and not the root's (the screen's edge is
+   * `overflow`'s).
+   */
+  const cutterOf = (from: Element | null, position: string): Element | null => {
+    let pos = position;
+    for (let up = from; up;) {
+      let next: Element | null = up;
+      if (pos === "absolute") {
+        next = holderOf(up);
+      } else if (pos === "fixed") {
+        next = holderOf(up, true);
+      }
+      if (
+        !next ||
+        next === document.body ||
+        next === document.documentElement ||
+        !scope.contains(next)
+      ) {
+        return null;
+      }
+      if (clipOf(next)) {
+        return next;
+      }
+      pos = style(next).position;
+      up = next.parentElement;
+    }
+    return null;
+  };
+  const pseudoStyles = new Map<
+    Element,
+    Partial<Record<"::before" | "::after", CSSStyleDeclaration | null>>
+  >();
+  /** A pseudo-element of `el` that makes a box, absolutely placed and shown: its style, else null. */
+  const pseudoOf = (
+    el: Element,
+    which: "::before" | "::after"
+  ): CSSStyleDeclaration | null => {
+    const known = pseudoStyles.get(el) ?? {};
+    pseudoStyles.set(el, known);
+    const kept = known[which];
+    if (kept !== undefined) {
+      return kept;
+    }
+    const ps = getComputedStyle(el, which);
+    const made =
+      ps.content !== "none" &&
+      ps.content !== "normal" &&
+      ps.display !== "none" &&
+      ps.visibility === "visible" &&
+      Number(ps.opacity) > 0 &&
+      ps.position === "absolute";
+    known[which] = made ? ps : null;
+    return known[which] ?? null;
+  };
+  /**
+   * Where an absolutely placed pseudo-element of `el` is drawn: its
+   * resolved offsets and size (CSSOM: a placed box's are its used values)
+   * from its containing block's padding edge (CSS Position 3 §2.1), then its
+   * own translate, scale and transform about its origin (CSS Transforms 2
+   * §6). Null where one did not resolve to px.
+   */
+  const pseudoBox = (el: Element, ps: CSSStyleDeclaration): Contour | null => {
+    if (
+      ![ps.left, ps.top, ps.width, ps.height].every((one) => one.endsWith("px"))
+    ) {
+      return null;
+    }
+    const holder = holderOf(el);
+    const hs = holder ? style(holder) : null;
+    const k = holder ? scaleOf(holder) : 1;
+    const root = document.documentElement;
+    const hb = holder
+      ? holder.getBoundingClientRect()
+      : {
+          left: -window.scrollX,
+          top: -window.scrollY,
+          right: root.clientWidth - window.scrollX,
+        };
+    const edge = (side: string) =>
+      (hs ? num(hs.getPropertyValue(`border-${side}-width`)) : 0) * k;
+    let w = num(ps.width);
+    let h = num(ps.height);
+    if (ps.boxSizing !== "border-box") {
+      w +=
+        num(ps.paddingLeft) +
+        num(ps.paddingRight) +
+        num(ps.borderLeftWidth) +
+        num(ps.borderRightWidth);
+      h +=
+        num(ps.paddingTop) +
+        num(ps.paddingBottom) +
+        num(ps.borderTopWidth) +
+        num(ps.borderBottomWidth);
+    }
+    const rtl =
+      style(holder ?? root).direction === "rtl" && ps.right.endsWith("px");
+    const x = rtl
+      ? hb.right - edge("right") - (num(ps.right) + num(ps.marginRight) + w) * k
+      : hb.left + edge("left") + (num(ps.left) + num(ps.marginLeft)) * k;
+    const y = hb.top + edge("top") + (num(ps.top) + num(ps.marginTop)) * k;
+    const [ox = w / 2, oy = h / 2] = ps.transformOrigin.split(/\s+/u).map(num);
+    const m = ps.transform.match(/^matrix(3d)?\((.+)\)$/u);
+    const v = m?.[2]?.split(",").map(Number) ?? [];
+    const [a = 1, b = 0, c = 0, d = 1, e = 0, f = 0] = m?.[1]
+      ? [v[0], v[1], v[4], v[5], v[12], v[13]]
+      : v;
+    const [tx = "0px", ty = "0px"] =
+      ps.translate === "none" ? [] : ps.translate.split(/\s+/u);
+    const [sx = 1, sy = sx] =
+      ps.scale === "none" ? [] : ps.scale.split(/\s+/u).map(Number);
+    const along = (value: string, whole: number) =>
+      value.endsWith("%") ? (num(value) / 100) * whole : num(value);
+    const corners = (
+      [
+        [0, 0],
+        [w, 0],
+        [w, h],
+        [0, h],
+      ] as const
+    ).map(([cx, cy]) => {
+      const qx = cx - ox;
+      const qy = cy - oy;
+      return [
+        ox + along(tx, w) + sx * (a * qx + c * qy + e),
+        oy + along(ty, h) + sy * (b * qx + d * qy + f),
+      ] as const;
+    });
+    const xs = corners.map((p) => p[0]);
+    const ys = corners.map((p) => p[1]);
+    return {
+      left: x + Math.min(...xs) * k,
+      right: x + Math.max(...xs) * k,
+      top: y + Math.min(...ys) * k,
+      bottom: y + Math.max(...ys) * k,
+      r: radiiOf(ps, w * k, h * k, k).map(([rx, ry]) => [
+        rx * Math.abs(sx * a),
+        ry * Math.abs(sy * d),
+      ]),
+    };
+  };
+  /** The nearest box from `from` up, inside the scope, that draws a rounded shape of its own (a fill, an edge or a shadow), or also one that cuts by it. */
+  const roundedHome = (from: Element | null, cuts: boolean): Element | null => {
+    for (
+      let up = from;
+      up && scope.contains(up) && up !== document.body;
+      up = up.parentElement
+    ) {
+      const s = style(up);
+      const shows =
+        paints(up).length > 0 ||
+        (cuts && (s.overflowX !== "visible" || s.overflowY !== "visible"));
+      if (shows && rounded(contourOf(up))) {
+        return up;
+      }
+    }
+    return null;
+  };
+  /** A wash's colour: its fill, else its gradient's first stop that shows; null when it draws none. */
+  const washOf = (s: CSSStyleDeclaration): Rgba | null => {
+    const own = fill(s);
+    if (own[3] > 0.02) {
+      return own;
+    }
+    return stopsOf(s.backgroundImage).find((one) => one[3] > 0.02) ?? null;
+  };
+  /**
+   * Whether a style draws through a clip-path or a mask: what it draws is
+   * that shape, not its box (the hanging card's neck, a `::before` cut to
+   * the flare's curve), so its box says nothing of it.
+   */
+  const shaped = (s: CSSStyleDeclaration) => {
+    const m = s as CSSStyleDeclaration & { webkitMaskImage?: string };
+    return (
+      s.clipPath !== "none" ||
+      (s.maskImage && s.maskImage !== "none") ||
+      Boolean(m.webkitMaskImage && m.webkitMaskImage !== "none")
+    );
+  };
+  /** Elements whose decorations or washes were drawn through a clip-path or mask, by rule: not read. */
+  const shapedBy = {
+    "decoration-spill": new Set<string>(),
+    "nested-radius": new Set<string>(),
+  };
+  const sayShaped = () => {
+    for (const [rule, seen] of Object.entries(shapedBy)) {
+      if (seen.size > 0) {
+        unread.push(
+          `${rule}: ${seen.size} element(s) draw it through a clip-path or mask, whose shape is not their box (${[...seen].slice(0, 3).join("; ")})`
+        );
+      }
+    }
+  };
+
+  // A decoration draws inside the box it belongs to: the One Ring Rule's
+  // ring is "inset on rows, tabs and anything flush or clipped" (design.css
+  // `focus-inset`), and a ring, a dashed edge or a pseudo-element's line or
+  // wash stays inside the wash it marks and the rounded or clipped box it
+  // sits in. A ring or pseudo of a box that itself runs past that box (out
+  // of its row, or scrolled out of sight) is `overflow`'s and the scroll's.
+  if (!skip.has("decoration-spill")) {
+    const scrolls = (el: Element) => {
+      const s = style(el);
+      return (
+        (/auto|scroll/u.test(s.overflowY) &&
+          el.scrollHeight > el.clientHeight + 1) ||
+        (/auto|scroll/u.test(s.overflowX) &&
+          el.scrollWidth > el.clientWidth + 1)
+      );
+    };
+    const meets = (a: Contour, b: Contour) =>
+      a.left < b.right &&
+      a.right > b.left &&
+      a.top < b.bottom &&
+      a.bottom > b.top;
+    /** Pseudo-elements standing flush outside their own box, by its selector: a joint, an edge fade. */
+    const beside = new Set<string>();
+    const spillAt = (el: Element): string | null => {
+      const s = style(el);
+      const own = contourOf(el);
+      const scale = scaleOf(el);
+      // Its own clip-path or mask cuts all it draws, rings and pseudos too.
+      if (shaped(s)) {
+        if (
+          reachOf(s, own, scale).length > 0 ||
+          brokenEdges(s).length > 0 ||
+          (["::before", "::after"] as const).some((one) => pseudoOf(el, one))
+        ) {
+          shapedBy["decoration-spill"].add(selectorOf(el));
+        }
+        return null;
+      }
+      const decors: {
+        c: Contour;
+        from: Element | null;
+        /** Its owner's box is its measure: a home its owner already runs past is not read. */
+        owned: boolean;
+        /** It marks its owner's own drawn box. */
+        marks: boolean;
+        position: string;
+        what: string;
+      }[] = [];
+      for (const one of reachOf(s, own, scale)) {
+        decors.push({
+          c: one.c,
+          what: `its ${one.what}`,
+          from: el.parentElement,
+          owned: true,
+          marks: false,
+          position: s.position,
+        });
+      }
+      const broken = brokenEdges(s);
+      if (broken.length > 0) {
+        decors.push({
+          c: own,
+          what: `its ${broken.join(", ")}`,
+          from: el.parentElement,
+          owned: false,
+          marks: false,
+          position: s.position,
+        });
+      }
+      for (const which of ["::before", "::after"] as const) {
+        const ps = pseudoOf(el, which);
+        const box = ps ? pseudoBox(el, ps) : null;
+        if (!(ps && box)) {
+          continue;
+        }
+        if (shaped(ps)) {
+          shapedBy["decoration-spill"].add(`${selectorOf(el)}${which}`);
+          continue;
+        }
+        const rings = reachOf(ps, box, scale);
+        // Its broken edges said by their style; its fill and solid edges by what they paint.
+        const dashes = brokenEdges(ps);
+        const drawn = [
+          ...dashes,
+          ...paintsOf(ps).filter(
+            (one) =>
+              !(
+                one.startsWith("box-shadow") ||
+                (dashes.length > 0 && one.startsWith("border-"))
+              )
+          ),
+        ];
+        if (drawn.length === 0 && rings.length === 0) {
+          continue;
+        }
+        // Wholly outside its box and flush against one side, it carries
+        // the box on (an edge fade, a joint to the next card): it marks
+        // no wash of its box's, and is read against the boxes it sits in.
+        const flush =
+          !meets(box, own) &&
+          [
+            box.bottom - own.top,
+            own.bottom - box.top,
+            box.right - own.left,
+            own.right - box.left,
+          ].some((gap) => Math.abs(gap) <= 0.5);
+        if (flush) {
+          beside.add(`${selectorOf(el)}${which}`);
+        }
+        const said = `its ${which}`;
+        for (const one of [
+          {
+            c: box,
+            what: `${said} (${drawn.join(", ").slice(0, 80) || "its rings"})`,
+          },
+          ...rings.map((ring) => ({
+            c: ring.c,
+            what: `${said}'s ${ring.what}`,
+          })),
+        ]) {
+          decors.push({
+            ...one,
+            from: el,
+            owned: true,
+            marks: !flush && paints(el).length > 0,
+            position: "absolute",
+          });
+        }
+      }
+      let worst: { by: number; said: string } | null = null;
+      for (const d of decors) {
+        const homes: { el: Element; c: Contour; how: string; cuts: boolean }[] =
+          [];
+        if (d.marks) {
+          homes.push({
+            el,
+            c: own,
+            how: `its own box, the ${washOf(s) ? "wash" : "box"} it marks`,
+            cuts: false,
+          });
+        }
+        const cutter = cutterOf(d.from, d.position);
+        const cut = cutter ? clipOf(cutter) : null;
+        if (cutter && cut) {
+          homes.push({
+            el: cutter,
+            c: cut,
+            how: `${selectorOf(cutter)}, which clips it (overflow ${style(cutter).overflow})`,
+            cuts: true,
+          });
+        }
+        // Its own box is the one it marks, when that draws; the rounded box
+        // it sits in is from its parent up.
+        const round = roundedHome(el.parentElement, false);
+        if (round && round !== cutter) {
+          const rc = contourOf(round);
+          homes.push({
+            el: round,
+            c: rc,
+            how: `${selectorOf(round)}, rounded ${px(Math.max(...rc.r.flat()))}`,
+            cuts: false,
+          });
+        }
+        for (const home of homes) {
+          if (home.el !== el) {
+            // Its owner's square corners a rounded box cuts are that box's
+            // to round (nested-radius reads them): its sides alone say it
+            // runs past.
+            const away = d.owned
+              ? spillOf(own, { ...home.c, r: [] }).by > 0.5
+              : (home.cuts && scrolls(home.el)) || !meets(d.c, home.c);
+            if (away) {
+              continue;
+            }
+          }
+          const spill = spillOf(d.c, home.c);
+          if (spill.by > 0.5 && !(worst && worst.by >= spill.by)) {
+            worst = {
+              by: spill.by,
+              said: `${d.what} reaches ${px(spill.by)} past the ${spill.where} of ${home.how}`,
+            };
+          }
+        }
+      }
+      return worst?.said ?? null;
+    };
+    for (const el of inFlowBoxes) {
+      const said = spillAt(el);
+      if (said) {
+        say("decoration-spill", el, said);
+      }
+    }
+    if (beside.size > 0) {
+      named.push(
+        `decoration-spill: ${beside.size} pseudo-element(s) flush outside their own box carry it on (an edge fade, a joint), read against the boxes they sit in: ${[...beside].slice(0, 3).join("; ")}`
+      );
+    }
+  }
+
+  // The Concentric Rule: "a surface nested in another's corner takes the
+  // outer radius less the gap between their edges, the outer's edge
+  // counted", and "the hover ghost, the selection pill and the focus ring
+  // take the contour of what they mark". Read at a corner of a wash that
+  // stands within the outer radius of a rounded box's corner, where the box
+  // draws its curve or cuts by it; a chip clear of the corner keeps its own.
+  if (!skip.has("nested-radius")) {
+    /** How far along a corner's diagonal its curve's midpoint stands from the square corner, per px of radius. */
+    const K = 1 - Math.SQRT1_2;
+    const alike = (a: Rgba, b: Rgba) =>
+      Math.abs(a[3] - b[3]) < 0.03 &&
+      Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 4;
+    const cornerAt = (
+      inner: Contour,
+      outer: Element
+    ): {
+      at: string;
+      drawn: number;
+      dx: number;
+      dy: number;
+      want: number;
+      big: number;
+    } | null => {
+      const oc = contourOf(outer);
+      const os = style(outer);
+      const cut =
+        os.overflowX !== "visible" && os.overflowY !== "visible"
+          ? clipOf(outer)
+          : null;
+      let worst: {
+        at: string;
+        big: number;
+        drawn: number;
+        dx: number;
+        dy: number;
+        off: number;
+        want: number;
+      } | null = null;
+      for (const [i, at] of CORNERS.entries()) {
+        const left = i === 0 || i === 3;
+        const top = i < 2;
+        const dx = Math.max(
+          0,
+          left ? inner.left - oc.left : oc.right - inner.right
+        );
+        const dy = Math.max(
+          0,
+          top ? inner.top - oc.top : oc.bottom - inner.bottom
+        );
+        const [orx = 0, ory = 0] = oc.r[i] ?? [];
+        const big = (orx + ory) / 2;
+        if (big < 0.5 || Math.hypot(dx, dy) >= big) {
+          continue;
+        }
+        const gap = (dx + dy) / 2;
+        const want = Math.max(0, big - gap);
+        const [irx = 0, iry = 0] = inner.r[i] ?? [];
+        let drawn = (irx + iry) / 2;
+        // Where the box cuts by its curve and that curve stands further in
+        // along the corner's diagonal than the wash's own, the cut is the
+        // corner drawn.
+        if (cut) {
+          const [crx = 0, cry = 0] = cut.r[i] ?? [];
+          const cin =
+            ((left ? cut.left - oc.left : oc.right - cut.right) +
+              (top ? cut.top - oc.top : oc.bottom - cut.bottom)) /
+              2 +
+            ((crx + cry) / 2) * K;
+          if (cin > gap + drawn * K) {
+            drawn = (cin - gap) / K;
+          }
+        }
+        // No one radius is concentric when the two insets differ: half
+        // their difference is given.
+        const room = Math.max(1.5, want * 0.25) + Math.abs(dx - dy) / 2;
+        const off = Math.abs(drawn - want) - room;
+        if (off > 0 && !(worst && worst.off >= off)) {
+          worst = { at, big, drawn, dx, dy, off, want };
+        }
+      }
+      return worst;
+    };
+    for (const el of inFlowBoxes) {
+      if (
+        el.matches(
+          'img, video, canvas, iframe, input[type="checkbox"], input[type="radio"], input[type="range"]'
+        )
+      ) {
+        continue;
+      }
+      const s = style(el);
+      const inners: {
+        c: Contour;
+        colour: Rgba;
+        from: Element | null;
+        what: string;
+      }[] = [];
+      const own = washOf(s);
+      if (own) {
+        inners.push({
+          c: contourOf(el),
+          colour: own,
+          from: el.parentElement,
+          what: "its",
+        });
+      }
+      for (const which of ["::before", "::after"] as const) {
+        const ps = pseudoOf(el, which);
+        const colour = ps ? washOf(ps) : null;
+        const box = ps && colour ? pseudoBox(el, ps) : null;
+        if (ps && colour && box && shaped(ps)) {
+          shapedBy["nested-radius"].add(`${selectorOf(el)}${which}`);
+        } else if (colour && box) {
+          inners.push({ c: box, colour, from: el, what: `its ${which}'s` });
+        }
+      }
+      // Its own clip-path or mask cuts its wash and its pseudos' alike.
+      if (shaped(s)) {
+        if (inners.length > 0) {
+          shapedBy["nested-radius"].add(selectorOf(el));
+        }
+        continue;
+      }
+      for (const inner of inners) {
+        const outer = roundedHome(inner.from, true);
+        if (!outer) {
+          continue;
+        }
+        const oc = contourOf(outer);
+        const ground = washOf(style(outer));
+        const ic = inner.c;
+        // It nearly fills the box: along one axis it stands within the
+        // box's corner radius of both ends (a row's ghost, a groove's
+        // thumb), not a chip or a dot that only stands near one corner.
+        const reach = Math.max(...oc.r.map(([x, y]) => (x + y) / 2));
+        const fills =
+          (ic.left - oc.left < reach && oc.right - ic.right < reach) ||
+          (ic.top - oc.top < reach && oc.bottom - ic.bottom < reach);
+        if (
+          !fills ||
+          (ground && alike(ground, inner.colour)) ||
+          ic.left < oc.left - 0.5 ||
+          ic.top < oc.top - 0.5 ||
+          ic.right > oc.right + 0.5 ||
+          ic.bottom > oc.bottom + 0.5
+        ) {
+          continue;
+        }
+        const corner = cornerAt(ic, outer);
+        if (corner) {
+          say(
+            "nested-radius",
+            el,
+            `${inner.what} ${corner.at} corner is ${px(corner.drawn)} round, ${px(corner.dx)}×${px(corner.dy)} in from ${selectorOf(outer)}'s ${px(corner.big)} corner: concentric is ${px(corner.want)}`
+          );
+          break;
+        }
+      }
+    }
+  }
+
+  sayShaped();
 
   // The Nothing Jumps Rule, on an open surface: its list grows and shrinks
   // from the edge it opened on. Read across this page's reads, so one read
