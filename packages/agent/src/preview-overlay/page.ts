@@ -270,6 +270,7 @@ const embeds = startEmbeds({
   inUse: (el) =>
     el === hovered || el === pinEl || !!drafting?.chain.includes(el),
   selectorOf: (el) => selectorOf(el),
+  touched: () => tellTouched(),
 });
 
 /**
@@ -531,23 +532,35 @@ function framesChanged() {
   });
 }
 
-/** How often the host is told the person's hand is on the page, at most: its beat reads the last, to the second. Our call. */
+/** How often the parent is told the person's hand is on the page, at most: its beat reads the last, to the second. Our call. */
 const TOUCHED_EVERY_MS = 5000;
 let touchedAt = Number.NEGATIVE_INFINITY;
-/** The person's input in `view`, to the host: the first at once, then one in {@link TOUCHED_EVERY_MS} (the dashboard's reload.svelte.ts `heardInput`). */
-const tellTouches = (view: Window): void => {
+/**
+ * The person's hand is on this page, or an embed in it (embeds.ts), said to
+ * the parent: the first at once, then one in {@link TOUCHED_EVERY_MS}. To any
+ * parent and carrying nothing, as an embed's `cawco:embedded` is, because a
+ * decision page never says an embed in it hello (host-origin.ts). Each parent
+ * hears only its own frame: the dashboard's `heardInput`, a decision page's
+ * overlay {@link embeds}.
+ */
+function tellTouched(): void {
+  const now = performance.now();
+  if (window.parent !== window && now - touchedAt >= TOUCHED_EVERY_MS) {
+    touchedAt = now;
+    window.parent.postMessage({ type: PAGE_TOUCHED_MESSAGE }, "*");
+  }
+}
+const hearTouches = (view: Window): void => {
   const touched = (event: Event) => {
-    const now = performance.now();
-    if (personsInput(event) && now - touchedAt >= TOUCHED_EVERY_MS) {
-      touchedAt = now;
-      post(PAGE_TOUCHED_MESSAGE);
+    if (personsInput(event)) {
+      tellTouched();
     }
   };
   for (const kind of PERSONS_INPUT) {
     view.addEventListener(kind, touched, { capture: true, passive: true });
   }
 };
-watchFrames(framesChanged, tellTouches);
+watchFrames(framesChanged, hearTouches);
 // A sheet's stage swapped a component in place (its sheet module says so on
 // each Vite HMR update), or a decision page's host drew a revision of its
 // program (decision-host, naming the program's hash): every pin's anchor is

@@ -33,6 +33,7 @@ import type {
   PageAnchor,
   PinnedElement,
 } from "@cawco/core/comments";
+import { PAGE_TOUCHED_MESSAGE } from "@cawco/core/frames";
 import { EMBED_DRAWN } from "@cawco/core/stage";
 import {
   contentBox,
@@ -380,6 +381,8 @@ export interface EmbedsDeps {
   inUse: (el: Element) => boolean;
   /** `el`'s selector in its own document (page.ts `selectorOf`). */
   selectorOf: (el: Element) => string;
+  /** The person's hand is on a bridged frame's page: this page's parent hears it (page.ts `tellTouched`). */
+  touched: () => void;
 }
 
 /** Where an anchor into an embed stands: on its stand-in, found by what; or not yet answered; or gone from the embed. */
@@ -721,6 +724,7 @@ export function startEmbeds(deps: EmbedsDeps): Embeds {
     const type = said?.type;
     if (
       type !== EMBEDDED &&
+      type !== PAGE_TOUCHED_MESSAGE &&
       type !== TARGET &&
       type !== FOUND &&
       type !== PICTURED
@@ -739,7 +743,9 @@ export function startEmbeds(deps: EmbedsDeps): Embeds {
     if (!bridge || event.origin !== bridge.origin) {
       return;
     }
-    if (type === PICTURED) {
+    if (type === PAGE_TOUCHED_MESSAGE) {
+      deps.touched();
+    } else if (type === PICTURED) {
       drew(bridge, Number(said?.seq), said?.png, said?.errors);
     } else if (type === TARGET) {
       targeted(bridge, Number(said?.seq), said?.target);

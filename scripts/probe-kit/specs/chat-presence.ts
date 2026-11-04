@@ -37,10 +37,16 @@
  * Input inside a frame (agent preview-overlay page.ts, `PAGE_TOUCHED_MESSAGE`):
  * 15. a touch inside a decision page, with no input anywhere else, brings the
  *    person back from away, and a later one moves their last input on;
- * 16. the same inside a preview in the panel, on a tab that had no input.
+ * 16. the same inside a preview in the panel, on a tab that had no input;
+ * 17. inside a preview embedded in a decision page, another origin's frame
+ *    inside another origin's: the embed tells the decision page's overlay,
+ *    which tells the dashboard (embeds.ts);
+ * 18. inside a canvas on the panel's stage (CanvasStages).
  *
  *   bun scripts/probe-kit/run.ts chat-presence
  */
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
 import {
   type PresenceSaid,
@@ -60,6 +66,16 @@ const SILENT = "PROBE-SILENT";
 const ANSWERS = "PROBE-ANSWERS";
 const CLOSING = "closing words";
 const DECISION_PAGE = "touched";
+const EMBED_PAGE = "embedded";
+const EMBED_FRAME = 'iframe[data-slot="embed"]';
+const EMBED_WORD = "The folder, live";
+const EMBED_PROGRAM = (preview: string) => `root = Decisions("Embedded", [word])
+word = Decision("word", "Which word reads right?", [keep, other], "Drawn live.", [], [], false, null, "behaviour")
+keep = Option("keep", "Keep this word", "The folder's own page.", true, [live], "One more look.")
+other = Option("other", "Another word", "A new page.", false, [], "Another round.")
+live = Preview("${preview}", "The folder, live")`;
+const CANVAS_FRAME =
+  '[data-slot="canvas-stage"][data-canvas-stages-docked] iframe';
 const DECISION_PROGRAM = `root = Decisions("Touched", [colour])
 colour = Decision("colour", "Which colour?", [red, blue], "Either works.", [], [], false, null, "behaviour")
 red = Option("red", "Red", "Warm.", true, [], "Loud.")
@@ -141,8 +157,11 @@ const touchInside = async (page: Page, frame: Locator): Promise<void> => {
   }
   await page.bringToFront();
   const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+  // The move that enters a frame has no movement there, so it is no one's hand
+  // (core `personsInput`), and a frame nested in another may be reached a move late.
   await page.mouse.move(x, y);
   await page.mouse.move(x + 12, y + 12);
+  await page.mouse.move(x + 24, y + 24);
 };
 
 /** The page says it is hidden (headless pages cannot be: kit hidden-tab.ts) or visible again, as a browser tells it. */
@@ -389,6 +408,117 @@ const run = async (kit: Kit): Promise<void> => {
   );
   check("16: a touch inside a preview is input on its tab", true);
   await previewTab.close();
+
+  // 17. Inside a preview embedded in a decision page: the pointer lands in the
+  // embed alone, so the decision page's own window hears nothing of it.
+  const folder = join(fleet.sandbox, "embedded");
+  await mkdir(folder, { recursive: true });
+  await Bun.write(
+    join(folder, "index.html"),
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${EMBED_WORD}</title></head><body style="min-height:100vh"><h1>${EMBED_WORD}</h1></body></html>`
+  );
+  const artifacts = `/api/instances/${conversation}/artifacts`;
+  const folderPreview = await fleet.api<{ id: string }>(artifacts, {
+    kind: "preview",
+    does: "try",
+    ask: "Try the folder",
+    name: "embedded-folder",
+    dir: folder,
+  });
+  await fleet.api(artifacts, {
+    kind: "page",
+    does: "pick",
+    ask: "Pick the word",
+    name: EMBED_PAGE,
+    program: EMBED_PROGRAM(folderPreview.id),
+  });
+  const embedTab = await kit.page("desk");
+  await open(
+    embedTab,
+    `${base}/project/${project.id}?view=decisions&page=${EMBED_PAGE}`,
+    '[data-slot="decisions"] iframe'
+  );
+  const hostFrame = embedTab.frameLocator('[data-slot="decisions"] iframe');
+  const embed = hostFrame.locator(EMBED_FRAME).first();
+  await embed.scrollIntoViewIfNeeded({ timeout: 60_000 });
+  const inEmbed = await embed.contentFrame();
+  await inEmbed.locator("h1").waitFor({ timeout: 60_000 });
+  const counting = () => {
+    const held = window as unknown as { probeMoves?: number };
+    held.probeMoves = 0;
+    addEventListener(
+      "pointermove",
+      (event) => {
+        const { movementX, movementY } = event as PointerEvent;
+        if (movementX !== 0 || movementY !== 0) {
+          held.probeMoves = (held.probeMoves ?? 0) + 1;
+        }
+      },
+      { capture: true }
+    );
+  };
+  const counted = () =>
+    (window as unknown as { probeMoves?: number }).probeMoves ?? 0;
+  const inHost = hostFrame.locator("body");
+  await inEmbed.locator("body").evaluate(counting);
+  await inHost.evaluate(counting);
+  check(
+    "17: setup: a decision page with a live embed and no input has said none",
+    (await inputOn(embedTab)) === null
+  );
+  await touchInside(embedTab, embed);
+  const movesInEmbed = await inEmbed.locator("body").evaluate(counted);
+  const movesInHost = await inHost.evaluate(counted);
+  check(
+    "17: setup: the pointer landed in the embed, and the decision page around it heard nothing",
+    movesInEmbed > 0 && movesInHost === 0,
+    `${movesInEmbed} move(s) in the embed, ${movesInHost} in the decision page`
+  );
+  await until(
+    "the touch inside the embedded preview to reach the hub",
+    () => inputOn(embedTab),
+    (at) => at !== null,
+    20_000
+  );
+  check(
+    "17: a touch inside a preview embedded in a decision page is input on its tab",
+    true
+  );
+  await embedTab.close();
+
+  // 18. Inside a canvas on the panel's stage, on a tab of its own.
+  await fleet.api(`/api/instances/${other}/artifacts`, {
+    kind: "canvas",
+    does: "draw",
+    ask: "Draw on this canvas",
+    name: "touched-canvas",
+  });
+  const canvasTab = await tabOn(kit, base, other);
+  const canvasFrame = canvasTab.locator(CANVAS_FRAME).first();
+  await (
+    await canvasFrame.contentFrame()
+  )
+    .locator(".canvas-host .excalidraw")
+    .waitFor({ timeout: 60_000 });
+  check(
+    "18: setup: a tab with a canvas on its stage and no input has said none",
+    (await inputOn(canvasTab)) === null
+  );
+  await touchInside(canvasTab, canvasFrame);
+  await until(
+    "the touch inside the canvas to reach the hub",
+    () => inputOn(canvasTab),
+    (at) => at !== null,
+    20_000
+  );
+  check(
+    "18: a touch inside a canvas on the panel's stage is input on its tab",
+    true
+  );
+  await canvasTab.close();
+  await fetch(`${fleet.base}/api/instances/${other}/preview`, {
+    method: "DELETE",
+  });
 
   // 3. The window unfocused, still on screen.
   await blurWindow(tab);

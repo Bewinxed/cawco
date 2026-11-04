@@ -47,8 +47,6 @@ const TEXT_INPUTS = new Set([
 
 type Field = HTMLInputElement | HTMLTextAreaElement | HTMLElement;
 
-// By tag, not `instanceof`: a field in a preview's frame is another
-// window's element, which no class of this window's is the class of.
 const typed = (element: Element | null): element is Field =>
   element !== null &&
   ((element as HTMLElement).isContentEditable ||
@@ -121,25 +119,6 @@ if (typeof window !== "undefined") {
   );
 }
 
-/** The element with the keyboard, looking into the frame that has it (a preview). */
-function focused(): Element | null {
-  let element = document.activeElement;
-  while (element?.tagName === "IFRAME") {
-    let inner: Element | null = null;
-    try {
-      inner =
-        (element as HTMLIFrameElement).contentDocument?.activeElement ?? null;
-    } catch {
-      // Another origin's frame: what has its keyboard is not ours to read.
-    }
-    if (!inner || inner === element) {
-      break;
-    }
-    element = inner;
-  }
-  return element;
-}
-
 /**
  * A surface that stands until it is closed, whose fields nothing keeps: a
  * dialog or sheet, a popover (bits-ui's content has no role of its own), a
@@ -164,7 +143,7 @@ const STANDING = [
  * those has committed them as it was left, or is a search's.
  */
 export function unsavedWords(): boolean {
-  const active = focused();
+  const active = document.activeElement;
   for (const [field, start] of started) {
     if (!field.isConnected) {
       started.delete(field);
