@@ -85,6 +85,7 @@ import { boardTitle } from "./labels";
 import { type McpTool, sentence, tool } from "./mcp-tool";
 import { AGENTS_FILE, personsTier, ROUTINE_ORIGIN } from "./memory";
 import { VIEW_PROMPT } from "./openui";
+import { onAccountMachines } from "./placement";
 import {
   folderReadWords,
   folderWrittenWords,
@@ -652,10 +653,18 @@ export const createCaw = ({
       : undefined;
   };
 
-  /** A checkout of the project on a machine that is online, the primary first. */
+  /**
+   * A checkout of the project on a machine that is online, the primary
+   * first, among those where its account is signed in when any is
+   * (placement.ts `onAccountMachines`).
+   */
   const checkoutFor = (project: ReturnType<typeof projectOf>) => {
-    const checkouts = project.places.filter(
-      (place) => place.kind === "checkout" && online(place.machineId)
+    const checkouts = onAccountMachines(
+      project.places.filter(
+        (place) => place.kind === "checkout" && online(place.machineId)
+      ),
+      project.account,
+      db.accounts.signins()
     );
     return checkouts.find((place) => place.isPrimary) ?? checkouts[0];
   };

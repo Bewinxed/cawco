@@ -83,12 +83,15 @@ export interface PlacementInput {
    * absent: none, or a session already running.
    */
   projectAccount?: string;
-  /** The project's allow-list; null or absent: every account. */
+  /**
+   * The project's allow-list; null or absent: every account. It holds only
+   * sessions of a provider it lists an account of ({@link ofProvider}).
+   */
   projectAccounts?: string[] | null;
   readings: AccountReading[];
   routing: ProviderRouting;
   signins: AccountSignin[];
-  /** The task's allow-list (`accounts:`); null or absent: every account. */
+  /** The task's allow-list (`accounts:`); null or absent: every account. Held to its providers as the project's is. */
   taskAccounts?: string[] | null;
   /** The delegate type's preferred account. */
   typeAccount?: string;
@@ -821,6 +824,41 @@ export const runningAccounts = (
   return project?.accounts ?? null;
 };
 
+/**
+ * Of the places a start in a project could go where nothing named its
+ * machine, those on machines where the project's account is signed in, in
+ * their order: a start goes where its account can take it ({@link
+ * projectPick}). All of them when the project names no account, or no
+ * candidate's machine has it signed in: the start then goes as it did, and
+ * placement says why it can't start there.
+ */
+export const onAccountMachines = <P extends { machineId: string }>(
+  candidates: readonly P[],
+  account: string | null | undefined,
+  signins: readonly AccountSignin[]
+): P[] => {
+  if (!account) {
+    return [...candidates];
+  }
+  const on = candidates.filter((candidate) =>
+    signedInOn(signins, account, candidate.machineId)
+  );
+  return on.length > 0 ? on : [...candidates];
+};
+
+/** Whether `account` is signed in on `machineId`. */
+export const signedInOn = (
+  signins: readonly AccountSignin[],
+  account: string,
+  machineId: string
+): boolean =>
+  signins.some(
+    (one) =>
+      one.accountId === account &&
+      one.machineId === machineId &&
+      one.state === "signed-in"
+  );
+
 /** The strategy's choice among the candidates, or nothing when none of them can take it. */
 const byStrategy = (
   strategy: PlacementStrategy,
@@ -1101,11 +1139,31 @@ export interface AccountRow {
   windows: PacedWindow[];
 }
 
+/**
+ * `input` with the project's and the task's account lists kept only where
+ * they hold an account of the session's provider (`input.accounts` holds
+ * that provider's alone): a list of Claude accounts says nothing of a
+ * session on a ChatGPT model, as the project's account says nothing of it
+ * ({@link projectPick}).
+ */
+const ofProvider = (input: PlacementInput): PlacementInput => {
+  const kept = (list: string[] | null | undefined) =>
+    list?.some((id) => input.accounts.some((one) => one.id === id))
+      ? list
+      : null;
+  return {
+    ...input,
+    projectAccounts: kept(input.projectAccounts),
+    taskAccounts: kept(input.taskAccounts),
+  };
+};
+
 /** Every account of `input.accounts` but `leaving`, as a carry off `leaving`'s limit reads it ({@link AccountRow}). */
 export const accountRows = (
-  input: PlacementInput,
+  asked: PlacementInput,
   leaving: string
 ): AccountRow[] => {
+  const input = ofProvider(asked);
   const usage = new Usage(input);
   const scope = modelScope(input.model);
   const { signedIn, allowed } = eligible(input);
@@ -1148,7 +1206,8 @@ export const accountRows = (
     });
 };
 
-export const place = (input: PlacementInput): Placement => {
+export const place = (asked: PlacementInput): Placement => {
+  const input = ofProvider(asked);
   const byId = new Map(input.accounts.map((account) => [account.id, account]));
   const name = (id: string): string => {
     const account = byId.get(id);

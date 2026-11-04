@@ -101,6 +101,7 @@ import { boardTitle } from "./labels";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { tool } from "./mcp-tool";
 import { ROUTINE_ORIGIN } from "./memory";
+import { onAccountMachines } from "./placement";
 import {
   routineListWords,
   routineRunWords,
@@ -314,7 +315,10 @@ export interface RoutineDeps {
   ) => Promise<
     { kind: "none"; reason: string } | { kind: "run"; text: string }
   >;
-  readonly db: Pick<DbShape, "ingress" | "project" | "routines" | "workItem">;
+  readonly db: Pick<
+    DbShape,
+    "accounts" | "ingress" | "project" | "routines" | "workItem"
+  >;
   /**
    * Where a routine in no project runs: the hub's machine and the checkout
    * the hub runs from; a sentence when it cannot now.
@@ -892,7 +896,11 @@ export const createRoutines = ({
     });
   };
 
-  /** Where a delegate run's workspace is cut: a checkout that is online, or the hub's own. */
+  /**
+   * Where a delegate run's workspace is cut: a checkout that is online, the
+   * primary first, among those where its project's account is signed in
+   * when any is (placement.ts `onAccountMachines`); or the hub's own.
+   */
   const placeOf = async (
     routine: RoutineRow
   ): Promise<{ cwd: string; machineId: string } | string> => {
@@ -900,8 +908,12 @@ export const createRoutines = ({
       return await hubCheckout();
     }
     const project = projectOf(routine.projectId);
-    const checkouts = project.places.filter(
-      (each) => each.kind === "checkout" && online(each.machineId)
+    const checkouts = onAccountMachines(
+      project.places.filter(
+        (each) => each.kind === "checkout" && online(each.machineId)
+      ),
+      project.account,
+      db.accounts.signins()
     );
     const place = checkouts.find((each) => each.isPrimary) ?? checkouts[0];
     return place

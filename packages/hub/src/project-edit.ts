@@ -211,7 +211,12 @@ export const accountChange = (
       )
     );
   }
-  if (project.accounts && !project.accounts.includes(account.id)) {
+  // The project's list holds its providers' sessions alone (placement.ts `ofProvider`).
+  const listed = project.accounts?.filter(
+    (id) =>
+      accounts.find((each) => each.id === id)?.provider === account.provider
+  );
+  if (listed?.length && !listed.includes(account.id)) {
     const named = (id: string) => {
       const one = accounts.find((each) => each.id === id);
       return one ? accountNameAmong(one, accounts) : id;
@@ -220,7 +225,7 @@ export const accountChange = (
       400,
       projectAccountWords.notAllowed(
         accountNameAmong(account, accounts),
-        project.accounts.map(named)
+        listed.map(named)
       )
     );
   }

@@ -876,6 +876,7 @@ import {
 import { createPlaceRepos } from "./place-repo";
 import {
   noAccountRefusal,
+  onAccountMachines,
   type PlacementInput,
   place as placeAccount,
   runningAccounts,
@@ -16697,6 +16698,10 @@ export const createServer = (
       ...(payload.role ? { role: payload.role } : {}),
       ...(payload.delegateType ? { delegateType: payload.delegateType } : {}),
       ...openedAccount(payload, placed),
+      // The account its start named, as placement honoured it.
+      ...(payload.account && placed.accountId
+        ? { namedAccount: placed.accountId }
+        : {}),
       ...forkedFromOf(payload),
     });
     const sent = sendSpawn(agent, machineId, {
@@ -24858,12 +24863,18 @@ export const createServer = (
    * Where a project's Caw starts before any checkout of it is online (D2):
    * its folder on the hub, on the hub's machine, when that machine runs an
    * agent; else `~/.cawco/caw/<projectId>`, made on the first machine that is
-   * online. Undefined while no machine is.
+   * online. Undefined while no machine is. Among the machines where the
+   * project's account is signed in, when any is (placement.ts
+   * `onAccountMachines`).
    */
   const leadHome = async (
     projectId: string
   ): Promise<{ machineId: string; cwd: string } | undefined> => {
-    const machines = onlineMachines();
+    const machines = onAccountMachines(
+      onlineMachines().map((machineId) => ({ machineId })),
+      db.project(projectId)?.account,
+      db.accounts.signins()
+    ).map((one) => one.machineId);
     const own = await ownMachineId;
     const hubMachine = machines.find((id) => id === own);
     if (hubMachine) {
@@ -30008,8 +30019,9 @@ export const createServer = (
    * one admitted onto its account in this window stays. The move is owed to its launch
    * ({@link owedMoves}), which carries its conversation into the
    * new account's dir; its line is written once that has. A fork stays with
-   * its origin, a session a person moved stays where they put it, and only
-   * Claude's conversations are carried this way.
+   * its origin, a session a person moved stays where they put it, one on the
+   * account its start named stays there, and only Claude's conversations are
+   * carried this way.
    */
   const replaceAtWake = (
     row: ReturnType<typeof db.getInstancesByIds>[number]
@@ -30032,6 +30044,10 @@ export const createServer = (
       .events([row.id])
       .findLast((one) => one.move.kind === "moved")?.move;
     if (last?.kind === "moved" && last.asked) {
+      return;
+    }
+    // An account its start named keeps it, as a person's move does.
+    if (row.namedAccount === from.id) {
       return;
     }
     const toId = replaceRow(row, from.id);

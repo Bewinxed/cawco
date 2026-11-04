@@ -1542,6 +1542,8 @@ export interface DbShape {
     delegateType?: { name: string; projectId?: string };
     /** The account placement chose; a row that has one keeps it. */
     accountId?: string;
+    /** The account its start named, as placed; a row that has one keeps it. */
+    namedAccount?: string;
     /**
      * The session a fork branched from (its spawn resumed that one's
      * conversation under `fork`); set once, as the fork's row opens, so
@@ -5443,6 +5445,7 @@ const make = async (path: string): Promise<DbShape> => {
       role,
       delegateType,
       accountId,
+      namedAccount,
       forkedFrom,
       keepTurn = false,
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: opens (or reuses) the one live row for a conversation across every optional field a spawn can carry — see the "one conversation, one live row" invariant below.
@@ -5517,6 +5520,7 @@ const make = async (path: string): Promise<DbShape> => {
           delegateType: delegateType?.name,
           delegateTypeProject: delegateType?.projectId,
           accountId,
+          namedAccount,
           forkedFrom,
           // A fresh conversation has spent nothing; a resumed one's spend so
           // far is unknown until its first result says it.
@@ -5549,6 +5553,11 @@ const make = async (path: string): Promise<DbShape> => {
             ...(accountId
               ? {
                   accountId: sql`COALESCE(${instances.accountId}, ${accountId})`,
+                }
+              : {}),
+            ...(namedAccount
+              ? {
+                  namedAccount: sql`COALESCE(${instances.namedAccount}, ${namedAccount})`,
                 }
               : {}),
             // A fork stays the fork of the session it branched from.

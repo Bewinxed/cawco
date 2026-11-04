@@ -35,6 +35,8 @@ import {
   accountWindows,
   loginMoves,
   movedFromSessions,
+  projectAccounts,
+  projects,
   removedAccounts,
   strandedSessions,
   usageLimitHistory,
@@ -499,7 +501,10 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         .where(eq(accounts.id, id))
         .run();
     },
-    // Its sign-ins, readings, catalog and bench go with it (cascade).
+    // Its sign-ins, readings, catalog and bench go with it (cascade), and
+    // so does its place on any project's account list; a project whose list
+    // held it alone runs on every account again, as an empty list would
+    // start nothing in it.
     remove: (id, why, leavesOn = []) =>
       db.transaction((tx) => {
         const [gone] = tx
@@ -508,6 +513,15 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           .returning()
           .all();
         if (gone) {
+          tx.update(projects)
+            .set({ accountsLimited: false })
+            .where(
+              and(
+                eq(projects.accountsLimited, true),
+                sql`not exists (select 1 from ${projectAccounts} where ${projectAccounts.projectId} = ${projects.id})`
+              )
+            )
+            .run();
           const removedAt = new Date();
           tx.insert(removedAccounts)
             .values({ id, removedAt, why })

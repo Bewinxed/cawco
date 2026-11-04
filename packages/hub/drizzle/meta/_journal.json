@@ -2514,6 +2514,20 @@
       "when": 1793816520074,
       "tag": "0366_project_account",
       "breakpoints": true
+    },
+    {
+      "idx": 367,
+      "version": "6",
+      "when": 1793817900468,
+      "tag": "0367_project_accounts_emptied",
+      "breakpoints": true
+    },
+    {
+      "idx": 368,
+      "version": "6",
+      "when": 1793818552533,
+      "tag": "0368_named_account",
+      "breakpoints": true
     }
   ]
 }

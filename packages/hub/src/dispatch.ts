@@ -151,6 +151,7 @@ import {
   tailOf,
 } from "./jev-placement";
 import type { HubLifetimeShape } from "./lifetime";
+import { onAccountMachines } from "./placement";
 import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
 import { orchestrates } from "./roles";
 import { fits, type MachineFacts, runsOnValue, runsOnWords } from "./runs-on";
@@ -203,6 +204,7 @@ export interface DispatchDeps {
   ) => Promise<InstanceRow | undefined>;
   readonly db: Pick<
     DbShape,
+    | "accounts"
     | "dropQueuedTaskStart"
     | "getInstancesByIds"
     | "listAgents"
@@ -882,7 +884,9 @@ export const createDispatcher = ({
   /**
    * Where a new workspace is cut: a checkout of the project on a machine that
    * is online and, when the attempt names where it runs, one of those
-   * machines; the starting session's own first, then the primary place.
+   * machines, among those where the project's account is signed in when any
+   * is (placement.ts `onAccountMachines`); the starting session's own first,
+   * then the primary place.
    */
   const placeFor = (
     project: ProjectRow,
@@ -892,11 +896,15 @@ export const createDispatcher = ({
     const allowed = runsOn
       ? new Set(machinesFor(runsOn).map((machine) => machine.machineId))
       : undefined;
-    const checkouts = project.places.filter(
-      (place) =>
-        place.kind === "checkout" &&
-        online(place.machineId) &&
-        (!allowed || allowed.has(place.machineId))
+    const checkouts = onAccountMachines(
+      project.places.filter(
+        (place) =>
+          place.kind === "checkout" &&
+          online(place.machineId) &&
+          (!allowed || allowed.has(place.machineId))
+      ),
+      project.account,
+      db.accounts.signins()
     );
     return (
       checkouts.find(

@@ -1,0 +1,1 @@
+ALTER TABLE `instances` ADD `named_account` text;

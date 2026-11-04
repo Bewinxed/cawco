@@ -210,6 +210,7 @@ import {
   WouldWait,
   whenStopped,
 } from "./machine-pause";
+import { signedInOn } from "./placement";
 import { handle } from "./presenters/words";
 import {
   FOLDER_FILE_LIMIT,
@@ -5613,6 +5614,44 @@ export const createWorkItems = ({
     );
   };
 
+  /**
+   * A delegate whose brief names neither its machine, nor its folder, nor a
+   * fork, in a project whose account is not signed in on its parent's
+   * machine: cut from a checkout of the project that is online on a machine
+   * where the account is, the primary first (placement.ts `signedInOn`). A
+   * brief that names any of them keeps it, and placement refuses the start
+   * where the account is not signed in; so does one with no such checkout.
+   */
+  const onProjectAccount = (
+    request: WorkItemRequest,
+    parent: Parent,
+    projectId: string | null
+  ): WorkItemRequest => {
+    const account = projectId ? db.project(projectId)?.account : undefined;
+    if (
+      !(account && projectId) ||
+      request.machineId ||
+      request.cwd?.trim() ||
+      request.fork
+    ) {
+      return request;
+    }
+    const signins = db.accounts.signins();
+    if (signedInOn(signins, account, parent.machineId)) {
+      return request;
+    }
+    const checkouts = (db.project(projectId)?.places ?? []).filter(
+      (place) =>
+        place.kind === "checkout" &&
+        online(place.machineId) &&
+        signedInOn(signins, account, place.machineId)
+    );
+    const place = checkouts.find((each) => each.isPrimary) ?? checkouts[0];
+    return place
+      ? { ...request, machineId: place.machineId, cwd: place.path }
+      : request;
+  };
+
   /** A new workspace's machine; a remote one needs its own repository and cannot fork. */
   const targetMachine = (request: WorkItemRequest, parent: Parent): string => {
     const machineId = request.machineId ?? parent.machineId;
@@ -6439,12 +6478,13 @@ export const createWorkItems = ({
    * its head ({@link cutFrom}); then its session spawned there.
    */
   const startFresh = async (
-    request: WorkItemRequest,
+    asked: WorkItemRequest,
     parent: Parent,
     projectId: string | null,
     inputs: Inputs
   ): Promise<WorkItemStart> => {
-    const source = request.from ? fromSource(request.from, parent) : undefined;
+    const source = asked.from ? fromSource(asked.from, parent) : undefined;
+    const request = source ? asked : onProjectAccount(asked, parent, projectId);
     const machineId = targetMachine(
       source
         ? { ...request, machineId: source.machineId, cwd: source.repoRoot }

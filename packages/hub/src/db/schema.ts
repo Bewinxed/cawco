@@ -498,9 +498,9 @@ export const projects = sqliteTable("projects", {
    */
   onCap: text("on_cap").$type<OnCap>(),
   /**
-   * Its sessions run only on the accounts `project_accounts` lists, none
-   * when it lists none (its last allowed account was removed); false: every
-   * account.
+   * Its sessions run only on the accounts `project_accounts` lists, of the
+   * providers it lists (placement.ts `ofProvider`); false: every account.
+   * Removing its last listed account sets it false (db/accounts.ts `remove`).
    */
   accountsLimited: integer("accounts_limited", { mode: "boolean" })
     .notNull()
@@ -950,6 +950,13 @@ export const instances = sqliteTable("instances", {
    * accounts, or a session from before accounts.
    */
   accountId: text("account_id"),
+  /**
+   * The account its start named (New session's pick, a delegate brief's
+   * `account`), as placement read it: while it runs there, a cold wake
+   * leaves it there, as it leaves a person's move (server.ts
+   * `replaceAtWake`). Null: placement chose.
+   */
+  namedAccount: text("named_account"),
   /**
    * The session this one was forked from, when it was: it reads that
    * session's cache, so it never moves to another account on its own.
