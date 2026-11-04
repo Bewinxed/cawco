@@ -29,7 +29,9 @@
  *      another machine's row, reads its own row, and the CLI's health check
  *      run as it finds it healthy;
  * (p4) a session can't approve its own ask: not a pairing it started, not
- *      its install ask; the person's answer settles the ask;
+ *      its install ask, which the call answers at once is recorded (core
+ *      asks.ts); the person's answer settles the ask, and reaches the
+ *      session as a send;
  * (p5) an unpaired browser sees the pairing code; the paired browser
  *      approves it, and the new browser opens the app;
  * (p5b) a top-level navigation from another site (a chat's link) renders
@@ -48,6 +50,12 @@
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: one scenario, read in order, one check after another.
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  type AskRecord,
+  askAnsweredText,
+  askLink,
+  askRecordedWords,
+} from "../../../packages/core/src/asks";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE_PROOF_HEADER } from "../../../packages/core/src/hub-auth";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/index";
@@ -219,6 +227,55 @@ const machineSocket = async (base: string) => {
     close: () => socket.close(),
   };
 };
+
+/** Whether a parked ask is the hub's own ask to approve `update_machines` (hub pending.ts `askEnvelope`). */
+const isInstallAsk = (parked: {
+  payload?: { askId?: string; toolName?: string };
+}): boolean =>
+  parked.payload?.askId !== undefined &&
+  parked.payload.toolName === "mcp__cawco__update_machines";
+
+/** The hub's ask `id` as its row holds it (hub db/asks.ts `recordOf`), or none. */
+const askOf = (fleet: Fleet, id: string): AskRecord | undefined => {
+  const [row] = fleet.query<{
+    id: string;
+    instance_id: string;
+    raised_at: number;
+    record: string;
+    state: AskRecord["state"];
+  }>(
+    "SELECT id, instance_id, raised_at, record, state FROM asks WHERE id = ?",
+    id
+  );
+  return row
+    ? {
+        ...(JSON.parse(row.record) as Omit<
+          AskRecord,
+          "id" | "instanceId" | "raisedAt" | "state"
+        >),
+        id: row.id,
+        instanceId: row.instance_id,
+        raisedAt: row.raised_at,
+        state: row.state,
+      }
+    : undefined;
+};
+
+/** The words of every send the hub took for session `id`, oldest first. */
+const sendsTo = (fleet: Fleet, id: string): string[] =>
+  fleet
+    .query<{ body: string }>(
+      "SELECT body FROM sent_messages WHERE instance_id = ? ORDER BY accepted_at",
+      id
+    )
+    .map(
+      (one) =>
+        (JSON.parse(one.body) as { message?: { content?: unknown } }).message
+          ?.content
+    )
+    .map((content) =>
+      typeof content === "string" ? content : JSON.stringify(content ?? "")
+    );
 
 /** Whether a socket with these headers opens on `/ws/dashboard`. */
 const dashboardOpens = (base: string, headers: Record<string, string>) =>
@@ -644,22 +701,36 @@ const spec: Spec = {
       `${selfApprove.status}, ${anonApprove.status}`
     );
     await fleet.api(`/api/pair/requests/${started.userCode}/deny`, {});
-    const installCall = callTool(fleet, parent, parentKey, "update_machines", {
-      reason: "probe: an install ask the person denies",
-    });
+    // An install that needs the person is an ask the hub keeps (core
+    // asks.ts): the call answers at once, and the answer comes as a send.
+    const installCall = await callTool(
+      fleet,
+      parent,
+      parentKey,
+      "update_machines",
+      { reason: "probe: an install ask the person denies" }
+    );
     const asked = await until(
       "the install ask parked",
       () =>
-        fleet.api<{ requestId?: string; payload?: { adminWrite?: string } }[]>(
-          "/api/pending"
-        ),
-      (list) =>
-        list.some((one) => one.payload?.adminWrite === "update_machines"),
+        fleet.api<
+          {
+            requestId?: string;
+            payload?: { askId?: string; toolName?: string };
+          }[]
+        >("/api/pending"),
+      (list) => list.some(isInstallAsk),
       60_000
     );
-    const requestId = asked.find(
-      (one) => one.payload?.adminWrite === "update_machines"
-    )?.requestId as string;
+    const requestId = asked.find(isInstallAsk)?.requestId as string;
+    const raised = askOf(fleet, requestId);
+    check(
+      "(p4) update_machines answers at once that the ask is recorded and waits on the person",
+      raised !== undefined &&
+        installCall.said ===
+          askRecordedWords({ id: requestId, link: askLink(raised) }),
+      `${installCall.status} ${installCall.said.slice(0, 400)}`
+    );
     check(
       "(p4) the session can't answer its install ask: the person's socket refuses its credential and no credential",
       !(
@@ -681,11 +752,29 @@ const spec: Spec = {
         args: [requestId, { behavior: "deny", message: "probe says no" }],
       },
     });
-    const denied = await installCall;
+    const denied = await until(
+      "the install ask answered",
+      () => askOf(fleet, requestId),
+      (record) => record?.state === "answered",
+      60_000
+    ).catch(() => askOf(fleet, requestId));
+    const told = denied ? askAnsweredText(denied) : "";
+    const toldSession = await until(
+      "the session told the person declined",
+      () => sendsTo(fleet, parent),
+      (sends) => told !== "" && sends.includes(told),
+      60_000
+    ).catch(() => sendsTo(fleet, parent));
     check(
-      "(p4) the person denies it on their own socket: update_machines answers that the person declined, and nothing ran",
-      denied.said.includes("declined installing this build"),
-      `${denied.status} ${denied.said.slice(0, 400)}`
+      "(p4) the person denies it on their own socket: the session is told that the person declined, and nothing ran",
+      denied?.answer?.result.behavior === "deny" &&
+        denied.carried === undefined &&
+        told !== "" &&
+        toldSession.includes(told),
+      `${JSON.stringify(denied ?? null).slice(0, 400)}; told: ${told.slice(0, 200)}; sends: ${toldSession
+        .map((one) => one.slice(0, 120))
+        .join(" | ")
+        .slice(0, 600)}`
     );
 
     // (p5) An unpaired browser sees the code; the paired browser approves it.
