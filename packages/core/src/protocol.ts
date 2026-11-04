@@ -1186,6 +1186,13 @@ export interface InstanceRow {
    * delegate from before work items existed.
    */
   workItemId?: string | null;
+  /**
+   * The workspace of its own its work item runs in (a delegate's clone), as
+   * the board reads it off that item: what the session menu's Archive
+   * workspace names (dashboard LiveSessionMenu). Null on a session with no
+   * work item.
+   */
+  workspaceId?: string | null;
 }
 
 export interface KeepAlive {

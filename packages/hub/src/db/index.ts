@@ -400,11 +400,15 @@ interface MovedHere {
   stayed?: string;
 }
 /**
- * A board row: a {@link PublicInstanceRow}, and whether its work item is
- * live (null: it runs none), which the board reads to list it and never
- * sends.
+ * A board row: a {@link PublicInstanceRow}, whether its work item is live
+ * (null: it runs none), which the board reads to list it and never sends,
+ * and the workspace that item runs in, which it sends (core
+ * `InstanceRow.workspaceId`).
  */
-export type BoardInstanceRow = PublicInstanceRow & { workLive: boolean | null };
+export type BoardInstanceRow = PublicInstanceRow & {
+  workLive: boolean | null;
+  workspaceId: string | null;
+};
 /** A session's whole row but its `tooling` ({@link PublicInstanceRow}). */
 type OwnedInstanceRow = Omit<StoredInstanceRow, "tooling" | "commands">;
 export type PlaceRow = typeof projectPlaces.$inferSelect;
@@ -3109,6 +3113,10 @@ const make = async (path: string): Promise<DbShape> => {
     >`CASE WHEN ${instances.workItemId} IS NULL THEN NULL ELSE EXISTS (SELECT 1 FROM ${workItems} WHERE ${workItems.id} = ${instances.workItemId} AND ${workItems.state} IN ('starting', 'running')) END`.mapWith(
       (value: number | null) => (value === null ? null : value === 1)
     ),
+    // The workspace its work item runs in: what Archive workspace names.
+    workspaceId: sql<
+      string | null
+    >`(SELECT ${workItems.workspaceId} FROM ${workItems} WHERE ${workItems.id} = ${instances.workItemId})`,
   };
   const {
     tooling: _ownTooling,

@@ -30720,6 +30720,12 @@
                 "null",
                 "string"
               ]
+            },
+            "workspaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
             }
           },
           "required": [
@@ -30749,7 +30755,8 @@
             "status",
             "title",
             "updatedAt",
-            "workItemId"
+            "workItemId",
+            "workspaceId"
           ]
         }
       },
@@ -60541,6 +60548,13 @@
           },
           "workItemId": {
             "description": "The work item this session runs: every delegate is one, and a session\nnever runs more than one. Null on a session nobody delegated, and on a\ndelegate from before work items existed.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "workspaceId": {
+            "description": "The workspace of its own its work item runs in (a delegate's clone), as\nthe board reads it off that item: what the session menu's Archive\nworkspace names (dashboard LiveSessionMenu). Null on a session with no\nwork item.",
             "type": [
               "null",
               "string"

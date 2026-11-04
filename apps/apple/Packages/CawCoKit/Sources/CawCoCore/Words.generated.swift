@@ -1303,6 +1303,45 @@ public enum Words {
             names.count == 1 ? "\(names.joined(separator: ", ")) still waits on you and goes with it." : "\(names.joined(separator: ", ")) still wait on you and go with it."
         }
 
+        /// A session row's menu item for its workspace of its own, and its confirm's button (dashboard LiveSessionMenu).
+        public static let archiveWorkspace = "Archive workspace"
+
+        /// The archive confirm's button while it runs.
+        public static let archiveWorkspacePending = "Archiving…"
+
+        /// The archive confirm's title, when the workspace holds nothing that is nowhere else.
+        public static let archiveWorkspaceTitle = "Archive this workspace?"
+
+        /// The archive confirm's first line for a workspace whose record `file` is damaged.
+        public static func archiveWorkspaceDamaged(file: String) -> String {
+            "Its record \(file) is damaged, so it cannot run."
+        }
+
+        /// The archive confirm's line naming what goes, on the machine `where`.
+        public static func archiveWorkspaceGoes(`where`: String) -> String {
+            "Archiving deletes its private copy, its boundary and its records on \(`where`), for good. Your folder stays as it is, and every other workspace runs as before."
+        }
+
+        /// The archive confirm's title, when the workspace holds work that is nowhere else.
+        public static let archiveHeldTitle = "This workspace holds work that is nowhere else"
+
+        /// What the workspace's private copy of `path` on `machine` holds, `holds` and `size` its machine's words.
+        public static func archiveHeldWhat(path: String, machine: String, holds: String, size: String) -> String {
+            "Its private copy of \(path) on \(machine) holds \(holds), \(size) in all."
+        }
+
+        /// What Save and archive does, the carry written on `machine`.
+        public static func archiveHeldSave(machine: String) -> String {
+            "Save and archive writes its unlanded commits and changes to a carry on \(machine) (in ~/.cawco/carries), then deletes its private copy, its boundary and its records. Your folder stays as it is. Keep leaves it all where it is."
+        }
+
+        /// The held confirm's two buttons and the one running.
+        public static let archiveHeldKeep = "Keep"
+
+        public static let archiveHeldConfirm = "Save and archive"
+
+        public static let archiveHeldPending = "Saving…"
+
         /// The projects list is empty and no machine runs CawCo yet.
         public static let noProjectsNoMachines = "No projects yet — start one with New project. Once CawCo runs on a machine, its checkouts group here too."
 

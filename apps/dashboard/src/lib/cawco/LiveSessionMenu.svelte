@@ -205,6 +205,15 @@
       ? instance.damaged.workspaceId
       : undefined
   );
+  /**
+   * The workspace of its own the session runs in, which Archive workspace
+   * archives: the one whose damaged record keeps it from running, else its
+   * work item's (core `InstanceRow.workspaceId`, the board's read of its
+   * item). None on a session with no workspace of its own.
+   */
+  const ownWorkspace = $derived(
+    damagedWorkspace ?? instance.workspaceId ?? undefined
+  );
 
   /**
    * Reads what the workspace's private copy of its folder holds that is
@@ -216,7 +225,7 @@
    * words what it cannot read.
    */
   async function askArchiveWorkspace() {
-    const workspaceId = damagedWorkspace as string;
+    const workspaceId = ownWorkspace as string;
     const where = machine ? machineLabel(machine.hostname) : "its machine";
     const [held, waiting] = await Promise.all([
       workspaceHeld(workspaceId).catch(() => undefined),
@@ -232,30 +241,39 @@
     if (held && !holdsNothing(held)) {
       await asker.ask({
         at: instance.id,
-        title: "This workspace holds work that is nowhere else",
+        title: sidebarWords.archiveHeldTitle,
         body: [
-          `Its private copy of ${held.path} on ${held.machine} holds ${held.holds}, ${held.size} in all.`,
-          `Save and archive writes its unlanded commits and changes to a carry on ${held.machine} (in ~/.cawco/carries), then deletes its private copy, its boundary and its records. Your folder stays as it is. Keep leaves it all where it is.`,
+          sidebarWords.archiveHeldWhat(
+            held.path,
+            held.machine,
+            held.holds,
+            held.size
+          ),
+          sidebarWords.archiveHeldSave(held.machine),
           ...stillWaiting,
         ],
-        cancelLabel: "Keep",
-        confirmLabel: "Save and archive",
+        cancelLabel: sidebarWords.archiveHeldKeep,
+        confirmLabel: sidebarWords.archiveHeldConfirm,
         destructive: true,
-        pendingLabel: "Saving…",
+        pendingLabel: sidebarWords.archiveHeldPending,
         run: () => archiveWorkspace(workspaceId, { discard: true, anyway }),
       });
       return;
     }
     await asker.ask({
       at: instance.id,
-      title: "Archive this workspace?",
+      title: sidebarWords.archiveWorkspaceTitle,
       body: [
-        `Its record ${instance.damaged?.file ?? ""} is damaged, so it cannot run. Archiving deletes its private copy, its boundary and its records on ${where}, for good. Your folder stays as it is, and every other workspace runs as before.`,
+        // A damaged one says why it cannot run first; every one, what goes.
+        ...(damagedWorkspace
+          ? [sidebarWords.archiveWorkspaceDamaged(instance.damaged?.file ?? "")]
+          : []),
+        sidebarWords.archiveWorkspaceGoes(where),
         ...stillWaiting,
       ],
-      confirmLabel: "Archive workspace",
+      confirmLabel: sidebarWords.archiveWorkspace,
       destructive: true,
-      pendingLabel: "Archiving…",
+      pendingLabel: sidebarWords.archiveWorkspacePending,
       run: () => archiveWorkspace(workspaceId, { anyway }),
     });
   }
@@ -406,11 +424,11 @@
       </ContextMenu.Item>
     {/if}
 
-    {#if damagedWorkspace}
+    {#if ownWorkspace}
       <ContextMenu.Separator />
       <ContextMenu.Item onSelect={askArchiveWorkspace} variant="destructive">
         <IconArchive />
-        <span>Archive workspace</span>
+        <span>{sidebarWords.archiveWorkspace}</span>
       </ContextMenu.Item>
     {/if}
 

@@ -27,6 +27,35 @@ export const sidebarWords = {
     names.length === 1
       ? `${names.join(", ")} still waits on you and goes with it.`
       : `${names.join(", ")} still wait on you and go with it.`,
+  /** A session row's menu item for its workspace of its own, and its confirm's button (dashboard LiveSessionMenu). */
+  archiveWorkspace: "Archive workspace",
+  /** The archive confirm's button while it runs. */
+  archiveWorkspacePending: "Archiving…",
+  /** The archive confirm's title, when the workspace holds nothing that is nowhere else. */
+  archiveWorkspaceTitle: "Archive this workspace?",
+  /** The archive confirm's first line for a workspace whose record `file` is damaged. */
+  archiveWorkspaceDamaged: (file: string) =>
+    `Its record ${file} is damaged, so it cannot run.`,
+  /** The archive confirm's line naming what goes, on the machine `where`. */
+  archiveWorkspaceGoes: (where: string) =>
+    `Archiving deletes its private copy, its boundary and its records on ${where}, for good. Your folder stays as it is, and every other workspace runs as before.`,
+  /** The archive confirm's title, when the workspace holds work that is nowhere else. */
+  archiveHeldTitle: "This workspace holds work that is nowhere else",
+  /** What the workspace's private copy of `path` on `machine` holds, `holds` and `size` its machine's words. */
+  archiveHeldWhat: (
+    path: string,
+    machine: string,
+    holds: string,
+    size: string
+  ) =>
+    `Its private copy of ${path} on ${machine} holds ${holds}, ${size} in all.`,
+  /** What Save and archive does, the carry written on `machine`. */
+  archiveHeldSave: (machine: string) =>
+    `Save and archive writes its unlanded commits and changes to a carry on ${machine} (in ~/.cawco/carries), then deletes its private copy, its boundary and its records. Your folder stays as it is. Keep leaves it all where it is.`,
+  /** The held confirm's two buttons and the one running. */
+  archiveHeldKeep: "Keep",
+  archiveHeldConfirm: "Save and archive",
+  archiveHeldPending: "Saving…",
   /** The projects list is empty and no machine runs CawCo yet. */
   noProjectsNoMachines:
     "No projects yet — start one with New project. Once CawCo runs on a machine, its checkouts group here too.",
