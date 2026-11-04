@@ -5510,6 +5510,9 @@ export const createWorkItems = ({
     const id = crypto.randomUUID();
     db.beginWorkspaceCreate(id, machineId);
     opening.add(id);
+    if (projectId) {
+      cuttingFor.set(id, { machineId, projectId });
+    }
     const started = Date.now();
     try {
       const checkout = await cutOn(machineId, [
@@ -5551,7 +5554,45 @@ export const createWorkItems = ({
       });
     } finally {
       opening.delete(id);
+      cuttingFor.delete(id);
     }
+  };
+
+  /**
+   * Each workspace being cut for a project ({@link openWorkspace}), by id:
+   * its machine and project, until it is filed or let go. Its machine asks
+   * where the project's large files live as it cuts (agent host-lfs.ts),
+   * before any item of it is filed ({@link holdsProjectOn}).
+   */
+  const cuttingFor = new Map<
+    string,
+    { machineId: string; projectId: string }
+  >();
+
+  /**
+   * Whether `machineId` holds a delegate workspace of project `projectId`,
+   * one of a project's places (Projects spec §5.1: "places[] (checkouts on
+   * any machine, delegate workspaces)"): one being cut for it
+   * ({@link cuttingFor}), or one active or held there whose items are the
+   * project's, a gate workspace by its source's. A host-scope row is the
+   * machine's own folder, none of the project's.
+   */
+  const holdsProjectOn = (machineId: string, projectId: string): boolean => {
+    if (
+      [...cuttingFor.values()].some(
+        (cut) => cut.machineId === machineId && cut.projectId === projectId
+      )
+    ) {
+      return true;
+    }
+    const projectOf = (workspace: WorkspaceRow): boolean =>
+      db
+        .workItemsIn(workspace.checksFor ?? workspace.id)
+        .some((item) => item.projectId === projectId);
+    return [
+      ...db.activeWorkspacesOn(machineId),
+      ...db.heldWorkspaces().filter((one) => one.machineId === machineId),
+    ].some((workspace) => !workspace.host && projectOf(workspace));
   };
 
   /**
@@ -10521,6 +10562,9 @@ export const createWorkItems = ({
         ? { hostScratch: workspace.id }
         : { workspace: refOf(workspace) };
     },
+
+    /** {@link holdsProjectOn}: whether a machine holds a delegate workspace of a project, one of its places. */
+    holdsProjectOn,
 
     /** Workspace `id` as a spawn or a stage is bounded to it; undefined when no workspace has that id. */
     workspaceRef(id: string): WorkspaceRef | undefined {

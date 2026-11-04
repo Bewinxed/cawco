@@ -26430,7 +26430,11 @@ export const createServer = (
   tasks.listen(designOffers.taskChanged);
   /**
    * Project `id` for a machine asking about its large files (agent
-   * host-lfs.ts): one that holds a place of it, and nothing else.
+   * host-lfs.ts): one that holds a place of it, a delegate workspace of it
+   * among them (Projects spec §5.1: "places[] (checkouts on any machine,
+   * delegate workspaces)"; work-items.ts `holdsProjectOn`), one being cut
+   * included, and nothing else. A cut on a machine with no checkout of the
+   * project was refused here before any item of it was filed (2026-11-04).
    */
   const lfsMachineProject = (
     id: string,
@@ -26450,11 +26454,12 @@ export const createServer = (
     if (caller.kind === "owner") {
       return { row, machineId: null };
     }
-    return row.places.some((place) => place.machineId === caller.machineId)
+    return row.places.some((place) => place.machineId === caller.machineId) ||
+      workItems.holdsProjectOn(caller.machineId, row.id)
       ? { row, machineId: caller.machineId }
       : {
           status: 403,
-          refused: `This machine holds no place of ${row.name}.`,
+          refused: workWords.lfsNoPlace(row.name),
         };
   };
   // Git LFS offered for the large files a place's first commit left out,

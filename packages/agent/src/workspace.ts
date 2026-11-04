@@ -318,7 +318,11 @@ export const lfsCheckout = async ({
  * had a remote, or one a move brought only `cawco/move/*` branches of, has
  * no default branch on the hub until this.
  */
-const hubBase = async (git: Git, repo: string): Promise<string> => {
+const hubBase = async (
+  git: Git,
+  repo: string,
+  lfsGit: () => Promise<Git>
+): Promise<string> => {
   const listed = await git(repo, "ls-remote", "--symref", "origin");
   const named = SYMREF.exec(listed)?.[1];
   const refs = new Set(listed.split("\n").map((line) => line.split("\t")[1]));
@@ -334,7 +338,9 @@ const hubBase = async (git: Git, repo: string): Promise<string> => {
     }
   );
   if (await marksLfs(git, repo, `refs/heads/${branch}`)) {
-    await git(repo, "lfs", "push", "origin", `refs/heads/${branch}`);
+    await (
+      await lfsGit()
+    )(repo, "lfs", "push", "origin", `refs/heads/${branch}`);
   }
   // `--no-verify`: the repository's own pre-push hooks are for its own pushes.
   await git(
@@ -529,15 +535,16 @@ export const hubRepoOf = async (
  * `source` (another workspace's clone, whose config is that workspace's) is
  * none, and the branch the workspace starts from ({@link hubBase}). `hub` is
  * that origin's URL when it is the hub's, which every git that reaches it
- * runs under ({@link hubGitEnv}), git-lfs held to the project's `declared`
- * endpoint when it has one.
+ * runs under ({@link hubGitEnv}); a push of its large files, the one
+ * git-lfs run here, is held to the project's `declared` endpoint when it
+ * has one, asked only then.
  */
 const readySource = (
   repoRoot: string,
   projectId: unknown,
   fromClone: boolean,
   deadline: number,
-  declared: DeclaredLfs | undefined
+  declared: () => Promise<DeclaredLfs | undefined>
 ): Promise<{ hub: string | undefined; known: string | undefined }> =>
   inSource(repoRoot, deadline, async () => {
     const plain = gitUntil(deadline);
@@ -563,9 +570,8 @@ const readySource = (
       useHubCredentialHelper(repoRoot);
     }
     const known = hub
-      ? await hubBase(
-          gitUntil(deadline, hubGitEnv(hub, [], declared)),
-          repoRoot
+      ? await hubBase(gitUntil(deadline, hubGitEnv(hub)), repoRoot, async () =>
+          gitUntil(deadline, hubGitEnv(hub, [], await declared()))
         )
       : undefined;
     return { hub, known };
@@ -1051,7 +1057,14 @@ const cutClone = async (
   if (problem) {
     throw new Error(`${repoRoot} cannot have a workspace: ${problem}`);
   }
-  const declared = await declaredLfs(projectId);
+  // Where the project's large files live is asked of the hub only once a
+  // tree marks some ({@link marksLfs}): a repository with none needs no
+  // endpoint, and asks nothing a machine may not be answered.
+  let asked: Promise<DeclaredLfs | undefined> | undefined;
+  const declared = (): Promise<DeclaredLfs | undefined> => {
+    asked ??= declaredLfs(projectId);
+    return asked;
+  };
   const { hub, known } = await readySource(
     repoRoot,
     projectId,
@@ -1107,7 +1120,7 @@ const cutClone = async (
     const checkout = (await marksLfs(authed, path, start))
       ? await lfsCheckout({
           deadline,
-          declared,
+          declared: await declared(),
           hub,
           path,
           plain,

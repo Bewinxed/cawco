@@ -55,8 +55,7 @@
   "scripts/probe-kit/specs/delegate-inputs.ts": {
     "a credential store no workspace reads": 1,
     "there's no file": 1,
-    "there's no file at": 1,
-    "Your parent's inputs are in $TMPDIR/inputs/:": 1
+    "there's no file at": 1
   },
   "scripts/probe-kit/specs/fallback-refusals.ts": {
     "before the hub's welcome": 1,

@@ -68,6 +68,12 @@ export const workWords = {
     outputs: (named: number, limit: number) =>
       `outputs names ${named} files; one item declares ${limit} at most.`,
   },
+  /**
+   * A machine's ask of where a project's large files live, refused: it holds
+   * no place of the project, a checkout or a delegate workspace (hub
+   * server.ts `lfsMachineProject`).
+   */
+  lfsNoPlace: (project: string) => `This machine holds no place of ${project}.`,
   /** What a delegate of no project is told of its `$TMPDIR/outputs/`: nothing there is collected. */
   scratchOutputsNoProject:
     "This item belongs to no project, so nothing in $TMPDIR is collected: what your parent needs goes in your report or a commit.",
