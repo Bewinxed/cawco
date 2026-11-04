@@ -1,0 +1,22 @@
+language js
+
+// What serves an artifact (its machine and source) has one write:
+// db/artifacts.ts `resource`, which tells `onSourceMoved` once it is done,
+// so the preview serving the artifact's origin follows the row (hub
+// preview-service.ts `moved`). `ArtifactPatch` leaves both out, so the
+// artifacts table's `update` (db.artifacts.update, and the artifacts
+// service's own `db.update`) cannot take them; this refuses the call that
+// tries.
+or {
+  `$db.artifacts.update($id, $patch)`,
+  `db.update($id, $patch)` where { $filename <: includes "packages/hub/src/artifacts/" }
+} as $hit where {
+  $filename <: includes "packages/hub/src/",
+  $filename <: not includes "packages/hub/src/db/artifacts.ts",
+  $patch <: JsObjectExpression(),
+  $patch <: contains or {
+    JsShorthandPropertyObjectMember() as $short where { $short <: r"^(?:source|machineId)$" },
+    JsPropertyObjectMember() as $named where { $named <: r"^(?:source|machineId)\s*:[\s\S]*" }
+  },
+  register_diagnostic(span=$hit, message="An artifact's machine and source change through db.artifacts.resource(id, { machineId, source }) alone, which moves its preview with it: never through update.")
+}

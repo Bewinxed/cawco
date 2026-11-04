@@ -258,6 +258,14 @@ const NO_PLUGIN: [RegExp, string][] = [
 /** What `artifact_create` and the agent are told when a sheet cannot run, and why. */
 export class StageRefusal extends Error {}
 
+/**
+ * A stage refused because the workspace it runs in is not on this machine
+ * any more (archived, discarded): nothing here can start its server again,
+ * so its preview says its server isn't running, never that the way to it
+ * failed (agent preview.ts `staged`, `pinged`).
+ */
+export class WorkspaceNotHere extends StageRefusal {}
+
 /** What a stage runs: the stage host on a sheet's toolchain root, or the command a workspace preview names. */
 type Runs =
   | {
@@ -1832,16 +1840,37 @@ export async function wakeSource(
     await wake(known, "a preview's request", navigation);
     return;
   }
-  const { workspace } = source;
-  const ref = (await workspaceRefs()).find((one) => one.id === workspace);
-  if (!ref) {
-    throw new StageRefusal(`No workspace ${workspace} is on this machine.`);
-  }
+  const ref = await sourceWorkspace(source.workspace);
   if (source.stage) {
     await ensureStage(ref, join(source.stage.dir, source.stage.file));
   } else if (source.serve) {
     await ensureServed(ref, { ...source.serve, port: source.port });
   }
+}
+
+/** Workspace `workspace`'s record on this machine; {@link WorkspaceNotHere} when it has none. */
+async function sourceWorkspace(
+  workspace: string
+): Promise<Awaited<ReturnType<typeof workspaceRefs>>[number]> {
+  const ref = (await workspaceRefs()).find((one) => one.id === workspace);
+  if (!ref) {
+    throw new WorkspaceNotHere(`No workspace ${workspace} is on this machine.`);
+  }
+  return ref;
+}
+
+/**
+ * Whether the stage a preview source names could be woken here, short of
+ * waking it: known to this daemon, or its workspace on this machine to
+ * start it in. {@link WorkspaceNotHere} when its workspace is gone; nothing
+ * for a source no stage serves (agent preview.ts `pinged`).
+ */
+export async function sourceWakes(source: PreviewSource): Promise<void> {
+  const key = keyOf(source);
+  if (!(key && "port" in source && source.workspace) || stages.has(key)) {
+    return;
+  }
+  await sourceWorkspace(source.workspace);
 }
 
 /**

@@ -1,0 +1,36 @@
+language js
+
+// A preview origin's upstream ({ for, address, port, token }: core
+// preview-upstream.ts `Upstream`) is made in one place, the hub's
+// preview-service.ts, which starts a machine's listener for what the
+// origin's artifact row names and relays through it only while the row
+// still names that (its `for`). An upstream made anywhere else is a second
+// copy of what serves the origin, which no row change refreshes: the class
+// of bug that kept previews answering 502 (2026-11-04). And what serves an
+// artifact is read off its row (db/artifacts.ts `artifactOf`, its
+// `source`), never off its source columns.
+or {
+  JsObjectExpression() as $hit where {
+    $filename <: includes "packages/hub/src/",
+    $filename <: not includes "packages/hub/src/preview-service.ts",
+    $hit <: contains or {
+      JsShorthandPropertyObjectMember() as $short1 where { $short1 <: r"^address$" },
+      JsPropertyObjectMember() as $named1 where { $named1 <: r"^address\s*:[\s\S]*" }
+    },
+    $hit <: contains or {
+      JsShorthandPropertyObjectMember() as $short2 where { $short2 <: r"^port$" },
+      JsPropertyObjectMember() as $named2 where { $named2 <: r"^port\s*:[\s\S]*" }
+    },
+    $hit <: contains or {
+      JsShorthandPropertyObjectMember() as $short3 where { $short3 <: r"^token$" },
+      JsPropertyObjectMember() as $named3 where { $named3 <: r"^token\s*:[\s\S]*" }
+    },
+    register_diagnostic(span=$hit, message="A preview's upstream ({ address, port, token }) is made by the hub's preview-service.ts alone, for what the origin's artifact row names now: reach it with previewService.reach(row), never keep one of your own.")
+  },
+  `artifacts.$column` as $hit where {
+    $filename <: includes "packages/hub/src/",
+    $filename <: not includes "packages/hub/src/db/artifacts.ts",
+    $column <: r"^source(?:Page|Dir|Port|Path|Workspace|Place|StageDir|StageFile|ServeCommand|ServeCwd)$",
+    register_diagnostic(span=$hit, message="What serves an artifact is its row's `source` (db/artifacts.ts reads its columns): read the row, never its source columns.")
+  }
+}

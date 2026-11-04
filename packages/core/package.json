@@ -66,6 +66,7 @@
     "./hub-previews": "./src/hub-previews.ts",
     "./install-script": "./src/install-script.ts",
     "./preview-proxy": "./src/preview-proxy.ts",
+    "./preview-upstream": "./src/preview-upstream.ts",
     "./hop-headers": "./src/hop-headers.ts",
     "./package-trees": "./src/package-trees.ts",
     "./captures": "./src/captures.ts",

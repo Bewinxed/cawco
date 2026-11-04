@@ -136,6 +136,7 @@ import {
   dropArtifactRows,
   type GoneArtifact,
   projectPage,
+  type SourceMoved,
 } from "./artifacts";
 import { type AsksDb, asksDb } from "./asks";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
@@ -1470,6 +1471,14 @@ export interface DbShape {
    * session's end confirmed, a session gone, a credential replaced.
    */
   readonly onCredentialsRevoked: (listener: (hashes: string[]) => void) => void;
+  /**
+   * `listener` hears each artifact whose source moved to another key, with
+   * what served it before, once the write that moved it is done: the one
+   * write of an artifact's machine and source (artifacts.ts `resource`),
+   * so the preview serving its origin follows the row (hub
+   * preview-service.ts), as `onArtifactsGone` ends it.
+   */
+  readonly onSourceMoved: (listener: (move: SourceMoved) => void) => void;
   readonly openInstance: (instance: {
     id: string;
     machineId: string;
@@ -3615,6 +3624,25 @@ const make = async (path: string): Promise<DbShape> => {
     }
   };
 
+  /** Who hears of the sources that moved ({@link DbShape.onSourceMoved}). */
+  const movedListeners = new Set<(move: SourceMoved) => void>();
+
+  /**
+   * A source moved (artifacts.ts `resource`), told once the write is done:
+   * a microtask, as {@link tellGone}'s, so no transaction is open then.
+   */
+  const sourceMoved = (move: SourceMoved): void => {
+    queueMicrotask(() => {
+      for (const listener of movedListeners) {
+        try {
+          listener(move);
+        } catch (error) {
+          console.error("[artifacts] telling a source move failed", error);
+        }
+      }
+    });
+  };
+
   /** Who hears of the credentials the hub revokes ({@link DbShape.onCredentialsRevoked}). */
   const revokedListeners = new Set<(hashes: string[]) => void>();
   /** Hashes a write revoked, not yet told. */
@@ -5172,6 +5200,9 @@ const make = async (path: string): Promise<DbShape> => {
     },
     onArtifactsGone: (listener) => {
       goneListeners.add(listener);
+    },
+    onSourceMoved: (listener) => {
+      movedListeners.add(listener);
     },
     getMcpServer: (name) => {
       const row = db
@@ -9937,7 +9968,7 @@ const make = async (path: string): Promise<DbShape> => {
     trackers: trackersDb(db),
     taskLinks: taskLinksOf,
     hubAuth: hubAuthDb(db),
-    artifacts: artifactsDb(db, dropArtifacts),
+    artifacts: artifactsDb(db, dropArtifacts, sourceMoved),
     find: findDb(db),
     findSettings: {
       hideSecrets: () =>

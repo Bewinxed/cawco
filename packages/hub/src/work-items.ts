@@ -78,6 +78,7 @@ import type {
 } from "@cawco/core";
 import {
   ANY_TYPE,
+  artifactLink,
   byPerson,
   CODE_MODE_TOOL,
   CONTROL_CLONE_HOLDING,
@@ -158,6 +159,7 @@ import type {
   WorkItemRow,
   WorkspaceRow,
 } from "./db";
+import type { ArtifactRow } from "./db/artifacts";
 import type {
   GatePass,
   ItemBlock,
@@ -1190,6 +1192,13 @@ export interface WorkItemDeps {
    */
   readonly unblocked: (instanceId: string) => void;
   readonly untellYou: (instanceId: string) => void;
+  /**
+   * Of the artifacts a workspace serves, those waiting on the person, with
+   * the decision pages waiting on the person that show one of them
+   * (artifacts service `waitingOnPerson`): its archive or discard refuses
+   * while any does ({@link servedFrom}).
+   */
+  readonly waitingOnPerson?: (served: readonly ArtifactRow[]) => ArtifactRow[];
   /** A workspace was settled on its machine, archived or held: the dashboards draw it so. */
   readonly workspaceChanged?: (workspace: WorkspaceRow) => void;
 }
@@ -2483,6 +2492,7 @@ export const createWorkItems = ({
   todos,
   types,
   untellYou,
+  waitingOnPerson,
   workspaceChanged,
 }: WorkItemDeps) => {
   /**
@@ -4146,30 +4156,63 @@ export const createWorkItems = ({
   ];
 
   /**
-   * The artifacts, any session's, showing what a workspace serves (db
-   * artifacts.ts `previewing`: a port preview naming it, a folder preview
-   * inside its clone or scratch dir), in words, or nothing. On 2026-10-15 a
-   * workspace was retired while it served the owner's two open previews.
-   * Only retirement waits for them ({@link holdOn}); an explicit archive ends
-   * their served servers, and their rows stay, reading as a workspace that
-   * isn't running.
+   * THE ONE READ OF WHAT A WORKSPACE SERVES: the artifacts, any session's,
+   * whose row names it (db artifacts.ts `previewing`: a port preview or a
+   * sheet naming it, a folder preview inside its clone or scratch dir), a
+   * held next version among them. Its retirement waits while any stands
+   * ({@link previewedBy}); its archive or discard, on purpose, refuses
+   * while any of them, or a decision page showing one, waits on the person
+   * ({@link waitingFrom}). A Linux view's path is the person's folder, so a
+   * folder preview there is not the workspace's; a port preview naming it
+   * is.
+   */
+  const servedFrom = (workspace: WorkspaceRow): ArtifactRow[] => {
+    const roots = rootsOf(workspace);
+    const rows = new Map<string, ArtifactRow>();
+    // "//" is no folder: a workspace with no folder of its own still serves its ports.
+    for (const path of roots.length > 0 ? roots : ["//"]) {
+      for (const row of db.artifacts.previewing({
+        id: workspace.id,
+        machineId: workspace.machineId,
+        path,
+      })) {
+        rows.set(row.id, row);
+      }
+    }
+    return [...rows.values()];
+  };
+
+  /**
+   * What a workspace serves ({@link servedFrom}), in words, or nothing. On
+   * 2026-10-15 a workspace was retired while it served the owner's two
+   * open previews. Retirement waits for every one ({@link holdOn}); an
+   * archive or discard on purpose refuses only on those waiting on the
+   * person ({@link waitingFrom}), and ends the served servers of the rest,
+   * whose rows stay, reading as a server that isn't running.
    */
   const previewedBy = (workspace: WorkspaceRow): string | undefined => {
-    const shown = [
-      ...new Set(
-        rootsOf(workspace).flatMap((path) =>
-          db.artifacts
-            .previewing({
-              id: workspace.id,
-              machineId: workspace.machineId,
-              path,
-            })
-            .map((one) => one.name)
-        )
-      ),
-    ];
+    const shown = [...new Set(servedFrom(workspace).map((one) => one.name))];
     if (shown.length > 0) {
       return `${shown.length === 1 ? "the artifact" : "the artifacts"} ${shown.join(", ")} ${shown.length === 1 ? "shows" : "show"} what it serves`;
+    }
+  };
+
+  /**
+   * Why an archive or discard of a workspace on purpose is refused, or
+   * nothing: what it serves ({@link servedFrom}) that waits on the person,
+   * with every decision page waiting on the person that shows one of
+   * those (artifacts service `waitingOnPerson`), each by its link. Nothing
+   * of them is lost: the session hands each up again from another
+   * workspace (its source moves through its one write, db artifacts.ts
+   * `resource`, and this one is free), or the person settles or deletes it.
+   */
+  const waitingFrom = (workspace: WorkspaceRow): string | undefined => {
+    const waiting = waitingOnPerson?.(servedFrom(workspace)) ?? [];
+    if (waiting.length > 0) {
+      return workWords.servesWaiting(
+        handle(workspace.id),
+        waiting.map((row) => artifactLink(row.id, row.name))
+      );
     }
   };
 
@@ -4827,14 +4870,20 @@ export const createWorkItems = ({
       );
     }
     // Even with `discard`: a discard lets go of the clone's own work, never
-    // a project's folder there. A preview of it does not refuse: the archive
-    // ends its served server ({@link previewedBy}).
+    // a project's folder there.
     const places = placesIn(workspace);
     if (places) {
       throw new WorkItemRefusal(
         409,
         `Workspace ${handle(workspace.id)} was not archived and nothing was deleted: ${places}. Delete or move that, then archive it again.`
       );
+    }
+    // Nor what it serves that waits on the person: a preview, a sheet, or
+    // a decision page showing one. Anything else it serves does not refuse:
+    // the archive ends its served server ({@link waitingFrom}).
+    const waiting = waitingFrom(workspace);
+    if (waiting) {
+      throw new WorkItemRefusal(409, waiting);
     }
     const skip = handedOver(workspace);
     // Bounded well inside the HTTP call's own idle timeout: a machine that

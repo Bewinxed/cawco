@@ -45,7 +45,7 @@
  *   session's sweep takes all of its workspace's work, the stage's server
  *   was ended with it until 2026-10-24. (The stage is reached on its
  *   socket, so this reads the process itself, not the preview's origin,
- *   which lasts as long as its artifact: hub server.ts `endArtifactOrigin`.)
+ *   which lasts as long as its artifact: hub preview-service.ts `end`.)
  *
  *   bun scripts/probe-kit/run.ts ended-item-work
  */

@@ -1,4 +1,5 @@
 import type { PreviewSource } from "@cawco/core";
+import { type SourceKey, sourceKeyOf } from "@cawco/core/preview-upstream";
 import { isPlace } from "@cawco/core/workspace-policy";
 import {
   and,
@@ -117,12 +118,50 @@ interface ArtifactChange {
 
 /**
  * What may change on an artifact after it is made: never its id, project,
- * kind, birth or origin (its origin only through {@link ArtifactsDb.handOrigin}). Its session changes only for a project's page another
- * session of the project makes again ({@link ArtifactsDb.projectPage}).
+ * kind, birth or origin (its origin only through {@link ArtifactsDb.handOrigin}),
+ * and never what serves it (its machine and source only through
+ * {@link ArtifactsDb.resource}, which tells the preview that serves it).
+ * Its session changes only for a project's page another session of the
+ * project makes again ({@link ArtifactsDb.projectPage}).
  */
 type ArtifactPatch = Partial<
-  Omit<ArtifactRow, "id" | "projectId" | "kind" | "createdAt" | "origin">
+  Omit<
+    ArtifactRow,
+    | "id"
+    | "projectId"
+    | "kind"
+    | "createdAt"
+    | "origin"
+    | "machineId"
+    | "source"
+  >
 >;
+
+/** What serves an artifact: the machine (none for what the hub serves) and its source. */
+export type ArtifactServed = Pick<ArtifactRow, "machineId" | "source">;
+
+/**
+ * The key of what a machine serves artifact `row` from (core
+ * `sourceKeyOf`); null for what the hub serves itself (a page, a canvas, a
+ * browser), or a row no machine holds.
+ */
+const rowSourceKey = (row: ArtifactServed): SourceKey | null =>
+  row.machineId && !("page" in row.source)
+    ? sourceKeyOf({ machineId: row.machineId, source: row.source })
+    : null;
+
+/**
+ * An artifact whose source moved to another key ({@link ArtifactsDb.resource}):
+ * its id, the origin its row pointed at as it moved, what served it
+ * `before`, and the keys it moved `from` and `to`.
+ */
+export interface SourceMoved {
+  before: ArtifactServed;
+  from: SourceKey | null;
+  id: string;
+  origin: string;
+  to: SourceKey | null;
+}
 
 /** The rows artifacts/ keeps: the list, and each document's update log. */
 export interface ArtifactsDb {
@@ -220,6 +259,19 @@ export interface ArtifactsDb {
   ) => ArtifactRow | undefined;
   /** Removes an artifact and its log, a next version held for it too ({@link dropArtifacts}). */
   readonly remove: (id: string) => void;
+  /**
+   * THE ONE WRITE OF WHAT SERVES AN ARTIFACT: its machine and source set,
+   * and, when that moves it to another source key ({@link rowSourceKey}),
+   * the move told once the write is done (db index.ts `onSourceMoved`), so
+   * the preview that serves its origin follows the row (hub
+   * preview-service.ts). Undefined when no row has that id.
+   */
+  readonly resource: (
+    id: string,
+    served: ArtifactServed
+  ) =>
+    | { from: SourceKey | null; row: ArtifactRow; to: SourceKey | null }
+    | undefined;
   /** Keeps `artifactId` as what session `instanceId`'s panel shows, in place of any other. */
   readonly show: (instanceId: string, artifactId: string) => void;
   /** Every session's shown artifact, with its row: what the hub serves after a restart. */
@@ -278,7 +330,9 @@ export const dropArtifactRows = (
 export const artifactsDb = (
   db: BunSQLiteDatabase,
   /** {@link dropArtifactRows}, its ids told once the write is done (db index.ts `dropArtifacts`). */
-  drop: (tx: Deleter, where: SQL | undefined) => void
+  drop: (tx: Deleter, where: SQL | undefined) => void,
+  /** A source moved by {@link ArtifactsDb.resource}, told once the write is done (db index.ts `onSourceMoved`). */
+  moved: (move: SourceMoved) => void
 ): ArtifactsDb => ({
   componentsOn: (machineId) =>
     db
@@ -535,6 +589,35 @@ export const artifactsDb = (
   remove: (id) => {
     drop(db, eq(artifacts.id, id));
   },
+  resource: (id, { machineId, source }) => {
+    const was = db.select().from(artifacts).where(eq(artifacts.id, id)).get();
+    if (!was) {
+      return;
+    }
+    const before = artifactOf(was);
+    const stored = db
+      .update(artifacts)
+      .set({ machineId, ...sourceColumnsOf(source) })
+      .where(eq(artifacts.id, id))
+      .returning()
+      .get();
+    if (!stored) {
+      return;
+    }
+    const row = artifactOf(stored);
+    const from = rowSourceKey(before);
+    const to = rowSourceKey(row);
+    if (from !== to) {
+      moved({
+        id,
+        origin: before.origin,
+        before: { machineId: before.machineId, source: before.source },
+        from,
+        to,
+      });
+    }
+    return { row, from, to };
+  },
   show: (instanceId, artifactId) => {
     db.insert(shownPreviews)
       .values({ instanceId, artifactId })
@@ -566,10 +649,10 @@ export const artifactsDb = (
       .where(eq(shownPreviews.instanceId, instanceId))
       .run();
   },
-  update: (id, { source, ...patch }) => {
+  update: (id, patch) => {
     const row = db
       .update(artifacts)
-      .set({ ...patch, ...(source ? sourceColumnsOf(source) : {}) })
+      .set(patch)
       .where(eq(artifacts.id, id))
       .returning()
       .get();

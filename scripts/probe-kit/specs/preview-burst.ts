@@ -284,30 +284,41 @@ export const workspaceGone = async () => false;
 /** The pass the probe's own hub listener takes (its passes open any token): the browser's cookie on a port over plain http. */
 const PROBE_PASS = "cawco-preview-pass=probe";
 
-/** The hub's preview listener for one session showing a component canvas, its machine's listener at `agentPort`. */
+/** The hub's preview listener on one component canvas's own origin (`embed`), its machine's listener at `upstream`. */
 async function hubListener(
-  instanceId: string,
+  embed: string,
   source: { port: number; workspace: string },
   upstream: { address: string; port: number; token: string }
 ): Promise<{ port: number; stop: () => void }> {
-  const { createPreviewListeners, previewTargets } =
+  const { createPreviewListeners } =
     await import("../../../packages/hub/src/preview");
-  previewTargets.set(instanceId, {
-    artifact: { id: crypto.randomUUID(), kind: "component", name: "Icons" },
+  const { originOfKey } = await import("../../../packages/hub/src/db/previews");
+  const { sourceKeyOf } =
+    await import("../../../packages/core/src/preview-upstream");
+  // The canvas's row, as the hub reads it off its origin on every request.
+  const row = {
+    id: crypto.randomUUID(),
+    kind: "component",
+    name: "Icons",
     machineId: "probe-machine",
-    revision: "1",
+    origin: originOfKey(embed),
     source,
-    upstream,
-  });
+  };
+  const at = {
+    ...upstream,
+    for: sourceKeyOf({ machineId: row.machineId, source }),
+  };
   const ports = new Map<string, number>();
   const unused = () => {
     throw new Error("preview-burst's hub serves a canvas's relay alone");
   };
   type Listeners = Parameters<typeof createPreviewListeners>;
   const deps = {
-    reach: () => Promise.resolve({ ok: true as const, upstream }),
+    reach: () => Promise.resolve({ ok: true as const, upstream: at }),
+    upstream: () => at,
     stageAnswered: () => undefined,
-    target: (key: string) => previewTargets.get(key),
+    rowAt: (asked: string) => (asked === embed ? row : undefined),
+    artifactAt: (asked: string) => (asked === embed ? row.id : undefined),
     unreachable: () => undefined,
     servedOn: () => false,
     kindOf: () => "component" as const,
@@ -353,8 +364,8 @@ async function hubListener(
     passes,
     tailnet
   );
-  const { port } = listeners.address(instanceId);
-  return { port, stop: () => listeners.release(instanceId) };
+  const { port } = listeners.embed(embed, embed);
+  return { port, stop: () => listeners.release(embed) };
 }
 
 /**
@@ -588,7 +599,11 @@ async function chain(
 }> {
   const { startPreview, stopPreview } =
     await import("../../../packages/agent/src/preview");
-  const instanceId = crypto.randomUUID();
+  const { embedKey } = await import("../../../packages/hub/src/preview");
+  const { sourceKeyOf } =
+    await import("../../../packages/core/src/preview-upstream");
+  // The canvas's own origin's key, which the machine keys its listener by.
+  const instanceId = embedKey(crypto.randomUUID());
   const workspace = crypto.randomUUID();
   const token = crypto.randomUUID();
   const agent = await startPreview({
@@ -596,6 +611,10 @@ async function chain(
     port: stagePort,
     workspace,
     token,
+    for: sourceKeyOf({
+      machineId: "probe-machine",
+      source: { port: stagePort, workspace },
+    }),
   });
   const hub = await hubListener(
     instanceId,

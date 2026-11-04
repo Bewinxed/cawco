@@ -18,6 +18,13 @@
     // An artifact's row goes through dropArtifacts alone, which ends its
     // preview origin (packages/hub/src/db/index.ts).
     "./scripts/lint/artifact-rows-drop.grit",
+    // A preview origin's upstream is the hub's preview-service.ts's alone,
+    // and what serves an artifact is read off its row
+    // (packages/core/src/preview-upstream.ts).
+    "./scripts/lint/preview-upstream.grit",
+    // An artifact's machine and source have one write, db/artifacts.ts
+    // `resource`, which moves its preview with it.
+    "./scripts/lint/preview-source-write.grit",
     // An exhaustive switch ends with unhandled() (packages/core/src/unhandled.ts).
     "./scripts/lint/no-hand-unhandled.grit",
     // A colour or a size in a stylesheet or a `<style>` is a token

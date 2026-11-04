@@ -338,8 +338,10 @@ const run = async (kit: Kit) => {
   process.env.CAWCO_PREVIEW_PORTS = `${HOST_PORT}-${HOST_PORT + 9}`;
   const { startPreview, stopPreview } =
     await import("../../../packages/agent/src/preview");
-  const { createPreviewListeners, previewTargets } =
+  const { createPreviewListeners } =
     await import("../../../packages/hub/src/preview");
+  const { sourceKeyOf } =
+    await import("../../../packages/core/src/preview-upstream");
   const { mintSessionTicket, mintTicket, sessionPassCookie } =
     await import("../../../packages/hub/src/preview-access");
   const { PREVIEW_ENTER_PATH, PREVIEW_PASS_COOKIE } =
@@ -349,24 +351,32 @@ const run = async (kit: Kit) => {
   type Passes = Parameters<typeof createPreviewListeners>[3];
   type PassRow = Parameters<Passes["open"]>[0];
   const server = recorder();
+  const source = { port: server.port };
+  const startedFor = sourceKeyOf({ machineId: "probe", source });
   const { port: agentPort } = await startPreview({
     instanceId: INSTANCE,
     port: server.port,
     token: TOKEN,
+    for: startedFor,
   });
-  previewTargets.set(INSTANCE, {
-    artifact: { kind: "preview", id: INSTANCE } as never,
+  // What the hub reads off the origin's row on every request.
+  const shown = {
+    id: INSTANCE,
+    kind: "preview",
+    name: "probe",
     machineId: "probe",
-    revision: "probe",
-    source: { port: server.port },
-  });
+    source,
+  };
+  const upstream = {
+    for: startedFor,
+    address: "127.0.0.1",
+    port: agentPort,
+    token: TOKEN,
+  };
   const deps = {
-    reach: () =>
-      Promise.resolve({
-        ok: true,
-        upstream: { address: "127.0.0.1", port: agentPort, token: TOKEN },
-      }),
-    target: (key: string) => previewTargets.get(key),
+    reach: () => Promise.resolve({ ok: true, upstream }),
+    upstream: () => upstream,
+    rowAt: (key: string) => (key === INSTANCE ? shown : undefined),
     unreachable: () => undefined,
     ownerOf: () => undefined,
     kindOf: () => undefined,
@@ -567,7 +577,6 @@ const run = async (kit: Kit) => {
     await listeners.set({ mode: "port" });
     listeners.release(INSTANCE);
     (Bun.dns as { lookup: unknown }).lookup = lookup;
-    previewTargets.delete(INSTANCE);
     await stopPreview({ instanceId: INSTANCE });
     server.stop(true);
     await rm(scratch, { recursive: true, force: true });

@@ -4363,7 +4363,7 @@ export const previewPorts = sqliteTable(
     /**
      * An artifact's origin (`artifacts.origin`), which no foreign key
      * holds: a held version's opening repoints it from one row to another.
-     * It goes as the origin ends (hub server.ts `endArtifactOrigin`, on
+     * It goes as the origin ends (hub preview-service.ts `end`, on
      * every artifact delete), and one whose artifact went while the hub was
      * down is dropped at its next start (preview.ts `bindKept`).
      */

@@ -159,7 +159,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { decidesWords } from "@cawco/core/words/decides";
 import { applyPatch, type Operation } from "rfc6902";
 import type { Doc, YMapEvent } from "yjs";
-import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
+import type { ArtifactRow, ArtifactServed, ArtifactsDb } from "../db/artifacts";
 import { SettleRefusal } from "../decides-file";
 import {
   type ArtifactNamed,
@@ -364,6 +364,17 @@ export interface ArtifactInput {
 
 /** What says where an artifact is served from, before it has a row or with one. */
 type Placed = Pick<ArtifactRow, "kind" | "machineId" | "name" | "source">;
+
+/** Where a create put an artifact (service `placed`), and what to put back to let it go (`unplace`). */
+interface Placement {
+  before: ArtifactRow | undefined;
+  holding: { fresh: boolean; next: ArtifactRow } | null;
+  /** The session whose panel held what this create made again, when it was another's: a project's page, or a tree's preview its holder left. */
+  movedFrom?: string | undefined;
+  row: ArtifactRow;
+  /** The row it made again, as it was before; none for a row this create made (a new one, a fresh next version). */
+  was: ArtifactRow | undefined;
+}
 
 /** The hub machine's headless screen on one canvas ({@link ArtifactServiceDeps.screen}). */
 export interface CanvasScreen {
@@ -1785,15 +1796,15 @@ export interface ArtifactServiceDeps {
    */
   previewAddress: (instanceId: string) => PreviewAddress;
   /**
-   * A preview no panel shows, loaded once through a listener of its own on
-   * machine `machineId` as a pane's load would be, then let go: null when
-   * nothing stands in its way (a page its server is still making among that),
-   * else the hop that failed and the machine's words for it. A preview handed
-   * to a parent is checked so before it reaches them.
+   * A preview no panel shows, loaded once on its own origin as a pane's
+   * load would be (its machine's listener started for what its row names
+   * now: hub preview-service.ts): null when nothing stands in its way (a
+   * page its server is still making among that), else the hop that failed
+   * and the machine's words for it. A preview handed to a parent is checked
+   * so before it reaches them.
    */
   reachable: (
-    machineId: string,
-    source: Exclude<PreviewSource, { page: string }>
+    row: ArtifactRow
   ) => Promise<{ failure: ShownFailure; why: string | null } | null>;
   /**
    * Every view of session `instanceId`'s panel hears its artifacts again on
@@ -2614,7 +2625,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * panel has no artifact of that name for lands on its delegation tree's
    * of that name in its project ({@link ofTree}), when several the one
    * nearest up its line ({@link above}), else the newest, so its id stays,
-   * its server moves to the caller's ({@link keepServed}) and every page
+   * its server moves to the caller's ({@link letGoMoved}) and every page
    * embedding it follows. A live holder's is made again where it stands,
    * as a `to: "parent"` create lands on the parent's: held as its next
    * version once it opened it, and it is told. One whose holder acts no
@@ -3087,22 +3098,26 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           StageState | undefined)
       : undefined;
     docs.merge(next.id, row.id, "agent");
-    const promoted = db.update(row.id, {
+    // What serves it is the version's: its one write, which the preview
+    // that serves its origin follows, and which lets the server it moved
+    // off go once nothing shows it (server.ts `onSourceMoved`).
+    db.resource(row.id, { machineId: next.machineId, source: next.source });
+    db.update(row.id, {
       madeBy: next.madeBy,
-      machineId: next.machineId,
-      source: next.source,
       revision: next.revision,
       updatedAt: new Date(),
-    }) as ArtifactRow;
+    });
     // Its preview origin, where its address was handed out, is the
     // artifact's now; the artifact's own goes with the version's row.
     db.handOrigin(next.id, row.id);
+    const promoted = db.get(row.id) as ArtifactRow;
     discard(next);
     versionMoved(promoted);
     // Its server's state written after the merge, so it stands over both
-    // docs' sets; a server the next version moved off is let go once
-    // nothing shows it.
-    keepServed(promoted, row, stage);
+    // docs' sets.
+    if (stage) {
+      writeStage(promoted, stage);
+    }
     // The program it opens on goes out to the person now: its Previews' stages warmed for it.
     const program = programOf(promoted);
     if (program !== undefined) {
@@ -3128,26 +3143,27 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       : Promise.resolve(undefined);
 
   /**
-   * A served preview's state kept in its doc; and, re-made on another port or
-   * workspace, the server it showed `before` let go once nothing else shows it.
+   * Artifact `id`'s source moved off `before` (db artifacts.ts `resource`):
+   * the server `before` named let go once nothing else shows it, unless the
+   * row names that same server again now (on another start page, or put
+   * back). Told by the preview service once the new source answers or no
+   * screen waits on it (server.ts `onSourceMoved`).
    */
-  const keepServed = (
-    row: ArtifactRow,
-    before: ArtifactRow | undefined,
-    stage: StageState | undefined
-  ) => {
-    if (stage) {
-      writeStage(row, stage);
+  const letGoMoved = (id: string, before: ArtifactServed): void => {
+    const row = db.get(id);
+    const was = row && servedOf({ kind: row.kind, source: before.source });
+    if (!(row && was && before.machineId)) {
+      return;
     }
-    const was = before ? servedOf(before) : null;
     const now = servedOf(row);
     if (
-      before &&
-      was &&
-      (was.port !== now?.port || was.workspace !== now?.workspace)
+      now?.port === was.port &&
+      now.workspace === was.workspace &&
+      row.machineId === before.machineId
     ) {
-      releaseServed(before);
+      return;
     }
+    releaseServed({ id, kind: row.kind, name: row.name, ...before });
   };
 
   /**
@@ -5586,10 +5602,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
     const now = new Date();
     const before = db.byName(owner.id, "component", input.name);
+    if (before) {
+      db.resource(before.id, { machineId, source });
+    }
     const row = before
       ? (db.update(before.id, {
-          source,
-          machineId,
           madeBy: maker.id,
           ...askedOf(input),
           revision: before.revision + 1,
@@ -5879,13 +5896,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     { lands, owner, maker }: Making,
     input: Pick<ArtifactInput, "kind" | "name" | "does" | "ask">,
     at: { machineId: string | null; source: PreviewSource }
-  ): {
-    before: ArtifactRow | undefined;
-    holding: ReturnType<typeof holdNext>;
-    /** The session whose panel held what this create made again, when it was another's: a project's page, or a tree's preview its holder left. */
-    movedFrom?: string | undefined;
-    row: ArtifactRow;
-  } => {
+  ): Placement => {
     const now = new Date();
     // Read again: opening its held version first (openNextFirst) moved it.
     const found = lands
@@ -5903,8 +5914,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (before) {
       const holding = holdNext(maker, before);
       const target = holding?.next ?? before;
+      db.resource(target.id, at);
       const row = db.update(target.id, {
-        ...at,
         ...asked,
         madeBy: maker.id,
         revision: target.revision + 1,
@@ -5914,7 +5925,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (!holding) {
         versionMoved(row);
       }
-      return { before, holding, movedFrom, row };
+      return {
+        before,
+        holding,
+        movedFrom,
+        row,
+        was: holding?.fresh ? undefined : target,
+      };
     }
     const row = db.create({
       id: crypto.randomUUID(),
@@ -5935,28 +5952,64 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       updatedAt: now,
       shownAt: null,
     });
-    return { before, holding: null, row };
+    return { before, holding: null, row, was: undefined };
   };
 
   /**
-   * A preview handed to a parent, loaded first: no panel loads it to say it
-   * failed, so one with a hop down is refused here, its served server let go,
-   * and it never reaches the parent. A page its server is still making goes
-   * up as it does to a panel. Nothing for a page artifact.
+   * A create's placement let go, as if it was never made: a row it made (a
+   * new artifact, a fresh next version) discarded, its served server with
+   * it; one it made again put back as it was, its machine and source
+   * through their one write, so the preview of its origin follows it back
+   * and the server it moved to is let go (server.ts `onSourceMoved`).
    */
-  const answersFirst = async (at: Placed): Promise<void> => {
-    const { kind, machineId, source } = at;
-    if (!(kind === "preview" && machineId) || "page" in source) {
+  const unplace = ({
+    before,
+    holding,
+    movedFrom,
+    row,
+    was,
+  }: Placement): void => {
+    if (before && movedFrom !== undefined) {
+      db.update(before.id, { instanceId: movedFrom });
+    }
+    if (!was) {
+      discard(row);
       return;
     }
-    const down = await deps.reachable(machineId, source);
+    db.resource(row.id, { machineId: was.machineId, source: was.source });
+    const back = db.update(row.id, {
+      madeBy: was.madeBy,
+      ask: was.ask,
+      does: was.does,
+      revision: was.revision,
+      updatedAt: was.updatedAt,
+    }) as ArtifactRow;
+    if (!holding) {
+      versionMoved(back);
+    }
+  };
+
+  /**
+   * A preview handed to a parent, loaded first on its own origin as the
+   * parent will open it (server.ts `reachable`): no panel loads it to say
+   * it failed, so one with a hop down is refused here, its placement let go
+   * ({@link unplace}), and it never reaches the parent. A page its server
+   * is still making goes up as it does to a panel. Nothing for a page
+   * artifact.
+   */
+  const answersFirst = async (placement: Placement): Promise<void> => {
+    const { row } = placement;
+    if (!(row.kind === "preview" && row.machineId) || "page" in row.source) {
+      return;
+    }
+    const down = await deps.reachable(row);
     if (!down) {
       return;
     }
-    releaseServed(at);
+    unplace(placement);
     throw new ArtifactRefusal(
       503,
-      `${notLoaded(at, down.failure)}${down.why ? ` (${down.why})` : ""} ${artifactToolWords.notHanded}`
+      `${notLoaded(row, down.failure)}${down.why ? ` (${down.why})` : ""} ${artifactToolWords.notHanded}`
     );
   };
 
@@ -6671,7 +6724,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     /** Whether the person had artifact `id` on screen at or after `at` (ms epoch). */
     /**
      * What artifact `id`'s machine said of its folder at its preview's last
-     * start (server.ts `openPreview`, `reachPreview`): `gone`, the daemon's
+     * start (preview-service.ts `reach`): `gone`, the daemon's
      * words that it isn't there (core preview-proxy `isFolderGone`), takes it
      * out of Needs you and keeps it in Files; null, it was there.
      */
@@ -6696,6 +6749,39 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ? [{ id: row.id, dir: row.source.dir }]
           : [];
       }),
+
+    /** The server artifact `id`'s source moved off, let go once nothing else shows it ({@link letGoMoved}). */
+    letGoMoved,
+
+    /**
+     * Of `served` (the artifacts a workspace serves: work-items.ts
+     * `servedFrom`), each one waiting on the person (Needs you's rule,
+     * `artifact_list`'s `waitingOn: ["person"]`), and every decision page
+     * waiting on the person that shows one of them as a Canvas or Preview
+     * piece: what a workspace's archive or discard refuses on.
+     */
+    waitingOnPerson: (served: readonly ArtifactRow[]): ArtifactRow[] => {
+      const ids = new Set(served.map((one) => one.heldFor ?? one.id));
+      if (ids.size === 0) {
+        return [];
+      }
+      const asks = new Map<string, ArtifactRow>();
+      for (const one of served) {
+        if (one.heldFor === null && pendingFor(one) !== null) {
+          asks.set(one.id, one);
+        }
+      }
+      for (const page of db.asking()) {
+        if (
+          page.kind === "page" &&
+          mediaOf(page).some((id) => ids.has(id)) &&
+          pendingFor(page) !== null
+        ) {
+          asks.set(page.id, page);
+        }
+      }
+      return [...asks.values()];
+    },
 
     sourceSeen: (id: string, gone: string | null): void => {
       const row = db.get(id);
@@ -7139,25 +7225,22 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           : undefined;
       await deliversItsAsk(input, { html, program, weight });
       const stage = await serveFirst(source, machineId);
-      if (handing(making)) {
-        await answersFirst({
-          kind: input.kind,
-          name: input.name,
-          machineId,
-          source,
-        });
-      }
       await openNextFirst(making, input.kind, input.name);
-      const { before, holding, movedFrom, row } = placed(making, input, {
-        source,
-        machineId,
-      });
+      const placement = placed(making, input, { source, machineId });
+      const { before, holding, movedFrom, row } = placement;
+      if (handing(making)) {
+        await answersFirst(placement);
+      }
       letGo(movedFrom, row);
       const made = html === null ? [] : writeMade(row, html, program);
       stampMeta(row, pageHashOf(html, program));
       keepProgramDir(row, program, input.dir);
-      // A held next version leaves the server its artifact shows up until it is opened (promote).
-      keepServed(row, holding ? undefined : before, stage);
+      // The server it moved off is let go by the preview that serves it
+      // (server.ts `onSourceMoved`); a held next version's moves off none,
+      // its artifact still showing it until it is opened (promote).
+      if (stage) {
+        writeStage(row, stage);
+      }
       const shown = await handOver(making, before, row, undefined, holding);
       if (!(shown.started || before) && input.kind === "preview") {
         // A preview nothing could start shows nothing: it is not kept. One
@@ -7575,8 +7658,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         dials: input.dials ?? sheet.spec.dials,
       });
       const { files } = canvasOf(row.source.path ?? "");
-      const next = db.update(row.id, {
+      db.resource(row.id, {
+        machineId: row.machineId,
         source: { ...row.source, path: canvasPath(files, spec) },
+      });
+      const next = db.update(row.id, {
         revision: row.revision + 1,
         updatedAt: new Date(),
       }) as ArtifactRow;

@@ -335,8 +335,6 @@ import {
   type PlacementStrategy,
   type PlanWaits,
   PREVIEW_FOLDERS,
-  PREVIEW_START,
-  PREVIEW_STOP,
   PREVIEW_WEIGHT,
   PROJECT_NOTE,
   PROVIDER_ACCOUNT_KINDS,
@@ -437,6 +435,7 @@ import {
   type BrowserClosePagesArgs,
   type BrowserFrame,
   type BrowserHandedBackFrame,
+  type BrowserKey,
   isBrowserKey,
 } from "@cawco/core/browser";
 import {
@@ -483,11 +482,8 @@ import {
   namedModels,
   providerOf,
 } from "@cawco/core/model-names";
-import {
-  DOWN_WORDS,
-  type FolderWeight,
-  isFolderGone,
-} from "@cawco/core/preview-proxy";
+import type { FolderWeight } from "@cawco/core/preview-proxy";
+import type { ServingPreview } from "@cawco/core/preview-upstream";
 import {
   remoteWithoutCredential,
   withoutRemoteCredential,
@@ -867,21 +863,18 @@ import { handle as idHandle } from "./presenters/words";
 import {
   createPreviewListeners,
   embedKey,
-  embedTargets,
-  loadedOnce,
   noteParent,
   type PreviewListenerDeps,
-  type PreviewReach,
   PreviewRefusal,
   type PreviewTarget,
   previewFrame,
-  previewSourceKey,
   previewTargets,
+  servedByMachine,
   shownArtifact,
-  targetsOf,
 } from "./preview";
 import { mintSessionTicket } from "./preview-access";
 import { previewRoutes } from "./preview-routes";
+import { createPreviewService } from "./preview-service";
 import { createCaps } from "./project-caps";
 import {
   makeProjectDelegateTypes,
@@ -2267,18 +2260,13 @@ const credentialHashesOf = (payload: unknown): string[] => {
 };
 const CREDENTIAL_HASH = /^[0-9a-f]{64}$/u;
 
-interface ServingPreview {
-  instanceId: string;
-  port: number;
-  source: PreviewSource;
-  /** The hub's token for the start that opened it: the relay carries it (core `RELAY_HEADER`). */
-  token: string;
-}
-
 /**
  * The preview listeners a registering daemon is still serving. One reported
- * without its start's token can't be relayed to (core `RELAY_HEADER`), so it
- * is not one: its target starts a listener again.
+ * without its start's token can't be relayed to (core `RELAY_HEADER`), and
+ * one without the source key it was started for can't be squared with its
+ * row (preview-service.ts `reconcile`), so neither is one: the origin's next
+ * request starts a listener again. A daemon from before the key reports
+ * none, so each of its listeners is started again once.
  */
 const peekPreviews = (payload: unknown): ServingPreview[] => {
   const value = (payload as { previews?: unknown } | null)?.previews;
@@ -2287,7 +2275,8 @@ const peekPreviews = (payload: unknown): ServingPreview[] => {
         (item): item is ServingPreview =>
           typeof (item as Partial<ServingPreview>).instanceId === "string" &&
           typeof (item as Partial<ServingPreview>).port === "number" &&
-          typeof (item as Partial<ServingPreview>).token === "string"
+          typeof (item as Partial<ServingPreview>).token === "string" &&
+          typeof (item as Partial<ServingPreview>).for === "string"
       )
     : [];
 };
@@ -3758,9 +3747,7 @@ export const createServer = (
       const opened = await openPreview(
         // A browser is always its session's: only a project's page outlives one.
         artifact.instanceId as string,
-        artifact.machineId ?? "",
-        artifact.source,
-        { id: artifact.id, kind: artifact.kind, name: artifact.name }
+        artifact
       );
       return opened.ok ? { ok: true } : { ok: false, error: opened.error };
     },
@@ -3794,7 +3781,7 @@ export const createServer = (
         .map((row) => row.key),
     machineName: (machineId) => machineName(machineId),
     mint: (userId, ttlMs) => streamRelay.mint(userId, ttlMs),
-    // As a preview's listener is reached (`startListener`): at the address
+    // As a preview's listener is reached (preview-service.ts `startListener`): at the address
     // its agent connected from, or carried over its SSH connection.
     reach: async (machineId, port) => {
       const address = registry.address(machineId);
@@ -12494,22 +12481,6 @@ export const createServer = (
   };
 
   /**
-   * One counter per instance, moved by every preview start and close. A start
-   * awaits the daemon; if the instance was stopped, closed or lost meanwhile,
-   * the counter has moved on and the late answer must not become a target —
-   * the listener it names gets stopped instead.
-   */
-  const previewGeneration = new Map<string, number>();
-  /** An instance's counter now; 0 before anything moved it in this hub process (a target restored at start). */
-  const previewGenerationOf = (instanceId: string): number =>
-    previewGeneration.get(instanceId) ?? 0;
-  const nextPreviewGeneration = (instanceId: string): number => {
-    const generation = previewGenerationOf(instanceId) + 1;
-    previewGeneration.set(instanceId, generation);
-    return generation;
-  };
-
-  /**
    * The project whose origin serves artifact `id` (preview.ts `originOf`):
    * a project's page, served there whichever session holds it or none;
    * undefined for anything else, served on its session's origin.
@@ -12535,22 +12506,37 @@ export const createServer = (
   const artifactIds = (instanceId: string): string[] =>
     db.artifacts.ofInstance(instanceId).map((row) => row.id);
 
-  /** What a frame shows: its artifact, what serves it, and which open it is. */
-  type Shown = Pick<
-    PreviewTarget,
-    "artifact" | "machineId" | "revision" | "source"
-  >;
+  /**
+   * What serves the artifact `target` shows, as its row names it now (a
+   * frame never keeps its own copy); none once the row is gone.
+   */
+  const sourceOf = (target: PreviewTarget): PreviewSource | undefined =>
+    db.artifacts.get(target.artifact.id)?.source;
+
+  /** A browser artifact's key, its page (core `ArtifactKind`) on its session's machine; null for any other. */
+  const browserKeyOf = (target: PreviewTarget): BrowserKey | null => {
+    const source = sourceOf(target);
+    return source && "page" in source && isBrowserKey(source.page)
+      ? source.page
+      : null;
+  };
+
+  /** Whether the hub serves what `target` shows itself (a page, a canvas, a browser's), as its row names it now; false once the row is gone. */
+  const hubShows = (target: PreviewTarget): boolean => {
+    const source = sourceOf(target);
+    return source !== undefined && "page" in source;
+  };
 
   /**
    * The origin a frame of `target` loads, its listener started when it has
    * none: a machine's preview (a dev server, a folder, a sheet) on its
-   * artifact's own origin ({@link keepEmbedTarget}), whichever panel, tab or
+   * artifact's own origin ({@link embedKeyOf}), whichever panel, tab or
    * decision card shows it, so no two artifacts ever share one; a project's
    * page on its project's; anything else the hub serves on session
    * `instanceId`'s, by its id. Null only when every port of the range is
    * taken, which the open that showed it already said.
    */
-  const frameAddress = (instanceId: string, target: Shown) => {
+  const frameAddress = (instanceId: string, target: PreviewTarget) => {
     try {
       return frameOrigin(instanceId, target);
     } catch (error) {
@@ -12561,15 +12547,22 @@ export const createServer = (
     }
   };
   /** {@link frameAddress}, or the listeners' refusal thrown. */
-  const frameOrigin = (instanceId: string, target: Shown) => {
-    if ("page" in target.source) {
+  const frameOrigin = (instanceId: string, target: PreviewTarget) => {
+    if (hubShows(target)) {
       const project = pageProject(target.artifact.id);
       return previewListeners.address(
         project ? projectOrigin(project) : instanceId
       );
     }
+    const key = embedKeyOf(target.artifact.id);
+    if (key === undefined) {
+      throw new PreviewRefusal(
+        409,
+        `${target.artifact.name} is gone, so no origin serves it.`
+      );
+    }
     return previewListeners.embed(
-      keepEmbedTarget(target.artifact, target.source, target.machineId),
+      key,
       originKeyOf(target.artifact.id) ?? instanceId
     );
   };
@@ -12585,8 +12578,11 @@ export const createServer = (
   };
 
   /** The key of the origin a frame of `target` in session `instanceId`'s panel loads ({@link frameOrigin}'s); undefined for an artifact the hub no longer holds. */
-  const frameKey = (instanceId: string, target: Shown): string | undefined => {
-    if (!("page" in target.source)) {
+  const frameKey = (
+    instanceId: string,
+    target: PreviewTarget
+  ): string | undefined => {
+    if (!hubShows(target)) {
       return embedKeyOf(target.artifact.id);
     }
     const project = pageProject(target.artifact.id);
@@ -12601,7 +12597,7 @@ export const createServer = (
    * still stands on, or none. A screen that follows the session, or opens
    * the artifact, takes one then ({@link frameAddress}).
    */
-  const toldAddress = (instanceId: string, target: Shown) => {
+  const toldAddress = (instanceId: string, target: PreviewTarget) => {
     const key = frameKey(instanceId, target);
     if (key === undefined) {
       return null;
@@ -12617,11 +12613,16 @@ export const createServer = (
    * opened for the tab that asks (`open`), else as told to every screen
    * ({@link toldAddress}).
    */
-  const shownFrame = (instanceId: string, target: Shown, open: boolean) =>
+  const shownFrame = (
+    instanceId: string,
+    target: PreviewTarget,
+    open: boolean
+  ) =>
     previewFrame(
       instanceId,
       "open",
       target,
+      sourceOf(target),
       open ? frameAddress(instanceId, target) : toldAddress(instanceId, target),
       artifactIds(instanceId),
       artifacts.stageFor(target.artifact.id),
@@ -12631,12 +12632,14 @@ export const createServer = (
   const publishPreview = (
     instanceId: string,
     state: "open" | "closed",
-    target: Shown
+    target: PreviewTarget
   ) => {
+    const source = sourceOf(target);
     const frame = previewFrame(
       instanceId,
       state,
       target,
+      source,
       state === "open" ? toldAddress(instanceId, target) : null,
       artifactIds(instanceId),
       artifacts.stageFor(target.artifact.id),
@@ -12647,7 +12650,7 @@ export const createServer = (
     // A project's decision page is read by the project's sessions, some of
     // which follow no session's stream: the board carries every open
     // preview, so every dashboard hears it there too.
-    if ("page" in target.source) {
+    if (source && "page" in source) {
       publishInstances("");
     }
     return frame;
@@ -12656,7 +12659,7 @@ export const createServer = (
   /**
    * Session `instanceId`'s panel shows nothing now. What it showed goes on
    * being served on its own origin, for its own tab and the decision cards
-   * that show it, for as long as that artifact lasts ({@link endArtifactOrigin}).
+   * that show it, for as long as that artifact lasts (preview-service.ts `end`).
    */
   const closePreview = (
     instanceId: string
@@ -12674,244 +12677,12 @@ export const createServer = (
    * A session ended: its preview closes, its preview origin's port is free
    * again, and every pass its browser was given (`artifact_browse`) is gone.
    * Each artifact it made or showed keeps its own origin
-   * ({@link endArtifactOrigin}): a preview handed up outlives its maker.
+   * (preview-service.ts `end`): a preview handed up outlives its maker.
    */
   const endPreviews = (instanceId: string): void => {
     closePreview(instanceId);
     db.previewPasses.revoke({ instanceId });
     previewListeners.release(instanceId);
-  };
-
-  /**
-   * What artifact origin `key` shows is let go: its target forgotten, a
-   * start still in flight voided, and its machine's listener stopped. A
-   * request after it makes the target again from its artifact's row as it
-   * is now (`target` in {@link artifactListener}), if one stands.
-   */
-  const dropEmbedTarget = (key: string): void => {
-    nextPreviewGeneration(key);
-    const target = embedTargets.get(key);
-    embedTargets.delete(key);
-    if (target && !("page" in target.source)) {
-      detach(
-        callAgent(
-          target.machineId,
-          PREVIEW_STOP,
-          [{ instanceId: key }],
-          BUSY_TIMEOUT_MS
-        ),
-        "embedded preview stop"
-      );
-    }
-  };
-
-  /**
-   * Artifact origin `origin` ended (schema.ts `artifacts.origin`): the row
-   * that pointed at it went (db `onArtifactsGone`: every way an artifact
-   * row goes, a held version's too, which after its opening points at the
-   * artifact's old origin, `handOrigin`). Its listener stops and its port
-   * is free again, and its machine's listener stops too. The one end of an
-   * artifact's origin: the session that opened it, or held it, ending
-   * leaves it standing.
-   */
-  const endArtifactOrigin = (origin: string): void => {
-    const key = embedKey(origin);
-    previewListeners.release(key);
-    dropEmbedTarget(key);
-  };
-
-  /** What starting a machine's listener for a preview answered: where it listens, or the hop that failed and why. */
-  type ListenerStart =
-    | { ok: true; upstream: NonNullable<PreviewTarget["upstream"]> }
-    | {
-        ok: false;
-        code: 409 | 500 | 503 | 504;
-        down: PreviewDown;
-        error: string;
-      };
-
-  /**
-   * Starts the daemon's listener for an instance's preview of `source`. A
-   * start the instance's counter moved past while it awaited the daemon (a
-   * close, a newer start, the machine leaving or registering again) is told
-   * to go, and answers 409. The start carries a token of its own and the stop
-   * names it, so the daemon takes that start's listener alone: a later start
-   * of the same preview has already replaced it, and its listener is the one
-   * the target points at (agent preview.ts `stopPreview`).
-   */
-  const startListener = async (
-    instanceId: string,
-    machineId: string,
-    source: PreviewSource,
-    generation: number
-  ): Promise<ListenerStart> => {
-    // A paused machine starts no preview: the pane says why, and the
-    // preview's next request after the pause asks again.
-    const paused = machinePause.words(machineId);
-    if (paused) {
-      return { ok: false, code: 503, down: "machine", error: paused };
-    }
-    const token = crypto.randomUUID();
-    const stopLate = () => {
-      // Not when a register has since pointed the target at this very listener.
-      if (targetsOf(instanceId).get(instanceId)?.upstream?.token === token) {
-        return;
-      }
-      detach(
-        callAgent(
-          machineId,
-          PREVIEW_STOP,
-          [{ instanceId, token }],
-          BUSY_TIMEOUT_MS
-        ),
-        "late preview stop"
-      );
-    };
-    const asked = await callAgent(
-      machineId,
-      PREVIEW_START,
-      [{ instanceId, ...source, token }],
-      BUSY_TIMEOUT_MS
-    );
-    switch (asked.kind) {
-      case "unanswered":
-        if (asked.reason === "dead") {
-          return {
-            ok: false,
-            code: 503,
-            down: "machine",
-            error: "Machine is not connected",
-          };
-        }
-        // The daemon may still finish the start after this gave up; the
-        // listener it would open has no target here, so it is told to go.
-        stopLate();
-        return {
-          ok: false,
-          code: 504,
-          down: "machine",
-          error: `Machine did not answer within ${Math.round(asked.after / 1000)} s`,
-        };
-      case "answered":
-        break;
-      default:
-        throw unreachable(asked);
-    }
-    const answer = asked.value;
-    if (!answer.ok) {
-      const error = answer.error ?? "Preview failed";
-      return {
-        ok: false,
-        code: 500,
-        // The daemon refuses a workspace no boundary runs in these words
-        // (preview-bridge.ts `WorkspaceDown`); anything else kept the way to
-        // the server from opening.
-        down: error === DOWN_WORDS.workspace ? "workspace" : "reach",
-        error,
-      };
-    }
-    if (previewGenerationOf(instanceId) !== generation) {
-      stopLate();
-      return {
-        ok: false,
-        code: 409,
-        down: "closed",
-        error: "Preview was closed while starting.",
-      };
-    }
-    const address = registry.address(machineId);
-    if (!address) {
-      return {
-        ok: false,
-        code: 503,
-        down: "machine",
-        error: "Machine is not connected",
-      };
-    }
-    const { port } = answer.result as { port: number };
-    if (!sshTunnels.holds(machineId)) {
-      return { ok: true, upstream: { address, port, token } };
-    }
-    return await carriedListener(
-      { instanceId, machineId, generation, port, token },
-      stopLate
-    );
-  };
-
-  /**
-   * A listener on a machine added over SSH, reached through the hub's
-   * connection to it (ssh-tunnels.ts): the address its socket came from is
-   * that connection's end here, the hub's own loopback, so the listener's
-   * port is carried to one on it. A start the counter moved past meanwhile
-   * is told to go, as {@link startListener}'s is.
-   */
-  const carriedListener = async (
-    at: {
-      generation: number;
-      instanceId: string;
-      machineId: string;
-      port: number;
-      token: string;
-    },
-    stopLate: () => void
-  ): Promise<ListenerStart> => {
-    let carried: number;
-    try {
-      carried = await sshTunnels.carry(at.machineId, at.port);
-    } catch (error) {
-      stopLate();
-      return {
-        ok: false,
-        code: 503,
-        down: "reach",
-        error: error instanceof Error ? error.message : String(error),
-      };
-    }
-    if (previewGenerationOf(at.instanceId) !== at.generation) {
-      stopLate();
-      return {
-        ok: false,
-        code: 409,
-        down: "closed",
-        error: "Preview was closed while starting.",
-      };
-    }
-    return {
-      ok: true,
-      upstream: { address: "127.0.0.1", port: carried, token: at.token },
-    };
-  };
-
-  /**
-   * Each preview's listener while it starts on an open, a request or a
-   * register: one start per generation, however many ask. A start of an
-   * earlier generation (from before the machine registered again, or before
-   * a newer open) is not the one to wait on.
-   */
-  const reaching = new Map<
-    string,
-    { generation: number; reach: Promise<PreviewReach> }
-  >();
-
-  /**
-   * Makes an artifact what an instance's panel shows: its machine's listener
-   * started (a page is the hub's own, preview.ts), the intent kept in the
-   * database so a hub restart serves it still, and the "open" published. Its
-   * start is the generation's one start: a request that comes meanwhile
-   * waits on it (reachPreview).
-   */
-  /**
-   * What a preview's start says of its folder, kept on the artifact: its
-   * machine's words that it is gone (core preview-proxy `isFolderGone`) take
-   * it out of Needs you; a start that reached it says it is there again.
-   * Any other failure says nothing of the folder.
-   */
-  const folderSeen = (id: string, started: ListenerStart): void => {
-    if (started.ok) {
-      artifacts.sourceSeen(id, null);
-    } else if (isFolderGone(started.error)) {
-      artifacts.sourceSeen(id, started.error);
-    }
   };
 
   /**
@@ -12959,19 +12730,33 @@ export const createServer = (
     server: 500,
   };
 
+  /**
+   * Makes artifact `row` what session `instanceId`'s panel shows: a
+   * machine's preview reached on its own origin first, its listener
+   * started for what the row names (preview-service.ts `reach`), so a
+   * refusal is the open's; the intent kept in the database so a hub restart
+   * serves it still, and the "open" published at a new revision.
+   */
   const openPreview = async (
     instanceId: string,
-    machineId: string,
-    source: PreviewSource,
-    artifact: PreviewTarget["artifact"]
+    asked: ArtifactRow
   ): Promise<
     | { ok: true; frame: ReturnType<typeof previewFrame> }
     | { ok: false; code: 409 | 500 | 503 | 504; error: string }
   > => {
+    // As its row stands now: an opening of its held version moved its origin
+    // (`handOrigin`) after the caller read it.
+    const row = db.artifacts.get(asked.id);
+    if (!row) {
+      return {
+        ok: false,
+        code: 409,
+        error: `${asked.name} is gone, so no origin serves it.`,
+      };
+    }
+    const artifact = shownArtifact(row);
     const target: PreviewTarget = {
       artifact,
-      machineId,
-      source,
       revision: crypto.randomUUID(),
     };
     // Its origin first (a machine's preview its artifact's own, a project's
@@ -12985,11 +12770,9 @@ export const createServer = (
       }
       throw error;
     }
-    if (!("page" in source)) {
-      // Its machine's listener under its artifact's own key, started now so
-      // a refusal is the open's; one already serving this source stands.
+    if (servedByMachine(row)) {
       const reached = await timedShowStep("reach", artifact, instanceId, () =>
-        reachPreview(keepEmbedTarget(artifact, source, machineId))
+        previewService.reach(row)
       );
       if (!reached.ok) {
         return {
@@ -13005,98 +12788,6 @@ export const createServer = (
       publishPreview(instanceId, "open", target)
     );
     return { ok: true, frame };
-  };
-
-  /**
-   * Where a shown preview is served now: its machine's listener, started
-   * here when it has none (the daemon restarted, or the last start failed:
-   * its workspace was not running, its bridge did not open). The target is
-   * the operator's intent and stays whatever this answers; only a close ends
-   * it. A start the counter moved past while it ran (the machine registered
-   * again, a newer open) answers with where the preview is served now.
-   */
-  const reachPreview = (instanceId: string): Promise<PreviewReach> => {
-    const generation = previewGenerationOf(instanceId);
-    const inFlight = reaching.get(instanceId);
-    if (inFlight?.generation === generation) {
-      return inFlight.reach;
-    }
-    const targets = targetsOf(instanceId);
-    const target = targets.get(instanceId);
-    if (!target) {
-      return Promise.resolve({
-        ok: false,
-        down: "closed",
-        error: "its session shows no preview",
-      });
-    }
-    if (target.upstream) {
-      return Promise.resolve({ ok: true, upstream: target.upstream });
-    }
-    if (!registry.agent(target.machineId)) {
-      return Promise.resolve({
-        ok: false,
-        down: "machine",
-        // The cause alone: its readers are the hub's own lines and the
-        // preview ping, whose pane says its own next step (it tries again).
-        error: machineFault(target.machineId, "offline", { next: false }),
-      });
-    }
-    const reach = (async (): Promise<PreviewReach> => {
-      const started = await startListener(
-        instanceId,
-        target.machineId,
-        target.source,
-        generation
-      );
-      folderSeen(target.artifact.id, started);
-      const now = targets.get(instanceId);
-      if (!now) {
-        return {
-          ok: false,
-          down: "closed",
-          error: "Preview was closed while starting.",
-        };
-      }
-      if (previewGenerationOf(instanceId) !== generation) {
-        return reachPreview(instanceId);
-      }
-      if (!started.ok) {
-        return started;
-      }
-      targets.set(instanceId, { ...now, upstream: started.upstream });
-      return started;
-    })().finally(() => {
-      if (reaching.get(instanceId)?.reach === reach) {
-        reaching.delete(instanceId);
-      }
-    });
-    reaching.set(instanceId, { generation, reach });
-    return reach;
-  };
-
-  /**
-   * The listener a preview's upstream names refused a connection: that is
-   * not where it is served, so the target forgets it and the next request
-   * reaches the machine again (reachPreview) instead of dialing it again.
-   */
-  const previewUnreachable = (
-    instanceId: string,
-    upstream: NonNullable<PreviewTarget["upstream"]>
-  ): void => {
-    const targets = targetsOf(instanceId);
-    const target = targets.get(instanceId);
-    if (
-      target?.upstream?.address === upstream.address &&
-      target.upstream.port === upstream.port
-    ) {
-      targets.set(instanceId, {
-        artifact: target.artifact,
-        machineId: target.machineId,
-        source: target.source,
-        revision: target.revision,
-      });
-    }
   };
 
   /**
@@ -14717,12 +14408,7 @@ export const createServer = (
           error: `No session holds ${artifact.name} now: it is its project's page.`,
         };
       }
-      const opened = await openPreview(
-        panel,
-        artifact.machineId ?? "",
-        artifact.source,
-        shownArtifact(artifact)
-      );
+      const opened = await openPreview(panel, artifact);
       if (!opened.ok) {
         return { ok: false, error: opened.error };
       }
@@ -14878,33 +14564,9 @@ export const createServer = (
     },
     stageComponents: async (at, ask) =>
       (await onStage(at, STAGE_COMPONENTS, ask)).result as DesignMap,
-    // A preview no panel shows, loaded once through a listener of its own
-    // (keyed by no session, so no panel's listener moves), then let go.
-    reachable: async (machineId, source) => {
-      const key = `handed-${crypto.randomUUID()}`;
-      const started = await startListener(
-        key,
-        machineId,
-        source,
-        previewGenerationOf(key)
-      );
-      if (!started.ok) {
-        return { failure: started.down, why: started.error };
-      }
-      try {
-        return await loadedOnce(started.upstream, source.path, SHOWN_WAIT_MS);
-      } finally {
-        detach(
-          callAgent(
-            machineId,
-            PREVIEW_STOP,
-            [{ instanceId: key, token: started.upstream.token }],
-            BUSY_TIMEOUT_MS
-          ),
-          "handed preview check stop"
-        );
-      }
-    },
+    // A preview handed up, loaded once on its own origin as its parent will
+    // open it: its listener is the one that origin keeps.
+    reachable: (row) => previewService.reachable(row),
     // A canvas no person's screen shows, drawn headless by the hub machine's
     // daemon on the canvas's own origin, which answers there on loopback,
     // entered with the session's own ticket as every port is locked.
@@ -15154,15 +14816,14 @@ export const createServer = (
   });
   /**
    * What every panel showed when this hub last ran, kept in the database
-   * (openPreview): served again from here on, each preview's listener
-   * pointed at or started by its machine's next register.
+   * (openPreview): served again from here on, each machine preview's
+   * listener pointed at again by its machine's next register when it is
+   * still for what the row names, else started by its first request.
    */
   const restoreShownPreviews = (): void => {
     for (const { instanceId, artifact } of db.artifacts.shown()) {
       previewTargets.set(instanceId, {
         artifact: shownArtifact(artifact),
-        machineId: artifact.machineId ?? "",
-        source: artifact.source,
         revision: crypto.randomUUID(),
       });
     }
@@ -15229,46 +14890,6 @@ export const createServer = (
   };
 
   /**
-   * A machine-served artifact's target under its own key ({@link
-   * embedKeyOf}: the origin its row points at), `source` on `machineId`:
-   * kept as it is while its source and machine stand, else made anew; the
-   * artifact it names is the one pointing at it now (a held version's
-   * origin is its artifact's once it opens, its listener kept). Its key: the
-   * artifact's own origin, which its panel, its own tab and every decision
-   * card load. Refused for an artifact the hub no longer holds.
-   */
-  const keepEmbedTarget = (
-    artifact: PreviewTarget["artifact"],
-    source: PreviewSource,
-    machineId: string
-  ): string => {
-    const key = embedKeyOf(artifact.id);
-    if (key === undefined) {
-      throw new PreviewRefusal(
-        409,
-        `${artifact.name} is gone, so no origin serves it.`
-      );
-    }
-    const now = embedTargets.get(key);
-    const named = { id: artifact.id, kind: artifact.kind, name: artifact.name };
-    if (
-      !now ||
-      previewSourceKey(now.source) !== previewSourceKey(source) ||
-      now.machineId !== machineId
-    ) {
-      embedTargets.set(key, {
-        artifact: named,
-        machineId,
-        source,
-        revision: crypto.randomUUID(),
-      });
-    } else if (now.artifact.id !== artifact.id) {
-      embedTargets.set(key, { ...now, artifact: named });
-    }
-    return key;
-  };
-
-  /**
    * What `open` answers of a preview origin, its listener started when it
    * has none; every port taken is the artifact's refusal, in the listeners'
    * words.
@@ -15290,7 +14911,7 @@ export const createServer = (
    * The origin that serves artifact `row` to a browser of its own, by its
    * key, its listener started when it has none, and its address there: a
    * page or a canvas on the origin that serves it, a machine's component or
-   * preview on its embed origin ({@link keepEmbedTarget}). Refused when no
+   * preview on its embed origin ({@link embedKeyOf}). Refused when no
    * session or machine holds it, or every preview port is taken.
    */
   const browsedOrigin = (
@@ -15307,13 +14928,13 @@ export const createServer = (
         path: `/__cawco/${row.kind}/${row.id}/`,
       };
     }
-    if (!row.machineId || "page" in row.source) {
+    const key = embedKeyOf(row.id);
+    if (!servedByMachine(row) || key === undefined) {
       throw new ArtifactRefusal(
         409,
         `${row.name} is served by no machine now, so it has no address to open.`
       );
     }
-    const key = keepEmbedTarget(row, row.source, row.machineId);
     return {
       key,
       address: onPreviewPort(() => previewListeners.embed(key, owner)),
@@ -15486,8 +15107,8 @@ export const createServer = (
    * A decision page's Preview of a dev-server preview, a folder's preview or
    * a sheet of its session's, at the version its media draws (`artifactId`,
    * artifacts service `newestVersion`): whatever machine serves it (a port
-   * or a folder), whether or not a panel shows it, its target kept under its
-   * own key ({@link embedKey}), so a next version held for the owner's panel
+   * or a folder), whether or not a panel shows it, on its own origin
+   * ({@link embedKey}), so a next version held for the owner's panel
    * stands on an origin apart from the one the panel shows; its origin's
    * listener started, and its address as the page reached it, the source's
    * start path on it. A preview no
@@ -15506,10 +15127,10 @@ export const createServer = (
     const row = db.artifacts.get(artifactId);
     // The origin that serves the page: its embeds are framed by it.
     const owner = originKeyOf(pageId);
-    if (!(row?.machineId && owner) || "page" in row.source) {
+    if (!(row && owner && servedByMachine(row))) {
       return {};
     }
-    const key = keepEmbedTarget(row, row.source, row.machineId);
+    const key = embedKey(row.origin);
     let at: ReturnType<typeof previewListeners.embed>;
     let ownPort: number;
     try {
@@ -15606,26 +15227,22 @@ export const createServer = (
         publishInstances("");
       });
     },
-    reach: reachPreview,
+    reach: (row) => previewService.reach(row),
+    upstream: (row) => previewService.upstreamOf(row),
     stageAnswered: (artifactId) => artifacts.stageAnswered(artifactId),
     artifactAt: (key) => {
       const origin = originOfKey(key);
       return origin === null ? undefined : db.artifacts.byOrigin(origin)?.id;
     },
-    target: (key) => {
+    rowAt: (key) => {
       const origin = originOfKey(key);
-      if (origin === null) {
-        return previewTargets.get(key);
+      if (origin !== null) {
+        return db.artifacts.byOrigin(origin);
       }
-      const row = embedTargets.has(key)
-        ? undefined
-        : db.artifacts.byOrigin(origin);
-      if (row?.machineId && !("page" in row.source)) {
-        keepEmbedTarget(shownArtifact(row), row.source, row.machineId);
-      }
-      return embedTargets.get(key);
+      const shown = previewTargets.get(key);
+      return shown && db.artifacts.get(shown.artifact.id);
     },
-    unreachable: previewUnreachable,
+    unreachable: (key, upstream) => previewService.unreachable(key, upstream),
     picture: artifactPicture(ARTIFACTS_ROOT, artifactDocs),
     pictures: artifactPictures(artifacts.pictures),
     send: artifactSend(artifacts.send, artifactDocs),
@@ -15755,110 +15372,41 @@ export const createServer = (
     db.previewPasses,
     tailnetHttps
   );
+  /** Each machine preview origin's upstream, following its artifact's row (preview-service.ts). */
+  const previewService = createPreviewService({
+    address: (machineId) => registry.address(machineId),
+    busyMs: BUSY_TIMEOUT_MS,
+    call: (machineId, method, args, timeoutMs) =>
+      callAgent(machineId, method, args, timeoutMs),
+    carry: (machineId, port) => sshTunnels.carry(machineId, port),
+    carried: (machineId) => sshTunnels.holds(machineId),
+    connected: (machineId) => !!registry.agent(machineId),
+    inUse: (key) => previewListeners.inUse(key),
+    letGoMoved: (id, before) => artifacts.letGoMoved(id, before),
+    offline: (machineId) => machineFault(machineId, "offline", { next: false }),
+    paused: (machineId) => machinePause.words(machineId) ?? undefined,
+    release: (key) => previewListeners.release(key),
+    row: (id) => db.artifacts.get(id),
+    rowAt: (origin) => db.artifacts.byOrigin(origin),
+    shownWaitMs: SHOWN_WAIT_MS,
+    sourceSeen: (id, gone) => artifacts.sourceSeen(id, gone),
+  });
   // Every way an artifact row goes ends its own origin.
   db.onArtifactsGone((gone) => {
     for (const { origin } of gone) {
-      endArtifactOrigin(origin);
+      previewService.end(origin);
     }
   });
-
-  /**
-   * A register squares the machine's preview listeners with this hub's
-   * targets. The register is the machine's whole account of what it serves,
-   * so nothing the hub held for it before stands: every target of the
-   * machine's drops its upstream and takes a new generation, which voids any
-   * start still in flight from before (on a connection the machine has
-   * since replaced, its old socket's close perhaps not yet heard). A target
-   * whose listener the daemon still serves, on the same source, is pointed
-   * at it again. One it does not serve (the daemon restarted) is kept
-   * without an upstream and started by nothing here: its next request, a
-   * pane's or an embed's, starts it (reachPreview, through the proxy), so a
-   * machine coming back after a reboot wakes no server nobody is looking
-   * at, and a pane open across the reconnect draws on that request. A
-   * listener no target names is stopped; one whose session shows another
-   * source is left to the start, which replaces it.
-   */
-  const reconcilePreviews = (
-    machineId: string,
-    address: string,
-    serving: ServingPreview[]
-  ): void => {
-    const listeners = new Map(
-      serving.map((listener) => [listener.instanceId, listener])
-    );
-    // Each machine artifact's own origin: the machine keys its listeners by
-    // it (a panel's intent names its artifact, never a listener).
-    for (const [key, target] of embedTargets) {
-      if (target.machineId !== machineId || "page" in target.source) {
-        continue;
+  // Every move of an artifact's source moves the upstream of the origin it
+  // stands on, and the panels showing it hear its source again.
+  db.onSourceMoved((move) => {
+    for (const [instanceId, target] of previewTargets) {
+      if (target.artifact.id === move.id) {
+        publishPreview(instanceId, "open", target);
       }
-      const targets = embedTargets;
-      nextPreviewGeneration(key);
-      const held: PreviewTarget = {
-        artifact: target.artifact,
-        machineId,
-        source: target.source,
-        revision: target.revision,
-      };
-      const listener = listeners.get(key);
-      if (
-        listener &&
-        previewSourceKey(listener.source) === previewSourceKey(target.source) &&
-        sshTunnels.holds(machineId)
-      ) {
-        // Through the hub's SSH connection to the machine, carried anew on
-        // this connection: until it is, a request starts the listener again.
-        targets.set(key, held);
-        const generation = previewGenerationOf(key);
-        sshTunnels.carry(machineId, listener.port).then(
-          (port) => {
-            const now = targets.get(key);
-            if (
-              now &&
-              !now.upstream &&
-              previewGenerationOf(key) === generation
-            ) {
-              targets.set(key, {
-                ...now,
-                upstream: { address: "127.0.0.1", port, token: listener.token },
-              });
-            }
-          },
-          (error: unknown) =>
-            console.warn(
-              `[hub] preview for ${key} is not pointed at its listener again: ${error instanceof Error ? error.message : String(error)}`
-            )
-        );
-        continue;
-      }
-      if (
-        listener &&
-        previewSourceKey(listener.source) === previewSourceKey(target.source)
-      ) {
-        targets.set(key, {
-          ...held,
-          upstream: {
-            address,
-            port: listener.port,
-            token: listener.token,
-          },
-        });
-        continue;
-      }
-      targets.set(key, held);
     }
-    for (const listener of serving) {
-      if (embedTargets.get(listener.instanceId)?.machineId === machineId) {
-        continue;
-      }
-      callAgent(
-        machineId,
-        PREVIEW_STOP,
-        [{ instanceId: listener.instanceId }],
-        BUSY_TIMEOUT_MS
-      ).catch(console.error);
-    }
-  };
+    detach(previewService.moved(move), "preview source move");
+  });
 
   /**
    * WHERE a conversation lives: which machine, which folder, which harness.
@@ -20261,8 +19809,6 @@ export const createServer = (
     return row
       ? {
           artifact: shownArtifact(row),
-          machineId: row.machineId ?? "",
-          source: row.source,
           revision: `${row.id}:${row.revision}:${mode.mode === "host" ? mode.pattern : mode.mode}`,
         }
       : null;
@@ -20278,12 +19824,7 @@ export const createServer = (
     (instanceId, artifactId): ArtifactSessionFrame => {
       const target = tabTarget(instanceId, artifactId);
       const [row] = db.listedBoardInstancesByIds([instanceId]);
-      // A browser artifact's key is its page (core `ArtifactKind`), on the
-      // session's machine.
-      const key =
-        target && "page" in target.source && isBrowserKey(target.source.page)
-          ? target.source.page
-          : null;
+      const key = target ? browserKeyOf(target) : null;
       // The session's open browser ask for that browser: by its artifact or its key.
       const asked = key
         ? pending.list().find((envelope) => {
@@ -25057,6 +24598,10 @@ export const createServer = (
     // nothing starts an item before the hub is up.
     resolveHanded: (caller, input) => handedInputs.resolve(caller, input),
     stageRuns: stageHold,
+    // What a workspace serves that waits on the person refuses its archive
+    // or discard (work-items.ts `waitingFrom`); the artifacts service is
+    // made above.
+    waitingOnPerson: (served) => artifacts.waitingOnPerson(served),
     startHeld: startHeldWords,
     // The design check (design-verify.ts), made further down; nothing
     // finishes an item before the hub is up.
@@ -30611,8 +30156,6 @@ export const createServer = (
             }
             return frameOrigin(row.instanceId ?? owner, {
               artifact: shownArtifact(row),
-              machineId: row.machineId ?? "",
-              source: row.source,
               revision: "",
             });
           },
@@ -35884,7 +35427,7 @@ export const createServer = (
                   `[hub] reading ${message.machineId}'s project remotes failed: ${error instanceof Error ? error.message : String(error)}`
                 )
               );
-              reconcilePreviews(
+              previewService.reconcile(
                 message.machineId,
                 ws.remoteAddress,
                 peekPreviews(message.payload)
@@ -38362,7 +37905,6 @@ export const createServer = (
               refuseVerb();
           }
         }),
-        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: releases each kind of machine-owned state when its socket goes away.
         close(ws) {
           closeLine(ws);
           machineNonces.delete(ws.id);
@@ -38395,22 +37937,11 @@ export const createServer = (
               waiter.reject(awayError(machineId));
             }
           }
-          // A preview outlives its machine's socket: the intent stays, without
-          // a listener, until the register that brings the machine back
-          // starts one again (see `reconcilePreviews`). Nothing is published;
-          // the panes keep the page they have until that "open" reloads them.
-          for (const [key, target] of embedTargets) {
-            // A page is the hub's own; no machine serves it.
-            if (target.machineId === machineId && !("page" in target.source)) {
-              nextPreviewGeneration(key);
-              embedTargets.set(key, {
-                artifact: target.artifact,
-                machineId,
-                source: target.source,
-                revision: target.revision,
-              });
-            }
-          }
+          // A preview outlives its machine's socket, without an upstream,
+          // until the register that brings the machine back points it at a
+          // listener again or a request starts one. Nothing is published;
+          // the panes keep the page they have.
+          previewService.machineGone(machineId);
           // The install may well still be running out there, but its reply can no
           // longer arrive on this socket — and the register that follows carries
           // the machine's own account of what landed.

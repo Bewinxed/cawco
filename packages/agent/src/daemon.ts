@@ -276,7 +276,7 @@ import {
 } from "./move";
 import { placePush } from "./place-push";
 import { placeLfs, placeRepo, repoRoot } from "./place-repo";
-import { listenBrowsers, servingPreviews } from "./preview";
+import { listenBrowsers, previewNetworks, servingPreviews } from "./preview";
 import { probesStarted } from "./probe-count";
 import { parseProcId, procIdFor, SESSION_PROC_KINDS } from "./proc-id";
 import {
@@ -318,7 +318,6 @@ import {
   closingStages,
   ensureServed,
   ensureStage,
-  networkOf,
   renderStage,
   StageRefusal,
   setStageSink,
@@ -3393,11 +3392,7 @@ const startDaemon = (rediscover = false) =>
     // next command starts it again. A place's sheet holds its stage clone's.
     watchQuietBoundaries({
       sessions: () => supervisor.boundedWorkspaces(),
-      previews: () =>
-        servingPreviews().flatMap(({ source }) => {
-          const network = "port" in source ? networkOf(source) : undefined;
-          return network ? [network] : [];
-        }),
+      previews: previewNetworks,
     });
     // While a turn, a gate step, a boundary's command or a run a session
     // left working is live here, the OS does not idle-sleep this machine

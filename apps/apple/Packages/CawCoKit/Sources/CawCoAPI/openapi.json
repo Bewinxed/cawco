@@ -37352,12 +37352,12 @@
           "kind": {
             "$ref": "#/components/schemas/ExternalKind"
           },
-          "source": {
-            "$ref": "#/components/schemas/ExternalSource"
-          },
           "state": {
             "$ref": "#/components/schemas/ExternalRefState",
             "description": "Its state as the source last said it; null until the item was read."
+          },
+          "source": {
+            "$ref": "#/components/schemas/ExternalSource"
           },
           "url": {
             "type": "string"
@@ -41752,6 +41752,21 @@
           "text": {
             "type": "string"
           },
+          "page": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ]
+          },
           "source": {
             "type": "object",
             "properties": {
@@ -41798,21 +41813,6 @@
               "framework",
               "line",
               "of"
-            ]
-          },
-          "page": {
-            "type": "object",
-            "properties": {
-              "x": {
-                "type": "number"
-              },
-              "y": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "x",
-              "y"
             ]
           },
           "url": {

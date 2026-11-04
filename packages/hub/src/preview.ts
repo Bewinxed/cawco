@@ -53,6 +53,7 @@ import {
   PREVIEW_REACH_PATH,
   type PreviewPingDown,
 } from "@cawco/core/preview-reach";
+import type { MachineSource, Upstream } from "@cawco/core/preview-upstream";
 import type { StageState } from "@cawco/core/stage";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
 import { MINUTE_MS } from "@cawco/core/time";
@@ -92,28 +93,22 @@ import { FolderRefusal, folderPath } from "./project-folder";
 import { asReached, type TailnetHttpsService } from "./tailnet-https";
 
 /**
- * What an origin serves: a session's panel's artifact (the operator's
- * intent, kept in the database, `shown_previews`, so it outlives the hub
- * too; only a close, or the session ending, ends it), or a machine
- * artifact's own ({@link embedTargets}), with the machine and address that
- * serve it. Every preview is an origin of its own, never the dashboard's: a
- * port of the hub's range, and in host mode a host name on the first port
- * too. So a previewed app keeps its own storage and cookies, routes by its
- * own paths at the root, and two previews open at once never cross.
- *
- * A machine artifact's target outlives its machine's listener: while none
- * serves it (its machine away or restarted, or its start failed) `upstream`
- * is absent, and the machine's register or the preview's next request
- * starts it again.
+ * What a session's panel shows: its artifact, and which open of it this is.
+ * The operator's intent, kept in the database (`shown_previews`) so it
+ * outlives the hub too; only a close, or the session ending, ends it. What
+ * serves it is never kept here: a frame reads its source off the
+ * artifact's row as it is published, and a machine's preview is served on
+ * its artifact's own origin, whose upstream follows the row
+ * (preview-service.ts). Every preview is an origin of its own, never the
+ * dashboard's: a port of the hub's range, and in host mode a host name on
+ * the first port too. So a previewed app keeps its own storage and
+ * cookies, routes by its own paths at the root, and two previews open at
+ * once never cross.
  */
 export interface PreviewTarget {
   /** The artifact the panel shows (Projects spec §5.10). */
   artifact: PreviewFrame["artifact"];
-  machineId: string;
   revision: string;
-  source: PreviewSource;
-  /** The machine's listener, and the token of the start that opened it. */
-  upstream?: { address: string; port: number; token: string };
 }
 
 /**
@@ -121,7 +116,7 @@ export interface PreviewTarget {
  * so the board and the panel's frames read it as one. A page the hub
  * serves stands at the session's origin's root too (the apps load it
  * there); a machine's preview is served on its artifact's own origin alone
- * ({@link embedTargets}), never the session's, so whatever the panel shows
+ * ({@link embedKey}), never the session's, so whatever the panel shows
  * next, a frame of it keeps its own content.
  */
 export const previewTargets = new Map<string, PreviewTarget>();
@@ -139,30 +134,17 @@ export const shownArtifact = (
 /**
  * A machine artifact's own origin (a dev server's or a folder's preview, a
  * sheet), which its session's panel, its own tab and every decision page's
- * Preview of it load: its target here and its listener on a port of its own
- * are keyed by the origin its row points at ({@link embedKey}, schema.ts
+ * Preview of it load: its listener on a port of its own and its machine's
+ * listener are keyed by the origin its row points at (schema.ts
  * `artifacts.origin`), apart from every session's, and both last as long as
- * that origin, whichever session opened or held it (server.ts
- * `endArtifactOrigin`); its port stays its own until the range is full and
- * it is the least recently used of those nothing uses (`reclaimOne`). A dev
- * server and a stage serve from their root, so no other origin can show one
- * under a path of its own; the machine keys its listener by the same key.
- * It is never in {@link previewTargets}.
+ * that origin, whichever session opened or held it (preview-service.ts
+ * `end`); its port stays its own until the range is full and it is the
+ * least recently used of those nothing uses (`reclaimOne`). A dev server
+ * and a stage serve from their root, so no other origin can show one under
+ * a path of its own; the machine keys its listener by the same key.
  */
-export const embedTargets = new Map<string, PreviewTarget>();
-
-/** The key of artifact origin `origin` (schema.ts `artifacts.origin`). */
 export const embedKey = artifactOrigin;
 const isEmbed = (key: string): boolean => originOfKey(key) !== null;
-
-/**
- * The map that holds `key`'s target: an embed's, or a session's. Only what
- * reaches a machine's listener (the relay, its start, a register, a machine
- * gone) takes either key; everything a session's panel or the board reads
- * goes to {@link previewTargets} by name.
- */
-export const targetsOf = (key: string): Map<string, PreviewTarget> =>
-  isEmbed(key) ? embedTargets : previewTargets;
 
 /**
  * The dashboard origins this hub is reached from: each one a dashboard or an
@@ -254,28 +236,27 @@ const withKeyedOverlay = (answer: Response): Promise<Response> | Response =>
     ? keyOverlay(answer, previewParents())
     : answer;
 
-/** Where a shown preview is served now, or the hop that failed and why (server.ts `reachPreview`). */
+/** Where a machine's preview is served now, or the hop that failed and why (preview-service.ts `reach`). */
 export type PreviewReach =
-  | { ok: true; upstream: NonNullable<PreviewTarget["upstream"]> }
+  | { ok: true; upstream: Upstream }
   | { ok: false; down: PreviewDown; error: string };
 
-/** One string per thing a preview shows: a page by name, a port in a workspace or on the host, a folder. */
-export const previewSourceKey = (source: PreviewSource): string => {
-  if ("page" in source) {
-    return `page:${source.page}`;
-  }
-  if ("port" in source) {
-    return source.workspace
-      ? `port:${source.port}@${source.workspace}`
-      : `port:${source.port}`;
-  }
-  return `dir:${source.dir}`;
+/** A machine artifact's row: one a machine serves (a port or a folder), never a page the hub serves itself. */
+export type MachineRow = ArtifactRow & {
+  machineId: string;
+  source: MachineSource;
 };
+
+/** Whether a machine serves artifact `row` ({@link MachineRow}). */
+export const servedByMachine = (row: ArtifactRow): row is MachineRow =>
+  row.machineId !== null && !("page" in row.source);
 
 export function previewFrame(
   instanceId: string,
   state: "open" | "closed",
-  target: Pick<PreviewTarget, "artifact" | "revision" | "source">,
+  target: PreviewTarget,
+  /** What serves it, as its row names it now; none once the row is gone. */
+  source: PreviewSource | undefined,
   address: PreviewAddress | null,
   /** The session's artifacts by id, newest first. */
   artifacts: string[],
@@ -292,7 +273,7 @@ export function previewFrame(
     artifacts,
     ...(address ?? {}),
     ...(project ? { project } : {}),
-    source: target.source,
+    ...(source ? { source } : {}),
     revision: target.revision,
     ...(stage ? { stage } : {}),
   };
@@ -455,8 +436,16 @@ export interface PreviewListenerDeps {
     artifactId: string,
     reachedAt: URL
   ) => { hash: string; media: string } | null;
-  /** Where a shown preview of a machine's is served now, its listener started when it has none. */
-  reach: (instanceId: string) => Promise<PreviewReach>;
+  /** Where machine artifact `row`'s preview is served now, its machine's listener started for what the row names when none is (preview-service.ts `reach`). */
+  reach: (row: MachineRow) => Promise<PreviewReach>;
+  /**
+   * The artifact origin `key` shows now, read off its row as it stands:
+   * an artifact's own origin's ({@link embedKey}) the row that points at
+   * it (schema.ts `artifacts.origin`), so the address it was handed under
+   * answers for as long as the artifact lasts; a session's, its panel's
+   * artifact. Undefined when nothing does.
+   */
+  rowAt: (key: string) => ArtifactRow | undefined;
   /** A page artifact's doc as its overlay tag carries it (artifacts/docs.ts `seed`). */
   seed: (artifactId: string) => { maps: string; state: string };
   send: ReturnType<typeof artifactSend>;
@@ -488,19 +477,10 @@ export interface PreviewListenerDeps {
   socket: ReturnType<typeof artifactSocket>;
   /** Artifact `artifactId`'s stage answered its page through the relay (core `PREVIEW_SERVED_HEADER`): it is reachable. */
   stageAnswered: (artifactId: string) => void;
-  /**
-   * What origin `key` shows now: a session's panel's target; an artifact's
-   * own origin's ({@link embedKey}), made again from its artifact when the
-   * hub holds none (it restarted since a frame named it), so the address it
-   * was handed under answers as long as the artifact lasts. Undefined when
-   * nothing does.
-   */
-  target: (key: string) => PreviewTarget | undefined;
   /** The machine's listener at `upstream` refused a connection: the next request reaches the preview again. */
-  unreachable: (
-    instanceId: string,
-    upstream: NonNullable<PreviewTarget["upstream"]>
-  ) => void;
+  unreachable: (key: string, upstream: Upstream) => void;
+  /** Where machine artifact `row`'s preview is served now, when a listener started for what the row names serves it; undefined while none does (preview-service.ts `upstreamOf`). */
+  upstream: (row: MachineRow) => Upstream | undefined;
 }
 
 /** An artifact's sync socket, its send (`/send`) or a canvas's picture (`/picture`), on the origin that serves it only ({@link PreviewListenerDeps.originOf}). */
@@ -633,13 +613,13 @@ async function pingSession(
   instanceId: string,
   deps: PreviewListenerDeps
 ): Promise<Response> {
-  const target = deps.target(instanceId);
   // A session's or a project's origin serves only what the hub holds: a
   // machine's preview answers on its artifact's own origin.
-  if (!(target && isEmbed(instanceId)) || "page" in target.source) {
+  const row = isEmbed(instanceId) ? deps.rowAt(instanceId) : undefined;
+  if (!(row && servedByMachine(row))) {
     return ping();
   }
-  const reached = await deps.reach(instanceId);
+  const reached = await deps.reach(row);
   if (!reached.ok) {
     return reached.down === "closed" ? ping() : pingDown(reached.error);
   }
@@ -691,7 +671,7 @@ async function pingSession(
  * stands, so `machine` is said only of a listener that answers neither.
  */
 export async function loadedOnce(
-  at: NonNullable<PreviewTarget["upstream"]>,
+  at: Upstream,
   path: string | undefined,
   waitMs: number
 ): Promise<{ failure: PreviewDown; why: string | null } | null> {
@@ -799,7 +779,7 @@ async function relay(
   request: Request,
   server: Server<ListenerSocket>,
   instanceId: string,
-  at: NonNullable<PreviewTarget["upstream"]>,
+  at: Upstream,
   deps: PreviewListenerDeps,
   direct: boolean,
   /** The preview's own port answered, as the machine's listener marks it. */
@@ -946,8 +926,8 @@ async function serveSession(
   if (hubsOwn(pathname)) {
     return new Response("Not found", { status: 404 });
   }
-  const target = deps.target(instanceId);
-  if (!target) {
+  const row = deps.rowAt(instanceId);
+  if (!row) {
     previewFailed(
       HOP,
       instanceId,
@@ -955,29 +935,24 @@ async function serveSession(
     );
     return downResponse("closed", 404);
   }
-  if (target.artifact.kind === "browser") {
+  if (row.kind === "browser") {
     return new Response(
       "A browser is drawn by its panel from its stream; no page serves it.",
       { status: 404 }
     );
   }
-  if ("page" in target.source && target.artifact.kind !== "component") {
+  if ("page" in row.source && row.kind !== "component") {
     // A project's page is served on its project's origin alone, at its own
     // address there (`/__cawco/page/<id>/`): its frame names that origin.
-    if (!deps.servedOn(target.artifact.id, instanceId)) {
+    if (!deps.servedOn(row.id, instanceId)) {
       previewFailed(HOP, instanceId, "its page is its project's origin's");
       return downResponse("closed", 404);
     }
-    return HUB_SERVES[target.artifact.kind](
-      target.artifact.id,
-      pathname,
-      deps,
-      url
-    );
+    return HUB_SERVES[row.kind](row.id, pathname, deps, url);
   }
   // A machine's preview is served on its artifact's own origin alone
   // (embedKey): the session's panel names that origin, never this one.
-  if (!isEmbed(instanceId)) {
+  if (!(isEmbed(instanceId) && servedByMachine(row))) {
     previewFailed(
       HOP,
       instanceId,
@@ -985,7 +960,7 @@ async function serveSession(
     );
     return downResponse("closed", 404);
   }
-  return serveMachine(request, server, instanceId, target, deps, direct);
+  return serveMachine(request, server, instanceId, row, deps, direct);
 }
 
 /**
@@ -998,22 +973,23 @@ async function serveMachine(
   request: Request,
   server: Server<ListenerSocket>,
   instanceId: string,
-  target: PreviewTarget,
+  row: MachineRow,
   deps: PreviewListenerDeps,
   direct: boolean
 ): Promise<Response | undefined> {
-  // A socket before the machine's listener serves it is refused at once,
-  // the listener started and not waited on (core `notUpYet`).
-  if (asksUpgrade(request) && !target.upstream) {
-    deps.reach(instanceId).catch(() => undefined);
+  // A socket before a listener for what the row names serves it is refused
+  // at once, the listener started and not waited on (core `notUpYet`).
+  if (asksUpgrade(request) && !deps.upstream(row)) {
+    deps.reach(row).catch(() => undefined);
     return notUpYet();
   }
   // A page's request waits on the machine: a listener started, its stage's
   // wake, the server's first answer.
   heldWhileServed(server, request);
-  // No listener serves it now (its machine restarted, or the last start
-  // failed): started here, or the hop that failed says why.
-  const reached = await deps.reach(instanceId);
+  // No listener serves what the row names now (its machine restarted, the
+  // last start failed, or the row moved to another source): started here,
+  // or the hop that failed says why.
+  const reached = await deps.reach(row);
   if (!reached.ok) {
     previewFailed(HOP, instanceId, `${reached.down}: ${reached.error}`);
     return downResponse(
@@ -1023,7 +999,6 @@ async function serveMachine(
     );
   }
   // A canvas's stage answering its page is the stage reached again.
-  const { artifact } = target;
   return relay(
     request,
     server,
@@ -1031,9 +1006,7 @@ async function serveMachine(
     reached.upstream,
     deps,
     direct,
-    artifact.kind === "component"
-      ? () => deps.stageAnswered(artifact.id)
-      : undefined
+    row.kind === "component" ? () => deps.stageAnswered(row.id) : undefined
   );
 }
 
@@ -2088,6 +2061,9 @@ export function createPreviewListeners(
 
     /** Whether origin `key` holds its port now ({@link holds}): a frame of it takes one. */
     holds,
+
+    /** Whether origin `key` is in use now ({@link inUse}): a frame of it open on a screen, or a running session keeps it. */
+    inUse,
 
     /**
      * Session `instanceId`'s origin as a process on the hub's own machine

@@ -33,6 +33,7 @@ import {
   versionAssets,
   versionedFile,
 } from "@cawco/core/preview-proxy";
+import type { ServingPreview, SourceKey } from "@cawco/core/preview-upstream";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { z } from "zod";
 import { wakeBrowser } from "./browser/browsers";
@@ -44,17 +45,32 @@ import {
   WorkspaceDown,
   workspaceGone,
 } from "./preview-bridge";
-import { networkOf, sourceUp, sourceViewer, wakeSource } from "./stage";
+import {
+  networkOf,
+  sourceUp,
+  sourceViewer,
+  sourceWakes,
+  WorkspaceNotHere,
+  wakeSource,
+} from "./stage";
 
 /**
- * The listeners this process serves, with the source each was asked for and
- * the hub's token for the start that made it. They outlive the hub
- * connection: a hub that drops and comes back reads them off the register
- * ({@link servingPreviews}) and points its targets at them again.
+ * The listeners this process serves, each with the hub's token for the
+ * start that made it and the source key that start named (core
+ * `SourceKey`), the source itself held only by the listener that serves
+ * it. They outlive the hub connection: a hub that drops and comes back
+ * reads them off the register ({@link servingPreviews}) and points an
+ * origin at one again only while its key is what the origin's row names.
  */
 const previews = new Map<
   string,
-  { listener: Server<PreviewSocket>; source: PreviewSource; token: string }
+  {
+    for: SourceKey;
+    listener: Server<PreviewSocket>;
+    /** The workspace network its port is in (stage.ts `networkOf`); none for the host's or a folder. */
+    network: string | undefined;
+    token: string;
+  }
 >();
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 /** How long the ping waits for the port's answer. Ours: under the hub's 5 s for the ping's relay (hub preview.ts `PING_RELAY_MS`). */
@@ -265,18 +281,20 @@ const upstreamOf = async (
   return reached === "host" ? "host" : { unix: reached };
 };
 
-/** What the register tells the hub this process is serving, each with the token of the start that made it. */
-export function servingPreviews(): {
-  instanceId: string;
-  port: number;
-  source: PreviewSource;
-  token: string;
-}[] {
-  return [...previews].map(([instanceId, { listener, source, token }]) => ({
+/** The workspace networks the ports of the previews this process serves are in: each holds its boundary open (boundary.ts `watchQuietBoundaries`). */
+export function previewNetworks(): string[] {
+  return [...previews.values()].flatMap(({ network }) =>
+    network === undefined ? [] : [network]
+  );
+}
+
+/** What the register tells the hub this process is serving, each with the token of the start that made it and the source key it named. */
+export function servingPreviews(): ServingPreview[] {
+  return [...previews].map(([instanceId, { listener, token, for: key }]) => ({
     instanceId,
     port: listener.port as number,
-    source,
     token,
+    for: key,
   }));
 }
 
@@ -672,6 +690,8 @@ export function startPreview(options: {
    * one credential the listener answers (core `RELAY_HEADER`).
    */
   token: string;
+  /** The source key the hub started it for (core `SourceKey`), which the register reports back. */
+  for: SourceKey;
 }): Promise<{ port: number }> {
   return inTurn(options.instanceId, () => start(options));
 }
@@ -685,6 +705,9 @@ async function start(
   }
   if (typeof token !== "string" || token.length === 0) {
     throw new Error("A preview start names the hub's token for it.");
+  }
+  if (typeof options.for !== "string" || options.for.length === 0) {
+    throw new Error("A preview start names the source key it is for.");
   }
   const relayToken = Buffer.from(token);
   if (workspace !== undefined && port === undefined) {
@@ -736,23 +759,34 @@ async function start(
       return null;
     } catch (error) {
       previewFailed("agent listener", instanceId, causeOf(error));
-      return downResponse("reach", 502, causeOf(error));
+      return error instanceof WorkspaceNotHere
+        ? downResponse("server", 503)
+        : downResponse("reach", 502, causeOf(error));
     }
   };
   /**
    * The hub's ping (hub preview.ts `pingSession`), answered as a load of
    * the page would be met, short of waking a stage: "ok", or the down page
-   * the load would get, which the hub reads (core `downOf`). A folder, and a
-   * port a stage serves (the load wakes it), answer at once; any other port
-   * needs its workspace running and its server answering on it.
+   * the load would get, which the hub reads (core `downOf`). A folder
+   * answers at once; a port a stage serves once the stage could be woken
+   * (its workspace is on this machine: one archived or discarded is a
+   * server that isn't running, as `staged` answers its load); any other
+   * port needs its workspace running and its server answering on it.
    */
   const pinged = async (): Promise<Response> => {
     const ok = new Response("ok", { headers: { "cache-control": "no-store" } });
-    if (
-      !("port" in source) ||
-      (source.workspace && (source.stage || source.serve))
-    ) {
+    if (!("port" in source)) {
       return ok;
+    }
+    if (source.workspace && (source.stage || source.serve)) {
+      try {
+        await sourceWakes(source);
+        return ok;
+      } catch (error) {
+        return error instanceof WorkspaceNotHere
+          ? downResponse("server", 503)
+          : downResponse("reach", 502, causeOf(error));
+      }
     }
     let upstream: Awaited<ReturnType<typeof upstreamOf>>;
     try {
@@ -1021,8 +1055,9 @@ async function start(
   });
   previews.set(instanceId, {
     listener,
-    source: "port" in source ? source : { dir: dir as string },
     token,
+    for: options.for,
+    network: "port" in source ? networkOf(source) : undefined,
   });
   return { port: listener.port as number };
 }
