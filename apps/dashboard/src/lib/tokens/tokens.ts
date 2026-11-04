@@ -314,6 +314,7 @@ export type TokenSize =
   | "size.c-graph-room-w"
   | "size.c-graph-node-w"
   | "size.c-graph-label"
+  | "size.c-graph-figure-w"
   | "size.c-graph-drawer-head"
   | "size.c-graph-stage-min"
   | "size.c-pin-list-min"

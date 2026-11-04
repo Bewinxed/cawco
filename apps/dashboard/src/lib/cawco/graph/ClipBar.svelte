@@ -216,7 +216,7 @@
 </script>
 
 <div
-  class="relative h-c-pill-h w-full touch-none select-none"
+  class="relative h-c-badge-h w-full touch-none select-none"
   data-dragging={dragging ?? undefined}
   data-slot="bar-lane"
   {@attach frameSize((node: HTMLElement) => {
