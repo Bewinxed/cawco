@@ -49,6 +49,34 @@
   import { cellFor } from "./updates/model";
   import { updates } from "./updates/updates.svelte";
 
+  let {
+    rail = false,
+  }: {
+    /**
+     * Standing in the phone's sidebar sheet: its rows take the sheet's own
+     * columns, a glyph's box `c-row-inset` in and the words that same gap
+     * after it (Files and Fleet's nav rows), a machine's tile centred on that
+     * glyph's box with its words on the same start.
+     */
+    rail?: boolean;
+  } = $props();
+  /** A row with a bare glyph: the card's 7px pads, or the sheet's nav row's. */
+  const bareRow = $derived(
+    rail
+      ? "gap-c-row-inset ps-c-row-inset pe-space-2"
+      : "gap-space-2 px-space-2"
+  );
+  /** A row led by a machine's tile: in the sheet, the tile on the glyph's box's centre. */
+  const tileRow = $derived(
+    rail
+      ? "gap-(--tile-lead) ps-(--tile-lead) pe-space-2"
+      : "gap-space-2 px-space-2"
+  );
+  /** The glyph's box: the sheet's nav row's (space-5), or the glyph's own. */
+  const glyphBox = $derived(rail ? "w-space-5" : "w-icon-md");
+  const TILE_LEAD =
+    "calc(var(--c-row-inset) - (var(--c-mark) - var(--space-5)) / 2)";
+
   /** Each machine the fleet lists that an install is bringing back: its row is that install's. */
   const returning = $derived(
     new Map(
@@ -206,8 +234,12 @@
       {@const name = machineLabel(machine.hostname ?? machine.machineId)}
       <li
         data-slot="row"
-        class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm px-space-2 py-space-1 text-ink-strong transition-control coarse:min-h-c-row-h hover:bg-surface-hover"
+        class={[
+          "flex w-full min-h-space-8 items-center rounded-sm py-space-1 text-ink-strong transition-control coarse:min-h-c-row-h hover:bg-surface-hover",
+          tileRow,
+        ]}
         data-waiting={machine.machineId}
+        style:--tile-lead={rail ? TILE_LEAD : undefined}
       >
         <MachineRow
           hue={machineHue(0, false)}
@@ -261,7 +293,12 @@
 {/if}
 {#if cawco.machines.length === 0}
   <!-- No machine yet: the empty fleet's two ways in, as rows. -->
-  <p class="m-0 px-space-2 pt-space-1 pb-space-2 type-meta text-ink-muted">
+  <p
+    class={[
+      "m-0 pt-space-1 pb-space-2 type-meta text-ink-muted",
+      rail ? "ps-c-row-inset pe-space-2" : "px-space-2",
+    ]}
+  >
     Connect a machine to run sessions
   </p>
   <ul data-slot="list" class="m-0 flex list-none flex-col gap-space-row p-0">
@@ -271,13 +308,16 @@
         <button
           data-slot="row"
           aria-haspopup="dialog"
-          class="select-none flex w-full min-h-space-8 items-center gap-space-2 rounded-sm px-space-2 py-space-1 text-start text-ink-strong transition-control coarse:min-h-c-row-h hover:bg-surface-hover press-tint focus-inset"
+          class={[
+            "select-none flex w-full min-h-space-8 items-center rounded-sm py-space-1 text-start text-ink-strong transition-control coarse:min-h-c-row-h hover:bg-surface-hover press-tint focus-inset",
+            bareRow,
+          ]}
           onclick={(event) => connect.openNew(event.currentTarget, way.route)}
           type="button"
         >
           <span
             data-slot="glyph"
-            class="inline-grid w-icon-md flex-none place-items-center"
+            class={["inline-grid flex-none place-items-center", glyphBox]}
             style:color={way.hue}><Icon class="size-icon-md" /></span
           >
           <span data-slot="words" class="flex min-w-0 flex-col">
@@ -320,7 +360,11 @@
           <MachineMenu {machine}>
             <div
               data-slot="row"
-              class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm px-space-2 py-space-1 text-ink-strong transition-control coarse:min-h-c-row-h hover:bg-surface-hover press-tint focus-inset"
+              class={[
+                "flex w-full min-h-space-8 items-center rounded-sm py-space-1 text-ink-strong transition-control coarse:min-h-c-row-h hover:bg-surface-hover press-tint focus-inset",
+                tileRow,
+              ]}
+              style:--tile-lead={rail ? TILE_LEAD : undefined}
               tabindex="-1"
             >
               <MachineRow
@@ -369,11 +413,18 @@
   <button
     data-slot="row"
     data-add
-    class="select-none mark-line press-tint focus-inset mt-space-1 flex w-full min-h-space-8 items-center gap-space-2 rounded-ee-sm rounded-es-sm border-t border-t-border-hairline px-space-2 py-space-1 text-start type-label text-ink-muted transition-control coarse:min-h-c-row-h hover:bg-surface-hover"
+    class={[
+      "select-none mark-line press-tint focus-inset mt-space-1 flex w-full min-h-space-8 items-center rounded-ee-sm rounded-es-sm border-t border-t-border-hairline py-space-1 text-start type-label text-ink-muted transition-control coarse:min-h-c-row-h hover:bg-surface-hover",
+      bareRow,
+    ]}
     onclick={(event) => connect.openNew(event.currentTarget)}
     type="button"
   >
-    <IconPlus aria-hidden="true" class="size-icon-md" />
+    <span
+      aria-hidden="true"
+      class={["inline-grid flex-none place-items-center", glyphBox]}
+      data-box><IconPlus class="size-icon-md" /></span
+    >
     <span>{connectWords.addMachine}</span>
   </button>
 {/if}

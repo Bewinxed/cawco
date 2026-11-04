@@ -1260,7 +1260,7 @@
           Machines
           <span class="ms-auto num">{machinesOnline()} online</span>
         </Sidebar.GroupLabel>
-        <MachinesList />
+        <MachinesList rail />
       </Sidebar.Group>
     {/if}
   </Sidebar.Content>

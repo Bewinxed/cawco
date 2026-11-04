@@ -37,12 +37,17 @@
 
   let card = $state<HTMLElement | null>(null);
   let form = $state<NewSessionForm>();
-  /** What held the focus as it opened, which it goes back to as it closes. */
+  /**
+   * What held the focus as it opened, which it goes back to as it closes:
+   * its anchor, followed while it stays open (a trigger in the phone's sheet
+   * hands over to the burger as the sheet goes, Shell), else the focus.
+   */
   let opener: HTMLElement | null = null;
   $effect(() => {
     if (open) {
+      const from = anchor;
       untrack(() => {
-        opener = anchor ?? (document.activeElement as HTMLElement | null);
+        opener = from ?? (document.activeElement as HTMLElement | null);
       });
     }
   });

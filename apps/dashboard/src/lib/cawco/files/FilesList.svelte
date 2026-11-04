@@ -462,6 +462,7 @@
       <EmptyState
         class="flex-1"
         icon={IconFiles}
+        pad="pane"
         line="Pages, canvases, previews and the files you and the agent share collect here."
         title="Nothing here yet"
       >
