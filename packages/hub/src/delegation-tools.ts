@@ -1332,7 +1332,7 @@ export function handoffInstructions(
   // (code.claude.com/docs/en/mcp, "For MCP server authors"), so what the
   // seat must read comes first and the block stays well inside the cap.
   return [
-    "This session orchestrates: it plans, briefs, reads reports and decides, and takes a delegate's report as the evidence for its work. Substantial execution goes to a delegate: implementation, builds, browser checks, probes, and any diagnosis that takes more than a few steps. Give each delegate a concrete deliverable and bounded file ownership; reports arrive by themselves, so independent parent work keeps moving. Finished work goes to the person as it is; a review runs when they ask for one. CawCo's delegate is not the harness's own subagents, which do not resolve CawCo's types.",
+    "This session orchestrates: it plans, briefs, reads reports and decides, and takes a delegate's report as the evidence for its work. Substantial execution goes to a delegate: implementation, builds, browser checks, probes, and any diagnosis that takes more than a few steps. Give each delegate a concrete deliverable. `owns` keeps two items from overlapping; work on a screen owns the whole screen. Reports arrive by themselves, so independent parent work keeps moving. Finished work goes to the person as it is; a review runs when they ask for one. CawCo's delegate is not the harness's own subagents, which do not resolve CawCo's types.",
     "When delegation fails or no type fits, report the blocker and keep bulk exploration for a delegate.",
     `${naming}${loading}${images}`,
   ].join("\n\n");

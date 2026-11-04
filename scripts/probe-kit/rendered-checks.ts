@@ -1,21 +1,22 @@
 /**
- * The house rules every preview and live UI spec holds a rendered state to,
+ * Measurements of a rendered page: overflow, contrast, coral use, bar and
+ * head layout, insets, row density, glyphs and the rest in the table below,
  * read from the engine at the state the spec put the page in, the same way
  * in every spec. Screenshot review is left with what a person must judge.
  *
- *   const house = new HouseRules(kit, engine, { scope: ".frame" });
- *   await house.at(page, "state name");   // after the spec's own settle
- *   house.report();                       // one PASS/FAIL line per rule
+ *   const checks = new RenderedChecks(kit, engine, { scope: ".frame" });
+ *   await checks.at(page, "state name");   // after the spec's own settle
+ *   checks.report();                       // one PASS/FAIL line per rule
  *
  * From the command line, on any page, once per width (under 640 a phone's
  * touch screen), in the kit's Chromium; exits 1 on any finding:
  *
- *   bun scripts/probe-kit/house-rules.ts <url> [--width 1540] [--width 390x844] [--scope <selector>]
+ *   bun scripts/probe-kit/rendered-checks.ts <url> [--width 1540] [--width 390x844] [--scope <selector>]
  *
- * `houseRules(page, opts)` is the one read under the ledger: it runs the
+ * `renderedChecks(page, opts)` is the one read under the ledger: it runs the
  * overflow sweep (journeys/scan.ts), `impeccable detect --json --cdp` on the
  * page as it stands (Chromium: the kit's own browser, by its DevTools port),
- * and the house checks impeccable has no rule for. Each finding names the
+ * and the rendered checks impeccable has no rule for. Each finding names the
  * element (selector and accessible name), the rule and what it measured.
  *
  * | rule        | read by                     | what it reads |
@@ -41,13 +42,13 @@
  * | small-text  | own code                    | at a width under 600, no words drawn under 10px |
  * | anchor-drift | own code, over reads        | an open popover, menu or listbox whose height changed between two reads of a page holds its top or its bottom |
  *
- * The other lines the house calls never intentional are read already: cut by
+ * Two other unintended-looking lines are read already: cut by
  * the crop by `overflow` and `hidden-cue`, spills its slot by `overflow`. An
  * entrance or an exit is not read here: a read comes after the settle, when
  * the move is over; a spec holds one on the clock with anim.ts.
  *
  * Every other impeccable finding in the scope is printed as a NOTE: its
- * rules are taste the house has not made a rule of.
+ * rules are taste no check here measures.
  */
 // biome-ignore-all lint/performance/useTopLevelRegex: the reads run serialized into the page (`page.evaluate`), so each regex lives inside its function
 import { existsSync, readFileSync } from "node:fs";
@@ -58,7 +59,7 @@ import { capture, type Raster } from "./ink";
 import { scan } from "./journeys/scan";
 import { devtoolsPort, installRuns, type Kit, ROOT, Run, settle } from "./kit";
 
-export type HouseRule =
+export type CheckName =
   | "overflow"
   | "coral"
   | "glyph"
@@ -81,7 +82,7 @@ export type HouseRule =
   | "anchor-drift";
 
 /** Each rule, what it holds, and who reads it: the report's words. */
-const HOUSE_RULES: Record<HouseRule, { says: string; by: string }> = {
+const CHECKS: Record<CheckName, { says: string; by: string }> = {
   overflow: {
     says: "nothing spills, clips or overlaps",
     by: "scan.ts + impeccable text-occlusion",
@@ -146,17 +147,17 @@ const HOUSE_RULES: Record<HouseRule, { says: string; by: string }> = {
   },
 };
 
-const RULES = Object.keys(HOUSE_RULES) as HouseRule[];
+const RULES = Object.keys(CHECKS) as CheckName[];
 
 /** One element-level exemption: findings of `rule` on what `selector` matches, whose words hold `text`; either alone, or both together. */
-interface HouseExcept {
+interface CheckExcept {
   reason: string;
-  rule: HouseRule;
+  rule: CheckName;
   selector?: string;
   text?: string;
 }
 
-export interface HouseOptions {
+export interface CheckOptions {
   /** Text slots that must hold one of `texts` (his starters, his records): `source` names where they come from. */
   allowedText?: {
     selector: string;
@@ -164,9 +165,9 @@ export interface HouseOptions {
     texts: readonly string[];
   }[];
   /** Findings excused one by one, each with its reason. */
-  except?: HouseExcept[];
+  except?: CheckExcept[];
   /** Whole rules not read here, each with its reason (printed). */
-  exempt?: Partial<Record<HouseRule, string>>;
+  exempt?: Partial<Record<CheckName, string>>;
   /** Standalone marks (a status glyph outside any control) held to the glyph rule's svg test too. */
   marks?: string;
   /**
@@ -180,23 +181,23 @@ export interface HouseOptions {
   views?: string;
 }
 
-interface HouseFinding {
+interface CheckFinding {
   element: string;
   measured: string;
-  rule: HouseRule;
+  rule: CheckName;
 }
 
-export interface HouseRead {
+export interface CheckRead {
   /** Findings excused by `except`, each with its reason. */
-  excused: (HouseFinding & { reason: string })[];
-  findings: HouseFinding[];
+  excused: (CheckFinding & { reason: string })[];
+  findings: CheckFinding[];
   /** What impeccable said: its run, or why it did not run. */
   impeccable: { ran: boolean; said: string };
   /** The lowest text contrast read, with its element. */
   lowest: { element: string; ratio: number } | null;
   /** What the rules met and name without failing (a checked checkbox's coral, a shelf, a capsule). */
   named: string[];
-  /** Impeccable findings outside the house rules, in the scope. */
+  /** Impeccable findings outside the rendered checks, in the scope. */
   others: string[];
   /** What a rule could not read, by rule, with why. */
   unread: string[];
@@ -274,27 +275,27 @@ interface InPageRead {
     holder: number;
     side: "top" | "bottom" | "left" | "right";
   }[];
-  findings: (HouseFinding & { at: number })[];
+  findings: (CheckFinding & { at: number })[];
   lowest: { element: string; ratio: number } | null;
   named: string[];
   unread: string[];
 }
 
 /**
- * The house checks impeccable has no rule for, read in the page. One
+ * The rendered checks impeccable has no rule for, read in the page. One
  * function serialized into the page, everything it uses inside it. Each
- * finding keeps the index of its element (`at`, in `window.__houseEls`) so
+ * finding keeps the index of its element (`at`, in `window.__checkEls`) so
  * an exemption can be matched against the element itself.
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one function serialized into the page, its helpers inside it
-function houseRead(args: InPageArgs): InPageRead {
+function readInPage(args: InPageArgs): InPageRead {
   const scope = document.querySelector(args.scope) ?? document.body;
   const skip = new Set(args.exempt);
-  const findings: (HouseFinding & { at: number })[] = [];
+  const findings: (CheckFinding & { at: number })[] = [];
   const named: string[] = [];
   const unread: string[] = [];
   const els: Element[] = [];
-  (window as unknown as { __houseEls: Element[] }).__houseEls = els;
+  (window as unknown as { __checkEls: Element[] }).__checkEls = els;
   const keep = (el: Element) => {
     els.push(el);
     return els.length - 1;
@@ -368,7 +369,7 @@ function houseRead(args: InPageArgs): InPageRead {
     const n = nameOf(el);
     return `${selectorOf(el)}${n ? ` “${n}”` : ""}`;
   };
-  const say = (rule: HouseRule, el: Element | null, measured: string) => {
+  const say = (rule: CheckName, el: Element | null, measured: string) => {
     findings.push({
       rule,
       element: el ? describe(el) : "the page",
@@ -1411,9 +1412,9 @@ function houseRead(args: InPageArgs): InPageRead {
               };
           // One mark per holder, kept for each of its cut edges.
           const mark = Number(
-            holder.getAttribute("data-house-mask") ?? edgesOut.length
+            holder.getAttribute("data-check-mask") ?? edgesOut.length
           );
-          holder.setAttribute("data-house-mask", String(mark));
+          holder.setAttribute("data-check-mask", String(mark));
           edgesOut.push({ band, element: describe(sc), holder: mark, side });
           continue;
         }
@@ -2125,13 +2126,13 @@ function houseRead(args: InPageArgs): InPageRead {
   // alone says so.
   {
     const was = window as unknown as {
-      __houseLayers?: Map<
+      __checkLayers?: Map<
         Element,
         { bottom: number; height: number; top: number }
       >;
     };
-    was.__houseLayers ??= new Map();
-    const seen = was.__houseLayers;
+    was.__checkLayers ??= new Map();
+    const seen = was.__checkLayers;
     const layers = [...scope.querySelectorAll(POPOVER)].filter(
       (el) => shown(el) && !el.parentElement?.closest(POPOVER)
     );
@@ -2169,7 +2170,7 @@ function excuseIn(args: {
   items: { at: number; rule: string; element: string; measured: string }[];
 }): (string | null)[] {
   const els =
-    (window as unknown as { __houseEls?: Element[] }).__houseEls ?? [];
+    (window as unknown as { __checkEls?: Element[] }).__checkEls ?? [];
   return args.items.map((item) => {
     const el = item.at >= 0 ? els[item.at] : null;
     // Given both, both must hold: findings of that kind on that element.
@@ -2190,9 +2191,9 @@ function placeIn(args: {
   selectors: string[];
 }): { inScope: boolean; at: number }[] {
   const scope = document.querySelector(args.scope) ?? document.body;
-  const w = window as unknown as { __houseEls?: Element[] };
-  w.__houseEls ??= [];
-  const els = w.__houseEls;
+  const w = window as unknown as { __checkEls?: Element[] };
+  w.__checkEls ??= [];
+  const els = w.__checkEls;
   return args.selectors.map((selector) => {
     let found: Element | null = null;
     try {
@@ -2274,11 +2275,11 @@ async function fadeDraws(
   const as = (rule: string | null) =>
     page.evaluate(
       ([i, r]) => {
-        document.getElementById("house-unmask")?.remove();
+        document.getElementById("check-unmask")?.remove();
         if (r) {
           const style = document.createElement("style");
-          style.id = "house-unmask";
-          style.textContent = `[data-house-mask="${i}"]{${r};transition:none!important}`;
+          style.id = "check-unmask";
+          style.textContent = `[data-check-mask="${i}"]{${r};transition:none!important}`;
           document.head.append(style);
         }
         return new Promise((done) =>
@@ -2339,7 +2340,7 @@ async function impeccable(page: Page): Promise<{
     };
   }
   scans += 1;
-  const token = `house-rules-${process.pid}-${scans}`;
+  const token = `rendered-checks-${process.pid}-${scans}`;
   const title = await page.title();
   await page.evaluate((t) => {
     document.title = t;
@@ -2390,7 +2391,7 @@ function keepPlace(): void {
       kept.push([el, el.scrollTop, el.scrollLeft]);
     }
   }
-  (window as unknown as { __housePlace: unknown }).__housePlace = {
+  (window as unknown as { __checkPlace: unknown }).__checkPlace = {
     kept,
     x: window.scrollX,
     y: window.scrollY,
@@ -2402,14 +2403,14 @@ function keepPlace(): void {
 function putPlace(): void {
   const place = (
     window as unknown as {
-      __housePlace?: {
+      __checkPlace?: {
         focus: Element | null;
         kept: [Element, number, number][];
         x: number;
         y: number;
       };
     }
-  ).__housePlace;
+  ).__checkPlace;
   if (!place) {
     return;
   }
@@ -2431,24 +2432,24 @@ function putPlace(): void {
   }
 }
 
-/** What impeccable reads for the house: its rule, by the house rule it serves. */
-const IMPECCABLE_HOUSE: Record<string, HouseRule> = {
+/** The impeccable rules these checks take in: each by the check it serves. */
+const IMPECCABLE_CHECKS: Record<string, CheckName> = {
   "low-contrast": "contrast",
   "text-occlusion": "overflow",
 };
 
 /**
- * Every house rule read at the state the spec put `page` in. The spec
+ * Every rendered check read at the state the spec put `page` in. The spec
  * settles first (`settle`, or its own); a page still moving is the
  * `settled` rule's finding, not waited out here.
  */
-async function houseRules(
+async function renderedChecks(
   page: Page,
-  opts: HouseOptions = {}
-): Promise<HouseRead> {
+  opts: CheckOptions = {}
+): Promise<CheckRead> {
   const scope = opts.scope ?? "body";
   const exempt = Object.keys(opts.exempt ?? {});
-  const read = await page.evaluate(houseRead, {
+  const read = await page.evaluate(readInPage, {
     scope,
     views: opts.views ?? null,
     marks: opts.marks ?? null,
@@ -2465,7 +2466,7 @@ async function houseRules(
     ),
     exempt,
   });
-  const findings: (HouseFinding & { at: number })[] = [...read.findings];
+  const findings: (CheckFinding & { at: number })[] = [...read.findings];
   const unread = [...read.unread];
 
   // 7: a declared fade that draws, read in the pixels with and without it.
@@ -2483,8 +2484,8 @@ async function houseRules(
     }
   }
   await page.evaluate(() => {
-    for (const el of document.querySelectorAll("[data-house-mask]")) {
-      el.removeAttribute("data-house-mask");
+    for (const el of document.querySelectorAll("[data-check-mask]")) {
+      el.removeAttribute("data-check-mask");
     }
   });
 
@@ -2526,7 +2527,7 @@ async function houseRules(
       if (!where?.inScope) {
         return;
       }
-      const rule = IMPECCABLE_HOUSE[f.antipattern];
+      const rule = IMPECCABLE_CHECKS[f.antipattern];
       if (rule && !exempt.includes(rule)) {
         findings.push({
           rule,
@@ -2543,8 +2544,8 @@ async function houseRules(
   const reasons = opts.except?.length
     ? await page.evaluate(excuseIn, { except: opts.except, items: findings })
     : findings.map(() => null);
-  const excused: HouseRead["excused"] = [];
-  const kept: HouseFinding[] = [];
+  const excused: CheckRead["excused"] = [];
+  const kept: CheckFinding[] = [];
   findings.forEach(({ at: _at, ...f }, i) => {
     const reason = reasons[i];
     if (reason) {
@@ -2565,14 +2566,14 @@ async function houseRules(
 }
 
 /**
- * The house rules over a spec's states: `at` reads one, `report` says one
+ * The rendered checks over a spec's states: `at` reads one, `report` says one
  * PASS or FAIL line per rule over all of them, then what was exempted,
  * excused, named and left unread, so nothing is skipped silently.
  */
-export class HouseRules {
+export class RenderedChecks {
   /** Each rule's findings, one entry per element and what it measured, with the states it was read in. */
   private readonly found = new Map<
-    HouseRule,
+    CheckName,
     Map<string, { first: string; n: number }>
   >();
   private readonly excused = new Map<string, number>();
@@ -2585,9 +2586,9 @@ export class HouseRules {
   private states = 0;
   private readonly kit: Kit;
   private readonly label: string;
-  private readonly opts: HouseOptions;
+  private readonly opts: CheckOptions;
 
-  constructor(kit: Kit, label: string, opts: HouseOptions = {}) {
+  constructor(kit: Kit, label: string, opts: CheckOptions = {}) {
     this.kit = kit;
     this.label = label;
     this.opts = opts;
@@ -2597,9 +2598,9 @@ export class HouseRules {
   async at(
     page: Page,
     where: string,
-    more: HouseOptions = {}
-  ): Promise<HouseRead> {
-    const read = await houseRules(page, {
+    more: CheckOptions = {}
+  ): Promise<CheckRead> {
+    const read = await renderedChecks(page, {
       ...this.opts,
       ...more,
       exempt: { ...this.opts.exempt, ...more.exempt },
@@ -2645,11 +2646,11 @@ export class HouseRules {
     const exempt = this.opts.exempt ?? {};
     const impeccableDown = [...this.impeccable].filter((one) => one !== "ran");
     for (const rule of RULES) {
-      const { says, by } = HOUSE_RULES[rule];
+      const { says, by } = CHECKS[rule];
       const reason = exempt[rule];
       if (reason) {
         this.kit.note(
-          `${this.label} house rule ${rule} (${says}) exempt: ${reason}`
+          `${this.label} rendered check ${rule} (${says}) exempt: ${reason}`
         );
         continue;
       }
@@ -2664,36 +2665,36 @@ export class HouseRules {
           ? `, lowest ${this.lowest.ratio.toFixed(2)}:1 at ${this.lowest.where}: ${this.lowest.element}`
           : "";
       this.kit.check(
-        `${this.label} house rule ${rule}, ${says} (${by}): ${total} finding(s), ${list.length} distinct, over ${this.states} state(s)${extra}`,
+        `${this.label} rendered check ${rule}, ${says} (${by}): ${total} finding(s), ${list.length} distinct, over ${this.states} state(s)${extra}`,
         total === 0 && this.states > 0,
         list.slice(0, 5).join(" | ")
       );
     }
-    // impeccable is part of the house check: a Chromium run that could not reach it fails.
+    // impeccable is part of the rendered check: a Chromium run that could not reach it fails.
     const said = (one: string) =>
       one.startsWith("impeccable reads Chromium only") ||
       one.startsWith("impeccable not run here");
     const blocking = impeccableDown.filter((one) => !said(one));
     if (blocking.length > 0) {
       this.kit.check(
-        `${this.label} house rules: impeccable detect ran on every state`,
+        `${this.label} rendered checks: impeccable detect ran on every state`,
         false,
         blocking.join(" | ")
       );
     }
     for (const one of impeccableDown.filter(said)) {
       this.kit.note(
-        `${this.label} house rules: ${one}; contrast and overflow read by the kit's own code alone here`
+        `${this.label} rendered checks: ${one}; contrast and overflow read by the kit's own code alone here`
       );
     }
     for (const [key, n] of this.excused) {
-      this.kit.note(`${this.label} house rule excused ×${n}: ${key}`);
+      this.kit.note(`${this.label} rendered check excused ×${n}: ${key}`);
     }
     for (const one of this.named) {
-      this.kit.note(`${this.label} house rules named, not failed: ${one}`);
+      this.kit.note(`${this.label} rendered checks named, not failed: ${one}`);
     }
     for (const one of this.unread) {
-      this.kit.note(`${this.label} house rules unread: ${one}`);
+      this.kit.note(`${this.label} rendered checks unread: ${one}`);
     }
     if (this.others.size > 0) {
       const top = [...this.others.entries()]
@@ -2701,7 +2702,7 @@ export class HouseRules {
         .slice(0, 6)
         .map(([o, n]) => `${o} ×${n}`);
       this.kit.note(
-        `${this.label} impeccable, outside the house rules (${this.others.size} distinct): ${top.join(" | ")}`
+        `${this.label} impeccable, outside the rendered checks (${this.others.size} distinct): ${top.join(" | ")}`
       );
     }
   }
@@ -2710,7 +2711,7 @@ export class HouseRules {
 /** Below this width a page is read as a phone's: touch and a coarse pointer (DESIGN.md's 640px line). */
 const PHONE_LINE = 640;
 const USAGE =
-  "bun scripts/probe-kit/house-rules.ts <url> [--width 1540] [--width 390x844] [--scope <selector>]";
+  "bun scripts/probe-kit/rendered-checks.ts <url> [--width 1540] [--width 390x844] [--scope <selector>]";
 
 /** One width a page is read at, from `--width 1540` or `--width 390x844`. */
 const sizeOf = (said: string): { height: number; width: number } => {
@@ -2745,13 +2746,13 @@ const askedOf = (
 };
 
 /** One width's read, said: each rule's PASS or FAIL and what it found, then the rest. The findings' count. */
-const sayRead = (read: HouseRead): number => {
+const sayRead = (read: CheckRead): number => {
   let found = 0;
   for (const rule of RULES) {
     const mine = read.findings.filter((one) => one.rule === rule);
     found += mine.length;
     console.log(
-      `${mine.length === 0 ? "PASS" : "FAIL"} ${rule}, ${HOUSE_RULES[rule].says}: ${mine.length} finding(s)`
+      `${mine.length === 0 ? "PASS" : "FAIL"} ${rule}, ${CHECKS[rule].says}: ${mine.length} finding(s)`
     );
     for (const one of mine.slice(0, 8)) {
       console.log(`  ${one.element}: ${one.measured}`);
@@ -2775,7 +2776,7 @@ const sayRead = (read: HouseRead): number => {
 };
 
 /**
- * The house rules read on the page at `url` from the command line, once per
+ * The rendered checks read on the page at `url` from the command line, once per
  * width, in the kit's Chromium (its DevTools port open, so impeccable runs
  * on it as in a spec). Exits 1 when any rule found something.
  */
@@ -2802,7 +2803,7 @@ async function main(args: string[]): Promise<number> {
         const page = await context.newPage();
         await page.goto(url, { waitUntil: "load" });
         await settle(page);
-        const read = await houseRules(page, scope ? { scope } : {});
+        const read = await renderedChecks(page, scope ? { scope } : {});
         console.log(
           `\n${size.width}×${size.height}${phone ? " touch" : ""}: ${page.url()}`
         );

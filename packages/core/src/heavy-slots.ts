@@ -97,7 +97,7 @@ export const HEAVY_SLOT_ENV = "CAWCO_HEAVY_SLOT";
  * I/O. Measured 2026-10-28 on a 10-core Mac (8 performance, 2 efficiency) at
  * load 30–40, Biome over the tree took 226 s in darwin background and 12 s
  * at nice 10; under it a merge check's golar tsc, Golar's lint, Biome and
- * three house checks each ran past the check runner's 240 s and failed.
+ * three rendered-checks runs each ran past the check runner's 240 s and failed.
  */
 export const HEAVY_NICE = 10;
 

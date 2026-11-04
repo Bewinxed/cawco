@@ -1050,7 +1050,7 @@ export class Run {
             "--no-sandbox",
             "--disable-gpu",
             // A DevTools port on loopback beside Playwright's pipe, for a
-            // tool that attaches to a page as it stands (house-rules.ts runs
+            // tool that attaches to a page as it stands (rendered-checks.ts runs
             // `impeccable detect --cdp` on it).
             `--remote-debugging-port=${port}`,
             ...(oneProcess

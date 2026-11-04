@@ -58,23 +58,24 @@ it with the dev server (`/motion/` benches, canvas-design's panel) hot-reloads
 every edit into its open pages, which reloads them mid-read and fails legs
 the edit never touched.
 
-## House rules
+## Rendered checks
 
 Every preview spec and every live UI spec that reads a rendered screen
-holds it to the house rules with `house-rules.ts`, the same way everywhere,
+measures it with `rendered-checks.ts` (overflow, contrast, coral use, bar
+layout, insets and the rest in the table below), the same way everywhere,
 so a screenshot review is left with what a person must judge:
 
 ```ts
-const house = new HouseRules(kit, engine, { scope: '[data-slot="stage"]' });
-await house.at(page, "state name"); // at each state, once the spec has settled it
-house.report();                      // one PASS/FAIL line per rule over every state
+const checks = new RenderedChecks(kit, engine, { scope: '[data-slot="stage"]' });
+await checks.at(page, "state name"); // at each state, once the spec has settled it
+checks.report();                      // one PASS/FAIL line per rule over every state
 ```
 
 Any page, from the command line, once per width (under 640 a phone's touch
 screen), exiting 1 on any finding:
 
 ```sh
-bun scripts/probe-kit/house-rules.ts <url> --width 1540x800 --width 390x844 [--scope <selector>]
+bun scripts/probe-kit/rendered-checks.ts <url> --width 1540x800 --width 390x844 [--scope <selector>]
 ```
 
 | Rule | Read by | What it reads |
@@ -101,14 +102,14 @@ bun scripts/probe-kit/house-rules.ts <url> --width 1540x800 --width 390x844 [--s
 | `anchor-drift` | own code, over reads | an open popover, menu or listbox whose height changed between two reads of one page holds its top or its foot (The Nothing Jumps Rule); one read says so as unread |
 
 Cut by the crop is `overflow` and `hidden-cue`, and spills its slot is
-`overflow`. An entrance or an exit is no house rule: a read comes after the
+`overflow`. An entrance or an exit is not read here: a read comes after the
 settle, when the move is over, so a spec holds one on the clock with `anim.ts`.
 
 Impeccable runs as `impeccable detect --json --cdp <port>` on the page as it
 stands: every kit Chromium carries a DevTools port (`devtoolsPort(page)`),
 and the launcher is `$IMPECCABLE`, else the impeccable skill's. It reads
 Chromium only; on WebKit the report says so and the kit's own contrast and
-overflow reads stand alone. Its findings outside the house rules (line
+overflow reads stand alone. Its findings outside the rendered checks (line
 length, nested cards…) print as a NOTE, never a failure. A Chromium read
 where it could not run fails.
 

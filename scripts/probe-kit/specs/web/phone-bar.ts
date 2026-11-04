@@ -23,9 +23,9 @@
  *   bun scripts/probe-kit/run.ts web phone-bar
  */
 import type { Page } from "playwright-core";
-import { HouseRules } from "../../house-rules";
 import { scan } from "../../journeys/scan";
 import { type Engine, type Kit, open, type Spec, settle } from "../../kit";
+import { RenderedChecks } from "../../rendered-checks";
 
 const ENGINES: Engine[] = ["chromium", "webkit"];
 const WIDTHS = [390, 320] as const;
@@ -290,10 +290,10 @@ async function leg(kit: Kit, bench: string, engine: Engine, width: number) {
       toggle.box.bottom <= toggle.box.bar + 0.5 &&
       toggle.box.bottom - toggle.box.top >= 44 - 0.5
   );
-  const house = new HouseRules(kit, at);
+  const checks = new RenderedChecks(kit, at);
   await settle(page);
-  await house.at(page, "the bar at rest");
-  house.report();
+  await checks.at(page, "the bar at rest");
+  checks.report();
   const found = await page.evaluate(scan);
   kit.check(
     `${at}: the overflow sweep totals 0 (${found.length})`,
