@@ -82,7 +82,7 @@
 
   /** The ledger's columns: mark, name, what it brings, when, the actions. */
   const COLUMNS =
-    "var(--c-row-lead) minmax(0, 1fr) var(--c-forgotten-brings-w) var(--c-ledger-when-w) auto";
+    "var(--c-row-lead) minmax(0, 1fr) var(--c-forgotten-brings-w) var(--c-forgotten-when-w) auto";
   /** Under the container width: mark, then everything else under the name. */
   const COLUMNS_NARROW = "var(--c-row-lead) minmax(0, 1fr)";
   /** Three rows stand in while the list is read. */
@@ -197,7 +197,10 @@
         at: keyOf(one),
         title: projectEndWords.deleteForgotten(name),
         body: projectEndWords.deleteForgottenBody,
-        confirmLabel: projectEndWords.deletePlain,
+        confirmLabel: () =>
+          fromDisk && checkoutsOf(one).length > 0
+            ? projectEndWords.deleteWithFiles
+            : projectEndWords.deletePlain,
         pendingLabel: projectEndWords.deleting,
         destructive: true,
         icon: IconDeleteForGood,
@@ -258,6 +261,18 @@
       style:--narrow-cols={COLUMNS_NARROW}
       {@attach reflow()}
     >
+      <!-- The columns' heads, on a desk: what each fact is. Under the
+           container width the facts fold under the name, worded whole. A
+           reader hears each cell's own words instead. -->
+      <li
+        aria-hidden="true"
+        class="col-span-full grid grid-cols-subgrid border-b border-border-hairline py-space-2 type-label tracking-caps text-ink-muted uppercase @max-forgotten/forgotten:hidden"
+        data-forgotten-heads
+      >
+        <span class="col-start-2">{projectEndWords.headProject}</span>
+        <span>{projectEndWords.headBrings}</span>
+        <span>{projectEndWords.headForgotten}</span>
+      </li>
       {#each list as one (keyOf(one))}
         {@const named = one.name !== null}
         {@const name = one.name ?? nameOf(one)}
@@ -323,8 +338,10 @@
                 />
               {/if}
               {#if detailOf(one)}
+                <!-- It wraps rather than cut: its end ("files changed …")
+                     is often all that tells two stubs apart. -->
                 <span
-                  class="mt-space-row block overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+                  class="mt-space-row block type-meta text-pretty text-ink-muted"
                   data-slot="detail"
                   title={detailOf(one)}>{detailOf(one)}</span
                 >
@@ -351,11 +368,12 @@
               ><span class="sr-only">{projectEndWords.forgottenAt(forgot)}</span
               ><span aria-hidden="true">{forgot}</span></span
             >
-            <!-- Under the container width: what it brings and when, one line. -->
+            <!-- Under the container width: what it brings and when, each
+                 named, since the heads are gone. -->
             <span
               data-slot="facts"
-              class="col-start-2 hidden overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted @max-forgotten/forgotten:block"
-              >{facts} · <span class="num">{forgot}</span></span
+              class="col-start-2 hidden type-meta text-pretty text-ink-muted @max-forgotten/forgotten:block"
+              >{projectEndWords.factsLine(facts, forgot)}</span
             >
             <div
               data-box

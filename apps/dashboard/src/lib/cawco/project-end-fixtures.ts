@@ -94,7 +94,10 @@ export const tray = (
     job: one,
     words:
       one.kind === "delete"
-        ? projectEndWords.delete(one.projectName)
+        ? projectEndWords.delete(
+            one.projectName,
+            one.fromDisk && one.places.length > 0
+          )
         : projectEndWords.forget(one.projectName),
   };
 };

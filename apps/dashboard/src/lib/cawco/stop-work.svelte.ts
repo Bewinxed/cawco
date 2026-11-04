@@ -114,7 +114,10 @@ export interface StopJob {
 /** A forget's or a delete's words, for its project, its files box as it stands. */
 export function endWordsOf(job: StopJob): EndWords {
   return job.kind === "delete"
-    ? projectEndWords.delete(job.projectName)
+    ? projectEndWords.delete(
+        job.projectName,
+        job.fromDisk && job.places.length > 0
+      )
     : projectEndWords.forget(job.projectName);
 }
 
@@ -204,6 +207,8 @@ class StopWork {
     string,
     Set<(view: ProjectConversationView) => void>
   >();
+  /** Jobs ended by Keep project while their tray folds away: their end never runs. */
+  private readonly abandoned = new WeakSet<StopJob>();
   /** The one `project.stop` listener every job hears through, once one stop runs. */
   private unhear: (() => void) | null = null;
 
@@ -481,6 +486,20 @@ class StopWork {
     this.keep();
   }
 
+  /**
+   * Keep project, while the stops land or after a refusal: the attempt
+   * ends here. Sessions already stopped stay stopped; the end never runs,
+   * so the project stays as it is.
+   */
+  keepProject(job: StopJob): void {
+    if (job.kind === "caw-off" || !["stopping", "fail"].includes(job.phase)) {
+      return;
+    }
+    this.quiet(jobKey(job));
+    this.abandoned.add(job);
+    this.close(job);
+  }
+
   /** Whether the place `at` is drawn now. */
   drawn(at: string): boolean {
     return this.places.has(at);
@@ -687,7 +706,11 @@ class StopWork {
   /* ── The end ─────────────────────────────────────────────────────── */
 
   private async finish(job: StopJob): Promise<void> {
-    if (job.phase === "ending" || job.phase === "done") {
+    if (
+      job.phase === "ending" ||
+      job.phase === "done" ||
+      this.abandoned.has(job)
+    ) {
       return;
     }
     const key = jobKey(job);

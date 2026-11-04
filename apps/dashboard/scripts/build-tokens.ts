@@ -340,10 +340,11 @@ const CONTAINERS = {
   // says itself by its glyph alone, so its title keeps the room.
   "stop-tray-rail": "300px",
   // Forgotten projects' ledger: its columns beside the name once the name's
-  // floor (c-ledger-title-min, 224px), the lead (c-row-lead, 28px), What it
-  // brings (c-forgotten-brings-w, 192px), When (c-ledger-when-w, 96px), the
-  // two actions (about 176px) and four gaps (space-3, 56px) fit: 772px.
-  forgotten: "48.25rem",
+  // floor (c-ledger-title-min, 224px), the lead (c-row-lead, 28px), Brings
+  // back (c-forgotten-brings-w, 192px), Forgotten (c-forgotten-when-w,
+  // 120px), the two actions (Bring back with its glyph and Delete…, about
+  // 200px) and four gaps (space-3, 56px) fit: 820px.
+  forgotten: "51.25rem",
   kinds: "480px",
   "decisions-520px": "520px",
   leaf: "620px",

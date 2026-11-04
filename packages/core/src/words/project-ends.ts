@@ -31,6 +31,8 @@ export interface EndWords {
   ended: string;
   /** The confirm's word while the stops land and the end runs. */
   ending: string;
+  /** In Cancel's place while the stops land or after a refusal: ends the attempt, the project kept. */
+  keep: string;
   /**
    * The line under the title, in each step; `stopped` is what the stops did
    * ("Stopped 4 sessions."), empty when nothing ran.
@@ -89,6 +91,7 @@ export const projectEndWords = {
         ? `Stop ${n} mid-turn and forget`
         : `Stop ${n}, ${cut} mid-turn, and forget`,
     ending: "Forgetting…",
+    keep: "Keep project",
     ended: "Forgotten",
     line: (step, n, cut, stopped) => {
       switch (step) {
@@ -111,17 +114,25 @@ export const projectEndWords = {
       `Stopped ${stopped} of ${count(total, "session", "sessions")}; it is kept.`,
   }),
 
-  /** Deleting `name` for good (its files box says what else goes). */
-  delete: (name: string): EndWords => ({
+  /** Deleting `name` for good; `fromDisk`: checkouts on disk go too (the box ticked where there are some), and its confirm says so. */
+  delete: (name: string, fromDisk: boolean): EndWords => ({
     title: `Delete ${name} for good?`,
     titleDone: `${name} is deleted`,
-    plain: "Delete project",
-    stop: (n) => `Stop ${n} and delete`,
-    armed: (n, cut) =>
-      cut === n
+    plain: fromDisk ? "Delete project and files" : "Delete project",
+    stop: (n) =>
+      fromDisk ? `Stop ${n}, delete project and files` : `Stop ${n} and delete`,
+    armed: (n, cut) => {
+      if (fromDisk) {
+        return cut === n
+          ? `Stop ${n} mid-turn, delete project and files`
+          : `Stop ${n}, ${cut} mid-turn, delete project and files`;
+      }
+      return cut === n
         ? `Stop ${n} mid-turn and delete`
-        : `Stop ${n}, ${cut} mid-turn, and delete`,
+        : `Stop ${n}, ${cut} mid-turn, and delete`;
+    },
     ending: "Deleting…",
+    keep: "Keep project",
     ended: "Deleted",
     line: (step, n, cut, stopped) => {
       switch (step) {
@@ -130,7 +141,7 @@ export const projectEndWords = {
         case "stopping":
           return "Its tasks, pages, routines, workspaces and signed-in browsers are removed. This cannot be undone.";
         case "armed":
-          return armedLine(n, cut);
+          return `${armedLine(n, cut)} This cannot be undone.`;
         case "fail":
           return kept;
         case "ending":
@@ -144,14 +155,17 @@ export const projectEndWords = {
       `Stopped ${stopped} of ${count(total, "session", "sessions")}; it is kept.`,
   }),
 
+  /** The tray's Cancel before its press, and its Close once done. */
+  cancel: "Cancel",
+  close: "Close",
+
   /** Said under what asked while what runs in the project is read. */
   reading: "Checking for running sessions…",
 
   /** Delete's box: its places on disk and its transcripts go too. */
   fromDisk: "Also delete its files on disk",
-  /** Checked, for a project whose only place is its folder on the hub: what the box still removes. */
-  noPlaces:
-    "It has no checkout on any machine; only its sessions' transcripts are removed.",
+  /** Delete's box for a project with no checkout on any machine: what it still removes. */
+  transcriptsOnly: "Also delete its sessions' transcripts",
   /** Checked, under the checkouts it lists: what else goes. */
   transcriptsGo: "Its sessions' transcripts are removed too.",
   /** Unchecked: what a delete leaves, and where it may show again. */
@@ -170,6 +184,13 @@ export const projectEndWords = {
   forgottenTitle: "Forgotten projects",
   /** A row forgotten before the hub kept a project's name. */
   unnamed: "Unnamed project",
+  /** The list's column heads, on a desk. */
+  headProject: "Project",
+  headBrings: "Brings back",
+  headForgotten: "Forgotten",
+  /** Under a row's name on a phone, where the heads are gone: what it brings back and when it was forgotten. */
+  factsLine: (brings: string, when: string) =>
+    `Brings back ${brings.charAt(0).toLowerCase()}${brings.slice(1)} · forgotten ${when}`,
   /** A named row's checkout, under its name. */
   placeAt: (machine: string, path: string) => `${machine} · ${path}`,
   /**
@@ -221,7 +242,7 @@ export const projectEndWords = {
         b.routines > 0 && count(b.routines, "routine", "routines"),
         b.sessions > 0 && count(b.sessions, "session", "sessions"),
       ].filter((part): part is string => typeof part === "string")
-    ) || "Its folder only",
+    ) || "Its folder",
   /** A folder from before the hub kept records whose tasks may live on in another project. */
   tasksIn: (name: string, n: number) =>
     `${count(n, "of its tasks lives", "of its tasks live")} in ${name} now`,
@@ -233,6 +254,8 @@ export const projectEndWords = {
     "Its folder on the hub and everything kept to bring it back are removed. This cannot be undone.",
   /** That question's confirm, and its pending word. */
   deletePlain: "Delete project",
+  /** That confirm with the files box ticked, as the tray's names the files. */
+  deleteWithFiles: "Delete project and files",
   deleting: "Deleting…",
   /** The page with nothing forgotten. */
   noneTitle: "Nothing forgotten",

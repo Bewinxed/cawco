@@ -162,7 +162,9 @@
         <Button
           failed={failure !== null}
           icon={asked.grant ? IconShield : asked.icon}
-          label={asked.confirmLabel}
+          label={typeof asked.confirmLabel === "function"
+            ? asked.confirmLabel()
+            : asked.confirmLabel}
           onclick={accept}
           pending={running}
           pendingLabel={asked.pendingLabel}
