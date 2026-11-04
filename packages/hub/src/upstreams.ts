@@ -5,7 +5,7 @@
  * (scripts/scratch-fleet-stand-ins.ts); no installed hub can.
  */
 
-import { CONNECTION_SERVICES } from "@cawco/core";
+import { CONNECTION_SERVICES, TOOL_CATALOG } from "@cawco/core";
 
 /** GitHub's REST API, which the pollers, the relay and the publisher call. */
 export const GITHUB_API = "https://api.github.com";
@@ -35,6 +35,18 @@ export const GITHUB_MCP =
  * `/oauth/token`, which a Linear app's sign-in calls.
  */
 export const LINEAR_API = "https://api.linear.app";
+
+/**
+ * Where the hub reads the newest release of each CLI it keeps current on
+ * every machine, by tool id: the catalog's own (core `ToolSpec.release`,
+ * tool-releases.ts).
+ */
+export const TOOL_RELEASES: Readonly<Record<string, string>> =
+  Object.fromEntries(
+    TOOL_CATALOG.flatMap((spec) =>
+      spec.release ? [[spec.id, spec.release]] : []
+    )
+  );
 
 /** TypeSafe's System One, which Jev's typesafe route posts to. */
 export const TYPESAFE_URL = "https://api.typesafe.ai/v1/systemone";

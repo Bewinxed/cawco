@@ -35397,7 +35397,7 @@
             "type": "number"
           },
           "detail": {
-            "description": "`failed`: the tail of the installer's stderr. `unsupported`: what is\nmissing, named exactly — 'needs npm (Node 20+)' beats a grey chip.",
+            "description": "`failed`: the tail of the installer's stderr. `unsupported`: what is\nmissing, named exactly — 'needs npm (Node 20+)' beats a grey chip.\n`installed`: set only on a tool CawCo keeps at its newest release\n({@link ToolSpec.release}), when the last update it ran here left the\ncopy older than the release it was after: why, in the updater's words.\nThe copy still runs; the update is owed until a newer release, a Retry,\nor the copy moving some other way.",
             "type": "string"
           },
           "id": {
@@ -35411,7 +35411,7 @@
             "$ref": "#/components/schemas/ToolState"
           },
           "version": {
-            "description": "Set when `installed`.",
+            "description": "The version the copy here says: on `installed`; on `failed`, a copy\nCawCo does not run (older than its floor, or not its one version), or,\nfor a tool CawCo keeps at its newest release, the copy an update that\nfailed left there; on `installing`, the copy being updated. An attempt\nthat failed on any other tool carries none.",
             "type": "string"
           }
         },
@@ -53294,11 +53294,15 @@
             }
           },
           "minVersion": {
-            "description": "The oldest version CawCo runs, for a tool whose own updates CawCo rides\n(Claude Code updates itself): a copy older than it is reported `failed`\nwith why, and an install brings it to this version or newer.",
+            "description": "The oldest version CawCo runs, for a tool CawCo updates with the tool's\nown updater (`claude update`, `pi update`): a copy older than it is\nreported `failed` with why, and an install brings it to this version or\nnewer.",
             "type": "string"
           },
           "name": {
             "description": "What the dashboard calls it.",
+            "type": "string"
+          },
+          "release": {
+            "description": "Where the tool's newest release is said, for a tool CawCo keeps at its\nnewest release on every machine that has it (hub tool-releases.ts): a\nURL whose body's first `x.y.z` is that release. The hub reads it and\nsends each machine whose copy is older an install, which runs the\ncopy's own updater ({@link ToolSpec.install}'s first method), so no\npress is needed; an update that leaves the copy older says why on its\nrow.",
             "type": "string"
           },
           "requires": {

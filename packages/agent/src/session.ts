@@ -6565,9 +6565,15 @@ export class SessionSupervisor {
         return await probeTools();
       }
       if (method === "installTool") {
+        // The policy's pin, then the newest release the hub sends a tool it
+        // keeps current to reach (hub tool-releases.ts); JSON says an absent
+        // one as null.
+        const said = (at: number): string | undefined =>
+          typeof args[at] === "string" ? (args[at] as string) : undefined;
         const installed = await installTool(
           args[0] as string,
-          args[1] as string | undefined
+          said(1),
+          said(2)
         );
         // A harness CLI installed here converges what the machine holds of
         // the fleet, as every harness already here did.

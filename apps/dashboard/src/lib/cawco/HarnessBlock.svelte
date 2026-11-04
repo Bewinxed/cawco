@@ -2,14 +2,17 @@
   /**
    * A machine's harness CLI refused (Claude Code, OpenCode or pi), in place
    * of what it blocks (Claude Code's sign-in, a session's start): why, in the
-   * machine's own sentence, and its one fix as a press, Update Claude Code,
-   * Update pi, Install OpenCode 2.0.29 (Install, with none there). The fix
-   * is the hub's tool cell (harness-block.svelte.ts), so its progress and
-   * its outcome come back after a reload, on every dashboard, and go on when
-   * this is closed. A failed one says why in the machine's words, and the
-   * press reads Retry. Nothing here once the harness runs: the surface it
-   * stood in goes on.
+   * machine's own sentence, and its one fix as a press, Update pi, Install
+   * OpenCode 2.0.29 (Install, with none there). Claude Code there takes no
+   * press: CawCo updates it to its newest release by itself, and the block
+   * shows that update running; only an update that failed offers Retry
+   * (`offersPress`). The fix is the hub's tool cell
+   * (harness-block.svelte.ts), so its progress and its outcome come back
+   * after a reload, on every dashboard, and go on when this is closed. A
+   * failed one says why in the machine's words, and the press reads Retry.
+   * Nothing here once the harness runs: the surface it stood in goes on.
    */
+  import { untrack } from "svelte";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
@@ -17,7 +20,9 @@
   import { didntAnswer } from "./client.svelte";
   import {
     fixHarness,
+    followHarness,
     type HarnessBlock,
+    offersPress,
     harnessWords as words,
   } from "./harness-block.svelte";
   import { failureWords } from "./hub-read";
@@ -42,6 +47,20 @@
   let asking = $state(false);
 
   const running = $derived(block.fix.phase === "running");
+
+  // A CLI CawCo updates by itself takes no press, so the block itself
+  // follows it: once the update lands, the surface says so and the session
+  // waiting on it starts again, as after a press. Written untracked: the
+  // follow reads the list it writes.
+  $effect(() => {
+    if (offersPress(block)) {
+      return;
+    }
+    const on = machineId;
+    const { harness } = block;
+    const waiting = relaunch;
+    untrack(() => followHarness(on, harness, waiting));
+  });
 
   async function press() {
     if (asking || running) {
@@ -83,30 +102,37 @@
     >
     <span class="min-w-0">{block.why}</span>
   </p>
-  <div data-slot="row" class="flex min-w-0 flex-wrap items-center gap-space-2">
-    <Button
-      disabled={!online}
-      failed={block.fix.phase === "failed" || refused !== null}
-      icon={IconDownload}
-      label={block.fix.phase === "failed" ? "Retry" : words.press(block)}
-      onclick={press}
-      pending={asking || running}
-      pendingLabel={words.pressing(block)}
-      size="sm"
-      variant="outline"
-    />
-    {#if running}
-      <!-- The live dot breathes beside the words (Live work breathes); the words hold still. -->
-      <span
-        data-slot="progress"
-        class="mark-line flex min-w-0 items-start gap-space-2 type-meta text-ink-muted"
-        role="status"
-        ><span class="mark-cell"><LiveDot /></span><span class="min-w-0"
-          >{words.running(block)}</span
-        ></span
-      >
-    {/if}
-  </div>
+  {#if offersPress(block) || running}
+    <div
+      data-slot="row"
+      class="flex min-w-0 flex-wrap items-center gap-space-2"
+    >
+      {#if offersPress(block)}
+        <Button
+          disabled={!online}
+          failed={block.fix.phase === "failed" || refused !== null}
+          icon={IconDownload}
+          label={block.fix.phase === "failed" ? "Retry" : words.press(block)}
+          onclick={press}
+          pending={asking || running}
+          pendingLabel={words.pressing(block)}
+          size="sm"
+          variant="outline"
+        />
+      {/if}
+      {#if running}
+        <!-- The live dot breathes beside the words (Live work breathes); the words hold still. -->
+        <span
+          data-slot="progress"
+          class="mark-line flex min-w-0 items-start gap-space-2 type-meta text-ink-muted"
+          role="status"
+          ><span class="mark-cell"><LiveDot /></span><span class="min-w-0"
+            >{words.running(block)}</span
+          ></span
+        >
+      {/if}
+    </div>
+  {/if}
   {#if refused}
     <p
       data-slot="error"

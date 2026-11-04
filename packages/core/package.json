@@ -87,6 +87,7 @@
     "./words/decides": "./src/words/decides.ts",
     "./words/routines": "./src/words/routines.ts",
     "./words/leaks": "./src/words/leaks.ts",
+    "./words/tools": "./src/words/tools.ts",
     "./words/preview-ports": "./src/words/preview-ports.ts",
     "./words/loop": "./src/words/loop.ts",
     "./words/search": "./src/words/search.ts",

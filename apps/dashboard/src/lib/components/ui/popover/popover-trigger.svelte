@@ -21,6 +21,10 @@
    *   home's raised card.
    * - `meter`: the composer's context meter, a glyph and its figure;
    *   `data-warn`, `data-critical` and `data-compacting` take their inks.
+   * - `mark`: a status mark that opens what it reports (a tool's update
+   *   that didn't land, Configure → CLI tools): the mark drawn inside it is
+   *   its whole look, no fill of its own ("Needs you is a mark, never a
+   *   surface", DESIGN.md), and it scales on press as a compact control.
    */
   export const popoverTriggerVariants = tv({
     variants: {
@@ -34,6 +38,7 @@
           "press-tint flex h-c-btn-h-lg items-center rounded-sm px-space-3 text-start text-ink-strong transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
         "strip-home":
           "press-tint flex h-c-usage-strip-home-h items-center rounded-md px-space-4 text-start text-ink-strong transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover",
+        mark: "pressable inline-flex rounded-xs",
         meter:
           "mark-line flex h-c-bar-item items-center gap-space-2 rounded-sm px-space-2 text-ink-muted text-label tabular-nums transition-[background-color,color] duration-(--dur-control) ease-out hover:bg-surface-hover data-compacting:text-ink-strong data-critical:not-data-compacting:text-error-9 data-warn:not-data-critical:not-data-compacting:text-warning-9",
       },

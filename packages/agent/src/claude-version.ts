@@ -9,6 +9,7 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { claudeVersionPath } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { toolWords } from "@cawco/core/words/tools";
 import type { Subprocess } from "bun";
 import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "./auth";
 
@@ -183,12 +184,21 @@ export const claudeHostVersion = async (): Promise<
 };
 
 /**
- * The fix every refusal ends on: the press that runs Claude Code's own
- * updater on the machine (core TOOL_CATALOG's `claude`), wherever the
- * refusal stands in the dashboard (`ClaudeBlock`).
+ * The fix a refusal ends on when the machine's Claude Code said no version:
+ * the press that runs Claude Code's own updater on the machine (core
+ * TOOL_CATALOG's `claude`), wherever the refusal stands in the dashboard
+ * (`HarnessBlock`). With no version to compare, the hub sends no update of
+ * its own (hub tool-releases.ts `updatesOwed`).
  */
 const UPDATE_FIX =
   "Update Claude Code on this machine, and CawCo runs it again: nothing was started or signed in.";
+
+/**
+ * The fix a refusal of a copy older than the floor ends on: the hub sends
+ * the update itself, as it does for any copy older than Claude Code's newest
+ * release (hub tool-releases.ts), so there is nothing to press.
+ */
+const UPDATING_FIX = `${toolWords.updatesItself("Claude Code")}: nothing was started or signed in.`;
 
 /**
  * Why CawCo runs nothing of this machine's Claude Code, in one sentence;
@@ -206,7 +216,7 @@ export const versionRefusal = (
         return `Claude Code on this machine didn't say its version, so CawCo can't tell it is ${CLAUDE_VERSION_FLOOR} or newer, the oldest it runs. ${UPDATE_FIX}`;
       }
       return olderThan(version.value, CLAUDE_VERSION_FLOOR)
-        ? `Claude Code ${version.value} on this machine is older than ${CLAUDE_VERSION_FLOOR}, the oldest CawCo runs, because older ones can sign an account out when a sign-in refresh is cut short. ${UPDATE_FIX}`
+        ? `Claude Code ${version.value} on this machine is older than ${CLAUDE_VERSION_FLOOR}, the oldest CawCo runs, because older ones can sign an account out when a sign-in refresh is cut short. ${UPDATING_FIX}`
         : undefined;
     default:
       return version satisfies never;

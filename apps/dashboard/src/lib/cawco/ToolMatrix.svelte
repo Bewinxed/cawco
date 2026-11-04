@@ -2,6 +2,7 @@
   import { machineLabel } from "@cawco/core/machine-names";
   import type { ToolPolicy, ToolSpec } from "@cawco/core/tools";
   import { unhandled } from "@cawco/core/unhandled";
+  import { toolWords } from "@cawco/core/words/tools";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
@@ -46,10 +47,15 @@
   let policyRefused = $state<Record<string, string>>({});
   const cellKey = (machineId: string, toolId: string): string =>
     `${machineId}:${toolId}`;
+  /** Machines with a copy there: one being updated (a version beside its progress) still has it. */
   const installedOn = (spec: ToolSpec): number =>
-    machines.filter(
-      (machine) => machine.tools?.[spec.id]?.state === "installed"
-    ).length;
+    machines.filter((machine) => {
+      const tool = machine.tools?.[spec.id];
+      return (
+        tool?.state === "installed" ||
+        (tool?.state === "installing" && tool.version !== undefined)
+      );
+    }).length;
 
   async function install(machine: Machine, spec: ToolSpec) {
     const key = cellKey(machine.machineId, spec.id);
@@ -101,8 +107,13 @@
   {@const failed = cellKey(machine.machineId, spec.id) in refused}
   <!-- A copy there at a version CawCo doesn't run (older than its floor, or
        not its one version) is the probe's, and carries that version; an
-       attempt that failed carries none (agent tools.ts). -->
+       attempt that failed carries none (agent tools.ts), but on a tool CawCo
+       keeps current, whose failures keep the copy's version. -->
   {@const outdated = toolStatus?.state === "failed" && !!toolStatus.version}
+  <!-- CawCo keeps it at its newest release by itself (core ToolSpec.release:
+       Claude Code): no press updates it, and a failed update takes Retry. -->
+  {@const kept = spec.release !== undefined}
+  {@const where = machineLabel(machine.hostname)}
   <!-- The act that installs the tool on the machine: an outlined button, or
        a quiet ghost one beside a state that already says enough. -->
   {#snippet installAct(label: string, pendingLabel: string, quiet: boolean)}
@@ -119,9 +130,56 @@
     />
   {/snippet}
 
-  {#if shown === "installed"}
+  {#if shown === "installed" && toolStatus?.detail}
+    <!-- A copy an update left older than its newest release (core
+         ToolStatus.detail on installed): it still runs, so its version stays
+         in ink; beside it the Needs you mark (a mark, never a surface), a
+         button that opens why, in the updater's words, and Retry, the one
+         press it takes. -->
+    {@const head = toolWords.notUpdatedHead(
+      spec.name,
+      toolStatus.version ?? "",
+      where
+    )}
+    <span class="flex items-center gap-space-2">
+      <code data-slot="num" class="num type-code text-ink-strong"
+        >{toolStatus.version ?? "—"}</code
+      >
+      <Popover.Root>
+        <Popover.Trigger aria-label={head} look="mark">
+          <Badge size="cell" variant="attn">
+            <span>{toolWords.notUpdated}</span>
+          </Badge>
+        </Popover.Trigger>
+        <Popover.Content
+          align="start"
+          frame="panel-high"
+          pad="none"
+          width="widest"
+        >
+          <header
+            class="flex items-baseline gap-space-1 border-b border-border-hairline px-space-3 py-space-2"
+          >
+            <span class="type-label text-ink-strong">{head}</span>
+            {#if toolStatus.method}
+              <code class="ml-auto shrink-0 type-code text-ink-muted"
+                >{toolStatus.method}</code
+              >
+            {/if}
+          </header>
+          <pre
+            class="max-h-56 overflow-auto px-space-3 py-space-2 type-code whitespace-pre-wrap wrap-anywhere">{toolStatus.detail}</pre>
+          <footer class="border-t border-border-hairline px-space-3 py-space-2">
+            {@render installAct("Retry", toolWords.updating, false)}
+          </footer>
+        </Popover.Content>
+      </Popover.Root>
+    </span>
+  {:else if shown === "installed"}
     <!-- Installed is the quiet state: the check and the version in ink, no
-         chip (DESIGN.md, The Idle Has No Fill Rule's quiet row). -->
+         chip (DESIGN.md, The Idle Has No Fill Rule's quiet row). A tool
+         CawCo keeps current has no Reinstall: its own update is the one
+         path. -->
     <span class="flex items-center gap-space-2">
       <span
         class="mark-line inline-flex items-center gap-space-1 text-ink-strong"
@@ -131,17 +189,31 @@
           >{toolStatus?.version ?? "—"}</code
         >
       </span>
-      <span
-        class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 hover-hover:opacity-0"
-      >
-        {@render installAct("Reinstall", "Installing…", true)}
-      </span>
+      {#if !kept}
+        <span
+          class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 hover-hover:opacity-0"
+        >
+          {@render installAct("Reinstall", "Installing…", true)}
+        </span>
+      {/if}
     </span>
   {:else if shown === "installing"}
-    <Badge size="cell" tone="muted" variant="ghost">
-      <Spinner class="shrink-0" />
-      <span>Installing…</span>
-    </Badge>
+    <!-- An update keeps the copy's version in ink beside its progress. -->
+    <span class="flex items-center gap-space-2">
+      {#if toolStatus?.version}
+        <code data-slot="num" class="num type-code text-ink-strong"
+          >{toolStatus.version}</code
+        >
+      {/if}
+      <Badge size="cell" tone="muted" variant="ghost">
+        <Spinner class="shrink-0" />
+        <span
+          >{kept && toolStatus?.version
+            ? toolWords.updating
+            : "Installing…"}</span
+        >
+      </Badge>
+    </span>
   {:else if shown === "missing"}
     {@render installAct("Install", "Installing…", false)}
   {:else if shown === "failed"}
@@ -153,7 +225,7 @@
               {...props}
               aria-label="Why {spec.name} {outdated
                 ? `${toolStatus?.version} can't run`
-                : 'did not install'} on {machineLabel(machine.hostname)}"
+                : 'did not install'} on {where}"
               size="cell"
               variant="destructive"
             >
@@ -199,16 +271,16 @@
           {/if}
           <footer class="border-t border-border-hairline px-space-3 py-space-2">
             {@render installAct(
-              outdated ? "Update" : "Retry",
-              outdated ? "Updating…" : "Installing…",
+              outdated && !kept ? "Update" : "Retry",
+              outdated ? toolWords.updating : "Installing…",
               false
             )}
           </footer>
         </Popover.Content>
       </Popover.Root>
       {@render installAct(
-        outdated ? "Update" : "Retry",
-        outdated ? "Updating…" : "Installing…",
+        outdated && !kept ? "Update" : "Retry",
+        outdated ? toolWords.updating : "Installing…",
         true
       )}
     </span>
@@ -218,9 +290,7 @@
         {#snippet child({ props })}
           <Badge
             {...props}
-            aria-label="Why {spec.name} cannot run on {machineLabel(
-              machine.hostname
-            )}"
+            aria-label="Why {spec.name} cannot run on {where}"
             size="cell"
             tone="muted"
             variant="ghost"

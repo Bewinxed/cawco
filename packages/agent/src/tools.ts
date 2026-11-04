@@ -18,6 +18,7 @@ import type {
 } from "@cawco/core";
 import { olderThan, TOOL_CATALOG, toolRuns, toolSpec } from "@cawco/core";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { toolWords } from "@cawco/core/words/tools";
 import { expandHome } from "./fs";
 import { probeStarted } from "./probe-count";
 
@@ -128,14 +129,17 @@ const oneLine = (said: string | undefined): string =>
  * whatever short of `installed` a re-probe would say: `missing` is exactly
  * what the hub auto-installs, so without this every reconnect sends the same
  * doomed install out again; and a copy still too old reads as the attempt
- * that failed on it, in the installer's words, not as one nobody tried. Per
+ * that failed on it, in the installer's words, not as one nobody tried. An
+ * update that left a copy that runs older than the release it was after
+ * (core `ToolStatus.detail` on `installed`) is kept too, so its words stay
+ * on the row while the copy is where it left it ({@link probeReported}). Per
  * boot on purpose — restarting the daemon is a deliberate second try, and so
  * is a click.
  */
 const failures = new Map<string, ToolStatus>();
 
 const remember = (status: ToolStatus): ToolStatus => {
-  if (status.state === "installed") {
+  if (status.state === "installed" && status.detail === undefined) {
     failures.delete(status.id);
   } else {
     failures.set(status.id, status);
@@ -553,6 +557,16 @@ export const toolGate = async (spec: ToolSpec): Promise<ToolGate> => {
 };
 
 /**
+ * What comes next for a copy older than its tool's floor: one CawCo keeps at
+ * its newest release is updated with no press (hub tool-releases.ts) when it
+ * says a version to compare; any other is updated by a press, or by hand.
+ */
+const belowFloorNext = (spec: ToolSpec, version: string | undefined): string =>
+  spec.release && version
+    ? toolWords.updatingItself
+    : "Update it to put a newer one on.";
+
+/**
  * What this machine has of one tool. A binary that will not say its version is
  * still installed — presence is the question, and the version is what we can
  * add about it.
@@ -571,12 +585,12 @@ const probeTool = async (
   sawTool(spec.id, version ?? "unsaid");
   const method = at.method ? { method: at.method.label } : {};
   const where = copyWords(spec, at.path);
-  // A tool whose own updates CawCo rides runs at its floor or newer.
+  // A tool CawCo updates with its own updater runs at its floor or newer.
   if (spec.minVersion && !(version && !olderThan(version, spec.minVersion))) {
     return {
       id: spec.id,
       state: "failed",
-      detail: `${spec.bin} ${version ?? "of no version it will say"} is installed ${where.at}${at.method ? ` with ${at.method.label}` : ""}; CawCo runs ${spec.name} ${spec.minVersion} or newer. Update it to put a newer one on.${where.others}`,
+      detail: `${spec.bin} ${version ?? "of no version it will say"} is installed ${where.at}${at.method ? ` with ${at.method.label}` : ""}; CawCo runs ${spec.name} ${spec.minVersion} or newer. ${belowFloorNext(spec, version)}${where.others}`,
       ...(version ? { version } : {}),
       ...method,
       at: Date.now(),
@@ -624,22 +638,44 @@ export const probeTools = async (): Promise<ToolStatus[]> => {
 const installing = new Map<string, Promise<ToolStatus>>();
 const installEnded = new Map<string, number>();
 
-/** One catalog tool, as {@link probeTools} reports it. */
+/**
+ * One catalog tool, as {@link probeTools} reports it. An attempt's failure
+ * ({@link failures}) stands while the copy is where the attempt left it: one
+ * that kept the copy's version is gone once the copy says another (updated
+ * by hand, or by its own updater), and any is gone once the tool runs,
+ * except an update that left a copy that runs older than the release it was
+ * after, which stands until that copy moves.
+ */
 const probeReported = async (spec: ToolSpec): Promise<ToolStatus> => {
   const started = Date.now();
   let status = await probeTool(spec);
   if (installing.has(spec.id)) {
-    return { id: spec.id, state: "installing", at: Date.now() };
+    // The copy an update replaces keeps its version on the row while it runs.
+    return {
+      id: spec.id,
+      state: "installing",
+      ...(status.version ? { version: status.version } : {}),
+      at: Date.now(),
+    };
   }
   if ((installEnded.get(spec.id) ?? 0) >= started) {
     status = await probeTool(spec);
   }
+  const kept = failures.get(spec.id);
+  const moved = kept?.version !== undefined && kept.version !== status.version;
+  if (moved || (kept?.state === "installed" && status.state !== "installed")) {
+    failures.delete(spec.id);
+    return status;
+  }
   if (status.state === "installed") {
+    if (kept?.state === "installed") {
+      return kept;
+    }
     // Put right by hand since: the attempt's failure no longer stands.
     failures.delete(spec.id);
     return status;
   }
-  return failures.get(spec.id) ?? status;
+  return kept ?? status;
 };
 
 const eligible = (method: ToolInstallMethod): boolean =>
@@ -729,10 +765,18 @@ const failedWords = (
  * method that put it there, or not at all (`refusal`); with none here, the
  * first method this machine can run. What a method `needs` is never installed
  * here: a machine without it is told so ({@link noMethod}).
+ *
+ * `newest`: for a tool CawCo keeps at its newest release (core
+ * `ToolSpec.release`), the release the hub sent this install to reach. A
+ * copy that runs and is still older than it after the method answers
+ * `installed` with why, in the method's words (`toolWords.behind`), kept
+ * until that copy moves; a copy CawCo doesn't run keeps its version on the
+ * failure, so its row still says which copy is there.
  */
 const install = async (
   spec: ToolSpec,
-  version: string | undefined
+  version: string | undefined,
+  newest: string | undefined
 ): Promise<ToolStatus> => {
   const at = tracked(spec) ? await findCopy(spec) : undefined;
   let method = at?.method;
@@ -757,6 +801,24 @@ const install = async (
   const ran = await runMethod(spec, method, version);
   const probed = await probeTool(spec, version ?? spec.exactVersion);
   if (probed.state === "installed") {
+    if (
+      spec.release &&
+      newest &&
+      probed.version &&
+      olderThan(probed.version, newest)
+    ) {
+      return remember({
+        ...probed,
+        method: method.label,
+        detail: toolWords.behind(
+          method.label,
+          spec.name,
+          probed.version,
+          newest,
+          oneLine(ran.said)
+        ),
+      });
+    }
     return remember({ ...probed, method: method.label });
   }
   return remember({
@@ -764,6 +826,7 @@ const install = async (
     state: "failed",
     detail: failedWords(spec, method, ran, probed, version),
     method: method.label,
+    ...(spec.release && probed.version ? { version: probed.version } : {}),
     at: Date.now(),
   });
 };
@@ -774,11 +837,14 @@ const install = async (
  * answers with what the machine looks like afterwards. Every tool is probed
  * again for the hub then ({@link toolsMoved}). Never throws: a failure is a
  * {@link ToolStatus} carrying what the installer said, which is what the
- * dashboard shows and what the hub records.
+ * dashboard shows and what the hub records. `version` is the policy's pin;
+ * `newest`, for a tool CawCo keeps at its newest release, the release the
+ * hub sent it to reach ({@link install}).
  */
 export const installTool = async (
   id: string,
-  version?: string
+  version?: string,
+  newest?: string
 ): Promise<ToolStatus> => {
   const spec = toolSpec(id);
   if (!spec) {
@@ -796,11 +862,13 @@ export const installTool = async (
     return await running;
   }
   // A tool CawCo is built against goes on at its one version, whatever is pinned.
-  const work = install(spec, spec.exactVersion ?? version).finally(() => {
-    installing.delete(spec.id);
-    installEnded.set(spec.id, Date.now());
-    toolsMoved();
-  });
+  const work = install(spec, spec.exactVersion ?? version, newest).finally(
+    () => {
+      installing.delete(spec.id);
+      installEnded.set(spec.id, Date.now());
+      toolsMoved();
+    }
+  );
   installing.set(spec.id, work);
   return await work;
 };
@@ -845,7 +913,7 @@ export const putOnPins = async (
     if (before.state === "missing" || before.state === "installed") {
       continue;
     }
-    const after = await install(spec, version);
+    const after = await install(spec, version, undefined);
     if (after.state !== "installed") {
       throw new Error(
         `${spec.name} ${version}, which ${build} runs, did not go on${after.method ? ` with ${after.method}` : ""}: ${oneLine(after.detail)}`

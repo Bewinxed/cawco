@@ -993,6 +993,7 @@ import {
   mcpRefused,
   toolResultRefused,
 } from "./tool-call-keys";
+import { releaseTarget, ToolReleases, updatesOwed } from "./tool-releases";
 import { createTrackers, trackerRoutes } from "./tracker";
 import {
   createTranscripts,
@@ -1005,6 +1006,7 @@ import {
 import { createTreeStops } from "./tree-stops";
 import { turnUsageOf } from "./turn-usage";
 import { unwatchedMode } from "./unwatched-mode";
+import { TOOL_RELEASES } from "./upstreams";
 import { UsageCounter } from "./usage-count";
 import { createViews, viewRoutes } from "./views";
 import { createWaits } from "./waits";
@@ -2636,6 +2638,13 @@ const peekInstall = (payload: unknown): string | undefined => {
   const { args } = payload as { args?: unknown };
   const id = Array.isArray(args) ? args[0] : undefined;
   return typeof id === "string" ? id : undefined;
+};
+
+/** The version an install's `control` pins, when it pins one. */
+const peekInstallPin = (payload: unknown): string | undefined => {
+  const { args } = payload as { args?: unknown };
+  const pin = Array.isArray(args) ? args[1] : undefined;
+  return typeof pin === "string" ? pin : undefined;
 };
 
 /** A `control` asking a machine to delete a transcript, and the session it names. */
@@ -10574,10 +10583,12 @@ export const createServer = (
    * Installs somebody is waiting on, by `requestId`: what keeps a machine from
    * being sent the same install twice while the first is still running, and
    * what tells a `control_result` that it is carrying a tool's status.
+   * `newest`: the release an install of a tool CawCo keeps current was sent
+   * to reach (tool-releases.ts), which its answer settles for that machine.
    */
   const pendingInstalls = new Map<
     string,
-    { machineId: string; toolId: string }
+    { machineId: string; newest?: string; toolId: string }
   >();
   /**
    * Transcript deletes somebody is waiting on, by `requestId`: when the
@@ -20701,29 +20712,127 @@ export const createServer = (
       if (awaitingInstall(machineId, policy.id)) {
         continue;
       }
-
-      const requestId = crypto.randomUUID();
-      const payload: ControlPayload = {
-        requestId,
-        method: "installTool",
-        args: [policy.id, policy.pinnedVersion ?? undefined],
-      };
-      pendingInstalls.set(requestId, { machineId, toolId: policy.id });
-      sendFrame(agent, {
-        verb: "control",
-        machineId,
-        payload,
-      } satisfies Envelope<ControlPayload>);
-      db.setAgentToolCell(machineId, {
-        id: policy.id,
-        state: "installing",
-        at: Date.now(),
+      sendInstall(machineId, agent, {
+        toolId: policy.id,
+        pin: policy.pinnedVersion ?? undefined,
+        newest: installTarget(policy.id, policy.pinnedVersion),
       });
+      sent = true;
+    }
+    if (keepCurrent(machineId, agent, cells)) {
       sent = true;
     }
     if (sent) {
       publishInstances(machineId);
     }
+  };
+
+  /**
+   * The newest release of each CLI CawCo keeps current on every machine
+   * (core `ToolSpec.release`: Claude Code), read as the hub starts and every
+   * 30 minutes (tool-releases.ts); after each read, every online machine is
+   * sent what it is owed ({@link keepCurrent}, through `autoInstall`).
+   */
+  const toolReleases = new ToolReleases({
+    urls: TOOL_RELEASES,
+    lifetime,
+    name: (toolId) => toolSpec(toolId)?.name ?? toolId,
+    read: () => {
+      for (const machineId of registry.machineIds()) {
+        const agent = registry.agent(machineId);
+        if (agent) {
+          autoInstall(machineId, agent);
+        }
+      }
+    },
+  });
+  offBoot.push(() => toolReleases.start());
+
+  /**
+   * The release an install of `toolId` is sent to reach: its newest, for a
+   * tool CawCo keeps current that the policy pins to no version
+   * (tool-releases.ts `releaseTarget`); none for any other. The machine
+   * answers a copy left older than it with why (agent tools.ts `install`).
+   */
+  const installTarget = (
+    toolId: string,
+    pinned: string | null | undefined
+  ): string | undefined => {
+    const spec = toolSpec(toolId);
+    return spec && !pinned
+      ? releaseTarget(spec, toolReleases.newest(toolId))
+      : undefined;
+  };
+
+  /**
+   * Sends the machine one install of the hub's own (a required tool it is
+   * missing, an update it is owed): its cell reads `installing`, with the
+   * version of the copy being updated, until the machine answers, and the
+   * answer is the cell (the `pendingInstalls` path). The caller publishes.
+   */
+  const sendInstall = (
+    machineId: string,
+    agent: HubSocket,
+    install: { newest?: string; pin?: string; toolId: string; version?: string }
+  ): void => {
+    const requestId = crypto.randomUUID();
+    pendingInstalls.set(requestId, {
+      machineId,
+      toolId: install.toolId,
+      ...(install.newest ? { newest: install.newest } : {}),
+    });
+    sendFrame(agent, {
+      verb: "control",
+      machineId,
+      payload: {
+        requestId,
+        method: "installTool",
+        args: [install.toolId, install.pin, install.newest],
+      },
+    } satisfies Envelope<ControlPayload>);
+    db.setAgentToolCell(machineId, {
+      id: install.toolId,
+      state: "installing",
+      ...(install.version ? { version: install.version } : {}),
+      at: Date.now(),
+    });
+  };
+
+  /**
+   * Sends the machine an update of each CLI CawCo keeps current whose copy
+   * there says a version older than its newest release (tool-releases.ts
+   * `updatesOwed`): the catalog's install, which runs the copy's own updater
+   * there, with no press. A machine the owner paused is sent none: nothing
+   * CawCo starts runs there until the pause ends, and the first read or
+   * report after it sends it. Answers whether any was sent.
+   */
+  const keepCurrent = (
+    machineId: string,
+    agent: HubSocket,
+    cells: Record<string, ToolStatus>
+  ): boolean => {
+    if (machinePause.until(machineId) !== undefined) {
+      return false;
+    }
+    const owed = updatesOwed(
+      {
+        cells,
+        inFlight: (toolId) => awaitingInstall(machineId, toolId),
+        tried: (toolId) => toolReleases.tried(machineId, toolId),
+      },
+      {
+        catalog: TOOL_CATALOG,
+        newest: (toolId) => toolReleases.newest(toolId),
+        policies: db.listToolPolicies(),
+      }
+    );
+    for (const update of owed) {
+      console.info(
+        `[hub] updating ${toolSpec(update.toolId)?.name ?? update.toolId} ${update.version} on ${machineName(machineId)} to ${update.newest}`
+      );
+      sendInstall(machineId, agent, update);
+    }
+    return owed.length > 0;
   };
 
   /**
@@ -20741,7 +20850,12 @@ export const createServer = (
       return Promise.resolve({ kind: "unanswered", reason: "dead", after: 0 });
     }
     const requestId = crypto.randomUUID();
-    pendingInstalls.set(requestId, { machineId, toolId });
+    const newest = installTarget(toolId, undefined);
+    pendingInstalls.set(requestId, {
+      machineId,
+      toolId,
+      ...(newest ? { newest } : {}),
+    });
     db.setAgentToolCell(machineId, {
       id: toolId,
       state: "installing",
@@ -20755,7 +20869,7 @@ export const createServer = (
         payload: {
           requestId,
           method: "installTool",
-          args: [toolId],
+          args: [toolId, undefined, newest],
         },
       } satisfies Envelope<ControlPayload>;
       sendFrame(agent, frame);
@@ -23513,21 +23627,40 @@ export const createServer = (
       }
     }
     const requestId = message.requestId ?? message.payload.requestId;
-    const correlated = { ...message, requestId };
+    // A press that installs a tool CawCo keeps current carries the release it
+    // is to reach, as the hub's own updates do (`installTarget`): a copy its
+    // updater leaves older answers why, and keeps its Retry.
+    const toolId = peekInstall(message.payload);
+    const pin = toolId ? peekInstallPin(message.payload) : undefined;
+    const newest = toolId ? installTarget(toolId, pin) : undefined;
+    const correlated = {
+      ...message,
+      requestId,
+      ...(toolId && newest
+        ? {
+            payload: {
+              ...message.payload,
+              args: [toolId, pin, newest],
+            },
+          }
+        : {}),
+    };
     if (!forward(correlated, dashboard, replyAsFrame)) {
       return false;
     }
     // A per-cell install or retry, clicked rather than swept: the chip
     // turns on every dashboard, not only the one that clicked it.
-    const toolId = peekInstall(message.payload);
     if (toolId && requestId) {
       pendingInstalls.set(requestId, {
         machineId: message.machineId,
         toolId,
+        ...(newest ? { newest } : {}),
       });
+      const updated = db.agentTools(message.machineId)[toolId]?.version;
       db.setAgentToolCell(message.machineId, {
         id: toolId,
         state: "installing",
+        ...(updated ? { version: updated } : {}),
         at: Date.now(),
       });
       publishInstances(message.machineId);
@@ -35931,6 +36064,10 @@ export const createServer = (
               console.info(
                 `[hub] machine ${message.machineId} registered from ${from ?? "an unknown address"}`
               );
+              // A copy an update left older is sent it once more: the agent
+              // may be a new process, which remembers no failure of the old
+              // one's (tool-releases.ts `connected`).
+              toolReleases.connected(message.machineId);
               // Its canvases' stages are reachable again: no doc says otherwise.
               artifacts.machineBack(message.machineId);
               // Its folder previews' folders read, never started.
@@ -38306,6 +38443,16 @@ export const createServer = (
                 : undefined;
               if (install && kind === "control_result" && message.requestId) {
                 pendingInstalls.delete(message.requestId);
+                // The release it was sent to reach is settled for this
+                // machine, landed or not: a copy left older says why on its
+                // row, and is sent no other until a newer release.
+                if (install.newest) {
+                  toolReleases.answered(
+                    message.machineId,
+                    install.toolId,
+                    install.newest
+                  );
+                }
                 const status = peekToolStatus(message.payload);
                 if (status) {
                   db.setAgentToolCell(message.machineId, status);

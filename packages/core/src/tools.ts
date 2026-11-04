@@ -90,13 +90,24 @@ export interface ToolSpec {
   /** Ordered by preference. Empty for a platform = unsupported there. */
   install: ToolInstallMethod[];
   /**
-   * The oldest version CawCo runs, for a tool whose own updates CawCo rides
-   * (Claude Code updates itself): a copy older than it is reported `failed`
-   * with why, and an install brings it to this version or newer.
+   * The oldest version CawCo runs, for a tool CawCo updates with the tool's
+   * own updater (`claude update`, `pi update`): a copy older than it is
+   * reported `failed` with why, and an install brings it to this version or
+   * newer.
    */
   minVersion?: string;
   /** What the dashboard calls it. */
   name: string;
+  /**
+   * Where the tool's newest release is said, for a tool CawCo keeps at its
+   * newest release on every machine that has it (hub tool-releases.ts): a
+   * URL whose body's first `x.y.z` is that release. The hub reads it and
+   * sends each machine whose copy is older an install, which runs the
+   * copy's own updater ({@link ToolSpec.install}'s first method), so no
+   * press is needed; an update that leaves the copy older says why on its
+   * row.
+   */
+  release?: string;
   /** Set on no tool; declared for installable apps only, as {@link ToolInstallMethod.native} is. */
   requires?: ToolRequirement[];
   /** Probe for the version; the first `x.y.z` in its output is the answer. */
@@ -120,13 +131,24 @@ export interface ToolStatus {
   /**
    * `failed`: the tail of the installer's stderr. `unsupported`: what is
    * missing, named exactly — 'needs npm (Node 20+)' beats a grey chip.
+   * `installed`: set only on a tool CawCo keeps at its newest release
+   * ({@link ToolSpec.release}), when the last update it ran here left the
+   * copy older than the release it was after: why, in the updater's words.
+   * The copy still runs; the update is owed until a newer release, a Retry,
+   * or the copy moving some other way.
    */
   detail?: string;
   id: string;
   /** The {@link ToolInstallMethod.label} that installed it or failed trying. */
   method?: string;
   state: ToolState;
-  /** Set when `installed`. */
+  /**
+   * The version the copy here says: on `installed`; on `failed`, a copy
+   * CawCo does not run (older than its floor, or not its one version), or,
+   * for a tool CawCo keeps at its newest release, the copy an update that
+   * failed left there; on `installing`, the copy being updated. An attempt
+   * that failed on any other tool carries none.
+   */
   version?: string;
 }
 
@@ -212,18 +234,31 @@ export const TOOL_CATALOG: ToolSpec[] = [
     bin: "claude",
     versionCommand: "claude --version",
     minVersion: CLAUDE_VERSION_FLOOR,
+    // The release channel Claude Code's own updater reads: 2.1.311's bundle
+    // has `var Ie="https://downloads.claude.ai/claude-code-releases"` and
+    // asks `${Ie}/${channel}`, `latest` by default (read 2026-11-04; the
+    // body is the version alone, "2.1.318"). Its updater never runs in the
+    // sessions CawCo starts: it is the interactive REPL's footer
+    // (`AutoUpdaterWrapper`, on mount and `Pa(()=>void z(),1800000)`), and a
+    // process whose stdout is no terminal is not interactive (`return
+    // n||t||o||!process.stdout.isTTY`), which every SDK process under
+    // sessiond is. So CawCo runs it, whenever this says a newer release.
+    release: "https://downloads.claude.ai/claude-code-releases/latest",
     // The native installer's link (code.claude.com/docs/en/setup), for a
     // daemon whose PATH lacks it.
     wellKnownPaths: ["~/.local/bin/claude"],
     // No footprints: whatever put Claude Code here, its own updater is asked
     // first, as the machine's user and with no sudo ("To apply an update
     // immediately without waiting for the next background check, run:
-    // claude update", code.claude.com/docs/en/setup, read 2026-10-22). The
-    // same page: "Installs managed by Homebrew, WinGet, or apk report `Claude
-    // is up to date!` instead", so the version is read again after it and a
-    // copy still below the floor fails with what the updater said. A machine
-    // without one gets the official installer, which puts the newest build in
-    // ~/.local/bin, or the build a pin names ("curl -fsSL
+    // claude update", code.claude.com/docs/en/setup, read 2026-11-04). It
+    // keeps the person's channel and pins ("Control which release channel
+    // Claude Code follows for auto-updates and `claude update` with the
+    // `autoUpdatesChannel` setting", the same page). The same page:
+    // "Installs managed by Homebrew, WinGet, or apk report `Claude is up to
+    // date!` instead", so the version is read again after it, and a copy
+    // left older than the release it was after says what the updater said.
+    // A machine without one gets the official installer, which puts the
+    // newest build in ~/.local/bin, or the build a pin names ("curl -fsSL
     // https://claude.ai/install.sh | bash -s 2.1.89", the same page).
     install: [
       {

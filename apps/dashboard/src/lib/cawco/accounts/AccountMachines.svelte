@@ -18,10 +18,11 @@
    * the popover again, on the link or code the hub kept.
    *
    * A machine whose Claude Code CawCo refuses (too old, or none) offers no
-   * sign-in that can't succeed: the popover holds why and Update Claude Code
-   * in its place (HarnessBlock), the row says so, and an update in flight
-   * parks on the row. Once it lands the popover offers the sign-in, saying
-   * which Claude Code is there now.
+   * sign-in that can't succeed: the popover holds why in its place
+   * (HarnessBlock: Install Claude Code with none there; with one too old,
+   * the update CawCo runs by itself, and Retry once it failed), the row says
+   * so, and an update in flight parks on the row. Once it lands the popover
+   * offers the sign-in, saying which Claude Code is there now.
    */
   import type { Account } from "@cawco/core/accounts";
   import { accountsWords as words } from "@cawco/core/words/accounts";

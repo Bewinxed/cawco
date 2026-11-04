@@ -1209,9 +1209,9 @@
   /**
    * This session's start was refused for its machine's harness CLI
    * (harness-block.svelte.ts): the refusal stands over the field with its
-   * fix (Update Claude Code, Update pi, Install OpenCode 2.0.29), and once
-   * that lands the session starts again with nothing more to press
-   * (`relaunchUnblocked`).
+   * fix (Update pi, Install OpenCode 2.0.29; Claude Code's own update, which
+   * CawCo runs by itself), and once that lands the session starts again with
+   * nothing more to press (`relaunchUnblocked`).
    */
   const harnessStart = $derived.by(() => {
     const row = failedRow;

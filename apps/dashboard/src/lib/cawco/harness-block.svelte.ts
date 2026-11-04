@@ -21,6 +21,7 @@ import {
   toolRuns,
   toolSpec,
 } from "@cawco/core/tools";
+import { toolWords } from "@cawco/core/words/tools";
 import { z } from "zod";
 import { HarnessKindSchema } from "#lib/cawco/stored-shapes.js";
 import {
@@ -106,7 +107,7 @@ export function harnessBlockOf(
       kind === "not-installed"
         ? `${spec.name} isn't installed on ${name}, so CawCo can't start ${spec.name} sessions${harness === "claude" ? " or sign an account in" : ""} there. Install ${spec.name}, and CawCo runs it as soon as it's on.`
         : (report.authReason ??
-          `${spec.name}${report.version ? ` ${report.version}` : ""} on ${name} isn't one CawCo runs. ${harnessWords.press({ kind, spec })} on this machine, and CawCo runs it again.`),
+          `${spec.name}${report.version ? ` ${report.version}` : ""} on ${name} isn't one CawCo runs. ${keptCurrent(spec) ? `${toolWords.updatesItself(spec.name)}.` : `${harnessWords.press({ kind, spec })} on this machine, and CawCo runs it again.`}`),
     fix: fixOf(spec, tool),
   };
 }
@@ -126,12 +127,27 @@ export const machineBlocksOf = (machine: Machine): HarnessBlock[] =>
     (block) => block.harness === "claude" || block.kind === "version"
   );
 
-/** Where the fix stands, off the hub's cell: an attempt's failure carries no version (agent tools.ts `install`). */
+/**
+ * Whether CawCo keeps the harness's CLI at its newest release by itself
+ * (core `ToolSpec.release`: Claude Code): the hub sends each machine whose
+ * copy is older its update, so its block offers no press until one failed.
+ */
+const keptCurrent = (spec: ToolSpec): boolean => spec.release !== undefined;
+
+/**
+ * Where the fix stands, off the hub's cell. An attempt's failure carries no
+ * version (agent tools.ts `install`), except on a CLI CawCo keeps current,
+ * whose every failure keeps its copy's version and stands as the update's
+ * own: the hub updates such a copy as soon as its probe says it is older.
+ */
 const fixOf = (spec: ToolSpec, tool: ToolStatus | undefined): HarnessFix => {
   if (tool?.state === "installing") {
     return { phase: "running" };
   }
-  if (tool?.state === "failed" && tool.version === undefined) {
+  if (
+    tool?.state === "failed" &&
+    (tool.version === undefined || keptCurrent(spec))
+  ) {
     return {
       phase: "failed",
       said: tool.detail ?? "The machine didn't say why.",
@@ -149,6 +165,16 @@ const fixOf = (spec: ToolSpec, tool: ToolStatus | undefined): HarnessFix => {
 /** Installs it, rather than updating it: none there, or a tool CawCo runs at one version only. */
 const installs = (block: Pick<HarnessBlock, "kind" | "spec">): boolean =>
   block.kind === "not-installed" || block.spec.exactVersion !== undefined;
+
+/**
+ * Whether the block offers its press: always, but for a CLI CawCo keeps
+ * current that is there, which CawCo updates by itself and which takes the
+ * press (Retry) only once that update failed.
+ */
+export const offersPress = (block: HarnessBlock): boolean =>
+  block.kind === "not-installed" ||
+  !keptCurrent(block.spec) ||
+  block.fix.phase === "failed";
 
 /** A block's words for the press, its progress and its outcome. */
 export const harnessWords = {
@@ -228,15 +254,34 @@ export async function fixHarness(
   harness: HarnessKind,
   relaunch?: string
 ): Promise<Bounded<ToolStatus>> {
+  followHarness(machineId, harness, relaunch);
+  return await installTool(machineId, HARNESS_TOOL[harness]);
+}
+
+/**
+ * This tab follows the harness on the machine until it runs there: each
+ * surface says the outcome once it lands, and `relaunch`, a session whose
+ * refused start goes again then. A press follows it ({@link fixHarness});
+ * so does a block that takes none while CawCo updates the CLI by itself
+ * (`HarnessBlock`). Writes only what is not followed yet.
+ */
+export function followHarness(
+  machineId: string,
+  harness: HarnessKind,
+  relaunch?: string
+): void {
   const key = keyOf(machineId, harness);
   if (!followed.value.brought.includes(key)) {
     followed.value.brought.push(key);
   }
-  if (relaunch) {
+  const waiting = relaunch ? followed.value.relaunch[relaunch] : undefined;
+  if (
+    relaunch &&
+    !(waiting?.harness === harness && waiting.machineId === machineId)
+  ) {
     followed.value.relaunch[relaunch] = { harness, machineId };
     delete followed.value.refused[relaunch];
   }
-  return await installTool(machineId, HARNESS_TOOL[harness]);
 }
 
 /**

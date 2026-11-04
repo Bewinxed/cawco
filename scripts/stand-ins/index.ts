@@ -27,6 +27,12 @@ export interface StandIns {
    * between two of its asks of Jev, in ms (hub project-starters.ts).
    */
   startersPace?: { gap: number; quiet: number };
+  /**
+   * Where the hub reads each kept CLI's newest release, by tool id (hub
+   * upstreams.ts `TOOL_RELEASES`): a spec's own server. None by default, so
+   * a scratch fleet's hub sends no machine an update of its own.
+   */
+  toolReleases?: Record<string, string>;
 }
 
 /** The stand-ins this process was handed; none outside a scratch fleet. */
