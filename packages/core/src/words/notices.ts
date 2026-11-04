@@ -102,6 +102,11 @@ export const noticeWords = {
     answered: "Told you their answer",
     dismissed: "Told you they dismissed it",
   } satisfies Record<AskOutcome, string>,
+  /**
+   * A question's answer told to the session, with the answers given, in
+   * the order asked: what the person reads of it in the conversation.
+   */
+  askAnsweredWith: (answers: string) => `Your answer: ${answers}`,
 };
 
 /** What a notice is about, without its live state: the line written where it was made, else its kind's. */

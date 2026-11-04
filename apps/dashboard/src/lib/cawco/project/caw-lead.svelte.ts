@@ -26,6 +26,7 @@
  * panel says it too (project-caps.ts in the hub).
  */
 
+import { bringIntoView } from "@cawco/core/bring-into-view";
 import type { HarnessKind } from "@cawco/core/harness";
 import {
   CAW_NO_MACHINE,
@@ -47,6 +48,7 @@ import {
   configureCaw,
   type ProjectRow,
 } from "../client.svelte";
+import { minimizedAsks } from "../minimized-asks.svelte";
 import { dur } from "../motion/curves.svelte";
 import { msOf } from "../motion/time";
 import type { TaskSummary } from "../project-tasks";
@@ -204,6 +206,53 @@ export class CawLead {
   ask(text: string, place: StarterPlace): void {
     this.draft.press(text, place);
     this.open = true;
+  }
+
+  /**
+   * His open questions, brought to the person (the draft bar's Answer
+   * Caw): his panel open on his conversation, any question minimized there
+   * standing up again, and the keys in the first one's options, so a digit
+   * answers it. With his panel already open it still does all of that.
+   */
+  async answerAsks(): Promise<void> {
+    this.tab = "assistant";
+    this.open = true;
+    for (const one of this.asks) {
+      minimizedAsks.set(one.request.requestId, false);
+    }
+    // The card stands up over his composer before the keys can go to it.
+    for (let tries = 0; tries < 90; tries += 1) {
+      await new Promise((done) => requestAnimationFrame(done));
+      const option = document.querySelector<HTMLElement>(
+        '[data-caw-panel] [data-slot="option-group"] [tabindex="0"]'
+      );
+      // A card still folding back up is inert: the focus takes only once
+      // it stands.
+      option?.focus();
+      if (option && document.activeElement === option) {
+        return;
+      }
+    }
+  }
+
+  /**
+   * The draft on the board, from his setup element (Review the draft): on a
+   * phone his sheet goes down, since it stands over the board; then the
+   * keys go to the draft bar's act (Set up, or Answer Caw), in view.
+   */
+  async reviewDraft(): Promise<void> {
+    if (matchMedia("(width < 640px)").matches) {
+      this.open = false;
+    }
+    await new Promise((done) => requestAnimationFrame(done));
+    const act = document.querySelector<HTMLElement>(
+      '[data-slot="draft-bar"] button'
+    );
+    const bar = act?.closest<HTMLElement>('[data-slot="draft-bar"]');
+    if (bar) {
+      bringIntoView(bar);
+    }
+    act?.focus({ preventScroll: true });
   }
 
   /**

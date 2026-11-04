@@ -24,6 +24,8 @@
   import type { Component } from "svelte";
   import { cawLoop } from "#lib/cawco/feel.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
+  import { takeHandOff } from "#lib/cawco/transcript/Prompt.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import {
@@ -42,8 +44,11 @@
   let {
     progress,
     status,
+    onreview,
   }: {
     progress: SetupProgress;
+    /** The draft stands on the board (way `board`): the person goes to it. */
+    onreview?: () => void;
     /** His status as the page has it (CawLead `status`): working while he drafts, needs you while a question holds him. */
     status: CawStatus;
   } = $props();
@@ -72,9 +77,13 @@
   data-tx-rail
   class="tx-columns rail-row max-w-c-measure"
 >
-  <div class="rail-hang" data-box>
-    <Caw size={80} still={!cawLoop.on} {status} />
-  </div>
+  <!-- He stands here while he works; handed over, he is back in his seat
+       (one live Caw), and the element stays as the record of what he did. -->
+  {#if !handedOver(progress)}
+    <div class="rail-hang" data-box>
+      <Caw size={80} still={!cawLoop.on} {status} />
+    </div>
+  {/if}
   <p
     aria-live="polite"
     class="m-0 min-h-(--tx-line) rail-line text-size-label font-medium text-ink-strong"
@@ -108,4 +117,24 @@
       {/each}
     </ThinkingSteps>
   </div>
+  {#if progress.phase === "board" && onreview}
+    <!-- The last answer was given from its card: the focus it left comes
+         here, the next step. -->
+    <div
+      class="rail-hang pt-space-2"
+      data-hand-off
+      {@attach (node: HTMLElement) => {
+        if (takeHandOff()) {
+          node.querySelector("button")?.focus();
+        }
+      }}
+    >
+      <Button
+        label={setupWords.reviewDraft}
+        onclick={onreview}
+        size="sm"
+        variant="outline"
+      />
+    </div>
+  {/if}
 </section>

@@ -31,6 +31,8 @@ related_targets: []
 
 **Caw's questions.** The house ask card over his composer on every width; after an answer the next card takes the focus, so a digit answers it; the question's own line is never faded by the body's edge mask while the body does not scroll.
 
+**Round 3 (cold review 78bedc47).** An answer to Caw reaches his conversation as the hub's CawCo notice, titled with the answers themselves ("Your answer: A renewal", core `askAnsweredTitle`). His setup element stays after the hand-over, every step ticked, with Review the draft, which takes the focus the last answer left. A question's count holds through a minimise. Answer Caw opens his panel, stands a minimized question up again and puts the keys in its options. A stage's menu keeps its second levels (Kind; Glyph and colour) in place under a Back row, widening to the screen on a phone; a stage that needs you offers no look. The draft bar holds still; what is for and the stages scroll under it to the page's edges, faded only while they run past (motion/fade-runs). Cards are as tall as their words on a phone. An empty board just set up keeps its room on a phone.
+
 **P0/P1 backlog:** the critique snapshot of 2026-11-04 (21/40; 2 P0, 4 P1) and the two cold reviews 231ba45d and 3c75c466 (all fixed on the branch, `design-run.md`).
 
 ## Direction contract

@@ -133,6 +133,16 @@
         : undefined}
       height="cap"
       modal={false}
+      onOpenAutoFocus={(event: Event) => {
+        // The sheet takes the focus itself, not its first button: a
+        // programmatic focus on "Caw" drew the ring on him as the sheet
+        // opened, a selected chip to the eye (cold review 78bedc47). A
+        // screen reader still lands in the sheet; Tab goes on from there.
+        event.preventDefault();
+        (event.currentTarget as HTMLElement | null)?.focus({
+          focusVisible: false,
+        } as FocusOptions);
+      }}
       ownHead
       pad="none"
       title={`Caw, ${projectName}`}

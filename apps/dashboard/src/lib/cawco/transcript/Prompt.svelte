@@ -6,6 +6,21 @@
    * card, never on a page's load.
    */
   let handOn = false;
+  /** When the last such answer was given. */
+  let handedAt = 0;
+  /** How long an answer's hand-off waits for what takes the focus next. */
+  const HAND_OFF_MS = 15_000;
+
+  /**
+   * The focus an answer from a card left with nowhere to go, taken by what
+   * comes next instead of a card (a setup element's Review the draft): true
+   * once, within {@link HAND_OFF_MS} of the answer.
+   */
+  export function takeHandOff(): boolean {
+    const fresh = handOn && Date.now() - handedAt < HAND_OFF_MS;
+    handOn = false;
+    return fresh;
+  }
 </script>
 
 <script lang="ts">
@@ -33,6 +48,8 @@
    */
   import { tick, untrack } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
+  import { dur } from "#lib/cawco/motion/curves.svelte.js";
+  import { fadeRuns } from "#lib/cawco/motion/fade-runs.svelte.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -264,6 +281,25 @@
       handOn = false;
       focusQuestion(0);
     }
+  });
+
+  // Answered from inside and gone with no card after it: the focus goes to
+  // the next step standing on the page (`data-hand-off`, a setup element's
+  // Review the draft), once a next card has had its moment to take it.
+  $effect(() => () => {
+    setTimeout(() => {
+      const next = document.querySelector<HTMLElement>(
+        "[data-hand-off] button"
+      );
+      if (
+        handOn &&
+        next &&
+        !document.querySelector('[data-slot="option-group"]')
+      ) {
+        handOn = false;
+        next.focus();
+      }
+    }, dur("--dur-grow-exit"));
   });
 
   /**
@@ -518,6 +554,7 @@
     }
     pressed = "answer";
     handOn = !!card?.contains(document.activeElement);
+    handedAt = Date.now();
     commandId = onanswer(questionAnswer(input, answers));
   }
 
@@ -528,6 +565,7 @@
     }
     pressed = "deny";
     handOn = !!card?.contains(document.activeElement);
+    handedAt = Date.now();
     commandId = onanswer(questionDismissal);
   }
 
@@ -818,10 +856,15 @@
          shrink below its words' longest run, which then wraps
          (`overflow-wrap` on the lede and the labels) rather than pushing
          past the card. -->
+    <!-- Under a finger its padding holds the last row's touch areas
+         (touch-hit's reach past a 30px chip), which otherwise ran a pixel
+         past the box and drew a scrollbar beside the options. -->
     <div
+      {@attach fadeRuns}
       data-slot="body"
-      class="group/body kit-edge-fade-block relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="group/body kit-edge-fade-block relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain coarse:pb-(--hit-reach) opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       data-railed={questions.length > 1 || undefined}
+      style:--hit-reach="calc((var(--c-touch-floor) - var(--c-btn-h-sm)) / 2)"
       style:--part="1"
       style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >

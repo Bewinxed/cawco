@@ -1,7 +1,21 @@
 <script lang="ts">
+  import {
+    ASK_ORIGIN,
+    type AskRecord,
+    askAnsweredText,
+    askOutcome,
+  } from "@cawco/core/asks";
+  import { detach } from "@cawco/core/detach";
   import type { PulseFrame } from "@cawco/core/frames";
+  import {
+    CAWCO_NOTICE,
+    type PermissionResult,
+    type UserAnswers,
+    type UserQuestion,
+  } from "@cawco/core/harness";
   import type { InstanceRow } from "@cawco/core/protocol";
   import type { Stage as BoardStage } from "@cawco/core/task-views";
+  import { askAnsweredTitle } from "@cawco/core/transcript-rules";
   import { projectWords } from "@cawco/core/words/project";
   /**
    * ONBOARDING BENCH (dev only): a project's page in its first minutes and
@@ -49,10 +63,7 @@
     PR_STAGES,
     SETUP_CALLS,
   } from "#lib/cawco/project/setup.fixtures.js";
-  import {
-    handedOver,
-    setupProgressOf,
-  } from "#lib/cawco/project/setup-progress.js";
+  import { setupProgressOf } from "#lib/cawco/project/setup-progress.js";
   import { firstTodoStage } from "#lib/cawco/project-tasks.js";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
   import type { Message } from "#lib/cawco/types.js";
@@ -146,6 +157,12 @@
   );
   /** What he calls once drafted: the board way's draft is the board, so no page of his opens. */
   const drafted = way === "board" ? SETUP_CALLS.named : SETUP_CALLS.page;
+  /** His words as he hands the draft over (the board way): where it is, and what is next. */
+  const handed = said(
+    "handed",
+    "assistant",
+    "The draft is on the board: eight stages from Inbox to Done, the researcher on Researching and the writer on Drafted. Change any stage there, or tell me what to change. Set it up once it reads right."
+  );
   /** His words once it is set up, counting the stages it was set up with. */
   const doneOf = (stages: number) =>
     said(
@@ -168,7 +185,13 @@
       first,
       ...SETUP_CALLS.named.slice(1),
     ],
-    page: [sent, ...drafted.slice(0, 1), first, ...drafted.slice(1)],
+    page: [
+      sent,
+      ...drafted.slice(0, 1),
+      first,
+      ...drafted.slice(1),
+      ...(way === "board" ? [handed] : []),
+    ],
     set: [sent, ...drafted.slice(0, 1), first, ...drafted.slice(1), done],
     "first-run": [],
   };
@@ -251,7 +274,14 @@
         state: "open",
       };
     }
-    pulse(beat === "set" || beat === "page" ? "idle" : "working");
+    // Held on a question with nothing else to do, he has ended his turn
+    // (core asks.ts `askQuestionWords`): at rest, so his composer offers
+    // Send, not Stop.
+    pulse(
+      beat === "set" || beat === "page" || beat === "questions"
+        ? "idle"
+        : "working"
+    );
   }
 
   /** His pulse, as the hub frames it: at work, or idle. */
@@ -272,19 +302,74 @@
 
   // The bench's hub: the page stands on it (no socket, so no band says the
   // hub is out of reach), and it answers the page's commands as the hub
-  // would. An answer to one of his questions takes it off his queue; once
-  // none holds him, he writes the rest of the draft, a stage a beat, and
-  // hands it over.
+  // does (hub asks.ts): an answer to one of his questions takes it off his
+  // queue and reaches his conversation as CawCo's notice, its text the
+  // hub's own (core asks.ts `askAnsweredText`, title "Told you their
+  // answer"), which wakes him. Once none holds him, he writes the rest of
+  // the draft, a stage a beat, and hands it over in words of his.
   const STAGE_BEAT_MS = 900;
   let writing: ReturnType<typeof setInterval> | undefined;
-  function answered(requestId: string) {
+  function answered(requestId: string, result: PermissionResult) {
     const session = debug.state.sessions[ID];
-    if (!session) {
+    const parked = session?.pending.find((one) => one.requestId === requestId);
+    if (!(session && parked)) {
       return;
     }
     session.pending = session.pending.filter(
       (one) => one.requestId !== requestId
     );
+    const input = parked.input as {
+      blocks?: boolean;
+      meanwhile?: string;
+      questions?: UserQuestion[];
+      waiting?: string;
+    };
+    const record = {
+      id: requestId,
+      instanceId: ID,
+      raisedAt: now,
+      state: "answered",
+      asked: {
+        kind: "question",
+        questions: input.questions ?? [],
+        blocks: input.blocks === true,
+        ...(input.waiting ? { waiting: input.waiting } : {}),
+        ...(input.meanwhile ? { meanwhile: input.meanwhile } : {}),
+      },
+      answer: {
+        at: Date.now(),
+        by: { via: "page", behavior: result.behavior },
+        result:
+          result.behavior === "allow"
+            ? {
+                behavior: "allow",
+                answers:
+                  (result.updatedInput as { answers?: UserAnswers })?.answers ??
+                  {},
+              }
+            : { behavior: "deny", message: result.message ?? "" },
+      },
+    } as unknown as AskRecord;
+    const outcome = askOutcome(record);
+    session.messages = [
+      ...session.messages,
+      {
+        id: `told-${requestId}`,
+        instanceId: ID,
+        type: "ui.system_note",
+        content: askAnsweredText(record),
+        timestamp: new Date().toISOString(),
+        metadata: {
+          subtype: CAWCO_NOTICE,
+          noteKind: "CawCo",
+          noteTitle: askAnsweredTitle(
+            { kind: "question", outcome },
+            askAnsweredText(record)
+          ),
+          notice: ASK_ORIGIN,
+        },
+      } as Message,
+    ];
     const holding = session.pending.some(
       (one) => (one.input as { blocks?: unknown }).blocks === true
     );
@@ -300,6 +385,7 @@
           clearInterval(writing);
           writing = undefined;
           at = "page";
+          session.messages = [...session.messages, handed];
           pulse("idle");
         }
       }, STAGE_BEAT_MS);
@@ -307,7 +393,11 @@
   }
   debug.standHub((_instanceId, kind, intent) => {
     if (kind === "permission.answer") {
-      answered((intent as { requestId: string }).requestId);
+      const { requestId, result } = intent as {
+        requestId: string;
+        result: PermissionResult;
+      };
+      answered(requestId, result);
     }
   });
 
@@ -375,13 +465,17 @@
         })
       : null
   );
-  const setup = $derived(progress && !handedOver(progress) ? progress : null);
+  // His setup element stands until the project is set up: handed over, it
+  // keeps what he did (the real page's `setupProgress` holds it the same).
+  const setup = $derived(progress);
   /**
    * A phone, read off the screen as it changes, as the project page reads
    * it (its `sheetQuery` line is CawFloat's sheet's): the bench follows a
    * resize as the page does, never a width read once at load.
    */
   const phoneQuery = new MediaQuery("(max-width: 639px)");
+  /** A desk's pads (the column's own, `desk:`), which the draft's scroller reaches through. */
+  const desk = new MediaQuery("(min-width: 900px)");
   const phone = $derived(phoneQuery.current);
   /** His panel stands docked beside the page while it is open and anchored, as the page's `docked`. */
   const docked = $derived(lead.open && lead.anchor !== null);
@@ -436,11 +530,21 @@
           </span>
         {/if}
       </div>
+      <!-- The draft scrolls in the page's whole column, its pads inside the
+           scroller: the scrollbar stands at the column's edge, clear of the
+           cards, a field's bleed is never cut, and what passes under the
+           head fades under the house edge. -->
       <div
         class="flex min-h-0 flex-auto flex-col ps-space-7 pe-space-6 max-desk:px-space-5"
+        style:--draft-bleed-end={desk.current
+          ? "var(--space-6)"
+          : "var(--space-5)"}
+        style:--draft-bleed-start={desk.current
+          ? "var(--space-7)"
+          : "var(--space-5)"}
       >
         {#if way === "board" && at !== "set"}
-          <div class="min-h-0 flex-auto overflow-y-auto">
+          <div class="min-h-0 flex-auto">
             <SetupDraft
               aim={draftAim}
               asking={asks.length}
@@ -449,10 +553,7 @@
               onaim={(next) => {
                 draftAim = next;
               }}
-              onanswer={() => {
-                lead.tab = "assistant";
-                lead.open = true;
-              }}
+              onanswer={() => detach(lead.answerAsks(), "answer Caw")}
               onsetup={setUp}
               onstages={(next) => {
                 draft = next;
