@@ -273,6 +273,7 @@ import {
   type EffortLevel,
   ENDED_STATUSES,
   type EndedBy,
+  effectiveImageChoice,
   estimateTokens,
   type FindSettings,
   FLEET_DELTA,
@@ -299,9 +300,12 @@ import {
   harnessNamed,
   hookProblem,
   IMAGE_GENERATION_TIMEOUT_MS,
+  IMAGE_PROVIDER_MODELS,
   IMAGE_PROVIDERS,
+  type ImageSettings,
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
+  imageProviderOf,
   invariant,
   isEffortLevel,
   isLoopbackSource,
@@ -334,6 +338,7 @@ import {
   NO_REPLY_TOOL,
   namedAccount,
   OVER_STATUSES,
+  offersModelChoice,
   PAIRING_REQUIRED,
   type PendingAccountSignin,
   PICTURE_LIMITS,
@@ -541,6 +546,7 @@ import { accountsWords } from "@cawco/core/words/accounts";
 import { containerWords } from "@cawco/core/words/containers";
 import { contextWords } from "@cawco/core/words/context";
 import { turnCutWords } from "@cawco/core/words/cuts";
+import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { leakWords } from "@cawco/core/words/leaks";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
 import { noticeWords } from "@cawco/core/words/notices";
@@ -31805,6 +31811,17 @@ export const createServer = (
             return status(404, "Unknown calling session.");
           }
           server?.timeout(request, 0);
+          // The provider the call names wins; else the fleet's default,
+          // which with nothing set is ChatGPT on its own model.
+          const { provider: named, model, ...asked } = body;
+          const provider = named ? imageProviderOf(named) : undefined;
+          const chosen = effectiveImageChoice(
+            {
+              ...(provider ? { provider } : {}),
+              ...(model ? { model } : {}),
+            },
+            db.imageSettings()
+          );
           const answer = await callAgent(
             row.machineId,
             GENERATE_IMAGE,
@@ -31814,7 +31831,7 @@ export const createServer = (
             [
               row.id,
               row.cwd,
-              body,
+              { ...asked, ...chosen },
               sessionWorkspace(row) ?? null,
               row.projectId ?? null,
             ],
@@ -33687,6 +33704,51 @@ export const createServer = (
         db.clearOpenRouterConnection();
         return { ok: true };
       })
+      // ── image default (core ImageSettings) ────────────────────────────────
+      // The provider and model a generate_image call that names no provider
+      // goes to; with no row, ChatGPT on its own model.
+      .get("/api/image-settings", (): ImageSettings => db.imageSettings())
+      .put(
+        "/api/image-settings",
+        {
+          body: t.Object({
+            // One of core's IMAGE_PROVIDERS, checked below in words.
+            provider: t.String(),
+            model: t.Optional(t.Union([t.String(), t.Null()])),
+          }),
+        },
+        ({ body, status }) => {
+          const provider = imageProviderOf(body.provider);
+          if (!provider) {
+            return status(
+              400,
+              imageGenerationWords.noSuchProvider(body.provider)
+            );
+          }
+          const model = body.model?.trim() || null;
+          const models = IMAGE_PROVIDER_MODELS[provider];
+          if (model && !offersModelChoice(provider)) {
+            return status(
+              400,
+              imageGenerationWords.settingsNoModelChoice(provider, models[0])
+            );
+          }
+          if (model && !models.includes(model)) {
+            return status(
+              400,
+              imageGenerationWords.settingsUnknownModel(provider, model, [
+                ...models,
+              ])
+            );
+          }
+          const chosen: ImageSettings = { provider, model };
+          db.setImageSettings(chosen);
+          console.log(
+            `[images] default: ${provider}${model ? ` on ${model}` : ""}`
+          );
+          return chosen;
+        }
+      )
       // ── fleet watch (fleet-watch.ts) ──────────────────────────────────────
       // Its switch, and its limits and Jev as facts: Settings shows them.
       .get("/api/fleet-watch", (): FleetWatchSettings => ({

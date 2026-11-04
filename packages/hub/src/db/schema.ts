@@ -22,6 +22,7 @@ import type {
   HarnessReport,
   HomeStore,
   HookEvent,
+  ImageProviderId,
   InstanceStatus,
   LandsMode,
   LimitWindow,
@@ -3238,6 +3239,19 @@ export const spendSettings = sqliteTable("spend_settings", {
   /** Always `'spend'`. */
   id: text("id").primaryKey(),
   onCap: text("on_cap").$type<OnCap>().notNull().default("both"),
+});
+
+/**
+ * The fleet's image default (core `ImageSettings`) — one row, keyed
+ * `'images'`, following the {@link spendSettings} precedent: the provider a
+ * `generate_image` call that names none goes to, and its model (null: the
+ * provider's default). No row reads as core's `DEFAULT_IMAGE_SETTINGS`.
+ */
+export const imageSettings = sqliteTable("image_settings", {
+  /** Always `'images'`. */
+  id: text("id").primaryKey(),
+  provider: text("provider").$type<ImageProviderId>().notNull(),
+  model: text("model"),
 });
 
 /**

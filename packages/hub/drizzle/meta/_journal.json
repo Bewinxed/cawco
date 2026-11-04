@@ -2500,6 +2500,13 @@
       "when": 1793790581149,
       "tag": "0364_tool_signin",
       "breakpoints": true
+    },
+    {
+      "idx": 365,
+      "version": "6",
+      "when": 1793792441444,
+      "tag": "0365_image_settings",
+      "breakpoints": true
     }
   ]
 }

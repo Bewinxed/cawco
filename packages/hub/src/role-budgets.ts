@@ -69,8 +69,8 @@ import type { Tasks } from "./tasks";
  * owner's Gemini subscription too, and says a JPEG lands as .jpg (worker
  * 29,456 measured).
  * 2026-11-04: generate_image's provider may be the Gemini API on a held
- * key, which takes a `model` of its four (worker 29,540, delegate 10,569
- * measured, with the fleet's image default beside it).
+ * key, which takes a `model` of its four, and its default is the fleet's
+ * setting (worker 29,540, delegate 10,569 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 29_600,

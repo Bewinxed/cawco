@@ -185,6 +185,20 @@ export const imageGenerationWords = {
   geminiNoImage: (reason: string, text: string) =>
     `The Gemini API answered without an image (${reason})${text ? `: ${text}` : "."} No image was saved and no retry was submitted.`,
 
+  /** The image setting names a provider there is none of. */
+  noSuchProvider: (id: string) =>
+    `There is no image provider ${id}; there are ${IMAGE_PROVIDERS.join(", ")}.`,
+  /** The image setting names a model of a provider with one. */
+  settingsNoModelChoice: (id: ImageProviderId, model: string) =>
+    `${SHORT_NAMES[id]} makes images on one model, ${model}, so the setting takes no model for it.`,
+  /** The image setting names a model the provider doesn't offer. */
+  settingsUnknownModel: (
+    id: ImageProviderId,
+    asked: string,
+    models: string[]
+  ) =>
+    `${SHORT_NAMES[id]} offers no model ${asked}; it offers ${models.join(", ")}.`,
+
   /** No CawCo account on the machine holds a ChatGPT sign-in. */
   noLogin: () =>
     `No CawCo account on this machine holds a ChatGPT login, so no image request was sent. ${SIGN_IN} API keys are not accepted.`,

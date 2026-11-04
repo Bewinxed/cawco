@@ -73,6 +73,8 @@ import type {
 import {
   CLAUDE_CONVERSATION_GONE,
   CONTINUATION_ORIGIN,
+  DEFAULT_IMAGE_SETTINGS,
+  type ImageSettings,
   type LastErrorKind,
   placedOnly,
   REMOVED_MACHINE,
@@ -202,6 +204,7 @@ import {
   githubPollCursors,
   githubPollers,
   type HubFolder,
+  imageSettings,
   inboundEvents,
   instanceAliases,
   instanceConversations,
@@ -1108,6 +1111,8 @@ export interface DbShape {
   readonly holdSend: (uuid: string, envelope: Envelope<SendPayload>) => boolean;
   /** Who may call the hub: the pairing setting, the person's devices, the machines' keys (hub-auth.ts). */
   readonly hubAuth: HubAuthDb;
+  /** The fleet's image default; core's `DEFAULT_IMAGE_SETTINGS` while no row says otherwise. */
+  readonly imageSettings: () => ImageSettings;
   /** Inbound events, their routes and the pollers that bring them in (ingress.ts). */
   readonly ingress: IngressDb;
   readonly insertContinuation: (
@@ -2196,6 +2201,8 @@ export interface DbShape {
     updatedAt: Date;
   };
   readonly setFleetWatchOn: (on: boolean) => void;
+  /** Sets the fleet's image default. */
+  readonly setImageSettings: (settings: ImageSettings) => void;
 
   /** Puts sessions in a project: a session made a project, and its delegates. */
   readonly setInstancesProject: (ids: string[], projectId: string) => void;
@@ -3007,6 +3014,8 @@ const SUPERVISOR_CONFIG_ID = "supervisor";
 const OPENROUTER_CONNECTION_ID = "openrouter";
 const JEV_SETTINGS_ID = "jev";
 const FLEET_WATCH_ID = "fleet-watch";
+/** The one row of {@link imageSettings}. */
+const IMAGE_SETTINGS_ID = "images";
 /** The one {@link presenceSettings} row's key, and the one {@link findSettings} row's. */
 const PRESENCE_ID = "person";
 
@@ -10247,6 +10256,22 @@ const make = async (path: string): Promise<DbShape> => {
         deniedTools: deniedToolNames(),
         updatedAt: row.updatedAt,
       };
+    },
+    imageSettings: () => {
+      const row = db
+        .select()
+        .from(imageSettings)
+        .where(eq(imageSettings.id, IMAGE_SETTINGS_ID))
+        .get();
+      return row
+        ? { provider: row.provider, model: row.model }
+        : DEFAULT_IMAGE_SETTINGS;
+    },
+    setImageSettings: (settings) => {
+      db.insert(imageSettings)
+        .values({ id: IMAGE_SETTINGS_ID, ...settings })
+        .onConflictDoUpdate({ target: imageSettings.id, set: settings })
+        .run();
     },
     fleetWatchOn: () =>
       db

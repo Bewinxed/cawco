@@ -20,7 +20,7 @@ export type ImageProviderId = (typeof IMAGE_PROVIDERS)[number];
 export const imageProviderOf = (id: string): ImageProviderId | undefined =>
   IMAGE_PROVIDERS.find((one) => one === id);
 
-/** The provider a call that names none goes to. */
+/** The provider a call goes to when it names none and the fleet's setting names none ({@link ImageSettings}). */
 export const DEFAULT_IMAGE_PROVIDER: ImageProviderId = "chatgpt";
 
 /**
@@ -50,6 +50,39 @@ export const IMAGE_PROVIDER_MODELS: Readonly<
 /** Whether `provider` offers a choice of model. */
 export const offersModelChoice = (provider: ImageProviderId): boolean =>
   IMAGE_PROVIDER_MODELS[provider].length > 1;
+
+/**
+ * The fleet's image default (hub `image_settings`, `GET`/`PUT
+ * /api/image-settings`): the provider a call that names none goes to, and
+ * that provider's model (null: its default). No row reads as
+ * {@link DEFAULT_IMAGE_SETTINGS}, which is today's behaviour.
+ */
+export interface ImageSettings {
+  model: string | null;
+  provider: ImageProviderId;
+}
+
+export const DEFAULT_IMAGE_SETTINGS: ImageSettings = {
+  provider: DEFAULT_IMAGE_PROVIDER,
+  model: null,
+};
+
+/**
+ * What a call runs on: the provider it names, else the fleet's setting's;
+ * the model it names, else the setting's model when that is the setting's
+ * provider, else that provider's default (none said).
+ */
+export const effectiveImageChoice = (
+  asked: { model?: string; provider?: ImageProviderId },
+  settings: ImageSettings
+): { model?: string; provider: ImageProviderId } => {
+  const provider = asked.provider ?? settings.provider;
+  const model =
+    asked.model ??
+    (provider === settings.provider ? settings.model : null) ??
+    undefined;
+  return { provider, ...(model ? { model } : {}) };
+};
 
 /** The formats a provider's image is kept in, as it made it: never re-encoded. */
 export const IMAGE_FORMATS = ["png", "jpeg"] as const;
@@ -97,6 +130,6 @@ export interface GeneratedImage {
 export const GENERATE_IMAGE = "generateImage";
 export const IMAGE_GENERATION_TIMEOUT_MS = 600_000;
 export const IMAGE_GENERATION_DESCRIPTION =
-  "Generate one image or reference-guided edit through an image provider on this machine's sign-in (ChatGPT unless `provider` says otherwise), from any model or harness. " +
+  "Generate one image or reference-guided edit through an image provider on this machine's sign-in (the fleet's default, ChatGPT unless changed, unless `provider` says otherwise), from any model or harness. " +
   "For photos, illustrations, textures and raster assets; SVGs, icons and code-native graphics are source to edit instead. " +
   "Saved on your machine; show it with show_image.";

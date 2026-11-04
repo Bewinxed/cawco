@@ -335,7 +335,7 @@ export function handoffTools(deps: HandoffDeps) {
           .enum(IMAGE_PROVIDERS)
           .optional()
           .describe(
-            `Default ${DEFAULT_IMAGE_PROVIDER}; another only when asked.`
+            `Left out: the fleet's default (${DEFAULT_IMAGE_PROVIDER} unless changed). Another only when asked.`
           ),
         model: z
           .enum(IMAGE_PROVIDER_MODELS["gemini-api"])
@@ -1342,7 +1342,7 @@ export function handoffInstructions(
   // Sessions said image generation was unavailable on models without it:
   // the tool is the hub's, on every model, and stays the session's own.
   const images = names.includes("generate_image")
-    ? `\n\ngenerate_image makes images on any model through this machine's own sign-in to an image provider (${DEFAULT_IMAGE_PROVIDER} unless provider names another): this session makes its own.`
+    ? `\n\ngenerate_image makes images on any model through this machine's own sign-in to an image provider (the fleet's default, ${DEFAULT_IMAGE_PROVIDER} unless changed, or the one provider names): this session makes its own.`
     : "";
   const loading = `\n\n${loadingLine(listable)}`;
   const mayStart = sessionMayStart(deps);
