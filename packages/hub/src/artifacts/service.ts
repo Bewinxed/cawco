@@ -1003,6 +1003,9 @@ const pngSize = (png: Uint8Array): { width: number; height: number } | null => {
 /** A thumbnail's most bytes in each scheme: the pane's capture of a page, as `previewPng` takes it. */
 export const THUMBNAIL_BYTES = 3 * 1024 * 1024;
 
+/** A sentence's closing stop and the space after it, taken off where a code in brackets goes before it. */
+const TRAILING_STOPS = /[\s.]+$/u;
+
 /** A promote from a session outside a project. DESIGN.md's error formula. */
 const NO_PROJECT =
   "This session belongs to no project, so there is nowhere to promote to.";
@@ -6085,10 +6088,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return;
     }
     unplace(placement);
-    throw new ArtifactRefusal(
-      503,
-      `${notLoaded(row, down.failure)}${down.why ? ` (${down.why})` : ""} ${artifactToolWords.notHanded}`
-    );
+    // The why is a code before the sentence's stop (DESIGN.md Voice, the
+    // error formula: "nixbox stopped answering (timeout)."); `show` says
+    // the `notLoaded` sentence alone.
+    const failed = notLoaded(row, down.failure);
+    const said = down.why
+      ? `${failed.replace(TRAILING_STOPS, "")} (${down.why.replace(TRAILING_STOPS, "")}).`
+      : failed;
+    throw new ArtifactRefusal(503, `${said} ${artifactToolWords.notHanded}`);
   };
 
   /** A session by its link, labelled by its title, as `artifact_list` names it. */
