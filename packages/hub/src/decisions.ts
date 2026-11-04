@@ -72,6 +72,7 @@ import { AFTER_REF } from "@cawco/core/decisions-library";
 import { pageHash } from "@cawco/core/preview-proxy";
 import { noticeWords } from "@cawco/core/words/notices";
 import { Elysia, status, t } from "elysia";
+import type { PageHearer } from "./artifacts/service";
 import type { PersonsSend } from "./caw";
 import type { ArtifactRow } from "./db/artifacts";
 import { PROGRAM_FILE, readKept } from "./decision-program";
@@ -376,19 +377,17 @@ export interface DecisionsDeps {
   };
   /** Whether the project is the hub's. */
   projectExists: (projectId: string) => boolean;
-  /** The person's I'm done picking on a session's artifact: its Send (artifacts/service.ts `send`), through `route`. */
-  send: (
-    instanceId: string,
-    artifactId: string,
-    route: string
-  ) => Promise<void>;
+  /**
+   * The person's I'm done picking on a page's artifact: its Send
+   * (artifacts/service.ts `sendPage`), through `route`, heard by `to`.
+   * Answers the session that heard it.
+   */
+  send: (artifactId: string, route: string, to: PageHearer) => Promise<string>;
   /**
    * Whether the send `uuid` (a Make tasks ask) is in flight: its session
    * has not read it yet, or the turn that read it has not ended.
    */
   sendInFlight: (uuid: string) => boolean;
-  /** Stamps a page's send when Caw took it in place of its ended session. */
-  stampSent: (artifactId: string) => void;
   /** A Send's carried writes (core `SendBody.writes`) applied to the artifact's doc (artifacts/sync.ts `takeSentWrites`): why not, or null. */
   takeWrites: (artifactId: string, writes: string) => string | null;
   /** The project's tasks that name a card ({@link DECIDED_FIELD}). */
@@ -1085,10 +1084,10 @@ export const createDecisions = (deps: DecisionsDeps) => {
 
     /**
      * The person's send on a page: I'm done picking (no words), the page's
-     * Send, which decides it ({@link decide}: through the artifact's send to
-     * its session, here before Caw is woken); or a note (words), said to its
-     * session as the person's own words and never a Send of the page. Its
-     * session hears it; an ended one's goes to Caw.
+     * Send, which decides it (through the artifact's Send, which applies a
+     * setup page's Setup too, whoever hears it); or a note (words), said to
+     * its session as the person's own words and never a Send of the page.
+     * Its session hears it; an ended one's goes to Caw.
      */
     async send(
       projectId: string,
@@ -1114,41 +1113,43 @@ export const createDecisions = (deps: DecisionsDeps) => {
       const words = text?.trim() || undefined;
       const to = heardBy(read);
       const page = `They wrote it on the decision page “${read.title}” (decisions/${name}/).`;
-      if ("instance" in to) {
-        if (words) {
+      if (words) {
+        if ("instance" in to) {
           deps.tell(
             to.instance,
             { by: "you", words, note: page },
             crypto.randomUUID()
           );
-        } else {
-          await deps.send(
-            to.instance.id,
-            read.artifactId,
-            `POST /api/projects/${projectId}/decisions/${name}/send`
-          );
+          deps.changed(projectId);
+          return { to: "session" };
         }
+        const { instanceId } = await deps.tellConversation(projectId, {
+          by: "you",
+          words,
+          note: `${page} ${handedToCaw(read)}`,
+        });
         deps.changed(projectId);
-        return { to: "session" };
+        return { to: "caw", instanceId };
       }
-      if (!words) {
-        await decide(projectId, name, read.artifactId);
-      }
-      const { instanceId } = await deps.tellConversation(
-        projectId,
-        words
-          ? { by: "you", words, note: `${page} ${handedToCaw(read)}` }
+      // His Send, one path whoever hears it: its session while it stands,
+      // else Caw, told the page is his now.
+      const heard = await deps.send(
+        read.artifactId,
+        `POST /api/projects/${projectId}/decisions/${name}/send`,
+        "instance" in to
+          ? { session: to.instance }
           : {
-              by: "act",
-              line: noticeWords.donePicking(read.title),
-              text: `The person is done picking on the decision page “${read.title}” (decisions/${name}/). ${handedToCaw(read)}`,
+              caw: {
+                projectId,
+                line: noticeWords.donePicking(read.title),
+                text: `The person is done picking on the decision page “${read.title}” (decisions/${name}/). ${handedToCaw(read)}`,
+              },
             }
       );
-      if (!words) {
-        deps.stampSent(read.artifactId);
-      }
       deps.changed(projectId);
-      return { to: "caw", instanceId };
+      return "instance" in to
+        ? { to: "session" }
+        : { to: "caw", instanceId: heard };
     },
 
     /**

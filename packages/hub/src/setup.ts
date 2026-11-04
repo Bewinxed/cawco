@@ -251,6 +251,12 @@ const shapeOf = (
   return OFFERED_TEMPLATES.find((name) => name === picked);
 };
 
+/** Whether artifact `artifact` is a project's setup page (its decision page `setup`). */
+export const isSetupPage = (artifact: {
+  kind: string;
+  name: string;
+}): boolean => artifact.kind === "page" && artifact.name === SETUP_PAGE;
+
 /**
  * A setup page as its Send finds it: its picks, its last Send (null before
  * the first), when its session last drew it (`revisedAt`, null when never)
@@ -274,16 +280,16 @@ export interface SentPage {
  * a pick made since, or, for a part the person left as drawn, the page
  * drawn again since; so a Send again for one pick (a place whose clone
  * failed) leaves the stages Caw wrote alone. Any other artifact is left
- * alone. Answers whether it was the setup page.
+ * alone.
  */
 export const applySetupPicks = async (
-  artifact: { kind: string; name: string },
-  projectId: string | null | undefined,
+  artifact: { kind: string; name: string; projectId: string | null },
   page: SentPage,
   apply: SetupApply
-): Promise<boolean> => {
-  if (!projectId || artifact.kind !== "page" || artifact.name !== SETUP_PAGE) {
-    return false;
+): Promise<void> => {
+  const { projectId } = artifact;
+  if (!(projectId && isSetupPage(artifact))) {
+    return;
   }
   const { revisedAt, sentAt } = page;
   const state = Object.fromEntries(
@@ -314,5 +320,4 @@ export const applySetupPicks = async (
   if (place) {
     await apply.place(projectId, place);
   }
-  return true;
 };

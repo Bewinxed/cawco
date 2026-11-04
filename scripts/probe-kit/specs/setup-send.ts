@@ -24,14 +24,59 @@
  * 4. A second project's Setup drawn from the social template, left as
  *    drawn: Set up applies that template itself, so `/stages` answers
  *    `source: "file"` with social's stages before anyone writes a file.
+ * 5. A third such page whose writer has ended (stopped) before Set up: the
+ *    same Send applies it (`/stages` from file with social's stages), the
+ *    project's Caw hears it in the writer's place, and his conversation's
+ *    write of AGENTS.md is approved by it (caw.ts `setupSent`). (Before:
+ *    an ended writer's Send went to Caw as a note alone, applying nothing
+ *    of the Setup and approving nothing.)
  */
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
 import { toolWords } from "../../lib/tool-call";
-import { MACHINE, type Reply, until } from "../../scratch-fleet";
+import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
-/** Every request: a word. The probe calls the session's tools itself. */
-const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
+const WRITE = "mcp__cawco__folder_write";
+/** Caw's write of AGENTS.md in the turn the handed page starts, and its answer once it came. */
+const agentsWrite = { issued: false, answer: "" };
+
+/**
+ * Every request: a word; the probe calls the writer's tools itself. Caw,
+ * told a page is his (leg 5), writes AGENTS.md in that turn, as the
+ * project-setup skill's step 6 does: the approval lasts the turn.
+ */
+const respond = (request: Seen): Reply => {
+  const say: Reply = { everyMs: 5, words: ["ok"] };
+  if (!(request.tools && HANDED.test(request.all))) {
+    return say;
+  }
+  if (agentsWrite.issued) {
+    agentsWrite.answer ||= request.last;
+    return say;
+  }
+  if (!request.toolNames.includes(WRITE)) {
+    return {
+      everyMs: 5,
+      words: [],
+      tool: {
+        name: "ToolSearch",
+        input: { query: `select:${WRITE}`, max_results: 1 },
+      },
+    };
+  }
+  agentsWrite.issued = true;
+  return {
+    everyMs: 5,
+    words: [],
+    tool: {
+      name: WRITE,
+      input: {
+        path: "AGENTS.md",
+        content: "# Spring move\n\nFinding a flat to rent by spring.\n",
+      },
+    },
+  };
+};
 
 /** A project's setup page as the project-setup skill opens it: its Setup alone. */
 const setupOnly = (shape: string) => `root = Decisions("Spring move", [setup])
@@ -67,6 +112,9 @@ const SOCIAL = [
 ];
 
 const NOTICE = /The page "setup" has new responses/u;
+/** What Caw hears of a page whose session ended (decisions.ts `send`). */
+const HANDED =
+  /done picking on the decision page “Spring move”[\s\S]*so this page is yours/u;
 
 interface StagesRead {
   source: string;
@@ -261,6 +309,67 @@ const run = async (kit: Kit) => {
       applied.source === "file" &&
       named(applied) === SOCIAL.join(),
     `made: ${socialMade.text.slice(0, 200)}; Set up: ${socialSetUp.slice(0, 300)}; stages: ${applied.source} ${named(applied)}`
+  );
+
+  // 5. The writer ended before Set up.
+  const ended = await projectWithSession(fleet, "Spring flat");
+  const endedMade = await ended.call("artifact_create", {
+    kind: "page",
+    name: "setup",
+    does: "pick",
+    ask: "Set up Spring move",
+    program: setupOnly("social"),
+  });
+  fleet.stopSession(ended.session);
+  const stopped = await until(
+    "the writer stopped",
+    () => fleet.instance(ended.session),
+    (row) => row?.status === "stopped",
+    60_000
+  ).then(
+    (row) => row?.status ?? "none",
+    () => "not stopped"
+  );
+  const handed = await fleet
+    .api<{ instanceId?: string; to: string }>(
+      `/api/projects/${ended.id}/decisions/setup/send`,
+      {}
+    )
+    .catch((error: unknown) => ({
+      to: error instanceof Error ? error.message : String(error),
+      instanceId: undefined,
+    }));
+  const endedStages = await ended.stages();
+  const cawHeard = await until(
+    "Caw hearing the page is his",
+    () => fleet.seen.some((one) => HANDED.test(one.all)),
+    Boolean,
+    120_000
+  ).catch(() => false);
+  const agents = await until(
+    "Caw's write of AGENTS.md answered",
+    () => agentsWrite.answer,
+    Boolean,
+    120_000
+  ).catch(() => "no answer");
+  kit.check(
+    "5: with its writer ended, Set up applies the Setup as drawn, the project's Caw hears it, and his write of AGENTS.md stands approved by it",
+    !endedMade.refused &&
+      stopped === "stopped" &&
+      handed.to === "caw" &&
+      handed.instanceId !== ended.session &&
+      endedStages.source === "file" &&
+      named(endedStages) === SOCIAL.join() &&
+      cawHeard &&
+      agents.includes("Committed AGENTS.md"),
+    JSON.stringify({
+      made: endedMade.text.slice(0, 120),
+      stopped,
+      setUp: handed,
+      stages: `${endedStages.source} ${named(endedStages)}`,
+      cawHeard,
+      agents: agents.slice(-300),
+    })
   );
 };
 

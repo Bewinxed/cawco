@@ -467,7 +467,7 @@ import {
   CANVAS_SCREEN_CLOSE,
   CANVAS_SCREEN_OPEN,
 } from "@cawco/core/canvas";
-import { COMMENT_LIMITS, SEND_CONTROLS } from "@cawco/core/comments";
+import { COMMENT_LIMITS } from "@cawco/core/comments";
 import { compressAnswer } from "@cawco/core/compress-answer";
 import type {
   ContextFill,
@@ -618,6 +618,7 @@ import {
   type MarksDelivery,
   type MarksOutcome,
   type PageFrom,
+  type PageHearer,
   SHOWN_WAIT_MS,
   type StageAt,
   timedShowStep,
@@ -984,7 +985,7 @@ import { createSessionLifecycle } from "./session-lifecycle";
 import { sessionLimitRoutes } from "./session-limits";
 import { nameSettledOnce } from "./settled-names";
 import { createSettling } from "./settling";
-import { applySetupPicks } from "./setup";
+import { applySetupPicks, isSetupPage } from "./setup";
 import { type ShownDeps, shownRefusal } from "./shown-files";
 import {
   bindSkillSource,
@@ -13800,6 +13801,34 @@ export const createServer = (
     };
   };
 
+  /**
+   * The person's act to whoever heard a page's Send ({@link PageHearer}): its
+   * session, or the project's Caw, whose conversation it starts again when
+   * it has none. One that reaches neither is logged.
+   */
+  const tellHearer = (
+    to: PageHearer,
+    act: Extract<PersonsSend, { by: "act" }>
+  ): void => {
+    if ("session" in to) {
+      sendYours(to.session, act);
+      return;
+    }
+    caw
+      .tellYours(to.caw.projectId, {
+        by: "act",
+        kind: "person-request",
+        trigger: "CawCo finished what the person's setup Send started",
+        origin: { name: ACT_ORIGIN, line: act.line },
+        text: act.text,
+      })
+      .catch((error: unknown) =>
+        console.warn(
+          `[setup] ${to.caw.projectId}: the project's conversation did not hear “${act.line}”: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
+  };
+
   /** Each setup clone running now, by machine and folder ({@link cloneProjectPlace}). */
   const clonesRunning = new Set<string>();
 
@@ -13811,13 +13840,14 @@ export const createServer = (
    * credentials). Cloned, or found there already, it is added as the
    * project's checkout, its remote read from the clone, which joins a
    * project that has that remote already ({@link addProjectPlace}). Either
-   * way the session that holds the page (`instance`) is told, as a notice of
-   * the person's act; on a failure the page's `place` pick is counted as
-   * unsent again, so their next Send tries again. A Send again for a folder
-   * still being cloned is refused.
+   * way whoever heard the Send (`to`: the session that holds the page, else
+   * the project's Caw, whose conversation the notice starts again) is told,
+   * as a notice of the person's act; on a failure the page's `place` pick
+   * is counted as unsent again, so their next Send tries again. A Send
+   * again for a folder still being cloned is refused.
    */
   const cloneProjectPlace = (
-    instance: InstanceRow,
+    to: PageHearer,
     artifactId: string,
     projectId: string,
     place: { clone: string; machineId: string; path: string }
@@ -13846,7 +13876,7 @@ export const createServer = (
     clonesRunning.add(key);
     const failed = (why: string): void => {
       artifacts.unsend(artifactId, "place");
-      sendYours(instance, {
+      tellHearer(to, {
         by: "act",
         line: noticeWords.cloneFailed(where),
         text: `CawCo could not clone ${shown} onto ${where} at ${path}: ${withoutRemoteCredential(why, place.clone)}. Nothing was added; the setup page's place pick stands unsent, so the person's next Send of the page tries it again.`,
@@ -13880,7 +13910,7 @@ export const createServer = (
               (each) => each.machineId === place.machineId && each.path === path
             )
           );
-      sendYours(instance, {
+      tellHearer(to, {
         by: "act",
         line: noticeWords.cloned(where),
         text: [
@@ -14123,11 +14153,11 @@ export const createServer = (
       return Promise.resolve();
     });
   };
-  const signalResponses: ArtifactServiceDeps["signal"] = (
-    instance,
-    artifact,
-    { since }
-  ) =>
+  const signalResponses = (
+    instance: InstanceRow,
+    artifact: ArtifactRow,
+    { since }: { since: number }
+  ): Promise<void> =>
     artifactInOrder(`${artifact.id}:picks`, async () => {
       const { withdrawn, replaces } = await withdrawArtifactEvents(
         instance,
@@ -14810,8 +14840,28 @@ export const createServer = (
     // Your picks on a session's own page reach that session as the page's
     // word for its tools to read (artifact_read), never as your message:
     // A session's decision page is its own to read, never a transcript line.
-    signal: (instance, artifact, responses) =>
-      signalResponses(instance, artifact, responses),
+    // A page whose session has ended goes to Caw, told it is his now.
+    signal: async (to, artifact, responses) => {
+      let heard: string;
+      if ("session" in to) {
+        await signalResponses(to.session, artifact, responses);
+        heard = to.session.id;
+      } else {
+        ({ instanceId: heard } = await caw.tellYours(to.caw.projectId, {
+          by: "act",
+          kind: "person-request",
+          trigger: "the person sent a decision page",
+          origin: { name: ACT_ORIGIN, line: to.caw.line },
+          text: to.caw.text,
+        }));
+      }
+      // A setup page sent is the approval of the AGENTS.md and delegate
+      // types the session that hears it writes from it (caw.ts `setupSent`).
+      if (artifact.projectId && isSetupPage(artifact)) {
+        caw.setupSent(artifact.projectId, heard);
+      }
+      return heard;
+    },
     // Your pins, replies, resolves and ink go on your Send, with your note.
     deliverMarks: (instance, artifact, delivery) =>
       deliverArtifactMarks(instance, artifact, delivery),
@@ -14905,17 +14955,18 @@ export const createServer = (
       const refused = await dropPage(instance, projectId, name);
       return refused && { status: refused.code, refused: refused.refused };
     },
-    sending: async (instance, artifact, page) => {
+    sending: async (to, artifact, page) => {
       // A step of the session's plan that waited on a card picked here stops waiting.
-      plans.waitsMoved(instance.id);
+      if ("session" in to) {
+        plans.waitsMoved(to.session.id);
+      }
       // His Send of a project's decision page decides it: its record and log are written from these picks.
       if (artifact.kind === "page" && artifact.projectId) {
         await decisions.decide(artifact.projectId, artifact.name, artifact.id);
       }
-      // A project's setup page: its name, shape, account and place applied before
-      // its writer hears the picks, and the Send its approval of the
-      // AGENTS.md and delegate types it writes from them (caw.ts `setupSent`).
-      const setup = await applySetupPicks(artifact, instance.projectId, page, {
+      // A project's setup page: its name, shape, account and place applied
+      // before whoever hears it reads the picks.
+      await applySetupPicks(artifact, page, {
         // Its name field's and account's refusals are the send's to answer, as a place's is.
         name: (projectId, name) => setupEdit(projectId, { name }),
         account: (projectId, account) => setupEdit(projectId, { account }),
@@ -14927,7 +14978,7 @@ export const createServer = (
         place: async (projectId, place) => {
           const { clone } = place;
           if (clone) {
-            cloneProjectPlace(instance, artifact.id, projectId, {
+            cloneProjectPlace(to, artifact.id, projectId, {
               ...place,
               clone,
             });
@@ -14936,9 +14987,6 @@ export const createServer = (
           await addProjectPlace(projectId, place.machineId, place.path);
         },
       });
-      if (setup && instance.projectId) {
-        lead?.setupSent(instance.projectId, instance.id);
-      }
     },
     showing: (instanceId) => previewTargets.get(instanceId)?.artifact.id,
     followed: (instanceId) => streams.followerCount(instanceId) > 0,
@@ -26245,19 +26293,18 @@ export const createServer = (
     },
     projectExists: (projectId) => db.project(projectId) !== undefined,
     // The artifact's refusal ("Nothing new to send…"), as the tab's route says it.
-    send: async (instanceId, artifactId, route) => {
-      const refusal = await artifacts
-        .send(instanceId, artifactId, { control: "decisions-done" }, route)
-        .then(
-          () => null,
-          (error: unknown) => {
-            if (error instanceof ArtifactRefusal) {
-              return error;
-            }
-            throw error;
+    send: async (artifactId, route, to) => {
+      const sent = await artifacts.sendPage(artifactId, route, to).then(
+        (heard) => ({ heard }),
+        (error: unknown) => {
+          if (error instanceof ArtifactRefusal) {
+            return { refusal: error };
           }
-        );
-      if (refusal) {
+          throw error;
+        }
+      );
+      if ("refusal" in sent) {
+        const { refusal } = sent;
         throw new DecisionRefusal(
           refusal.status === 409 || refusal.status === 404
             ? refusal.status
@@ -26266,24 +26313,10 @@ export const createServer = (
           { cause: refusal }
         );
       }
+      return sent.heard;
     },
     takeWrites: (artifactId, writes) =>
       takeSentWrites(artifactDocs, artifactId, writes),
-    stampSent: (artifactId) => {
-      console.log(
-        artifactToolWords.pageSent(
-          artifactId,
-          SEND_CONTROLS["decisions-done"],
-          "the Decisions tab",
-          "its session ended, so its project's Caw reads it"
-        )
-      );
-      artifactDocs.transact(artifactId, "hub", (doc) => {
-        const meta = doc.getMap("meta");
-        meta.set("sentAt", new Date().toISOString());
-        meta.set("sentText", null);
-      });
-    },
     tasks: async (projectId) =>
       decidedTasks((await tasks.list(projectId)).tasks),
     // The person's note, their words alone with the page beside them for

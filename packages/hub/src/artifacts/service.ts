@@ -1577,6 +1577,15 @@ export type PageFrom =
   | { dir: string }
   | { folder: true };
 
+/**
+ * Who hears a page's Send: the session that holds it, or, once that one has
+ * ended, the project's Caw, told the person's act in its words (decisions.ts
+ * `send`), whose conversation a message starts again.
+ */
+export type PageHearer =
+  | { session: InstanceRow }
+  | { caw: { line: string; projectId: string; text: string } };
+
 export interface ArtifactServiceDeps {
   /** The notice ids the person acknowledged (hub notices.ts): Not now's among them. */
   acknowledged: () => readonly string[];
@@ -1842,7 +1851,7 @@ export interface ArtifactServiceDeps {
    * refusal throws and nothing is sent.
    */
   sending: (
-    instance: InstanceRow,
+    to: PageHearer,
     artifact: ArtifactRow,
     page: SentPage
   ) => Promise<void>;
@@ -1861,17 +1870,18 @@ export interface ArtifactServiceDeps {
   /** The artifact a session's panel shows now, if any. */
   showing: (instanceId: string) => string | undefined;
   /**
-   * Tells the session the person sent their picks on `artifact`, which it
-   * reads from `since` with `artifact_read` (core `artifactResponsesNotice`).
-   * One the session has not read yet for the same artifact is superseded,
-   * not added to: the session hears once, from the earliest `since` it was
-   * not told of.
+   * Tells `to` the person sent their picks on `artifact`: its session,
+   * which reads them from `since` with `artifact_read` (core
+   * `artifactResponsesNotice`), one it has not read yet for the same
+   * artifact superseded, not added to, so it hears once, from the earliest
+   * `since` it was not told of; or the project's Caw, in `to`'s words.
+   * Answers the session that heard it.
    */
   signal: (
-    instance: InstanceRow,
+    to: PageHearer,
     artifact: ArtifactRow,
     responses: { since: number }
-  ) => Promise<void>;
+  ) => Promise<string>;
   /**
    * The stage story file `file` runs on in a workspace (agent stage.ts
    * `ensureStage`), started or woken there and waited on: its port, root and
@@ -4545,6 +4555,88 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       );
     }
     return { picked, note };
+  };
+
+  /**
+   * A Send of artifact `row`'s picks and note, heard by `to`: what it owes
+   * ({@link sendOwes}, refused when nothing), applied (`sending`: a
+   * decision page decided, a setup page's Setup applied), then heard
+   * (`signal`), the page's Send time stamped. Every Send of a page comes
+   * here: its own and the panel's ({@link send}), and the Decisions tab's
+   * and the board's Set up (`sendPage`), whether its session stands or has
+   * ended. Answers the session that heard it.
+   */
+  const sendPage = async (
+    row: ArtifactRow,
+    body: SendBody,
+    route: string,
+    to: PageHearer
+  ): Promise<string> => {
+    const doc = docs.doc(row.id);
+    const state = stateOf(doc);
+    const program = programOf(row);
+    const setup = program === undefined ? null : readKept(program).setup;
+    let owes: ReturnType<typeof sendOwes>;
+    try {
+      owes = sendOwes(doc, state, setup, body);
+    } catch (error) {
+      saySend(
+        row,
+        body,
+        route,
+        artifactToolWords.sendRefused(
+          error instanceof Error ? error.message : String(error)
+        )
+      );
+      throw error;
+    }
+    const { picked, note } = owes;
+    const { sentAt } = metaOf(doc);
+    saySend(
+      row,
+      body,
+      route,
+      artifactToolWords.sendCarried(
+        unsentChoices(state, metaOf(doc).sentAt),
+        note !== null
+      )
+    );
+    if (picked) {
+      await deps.sending(to, row, {
+        state,
+        sentAt,
+        revisedAt:
+          (doc.getMap("meta").get("revisedAt") as string | undefined) ?? null,
+        setup,
+      });
+    }
+    const hearer = await deps.signal(to, row, { since: row.deliveredSeq });
+    const at = new Date().toISOString();
+    docs.transact(row.id, "hub", (live) => {
+      const meta = live.getMap("meta");
+      meta.set("sentAt", at);
+      meta.set("sentText", note);
+      // His Send is a look at everything on this revision: every change and every answer.
+      const changes = meta.get("changes") as ArtifactChanges | undefined;
+      if (changes) {
+        seeChanges(
+          live,
+          changes.revision,
+          changes.items.map((item) => item.anchor)
+        );
+      }
+      for (const pin of readPins(live).values()) {
+        if (newAnswer(pin)) {
+          seePin(live, pin.id, at);
+        }
+      }
+    });
+    answeredBy(
+      db.update(row.id, {
+        deliveredSeq: (db.get(row.id) as ArtifactRow).seq,
+      }) as ArtifactRow
+    );
+    return hearer;
   };
 
   /**
@@ -8655,69 +8747,27 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         await askAgain(row, new Set(body.again));
         return { choices: state, ...metaOf(doc) };
       }
-      const program = programOf(row);
-      const setup = program === undefined ? null : readKept(program).setup;
-      let owes: ReturnType<typeof sendOwes>;
-      try {
-        owes = sendOwes(doc, state, setup, body);
-      } catch (error) {
-        saySend(
-          row,
-          body,
-          route,
-          artifactToolWords.sendRefused(
-            error instanceof Error ? error.message : String(error)
-          )
-        );
-        throw error;
-      }
-      const { picked, note } = owes;
-      const { sentAt } = metaOf(doc);
-      saySend(
-        row,
-        body,
-        route,
-        artifactToolWords.sendCarried(
-          unsentChoices(state, metaOf(doc).sentAt),
-          note !== null
-        )
-      );
-      if (picked) {
-        await deps.sending(instance, row, {
-          state,
-          sentAt,
-          revisedAt:
-            (doc.getMap("meta").get("revisedAt") as string | undefined) ?? null,
-          setup,
-        });
-      }
-      await deps.signal(instance, row, { since: row.deliveredSeq });
-      const at = new Date().toISOString();
-      docs.transact(row.id, "hub", (live) => {
-        const meta = live.getMap("meta");
-        meta.set("sentAt", at);
-        meta.set("sentText", note);
-        // His Send is a look at everything on this revision: every change and every answer.
-        const changes = meta.get("changes") as ArtifactChanges | undefined;
-        if (changes) {
-          seeChanges(
-            live,
-            changes.revision,
-            changes.items.map((item) => item.anchor)
-          );
-        }
-        for (const pin of readPins(live).values()) {
-          if (newAnswer(pin)) {
-            seePin(live, pin.id, at);
-          }
-        }
-      });
-      answeredBy(
-        db.update(row.id, {
-          deliveredSeq: (db.get(row.id) as ArtifactRow).seq,
-        }) as ArtifactRow
-      );
+      await sendPage(row, body, route, { session: instance });
       return { choices: state, ...metaOf(doc) };
+    },
+
+    /**
+     * The person's I'm done picking on a project's decision page (the
+     * Decisions tab, the board's Set up: decisions.ts `send`), heard by
+     * `to`: the session that wrote it while it stands, else the project's
+     * Caw. The same Send as {@link send}'s, whoever hears it. Answers the
+     * session that heard it.
+     */
+    sendPage: async (
+      id: string,
+      route: string,
+      to: PageHearer
+    ): Promise<string> => {
+      const row = db.get(id);
+      if (!row) {
+        throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
+      }
+      return await sendPage(row, { control: "decisions-done" }, route, to);
     },
   };
 };
