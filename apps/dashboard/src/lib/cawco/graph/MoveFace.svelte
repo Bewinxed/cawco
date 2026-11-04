@@ -371,7 +371,7 @@
   /** The kinds of change the bars show, in the key's order: their colours named. */
   const KINDS: ClipKind[] = ["size", "move", "fade", "tint", "effect", "other"];
   const kindsShown = $derived(
-    KINDS.filter((kind) => tracks.some((track) => track.kind === kind))
+    KINDS.filter((kind) => lines.some((line) => line.track.kind === kind))
   );
   /** The selected line, while it still stands. */
   const picked = $derived(
