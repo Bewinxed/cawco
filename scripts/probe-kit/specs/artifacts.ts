@@ -672,6 +672,14 @@ const run = async (kit: Kit) => {
 const handedLine = (from: string, kind: string, name: string, id: string) =>
   `[CawCo] ${from} handed you the ${kind} "${name}" (artifact ${id}), not opened: artifact_show opens it in your panel.`;
 
+/**
+ * Session `on`'s first page of artifact_list (hub routes.ts
+ * `/artifacts/list`, 25 a page): every artifact this spec makes.
+ */
+const listedOf = async <T>(fleet: KitFleet, on: string): Promise<T[]> =>
+  (await fleet.api<{ artifacts: T[] }>(`/api/instances/${on}/artifacts/list`))
+    .artifacts;
+
 /** One artifact as artifact_list answers it (artifacts/service.ts `ArtifactStatus`). */
 interface Listed {
   id: string;
@@ -794,9 +802,7 @@ const handChecks = async ({
 
   // H5. artifact_list from the parent: shown false, waiting on the parent.
   const listedText = await callParent("mcp__cawco__artifact_list", {});
-  const listed = await fleet.api<Listed[]>(
-    `/api/instances/${parent}/artifacts/status`
-  );
+  const listed = await listedOf<Listed>(fleet, parent);
   const entry = listed.find((one) => one.id === handedId);
   kit.check(
     "H5: artifact_list from the parent has it shown false, madeBy the delegate, waitingOn the parent's session",
@@ -874,9 +880,9 @@ const handChecks = async ({
     shownOf(ownId),
     shownOf(handedId),
   ]);
-  const stillWaiting = (
-    await fleet.api<Listed[]>(`/api/instances/${parent}/artifacts/status`)
-  ).find((one) => one.id === handedId);
+  const stillWaiting = (await listedOf<Listed>(fleet, parent)).find(
+    (one) => one.id === handedId
+  );
   kit.check(
     "H9: the delegate's artifact_show of the canvas it handed up opens it in the delegate's panel; the parent's panel keeps its page and the hand-off still waits on the parent",
     showedOk(delegateShow) &&
@@ -895,9 +901,9 @@ const handChecks = async ({
     shownOf(handedId),
     shownOf(ownId),
   ]);
-  const after = (
-    await fleet.api<Listed[]>(`/api/instances/${parent}/artifacts/status`)
-  ).find((one) => one.id === handedId);
+  const after = (await listedOf<Listed>(fleet, parent)).find(
+    (one) => one.id === handedId
+  );
   kit.check(
     "H6: the parent's artifact_show puts it in its panel, and the hand-off waits on the parent no more",
     handedOpened.shown &&
@@ -974,8 +980,7 @@ const treeChecks = async ({
   const callParent = callIn(parent);
   const callSibling = callIn(sibling);
   const callOutsider = callIn(outsider);
-  const listOf = (on: string) =>
-    fleet.api<TreeListed[]>(`/api/instances/${on}/artifacts/status`);
+  const listOf = (on: string) => listedOf<TreeListed>(fleet, on);
 
   // T1. The sibling reads the handed canvas with its picture, listed as the parent's.
   const read = await callSibling("mcp__cawco__artifact_read", {
@@ -1209,9 +1214,9 @@ const heldChecks = async ({
     to: "parent",
   });
   const canvasNext = heldOf(again);
-  const relisted = (
-    await fleet.api<Listed[]>(`/api/instances/${parent}/artifacts/status`)
-  ).find((one) => one.id === canvasId);
+  const relisted = (await listedOf<Listed>(fleet, parent)).find(
+    (one) => one.id === canvasId
+  );
   const canvasShown = await shownOf(canvasId);
   kit.check(
     "H8: the delegate's re-create of the canvas the parent's panel shows is held as its next version: the panel keeps it, it waits on the parent, and the parent is told it changed",
@@ -1279,9 +1284,9 @@ const heldChecks = async ({
   // H11. The parent's artifact_show opens the new version.
   await callParent("mcp__cawco__artifact_show", { id: pageId });
   const opened = await readOf(pageId);
-  const listed = (
-    await fleet.api<Listed[]>(`/api/instances/${parent}/artifacts/status`)
-  ).find((one) => one.id === pageId);
+  const listed = (await listedOf<Listed>(fleet, parent)).find(
+    (one) => one.id === pageId
+  );
   const gone = pageNext
     ? await fleet
         .api<unknown>(`/api/instances/${parent}/artifacts/${pageNext}`)
