@@ -119,22 +119,26 @@
    * does (preview/loaded.svelte.ts holds or unloads it); only the sheet of
    * the tab in front is open. Put away while it stands in front (its
    * Close, Escape, an agent closing the preview), it slides down and goes
-   * once it has (`sheetClosing`, until SideSheet's `onclosed`); put away
-   * while its tab is off screen, nothing of it is drawn and it goes at once.
+   * once it has: it stood open in front (`standing`) until SideSheet's
+   * `onclosed`. Put away while its tab is off screen, nothing of it is
+   * drawn and it goes at once.
+   *
+   * `standing` is set as the sheet opens, before any close, so the render
+   * that closes the preview still reads it and keeps the sheet. Set by an
+   * effect as the close was seen, after that render, the `{#if}` below had
+   * already taken the sheet away, and a new one mounted closed: never open,
+   * its close never landed, so it never went (preview-touch 2).
    */
   const sheetOpen = $derived(previewOpen && visible && active);
-  let sheetClosing = $state(false);
-  let sheetWas = untrack(() => sheetOpen);
+  let standing = $state(untrack(() => sheetOpen));
   $effect(() => {
-    const now = sheetOpen;
-    if (now) {
-      sheetClosing = false;
-    } else if (sheetWas && !previewOpen) {
-      sheetClosing = true;
+    if (sheetOpen) {
+      standing = true;
+    } else if (!(visible && active)) {
+      standing = false;
     }
-    sheetWas = now;
   });
-  const sheetMounted = $derived(previewOpen || sheetClosing);
+  const sheetMounted = $derived(previewOpen || (standing && visible && active));
 
   const LABEL: Record<Shown, string> = {
     preview: sideWords.preview,
@@ -216,7 +220,7 @@
       instanceId={viewId}
       away={!(visible && active)}
       onclosed={() => {
-        sheetClosing = false;
+        standing = false;
       }}
       onkeyescape={(event) => previewPane?.parentEscape(event)}
       open={sheetOpen}
