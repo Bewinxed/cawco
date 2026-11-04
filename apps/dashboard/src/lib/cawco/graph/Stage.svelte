@@ -91,7 +91,7 @@
      * The width the stage asks of its column, px: the drawing's width and
      * the panel round it (its edge, the page's gutter, the scroller's
      * gutter). A form held to its measure asks for that and no more, so
-     * the room beside it takes the rest; 0 until the stage is laid out.
+     * the room beside it takes the rest; 0 until the drawing is measured.
      */
     need?: number;
   } = $props();
@@ -121,8 +121,10 @@
   );
   /** The panel's own width less the drawing's room: its edge, the scroller's gutter and the page's gutters. */
   let chrome = $state(0);
+  /** The drawing's width has been read once, the frame after it mounted. */
+  let laid = $state(false);
   $effect(() => {
-    need = chrome > 0 ? Math.ceil(drawnWidth + chrome) : 0;
+    need = laid && chrome > 0 ? Math.ceil(drawnWidth + chrome) : 0;
   });
   /** The drawing's own width read as it rests: its root's box, or what overflows it. */
   const measureFit = (holder: HTMLElement) => {
@@ -177,6 +179,13 @@
     }
     const raf = requestAnimationFrame(() => {
       mounted = true;
+      // Its width read the frame it mounts, not once its arrivals rest
+      // (885 ms in): the split laid out for a 973px stage, then jumped to
+      // 693 under him. The read at rest only ever widens it.
+      if (frame) {
+        measureFit(frame);
+      }
+      laid = true;
     });
     return () => cancelAnimationFrame(raf);
   });
@@ -557,6 +566,10 @@
   }): Promise<void> {
     shownBox = box;
     await tick();
+    // After the head lays out what it says: brought into view as Compare
+    // turned on, the ring was pushed back under the fold by the
+    // differences' lines landing in the head a frame later.
+    await new Promise(requestAnimationFrame);
     if (marker) {
       bringIntoView(marker, {
         behavior: motionOk.current ? "smooth" : "instant",
@@ -624,21 +637,34 @@
    * removed field drawn over "Each run starts"). It is a line, unringed.
    */
   const ringed = $derived(found.filter((mark) => mark.kind !== "went"));
+  /** What went: ringed, dashed, where it stood, on the compared drawing while it is shown. */
+  const went = $derived(found.filter((mark) => mark.kind === "went"));
+  /** The compared state stands in the kept one's place (Compare's flip). */
+  let flipped = $state(false);
+  $effect(() => {
+    if (!against) {
+      flipped = false;
+    }
+  });
   /**
    * Compare turned on, or turned to another state: once its differences
    * are read, the first one's ring is brought into view, so the words at
    * the head and the ring they name are on screen together.
    */
-  let firstPending = false;
+  // The differences are read again as either drawing lays itself out
+  // anew, and the first read stands on a drawing still settling: shown
+  // once at the first read, the ring was brought to where it stood, not
+  // where it stands. Each read within the settle brings it again.
+  const SETTLE_MS = 1200;
+  let firstUntil = 0;
   $effect(() => {
     if (against?.story) {
-      firstPending = true;
+      firstUntil = performance.now() + SETTLE_MS;
     }
   });
   $effect(() => {
     const [first] = ringed;
-    if (first && firstPending) {
-      firstPending = false;
+    if (first && performance.now() < firstUntil) {
       untrack(() => showBox(first.box));
     }
   });
@@ -676,10 +702,20 @@
         >
       {/if}
       {#if against}
-        <span
+        <!-- The state it is compared with, a press that shows it in the
+             kept one's place, rings where its gone parts stood, and back. -->
+        <button
+          type="button"
+          aria-pressed={flipped}
+          class="pointer-hit touch-hit min-w-0 truncate rounded-sm px-space-1 type-label text-ink-muted transition-control aria-pressed:bg-selected-bg aria-pressed:text-selected-ink aria-pressed-false:can-hover:hover:bg-surface-hover"
           data-slot="stage-against"
-          class="min-w-0 truncate type-label text-ink-muted"
-          >{words.comparedWith(against.name)}</span
+          onclick={() => {
+            flipped = !flipped;
+          }}
+          title={words.showCompared(against.name)}
+          >{flipped
+            ? words.showingCompared(against.name)
+            : words.comparedWith(against.name)}</button
         >
       {/if}
     </div>
@@ -739,32 +775,27 @@
         >
           {#each lines as line, at (at)}
             <li class="min-w-0">
-              {#if line.kind === "went"}
-                <!-- Gone from the drawing: a line with the dashed mark, no ring to bring into view. -->
+              <!-- Each line a link to its ring: one that went shows the
+                   compared state, where it stood, its ring dashed; one
+                   that came in or changed, the kept state. -->
+              <button
+                type="button"
+                class="mark-line pointer-hit touch-hit flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2 rounded-sm px-space-1 text-start type-label text-ink-row transition-control can-hover:hover:bg-surface-hover"
+                onclick={() => {
+                  flipped = line.kind === "went";
+                  showBox(line.box);
+                }}
+              >
                 <span
-                  class="mark-line flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2 px-space-1 type-label text-ink-muted"
-                >
-                  <span
-                    aria-hidden="true"
-                    data-box
-                    class="inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-dashed border-c-change-ring"
-                  ></span>
-                  <span class="min-w-0 wrap-anywhere">{line.line}</span>
-                </span>
-              {:else}
-                <button
-                  type="button"
-                  class="mark-line pointer-hit touch-hit flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2 rounded-sm px-space-1 text-start type-label text-ink-row transition-control can-hover:hover:bg-surface-hover"
-                  onclick={() => showBox(line.box)}
-                >
-                  <span
-                    aria-hidden="true"
-                    data-box
-                    class="inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-c-change-ring"
-                  ></span>
-                  <span class="min-w-0 wrap-anywhere">{line.line}</span>
-                </button>
-              {/if}
+                  aria-hidden="true"
+                  data-box
+                  class={[
+                    "inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-c-change-ring",
+                    line.kind === "went" && "border-dashed",
+                  ]}
+                ></span>
+                <span class="min-w-0 wrap-anywhere">{line.line}</span>
+              </button>
             </li>
           {/each}
           {#if found.length > LINES_SHOWN}
@@ -843,7 +874,10 @@
             aria-hidden="true"
             data-stage-drawing
             inert
-            class="pointer-events-none invisible absolute inset-x-0 top-0"
+            class={[
+              "pointer-events-none absolute inset-x-0 top-0",
+              !flipped && "invisible",
+            ]}
           >
             {#key against}
               <svelte:boundary>
@@ -861,7 +895,7 @@
           data-cawco-source={shown.line
             ? `${review.file}:${shown.line}:1`
             : undefined}
-          class="relative"
+          class={["relative", flipped && "invisible"]}
         >
           {#key mount}
             <svelte:boundary
@@ -913,12 +947,13 @@
           <!-- The rings: outside each element's box on its own shape, in
                the stage's own layer, taking no press. -->
           <div aria-hidden="true" class="pointer-events-none absolute inset-0">
-            {#each ringed as mark, at (at)}
+            {#each flipped ? went : ringed as mark, at (at)}
               <span
                 data-slot="change-ring"
                 data-kind={mark.kind}
                 class={[
                   "absolute start-(--ring-x) top-(--ring-y) h-(--ring-h) w-(--ring-w) rounded-(--ring-r) border-(length:--c-change-ring-width) border-c-change-ring",
+                  mark.kind === "went" && "border-dashed",
                 ]}
                 style:--ring-x="calc({mark.box.x}px - {ringOut})"
                 style:--ring-y="calc({mark.box.y}px - {ringOut})"

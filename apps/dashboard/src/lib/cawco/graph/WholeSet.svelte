@@ -21,8 +21,9 @@
    * a set too big for the room at that zoom stands on the kept card, the
    * rest a pan away. It fits again in place as the cards' measured heights lay it
    * out anew or the room changes size, while the view is still a fit
-   * (FlowAutoFit). The Fit tool shows the whole set at whatever zoom that
-   * takes, as its name says; the pan stops at the set's own bounds. No
+   * (FlowAutoFit). The fit tool frames the same way, never under the
+   * readable zoom (fitted whole at 0.47 its words drew at 6px), and says so
+   * ("Fit at a readable size"); the pan stops at the set's own bounds. No
    * zoom figure. The kept card wears the
    * chosen card's coral edge (WholeCard). One press keeps a state, or,
    * while comparing, compares with it; resting on a card changes nothing.
@@ -255,8 +256,7 @@
    * the routine form's four machines drew at half size, their notes at 6px:
    * a set too big for the room stands at this zoom on the kept card instead
    * (FlowAutoFit `focus`), the rest a pan away; a set that fits whole above
-   * it opens whole. The Fit tool shows the
-   * whole set at any zoom.
+   * it opens whole. The fit tool frames the same way.
    */
   const READABLE = browser
     ? LEAST_TEXT /
@@ -388,7 +388,8 @@
       <Panel position="bottom-center">
         <FlowCanvasTools
           figure={false}
-          fit={() => fit?.fitWhole()}
+          fit={() => fit?.fit()}
+          fitLabel={words.fitReadable}
           onfit={() => {
             held = false;
           }}

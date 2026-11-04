@@ -13,6 +13,7 @@
     onzoom,
     onfit,
     fit: framer,
+    fitLabel = "Fit graph",
     undo,
     redo,
     canUndo,
@@ -34,6 +35,8 @@
     onfit: () => void;
     /** The canvas's own way to frame its graph; without it, Svelte Flow's fit. */
     fit?: () => void;
+    /** What the fit tool says it does, when the canvas's own fit is not the whole graph. */
+    fitLabel?: string;
     /** Undo and redo, for a canvas that is edited; without them there are none. */
     undo?: () => void;
     redo?: () => void;
@@ -126,11 +129,11 @@
       </Button>
     {/snippet}
   </Tip>
-  <Tip keys="F" label="Fit graph">
+  <Tip keys="F" label={fitLabel}>
     {#snippet children(tip)}
       <Button
         {...tip}
-        aria-label="Fit graph"
+        aria-label={fitLabel}
         onclick={fit}
         size="icon"
         type="button"

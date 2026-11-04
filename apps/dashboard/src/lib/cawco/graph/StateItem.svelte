@@ -62,8 +62,14 @@
   <!-- The row's press: the name's button reaches over the whole row (its
        ::before), so a press anywhere on it is the button's and a pin on it
        is named by the name alone. -->
+  <!-- The kept row is the house's selected row (DESIGN.md, Selected): the
+       apricot wash under its coral words, so the coral reads as chosen,
+       never as an alarm on a state named for a failure. -->
   <div
-    class="relative flex min-h-c-touch-floor min-w-0 flex-col justify-center gap-space-row rounded-sm px-space-3 py-space-2"
+    class={[
+      "relative flex min-h-c-touch-floor min-w-0 flex-col justify-center gap-space-row rounded-sm px-space-3 py-space-2",
+      kept && "bg-selected-bg",
+    ]}
   >
     <Tip disabled={!cut} label={item.note ?? ""} side="left">
       {#snippet children(tip)}

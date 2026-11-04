@@ -3,10 +3,12 @@
    * The roster on a page's ground, its table held here: a hand-over moves
    * the tile and a put-back brings it home, and nothing is written to the
    * hub. A project's own kinds are the ones whose member differs from the
-   * fleet's.
+   * fleet's. It follows its props while mounted (house/follows-props): the
+   * design graph sets a state's args on the one live instance, so the
+   * table and the open column are writable `$derived`s of their props,
+   * overridden by a hand-over until the next state's args arrive.
    */
   import type { Kind, Member } from "@cawco/core/decides";
-  import { untrack } from "svelte";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import type { Facts, Fault } from "../decides.svelte";
   import Roster from "../Roster.svelte";
@@ -33,8 +35,8 @@
     routes: Record<string, string>;
   } = $props();
 
-  let routes = $state(untrack(() => ({ ...first })));
-  let handing = $state(untrack(() => openFirst));
+  let routes = $derived({ ...first });
+  let handing = $derived(openFirst);
   const own = $derived(
     project === null
       ? []
@@ -55,11 +57,11 @@
       {kinds}
       {members}
       onhand={(kind, member) => {
-        routes[kind] = member;
+        routes = { ...routes, [kind]: member };
         return Promise.resolve(true);
       }}
       onputback={(kind) => {
-        routes[kind] = fleetRoutes[kind];
+        routes = { ...routes, [kind]: fleetRoutes[kind] as string };
         return Promise.resolve(true);
       }}
       {own}
