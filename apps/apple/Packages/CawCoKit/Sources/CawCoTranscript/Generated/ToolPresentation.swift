@@ -779,7 +779,37 @@ nonisolated enum ToolPresentation {
                 favicon: nil,
                 secondLine: true
             ),
-            variants: []
+            variants: [Variant(
+                when: When(action: nil, names: ["project_name"], patch: nil, status: nil),
+                renderer: .prose,
+                sentence: Sentence(
+                    label: .words("Named the project"),
+                    object: [Piece(from: ["name"], cut: .oneLine, text: nil, unless: nil, wrap: nil, orShortest: false)],
+                    objectMono: false,
+                    detail: [],
+                    detailMono: false,
+                    chip: nil,
+                    fact: nil,
+                    factDiff: false,
+                    favicon: nil,
+                    secondLine: false
+                )
+            ), Variant(
+                when: When(action: nil, names: ["project_setup"], patch: nil, status: nil),
+                renderer: .prose,
+                sentence: Sentence(
+                    label: .words("Read how a project is set up"),
+                    object: [],
+                    objectMono: false,
+                    detail: [],
+                    detailMono: false,
+                    chip: nil,
+                    fact: nil,
+                    factDiff: false,
+                    favicon: nil,
+                    secondLine: false
+                )
+            )]
         ),
         Kind(
             id: .other,

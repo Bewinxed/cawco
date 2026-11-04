@@ -640,6 +640,24 @@ export const TOOL_KINDS: ToolKind[] = [
     many: "calls",
     renderer: "fields",
     sentence: { label: "tool-name", objectMono: false, secondLine: true },
+    variants: [
+      // CawCo's own setup calls say what they did, in words: the name it
+      // gave, never its input as fields (no body, so no chevron to open).
+      {
+        when: { names: ["project_name"] },
+        renderer: "prose",
+        sentence: {
+          label: "Named the project",
+          object: { from: ["name"], as: "one-line" },
+          objectMono: false,
+        },
+      },
+      {
+        when: { names: ["project_setup"] },
+        renderer: "prose",
+        sentence: { label: "Read how a project is set up", objectMono: false },
+      },
+    ],
   },
   {
     // Not "step": the header already counts steps. An unknown tool has no

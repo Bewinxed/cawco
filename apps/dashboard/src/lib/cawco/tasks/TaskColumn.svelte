@@ -14,6 +14,7 @@
    * draft is set up: one object, never two (motion/share).
    */
   import type { StageColor, StageIcon, StageKind } from "@cawco/core/views";
+  import { setupPageWords } from "@cawco/core/words/onboarding";
   import { type Snippet, tick } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
@@ -23,13 +24,13 @@
     reread,
   } from "#lib/cawco/motion/rows.svelte.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
-  import { KIND_LABEL, type TaskSummary } from "#lib/cawco/project-tasks.js";
+  import type { TaskSummary } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconNeedsYou } from "#lib/icons.js";
-  import { STAGE_GLYPHS, STAGE_HUES } from "./stage-look";
+  import { markOf } from "./stage-look";
   import TaskCard from "./TaskCard.svelte";
 
   let {
@@ -115,9 +116,9 @@
   /** The quiet word under the name: the stage's kind, or what the column holds. */
   const kindWord = $derived.by(() => {
     if (kind) {
-      return KIND_LABEL[kind];
+      return setupPageWords.kinds[kind];
     }
-    return archived ? "archived" : "not in stages.md";
+    return archived ? "Archived" : "Not in stages.md";
   });
 </script>
 
@@ -139,15 +140,14 @@
           aria-hidden="true"
           class="-me-space-1 size-icon-md flex-none text-status-attn-glyph"
         />
-      {:else if icon}
-        {@const Glyph = STAGE_GLYPHS[icon]}
+      {:else if kind}
+        {@const mark = markOf({ kind, icon, color })}
         <span
           aria-hidden="true"
           class="-me-space-1 grid flex-none place-items-center text-(--stage-hue)"
           data-box
           data-slot="stage-mark"
-          style:--stage-hue={color ? STAGE_HUES[color] : "var(--ink-muted)"}
-          ><Glyph class="size-icon-md" /></span
+          style:--stage-hue={mark.hue}><mark.glyph class="size-icon-md" /></span
         >
       {/if}
       <h3

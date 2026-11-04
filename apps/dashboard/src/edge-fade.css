@@ -52,7 +52,12 @@
      short where something must stay whole (`--fade-cap-start`,
      `--fade-cap-end`: the tabs track, for the tab drawn chosen).
      Each edge is its own animation over only the run where it moves, the
-     first and last 6% of the scroll, filled outside it: between them
+     first and last fade's length of the scroll, in px, filled outside it.
+     In px, never a share of the scroll: a share made a scroller that runs
+     a pixel past its box (a question's body, 109 over 108) fade a whole
+     edge at its top, its first line greyed as if disabled; in px the fade
+     grows with the scroll, so a pixel of scroll is a pixel of fade.
+     Between them
      neither changes, so a long scroll asks no restyle or repaint of the
      scroller for its every frame (edge-fade-perf). Spelled out, never the
      `animation` shorthand: the build's minifier writes a shorthand's unset
@@ -68,8 +73,8 @@
     animation-timing-function: linear;
     animation-fill-mode: both;
     animation-range:
-      0% 6%,
-      94% 100%;
+      0px var(--fade-len),
+      calc(100% - var(--fade-len)) 100%;
   }
   .kit-edge-fade {
     animation-timeline: scroll(self inline);

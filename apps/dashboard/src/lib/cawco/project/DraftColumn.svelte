@@ -17,7 +17,7 @@
   import StageKindItems from "#lib/cawco/decisions/host/setup/StageKindItems.svelte";
   import StageLookItems from "#lib/cawco/decisions/host/setup/StageLookItems.svelte";
   import type { Stage } from "#lib/cawco/decisions/host/setup/stage.js";
-  import { STAGE_GLYPHS, STAGE_HUES } from "#lib/cawco/tasks/stage-look.js";
+  import { markOf } from "#lib/cawco/tasks/stage-look.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { IconMore, IconNeedsYou } from "#lib/icons.js";
@@ -79,15 +79,13 @@
           aria-hidden="true"
           class="size-icon-md flex-none text-status-attn-glyph"
         />
-      {:else if stage.icon}
-        {@const Glyph = STAGE_GLYPHS[stage.icon]}
+      {:else}
+        {@const mark = markOf(stage)}
         <span
           aria-hidden="true"
           class="grid flex-none place-items-center text-(--stage-hue)"
           data-box
-          style:--stage-hue={stage.color
-            ? STAGE_HUES[stage.color]
-            : "var(--ink-muted)"}><Glyph class="size-icon-md" /></span
+          style:--stage-hue={mark.hue}><mark.glyph class="size-icon-md" /></span
         >
       {/if}
       <Input
@@ -108,7 +106,7 @@
         >
           <IconMore />
         </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end" width="regular">
+        <DropdownMenu.Content align="end" width="wide">
           <DropdownMenu.Sub>
             <DropdownMenu.SubTrigger
               ><span>{setupPageWords.kindItem}</span></DropdownMenu.SubTrigger
