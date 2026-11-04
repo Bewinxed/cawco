@@ -845,7 +845,7 @@ A string needed only in a rare state stands in that state, not on the page at re
 - **Commanding.** Active voice, the imperative for actions. No "we" as the product, no "I" for it: name the harness or "the agent".
 - **Honest.** Say when the product doesn't know ("no machine has reported" is not "reported zero") and when an action cannot be undone. A grant is never made more attractive: "Approve", never "Allow all".
 
-**Punctuation.** No `!` on an error, warning or wait, and `Success!` never ships. A full stop ends a sentence that stands alone; a label, button, chip, status word or figure takes none. An ellipsis marks only an action in progress ("Syncing…").
+**Punctuation.** No `!` on an error, warning or wait, and `Success!` never ships. A full stop ends a sentence that stands alone; a label, button, chip, status word or figure takes none. An ellipsis marks only work in progress ("Syncing…"), a row that asks first ("Forget project…") or a placeholder.
 
 **Contractions.** Preferred in body copy, empty states and confirmations ("doesn't", "can't"). Never where the negation is the point: "cannot be undone" stays two words.
 
