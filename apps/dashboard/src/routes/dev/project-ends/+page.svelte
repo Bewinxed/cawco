@@ -113,8 +113,9 @@
     });
   }
 
-  let step = $state<Step | null>(null);
-  let tray = $state<StopJob | null>(null);
+  /** It opens on a delete asked with four running: the tray at its fullest. */
+  let step = $state<Step | null>("delete-running");
+  let tray = $state<StopJob | null>(stepJob("delete-running"));
   const timers: ReturnType<typeof setTimeout>[] = [];
 
   function show(next: Step | null): void {

@@ -302,6 +302,7 @@
             >
               <Button
                 data-bring-back
+                failed={refusalOf(one.id) !== null}
                 disabled={isNaming(one) && !name}
                 label={projectEndWords.bringBack}
                 onclick={() => back(one)}

@@ -296,7 +296,7 @@
   const description = $derived(
     words.line(
       phase,
-      phase === "list" ? listed : total,
+      phase === "list" || phase === "armed" ? listed : total,
       midTurn(job, activityOf).length,
       done()
     )
