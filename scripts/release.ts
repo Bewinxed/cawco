@@ -251,7 +251,9 @@ type Runner = (
   command: string[],
   cwd?: string,
   capture?: boolean,
-  env?: Record<string, string>
+  env?: Record<string, string>,
+  /** How long it may run: past it, its whole process group is ended and the step fails, saying so. */
+  limit?: { seconds: number; why: string }
 ) => Promise<string>;
 
 /**
@@ -662,6 +664,15 @@ const manifestOf = async (
 };
 
 /**
+ * How long the live database's check may run: it passes in about 3 s, and
+ * one whose hub never answered sat at 100% CPU for 24 minutes, holding
+ * notarization and promotion (nightly 0e08f76f8, 2026-11-04). Our call: far
+ * past any real database's migrations, short enough that a hang fails the
+ * release while its run is still watched.
+ */
+const LIVE_DATABASE_LIMIT_S = 180;
+
+/**
  * The hub's own database, migrated by this build before it ships: a copy of
  * the live one on this host (`VACUUM INTO`, a consistent snapshot, as the
  * update helper takes it, cli binary-apply.ts), checked by
@@ -693,7 +704,13 @@ const liveDatabase = async (
   try {
     await run(
       [process.execPath, "run", "migrations:check", "--db", copy],
-      join(checkout, "packages/hub")
+      join(checkout, "packages/hub"),
+      false,
+      {},
+      {
+        seconds: LIVE_DATABASE_LIMIT_S,
+        why: "The check's hub started on a copy of the live database and never answered: run the same check on a copy (`bun run migrations:check --db <copy>` in packages/hub) and read where it spins.",
+      }
     );
   } finally {
     await rm(copy, { force: true });
@@ -1432,12 +1449,10 @@ const running = new Set<Subprocess>();
 let stopped: Promise<never> | undefined;
 /** Set while a failed build's steps are being stopped: no command starts then. */
 let abandoned: Error | undefined;
-const runCommand: Runner = async (
-  command,
-  cwd = repo,
-  capture = false,
-  env = {}
-) => {
+const runCommand: Runner = async (command, at, captured, extra, limit) => {
+  const cwd = at ?? repo;
+  const capture = captured ?? false;
+  const env = extra ?? {};
   if (stopped) {
     await stopped;
   }
@@ -1459,11 +1474,31 @@ const runCommand: Runner = async (
   const group = { pid: child.pid, started: (await startedOf(child.pid)) ?? "" };
   me.groups = [...(me.groups ?? []), group];
   await writeHolder();
+  // Past its limit the command's whole group ends (a `bun run` and the
+  // script it started alike), and the step fails with why the limit is
+  // there: a process spinning on its own thread never reaches a timer of
+  // its own.
+  let overran = false;
+  const deadline =
+    limit &&
+    setTimeout(() => {
+      overran = true;
+      endGroup(group).catch((error: unknown) => {
+        console.error(
+          `[release] ${command.join(" ")} did not end at its limit: ${error instanceof Error ? error.message : String(error)}`
+        );
+      });
+    }, limit.seconds * 1000);
   try {
     const text = capture
       ? await new Response(child.stdout as ReadableStream).text()
       : "";
     const status = await child.exited;
+    if (overran && limit) {
+      throw new Error(
+        `Release command ran past its ${limit.seconds}s limit and was stopped: ${command.join(" ")}. ${limit.why}`
+      );
+    }
     if (status !== 0) {
       // Killed by a stop: the stop finishes the run, not a failure path.
       if (stopped) {
@@ -1476,6 +1511,7 @@ const runCommand: Runner = async (
     }
     return text.trim();
   } finally {
+    clearTimeout(deadline);
     running.delete(child);
     me.groups = me.groups?.filter((one) => one !== group);
     logStep(command.join(" "), started);

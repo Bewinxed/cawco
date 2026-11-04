@@ -8,6 +8,10 @@ import { resolve } from "node:path";
  * import; so this is the first thing that imports them, and it throws when
  * something in this process loaded them before on another database (a probe
  * spec that calls it runs in a process of its own: probe kit `ownProcess`).
+ * It is a hub built only to be read (server.ts `serves: false`): it opens
+ * no port, dials no machine or server and starts no poller, so a check on a
+ * copy of the live database, run on the live hub's machine and network,
+ * leaves the live hub's ports and machines alone.
  */
 export async function hubInProcess(dbPath: string, home: string) {
   process.env.CAWCO_DB_PATH = dbPath;
@@ -38,7 +42,7 @@ export async function hubInProcess(dbPath: string, home: string) {
             pending: yield* Pending,
             lifetime,
           },
-          { background: false }
+          { serves: false }
         );
         return { db, hub, lifetime };
       }),

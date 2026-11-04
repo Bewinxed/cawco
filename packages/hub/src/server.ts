@@ -3222,14 +3222,18 @@ const normalizeRelayMessage = (body: unknown): string | undefined => {
 /** How a hub is built: one that serves, or one built only to be read. */
 export interface ServerOptions {
   /**
-   * It serves, so it starts the work that runs off the boot path: resumes,
-   * catch-ups, pollers, first looks, repairs. False for a hub built in a
-   * script only to be read (scripts/openapi.ts, scripts/hub-in-process.ts,
-   * probe-in-place.ts): none of that work starts, so nothing outlives the
-   * script's `lifetime.close()` to reach a closed database. A timer goes
-   * through `lifetime`, which that close cancels.
+   * It serves: it starts the work that runs off the boot path (resumes,
+   * catch-ups, pollers, first looks, repairs, the fleet's MCP discovery,
+   * the stream relay's watches) and opens its preview listeners. False for
+   * a hub built in a script only to be read (scripts/hub-in-process.ts,
+   * which the migrations check, openapi.ts and the probes build on): none
+   * of that work starts, so nothing outlives the script's
+   * `lifetime.close()` to reach a closed database, and it opens no port and
+   * dials nothing, so a check on a copy of the live database run beside
+   * the live hub neither takes its ports nor reaches its machines and
+   * servers. A timer goes through `lifetime`, which that close cancels.
    */
-  background?: boolean;
+  serves?: boolean;
 }
 
 /** What `POST /api/work-items` answers: the item started, its session and workspace; or queued for owned files, with neither yet. */
@@ -3258,7 +3262,7 @@ const delegated = (
 
 export const createServer = (
   { build: hubBuild, registry, db, pending, lifetime }: HubServices,
-  { background = true }: ServerOptions = {}
+  { serves = true }: ServerOptions = {}
 ) => {
   // Honest ground, before anything is served. A fresh process holds no agent
   // sockets, so every row still claiming `online` is a leftover from a hub that
@@ -3383,7 +3387,7 @@ export const createServer = (
   /**
    * The work a serving hub starts off the boot path (resumes, catch-ups,
    * pollers, first looks, repairs), each where what it needs is made, all
-   * started once at the end and only with `background` (ServerOptions).
+   * started once at the end and only by a hub that `serves` (ServerOptions).
    */
   const offBoot: (() => void)[] = [];
 
@@ -13621,7 +13625,9 @@ export const createServer = (
     renewed: (expiresAt) =>
       db.streamRelay.journeyUpdate({ certificateEndsAt: expiresAt }),
   });
-  streamRelay.watch();
+  offBoot.push(() => {
+    streamRelay.watch();
+  });
   /**
    * The stream relay's guided journey (relay-journey.ts): every step
    * computed from its record, the fleet and the relay, and pushed to every
@@ -15788,13 +15794,18 @@ export const createServer = (
       publishPreview(instanceId, "open", target);
     }
   });
-  /** Every session's preview origin (preview.ts): `previews.start()` once the hub listens (index.ts). */
+  /**
+   * Every session's preview origin (preview.ts): `previews.start()` once the
+   * hub listens (index.ts). A hub built only to be read opens none: every
+   * ask for an origin's address is refused, and told as none.
+   */
   const previewListeners = createPreviewListeners(
     BIND_HOST,
     artifactListener,
     db.previews,
     db.previewPasses,
-    tailnetHttps
+    tailnetHttps,
+    { listens: serves }
   );
   /** Each machine preview origin's upstream, following its artifact's row (preview-service.ts). */
   const previewService = createPreviewService({
@@ -21163,7 +21174,9 @@ export const createServer = (
       : [];
   };
 
-  relayJourney.watch();
+  offBoot.push(() => {
+    relayJourney.watch();
+  });
 
   /** Every known machine's fleet items hashed, before the hub listens (fleet-sync.ts `warmHashes`). */
   const warmFleetHashes = (): void => {
@@ -22522,15 +22535,20 @@ export const createServer = (
       connectAsks.signedIn(name);
     },
   });
-  const mcpReady = Promise.all(
-    db.fleetConfig().mcp.map((row) => fleetMcp.probe(row.name))
-  );
+  /** The fleet's URL servers settled by a serving hub's startup discovery: what the fleet's reads wait on. */
+  let mcpReady: Promise<unknown> = Promise.resolve();
   // Startup discovery settles the fleet's URL servers; what it moved goes to
-  // the machines then, as any change does.
-  detach(
-    mcpReady.then(() => fleetChanged("the hub's MCP discovery finished")),
-    "fleet MCP discovery"
-  );
+  // the machines then, as any change does. A hub built only to be read
+  // dials none of them.
+  offBoot.push(() => {
+    mcpReady = Promise.all(
+      db.fleetConfig().mcp.map((row) => fleetMcp.probe(row.name))
+    );
+    detach(
+      mcpReady.then(() => fleetChanged("the hub's MCP discovery finished")),
+      "fleet MCP discovery"
+    );
+  });
 
   /**
    * A dashboard's `send` command, taken: the one send path, and a log line.
@@ -31234,7 +31252,7 @@ export const createServer = (
   // One built only to be read starts none of it. Before it listens, each
   // known machine's fleet items are hashed (fleet-sync.ts `warmHashes`), so
   // no machine's register is the one that hashes the fleet's files.
-  if (background) {
+  if (serves) {
     warmFleetHashes();
     for (const start of offBoot) {
       start();

@@ -1342,9 +1342,27 @@ export function createPreviewListeners(
   deps: PreviewListenerDeps,
   db: PreviewsDb,
   passes: PreviewPassesDb,
-  tailnet: Pick<TailnetHttpsService, "beside" | "origin">
+  tailnet: Pick<TailnetHttpsService, "beside" | "origin">,
+  {
+    listens,
+  }: {
+    /** False for a hub built only to be read (server.ts `serves`): it opens no listener, and every ask for an origin's port is refused. */
+    listens: boolean;
+  }
 ) {
   const proxy = previewWebSocket as unknown as WebSocketHandler<ListenerSocket>;
+  /**
+   * Throws, in one sentence, when this hub opens no listener ({@link listens}):
+   * asked before every bind and before any port is moved or taken back.
+   */
+  const mayListen = (): void => {
+    if (!listens) {
+      throw new PreviewRefusal(
+        503,
+        "This hub opens no preview listener: it was built only to be read."
+      );
+    }
+  };
   /**
    * Each origin's open sockets, by its key: a frame that shows it holds one
    * while it stands (its overlay's doc link, which keeps itself open: core
@@ -1424,6 +1442,7 @@ export function createPreviewListeners(
     route: (request: Request) => string | undefined,
     lock: PassLock
   ): Listener => {
+    mayListen();
     const serve = async (
       request: Request,
       server: Server<ListenerSocket>
@@ -1609,6 +1628,7 @@ export function createPreviewListeners(
    * an embed's requests that way, its frame left on the browser's error page.
    */
   const unheld = (port: number): boolean => {
+    mayListen();
     try {
       Bun.serve({ hostname, port, fetch: () => new Response(null) }).stop(true);
       return true;
@@ -1741,15 +1761,24 @@ export function createPreviewListeners(
   /**
    * Whether origin `key`'s address is told to every screen that shows it
    * (server.ts `toldAddress`): its owner (the session, the project, the
-   * artifact) is a row, and it is in use ({@link inUse}) or is a project's,
-   * kept as long as the hub keeps the project. Every origin keeps the port
-   * it stores until the range is full and it is the one least recently
-   * used that nothing uses now ({@link reclaimOne}), as Portless keeps a
-   * route only while its process is alive (github.com/vercel-labs/portless,
-   * routes.ts `loadRoutes`).
+   * artifact) is a row, and it is in use ({@link inUse}) or is a project's
+   * that still keeps its stored port. Every origin keeps the port it stores
+   * until the range is full and it is the one least recently used that
+   * nothing uses now ({@link reclaimOne}), as Portless keeps a route only
+   * while its process is alive (github.com/vercel-labs/portless, routes.ts
+   * `loadRoutes`). A project's origin whose port was taken back holds none:
+   * told again, it is told without one, and opens again only when a screen
+   * asks for it. Held regardless, the telling took a port back for it,
+   * whose origin's telling took one back in turn, each in a microtask
+   * (server.ts `letGo`): two idle project origins on a full range traded
+   * one port forever and the hub never answered again (nightly 0e08f76f8's
+   * live-database check, 2026-11-04).
    */
   const holds = (key: string): boolean =>
-    db.ownerHeld(key) && (projectOfOrigin(key) !== null || inUse(key));
+    db.ownerHeld(key) &&
+    (inUse(key) ||
+      (projectOfOrigin(key) !== null &&
+        db.ports().some((row) => row.key === key)));
 
   /**
    * One port taken back for origin `asking`, the range being full: from
@@ -1791,6 +1820,7 @@ export function createPreviewListeners(
     instanceId: string,
     opens: (port: number) => boolean
   ): number => {
+    mayListen();
     // An origin whose session or project is gone holds no port: it is let go, never kept.
     if (!db.ownerHeld(instanceId)) {
       throw ownerGone(instanceId);

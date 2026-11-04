@@ -47,7 +47,10 @@ export interface PreviewsDb {
   /**
    * Origin `key`'s port is `port`, kept only while its owner (the session,
    * the project or the artifact) is a row of the hub's: false, and nothing
-   * kept, when it is not.
+   * kept, when it is not. Taken because something asked for the origin, so
+   * used as it is kept: the origin that just took a port is never the first
+   * a full range takes back (`portsByUse`), whose rebinding took the next
+   * back in turn.
    */
   readonly keepPort: (key: string, port: number) => boolean;
   /** Whether origin `key`'s owner (the session, the project or the artifact) is a row of the hub's now. */
@@ -158,7 +161,7 @@ export const previewsDb = (db: BunSQLiteDatabase): PreviewsDb => ({
         return false;
       }
       tx.insert(previewPorts)
-        .values({ port, ...ownerOf(key) })
+        .values({ port, usedAt: new Date(), ...ownerOf(key) })
         .run();
       return true;
     }),

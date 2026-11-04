@@ -942,7 +942,8 @@ const run = async (kit: Kit) => {
     // No request here carries a pass, so the lock reads none: each answer is
     // its locked page, which carries the preview's headers this leg reads.
     {} as Parameters<typeof createPreviewListeners>[3],
-    tailnet
+    tailnet,
+    { listens: true }
   );
   const session = "00000000-0000-4000-8000-00000000a011";
   try {

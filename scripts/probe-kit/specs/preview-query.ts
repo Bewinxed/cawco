@@ -453,10 +453,17 @@ const run = async (kit: Kit) => {
     touch: () => undefined,
   };
   // No tailnet here: no TLS twins, no tailnet origin.
-  const listeners = createPreviewListeners("127.0.0.1", deps, db, passes, {
-    beside: () => ({ close: () => undefined }),
-    origin: () => undefined,
-  });
+  const listeners = createPreviewListeners(
+    "127.0.0.1",
+    deps,
+    db,
+    passes,
+    {
+      beside: () => ({ close: () => undefined }),
+      origin: () => undefined,
+    },
+    { listens: true }
+  );
   /** `target` through `port`, then what the server behind read: its check, numbered `leg`. */
   const through = async (
     leg: string,

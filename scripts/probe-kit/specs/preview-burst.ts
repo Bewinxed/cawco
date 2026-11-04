@@ -362,7 +362,8 @@ async function hubListener(
     deps,
     db,
     passes,
-    tailnet
+    tailnet,
+    { listens: true }
   );
   const { port } = listeners.embed(embed, embed);
   return { port, stop: () => listeners.release(embed) };

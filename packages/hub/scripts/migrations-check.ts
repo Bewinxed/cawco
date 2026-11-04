@@ -22,7 +22,9 @@
  * hub's, or a copy of one), taken by `VACUUM INTO`; the given file is never
  * written: hub start-up and migrations are proven on a copy of the live
  * database before landing. Its hub's `secrets.key` is copied beside the copy,
- * so its sealed values open as they do on that hub.
+ * so its sealed values open as they do on that hub. Its hub opens no port
+ * and dials nothing (hub-in-process.ts), so it runs beside the live hub on
+ * the live hub's own machine and network and leaves both alone.
  */
 import { Database } from "bun:sqlite";
 import {

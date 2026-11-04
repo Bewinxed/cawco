@@ -4495,10 +4495,11 @@ export const previewPorts = sqliteTable(
      */
     origin: text("origin").unique(),
     /**
-     * When the origin was last used (a request, a socket opened or closed),
-     * written at most once a minute (preview.ts `used`): under a full range
-     * the port of the one used least recently that nothing uses now goes
-     * first (`reclaimOne`), across the hub's restarts. Null until first used.
+     * When the origin was last used (it took this port, a request, a socket
+     * opened or closed), written at most once a minute after it took the
+     * port (preview.ts `used`): under a full range the port of the one used
+     * least recently that nothing uses now goes first (`reclaimOne`), across
+     * the hub's restarts. Null on a row kept before 0347 until next used.
      */
     usedAt: timestamp("used_at"),
   },
