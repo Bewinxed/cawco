@@ -1086,6 +1086,57 @@
           {@render dot()}
           <span class="flex-none num">{item.taskId}</span>
         </span>
+      {:else if item.kind === "desk" && !item.done}
+        <!-- Where it comes from, then Skip and Allow as peers (The Peer
+           Rule) on the same line while the row has the room (a desk's
+           panel), under it where it hasn't (a phone's): the ask keeps the
+           height of a permission row. Skip puts the row away in this
+           browser, the presence menu still offers it; Allow calls the
+           browser's own prompts on the press. A refusal stands over the
+           peers, naming each blocked setting and where to turn it on. -->
+        <div
+          data-slot="peers"
+          class="relative col-start-2 col-end-4 row-3 flex flex-wrap items-center justify-end gap-x-space-2 gap-y-space-2 coarse:gap-x-space-4"
+        >
+          <span
+            data-slot="meta"
+            class="pointer-events-none me-auto min-w-0 flex-none overflow-hidden type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+            >{meta}</span
+          >
+          {#if person.refusal}
+            <!-- Wrapped, never cut to one line: the setting's name and where
+               to turn it on are the whole point of it. -->
+            <p
+              data-slot="desk-refusal"
+              class="type-meta m-0 w-full text-pretty wrap-anywhere text-status-fail-ink"
+              role="alert"
+            >
+              {person.refusal.title}. {person.refusal.message}
+            </p>
+          {/if}
+          <span class="flex flex-none gap-space-2 coarse:gap-space-4">
+            <Button
+              data-skip
+              disabled={person.pending === "allow"}
+              label={presenceWords.skip}
+              onclick={skipHere}
+              size="sm"
+              variant="secondary"
+            />
+            {#if item.agent !== null || item.idle || item.notify}
+              <Button
+                data-allow
+                disabled={person.pending === "allow"}
+                label={presenceWords.allow}
+                onclick={() => allowHere()}
+                pending={person.pending === "allow"}
+                pendingLabel={presenceWords.allowing}
+                size="sm"
+                variant="secondary"
+              />
+            {/if}
+          </span>
+        </div>
       {:else}
         <NeedsMeta text={meta} />
       {/if}
@@ -1148,49 +1199,6 @@
             size="sm"
             variant="secondary"
           />
-        </div>
-      {:else if item.kind === "desk" && !item.done}
-        <!-- Skip and Allow as peers (The Peer Rule): Skip puts the row away in
-           this browser, the presence menu still offers it; Allow calls the
-           browser's own prompts on the press. A refusal stands over them,
-           naming each blocked setting and where to turn it on. A browser
-           with no Idle Detection has nothing of it to allow: its row says
-           so, with Skip alone unless notifications are still to ask. -->
-        <div
-          data-slot="peers"
-          class="relative col-start-2 col-end-4 row-4 mt-space-2 flex flex-wrap justify-end gap-space-2 coarse:gap-space-4"
-        >
-          {#if person.refusal}
-            <!-- Wrapped, never cut to one line: the setting's name and where
-               to turn it on are the whole point of it. -->
-            <p
-              data-slot="desk-refusal"
-              class="type-meta m-0 w-full text-pretty wrap-anywhere text-status-fail-ink"
-              role="alert"
-            >
-              {person.refusal.title}. {person.refusal.message}
-            </p>
-          {/if}
-          <Button
-            data-skip
-            disabled={person.pending === "allow"}
-            label={presenceWords.skip}
-            onclick={skipHere}
-            size="sm"
-            variant="secondary"
-          />
-          {#if item.agent !== null || item.idle || item.notify}
-            <Button
-              data-allow
-              disabled={person.pending === "allow"}
-              label={presenceWords.allow}
-              onclick={() => allowHere()}
-              pending={person.pending === "allow"}
-              pendingLabel={presenceWords.allowing}
-              size="sm"
-              variant="secondary"
-            />
-          {/if}
         </div>
       {:else if item.kind === "tailnet" && item.done}
         <!-- Ticked: the https dashboard to open. -->
