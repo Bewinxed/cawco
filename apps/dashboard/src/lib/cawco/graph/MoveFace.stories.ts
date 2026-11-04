@@ -193,6 +193,7 @@ export default {
     onfocusthing: noop,
     onlight: noop,
     onretry: noop,
+    onundo: noop,
     lang: undefined,
   },
   parameters: { viewport: 400 },
@@ -209,7 +210,7 @@ export const TwoRuns = { args: { opened: { "1": true } } };
 
 /** One animation of a two-run row chosen: its own settings under it. */
 export const TwoRunsOneChosen = {
-  args: { opened: { "1": true }, selected: "1/3" },
+  args: { opened: { "1": true }, selected: "1/1/--swap-away" },
 };
 
 /** At rest beside a 2529 stage: the room at 800. */

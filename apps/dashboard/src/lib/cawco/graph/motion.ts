@@ -303,6 +303,9 @@ export class Replays {
     for (const clip of clips) {
       const replay = this.#running.get(clip.id) ?? this.#of(clip);
       if (replay) {
+        // A replay that was playing stops where it is put: Pause set the
+        // time and the move ran on to its end.
+        replay.pause();
         replay.currentTime = t - clip.start;
       }
     }
@@ -485,8 +488,7 @@ const asRan = (a: Clip, b: Clip) =>
   beginOf(untune(a)) - beginOf(untune(b)) || Number(a.id) - Number(b.id);
 
 /** A row's clips in the order the engine ran them: its rows per animation keep their places while one is retimed. */
-export const inRunOrder = (clips: readonly Clip[]): Clip[] =>
-  [...clips].sort(asRan);
+const inRunOrder = (clips: readonly Clip[]): Clip[] => [...clips].sort(asRan);
 
 /** A row's own lengths, the shortest and the longest of its animations' durations: what each was written to last, never a measured span. */
 export const ownLengths = (clips: readonly Clip[]): [number, number] => [
@@ -557,10 +559,13 @@ export function withTuning(
  * by the tuned start, a delay stepped up sent the row he was tuning below
  * the fold and dropped its focus.
  */
-export function tracksOf(clips: readonly Clip[]): Track[] {
-  const by = new Map<Element | string, Clip[]>();
+export function tracksOf(
+  clips: readonly Clip[],
+  keyOf: (clip: Clip) => unknown = (clip) => clip.thing ?? clip.id
+): Track[] {
+  const by = new Map<unknown, Clip[]>();
   for (const clip of clips) {
-    const key = clip.thing ?? clip.id;
+    const key = keyOf(clip);
     by.set(key, [...(by.get(key) ?? []), clip]);
   }
   return [...by.values()]
@@ -586,6 +591,37 @@ export function tracksOf(clips: readonly Clip[]): Track[] {
         length: lengths.size === 1 ? ([...lengths][0] ?? null) : null,
       };
     });
+}
+
+/** One row under a row: the animations of one property in one of its runs, however many parts of the thing they move. */
+export interface Part {
+  /** Its parts: the elements its animations move (a morphed text's letters, each one). */
+  count: number;
+  key: string;
+  property: string;
+  /** Its run, when its thing runs more than once. */
+  run: number | null;
+  track: Track;
+}
+
+/**
+ * A row's animations as the rows under it: by run, then by property, in
+ * the order the engine ran them, each its own track to retime. A text that
+ * morphs letter by letter was forty rows each saying "transform" or
+ * "opacity"; it is four.
+ */
+export function partsOf(track: Track): Part[] {
+  return track.runs.flatMap((run, at) =>
+    tracksOf(inRunOrder(run.clips), (clip) => clip.property).map(
+      (part): Part => ({
+        key: `${track.id}/${at}/${part.clips[0]?.property ?? ""}`,
+        property: part.clips[0]?.property ?? "",
+        run: track.runs.length > 1 ? at + 1 : null,
+        count: new Set(part.clips.map((clip) => clip.target)).size,
+        track: { ...part, name: track.name, thing: track.thing },
+      })
+    )
+  );
 }
 
 /** When the track begins after the moment the move set it off, ms: its delay. */

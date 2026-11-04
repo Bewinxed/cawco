@@ -24,24 +24,21 @@
    * restore it). Coral is the selected row's alone. A pick or a typed value
    * plays the move from the row once (DesignGraph `retime`).
    */
-  import { bringIntoView } from "@cawco/core/bring-into-view";
   import { HOUR_MS } from "@cawco/core/time";
   import { graphWords as words } from "@cawco/core/words/graph";
-  import { Slider } from "bits-ui";
   import { ease } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
-  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
-    IconCheck,
     IconChevronDown,
     IconMinus,
     IconPlus,
     IconReset,
   } from "#lib/icons.js";
+  import ChoiceList, { toChosen } from "./ChoiceList.svelte";
+  import CurveChoices from "./CurveChoices.svelte";
   import { figureOf } from "./figures";
   import {
     type Clip,
@@ -180,8 +177,6 @@
   /** The spring's own length: how long it takes to swing to its end, s (its response). */
   const responseOf = (spring: Spring) =>
     (2 * Math.PI) / Math.sqrt(spring.stiffness / spring.mass);
-  /** Bounce while a drag holds it; the row's own at rest. */
-  let bounce = $state<number | null>(null);
 
   // --- Reset ---------------------------------------------------------------
   /** Each changed value's press, named for what it goes back to. */
@@ -205,23 +200,6 @@
     }),
   });
 
-  /**
-   * A list's chosen choice brought into view and focused as it opens: the
-   * kit's popover focuses its first row, and on a phone the chosen length
-   * (Pop, 260 ms) stood scrolled out of the list.
-   */
-  const toChosen = (list: () => HTMLElement | undefined) => (event: Event) => {
-    event.preventDefault();
-    requestAnimationFrame(() => {
-      const chosen =
-        list()?.querySelector<HTMLElement>('[aria-selected="true"]') ??
-        list()?.querySelector<HTMLElement>('[role="option"]');
-      if (chosen) {
-        bringIntoView(chosen);
-      }
-      chosen?.focus({ preventScroll: true });
-    });
-  };
   let lengthList = $state<HTMLElement>();
   let curveList = $state<HTMLElement>();
 
@@ -359,51 +337,20 @@
         overflow="scroll"
         width="narrow"
       >
-        <div
-          bind:this={lengthList}
-          aria-label={words.length}
-          class="flex flex-col"
-          role="listbox"
-          {@attach highlight({
-            rows: '[data-slot="item"]',
-            selected: '[aria-selected="true"]',
-          })}
-        >
-          {#each DURATIONS as one (one.token)}
-            {@const chosen = shortest === longest && shortest === one.ms}
-            <button
-              aria-selected={chosen}
-              class={menuItemVariants({
-                class:
-                  "flex w-full items-center gap-space-2 px-space-3 text-start type-label text-ink-strong select-none focus-inset",
-              })}
-              data-menu-item
-              data-slot="item"
-              onclick={() => {
-                setLength(one.ms);
-                open = null;
-              }}
-              role="option"
-              type="button"
-            >
-              <span
-                class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap"
-                >{words.durations[one.token] ?? one.token}</span
-              >
-              <span class="type-meta text-ink-muted num"
-                >{words.ms(figure(one.ms))}</span
-              >
-              <span
-                class="grid size-icon-md flex-none place-items-center"
-                data-box
-              >
-                {#if chosen}
-                  <IconCheck class="size-icon-md" />
-                {/if}
-              </span>
-            </button>
-          {/each}
-        </div>
+        <ChoiceList
+          bind:ref={lengthList}
+          label={words.length}
+          onpick={(next) => {
+            setLength(Number(next));
+            open = null;
+          }}
+          options={DURATIONS.map((one) => ({
+            value: String(one.ms),
+            name: words.durations[one.token] ?? one.token,
+            meta: words.ms(figure(one.ms)),
+          }))}
+          value={shortest === longest ? String(shortest) : null}
+        />
         <!-- A length of his own: off the design system's durations, which
              the agent reads as his own number to name. -->
         <label
@@ -448,103 +395,41 @@
       <Popover.Content
         align="start"
         gap="none"
-        height="capped"
+        height="available"
         onOpenAutoFocus={toChosen(() => curveList)}
         overflow="scroll"
         width="narrow"
       >
-        <div
-          bind:this={curveList}
-          aria-label={words.curve}
-          class="flex flex-col"
-          role="listbox"
-          {@attach highlight({
-            rows: '[data-slot="item"]',
-            selected: '[aria-selected="true"]',
-          })}
-        >
-          {#each [...HOUSE, "spring", ...(written ? ["written"] : [])] as choice (choice)}
-            <button
-              aria-selected={curve === choice}
-              class={menuItemVariants({
-                class:
-                  "flex w-full items-center gap-space-2 px-space-3 text-start type-label text-ink-strong select-none focus-inset",
-              })}
-              data-menu-item
-              data-slot="item"
-              onclick={() => {
-                pickCurve(choice);
-                if (choice !== "spring") {
-                  open = null;
-                }
-              }}
-              role="option"
-              type="button"
-            >
-              <span
-                class="grid size-icon-md flex-none place-items-center text-ink-muted"
-                data-box
-              >
-                {@render glyph(glyphOf(choice, was))}
-              </span>
-              <span
-                class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap"
-                >{curveName(choice)}</span
-              >
-              <span
-                class="grid size-icon-md flex-none place-items-center"
-                data-box
-              >
-                {#if curve === choice}
-                  <IconCheck class="size-icon-md" />
-                {/if}
-              </span>
-            </button>
-          {/each}
-        </div>
-        {#if first.spring}
-          {@const spring = first.spring}
-          <!-- The spring's one setting: how far it overshoots. -->
-          <div
-            class="flex min-w-0 items-center gap-space-3 border-t border-border-hairline px-space-3 pt-space-2 pb-space-1"
-          >
-            <span class="type-label text-ink-muted">{words.bounce}</span>
-            <Slider.Root
-              class="relative flex h-c-btn-h-sm min-w-0 flex-1 touch-none items-center select-none"
-              max={BOUNCE_MOST}
-              min={0}
-              onValueChange={(next: number) => {
-                bounce = next;
-              }}
-              onValueCommit={(next: number) => {
-                bounce = null;
-                sendSpring({
-                  ...springOf(responseOf(spring), next),
-                  mass: spring.mass,
-                });
-              }}
-              step={0.05}
-              type="single"
-              value={bounce ?? Math.min(BOUNCE_MOST, spring.bounce)}
-            >
-              <span
-                class="relative h-space-1 w-full overflow-clip rounded-pill bg-surface-fill"
-              >
-                <Slider.Range
-                  class="absolute h-full rounded-pill bg-ink-muted"
-                />
-              </span>
-              <Slider.Thumb
-                aria-label={words.bounce}
-                class="pointer-hit touch-hit block size-space-4 cursor-ew-resize rounded-pill border border-border-control bg-surface-raised shadow-xs focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2"
-                index={0}
-              />
-            </Slider.Root>
-            <span class="w-space-7 text-end type-meta text-ink-muted num"
-              >{Math.round((bounce ?? spring.bounce) * 100)}%</span
-            >
-          </div>
-        {/if}
+        <CurveChoices
+          bind:ref={curveList}
+          onpick={(choice) => {
+            pickCurve(choice);
+            if (choice !== "spring") {
+              open = null;
+            }
+          }}
+          options={[...HOUSE, "spring", ...(written ? ["written"] : [])].map(
+            (choice) => ({
+              value: choice,
+              name: curveName(choice),
+              glyph: glyphOf(choice, was),
+            })
+          )}
+          spring={first.spring
+            ? {
+                bounce: first.spring.bounce,
+                most: BOUNCE_MOST,
+                onbounce: (next) => {
+                  const spring = first.spring as Spring;
+                  sendSpring({
+                    ...springOf(responseOf(spring), next),
+                    mass: spring.mass,
+                  });
+                },
+              }
+            : null}
+          value={curve}
+        />
       </Popover.Content>
     </Popover.Root>
     {@render restoreOf("curve")}
