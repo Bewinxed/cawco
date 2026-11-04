@@ -509,6 +509,7 @@
     anchor={glass}
     aria-label={LABEL[shown]}
     data-glass-card-frame={FRAME[shown]}
+    role="dialog"
     data-rehearsing={rehearsing || undefined}
     frame={shown}
     collisionPadding={placement.collisionPadding}

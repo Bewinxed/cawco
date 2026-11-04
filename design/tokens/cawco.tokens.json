@@ -4211,7 +4211,7 @@
         "value": 32,
         "unit": "px"
       },
-      "$description": "Caw's own glass on the phone bar, its side: round at its leading side, square at its trailing one, its trailing edge c-bar-phone-edge in from the screen's, as the sidebar toggle's glyph is from the other. Caw's phone glass tops with the tabs and stands clear of the floor; open, his panel hangs from the floor through a neck (c-tab-row-h less this, his glass's foot to the row's floor)."
+      "$description": "Caw's own glass on the phone bar, its side: round at its leading side, square at its trailing one, its trailing edge c-bar-phone-edge in from the screen's, as the sidebar toggle's glyph is from the other. Caw's phone glass stands centred on the tabs' centre line, as the sidebar toggle's glyph does, clear of the floor; open, his panel hangs from the floor through a neck (half of c-tab-row-h less this, his glass's foot to the row's floor)."
     },
     "c-bar-caw-head-phone": {
       "$type": "dimension",

@@ -28,6 +28,7 @@
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import SoundSwitcher from "#lib/components/ui/SoundSwitcher.svelte";
+  import * as Sheet from "#lib/components/ui/sheet/index.js";
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import ThemeSwitcher from "#lib/components/ui/ThemeSwitcher.svelte";
@@ -912,6 +913,12 @@
           </button>
         {/snippet}
       </Tip>
+      {#if sheet}
+        <!-- The phone's sheet names itself by this row, so its Close is the
+             row's last control (Sheet `titleHidden`), Start session's twin:
+             the same box and glyph size, the row's gap between them. -->
+        <Sheet.Close size="row" />
+      {/if}
     </div>
   </Sidebar.Header>
 

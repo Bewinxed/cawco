@@ -669,7 +669,7 @@ public enum Size {
     public static let cBarItem: Double = 28
     /// A symbol in the top bar's glass group: the machines glyph and Caw's head.
     public static let cBarSymbol: Double = 20
-    /// Caw's own glass on the phone bar, its side: round at its leading side, square at its trailing one, its trailing edge c-bar-phone-edge in from the screen's, as the sidebar toggle's glyph is from the other. Caw's phone glass tops with the tabs and stands clear of the floor; open, his panel hangs from the floor through a neck (c-tab-row-h less this, his glass's foot to the row's floor).
+    /// Caw's own glass on the phone bar, its side: round at its leading side, square at its trailing one, its trailing edge c-bar-phone-edge in from the screen's, as the sidebar toggle's glyph is from the other. Caw's phone glass stands centred on the tabs' centre line, as the sidebar toggle's glyph does, clear of the floor; open, his panel hangs from the floor through a neck (half of c-tab-row-h less this, his glass's foot to the row's floor).
     public static let cBarCawGlassPhone: Double = 32
     /// Caw's head in his phone glass: the glass less the desktop item's 4px margin round its head on each side.
     public static let cBarCawHeadPhone: Double = 24
