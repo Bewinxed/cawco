@@ -14,7 +14,7 @@
     deleteProjectForGood,
     readForgottenProjects,
   } from "#lib/cawco/client.svelte.js";
-  import ForgottenProjects from "#lib/cawco/forgotten/ForgottenProjects.svelte";
+  import ForgottenPage from "#lib/cawco/forgotten/ForgottenPage.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { bringBack, bringBackKey } from "#lib/cawco/project-end.svelte.js";
   import { refusals } from "#lib/cawco/refusals.svelte.js";
@@ -62,30 +62,12 @@
   <title>{projectEndWords.forgottenTitle} &middot; CawCo</title>
 </svelte:head>
 
-<!-- The pages' one gutter (as Usage stands on it), the ledger capped at the
-     house's section width so its columns stay beside their names. -->
-<div
-  class="min-w-0 flex-auto overflow-y-auto pt-space-6 pr-space-6 pb-space-6 pl-space-7 max-desk:px-space-5 max-phone:px-space-5 max-phone:py-space-4"
->
-  <div class="flex max-w-c-config-max-w flex-col gap-space-group">
-    <header class="flex min-w-0 flex-col gap-space-1">
-      <h1 class="m-0 type-title text-balance text-ink-strong">
-        {projectEndWords.forgottenTitle}
-      </h1>
-      <p class="m-0 type-body text-pretty text-ink-muted">
-        {projectEndWords.forgottenLine}
-      </p>
-    </header>
-    <div class="rounded-lg bg-surface-raised px-space-4 py-space-2 shadow-tile">
-      <ForgottenProjects
-        bringBack={(one, name) =>
-          bringBack(one.id, { forgottenAt: one.forgottenAt, name })}
-        {list}
-        refusalOf={(id) => refusals.reason(bringBackKey(id))}
-        reread={read}
-        {remove}
-        {unread}
-      />
-    </div>
-  </div>
-</div>
+<ForgottenPage
+  bringBack={(one, name) =>
+    bringBack(one.id, { forgottenAt: one.forgottenAt, name })}
+  {list}
+  refusalOf={(id) => refusals.reason(bringBackKey(id))}
+  reread={read}
+  {remove}
+  {unread}
+/>
