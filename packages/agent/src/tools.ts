@@ -629,36 +629,68 @@ const SETTINGS_ENGINES: Record<
 };
 
 /**
- * Where one source of a tool's settings is, in the words a row says it with
- * (core `ToolUpdateSwitches.places`): a file by its path; a managed policy by
- * the place the engine says it came from, the managed settings when it names
- * none of these, or the files are kept nowhere on this platform.
+ * Where a switch is set, in the words a row says it with, and `next`, how an
+ * unset there reaches CawCo's next read of it (core words
+ * `toolWords.updatesOff`'s `where` and `then`).
  */
-const sourceWhere = (
+interface SwitchPlace {
+  next: string;
+  where: string;
+}
+
+/**
+ * A place CawCo's next read of the settings reads as it stands: that read
+ * is a process of its own (`SETTINGS_ENGINES`), so an unset there counts at
+ * the Retry after it.
+ */
+const retried = (where: string): SwitchPlace => ({
+  next: toolWords.thenRetry,
+  where,
+});
+
+/**
+ * Where one source of a tool's settings is (core `ToolUpdateSwitches.places`),
+ * and how an unset there reaches CawCo's next read: a file by its path; a
+ * managed policy by the place the engine says it came from, the managed
+ * settings when it names none of these, or the files are kept nowhere on
+ * this platform. Each is read as it stands, but the server-managed settings:
+ * the engine reads the copy Claude Code last fetched, and "Claude Code
+ * fetches settings from Anthropic's servers at startup and polls for updates
+ * hourly during active sessions", or for "A client signed in through a
+ * Claude apps gateway fetches its settings from the gateway and waits for
+ * that fetch before the session starts"
+ * (code.claude.com/docs/en/server-managed-settings, read 2026-11-04), so a
+ * session's fetch comes first.
+ */
+const sourcePlace = (
   places: ToolUpdateSwitches["places"],
   source: SettingsRead["sources"][number]
-): string => {
+): SwitchPlace => {
   if (source.path) {
-    return shownPath(source.path);
+    return retried(shownPath(source.path));
   }
   const { files, registry } = places;
   const dir = files.dirs[platform() as ToolPlatform];
-  const named: Record<string, string> = {
+  const named: Record<string, SwitchPlace> = {
     ...(dir
       ? {
-          file: toolWords.inManagedFiles(
-            join(dir, files.file),
-            join(dir, files.folder)
+          file: retried(
+            toolWords.inManagedFiles(
+              join(dir, files.file),
+              join(dir, files.folder)
+            )
           ),
         }
       : {}),
-    hkcu: toolWords.inRegistry(registry.value, registry.hkcu),
-    hklm: toolWords.inRegistry(registry.value, registry.hklm),
-    plist: toolWords.inProfile(places.profile),
-    remote: toolWords.inServerManaged,
-  } satisfies Partial<Record<PolicySettingsOrigin, string>>;
+    hkcu: retried(toolWords.inRegistry(registry.value, registry.hkcu)),
+    hklm: retried(toolWords.inRegistry(registry.value, registry.hklm)),
+    plist: retried(toolWords.inProfile(places.profile)),
+    remote: { next: toolWords.thenFetched, where: toolWords.inServerManaged },
+  } satisfies Partial<Record<PolicySettingsOrigin, SwitchPlace>>;
+  const { policyOrigin } = source;
   return (
-    (source.policyOrigin && named[source.policyOrigin]) ?? toolWords.inManaged
+    (policyOrigin ? named[policyOrigin] : undefined) ??
+    retried(toolWords.inManaged)
   );
 };
 
@@ -676,22 +708,27 @@ const turnsOff = (
     ? value !== undefined && value !== null && String(value) !== ""
     : switchOn(value);
 
+/** The switch that turned a tool's updates off, where it is set, and how an unset there reaches CawCo. */
+type SwitchedOff = SwitchPlace & { variable: string };
+
 /**
  * The switch with which a machine's owner turned the tool's own updates off,
- * and where it is set (core `ToolUpdateSwitches`), from the environment the
- * tool runs with (`env`) and its settings as its engine resolved them: a
- * variable's value is the settings' `env`'s where they set it, which the
- * tool applies over its environment, else the environment's; it is set in
- * the highest source whose `env` sets it. One of `every` turns off any
- * update; one of `automatic`, an automatic one (CawCo's own) too. None set:
- * undefined.
+ * where it is set, and how an unset there reaches CawCo's next read (core
+ * `ToolUpdateSwitches`), from the environment the tool runs with (`env`) and
+ * its settings as its engine resolved them: a variable's value is the
+ * settings' `env`'s where they set it, which the tool applies over its
+ * environment, else the environment's; it is set in the highest source whose
+ * `env` sets it ({@link sourcePlace}), or in the environment, which is this
+ * daemon's own, held from its start (`toolEnv`), so only a restart reads it
+ * unset. One of `every` turns off any update; one of `automatic`, an
+ * automatic one (CawCo's own) too. None set: undefined.
  */
 export const switchedOffIn = (
   switches: ToolUpdateSwitches,
   automatic: boolean,
   env: Readonly<Record<string, string | undefined>>,
   settings: SettingsRead
-): { variable: string; where: string } | undefined => {
+): SwitchedOff | undefined => {
   const resolved = settings.effective.env ?? {};
   for (const variable of [
     ...switches.every,
@@ -703,7 +740,11 @@ export const switchedOffIn = (
       continue;
     }
     if (!inSettings) {
-      return { variable, where: toolWords.inEnvironment };
+      return {
+        variable,
+        next: toolWords.thenRestarted,
+        where: toolWords.inEnvironment,
+      };
     }
     const source = settings.sources.findLast(
       (one) =>
@@ -712,9 +753,9 @@ export const switchedOffIn = (
     );
     return {
       variable,
-      where: source
-        ? sourceWhere(switches.places, source)
-        : toolWords.inManaged,
+      ...(source
+        ? sourcePlace(switches.places, source)
+        : retried(toolWords.inManaged)),
     };
   }
 };
@@ -727,9 +768,7 @@ export const switchedOffIn = (
 const switchedOff = async (
   switches: ToolUpdateSwitches,
   automatic: boolean
-): Promise<
-  { variable: string; where: string } | SettingsUnread | undefined
-> => {
+): Promise<SwitchedOff | SettingsUnread | undefined> => {
   const read = await SETTINGS_ENGINES[switches.engine]([
     ...switches.every,
     ...switches.automatic,
@@ -1218,7 +1257,12 @@ const install = async (
         () =>
           "unread" in off
             ? toolWords.settingsUnread(spec.name, off.unread)
-            : toolWords.updatesOff(spec.name, off.variable, off.where),
+            : toolWords.updatesOff(
+                spec.name,
+                off.variable,
+                off.where,
+                off.next
+              ),
         undefined
       )
     );

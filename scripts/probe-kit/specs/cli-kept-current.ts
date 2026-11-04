@@ -72,8 +72,12 @@
  * (m) Where the engine says a switch is set, as a row names it: Claude
  *     Code's macOS profile, HKLM and HKCU registry policies, managed
  *     settings files and server-managed settings each stand over the
- *     user's settings, and the settings' `env` over the environment's. The
- *     read's process answers the settings it printed, or none.
+ *     user's settings, and the settings' `env` over the environment's. Each
+ *     row ends on how an unset there reaches CawCo: a Retry for a place the
+ *     next read reads as it stands, a Claude Code session's fetch first for
+ *     the server-managed settings, a restart of CawCo first for its
+ *     environment. The read's process answers the settings it printed, or
+ *     none.
  * (n) A read of the settings that fails decides nothing: neither CawCo's
  *     own update nor a press runs, and the row says why.
  *
@@ -783,7 +787,8 @@ const fleetLegs = async (kit: Kit): Promise<void> => {
           toolWords.updatesOff(
             NAME,
             "DISABLE_AUTOUPDATER",
-            toolWords.inEnvironment
+            toolWords.inEnvironment,
+            toolWords.thenRestarted
           ) &&
         (await off.calls()).length === 0,
       `row: ${JSON.stringify(declined)}; its updater ran: ${(await off.calls()).join(", ") || "never"}`
@@ -1093,7 +1098,12 @@ const offSays = async (
   kit.check(
     `(j, ${view}) the machine whose updates are off says why on its row`,
     offSaid.includes(
-      toolWords.updatesOff(NAME, "DISABLE_AUTOUPDATER", toolWords.inEnvironment)
+      toolWords.updatesOff(
+        NAME,
+        "DISABLE_AUTOUPDATER",
+        toolWords.inEnvironment,
+        toolWords.thenRestarted
+      )
     ),
     there
       ? offSaid.replaceAll("\n", " ").slice(0, 400)
@@ -1129,7 +1139,8 @@ const switchLegs = async (kit: Kit, fresh: Fresh): Promise<void> => {
           toolWords.updatesOff(
             NAME,
             "DISABLE_AUTOUPDATER",
-            join("~", CLAUDE_DIR_NAME, "settings.json")
+            join("~", CLAUDE_DIR_NAME, "settings.json"),
+            toolWords.thenRetry
           ),
       JSON.stringify(read.declined)
     );
@@ -1148,7 +1159,8 @@ const switchLegs = async (kit: Kit, fresh: Fresh): Promise<void> => {
           toolWords.updatesOff(
             NAME,
             "DISABLE_UPDATES",
-            toolWords.inEnvironment
+            toolWords.inEnvironment,
+            toolWords.thenRestarted
           ) &&
         calls.join(",") === `update from ${BEHIND}`,
       `${JSON.stringify(read.blocked)}; what ran: ${calls.join(", ")}`
@@ -1170,7 +1182,8 @@ const switchLegs = async (kit: Kit, fresh: Fresh): Promise<void> => {
           toolWords.updatesOff(
             NAME,
             "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
-            toolWords.inEnvironment
+            toolWords.inEnvironment,
+            toolWords.thenRestarted
           ),
       JSON.stringify(read.declined)
     );
@@ -1416,6 +1429,50 @@ const settingsLegs = (kit: Kit): void => {
     "(m) a variable only the environment sets is the environment's",
     envOnly?.variable === "DISABLE_UPDATES" &&
       envOnly.where === toolWords.inEnvironment,
+    JSON.stringify(envOnly)
+  );
+
+  // How an unset reaches CawCo, by where the switch is set (agent tools.ts
+  // `switchedOffIn`): each read is a process of its own, so a place it reads
+  // as it stands takes a Retry; the server-managed settings are the copy
+  // Claude Code last fetched, so a session's fetch comes first; the
+  // environment is the daemon's own, held from its start, so a restart does.
+  const asTheyStand: [string, SettingsRead][] = [
+    [
+      "the user's settings file",
+      {
+        effective: { env: { DISABLE_AUTOUPDATER: "1" } },
+        sources: [{ ...user, settings: { env: { DISABLE_AUTOUPDATER: "1" } } }],
+      },
+    ],
+    ...(["plist", "hklm", "hkcu", "file", "helper"] as const).map(
+      (origin): [string, SettingsRead] => [origin, managed(origin)]
+    ),
+    [
+      "managed settings no source of which the engine names",
+      { effective: { env: { DISABLE_AUTOUPDATER: "1" } }, sources: [] },
+    ],
+  ];
+  const tails = asTheyStand.map(([source, read]) => ({
+    source,
+    off: switchedOffIn(switches, true, {}, read),
+  }));
+  check(
+    `(m) a switch in a place the next read reads as it stands ends "${toolWords.thenRetry}": the user's settings file, the profile, HKLM, HKCU, the managed settings files, and managed settings the engine names no place for`,
+    tails.every(({ off }) => off?.next === toolWords.thenRetry),
+    JSON.stringify(tails)
+  );
+  const fetched = switchedOffIn(switches, true, {}, managed("remote"));
+  check(
+    `(m) a switch in the server-managed settings ends "${toolWords.thenFetched}": the read sees the copy Claude Code last fetched`,
+    fetched?.where === toolWords.inServerManaged &&
+      fetched.next === toolWords.thenFetched,
+    JSON.stringify(fetched)
+  );
+  check(
+    `(m) a switch only the environment CawCo runs in sets ends "${toolWords.thenRestarted}": that environment is the daemon's own, held from its start`,
+    envOnly?.where === toolWords.inEnvironment &&
+      envOnly.next === toolWords.thenRestarted,
     JSON.stringify(envOnly)
   );
 };

@@ -21,10 +21,32 @@ export const toolWords = {
     `The newest release is ${newest}. ${said ? `${method} said: ${said}` : `${method} said nothing about why`}. Sessions still start on ${version}. CawCo tries again when a newer release is out.`,
   /**
    * The machine's owner turned the tool's own updates off (core
-   * `ToolSpec.updatesOff`): which switch, and where it is set.
+   * `ToolSpec.updatesOff`): which switch, where it is set, and `then`, how
+   * an unset there reaches CawCo's next read of it: {@link toolWords.thenRetry},
+   * {@link toolWords.thenFetched} or {@link toolWords.thenRestarted}, by
+   * where it is set (agent tools.ts `switchedOffIn`).
    */
-  updatesOff: (name: string, variable: string, where: string) =>
-    `${variable} in ${where} turns ${name}'s updates off, and CawCo follows it. Unset it there and CawCo updates it.`,
+  updatesOff: (name: string, variable: string, where: string, then: string) =>
+    `${variable} in ${where} turns ${name}'s updates off, and CawCo follows it. ${then}`,
+  /**
+   * {@link toolWords.updatesOff}'s `then` for a switch in a place CawCo's
+   * next read of the settings reads as it stands: a settings file, a
+   * configuration profile, the registry, the managed settings files.
+   */
+  thenRetry: "Unset it there, then Retry.",
+  /**
+   * {@link toolWords.updatesOff}'s `then` for a switch in the server-managed
+   * settings: CawCo reads the copy Claude Code last fetched, which changes
+   * only when Claude Code fetches them, at its start and then hourly in an
+   * active session.
+   */
+  thenFetched:
+    "Unset it there, start a Claude Code session on this machine so it fetches them again, then Retry.",
+  /**
+   * {@link toolWords.updatesOff}'s `then` for a switch in the environment
+   * CawCo runs in: its daemon's own, which holds what it started with.
+   */
+  thenRestarted: "Unset it there and restart CawCo, then Retry.",
   /** {@link toolWords.updatesOff}'s `where` for a switch set in the environment rather than a settings file. */
   inEnvironment: "the environment CawCo runs in",
   /** {@link toolWords.updatesOff}'s `where` for a switch set in a macOS configuration profile (core `ToolUpdateSwitches.places`). */
@@ -40,20 +62,24 @@ export const toolWords = {
    */
   inManagedFiles: (file: string, folder: string) =>
     `${file} or a .json file in ${folder}`,
-  /** {@link toolWords.updatesOff}'s `where` for a switch set in the server-managed settings, as Claude Code last fetched them. */
+  /**
+   * {@link toolWords.updatesOff}'s `where` for a switch set in the
+   * server-managed settings, as Claude Code last fetched them: from the
+   * claude.ai console or from a Claude apps gateway, both of which the
+   * engine names `remote`.
+   */
   inServerManaged:
-    "the managed settings of your claude.ai organization (Organization settings → Claude Code → Managed settings)",
+    "the managed settings Claude Code last fetched from the organization it signs in to (the claude.ai console's Organization settings → Claude Code → Managed settings, or its Claude apps gateway)",
   /** {@link toolWords.updatesOff}'s `where` for a switch set in managed settings whose source the tool's engine names as none of the others. */
   inManaged:
     "the managed settings Claude Code reads on the machine (its /status names the source)",
   /**
    * A read of the tool's settings that gave none (agent tools.ts
    * `settingsAnswer`): CawCo can't tell whether its owner turned its updates
-   * off, so it updates nothing; the read's last line when it said one. A
-   * placeholder until reviewed.
+   * off, so it updates nothing; the read's last line when it said one.
    */
   settingsUnread: (name: string, said: string | undefined) =>
-    `CawCo couldn't read ${name}'s settings to see whether its updates are off, so it left it as it is.${said ? ` The read said: ${said}` : ""} CawCo reads them again at the next update.`,
+    `CawCo couldn't read ${name}'s settings${said ? ` (${said})` : ""}, so it can't tell whether its updates are off. Retry reads them again, and so does CawCo's next update.`,
   /** A pinned version the copy's method can't install (a Homebrew cask carries one version): nothing was run. */
   cannotPin: (method: string, name: string, version: string) =>
     `${method} installs only the version it carries, not ${name} ${version}, the version the fleet pins. Pin the version ${method} carries, or install ${name} there without ${method}.`,
