@@ -147,6 +147,14 @@ export const workWords = {
   /** `stop_delegate`'s word on a stopped item's workspace that holds nothing that is nowhere else. */
   stopRetires: (ws: string) =>
     `Its workspace ${ws} holds nothing that is nowhere else, so it retires once its session ends; a handoff to it cuts it again where it was.`,
+  /**
+   * WORDS OWED (a placeholder): `stop_delegate`'s word on a stopped item's
+   * workspace that holds nothing that is nowhere else but serves `links`
+   * (each an artifact by its link, hub work-items.ts `serving`): it stays
+   * while it serves them, never retiring under them.
+   */
+  stopServes: (ws: string, links: readonly string[]) =>
+    `[words owed: stopServes] workspace ${ws}; serves ${links.join(", ")}`,
   /** `stop_delegate`'s word when what the workspace holds could not be read as it stopped. */
   stopUnread: (ws: string, error: string) =>
     `What its workspace ${ws} holds could not be read now (${error}): if it holds work that is nowhere else it is held as its session ends, and you are told then.`,

@@ -25,6 +25,7 @@ import type {
   SpawnPayload,
 } from "@cawco/core";
 import {
+  artifactLink,
   delegateTypeProblem,
   handoffMarker,
   IMAGE_GENERATION_TIMEOUT_MS,
@@ -1265,12 +1266,15 @@ function repeatOfRefused(
  * held, with what it holds and its two ways out (continue it, or discard it
  * to a carry), the hold being its stopper's to decide (work-items.ts
  * `carriesOff`); or retiring, holding nothing that is nowhere else, with a
- * handoff cutting it again. A read that failed says so, and that a hold is
- * told as it comes (work-items.ts `heldNotice`).
+ * handoff cutting it again; or, holding nothing but serving an artifact
+ * (`serving`, work-items.ts `serving`: the hold `previewedBy` reads), staying
+ * while it serves that, each by its link. A read that failed says so, and
+ * that a hold is told as it comes (work-items.ts `heldNotice`).
  */
 function stoppedHoldWords(
   workspaceId: string,
-  unlanded: Unlanded | { error: string } | null
+  unlanded: Unlanded | { error: string } | null,
+  serving: readonly { id: string; name: string }[]
 ): string {
   const ws = idHandle(workspaceId);
   if (!unlanded) {
@@ -1285,8 +1289,14 @@ function stoppedHoldWords(
     unlanded.changed > 0 &&
       `${unlanded.changed} changed file${unlanded.changed === 1 ? "" : "s"} or stash${unlanded.changed === 1 ? "" : "es"}`,
   ].filter(Boolean);
-  return held.length > 0
-    ? `${workWords.stopHolds(ws, held.join(" and "))} ${workWords.holdWays(ws)}`
+  if (held.length > 0) {
+    return `${workWords.stopHolds(ws, held.join(" and "))} ${workWords.holdWays(ws)}`;
+  }
+  return serving.length > 0
+    ? workWords.stopServes(
+        ws,
+        serving.map((one) => artifactLink(one.id, one.name))
+      )
     : workWords.stopRetires(ws);
 }
 
@@ -2052,13 +2062,14 @@ export const handoffActions = ({
       const read = await fetch(
         `${hubHttpUrl()}/api/work-items/${encodeURIComponent(peer.row.workItemId)}/unlanded`
       );
-      const unlanded = read.ok
-        ? (
-            (await read.json()) as {
-              unlanded: Unlanded | { error: string } | null;
-            }
-          ).unlanded
-        : { error: await read.text() };
+      const said = read.ok
+        ? ((await read.json()) as {
+            serving?: { id: string; name: string }[];
+            unlanded: Unlanded | { error: string } | null;
+          })
+        : { unlanded: { error: await read.text() } };
+      const { unlanded } = said;
+      const serving = ("serving" in said ? said.serving : undefined) ?? [];
       const item = await fetch(
         `${hubHttpUrl()}/api/work-items/${encodeURIComponent(peer.row.workItemId)}`
       );
@@ -2066,7 +2077,7 @@ export const handoffActions = ({
         throw new Error(await item.text());
       }
       const { workspaceId } = (await item.json()) as WorkItemView;
-      return `${stopping} ${stoppedHoldWords(workspaceId, unlanded)}`;
+      return `${stopping} ${stoppedHoldWords(workspaceId, unlanded, serving)}`;
     },
 
     interruptDelegate(target: string): string {

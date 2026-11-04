@@ -10255,6 +10255,24 @@ export const createWorkItems = ({
       return read && { ...read, live: LIVE.has(item.state) };
     },
 
+    /**
+     * The artifacts workspace `id` serves ({@link servedFrom}), each once by
+     * its artifact's own id and name (a held next version by the artifact
+     * it is held for): what holds its retirement, as `stop_delegate` names
+     * it. Empty for a workspace the hub does not hold.
+     */
+    serving: (id: string): { id: string; name: string }[] => {
+      const [workspace] = db.workspacesNamed(id);
+      if (!workspace) {
+        return [];
+      }
+      const named = new Map<string, string>();
+      for (const row of servedFrom(workspace)) {
+        named.set(row.heldFor ?? row.id, row.name);
+      }
+      return [...named].map(([one, name]) => ({ id: one, name }));
+    },
+
     /** Every held workspace, with what it holds and where ({@link HeldWork}), newest first. */
     heldWorkspaces: (): HeldWork[] =>
       db.heldWorkspaces().filter(isHeld).map(heldWork),

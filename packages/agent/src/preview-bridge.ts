@@ -2,8 +2,9 @@
  * A preview's way to a port inside a workspace (Linux). Every command of a
  * workspace runs in its boundary's own network (`boundary.ts`), so a dev
  * server a session there starts listens on the boundary's loopback, which the
- * host's does not reach. The agent bridges it: a relay ({@link RELAY}, one
- * bun process on CawCo's own runtime) joined to the boundary's network, and
+ * host's does not reach. The agent bridges it: a relay (bridge-relay.ts
+ * `bridgeRelay`, one bun process on CawCo's own runtime) joined to the
+ * boundary's network, and
  * to the user namespace that owns that network ({@link JOIN}), listens on a
  * unix socket in the agent's own runtime dir (a path, so in no network) and
  * carries each connection to 127.0.0.1:<port> in there, every connection on
@@ -33,12 +34,8 @@ import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { systemProgram, trustedPath } from "@cawco/core/workspace-needs";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import type { Subprocess } from "bun";
-import {
-  BUN_SCRIPT_ENV,
-  bunScriptRuntime,
-  listeners,
-  workspaceNetworks,
-} from "./boundary";
+import { listeners, workspaceNetworks } from "./boundary";
+import { bridgeRelay } from "./bridge-relay";
 
 /** The workspace a preview names has no boundary running on this machine. */
 export class WorkspaceDown extends Error {
@@ -82,81 +79,6 @@ const BRIDGE_START_MS = 3000;
 
 /** The most of a bridge's stderr kept, to say why it did not start. */
 const STDERR_KEPT = 2000;
-
-/**
- * The relay, a bun program: it listens on the unix socket its first argument
- * names and carries each connection to 127.0.0.1 at the port its second
- * names, both ways, holding what a side can't take yet until it drains.
- * Every connection is its event loop's, so a canvas's burst of module
- * requests opens no process: socat with `fork` took one per connection (a
- * relay trace on obelisk: 300 GETs through the agent spawned 78 to 299).
- */
-const RELAY = `
-const [socket, port] = process.argv.slice(-2);
-const send = (to, chunk) => {
-  const held = to.data.held;
-  if (held.length > 0) { held.push(Buffer.from(chunk)); return; }
-  const wrote = to.write(chunk);
-  if (wrote < chunk.byteLength) held.push(Buffer.from(chunk.subarray(wrote)));
-};
-const drain = (to) => {
-  const held = to.data.held;
-  while (held.length > 0) {
-    const chunk = held[0];
-    const wrote = to.write(chunk);
-    if (wrote < chunk.byteLength) { held[0] = chunk.subarray(wrote); return; }
-    held.shift();
-  }
-  if (to.data.ending) to.end();
-};
-const finish = (to) => {
-  if (!to) return;
-  if (to.data.held.length > 0) to.data.ending = true; else to.end();
-};
-Bun.listen({
-  unix: socket,
-  socket: {
-    open(client) {
-      client.data = { held: [], early: [], upstream: null, ending: false };
-      Bun.connect({
-        hostname: "127.0.0.1",
-        port: Number(port),
-        socket: {
-          open(upstream) {
-            upstream.data = { held: [], client, ending: false };
-            client.data.upstream = upstream;
-            for (const chunk of client.data.early) send(upstream, chunk);
-            client.data.early = [];
-          },
-          data(upstream, chunk) { send(upstream.data.client, chunk); },
-          drain,
-          end(upstream) { finish(upstream.data.client); },
-          close(upstream) { finish(upstream.data.client); },
-          error(upstream) { finish(upstream.data.client); },
-          connectError() { client.end(); },
-        },
-      }).catch(() => client.end());
-    },
-    data(client, chunk) {
-      const { upstream } = client.data;
-      if (upstream) send(upstream, chunk); else client.data.early.push(Buffer.from(chunk));
-    },
-    drain,
-    end(client) { finish(client.data.upstream); },
-    close(client) { finish(client.data.upstream); },
-    error(client) { finish(client.data.upstream); },
-  },
-});
-`;
-
-/** The relay's own command on `socket` to `port`, and its environment: CawCo's bun (a binary install's runs as bun with `BUN_BE_BUN=1`). */
-const bridgeRelay = (
-  socket: string,
-  port: number
-): { command: string[]; env: Record<string, string> } => ({
-  command: [bunScriptRuntime(), "-e", RELAY, socket, String(port)],
-  env: { ...BUN_SCRIPT_ENV },
-});
 
 /** A workspace's id, or a place's (core `isPlace`): a sheet's stage runs in either. */
 const WORKSPACE_ID = new RegExp(

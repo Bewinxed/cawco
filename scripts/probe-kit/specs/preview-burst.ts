@@ -10,7 +10,7 @@
  * (preview-bridge.ts) was a socat listening on a unix socket with socat's
  * own backlog of 5; past it, a nonblocking connect fails at once with
  * EAGAIN, and the agent's listener answers 502 for the fetch that failed.
- * The bridge is now the agent's own relay (preview-bridge.ts `bridgeRelay`),
+ * The bridge is now the agent's own relay (bridge-relay.ts `bridgeRelay`),
  * one bun process carrying every connection.
  *
  * The chain, every hop the real one but the bridge's join into a
@@ -20,7 +20,7 @@
  * least advised), on to the hub's preview listener (hub preview.ts, a
  * session's own port), the agent's listener (agent preview.ts
  * `startPreview`, a port in a workspace), the bridge's own relay
- * (preview-bridge.ts `bridgeRelay`) carrying each connection to the stage's
+ * (bridge-relay.ts `bridgeRelay`) carrying each connection to the stage's
  * port, and the stage host's Vite serving a Svelte canvas whose states file
  * imports a barrel of 150 icon components, a module each.
  *
@@ -79,7 +79,8 @@ const FIXTURE = join(
   ROOT,
   "scripts/probe-kit/fixtures/component-canvas/svelte"
 );
-const BRIDGE_FILE = join(ROOT, "packages/agent/src/preview-bridge.ts");
+/** The bridge's relay, the module preview-bridge.ts runs it from. */
+const RELAY_FILE = join(ROOT, "packages/agent/src/bridge-relay.ts");
 const BRIDGE_MODULE = /packages\/agent\/src\/preview-bridge\.ts$/u;
 const STORIES = "src/Icons.stories.js";
 const WHY = new RegExp(
@@ -241,15 +242,14 @@ async function stage(
 
 /**
  * The bridge as preview-bridge.ts runs it, but for its join into a
- * workspace's network: the module's own relay (`bridgeRelay`, read from the
- * module itself at `?real`, which Bun loads past this swap), each connection
- * carried to the port the preview names on this loopback. Each bridge's pid
- * goes on `globalThis.__probeBridges` for leg 4.
+ * workspace's network: its relay (bridge-relay.ts `bridgeRelay`, the module
+ * preview-bridge.ts runs it from), each connection carried to the port the
+ * preview names on this loopback. Each bridge's pid goes on
+ * `globalThis.__probeBridges` for leg 4.
  */
 function standInBridge(): void {
-  const real = `${BRIDGE_FILE}?real`;
   const contents = `import { existsSync } from "node:fs";
-import { bridgeRelay } from ${JSON.stringify(real)};
+import { bridgeRelay } from ${JSON.stringify(RELAY_FILE)};
 export class WorkspaceDown extends Error {}
 const bridges = new Map();
 export const reachWorkspace = async (instanceId, _workspace, port) => {

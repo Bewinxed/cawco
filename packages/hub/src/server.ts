@@ -35022,7 +35022,11 @@ export const createServer = (
         async ({ params, status }) => {
           const item = workItems.item(params.id);
           return item
-            ? { unlanded: await coldWork(item.instanceId) }
+            ? {
+                unlanded: await coldWork(item.instanceId),
+                // What its workspace serves, which holds its retirement.
+                serving: workItems.serving(item.workspaceId),
+              }
             : status(404, `no work item ${params.id}`);
         }
       )

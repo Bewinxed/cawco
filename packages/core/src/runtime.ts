@@ -32,11 +32,16 @@ export const runtimeCommit =
  * 6: the hub hands no machine a rule on which repositories a session may
  * write to, and holds no post for the person (`/api/upstream/asks` is gone);
  * an epoch-5 agent's doors go on by the last rule it wrote and raise held
- * posts there. A hub sends a launch only to an agent whose range holds its
- * own, and a joined machine installs only a build whose range overlaps its
- * hub's.
+ * posts there. Epoch 7: a preview's listener is started for the source key
+ * its origin's artifact row names (core preview-upstream.ts `SourceKey`):
+ * `PREVIEW_START` carries `for`, which the agent refuses a start without,
+ * and the register's previews carry `for` in place of their `source`; an
+ * epoch-6 hub starts every preview with no `for` and reads a `source` the
+ * register no longer sends. A hub sends a launch only to an agent whose
+ * range holds its own, and a joined machine installs only a build whose
+ * range overlaps its hub's.
  */
-export const protocolRange = { min: 6, max: 6 } as const;
+export const protocolRange = { min: 7, max: 7 } as const;
 export const runtimeDataDir = () =>
   join(
     process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),
