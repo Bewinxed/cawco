@@ -39,7 +39,13 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type {
+  Account,
+  AccountSignin,
+} from "../../../packages/core/src/accounts";
 import { HOUR_MS } from "../../../packages/core/src/time";
+import { accountsWords } from "../../../packages/core/src/words/accounts";
+import type { ClaudeRefusal } from "../../../packages/hub/src/accounts";
 import type { Kit, Spec } from "../kit";
 
 const MACHINE_A = "machine-a";
@@ -57,12 +63,8 @@ const spec: Spec = {
         await import("../../../packages/hub/scripts/hub-in-process");
       const dbPath = join(scratch, "hub", "hub.db");
       const { db, hub } = await hubInProcess(dbPath, join(scratch, "home"));
-      const {
-        checkRefusal,
-        claudeCredentialRefused,
-        refusalsDue,
-        signOutRefused,
-      } = await import("../../../packages/hub/src/accounts");
+      const { claudeCredentialRefused, signOutRefused } =
+        await import("../../../packages/hub/src/accounts");
       const { accountsRead, decideStop } =
         await import("../../../packages/hub/src/at-limit");
       const { createAdmission } =
@@ -251,172 +253,229 @@ const spec: Spec = {
         JSON.stringify(placed)
       );
 
-      // D: the way back, a check's one turn as the account.
-      const orgRefusal = (words: string) => ({
-        kind: "error" as const,
-        error: "oauth_org_not_allowed",
-        text: words,
+      await wayBack(kit, {
+        account,
+        auth,
+        db,
+        dbPath,
+        home: join(scratch, "home"),
+        hub,
+        refused,
+        signinOf,
       });
-      const anyOnline = () => true;
-      const standing = (accountId: string) =>
-        [MACHINE_A, MACHINE_B].map((machineId) => {
-          const one = signinOf(accountId, machineId);
-          return `${one?.state}:${one?.refusalReach}:${one?.reason}`;
-        });
-      const pastDue =
-        "Claude Code can't use your Claude subscription, usually because a payment is past due";
-      const stillOut = await checkRefusal(
-        db,
-        refused.id,
-        () => Promise.resolve(orgRefusal(pastDue)),
-        anyOnline
-      );
-      kit.check(
-        "D: a check Claude Code refuses again keeps the account out on every machine, its reason the new words",
-        stillOut.kind === "refused" &&
-          standing(refused.id).every(
-            (one) => one === `signed-out:account:${pastDue}`
-          ),
-        JSON.stringify({ stillOut, out: standing(refused.id) })
-      );
-      const asked: string[] = [];
-      const noVerdict = await checkRefusal(
-        db,
-        refused.id,
-        (machineId) => {
-          asked.push(machineId);
-          return Promise.resolve(
-            machineId === MACHINE_A
-              ? { kind: "unread" as const, why: "machine-a didn't answer" }
-              : {
-                  kind: "error" as const,
-                  error: "server_error",
-                  text: "Internal server error",
-                }
-          );
-        },
-        anyOnline
-      );
-      kit.check(
-        "D: a check with no answer, a timeout or another error gives no verdict, and the account stays out",
-        noVerdict.kind === "none" &&
-          asked.length === 2 &&
-          standing(refused.id).every((one) =>
-            one.startsWith("signed-out:account")
-          ),
-        JSON.stringify({ noVerdict, asked })
-      );
-      const offline = await checkRefusal(
-        db,
-        refused.id,
-        () => Promise.reject(new Error("an offline machine is never asked")),
-        () => false
-      );
-      kit.check(
-        "D: with no machine that holds its sign-in connected, nothing is asked and there is no verdict",
-        offline.kind === "none",
-        JSON.stringify(offline)
-      );
-
-      // The route runs the same check: here no machine is connected.
-      const routed = await hub.handle(
-        new Request(
-          `http://127.0.0.1/api/accounts/${refused.id}/refusal-check`,
-          { method: "POST" }
-        )
-      );
-      const routedBody = await routed.text();
-      const machineRefused = account("four@example.com", "Four's", "org-4");
-      if (auth) {
-        signOutRefused(db, MACHINE_A, machineRefused.id, auth);
-      }
-      const machineRoute = await hub.handle(
-        new Request(
-          `http://127.0.0.1/api/accounts/${machineRefused.id}/refusal-check`,
-          { method: "POST" }
-        )
-      );
-      const machineBody = await machineRoute.text();
-      kit.check(
-        "D: POST /api/accounts/:id/refusal-check runs the check: an account refused account-wide is checked (no machine connected here: no verdict)",
-        routed.status === 200 &&
-          (JSON.parse(routedBody) as { kind: string }).kind === "none",
-        `${routed.status} ${routedBody.slice(0, 300)}`
-      );
-      const machineChecked: string[] = [];
-      await checkRefusal(
-        db,
-        machineRefused.id,
-        (machineId) => {
-          machineChecked.push(machineId);
-          return Promise.resolve({ kind: "answered" as const });
-        },
-        anyOnline
-      );
-      kit.check(
-        "D: a refusal of one machine's credential is never checked: the route and the check answer not-refused, nothing is asked, and it stays signed out",
-        machineRoute.status === 200 &&
-          (JSON.parse(machineBody) as { kind: string }).kind ===
-            "not-refused" &&
-          machineChecked.length === 0 &&
-          signinOf(machineRefused.id, MACHINE_A)?.state === "signed-out",
-        `${machineRoute.status} ${machineBody.slice(0, 200)}`
-      );
-
-      // The hourly clock, kept with the account across a restart.
-      const checkedAt = db.accounts.refusalCheckedAt(refused.id) ?? 0;
-      const again = await hubInProcess(dbPath, join(scratch, "home"));
-      const keptAt = again.db.accounts.refusalCheckedAt(refused.id);
-      const soon = refusalsDue(again.db, checkedAt + HOUR_MS - 1);
-      const due = refusalsDue(again.db, checkedAt + HOUR_MS);
-      kit.check(
-        "D: a hub opened again on the same database keeps each refused account's last check: not due before its hour, due at it",
-        checkedAt > 0 &&
-          keptAt === checkedAt &&
-          !soon.includes(refused.id) &&
-          due.includes(refused.id) &&
-          !due.includes(machineRefused.id),
-        JSON.stringify({ checkedAt, keptAt, soon, due })
-      );
-
-      const backCheckedOn: string[] = [];
-      const back = await checkRefusal(
-        db,
-        refused.id,
-        (machineId) => {
-          backCheckedOn.push(machineId);
-          return Promise.resolve({ kind: "answered" as const });
-        },
-        anyOnline
-      );
-      kit.check(
-        "D: a check that is answered brings the account back on every machine its refusal signed out, after one turn on one machine",
-        back.kind === "back" &&
-          back.machines.length === 2 &&
-          backCheckedOn.length === 1 &&
-          standing(refused.id).every((one) => one === "signed-in:null:null"),
-        JSON.stringify({ back, backCheckedOn, out: standing(refused.id) })
-      );
-      const placedBack = place({
-        kind: "delegates",
-        machineId: MACHINE_B,
-        now: Date.now(),
-        accounts: db.accounts.list(),
-        signins: db.accounts.signins(),
-        readings: db.accounts.readings(),
-        bench: db.accounts.bench(Date.now()),
-        routing: db.accounts.routing("anthropic"),
-        typeAccount: refused.id,
-      });
-      kit.check(
-        "D: placement takes the account back: a delegate whose type names it starts on it",
-        placedBack.ok && placedBack.accountId === refused.id,
-        JSON.stringify(placedBack)
-      );
     } finally {
       await rm(scratch, { recursive: true, force: true });
     }
   },
+};
+
+type HubInProcess = Awaited<
+  ReturnType<
+    (typeof import("../../../packages/hub/scripts/hub-in-process"))["hubInProcess"]
+  >
+>;
+
+/**
+ * D: the way back, a check's one turn as the account, on the accounts the
+ * legs before left: `refused` signed out account-wide on both machines.
+ */
+const wayBack = async (
+  kit: Kit,
+  {
+    account,
+    auth,
+    db,
+    dbPath,
+    home,
+    hub,
+    refused,
+    signinOf,
+  }: {
+    account: (email: string, organization: string, orgId: string) => Account;
+    auth: ClaudeRefusal | undefined;
+    db: HubInProcess["db"];
+    dbPath: string;
+    home: string;
+    hub: HubInProcess["hub"];
+    refused: Account;
+    signinOf: (
+      accountId: string,
+      machineId: string
+    ) => AccountSignin | undefined;
+  }
+): Promise<void> => {
+  const { hubInProcess } =
+    await import("../../../packages/hub/scripts/hub-in-process");
+  const { checkRefusal, refusalsDue, signOutRefused } =
+    await import("../../../packages/hub/src/accounts");
+  const { place } = await import("../../../packages/hub/src/placement");
+  // D: the way back, a check's one turn as the account.
+  const orgRefusal = (words: string) => ({
+    kind: "error" as const,
+    error: "oauth_org_not_allowed",
+    text: words,
+  });
+  const anyOnline = () => true;
+  const boxOf = (machineId: string) => machineId.replace("machine-", "box-");
+  const standing = (accountId: string) =>
+    [MACHINE_A, MACHINE_B].map((machineId) => {
+      const one = signinOf(accountId, machineId);
+      return `${one?.state}:${one?.refusalReach}:${one?.reason}`;
+    });
+  const pastDue =
+    "Claude Code can't use your Claude subscription, usually because a payment is past due";
+  const stillOut = await checkRefusal(
+    db,
+    refused.id,
+    () => Promise.resolve(orgRefusal(pastDue)),
+    anyOnline,
+    boxOf
+  );
+  kit.check(
+    "D: a check Claude Code refuses again keeps the account out on every machine, its reason the new words",
+    stillOut.kind === "refused" &&
+      standing(refused.id).every(
+        (one) => one === `signed-out:account:${pastDue}`
+      ),
+    JSON.stringify({ stillOut, out: standing(refused.id) })
+  );
+  const asked: string[] = [];
+  const noVerdict = await checkRefusal(
+    db,
+    refused.id,
+    (machineId) => {
+      asked.push(machineId);
+      return Promise.resolve(
+        machineId === MACHINE_A
+          ? { kind: "unread" as const, why: "machine-a didn't answer" }
+          : {
+              kind: "error" as const,
+              error: "server_error",
+              text: "Internal server error",
+            }
+      );
+    },
+    anyOnline,
+    boxOf
+  );
+  kit.check(
+    "D: a check with no answer, a timeout or another error gives no verdict, and the account stays out",
+    noVerdict.kind === "none" &&
+      noVerdict.why ===
+        `machine-a didn't answer; ${accountsWords.problem.checkWhy.said("Internal server error", "box-b", "server_error")}` &&
+      asked.length === 2 &&
+      standing(refused.id).every((one) => one.startsWith("signed-out:account")),
+    JSON.stringify({ noVerdict, asked })
+  );
+  const offline = await checkRefusal(
+    db,
+    refused.id,
+    () => Promise.reject(new Error("an offline machine is never asked")),
+    () => false,
+    boxOf
+  );
+  kit.check(
+    "D: with no machine that holds its sign-in connected, nothing is asked and there is no verdict",
+    offline.kind === "none" &&
+      offline.why === accountsWords.problem.checkWhy.noMachine,
+    JSON.stringify(offline)
+  );
+
+  // The route runs the same check: here no machine is connected.
+  const routed = await hub.handle(
+    new Request(`http://127.0.0.1/api/accounts/${refused.id}/refusal-check`, {
+      method: "POST",
+    })
+  );
+  const routedBody = await routed.text();
+  const machineRefused = account("four@example.com", "Four's", "org-4");
+  if (auth) {
+    signOutRefused(db, MACHINE_A, machineRefused.id, auth);
+  }
+  const machineRoute = await hub.handle(
+    new Request(
+      `http://127.0.0.1/api/accounts/${machineRefused.id}/refusal-check`,
+      { method: "POST" }
+    )
+  );
+  const machineBody = await machineRoute.text();
+  kit.check(
+    "D: POST /api/accounts/:id/refusal-check runs the check: an account refused account-wide is checked (no machine connected here: no verdict)",
+    routed.status === 200 &&
+      (JSON.parse(routedBody) as { kind: string }).kind === "none",
+    `${routed.status} ${routedBody.slice(0, 300)}`
+  );
+  const machineChecked: string[] = [];
+  await checkRefusal(
+    db,
+    machineRefused.id,
+    (machineId) => {
+      machineChecked.push(machineId);
+      return Promise.resolve({ kind: "answered" as const });
+    },
+    anyOnline,
+    boxOf
+  );
+  kit.check(
+    "D: a refusal of one machine's credential is never checked: the route and the check answer not-refused, nothing is asked, and it stays signed out",
+    machineRoute.status === 200 &&
+      (JSON.parse(machineBody) as { kind: string }).kind === "not-refused" &&
+      machineChecked.length === 0 &&
+      signinOf(machineRefused.id, MACHINE_A)?.state === "signed-out",
+    `${machineRoute.status} ${machineBody.slice(0, 200)}`
+  );
+
+  // The hourly clock, kept with the account across a restart.
+  const checkedAt = db.accounts.refusalCheckedAt(refused.id) ?? 0;
+  const again = await hubInProcess(dbPath, home);
+  const keptAt = again.db.accounts.refusalCheckedAt(refused.id);
+  const soon = refusalsDue(again.db, checkedAt + HOUR_MS - 1);
+  const due = refusalsDue(again.db, checkedAt + HOUR_MS);
+  kit.check(
+    "D: a hub opened again on the same database keeps each refused account's last check: not due before its hour, due at it",
+    checkedAt > 0 &&
+      keptAt === checkedAt &&
+      !soon.includes(refused.id) &&
+      due.includes(refused.id) &&
+      !due.includes(machineRefused.id),
+    JSON.stringify({ checkedAt, keptAt, soon, due })
+  );
+
+  const backCheckedOn: string[] = [];
+  const back = await checkRefusal(
+    db,
+    refused.id,
+    (machineId) => {
+      backCheckedOn.push(machineId);
+      return Promise.resolve({ kind: "answered" as const });
+    },
+    anyOnline,
+    boxOf
+  );
+  kit.check(
+    "D: a check that is answered brings the account back on every machine its refusal signed out, after one turn on one machine",
+    back.kind === "back" &&
+      back.machines.length === 2 &&
+      backCheckedOn.length === 1 &&
+      standing(refused.id).every((one) => one === "signed-in:null:null"),
+    JSON.stringify({ back, backCheckedOn, out: standing(refused.id) })
+  );
+  const placedBack = place({
+    kind: "delegates",
+    machineId: MACHINE_B,
+    now: Date.now(),
+    accounts: db.accounts.list(),
+    signins: db.accounts.signins(),
+    readings: db.accounts.readings(),
+    bench: db.accounts.bench(Date.now()),
+    routing: db.accounts.routing("anthropic"),
+    typeAccount: refused.id,
+  });
+  kit.check(
+    "D: placement takes the account back: a delegate whose type names it starts on it",
+    placedBack.ok && placedBack.accountId === refused.id,
+    JSON.stringify(placedBack)
+  );
 };
 
 export default spec;

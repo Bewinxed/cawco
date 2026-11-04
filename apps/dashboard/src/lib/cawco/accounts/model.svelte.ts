@@ -158,17 +158,21 @@ export function groupsOf(): ProviderGroup[] {
 }
 
 /**
- * Whether Claude Code refused the account account-wide and the hub holds it
- * out on some machine for it: what the hub's check (Check again) can bring
- * back.
+ * When the hub last wrote an account-wide refusal of the account on one of
+ * its machines (the newest such sign-in's `checkedAt`, epoch ms), or null
+ * when none holds it out: what the hub's check (Check again) can bring back.
+ * A refusal written again reads a newer time.
  */
-export function refusedAccountWide(account: Account): boolean {
-  return (cawco.accounts?.signins ?? []).some(
-    (one) =>
-      one.accountId === account.id &&
-      one.state === "signed-out" &&
-      one.refusalReach === "account"
-  );
+export function refusedAccountWideAt(account: Account): number | null {
+  const times = (cawco.accounts?.signins ?? [])
+    .filter(
+      (one) =>
+        one.accountId === account.id &&
+        one.state === "signed-out" &&
+        one.refusalReach === "account"
+    )
+    .map((one) => one.checkedAt);
+  return times.length > 0 ? Math.max(...times) : null;
 }
 
 /** Where the account stands on a machine; signed out when the hub has no row. */
@@ -206,7 +210,7 @@ export function problemOf(account: Account): string | null {
   if (!signins.some((one) => one.state === "signed-in")) {
     // Signed out by the hub on a refusal: its words say why.
     const refused = signins.find((one) => one.reason)?.reason;
-    return refused ? words.problem.refused(refused) : words.problem.nowhere;
+    return refused ?? words.problem.nowhere;
   }
   const missing = online.filter(
     (machine) =>

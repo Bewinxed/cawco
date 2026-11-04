@@ -175,23 +175,40 @@ public enum Words {
 
             public static let nowhere = "Not signed in on any machine"
 
-            /// Signed in nowhere because Claude Code refused the account (its sign-in's `reason`, Claude Code's own words): placeholder copy.
-            public static func refused(reason: String) -> String {
-                "Refused by Claude Code: \(reason)"
-            }
-
-            /// The button beside an account-wide refusal (`refused`): runs the hub's check now, one turn as the account. Placeholder copy.
+            /// The button under an account-wide refusal (the sign-in's `reason`, Claude Code's own words, as the account's problem line): runs the hub's check now, one turn as the account.
             public static let checkAgain = "Check again"
 
-            /// That button while its check runs. Placeholder copy.
+            /// That button while its check runs.
             public static let checking = "Checking…"
 
-            /// Under the refusal once a check ran and Claude Code refused it again. Placeholder copy.
+            /// Under the refusal once a check ran and Claude Code refused it again.
             public static let stillRefused = "Still refused"
 
-            /// Under the refusal once a check gave no verdict (no machine answered), with why. Placeholder copy.
+            /// Under the refusal once a check gave no verdict (no machine answered), with why.
             public static func noVerdict(why: String) -> String {
                 "Couldn't check: \(why)"
+            }
+
+            /// Why a check gave no verdict, as `noVerdict`'s `why` (hub accounts.ts `checkRefusal`, server.ts `checkRefused`); several machines' join with "; ". A machine that didn't answer says the hub's machine fault, its next step off.
+            public enum CheckWhy {
+                public static let noMachine = "none of its machines is connected"
+
+                public static func notRun(machine: String) -> String {
+                    "\(machine) didn't run it"
+                }
+
+                /// The same, with the error the machine gave.
+                public static func notRunWith(machine: String, error: String) -> String {
+                    "\(machine) didn't run it (\(error))"
+                }
+
+                public static func said(text: String, machine: String, error: String) -> String {
+                    "Claude Code said “\(text)” on \(machine) (\(error))"
+                }
+
+                public static func answered(error: String, machine: String) -> String {
+                    "Claude Code answered \(error) on \(machine)"
+                }
             }
 
             public static func missingOn(machine: String, others: Int) -> String {

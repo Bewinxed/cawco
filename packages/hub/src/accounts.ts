@@ -10,6 +10,7 @@ import {
   type AccountReport,
   type AccountSignin,
   accountNameAmong,
+  accountsWords,
   CLAUDE_PROVIDER,
   CLAUDE_READING_CURRENT_MS,
   type ClaudeExtraUsage,
@@ -563,6 +564,7 @@ export const checkRefusal = async (
   accountId: string,
   check: RefusalChecker,
   online: (machineId: string) => boolean,
+  machineName: (machineId: string) => string,
   now = Date.now()
 ): Promise<RefusalVerdict> => {
   const out = refusedAccountWide(db, accountId);
@@ -573,7 +575,7 @@ export const checkRefusal = async (
   if (machines.length === 0) {
     return {
       kind: "none",
-      why: "no machine that holds its sign-in is connected",
+      why: accountsWords.problem.checkWhy.noMachine,
     };
   }
   db.accounts.setRefusalCheckedAt(accountId, now);
@@ -600,7 +602,19 @@ export const checkRefusal = async (
     }
     const word = claudeCredentialRefused(answer.error, answer.text);
     if (word?.reach !== "account") {
-      whys.push(`Claude Code said ${answer.error}: ${answer.text.trim()}`);
+      const text = answer.text.trim();
+      whys.push(
+        text
+          ? accountsWords.problem.checkWhy.said(
+              text,
+              machineName(machineId),
+              answer.error
+            )
+          : accountsWords.problem.checkWhy.answered(
+              answer.error,
+              machineName(machineId)
+            )
+      );
       continue;
     }
     for (const one of refusedAccountWide(db, accountId)) {

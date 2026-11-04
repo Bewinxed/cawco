@@ -51,21 +51,34 @@ export const accountsWords = {
     someoneElse: (machine: string) => `${machine} is signed in as someone else`,
     nowhere: "Not signed in on any machine",
     /**
-     * Signed in nowhere because Claude Code refused the account (its
-     * sign-in's `reason`, Claude Code's own words): placeholder copy.
-     */
-    refused: (reason: string) => `Refused by Claude Code: ${reason}`,
-    /**
-     * The button beside an account-wide refusal (`refused`): runs the hub's
-     * check now, one turn as the account. Placeholder copy.
+     * The button under an account-wide refusal (the sign-in's `reason`, Claude
+     * Code's own words, as the account's problem line): runs the hub's
+     * check now, one turn as the account.
      */
     checkAgain: "Check again",
-    /** That button while its check runs. Placeholder copy. */
+    /** That button while its check runs. */
     checking: "Checking…",
-    /** Under the refusal once a check ran and Claude Code refused it again. Placeholder copy. */
+    /** Under the refusal once a check ran and Claude Code refused it again. */
     stillRefused: "Still refused",
-    /** Under the refusal once a check gave no verdict (no machine answered), with why. Placeholder copy. */
+    /** Under the refusal once a check gave no verdict (no machine answered), with why. */
     noVerdict: (why: string) => `Couldn't check: ${why}`,
+    /**
+     * Why a check gave no verdict, as `noVerdict`'s `why` (hub accounts.ts
+     * `checkRefusal`, server.ts `checkRefused`); several machines' join with
+     * "; ". A machine that didn't answer says the hub's machine fault, its
+     * next step off.
+     */
+    checkWhy: {
+      noMachine: "none of its machines is connected",
+      notRun: (machine: string) => `${machine} didn't run it`,
+      /** The same, with the error the machine gave. */
+      notRunWith: (machine: string, error: string) =>
+        `${machine} didn't run it (${error})`,
+      said: (text: string, machine: string, error: string) =>
+        `Claude Code said “${text}” on ${machine} (${error})`,
+      answered: (error: string, machine: string) =>
+        `Claude Code answered ${error} on ${machine}`,
+    },
     missingOn: (machine: string, others: number) =>
       others === 0
         ? `Not signed in on ${machine}`

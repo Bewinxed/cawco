@@ -5383,20 +5383,32 @@ export const createServer = (
           case "unanswered":
             return {
               kind: "unread",
-              why: `${machineName(machineId)} didn't answer: ${unansweredFault(machineId, answer)}`,
+              why: machineFault(
+                machineId,
+                answer.reason === "dead" ? "offline" : "silent",
+                { next: false }
+              ),
             };
           case "answered":
             return answer.value.ok
               ? (answer.value.result as AccountCheck)
               : {
                   kind: "unread",
-                  why: `${machineName(machineId)} couldn't run it: ${answer.value.error ?? "it gave no reason"}`,
+                  why: answer.value.error
+                    ? accountsWords.problem.checkWhy.notRunWith(
+                        machineName(machineId),
+                        answer.value.error
+                      )
+                    : accountsWords.problem.checkWhy.notRun(
+                        machineName(machineId)
+                      ),
                 };
           default:
             throw unreachable(answer);
         }
       },
-      (machineId) => registry.agent(machineId) !== undefined
+      (machineId) => registry.agent(machineId) !== undefined,
+      machineName
     )
       .then((verdict) => {
         switch (verdict.kind) {

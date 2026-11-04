@@ -16,9 +16,10 @@
    *
    * An account Claude Code refused account-wide carries Check again under
    * its refusal, in the name's column and outside the link: the hub's check
-   * runs now, the button working while it does. Answered, the refusal and
-   * the button go as the accounts are read again; refused again, or with no
-   * verdict, a meta line under it says so until the next press.
+   * runs now, the button working while it does. Answered, the button goes
+   * with the answer and the refusal as the accounts are read again; refused
+   * again, or with no verdict, a meta line under it says so until the next
+   * press.
    */
   import type { Account, RefusalVerdict } from "@cawco/core/accounts";
   import { accountsWords as words } from "@cawco/core/words/accounts";
@@ -35,12 +36,21 @@
     hueVar,
     nameOf,
     problemOf,
-    refusedAccountWide,
+    refusedAccountWideAt,
   } from "./model.svelte";
 
   let { account }: { account: Account } = $props();
 
-  const checkable = $derived(!account.setupStep && refusedAccountWide(account));
+  const refusedAt = $derived(
+    account.setupStep ? null : refusedAccountWideAt(account)
+  );
+  /**
+   * The refusal a check here brought back (its `refusedAt`): the button and
+   * its line leave with the answer, before the accounts' read that removes
+   * the refusal lands, and come back for a refusal written after it.
+   */
+  let backFrom = $state<number | null>(null);
+  const checkable = $derived(refusedAt !== null && refusedAt !== backFrom);
   let checking = $state(false);
   /**
    * What the last press came to, said under the button until the next: the
@@ -65,8 +75,13 @@
   async function checkAgain() {
     checking = true;
     said = null;
+    const from = refusedAt;
     try {
-      said = sayVerdict(await checkRefusalOf(account.id));
+      const verdict = await checkRefusalOf(account.id);
+      if (verdict.kind === "back") {
+        backFrom = from;
+      }
+      said = sayVerdict(verdict);
     } catch (error) {
       said = failureWords(error);
     } finally {
@@ -120,14 +135,16 @@
     >
     {#if problem}
       <span
-        class="mark-line col-(--area) row-(--area) flex min-w-0 items-center gap-space-1 type-meta text-status-attn-ink transition-[color] duration-(--dur-panel) ease-out"
+        class="mark-line col-(--area) row-(--area) flex min-w-0 items-start gap-space-1 type-meta text-status-attn-ink transition-[color] duration-(--dur-panel) ease-out"
         data-flip
         style:--area="problem"
       >
-        <IconWarningTriangle
+        <!-- One line high: the glyph stands beside a problem's first line. -->
+        <span
           aria-hidden="true"
-          class="size-icon-sm flex-none"
-        />
+          class="flex h-lh flex-none items-center"
+          data-box><IconWarningTriangle class="size-icon-sm flex-none" /></span
+        >
         <span><MorphText text={problem} /></span>
       </span>
     {/if}
