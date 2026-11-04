@@ -57,7 +57,12 @@ import {
 } from "../../../packages/core/src/comments";
 import { commentWords } from "../../../packages/core/src/words/comments";
 import type { CommentRead } from "../../../packages/hub/src/artifacts/service";
-import { type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  heardToolAnswer,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 import { pagePins, writePagePins } from "../pins";
 
@@ -79,6 +84,8 @@ const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const asks = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
 const answered = new Map<string, string>();
+/** The calls Claude Code moved to the background, by marker: the task each runs as. */
+const movedCalls = new Map<string, string>();
 
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
@@ -90,8 +97,16 @@ const respond = (request: Seen): Reply => {
     return text("Heard.");
   }
   if (issued.has(marker)) {
+    // The person's marks reach the session on their own clock, and one that
+    // lands while the call runs moves it to the background: its answer is
+    // the task's result, in a later turn.
     if (!answered.has(marker)) {
-      answered.set(marker, request.last);
+      const said = heardToolAnswer(request, movedCalls.get(marker));
+      if (said.kind === "moved") {
+        movedCalls.set(marker, said.task);
+      } else {
+        answered.set(marker, said.text);
+      }
     }
     return text("done");
   }
