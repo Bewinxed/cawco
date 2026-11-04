@@ -5440,14 +5440,19 @@ export class SessionSupervisor {
     return dir;
   }
 
-  #recordWorktree(instanceId: string, worktree: Worktree): void {
+  /**
+   * The hub's record of a spin-off's worktree: where it is, never what this
+   * agent keeps of it until its opening message (`announce`), which the hub
+   * does not store (core `ScratchWorktree`).
+   */
+  #recordWorktree(instanceId: string, { dir, path, root }: Worktree): void {
     const processGeneration = this.#generations.get(instanceId);
     if (processGeneration) {
       this.sink({
         kind: "scratch_worktree",
         instanceId,
         processGeneration,
-        worktree,
+        worktree: { dir, path, root },
       });
     }
   }
