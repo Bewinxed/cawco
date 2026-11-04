@@ -41,7 +41,6 @@ import {
   existsSync,
   readdirSync,
   readFileSync,
-  realpathSync,
   statSync,
   watch,
   writeFileSync,
@@ -50,6 +49,10 @@ import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { stripVTControlCharacters } from "node:util";
+import {
+  linkedFolder as linkedFolderFrom,
+  linkedRebundle,
+} from "@cawco/core/linked-rebundle";
 import { PACKAGE_TREES } from "@cawco/core/package-trees";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
@@ -137,8 +140,6 @@ interface DevServer {
   config: { base: string };
   environments: {
     client: {
-      /** The environment's resolved options: its dependency optimizer's `include`, the packages the project forces into the pre-bundle. */
-      config: { optimizeDeps: { include?: string[] } };
       /** Vite's optimizer of the project's dependencies: its `browserHash` names the deps it last built (each served at `?v=<hash>`); each dependency found since, with the build that bundles it while it runs. */
       depsOptimizer?: {
         metadata: {
@@ -177,8 +178,6 @@ interface DevServer {
       ) => void
     ) => void;
   };
-  /** Vite's own restart, its optimizer bundling every dependency again when `forceOptimize`. */
-  restart: (forceOptimize?: boolean) => Promise<void>;
   transformIndexHtml: (
     url: string,
     html: string,
@@ -353,98 +352,9 @@ function projectPackage(
   }
 }
 
-/** A package's name from an import of it or of its subpath: `@cawco/icons/marks` is `@cawco/icons`. */
-const packageName = (specifier: string): string =>
-  specifier
-    .split("/")
-    .slice(0, specifier.startsWith("@") ? 2 : 1)
-    .join("/");
-
-/**
- * Package `name`'s real folder, found from the toolchain root up as Node
- * finds it, when it is linked: its real path lies under no `node_modules`
- * (a workspace's own package, `workspace:*`), where an installed one's,
- * bun's shared store's included, lies under one. Null for an installed one
- * or none.
- */
-function linkedFolder(name: string): string | null {
-  for (let dir = root; ; dir = dirname(dir)) {
-    const at = join(dir, "node_modules", name);
-    if (existsSync(at)) {
-      const real = realpathSync(at);
-      return real.split(sep).includes("node_modules") ? null : real;
-    }
-    if (dirname(dir) === dir) {
-      return null;
-    }
-  }
-}
-
-/** The real folders of the linked packages `include` forces into the pre-bundle: a package's own entry or its subpath's (`dep > cjs-dep` names a package inside one, never one of the workspace's). */
-const forcedLinked = (include: string[]): string[] => [
-  ...new Set(
-    include
-      .filter((entry) => !entry.includes(">"))
-      .map((entry) => linkedFolder(packageName(entry)))
-      .filter((dir): dir is string => dir !== null)
-  ),
-];
-
-/** How long a forced package's writes settle before its pre-bundle is built again. Ours: a merge or a checkout writes many files at once. */
-const REBUNDLE_SETTLE_MS = 300;
-let rebundleTimer: ReturnType<typeof setTimeout> | undefined;
-
-/**
- * A linked workspace package the project's config forces into Vite's
- * pre-bundle ("Use this option to force a linked package to be
- * pre-bundled", vite.dev/config/dep-optimization-options) stays
- * pre-bundled, and is bundled again whenever a file of it changes. The
- * dashboard forces `@cawco/icons`: a canvas of a component drawing its
- * icons opened cold in 663 requests with it, 1,097 with the barrel served
- * from source (its icons one module each). Vite keeps a pre-bundle while
- * "Package manager lockfile content … Relevant fields in your
- * `vite.config.js` … `NODE_ENV` value" stay the same
- * (vite.dev/guide/dep-pre-bundling), so an icon a merge added never reached
- * it ("does not provide an export named 'IconTodoDone'"); the same page:
- * "When making changes to the linked dep, restart the dev server with the
- * `--force` command line option". The stage does that with Vite's own
- * `restart(forceOptimize)` ("force the optimizer to re-bundle, same as
- * --force cli flag", vite.dev/guide/api-javascript), on its watcher
- * ("Chokidar watcher instance", same page), given each forced package's
- * folder: Vite watches its root and the modules it serves, and a
- * pre-bundled package's source is neither. A page open through it has its
- * socket closed by the restart, and Vite's client waits for the server and
- * reloads (its `vite:ws:disconnect`: "Polling for restart...",
- * `location.reload()`), asking for the new bundle.
- */
-function rebundleOnChange(dev: DevServer): void {
-  const folders = forcedLinked(
-    dev.environments.client.config.optimizeDeps.include ?? []
-  );
-  if (folders.length === 0) {
-    return;
-  }
-  dev.watcher.add(folders);
-  const changed = (file: string) => {
-    if (
-      file.includes(`${sep}node_modules${sep}`) ||
-      !folders.some((dir) => file.startsWith(`${dir}${sep}`))
-    ) {
-      return;
-    }
-    clearTimeout(rebundleTimer);
-    rebundleTimer = setTimeout(() => {
-      dev.restart(true).catch((error: unknown) => {
-        process.stderr.write(
-          `[cawco] the stage could not bundle ${relative(root, file)}'s package again: ${error instanceof Error ? error.message : String(error)}\n`
-        );
-      });
-    }, REBUNDLE_SETTLE_MS);
-  };
-  for (const event of ["add", "change", "unlink"] as const) {
-    dev.watcher.on(event, changed);
-  }
-}
+/** Package `name`'s real folder when it is linked (core linked-rebundle.ts `linkedFolder`), found from the project's root up. */
+const linkedFolder = (name: string): string | null =>
+  linkedFolderFrom(root, name);
 
 /** Whether module `mod` is a script a page was handed an import of (an importer of it served) that has no code served: its transform threw. */
 const failedServe = (mod: ModuleNode): boolean =>
@@ -3278,7 +3188,6 @@ function cawcoStage() {
     },
     configureServer(dev: DevServer) {
       server = dev;
-      rebundleOnChange(dev);
       relinkOnManifestChange(dev);
       nameFailedModules(dev);
       const { hot } = dev.environments.client;
@@ -3483,6 +3392,7 @@ const CONFIGS = ["ts", "mts", "js", "mjs", "cts", "cjs"].map(
 /** The stage's plugins for the Vite inside any toolchain: a Svelte element carries its place already; SvelteKit's client modules are stubs. */
 const plugins = () => [
   cawcoStage(),
+  linkedRebundle(),
   ...(framework === "svelte" ? [] : [stamp()]),
   ...(kit ? [cawcoKit()] : []),
 ];

@@ -9,6 +9,7 @@ import {
 } from "@cawco/core/browser-gate";
 import { unlayeredRules, withLayerOrder } from "@cawco/core/css-layers";
 import { CSS_TARGET } from "@cawco/core/css-target";
+import { linkedRebundle } from "@cawco/core/linked-rebundle";
 import { devServerWords } from "@cawco/core/words/dev-server";
 import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
@@ -533,6 +534,7 @@ export default defineConfig(({ command }) => {
   return {
     plugins: [
       workspacePackagesWatched(),
+      linkedRebundle(),
       houseFaces(),
       vendorComponentSheets(),
       streamdownOverlayOwn(),
@@ -623,9 +625,10 @@ export default defineConfig(({ command }) => {
        * an import of each `~icons/solar/*.svelte`, as many requests as
        * before (measured on Vite 8.3.4); with it, each icon's `.svelte` is
        * made there and vite-plugin-svelte's optimizer plugin compiles it in.
-       * Vite never rebuilds it when the package's source changes; a CawCo
-       * stage does, restarting its Vite with the optimizer forced (agent
-       * stage-host host.ts `rebundleOnChange`).
+       * Vite never rebuilds it when the package's source changes, so
+       * `linkedRebundle` (core linked-rebundle.ts) restarts the server with
+       * the optimizer forced when it does. Every other workspace package is
+       * served as source: include one here only for a measured reason.
        */
       // The brand marks (`@cawco/icons/marks`) are a module of their own, loaded by what draws one.
       include: ["@cawco/icons", "@cawco/icons/marks", ...COMPILED_LIBRARY_DEPS],

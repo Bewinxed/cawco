@@ -17,6 +17,7 @@
     "./bundled": "./src/bundled.ts",
     "./css-target": "./src/css-target.ts",
     "./css-layers": "./src/css-layers.ts",
+    "./linked-rebundle": "./src/linked-rebundle.ts",
     "./at-most": "./src/at-most.ts",
     "./base64": "./src/base64.ts",
     "./bounded": "./src/bounded.ts",
