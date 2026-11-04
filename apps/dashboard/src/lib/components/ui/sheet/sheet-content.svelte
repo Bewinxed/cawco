@@ -30,9 +30,9 @@
   import { mirror } from "#lib/cawco/page-marks.js";
   import { sheetHeadVariants } from "#lib/components/ui/drawer/sheet-head.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import { IconClose } from "#lib/icons.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import { closer } from "./sheet.svelte";
+  import SheetClose from "./sheet-close.svelte";
   import SheetFrame from "./sheet-frame.svelte";
   import SheetOverlay from "./sheet-overlay.svelte";
   import SheetPortal from "./sheet-portal.svelte";
@@ -68,8 +68,9 @@
       title: string;
       /** The name read out but not drawn, on a sheet whose content names
           itself on screen (the rail's brand row): no header row stands, and
-          Close keeps the header's trailing corner over the content's first
-          row, which leaves it room. */
+          the content draws the kit's Close (`Sheet.Close`) in its own first
+          row, beside that row's own controls. A Close the kit laid over the
+          row's trailing corner stood on the row's own corner action. */
       titleHidden?: boolean;
       children: Snippet;
     } = $props();
@@ -140,28 +141,18 @@
   >
     {#snippet child({ props, open })}
       <SheetFrame away={AWAY[side]} {open} {props}>
-        <div
-          class={cn(
-            head.head(),
-            "px-4 pt-4",
-            titleHidden && "absolute end-0 top-0 z-1 p-4"
-          )}
-          data-slot="sheet-header"
-        >
-          <SheetPrimitive.Title
-            class={cn(head.title(), titleHidden && "sr-only")}
-            data-slot="sheet-title"
-            ><MorphText text={title} wrap /></SheetPrimitive.Title
+        {#if titleHidden}
+          <SheetPrimitive.Title class="sr-only" data-slot="sheet-title"
+            >{title}</SheetPrimitive.Title
           >
-          <SheetPrimitive.Close
-            aria-label="Close"
-            class={cn(head.close(), "ms-auto")}
-            data-slot="sheet-close"
-            title="Close"
-          >
-            <IconClose aria-hidden="true" />
-          </SheetPrimitive.Close>
-        </div>
+        {:else}
+          <div class={cn(head.head(), "px-4 pt-4")} data-slot="sheet-header">
+            <SheetPrimitive.Title class={head.title()} data-slot="sheet-title"
+              ><MorphText text={title} wrap /></SheetPrimitive.Title
+            >
+            <SheetClose class="ms-auto" />
+          </div>
+        {/if}
         {@render children?.()}
       </SheetFrame>
     {/snippet}

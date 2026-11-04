@@ -1060,8 +1060,8 @@
     >
       <!-- Closed by its search field, the focus stays in the Jump palette
            it opened, which hangs from the bar's glass. Its brand row names
-           it on screen, so the kit's Close keeps the header's trailing
-           corner over that row (16px in) and no header row stands. -->
+           it on screen, so no header row stands and the row draws the kit's
+           Close as its last control, after Start session (Sidebar). -->
       <Sheet.Content
         data-rail-sheet
         class="w-c-rail-sheet-w"
@@ -1269,10 +1269,12 @@
         <!-- The trailing edge, one glass group (Apple HIG, Toolbars): on a
              conversation Files first, then Jump, the machines, then Caw's
              head last, at the edge. A phone keeps Files, Jump and the
-             machines in its sidebar, so its group holds Caw alone. -->
+             machines in its sidebar, so its group holds Caw alone; over a
+             conversation's tab row the floating bar passes touches through,
+             and the glass takes its own back, as the toggle does. -->
         <div
           data-slot="right"
-          class="relative ms-auto flex min-w-0 items-center group-data-hosting/top:flex-none group-data-hosting/top:ps-space-3 max-desk:self-stretch max-desk:group-data-hosting/top:flex-initial max-desk:group-data-hosting/top:ps-0 coarse:portrait:group-data-hosting/top:flex-initial coarse:portrait:group-data-hosting/top:ps-0"
+          class="relative ms-auto flex min-w-0 items-center group-data-hosting/top:flex-none group-data-hosting/top:ps-space-3 max-desk:self-stretch max-desk:group-data-hosting/top:flex-initial max-desk:group-data-hosting/top:ps-0 coarse:portrait:group-data-hosting/top:flex-initial coarse:portrait:group-data-hosting/top:ps-0 max-desk:group-data-floating/top:*:pointer-events-auto"
         >
           <!-- The glass (kit BarGlass), as one shape with the card hanging
                from it while one does (bar-glass: Caw's panel, the machines,

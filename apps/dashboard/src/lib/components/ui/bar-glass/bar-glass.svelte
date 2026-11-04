@@ -7,8 +7,9 @@
    * phone margin (`c-bar-phone-edge`, the Shell's trailing pad) in from the
    * screen's trailing edge, as the sidebar toggle's glyph stands from the
    * leading one: square on its trailing side and round on its leading one,
-   * edged all round, topping with the tabs and standing a neck
-   * (`--caw-neck`) clear of the row's floor.
+   * edged all round, its centre on the tabs' centre line as the toggle's
+   * glyph's is (on a page with no tabs, the line the two share), standing a
+   * neck (`--caw-neck`) clear of the row's floor.
    *
    * Its form follows the shell, not the window: the phone form answers to
    * the `shell` container (`@max-desk/shell`, the shell's root, as wide as
@@ -65,14 +66,14 @@
   class={[
     "group/tools relative flex items-center gap-c-bar-group-pad h-c-btn-h p-c-bar-group-pad rounded-pill hit-gap-x-c-bar-group-pad coarse:gap-space-5 coarse:hit-gap-x-space-5 before:absolute before:inset-0 before:rounded-inherit before:border before:border-border-hairline before:bg-material-panel before:shadow-tile before:glass-backdrop before:pointer-events-none contrast-more:before:border-border-contrast contrast-more:before:bg-surface-raised contrast-more:before:backdrop-filter-none reduced-transparency:before:border-border-contrast reduced-transparency:before:bg-surface-raised reduced-transparency:before:backdrop-filter-none",
     form === "bar" &&
-      "@max-desk/shell:self-start @max-desk/shell:h-c-bar-caw-glass-phone @max-desk/shell:mt-(--tools-top) @max-desk/shell:p-0 @max-desk/shell:rounded-s-(--tools-round) @max-desk/shell:rounded-e-none @max-desk/shell:caw-neck-(--tools-neck) @max-desk/shell:**:data-bar-item:w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:min-w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:h-c-bar-caw-glass-phone",
+      "@max-desk/shell:self-start @max-desk/shell:h-c-bar-caw-glass-phone @max-desk/shell:mt-(--tools-top) @max-desk/shell:p-0 @max-desk/shell:rounded-s-(--tools-round) @max-desk/shell:rounded-e-none @max-desk/shell:caw-neck-(--tools-neck) @max-desk/shell:**:data-bar-item:rounded-e-none @max-desk/shell:**:data-bar-item:w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:min-w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:h-c-bar-caw-glass-phone",
   ]}
   data-bar-group={form === "bar" ? "" : undefined}
   data-joined={joined ? "" : undefined}
   style:--flare="var(--radius-lg)"
-  style:--tools-top="calc(var(--c-top-bar-h) - var(--c-tab-row-h))"
+  style:--tools-top={"calc(var(--c-top-bar-h) - var(--c-tab-row-h) / 2 - var(--c-bar-caw-glass-phone) / 2)"}
   style:--tools-round="calc(var(--c-bar-caw-glass-phone) / 2)"
-  style:--tools-neck={"calc(var(--c-tab-row-h) - var(--c-bar-caw-glass-phone))"}
+  style:--tools-neck={"calc((var(--c-tab-row-h) - var(--c-bar-caw-glass-phone)) / 2)"}
 >
   <!-- The join: a layer one flare wider than the glass on its leading side
        and 1px under its foot, into the card's top edge. The layer is the
