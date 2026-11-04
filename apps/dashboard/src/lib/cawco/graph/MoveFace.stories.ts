@@ -162,7 +162,7 @@ export default {
   component: MoveFace,
   args: {
     move: ready(formMove),
-    playhead: 0,
+    playhead: 886,
     playing: false,
     repeat: false,
     version: "yours",
@@ -199,7 +199,7 @@ export default {
   parameters: { viewport: 400 },
 };
 
-/** At rest beside a 1440 stage: the move into "Hub didn't answer", the playhead at 0. */
+/** At rest beside a 1440 stage: the move into "Hub didn't answer" played, its playhead on its end over the kept state. */
 export const AtRest = {};
 
 /** A row chosen: Form failure's words in the Selected wash, its bar ringed, its three settings under it. */

@@ -1,8 +1,7 @@
 /**
- * The decision page's question on the Curve chip, drawn on the chip's own
- * list (CurveChoices): the design system's curves with their glyphs, then
- * Spring, then the agent's curve as written, the house ease-out chosen. The
- * two options' states files (CurveListOnly, CurveDrawn) read it.
+ * The Curve chip's list as CurveDrawn draws it (CurveChoices): the design
+ * system's curves with their glyphs, then Spring, then the agent's curve,
+ * the house ease-out chosen.
  */
 
 import { graphWords as words } from "@cawco/core/words/graph";

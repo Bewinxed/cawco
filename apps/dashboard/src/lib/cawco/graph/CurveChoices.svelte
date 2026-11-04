@@ -6,10 +6,11 @@
    * the foot, brought into view as Spring is picked: on a phone the list
    * was cut at 320px and Bounce stood below it with nothing to say so.
    *
-   * `bend` is an open question on the decision page (whether the chip lets
-   * him draw his own curve, as Jitter's easing popover does): given it, the
-   * chosen curve stands drawn over the list, its two control points
-   * dragged or moved with the arrow keys.
+   * Over the list, the chosen curve drawn (`bend`), its two control points
+   * dragged or moved with the arrow keys, as Jitter's easing popover draws
+   * its preset (his pick, animation-face-questions#curve-draw: "The list
+   * with a curve to drag"); a spring and a curve kept in a transition's
+   * frames have none.
    */
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import { graphWords as words } from "@cawco/core/words/graph";

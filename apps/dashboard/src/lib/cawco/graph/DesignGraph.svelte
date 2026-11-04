@@ -499,6 +499,8 @@
     holding = false;
     beforeReset = null;
     move = from ? { kind: "ready", from, to, clips: read } : none;
+    // The move played as the stage arrived: its playhead rests on its end.
+    playhead = from ? lengthOf(read) : 0;
   };
   // Each kept state is reached on the one live instance; a width or a
   // scheme picked lays it out anew and moves nothing.
@@ -527,7 +529,7 @@
     if (still) {
       replays.seek(clips, length);
       stage?.fadeIn();
-      playhead = 0;
+      playhead = length;
       return;
     }
     const from = playhead >= length ? 0 : playhead;
@@ -537,16 +539,17 @@
     const step = () => {
       playhead = Math.min(length, performance.now() - t0);
       if (playhead >= length) {
-        // On repeat it goes round again from its start; else it rests, its
-        // playhead back at the start (his answer: it plays, then rests at
-        // its start).
+        // On repeat it goes round again from its start; else it rests on
+        // its end, over the stage as it stands, and Play goes round again
+        // from 0 (his pick, animation-face-questions#playhead-rest: "On
+        // the move's end").
         if (repeat) {
           replays.play(clips, 0);
           t0 = performance.now();
           playhead = 0;
         } else {
           playing = false;
-          playhead = 0;
+          playhead = length;
           return;
         }
       }

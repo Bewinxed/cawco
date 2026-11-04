@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
-   * A curve drawn to be bent (the decision page's option: the Curve chip
-   * lets him draw his own, as Jitter's easing popover does): progress up
+   * A curve drawn to be bent (his pick on animation-face-questions: the
+   * Curve chip lets him draw his own, as Jitter's easing popover does):
+   * progress up
    * against time across, the line from the start to the end, and its two
    * control points, each dragged with the pointer or moved with the arrow
    * keys (0.05, Shift 0.01). Letting go hands the four numbers back.

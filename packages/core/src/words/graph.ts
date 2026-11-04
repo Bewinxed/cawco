@@ -157,6 +157,8 @@ export const graphWords = {
   } as Record<string, string>,
   /** The curve the agent wrote, when it is none of the design system's: offered to go back to. */
   agentsCurve: "Agent's curve",
+  /** A curve he drew by its two control points: his own, off the design system's. */
+  yourCurve: "Your curve",
   /** A clip's element when nothing names it. */
   element: "Element",
 

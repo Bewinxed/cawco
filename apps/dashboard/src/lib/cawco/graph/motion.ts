@@ -825,6 +825,11 @@ export const redelay = (track: Track, delay: number): Clip[] => {
   );
 };
 
+/** Four numbers as CSS: a curve he drew. */
+export const cubic = (at: readonly number[]): string =>
+  // golar-ignore-next-line house/no-raw-motion -- a curve for the component under review, never the dashboard's own motion
+  `cubic-bezier(${at.map((one) => Number(one.toFixed(3))).join(", ")})`;
+
 /** CSS's keywords as their four numbers (CSS Easing Functions Level 1). */
 const KEYWORDS: Record<string, number[]> = {
   ease: [0.25, 0.1, 0.25, 1],
@@ -835,7 +840,7 @@ const KEYWORDS: Record<string, number[]> = {
 };
 
 /** A cubic-bezier's four numbers, from its CSS; null for a spring's `linear(…)` or steps. */
-function bezierOf(easing: string): number[] | null {
+export function bezierOf(easing: string): number[] | null {
   const said = easing.trim();
   const keyword = KEYWORDS[said];
   if (keyword) {

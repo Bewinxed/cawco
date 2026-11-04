@@ -1,6 +1,6 @@
 /**
- * The decision page's second option on where the playhead rests after a
- * play: the move into "Hub didn't answer" has played to its end, the stage
+ * Where the playhead rests after a play (his pick on
+ * animation-face-questions, "On the move's end"): the move into "Hub didn't answer" has played to its end, the stage
  * shows the kept state, and the playhead stays on the move's end over it;
  * Play goes round again from 0.
  */
