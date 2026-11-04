@@ -18,7 +18,7 @@ import {
   type PlaceLfsMade,
   type ProjectNote,
 } from "@cawco/core";
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import type { DbShape } from "./db";
 import type { LfsOfferRow } from "./db/lfs-offers";
 import { FolderRefusal, folderAttempt } from "./project-folder";
@@ -126,18 +126,12 @@ export type LfsOffers = ReturnType<typeof createLfsOffers>;
 /** The card's routes: where it stands, and its two answers. */
 export const lfsOfferRoutes = (offers: LfsOffers) =>
   new Elysia()
-    .get(
-      "/api/lfs-offers/:id",
-      { params: t.Object({ id: t.String() }) },
-      ({ params }) => folderAttempt(() => offers.state(params.id))
+    .get("/api/lfs-offers/:id", ({ params }) =>
+      folderAttempt(() => offers.state(params.id))
     )
-    .post(
-      "/api/lfs-offers/:id/dismiss",
-      { params: t.Object({ id: t.String() }) },
-      ({ params }) => folderAttempt(() => offers.dismiss(params.id))
+    .post("/api/lfs-offers/:id/dismiss", ({ params }) =>
+      folderAttempt(() => offers.dismiss(params.id))
     )
-    .post(
-      "/api/lfs-offers/:id/track",
-      { params: t.Object({ id: t.String() }) },
-      ({ params }) => folderAttempt(() => offers.track(params.id))
+    .post("/api/lfs-offers/:id/track", ({ params }) =>
+      folderAttempt(() => offers.track(params.id))
     );

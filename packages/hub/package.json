@@ -37,7 +37,7 @@
     "cronstrue": "3.32.0",
     "drizzle-orm": "^0.45.3",
     "effect": "^4.0.0",
-    "elysia": "2.0.0-beta.23",
+    "elysia": "2.0.0-rc.1",
     "exact-mirror": "^1.2.6",
     "image-size": "2.0.4",
     "lib0": "0.2.119",
@@ -51,7 +51,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@elysia/openapi": "2.0.0-beta.4",
+    "@elysia/openapi": "2.0.0-rc.1",
     "@types/bun": "^1.4.3",
     "drizzle-kit": "^0.31.11",
     "typescript": "npm:@typescript/typescript6@^6.0.2",

@@ -32,7 +32,7 @@ import {
 import type { MachinePath } from "@cawco/core/machine-path";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { DAY_MS } from "@cawco/core/time";
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import { z } from "zod";
 import type { DbShape, ProjectOfferRow, ProjectRow } from "./db";
 import { leafOf, sessionLabel } from "./labels";
@@ -415,29 +415,21 @@ export type ProjectOffers = ReturnType<typeof createProjectOffers>;
 export const projectOfferRoutes = (offers: ProjectOffers, you: TaskActor) =>
   new Elysia()
     .get("/api/project-offers", () => offers.open())
-    .post(
-      "/api/project-offers/:instanceId/dismiss",
-      { params: t.Object({ instanceId: t.String() }) },
-      ({ params }) => {
-        try {
-          offers.dismiss(params.instanceId);
-          return { ok: true };
-        } catch (error) {
-          return refused(error);
-        }
+    .post("/api/project-offers/:instanceId/dismiss", ({ params }) => {
+      try {
+        offers.dismiss(params.instanceId);
+        return { ok: true };
+      } catch (error) {
+        return refused(error);
       }
-    )
-    .post(
-      "/api/project-offers/:instanceId/accept",
-      { params: t.Object({ instanceId: t.String() }) },
-      async ({ params }) => {
-        try {
-          return await offers.accept(params.instanceId, you);
-        } catch (error) {
-          return refused(error);
-        }
+    })
+    .post("/api/project-offers/:instanceId/accept", async ({ params }) => {
+      try {
+        return await offers.accept(params.instanceId, you);
+      } catch (error) {
+        return refused(error);
       }
-    );
+    });
 
 /** The MCP tool's name: Caw proposes it in conversation, and you say yes. */
 export const PROJECT_FROM_SESSION = "project_from_session";

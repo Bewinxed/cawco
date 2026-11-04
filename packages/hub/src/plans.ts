@@ -52,7 +52,7 @@ import {
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { unhandled } from "@cawco/core/unhandled";
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import { createPatch } from "rfc6902";
 import type { DbShape, PlanChangeRow } from "./db";
 import { FolderRefusal, refused } from "./project-folder";
@@ -869,25 +869,17 @@ export type Plans = ReturnType<typeof createPlans>;
  */
 export const planRoutes = (plans: Plans) =>
   new Elysia()
-    .get(
-      "/api/instances/:id/plan",
-      { params: t.Object({ id: t.String() }) },
-      async ({ params }) => {
-        try {
-          return await plans.read(params.id);
-        } catch (error) {
-          return refused(error);
-        }
+    .get("/api/instances/:id/plan", async ({ params }) => {
+      try {
+        return await plans.read(params.id);
+      } catch (error) {
+        return refused(error);
       }
-    )
-    .post(
-      "/api/instances/:id/plan/seen",
-      { params: t.Object({ id: t.String() }) },
-      async ({ params }) => {
-        try {
-          return { seen: await plans.seeAway(params.id) };
-        } catch (error) {
-          return refused(error);
-        }
+    })
+    .post("/api/instances/:id/plan/seen", async ({ params }) => {
+      try {
+        return { seen: await plans.seeAway(params.id) };
+      } catch (error) {
+        return refused(error);
       }
-    );
+    });

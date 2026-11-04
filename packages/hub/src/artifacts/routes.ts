@@ -276,7 +276,7 @@ const changeOf = (body: {
 export const artifactRoutes = (artifacts: Artifacts) =>
   new Elysia()
     // A body the validator refused: what the tool takes, never the validator's text.
-    .error(({ error, request }) => {
+    .onError(({ error, request }) => {
       const { pathname: path } = new URL(request.url);
       if (!(error instanceof ValidationError && path.includes("/artifacts"))) {
         return;

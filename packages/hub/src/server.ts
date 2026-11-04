@@ -30599,7 +30599,7 @@ export const createServer = (
       })
       // No page of another origin calls the hub with the browser's cookies:
       // a previewed app on its own port of this host least of all.
-      .request(({ request }) => {
+      .onRequest(({ request }) => {
         const refused = crossSiteRefusal(
           request.method,
           (name) => request.headers.get(name),
@@ -30618,12 +30618,12 @@ export const createServer = (
       // Who is calling, and whether they may (hub-auth.ts): every route is
       // the person's unless it is listed for sessions, machines or anyone.
       // A socket's upgrade passes here too.
-      .request(({ request, server }) =>
+      .onRequest(({ request, server }) =>
         hubAuth.gate(request, addressOf(server, request))
       )
       // Each route's body cap, met before a request is routed or its body
       // read (body-limits.ts).
-      .request(async ({ request }) => await bodyLimitRefusal(request))
+      .onRequest(async ({ request }) => await bodyLimitRefusal(request))
       .use(
         previewRoutes({
           deviceOf: (request) => {
@@ -35170,7 +35170,6 @@ export const createServer = (
       // signOutMachine}).
       .delete(
         "/api/accounts/:id/machines/:machineId",
-        { params: t.Object({ id: t.String(), machineId: t.String() }) },
         async ({ params, status }) => {
           const account = accountOf(params.id);
           if (!account) {
@@ -35426,16 +35425,12 @@ export const createServer = (
       // verdict: `back` on those machines, `refused` with Claude Code's
       // words, `none` with why there was none, or `not-refused` for an
       // account no account-wide refusal holds out.
-      .post(
-        "/api/accounts/:id/refusal-check",
-        { params: t.Object({ id: t.String() }) },
-        async ({ params, status }) => {
-          if (!accountOf(params.id)) {
-            return status(404, `There is no account ${params.id}.`);
-          }
-          return await checkRefused(params.id);
+      .post("/api/accounts/:id/refusal-check", async ({ params, status }) => {
+        if (!accountOf(params.id)) {
+          return status(404, `There is no account ${params.id}.`);
         }
-      )
+        return await checkRefused(params.id);
+      })
       // Signs an account in on a machine, into the account's own store there.
       // Claude: `claude auth login` in the account's config dir, answering
       // the link to authorise in the reader's browser. Any other provider:

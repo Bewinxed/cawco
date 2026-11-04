@@ -78,7 +78,10 @@ const scratch = mkdtempSync(join(tmpdir(), "cawco-openapi-"));
 // version, so the program is built with the generator's `ts`.
 const TJS = await import("typescript-json-schema");
 const { ts } = TJS;
-const { toOpenAPISchema } = await import("@elysia/openapi");
+// Its `openapi` subpath, which imports only Elysia: the package's root also
+// loads its type generator, which imports `typebox` without declaring it
+// since 2.0.0-rc.0 dropped the peer, so the root fails to resolve it.
+const { toOpenAPISchema } = await import("@elysia/openapi/openapi");
 const { CAWCO_HUB_PORT, WIRE_PROTOCOL } = await import("@cawco/core");
 
 type Schema = Record<string, unknown>;
@@ -154,7 +157,9 @@ if (repeated.length) {
 
 // One alias per operation, named by its operationId: the route's response
 // map in `~Routes`, which nests by path segment (`:id`, as Elysia writes a
-// parameter), then method.
+// parameter), then method. Elysia types a status sent with no body
+// (`status(204)`) as `undefined`, which the schema generator leaves out of an
+// object, so `Sent` writes it as `null` and the status keeps its key.
 const PARAMETER = /^\{(.+)\}$/u;
 const routesFile = join(scratch, "routes.ts");
 writeFileSync(
@@ -162,6 +167,7 @@ writeFileSync(
   [
     `import type { createServer } from ${JSON.stringify(join(HUB, "src/server"))};`,
     `type Routes = ReturnType<typeof createServer>["~Routes"];`,
+    "type Sent<R> = { [K in keyof R]: [R[K]] extends [undefined] ? null : R[K] };",
     ...operations.map(({ path, method, op }) => {
       const keys = path
         .split("/")
@@ -170,7 +176,7 @@ writeFileSync(
       const at = [...keys, method, "response"]
         .map((key) => `[${JSON.stringify(key)}]`)
         .join("");
-      return `export type ${op.operationId} = Routes${at};`;
+      return `export type ${op.operationId} = Sent<Routes${at}>;`;
     }),
   ].join("\n")
 );
@@ -390,6 +396,10 @@ const isText = (schema: Schema): boolean => {
   );
 };
 
+/** What the document says of Elysia's 422 body; production sends none of `detail`, `found`, `expected` and `errors`. */
+const VALIDATION_WORDS =
+  "Request validation problem. Diagnostic fields are development-only.";
+
 /** Elysia's 422 body (`ValidationErrorResponse`), by the literal it carries. */
 const isValidationProblem = (schema: Schema): boolean => {
   const kind = (schema.properties as Record<string, Schema> | undefined)?.type;
@@ -470,7 +480,14 @@ for (const { op, method, path } of operations) {
       } else if (!body.$ref) {
         name = `${op.operationId}${status}`;
       }
-      if (name) {
+      if (validation) {
+        // Its description is ours: the comment on Elysia's type is written
+        // for Elysia's own maintainers.
+        components.ValidationErrorResponse = {
+          ...body,
+          description: VALIDATION_WORDS,
+        };
+      } else if (name) {
         components[name] = body;
       }
       const ref = name ? `${COMPONENT}${name}` : (body.$ref as string);

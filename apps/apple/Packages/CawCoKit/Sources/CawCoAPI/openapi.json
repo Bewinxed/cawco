@@ -718,6 +718,26 @@
           "204": {
             "description": "postApiDashboardErrors 204"
           },
+          "413": {
+            "description": "postApiDashboardErrors 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiDashboardErrors 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "422": {
             "description": "postApiDashboardErrors 422",
             "content": {
@@ -17011,6 +17031,11 @@
                 "schema": {
                   "type": "string"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
               }
             }
           },
@@ -17146,6 +17171,11 @@
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -17283,6 +17313,11 @@
                 "schema": {
                   "type": "string"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
               }
             }
           },
@@ -17418,6 +17453,11 @@
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -20178,6 +20218,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiInstancesByIdContinue200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiInstancesByIdContinue 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -28441,9 +28491,19 @@
           "detail": {
             "type": "string"
           },
-          "expected": {
-            "type": "string"
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {},
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              }
+            }
           },
+          "expected": {},
           "found": {},
           "on": {
             "type": "string"

@@ -30,7 +30,7 @@ import type {
   ProjectNote,
   StagesTemplate,
 } from "@cawco/core";
-import { Elysia, t } from "elysia";
+import { Elysia } from "elysia";
 import type { DbShape } from "./db";
 import { projectDesign } from "./landed";
 import { FolderRefusal, folderAttempt, projectRoot } from "./project-folder";
@@ -293,18 +293,12 @@ export type DesignOffers = ReturnType<typeof createDesignOffers>;
 /** The card's routes: where it stands, and its two answers. */
 export const designOfferRoutes = (offers: DesignOffers, you: TaskActor) =>
   new Elysia()
-    .get(
-      "/api/projects/:id/design-offer",
-      { params: t.Object({ id: t.String() }) },
-      ({ params }) => folderAttempt(() => offers.state(params.id))
+    .get("/api/projects/:id/design-offer", ({ params }) =>
+      folderAttempt(() => offers.state(params.id))
     )
-    .post(
-      "/api/projects/:id/design-offer/dismiss",
-      { params: t.Object({ id: t.String() }) },
-      ({ params }) => folderAttempt(() => offers.dismiss(params.id))
+    .post("/api/projects/:id/design-offer/dismiss", ({ params }) =>
+      folderAttempt(() => offers.dismiss(params.id))
     )
-    .post(
-      "/api/projects/:id/design-offer/build",
-      { params: t.Object({ id: t.String() }) },
-      ({ params }) => folderAttempt(() => offers.build(params.id, you))
+    .post("/api/projects/:id/design-offer/build", ({ params }) =>
+      folderAttempt(() => offers.build(params.id, you))
     );
