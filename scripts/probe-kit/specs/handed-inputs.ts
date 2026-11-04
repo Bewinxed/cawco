@@ -52,8 +52,9 @@
  *    `<folder>#<id8>`, a mention chip `@Title <handle>`) is reached by the
  *    parent's `handoff` (its words reach that leaf), `interrupt_delegate`
  *    and `stop_delegate` (each answer names it, the stop cancels its item),
- *    `answer_delegate` (the leaf asks its parent a real question; the answer
- *    names it and the leaf reads the label picked), and `find`'s `around`
+ *    `answer_delegate` (the leaf asks a real question through CawCo's
+ *    `ask`, which reaches its parent; the answer names it and the leaf reads
+ *    the label picked in the hub's answer to its ask), and `find`'s `around`
  *    reads that session once its words are indexed.
  *    Two leaves, each continued by the parent's `continue_session` (one
  *    session from then, its old id a former id of the new; from its asks
@@ -144,8 +145,12 @@ const FORMS: Record<string, (id: string, folder: string) => string> = {
   "a mention chip": (id, folder) => `@Forms leaf <${folder}#${id.slice(0, 8)}>`,
 };
 const TAG_FORM = `PROBE-HANDED-FORM-${RUN}`;
-/** Claude Code's question tool: a delegate's ask its parent answers. */
-const ASK_TOOL = "AskUserQuestion";
+/**
+ * CawCo's question tool: a delegate's ask its parent answers. Claude Code's
+ * own, AskUserQuestion, is denied at every spawn (core
+ * `QUESTION_TOOL_DENIED`, since 3c1af1bae).
+ */
+const ASK_TOOL = "mcp__cawco__ask";
 const LAN_CODE = /lan:\d+/u;
 const LAN_DIRECT_CODE = /lan-direct:\d+/u;
 /** artifact_browse's answer: the address its browser loads. */
@@ -432,8 +437,9 @@ const leafShort = (request: Seen): Reply =>
 const formLeaf = (request: Seen): Reply => {
   for (const [token, ask] of state.asks) {
     if (!ask.asked && request.all.includes(token)) {
-      ask.asked = true;
-      return call(ASK_TOOL, {
+      const reply = found(request, ASK_TOOL, {
+        blocks: true,
+        waiting: "Going on",
         questions: [
           {
             question: ask.question,
@@ -446,6 +452,8 @@ const formLeaf = (request: Seen): Reply => {
           },
         ],
       });
+      ask.asked = reply.tool?.name === ASK_TOOL;
+      return reply;
     }
   }
   return call("Bash", { command: "sleep 3", description: "Work" });
@@ -1158,10 +1166,11 @@ const reachedAs = async (
 };
 
 /**
- * Step 10's answer: words handed to the leaf make it ask its parent a
- * question (Claude Code's own), routed to the parent; `answer_delegate`
- * to `target` with the ask's request id answers it, names the leaf, and
- * the leaf reads the label picked.
+ * Step 10's answer: words handed to the leaf make it ask a question
+ * through CawCo's `ask`, routed to its parent; `answer_delegate` to
+ * `target` with the ask's request id answers it, names the leaf, and the
+ * leaf reads the label picked in the hub's answer to its ask (core asks.ts
+ * `askAnsweredText`: a line per question, "- <question>: <label>").
  */
 const answered = async (
   { check }: Kit,
@@ -1195,10 +1204,10 @@ const answered = async (
   const read = await until(
     "the leaf reading its answer",
     () =>
-      fleet.seen
-        .filter((one) => one.all.includes(tag))
-        .map((one) => answerOf(one.body, (use) => use.name === ASK_TOOL))
-        .find((one) => one?.answer?.includes(label)),
+      fleet.seen.find(
+        (one) =>
+          one.all.includes(tag) && one.last.includes(`- ${question}: ${label}`)
+      ),
     Boolean,
     120_000
   ).catch(() => undefined);

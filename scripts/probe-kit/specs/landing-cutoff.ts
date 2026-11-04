@@ -25,7 +25,10 @@
  *   background, then calls finish_item. Its item ends done, saying it
  *   landed; its commit is on the hub's main; the clone's `.git/config` is
  *   the file it was; the sandbox is the one it was (the agent's log says no
- *   restart); and its `sleep` still runs.
+ *   restart); and its `sleep` ran on through the landing: what ends it is
+ *   its item's end, whose settle ends what an ended item's sessions left
+ *   running in its workspace (523b45d9f; agent session.ts
+ *   `endFinishedWork`), the agent's line naming its pid.
  * - B, the end state when a push is cut off all the same: a delegate commits
  *   a large file, so the door's `git lfs push` uploads it. As the upload
  *   lands in the hub's LFS store (its `tmp` dir), the spec replaces the
@@ -38,12 +41,14 @@
  *   not hold it; the hub saw one LFS upload batch for it.
  * - C, a fetch that fails: a delegate commits nothing, so its HEAD is on
  *   main already (as workspace a7dd050f's one commit was). Before it
- *   finishes, the host writes into its clone's config the `lfs.<url>.access`
- *   git-lfs left in the clones of 2026-10-17, a key the git door runs no git
- *   under (safe-git.ts `repositoryConfigProblem`), so the landing's fetch
- *   fails ("remote helper 'cawco' aborted session"). The item is not
- *   landed, the refusal naming the fetch in git's words: a ref the clone
- *   fetched before never stands in for a fetch that failed.
+ *   finishes, the host writes into its clone's config a key the git door
+ *   runs no git under (safe-git.ts `repositoryConfigProblem`):
+ *   `http.cookieFile`, which runs nothing but reaches past the clone. (The
+ *   `lfs.<url>.access` git-lfs left in the clones of 2026-10-17 passes since
+ *   f4fb852b2, git-lfs's own keys being allowed.) So the landing's fetch
+ *   fails. The item is not landed, the refusal naming the fetch in git's
+ *   words: a ref the clone fetched before never stands in for a fetch that
+ *   failed.
  * - D, a committed `.lfsconfig` cannot move a hub origin's git-lfs: a
  *   delegate commits a large file and an `.lfsconfig` whose `lfs.url` names
  *   a second project's repository on the same hub and whose `lfs.pushurl`
@@ -93,7 +98,7 @@ import { readRecord } from "../../../packages/core/src/state-file";
 import { workWords } from "../../../packages/core/src/words/work";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { decisionsOf } from "../agent-records";
-import type { Kit, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../kit";
 
 const FINISH = "mcp__cawco__finish_item";
 const TAG = /PROBE-CUTOFF-([ABCDEFG])/u;
@@ -542,6 +547,33 @@ const endedWhole = (
   said: `${String(hooked?.ended ?? "nothing ended it")}\n${hooked?.said ?? ""}`,
 });
 
+/**
+ * Whether the settle of `instanceId`'s ended item ended its background
+ * command `pid` (523b45d9f, agent session.ts `endFinishedWork`), the
+ * agent's line naming it: then the command lived until the item's end, and
+ * nothing in its landing ended it.
+ */
+const endedByItsEnd = async (
+  fleet: KitFleet,
+  instanceId: string,
+  pid: Pid | undefined
+): Promise<{ ok: boolean; said: string }> => {
+  const finished = workWords.workEnded(instanceId, "finished", [], []);
+  const line = await until(
+    "the background command ended by its item's end",
+    async () =>
+      (await fleet.logs("agent"))
+        .split("\n")
+        .find((one) => one.includes(finished) && one.includes(`${pid}`)),
+    Boolean,
+    30_000
+  ).catch(() => undefined);
+  return {
+    ok: pid !== undefined && line !== undefined,
+    said: `pid ${pid}: ${line ?? `no agent line "${finished}…" naming it within 30 s; alive now: ${pid === undefined ? "none read" : isAlive(pid)}`}`,
+  };
+};
+
 const run = async (kit: Kit) => {
   const { check } = kit;
   check(
@@ -622,9 +654,9 @@ const run = async (kit: Kit) => {
     const parent = await fleet.spawn("claude", "Parent", repo, {
       projectId: project.id,
     });
-    /** The key the host writes into C's clone config before it finishes, as git-lfs did. */
+    /** The key the host writes into C's clone config before it finishes: one past the git door's allowlist. */
     const written: Partial<Record<Tag, [string, string]>> = {
-      C: [`lfs.${named.address}/lfs.access`, "basic"],
+      C: ["http.cookieFile", "/dev/null"],
     };
     /** B's clone config, replaced as its large file's upload lands in the hub's store. */
     let replaceOnUpload: string | undefined;
@@ -646,14 +678,17 @@ const run = async (kit: Kit) => {
       /** Run once its background sleep runs, before it is let finish. */
       hook?: (armed: Armed) => Promise<T>
     ) => {
-      const item = await fleet.api<{ workItemId: string }>("/api/work-items", {
-        parentInstanceId: parent,
-        title: `Commit and land ${tag}`,
-        prompt: `PROBE-CUTOFF-${tag}: commit, then finish.`,
-        harness: "claude",
-        model: "claude-haiku-4-5",
-        cwd: repo,
-      });
+      const item = await fleet.api<{ instanceId: string; workItemId: string }>(
+        "/api/work-items",
+        {
+          parentInstanceId: parent,
+          title: `Commit and land ${tag}`,
+          prompt: `PROBE-CUTOFF-${tag}: commit, then finish.`,
+          harness: "claude",
+          model: "claude-haiku-4-5",
+          cwd: repo,
+        }
+      );
       const itemOf = () =>
         fleet.query<ItemRow>(
           "SELECT state, error, result, workspace_id FROM work_items WHERE id = ?",
@@ -799,6 +834,7 @@ const run = async (kit: Kit) => {
       };
       const closed = ended.inner.length === 0 ? await closedOnPurpose() : false;
       return {
+        instanceId: item.instanceId,
         clone,
         row,
         result: row.result ?? "",
@@ -810,7 +846,6 @@ const run = async (kit: Kit) => {
         closed,
         state: stateOf(),
         told: await told(),
-        sleepAlive: sleeping === undefined ? undefined : isAlive(sleeping),
         sleeping,
         hooked,
       };
@@ -862,10 +897,11 @@ const run = async (kit: Kit) => {
       sameSandbox(a),
       sandboxSaid(a)
     );
+    const aEnded = await endedByItsEnd(fleet, a.instanceId, a.sleeping);
     check(
-      "A: the delegate's background command still runs",
-      a.sleepAlive === true,
-      `pid ${a.sleeping}`
+      "A: the delegate's background command runs through the landing: its item's end ends it, the agent's line naming its pid",
+      aEnded.ok,
+      aEnded.said
     );
 
     // B

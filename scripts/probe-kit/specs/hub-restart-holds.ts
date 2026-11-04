@@ -48,6 +48,7 @@ import { workWords } from "../../../packages/core/src/words/work";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { declareGate } from "../gate";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { passedFetch } from "../preview-pass";
 
 const FINISH = "mcp__cawco__finish_item";
 const WAIT = "mcp__cawco__wait_item";
@@ -376,7 +377,10 @@ const legA = async (legs: Legs) => {
   }
   const url = `http://${fleet.hub.at}:${port}/`;
   const pin = crypto.randomUUID();
-  const held = await fetch(
+  // Behind the previews' lock, as every preview port is (hub
+  // preview-access.ts): the overlay posts with the person's pass.
+  const held = await passedFetch(
+    fleet,
     `http://${fleet.hub.at}:${port}/__cawco/artifact/${artifact}/pictures`,
     {
       method: "POST",

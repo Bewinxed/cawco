@@ -7,21 +7,29 @@
  * your old process was still running", while its background command ran on
  * in its workspace, re-parented to the sandbox's init, until the machine's
  * leak watch told it that it had left the command behind. The carry ended
- * Claude Code's process; a command in a workspace runs inside its boundary,
- * which the CLI's end never reaches, and only a stop of the session ended
- * what it ran there (boundary.ts `endSessionWork`).
+ * Claude Code's process, whose end cuts off the command it ran in its
+ * workspace's boundary: the runner sends TERM to that command's process
+ * group (boundary.ts, the runner's `cancel`). That command was a `timeout`,
+ * which runs in a group of its own (GNU timeout's `setpgid (0, 0)`, unless
+ * `--foreground`), as a server started with `setsid` or a daemon's double
+ * fork do, so the cut-off never reached it; only a stop of the session
+ * ended that work (boundary.ts `endSessionWork`, by the session's name in
+ * each process's environment).
  *
  * On a scratch fleet (real hub, agent and sessiond; Claude Code against the
  * mock model) with two Claude accounts, R (the fleet's own, first in
  * placement) and W, each its own fake login and token, so the mock says
  * which account a request ran on. A delegate in a workspace starts on R; its
- * first turn starts `sleep 600.7373` in the background and ends. Its next
+ * first turn starts `timeout 900 sleep 600.7373` in the background, a group
+ * of its own as the probe kit's run was, and ends. Its next
  * request on R is refused 403 (an organization whose subscription access is
  * refused, `oauth_org_not_allowed`), which signs R out and moves the
  * delegate, stopped on its refused sign-in, to W, ending the work its
  * process holds for later (hub server.ts `moveRowsToAccount`, `endLater`).
  *
- * - (a) Before the refusal, the background `sleep` runs.
+ * - (a) Before the refusal, the background `sleep` runs. (A bare `sleep`, in
+ *   its command's group, ended with the CLI's cut-off before the move's own
+ *   ending looked: r421 read it gone and no agent line.)
  * - (b) The delegate moves to W.
  * - (c) Within {@link GONE_WAIT_MS} of its move the `sleep` is gone, and the
  *   agent's log says the move ended what it left running in its workspace,
@@ -62,6 +70,8 @@ const W_TOKEN = "sk-ant-oat01-fake-move-ends-w";
 const TAG = "PROBE-MOVE-ENDS";
 /** The background command's `sleep` argument, and the description it runs under. */
 const LEFTOVER = "600.7373";
+/** What the `sleep` runs under: GNU timeout, which leads a process group of its own. */
+const TIMEOUT = "timeout 900";
 const DESCRIPTION = "Sleep in the background";
 /** Anthropic's words for an organization whose subscription access is refused. */
 const ORG_REFUSED =
@@ -95,7 +105,7 @@ const respond = async (request: Seen): Promise<Reply> => {
       tool: {
         name: "Bash",
         input: {
-          command: `sleep ${LEFTOVER}`,
+          command: `${TIMEOUT} sleep ${LEFTOVER}`,
           description: DESCRIPTION,
           run_in_background: true,
         },
@@ -169,10 +179,14 @@ const accountOfRow = (fleet: KitFleet, id: string) =>
     id
   )[0]?.account_id;
 
-/** The live pids of `sleep 600.7373`. */
-const sleeping = async (): Promise<number[]> =>
+/** The live pids of `sleep 600.7373`, and with `timeout`, of the `timeout` it runs under. */
+const sleeping = async (timeout = false): Promise<number[]> =>
   (await commandLines())
-    .filter((line) => line.command.startsWith(`sleep ${LEFTOVER}`))
+    .filter(
+      (line) =>
+        line.command.startsWith(`sleep ${LEFTOVER}`) ||
+        (timeout && line.command.startsWith(`${TIMEOUT} sleep ${LEFTOVER}`))
+    )
     .map((line) => line.pid)
     .filter((pid) => isAlive(listedPid(pid)));
 
@@ -292,7 +306,7 @@ const spec: Spec = {
         sleeping,
         (pids) => pids.length === 0,
         GONE_WAIT_MS
-      ).catch(sleeping);
+      ).catch(() => sleeping());
       const said = workWords.workEnded(delegate, "moved", [], []);
       const line = (await fleet.logs("agent"))
         .split("\n")
@@ -330,7 +344,7 @@ const spec: Spec = {
       );
     } finally {
       refuse.resolve();
-      for (const pid of await sleeping()) {
+      for (const pid of await sleeping(true)) {
         signalPid(listedPid(pid), "SIGKILL");
       }
     }
