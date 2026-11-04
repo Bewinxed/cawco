@@ -160,6 +160,8 @@ export default {
         "scripts/git-door-words-check.ts",
         // scripts/check.ts:635
         "scripts/logs-trailer-check.ts",
+        // scripts/check.ts:670
+        "scripts/compress-answer-check.ts",
         // scripts/check.ts:639
         "scripts/open-at-check.ts",
         // scripts/ship.sh:108
