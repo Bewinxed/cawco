@@ -264,8 +264,10 @@
         fail(why);
         return;
       }
-      // Its graph, told before it fetches any of it: it fetches on its turn.
+      // Its graph, told before it fetches any of it, by every load of its
+      // frame: each load fetches on a turn of its own.
       if (said?.type === CANVAS_EMBED_GRAPH && Array.isArray(said.urls)) {
+        turnState = "waiting";
         turn?.graph(said.urls.map(String));
         return;
       }
@@ -602,38 +604,41 @@
     };
     asking = true;
     // Every embed of the page takes its place in its turns now, as it mounts, so every Preview of the page is in the queue before the first turn, the one in view first (embed-turns.ts). A canvas fetches its graph on its turn, its frame loading meanwhile, its skeleton standing; a whole screen loads on its turn, alone, once its origin answers, which it tells as an empty graph: seven dashboards asked at once held every frame of the page white for most of a minute.
-    if (!canvas) {
-      turnState = "waiting";
-      const mine = embedTurn(() => box, true);
-      turn = mine;
-      mine.granted.then(() => {
-        if (!gone) {
-          turnState = "fetching";
-          ready = address;
-        }
-      });
-    }
+    turnState = "waiting";
     if (canvas) {
-      turnState = "waiting";
-      const mine = embedTurn(() => box);
-      turn = mine;
-      const tell = (type: string, urls: string[]) =>
-        frame?.contentWindow?.postMessage(
-          { type, urls },
-          new URL(address).origin
-        );
-      mine.granted.then((share) => {
-        if (gone) {
-          return;
-        }
-        turnState = "fetching";
-        tell(CANVAS_EMBED_GO, share);
+      const origin = new URL(address).origin;
+      // Each load of its frame takes a turn of its own (embed-turns.ts
+      // `graph`): its go, then its rest, told again for every load.
+      turn = embedTurn(() => box, {
+        go: (share) => {
+          if (!gone) {
+            turnState = "fetching";
+            frame?.contentWindow?.postMessage(
+              { type: CANVAS_EMBED_GO, urls: share },
+              origin
+            );
+          }
+        },
+        ready: (urls) => {
+          if (!gone) {
+            rest = { origin, urls };
+          }
+        },
       });
-      mine.ready.then((urls) => {
-        if (!gone) {
-          rest = { origin: new URL(address).origin, urls };
-        }
-      });
+    } else {
+      turn = embedTurn(
+        () => box,
+        {
+          go: () => {
+            if (!gone) {
+              turnState = "fetching";
+              ready = address;
+            }
+          },
+          ready: () => undefined,
+        },
+        true
+      );
     }
     (async () => {
       const why = await reached();

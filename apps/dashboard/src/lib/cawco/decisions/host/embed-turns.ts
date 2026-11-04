@@ -239,36 +239,52 @@ const soon = () => {
 };
 
 export interface EmbedTurn {
-  /** Ends the turn, or takes it out of the queue before it came: once, later calls do nothing. */
+  /** Ends the turn, or takes it out of the queue before it came: until its frame tells its graph again ({@link EmbedTurn.graph}), later calls do nothing. */
   done: () => void;
   /** Its share arrived whole (core `CANVAS_EMBED_FETCHED`): those modules are the page's, and the budget they held is free. */
   fetched: () => void;
-  /** Settles on its turn, with its share: the modules it fetches (core `CANVAS_EMBED_GO`). */
-  granted: Promise<string[]>;
-  /** Its graph as its page told it (core `CANVAS_EMBED_GRAPH`), each module's address; the first told counts, and a page that tells none answers `[]`. */
+  /**
+   * Its graph as its page told it (core `CANVAS_EMBED_GRAPH`), each module's
+   * address; a page that tells none answers `[]`. Every load of the frame
+   * tells it, and each load gets a turn of its own: told again (the frame
+   * loaded again, by its own `location.reload()` as Vite's client does once
+   * its socket drops, or by its address set again), whatever share the last
+   * load held is let go and it waits for its turn anew, so `go` and `ready`
+   * are called again for the new load. Kept to the first, a frame that
+   * loaded again waited at its `go` for good and drew nothing.
+   */
   graph: (urls: readonly string[]) => void;
-  /** Settles once no module of its graph is fetched by another, with the rest of its graph: it loads them and draws (core `CANVAS_EMBED_READY`). */
-  ready: Promise<string[]>;
+}
+
+/** What a turn says to its embed, each load of its frame: its turn with its share (core `CANVAS_EMBED_GO`), then the rest of its graph once none of it is fetched by another (core `CANVAS_EMBED_READY`). */
+export interface TurnCalls {
+  go: (share: string[]) => void;
+  ready: (rest: string[]) => void;
 }
 
 /** A place in the page's queue of embeds, for the picture standing at `place`; `alone` for a whole screen, which tells no graph and takes its turn alone. */
 export function embedTurn(
   place: () => Element | null | undefined,
+  calls: TurnCalls,
   alone = false
 ): EmbedTurn {
   let state: "waiting" | "fetching" | "done" = "waiting";
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let tellReady: (rest: string[]) => void = () => undefined;
-  const ready = new Promise<string[]>((resolve) => {
-    tellReady = resolve;
-  });
   const asked: Asked = {
     alone,
     graph: null,
     place,
     share: new Set(),
-    ready: (rest) => tellReady(rest),
-    start: () => undefined,
+    ready: (rest) => calls.ready(rest),
+    start: (share) => {
+      state = "fetching";
+      timer = setTimeout(() => {
+        if (fetching.has(asked)) {
+          letGo(false);
+        }
+      }, TURN_MS);
+      calls.go(share);
+    },
   };
   /** Its share no longer held: arrived (`kept`), or let go for whoever needs it to fetch itself. */
   const letGo = (arrived: boolean) => {
@@ -304,26 +320,25 @@ export function embedTurn(
     }
   };
   const graph = (urls: readonly string[]) => {
+    // A graph told again is a new load of the frame: its last load's turn
+    // ends, and this one waits for its own.
     if (asked.graph !== null) {
-      return;
+      if (fetching.has(asked)) {
+        letGo(false);
+      }
+      unready.delete(asked);
+      asked.share = new Set();
+      if (!waiting.includes(asked)) {
+        waiting.push(asked);
+      }
+      state = "waiting";
     }
     asked.graph = urls;
     if (state === "waiting") {
       soon();
     }
   };
-  const granted = new Promise<string[]>((resolve) => {
-    asked.start = (share) => {
-      state = "fetching";
-      timer = setTimeout(() => {
-        if (fetching.has(asked)) {
-          letGo(false);
-        }
-      }, TURN_MS);
-      resolve(share);
-    };
-  });
   waiting.push(asked);
   soon();
-  return { done, fetched, graph, granted, ready };
+  return { done, fetched, graph };
 }
