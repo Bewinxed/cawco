@@ -148,6 +148,48 @@ interface Place {
 }
 
 /** Every run on a page's clock from here on, held still once caught. */
+/**
+ * Of the runs the protocol caught on `node`, the ones that leave the clock
+ * (Clock `liveOf`), each said in the run's log, given what the page lists
+ * there (`on`, Clock `heldOn`): every one when the node is gone, or when
+ * the page holds none there and lists them finished (it ended them itself:
+ * a run it finishes as a newer one starts, an interrupted glyph swap
+ * landing at its end, is over, not a run it cannot see); the older ones
+ * where it holds fewer than were caught. Null when the page holds none
+ * there and finished none: a run it never sees.
+ */
+const leftOff = (
+  runs: Run[],
+  node: number | undefined,
+  on: { finished: number; held: number } | null
+): Run[] | null => {
+  const named = (some: Run[]) =>
+    some.map((one) => `${one.type} ${one.name}`).join(", ");
+  if (on === null) {
+    console.log(
+      `… clock: ${named(runs)} on node ${node}, no longer in the document, left off the clock`
+    );
+    return runs;
+  }
+  const { held, finished } = on;
+  if (held === 0) {
+    if (finished < runs.length) {
+      return null;
+    }
+    console.log(
+      `… clock: ${named(runs)} on node ${node}, finished by the page itself, left off the clock`
+    );
+    return runs;
+  }
+  const older = runs.slice(0, Math.max(0, runs.length - held));
+  if (older.length > 0) {
+    console.log(
+      `… clock: ${named(older)} on node ${node}, in the document, replaced by the page's newer run (it holds ${held} of ${runs.length}), left off the clock`
+    );
+  }
+  return older;
+};
+
 export class Clock {
   private readonly started: Described[] = [];
   /** Each run held since the catch began, by id: where its target lies. */
@@ -387,9 +429,11 @@ export class Clock {
    * in it, the page's held runs are the newest caught there, the older ones
    * runs the page cancelled itself (Svelte reverses a transition by
    * cancelling its run and starting another on the same element, which
-   * `animationCanceled` cannot tell from the clock's own pause). A node in
-   * the document whose runs the page lists none of is a run it never sees
-   * (a shadow tree's): null. Each run let go is said in the run's log.
+   * `animationCanceled` cannot tell from the clock's own pause), and runs
+   * it lists finished and holds none of there are ones it ended itself. A
+   * node in the document whose runs the page lists none of is a run it
+   * never sees (a shadow tree's): null. Each run let go is said in the
+   * run's log ({@link leftOff}).
    */
   private async liveOf(kept: Run[]): Promise<Run[] | null> {
     const byNode = new Map<number | undefined, Run[]>();
@@ -398,35 +442,20 @@ export class Clock {
     }
     const drop = new Set<Run>();
     for (const [node, runs] of byNode) {
-      const held = await this.heldOn(node);
-      if (held === null) {
-        for (const run of runs) {
-          drop.add(run);
-        }
-        console.log(
-          `… clock: ${runs.map((one) => `${one.type} ${one.name}`).join(", ")} on node ${node}, no longer in the document, left off the clock`
-        );
-        continue;
-      }
-      if (held === 0) {
+      const gone = leftOff(runs, node, await this.heldOn(node));
+      if (gone === null) {
         return null;
       }
-      const older = runs.slice(0, Math.max(0, runs.length - held));
-      for (const run of older) {
+      for (const run of gone) {
         drop.add(run);
-      }
-      if (older.length > 0) {
-        console.log(
-          `… clock: ${older.map((one) => `${one.type} ${one.name}`).join(", ")} on node ${node}, in the document, replaced by the page's newer run (it holds ${held} of ${runs.length}), left off the clock`
-        );
       }
     }
     return kept.filter((run) => !drop.has(run));
   }
 
   /**
-   * How many held runs the page lists on a node; null when it is no longer
-   * in the document. A pseudo-element's run is the page's on its host: the
+   * How many held runs the page lists on a node, and how many it lists
+   * finished there; null when it is no longer in the document. A pseudo-element's run is the page's on its host: the
    * protocol names the pseudo-element's own node, which resolves to a
    * `CSSPseudoElement`, while the page's run has the host as its
    * `effect.target` and the pseudo-element in `effect.pseudoElement`
@@ -439,7 +468,9 @@ export class Clock {
    * `::before` run (a tray chip's fill) read 0, and the clock threw on a
    * page that held it.
    */
-  private async heldOn(node: number | undefined): Promise<number | null> {
+  private async heldOn(
+    node: number | undefined
+  ): Promise<{ finished: number; held: number } | null> {
     const resolved =
       node === undefined
         ? null
@@ -453,9 +484,11 @@ export class Clock {
     const { result } = (await this.cdp.send("Runtime.callFunctionOn", {
       objectId,
       functionDeclaration:
-        "function () { const t = this instanceof Element ? this : this.element; const pseudo = this instanceof Element ? null : this.type; if (!(t && t.isConnected)) { return null; } return window.kitRuns().filter((r) => r.playState === 'paused' && r.effect && r.effect.target === t && (r.effect.pseudoElement || null) === pseudo).length; }",
+        "function () { const t = this instanceof Element ? this : this.element; const pseudo = this instanceof Element ? null : this.type; if (!(t && t.isConnected)) { return null; } const on = window.kitRuns().filter((r) => r.effect && r.effect.target === t && (r.effect.pseudoElement || null) === pseudo); return { held: on.filter((r) => r.playState === 'paused').length, finished: on.filter((r) => r.playState === 'finished').length }; }",
       returnByValue: true,
-    })) as { result: { value: number | null } };
+    })) as {
+      result: { value: { finished: number; held: number } | null };
+    };
     return result.value;
   }
 

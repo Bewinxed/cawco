@@ -2003,8 +2003,55 @@ export async function pressIn(
       return;
     }
   }
+  // What the frame itself holds at the point, up its ancestors: an element
+  // standing there that takes no presses (`pointer-events: none` up to the
+  // root) lets the press through to the parent's <iframe>.
+  const inFrame = await pressed
+    .evaluate((el: Element) => {
+      const box = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        box.left + box.width / 2,
+        box.top + box.height / 2
+      );
+      const chain: string[] = [];
+      for (let at: Element | null = hit ?? el; at; at = at.parentElement) {
+        const style = getComputedStyle(at);
+        chain.push(
+          `${at.localName}${at.id ? `#${at.id}` : ""}${at.classList.length ? `.${[...at.classList].slice(0, 2).join(".")}` : ""}[pe=${style.pointerEvents}${at.hasAttribute("inert") ? ",inert" : ""}]`
+        );
+      }
+      return `${hit ? "hit" : "nothing hit; the target"} ${chain.slice(0, 8).join(" < ")}`;
+    })
+    .catch((error: unknown) => `unread: ${String(error)}`);
+  // And how the page around draws the <iframe>: a box at opacity 0, or one
+  // an animation holds, is not drawn, and the compositor hit-tests by what
+  // it draws.
+  const around = await element
+    .evaluate((el: Element) => {
+      const said: string[] = [];
+      for (let at: Element | null = el; at; at = at.parentElement) {
+        const style = getComputedStyle(at);
+        const runs = at
+          .getAnimations()
+          .map(
+            (run) =>
+              `${(run as CSSAnimation).animationName ?? run.id ?? "?"} ${run.playState}`
+          );
+        if (
+          style.opacity !== "1" ||
+          style.visibility !== "visible" ||
+          runs.length > 0
+        ) {
+          said.push(
+            `${at.localName}${at.getAttribute("data-slot") ? `[${at.getAttribute("data-slot")}]` : ""} opacity ${style.opacity}, ${style.visibility}${runs.length ? `, runs ${runs.join(" ")}` : ""}`
+          );
+        }
+      }
+      return said.join(" < ") || "drawn whole";
+    })
+    .catch((error: unknown) => `unread: ${String(error)}`);
   throw new Error(
-    `${named}: the parent's <iframe> took each of ${PRESSES} presses`
+    `${named}: the parent's <iframe> took each of ${PRESSES} presses (in the frame: ${inFrame}; the frame's <iframe>: ${around})`
   );
 }
 
