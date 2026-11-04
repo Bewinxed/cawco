@@ -2110,6 +2110,12 @@ export interface DbShape {
    * grants nothing here, which is the hub's word that it is revoked.
    */
   readonly revokedAmong: (hashes: readonly string[]) => string[];
+  /**
+   * Session `instanceId`'s credentials revoked, installed and on their way:
+   * its process is gone (asleep, or dead of a signal), so nothing it held
+   * grants again; its next launch mints its own (server.ts `grantLaunch`).
+   */
+  readonly revokeSessionIdentity: (instanceId: string) => void;
   /** Routines and their runs (routines.ts). */
   readonly routines: RoutinesDb;
   /** Where a rule stands with a session; absent means it has never fired there. */
@@ -3795,9 +3801,10 @@ const make = async (path: string): Promise<DbShape> => {
   /**
    * The credentials of `ids`' sessions revoked, inside the caller's
    * transaction: what was installed and what was on its way. A session's
-   * credential grants while it may run; once its end is confirmed or it
-   * leaves the hub, nothing it held grants again, and a launch after mints
-   * its own (server.ts `grantLaunch`).
+   * credential grants while its process may run; once that process is gone
+   * (asleep, dead, its end confirmed) or the session leaves the hub, nothing
+   * it held grants again, and its next launch mints its own (server.ts
+   * `grantLaunch`).
    */
   const revokeIdentities = (tx: Tx, ids: readonly string[]): void => {
     if (ids.length === 0) {
@@ -5276,6 +5283,8 @@ const make = async (path: string): Promise<DbShape> => {
           .run();
       }),
     revokedAmong,
+    revokeSessionIdentity: (instanceId) =>
+      db.transaction((tx) => revokeIdentities(tx, [instanceId])),
     onCredentialsRevoked: (listener) => {
       revokedListeners.add(listener);
     },

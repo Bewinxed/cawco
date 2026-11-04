@@ -38238,6 +38238,13 @@ export const createServer = (
                   const { died } = message.payload as FramePayload & {
                     kind: "asleep";
                   };
+                  // Its process is gone: the credential it ran on grants
+                  // nothing from here, wherever that credential was printed
+                  // (a shell's env, a transcript). Its wake, a resume or a
+                  // restart after a signal, is a launch, which mints its
+                  // own (grantLaunch); a continuation is a session of its
+                  // own, with its own.
+                  db.revokeSessionIdentity(message.instanceId);
                   launchSettled(
                     message.instanceId,
                     died ? "its process died" : "it went to sleep",
