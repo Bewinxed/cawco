@@ -131,6 +131,19 @@ function fieldLabelOf(el: Element): string | null {
   return null;
 }
 
+/** A house part in words: by the label it holds, else by the one control a kit wrapper holds, else by its part's name. */
+function slotNameOf(el: Element, slot: string): string {
+  const label = labelIn(el);
+  if (label) {
+    return `${slotWords(slot)} ${quoted(label)}`;
+  }
+  // A kit wrapper round one control (a native select's) is that control:
+  // "Native select wrapper" named the box, not the menu.
+  const controls = el.querySelectorAll("input, select, textarea");
+  const [only] = controls;
+  return controls.length === 1 && only ? nameOf(only) : slotWords(slot);
+}
+
 /** The element in words. */
 export function nameOf(el: Element): string {
   // A part of a control (a button's label, its slot) is the control.
@@ -141,15 +154,7 @@ export function nameOf(el: Element): string {
   const own = CONTROLS.has(el.localName) ? null : el.getAttribute("data-slot");
   const slot = own && !WORDS_ONLY.has(own) ? own : null;
   if (slot) {
-    const label = labelIn(el);
-    if (label) {
-      return `${slotWords(slot)} ${quoted(label)}`;
-    }
-    // A kit wrapper round one control (a native select's) is that control:
-    // "Native select wrapper" named the box, not the menu.
-    const controls = el.querySelectorAll("input, select, textarea");
-    const [only] = controls;
-    return controls.length === 1 && only ? nameOf(only) : slotWords(slot);
+    return slotNameOf(el, slot);
   }
   const kind = KIND[el.localName] ?? null;
   const label = el.getAttribute("aria-label") ?? fieldLabelOf(el);
