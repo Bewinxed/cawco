@@ -24,8 +24,9 @@
   const HIGH = 1.25;
   const yOf = (p: number) => (H * (HIGH - p)) / (HIGH - LOW);
   /** The numbers while a point is held; the curve's own at rest. */
-  let held = $state<number[] | null>(null);
-  const shown = $derived(held ?? at);
+  let held = $state<{ for: number[]; at: number[] } | null>(null);
+  /** The curve as he left it stands until the numbers come back changed. */
+  const shown = $derived(held && held.for === at ? held.at : at);
   const [x1 = 0, y1 = 0, x2 = 1, y2 = 1] = $derived(shown);
   let box = $state<HTMLElement>();
   let dragging: 0 | 1 | null = null;
@@ -55,14 +56,13 @@
   };
   const drag = (event: PointerEvent) => {
     if (dragging !== null && box) {
-      held = place(dragging, ...fromPointer(event));
+      held = { for: at, at: place(dragging, ...fromPointer(event)) };
     }
   };
   const letGo = () => {
-    if (held) {
-      onbend(held);
+    if (held && dragging !== null) {
+      onbend(held.at);
     }
-    held = null;
     dragging = null;
   };
   const key = (point: 0 | 1) => (event: KeyboardEvent) => {
@@ -76,13 +76,13 @@
     if (move) {
       event.preventDefault();
       const [dx = 0, dy = 0] = move;
-      onbend(
-        place(
-          point,
-          (shown[point * 2] ?? 0) + dx,
-          (shown[point * 2 + 1] ?? 0) + dy
-        )
+      const next = place(
+        point,
+        (shown[point * 2] ?? 0) + dx,
+        (shown[point * 2 + 1] ?? 0) + dy
       );
+      held = { for: at, at: next };
+      onbend(next);
     }
   };
   const points = $derived([
