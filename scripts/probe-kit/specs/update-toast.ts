@@ -84,7 +84,7 @@ const FRAME_LANDS_MS = 2000;
 /** Each announcement names a build of its own (reload.svelte.ts `RELOADED_FOR`). */
 const nextBuild = (n: number) => `probe-toast-${n}`;
 
-interface Update {
+export interface Update {
   builds: number;
   /** The page's console errors and uncaught errors. */
   errors: string[];
@@ -95,7 +95,7 @@ interface Update {
 }
 
 /** The probe's announcement, wired into `page` before it opens. */
-const wire = async (page: Page): Promise<Update> => {
+export const wire = async (page: Page): Promise<Update> => {
   const update: Update = {
     builds: 0,
     on: false,
@@ -136,7 +136,7 @@ const wire = async (page: Page): Promise<Update> => {
 };
 
 /** A new build is announced: served from now, the socket dropped so the page asks. */
-const announce = async (update: Update): Promise<void> => {
+export const announce = async (update: Update): Promise<void> => {
   update.builds += 1;
   update.on = true;
   const { socket } = update;

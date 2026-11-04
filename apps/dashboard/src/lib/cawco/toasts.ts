@@ -4,7 +4,7 @@
  * `.custom`, `.dismiss`, `.getActiveToasts`), and it keeps every new toast
  * in a macrotask of its own.
  *
- * svelte-sonner (1.2.1, the latest) measures a toast once, as it mounts. Of
+ * svelte-sonner (1.2.3, the latest) measures a toast once, as it mounts. Of
  * two toasts made in one tick, the first is already second in line when it
  * mounts, so it is laid out at the front toast's height, stores that, and
  * the stack overlaps from then on (svelte-sonner issue #24, open: "Adding

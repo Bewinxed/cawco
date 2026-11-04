@@ -3,6 +3,24 @@
   <head>
     <meta charset="utf-8" />
     <!--
+      The house's cascade layers, in order, stated by the page itself ahead
+      of every sheet it links. A document sorts its layers "by the order in
+      which they first are declared"
+      (https://drafts.csswg.org/css-cascade-5/#layer-ordering) over its
+      sheets in tree order, so this one, first in the tree and fetched from
+      nowhere, holds whatever order a route's sheets are linked or arrive in
+      and whatever one of them names first. The sheet holding svelte-sonner's
+      (`@layer vendor { … }`) is linked ahead of base.css on every page under
+      `(app)`; a copy of it naming `vendor` first put it under `base`, and
+      Tailwind's preflight took every toast's padding and border. Tailwind's
+      `properties` (its `@property` fallbacks) comes first; app.css says what
+      each of the others holds. A built sheet naming a layer left out here
+      fails the build (vite.config.ts `vendorComponentSheets`).
+    -->
+    <style>
+      @layer properties, theme, base, vendor, components, utilities, overrides;
+    </style>
+    <!--
       The viewport, made before the body is parsed. A virtual keyboard
       resizes the layout, not just the visual viewport
       (`interactive-widget=resizes-content`: Chrome for Android since 108,

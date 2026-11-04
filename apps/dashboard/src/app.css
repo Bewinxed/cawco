@@ -1,4 +1,5 @@
-/* One cascade order for the whole app, Tailwind's own with two more: tokens
+/* One cascade order for the whole app, Tailwind's own with two more, stated
+   by app.html ahead of every sheet a page links: tokens
    in theme, element defaults in base, the libraries' own stylesheets in
    `vendor` under the house's components (Svelte Flow's and Milkdown
    Crepe's by lib/vendor-css, loaded with what draws them; the sheets
@@ -9,10 +10,7 @@
    the few page-wide holds that outrank every utility on any element (a
    field's type floor, a loop held still, the theme flip). A later layer
    wins over an earlier one whatever the selectors' weight
-   (https://developer.mozilla.org/en-US/docs/Web/CSS/@layer). Stated before
-   Tailwind's import, which declares its four first: a layer's place is
-   where it is first named. */
-@layer theme, base, vendor, components, utilities, overrides;
+   (https://developer.mozilla.org/en-US/docs/Web/CSS/@layer). */
 @import "tailwindcss" source(".");
 /* The house faces, Figtree, JetBrains Mono and Nunito, as every CawCo web
    surface serves them: woff2 pieces cut from the repository's own files (core
@@ -787,7 +785,7 @@
 
 /* ---- Sonner's toaster and toasts (the kit's sonner.svelte hosts them;
    svelte-sonner draws them). Its own sheet stands in the `vendor` layer
-   (vite.config.ts, sonnerSheet), so these win by layer. */
+   (vite.config.ts, vendorComponentSheets), so these win by layer. */
 @layer components {
   /* The kit's floating surface, over sonner's own box. */
   [data-sonner-toaster] [data-sonner-toast][data-styled="true"] {

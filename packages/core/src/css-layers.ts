@@ -1,33 +1,72 @@
 /**
- * The one guard every sheet built over the house's cascade layers is held
- * to: the dashboard's assets (vite.config.ts `vendorComponentSheets`) and
- * the decision host's (decision-host.ts). A module of its own with no
- * relative imports, so the dashboard's Vite config loads it under Node as
- * written. PostCSS is loaded on the first check, so the standalone binary
- * never loads it.
+ * The guards every sheet built over the house's cascade layers is held to:
+ * no style rule outside a layer, for the dashboard's assets (vite.config.ts
+ * `vendorComponentSheets`) and the decision host's (decision-host.ts); and
+ * for the dashboard, no layer its page template (app.html) leaves out of the
+ * order it states before any sheet. A module of its own with no relative
+ * imports, so the dashboard's Vite config loads it under Node as written.
+ * PostCSS is loaded on the first check, so the standalone binary never loads
+ * it.
  */
+
+/** A `<style>` element's contents, from its opening tag to its closing one. */
+const STYLE_ELEMENT = /<style>([^<]*)<\/style>/gu;
+const LAYER_STATEMENT = /^@layer\s+([\w-]+(?:\s*,\s*[\w-]+)*)\s*;$/u;
+/** Where Kit links a route's sheets in app.html. */
+const KIT_HEAD = "%sveltekit.head%";
 
 /**
- * The house's cascade layers, in order: Tailwind's `properties` (its
- * fallbacks for `@property`, which it emits ahead of everything), then the
- * ones app.css states. A layer's place is where a document first
- * names it, so the order holds only if the first sheet a page parses says
- * it whole: {@link withLayerOrder} heads every built sheet with it.
+ * The cascade layers a page template declares ahead of every sheet it
+ * links, in order: the `@layer` statement standing alone in a `<style>` of
+ * its own before Kit's head, where a route's sheets are linked. A document
+ * sorts its layers "by the order in which they first are declared"
+ * (https://drafts.csswg.org/css-cascade-5/#layer-ordering), reading its
+ * sheets "in tree order"
+ * (https://drafts.csswg.org/cssom/#documentorshadowroot-document-or-shadow-root-css-style-sheets),
+ * so the order stated there holds whatever order the sheets after it are
+ * linked or arrive in, and whatever any of them names first. Throws when
+ * the template states none there.
  */
-const HOUSE_LAYERS =
-  "properties, theme, base, vendor, components, utilities, overrides";
-
-const ORDER_STATEMENT = `@layer ${HOUSE_LAYERS};`;
+export function documentLayers(html: string): string[] {
+  const head = html.indexOf(KIT_HEAD);
+  for (const style of html.matchAll(STYLE_ELEMENT)) {
+    if (head === -1 || style.index > head) {
+      break;
+    }
+    const names = LAYER_STATEMENT.exec(style[1]?.trim() ?? "")?.[1];
+    if (names) {
+      return names.split(",").map((name) => name.trim());
+    }
+  }
+  throw new Error(
+    `css layers: the page template states no \`@layer\` order in a <style> of its own ahead of ${KIT_HEAD}`
+  );
+}
 
 /**
- * `css` headed by the house's layer order. A page links its route's sheets
- * in whatever order its chunks fall: one that opens on `@layer vendor { … }`
- * (svelte-sonner's) parsed first put `vendor` under `base`, and Tailwind's
- * preflight took every toast's padding and its buttons' fill. Every sheet
- * saying the order first, any one of them can come first.
+ * Each cascade layer `css` names outside every other layer, in the order it
+ * first names them: the layers that take a place in the document's order. A
+ * nested layer (`vendor.calendar`) takes its place inside its parent's, so
+ * it counts as its parent.
  */
-export const withLayerOrder = (css: string): string =>
-  css.startsWith(ORDER_STATEMENT) ? css : `${ORDER_STATEMENT}${css}`;
+export async function layersNamed(css: string): Promise<string[]> {
+  const { default: postcss } = await import("postcss");
+  const named: string[] = [];
+  postcss.parse(css).walkAtRules("layer", (rule) => {
+    for (let at = rule.parent; at && at.type !== "root"; at = at.parent) {
+      if (at.type === "atrule" && "name" in at && at.name === "layer") {
+        return;
+      }
+    }
+    for (const name of rule.params.split(",")) {
+      const [outer] = name.trim().split(".");
+      if (outer && !named.includes(outer)) {
+        named.push(outer);
+      }
+    }
+  });
+  return named;
+}
 
 /**
  * Each style rule in `css` that no `@layer` holds, as its selector: one

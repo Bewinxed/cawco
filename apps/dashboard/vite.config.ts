@@ -7,7 +7,11 @@ import {
   crossSiteRefusal,
   PAGE_ORIGIN_HEADER,
 } from "@cawco/core/browser-gate";
-import { unlayeredRules, withLayerOrder } from "@cawco/core/css-layers";
+import {
+  documentLayers,
+  layersNamed,
+  unlayeredRules,
+} from "@cawco/core/css-layers";
 import { CSS_TARGET } from "@cawco/core/css-target";
 import { linkedRebundle } from "@cawco/core/linked-rebundle";
 import { devServerWords } from "@cawco/core/words/dev-server";
@@ -290,7 +294,7 @@ const runningVersion = (): Plugin => ({
  * unlayered, where it would outrank every rule of the house, and no
  * `@import … layer()` reaches it. Two ways in:
  * - a Svelte component's `<style>`, which the compiler emits unlayered:
- *   svelte-sonner 1.2.1 (Toaster.svelte), vaul-svelte 1.0.0-next.7
+ *   svelte-sonner 1.2.3 (Toaster.svelte), vaul-svelte 1.0.0-next.7
  *   (components/drawer/drawer.svelte), bits-ui 2.19.5
  *   (select/components/select-viewport.svelte), @xyflow/svelte 1.7.0 (its
  *   A11yDescriptions, selection and edge-label components) and
@@ -315,12 +319,11 @@ const runningVersion = (): Plugin => ({
  * (core css-layers.ts `unlayeredRules`, the guard the decision host's sheet
  * is held to as well).
  *
- * Every CSS asset is headed by the house's layer order (core css-layers.ts
- * `withLayerOrder`): a document places a layer where it first names it, and
- * a page links its chunks' sheets in no set order. svelte-sonner's, linked
- * ahead of base.css on every page under `(app)`, named `vendor` first, under
- * `base`, so Tailwind's preflight stripped every toast of its padding and its
- * buttons of their fill.
+ * The layers' order is app.html's, stated in a `<style>` of its own ahead
+ * of every sheet a page links (core css-layers.ts `documentLayers`), so no
+ * sheet's order or first words place a layer. A sheet naming a layer that
+ * statement leaves out fails the build, naming its asset and layer: the
+ * document would place it after `overrides`, over every rule of the house.
  */
 const VENDOR_COMPONENT_SHEETS = [
   "svelte-sonner",
@@ -375,6 +378,10 @@ const VENDOR_COMPONENT_STYLE = new RegExp(
   ].join("|"),
   "u"
 );
+/** The cascade layers app.html states, in order, ahead of every sheet. */
+const DOCUMENT_LAYERS = documentLayers(
+  readFileSync(join(import.meta.dirname, "src/app.html"), "utf8")
+);
 export const vendorComponentSheets = (): Plugin => ({
   name: "cawco-vendor-component-sheets",
   transform(code, id) {
@@ -389,10 +396,21 @@ export const vendorComponentSheets = (): Plugin => ({
     if (sheets.length === 0) {
       return;
     }
-    for (const sheet of sheets) {
-      if (sheet.type === "asset") {
-        sheet.source = withLayerOrder(String(sheet.source));
-      }
+    const undeclared = (
+      await Promise.all(
+        sheets.map(async (sheet) =>
+          sheet.type === "asset"
+            ? (await layersNamed(String(sheet.source)))
+                .filter((layer) => !DOCUMENT_LAYERS.includes(layer))
+                .map((layer) => `${sheet.fileName}: @layer ${layer}`)
+            : []
+        )
+      )
+    ).flat();
+    if (undeclared.length > 0) {
+      this.error(
+        `css layers: ${undeclared.length} layer(s) app.html's order leaves out; a layer joins its <style> where it belongs:\n${undeclared.join("\n")}`
+      );
     }
     const unlayered = (
       await Promise.all(
@@ -410,7 +428,9 @@ export const vendorComponentSheets = (): Plugin => ({
         `css layers: ${unlayered.length} unlayered style rule(s); a library's sheet joins vendorComponentSheets' list, a house rule moves into its layer:\n${unlayered.join("\n")}`
       );
     }
-    console.log(`css layers: ${sheets.length} assets, 0 unlayered rules`);
+    console.log(
+      `css layers: ${sheets.length} assets, 0 unlayered rules, every layer in app.html's order`
+    );
   },
 });
 
