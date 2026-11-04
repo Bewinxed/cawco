@@ -7,7 +7,7 @@
  * published. A draft is no release to a machine (the installer reads
  * published releases alone; core binary-distribution.ts the same), so none
  * sees one before every asset and the manifest are up. Called only behind
- * `release.ts --publish`; nothing else reaches it.
+ * `release.ts --publish` and by republish.ts; nothing else reaches it.
  *
  * Each call is one REST request through `gh api --include`, which prints
  * GitHub's status line before the body whenever GitHub answered (cli/cli
@@ -158,6 +158,10 @@ const listReleases = async (): Promise<Release[]> =>
 /** The release under `tag`, draft or published, if there is one. */
 const releaseOf = async (tag: string): Promise<Release | undefined> =>
   (await listReleases()).find((release) => release.tag_name === tag);
+
+/** Whether a published release (not a draft) stands under `tag`. */
+export const isPublished = async (tag: string): Promise<boolean> =>
+  (await releaseOf(tag))?.draft === false;
 
 /** A DELETE whose 404 means an earlier, unanswered attempt already did it. */
 const remove = (what: string, path: string): Promise<unknown> =>

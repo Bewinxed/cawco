@@ -11,12 +11,17 @@
 #       `release.ts --commit SHA --channel … --notes … --output ~/.cache/cawco-release/out --publish`; the worktree is
 #       removed when the release ends, whichever way. release.ts keeps its own lock and its queue of one: a request
 #       while a release runs is built next, the newest one winning.
+#   bash scripts/ship.sh --republish VERSION
+#       Publishes a build whose publish failed, from the folder it left (~/.cache/cawco-release/out/VERSION), as a
+#       unit of its own, `cawco-republish-<version>-<time>`: `republish.ts` makes the draft, uploads every file,
+#       promotes it and tells the hub. Nothing is built or notarized, so no quota is checked; it refuses (exit 2) a
+#       folder missing or incomplete and a version already published. `--run --republish VERSION` is what the unit runs.
 #
 # A fresh clone on a fresh machine runs this after `bash scripts/release-setup.sh` and its secrets import alone.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(git -C "$here" rev-parse --show-toplevel)
-run=0 commit= notes= channel=nightly tag=
+run=0 commit= notes= channel=nightly tag= republish=
 while (($#)); do
   case $1 in
     --run) run=1; shift ;;
@@ -24,13 +29,30 @@ while (($#)); do
     --notes) notes=${2:-}; shift 2 ;;
     --channel) channel=${2:-}; shift 2 ;;
     --tag) tag=${2:-}; shift 2 ;;
+    --republish) republish=${2:-}; shift 2 ;;
     *) echo "ship.sh: unknown argument $1" >&2; exit 2 ;;
   esac
 done
-[[ -n $commit && ($channel == stable || -f $notes) && ($channel == nightly || $channel == stable) ]] ||
-  { echo "usage: bash scripts/ship.sh [--run] --commit SHA --notes FILE (a nightly's) [--channel nightly|stable] [--tag vX.Y.Z]" >&2; exit 2; }
+[[ (-n $republish && -z $commit) || (-n $commit && ($channel == stable || -f $notes) && ($channel == nightly || $channel == stable)) ]] ||
+  { echo "usage: bash scripts/ship.sh [--run] --commit SHA --notes FILE (a nightly's) [--channel nightly|stable] [--tag vX.Y.Z]
+       bash scripts/ship.sh [--run] --republish VERSION" >&2; exit 2; }
 export PATH="$HOME/.bun/bin:$HOME/.local/bin:$PATH"
 cache="$HOME/.cache/cawco-release"
+
+if [[ -n $republish ]]; then
+  if ((run == 1)); then
+    exec bun "$here/republish.ts" --version "$republish" --output "$cache/out"
+  fi
+  # Refused here, before a unit is started, when the folder is plainly not there.
+  [[ -d $cache/out/$republish ]] ||
+    { echo "Republish refused: there is no build of $republish at $cache/out/$republish" >&2; exit 2; }
+  unit="cawco-republish-${republish//[^A-Za-z0-9]/-}-$(date +%s)"
+  systemd-run --user --collect --quiet --unit="$unit" --working-directory="$repo" \
+    --setenv=PATH="$PATH" --setenv=HOME="$HOME" \
+    bash "$here/ship.sh" --run --republish "$republish"
+  echo "Republishing $republish as $unit (journalctl --user -u $unit)"
+  exit 0
+fi
 
 if ((run == 0)); then
   said=$(bun "$here/release-quota.ts") || { echo "$said"; exit 2; }

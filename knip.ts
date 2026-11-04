@@ -162,9 +162,11 @@ export default {
         "scripts/logs-trailer-check.ts",
         // scripts/check.ts:639
         "scripts/open-at-check.ts",
-        // scripts/ship.sh:86
+        // scripts/ship.sh:108
         "scripts/release.ts",
-        // scripts/ship.sh:36
+        // scripts/ship.sh:44
+        "scripts/republish.ts",
+        // scripts/ship.sh:58
         "scripts/release-quota.ts",
         // scripts/release-setup.sh:27
         "scripts/release-setup.ts",
