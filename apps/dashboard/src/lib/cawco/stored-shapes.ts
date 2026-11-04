@@ -847,7 +847,7 @@ export const SpawnPrefsShape = z.object({
   permissionMode: PermissionModeShape.nullable(),
 });
 
-const StopKindShape = z.enum(["forget", "caw-off"]);
+const StopKindShape = z.enum(["forget", "delete", "caw-off"]);
 
 const StopPhaseShape = z.enum([
   "none",
@@ -885,11 +885,13 @@ const StopRowShape = z.object({
 
 const StopJobShape = z.object({
   at: z.string(),
+  fromDisk: z.boolean(),
   kind: StopKindShape,
   off: z.boolean(),
   open: z.boolean(),
   phase: StopPhaseShape,
   picked: z.array(z.string()),
+  places: z.array(z.object({ machineId: z.string(), path: z.string() })),
   pressedAt: z.number(),
   projectId: z.string(),
   projectName: z.string(),

@@ -336,6 +336,11 @@ const CONTAINERS = {
   // Labels (c-task-col-labels-w, 224px) from 878 + 224:
   "table-1102px": "1102px",
   "stop-tray": "420px",
+  // Forgotten projects' ledger: its columns beside the name once the name's
+  // floor (c-ledger-title-min, 224px), the lead (c-row-lead, 28px), What it
+  // brings (c-forgotten-brings-w, 192px), When (c-ledger-when-w, 96px), the
+  // two actions (about 176px) and four gaps (space-3, 56px) fit: 772px.
+  forgotten: "48.25rem",
   kinds: "480px",
   "decisions-520px": "520px",
   leaf: "620px",

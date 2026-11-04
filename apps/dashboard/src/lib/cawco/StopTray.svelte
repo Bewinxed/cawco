@@ -1,7 +1,8 @@
 <script lang="ts">
+  import type { Activity } from "@cawco/core/activity";
   import { commonWords } from "@cawco/core/words/common";
   /**
-   * A forget's running-sessions tray (Caw off's is CawOffTray, each row
+   * A forget's or a delete's tray (Caw off's is CawOffTray, each row
    * checked to stop): one tray that changes shape as a stop goes,
    * never a second dialog (Family, benji.org/family-values: trays that
    * "expand, contract, and adapt"). It stands in the page under whatever
@@ -20,6 +21,12 @@
    *
    * With nothing running it is the plain question: the kind's end, its
    * ended word held in place, then gone.
+   *
+   * A delete asks one more thing before its press: "Also delete its files
+   * on disk", a checkbox under its words. Checked, the checkouts it removes
+   * stand listed, each its machine and path; unchecked, it says what it
+   * leaves (its sessions' transcripts, which a machine may list again as
+   * sessions with no project). Once pressed, the box holds what was chosen.
    *
    * With sessions running it lists them as the rail nests them (each lead
    * with its delegates) on one button, "Stop 3 and …", whose press stops
@@ -46,7 +53,9 @@
    * shorter armed, a row shorter per landing, the short "Stopped 3
    * sessions." at the end, a line taller for a failure.
    */
+  import { projectEndWords } from "@cawco/core/words/project-ends";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
@@ -72,7 +81,7 @@
   import { sessionPlace } from "./session-names.svelte";
   import { standing, trailOf, trayHere } from "./stop-tray-here.svelte";
   import {
-    forgetWords,
+    endWordsOf,
     midTurn,
     type StopJob,
     type StopRow,
@@ -84,10 +93,16 @@
   let {
     class: className,
     job,
+    activityOf = (id: string) => cawco.activityOf(id),
+    nameOf = machineName,
   }: {
     /** The host's indent for the tray (`--ask-indent`, `--ask-end`). */
     class?: string;
     job: StopJob;
+    /** What each row's turn is doing; the board's, unless a story names it. */
+    activityOf?: (id: string) => Activity;
+    /** A machine's name by its id; the board's, unless a story names it. */
+    nameOf?: (machineId: string) => string;
   } = $props();
 
   /** This tray's own: its rows' tiles fly under it into the button, and its title is named by it. */
@@ -99,7 +114,7 @@
     id: string;
   }
 
-  const words = $derived(forgetWords(job.projectName));
+  const words = $derived(endWordsOf(job));
   const rows = $derived(job.rows);
   const phase = $derived(job.phase);
   const total = $derived(job.total);
@@ -180,7 +195,7 @@
     if (inert) {
       return;
     }
-    if (phase === "list" && midTurn(job).length > 0) {
+    if (phase === "list" && midTurn(job, activityOf).length > 0) {
       // A double-click never carries through the arming morph into the stop.
       inert = true;
       after(dur("--dur-panel"), () => {
@@ -276,7 +291,16 @@
   /* ── What each part says ─────────────────────────────────────────── */
 
   const description = $derived(
-    words.line(phase, phase === "list" ? listed : total, done())
+    words.line(
+      phase,
+      phase === "list" ? listed : total,
+      midTurn(job, activityOf).length,
+      done()
+    )
+  );
+  /** A delete's box can still change: its press has not gone. */
+  const choosing = $derived(
+    phase === "none" || phase === "list" || phase === "armed"
   );
 
   /** What the stops did: "Stopped 2 sessions. 1 stops when obelisk is back." */
@@ -286,9 +310,7 @@
     if (away.length === 0) {
       return endedLine;
     }
-    const machines = [
-      ...new Set(away.map((row) => machineName(row.s.machineId))),
-    ];
+    const machines = [...new Set(away.map((row) => nameOf(row.s.machineId)))];
     const back =
       machines.length === 1
         ? `when ${machines[0]} is back`
@@ -304,7 +326,7 @@
         return words.stop(listed);
       case "armed": {
         // A turn that ended while armed leaves nothing to warn of.
-        const cut = midTurn(job).length;
+        const cut = midTurn(job, activityOf).length;
         return cut > 0 ? words.armed(listed, cut) : words.stop(listed);
       }
       case "fail":
@@ -357,12 +379,12 @@
     }
     if (row.state === "away") {
       return {
-        word: `Stops when ${machineName(row.s.machineId)} is back`,
+        word: `Stops when ${nameOf(row.s.machineId)} is back`,
         icon: Away,
         tone: "quiet",
       } as const;
     }
-    const activity = cawco.activityOf(row.s.id);
+    const activity = activityOf(row.s.id);
     if (activity === "blocked") {
       return { word: "Needs you", icon: Attention, tone: "attention" } as const;
     }
@@ -380,7 +402,7 @@
     if (row.state !== "running") {
       return;
     }
-    const activity = cawco.activityOf(row.s.id);
+    const activity = activityOf(row.s.id);
     if (activity === "blocked") {
       return "attn" as const;
     }
@@ -531,10 +553,12 @@
     transition:unfold
     {@attach trayHere(() => job, leave)}
   >
+    <!-- One column as wide as the tile, never its rows' widest title: a
+         row truncates inside it rather than pushing the confirm out. -->
     <div
       bind:this={tile}
       data-slot="tile"
-      class="grid gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
+      class="grid grid-cols-1 gap-space-3 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
       {@attach land(() => share)}
     >
       <div data-slot="head" class="flex min-w-0 gap-space-3">
@@ -567,6 +591,63 @@
         >
           {@render branch(null)}
         </ul>
+      {/if}
+      {#if job.kind === "delete"}
+        <!-- What the box decides stands under its words, from where they
+             start (`--box-indent`: the box and its gap). -->
+        <div
+          data-slot="from-disk"
+          class="grid min-w-0 gap-space-2"
+          style:--box-indent="calc(var(--icon-md) + var(--space-2))"
+        >
+          <label
+            class="mark-line flex min-w-0 items-center gap-space-2 type-label text-ink-strong data-disabled:text-ink-muted"
+            data-disabled={!choosing || undefined}
+          >
+            <Checkbox
+              data-box
+              checked={job.fromDisk}
+              disabled={!choosing}
+              onCheckedChange={(on) => stopWork.setFromDisk(job, on === true)}
+            />
+            <span class="min-w-0">{projectEndWords.fromDisk}</span>
+          </label>
+          {#if job.fromDisk}
+            <div transition:unfold>
+              {#if job.places.length > 0}
+                <ul
+                  aria-label={projectEndWords.placesGo}
+                  class="m-0 flex min-w-0 list-none flex-col gap-space-2 ps-(--box-indent) pe-0"
+                >
+                  {#each job.places as place (`${place.machineId}\0${place.path}`)}
+                    <li class="flex min-w-0 flex-col gap-space-row">
+                      <span class="type-label text-ink-row"
+                        >{nameOf(place.machineId)}</span
+                      >
+                      <!-- The path reads from its end: the folder's tail
+                           stays when it is cut (as Project details'). -->
+                      <span
+                        class="dir-rtl type-meta truncate text-start text-ink-muted"
+                        title={place.path}><bdi>{place.path}</bdi></span
+                      >
+                    </li>
+                  {/each}
+                </ul>
+              {:else}
+                <p class="m-0 ps-(--box-indent) type-meta text-ink-muted">
+                  {projectEndWords.noPlaces}
+                </p>
+              {/if}
+            </div>
+          {:else}
+            <p
+              class="m-0 ps-(--box-indent) type-meta text-ink-muted"
+              transition:unfold
+            >
+              {projectEndWords.transcriptsStay}
+            </p>
+          {/if}
+        </div>
       {/if}
       <div data-slot="actions" class="flex flex-wrap justify-end gap-space-2">
         <Button

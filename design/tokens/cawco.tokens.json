@@ -5897,6 +5897,14 @@
       },
       "$description": "The machine and connection select column of the details tray's add forms."
     },
+    "c-forgotten-brings-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 12,
+        "unit": "rem"
+      },
+      "$description": "Forgotten projects' What it brings column (\"2 tasks, 1 page and 1 session\"), beside When (c-ledger-when-w)."
+    },
     "c-ledger-when-w": {
       "$type": "dimension",
       "$value": {

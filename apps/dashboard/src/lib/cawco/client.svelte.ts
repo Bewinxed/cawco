@@ -47,6 +47,10 @@ import type { AvailableCommand } from "@cawco/core/fleet";
 import { classifyCommand } from "@cawco/core/fleet";
 import type { FleetWatchNotice } from "@cawco/core/fleet-watch";
 import type {
+  ForgottenProject,
+  ProjectRestored,
+} from "@cawco/core/forgotten-project";
+import type {
   BrowserAskFrame,
   ConnectAskFrame,
   FleetFetchFrame,
@@ -160,6 +164,7 @@ import { catalogWords } from "@cawco/core/words/catalog";
 import { machineWords } from "@cawco/core/words/machine";
 import { offerWords } from "@cawco/core/words/offers";
 import { projectWords } from "@cawco/core/words/project";
+import { projectEndWords } from "@cawco/core/words/project-ends";
 import { sidebarWords } from "@cawco/core/words/sidebar";
 import { workWords } from "@cawco/core/words/work";
 import { flushSync, untrack } from "svelte";
@@ -7125,15 +7130,15 @@ export const setProjectBudget = (
 ): Promise<unknown> =>
   askHub(`${projectPath(projectId)}/dispatch`, json("PATCH", { budget }));
 
-/** Forgets the project; the sessions started from it stay, just unattached. */
 /**
- * Forgets a project. The hub refuses while any of its sessions still runs
+ * Forgets a project: it waits in the hub's trash to be brought back
+ * (`restoreProject`). The hub refuses while any of its sessions still runs
  * (409, saying how many); that answer is thrown as it is. The board's list
- * keeps the project until `readProjects`: the forget dialog first takes the
- * reader off the project's page, so the page never stands on a project the
- * list no longer has.
+ * keeps the project until `readProjects`: the tray first takes the reader
+ * off the project's page, so the page never stands on a project the list no
+ * longer has.
  */
-export async function deleteProject(id: string): Promise<void> {
+export async function forgetProject(id: string): Promise<void> {
   // Its tab's presence, which the hub's journal names the forget by.
   const response = await fetch(`/api/projects/${id}`, {
     method: "DELETE",
@@ -7142,6 +7147,63 @@ export async function deleteProject(id: string): Promise<void> {
   if (!response.ok) {
     throw await hubRefusal(response, projectWords.notForgottenThen);
   }
+}
+
+/**
+ * Deletes a project for good, live or forgotten (hub project-delete.ts);
+ * `fromDisk`: its checkouts on every machine and its sessions' transcripts
+ * too. A refusal (a session running, a machine away, a place shared) is
+ * thrown in the hub's words.
+ */
+export async function deleteProjectForGood(
+  id: string,
+  fromDisk: boolean
+): Promise<void> {
+  const response = await fetch(`/api/projects/${id}/delete`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      [PRESENCE_HEADER]: presenceClientId(),
+    },
+    body: JSON.stringify({ fromDisk }),
+  });
+  if (!response.ok) {
+    throw await hubRefusal(response, projectEndWords.notDeletedThen);
+  }
+}
+
+/** Every forgotten project the hub can bring back, newest first. */
+export async function readForgottenProjects(): Promise<ForgottenProject[]> {
+  const response = await fetch("/api/projects/forgotten");
+  if (!response.ok) {
+    throw await hubRefusal(response, projectEndWords.unreadThen);
+  }
+  return (await response.json()) as ForgottenProject[];
+}
+
+/**
+ * Brings a forgotten project back as it was (hub project-trash.ts): the
+ * entry forgotten at `forgottenAt` (else its newest), and `name` for one forgotten before the
+ * hub kept names. The projects are read again, so the rail has it.
+ */
+export async function restoreProject(
+  id: string,
+  asked: { forgottenAt?: number; name?: string }
+): Promise<ProjectRestored> {
+  const response = await fetch(`/api/projects/${id}/restore`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      [PRESENCE_HEADER]: presenceClientId(),
+    },
+    body: JSON.stringify(asked),
+  });
+  if (!response.ok) {
+    throw await hubRefusal(response, projectEndWords.notBroughtBackThen);
+  }
+  const restored = (await response.json()) as ProjectRestored;
+  await readProjects();
+  return restored;
 }
 
 /** Reads the projects again, as the hub has them now. */

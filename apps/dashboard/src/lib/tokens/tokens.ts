@@ -555,6 +555,7 @@ export type TokenSize =
   | "size.c-project-details-measure"
   | "size.c-project-details-label-w"
   | "size.c-project-details-select-w"
+  | "size.c-forgotten-brings-w"
   | "size.c-ledger-when-w"
   | "size.c-ledger-when-w-narrow"
   | "size.c-ledger-outcome-w"

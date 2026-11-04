@@ -1046,6 +1046,8 @@ public enum Size {
     public static let cProjectDetailsLabelW: Double = 104
     /// The machine and connection select column of the details tray's add forms.
     public static let cProjectDetailsSelectW: Double = 160
+    /// Forgotten projects' What it brings column ("2 tasks, 1 page and 1 session"), beside When (c-ledger-when-w).
+    public static let cForgottenBringsW: Double = 192
     /// The Actions and Runs ledgers' When column.
     public static let cLedgerWhenW: Double = 96
     /// The When column in a runs ledger under 496px, where Result's floor (c-ledger-title-min) beside When and Outcome at full width no longer fits (build-tokens.ts CONTAINERS table-496px); under 424px the runs are cards.

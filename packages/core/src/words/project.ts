@@ -33,7 +33,6 @@ export const projectWords = {
   hubFolder: "Its folder on the hub",
   projectDetails: "Project details…",
   cawSettings: "Caw settings…",
-  forgetProject: "Forget project…",
   /** A task card whose attempt the hub couldn't start. */
   cantStart: "Can't start",
   /** Project details' row of the checks the hub runs before it merges work (gate.md). */

@@ -2,7 +2,7 @@
   /**
    * The project's details, changed where they are shown (DESIGN.md, The Stay
    * In Context Rule; project-details-wireframe.md): a tray that unfolds under
-   * the project head, in the forget tray's frame (ForgetProjectTray, StopTray),
+   * the project head, in the end tray's frame (ProjectEndTray, StopTray),
    * with the board live under it (The Open Page Rule). The head's place (its
    * machine's mark, or the hub's folder) opens it, and so does ⋯ › Project
    * details…; Done, Escape or the place again folds it.
