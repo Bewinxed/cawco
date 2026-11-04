@@ -1816,15 +1816,9 @@ const afterFirst = (line: string, clause: string | undefined): string => {
   return [head, clause, ...rest].join(" · ");
 };
 
-/**
- * What a harness's own /compact did with the open items: filed first and
- * listed after on every harness; OpenCode's takes no focus, so it chose
- * what to keep on its own.
- */
-const compactedWords = (by: "opencode" | "pi" | undefined): string =>
-  by === "opencode"
-    ? "Its open items were filed first and listed after · OpenCode’s /compact chose what to keep on its own"
-    : "Its open items were filed first and listed after";
+/** What a harness's own /compact did with the open items, on every harness: filed first and listed back after it. */
+const COMPACTED_WORDS =
+  "Its open items were filed first and are listed back to it";
 
 /**
  * A move compacted by its harness's own /compact, by where that stands:
@@ -1880,7 +1874,7 @@ const compactedAfterWords = (
     case "compacted":
       return {
         line: `Moved to ${to}, then compacted · re-read ${tokens} once${cost}`,
-        detail: `${compactedWords(move.compactBy)} · ${hit}`,
+        detail: `${COMPACTED_WORDS} · ${hit}`,
       };
     case "stopped":
     case undefined:
@@ -1918,7 +1912,7 @@ const compactedFirstWords = (
     case "compacted":
       return {
         line: `Compacted on ${from}, then moved to ${to} · re-read ${tokens}${cost}`,
-        detail: `${compactedWords(move.compactBy)} · ${why}`,
+        detail: `${COMPACTED_WORDS} · ${why}`,
       };
     case "stopped":
     case undefined:

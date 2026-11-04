@@ -28512,8 +28512,10 @@ export const createServer = (
    * at its end, OpenCode's as it starts); a failure said after it
    * (OpenCode's `compact_result: "failed"`) undoes that.
    *
-   * Any boundary re-arms its context threshold ({@link fileAtThreshold}):
-   * its rise is taken away. One no move's `/compact` asked for is its
+   * Any boundary re-arms its context threshold ({@link fileAtThreshold})
+   * for the session's next turn of its own work: its rise is taken away, and
+   * no filing starts until it has answered a request of its own since, so
+   * the compaction's own result never files. One no move's `/compact` asked for is its
    * harness compacting it on its own (or a person's `/compact`), said in one
    * line with whether a filing came since its compaction before. A failure
    * OpenCode says after its boundary says that line again as failed, and
@@ -28553,8 +28555,9 @@ export const createServer = (
 
   /**
    * Its harness said a compaction boundary ({@link observeCompaction}): its
-   * rise goes, re-arming its threshold, its context reading goes with what
-   * it measured, and one no move's `/compact` asked for is said in its line,
+   * rise goes, re-arming its threshold for its next turn of its own work
+   * (schema `contextCompactions`), its context reading goes with what it
+   * measured, and one no move's `/compact` asked for is said in its line,
    * once, with whether a filing came before it.
    */
   const compactedBy = (
@@ -28567,6 +28570,10 @@ export const createServer = (
   ): void => {
     const rise = db.atLimit.rise(row.id);
     db.atLimit.dropRise(row.id);
+    // Re-armed, but not for the compaction's own turn: no filing starts
+    // until the session has answered a request of its own since
+    // ({@link fileMayStart}, cleared by {@link answeredSinceCompaction}).
+    db.atLimit.putCompacted(row.id, Date.now());
     // What its last request sent is no longer its context: unknown until a
     // request after the compaction says it, as pi itself rules ("context
     // token count is unknown until the next LLM response", 1.4.0
@@ -28711,9 +28718,24 @@ export const createServer = (
   };
 
   /**
+   * A session's model answered a request of its own (a top-level assistant
+   * message, no compaction's summary): a compaction before it no longer
+   * holds its filing back ({@link fileMayStart}). Read before it is written,
+   * so most answers write nothing.
+   */
+  const answeredSinceCompaction = (instanceId: string): void => {
+    if (db.atLimit.compactedAt(instanceId) !== undefined) {
+      db.atLimit.dropCompacted(instanceId);
+    }
+  };
+
+  /**
    * Whether a session's filing at its context threshold may start now, by
    * what the hub holds of it: it has not filed since its harness last
-   * compacted it (its rise), no compaction plan of a move's or a filing's
+   * compacted it (its rise), it has answered a request of its own since its
+   * harness last compacted it (a compaction's own turn, whose result reports
+   * only what the compaction left, files nothing new: its records were just
+   * listed back to it), no compaction plan of a move's or a filing's
    * runs, no continuation of it is under way, it is not held at its
    * account's limit nor handled or owed a move there, it is not ending, it
    * is no summariser, and it takes the hub's word (a finished work item's
@@ -28723,6 +28745,7 @@ export const createServer = (
     row.kind !== "summariser" &&
     !db.ownedInstance(row.id)?.endIntent &&
     !db.atLimit.rise(row.id) &&
+    db.atLimit.compactedAt(row.id) === undefined &&
     !db.atLimit.compaction(row.id) &&
     !db.atLimit.hold(row.id) &&
     !atLimit.handling(row.id) &&
@@ -38574,6 +38597,12 @@ export const createServer = (
                   neutral.type === "assistant" &&
                   !neutral.parent_tool_use_id
                 ) {
+                  // An answer of its own, after any compaction: its next
+                  // turn's end may file again (OpenCode writes its summary
+                  // in the assistant's role, which is the compaction's).
+                  if (!neutral.compactSummary) {
+                    answeredSinceCompaction(message.instanceId);
+                  }
                   // Claude Code ending the turn on its account's limit.
                   if ((neutral as { error?: string }).error === "rate_limit") {
                     limitRefused.add(message.instanceId);

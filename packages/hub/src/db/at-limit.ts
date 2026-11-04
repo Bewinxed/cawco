@@ -3,6 +3,7 @@ import type { ContextFill } from "@cawco/core/context-filing";
 import { asc, eq, inArray } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
+  contextCompactions,
   contextRises,
   limitCompactions,
   limitEvents,
@@ -80,9 +81,16 @@ export interface LimitEvent {
 }
 
 export interface AtLimitDb {
+  /**
+   * Since when `instanceId`'s harness compacted it with no answer of its own
+   * after (schema `contextCompactions`); undefined when it has answered since.
+   */
+  readonly compactedAt: (instanceId: string) => number | undefined;
   readonly compaction: (instanceId: string) => LimitCompaction | undefined;
   /** Each session's compaction under way. */
   readonly compactions: () => LimitCompaction[];
+  /** `instanceId` answered a request of its own: its compaction no longer holds its filing back. */
+  readonly dropCompacted: (instanceId: string) => void;
   readonly dropCompaction: (instanceId: string) => void;
   /** Takes one line back. */
   readonly dropEvent: (id: string) => void;
@@ -105,6 +113,8 @@ export interface AtLimitDb {
       move?: AccountMove;
     }
   ) => void;
+  /** Marks `instanceId` compacted at `at`, no answer of its own since. */
+  readonly putCompacted: (instanceId: string, at: number) => void;
   /** Starts a session's compaction, in place of any it had. */
   readonly putCompaction: (compaction: LimitCompaction) => void;
   /** Writes a line; one already written under its id is what it says now (a compaction's move line as it goes). */
@@ -236,6 +246,27 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
       .onConflictDoUpdate({ target: contextRises.instanceId, set: values })
       .run();
   },
+  compactedAt: (instanceId) =>
+    db
+      .select({ at: contextCompactions.at })
+      .from(contextCompactions)
+      .where(eq(contextCompactions.instanceId, instanceId))
+      .get()
+      ?.at.getTime(),
+  putCompacted: (instanceId, at) => {
+    db.insert(contextCompactions)
+      .values({ instanceId, at: new Date(at) })
+      .onConflictDoUpdate({
+        target: contextCompactions.instanceId,
+        set: { at: new Date(at) },
+      })
+      .run();
+  },
+  dropCompacted: (instanceId) => {
+    db.delete(contextCompactions)
+      .where(eq(contextCompactions.instanceId, instanceId))
+      .run();
+  },
   dropRise: (instanceId) => {
     db.delete(contextRises)
       .where(eq(contextRises.instanceId, instanceId))
@@ -302,6 +333,9 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
       .run();
     db.delete(limitEvents)
       .where(inArray(limitEvents.instanceId, instanceIds))
+      .run();
+    db.delete(contextCompactions)
+      .where(inArray(contextCompactions.instanceId, instanceIds))
       .run();
     db.delete(contextRises)
       .where(inArray(contextRises.instanceId, instanceIds))

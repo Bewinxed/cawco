@@ -2737,8 +2737,9 @@ export const limitCompactions = sqliteTable("limit_compactions", {
 });
 
 /**
- * A session whose context reached its compaction policy's `fileAtPct` since
- * its harness last compacted it (core context-filing.ts): one per session,
+ * A session whose context came within its compaction policy's `fileRoom` of
+ * its harness's compaction point since its harness last compacted it (core
+ * context-filing.ts): one per session,
  * written as its filing turn at the threshold is sent and kept after it
  * ends, so one rise files once; any compaction boundary its harness says
  * takes it away, re-arming the threshold (server.ts `observeCompaction`).
@@ -2752,6 +2753,25 @@ export const contextRises = sqliteTable("context_rises", {
     .references(() => instances.id, { onDelete: "cascade" }),
   /** The `session_lines` id (kind `context`) of the line that says it: its filing's, else the failed compaction's. */
   lineId: text("line_id").notNull(),
+  at: timestamp("at").notNull(),
+});
+
+/**
+ * A session its harness compacted that has answered no request of its own
+ * since (server.ts `observeCompaction`): written at every compaction
+ * boundary, a move's included, and taken away by the session's next answer
+ * of its own (a top-level assistant message that is no compaction summary).
+ * While it stands no filing starts: the compaction's own turn (a
+ * `/compact`'s, whose result reports what the compaction left, as pi's
+ * `estimatedTokensAfter`) files nothing new, its records just listed back to
+ * it; the first filing after a boundary is due once a turn of the session's
+ * own work has ended within the room.
+ */
+export const contextCompactions = sqliteTable("context_compactions", {
+  instanceId: text("instance_id")
+    .primaryKey()
+    .references(() => instances.id, { onDelete: "cascade" }),
+  /** When its harness said the boundary. */
   at: timestamp("at").notNull(),
 });
 

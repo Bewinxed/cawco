@@ -16,6 +16,7 @@
 
 import { fnv1a } from "./fnv1a";
 import {
+  CONTEXT_LINE,
   type NeutralMessage,
   type SendRecord,
   type SessionMessage,
@@ -1443,11 +1444,15 @@ export class TranscriptBuilder {
       return;
     }
     // A row already there — a frame replayed behind a history read — is not
-    // said twice. The hub's account line said again under its id is what
-    // that line says now (a continuation's "Summarising…" turned into what
-    // came of it): it is redrawn in its place.
+    // said twice. The hub's account line or context line said again under
+    // its id is what that line says now (a continuation's "Summarising…"
+    // turned into what came of it, a filing into "Open items filed"): it is
+    // redrawn in its place.
     if (this.rowIds.has(block.id)) {
-      if (block.type === "system.account_move") {
+      if (
+        block.type === "system.account_move" ||
+        block.metadata?.subtype === CONTEXT_LINE
+      ) {
         this.restate(block);
       }
       return;

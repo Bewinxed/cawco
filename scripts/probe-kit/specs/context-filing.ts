@@ -35,6 +35,11 @@
  * 50,000, at 60,000. Each `/compact` of theirs is said in a line, and their
  * next request carries the Open items section.
  *
+ * (l) After each of their compactions, its own result files nothing (pi's
+ * reports what its large kept tail leaves, within the room), and their next
+ * turn of their own work within the room files, once. (d) says the same
+ * hold of Claude's `/compact`.
+ *
  * (i) An OpenCode `/compact` ends the hub's turn: its send is read as
  * OpenCode delivers the compaction, so the execution's result closes it.
  *
@@ -55,7 +60,10 @@ import {
   piCompactsAt,
 } from "../../../packages/agent/src/harnesses/compaction-points";
 import { DEFAULT_COMPACTION } from "../../../packages/core/src/accounts";
-import { COMPACTION_ORIGIN } from "../../../packages/core/src/harness";
+import {
+  COMPACTION_ORIGIN,
+  CONTEXT_LINE,
+} from "../../../packages/core/src/harness";
 import { accountsWords } from "../../../packages/core/src/words/accounts";
 import { contextWords } from "../../../packages/core/src/words/context";
 import { fileDue } from "../../../packages/hub/src/at-limit";
@@ -157,6 +165,53 @@ const rules = (kit: Kit) => {
       opencodeCompactsAt({ context: 100_000 }, { buffer: 20_000 }) === 80_000 &&
       opencodeCompactsAt({ context: 100_000 }, { auto: false }) === undefined
   );
+  const fill = { tokens: 137_000, compactsAt };
+  const compactedLine = (
+    trigger: "auto" | "manual",
+    filed: "filed" | null,
+    failed?: true
+  ) =>
+    contextWords.line({
+      kind: "compacted",
+      filed,
+      harness: "claude",
+      tokens: 165_000,
+      trigger,
+      ...(failed ? { failed } : {}),
+    });
+  check(
+    "words: a filing line names the reading and the point in tokenWords' form, and once filed its title stands alone",
+    contextWords.line({ kind: "filing", fill, stage: "filing" }).title ===
+      "Filing its open items at 137k tokens · its harness compacts it at 167k" &&
+      contextWords.line({ kind: "filing", fill, stage: "filed" }).title ===
+        "Open items filed at 137k tokens · its harness compacts it at 167k" &&
+      contextWords.line({ kind: "filing", fill, stage: "filed" }).detail === ""
+  );
+  check(
+    "words: a person's /compact is titled as asked, the harness's own is not, one detail for both",
+    compactedLine("manual", "filed").title ===
+      "Compacted by Claude Code as asked at 165k tokens · its open items filed first" &&
+      compactedLine("auto", null).title ===
+        "Compacted by Claude Code at 165k tokens · nothing filed first" &&
+      compactedLine("auto", null).detail ===
+        compactedLine("manual", "filed").detail,
+    JSON.stringify([
+      compactedLine("manual", "filed"),
+      compactedLine("auto", null),
+    ])
+  );
+  check(
+    "words: a failed compaction's detail branches on whether a filing had come: the longer one says more after the shorter",
+    compactedLine("auto", null, true).detail !==
+      compactedLine("auto", "filed", true).detail &&
+      compactedLine("auto", "filed", true).detail.startsWith(
+        `${compactedLine("auto", null, true).detail} · `
+      ),
+    JSON.stringify([
+      compactedLine("auto", null, true),
+      compactedLine("auto", "filed", true),
+    ])
+  );
   const plain = filingPrompt("compacted");
   const full = filingPrompt("compacted", { tokens: 140_000, compactsAt });
   check(
@@ -202,6 +257,33 @@ const reads = (fleet: KitFleet) => {
       "SELECT stage, fill FROM limit_compactions WHERE instance_id = ?",
       id
     )[0];
+  /** Whether `id`'s compaction still holds its filing back: no answer of its own since (schema `context_compactions`). */
+  const gated = (id: string) =>
+    fleet.query<{ at: number }>(
+      "SELECT at FROM context_compactions WHERE instance_id = ?",
+      id
+    ).length > 0;
+  /** `id`'s transcript's context lines as the hub draws them: each title and the detail under it. */
+  const notes = async (id: string) =>
+    (
+      await fleet.api<{
+        blocks: {
+          content?: string;
+          metadata?: { noteTitle?: string; subtype?: string };
+        }[];
+      }>(`/api/instances/${id}/transcript`)
+    ).blocks
+      .filter((block) => block.metadata?.subtype === CONTEXT_LINE)
+      .map((block) => ({
+        title: block.metadata?.noteTitle ?? "",
+        content: block.content ?? "",
+      }));
+  /** `id`'s context as the hub last stored it. */
+  const stored = (id: string) =>
+    fleet.query<{ context_tokens: number | null }>(
+      "SELECT context_tokens FROM instances WHERE id = ?",
+      id
+    )[0]?.context_tokens ?? null;
   const turnOpen = (id: string) =>
     fleet.query<{ turn_open_at: number | null }>(
       "SELECT turn_open_at FROM instances WHERE id = ?",
@@ -267,11 +349,14 @@ const reads = (fleet: KitFleet) => {
     filingAfter,
     filings,
     filingSends,
+    gated,
     lines,
     nextRequest,
+    notes,
     noFiling,
     plan,
     rise,
+    stored,
     turn,
     turnOpen,
   };
@@ -325,6 +410,16 @@ const claude200k = async (kit: Kit, fleet: KitFleet, read: Reads) => {
     filed === "filed" && !plan(id),
     JSON.stringify({ lines: lines(id), plan: plan(id) })
   );
+  const filedNote = (await read.notes(id)).find((note) =>
+    note.title.startsWith("Open items filed")
+  );
+  check(
+    "(b) its transcript draws the line by its words, its title alone",
+    filedNote?.title ===
+      "Open items filed at 137k tokens · its harness compacts it at 167k" &&
+      filedNote.content === "",
+    JSON.stringify(filedNote)
+  );
 
   await turn(id, "above", 140_000);
   await Bun.sleep(QUIET_MS);
@@ -351,6 +446,29 @@ const claude200k = async (kit: Kit, fleet: KitFleet, read: Reads) => {
     () => fleet.instance(id)?.status,
     (status) => status === "running",
     120_000
+  );
+  await until(
+    "Claude at rest after its /compact",
+    () => read.turnOpen(id) ?? "closed",
+    (open) => open === "closed",
+    60_000
+  ).catch(() => undefined);
+  const compactedNote = (await read.notes(id)).find((note) =>
+    note.title.startsWith("Compacted by")
+  );
+  check(
+    '(d) a person\'s /compact is drawn as asked: "Compacted by Claude Code as asked at …k tokens · its open items filed first"',
+    !!compactedNote?.title.startsWith(
+      "Compacted by Claude Code as asked at "
+    ) &&
+      compactedNote.title.endsWith("k tokens · its open items filed first") &&
+      compactedNote.content === "What its records hold is listed back to it.",
+    JSON.stringify(compactedNote)
+  );
+  check(
+    "(d) Claude's /compact turn leaves its filing held back until it answers a request of its own",
+    read.gated(id) && read.filings(id).length === 1,
+    JSON.stringify({ gated: read.gated(id), lines: lines(id) })
   );
   const after = await read.nextRequest(id, "after the compaction");
   check(
@@ -558,6 +676,25 @@ const piAndOpencode = async (
       JSON.stringify({ turnOpenAt: atRest })
     );
   }
+  // The compaction's own result: no filing, whatever it reports.
+  await Bun.sleep(QUIET_MS);
+  const left = read.stored(id);
+  if (harness === "pi") {
+    check(
+      `(l) pi's compaction's own result reports what its large kept tail leaves, within the room of its point (${left} of ${point})`,
+      point !== undefined && left !== null && left >= point - ROOM,
+      JSON.stringify({ reading: left, point, room: ROOM })
+    );
+  }
+  check(
+    `(l) ${harness}'s compaction's own result files nothing: its filing held back until it answers a request of its own`,
+    read.filings(id).length === 1 && read.gated(id) && !read.plan(id),
+    JSON.stringify({
+      reading: left,
+      gated: read.gated(id),
+      lines: read.lines(id),
+    })
+  );
   // The listing is written once the hub's records are read: given a moment.
   await Bun.sleep(3000);
   const after = await read.nextRequest(id, `after ${harness}'s compaction`);
@@ -565,6 +702,20 @@ const piAndOpencode = async (
     `(h) ${harness}'s next request carries the Open items section`,
     !!after?.body.includes(OPEN_ITEMS),
     after ? after.body.slice(-3000) : "(no request)"
+  );
+  check(
+    `(l) ${harness}'s answer of its own after the compaction lets it file again`,
+    !read.gated(id),
+    JSON.stringify({ gated: read.gated(id) })
+  );
+  await read.turn(id, "work again", 60_000);
+  const again = await read.filingAfter(id, 1);
+  await read.turn(id, "work on", 61_000);
+  await Bun.sleep(QUIET_MS);
+  check(
+    `(l) ${harness}'s next turn of its own work within the room files, once`,
+    again?.said.fill?.tokens === 60_000 && read.filings(id).length === 2,
+    JSON.stringify(read.lines(id))
   );
 };
 

@@ -351,9 +351,11 @@ export const compactionPlan = (how: {
  * own (core `NeutralResultMessage.compactsAt`), so that it files its open
  * items before that (server.ts `fileAtThreshold`, which sends it only
  * between turns, once per rise, and never beside a compaction, a
- * continuation or a hold at its limit). A reading never reported, a point
- * its harness did not say, and a room of 0 file nothing: the point is never
- * guessed. A reading past the point files too (one turn overshot it).
+ * continuation or a hold at its limit, nor for a compaction's own result:
+ * after a boundary it files only once a turn of the session's own work has
+ * ended). A reading never reported, a point its harness did not say, and a
+ * room of 0 file nothing: the point is never guessed. A reading past the
+ * point files too (one turn overshot it).
  */
 export const fileDue = (how: {
   /** Where its harness compacts it on its own; undefined when it said none. */

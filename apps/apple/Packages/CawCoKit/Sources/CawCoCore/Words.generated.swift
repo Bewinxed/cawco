@@ -692,12 +692,12 @@ public enum Words {
 
             public static let terms = "Moving a conversation between Claude subscriptions is subject to Anthropic’s terms"
 
-            /// The room short of where its harness compacts a session at which it files its open items (core `Compaction.fileRoom`), in thousands of tokens. Placeholder words.
+            /// The room short of where its harness compacts a session at which it files its open items (core `Compaction.fileRoom`), in thousands of tokens.
             public static let fileRoom = "File a session’s open items when its context comes within"
 
             public static let fileRoomUnit = "k tokens of where its harness compacts it"
 
-            public static let fileRoomOff = "0 files none."
+            public static let fileRoomOff = "0 turns it off."
 
             /// The cutoff past which a held session is no longer carried on by itself (core `AtLimit.staleAfterHours`).
             public static let stale = "Carry a stopped session on by itself up to"
