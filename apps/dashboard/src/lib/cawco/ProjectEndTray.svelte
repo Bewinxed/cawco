@@ -139,7 +139,7 @@
       style:--ask-indent-in="var(--ask-indent, 0)"
     >
       <Spinner aria-hidden="true" box="small" />
-      <span>{projectEndWords.reading(asked.name)}</span>
+      <span>{projectEndWords.reading}</span>
     </p>
   {/if}
   <RowFault again={() => read(asked, end)} class={className} reason={unread} />

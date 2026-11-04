@@ -44,14 +44,22 @@ export interface EndWords {
   title: string;
 }
 
-/** The armed line: what the second press cuts short. */
-const armedLine = (cut: number) =>
-  cut === 1
-    ? "1 session is mid-turn: stopping it now cuts its turn short."
-    : `${cut} sessions are mid-turn: stopping them now cuts their turns short.`;
+/** The armed line: that a second press stops them, and what it cuts short. */
+const armedLine = (n: number, cut: number): string => {
+  const cuts =
+    cut === 1 ? "Its turn is cut short." : "Their turns are cut short.";
+  if (cut === n) {
+    return cut === 1
+      ? `1 session is mid-turn. Press again to stop it. ${cuts}`
+      : `${cut} sessions are mid-turn. Press again to stop them. ${cuts}`;
+  }
+  return `${cut} of ${n} sessions ${cut === 1 ? "is" : "are"} mid-turn. Press again to stop all ${n}. ${cuts}`;
+};
 
-const runningFirst = (n: number) =>
-  `${count(n, "running session stops", "running sessions stop")} first.`;
+/** A forget's line while it stands: where the project waits. */
+const waits = "It waits in Forgotten projects to be brought back.";
+/** A refused end's line: the project stays. */
+const kept = "It is kept until every session is stopped.";
 
 export const projectEndWords = {
   // ── The menus ──
@@ -74,28 +82,26 @@ export const projectEndWords = {
     line: (step, n, cut, done) => {
       switch (step) {
         case "none":
-          return "It waits in Forgotten projects to be brought back. Its files stay on disk.";
         case "list":
-          return `${runningFirst(n)} It waits in Forgotten projects to be brought back.`;
-        case "armed":
-          return armedLine(cut);
         case "stopping":
-          return "It waits in Forgotten projects to be brought back.";
+          return waits;
+        case "armed":
+          return armedLine(n, cut);
         case "fail":
-          return `${name} is kept until every session is stopped.`;
+          return kept;
         case "ending":
         case "done":
           return done;
       }
     },
     parked: (stopped, total) =>
-      `Forgetting ${name}: stopped ${stopped} of ${count(total, "session", "sessions")}…`,
+      `Forgetting: stopped ${stopped} of ${count(total, "session", "sessions")}…`,
     partway: (stopped, total) =>
-      `Stopped ${stopped} of ${total}; ${name} kept.`,
+      `Stopped ${stopped} of ${count(total, "session", "sessions")}; it is kept.`,
   }),
 
-  /** Deleting `name` for good; `fromDisk`: its checkouts and transcripts too. */
-  delete: (name: string, fromDisk: boolean): EndWords => ({
+  /** Deleting `name` for good (its files box says what else goes). */
+  delete: (name: string): EndWords => ({
     title: `Delete ${name} for good?`,
     plain: "Delete project",
     stop: (n) => `Stop ${n} and delete`,
@@ -106,41 +112,34 @@ export const projectEndWords = {
     ending: "Deleting…",
     ended: "Deleted",
     line: (step, n, cut, done) => {
-      const gone = fromDisk
-        ? "Its tasks, pages, browsers, workspaces and files on disk are removed. This cannot be undone."
-        : "Its tasks, pages, browsers and workspaces are removed. This cannot be undone.";
       switch (step) {
         case "none":
-          return gone;
         case "list":
-          return `${runningFirst(n)} ${gone}`;
-        case "armed":
-          return armedLine(cut);
         case "stopping":
-          return gone;
+          return "Its tasks, pages, routines, workspaces and signed-in browsers are removed. This cannot be undone.";
+        case "armed":
+          return armedLine(n, cut);
         case "fail":
-          return `${name} is kept until every session is stopped.`;
+          return kept;
         case "ending":
         case "done":
           return done;
       }
     },
     parked: (stopped, total) =>
-      `Deleting ${name}: stopped ${stopped} of ${count(total, "session", "sessions")}…`,
+      `Deleting: stopped ${stopped} of ${count(total, "session", "sessions")}…`,
     partway: (stopped, total) =>
-      `Stopped ${stopped} of ${total}; ${name} kept.`,
+      `Stopped ${stopped} of ${count(total, "session", "sessions")}; it is kept.`,
   }),
 
   /** Said under what asked while what runs in the project is read. */
-  reading: (name: string) => `Reading what runs in ${name}…`,
+  reading: "Checking for running sessions…",
 
   /** Delete's box: its places on disk and its transcripts go too. */
   fromDisk: "Also delete its files on disk",
-  /** Checked: the list of what goes, by machine and path. */
-  placesGo: "Removed from disk",
-  /** A project whose only place is its folder on the hub: nothing on a machine to remove. */
+  /** Checked, for a project whose only place is its folder on the hub: what the box still removes. */
   noPlaces:
-    "It has no checkout on a machine; its folder on the hub is removed.",
+    "It has no checkout on any machine; only its sessions' transcripts are removed.",
   /** Unchecked: what a delete leaves, and where it may show again. */
   transcriptsStay:
     "Its sessions' transcripts stay on their machines and may show again as sessions with no project.",
@@ -155,9 +154,6 @@ export const projectEndWords = {
   // ── Forgotten projects ──
   /** The page's title (the bar's) and the rail glyph's name. */
   forgottenTitle: "Forgotten projects",
-  /** The page's one line under its title. */
-  forgottenLine:
-    "Brought back, a project returns as it was forgotten. Deleted, it is gone for good.",
   /** A row forgotten before the hub kept a project's name. */
   unnamed: "Unnamed project",
   /** That row's name field. */
@@ -200,8 +196,6 @@ export const projectEndWords = {
   noneTitle: "Nothing forgotten",
   noneBody:
     "A project you forget waits here, to be brought back or deleted for good.",
-  /** The empty page's one action. */
-  newProject: "New project",
   /** The list could not be read. */
   unreadThen: "so the forgotten projects were not listed. Try again.",
   /** A restore refused by the hub, said after the hub's sentence. */

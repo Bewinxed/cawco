@@ -624,7 +624,6 @@
             <div transition:unfold>
               {#if job.places.length > 0}
                 <ul
-                  aria-label={projectEndWords.placesGo}
                   class="m-0 flex min-w-0 list-none flex-col gap-space-2 ps-(--box-indent) pe-0"
                 >
                   {#each job.places as place (`${place.machineId}\0${place.path}`)}
