@@ -174,7 +174,6 @@
     IconArtifactSheet,
     IconColumns,
     IconFileTable,
-    IconFolder,
     IconLayers,
     IconMore,
     IconPlus,
@@ -2458,13 +2457,7 @@
     data-share="caw:{projectId}"
     out:sitDown|global
   >
-    <CawSeat
-      {lead}
-      {projectId}
-      projectName={project?.name ?? ""}
-      size={80}
-      standIn={IconFolder}
-    />
+    <CawSeat {lead} {projectId} projectName={project?.name ?? ""} size={80} />
   </div>
 {/snippet}
 

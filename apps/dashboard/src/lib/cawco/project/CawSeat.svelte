@@ -9,12 +9,13 @@
    * head's `⋯`. While he works on a project's setup in his panel
    * (`lead.inPanel`, SetupWell) he is there, not here: the seat stays (it
    * is his panel's anchor, and a press still puts the panel away) and
-   * shows its `standIn` glyph, or nothing.
+   * shows the project's folder glyph, so every seat draws something to
+   * press, at any size and wherever it stands.
    */
-  import type { Component } from "svelte";
   import { cawLoop } from "#lib/cawco/feel.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
   import { land } from "#lib/cawco/motion/share.svelte.js";
+  import { IconFolder } from "#lib/icons.js";
   import { type CawLead, HEAD_NEXT } from "./caw-lead.svelte";
 
   let {
@@ -22,14 +23,11 @@
     projectId,
     projectName,
     size = 48,
-    standIn,
   }: {
     lead: CawLead;
     projectId: string;
     projectName: string;
     size?: number;
-    /** What the seat shows while his panel holds him (the setup scene's folder glyph). */
-    standIn?: Component;
   } = $props();
 
   /** He holds his still: idle, the done hold, and working when his loop is off. */
@@ -64,10 +62,7 @@
   {@attach land(() => `caw:${projectId}`, { uniform: true })}
 >
   {#if lead.inPanel}
-    {#if standIn}
-      {@const Glyph = standIn}
-      <Glyph aria-hidden="true" class="size-icon-lg text-ink-muted" />
-    {/if}
+    <IconFolder aria-hidden="true" class="size-icon-lg text-ink-muted" />
   {:else if lead.shown}
     <Caw next={HEAD_NEXT} {size} status={lead.status} {still} />
   {/if}

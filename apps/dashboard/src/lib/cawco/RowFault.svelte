@@ -4,7 +4,8 @@
    * in the words of whatever refused it, unfolding under the row that asked
    * (DESIGN.md, The Stay In Context Rule: same place, same state, told why,
    * able to go on). `again` offers the way on beside it ("Try again" unless
-   * `againLabel` says otherwise); while it runs the button is pending, and a
+   * `againLabel` says otherwise, with the refresh glyph unless `againIcon`
+   * names its own act's); while it runs the button is pending, and a
    * throw from it becomes the reason shown, so nothing it does reaches the
    * page's unhandled-rejection reporter.
    *
@@ -47,6 +48,7 @@
     again,
     goTo,
     againLabel = configureWords.tryAgain,
+    againIcon = IconRefresh,
     againPending = "Trying again…",
     class: className,
     children,
@@ -74,6 +76,8 @@
       icon?: Component<SVGAttributes<SVGSVGElement>>;
     };
     againLabel?: string;
+    /** The glyph of `again`'s act: IconRefresh for a retry. */
+    againIcon?: Component<SVGAttributes<SVGSVGElement>>;
     againPending?: string;
     class?: string;
     /** A fault that says itself, in place of the reason line. */
@@ -160,7 +164,7 @@
             {#if again}
               <Button
                 data-again
-                icon={IconRefresh}
+                icon={againIcon}
                 label={againLabel}
                 onclick={tryAgain}
                 pending={trying}

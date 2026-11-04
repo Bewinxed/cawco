@@ -28,6 +28,7 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import Prompt from "#lib/cawco/transcript/Prompt.svelte";
   import { buttonVariants } from "#lib/components/ui/button/index.js";
+  import { IconColumns } from "#lib/icons.js";
   import SetupDraft from "./SetupDraft.svelte";
 
   let {
@@ -162,6 +163,7 @@
   {:else if stale}
     <RowFault
       again={onaskagain}
+      againIcon={IconColumns}
       againLabel={setupWords.askSetup}
       reason={setupWords.pageUnread}
     />
