@@ -43,6 +43,7 @@ import {
   STAGE_REACHED,
 } from "../../../packages/core/src/stage-graph";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { ToolCalls } from "../../tool-calls";
 import { type Kit, open, type Spec } from "../kit";
 import { RenderedChecks } from "../rendered-checks";
 
@@ -89,41 +90,14 @@ export const Three = { args: { title: "Third", tone: "loud" } };
 };
 
 /** What each numbered message asks the session to call, and what it answered. */
-const asks = new Map<string, { input: object; name: string }>();
-const issued = new Set<string>();
-const answered = new Map<string, string>();
-const COMMAND = /PROBE-CALL:(\d+[a-z]?)/gu;
+const calls = new ToolCalls();
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("Graph title");
   }
-  const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
-  const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask)) {
-    return text("ok");
-  }
-  if (issued.has(marker)) {
-    if (!answered.has(marker)) {
-      answered.set(marker, request.last);
-    }
-    return text("done");
-  }
-  if (request.toolNames.includes(ask.name)) {
-    issued.add(marker);
-    return { everyMs: 5, words: [], tool: ask };
-  }
-  return request.toolNames.includes("ToolSearch")
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "ToolSearch",
-          input: { query: `select:${ask.name}`, max_results: 1 },
-        },
-      }
-    : text(`${ask.name} is not offered`);
+  return calls.reply(request) ?? text("ok");
 };
 
 const ID = /"id":"([0-9a-f-]{36})"/u;
@@ -374,11 +348,11 @@ const run = async (kit: Kit) => {
   await fleet.accountSignedIn();
   const session = await fleet.spawn("claude", "Graph cards", fleet.repo);
   const call = async (n: string, name: string, input: object) => {
-    asks.set(n, { name, input: { response_format: "detailed", ...input } });
-    await fleet.send(session, `PROBE-CALL:${n}`);
+    calls.ask(n, { name, input: { response_format: "detailed", ...input } });
+    await fleet.send(session, calls.words(n));
     return (await until(
       `${name}'s answer`,
-      () => answered.get(n),
+      () => calls.answer(n),
       Boolean,
       240_000
     )) as string;
