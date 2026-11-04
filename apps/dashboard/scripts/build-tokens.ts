@@ -336,6 +336,9 @@ const CONTAINERS = {
   // Labels (c-task-col-labels-w, 224px) from 878 + 224:
   "table-1102px": "1102px",
   "stop-tray": "420px",
+  // Under a project's row in the rail (228px by default): a row's status
+  // says itself by its glyph alone, so its title keeps the room.
+  "stop-tray-rail": "300px",
   // Forgotten projects' ledger: its columns beside the name once the name's
   // floor (c-ledger-title-min, 224px), the lead (c-row-lead, 28px), What it
   // brings (c-forgotten-brings-w, 192px), When (c-ledger-when-w, 96px), the

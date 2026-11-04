@@ -465,7 +465,7 @@
             {/if}</span
           >
           <span
-            class="mark-line inline-flex min-w-(--stat-min) flex-none items-center gap-space-1 text-size-label font-medium whitespace-nowrap text-ink-muted @max-stop-tray/stop-tray:min-w-c-stop-tray-status-w @max-stop-tray/stop-tray:group-data-away:order-1 @max-stop-tray/stop-tray:group-data-away:basis-full @max-stop-tray/stop-tray:group-data-away:min-w-0 @max-stop-tray/stop-tray:group-data-away:ps-(--stat-away-indent) @max-stop-tray/stop-tray:group-data-away:pb-space-1"
+            class="mark-line inline-flex min-w-(--stat-min) flex-none items-center gap-space-1 text-size-label font-medium whitespace-nowrap text-ink-muted @min-stop-tray-rail/stop-tray:@max-stop-tray/stop-tray:min-w-c-stop-tray-status-w @max-stop-tray-rail/stop-tray:min-w-0 @max-stop-tray/stop-tray:group-data-away:order-1 @max-stop-tray/stop-tray:group-data-away:basis-full @max-stop-tray/stop-tray:group-data-away:min-w-0 @max-stop-tray/stop-tray:group-data-away:ps-(--stat-away-indent) @max-stop-tray/stop-tray:group-data-away:pb-space-1"
             data-stop-tray-tone={status.tone}
             data-box
             style:--stat-away-indent={"calc(var(--mark-size, var(--space-5)) + var(--row-compact-gap))"}
@@ -474,7 +474,7 @@
             <span
               data-slot="glyph"
               class={[
-                "inline-grid flex-none @max-stop-tray/stop-tray:hidden",
+                "inline-grid flex-none @min-stop-tray-rail/stop-tray:@max-stop-tray/stop-tray:hidden",
                 status.tone === "working" && "text-status-live-glyph",
                 status.tone === "attention" && "text-status-attn-glyph",
                 status.tone === "failed" && "text-status-fail-glyph",
@@ -497,13 +497,18 @@
                 </span>
               {/key}
             </span>
-            <span class={status.tone === "failed" ? "text-status-fail-ink" : ""}
-              ><MorphText text={status.word} /></span
+            <!-- In the rail's room the glyph says it alone; the title's
+                 hidden words say it to a reader. -->
+            <span
+              class={[
+                "@max-stop-tray-rail/stop-tray:hidden",
+                status.tone === "failed" && "text-status-fail-ink",
+              ]}><MorphText text={status.word} /></span
             >
           </span>
           <span
             data-slot="num"
-            class="num w-c-stop-tray-trail-w flex-none type-meta text-end whitespace-nowrap text-ink-muted"
+            class="num w-c-stop-tray-trail-w flex-none type-meta text-end whitespace-nowrap text-ink-muted @max-stop-tray-rail/stop-tray:hidden"
             >{trailOf(job, row, stands.now)}</span
           >
         </div>
@@ -597,7 +602,7 @@
              start (`--box-indent`: the box and its gap). -->
         <div
           data-slot="from-disk"
-          class="grid min-w-0 gap-space-2"
+          class="grid min-w-0 grid-cols-1 gap-space-2"
           style:--box-indent="calc(var(--icon-md) + var(--space-2))"
         >
           <label
@@ -625,9 +630,11 @@
                         >{nameOf(place.machineId)}</span
                       >
                       <!-- The path reads from its end: the folder's tail
-                           stays when it is cut (as Project details'). -->
+                           stays when it is cut (as Project details'), and
+                           one that fits starts under its machine's name
+                           (the end of a right-to-left line). -->
                       <span
-                        class="dir-rtl type-meta truncate text-start text-ink-muted"
+                        class="dir-rtl type-meta truncate text-end text-ink-muted"
                         title={place.path}><bdi>{place.path}</bdi></span
                       >
                     </li>

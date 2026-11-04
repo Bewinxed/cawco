@@ -25,6 +25,7 @@
   import { detach } from "@cawco/core/detach";
   import type { ForgottenProject } from "@cawco/core/forgotten-project";
   import { projectEndWords } from "@cawco/core/words/project-ends";
+  import { untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -109,7 +110,26 @@
     });
   }
 
+  /** The nameless rows whose name field stands open, asked by Bring back. */
+  let naming = $state<string[]>([]);
+  const isNaming = (one: ForgottenProject) =>
+    one.name === null &&
+    (naming.includes(one.id) || (names[one.id] ?? "") !== "");
+
+  /** The name field takes the focus as it opens. */
+  const takeFocus = (node: HTMLElement) => {
+    (node instanceof HTMLInputElement
+      ? node
+      : node.querySelector("input")
+    )?.focus();
+  };
+
   async function back(one: ForgottenProject): Promise<void> {
+    if (one.name === null && !isNaming(one)) {
+      // Nameless: Bring back opens its name field first.
+      naming = [...naming, one.id];
+      return;
+    }
     const name = one.name ?? nameOf(one);
     if (!name || pending.includes(one.id)) {
       return;
@@ -144,7 +164,8 @@
     const standing = asking;
     const one = standing && list?.find((each) => each.id === standing.id);
     if (standing && one) {
-      askDelete(one, standing.fromDisk);
+      // Untracked: asking reads the asker's question it then replaces.
+      untrack(() => askDelete(one, standing.fromDisk));
     }
   });
 </script>
@@ -213,8 +234,16 @@
                   class="block overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-row"
                   title={one.name}>{one.name}</span
                 >
+              {:else if !isNaming(one)}
+                <!-- Forgotten before the hub kept names: Bring back asks
+                     for one here. -->
+                <span
+                  class="block overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-muted"
+                  >{projectEndWords.unnamed}</span
+                >
               {:else}
                 <Input
+                  {@attach takeFocus}
                   data-box
                   aria-label={projectEndWords.nameLabel(one.id)}
                   class="max-w-c-page-column-w"
@@ -227,6 +256,8 @@
                     if (event.key === "Enter") {
                       event.preventDefault();
                       detach(back(one), "bring back");
+                    } else if (event.key === "Escape" && !nameOf(one)) {
+                      naming = naming.filter((id) => id !== one.id);
                     }
                   }}
                   placeholder={projectEndWords.namePlaceholder}
@@ -268,7 +299,7 @@
             >
               <Button
                 data-bring-back
-                disabled={!name}
+                disabled={isNaming(one) && !name}
                 label={projectEndWords.bringBack}
                 onclick={() => back(one)}
                 pending={busy}
