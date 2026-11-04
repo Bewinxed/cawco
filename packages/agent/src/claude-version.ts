@@ -61,7 +61,24 @@ interface VersionRead {
   binary: string;
   child: Subprocess | undefined;
   version: Promise<string | undefined>;
+  /** A caller's wait ran out before it answered: its answer is news ({@link onVersionAnswered}). */
+  waitedOut?: true;
 }
+
+/** What hears a version read answer after a caller stopped waiting for it ({@link onVersionAnswered}). */
+const answeredListeners = new Set<() => void>();
+
+/**
+ * Listens for a version read that a caller stopped waiting for
+ * ({@link VERSION_WAIT_MS}) finally answering, a version or none: what that
+ * caller said of the machine's Claude Code ("hasn't said its version yet")
+ * is out of date from then, and the gate ({@link claudeToStart}) already
+ * reads the answer. Answers the way to stop.
+ */
+export const onVersionAnswered = (listener: () => void): (() => void) => {
+  answeredListeners.add(listener);
+  return () => answeredListeners.delete(listener);
+};
 
 /** The read of the binary `claude` resolved to last; the one kept on disk until the first call. */
 let read: VersionRead | undefined;
@@ -89,6 +106,13 @@ const keptRead = async (): Promise<VersionRead | undefined> => {
   };
 };
 
+/** Tells every {@link onVersionAnswered} listener. */
+const tellAnswered = (): void => {
+  for (const listener of answeredListeners) {
+    listener();
+  }
+};
+
 /** Starts `path --version` and reads it to its end. One that cannot even be run says no version. */
 const readVersion = (path: string, binary: string): VersionRead => {
   let child: Subprocess<"ignore", "pipe", "ignore"> | undefined;
@@ -109,11 +133,17 @@ const readVersion = (path: string, binary: string): VersionRead => {
   const reading: VersionRead = { binary, version, child };
   detach(
     version.then(async (answered) => {
+      // Still the binary's read, and a caller said it gave no answer: its
+      // answer goes out now, read afresh by the listeners.
+      const news = reading.waitedOut === true && read === reading;
+      // None is not kept, so the next call asks again.
+      if (!answered && read === reading) {
+        read = undefined;
+      }
+      if (news) {
+        tellAnswered();
+      }
       if (!answered) {
-        // Not kept, so the next call asks again.
-        if (read === reading) {
-          read = undefined;
-        }
         return;
       }
       if (known && answered !== known) {
@@ -180,8 +210,12 @@ export const claudeHostVersion = async (): Promise<
     read = readVersion(path, binary);
   }
   // The read is shared and outlives this wait, so the wait's end is not passed on to it.
-  const { version } = read;
-  return readWithin(VERSION_WAIT_MS, () => version);
+  const reading = read;
+  const said = await readWithin(VERSION_WAIT_MS, () => reading.version);
+  if (said.kind === "unanswered") {
+    reading.waitedOut = true;
+  }
+  return said;
 };
 
 /**

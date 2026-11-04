@@ -229,6 +229,7 @@ import {
 } from "./browser/shield";
 import { buildInfo } from "./build";
 import { probeCapabilities } from "./capabilities";
+import { onVersionAnswered } from "./claude-version";
 import { readConfig, writeConfig } from "./config";
 import { damagedRecords, sweepRecords } from "./damaged-records";
 import { convergeDeniedTools } from "./denied-tools";
@@ -2235,6 +2236,15 @@ const attach = (
       const old = reportedHarnesses.find((one) => one.harness === "claude");
       return report && old && Bun.deepEquals(report, old) ? undefined : report;
     };
+    /** Claude's report sent when {@link rereadClaude} finds it moved. */
+    const sendClaudeIfMoved = async (): Promise<void> => {
+      const claude = await rereadClaude();
+      if (!claude) {
+        return;
+      }
+      keepReport(claude);
+      beat({ harnesses: reportedHarnesses });
+    };
 
     /**
      * The machine's login keychain unlocked with the password the reader
@@ -2282,19 +2292,26 @@ const attach = (
           ) {
             providerAccountsChanged(homeStores);
           }
-          if (!announced) {
-            return;
+          if (announced) {
+            await sendClaudeIfMoved();
           }
-          const claude = await rereadClaude();
-          if (!claude) {
-            return;
-          }
-          keepReport(claude);
-          beat({ harnesses: reportedHarnesses });
         }),
         Schedule.spaced(Duration.millis(CLAUDE_LOGIN_CHECK_INTERVAL_MS))
       )
     );
+    // A `claude --version` that ran past a read's wait answers: Claude's
+    // report goes now, by the same re-read, so the hub reads Claude as
+    // answered when the gate does (claude-version.ts `claudeToStart`), not
+    // at the next minute's re-read.
+    // Once Claude's first report went: the machine's whole announce can
+    // still be waiting on another harness's, and a report not sent yet
+    // carries the answer itself.
+    const stopVersionWatch = onVersionAnswered(() => {
+      if (reportedHarnesses.some((one) => one.harness === "claude")) {
+        readPart("Claude's report", sendClaudeIfMoved).catch(() => undefined);
+      }
+    });
+    yield* Effect.addFinalizer(() => Effect.sync(stopVersionWatch));
 
     // A spawn also checks pi's sign-in, and any OpenCode call can find its
     // server refusing to start or starting again, or a turn find one of the

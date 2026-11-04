@@ -54,9 +54,10 @@ export const harnessRefusedWords = {
     `${name}${version ? ` ${version}` : ""} on ${machine} isn't one CawCo runs. ${fix}`,
   /**
    * The machine's Claude Code still answering `claude --version` after the
-   * wait (`seconds`): no start until it answers, and the agent's next read
-   * of Claude (each minute) carries the answer, which clears it by itself.
+   * wait (`seconds`): no start until it answers, and the agent reads Claude
+   * again as it does (agent claude-version.ts `onVersionAnswered`), which
+   * clears it by itself.
    */
   claudeVersionUnsaid: (seconds: number, floor: string) =>
-    `Claude Code on this machine hasn't said its version yet (\`claude --version\` gave no answer in ${seconds} s), and CawCo runs only ${floor} or newer. CawCo is still waiting for its answer, and within a minute of it reads the sign-ins here and can start Claude sessions. Nothing was started or signed in.`,
+    `Claude Code on this machine hasn't said its version yet (\`claude --version\` gave no answer in ${seconds} s), and CawCo runs only ${floor} or newer. CawCo is still waiting for its answer, and as it answers reads the sign-ins here and can start Claude sessions. Nothing was started or signed in.`,
 };

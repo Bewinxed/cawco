@@ -25,14 +25,16 @@
  *     (`versionRefusal`). The hub keeps no sign-in for the account, and a
  *     Claude start is still refused, in the sentence the machine's row says
  *     (core harness-refusal.ts `harnessRefusal`): its version not said yet,
- *     clearing within a minute of its answer, not "no account" (hub
+ *     clearing as it answers, not "no account" (hub
  *     server.ts `placeSpawn`). The machine's capabilities arrive as their
  *     own update.
  * (d) The stand-in answers at once from here, and the `--version` it was
  *     already asked goes on to its answer: Claude's report on the agent's
  *     next read carries that version and no refusal, the account reads
  *     signed in, and a Claude start is no longer refused for want of a
- *     report.
+ *     report. The agent reads Claude again as that answer comes
+ *     (claude-version.ts `onVersionAnswered`), so the hub has it within
+ *     seconds, not at the next minute's read.
  * (e) The stand-in is slow again: the next read's `auth status` runs out of
  *     time, said once, naming the dir and how long it waited, and the
  *     account still reads signed in, the machine still authenticated.
@@ -119,6 +121,21 @@ case " $* " in
 esac
 exec "${real}" "$@"
 `;
+
+/** How soon after `claude --version` answers the hub reads Claude as answered, at most (claude-version.ts `onVersionAnswered`): the re-read of the sign-ins, not the next minute's. */
+const ANSWER_SEEN_MS = 10_000;
+
+/** A stand-in's log line for a held `--version` it answered. */
+const VERSION_ANSWERED = / answered .*--version/u;
+
+/** When (epoch ms) the stand-in first answered a `--version` it had held, as its log stamps it; undefined before any. */
+const versionAnsweredAt = async (log: string): Promise<number | undefined> => {
+  const stamps = (await readFile(log, "utf8").catch(() => ""))
+    .split("\n")
+    .filter((line) => VERSION_ANSWERED.test(line))
+    .map((line) => Math.round(Number(line.split(" ")[0]) / 1000));
+  return stamps[0];
+};
 
 /** The account's Claude dir, as the agent names it. */
 const accountDir = (fleet: Fleet): string =>
@@ -261,6 +278,20 @@ const rowSentence = (agent: AgentRow | undefined): string | undefined => {
   )?.why;
 };
 
+/** (d) The hub read Claude as answered (at `seenAt`) within {@link ANSWER_SEEN_MS} of the stand-in's held `--version` answering. */
+const answeredSoon = async (
+  check: Phase["check"],
+  log: string,
+  seenAt: number
+): Promise<void> => {
+  const saidAt = await versionAnsweredAt(log);
+  check(
+    `(d) the hub reads Claude as answered within ${ANSWER_SEEN_MS / 1000} s of the slow \`claude --version\` answering, not at the agent's next minute's read`,
+    saidAt !== undefined && seenAt - saidAt <= ANSWER_SEEN_MS,
+    `the stand-in answered at ${saidAt ?? "(never)"}; the hub's row read it ${saidAt === undefined ? "-" : seenAt - saidAt} ms after`
+  );
+};
+
 /** Whether the hub refused a start in `expected`'s words; a start it did not answer was not. */
 const refusedWith = (said: Bounded<string>, expected: string): boolean => {
   switch (said.kind) {
@@ -365,6 +396,7 @@ const spec: Spec = {
       check,
       fleet,
       flag,
+      log,
       expected,
       calls: () => calls(started),
     });
@@ -383,12 +415,14 @@ const timeouts = async ({
   check,
   fleet,
   flag,
+  log,
   expected,
   calls,
 }: Phase & {
   calls: () => Promise<string>;
   expected: string;
   flag: string;
+  log: string;
 }): Promise<string> => {
   const { row, claudeReport, signin, startClaude } = drive(fleet);
   {
@@ -419,7 +453,7 @@ const timeouts = async ({
     const why = rowSentence(await row());
     const afterCut = await startClaude();
     check(
-      "(c) a Claude start is still refused, in the machine row's own sentence: Claude Code hasn't said its version yet, and it starts within a minute of the answer; nothing is left of it",
+      "(c) a Claude start is still refused, in the machine row's own sentence: Claude Code hasn't said its version yet, and it starts as it answers; nothing is left of it",
       why === VERSION_UNSAID &&
         refusedWith(afterCut.said, VERSION_UNSAID) &&
         fleet.instance(afterCut.id) === undefined,
@@ -446,6 +480,7 @@ const timeouts = async ({
         ? agent
         : undefined;
     }, 150_000);
+    await answeredSoon(check, log, Date.now());
     const claude = claudeReport(answered);
     check(
       "(d) on the agent's next read Claude's report carries the version it said and no refusal, and the account reads signed in",
