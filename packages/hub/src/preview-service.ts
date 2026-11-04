@@ -376,7 +376,9 @@ export function createPreviewService(deps: PreviewServiceDeps) {
      * parent will open it: its listener reached for what its row names now,
      * then its page asked for as a pane's load is (a sleeping stage or
      * served server wakes for it). Null when nothing stands in its way, else
-     * the hop that failed and why (artifacts service `answersFirst`).
+     * the hop that failed and why, or `error` when its page answered an
+     * error status, with that status and the error's first line
+     * ({@link loadedOnce}; artifacts service `answersFirst`).
      */
     reachable: async (
       row: ArtifactRow
