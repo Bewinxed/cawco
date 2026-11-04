@@ -1,9 +1,9 @@
 /**
  * The git-door spec's leg (x): a command's git in a workspace leaves nothing
- * running after it (agent hub-git.ts `quietGitParameters`, which boundary.ts
- * `doorEnv` adds to every command's git config). Run through the
- * workspace's real executor and runner on the host (workspace-executor.ts),
- * so the git config is the one a command inside gets.
+ * running after it (agent hub-git.ts `QUIET_GIT`, which `gitDoorEnv` gives
+ * every command's git config). Run through the workspace's real executor
+ * and runner on the host (workspace-executor.ts), so the git config is the
+ * one a command inside gets.
  *
  * (x) In a clone of its own (an origin with a commit the clone lacks), a
  *     command commits, fetches and rebases onto the fetched main: it exits 0

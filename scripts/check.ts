@@ -652,6 +652,10 @@ const gated: Gated[] = [
   ),
   bun("scripts/protocol-sweep.ts", ["packages/core/src/"]),
   bun("scripts/call-cuts-check.ts", ["packages/hub/src/call-cuts.ts"]),
+  bun("scripts/git-door-words-check.ts", [
+    "packages/agent/src/",
+    "packages/core/src/",
+  ]),
   bun("scripts/logs-trailer-check.ts", [
     "packages/hub/src/landing.ts",
     "packages/core/src/safe-git.ts",

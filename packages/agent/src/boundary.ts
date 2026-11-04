@@ -214,12 +214,10 @@ import { syncedHeld } from "./fleet-converged";
 import { closeGithubDoor, githubDoorOf, openGithubDoor } from "./github-door";
 import {
   closeGitDoor,
-  doorPushParameters,
   gitDoorEnv,
   gitDoorOf,
   gitHelperDirOf,
   openGitDoor,
-  quietGitParameters,
 } from "./hub-git";
 import { hubPreviewsPath } from "./hub-previews";
 import { type HeldProc, KeeperPool } from "./keepers";
@@ -7097,8 +7095,8 @@ const ready = (
  * with, on any host. gh runs with the door's config dir
  * ({@link guardedGhConfigOf}): its requests go through the workspace's GitHub
  * door, which signs in on the host (github-door.ts). Every push across the
- * network goes through the git door (hub-git.ts `doorPushParameters`), which
- * pushes it with the host's own credential.
+ * network goes through the git door (hub-git.ts `gitDoorEnv`), which pushes
+ * it with the host's own credential.
  */
 const commandEnv = (id: string, clone: string): string[] => [
   `unset ${AGENT_SOCKET_ENV.join(" ")}`,
@@ -7122,28 +7120,9 @@ const commandEnv = (id: string, clone: string): string[] => [
     IMPECCABLE_BROWSER: chromiumShimOf(id),
     CAWCO_TOOL_SOCKET: toolDoorOf(id),
     CAWCO_WORKSPACE: id,
-    ...doorEnv(id, clone),
+    ...gitDoorEnv(id, clone),
   }).map(([name, value]) => `export ${name}=${shellQuote(value)}`),
 ];
-
-/**
- * The git door's variables, its config words joined by those that send every
- * push across the network through it and those that leave no maintenance
- * running after a command's git (hub-git.ts `quietGitParameters`).
- */
-const doorEnv = (id: string, clone: string): Record<string, string> => {
-  const door = gitDoorEnv(id, clone);
-  return {
-    ...door,
-    CAWCO_GIT_PARAMETERS: [
-      door.CAWCO_GIT_PARAMETERS,
-      doorPushParameters(),
-      quietGitParameters(),
-    ]
-      .filter(Boolean)
-      .join(" "),
-  };
-};
 
 /**
  * The variables a forge's credential travels in, whatever the forge, as

@@ -106,15 +106,12 @@ const spec: Spec = {
     );
     process.env.HOME = join(scratch, "h");
     process.env.XDG_RUNTIME_DIR = join(scratch, "r");
+    // The hub the workspace's agent knows, as git-door sets it: without one
+    // `gitDoorEnv` gives no door. Nothing here reaches it.
+    process.env.CAWCO_HUB_URL = "ws://hub.probe.test/ws";
     await mkdir(process.env.XDG_RUNTIME_DIR, { recursive: true, mode: 0o700 });
-    const {
-      closeGitDoor,
-      gitDoorEnv,
-      gitHelperDirOf,
-      doorPushParameters,
-      openGitDoor,
-      quietGitParameters,
-    } = await import("../../../packages/agent/src/hub-git");
+    const { closeGitDoor, gitDoorEnv, gitHelperDirOf, openGitDoor } =
+      await import("../../../packages/agent/src/hub-git");
     const { land, landingQueue } =
       await import("../../../packages/hub/src/landing");
 
@@ -185,11 +182,7 @@ const spec: Spec = {
       ...process.env,
       ...door,
       PATH: `${gitHelperDirOf(id)}:${process.env.PATH}`,
-      GIT_CONFIG_PARAMETERS: [
-        door.CAWCO_GIT_PARAMETERS,
-        doorPushParameters(),
-        quietGitParameters(),
-      ].join(" "),
+      GIT_CONFIG_PARAMETERS: door.CAWCO_GIT_PARAMETERS,
       GIT_TERMINAL_PROMPT: "0",
       GIT_COMMITTER_NAME: "Probe",
       GIT_COMMITTER_EMAIL: "probe@probe.test",

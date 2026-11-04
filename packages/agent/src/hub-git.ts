@@ -32,7 +32,7 @@
  * ({@link gitDoorEnv}), and the door, which speaks git's helper protocol
  * itself for such a remote, runs the host's own git against it with the
  * host's own credential ({@link hostGitEnv}). Every push across the
- * network comes here too ({@link doorPushParameters}), on any host, and
+ * network comes here too ({@link DOOR_PUSH}), on any host, and
  * goes on with the host's own credential. The door serves the workspace's
  * own clone alone, by the repository its helper names. A workspace's gh
  * reaches GitHub's API through its GitHub door (github-door.ts) the same
@@ -789,39 +789,29 @@ const isNetworkRemote = (url: string): boolean => {
 };
 
 /**
- * For every workspace, the git config (as `CAWCO_GIT_PARAMETERS` words)
- * that sends every push across the network, on any host, through the
- * workspace's git door (`pushInsteadOf`, git-config(1): "Any URL that starts
- * with this value will not be pushed to; instead, it will be rewritten"):
- * `https://`, `http://`, the ssh schemes, and the scp-like form under
- * `git@`, the login every forge's ssh URL carries. The door pushes each with
- * the host's own credential ({@link doorTarget}). Fetches still go straight
- * out. A push to an
- * scp-like URL under any other login reaches git's ssh, which inside the
+ * For every workspace, the git config ({@link gitDoorEnv}) that sends every
+ * push across the network, on any host, through the workspace's git door
+ * (`pushInsteadOf`, git-config(1): "Any URL that starts with this value will
+ * not be pushed to; instead, it will be rewritten"): `https://`, `http://`,
+ * the ssh schemes, and the scp-like form under `git@`, the login every
+ * forge's ssh URL carries. The door pushes each with the host's own
+ * credential ({@link doorTarget}). Fetches still go straight out. A push to
+ * an scp-like URL under any other login reaches git's ssh, which inside the
  * boundary is {@link SSH_REFUSAL}.
  */
-export const doorPushParameters = (): string =>
-  [
-    ...[
-      "https://",
-      "http://",
-      "ssh://",
-      "git+ssh://",
-      "ssh+git://",
-      "git@",
-    ].map((prefix) => [`url.cawco::${prefix}.pushInsteadOf`, prefix]),
-    ["protocol.cawco.allow", "always"],
-  ]
-    .map(
-      ([key, value]) =>
-        `${shellWord(key as string)}=${shellWord(value as string)}`
-    )
-    .join(" ");
+const DOOR_PUSH: [string, string][] = [
+  "https://",
+  "http://",
+  "ssh://",
+  "git+ssh://",
+  "ssh+git://",
+  "git@",
+].map((prefix) => [`url.cawco::${prefix}.pushInsteadOf`, prefix]);
 
 /**
- * For every workspace, the git config (as `CAWCO_GIT_PARAMETERS` words)
- * that keeps a command's git to the command: after a commit, fetch, merge
- * or rebase git starts `git maintenance run --auto --detach` (git-config(1)
+ * For every workspace, the git config ({@link gitDoorEnv}) that keeps a
+ * command's git to the command: after a commit, fetch, merge or rebase git
+ * starts `git maintenance run --auto --detach` (git-config(1)
  * `maintenance.auto`: "This boolean config option controls whether some
  * commands run `git maintenance run --auto` after doing their normal work.
  * Defaults to true"), and an auto gc detaches the same way (`gc.auto`:
@@ -830,16 +820,10 @@ export const doorPushParameters = (): string =>
  * process behind. Given as `-c` words, they hold over the clone's and the
  * user's own config. A workspace is retired, never packed.
  */
-export const quietGitParameters = (): string =>
-  [
-    ["maintenance.auto", "false"],
-    ["gc.auto", "0"],
-  ]
-    .map(
-      ([key, value]) =>
-        `${shellWord(key as string)}=${shellWord(value as string)}`
-    )
-    .join(" ");
+const QUIET_GIT: [string, string][] = [
+  ["maintenance.auto", "false"],
+  ["gc.auto", "0"],
+];
 
 /**
  * What git-lfs would otherwise learn from a server and write into the
@@ -1624,6 +1608,19 @@ export const closeGitDoor = async (id: string): Promise<void> => {
 const shellWord = (word: string): string =>
   `'${word.replaceAll("'", "'\\''")}'`;
 
+/**
+ * `pairs` as the words git reads from `GIT_CONFIG_PARAMETERS`, each
+ * `'<key>'='<value>'` with one space between (git-config(1) "ENVIRONMENT";
+ * config.c `parse_config_env_list`). git reads each word from its first
+ * character with quote.c `sq_dequote_step`, which takes nothing but a `'`
+ * there: a value that starts with a space is refused whole, "bogus format in
+ * GIT_CONFIG_PARAMETERS", and so is every command of git run with it.
+ */
+const configWords = (pairs: readonly (readonly [string, string])[]): string =>
+  pairs
+    .map(([key, value]) => `${shellWord(key)}=${shellWord(value)}`)
+    .join(" ");
+
 /** Workspace `id`'s copy's `origin` URL as its own config names it (its copy at `clone`); empty when it names none. */
 const originOf = (id: string, clone: string): string =>
   Bun.spawnSync(
@@ -1640,29 +1637,37 @@ const originOf = (id: string, clone: string): string =>
     .trim();
 
 /**
- * The variables every command in workspace `id` runs with: the door, git's
- * ssh as {@link SSH_REFUSAL}, and in `CAWCO_GIT_PARAMETERS` the git config
- * the runner appends to `GIT_CONFIG_PARAMETERS` (git reads it as `-c`
- * options) after it has set srt's own over the request, which carries a
- * `GIT_CONFIG_PARAMETERS` of its own: the hub's `/git/` URLs and the clone's
- * own origin across the network, on any host and over any transport
- * ({@link isNetworkRemote}), rewritten to the `cawco::` helper, and that
- * transport allowed. A workspace holds no credential of any host, so its
+ * The variables every command in workspace `id` runs with for git. In
+ * `CAWCO_GIT_PARAMETERS`, always, the git config ({@link configWords}) the
+ * runner appends to `GIT_CONFIG_PARAMETERS` (git reads it as `-c` options)
+ * after it has set srt's own over the request, which carries a
+ * `GIT_CONFIG_PARAMETERS` of its own: every push across the network sent
+ * through the door ({@link DOOR_PUSH}), the `cawco::` transport allowed, and
+ * no maintenance left running ({@link QUIET_GIT}). While the agent knows a
+ * hub, also the door, git's ssh as {@link SSH_REFUSAL}, and in those words
+ * the hub's `/git/` URLs and the clone's own origin across the network, on
+ * any host and over any transport ({@link isNetworkRemote}), rewritten to
+ * the `cawco::` helper. A workspace holds no credential of any host, so its
  * origin's fetches and pushes are signed on the host, by the door, with the
  * host's own (`doorTarget`). When the clone's origin is the hub, also
  * git-lfs's filters ({@link LFS_FILTERS}). When the door takes the origin,
  * `GIT_LFS_SKIP_PUSH=1` (git-lfs: "Do nothing on pre-push"): any git-lfs
  * command installs a pre-push hook, which inside the boundary reaches no
  * LFS server with a credential; the door sends a push's large files from
- * the host ({@link pushLfs}). None without a hub.
+ * the host ({@link pushLfs}).
  */
 export const gitDoorEnv = (
   id: string,
   clone: string
 ): Record<string, string> => {
+  const always: [string, string][] = [
+    ...DOOR_PUSH,
+    ["protocol.cawco.allow", "always"],
+    ...QUIET_GIT,
+  ];
   const origins = hubOrigins();
   if (origins.length === 0) {
-    return {};
+    return { CAWCO_GIT_PARAMETERS: configWords(always) };
   }
   const origin = originOf(id, clone);
   const hubOrigin = isHubRemote(origin);
@@ -1670,23 +1675,23 @@ export const gitDoorEnv = (
   return {
     CAWCO_GIT_SOCKET: gitDoorOf(id),
     GIT_SSH_COMMAND: sshRefusalOf(id),
-    CAWCO_GIT_PARAMETERS: [
+    CAWCO_GIT_PARAMETERS: configWords([
       // Every address the hub answers at: a clone's origin names the one
       // the machine that made it reached the hub by.
       ...origins.map((each): [string, string] => [
         `url.cawco::${each}/git/.insteadOf`,
         `${each}/git/`,
       ]),
-      ...(outsideOrigin ? [[`url.cawco::${origin}.insteadOf`, origin]] : []),
-      ["protocol.cawco.allow", "always"],
+      ...(outsideOrigin
+        ? [[`url.cawco::${origin}.insteadOf`, origin] as [string, string]]
+        : []),
       // The filters the hub branch's checkout ran with (workspace.ts
       // `createWorkspace`): without the clean one, git inside reads every
       // large file it smudged as changed, and a landing hands the item back
       // as uncommitted work.
       ...(hubOrigin ? LFS_FILTERS : []),
-    ]
-      .map(([key, value]) => `${shellWord(key)}=${shellWord(value)}`)
-      .join(" "),
+      ...always,
+    ]),
     ...(hubOrigin || outsideOrigin ? { GIT_LFS_SKIP_PUSH: "1" } : {}),
   };
 };

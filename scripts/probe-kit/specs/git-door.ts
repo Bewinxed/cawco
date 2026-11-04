@@ -4,11 +4,10 @@
  * protocol itself and runs the host's own git with the host's own
  * credential. Run against the real door and real git, with no boundary: git
  * here runs with exactly the helper, door socket, ssh and config a
- * workspace's commands get (`gitDoorEnv`, and `doorPushParameters` and
- * `quietGitParameters` as a workspace's executor adds them),
- * against bare repositories git's own http-backend serves on the loopback
- * (`serveGitHttp`): the clone's origin, `probe/origin.git`, and another
- * person's, `someone/else.git`.
+ * workspace's commands get (`gitDoorEnv`, as a workspace's executor gives
+ * them), against bare repositories git's own http-backend serves on the
+ * loopback (`serveGitHttp`): the clone's origin, `probe/origin.git`, and
+ * another person's, `someone/else.git`.
  *
  *   bun scripts/probe-kit/run.ts git-door
  *
@@ -112,15 +111,13 @@ const spec: Spec = {
     // scratch's own, before the agent's modules read either.
     process.env.HOME = join(scratch, "h");
     process.env.XDG_RUNTIME_DIR = join(scratch, "r");
+    // The hub the workspace's agent knows: without one `gitDoorEnv` gives no
+    // door, ssh or origin rewrite, and a probe on the host runs with none.
+    // Nothing here reaches it.
+    process.env.CAWCO_HUB_URL = "ws://hub.probe.test/ws";
     await mkdir(process.env.XDG_RUNTIME_DIR, { recursive: true, mode: 0o700 });
-    const {
-      closeGitDoor,
-      gitDoorEnv,
-      gitHelperDirOf,
-      doorPushParameters,
-      openGitDoor,
-      quietGitParameters,
-    } = await import("../../../packages/agent/src/hub-git");
+    const { closeGitDoor, gitDoorEnv, gitHelperDirOf, openGitDoor } =
+      await import("../../../packages/agent/src/hub-git");
 
     const http = serveGitHttp(join(scratch, "srv"), HOST_LOGIN);
     const originUrl = await http.bare(ORIGIN);
@@ -135,16 +132,12 @@ const spec: Spec = {
     const ref = { id, path: clone };
     await openGitDoor(ref);
     const door = gitDoorEnv(id, clone);
-    /** A workspace's command environment: the door's helper first on PATH, its config words, its ssh. */
+    /** A workspace's command environment: the door's helper first on PATH, its config words (the runner appends them to srt's own, and here is no srt), its ssh. */
     const doorEnv = (extra: Record<string, string> = {}) => ({
       ...process.env,
       ...door,
       PATH: `${gitHelperDirOf(id)}:${process.env.PATH}`,
-      GIT_CONFIG_PARAMETERS: [
-        door.CAWCO_GIT_PARAMETERS,
-        doorPushParameters(),
-        quietGitParameters(),
-      ].join(" "),
+      GIT_CONFIG_PARAMETERS: door.CAWCO_GIT_PARAMETERS,
       GIT_TERMINAL_PROMPT: "0",
       ...extra,
     });
