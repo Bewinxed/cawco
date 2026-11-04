@@ -132,7 +132,7 @@
   import { artifactReached } from "../files/reached";
   import { frameObserver, frameSize } from "../frame-observer";
   import DesignGraph from "../graph/DesignGraph.svelte";
-  import { StageLink } from "../graph/stage-link.svelte";
+  import { inspectKept, StageLink } from "../graph/stage-link.svelte";
   import { resolveSessionTitle } from "../links";
   import {
     type MarkdownFleet,
@@ -1456,7 +1456,12 @@
     const id = artifactId;
     const session = instanceId;
     return id && isSheet
-      ? new Inspector(post, (change) => writeSheet(session, id, change))
+      ? new Inspector(
+          post,
+          (change) => writeSheet(session, id, change),
+          // A story he picked in the inspector: the design graph keeps its state.
+          (file, story) => link?.want(file, story)
+        )
       : null;
   });
   const inspecting = $derived(!!inspector && inspectOpen);
@@ -3343,7 +3348,6 @@
         // A sheet's page said its stories and props: the inspector's controls, and the design graph's model.
         const said = previewSheet(message.sheet);
         if (said) {
-          inspector?.heard(said);
           link?.heardSheet(said);
         }
         break;
@@ -3595,6 +3599,11 @@
     const session = instanceId;
     return isSheet && session ? untrack(() => new StageLink(post)) : null;
   });
+  // The inspector's controls are for the story the stage stands at.
+  inspectKept(
+    () => link,
+    () => inspector
+  );
   /** The component artifact's states files and the agent's spec, as its address carries them (core `canvasPath`). */
   const sheetCanvas = $derived(isSheet ? canvasOf(startAt) : null);
   /**
@@ -3993,7 +4002,7 @@
 
 {#snippet viewBar()}
   {#if canvasView}
-    <!-- A component canvas's view: its frames' scheme, widths, motion and zoom. -->
+    <!-- A component artifact's view: Map and Verify. -->
     <CanvasView onverify={verify} view={canvasView} {verifying} />
   {/if}
 {/snippet}

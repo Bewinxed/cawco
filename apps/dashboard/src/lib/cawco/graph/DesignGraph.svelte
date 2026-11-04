@@ -57,7 +57,7 @@
   import {
     IconChevronDown,
     IconClose,
-    IconLayers,
+    IconEye,
     IconListRows,
     IconMaximize,
     IconMonitor,
@@ -155,11 +155,37 @@
     }
     return best;
   };
+  /**
+   * The room's faces, in its switch's order: the States face alone until
+   * the Map and Animation faces stand on the page. The room is named by
+   * the faces it has.
+   */
+  const FACES = [
+    { value: "states", label: words.statesFace, icon: IconListRows },
+  ] as const;
+  const roomName = words.room(FACES.map((one) => one.label));
   /** The kept state of each component, by its name. */
   let keptOf = $state<Record<string, Pick>>({});
-  const kept = $derived<Pick | null>(
-    review ? (keptOf[review.name] ?? first(review)) : null
-  );
+  /** The state he kept on the component in front, while its states file still has it; else where the component opens. */
+  const kept = $derived.by<Pick | null>(() => {
+    if (!review) {
+      return null;
+    }
+    const pick = keptOf[review.name];
+    return pick && review.states[pick.state] ? pick : first(review);
+  });
+  // A new ask (the agent showed the canvas again, or changed its ask)
+  // opens on the state it names: what he kept under the last ask goes.
+  let askSeen: string | null = null;
+  $effect(() => {
+    const said = ask;
+    untrack(() => {
+      if (askSeen !== null && askSeen !== said) {
+        keptOf = {};
+      }
+      askSeen = said;
+    });
+  });
   let roomOpen = $state(true);
   let width = $state<number | null>(null);
   let scheme = $state<"light" | "dark">(
@@ -231,6 +257,50 @@
       keptOf = { ...keptOf, [review.name]: { state, variant } };
     }
   };
+  /** The state a story stands for: a state's own, a variant's under it, or a state's at another width (with that width). */
+  const pickOf = (
+    on: Review,
+    story: string
+  ): { pick: Pick; width?: number } | null => {
+    if (on.states[story]) {
+      return { pick: { state: story, variant: null } };
+    }
+    for (const id of on.order) {
+      const state = on.states[id];
+      if (state?.variants.some((one) => one.id === story)) {
+        return { pick: { state: id, variant: story } };
+      }
+      const sized = state?.widths.find((one) => one.story === story);
+      if (sized) {
+        return { pick: { state: id, variant: null }, width: sized.width };
+      }
+    }
+    return null;
+  };
+  // A story he picked in the inspector: its component in front and its
+  // state kept, so the stage stands at what the controls edit. One the
+  // states file doesn't hold yet (a story just added) waits for its sheet.
+  $effect(() => {
+    const wish = link.wanted;
+    const all = reviews;
+    untrack(() => {
+      const at = wish ? all.findIndex((one) => one.file === wish.file) : -1;
+      const on = all[at];
+      const found = wish && on ? pickOf(on, wish.story) : null;
+      if (!(wish && on && found)) {
+        return;
+      }
+      front = at;
+      keptOf = { ...keptOf, [on.name]: found.pick };
+      if (found.width !== undefined) {
+        ({ width } = found);
+      } else if (refOf(on, found.pick, width).story !== wish.story) {
+        // At a width it has a story of its own for, the state as written is that story: back to its own width.
+        width = null;
+      }
+      link.wanted = null;
+    });
+  });
 
   // --- The stage brought to the kept state -------------------------------------
 
@@ -271,6 +341,13 @@
     const { loads } = link;
     const to = on && pick ? refOf(on, pick, width) : null;
     untrack(() => {
+      // Every way a state comes to be kept (a row's press, a step, the
+      // ask's state, a new ask, the inspector's pick, a width's own story,
+      // another component in front) names it here: the inspector's
+      // controls follow it, so an edit lands on the drawing he sees.
+      if (to && JSON.stringify(to) !== JSON.stringify(link.kept)) {
+        link.kept = to;
+      }
       if (!(on && pick && to) || loads === 0) {
         return;
       }
@@ -611,16 +688,17 @@
 
 {#snippet faceName()}
   <!-- The room's one face: its Solar duotone glyph before its name. -->
+  {@const [face] = FACES}
   <h2
     class="mark-line m-0 flex min-w-0 flex-1 items-center gap-space-2 type-label text-ink-strong"
   >
-    <IconListRows
+    <face.icon
       aria-hidden="true"
       class="size-icon-md flex-none text-ink-muted"
       data-box
     />
     <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-      >{words.statesFace}</span
+      >{face.label}</span
     >
   </h2>
 {/snippet}
@@ -754,7 +832,7 @@
                       class="select-none touch-hit press-tint"
                       type="button"
                     >
-                      <IconLayers data-slot="bar-symbol" aria-hidden="true" />
+                      <IconEye data-slot="bar-symbol" aria-hidden="true" />
                     </button>
                   {/snippet}
                 </Popover.Trigger>
@@ -952,7 +1030,7 @@
                  panels do (the sheet recipe's motion, `sheetSlide`). -->
             <aside
               data-slot="graph-room"
-              aria-label={words.room}
+              aria-label={roomName}
               in:sheetSlide|global={{ axis: "X", leaving: false }}
               out:sheetSlide|global={{ axis: "X", leaving: true }}
               class="relative my-(--border-width) ms-space-2 me-(--border-width) flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile"
@@ -1012,7 +1090,7 @@
           onmousedown={keepFocusOnPage}
           trapFocus={false}
           ownHead
-          title={words.room}
+          title={roomName}
         >
           <div
             class="flex min-h-0 flex-auto flex-col gap-space-3 px-space-4 pb-(--snap-drop)"

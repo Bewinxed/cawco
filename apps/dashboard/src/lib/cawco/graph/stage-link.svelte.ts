@@ -16,7 +16,10 @@ import {
   type StageReach,
   type StageReached,
   type StateRef,
+  storyOf,
 } from "@cawco/core/stage-graph";
+import { untrack } from "svelte";
+import type { SheetInspector } from "#lib/cawco/preview/sheet-inspector.svelte.js";
 
 /** The stage's view, as the view card picks it: its scheme, the width he picked (none: its own), reduced motion. */
 export interface StageView {
@@ -38,6 +41,10 @@ export class StageLink {
   loads = $state(0);
   /** Presses the page heard (`cawco:press`): each closes the graph's open layers, a press on the stage being outside them. */
   presses = $state(0);
+  /** The state the graph keeps, as the page names it: the inspector's controls follow its story. Null until the graph has a state. */
+  kept = $state<StateRef | null>(null);
+  /** A story the person picked in the inspector, by its states file: the graph keeps its state, then lets it go. */
+  wanted = $state<{ file: string; story: string } | null>(null);
   readonly #post: (message: object) => void;
   #ask = 0;
 
@@ -87,6 +94,11 @@ export class StageLink {
     });
   }
 
+  /** The person picked story `story` of `file` in the inspector: the graph keeps its state. */
+  want(file: string, story: string): void {
+    this.wanted = { file, story };
+  }
+
   /** A new page said it is ready: what the last one said of its drawing is gone with it. */
   loaded(): void {
     this.laid = null;
@@ -98,4 +110,25 @@ export class StageLink {
   heardSheet(sheet: SheetOnPage): void {
     this.sheets = { ...this.sheets, [sheet.file]: sheet };
   }
+}
+
+/**
+ * The inspector's controls are for the story the stage stands at: the
+ * graph's kept state, in its states file's sheet as the page says it,
+ * whichever way the state came to be kept. Called as a component sets up
+ * (PreviewPane), so the effect lives as long as it does.
+ */
+export function inspectKept(
+  link: () => StageLink | null,
+  inspector: () => SheetInspector | null
+): void {
+  $effect(() => {
+    const held = inspector();
+    const at = link();
+    const kept = at?.kept;
+    const said = kept ? at?.sheets[kept.file] : undefined;
+    if (held && kept && said) {
+      untrack(() => held.follow(said, storyOf(kept)));
+    }
+  });
 }

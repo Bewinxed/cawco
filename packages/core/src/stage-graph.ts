@@ -37,6 +37,10 @@ export interface StateRef {
   variant?: { story: string } | { records: RecordCut };
 }
 
+/** The story a state is drawn from: a variant's own, else its own (a record set is cut from its state's story). */
+export const storyOf = (ref: StateRef): string =>
+  ref.variant && "story" in ref.variant ? ref.variant.story : ref.story;
+
 /** The most a "many" record set holds: the whole list, or this much of it when longer. */
 export const MANY_RECORDS = 20;
 

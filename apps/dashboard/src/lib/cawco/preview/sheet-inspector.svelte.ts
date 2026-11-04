@@ -46,13 +46,21 @@ export class SheetInspector {
   problem = $state<string | null>(null);
   readonly #post: (message: ToPage) => void;
   readonly #write: (change: SheetChange) => Promise<unknown>;
+  readonly #chose: (file: string, story: string) => void;
 
+  /**
+   * `chose`: the person picked a story here (the picker, a story added or
+   * duplicated): the design graph keeps its state, so the stage stands at
+   * the story the controls edit.
+   */
   constructor(
     post: (message: ToPage) => void,
-    write: (change: SheetChange) => Promise<unknown>
+    write: (change: SheetChange) => Promise<unknown>,
+    chose: (file: string, story: string) => void
   ) {
     this.#post = post;
     this.#write = write;
+    this.#chose = chose;
   }
 
   /** The page said its sheet (a run, a props refresh): the choice kept while its story stands, and every unsaved story mounted with its values again. */
@@ -75,7 +83,29 @@ export class SheetInspector {
     }
   }
 
+  /** The person picked story `name`: the controls are for it, and the design graph keeps its state. */
   choose(name: string): void {
+    this.#show(name);
+    if (this.sheet) {
+      this.#chose(this.sheet.file, name);
+    }
+  }
+
+  /**
+   * The design graph keeps a state: the controls follow the story the stage
+   * stands at, in its states file's sheet, so an edit lands on the drawing
+   * the person sees.
+   */
+  follow(sheet: SheetOnPage, name: string): void {
+    if (sheet !== this.sheet) {
+      this.heard(sheet);
+    }
+    if (this.chosen !== name) {
+      this.#show(name);
+    }
+  }
+
+  #show(name: string): void {
     this.chosen = name;
     this.problem = null;
     this.#post({ type: "cawco:story-select", story: name });
@@ -240,9 +270,9 @@ export class SheetInspector {
     try {
       await this.#write({ story: op });
       if ("add" in op) {
-        this.chosen = op.add;
+        this.choose(op.add);
       } else if ("duplicate" in op) {
-        this.chosen = op.as;
+        this.choose(op.as);
       }
       return true;
     } catch (error) {

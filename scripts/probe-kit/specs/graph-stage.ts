@@ -147,6 +147,7 @@ async function graphPage(
   view: "desk" | "phone"
 ): Promise<{ frame: Frame; page: Page }> {
   const page = await kit.page(view, { theme: "light" });
+  await hearAnswers(page);
   await open(page, `${base}/artifact/${id}`, GRAPH, 120_000);
   await page.waitForSelector(`${GRAPH}:not([data-arriving])`, {
     timeout: 120_000,
@@ -171,19 +172,19 @@ const drawnStory = (frame: Frame) =>
         .cawcoStory ?? null
   );
 
-/** What the frame hears from the panel, and what the panel hears from the frame, of the stage's messages, from now. */
-async function listen(page: Page, frame: Frame): Promise<void> {
-  await frame.evaluate((type) => {
-    const heard: unknown[] = [];
-    (window as unknown as { __reaches: unknown[] }).__reaches = heard;
-    addEventListener("message", (event) => {
-      if ((event.data as { type?: unknown } | null)?.type === type) {
-        heard.push(event.data);
-      }
-    });
-  }, STAGE_REACH);
-  await page.evaluate(
+/**
+ * What the panel hears from the frame of the stage's answers, from the
+ * panel's first load: the page says how it laid the drawing out as it
+ * mounts, and again only when that changes (stage-host canvas stage.ts
+ * `laid`), so a listener started later hears none for a reach that moves
+ * nothing across.
+ */
+async function hearAnswers(page: Page): Promise<void> {
+  await page.addInitScript(
     ([reached, laid]) => {
+      if (window !== window.top) {
+        return;
+      }
       const heard: unknown[] = [];
       (window as unknown as { __answers: unknown[] }).__answers = heard;
       addEventListener("message", (event) => {
@@ -195,6 +196,19 @@ async function listen(page: Page, frame: Frame): Promise<void> {
     },
     [STAGE_REACHED, STAGE_LAID] as const
   );
+}
+
+/** What the frame hears from the panel of the stage's reaches, from now. */
+async function listen(frame: Frame): Promise<void> {
+  await frame.evaluate((type) => {
+    const heard: unknown[] = [];
+    (window as unknown as { __reaches: unknown[] }).__reaches = heard;
+    addEventListener("message", (event) => {
+      if ((event.data as { type?: unknown } | null)?.type === type) {
+        heard.push(event.data);
+      }
+    });
+  }, STAGE_REACH);
 }
 
 interface Reach {
@@ -234,7 +248,7 @@ async function deskLegs(
   await checks.at(page, "1440, at Two");
 
   // 3. A press on One's row: one reach into the frame, answered.
-  await listen(page, frame);
+  await listen(frame);
   await page
     .locator(`${GRAPH} [data-slot="graph-room"] [data-state-id="One"] button`)
     .first()

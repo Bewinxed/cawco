@@ -67,6 +67,7 @@ import {
   type StageReached,
   type StateRef,
   stageReachOf,
+  storyOf,
   storyWords,
 } from "@cawco/core/stage-graph";
 import { queriesIn, userEventIn } from "@cawco/core/stage-play";
@@ -299,8 +300,7 @@ export function bootStage(page: Page): Mode {
     if (!(section && sheet)) {
       return { refused: `${ref.file} is no states file of this canvas.` };
     }
-    const drawn =
-      ref.variant && "story" in ref.variant ? ref.variant.story : ref.story;
+    const drawn = storyOf(ref);
     const story = sheet.stories.find((one) => one.name === drawn);
     if (!story) {
       return { refused: `${ref.file} has no story ${drawn}.` };

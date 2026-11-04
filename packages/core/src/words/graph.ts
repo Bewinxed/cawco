@@ -4,6 +4,8 @@
  * its states, with the moves between them and their timing. Plain words,
  * DESIGN.md's Voice: a state is named as the product talks of it.
  */
+import { andList } from "./helpers";
+
 /**
  * A number as the page's language writes it (dashboard graph/figures.ts
  * `figureOf`, `Intl.NumberFormat` in the page's `lang`): every figure these
@@ -12,13 +14,14 @@
 export type Figure = string & { readonly figure: true };
 
 export const graphWords = {
-  /** The room's three faces, its switch's segments, and the switch's name for a screen reader. */
+  /** The room's faces, its switch's segments, and the switch's name for a screen reader. */
   statesFace: "States",
   wholeSet: "Map",
   moveFace: "Animation",
   faces: "Panel view",
-  /** The panel's own name, whichever face it shows: the room's aside and the phone drawer's title. */
-  room: "States, map and animation",
+  /** The panel's own name, whichever face it shows, from the faces it has: the room's aside and the phone drawer's title ("States, map and animation"). */
+  room: (faces: readonly string[]) =>
+    andList(faces.map((face, at) => (at === 0 ? face : face.toLowerCase()))),
   /** Where the journey stands on the component's path: "8 of 11". */
   position: (at: Figure, of: Figure) => `${at} of ${of}`,
   previous: "Previous state",

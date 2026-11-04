@@ -1732,10 +1732,10 @@ const run = async (kit: Kit) => {
       enumSession
     );
     const enumClone = await stageCloneIn(fleet.env.HOME as string, enumDir);
-    // What the stage wrote once its host was written (stage.ts `start`: the clone installed first, then the host), outside its own `.cawco/` and git's.
+    // What the stage wrote once its host was written (stage.ts `start`: the clone installed first, then the host), outside its own `.cawco/` and git's. Through links: the clone's `node_modules` is a link into the workspaces' cache (agent workspace-modules.ts), which a `find` that keeps to the clone never enters, and whose own time is the link's.
     const written = enumClone
       ? (
-          await Bun.$`find . -newer ${HOST_FILE} -not -path ./.git -not -path './.git/*' -not -path ./.cawco -not -path './.cawco/*' -print`
+          await Bun.$`find -L . -newer ${HOST_FILE} -not -path ./.git -not -path './.git/*' -not -path ./.cawco -not -path './.cawco/*' -print`
             .cwd(enumClone.path)
             .nothrow()
             .text()

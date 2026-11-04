@@ -115,7 +115,11 @@ const inspector = (
   chosen = "Live",
   write: () => Promise<unknown> = () => Promise.resolve({})
 ) => {
-  const one = new SheetInspector(() => undefined, write);
+  const one = new SheetInspector(
+    () => undefined,
+    write,
+    () => undefined
+  );
   one.heard(sheet);
   one.choose(chosen);
   return one;
