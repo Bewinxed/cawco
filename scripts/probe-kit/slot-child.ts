@@ -47,7 +47,7 @@ try {
       "1000",
       poll,
     ],
-    { stdout: "inherit", stderr: "inherit" }
+    { env: process.env, stdout: "inherit", stderr: "inherit" }
   );
   await child.exited;
   if (hold === "forever") {

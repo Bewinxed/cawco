@@ -151,7 +151,9 @@ function trees(roots: number[]): Proc[] {
     }
     return out;
   }
-  const rows = Bun.spawnSync(["ps", "-A", "-o", "pid=,ppid=,rss=,command="])
+  const rows = Bun.spawnSync(["ps", "-A", "-o", "pid=,ppid=,rss=,command="], {
+    env: process.env,
+  })
     .stdout.toString()
     .split("\n")
     .map((line) => PS_ROW.exec(line.trim()))

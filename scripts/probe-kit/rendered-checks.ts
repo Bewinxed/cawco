@@ -3248,11 +3248,7 @@ async function impeccable(page: Page): Promise<{
   try {
     const child = Bun.spawn(
       [bin, "detect", "--json", "--cdp", String(port), "--target", token],
-      {
-        cwd: ROOT,
-        stdout: "pipe",
-        stderr: "pipe",
-      }
+      { env: process.env, cwd: ROOT, stdout: "pipe", stderr: "pipe" }
     );
     const [out, err, code] = await Promise.all([
       new Response(child.stdout).text(),

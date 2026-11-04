@@ -510,6 +510,7 @@ setTimeout(() => { console.log(${JSON.stringify(RESULT_MARK)} + JSON.stringify({
 /** What the system's responder answers for `name` within 4 s: `dns-sd -G v4`'s address column. */
 const systemAnswers = async (name: string): Promise<string[]> => {
   const asked = Bun.spawn(["dns-sd", "-G", "v4", name], {
+    env: process.env,
     stdout: "pipe",
     stderr: "ignore",
   });

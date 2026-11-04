@@ -102,6 +102,7 @@ const own = process.pid;
 const group = processGroup(own);
 
 const sentinel = Bun.spawn(["sleep", "600"], {
+  env: process.env,
   stdin: "ignore",
   stdout: "ignore",
   stderr: "ignore",
@@ -170,6 +171,7 @@ for (const value of VALUES) {
 
 // signalGroup on a child in this program's group, not a leader of its own.
 const member = Bun.spawn(["sleep", "600"], {
+  env: process.env,
   stdin: "ignore",
   stdout: "ignore",
   stderr: "ignore",
@@ -187,6 +189,7 @@ await member.exited;
 
 // A real child, killed.
 const target = Bun.spawn(["sleep", "600"], {
+  env: process.env,
   stdin: "ignore",
   stdout: "ignore",
   stderr: "ignore",
@@ -199,6 +202,7 @@ const killed = { pid: target.pid, sent, signalCode: target.signalCode };
 
 // A group this program started as its leader, killed with its member.
 const leader = Bun.spawn(["sh", "-c", "sleep 600 & echo $!; wait"], {
+  env: process.env,
   stdin: "ignore",
   stdout: "pipe",
   stderr: "ignore",

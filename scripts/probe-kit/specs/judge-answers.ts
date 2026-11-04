@@ -103,7 +103,11 @@ const callJson = (clone: string, n: number): string =>
 /** What the kernel and lsof say of the judge's sockets and the stalled client's. */
 const standing = async (judge: number, client: number): Promise<string> => {
   const of = async (argv: string[]): Promise<string> => {
-    const ran = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe" });
+    const ran = Bun.spawn(argv, {
+      env: process.env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     const [out, err] = await Promise.all([
       new Response(ran.stdout).text(),
       new Response(ran.stderr).text(),
@@ -239,7 +243,12 @@ const run = async (kit: Kit) => {
   const script = join(state, "boundary-judge.ts");
   const judge = Bun.spawn(
     [bun, script, socket, ...parts.judgeHanded(policy), "probe-build"],
-    { cwd: dirname(script), stdout: "pipe", stderr: "inherit" }
+    {
+      env: process.env,
+      cwd: dirname(script),
+      stdout: "pipe",
+      stderr: "inherit",
+    }
   );
   const ready = judge.stdout.getReader();
   await ready.read();

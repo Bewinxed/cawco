@@ -125,11 +125,7 @@ const leaksOf = async (
       "--listFilesOnly",
       "--traceResolution",
     ],
-    {
-      cwd: ROOT,
-      stdout: "pipe",
-      stderr: "pipe",
-    }
+    { env: process.env, cwd: ROOT, stdout: "pipe", stderr: "pipe" }
   );
   const [out, err, code] = await Promise.all([
     new Response(child.stdout).text(),

@@ -64,6 +64,7 @@ const once = async (): Promise<string> => {
     return `failed: the hook decided the shell call itself: ${oneLine(said)}`;
   }
   const ran = Bun.spawn([prefix, "cat README.md"], {
+    env: process.env,
     cwd: clone,
     stdout: "pipe",
     stderr: "pipe",

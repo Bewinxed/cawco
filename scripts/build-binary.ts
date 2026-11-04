@@ -92,6 +92,7 @@ export function packageDir(
 
 async function run(argv: string[]) {
   const child = Bun.spawn(argv, {
+    env: process.env,
     cwd: ROOT,
     stdout: "inherit",
     stderr: "inherit",

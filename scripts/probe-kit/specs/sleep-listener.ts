@@ -147,7 +147,7 @@ const spec: Spec = {
         "--nofork",
         "--print-address=1",
       ],
-      { stdin: "ignore", stdout: "pipe", stderr: "pipe" }
+      { env: process.env, stdin: "ignore", stdout: "pipe", stderr: "pipe" }
     );
     const agents: Bun.Subprocess[] = [];
     try {

@@ -193,7 +193,10 @@ export const All = {};
 `
   );
   if (!existsSync(join(dir, "node_modules"))) {
-    const install = Bun.spawnSync(["bun", "install"], { cwd: dir });
+    const install = Bun.spawnSync(["bun", "install"], {
+      env: process.env,
+      cwd: dir,
+    });
     if (install.exitCode !== 0) {
       throw new Error(
         `bun install in ${dir} failed: ${install.stderr.toString().slice(0, 400)}`
@@ -696,7 +699,7 @@ const COST_AT_ONCE = 50;
 
 /** The child processes of `pid` now (`pgrep -P`: BSD ps, macOS's, has no `--ppid`, and its refusal read as no children). */
 const childrenOf = (pid: number): number[] =>
-  Bun.spawnSync(["pgrep", "-P", String(pid)])
+  Bun.spawnSync(["pgrep", "-P", String(pid)], { env: process.env })
     .stdout.toString()
     .split("\n")
     .map((line) => Number(line.trim()))

@@ -82,12 +82,14 @@ const spec: Spec = {
     const { check } = kit;
     // A sentinel of this spec's own, outside the leg's group.
     const beside = Bun.spawn(["sleep", "600"], {
+      env: process.env,
       stdin: "ignore",
       stdout: "ignore",
       stderr: "ignore",
     });
     try {
       const leg = Bun.spawn([process.execPath, CHILD], {
+        env: process.env,
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",

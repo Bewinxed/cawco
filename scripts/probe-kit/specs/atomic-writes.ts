@@ -54,6 +54,7 @@ const killedOnce = async (
 ): Promise<string | undefined> => {
   const file = join(dir, "record.json");
   const writer = Bun.spawn(["bun", WRITER, file, how, String(BODY)], {
+    env: process.env,
     stdout: "pipe",
     stderr: "inherit",
   });

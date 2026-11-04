@@ -61,7 +61,7 @@ const repair = async (db: string, extra: string[] = []) => {
       "2026-01-01T00:00:00Z",
       ...extra,
     ],
-    { cwd: ROOT, stdout: "pipe", stderr: "pipe" }
+    { env: process.env, cwd: ROOT, stdout: "pipe", stderr: "pipe" }
   );
   const [code, out, err] = await Promise.all([
     child.exited,

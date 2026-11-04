@@ -76,7 +76,7 @@ for (const [entry, patch] of entries) {
     const dir = realpathSync(join(STORE, copy, "node_modules", name));
     const reverse = Bun.spawnSync(
       ["git", "apply", "--check", "-R", join(ROOT, patch)],
-      { cwd: dir, stderr: "pipe", stdout: "ignore" }
+      { env: process.env, cwd: dir, stderr: "pipe", stdout: "ignore" }
     );
     if (reverse.exitCode !== 0) {
       failures.push(

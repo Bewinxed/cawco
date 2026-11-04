@@ -73,7 +73,7 @@ async function packagesWithoutScript(): Promise<string[]> {
   );
   const listed = Bun.spawnSync(
     [...formatter(), "--list-files", "--ignore-unknown", ...manifests],
-    { cwd: ROOT, stdout: "pipe", stderr: "inherit" }
+    { env: process.env, cwd: ROOT, stdout: "pipe", stderr: "inherit" }
   );
   if (listed.exitCode !== 0) {
     fail(`bun fmt --list-files exited ${listed.exitCode}`);
@@ -101,6 +101,7 @@ const waiting: (() => void)[] = [];
 /** One formatter run over `text` as the file at `file` (absolute). */
 async function formatOne(file: string, text: string): Promise<string> {
   const child = Bun.spawn([...formatter(), `--stdin-filepath=${file}`], {
+    env: process.env,
     cwd: ROOT,
     stdin: Buffer.from(text),
     stdout: "pipe",
@@ -257,7 +258,7 @@ async function main(): Promise<number> {
       "--no-error-on-unmatched-pattern",
       ...files,
     ],
-    { cwd: ROOT, stdio: ["inherit", "inherit", "inherit"] }
+    { env: process.env, cwd: ROOT, stdio: ["inherit", "inherit", "inherit"] }
   );
   return await child.exited;
 }

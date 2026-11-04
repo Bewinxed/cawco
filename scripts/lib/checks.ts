@@ -56,7 +56,7 @@ const run = async (check: Check): Promise<Outcome> => {
       stdout: "pipe",
       stderr: "pipe",
       detached: true,
-      env: check.env ? { ...process.env, ...check.env } : undefined,
+      env: { ...process.env, ...check.env },
     });
   } catch (error) {
     return {

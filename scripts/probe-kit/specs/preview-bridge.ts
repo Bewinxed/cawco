@@ -62,7 +62,7 @@ const run = async (kit: Kit) => {
       `TCP-LISTEN:${PORT},fork,reuseaddr,bind=127.0.0.1`,
       "SYSTEM:echo HTTP/1.0 200 OK; echo; echo bridged",
     ],
-    { stdout: "ignore", stderr: "pipe" }
+    { env: process.env, stdout: "ignore", stderr: "pipe" }
   );
   const children = `/proc/${sandbox.pid}/task/${sandbox.pid}/children`;
   let inner = 0;

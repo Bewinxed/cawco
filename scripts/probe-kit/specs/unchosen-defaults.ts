@@ -166,7 +166,12 @@ const serveOn = (port: number, hub?: string) =>
       "node",
       SERVE,
     ],
-    { cwd: join(ROOT, "apps/dashboard"), stdout: "pipe", stderr: "pipe" }
+    {
+      env: process.env,
+      cwd: join(ROOT, "apps/dashboard"),
+      stdout: "pipe",
+      stderr: "pipe",
+    }
   );
 
 /** A connection to `port` once the activator listens there (it says so after it is spawned); undefined if it never does. */

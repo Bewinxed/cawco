@@ -236,6 +236,7 @@ async function ownerSecurity(args: readonly string[]): Promise<Said> {
     );
   }
   const child = Bun.spawn([systemProgram("security"), ...args], {
+    env: process.env,
     stdout: "pipe",
     stderr: "pipe",
   });

@@ -109,7 +109,7 @@ const run = async (plugin: string): Promise<string[]> => {
       `--config-path=${dir}`,
       folder,
     ],
-    { cwd: ROOT, stdout: "pipe", stderr: "pipe" }
+    { env: process.env, cwd: ROOT, stdout: "pipe", stderr: "pipe" }
   );
   const [out, err] = await Promise.all([
     new Response(biome.stdout).text(),

@@ -71,13 +71,15 @@ const END = /^END (\d+)$/mu;
 /** A process's nice (`ps -o nice=`) and, on Linux, its I/O class (`ionice -p`, "idle" or "none: prio 4"). */
 const priorityOf = (pid: number): { io: string; nice: number } => ({
   nice: Number(
-    Bun.spawnSync(["ps", "-o", "nice=", "-p", String(pid)])
+    Bun.spawnSync(["ps", "-o", "nice=", "-p", String(pid)], {
+      env: process.env,
+    })
       .stdout.toString()
       .trim()
   ),
   io:
     process.platform === "linux"
-      ? Bun.spawnSync(["ionice", "-p", String(pid)])
+      ? Bun.spawnSync(["ionice", "-p", String(pid)], { env: process.env })
           .stdout.toString()
           .trim()
       : "idle",

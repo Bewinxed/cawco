@@ -43,3 +43,7 @@ preview-upstream/packages/hub/src/planted.ts:9:23 preview-upstream
 preview-source-write/packages/hub/src/planted.ts:6:1 preview-source-write
 preview-source-write/packages/hub/src/planted.ts:7:1 preview-source-write
 preview-source-write/packages/hub/src/artifacts/service.ts:4:1 preview-source-write
+spawn-names-env/planted.ts:5:21 spawn-names-env
+spawn-names-env/planted.ts:6:22 spawn-names-env
+spawn-names-env/planted.ts:7:26 spawn-names-env
+spawn-names-env/planted.ts:8:27 spawn-names-env

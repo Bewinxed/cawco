@@ -248,7 +248,7 @@ const answersIn = async (dir: string, socket: string): Promise<string> => {
       "-e",
       `const r = await fetch("http://ended/", { unix: ${JSON.stringify(socket)} }); console.log(r.status, await r.text());`,
     ],
-    { cwd: dir, stdout: "pipe", stderr: "pipe" }
+    { env: process.env, cwd: dir, stdout: "pipe", stderr: "pipe" }
   );
   const read = await readWithin(10_000, async () => {
     const [out, err] = await Promise.all([

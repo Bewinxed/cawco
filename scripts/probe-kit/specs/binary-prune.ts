@@ -46,6 +46,7 @@ import {
   recordInstall,
   versionDirectory,
 } from "../../../packages/core/src/binary-installation";
+import { signalGroup, spawnedPid } from "../../../packages/core/src/signal";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
 import { createBinaryUpdates } from "../../../packages/hub/src/binary-updates";
 import type { Kit, Spec } from "../kit";
@@ -110,6 +111,16 @@ const spec: Spec = {
     const dbPath = join(scratch, "share", "cawco", "cawco.db");
     process.env.CAWCO_DB_PATH = dbPath;
     let keeper: ReturnType<typeof Bun.spawn> | undefined;
+    /**
+     * Ends the stand-in keeper with `sig`: its whole group, so the `sleep`
+     * its shell runs ends with it rather than running on, orphaned.
+     */
+    const endKeeper = (sig: NodeJS.Signals) => {
+      const pid = keeper ? spawnedPid(keeper) : undefined;
+      if (pid !== undefined) {
+        signalGroup(pid, sig);
+      }
+    };
     try {
       const versions = join(binaryRoot(), "versions");
       const releases = hubReleasesDir();
@@ -157,7 +168,13 @@ const spec: Spec = {
         if (version === KEEPER) {
           keeper = Bun.spawn(
             [join(versionDirectory(version), "cawco"), "600"],
-            { stdout: "ignore", stderr: "ignore" }
+            {
+              env: process.env,
+              // A group of its own, ended whole ({@link endKeeper}).
+              detached: true,
+              stdout: "ignore",
+              stderr: "ignore",
+            }
           );
           await Bun.sleep(200);
           kit.check(
@@ -192,7 +209,7 @@ const spec: Spec = {
         (await listed(versions)) === sorted([...newest, KEEPER]),
         await listed(versions)
       );
-      keeper?.kill("SIGTERM");
+      endKeeper("SIGTERM");
       await keeper?.exited;
       keeper = undefined;
       await prune();
@@ -225,7 +242,7 @@ const spec: Spec = {
         JSON.stringify(again.said)
       );
     } finally {
-      keeper?.kill("SIGKILL");
+      endKeeper("SIGKILL");
       process.env.XDG_DATA_HOME = saved.XDG_DATA_HOME;
       process.env.CAWCO_DB_PATH = saved.CAWCO_DB_PATH;
       if (saved.XDG_DATA_HOME === undefined) {

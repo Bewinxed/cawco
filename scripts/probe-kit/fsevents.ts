@@ -33,16 +33,19 @@ export const fseventsInterposer = async (): Promise<string> => {
     return dylib;
   }
   await mkdir(dir, { recursive: true });
-  const built = Bun.spawnSync([
-    "clang",
-    "-dynamiclib",
-    "-O2",
-    "-framework",
-    "CoreServices",
-    "-o",
-    dylib,
-    SOURCE,
-  ]);
+  const built = Bun.spawnSync(
+    [
+      "clang",
+      "-dynamiclib",
+      "-O2",
+      "-framework",
+      "CoreServices",
+      "-o",
+      dylib,
+      SOURCE,
+    ],
+    { env: process.env }
+  );
   if (built.exitCode !== 0) {
     throw new Error(
       `clang did not build the FSEvents interposer: ${built.stderr.toString().trim()}`

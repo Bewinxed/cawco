@@ -339,6 +339,7 @@ const run = async (kit: Kit) => {
       `cpj-${crypto.randomUUID().slice(0, 8)}.sock`
     );
     const proc = Bun.spawn([bun, script, listening, ...handed], {
+      env: process.env,
       cwd: dirname(script),
       stdout: "pipe",
       stderr: "inherit",
@@ -647,6 +648,7 @@ const run = async (kit: Kit) => {
       .quiet()
       .nothrow();
     const open = Bun.spawn([parts.prefixAt, "head -n1"], {
+      env: process.env,
       cwd: clone,
       stdin: "pipe",
       stdout: "pipe",

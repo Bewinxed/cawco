@@ -198,7 +198,7 @@ const boundaryEnv = async (kit: Kit) => {
       `TCP-LISTEN:${upstreamPort},bind=127.0.0.1,fork,reuseaddr,backlog=${SOCAT_BACKLOG}`,
       `UNIX-CONNECT:${srtSocket}`,
     ],
-    { stdin: "ignore", stdout: "ignore", stderr: "ignore" }
+    { env: process.env, stdin: "ignore", stdout: "ignore", stderr: "ignore" }
   );
   await until(
     "srt's proxy socket bridged for the relay",

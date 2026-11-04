@@ -135,7 +135,7 @@ const viteOn = async (dir: string, port: number) => {
       String(port),
       "--strictPort",
     ],
-    { cwd: dir, stdout: "ignore", stderr: "ignore" }
+    { env: process.env, cwd: dir, stdout: "ignore", stderr: "ignore" }
   );
   // Ended as the spec ends, whatever its legs did (`run`).
   vites.add(proc);

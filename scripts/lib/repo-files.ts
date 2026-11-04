@@ -31,7 +31,7 @@ export const repoFiles = (
       "--",
       ...paths,
     ],
-    { cwd, stdout: "pipe", stderr: "pipe" }
+    { env: process.env, cwd, stdout: "pipe", stderr: "pipe" }
   );
   if (listed.exitCode !== 0) {
     throw new Error(

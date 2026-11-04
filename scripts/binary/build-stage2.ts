@@ -52,6 +52,7 @@ diskRoomOrExit("The stage-2 build");
 holdAwake("The stage-2 build");
 const run = async (argv: string[], cwd?: string) => {
   const child = Bun.spawn(argv, {
+    env: process.env,
     stdout: "inherit",
     stderr: "inherit",
     ...(cwd ? { cwd } : {}),

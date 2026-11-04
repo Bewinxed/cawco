@@ -1,0 +1,22 @@
+language js
+
+// Bun hands a `Bun.spawn` or `Bun.spawnSync` given no `env` the environment
+// its process started with ("Defaults to `process.env` as it was when the
+// current Bun process launched", bun-types; oven-sh/bun#40846), whatever was
+// set in or deleted from `process.env` since. On 2026-11-04 a tied child's
+// child took its grandparent's pid for its parent's and stopped itself, and
+// the release's signing secrets, taken out of `process.env`, still reached
+// its git, ps, gh and rcodesign. So every spawn names its env: the live one
+// (`env: process.env`) or one made for the child.
+or {
+  `Bun.spawn($_)`,
+  `Bun.spawnSync($_)`,
+  `Bun.spawn($_, $_)`,
+  `Bun.spawnSync($_, $_)`
+} as $hit where {
+  $hit <: not contains or {
+    `env: $_`,
+    JsShorthandPropertyObjectMember() as $member where { $member <: contains `env` }
+  },
+  register_diagnostic(span=$hit, message="A Bun spawn with no `env` gets the environment its process started with, not process.env as it is now (oven-sh/bun#40846). Name it: `env: process.env`, or one made for the child.")
+}

@@ -89,13 +89,10 @@ const spec: Spec = {
 
     // The cap.
     const log = launchdLog("agent");
-    const writer = Bun.spawn([
-      systemProgram("sh"),
-      "-c",
-      'exec "$@" >> "$0" 2>&1',
-      log,
-      ...WRITER,
-    ]);
+    const writer = Bun.spawn(
+      [systemProgram("sh"), "-c", 'exec "$@" >> "$0" 2>&1', log, ...WRITER],
+      { env: process.env }
+    );
     try {
       const size = await pastCap(log);
       console.log(`  ${log}: ${size} bytes, writer pid ${writer.pid}`);

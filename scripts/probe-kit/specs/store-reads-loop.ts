@@ -201,7 +201,7 @@ const evict = (paths: string[]): Promise<number> =>
       "import os,sys\nfor p in sys.argv[1:]:\n  fd=os.open(p,os.O_RDONLY)\n  os.posix_fadvise(fd,0,0,os.POSIX_FADV_DONTNEED)\n  os.close(fd)",
       ...paths,
     ],
-    { stdout: "ignore", stderr: "ignore" }
+    { env: process.env, stdout: "ignore", stderr: "ignore" }
   ).exited;
 
 /** Every hold the loop watch logged, in ms: its own line once a hold ended (loop-watch.ts `stallLine`). */
@@ -231,6 +231,7 @@ export default {
         `an OpenCode database of ${DB_GB} GB built in ${Math.round((Date.now() - began) / 1000)} s at ${db}`
       );
       const writing = Bun.spawn(["bun", "-e", WRITER, db, String(WAL_MB)], {
+        env: process.env,
         stdout: "pipe",
         stderr: "pipe",
       });
@@ -280,7 +281,7 @@ export default {
             "cawco-probe-load",
             join(kit.out, "load.bin"),
           ],
-          { stdout: "ignore", stderr: "pipe" }
+          { env: process.env, stdout: "ignore", stderr: "pipe" }
         );
         await Bun.sleep(2000);
         if (load.exitCode !== null) {
@@ -359,6 +360,7 @@ export default {
       writer?.kill();
       if (LOADED) {
         await Bun.spawn(["systemctl", "--user", "stop", `${scope}.scope`], {
+          env: process.env,
           stdout: "ignore",
           stderr: "ignore",
         }).exited;

@@ -92,7 +92,9 @@ export const launchAgents = (dir: string): LaunchAgents => {
   const domain = `gui/${process.getuid?.()}`;
   const labels = new Set<string>();
   const bootout = (label: string): void => {
-    Bun.spawnSync(["launchctl", "bootout", `${domain}/${label}`]);
+    Bun.spawnSync(["launchctl", "bootout", `${domain}/${label}`], {
+      env: process.env,
+    });
     rmSync(launchdStartPath(label), { force: true });
   };
   const stopAll = (): void => {
@@ -123,7 +125,9 @@ export const launchAgents = (dir: string): LaunchAgents => {
     rmSync(log, { force: true });
     writeFileSync(plist, plistOf(label, argv, env, log));
     labels.add(label);
-    const loaded = Bun.spawnSync(["launchctl", "bootstrap", domain, plist]);
+    const loaded = Bun.spawnSync(["launchctl", "bootstrap", domain, plist], {
+      env: process.env,
+    });
     if (loaded.exitCode !== 0) {
       throw new Error(
         `launchctl bootstrap ${domain} ${plist}: ${loaded.stderr.toString().trim()}`

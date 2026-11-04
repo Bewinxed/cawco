@@ -239,6 +239,7 @@ const stageChecks = async (kit: Kit) => {
 
     // 2. Biome refuses it.
     const lint = Bun.spawnSync(["bun", "x", "biome", "lint", fleet], {
+      env: process.env,
       cwd: ROOT,
     });
     const lintSaid = `${lint.stdout.toString()}${lint.stderr.toString()}`;

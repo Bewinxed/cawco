@@ -376,12 +376,15 @@ function ephemeralPorts(): { first: number; last: number } {
   const said =
     platform() === "darwin"
       ? new TextDecoder().decode(
-          Bun.spawnSync([
-            "sysctl",
-            "-n",
-            "net.inet.ip.portrange.first",
-            "net.inet.ip.portrange.last",
-          ]).stdout
+          Bun.spawnSync(
+            [
+              "sysctl",
+              "-n",
+              "net.inet.ip.portrange.first",
+              "net.inet.ip.portrange.last",
+            ],
+            { env: process.env }
+          ).stdout
         )
       : readFileSync("/proc/sys/net/ipv4/ip_local_port_range", "utf8");
   const [first, last] = said.trim().split(SPACES).map(Number);
@@ -2409,7 +2412,9 @@ async function standUp(
    */
   const previewPortsHeld = async (): Promise<string> => {
     const [first, last] = previewPorts.split("-").map(Number);
-    const ss = Bun.spawnSync(["ss", "-Htanp", "state", "all"]);
+    const ss = Bun.spawnSync(["ss", "-Htanp", "state", "all"], {
+      env: process.env,
+    });
     const sockets = new TextDecoder()
       .decode(ss.stdout)
       .split("\n")

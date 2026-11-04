@@ -511,7 +511,7 @@ wait
         `${user}@ssh-reach-box`,
         command,
       ],
-      { stdin: "ignore", stdout: "pipe", stderr: "pipe" }
+      { env: process.env, stdin: "ignore", stdout: "pipe", stderr: "pipe" }
     );
     const [out, err, code] = await Promise.all([
       new Response(child.stdout).text(),
@@ -592,7 +592,11 @@ async function standUp(
       `UNIX-LISTEN:${join(box.dir, MOCK_SOCKET)},fork,unlink-early`,
       `TCP:127.0.0.1:${box.mockPort}`,
     ],
-    { stdout: "ignore", stderr: Bun.file(join(box.dir, "mock-bridge.err")) }
+    {
+      env: process.env,
+      stdout: "ignore",
+      stderr: Bun.file(join(box.dir, "mock-bridge.err")),
+    }
   );
   const child = Bun.spawn(
     [

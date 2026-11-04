@@ -70,6 +70,7 @@ const standIn = async (): Promise<{
   inner: number;
 }> => {
   const outer = Bun.spawn([systemProgram("sh"), "-c", "sleep 600 & wait"], {
+    env: process.env,
     stdio: ["ignore", "ignore", "ignore"],
   });
   const inner = await until(
@@ -134,6 +135,7 @@ const liveLegs = async (kit: Kit): Promise<void> => {
 
   const second = await standIn();
   const other = Bun.spawn(["sleep", "600"], {
+    env: process.env,
     stdio: ["ignore", "ignore", "ignore"],
   });
   try {

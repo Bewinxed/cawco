@@ -33,7 +33,11 @@ async function sha256(path: string): Promise<string> {
 }
 
 async function run(argv: string[]) {
-  const child = Bun.spawn(argv, { stdout: "inherit", stderr: "inherit" });
+  const child = Bun.spawn(argv, {
+    env: process.env,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
   if ((await child.exited) !== 0) {
     throw new Error(`${argv.join(" ")} failed`);
   }
@@ -86,7 +90,10 @@ if (verb === "keys") {
   await chmod(join(staging, "cawco"), 0o755);
   // The hub ↔ agent contract the build speaks, as it says itself (build 1, from before the launch verb, speaks 1;
   // this tree's builds speak this tree's): a joined machine installs it only when it overlaps its hub's.
-  const said = Bun.spawnSync([binary, "build-info"], { stderr: "inherit" });
+  const said = Bun.spawnSync([binary, "build-info"], {
+    env: process.env,
+    stderr: "inherit",
+  });
   if (!said.success) {
     throw new Error(`${binary} build-info failed`);
   }

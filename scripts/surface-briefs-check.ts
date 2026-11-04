@@ -30,7 +30,10 @@ const Brief = z.object({
 
 /** The project's files, from git: where a moved target may be found by name. */
 const projectFiles = (): string[] =>
-  Bun.spawnSync(["git", "ls-files", "--", PROJECT], { cwd: ROOT })
+  Bun.spawnSync(["git", "ls-files", "--", PROJECT], {
+    env: process.env,
+    cwd: ROOT,
+  })
     .stdout.toString()
     .split("\n")
     .filter(Boolean)

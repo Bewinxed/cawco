@@ -609,6 +609,7 @@ const ownerLeg = async (kit: Kit, scene: Scene): Promise<void> => {
     ITEM_MS
   ).catch(() => false);
   const shell = Bun.spawn(["sh", "-c", `sleep ${OWNER_SLEEP}; :`], {
+    env: process.env,
     cwd: wo.path,
     stdio: ["ignore", "ignore", "ignore"],
   });
@@ -685,6 +686,7 @@ const viewOwnerLeg = async (
     ITEM_MS
   ).catch(() => -1);
   const shell = Bun.spawn(["sh", "-c", `sleep ${OWNER_SLEEP}; :`], {
+    env: process.env,
     cwd: wo.path,
     stdio: ["ignore", "ignore", "ignore"],
   });

@@ -53,7 +53,11 @@ const checking = argv.includes("--check");
 /** A command's exit status and what it printed, both streams together; one that is not there did not run. */
 const said = (command: string[]): { ok: boolean; text: string } => {
   try {
-    const ran = Bun.spawnSync(command, { stdout: "pipe", stderr: "pipe" });
+    const ran = Bun.spawnSync(command, {
+      env: process.env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     return {
       ok: ran.exitCode === 0,
       text: `${ran.stdout.toString()}${ran.stderr.toString()}`,
@@ -492,9 +496,7 @@ if (importAt >= 0) {
     );
     const installed = Bun.spawnSync(
       [...sudo, "apt-get", "install", "-y", ...packages],
-      {
-        stdio: ["inherit", "inherit", "inherit"],
-      }
+      { env: process.env, stdio: ["inherit", "inherit", "inherit"] }
     );
     if (installed.exitCode !== 0) {
       process.exit(1);

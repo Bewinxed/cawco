@@ -36,6 +36,9 @@
     "./scripts/lint/no-raw-motion.grit",
     // A refused hub request's reason is a words entry (packages/core/src/words/**).
     "./scripts/lint/hub-refusal-words.grit",
+    // A Bun spawn names its env: with none it gets the environment its
+    // process started with (oven-sh/bun#40846).
+    "./scripts/lint/spawn-names-env.grit",
   ],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.

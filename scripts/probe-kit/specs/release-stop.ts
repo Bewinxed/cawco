@@ -318,7 +318,11 @@ const runLeg = async (
         "trap 'sleep 5; exit 0' TERM; while :; do sleep 1; done",
         join(dir, "stale-holder"),
       ],
-      { detached: true, stdio: ["ignore", "ignore", "ignore"] }
+      {
+        env: process.env,
+        detached: true,
+        stdio: ["ignore", "ignore", "ignore"],
+      }
     );
     group.unref();
     const started = await run(["ps", "-o", "lstart=", "-p", String(group.pid)]);
@@ -393,6 +397,7 @@ const runLeg = async (
     // One process each, its command line naming the run dir (argv[0], as a conmon's names its paths).
     const named = (path: string) =>
       Bun.spawn(["bash", "-c", 'exec -a "$0" sleep 600', path], {
+        env: process.env,
         detached: true,
         stdio: ["ignore", "ignore", "ignore"],
       });

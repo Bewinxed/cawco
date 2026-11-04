@@ -96,14 +96,15 @@ const spec: Spec = {
     const recordText = `${JSON.stringify({ path: "/nowhere" })}\n`;
     await writeFile(record, recordText);
 
-    const ended = Bun.spawn(["true"]);
+    const ended = Bun.spawn(["true"], { env: process.env });
     await ended.exited;
     const dead = ended.pid;
-    const refused = Bun.spawn(["true"]);
+    const refused = Bun.spawn(["true"], { env: process.env });
     await refused.exited;
     const denied = refused.pid;
     const foreign = await foreignProcess();
     const live = Bun.spawn(["sleep", "600"], {
+      env: process.env,
       stdio: ["ignore", "ignore", "ignore"],
     });
     try {

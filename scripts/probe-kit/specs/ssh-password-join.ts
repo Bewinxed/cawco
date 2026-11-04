@@ -251,7 +251,7 @@ async function realSshd(
         "-E",
         join(dir, `${name}.log`),
       ],
-      { stdout: "ignore", stderr: "ignore" }
+      { env: process.env, stdout: "ignore", stderr: "ignore" }
     );
     const listening = until(
       `the real sshd ${name} listening`,

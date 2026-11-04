@@ -24,6 +24,7 @@ const REFUSED = new Set(["EROFS", "EACCES", "EPERM"]);
 const root = resolve(import.meta.dir, "../..");
 
 const where = Bun.spawnSync(["git", "rev-parse", "--git-path", "hooks"], {
+  env: process.env,
   cwd: root,
   stdout: "pipe",
   stderr: "pipe",

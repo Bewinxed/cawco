@@ -135,7 +135,11 @@ async function storesAnswer() {
   console.log(out.trim().split("\n").at(-1));
 }
 async function command(args: string[]) {
-  const child = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
+  const child = Bun.spawn(args, {
+    env: process.env,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   const text = await new Response(child.stdout).text();
   if ((await child.exited) !== 0) {
     throw new Error(
@@ -570,7 +574,7 @@ try {
   if (systemd) {
     const restarting = Bun.spawn(
       ["systemctl", "restart", "cawco-binary-dashboard.service"],
-      { stdout: "pipe", stderr: "pipe" }
+      { env: process.env, stdout: "pipe", stderr: "pipe" }
     );
     for (let i = 0; i < 50; i += 1) {
       if (

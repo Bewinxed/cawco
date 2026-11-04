@@ -189,7 +189,7 @@ const signalled = async (kit: Kit): Promise<void> => {
   );
   await until("the bridge subscribed", () => listener, Boolean, 5000);
   // A real child, killed by a signal: what sessiond's `#reap` hears of it.
-  const child = Bun.spawn(["sleep", "30"]);
+  const child = Bun.spawn(["sleep", "30"], { env: process.env });
   child.kill("SIGKILL");
   await child.exited;
   listener?.exit?.(
@@ -639,7 +639,7 @@ const sshJoin = async (kit: Kit, scratch: string): Promise<void> => {
   const sshdLog = join(dir, "sshd.log");
   const server = Bun.spawn(
     [systemProgram("sshd"), "-D", "-e", "-f", join(dir, "sshd_config")],
-    { stdout: "ignore", stderr: Bun.file(sshdLog) }
+    { env: process.env, stdout: "ignore", stderr: Bun.file(sshdLog) }
   );
   /** sshd's state and its last words, for a check that fails. */
   const sshdSaid = async (): Promise<string> => {
@@ -777,7 +777,7 @@ const penalties = async (
   const log = join(at.dir, "sshd-held.log");
   const server = Bun.spawn(
     [systemProgram("sshd"), "-D", "-e", "-f", join(at.dir, "sshd_held_config")],
-    { stdout: "ignore", stderr: Bun.file(log) }
+    { env: process.env, stdout: "ignore", stderr: Bun.file(log) }
   );
   const heard = () =>
     Bun.file(log)

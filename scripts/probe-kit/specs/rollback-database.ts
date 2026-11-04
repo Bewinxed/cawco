@@ -91,7 +91,7 @@ db.run("UPDATE t SET v = randomblob(3000)");
 console.log("ready");
 await Bun.sleep(60000);`,
     ],
-    { stdout: "pipe", stderr: "inherit" }
+    { env: process.env, stdout: "pipe", stderr: "inherit" }
   );
   const reader = child.stdout.getReader();
   let said = "";
@@ -240,7 +240,7 @@ console.log("held");
 ${hold ? "await Bun.sleep(60000);" : ""}
 process.exit(0);`,
     ],
-    { stdout: "pipe", stderr: "inherit" }
+    { env: process.env, stdout: "pipe", stderr: "inherit" }
   );
 
 const lockLegs = async (kit: Kit, scratch: string) => {

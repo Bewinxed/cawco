@@ -86,7 +86,9 @@ ${launchdProgram(label, WRITER)
 `
     );
     try {
-      const loaded = Bun.spawnSync(["launchctl", "bootstrap", domain, plist]);
+      const loaded = Bun.spawnSync(["launchctl", "bootstrap", domain, plist], {
+        env: process.env,
+      });
       if (
         !kit.check(
           `launchctl bootstrap ${domain} ${label}`,
@@ -136,7 +138,9 @@ ${launchdProgram(label, WRITER)
         !(await launchdJobs()).has(label)
       );
     } finally {
-      Bun.spawnSync(["launchctl", "bootout", `${domain}/${label}`]);
+      Bun.spawnSync(["launchctl", "bootout", `${domain}/${label}`], {
+        env: process.env,
+      });
       await forgetLaunchdStart(label);
     }
   },

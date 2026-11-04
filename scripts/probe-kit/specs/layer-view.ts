@@ -66,6 +66,7 @@ const inCopy = async (
       ])
     : [systemProgram("sh"), "-c", command];
   const ran = Bun.spawnSync(argv, {
+    env: process.env,
     cwd: linux ? "/" : layer.path,
     stdout: "pipe",
     stderr: "pipe",
@@ -225,24 +226,26 @@ const run = async (kit: Kit) => {
   const tree = join(home, "walk");
   await rm(tree, { recursive: true, force: true });
   await mkdir(tree, { recursive: true });
-  const made = Bun.spawnSync([
-    systemProgram("sh"),
-    "-c",
-    'for d in $(seq 1 100); do mkdir -p "$1/$d" && (cd "$1/$d" && seq 1 1000 | xargs touch) || exit 1; done',
-    "make-tree",
-    tree,
-  ]);
+  const made = Bun.spawnSync(
+    [
+      systemProgram("sh"),
+      "-c",
+      'for d in $(seq 1 100); do mkdir -p "$1/$d" && (cd "$1/$d" && seq 1 1000 | xargs touch) || exit 1; done',
+      "make-tree",
+      tree,
+    ],
+    { env: process.env }
+  );
   if (made.exitCode !== 0) {
     throw new Error(
       `the 100,000-file tree was not made: ${made.stderr.toString()}`
     );
   }
   const nativeAt = performance.now();
-  const native = Bun.spawnSync([
-    systemProgram("sh"),
-    "-c",
-    `find ${tree} -type f | wc -l`,
-  ]);
+  const native = Bun.spawnSync(
+    [systemProgram("sh"), "-c", `find ${tree} -type f | wc -l`],
+    { env: process.env }
+  );
   const nativeMs = ms(nativeAt);
   const walkId = crypto.randomUUID();
   const walkPath = linux
