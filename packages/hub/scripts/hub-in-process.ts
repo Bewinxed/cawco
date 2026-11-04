@@ -1,16 +1,25 @@
+import { resolve } from "node:path";
+
 /**
  * A hub built in this process on a database file of the caller's: its
  * migrations run as it opens, as a real start's do, and its routes answer
  * through `hub.handle(request)` with no port. HOME and CAWCO_DB_PATH are
  * set before the hub's modules load, since config.ts reads them once, at
- * import; so this is the first thing that imports them.
+ * import; so this is the first thing that imports them, and it throws when
+ * something in this process loaded them before on another database (a probe
+ * spec that calls it runs in a process of its own: probe kit `ownProcess`).
  */
 export async function hubInProcess(dbPath: string, home: string) {
   process.env.CAWCO_DB_PATH = dbPath;
   process.env.HOME = home;
   process.env.CAWCO_NO_MDNS = "1";
   const { Effect, Layer } = await import("effect");
-  const { HUB_VERSION } = await import("../src/config");
+  const { DB_PATH, HUB_VERSION } = await import("../src/config");
+  if (DB_PATH !== resolve(dbPath)) {
+    throw new Error(
+      `the hub's modules were loaded in this process before hubInProcess(${dbPath}): their database is ${DB_PATH}. Call it before anything imports packages/hub/src, in a process of its own.`
+    );
+  }
   const { Db, DbLayer } = await import("../src/db");
   const { HubLifetime, HubLifetimeLayer } = await import("../src/lifetime");
   const { Pending, PendingLayer } = await import("../src/pending");

@@ -720,6 +720,8 @@ const hubLeg = async (kit: Kit, root: string): Promise<void> => {
 const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "host-lfs",
+  ownProcess:
+    "its in-process hub (hub-in-process.ts) reads CAWCO_DB_PATH and HOME once, as the hub's modules load: after a spec before it in a run had loaded them, it would open that spec's database",
   run: async (kit: Kit) => {
     const root = await mkdtemp(
       join(process.env.TMPDIR ?? tmpdir(), "host-lfs-")

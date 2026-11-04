@@ -76,6 +76,8 @@ const MACHINE_B = "machine-b";
 const spec: Spec = {
   group: "The hub and machines",
   name: "account-refused",
+  ownProcess:
+    "its in-process hub (hub-in-process.ts) reads CAWCO_DB_PATH and HOME once, as the hub's modules load: after a spec before it in a run had loaded them, it would open that spec's database",
   run: async (kit: Kit) => {
     // First: the in-process hub below points this process's HOME at its
     // scratch, and the fleet's processes take theirs from it.

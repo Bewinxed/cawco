@@ -1249,6 +1249,8 @@ const midTurn = async (kit: Kit, scratch: string): Promise<void> => {
 const spec: Spec = {
   group: "The hub and machines",
   name: "typed-causes",
+  ownProcess:
+    "its in-process hub (hub-in-process.ts) reads CAWCO_DB_PATH and HOME once, as the hub's modules load: after a spec before it in a run had loaded them, it would open that spec's database",
   run: async (kit: Kit) => {
     const scratch = await mkdtemp(
       join(process.env.TMPDIR ?? tmpdir(), "typed-causes-")
