@@ -149,7 +149,7 @@ const sameMap = (a: YMap<unknown>, b: YMap<unknown>): boolean =>
 /** The keys of a canvas's `meta` its screen keeps: Excalidraw's pen mode, once a pen touched it. */
 const PEN_KEYS = new Set(["penMode", "penDetected"]);
 
-/** A request's keys a screen writes: its claim (`claim-<clientID>`) and the result. */
+/** A request's keys a screen writes: its claim (`claim-<its page's number>`, canvas-host scene.ts `PAGE_CLAIM`) and the result. */
 const SCREEN_REQUEST_KEY = /^(claim-\d+|result)$/u;
 
 /** Why a screen's change to a canvas's `requests` may not be kept, or null. */
@@ -436,10 +436,91 @@ export const artifactPicture =
   };
 
 /**
+ * Which screen's socket each claim came in on, by artifact: a holder is a
+ * screen while it stays joined ({@link releaseClaims}).
+ */
+const claimedOn = new Map<string, Map<string, ArtifactClient>>();
+
+/** The claims on unanswered requests that no socket has said yet, said now by `client`'s. */
+const noteClaims = (
+  docs: ArtifactDocs,
+  artifactId: string,
+  client: ArtifactClient
+) => {
+  const requests = docs.doc(artifactId).getMap("requests") as YMap<
+    YMap<unknown>
+  >;
+  let mine = claimedOn.get(artifactId);
+  for (const request of requests.values()) {
+    if (!(request instanceof YMap) || request.get("result") !== undefined) {
+      continue;
+    }
+    for (const key of request.keys()) {
+      if (key.startsWith("claim-") && !mine?.has(key)) {
+        mine ??= new Map();
+        mine.set(key, client);
+      }
+    }
+  }
+  if (mine) {
+    claimedOn.set(artifactId, mine);
+  }
+};
+
+/**
+ * A screen's socket closed: its claims on requests still unanswered are
+ * taken off, the holder among them too, and the claims left (another
+ * screen's, or the next one a screen writes) elect a holder again
+ * ({@link holdClaims}). A holder that left never answers: kept, the agent's
+ * write waited out `convertMs` and was refused while another screen stood
+ * joined.
+ */
+const releaseClaims = (
+  docs: ArtifactDocs,
+  artifactId: string,
+  client: ArtifactClient
+) => {
+  const mine = claimedOn.get(artifactId);
+  const gone = [...(mine?.entries() ?? [])]
+    .filter(([, by]) => by === client)
+    .map(([key]) => key);
+  if (!mine || gone.length === 0) {
+    return;
+  }
+  for (const key of gone) {
+    mine.delete(key);
+  }
+  if (mine.size === 0) {
+    claimedOn.delete(artifactId);
+  }
+  const requests = docs.doc(artifactId).getMap("requests") as YMap<
+    YMap<unknown>
+  >;
+  docs.transact(artifactId, "hub", () => {
+    for (const request of requests.values()) {
+      if (!(request instanceof YMap) || request.get("result") !== undefined) {
+        continue;
+      }
+      const holder = request.get("holder");
+      for (const key of gone) {
+        if (request.has(key)) {
+          request.delete(key);
+          if (holder === key.slice("claim-".length)) {
+            request.delete("holder");
+          }
+        }
+      }
+    }
+  });
+  holdClaims(docs, artifactId);
+};
+
+/**
  * The first claim on each of the agent's requests wins (Projects spec
- * §5.10): a screen claims one by writing `claim-<its clientID>`; the hub,
+ * §5.10): a screen claims one by writing `claim-<its page's id>`; the hub,
  * which takes every update in turn, names the first claimant it heard as
- * the request's `holder`, and only the holder converts.
+ * the request's `holder`, and only the holder converts. One whose screen
+ * leaves before answering is let go ({@link releaseClaims}).
  */
 const holdClaims = (docs: ArtifactDocs, artifactId: string) => {
   const requests = docs.doc(artifactId).getMap("requests") as YMap<
@@ -631,6 +712,9 @@ const takeUpdate = (
   }
   applyUpdate(doc, update, origin);
   if (doc.getMap("meta").get("kind") === "canvas") {
+    if (origin?.client.screen) {
+      noteClaims(docs, artifactId, origin.client);
+    }
     holdClaims(docs, artifactId);
   }
   return null;
@@ -788,9 +872,13 @@ export const artifactSocket = (docs: ArtifactDocs) => ({
       socket.send(refusal(problem));
     }
   },
-  close(socket: ServerWebSocket<ArtifactSocket>) {
+  close(socket: ServerWebSocket<ArtifactSocket>, code?: number) {
     if (socket.data.origin) {
       docs.leave(socket.data.artifactId, socket.data.origin.client);
+      // A removed artifact's doc is let go with its sockets: nothing to elect.
+      if (socket.data.screen && code !== ARTIFACT_GONE) {
+        releaseClaims(docs, socket.data.artifactId, socket.data.origin.client);
+      }
     }
   },
 });

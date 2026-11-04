@@ -40,6 +40,10 @@
  *     into the pen's box and back, as Send and Stop swap; the swap's two
  *     opacities run on one clock of `--dur-fade`, the same with reduced
  *     motion, as the agent's elements still fade up there.
+ * 27. The screen holding the agent's write leaves before answering it (a
+ *     claim written first under a number no page answers to, then that
+ *     screen closed): another screen joined to the canvas draws it, inside
+ *     the hub's wait (sync.ts `releaseClaims`).
  * 26. Images: a 32×32 PNG pasted on the canvas (a `paste` event with the
  *     file on its clipboardData) is an image element on both screens joined
  *     to it, its file in each one's doc `files`; the outline reads
@@ -237,6 +241,139 @@ const setUp = async (kit: Kit): Promise<OnCanvas> => {
   return { call, fleet, kit, logged, offOrigin, page, said, session };
 };
 
+/** The hub's wait for a screen's answer to the agent's write (core `CANVAS_LIMITS.convertMs`). */
+const CONVERT_MS = 10_000;
+
+/**
+ * 27. The screen holding the agent's write leaves before answering it:
+ * another screen joined to the canvas draws it, inside the hub's wait.
+ * Made to happen: screen A the canvas's one screen, a claim written first
+ * on it under a number no page answers to, so A's socket holds the write
+ * and never answers; screen B joins, and A closes. The hub takes that socket's claims off and elects again
+ * (sync.ts `releaseClaims`), and screen B answers. Before, the holder stood
+ * and the write was refused after `convertMs` ("no screen drew it"), as a
+ * create's drawing after its show was in the artifacts probe's leg 16.
+ */
+const holderLeavesChecks = async (on: OnCanvas) => {
+  const { kit, fleet, session } = on;
+  const made = await on.call(CREATE, {
+    kind: "canvas",
+    does: "draw",
+    ask: "Draw on this canvas",
+    name: "held-write",
+  });
+  const id = made.match(ANSWERED_ID)?.[1];
+  if (!id) {
+    kit.check("27: the canvas is made", false, made.slice(0, 300));
+    return;
+  }
+  const base = await fleet.dashboard();
+  // A the one screen while the write comes: the spec's first page leaves
+  // the session (it comes back for check 6's close).
+  await on.page.goto("about:blank");
+  const a = await kit.page("desk");
+  await open(a, `${base}/session/${session}`, COMPOSER);
+  const aFrame = await frameOf(a, id);
+  // On A, every new request is claimed first under `claim-1`, before the
+  // page's own claim (its serve runs a microtask later).
+  await aFrame.evaluate(() => {
+    interface Request {
+      get: (key: string) => unknown;
+      set: (key: string, value: unknown) => void;
+    }
+    const doc = (
+      window as unknown as {
+        cawcoCanvasDoc: {
+          getMap: (name: string) => {
+            get: (key: string) => Request | undefined;
+            observe: (
+              run: (event: { keysChanged: Set<string> }) => void
+            ) => void;
+          };
+        };
+      }
+    ).cawcoCanvasDoc;
+    const requests = doc.getMap("requests");
+    requests.observe((event) => {
+      for (const key of event.keysChanged) {
+        const request = requests.get(key);
+        if (
+          request &&
+          request.get("result") === undefined &&
+          request.get("holder") === undefined &&
+          request.get("claim-1") === undefined
+        ) {
+          request.set("claim-1", new Date().toISOString());
+          (window as unknown as { __ghostClaims?: number }).__ghostClaims =
+            ((window as unknown as { __ghostClaims?: number }).__ghostClaims ??
+              0) + 1;
+        }
+      }
+    });
+  });
+  const asked = Date.now();
+  const answer = on.call(UPDATE, {
+    id,
+    elements: [
+      {
+        type: "rectangle",
+        id: "held-write-box",
+        x: 0,
+        y: 0,
+        width: 120,
+        height: 60,
+      },
+    ],
+  });
+  /** A's replica's requests as JSON, as A holds them; "" once A can't be read. */
+  const aRequests = async (): Promise<string> => {
+    try {
+      return await aFrame.evaluate(() =>
+        JSON.stringify(
+          (
+            window as unknown as {
+              cawcoCanvasDoc: {
+                getMap: (name: string) => { toJSON: () => unknown };
+              };
+            }
+          ).cawcoCanvasDoc
+            .getMap("requests")
+            .toJSON()
+        )
+      );
+    } catch (error) {
+      return `unread: ${String(error).slice(0, 120)}`;
+    }
+  };
+  const held = await until(
+    "the write held under claim-1",
+    aRequests,
+    (json) => json.includes('"holder":"1"'),
+    CONVERT_MS / 2
+  ).catch(() => aRequests());
+  const heldByNoOne = held.includes('"holder":"1"');
+  const ghosts = await aFrame
+    .evaluate(
+      () => (window as unknown as { __ghostClaims?: number }).__ghostClaims ?? 0
+    )
+    .catch(() => -1);
+  // B joins a write already held, and leaves it alone; then A leaves.
+  const b = await kit.page("desk");
+  await open(b, `${base}/session/${session}`, COMPOSER);
+  await frameOf(b, id);
+  await a.close();
+  const said = await answer;
+  const took = Date.now() - asked;
+  kit.check(
+    "27: the screen holding the agent's write leaves before answering it: another screen draws it, inside the hub's wait",
+    heldByNoOne &&
+      said.includes('"wrote":["held-write-box"') &&
+      took < CONVERT_MS,
+    `held under claim-1 ${heldByNoOne} (${held.slice(0, 300)}; claim-1 written ${ghosts}×); answered in ${took} ms: ${said.slice(0, 300)}`
+  );
+  await b.close();
+};
+
 const runSpec = async (kit: Kit) => {
   const on = await setUp(kit);
   const made = await created(on);
@@ -255,6 +392,7 @@ const runSpec = async (kit: Kit) => {
   await shapeChecks(on);
   await emptyChecks(on);
   await imageChecks(on);
+  await holderLeavesChecks(on);
 
   // 9. Every canvas page load so far (the flow canvas, its reloads, the blank one).
   const twice = on.logged.filter((line) =>

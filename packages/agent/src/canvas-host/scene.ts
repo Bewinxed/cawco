@@ -1497,10 +1497,20 @@ const fromMermaid = async (
   return placed.map((el) => el.id);
 };
 
+/**
+ * This page's claim on the agent's requests, the same for every binding it
+ * makes: a binding made again (its replica's doc replaced, replica.ts) still
+ * answers what the page holds. Keyed by the doc's clientID, a page bound
+ * again held a request under an id no binding of it answered, until the
+ * hub refused the write `convertMs` on. A number, as the hub reads a claim
+ * (sync.ts `SCREEN_REQUEST_KEY`).
+ */
+const PAGE_CLAIM = String(crypto.getRandomValues(new Uint32Array(1))[0]);
+
 /** Claims every request, converts those this page holds; stops serving when called. */
 const serveRequests = (live: Doc, ink: CanvasInk): (() => void) => {
   const requests = live.getMap<Entry>("requests");
-  const mine = `claim-${live.clientID}`;
+  const mine = `claim-${PAGE_CLAIM}`;
   const working = new Set<string>();
   const convert = async (request: Entry): Promise<CanvasRequestResult> => {
     const payload = request.get("payload") as CanvasRequestPayload;
@@ -1541,7 +1551,7 @@ const serveRequests = (live: Doc, ink: CanvasInk): (() => void) => {
             CLAIM
           );
         }
-      } else if (holder === String(live.clientID) && !working.has(id)) {
+      } else if (holder === PAGE_CLAIM && !working.has(id)) {
         working.add(id);
         convert(request).then((result) => {
           working.delete(id);

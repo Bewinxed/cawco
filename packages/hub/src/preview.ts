@@ -1420,7 +1420,7 @@ export function createPreviewListeners(
     close: (socket, code, reason) => {
       viewed(socket, -1);
       return isArtifact(socket)
-        ? deps.socket.close(socket)
+        ? deps.socket.close(socket, code)
         : proxy.close?.(socket, code, reason);
     },
   };
