@@ -79,8 +79,12 @@ export interface AskHereRequest extends Askable {
   /** The consequence, in plain words. Several strings are several paragraphs. */
   body?: string | string[];
   cancelLabel?: string;
-  /** The confirm button: the verb and its reach ("Remove machine"). */
-  confirmLabel: string;
+  /**
+   * The confirm button: the verb and its reach ("Remove machine"); a
+   * function where a choice in the question changes the reach ("Delete
+   * project and files"), read live.
+   */
+  confirmLabel: string | (() => string);
   destructive?: boolean;
   /**
    * Paints the confirm button as a consequential grant, shield and warning

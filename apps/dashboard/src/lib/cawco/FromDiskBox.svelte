@@ -2,8 +2,9 @@
   /**
    * A delete's one choice, said the same wherever a project is deleted (its
    * tray under the head or its row in the rail, a row of Forgotten
-   * projects): "Also delete its files on disk", and under it what that box
-   * decides. Checked: each checkout that goes, its machine over its path
+   * projects): "Also delete its files on disk" (or, with no checkout on any
+   * machine, "Also delete its sessions' transcripts"), and under it what
+   * that box decides. Checked: each checkout that goes, its machine over its path
    * (read from the path's end, as Project details lists places), then that
    * its sessions' transcripts go too. Unchecked: that the transcripts stay,
    * where a machine may list them again as sessions with no project.
@@ -44,7 +45,13 @@
       {disabled}
       onCheckedChange={(on) => onchange(on === true)}
     />
-    <span class="min-w-0">{projectEndWords.fromDisk}</span>
+    <!-- What the box removes, named from what the project holds: its files
+         where it has checkouts, else only its sessions' transcripts. -->
+    <span class="min-w-0"
+      >{places.length > 0
+        ? projectEndWords.fromDisk
+        : projectEndWords.transcriptsOnly}</span
+    >
   </label>
   {#key checked}
     <div
@@ -67,15 +74,15 @@
           {/each}
         </ul>
       {/if}
-      <p class="m-0 min-w-0 type-meta text-pretty text-ink-muted">
-        {#if !checked}
+      {#if !checked}
+        <p class="m-0 min-w-0 type-meta text-pretty text-ink-muted">
           {projectEndWords.transcriptsStay}
-        {:else if places.length === 0}
-          {projectEndWords.noPlaces}
-        {:else}
+        </p>
+      {:else if places.length > 0}
+        <p class="m-0 min-w-0 type-meta text-pretty text-ink-muted">
           {projectEndWords.transcriptsGo}
-        {/if}
-      </p>
+        </p>
+      {/if}
     </div>
   {/key}
 </div>

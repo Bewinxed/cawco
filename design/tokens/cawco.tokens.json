@@ -5897,6 +5897,14 @@
       },
       "$description": "The machine and connection select column of the details tray's add forms."
     },
+    "c-forgotten-when-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 7.5,
+        "unit": "rem"
+      },
+      "$description": "Forgotten projects' Forgotten column: a day and a minute (\"Oct 17, 11:40 PM\", 97px in Figtree's meta) with room for a longer locale's, wider than the ledgers' When (c-ledger-when-w), which holds a day alone."
+    },
     "c-forgotten-brings-w": {
       "$type": "dimension",
       "$value": {

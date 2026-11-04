@@ -22,6 +22,7 @@
   import { commonWords } from "@cawco/core/words/common";
   import { projectEndWords } from "@cawco/core/words/project-ends";
   import { projectTrashWords } from "@cawco/core/words/project-trash";
+  import { MediaQuery } from "svelte/reactivity";
   import ForgottenPage from "#lib/cawco/forgotten/ForgottenPage.svelte";
   import {
     ALL,
@@ -58,7 +59,9 @@
     IconUsage,
   } from "#lib/icons.js";
 
-  type View = "project" | "forgotten";
+  const narrowToasts = new MediaQuery("(max-width: 640px)");
+
+  type View = "project" | "forgotten" | "home";
   let view = $state<View>("project");
   /** The project the page stands on: Private office, or one brought back. */
   let pageName = $state(NAME);
@@ -80,21 +83,22 @@
   } as const;
   type Step = keyof typeof STEPS;
 
-  const REFUSALS: Partial<Record<Step, string>> = {
-    "refused-running": projectTrashWords.stillRuns(NAME, 1),
-    "refused-away": projectTrashWords.machinesAway(NAME, ["kestrel"]),
+  /** Each refusal, said of the project the page stands on. */
+  const refusalsOf = (name: string): Partial<Record<Step, string>> => ({
+    "refused-running": projectTrashWords.stillRuns(name, 1),
+    "refused-away": projectTrashWords.machinesAway(name, ["kestrel"]),
     "refused-shared": projectTrashWords.placeShared(
-      NAME,
+      name,
       "/home/bewinxed/office",
       "obelisk",
       "Cawco"
     ),
     "refused-agent": projectTrashWords.agentTooOld(
-      NAME,
+      name,
       "Workspace 3d062e2d",
       "obelisk"
     ),
-  };
+  });
 
   const fresh = (rows: StopRow[]) =>
     rows.map((row) => ({ ...row, s: { ...row.s } }));
@@ -123,7 +127,7 @@
       projectName: pageName,
       rows: phase === "none" ? [] : fresh(RUNNING),
       ...(picked === "delete-hub" ? { places: [] } : {}),
-      refusal: REFUSALS[picked] ?? null,
+      refusal: refusalsOf(pageName)[picked] ?? null,
     });
   }
 
@@ -165,9 +169,9 @@
       job.phase = "armed";
       return;
     }
-    if (job.refusal === projectTrashWords.stillRuns(NAME, 1)) {
-      // The hub's refusal listed what runs: the tray asks again on it.
-      job.refusal = null;
+    if (job.refusal === projectTrashWords.stillRuns(job.projectName, 1)) {
+      // The hub's refusal listed what runs (stop-work listStarted): the
+      // tray asks again on it, the refusal kept above the confirm.
       job.rows = fresh(RUNNING.slice(1, 2));
       job.phase = "list";
       return;
@@ -199,18 +203,23 @@
     job.phase = "ending";
     later(1200, () => {
       job.phase = "done";
-      // Held where it was asked, then the page leaves, as stop-work's end.
+      // Held where it was asked, then the page leaves for home, as
+      // stop-work's end does; a forgotten project now heads Forgotten
+      // projects, and the toast brings it back.
       later(1400, () => {
         const name = job.projectName;
         const forgot = job.kind === "forget";
         show("");
-        view = "forgotten";
+        view = "home";
         if (forgot) {
+          const entry = forgottenOf(job);
+          list = [entry, ...list];
           toast(projectEndWords.forgot(name), {
             id: `forgot:${name}`,
             action: {
               label: projectEndWords.bringBack,
               onClick: () => {
+                list = list.filter((each) => each !== entry);
                 pageName = name;
                 view = "project";
               },
@@ -222,6 +231,39 @@
   }
 
   /* ── Forgotten projects ─────────────────────────────────────────── */
+
+  /** The project just forgotten, as the hub's trash would list it. */
+  function forgottenOf(job: StopJob): ForgottenProject {
+    return {
+      id: `forgot-${job.projectName}`,
+      name: job.projectName,
+      by: null,
+      forgottenAt: Date.now(),
+      hints: null,
+      brings: {
+        account: null,
+        browsers: 1,
+        folder: true,
+        memoryDocs: 0,
+        notes: 0,
+        pages: 2,
+        places: 1 + job.places.length,
+        routines: 0,
+        rows: 40,
+        rules: 0,
+        sessions: 4,
+        settings: true,
+        tasks: 6,
+        tasksIn: null,
+      },
+      places: job.places.map((place) => ({
+        kind: "checkout" as const,
+        machineId: place.machineId,
+        machineName: MACHINES[place.machineId] ?? place.machineId,
+        path: place.path,
+      })),
+    };
+  }
 
   let list = $state<ForgottenProject[]>(ALL.map((one) => ({ ...one })));
   let refused = $state<Record<string, string>>({});
@@ -254,12 +296,11 @@
     fromDisk: boolean
   ): Promise<void> {
     await beat();
-    if (fromDisk && one.id === ALL[2]?.id) {
+    // Balcony garden's checkout is on obelisk: deleting it with its files
+    // while obelisk is away is refused, as the hub would.
+    if (fromDisk && one.id === BALCONY.id) {
       throw new Error(
-        projectTrashWords.machinesAway(
-          one.hints?.heading ?? projectEndWords.unnamed,
-          ["kestrel"]
-        )
+        projectTrashWords.machinesAway("Balcony garden", ["obelisk"])
       );
     }
     list = list.filter((each) => each.id !== one.id);
@@ -270,7 +311,12 @@
   <title>Ending a project &middot; CawCo</title>
 </svelte:head>
 
-<Toaster position="bottom-right" />
+<!-- Where the app's layout stands its toasts: the top on a phone, the corner on a desk. -->
+<Toaster
+  data-safe-bottom
+  expand
+  position={narrowToasts.current ? "top-center" : "bottom-right"}
+/>
 
 <div class="flex min-h-dvh flex-col bg-surface-recess">
   <div
@@ -285,6 +331,7 @@
       <TabsList aria-label="Where">
         <TabItem label="Project page" value="project" />
         <TabItem label={projectEndWords.forgottenTitle} value="forgotten" />
+        <TabItem label="Home" value="home" />
       </TabsList>
     </Tabs>
     {#if view === "project"}
@@ -384,6 +431,10 @@
           }}
           oncancel={cancel}
           onconfirm={play}
+          onkeep={() => {
+            show("");
+            more?.focus();
+          }}
           ondepart={(row) => {
             row.departed = true;
           }}
@@ -398,10 +449,21 @@
           onstopone={() => undefined}
           share="stop-tray:preview"
           trailOf={() => ""}
-          words={tray.words}
+          words={tray.job.kind === "delete"
+            ? projectEndWords.delete(
+                tray.job.projectName,
+                tray.job.fromDisk && tray.job.places.length > 0
+              )
+            : projectEndWords.forget(tray.job.projectName)}
         />
       </div>
     {/if}
+  {:else if view === "home"}
+    <!-- Where the app goes once a project's page is gone (stop-work's end,
+         route.spoke): the home stands for it here. -->
+    <div class="px-space-7 pt-space-5 max-desk:px-space-5">
+      <h1 class="m-0 type-title text-ink-strong">Home</h1>
+    </div>
   {:else}
     <ForgottenPage
       {bringBack}

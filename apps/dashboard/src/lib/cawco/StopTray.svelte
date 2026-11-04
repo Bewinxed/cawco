@@ -57,6 +57,10 @@
   nameOf={machineName}
   onarrive={(row) => stopWork.arrive(job, row)}
   oncancel={cancel}
+  onkeep={() => {
+    stopWork.keepProject(job);
+    opener?.()?.focus();
+  }}
   onconfirm={() => stopWork.press(job)}
   ondepart={(row) => {
     row.departed = true;

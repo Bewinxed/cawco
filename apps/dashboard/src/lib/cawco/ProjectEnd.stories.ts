@@ -30,6 +30,7 @@ export default {
     trailOf: () => "",
     onconfirm: () => undefined,
     oncancel: () => undefined,
+    onkeep: () => undefined,
     onfromdisk: () => undefined,
     onstopone: () => undefined,
     onarrive: () => undefined,

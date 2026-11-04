@@ -1046,6 +1046,8 @@ public enum Size {
     public static let cProjectDetailsLabelW: Double = 104
     /// The machine and connection select column of the details tray's add forms.
     public static let cProjectDetailsSelectW: Double = 160
+    /// Forgotten projects' Forgotten column: a day and a minute ("Oct 17, 11:40 PM", 97px in Figtree's meta) with room for a longer locale's, wider than the ledgers' When (c-ledger-when-w), which holds a day alone.
+    public static let cForgottenWhenW: Double = 120
     /// Forgotten projects' What it brings column ("2 tasks, 1 page and 1 session"), beside When (c-ledger-when-w).
     public static let cForgottenBringsW: Double = 192
     /// The Actions and Runs ledgers' When column.

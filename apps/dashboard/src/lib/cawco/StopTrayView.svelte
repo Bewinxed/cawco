@@ -2,6 +2,7 @@
   import type { Activity } from "@cawco/core/activity";
   import { commonWords } from "@cawco/core/words/common";
   import type { EndWords } from "@cawco/core/words/project-ends";
+  import { projectEndWords } from "@cawco/core/words/project-ends";
   /**
    * A forget's or a delete's tray (Caw off's is CawOffTray, each row
    * checked to stop): one tray that changes shape as a stop goes,
@@ -92,6 +93,7 @@
     trailOf,
     onconfirm,
     oncancel,
+    onkeep,
     onfromdisk,
     onstopone,
     onarrive,
@@ -117,8 +119,10 @@
     trailOf: (row: StopRow) => string;
     /** The confirm, pressed. */
     onconfirm: () => void;
-    /** Cancel, Stop waiting, Close or Escape. */
+    /** Cancel before the press, Close once done, or Escape: the tray goes (stops under way park). */
     oncancel: () => void;
+    /** Keep project, while the stops land or after a refusal: the end does not run. */
+    onkeep: () => void;
     /** Delete's files box, changed. */
     onfromdisk: (on: boolean) => void;
     /** A failed row's Try again. */
@@ -362,7 +366,8 @@
       case "stopping":
         break;
     }
-    return words.stop(total);
+    // While the stops land and the end runs: what was pressed.
+    return total > 0 ? words.stop(total) : words.plain;
   });
   // The count winds down as stops land, and holds at the last one while its
   // tile is still on its way: the ending word is next.
@@ -370,14 +375,35 @@
     phase === "stopping" ? `Stopping ${Math.max(left, 1)}…` : words.ending
   );
   const pending = $derived(phase === "stopping" || phase === "ending");
+  /**
+   * The button in Cancel's place says what it does: before the press it
+   * drops the ask; while the stops land or after a refusal it ends the
+   * attempt and keeps the project; while the end itself runs nothing can
+   * call it back, so it is not there; once done it closes.
+   */
   const cancelLabel = $derived.by(() => {
-    if (phase === "stopping") {
-      return "Stop waiting";
+    switch (phase) {
+      case "stopping":
+      case "fail":
+        return words.keep;
+      case "done":
+        return projectEndWords.close;
+      case "ending":
+        return null;
+      case "none":
+      case "list":
+      case "armed":
+        return projectEndWords.cancel;
     }
-    return phase === "fail" || phase === "ending" || phase === "done"
-      ? "Close"
-      : "Cancel";
   });
+  const cancelPress = () =>
+    phase === "stopping" || phase === "fail" ? onkeep() : leave();
+
+  /** A row's place in the tree: under its lead when its lead is listed, else a root of its own. */
+  const rootOf = (row: StopRow): string | null =>
+    row.s.parentId !== null && rows.some((each) => each.s.id === row.s.parentId)
+      ? row.s.parentId
+      : null;
   /** The ring's share: only a tray with sessions to stop counts. */
   const progress = $derived.by(() => {
     if (rows.length === 0) {
@@ -439,7 +465,7 @@
 </script>
 
 {#snippet branch(parentId: string | null)}
-  {#each rows.filter((row) => row.s.parentId === parentId && !row.gone) as row (row.s.id)}
+  {#each rows.filter((row) => rootOf(row) === parentId && !row.gone) as row (row.s.id)}
     {@const status = statusOf(row)}
     {@const kids = rows.filter(
       (each) => each.s.parentId === row.s.id && !each.gone
@@ -661,13 +687,15 @@
            from here, from the title's own start. -->
       <RowFault end="0" indent="0" reason={job.refusal} />
       <div data-slot="actions" class="flex flex-wrap justify-end gap-space-2">
-        <Button
-          data-stop-cancel
-          label={cancelLabel}
-          onclick={leave}
-          size="sm"
-          variant="ghost"
-        />
+        {#if cancelLabel !== null}
+          <Button
+            data-stop-cancel
+            label={cancelLabel}
+            onclick={cancelPress}
+            size="sm"
+            variant="ghost"
+          />
+        {/if}
         <Button
           arrivals={landed}
           data-stop-confirm
