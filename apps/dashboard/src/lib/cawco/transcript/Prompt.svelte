@@ -14,11 +14,19 @@
   /**
    * The focus an answer from a card left with nowhere to go, taken by what
    * comes next instead of a card (a setup element's Review the draft): true
-   * once, within {@link HAND_OFF_MS} of the answer.
+   * once, within {@link HAND_OFF_MS} of the answer, and only while it is
+   * still nowhere: no question stands open anywhere on the page (a board
+   * draws several at once) and nothing else has the focus.
    */
   export function takeHandOff(): boolean {
-    const fresh = handOn && Date.now() - handedAt < HAND_OFF_MS;
-    handOn = false;
+    const nowhere =
+      !document.querySelector('[data-slot="option-group"]') &&
+      (document.activeElement === null ||
+        document.activeElement === document.body);
+    const fresh = handOn && nowhere && Date.now() - handedAt < HAND_OFF_MS;
+    if (nowhere) {
+      handOn = false;
+    }
     return fresh;
   }
 </script>
@@ -902,12 +910,13 @@
         <!-- An option's keycap and words: in a list, the keycap stands on
              the label's first line and the description runs under the
              label; in a chip row, the label beside it. An option's label
-             shrinks with its chip and wraps inside it. -->
+             shrinks with its chip and wraps inside it. Under a finger there
+             is no key to press, so no keycap: the words take the row. -->
         {#snippet face(digit: number, label: string, description?: string)}
           {#if list}
-            <span class="mark-cell"
-              ><Kbd data-box look="keycap">{digit}</Kbd></span
-            ><span class="block min-w-0"
+            <span class="mark-cell coarse:hidden"
+              ><Kbd data-box look="keycap" reach="keyboard">{digit}</Kbd></span
+            ><span class="block min-w-0 coarse:col-span-full"
               ><span
                 data-slot="opt-label"
                 class="block min-w-0 wrap-anywhere text-pretty">{label}</span
@@ -918,7 +927,7 @@
                 >{/if}</span
             >
           {:else}
-            <Kbd data-box look="keycap">{digit}</Kbd><span
+            <Kbd data-box look="keycap" reach="keyboard">{digit}</Kbd><span
               data-slot="opt-label"
               class="min-w-0 wrap-anywhere text-pretty">{label}</span
             >

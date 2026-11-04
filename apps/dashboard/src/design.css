@@ -542,6 +542,17 @@
   }
 }
 
+/* A field edited in place that spans its column, its box on the column's
+   edges with the rows beside it, while its words keep the reading measure:
+   its inline end padded by what the column has past the measure (never
+   less than the field's own inset). Its hover fill is the whole box. */
+@utility pe-measure {
+  padding-inline-end: max(
+    var(--c-field-inline-inset),
+    calc(100% - var(--c-measure))
+  );
+}
+
 /* The focus ring drawn over the element's own border box, for a control or
    row that sits flush against its container's edge or inside a clipping
    scroller, where the outside ring would cross the edge or be cut. */

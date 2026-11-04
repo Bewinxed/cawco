@@ -1072,8 +1072,8 @@ public enum Size {
     public static let cBoardColMax: Double = 352
     /// A field edited where it stands (the kit's `inline` input and `prose` textarea): its inline padding, so that inside its 1px edge its words stand where a boxed row's words stand (a row's space-3 inset), and its hover fill and focus edge are its own box, never past it into a neighbour or its container's padding.
     public static let cFieldInlineInset: Double = 10
-    /// A stage of Caw's setup draft drawn as its board column (SetupDraft, DraftColumn): its head (mark, name, kind) and two lines of what happens to work in it, so a column of one line and one of two stand at one height in their row, and the skeleton of a stage still coming stands at it.
-    public static let cDraftColH: Double = 120
+    /// A stage of Caw's setup draft drawn as its board column (SetupDraft, DraftColumn) with every part it can hold, summed from them: its padding, its head (the name's row and its kind's line) and one line of what its hooks do. The skeleton of a stage still coming stands at it, so a stage takes its skeleton's place without the row moving.
+    public static let cDraftColH: Double = 89.4
     /// The key column of a task's Fields and Relations, so the two parts' values stand on one line.
     public static let cTaskKeyW: Double = 96
     /// The Filter popover's name column.

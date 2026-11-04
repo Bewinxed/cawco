@@ -151,12 +151,18 @@
     caw = fit ? "peek" : "page";
   }
 
-  /** A chip's words into the composer, the caret after them. */
+  /**
+   * A chip's words into the composer, the caret after them: an empty field
+   * takes them whole; words already there keep their place, the chip's
+   * going on a line under them, so a press never takes what was typed.
+   */
   function starter(text: string) {
-    draft.text = text;
+    const typedWords = draft.text.trimEnd();
+    const next = typedWords ? `${typedWords}\n${text}` : text;
+    draft.text = next;
     draft.focusWanted = true;
     // A press runs the fit at once: there is no typing to wait for.
-    refit(text);
+    refit(next);
   }
 
   /** No machine online, known: Caw's conversation can't start. */
@@ -172,6 +178,17 @@
   let again = $state(refusal?.again ?? false);
   /** What the Composer stands over its foot: its box holds that much room. */
   let footHeight = $state(0);
+  /**
+   * The field's box: the composer's standing as it reports it, and until it
+   * has (the server's paint, the frames before it mounts) its panel at rest
+   * (`c-composer-panel`), so the composer never stands over the question
+   * and nothing moves once it reports.
+   */
+  const footBox = $derived(
+    footHeight > 0
+      ? `calc(${footHeight}px + var(--space-4))`
+      : "calc(var(--c-composer-panel) + var(--space-4))"
+  );
 
   /** The prompt a start that did not go through carried, and its id: the same prompt again is the same project. */
   let unsent: SentWords | null = null;
@@ -232,7 +249,7 @@
     <div
       data-slot="new-page-field"
       class="relative w-full max-w-c-new-project-field-w"
-      style:block-size="calc({footHeight}px + var(--space-4))"
+      style:block-size={footBox}
     >
       <Composer
         fleet={composerFleet}

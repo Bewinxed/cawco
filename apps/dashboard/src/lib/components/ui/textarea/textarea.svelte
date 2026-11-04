@@ -22,7 +22,13 @@
       resize: { block: "resize-y" },
       fill: { page: "bg-surface-page" },
       /** Its line length held to the reading measure (DESIGN.md: running text 60 to 72ch). */
-      measure: { reading: "max-w-c-measure" },
+      measure: {
+        reading: "max-w-c-measure",
+        /** The column's width, its words still at the reading measure
+            (design.css `pe-measure`): its box ends where the rows beside
+            it end. */
+        column: "w-full pe-measure",
+      },
       look: {
         /** A paragraph edited where it stands (a setup's description): text
             at rest, its edge only while it has focus. Its hover fill and

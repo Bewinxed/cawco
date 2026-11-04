@@ -271,10 +271,11 @@
       >
     {/if}
   </header>
-  <!-- What this project does with work here, only where its hooks say. -->
+  <!-- What this project does with work here, only where its hooks say: in
+       the meta role, under the name it describes. -->
   {#if holds}
     <p
-      class="m-0 px-space-2 pb-space-2 type-body text-pretty text-ink-muted"
+      class="m-0 px-space-2 pb-space-2 type-meta text-pretty text-ink-muted"
       data-slot="holds"
     >
       {holds}

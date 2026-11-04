@@ -2087,10 +2087,7 @@
       <SetUpBar
         first={newIn}
         name={project?.name ?? ""}
-        onask={() => {
-          lead.tab = "assistant";
-          lead.open = true;
-        }}
+        onask={() => lead.talk()}
       />
       <div class="min-h-0 flex-auto">{@render boardBody("board")}</div>
     </div>

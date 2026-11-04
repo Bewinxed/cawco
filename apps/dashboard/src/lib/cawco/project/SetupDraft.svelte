@@ -61,7 +61,14 @@
     onsetup,
     delegates = [],
     questions,
+    asksInView = false,
   }: {
+    /**
+     * His questions stand in view on the board, each with its own Answer:
+     * the view's coral is theirs, and the bar's Answer Caw, which only
+     * takes the keys to the first, stands in the outline.
+     */
+    asksInView?: boolean;
     /** The delegate types the setup proposes: who may do a stage's work. */
     delegates?: SetupDelegate[];
     /** His open questions where the board draws them (a desk): above the stages. */
@@ -102,9 +109,12 @@
     return asking > 0 ? "asking" : "drafted";
   });
 
+  const uid = $props.id();
   /** The board's column width, wrapping into rows; one column where the room is narrower. */
   const COLS =
     "repeat(auto-fill, minmax(min(100%, var(--c-board-col-min)), 1fr))";
+  /** Every row past a phone: one height, at least a whole stage's. */
+  const ROWS = "minmax(var(--c-draft-col-h), 1fr)";
   let grid = $state<HTMLElement>();
 
   /** A new stage stands before the first closed one (done, dropped): in view, its name taking the caret. */
@@ -175,7 +185,7 @@
         label={setupWords.answer}
         onclick={onanswer}
         size="sm"
-        variant={barState === "drafting" ? "outline" : "default"}
+        variant={barState === "drafting" || asksInView ? "outline" : "default"}
       />
     {:else if !drafting}
       <!-- Its own glyph, so the pending spinner takes the glyph's slot and
@@ -205,23 +215,37 @@
   >
     {@render questions?.()}
     {#if aim}
-      <Textarea
-        aria-label={setupPageWords.aim}
-        look="prose"
-        measure="reading"
-        oninput={(event: Event) =>
-          onaim((event.currentTarget as HTMLTextAreaElement).value)}
-        value={aim}
-      />
+      <!-- What it is for, named over it in the meta role: the label says
+           it is a field of its own to change, and its box stands on the
+           column's edges with the bar and the stages. -->
+      <div class="flex flex-col gap-space-1" data-slot="setup-aim">
+        <label
+          class="ps-c-field-inline-inset type-meta text-ink-muted"
+          for="{uid}-aim">{setupPageWords.aim}</label
+        >
+        <Textarea
+          id="{uid}-aim"
+          look="prose"
+          measure="column"
+          oninput={(event: Event) =>
+            onaim((event.currentTarget as HTMLTextAreaElement).value)}
+          value={aim}
+        />
+      </div>
     {/if}
 
     <!-- The stages in the board's order, wrapping at the board's column
-       width: every stage in view on a desk, down the page on a phone. -->
+       width: every stage in view on a desk, down the page on a phone. Past
+       a phone every row shares one height, at least a whole stage's
+       (`c-draft-col-h`, the skeleton's), so a stage takes a skeleton's place
+       and a short stage stands beside a tall one without the grid moving;
+       on a phone each card is as tall as its words. -->
     <div
       bind:this={grid}
-      class="grid grid-cols-(--cols) items-start gap-space-3 pb-space-3"
+      class="grid grid-cols-(--cols) auto-rows-(--rows) gap-space-3 pb-space-3 max-phone:auto-rows-auto max-phone:items-start"
       data-slot="board"
       style:--cols={COLS}
+      style:--rows={ROWS}
     >
       {#each stages as stage, at (at)}
         <DraftColumn
@@ -239,7 +263,7 @@
       {/each}
       {#if !drafting}
         <button
-          class="select-none press-tint mark-line flex min-h-c-draft-col-h items-center justify-center gap-space-2 rounded-lg border-none bg-transparent text-ink-muted inset-ring inset-ring-border-control hover:bg-surface-hover"
+          class="select-none press-tint mark-line flex min-h-c-draft-col-h max-phone:min-h-c-btn-h items-center justify-center gap-space-2 rounded-lg border-none bg-transparent text-ink-muted inset-ring inset-ring-border-control hover:bg-surface-hover"
           data-slot="add-stage"
           onclick={add}
           type="button"

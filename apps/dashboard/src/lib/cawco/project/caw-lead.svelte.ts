@@ -262,6 +262,17 @@ export class CawLead {
    * its composer (the head's Ask Caw, the views bar's "+"). What he does
    * with it (files tasks, starts a session, asks back) is his.
    */
+  /**
+   * Ask Caw where something on the page offers it (the set-up bar): his
+   * panel open on his conversation, the caret in his composer, whether the
+   * panel was open already or opens with it.
+   */
+  talk(): void {
+    this.tab = "assistant";
+    this.open = true;
+    this.draft.focusWanted = true;
+  }
+
   newConversation(): void {
     this.fresh = true;
     this.draft.focusWanted = true;

@@ -35,6 +35,8 @@
 
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
+  import { questionsOf } from "@cawco/core/question";
+  import { askWords } from "@cawco/core/words/asks";
   import { commonWords } from "@cawco/core/words/common";
   import { transcriptWords } from "@cawco/core/words/transcript";
   /**
@@ -2669,15 +2671,29 @@
     if (!(list && shown) || renderedRows.length === 0) {
       return;
     }
-    sizes.set(session.instanceId, {
+    sizes.set(landingFor, {
       cache: list.getCache(),
       first: placeOf(renderedRows[0]),
       count: renderedRows.length,
     });
     const place = atBottom ? null : (keptPlace ?? placeAt(lastTop));
     const landing: Landing = place ? { tail: false, ...place } : { tail: true };
-    writeJson(LANDING + session.instanceId, landing, "session");
+    writeJson(LANDING + landingFor, landing, "session");
   }
+  /**
+   * Whose place `saveLanding` keeps: the conversation this transcript drew,
+   * read while it stands. Torn down because its owner stopped showing it
+   * (a new conversation asked for), its `session` prop already reads the
+   * owner's next value, which may be none.
+   */
+  let landingFor = untrack(() => session.instanceId);
+  $effect.pre(() => {
+    // The prop reads null while its owner tears this down.
+    const id = session?.instanceId;
+    if (id) {
+      landingFor = id;
+    }
+  });
 
   $effect.pre(() => {
     if (!visible) {
@@ -4684,8 +4700,15 @@
     if (!landed) {
       return "";
     }
-    if (session.pending.length > 0) {
-      return "Agent needs your permission";
+    const [parked] = session.pending;
+    if (parked) {
+      // Said as its card names it: a question is not a permission.
+      if (parked.browserAsk) {
+        return askWords.browserAskFrom(agentName);
+      }
+      return questionsOf(parked.toolName, parked.input)
+        ? askWords.questionFrom(agentName)
+        : askWords.permissionFrom(agentName);
     }
     if (rows.at(-1)?.kind === "question") {
       return `Question from ${agentName}`;

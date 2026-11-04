@@ -6086,10 +6086,15 @@
     "c-draft-col-h": {
       "$type": "dimension",
       "$value": {
-        "value": 7.5,
-        "unit": "rem"
+        "value": 89.4,
+        "unit": "px"
       },
-      "$description": "A stage of Caw's setup draft drawn as its board column (SetupDraft, DraftColumn): its head (mark, name, kind) and two lines of what happens to work in it, so a column of one line and one of two stand at one height in their row, and the skeleton of a stage still coming stands at it."
+      "$description": "A stage of Caw's setup draft drawn as its board column (SetupDraft, DraftColumn) with every part it can hold, summed from them: its padding, its head (the name's row and its kind's line) and one line of what its hooks do. The skeleton of a stage still coming stands at it, so a stage takes its skeleton's place without the row moving.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc(5 * {space.space-1} + {space.space-2} + {size.c-btn-h-sm} + 2 * {type.text-meta} * {type.leading-meta})"
+        }
+      }
     },
     "c-task-key-w": {
       "$type": "dimension",
