@@ -34,9 +34,9 @@ export const workspaceNeedsWords = {
   /** The same for a program the sandbox runs, which counts only as a copy no one but the system can change. */
   trustedMissing: (program: string, needs: string, dirs: string) =>
     `${WORKSPACE_NEEDS_LEAD} a system-owned ${program}, needed by ${needs}: CawCo runs only a copy this user cannot change, and none of the folders of CawCo's PATH (${dirs}) holds one.`,
-  /** One line of Show details: the folders a tool was looked for in. */
-  lookedFor: (command: string, dirs: string) =>
-    `${command}: not found in ${dirs}`,
+  /** One line of Show details: the tools looked for in the same folders, and those folders. */
+  lookedFor: (commands: string, dirs: string) =>
+    `${commands}: not found in ${dirs}`,
 };
 
 /**
@@ -77,18 +77,31 @@ export const workspaceNeedsRefusal = (
     ? `${workspaceNeedsReason(missing, command)}\n${command}`
     : workspaceNeedsReason(missing, command);
 
-/** Show details under that refusal: each tool, and every folder it was looked for in and is not. */
+/**
+ * Show details under that refusal: every folder the tools were looked for in
+ * and are not, each named once. Tools looked for in the same folders (every
+ * tool a machine's PATH is searched for) share one line, so a machine
+ * missing five tools lists its folders once, not five times.
+ */
 export const workspaceNeedsDetails = (
   missing: readonly WorkspaceTool[]
-): string =>
-  missing
-    .map((tool) =>
+): string => {
+  const byFolders = new Map<string, string[]>();
+  for (const tool of missing) {
+    byFolders.set(tool.lookedIn, [
+      ...(byFolders.get(tool.lookedIn) ?? []),
+      tool.command,
+    ]);
+  }
+  return [...byFolders]
+    .map(([folders, commands]) =>
       workspaceNeedsWords.lookedFor(
-        tool.command,
-        tool.lookedIn.split(":").join(", ")
+        andList(commands),
+        folders.split(":").join(", ")
       )
     )
     .join("\n");
+};
 
 /**
  * Why `program`, needed by `needs`, cannot run: no folder of CawCo's PATH,

@@ -22,7 +22,9 @@
  *   refused first in those words: what the machine lacks before the folder.
  * - D: the machine's row in the dashboard shows those words, drawn, the
  *   install command in a well of its own with Copy, and Show details says
- *   where each tool was looked for.
+ *   where the tools were looked for, each folder once however many tools
+ *   are missing (a machine whose walls' tools are no system's own lacks
+ *   all five).
  *
  *   bun scripts/probe-kit/run.ts workspace-needs
  */
@@ -48,6 +50,9 @@ import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
+
+/** What stands between the words of Show details: a folder is one word. */
+const WORD_BREAK = /[\s,]+/u;
 
 /** The dashboard's Machines button: its count of machines. */
 const MACHINES_BUTTON = /^\d+ machines?/u;
@@ -365,15 +370,26 @@ const legD = async (
     .waitFor();
   const shown = await rowNeeds(page);
   console.log(`  Show details: ${shown.details}`);
-  const folders = (needs.missing ?? []).flatMap((tool) =>
-    tool.lookedIn.split(":")
+  // Every tool is looked for in the same folders: each is named once in
+  // all of Show details, however many tools are missing.
+  const folders = [
+    ...new Set(
+      (needs.missing ?? []).flatMap((tool) => tool.lookedIn.split(":"))
+    ),
+  ];
+  const words = (shown.details ?? "").split(WORD_BREAK);
+  const named = folders.map(
+    (folder) => words.filter((word) => word === folder).length
   );
   kit.check(
-    "D: Show details names each folder looked in that is there, once",
+    `D: Show details names each folder looked in that is there, once, with ${(needs.missing ?? []).length} tools missing`,
     shown.details === workspaceNeedsDetails(needs.missing ?? []) &&
+      folders.length > 0 &&
       folders.every(existsSync) &&
-      new Set(folders).size === folders.length,
-    shown.details ?? ""
+      named.every((times) => times === 1),
+    `${folders
+      .map((folder, at) => `${folder} ×${named[at]}`)
+      .join(", ")}; ${shown.details ?? ""}`
   );
 };
 
