@@ -26,7 +26,10 @@
  * One landing at a time per repository and branch, and a turn never waits:
  * fetch, rebase onto the branch again, run again only the commands whose
  * inputs the rebase changed, push, and, while someone keeps pushing in
- * between, the same again, three tries in all. A command due in the turn that
+ * between, the same again, three tries in all. A push (and a push check) the
+ * remote fails on its own fault, a 5xx or a dropped connection, is tried
+ * again as it is, a few times with backoff ({@link triedOnFault}); one
+ * refused for a reason is not. A command due in the turn that
  * would wait for a machine slot or a pause, or run on another machine (a
  * step that `needs:` one), does not: the item steps out of the turn (`busy`), gates
  * again on the newer branch, and queues again, so the next ready item lands
@@ -304,6 +307,83 @@ const CONFLICT_MARK = "cawco-conflict";
  * inputs moved again, so the window is theirs: a busy branch can win it twice.
  */
 const ATTEMPTS = 3;
+
+/**
+ * The waits before each push tried again after the remote failed it on its
+ * own fault ({@link remoteFault}): three more pushes, 5 s, 15 s and 45 s
+ * apart. On 2026-11-04, between about 12:40 and 13:20, three landings were
+ * refused `[remote rejected] (Internal Server Error)` and one `(failure)`,
+ * GitHub's own report-status for the ref (`ng <ref> <reason>`, git
+ * send-pack.c `receive_status`), while its status page said all was
+ * operational; each landed on its next try with nothing changed.
+ */
+const FAULT_WAITS_MS = [5000, 15_000, 45_000] as const;
+
+/**
+ * Why a remote turns a ref down on its own fault, as git prints the reason
+ * the remote gave (transport.c `print_ref_status`: `[remote rejected]
+ * (<reason>)`, and git's own `[remote failure] (remote failed to report
+ * status)` when it never answered for the ref), or as git says the
+ * connection failed: a 5xx (remote-curl.c "RPC failed; HTTP <code>", curl's
+ * "The requested URL returned error: <code>") or a connection that dropped.
+ */
+const FAULT_WORDS =
+  /\((?:internal server error|failure|service unavailable|bad gateway|gateway time-?out)\)|remote failed to report status|\bHTTP 5\d\d\b|returned error: 5\d\d\b|the remote end hung up unexpectedly|unexpected disconnect while reading sideband packet|early EOF|connection reset by peer|empty reply from server|was not closed cleanly|recv failure/iu;
+/**
+ * A refusal that has a reason: git's own (`[rejected] (non-fast-forward)`,
+ * `(fetch first)`, `(stale info)`), or the remote's words on why
+ * (`remote: error: GH006: Protected branch update failed`, a hook's
+ * `remote: fatal: …`), whatever else git said after it.
+ */
+const REASONED_REFUSAL = /\[rejected\]|^remote: (?:error|fatal):/imu;
+
+/**
+ * Whether a push that failed did so on the remote's own fault ({@link
+ * FAULT_WORDS}) and never for a reason ({@link REASONED_REFUSAL}): only such
+ * a push is tried again. Read from git's words, as nothing else says it: a
+ * 5xx and a non-fast-forward both exit 1. Through a workspace's git door the
+ * host's git's ref line is the reason the door gives (agent hub-git.ts
+ * `pushAnswers`), so `[remote rejected] HEAD -> main ([remote rejected]
+ * (Internal Server Error))` reads the same as git's own.
+ */
+const remoteFault = (result: CommandResult): boolean => {
+  const said = `${result.stderr}\n${result.stdout}`;
+  return !REASONED_REFUSAL.test(said) && FAULT_WORDS.test(said);
+};
+
+/**
+ * A push, tried again while the remote fails it on its own fault
+ * ({@link remoteFault}) and the landing is not stopped, after each wait of
+ * {@link FAULT_WAITS_MS}, each try logged. `settled` is whether a push that
+ * answered needs no other: it landed (0, or the branch holds the commit
+ * when read after it: a 5xx can come after the remote took the ref), or its
+ * boundary cut it off ({@link CUT_OFF}), which is read once and never tried
+ * again. Answers the last push; a push that failed every time is refused in
+ * its words, as one try is.
+ */
+async function triedOnFault(
+  what: string,
+  push: () => Promise<CommandResult>,
+  settled: (pushed: CommandResult) => Promise<boolean>,
+  stopped?: () => boolean
+): Promise<CommandResult> {
+  for (let n = 1; ; n += 1) {
+    const pushed = await push();
+    const wait = FAULT_WAITS_MS[n - 1];
+    if (
+      (await settled(pushed)) ||
+      wait === undefined ||
+      !remoteFault(pushed) ||
+      stopped?.()
+    ) {
+      return pushed;
+    }
+    console.warn(
+      `[landing] ${what}: try ${n} of ${FAULT_WAITS_MS.length + 1} failed on the remote's own fault, trying again in ${wait / 1000} s: ${detailOf(pushed).replaceAll("\n", " | ")}`
+    );
+    await Bun.sleep(wait);
+  }
+}
 
 /** A command git refused at `step`, in its words. */
 const refusal = (step: Refusal["step"], result: CommandResult): Refusal => ({
@@ -695,9 +775,14 @@ async function pushCheck(
   ref: string,
   onto?: string
 ): Promise<Refusal | Moved | undefined> {
-  const tried = await run(
-    `git push --dry-run${onto === undefined ? " --force" : ""} origin ${quote(`HEAD:${ref}`)}`,
-    NETWORK_MS
+  const tried = await triedOnFault(
+    `the push check of ${ref}`,
+    () =>
+      run(
+        `git push --dry-run${onto === undefined ? " --force" : ""} origin ${quote(`HEAD:${ref}`)}`,
+        NETWORK_MS
+      ),
+    async (checked) => checked.exitCode === 0
   );
   if (tried.exitCode === 0) {
     return;
@@ -795,16 +880,25 @@ async function attempt<F>(
     return { kind: "stopped" };
   }
   const { head: after, onto, rebased } = gated;
-  const pushed = await deps.run(
-    `git push origin ${quote(`HEAD:refs/heads/${base}`)}`,
-    NETWORK_MS,
-    true,
-    true
+  let landed = false;
+  const pushed = await triedOnFault(
+    `${deps.turn?.who ?? "a landing"}'s push to ${base}`,
+    () =>
+      deps.run(
+        `git push origin ${quote(`HEAD:refs/heads/${base}`)}`,
+        NETWORK_MS,
+        true,
+        true
+      ),
+    async (tried) => {
+      landed =
+        tried.exitCode === 0 ||
+        (await holds(deps.run, `refs/heads/${base}`, after, true));
+      return landed || tried.exitCode === CUT_OFF;
+    },
+    deps.stopped
   );
-  if (
-    pushed.exitCode === 0 ||
-    (await holds(deps.run, `refs/heads/${base}`, after, true))
-  ) {
+  if (landed) {
     return { kind: "landed", sha: after, onto, rebased };
   }
   if (pushed.exitCode === CUT_OFF) {
@@ -1017,8 +1111,9 @@ const SPACE = /\s+/u;
 /**
  * HEAD (`sha`) pushed to `branch`, replacing it only while it is missing or
  * at `last` ({@link taken}), leased on what `git ls-remote` read just before
- * so a push someone makes in between is never replaced either. Not tried
- * again: a branch that moved is someone else's work, and a push cut off
+ * so a push someone makes in between is never replaced either. Tried again
+ * only when the remote failed it on its own fault ({@link triedOnFault}),
+ * leased the same: a branch that moved is someone else's work, and a push cut off
  * ({@link CUT_OFF}) leaves the caller to read the branch once. Answers why
  * it was refused, or nothing when it was pushed.
  */
@@ -1040,11 +1135,19 @@ async function leasedPush(
   if (before) {
     return before;
   }
-  const pushed = await run(
-    `git push --force-with-lease=${quote(`${ref}:${held}`)} origin ${quote(`HEAD:${ref}`)}`,
-    NETWORK_MS,
-    false,
-    true
+  const pushed = await triedOnFault(
+    `the push to ${branch}`,
+    () =>
+      run(
+        `git push --force-with-lease=${quote(`${ref}:${held}`)} origin ${quote(`HEAD:${ref}`)}`,
+        NETWORK_MS,
+        false,
+        true
+      ),
+    async (tried) =>
+      tried.exitCode === 0 ||
+      tried.exitCode === CUT_OFF ||
+      (await holds(run, ref, sha, false))
   );
   if (pushed.exitCode === 0) {
     return;
