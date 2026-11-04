@@ -125,6 +125,8 @@ export interface EmbeddedDeps {
   /** What a press on `el` may stand on, `el` first, the page's root last (page.ts `chainOf`). */
   chain: (el: Element) => Element[];
   locate: (anchor: PageAnchor) => AnchorFound<Element> | null;
+  /** The content nearest the viewport's `x`, `y`, however far, for a mark that must move with what it covers (page.ts `nearestContent`). */
+  near: (x: number, y: number) => Element | null;
   /** Whether a node is the overlay's own: its changes move nothing the page asked of. */
   own: (node: Node) => boolean;
   /**
@@ -193,8 +195,13 @@ export function answerEmbedder(deps: EmbeddedDeps): void {
   };
 
   /** The element at the embed's `x`, `y`, with what holds it, watched from now on; null for its page as a whole or nothing. */
-  const answerAt = (x: number, y: number): RemoteTarget | null => {
-    const el = Number.isFinite(x) && Number.isFinite(y) ? deps.at(x, y) : null;
+  const answerAt = (
+    x: number,
+    y: number,
+    near: boolean
+  ): RemoteTarget | null => {
+    const read = near ? deps.near : deps.at;
+    const el = Number.isFinite(x) && Number.isFinite(y) ? read(x, y) : null;
     const answer = el && !isRoot(el) ? target(el) : null;
     if (answer) {
       watch(keyOf(answer.anchor), answer.anchor, stable(answer));
@@ -250,6 +257,7 @@ export function answerEmbedder(deps: EmbeddedDeps): void {
       box?: unknown;
       seq?: unknown;
       type?: unknown;
+      near?: unknown;
       x?: unknown;
       y?: unknown;
     } | null;
@@ -258,7 +266,11 @@ export function answerEmbedder(deps: EmbeddedDeps): void {
       drawFor(said.seq, said.box);
     } else if (said?.type === AT) {
       askedFrom(event.origin);
-      const answer = answerAt(Number(said.x), Number(said.y));
+      const answer = answerAt(
+        Number(said.x),
+        Number(said.y),
+        said.near === true
+      );
       say({ type: TARGET, seq: said.seq, target: answer });
     } else if (said?.type === FIND) {
       askedFrom(event.origin);
@@ -402,8 +414,13 @@ interface StandIn {
 export interface Embeds {
   /** A stand-in's page anchor: the frames down to the embed, the embed's anchor, the artifact it shows, its box in the page. */
   anchorOf: (el: Element) => PageAnchor | null;
-  /** The element under the top viewport's `x`, `y` in `frame`, as its stand-in; the frame itself when the embed names its page as a whole; null when a later ask overtook this one. */
-  at: (frame: FrameElement, x: number, y: number) => Promise<Element | null>;
+  /** The element under the top viewport's `x`, `y` in `frame`, as its stand-in, `near` the content nearest there however far; the frame itself when the embed names its page as a whole; null when a later ask overtook this one. */
+  at: (
+    frame: FrameElement,
+    x: number,
+    y: number,
+    near?: boolean
+  ) => Promise<Element | null>;
   /** Whether `el` is a frame of another origin whose overlay answers. */
   bridged: (el: Element | null) => el is FrameElement;
   /** A stand-in's description as a pin keeps it, its box the page's. */
@@ -808,7 +825,7 @@ export function startEmbeds(deps: EmbedsDeps): Embeds {
   return {
     bridged: (el): el is FrameElement =>
       isFrame(el) && !frameDocument(el) && bridges.has(el),
-    at: (frame, x, y) => {
+    at: (frame, x, y, near = false) => {
       const bridge = bridges.get(frame);
       if (!bridge) {
         return Promise.resolve(frame);
@@ -826,6 +843,7 @@ export function startEmbeds(deps: EmbedsDeps): Embeds {
       }
       post(bridge, {
         type: AT,
+        near,
         seq: mine,
         x: (x - box.x) / box.sx,
         y: (y - box.y) / box.sy,

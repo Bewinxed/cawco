@@ -146,6 +146,8 @@ const DRAFT_PIN = "draft";
 export interface PinsDeps {
   /** What a page's mark stands on, read from `el` as it is now. */
   anchorOf: (el: Element) => PageAnchor;
+  /** A mark's anchor as this page may read it, `at` when the mark was made (page.ts `anchorToday`). */
+  anchorToday: (anchor: PageAnchor, at: string) => PageAnchor;
   /** The page stands in the iPhone or Mac app, whose card opens a pin a tap writes (page.ts `appCommenting`, until tsk-59). */
   appCommenting: () => boolean;
   chrome: InkChrome;
@@ -804,10 +806,13 @@ export function startPins(deps: PinsDeps): Pins {
   const reanchor = (pins: Pin[]) => {
     const moves: Pin[] = [];
     for (const pin of pins) {
-      if (!("selector" in pin.anchor) || (pin.movedAt && pin.ink)) {
+      if (
+        !("selector" in pin.anchor) ||
+        (pin.movedAt && pin.ink && !deps.groupBox(pin.ink))
+      ) {
         continue;
       }
-      const found = deps.locate(pin.anchor);
+      const found = deps.locate(deps.anchorToday(pin.anchor, pin.at));
       const now = found && deps.anchorOf(found.el);
       if (
         now &&

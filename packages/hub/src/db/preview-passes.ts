@@ -17,7 +17,10 @@ export interface PreviewPassesDb {
    * presented, if any) gone in the same write, and every lapsed pass with
    * it. False, and nothing kept, when its device is no longer paired.
    */
-  readonly open: (row: PreviewPassRow, replacing: string | null) => boolean;
+  readonly open: (
+    row: PreviewPassRow,
+    replacing: { tokenHash: string; until: Date } | null
+  ) => boolean;
   /**
    * Every pass of paired device `deviceId`, every pass of session
    * `instanceId`, or the one whose token hashes to `tokenHash`, is gone; how
@@ -60,8 +63,14 @@ export const previewPassesDb = (db: BunSQLiteDatabase): PreviewPassesDb => ({
         .where(lte(previewPasses.expiresAt, row.createdAt))
         .run();
       if (replacing) {
-        tx.delete(previewPasses)
-          .where(eq(previewPasses.tokenHash, replacing))
+        tx.update(previewPasses)
+          .set({ expiresAt: replacing.until })
+          .where(
+            and(
+              eq(previewPasses.tokenHash, replacing.tokenHash),
+              gt(previewPasses.expiresAt, replacing.until)
+            )
+          )
           .run();
       }
       if (

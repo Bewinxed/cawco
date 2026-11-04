@@ -200,6 +200,13 @@ export interface PageAnchor {
    * document either way.
    */
   frames?: string[];
+  /**
+   * Named by its place alone: the hash of the document it stands in, as it was
+   * served when the anchor was read. While the document is that one, the words at its place have changed
+   * only by the page's own running, so the element there is the mark's
+   * ({@link findAnchor}); a revision may have put another there.
+   */
+  page?: string;
   selector: string;
   /**
    * On a component canvas: its states file (from the toolchain root), the
@@ -1675,6 +1682,8 @@ export interface AnchorLookup<E, D> {
   page: (within: D) => E | null;
   /** Whether a box in the page (an anchor's, as it was kept) is nearly as wide and as tall as the document's page now: the page's own box. */
   pageSized: (within: D, box: NonNullable<PageAnchor["box"]>) => boolean;
+  /** Whether the page is the one the anchor was read on: not revised since ({@link PageAnchor.page}). */
+  samePage: (anchor: PageAnchor, within: D) => boolean;
   textOf: (el: E) => string;
   /** The top document, where an anchor's frames start. */
   top: D;
@@ -1734,7 +1743,7 @@ export const generatedId = (id: string): boolean => MINTED_ID.test(id);
  * from the page's root (`body > section:nth-of-type(2) > h2:nth-of-type(1)`)
  * names whatever stands there now.
  */
-const stableSelector = (selector: string): boolean =>
+export const stableSelector = (selector: string): boolean =>
   PAGE_ROOTS.has(selector) ||
   (selector.startsWith("#") && !MINTED_ID_SELECTOR.test(selector)) ||
   ANCHOR_IDENTITIES.some((name) => selector.startsWith(`[${name}=`));
@@ -1771,7 +1780,10 @@ function pageOf<E, D>(
  * the page-sized container that held it, before such a press named the
  * body) stands on the page as a whole, as {@link wholePage} does, whatever
  * its container says now; content that draws words of its own and still
- * reads the anchor's is never such a container. Null when none of them finds it: the mark goes to
+ * reads the anchor's is never such a container. On a page not revised since
+ * ({@link AnchorLookup.samePage}), the element at its place reading other
+ * words, when no element reads the anchor's: a page's own script changed them
+ * while nothing was open. Null when none of them finds it: the mark goes to
  * the moved tray.
  */
 export function findAnchor<E, D>(
@@ -1820,7 +1832,13 @@ export function findAnchor<E, D>(
     return { by: "selector", el: named };
   }
   const found = text ? lookup.byText(doc, text) : null;
-  return found ? { by: "text", el: found } : null;
+  if (found) {
+    return { by: "text", el: found };
+  }
+  // Its words nowhere and the page as it was: they changed where it stands.
+  return named && lookup.samePage(anchor, doc)
+    ? { by: "place", el: named }
+    : null;
 }
 
 /**
@@ -1921,6 +1939,7 @@ export const changedAnchor = (
   (by !== "selector" &&
     by !== "place" &&
     (was.text ?? "") !== (now.text ?? "")) ||
+  (now.page !== undefined && was.page !== now.page) ||
   JSON.stringify(was.source) !== JSON.stringify(now.source) ||
   JSON.stringify(was.chain ?? []) !== JSON.stringify(now.chain ?? []) ||
   JSON.stringify(was.sheet ?? null) !== JSON.stringify(now.sheet ?? null);

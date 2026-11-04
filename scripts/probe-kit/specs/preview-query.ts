@@ -431,7 +431,7 @@ const run = async (kit: Kit) => {
     },
     open: (row, replacing) => {
       if (replacing) {
-        passRows.delete(replacing);
+        passRows.delete(replacing.tokenHash);
       }
       passRows.set(row.tokenHash, row);
       return true;

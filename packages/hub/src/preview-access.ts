@@ -65,7 +65,8 @@
  * Its token from a CSPRNG, "at least 128 bits of entropy; prefer 160 bits or
  * more", kept as "a one-way verifier"; its timeout absolute and enforced
  * here; a new pass at every entry, the one presented gone ("the old or
- * previous session ID must be destroyed").
+ * previous session ID must be destroyed") within {@link REPLACED_PASS_MS}, for
+ * what the browser sent with it before the new cookie reached it.
  *
  * A session's cookie is made the same way, its `Max-Age` its pass's end.
  *
@@ -108,6 +109,15 @@ const PASS_MS = 30 * DAY_MS;
  * another whenever it needs one).
  */
 const SESSION_PASS_MS = 15 * 60_000;
+/**
+ * How long a pass stands once an entry has replaced it: what the browser sent
+ * before the new cookie reached it. A page whose link stood down enters again
+ * as the hub comes back (PreviewPane `enterAgain`), its socket's backoff going
+ * on meanwhile, and one handshake sent with the old cookie as the entry landed
+ * was refused 401. Our call: longer than a request in flight, too short to
+ * matter to a pass someone else holds.
+ */
+const REPLACED_PASS_MS = 10_000;
 /** How often a pass's last use is written, at most (hub-auth.ts writes a device's the same way). */
 const TOUCH_EVERY_MS = 60_000;
 const KEY_LABEL = "cawco preview access v1";
@@ -440,7 +450,7 @@ const passFor = (
 /**
  * `GET /__cawco/enter?ticket=…[&next=<path>]` on a held name or port (origin
  * `key`): a new pass, the one the browser presented under the same cookie
- * gone, and a redirect to `next`, or a bare 204 when it names none (the
+ * gone shortly ({@link REPLACED_PASS_MS}), and a redirect to `next`, or a bare 204 when it names none (the
  * dashboard's own entry, made beside its frames); else the locked page and
  * the refusal's word for the journal. A session's ticket enters only on a
  * name of its scope, and only while its session runs.
@@ -475,6 +485,11 @@ export const enter = (
       expiresAt: new Date(pass.expiresAt),
     },
     pass.replacing
+      ? {
+          tokenHash: pass.replacing,
+          until: new Date(now + REPLACED_PASS_MS),
+        }
+      : null
   );
   if (!given) {
     return { response: lockedResponse(), refused: "unpaired" };

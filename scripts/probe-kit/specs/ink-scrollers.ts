@@ -37,6 +37,12 @@
  * 12. Moving 30 groups through 180 frames of an inner scroller lays the page
  *    out at most three times a frame, the scroll's own among them (33 a frame
  *    when each group drew itself again), and outlines no stroke again.
+ * 13. A stroke over an embed's own gap stands on the content nearest it there,
+ *    and the embed's scroll carries it.
+ * 14. Words that changed while nothing was open: on the page as it was served,
+ *    a stroke stays on its element, in the page, in a same-origin frame and in
+ *    an embed; one kept before anchors said their page, moved aside for it,
+ *    comes back; with the page revised it goes to the moved tray.
  */
 import type { Frame, Page } from "playwright-core";
 import { bundleOverlay } from "../../../packages/core/src/preview-proxy";
@@ -354,6 +360,30 @@ const decisionChecks = async (
     String(byPageBare)
   );
 
+  // 13. An embed's own gap: nothing of it under the stroke, its scroll to carry it.
+  await hand.bring("#bridged", 40);
+  await inner?.evaluate(() => document.querySelector("#inner")?.scrollTo(0, 0));
+  await hand.settle(300);
+  await hand.stroke(line([width - 30, 200], [width - 12, 240], 6));
+  await hand.settle(300);
+  const emptied = await hand.newest();
+  const byGapInEmbed = await hand.moved(emptied.id, async () => {
+    await inner?.evaluate(() =>
+      document.querySelector("#inner")?.scrollTo(0, 30)
+    );
+    await hand.settle(400);
+  });
+  kit.check(
+    say(
+      "13: over an embed's own gap, on the content nearest, its scroll carrying it"
+    ),
+    emptied.selector?.startsWith("#t") === true &&
+      byGapInEmbed !== null &&
+      near(byGapInEmbed, -30),
+    `${emptied.selector} ${byGapInEmbed}`
+  );
+  await inner?.evaluate(() => document.querySelector("#inner")?.scrollTo(0, 0));
+
   // 3. Over no content: the gap under the head, and a pane's.
   await hand.scroll("#scroller", 0);
   const title = await hand.boxOf("#title");
@@ -479,6 +509,138 @@ const pillChecks = async (kit: Kit, page: Page, at: string) => {
     "7: a pin on ink stands hidden while its strokes are scrolled out of view",
     shown > 0 && scrolledAway === 0 && back === shown,
     `${shown} then ${scrolledAway} then ${back}`
+  );
+};
+
+/** Words a script sets from what it kept, as a page's own running does between loads. */
+const keptWords = (key: string) =>
+  `<span class="count" style="display:inline-block;padding:8px;background:#eee">Runs</span><script>document.currentScript.previousElementSibling.textContent=localStorage.getItem("${key}")??"Runs: 1"</script>`;
+const wordsFrame = (key: string) =>
+  `<!doctype html><html><head>${OVERLAY_TAG}</head><body style="margin:0;font:16px sans-serif"><main><div>${keptWords(key)}</div></main></body></html>`;
+const wordsPage = (hash: string, embedAt: string) =>
+  `<!doctype html><html><head>${SEEDED_TAG.replace('data-page-hash="spec"', `data-page-hash="${hash}"`)}</head><body style="margin:0;font:16px sans-serif"><main><div>${keptWords("top")}</div><p>Words of the page, standing still.</p><iframe id="same" src="/words-frame" style="display:block;width:400px;height:80px;border:0"></iframe><iframe id="other" src="${embedAt}/embed-words" style="display:block;width:400px;height:80px;border:0"></iframe></main></body></html>`;
+
+/** Check 14. */
+const wordsChecks = async (kit: Kit, page: Page, at: string) => {
+  const hand = handOn(page);
+  const inPlace = (selector: string) =>
+    hand.boxOf(selector).then(({ x, y }) => [x, y] as Point);
+  await hand.open(`${at}/words`);
+  /** A stroke across the count of the document at `from`, its box there. */
+  const across = async (from: Point) => {
+    await hand.stroke(
+      line([from[0] + 4, from[1] + 12], [from[0] + 50, from[1] + 12])
+    );
+  };
+  await across(await inPlace("main > div > .count"));
+  const onTop = await hand.newest();
+  await across(await inPlace("#same"));
+  const onSame = await hand.newest();
+  await across(await inPlace("#other"));
+  await hand.settle(500);
+  const onOther = (await hand.groups()).at(-1) as Group;
+  kit.check(
+    "14: strokes stand on the count named by its place, in the page, in a same-origin frame and in an embed",
+    !!onTop.selector?.includes("span") &&
+      onSame.frames?.join() === "#same" &&
+      onOther.frames?.join() === "#other",
+    JSON.stringify([onTop.selector, onSame.frames, onOther.frames])
+  );
+  const setWords = (frame: Frame, key: string) =>
+    frame.evaluate(
+      (name) => localStorage.setItem(name, "Runs: while you were away"),
+      key
+    );
+  await setWords(page.mainFrame(), "top");
+  await setWords(page.mainFrame(), "same");
+  const other = page.frames().find((one) => one.url().endsWith("/embed-words"));
+  if (other) {
+    await setWords(other, "other");
+  }
+  await hand.open(`${at}/words`);
+  // Past a mark's patience for what stands missing (absent.ts).
+  await hand.settle(3000);
+  const moved = () =>
+    page.evaluate(
+      () =>
+        Object.keys(
+          (
+            window as unknown as {
+              cawcoArtifact: {
+                doc: { getMap: (name: string) => { toJSON: () => object } };
+              };
+            }
+          ).cawcoArtifact.doc
+            .getMap("moved")
+            .toJSON()
+        ).length
+    );
+  const standing = await hand.groups();
+  const tops = await Promise.all(standing.map((group) => hand.topOf(group.id)));
+  kit.check(
+    "14: their words changed with nothing open, on the page as it was served: all three stand on their elements",
+    standing.length === 3 &&
+      (await moved()) === 0 &&
+      tops.every((top) => top !== null),
+    `${standing.length} standing; ${await moved()} moved; ${tops.join()}`
+  );
+
+  // Kept before anchors said their page, and moved aside for its words.
+  await page.evaluate(() => {
+    const { doc } = (
+      window as unknown as {
+        cawcoArtifact: {
+          doc: {
+            getMap: (name: string) => {
+              delete: (key: string) => void;
+              get: (
+                key: string
+              ) =>
+                | { anchor: { page?: string; text?: string }; id: string }
+                | undefined;
+              keys: () => IterableIterator<string>;
+              set: (key: string, value: object) => void;
+            };
+            transact: (run: () => void) => void;
+          };
+        };
+      }
+    ).cawcoArtifact;
+    const ink = doc.getMap("ink");
+    const aside = doc.getMap("moved");
+    doc.transact(() => {
+      for (const key of [...ink.keys()]) {
+        const group = ink.get(key);
+        if (group && !(group.anchor as { frames?: string[] }).frames) {
+          const { page: _page, ...anchor } = group.anchor;
+          ink.delete(key);
+          aside.set(key, {
+            ...group,
+            anchor: { ...anchor, text: "Runs: long ago" },
+          });
+        }
+      }
+    });
+  });
+  await hand.open(`${at}/words`);
+  await hand.settle(1500);
+  kit.check(
+    "14: a stroke kept before anchors said their page, moved aside for words that changed, comes back on the page not revised since",
+    (await moved()) === 0 && (await hand.groups()).length === 3,
+    `${await moved()} moved; ${(await hand.groups()).length} standing`
+  );
+
+  // The page revised: another element may stand at its place now.
+  await hand.settle(4000);
+  await page.evaluate(() =>
+    localStorage.setItem("top", "Runs: after a revision")
+  );
+  await hand.open(`${at}/words?revised`);
+  await hand.settle(3000);
+  kit.check(
+    "14: the page revised and its words gone: the stroke in the page goes to the moved tray, never onto what stands there",
+    (await moved()) >= 1,
+    `${await moved()} moved`
   );
 };
 
@@ -714,6 +876,9 @@ const onOwnOrigins = async (
     if (address === "/embed") {
       return embedPage(OVERLAY_TAG);
     }
+    if (address === "/embed-words") {
+      return wordsFrame("other");
+    }
     return address === "/bare" ? embedPage("") : null;
   });
   const embedAt = `http://127.0.0.1:${embeds.port}`;
@@ -728,6 +893,9 @@ const onOwnOrigins = async (
         "/stays": staysPage,
         "/gutter": gutterPage,
         "/many": manyPage,
+        "/words": wordsPage("spec", embedAt),
+        "/words?revised": wordsPage("revised", embedAt),
+        "/words-frame": wordsFrame("same"),
       })[address] ?? null
   );
   try {
@@ -765,6 +933,9 @@ const run = async (kit: Kit) => {
   );
   await onOwnOrigins(overlay, async (at) =>
     costChecks(kit, await kit.page("desk"), at)
+  );
+  await onOwnOrigins(overlay, async (at) =>
+    wordsChecks(kit, await kit.page("desk"), at)
   );
 };
 

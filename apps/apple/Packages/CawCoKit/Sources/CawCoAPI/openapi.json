@@ -42137,6 +42137,10 @@
               "type": "string"
             }
           },
+          "page": {
+            "description": "Named by its place alone: the hash of the document it stands in, as it was\nserved when the anchor was read. While the document is that one, the words at its place have changed\nonly by the page's own running, so the element there is the mark's\n({@link findAnchor}); a revision may have put another there.",
+            "type": "string"
+          },
           "selector": {
             "type": "string"
           },

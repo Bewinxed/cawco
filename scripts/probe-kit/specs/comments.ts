@@ -10027,8 +10027,9 @@ const LIVE_PAGE = `<!doctype html>
   const count = document.querySelector(".count");
   let n = 0;
   let timer = 0;
-  if (sessionStorage.getItem("probeLive") === "stopped") {
-    count.textContent = "Runs: done";
+  const kept = sessionStorage.getItem("probeLive");
+  if (kept) {
+    count.textContent = kept === "stopped" ? "Runs: done" : kept;
   } else {
     timer = setInterval(() => {
       n += 1;
@@ -10058,7 +10059,8 @@ const LIVE_COUNT = "main .card .count";
  * named by its place alone, is never moved aside through 4 s of changes,
  * its pill on the count, and its anchor's words follow the count's; its
  * last words set and the page reloaded, it stands on the count, never
- * moved aside; the card taken out, it is moved aside, its row Element gone.
+ * moved aside; its words changed while nothing was open, on the same page, it
+ * stands on the count; the card taken out, it is moved aside, its row Element gone.
  */
 const liveWordsChecks = async (on: On) => {
   const made = await on.call(CREATE, {
@@ -10176,8 +10178,86 @@ const liveWordsChecks = async (on: On) => {
     `words ${JSON.stringify((settled?.anchor as { text?: string } | undefined)?.text)}; reads ${reloaded.length}; moved ${reloaded.filter((one) => one.moved).length}; last on ${reloaded.at(-1)?.on}`
   );
 
+  // Its words changed while nothing was open: the next load finds other words
+  // at its place, none of its own anywhere, and the same page it was pinned on.
+  await again?.evaluate(() =>
+    sessionStorage.setItem("probeLive", "Runs: while you were away")
+  );
+  await open(on.page, `${origin}/session/${on.session}`, COMPOSER);
+  const later = await frameHolding(
+    on.page,
+    id,
+    "the live page, its words changed while it was shut"
+  );
+  const closed: { moved: boolean; on: boolean | null }[] = [];
+  if (later) {
+    await later.waitForSelector(LIVE_COUNT);
+    // Past a mark's patience for what stands missing (absent.ts).
+    const until3 = Date.now() + 3000;
+    while (Date.now() < until3) {
+      const pin = pinNumbered((await docOf(later)).pins, 1);
+      closed.push({
+        moved: !!pin?.movedAt,
+        on: await pillOn(later, 1, LIVE_COUNT),
+      });
+      await on.page.waitForTimeout(200);
+    }
+  }
+  on.kit.check(
+    "live words: its words changed while nothing was open, on the page it was pinned on: the pin stays on the count, never moved aside",
+    closed.length > 5 &&
+      closed.every((one) => !one.moved) &&
+      closed.at(-1)?.on === true,
+    `reads ${closed.length}; moved ${closed.filter((one) => one.moved).length}; last on ${closed.at(-1)?.on}`
+  );
+
+  // A pin kept before anchors said their page, moved aside for such words.
+  const heldAside = await later?.evaluate(() => {
+    const { doc } = (
+      window as unknown as {
+        cawcoArtifact: {
+          doc: {
+            getMap: (name: string) => {
+              get: (key: string) => { anchor: { page?: string } } | undefined;
+              keys: () => IterableIterator<string>;
+              set: (key: string, value: object) => void;
+            };
+          };
+        };
+      }
+    ).cawcoArtifact;
+    const places = doc.getMap("places");
+    const [placed] = [...places.keys()];
+    const place = placed ? places.get(placed) : undefined;
+    if (!(placed && place)) {
+      return false;
+    }
+    const { page: _page, ...anchor } = place.anchor;
+    places.set(placed, {
+      ...place,
+      anchor: { ...anchor, text: "Runs: long ago" },
+      movedAt: new Date().toISOString(),
+    });
+    return true;
+  });
+  await open(on.page, `${origin}/session/${on.session}`, COMPOSER);
+  const backOn = await frameHolding(on.page, id, "the live page, once more");
+  const cameBack = backOn
+    ? await until(
+        "the pin back on the count",
+        async () => pinNumbered((await docOf(backOn)).pins, 1),
+        (pin) => !pin?.movedAt,
+        10_000
+      ).catch(() => undefined)
+    : undefined;
+  on.kit.check(
+    "live words: a pin kept before anchors said their page, moved aside for words that changed, comes back on the page not revised since",
+    !!heldAside && !!cameBack && !cameBack.movedAt,
+    `written ${heldAside}; movedAt ${cameBack?.movedAt}`
+  );
+
   // The card taken out: the pin is moved aside, its row Element gone.
-  const live = again ?? frame;
+  const live = backOn ?? later ?? again ?? frame;
   await live.evaluate(() =>
     (
       window as unknown as { probeLive: { remove: () => void } }
@@ -10882,9 +10962,9 @@ const restartChecks = async (on: On) => {
   await shutList(on);
 };
 
-/** What a page says while the hub is down for a restart: a failed request or socket to it, or one refused by the hub as it comes back up. */
+/** What a page says while the hub is down for a restart: a failed request or socket to it. */
 const HUB_DOWN =
-  /status of 502|ERR_CONNECTION_REFUSED|Connection closed before receiving a handshake response|WebSocket is closed before the connection is established|HTTP Authentication failed/u;
+  /status of 502|ERR_CONNECTION_REFUSED|Connection closed before receiving a handshake response|WebSocket is closed before the connection is established/u;
 
 /** The thread head's controls by their names, and each one's top. */
 const threadHead = (card: Locator) =>

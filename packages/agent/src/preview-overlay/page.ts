@@ -27,6 +27,7 @@ import {
   readPins,
   replyToPin,
   resolvePin,
+  stableSelector,
   withdrawPin,
 } from "@cawco/core/comments";
 import type { DocMap } from "@cawco/core/doc-maps";
@@ -73,13 +74,14 @@ import {
 } from "./frames";
 import { hold, isHeld } from "./hold";
 import { heardFromHost, toHost } from "./host-origin";
-import { OVERLAY_OWN, ownNode, startInk } from "./ink";
+import { contentNearIn, OVERLAY_OWN, ownNode, startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
 import { choiceOf, listenForPicks, optionOf } from "./pick";
 import { cropPicture } from "./picture";
 import { type DraftTarget, type Pins, padded, startPins } from "./pins";
 import { inkChrome } from "./radial";
 import { drawInScheme, type Scheme } from "./schemes";
+import { scrollerRound } from "./scrollers";
 
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/u;
 /** A page hash: sha256, hex. */
@@ -446,6 +448,7 @@ function cornersOf(el: Element, rect: DOMRect): string[] {
 /** The person's pins, drawn after the ink (pins.ts). */
 const pins: Pins = startPins({
   anchorOf,
+  anchorToday,
   appCommenting,
   chrome,
   compose: (target, elements) => composeInk(target, elements),
@@ -523,7 +526,9 @@ const ink = startInk({
   chrome,
   describe,
   elementsAt,
-  embedAt: (el, x, y) => (embeds.bridged(el) ? embeds.at(el, x, y) : null),
+  embedAt: (el, x, y) =>
+    embeds.bridged(el) ? embeds.at(el, x, y, true) : null,
+  anchorToday,
   inEmbed: (el) => {
     const standIn = embeds.read(el);
     return standIn ? [...standIn.chain, standIn.frame] : [];
@@ -1778,6 +1783,23 @@ function contentAt(x: number, y: number): Element | null {
   );
 }
 
+/**
+ * What a mark at the viewport's `x`, `y` stands on so it moves with what it
+ * covers: what a press names, or where that is the page's own box the content
+ * nearest there, however far, in the scroller holding it (ink.ts `reachIn`,
+ * for a stroke over an embed's own gap).
+ */
+function nearestContent(x: number, y: number): Element | null {
+  const el = contentAt(x, y);
+  if (!el || el !== el.ownerDocument.body) {
+    return el;
+  }
+  const [hit] = elementsAt([[x, y]]);
+  return (
+    contentNearIn((hit && scrollerRound(hit)) ?? el, x, y, pageSized) ?? el
+  );
+}
+
 /** The selectors of the frames `el` stands in, outermost first, each in its parent's document. */
 const frameSelectors = (el: Element): string[] => framesOf(el).map(selectorOf);
 
@@ -1851,6 +1873,40 @@ function wordsOf(el: Element): string {
  * body) is named by that alone and keeps none of its words, which change
  * from one state of the page to the next and say nothing of where it stands.
  */
+/**
+ * The hash `doc` was served with: this page's as it stands, a same-origin
+ * frame's as its overlay's tag says it. On a sheet there is none: its story's
+ * words change with its source, under the one host page.
+ */
+const documentHash = (doc: Document): string | null => {
+  if (artifact.kind() === "component") {
+    return null;
+  }
+  return doc === document
+    ? pageHash || null
+    : (doc.querySelector<HTMLElement>("script[data-page-hash]")?.dataset
+        .pageHash ?? null);
+};
+
+/**
+ * A mark kept before anchors said their document's hash: the page's now, when
+ * the session has not changed the page since the mark was made, so a mark
+ * moved aside for words that changed while nothing was open comes back. An
+ * anchor in a frame has no such record: the page's own revisions say nothing
+ * of a frame's document.
+ */
+function anchorToday(anchor: PageAnchor, at: string): PageAnchor {
+  const { revisedAt } = artifact.meta();
+  return anchor.page ||
+    anchor.frames?.length ||
+    artifact.kind() !== "page" ||
+    !pageHash ||
+    stableSelector(anchor.selector) ||
+    (revisedAt && at < revisedAt)
+    ? anchor
+    : { ...anchor, page: pageHash };
+}
+
 function anchorOf(el: Element): PageAnchor {
   const remote = embeds.anchorOf(el);
   if (remote) {
@@ -1860,6 +1916,8 @@ function anchorOf(el: Element): PageAnchor {
   const frames = frameSelectors(el);
   const doc = el.ownerDocument;
   const whole = el === doc.body || el === doc.documentElement;
+  const selector = whole ? el.localName : selectorOf(el);
+  const hash = documentHash(doc);
   // The artifact the nearest frame showing one shows: the one it stands in, or the frame itself.
   const shown = [...framesOf(el), ...(isFrame(el) ? [el] : [])]
     .findLast((frame) => frame.hasAttribute(EMBED_ARTIFACT))
@@ -1867,10 +1925,11 @@ function anchorOf(el: Element): PageAnchor {
   return {
     ...(frames.length > 0 ? { frames } : {}),
     ...(shown ? { embed: { artifact: shown } } : {}),
-    selector: whole ? el.localName : selectorOf(el),
+    selector,
     source: sourceOf(el),
     ...(sheetChain(el) ?? {}),
     ...(whole ? {} : { text: textOf(el) }),
+    ...(hash && !stableSelector(selector) ? { page: hash } : {}),
     box: {
       x: Math.round(x + scrollX),
       y: Math.round(y + scrollY),
@@ -2000,7 +2059,12 @@ interface Kept {
 /** What each anchor found, by the anchor as kept: its frames, its selector and its words. */
 const foundBy = new Map<string, Kept>();
 const foundKey = (anchor: PageAnchor) =>
-  JSON.stringify([anchor.frames ?? [], anchor.selector, anchor.text ?? ""]);
+  JSON.stringify([
+    anchor.frames ?? [],
+    anchor.selector,
+    anchor.text ?? "",
+    anchor.page ?? "",
+  ]);
 
 /** Forgets what every anchor found: the page was drawn again in place (a morph, an HMR update), its nodes holding other parts now. */
 function forgetFound() {
@@ -2147,6 +2211,7 @@ function findAnchorHere(anchor: PageAnchor) {
     frame: frameIn,
     page: (within) => within.body,
     pageSized: pageSizedBox,
+    samePage: ({ page }, within) => !!page && page === documentHash(within),
     content: isContent,
     bySource: (within, file, line) => {
       const read = pageRead(within);
@@ -3508,6 +3573,7 @@ function remoteOf(el: Element): Remote {
 // overlay asks what stands under its pointer here, and where its pins do.
 answerEmbedder({
   at: contentAt,
+  near: nearestContent,
   chain: chainOf,
   locate,
   own: (node) =>

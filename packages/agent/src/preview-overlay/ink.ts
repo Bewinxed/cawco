@@ -178,6 +178,8 @@ const viewOf = (points: [number, number][]): [number, number][] =>
 export interface InkDeps {
   /** What a page's mark stands on, read from `el` as it is now. */
   anchorOf: (el: Element) => PageAnchor;
+  /** A mark's anchor as this page may read it, `at` when the mark was made (page.ts `anchorToday`). */
+  anchorToday: (anchor: PageAnchor, at: string) => PageAnchor;
   chrome: InkChrome;
   describe: (el: Element) => PinnedElement;
   /** The deepest element at each of the viewport's points, inside same-origin frames; one hit test pass. */
@@ -229,6 +231,20 @@ const distanceTo = (r: DOMRect, x: number, y: number) =>
     Math.max(r.left - x, 0, x - r.right),
     Math.max(r.top - y, 0, y - r.bottom)
   );
+
+/** The content nearest the viewport's `x`, `y` inside `el`: down through what is only the page's box; null when it holds none. */
+export const contentNearIn = (
+  el: Element,
+  x: number,
+  y: number,
+  pageSized: (one: Element) => boolean
+): Element | null => {
+  let at = nearestChild(el, x, y);
+  while (at && pageSized(at)) {
+    at = nearestChild(at, x, y);
+  }
+  return at;
+};
 
 /** The child of `el` with a box nearest the viewport's `x`, `y`, the overlay's own left out; null when it has none. */
 const nearestChild = (el: Element, x: number, y: number): Element | null => {
@@ -493,14 +509,8 @@ export function startInk(deps: InkDeps): Ink {
           holder === el || holder.contains(el) || holdersOf(el).includes(holder)
       )
     ) ?? null;
-  /** The content nearest the viewport's `x`, `y` inside `el`: down through what is only the page's box; null when it holds none. */
-  const contentNear = (el: Element, x: number, y: number): Element | null => {
-    let at = nearestChild(el, x, y);
-    while (at && deps.pageSized(at)) {
-      at = nearestChild(at, x, y);
-    }
-    return at;
-  };
+  const contentNear = (el: Element, x: number, y: number) =>
+    contentNearIn(el, x, y, deps.pageSized);
   /** What a stroke at the viewport's `x`, `y` stands on where it lands on a scroller's own box: what the scroller scrolls, there. */
   const onContent = (el: Element, x: number, y: number): Element =>
     scrollsContent(el) ? (contentNear(el, x, y) ?? el) : el;
@@ -1222,7 +1232,9 @@ export function startInk(deps: InkDeps): Ink {
     const brand = groups.length > 0 ? chrome.token("--brand-solid") : "";
     const located = groups.map((group) => {
       const found =
-        "selector" in group.anchor ? deps.locate(group.anchor) : null;
+        "selector" in group.anchor
+          ? deps.locate(deps.anchorToday(group.anchor, group.at))
+          : null;
       return { group, el: found?.el ?? null, by: found?.by ?? "selector" };
     });
     const gone = goneOf(located);
@@ -1248,6 +1260,7 @@ export function startInk(deps: InkDeps): Ink {
     watchAnchors(standing);
     if (settled()) {
       settleGroups(found, gone);
+      bringBackMoved();
     }
     deps.pins().draw();
     watchMoves();
@@ -1421,6 +1434,33 @@ export function startInk(deps: InkDeps): Ink {
       placeGroup(stand);
     }
     deps.pins().draw(true);
+  }
+
+  /**
+   * The groups moved aside for words that changed where they stood, on the
+   * page they were drawn on: each back on its element (core `findAnchor`'s
+   * `place`). Any other moved group stays where the person can place it.
+   */
+  function bringBackMoved() {
+    const { doc, ink, moved } = maps();
+    const back = [...moved.values()].filter(
+      (group) =>
+        "selector" in group.anchor &&
+        deps.locate(deps.anchorToday(group.anchor, group.at))?.by === "place"
+    );
+    if (back.length === 0) {
+      return;
+    }
+    doc.transact(() => {
+      for (const group of back) {
+        moved.delete(group.id);
+        ink.set(group.id, {
+          ...group,
+          anchor: deps.anchorToday(group.anchor as PageAnchor, group.at),
+        });
+      }
+    }, PLACED);
+    later();
   }
 
   /** Writes the groups found again by their source or text, and moves aside those no anchor finds. */
