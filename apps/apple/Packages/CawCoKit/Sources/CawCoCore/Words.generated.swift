@@ -1288,9 +1288,9 @@ public enum Words {
         /// A workspace archived, refused by the hub: what came of it (`hubRefusal`).
         public static let notArchivedThen = "so the workspace was not archived. Try again."
 
-        /// WORDS OWED (a placeholder): the archive confirm's line (dashboard LiveSessionMenu) when what the workspace serves still waits on the person, `names` each artifact's name: confirming archives it anyway.
+        /// The archive confirm's line (dashboard LiveSessionMenu) when what the workspace serves still waits on the person, `names` each artifact's name: confirming archives it anyway. The one name is read as the list of one (`join`), the subset the Swift words take (scripts/words-swift.ts).
         public static func archiveStillWaiting(names: [String]) -> String {
-            "[words owed: archiveStillWaiting] \(names.joined(separator: ", "))"
+            names.count == 1 ? "\(names.joined(separator: ", ")) still waits on you and goes with it." : "\(names.joined(separator: ", ")) still wait on you and go with it."
         }
 
         /// The projects list is empty and no machine runs CawCo yet.

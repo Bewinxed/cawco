@@ -18,12 +18,15 @@ export const sidebarWords = {
   /** A workspace archived, refused by the hub: what came of it (`hubRefusal`). */
   notArchivedThen: "so the workspace was not archived. Try again.",
   /**
-   * WORDS OWED (a placeholder): the archive confirm's line (dashboard
-   * LiveSessionMenu) when what the workspace serves still waits on the
-   * person, `names` each artifact's name: confirming archives it anyway.
+   * The archive confirm's line (dashboard LiveSessionMenu) when what the
+   * workspace serves still waits on the person, `names` each artifact's
+   * name: confirming archives it anyway. The one name is read as the list
+   * of one (`join`), the subset the Swift words take (scripts/words-swift.ts).
    */
   archiveStillWaiting: (names: readonly string[]) =>
-    `[words owed: archiveStillWaiting] ${names.join(", ")}`,
+    names.length === 1
+      ? `${names.join(", ")} still waits on you and goes with it.`
+      : `${names.join(", ")} still wait on you and go with it.`,
   /** The projects list is empty and no machine runs CawCo yet. */
   noProjectsNoMachines:
     "No projects yet — start one with New project. Once CawCo runs on a machine, its checkouts group here too.",

@@ -148,13 +148,13 @@ export const workWords = {
   stopRetires: (ws: string) =>
     `Its workspace ${ws} holds nothing that is nowhere else, so it retires once its session ends; a handoff to it cuts it again where it was.`,
   /**
-   * WORDS OWED (a placeholder): `stop_delegate`'s word on a stopped item's
-   * workspace that holds nothing that is nowhere else but serves `links`
-   * (each an artifact by its link, hub work-items.ts `serving`): it stays
-   * while it serves them, never retiring under them.
+   * `stop_delegate`'s word on a stopped item's workspace that holds nothing
+   * that is nowhere else but serves `links` (each an artifact by its link,
+   * hub work-items.ts `serving`): it stays while it serves them, never
+   * retiring under them.
    */
   stopServes: (ws: string, links: readonly string[]) =>
-    `[words owed: stopServes] workspace ${ws}; serves ${links.join(", ")}`,
+    `Its workspace ${ws} holds nothing that is nowhere else but serves ${links.join(", ")}, so it stays while it does; discard_workspace with workspace: "${ws}" retires it.`,
   /** `stop_delegate`'s word when what the workspace holds could not be read as it stopped. */
   stopUnread: (ws: string, error: string) =>
     `What its workspace ${ws} holds could not be read now (${error}): if it holds work that is nowhere else it is held as its session ends, and you are told then.`,
@@ -178,38 +178,44 @@ export const workWords = {
   /** That notice's headline. */
   notRetiredHeadline: (ws: string) => `Workspace ${ws} could not be retired.`,
   /**
-   * WORDS OWED (a placeholder): `discard_workspace` refused (hub
-   * work-items.ts `discardFor`) while what the workspace serves waits on the
-   * person: `ws` its handle, `links` each waiting artifact by its link. The
-   * words name each, then the session's two ways forward: hand it up again
-   * from another workspace (its parent can), or ask the person to decide by
-   * calling discard_workspace again with `ask: true` and a `reason`, which
-   * waits on his approval and, approved, discards it anyway.
+   * `discard_workspace` refused (hub work-items.ts `discardFor`) while what
+   * the workspace serves waits on the person: `ws` its handle, `links` each
+   * waiting artifact by its link. The words name each, then the session's
+   * two ways forward: hand it up again from another workspace, or ask the
+   * person to decide by calling discard_workspace again with `ask: true`
+   * and a `reason`, which waits on his approval and, approved, discards it
+   * anyway.
    */
   servesWaiting: (ws: string, links: readonly string[]) =>
-    `[words owed: servesWaiting] workspace ${ws}; waiting on the person: ${links.join(", ")}; ways: hand it up again from another workspace, or discard_workspace with ask: true and a reason`,
+    links.length === 1
+      ? `Workspace ${ws} was not discarded: ${links[0]} still waits on the person. Hand it up again from a workspace that runs (artifact_create under the same name, from your own or a delegate's) and discard this one again; or call discard_workspace again with ask: true and a reason, and the person decides: approved, the workspace is discarded anyway.`
+      : `Workspace ${ws} was not discarded: ${links.join(", ")} still wait on the person. Hand each up again from a workspace that runs (artifact_create under the same name, from your own or a delegate's) and discard this one again; or call discard_workspace again with ask: true and a reason, and the person decides: approved, the workspace is discarded anyway.`,
   /**
-   * WORDS OWED (a placeholder): a workspace's archive asked by the person
-   * (`POST /api/workspaces/:id/archive`, the dashboard and the app) and
-   * refused because he didn't confirm what still waits on him: `ws`, `links`
-   * as above. The dashboard's confirm names them first and sends the
-   * archive confirmed, so this reaches a client that doesn't.
+   * A workspace's archive asked by the person (`POST
+   * /api/workspaces/:id/archive`, the dashboard and the app) and refused
+   * because he didn't confirm what still waits on him: `ws`, `links` as
+   * above. The dashboard's confirm names them first and sends the archive
+   * confirmed, so this reaches a client that doesn't.
    */
   servesWaitingConfirm: (ws: string, links: readonly string[]) =>
-    `[words owed: servesWaitingConfirm] workspace ${ws}; waiting on you: ${links.join(", ")}; confirm to archive it anyway`,
+    links.length === 1
+      ? `Workspace ${ws} was not archived: ${links[0]} still waits on you there, and goes with it. Confirm to archive it anyway.`
+      : `Workspace ${ws} was not archived: ${links.join(", ")} still wait on you there, and go with it. Confirm to archive it anyway.`,
   /**
-   * WORDS OWED (a placeholder): the line an approval of `discard_workspace`
-   * shows the person (its ask's `waiting`, hub server.ts): what still waits
-   * on him there, `links` each by its link.
+   * The line an approval of `discard_workspace` shows the person (its ask's
+   * `waiting`, hub server.ts): what still waits on him there, `links` each
+   * by its link.
    */
   discardAskWaiting: (links: readonly string[]) =>
-    `[words owed: discardAskWaiting] ${links.join(", ")}`,
+    links.length === 1
+      ? `${links[0]} still waits on you and goes with the workspace.`
+      : `${links.join(", ")} still wait on you and go with the workspace.`,
   /**
-   * WORDS OWED (a placeholder): `discard_workspace` with `ask: true` and no
-   * `reason`, refused before anything is asked: the person reads the reason
-   * first on the approval.
+   * `discard_workspace` with `ask: true` and no `reason`, refused before
+   * anything is asked: the person reads the reason first on the approval.
    */
-  discardAskReason: "[words owed: discardAskReason]",
+  discardAskReason:
+    "discard_workspace with ask: true needs a `reason`: one sentence on why, for which task. The person reads it on the approval; nothing was asked.",
   /** The hub's log line as a settle ends what an ended item's awake sessions left running (hub work-items.ts `endLeftWork`). */
   workEnding: (sessions: readonly string[], hold: string) =>
     `its items have all ended, so what ${sessions.length === 1 ? `its session ${sessions[0]}` : `its sessions ${sessions.join(", ")}`} left running there ends; not retired while ${hold}`,
