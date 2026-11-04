@@ -495,16 +495,6 @@ export const stageLabel = (name: string): string => {
   return words ? words[0].toUpperCase() + words.slice(1) : "No stage";
 };
 
-/** A kind as its quiet label says it (`you` is Needs you). */
-export const KIND_LABEL: Record<StageKind, string> = {
-  todo: "to do",
-  active: "active",
-  waiting: "waiting",
-  you: "needs you",
-  done: "done",
-  dropped: "dropped",
-};
-
 /** Where a new task starts: the first stage of kind todo, else the first stage. */
 export const firstTodoStage = (stages: Stage[]): Stage | undefined =>
   stages.find((stage) => stage.kind === "todo") ?? stages[0];

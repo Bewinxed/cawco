@@ -15,14 +15,26 @@
     ref = $bindable(null),
     class: className,
     children: childrenProp,
+    tile = false,
     ...restProps
-  }: WithoutChild<DropdownMenuPrimitive.RadioItemProps> = $props();
+  }: WithoutChild<DropdownMenuPrimitive.RadioItemProps> & {
+    /**
+     * A choice drawn as itself rather than named (a glyph, a swatch): a
+     * square of the small control's size, its mark centred, no dot; chosen,
+     * it takes the selected wash; under a finger it is the touch square
+     * (`c-btn-h-lg`). It names itself for a screen reader by `aria-label`.
+     * Several stand in a grid of the caller's.
+     */
+    tile?: boolean;
+  } = $props();
 </script>
 
 <DropdownMenuPrimitive.RadioItem
   class={cn(
     menuItemVariants(),
     "relative flex cursor-default select-none items-center gap-2.5 pr-space-8 pl-2.5 text-label outline-hidden data-[disabled]:pointer-events-none data-inset:pl-9.5 data-[disabled]:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    tile &&
+      "size-c-btn-h-sm min-h-c-btn-h-sm justify-center p-0 coarse:size-c-btn-h-lg aria-checked:bg-selected-bg aria-checked:text-selected-ink",
     className
   )}
   data-menu-item
@@ -31,13 +43,15 @@
   {...restProps}
 >
   {#snippet children({ checked })}
-    <span
-      class="absolute right-2 flex size-icon-md items-center justify-center pointer-events-none"
-      data-box
-      data-slot="dropdown-menu-radio-item-indicator"
-    >
-      <span class={radioDot} data-on={checked}></span>
-    </span>
+    {#if !tile}
+      <span
+        class="absolute right-2 flex size-icon-md items-center justify-center pointer-events-none"
+        data-box
+        data-slot="dropdown-menu-radio-item-indicator"
+      >
+        <span class={radioDot} data-on={checked}></span>
+      </span>
+    {/if}
     {@render childrenProp?.({ checked })}
   {/snippet}
 </DropdownMenuPrimitive.RadioItem>

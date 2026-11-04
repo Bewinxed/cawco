@@ -40,6 +40,7 @@
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import ProjectDock from "#lib/cawco/project/ProjectDock.svelte";
+  import SetUpBar from "#lib/cawco/project/SetUpBar.svelte";
   import SetupDraft from "#lib/cawco/project/SetupDraft.svelte";
   import SetupScene from "#lib/cawco/project/SetupScene.svelte";
   import {
@@ -52,6 +53,7 @@
     handedOver,
     setupProgressOf,
   } from "#lib/cawco/project/setup-progress.js";
+  import { firstTodoStage } from "#lib/cawco/project-tasks.js";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
   import type { Message } from "#lib/cawco/types.js";
   import { IconFolder } from "#lib/icons.js";
@@ -465,16 +467,32 @@
             <SetupPagePreview />
           </div>
         {:else if at === "set"}
-          <TaskBoard
-            allowedFrom={() => new Set<string>()}
-            hrefOf={() => "#"}
-            newIn="inbox"
-            oncreate={async () => undefined}
-            onmove={none}
-            onopen={none}
-            stages={way === "board" ? boardStages : PR_STAGES}
-            tasks={[]}
-          />
+          {@const stages = way === "board" ? boardStages : PR_STAGES}
+          {@const first = firstTodoStage(stages)?.name}
+          <div class="flex min-h-0 flex-auto flex-col gap-space-4">
+            {#if way === "board" && first}
+              <SetUpBar
+                {first}
+                {name}
+                onask={() => {
+                  lead.tab = "assistant";
+                  lead.open = true;
+                }}
+              />
+            {/if}
+            <div class="min-h-0 flex-auto">
+              <TaskBoard
+                allowedFrom={() => new Set<string>()}
+                hrefOf={() => "#"}
+                newIn={first}
+                oncreate={async () => undefined}
+                onmove={none}
+                onopen={none}
+                {stages}
+                tasks={[]}
+              />
+            </div>
+          </div>
         {:else}
           <SetupScene
             act={at === "page"

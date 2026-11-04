@@ -127,6 +127,15 @@ export const setupWords = {
   /** Under the bar's line while questions that hold nothing are open. */
   asksOpen: (count: number) =>
     count === 1 ? "1 question from Caw" : `${count} questions from Caw`,
+  /** Under the drafted bar's line while his questions are open: Set up waits on them. */
+  asksBefore: (count: number) =>
+    count === 1
+      ? "Answer his question, then set it up."
+      : `Answer his ${count} questions, then set it up.`,
+  /** The draft bar once it is set up, while the board has no task: the next step, named. */
+  isSetUp: (name: string) => `${name} is set up`,
+  firstTask: (stage: string) =>
+    `Add the first task to ${stage}, or tell Caw what to work on.`,
   /** The bar's act while he asks: his questions, where they are asked. */
   answer: "Answer Caw",
   /** A draft column's name, for a screen reader. */

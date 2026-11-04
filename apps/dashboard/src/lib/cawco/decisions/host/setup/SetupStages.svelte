@@ -231,7 +231,7 @@
               >
                 <IconMore />
               </DropdownMenu.Trigger>
-              <DropdownMenu.Content align="end" width="regular">
+              <DropdownMenu.Content align="end" width="wide">
                 <DropdownMenu.Item onSelect={() => rename(index)}>
                   <span>{words.rename}</span>
                 </DropdownMenu.Item>
@@ -285,7 +285,7 @@
               <StageMark {stage} {trigger} />
             {/snippet}
           </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="start" width="regular">
+          <DropdownMenu.Content align="start" width="wide">
             <StageLookItems onlook={(patch) => at(index, patch)} {stage} />
           </DropdownMenu.Content>
         </DropdownMenu.Root>

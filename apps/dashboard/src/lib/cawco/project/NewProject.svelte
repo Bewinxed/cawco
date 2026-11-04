@@ -375,9 +375,12 @@
           <div class={chipsVariants()}>
             {#each TEMPLATE_CARDS as card (card.template)}
               {@const Glyph = card.icon}
+              <!-- Held while the project is made: the send went with the
+                   template it had. -->
               <button
                 aria-pressed={tapped === card.template}
                 class={chipVariants({ class: "select-none" })}
+                disabled={starting}
                 onclick={() =>
                   tap(tapped === card.template ? null : card.template)}
                 type="button"

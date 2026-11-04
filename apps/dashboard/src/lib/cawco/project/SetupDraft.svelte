@@ -80,12 +80,19 @@
   } = $props();
 
   const drafting = $derived(coming > 0 || waiting > 0);
-  /** What the draft bar says: held on an answer, being written, or whole. */
+  /**
+   * What the draft bar says: held on an answer, being written, written with
+   * his questions still open, or whole. Set up stands only in the last: an
+   * open question is an answer the draft may still change by.
+   */
   const barState = $derived.by(() => {
     if (waiting > 0) {
       return "waiting";
     }
-    return drafting ? "drafting" : "drafted";
+    if (drafting) {
+      return "drafting";
+    }
+    return asking > 0 ? "asking" : "drafted";
   });
 
   /** The board's column width, wrapping into rows; one column where the room is narrower. */
@@ -151,19 +158,19 @@
         <p class="m-0 type-label text-ink-strong">
           {setupWords.draftedHow(name)}
         </p>
-        <p class="m-0 type-meta text-ink-muted">{setupWords.draftHint}</p>
+        <p class="m-0 type-meta text-ink-muted">
+          {asking > 0 ? setupWords.asksBefore(asking) : setupWords.draftHint}
+        </p>
       {/if}
     </div>
-    {#if drafting}
-      {#if asking > 0}
-        <Button
-          label={setupWords.answer}
-          onclick={onanswer}
-          size="sm"
-          variant={waiting > 0 ? "default" : "outline"}
-        />
-      {/if}
-    {:else}
+    {#if asking > 0}
+      <Button
+        label={setupWords.answer}
+        onclick={onanswer}
+        size="sm"
+        variant={barState === "drafting" ? "outline" : "default"}
+      />
+    {:else if !drafting}
       <Button
         label={setupPageWords.send(name)}
         onclick={onsetup}

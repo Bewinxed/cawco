@@ -515,8 +515,14 @@
           >{d.label}</span
         >
       {/if}
+      <!-- The object in the mono face only where the rules say it is a
+           path, a command or an id (`objectIsMono`): a name a call gave,
+           in the UI face. -->
       <span
-        class="font-(family-name:--font-mono) text-ink-muted overflow-clip text-ellipsis whitespace-nowrap min-w-0 flex-1"
+        class={[
+          d.objectIsMono && "font-(family-name:--font-mono)",
+          "text-ink-muted overflow-clip text-ellipsis whitespace-nowrap min-w-0 flex-1",
+        ]}
         title={[d.object, d.detail].filter(Boolean).join(" ") || undefined}
       >
         {#if d.object}

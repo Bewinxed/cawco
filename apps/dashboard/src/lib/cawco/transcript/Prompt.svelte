@@ -1,3 +1,13 @@
+<script lang="ts" module>
+  /**
+   * An answer (or a dismissal) given from inside a question's card: the
+   * card leaves, and the next ask's card takes the focus as it mounts, so
+   * the digits and Enter go on answering. Set only from a press inside the
+   * card, never on a page's load.
+   */
+  let handOn = false;
+</script>
+
 <script lang="ts">
   import type {
     PermissionResult,
@@ -247,6 +257,14 @@
     const group = card?.querySelectorAll('[data-slot="option-group"]')[index];
     group?.querySelector<HTMLElement>('[tabindex="0"]')?.focus();
   }
+
+  // The ask before this one was answered from its card: this one takes the focus.
+  $effect(() => {
+    if (untrack(() => handOn && questions)) {
+      handOn = false;
+      focusQuestion(0);
+    }
+  });
 
   /**
    * The digits move on to the first question still unanswered, and so does
@@ -499,6 +517,7 @@
       return;
     }
     pressed = "answer";
+    handOn = !!card?.contains(document.activeElement);
     commandId = onanswer(questionAnswer(input, answers));
   }
 
@@ -508,6 +527,7 @@
       return;
     }
     pressed = "deny";
+    handOn = !!card?.contains(document.activeElement);
     commandId = onanswer(questionDismissal);
   }
 
