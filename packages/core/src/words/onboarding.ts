@@ -30,6 +30,10 @@ export const onboardingWords = {
   noMachine: "No machine has joined yet, so Caw can't start.",
   /** Machines registered, none online. */
   noneOnline: "No machine is online, so Caw can't start.",
+  /** Over the template row under the field: the other way in. */
+  templates: "Or start from a template",
+  /** The fold that opens the template row, where it stands folded. */
+  showTemplates: "Start from a template",
   addMachine: "Add machine",
   checkMachines: "Check machines",
 } as const;
@@ -87,6 +91,27 @@ export const setupWords = {
   questionAt: (at: number, of: number) => `${at} of ${of}`,
   /** An answer on its way. */
   answering: "Answering…",
+  /**
+   * The board as Caw's draft, over its columns while he writes them (the
+   * house draft bar's words: words/views `drafted`).
+   */
+  draftingHow: (name: string) => `Caw is drafting how ${name} runs`,
+  draftedHow: (name: string) => `Caw drafted how ${name} runs`,
+  /** Under the draft bar's line: where a change is made. */
+  draftHint: "Change a stage here, or tell Caw.",
+  /** A draft column's name, for a screen reader. */
+  draftStage: (name: string) => `${name}, a stage in Caw's draft`,
+  /** What a draft column says in its body: what happens to work in it. */
+  stageRuns: (who: string) => `Runs the ${who.toLowerCase()}`,
+  stageAfter: (span: string) => `Moves on after ${span}`,
+  stageHolds: {
+    todo: "New work lands here.",
+    active: "Work in hand.",
+    waiting: "Waiting on someone else.",
+    you: "Waits on you before it goes on.",
+    done: "Finished work.",
+    dropped: "Work let go.",
+  } satisfies Record<StageKind, string>,
 } as const;
 
 /**

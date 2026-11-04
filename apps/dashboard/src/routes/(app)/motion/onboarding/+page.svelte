@@ -21,6 +21,12 @@
    * `?tab=assistant` keeps the page's beat on his conversation;
    * `?switch=start` stands Assistant | Preview leading the bar, the other
    * option of the card `artifact-open` to its top-right default.
+   *
+   * `?way=` draws one way of the first minutes for the decision page
+   * `onboarding-first-minutes`, Caw's questions in his composer on every
+   * width: `board` (the draft drawn as the board it becomes, SetupDraft),
+   * `page` (the setup page in the board's place), `panel` (the setup page
+   * in his panel's Preview, as today, with no stills on the floor).
    */
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -30,7 +36,10 @@
   import CawFlock from "#lib/cawco/project/CawFlock.svelte";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
+  import SetupPagePreview from "#lib/cawco/decisions/SetupPagePreview.svelte";
+  import type { Stage as DraftStage } from "#lib/cawco/decisions/host/setup/stage.js";
   import ProjectDock from "#lib/cawco/project/ProjectDock.svelte";
+  import SetupDraft from "#lib/cawco/project/SetupDraft.svelte";
   import SetupScene from "#lib/cawco/project/SetupScene.svelte";
   import {
     PR_ASKS,
@@ -63,6 +72,27 @@
   const switchAt: "start" | "end" =
     page.url.searchParams.get("switch") === "start" ? "start" : "end";
   const name = named ? PR_NAME : projectWords.placeholderName;
+  const WAYS = ["board", "page", "panel"] as const;
+  const way = WAYS.find((one) => one === page.url.searchParams.get("way"));
+  /** His questions stand on the board only in today's way, on a desk. */
+  const asksOnBoard = way === undefined;
+  /** The PR team's draft as the setup page holds it (SetupPagePreview's program). */
+  const DRAFT: DraftStage[] = [
+    { name: "Inbox", kind: "todo", icon: "inbox", color: "cyan" },
+    { name: "Researching", kind: "active", icon: "search", color: "cyan", hooks: { runs: "researcher" } },
+    { name: "Drafted", kind: "active", icon: "pen", color: "amber", hooks: { runs: "writer" } },
+    { name: "Your call", kind: "you" },
+    { name: "Sent", kind: "waiting", icon: "send", color: "orange" },
+    { name: "Waiting on reply", kind: "waiting", icon: "hourglass", color: "orange", hooks: { after: "7d" } },
+    { name: "Done", kind: "done", icon: "done", color: "green" },
+    { name: "Dropped", kind: "dropped", icon: "trash" },
+  ];
+  const AIM =
+    "A personal PR team: the job search, visa applications and renewals, travel booked around them, and a public voice. Research and drafts are done by delegates; every message, post and application goes out only once you send it.";
+  /** While he drafts, the stages he has written so far. */
+  const written = beat === "page" ? DRAFT.length : beat === "sent" ? 0 : 5;
+  let draft = $state(DRAFT.slice(0, written));
+  let draftAim = $state(beat === "sent" ? "" : AIM);
 
   const WORDS =
     "set up a new project to be my personal PR team, you will handle my personal tasks, job hunts, social media and others, visa applications and travel. the aim is to propel me into wealth";
@@ -211,7 +241,11 @@
   });
   untrack(() => {
     lead.open = !page.url.searchParams.has("closed");
-    if (beat === "page" && page.url.searchParams.get("tab") !== "assistant") {
+    if (
+      beat === "page" &&
+      (way === undefined || way === "panel") &&
+      page.url.searchParams.get("tab") !== "assistant"
+    ) {
       lead.tab = "preview";
     }
   });
@@ -286,7 +320,7 @@
         >
           {name}
         </h1>
-        {#if beat === "set"}
+        {#if beat === "set" || way === "board" || (way === "page" && beat === "page")}
           <span class="ms-auto" data-box>
             <CawSeat {lead} projectId={PROJECT} projectName={name} />
           </span>
@@ -295,7 +329,25 @@
       <div
         class="flex min-h-0 flex-auto flex-col ps-space-7 pe-space-6 max-desk:px-space-5"
       >
-        {#if beat === "set"}
+        {#if way === "board" && beat !== "set"}
+          <SetupDraft
+            aim={draftAim}
+            coming={DRAFT.length - written}
+            {name}
+            onaim={(next) => {
+              draftAim = next;
+            }}
+            onsetup={none}
+            onstages={(next) => {
+              draft = next;
+            }}
+            stages={draft}
+          />
+        {:else if way === "page" && beat === "page"}
+          <div class="min-h-0 flex-auto overflow-y-auto">
+            <SetupPagePreview />
+          </div>
+        {:else if beat === "set"}
           <TaskBoard
             allowedFrom={() => new Set<string>()}
             hrefOf={() => "#"}
@@ -311,12 +363,14 @@
             act={beat === "page"
               ? { kind: "page", open: none }
               : { kind: "drafting" }}
-            {asks}
+            asks={asksOnBoard ? asks : []}
             onanswer={() => null}
             {seat}
           >
             {#snippet floor()}
-              <CawFlock count={phone ? 2 : 4} />
+              {#if way === undefined}
+                <CawFlock count={phone ? 2 : 4} />
+              {/if}
             {/snippet}
           </SetupScene>
         {/if}
@@ -325,7 +379,7 @@
     {#snippet dock()}
       <CawFloat
         asksElsewhere={(request) =>
-          !phone && request.toolName === "AskUserQuestion"}
+          asksOnBoard && !phone && request.toolName === "AskUserQuestion"}
         {lead}
         projectId={PROJECT}
         projectName={name}
