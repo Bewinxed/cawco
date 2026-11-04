@@ -351,6 +351,42 @@
    */
   /** The pick the stage is on its way to (the last press), by key: a press is measured against it, not the state that last landed. */
   let heading: string | null = null;
+  /** The move on the Animation face, as its states' ids (`from->to`); null with none. */
+  let movePair = $state<string | null>(null);
+  /**
+   * A move chosen by name (the Animation face's picker, an arrow on the
+   * map): the stage stood at its from state at once, its own motion landed
+   * where it stands, then brought to its to state, so the move read is that
+   * one, whatever state stood before. Only the last two states pressed
+   * gave a move, and a move no arrow names ("Delegate type refused → Every
+   * hour") could be all there was.
+   */
+  const chooseMove = async (from: string, to: string) => {
+    face = "move";
+    const on = review;
+    const at: Pick = { state: from, variant: null };
+    stop();
+    replays.release();
+    heading = keyOf(on, at);
+    await stage?.reach(argsOf(at), null, true);
+    onStage = { key: keyOf(on, at), review: on.name, state: from };
+    if (kept.state === to && kept.variant === null) {
+      arrive(on, kept);
+    } else {
+      keep(to, null);
+    }
+  };
+  /** Every move the states file names, for the Animation face's picker. */
+  const moveChoices = $derived(
+    review.moves
+      .filter((one) => one.from !== one.to)
+      .map((one) => ({
+        key: `${one.from}->${one.to}`,
+        from: one.from,
+        to: one.to,
+        name: words.move(nameIn(review, one.from), nameIn(review, one.to)),
+      }))
+  );
   const arrive = async (on: Review, pick: Pick) => {
     const key = keyOf(on, pick);
     // Against where the stage is heading: measured against the state that
@@ -405,6 +441,7 @@
     const to = nameIn(on, pick.state) || pick.state;
     const none: MoveState = { kind: "none", state: to };
     const from = nameIn(on, onStage?.state ?? "");
+    movePair = from ? `${onStage?.state}->${pick.state}` : null;
     const play =
       played && onStage?.state === played.from
         ? (on.states[pick.state]?.play ?? null)
@@ -854,6 +891,7 @@
     <WholeSet
       against={comparing ? against : null}
       kept={kept.state}
+      onmove={chooseMove}
       onpress={press}
       narrow={surface > 0 && surface < PHONE_LINE}
       {review}
@@ -874,7 +912,10 @@
 
 {#snippet moveFace(peek = false)}
   <MoveFace
+    choices={moveChoices}
+    chosen={movePair}
     {move}
+    onchoose={chooseMove}
     onfocusthing={(thing) => {
       if (thing) {
         stage?.reveal([thing]);
