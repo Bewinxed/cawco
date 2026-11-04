@@ -24,7 +24,7 @@
  * | rule        | read by                     | what it reads |
  * | ----------- | --------------------------- | ------------- |
  * | overflow    | scan.ts + impeccable `text-occlusion` | boxes past the screen, out of their control or box, a control out of its row, card or panel, text under a control or an opaque box; what is hidden (a 1px box, `sr-only`'s `clip-path: inset(50%)`) is not read |
- * | coral       | own code                    | each view's controls and grounded chips whose fill, border or (a control's) ink resolves to a coral token from tokens.css; at most one; a checked checkbox, switch or radio, a chosen record (`data-chosen`), an identity tile on its mark hue, and a mark out of the accessibility tree (`data-mark`: a comment's pin) are allowed and named |
+ * | coral       | own code                    | each view's (the spec's `views`, else the scope; and each `data-specimen`) controls and grounded chips whose fill, border or (a control's) ink resolves to a coral token from tokens.css; at most one; a checked checkbox, switch or radio, a chosen record (`data-chosen`), an identity tile on its mark hue, and a mark out of the accessibility tree (`data-mark`: a comment's pin) are allowed and named |
  * | glyph       | own code                    | a control whose only content is a glyph: no fill, border or shadow on it or on a wrapper that holds it alone; its svg holds no solid disc, tile or rounded shape spanning 70% of its viewBox |
  * | bar-ground  | own code                    | bars (toolbars, the bar data-slots, foot bars, and a `header` that does not scroll with its content: one that does, or one under another bar of its surface, heads a group of it, no bar) paint no fill, border or shadow; a folder-tab shelf (DESIGN.md, Shapes, Folder tabs), a group's capsule (DESIGN.md, The Title Bars Follow Liquid Glass Rule: Floating groups) and a foot's lone top hairline (DESIGN.md, Borders are graded) are named, not failed |
  * | head        | own code                    | a bar's (as bar-ground reads one) title and controls share one row (centres within 4px), no second line in the bar (a popover, menu or dialog it opens is no part of it), the title not repeated by the first heading under it |
@@ -33,9 +33,9 @@
  * | contrast    | own code + impeccable `low-contrast` | every text run against the ground under it (its boxes' fills, and the filled svg shapes drawn before it under its middle: a folder tab's sheet), 4.5:1 (3:1 at 24px); the lowest is reported |
  * | settled     | own code                    | no finite animation running, fonts loaded (`settle(page)` gets a page there) |
  * | made-up     | own code                    | no fixture or probe words (`PROBE-`, `/tmp/`, `Lorem` …), a lone "Body", text outside the spec's `allowedText` source |
- * | tight-inset | own code                    | words on an edged, rounded surface of 160×48 or more stand 8px or more from its sides |
+ * | tight-inset | own code                    | words on an edged, rounded surface of 160×48 or more stand 8px or more from its sides (DESIGN.md, The Row Grid Rule) |
  * | tight-control | own code                  | a drawn button stands 7px (`space-2`) or more under the field, line or card above it |
- * | uneven-inset | own code                   | a drawn row its children fill (to its padding at both ends) keeps one inset at both ends, a ghost control read by its ink: the smaller end not under 55% of a 16px or larger one |
+ * | uneven-inset | own code                   | a drawn row its children fill (to its padding at both ends) keeps one inset at both ends, a ghost control read by its ink: the smaller end not under 55% of a 16px or larger one (DESIGN.md, The Row Grid Rule) |
  * | fat-row     | own code                    | one-line rows of a list (its children of its commonest kind) not over 3.4 lines and 48px tall, a row that draws nothing less the margins its children keep inside it |
  * | loose-list  | own code                    | a list's alike rows, where two stand next to each other, not further apart than they are tall, and 24px |
  * | empty-pane  | own code                    | a landmark or pane of 120px or more holds a word, mark, control (an editor's `contenteditable` too) or drawn block |
@@ -45,6 +45,14 @@
  * | anchor-drift | own code, over reads        | an open popover, menu or listbox whose height changed between two reads of a page holds its top or its bottom |
  * | decoration-spill | own code                 | an outline (offset past the border edge), a hard box-shadow (blur under 1px, by its spread and offsets), a dashed or dotted border, or an absolutely placed ::before/::after that draws, reaching 0.5px past the box it marks (a pseudo's own element, when that draws; not a pseudo flush outside it, which carries it on) or past the nearest box that clips it or rounded box that draws, its own box inside that one; a clip-path or mask is unread |
  * | nested-radius | own code                    | a wash (a fill or gradient, an element's or an absolute pseudo's) that nearly fills a rounded box (one axis within its radius of both ends) and whose corner stands within that radius of the box's corner (the box drawing or clipping) is outer radius less the mean inset, within 1.5px or a quarter of it, plus half the two insets' difference |
+ *
+ * A sheet of specimens (a bench) says what a view is on the page itself:
+ * each specimen that stands for a screen of its own carries `data-specimen`,
+ * and the per-view rules (coral) read each as a view of its own, its
+ * elements counted in the nearest view that holds them, the specimen itself
+ * included (a button can be one). What stands outside every specimen is
+ * still the scope's, or a spec's `views`. A product screen never carries
+ * it: there, one view is the screen.
  *
  * Two other unintended-looking lines are read already: cut by
  * the crop by `overflow` and `hidden-cue`, spills its slot by `overflow`. An
@@ -112,7 +120,7 @@ const CHECKS: Record<CheckName, { says: string; by: string }> = {
   settled: { says: "no finite motion running, fonts ready", by: "own code" },
   "made-up": { says: "nothing made up", by: "own code" },
   "tight-inset": {
-    says: "words stand 8px inside their surface (the row grid's inset)",
+    says: "words stand 8px inside their surface (The Row Grid Rule: the text column and the trailing edge `space-3` in)",
     by: "own code",
   },
   "tight-control": {
@@ -120,7 +128,7 @@ const CHECKS: Record<CheckName, { says: string; by: string }> = {
     by: "own code",
   },
   "uneven-inset": {
-    says: "a drawn row keeps one inset at both ends (the row grid's trailing edge)",
+    says: "a drawn row keeps one inset at both ends (The Row Grid Rule: the trailing edge, drawn in ink)",
     by: "own code",
   },
   "fat-row": {
@@ -191,7 +199,7 @@ export interface CheckOptions {
   noImpeccable?: string;
   /** The surface the rules read: the product, not a preview's own chrome. Default `body`. */
   scope?: string;
-  /** Each match is one view for the coral count. Default: the scope. */
+  /** Each match is one view for the coral count. Default: the scope. A page's `data-specimen` is one too, whatever this says. */
   views?: string;
 }
 
@@ -703,6 +711,12 @@ function readInPage(args: InPageArgs): InPageRead {
 
   const CONTROL =
     'button, a[href], input:not([type="hidden"]), select, textarea, summary, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="option"], [role="checkbox"], [role="radio"], [role="switch"], [role="combobox"], [role="slider"]';
+  /**
+   * A specimen on a sheet of them (a bench): one view of its own for the
+   * per-view rules (coral), as the screen it stands in for is, however many
+   * stand on the sheet together.
+   */
+  const SPECIMEN = "[data-specimen]";
   /** A layer a control opens: over the page, wherever its markup stands. */
   const POPOVER =
     '[data-popover], [data-slot="popover-content"], [role="menu"], [role="listbox"]';
@@ -759,13 +773,29 @@ function readInPage(args: InPageArgs): InPageRead {
         el.closest("label")?.querySelector("input:checked") ||
         el.querySelector('input:checked, [aria-checked="true"]')
       );
-    const views = args.views
-      ? [...scope.querySelectorAll(args.views)].filter(shown)
-      : [scope];
+    // The views: the spec's (`views`), else the scope; and each specimen a
+    // sheet marks (`data-specimen`), a view of its own whichever view holds
+    // it. An element counts in the nearest view that holds it, itself
+    // included: a specimen that is a button is its own view.
+    const views = [
+      ...(args.views
+        ? [...scope.querySelectorAll(args.views)].filter(shown)
+        : [scope]),
+      ...[...scope.querySelectorAll(SPECIMEN)].filter(shown),
+    ].filter((one, i, all) => all.indexOf(one) === i);
+    const viewSet = new Set<Element>(views);
+    const viewOf = (el: Element): Element | null => {
+      for (let up: Element | null = el; up; up = up.parentElement) {
+        if (viewSet.has(up)) {
+          return up;
+        }
+      }
+      return null;
+    };
     for (const view of views) {
       const spends: { el: Element; what: string }[] = [];
-      for (const el of view.querySelectorAll("*")) {
-        if (el.closest("svg") || !shown(el)) {
+      for (const el of [view, ...view.querySelectorAll("*")]) {
+        if (el.closest("svg") || !shown(el) || viewOf(el) !== view) {
           continue;
         }
         const s = style(el);
@@ -1979,8 +2009,9 @@ function readInPage(args: InPageArgs): InPageRead {
     ) &&
     !el.closest('table, [role="grid"]');
 
-  // The row grid's inset ("ends on one trailing edge `space-3` in from the
-  // list's"), held at the line words start to crowd it. Sideways only: a text
+  // DESIGN.md, The Row Grid Rule: words on "one text column `space-3` after"
+  // the mark, the last control on "one trailing edge `space-3` in from the
+  // list's", held at the line words start to crowd it. Sideways only: a text
   // rect is the line's box, not its ink, so its top and foot carry the
   // leading and read short of what the eye sees.
   if (!skip.has("tight-inset")) {
@@ -2069,9 +2100,10 @@ function readInPage(args: InPageArgs): InPageRead {
     }
   }
 
-  // The row grid's trailing edge: a drawn row its children fill keeps one
-  // inset at both ends, read in ink: a control that draws nothing of its own
-  // (a ghost) ends where its words and glyph end, not at its padding. A row whose children stop
+  // DESIGN.md, The Row Grid Rule: the trailing edge "drawn in ink". A drawn
+  // row its children fill keeps one inset at both ends, read in ink: a
+  // control that draws nothing of its own (a ghost) ends where its words and
+  // glyph end, not at its padding. A row whose children stop
   // short of its padding on a side (a tab strip with room after its last
   // tab) has free space there, and is a layout.
   if (!skip.has("uneven-inset")) {

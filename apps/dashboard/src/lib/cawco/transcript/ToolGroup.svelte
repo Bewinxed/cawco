@@ -527,7 +527,7 @@
              still names them). -->
         {#if d.detail}
           <span
-            class="text-ink-muted opacity-70 group-state-open/trow:data-told:hidden"
+            class="text-ink-subtle group-state-open/trow:data-told:hidden"
             data-told={d.expanded === "prose" || undefined}
             >{` ${d.detail}`}</span
           >

@@ -9,7 +9,9 @@
  *  - coral: comment pins (PinMark: `data-mark`, `aria-hidden`, a figure on
  *    `action-solid`), the reader's own marks (DESIGN.md, Coral Action: "the
  *    reader's own row mark"), and a record of what was picked (ui/chip
- *    `data-chosen`, the chosen option) beside the one act.
+ *    `data-chosen`, the chosen option) beside the one act; a bench's sheet
+ *    of specimens, each `data-specimen` (a panel, or a button itself) with
+ *    its one act.
  *  - mixed-icons: a task ring (two circles on one centre, stroked; its
  *    check waiting at opacity 0) beside filled glyphs in a bar (DESIGN.md,
  *    Task ring).
@@ -32,7 +34,8 @@
  *  - bar-ground: a popover's foot, its top hairline parting it from the
  *    content (DESIGN.md, Borders are graded).
  *
- * The mistake each rule is for, still named: two coral acts, a worded chip
+ * The mistake each rule is for, still named: two coral acts, two in one
+ * specimen, a worded chip
  * on coral beside the act; an outlined mark beside filled ones; a scroller
  * cut with no cue, the usage strip's clip outside any control, a masked
  * strip with nothing peeking; a list stretched apart; one-line rows grown
@@ -152,6 +155,16 @@ const FIXTURES: Record<string, Fixture> = {
   "coral, two acts": {
     rule: "coral",
     html: `${BASE}<main><button class="act" type="button">Save</button> <button class="act" type="button">Install now</button></main>`,
+    want: "Install now",
+  },
+  "coral, a sheet of specimens, each a view of its own": {
+    rule: "coral",
+    html: `${BASE}<main><div class="panel" data-specimen><p>The install failed on studio.</p><button class="act" type="button">Retry</button></div> <div class="panel" data-specimen><p>3 machines run an older build.</p><button class="act" type="button">Install now</button></div> <button class="act" data-specimen type="button">Save</button> <button class="act" data-specimen type="button">Add task</button></main>`,
+    want: null,
+  },
+  "coral, two acts in one specimen": {
+    rule: "coral",
+    html: `${BASE}<main><div class="panel" data-specimen><button class="act" type="button">Retry</button> <button class="act" type="button">Install now</button></div> <button class="act" data-specimen type="button">Save</button></main>`,
     want: "Install now",
   },
   "coral, a worded chip on coral beside the act": {

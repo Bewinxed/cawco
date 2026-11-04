@@ -2,7 +2,7 @@
   /**
    * What a part that is one list or one strip shows where it stood when it
    * stops on a render error (FaultBoundary): one row on the house
-   * row grid (Caw's panel's surface brief, Caw's panel): Caw's still in the lead column, the
+   * row grid (DESIGN.md, The Row Grid Rule): Caw's still in the lead column, the
    * words, and at the trailing edge the action that leads, an outline, with
    * Show details stepped back beside it in a quiet ghost. The rest of its
    * surface keeps working, and its view's coral stays that view's (DESIGN.md,

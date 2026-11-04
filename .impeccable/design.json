@@ -3302,6 +3302,11 @@
         "section": "layout"
       },
       {
+        "name": "The Row Grid Rule",
+        "body": "A row's mark is centred in a 28px lead column, its words start on one text column `space-3` after it, and its last control ends on one trailing edge `space-3` in from the list's, drawn in ink: its last painted pixel (a fill, a ghost's last letter or stroke) lands on the edge within 1px, its box hanging past by what its ink stops short, never past the row's `space-3`, so a list never scrolls sideways.",
+        "section": "layout"
+      },
+      {
         "name": "The Frame Recesses Rule",
         "body": "The frame recesses and content never does. The one sanctioned card-in-card is the stat tile's recessed well.",
         "section": "elevation"

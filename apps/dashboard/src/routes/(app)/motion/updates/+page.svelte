@@ -28,7 +28,11 @@
 
   /**
    * Caw's panel as the notices stand in it: the kit's floating surface at the
-   * panel's width, and no wider than the page's column (a phone's).
+   * panel's width, and no wider than the page's column (a phone's). Each
+   * panel is a specimen of its own (`data-specimen`): Caw's panel holds one
+   * update notice at a time (updates/model `noticeFor`, "The one notice the
+   * screen shows"), so Retry and Install now never stand in one view, and
+   * the rendered checks' coral count reads each panel apart.
    */
   const panel = floatingSurface({ class: "w-full max-w-c-panel-w" });
   /** The notice grids: panels at their width where it fits, the column's where not. */
@@ -377,7 +381,7 @@
     data-states="notices"
   >
     {#each NOTICES as notice (notice.kind)}
-      <div class={panel} data-notice={notice.kind}>
+      <div class={panel} data-notice={notice.kind} data-specimen>
         <UpdateCard alone={false} {notice} onaction={noop} ondismiss={noop} />
       </div>
     {/each}
@@ -389,7 +393,7 @@
     class="grid grid-cols-(--notice-cols) items-box-start gap-space-5"
     data-states="notice-plain"
   >
-    <div class={panel} data-notice="plain">
+    <div class={panel} data-notice="plain" data-specimen>
       <UpdateCard
         alone
         notice={UPDATED_PLAIN}
@@ -404,7 +408,7 @@
     class="grid grid-cols-(--notice-cols) items-box-start gap-space-5"
     data-states="update-card"
   >
-    <div class={panel}>
+    <div class={panel} data-specimen>
       <UpdateCard alone notice={UPDATED} onaction={noop} ondismiss={noop} />
     </div>
   </div>

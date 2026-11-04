@@ -7,7 +7,9 @@
    * button cycles through rest, pending and done on
    * `window.__buttonBench` (`start`, then `stop`, the work ending well);
    * the icon cases stand still; and every label-only call site that gives
-   * a literal `pendingLabel` stands at rest, for its width.
+   * a literal `pendingLabel` stands at rest, for its width. Each button is
+   * a specimen of its own (`data-specimen`), standing for its call site's
+   * screen, so the rendered checks' coral count reads each apart.
    */
   import { onMount } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -32,18 +34,21 @@
 
 <div class="flex flex-wrap items-box-start gap-space-4 p-space-7">
   <Button
+    data-specimen
     data-case="label-cycle"
     label="Save"
     pending={cycling}
     pendingLabel="Saving…"
   />
   <Button
+    data-specimen
     data-case="icon-rest"
     icon={IconRefresh}
     label="Save"
     pendingLabel="Saving…"
   />
   <Button
+    data-specimen
     data-case="icon-pending"
     icon={IconRefresh}
     label="Save"
@@ -53,6 +58,7 @@
 </div>
 <div class="flex flex-wrap items-box-start gap-space-4 p-space-7">
   <Button
+    data-specimen
     data-site="lib/cawco/HubBand.svelte:268"
     label="Reconnect now"
     pendingLabel="Reconnecting…"
@@ -60,6 +66,7 @@
     variant="outline"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/config/FetchSkillPopover.svelte:232"
     label="Fetch skill"
     pendingLabel="Fetching…"
@@ -67,6 +74,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/config/LinkMarketplacePopover.svelte:197"
     label="Link"
     pendingLabel="Linking…"
@@ -74,6 +82,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/config/NewMemoryPopover.svelte:125"
     label="Create and open"
     pendingLabel="Creating…"
@@ -81,6 +90,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/home/CawPanel.svelte:213"
     label="Reset"
     pendingLabel="Resetting…"
@@ -88,6 +98,7 @@
     variant="secondary"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/move/MoveWait.svelte:543"
     label="Cancel"
     pendingLabel="Stopping…"
@@ -95,6 +106,7 @@
     variant="secondary"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/move/MoveWait.svelte:553"
     label="Retry"
     pendingLabel="Retrying…"
@@ -102,6 +114,7 @@
     variant="secondary"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/move/MoveWait.svelte:585"
     label="Cancel"
     pendingLabel="Stopping…"
@@ -109,6 +122,7 @@
     variant="secondary"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/preview/PreviewPane.svelte:2075"
     label={commonWords.tryAgain}
     pendingLabel="Reloading…"
@@ -116,6 +130,7 @@
     variant="outline"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/preview/PreviewPane.svelte:2084"
     label={commonWords.tryAgain}
     pendingLabel="Closing…"
@@ -123,6 +138,7 @@
     variant="outline"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/project/ProjectDetails.svelte:406"
     label="Add"
     pendingLabel="Adding…"
@@ -130,6 +146,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/project/ProjectHead.svelte:521"
     label="Start"
     pendingLabel="Starting…"
@@ -137,6 +154,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/tasks/NewTaskForm.svelte:114"
     label="Add task"
     pendingLabel="Adding…"
@@ -144,6 +162,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/tasks/TaskNeeds.svelte:236"
     label={commonWords.tryAgain}
     pendingLabel="Starting…"
@@ -151,6 +170,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/tasks/TaskReview.svelte:629"
     label={commonWords.tryAgain}
     pendingLabel="Starting…"
@@ -158,6 +178,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/tasks/TaskReview.svelte:638"
     label={taskReviewWords.approve("Done")}
     pendingLabel={taskReviewWords.approving}
@@ -165,6 +186,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/tasks/TaskReview.svelte:648"
     label={taskReviewWords.comment}
     pendingLabel={taskReviewWords.commenting}
@@ -172,6 +194,7 @@
     variant="outline"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/tasks/TaskReview.svelte:659"
     label={taskReviewWords.sendBack("Ready")}
     pendingLabel={taskReviewWords.sendingBack}
@@ -179,6 +202,7 @@
     variant="outline"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/tasks/TextSection.svelte:93"
     label="Save"
     pendingLabel="Saving…"
@@ -186,6 +210,7 @@
     variant="outline"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/transcript/DelegateTray.svelte:1311"
     label="Dismiss"
     pendingLabel="Dismissing…"
@@ -193,6 +218,7 @@
     variant="outline"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/transcript/DelegateTray.svelte:1548"
     label="Dismiss all"
     pendingLabel="Dismissing…"
@@ -200,6 +226,7 @@
     variant="outline"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/transcript/Prompt.svelte:866"
     label="Dismiss"
     pendingLabel="Dismissing…"
@@ -207,6 +234,7 @@
     variant="outline"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/usage/ProjectSpend.svelte:337"
     label="Save"
     pendingLabel="Saving…"
@@ -214,6 +242,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="lib/cawco/usage/ProjectSpend.svelte:409"
     label="Save"
     pendingLabel="Saving…"
@@ -221,6 +250,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="routes/(app)/config/connections/+page.svelte:483"
     label="Sign in"
     pendingLabel="Signing in…"
@@ -228,6 +258,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="routes/(app)/config/connections/+page.svelte:591"
     label="Save key"
     pendingLabel="Saving…"
@@ -235,6 +266,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="routes/(app)/config/devices/+page.svelte:178"
     label="Require paired devices"
     pendingLabel="Pairing this browser…"
@@ -242,6 +274,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="routes/(app)/config/devices/+page.svelte:204"
     label="Stop requiring paired devices"
     pendingLabel="Stopping…"
@@ -249,6 +282,7 @@
     variant="grant"
   />
   <Button
+    data-specimen
     data-site="routes/(app)/config/models/+page.svelte:310"
     label="Disconnect"
     pendingLabel="Disconnecting…"
@@ -256,6 +290,7 @@
     variant="outline"
   />
   <Button
+    data-specimen
     data-site="routes/(app)/config/models/+page.svelte:320"
     label="Connect OpenRouter"
     pendingLabel="Opening OpenRouter…"
@@ -263,6 +298,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="routes/(app)/config/models/+page.svelte:394"
     label="Remove key"
     pendingLabel="Removing…"
@@ -270,6 +306,7 @@
     variant="outline"
   />
   <Button
+    data-specimen
     data-site="routes/(app)/config/models/+page.svelte:404"
     label="Save key"
     pendingLabel="Saving…"
@@ -277,6 +314,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="routes/(app)/config/phone/+page.svelte:138"
     label="Send test push"
     pendingLabel="Sending…"
@@ -284,6 +322,7 @@
     variant="outline"
   />
   <Button
+    data-specimen
     data-site="routes/(app)/config/previews/+page.svelte:210"
     label="Save"
     pendingLabel="Saving…"
@@ -291,6 +330,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="routes/(app)/config/subagents/+page.svelte:177"
     label="Push to machines"
     pendingLabel="Pushing…"
@@ -298,6 +338,7 @@
     variant="outline"
   />
   <Button
+    data-specimen
     data-site="routes/(app)/config/updates/+page.svelte:157"
     label="Reset"
     pendingLabel="Resetting…"
@@ -305,6 +346,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="routes/(app)/config/updates/+page.svelte:184"
     label="Switch to Nightly"
     pendingLabel="Switching…"
@@ -312,6 +354,7 @@
     variant="default"
   />
   <Button
+    data-specimen
     data-site="routes/(app)/config/updates/+page.svelte:259"
     label={commonWords.checkForUpdates}
     pendingLabel="Checking…"

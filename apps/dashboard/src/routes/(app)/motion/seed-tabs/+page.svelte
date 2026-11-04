@@ -7,18 +7,31 @@
    * goes to localStorage, the workspace's source, and to the server's copy
    * (lib/cawco/prefs.ts) before the page moves on, so the server draws the
    * strip from the first paint.
+   *
+   * Opened with no ids, it says what to pass and takes them by hand (DESIGN.md,
+   * The Empty Starts Work Rule): the field is the parameter, so Open asks for
+   * this page again with `?ids=` as typed, a whole load, and the page goes on
+   * from there.
    */
   import { onMount } from "svelte";
   import { leaveThePage } from "#lib/cawco/leaving.js";
   import { store } from "#lib/cawco/storage.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { IconWindow } from "#lib/icons.js";
   import { page } from "$app/state";
 
   const KEY = "cawco-workspace";
 
-  onMount(async () => {
-    const ids = (page.url.searchParams.get("ids") ?? "")
+  const ids = $derived(
+    (page.url.searchParams.get("ids") ?? "")
       .split(",")
-      .filter(Boolean);
+      .map((id) => id.trim())
+      .filter(Boolean)
+  );
+
+  onMount(async () => {
     if (ids.length === 0) {
       return;
     }
@@ -37,3 +50,36 @@
     leaveThePage(() => location.replace(`/session/${ids[0]}`));
   });
 </script>
+
+{#if ids.length === 0}
+  <!-- The action stands the block's width (`fill`), so the field takes what
+       the row leaves it at a phone's width rather than its own 480px. -->
+  <EmptyState
+    actionWidth="fill"
+    icon={IconWindow}
+    pad="pane"
+    title="No sessions to open"
+  >
+    {#snippet line()}
+      Pass their ids as <code>?ids=</code>, comma separated: they open as one
+      group's tabs, the first in front.
+    {/snippet}
+    {#snippet action()}
+      <form
+        class="flex w-c-bench-field-w max-w-full gap-space-2"
+        data-sveltekit-reload
+        method="get"
+      >
+        <Input
+          aria-label="Session ids"
+          class="flex-1"
+          face="mono"
+          measure="shrink"
+          name="ids"
+          required
+        />
+        <Button label="Open as tabs" type="submit" />
+      </form>
+    {/snippet}
+  </EmptyState>
+{/if}

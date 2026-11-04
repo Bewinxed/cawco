@@ -7,7 +7,10 @@
    * - the plan's: its title, its progress ring and figure (`titleControl`,
    *   the title its lead);
    * - a task attempt's to-dos with the task id under them (`title`, and
-   *   `subtitle` set as code, `subtitleCode`, as PlanPane sets it);
+   *   `subtitle` set as code, `subtitleCode`). No pane sets a to-dos
+   *   subtitle: the one product caller of `subtitle` is PreviewPane, whose
+   *   line is an artifact's ask in meta ink (`subtitle={headLine}`), not
+   *   code;
    * - a project file's path (`title`), the longest, beside icon actions.
    * The probe reads every word and the ring of the name against every action.
    */

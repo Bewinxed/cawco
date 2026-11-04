@@ -976,10 +976,17 @@
     <!-- What will happen and why, then the command or the change itself: a
          grant is made on what runs, never on a sentence about it alone. The
          words are the hub's (core permission-presentation.ts), the same on
-         iOS; secrets in the fields are already hidden. -->
+         iOS; secrets in the fields are already hidden. Under a finger the
+         command's chevron, at the body's inline end, reaches its 44px area
+         past the body's box, and a scroller scrolls to what reaches past it:
+         the body would pan sideways under a swipe. So, as the tab strip and
+         the attachment row hold their controls' areas inside their clips,
+         its padding grows into the card's own inline pad and an equal
+         negative margin gives the layout that room back: the area stands
+         inside the clip, whole, and the words do not move. -->
     <div
       data-slot="body"
-      class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain coarse:-mx-space-3 coarse:px-space-3 opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="1"
       style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >

@@ -12,9 +12,9 @@
    * a live Crepe editor, for its slash menu, and a Caw reply's file chips
    * (`?control=files` stands the page on that project's file, shallowly, as
    * the project page does, so the first chip reads current), a chosen
-   * option chip that is a button, and the split's handle (its drag's
-   * `data-active` the probe sets), and two rows on a half pixel under a
-   * list's ghost and pill (`data-probe="half"`).
+   * option chip that is a button, and the split's handle between a page and
+   * its side surface (its drag's `data-active` the probe sets), and two rows
+   * on a half pixel under a list's ghost and pill (`data-probe="half"`).
    */
   import { CAPABILITIES_NONE } from "@cawco/core/harness";
   import { cawco } from "#lib/cawco/client.svelte.js";
@@ -269,11 +269,33 @@
       {/each}
     </div>
   </section>
+  <!-- The split as Split stands it: the page, the handle, then the page's
+       side surface, each holding its own words, so the handle reads as what
+       parts them. The page is the session's exchange over the first
+       comment; the surface, the preview with the comment still open. -->
   <section class="h-c-bench-side-h w-c-bench-side-w min-w-0" data-probe="split">
     <Resizable.PaneGroup direction="horizontal">
-      <Resizable.Pane defaultSize={50} look="split" />
+      <Resizable.Pane defaultSize={50} look="split">
+        <div class="flex min-w-0 flex-1 flex-col gap-space-2 p-space-3">
+          {#each pins[0]?.thread ?? [] as said (said.id)}
+            <p
+              class={[
+                "type-body",
+                said.by === "person" ? "text-ink-strong" : "text-ink-muted",
+              ]}
+            >
+              {said.text}
+            </p>
+          {/each}
+        </div>
+      </Resizable.Pane>
       <Resizable.Handle look="split" />
-      <Resizable.Pane defaultSize={50} look="split" />
+      <Resizable.Pane defaultSize={50} look="split">
+        <div class="flex min-w-0 flex-1 flex-col gap-space-1 p-space-3">
+          <p class="type-label text-ink-strong">Preview</p>
+          <p class="type-meta text-ink-muted">{pins[1]?.thread[0]?.text}</p>
+        </div>
+      </Resizable.Pane>
     </Resizable.PaneGroup>
   </section>
 </main>

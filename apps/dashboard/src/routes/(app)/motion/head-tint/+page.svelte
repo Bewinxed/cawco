@@ -79,7 +79,12 @@
     ],
     [
       "Show me the narrowest case.",
-      [["Bash", "bun scripts/probe-kit/run.ts web --width 320"]],
+      [
+        [
+          "Bash",
+          'bunx playwright screenshot --viewport-size "320,640" http://localhost:3455/ tray-chip-320.png',
+        ],
+      ],
       "At 320px the chip holds its glyph, four characters and the ellipsis, then the count. Nothing reaches the pane's edge, and the chip's hit area stays 44px tall under a finger.",
     ],
     [

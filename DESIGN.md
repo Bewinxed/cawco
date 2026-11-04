@@ -662,6 +662,8 @@ The shell is a resizable rail (228px by default, the reader's own width wins), a
 
 **Density.** A 44px row pitch, a 32px header band and 90px stat tiles; the transcript runs a compact scale from the same tokens; under a coarse pointer compact relaxes to the touch floor.
 
+**The Row Grid Rule.** A row's mark is centred in a 28px lead column, its words start on one text column `space-3` after it, and its last control ends on one trailing edge `space-3` in from the list's, drawn in ink: its last painted pixel (a fill, a ghost's last letter or stroke) lands on the edge within 1px, its box hanging past by what its ink stops short, never past the row's `space-3`, so a list never scrolls sideways.
+
 **Breakpoints.** 640px (`phone:`: dialogs become bottom sheets, toasts move to the top), 900px (`desk:`: the rail becomes a burger sheet, panes take the drawer layout), and 1024px (fluid sizes reach their maximum). A coarse pointer counts as narrow for nav rows.
 
 ## Elevation & Depth

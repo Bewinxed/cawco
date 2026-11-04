@@ -209,129 +209,135 @@ Under "Layout" (DESIGN.md line 648); rule at line 652.
 - **One prominent action**, trailing, on `action-surface`; colour on the glass is for it and for status alone.
 - **Back and Close are symbols**, named by where they go, never a button that says Back or Close.
 
+## The Row Grid Rule
+
+Under "Layout" (DESIGN.md line 648); rule at line 665.
+
+**The Row Grid Rule.** A row's mark is centred in a 28px lead column, its words start on one text column `space-3` after it, and its last control ends on one trailing edge `space-3` in from the list's, drawn in ink: its last painted pixel (a fill, a ghost's last letter or stroke) lands on the edge within 1px, its box hanging past by what its ink stops short, never past the row's `space-3`, so a list never scrolls sideways.
+
 ## The Frame Recesses Rule
 
-Under "Named Rules" (DESIGN.md line 690); rule at line 691.
+Under "Named Rules" (DESIGN.md line 692); rule at line 693.
 
 **The Frame Recesses Rule.** The frame recesses and content never does. The one sanctioned card-in-card is the stat tile's recessed well.
 
 ## The Warm Shadow Rule
 
-Under "Named Rules" (DESIGN.md line 690); rule at line 693.
+Under "Named Rules" (DESIGN.md line 692); rule at line 695.
 
 **The Warm Shadow Rule.** Shadows are warm ink taken from the neutral ramp, never `rgba(0,0,0,·)`. The tile's night drop is the one black, under a ring of ink.
 
 ## The Night Ring Rule
 
-Under "Named Rules" (DESIGN.md line 690); rule at line 695.
+Under "Named Rules" (DESIGN.md line 692); rule at line 697.
 
 **The Night Ring Rule.** At night a raised surface is told apart from its frame by a 1px inner ring of ink as well as its drop. The ring is part of the shadow token, so a component that takes the token gets it in both schemes.
 
 ## The Concentric Rule
 
-Under "Shapes" (DESIGN.md line 697); rule at line 701.
+Under "Shapes" (DESIGN.md line 699); rule at line 703.
 
 **The Concentric Rule.** A surface nested in another's corner takes the outer radius less the gap between their edges, the outer's edge counted. Where no radius token is the derived value, a derived token holds it (`inner-well-r`), never a literal. A container declares its outer radius and inset once (design.css `concentric-in`) and its rows and parts take the result (`concentric-<radius>`); the hover ghost, the selection pill and the focus ring take the contour of what they mark.
 
 ## The Measured Exception Rule
 
-Under "Shapes" (DESIGN.md line 697); rule at line 703.
+Under "Shapes" (DESIGN.md line 699); rule at line 705.
 
 **The Measured Exception Rule.** The stat tile keeps the comp's radii (a 10px card round a 7px well), a panel its 16px shell, and the smallest marks the 2px hair. Each is a token.
 
 ## The Whole Pixel Border Rule
 
-Under "Shapes" (DESIGN.md line 697); rule at line 707.
+Under "Shapes" (DESIGN.md line 699); rule at line 709.
 
 **The Whole Pixel Border Rule.** A border or outline is a whole CSS pixel; a fractional stroke is an inset ring (`inset-ring-(length:--x)`) or an SVG stroke. `scripts/border-width-check.ts` refuses a fractional width.
 
 ## The Earned Count Rule
 
-Under "Components" (DESIGN.md line 713); rule at line 717.
+Under "Components" (DESIGN.md line 715); rule at line 719.
 
 **The Earned Count Rule.** A count on a control is drawn only above 0: at 0 the count element is gone and the control's name drops it too, on the web and in the app. A figure whose 0 is itself the reading (a measurement, a share, a total) is not a count.
 
 ## The Press Rule
 
-Under "Buttons" (DESIGN.md line 719); rule at line 725.
+Under "Buttons" (DESIGN.md line 721); rule at line 727.
 
 **The Press Rule.** A compact standalone control (a button, a chip, a switch) scales to `--press-scale`; anything wide or grouped (rows, cards, tabs, segments) tints to `surface-pressed` and moves nothing. A link dims. The tint outranks a control's own fill by specificity, never `!important`.
 
 ## The Hold-To-Select Rule
 
-Under "Dialog, sheet and drawer" (DESIGN.md line 767); rule at line 773.
+Under "Dialog, sheet and drawer" (DESIGN.md line 769); rule at line 775.
 
 **The Hold-To-Select Rule.** A press that starts in a text field is never captured by a drawer or gesture round it, so iOS hold-to-select and Paste reach the field. A held press on a context-menu trigger suppresses the platform callout.
 
 ## The Empty Starts Work Rule
 
-Under "Empty, loading and skeleton states" (DESIGN.md line 781); rule at line 786.
+Under "Empty, loading and skeleton states" (DESIGN.md line 783); rule at line 788.
 
 **The Empty Starts Work Rule.** An empty state always offers to start the work that would fill it: its one action starts a session with Caw (or the screen's own agent) already asking for the thing, its words editable before they go. Where that can't start, it says why and offers the way by hand.
 
 ## The Caw Stands On The Axis Rule
 
-Under "Empty, loading and skeleton states" (DESIGN.md line 781); rule at line 788.
+Under "Empty, loading and skeleton states" (DESIGN.md line 783); rule at line 790.
 
 **The Caw Stands On The Axis Rule.** Caw sits in the 28px lead column only on a row. Everywhere else (an empty page, a hero, a setup card, a fault at a surface's centre) he stands centred on the composition's own axis.
 
 ## The Claim Of Nothing Rule
 
-Under "Empty, loading and skeleton states" (DESIGN.md line 781); rule at line 790.
+Under "Empty, loading and skeleton states" (DESIGN.md line 783); rule at line 792.
 
 **The Claim Of Nothing Rule.** An empty state renders only once the data is known to be empty. While it loads, the skeleton stands at the real layout's size, and the first read replaces it in the reveal. Nothing claims zero while the hub connection is down.
 
 ## The Real Wait Rule
 
-Under "Empty, loading and skeleton states" (DESIGN.md line 781); rule at line 792.
+Under "Empty, loading and skeleton states" (DESIGN.md line 783); rule at line 794.
 
 **The Real Wait Rule.** Nothing stands in for a wait until it has lasted `--dur-wait-grace`. Caw, once he appears, finishes his enter before what arrives lands, then fades out from the drawing he is on (assets/mascot/README.md, Contract).
 
 ## The Solar Duotone Rule
 
-Under "Icons" (DESIGN.md line 807); rule at line 808.
+Under "Icons" (DESIGN.md line 809); rule at line 810.
 
 **The Solar Duotone Rule.** Every product icon is Solar's bold-duotone cut, imported through `$lib/icons.ts` (packages/icons): one face for the whole product. The duotone's second layer is `currentColor` at 50%. A status glyph keeps its `status-*-glyph` hue and holds 3:1 as a whole on its surfaces. Chevrons and arrows use Solar's linear cut. Close, Plus and Tick are local glyphs on Solar's 24px grid with a 1.5 linear stroke and round caps; the Tick is also the done glyph, in `status-done-glyph`. An icon is the glyph alone: no circle, square, squircle or box stands round it, and where Solar ships only a contained cut, a container-less glyph is drawn in Solar's style.
 - **Sizes:** 12px beside meta text, 16px in controls and rows (the default), 20px in nav and headers.
 
 ## The Caret Rule
 
-Under "Focus and hit areas" (DESIGN.md line 811); rule at line 812.
+Under "Focus and hit areas" (DESIGN.md line 813); rule at line 814.
 
 **The Caret Rule.** A text field's focus indicator is its caret (WCAG 2.2 Understanding 2.4.7): no field, editor or search strip draws the coral ring. A field with a frame steps that frame's edge to `border-control-strong` while its text has focus (`field-edge`); a field that is the whole surface shows its caret alone.
 
 ## The One Ring Rule
 
-Under "Focus and hit areas" (DESIGN.md line 811); rule at line 814.
+Under "Focus and hit areas" (DESIGN.md line 813); rule at line 816.
 
 **The One Ring Rule.** Every control shows one ring on keyboard focus only (`:focus-visible`): a 2px outline in `focus-ring`, 2px outside, never a box-shadow, so it follows the radius and survives forced colours; inset on rows, tabs and anything flush or clipped. The ring is for focus alone: a selection or a mode takes the selected marks instead.
 
 ## The 44 Touch Rule
 
-Under "Focus and hit areas" (DESIGN.md line 811); rule at line 816.
+Under "Focus and hit areas" (DESIGN.md line 813); rule at line 818.
 
 **The 44 Touch Rule.** On a coarse pointer every control's tappable area reaches 44×44 through a transparent `::after` (`.touch-hit`) while its drawn size stays; neighbours stop at the midpoint (`--hit-gap-x`, `--hit-gap-y`). A text field's area lies under it (`.hit-under`). A chip in running text takes its line's height, as a link does (WCAG 2.5.8's inline exception).
 
 ## The 24 Pointer Rule
 
-Under "Focus and hit areas" (DESIGN.md line 811); rule at line 818.
+Under "Focus and hit areas" (DESIGN.md line 813); rule at line 820.
 
 **The 24 Pointer Rule.** On a fine pointer a control drawn under 24×24 reaches 24px through `.pointer-hit`.
 
 ## The Peer Rule
 
-Under "Answering a permission" (DESIGN.md line 822); rule at line 823.
+Under "Answering a permission" (DESIGN.md line 824); rule at line 825.
 
 **The Peer Rule.** Approve and Deny are peers on every surface that answers a permission (Caw's panel, the transcript's card `transcript/Prompt.svelte`, the peek): the operator answers under time pressure, often from a phone, and a rushed thumb must not grant when it meant deny. They are the same size (`sm`, with a 44×44 hit area on every pointer), the same label type, the same `surface-recess` fill and `border-button-outline` edge, in `ink-strong`, reading apart by glyph, word and place, never by hue; no status fill or ink touches either, and neither changes under the pointer. They stand at opposite ends of their row, at least `--space-8` apart, with no third control between them.
 
 ## The Consequential Grant Rule
 
-Under "Answering a permission" (DESIGN.md line 822); rule at line 825.
+Under "Answering a permission" (DESIGN.md line 824); rule at line 827.
 
 **The Consequential Grant Rule.** A standing grant ("Always allow … for …") is wider than the request, so it is kept apart: under a break and a hairline, after a sentence saying what it would allow, in the warning tint with warning ink, a shield glyph and a real edge, the most salient control on the card on purpose. Above the answer row the card says who asks, what will happen and to what, and the change itself, open (the diff, scrolling inside). Nothing is behind a disclosure: a grant is made on what it changes.
 
 ## The Should It Exist Rule
 
-Under "Voice" (DESIGN.md line 827); rule at line 831.
+Under "Voice" (DESIGN.md line 829); rule at line 833.
 
 **The Should It Exist Rule.** Before a string is phrased, it earns its place on the screen (the `clean-copy` skill). Walk it down in order and cut at the first that fires: a thing the person would never have wondered about, unprompted, goes, since naming it plants the question; a caption that restates its label, field or value goes; a line that rules out a failure, defends a choice or remembers a fixed bug goes (the fix is the fix). Cut whole clauses; when nothing is left, the element goes with its words, its empty hint prop and its `<p>` too.
