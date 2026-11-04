@@ -192,13 +192,15 @@ import {
   branchPushCheck,
   type Failed,
   type GateStep,
-  keptCommits,
   type LandingTurn,
   land,
   landingQueue,
   pushBranch,
   quote,
   type Refusal,
+  reportedCommits,
+  reportedDiffstat,
+  reportedRange,
   statusCommand,
 } from "./landing";
 import { type HubLifetimeShape, type HubTimer, soon } from "./lifetime";
@@ -7888,40 +7890,35 @@ export const createWorkItems = ({
   };
 
   /**
-   * The report's commits and diffstat: only what the item's own session
-   * made. A range from a starting commit cannot say that — a rebase onto a
-   * newer main pulls other people's commits into it, and after the push that
-   * lands the work, `merge-base origin/<base> HEAD` is HEAD itself. The
-   * worktree's HEAD reflog can: every commit its session made, or rewrote by
-   * rebasing, is an entry there. The ones since the item began, as HEAD holds
-   * them now, the landing's own rewrite of them included, are the item's
-   * ({@link keptCommits}); the diffstat runs from the oldest of them. Each
-   * command prints only what the report shows.
+   * The report's commits and diffstat: what `landing` put on the item's
+   * base, or, where it put nothing there, what the workspace holds that the
+   * base does not (landing.ts {@link reportedRange}). Each command prints
+   * only what the report shows; one git could not answer says so.
    */
-  const changesSince = async (
+  const reportedChanges = async (
     workspace: WorkspaceRow,
-    item: WorkItemRow
+    item: WorkItemRow,
+    landing: Exclude<Landed, { kind: "retry" | "stopped" }>
   ): Promise<string> => {
     // A folder has no commits: its landing line names every path it changed.
     if (workspace.kind === "folder") {
       return "";
     }
     const git = (cmd: string) => runIn(workspace, item)(cmd, GIT_TIMEOUT_MS);
-    const since = Math.floor(item.createdAt.getTime() / 1000);
-    const kept = (await git(keptCommits(since))).stdout
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .join(" ");
-    if (!kept) {
+    const range = reportedRange(
+      `origin/${workspace.base}`,
+      landing.kind === "done" ? landing.landed : undefined
+    );
+    const [commits, diffstat] = await Promise.all([
+      git(reportedCommits(range)),
+      git(reportedDiffstat(range, DIFFSTAT_LINES)),
+    ]);
+    if (commits.exitCode !== 0) {
+      return `\n\nCommits:${fenced(`git could not list them: ${failedWith(commits)}`)}`;
+    }
+    if (!commits.stdout.trim()) {
       return `\n\nCommits:${fenced("(none)")}\n\nDiffstat:${fenced("(no changes)")}`;
     }
-    const [commits, diffstat] = await Promise.all([
-      git(`git log --oneline --no-walk ${kept}`),
-      git(
-        `git diff --stat "$(git merge-base --octopus ${kept})^" HEAD | tail -n ${DIFFSTAT_LINES}`
-      ),
-    ]);
     return `\n\nCommits:${fenced(commits.stdout.trim())}\n\nDiffstat:${fenced(diffstat.stdout.trim() || "(no changes)")}`;
   };
 
@@ -8813,7 +8810,7 @@ export const createWorkItems = ({
       submission.summary,
       landing,
       collected,
-      `${workspace.host ? "" : await changesSince(workspace, item)}${findingsBlock(submission.findings)}${shipped}`
+      `${workspace.host ? "" : await reportedChanges(workspace, item, landing)}${findingsBlock(submission.findings)}${shipped}`
     );
     const lines = landingGateLines(landing);
     const gateSaid = `${lines ? `\n\nMerge checks:\n${lines}` : ""}${shipped}`;

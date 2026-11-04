@@ -9,8 +9,10 @@
  * A branch of four commits, each with its own author date, (one with a `Co-Authored-By` trailer, one with
  * another session's link above one, one whose subject starts with `#`, one
  * with no body) is stamped, stamped again, rebased onto a newer upstream
- * and stamped, a second branch is stamped where it stands (`keepBase`), and
- * a third conflicts with its upstream. After each, the laws:
+ * and stamped, a second branch is stamped where it stands (`keepBase`), a
+ * third conflicts with its upstream, and a fourth, cut from a commit made
+ * outside this checkout (a workspace cut `from` another's), goes on from it
+ * and lands onto a newer upstream. After each, the laws:
  *
  * - Law A: each commit carries exactly one `Agent-Logs-Url`, a link into
  *   the session.
@@ -35,11 +37,13 @@
  *   were.
  * - Law I: no landing leaves its rebase's worktree behind: `git worktree
  *   list` names the repository's own alone, and the scratch dir is empty.
- * - Law J: after each landing, the report's commits (`keptCommits`, from
- *   the moment the branch's work began) are the branch's own as HEAD holds
- *   them now, stamped and rebased, and none of upstream's: upstream's
- *   commit is made outside this checkout, as another session's lands on
- *   main.
+ * - Law J: after each landing, the report's commits (`reportedRange` of
+ *   what the landing came to, listed by `reportedCommits`, as the hub's
+ *   report lists them) are what it put on its base: the branch's own as
+ *   HEAD holds them now, stamped and rebased, the commit it was cut from
+ *   among them, and none of upstream's. Upstream's commits and the one cut
+ *   from are made outside this checkout, as another session's land on main
+ *   and another workspace made its own.
  *
  * Run by `bun run check` (scripts/check.ts); it fails on any law broken.
  */
@@ -56,9 +60,10 @@ import { dirname, join } from "node:path";
 import type { CommandResult } from "../packages/core/src/harness";
 import { SAFE_GIT_SHELL } from "../packages/core/src/safe-git";
 import {
-  keptCommits,
   LOGS_TRAILER,
   landedRebase,
+  reportedCommits,
+  reportedRange,
 } from "../packages/hub/src/landing";
 
 const URL_NOW = "https://hub.example.ts.net:3455/session/3f2a9c1e";
@@ -184,32 +189,58 @@ const commit = (file: string, message: string): void => {
 };
 
 /**
- * A commit on `main` made outside this checkout, as another session's lands
- * there: through an index of its own, so HEAD, its reflog and the working
- * tree never see it.
+ * A commit on `branch` made outside this checkout: through an index of its
+ * own, so HEAD, its reflog and the working tree never see it. On `main`, as
+ * another session's lands there; on another branch, as the workspace a
+ * clone is cut `from` made it.
  */
-const upstreamCommit = (file: string, message: string): void => {
+const commitElsewhere = (
+  branch: string,
+  file: string,
+  message: string
+): void => {
   nextAuthored();
   sh(
-    `export GIT_INDEX_FILE="$(git rev-parse --absolute-git-dir)/upstream-index" && git read-tree main && b=$(printf '%s\\n' ${JSON.stringify(`${file} ${message}`)} | git hash-object -w --stdin) && git update-index --add --cacheinfo "100644,$b,${file}" && t=$(git write-tree) && rm -f "$GIT_INDEX_FILE" && c=$(printf '%s\\n' ${JSON.stringify(message)} | git commit-tree "$t" -p main) && git update-ref refs/heads/main "$c"`
+    `export GIT_INDEX_FILE="$(git rev-parse --absolute-git-dir)/elsewhere-index" && git read-tree ${branch} && b=$(printf '%s\\n' ${JSON.stringify(`${file} ${message}`)} | git hash-object -w --stdin) && git update-index --add --cacheinfo "100644,$b,${file}" && t=$(git write-tree) && rm -f "$GIT_INDEX_FILE" && c=$(printf '%s\\n' ${JSON.stringify(message)} | git commit-tree "$t" -p ${branch}) && git update-ref refs/heads/${branch} "$c"`
   );
 };
 
-/** When the branch's work began, in unix seconds: the report reads its commits from here (work-items.ts `changesSince`). */
-const began = Math.floor(Date.now() / 1000);
+/** What a landing came to, as the hub records it (schema.ts `WorkLanding`): the commit it rebased onto, none for a branch of its own, and HEAD after it. */
+interface LandedAt {
+  onto: string | null;
+  sha: string;
+}
 
-/** Law J's look, after each landing: the report's commits, read as the hub reads them (its stdout, whatever it exits with), against `range`, the branch's own. */
-const reportedAsOwn = async (when: string, range: string): Promise<void> => {
-  const reported = (await run(keptCommits(began))).stdout
+/**
+ * Law J's look, after each landing: the report's commits, listed as the hub
+ * lists them (work-items.ts `reportedChanges`: its stdout, whatever it exits
+ * with) from `landing`, what it came to (none when it put nothing
+ * on main), against `range`, the commits it put there.
+ */
+const reportedAsOwn = async (
+  when: string,
+  range: string,
+  landing?: LandedAt
+): Promise<void> => {
+  const lines = (await run(reportedCommits(reportedRange("main", landing))))
+    .stdout;
+  const reported = lines
     .split("\n")
     .filter(Boolean)
+    .map((line) => sh(`git rev-parse ${line.split(" ")[0]}`).trim())
     .sort();
   const own = sh(`git rev-list ${range}`).split("\n").filter(Boolean).sort();
   law(
     `Law J (${when})`,
     reported.length > 0 && reported.join(" ") === own.join(" "),
-    `the report names ${JSON.stringify(reported)}, the branch's own are ${JSON.stringify(own)}`
+    `the report names ${JSON.stringify(reported)}, the commits it put on main are ${JSON.stringify(own)}`
   );
+};
+
+/** {@link landed} onto `main`, as the hub's landing on its base records it: the commit main was at, and HEAD after. */
+const landedOnMain = async (): Promise<LandedAt> => {
+  const onto = sh("git rev-parse main").trim();
+  return { onto, sha: await landed("main") };
 };
 
 interface Shape {
@@ -300,9 +331,9 @@ try {
   const before = shapes("main..ws");
 
   let files = written();
-  await landed("main");
+  const first = await landedOnMain();
   stampedAsBefore("first stamp", "main..ws", before);
-  await reportedAsOwn("first stamp", "main..ws");
+  await reportedAsOwn("first stamp", "main..ws", first);
   law(
     "Law F (first stamp)",
     touched(files, written()).length === 0,
@@ -312,14 +343,14 @@ try {
 
   const head = sh("git rev-parse HEAD").trim();
   files = written();
-  await landed("main");
+  const second = await landedOnMain();
   law(
     "Law C (second stamp)",
     sh("git rev-parse HEAD").trim() === head,
     "HEAD moved"
   );
   stampedAsBefore("second stamp", "main..ws", before);
-  await reportedAsOwn("second stamp", "main..ws");
+  await reportedAsOwn("second stamp", "main..ws", second);
   law(
     "Law F (second stamp)",
     touched(files, written()).length === 0,
@@ -327,11 +358,12 @@ try {
   );
   leftNothing("second stamp");
 
-  upstreamCommit("src/deep/e", "Upstream e");
+  commitElsewhere("main", "src/deep/e", "Upstream e");
   const stamped = shapes("main..ws");
   const old = sh("git rev-parse HEAD").trim();
   files = written();
-  const moved = await landed("main");
+  const rebasedOnto = await landedOnMain();
+  const moved = rebasedOnto.sha;
   const differ = new Set(
     sh(`git diff --name-only ${old} ${moved}`).split("\n").filter(Boolean)
   );
@@ -344,7 +376,7 @@ try {
     `the trees differ in ${JSON.stringify([...differ])}; it also wrote ${JSON.stringify(touched(files, written(), differ))}; status ${JSON.stringify(sh("git status --porcelain"))}`
   );
   leftNothing("rebased");
-  await reportedAsOwn("rebased", "main..ws");
+  await reportedAsOwn("rebased", "main..ws", rebasedOnto);
   const rebased = shapes("main..ws");
   law(
     "Law B (rebased)",
@@ -368,14 +400,14 @@ try {
   const fork = sh("git merge-base main own").trim();
   const ownBefore = shapes("main..own");
   files = written();
-  await landed("main", true);
+  const kept: LandedAt = { onto: null, sha: await landed("main", true) };
   law(
     "Law D (keep base)",
     sh("git rev-parse HEAD~2").trim() === fork,
     "the commits moved off the commit they started from"
   );
   stampedAsBefore("keep base", "main..own", ownBefore);
-  await reportedAsOwn("keep base", "main..own");
+  await reportedAsOwn("keep base", "main..own", kept);
   law(
     "Law F (keep base)",
     touched(files, written()).length === 0,
@@ -409,6 +441,26 @@ try {
   );
   leftNothing("conflict");
   await reportedAsOwn("conflict", "main..clash");
+
+  // A clone cut `from` another workspace: its branch starts at that one's
+  // commit, made where this checkout's HEAD and reflog never were, and its
+  // own session goes on from it; main moves before it lands.
+  sh("git branch held main");
+  commitElsewhere("held", "src/held-s", "Delegate commit S");
+  sh("git checkout -q -b cut held");
+  commit("src/t", "Went on from S");
+  commitElsewhere("main", "src/deep/u", "Upstream u");
+  const cut = await landedOnMain();
+  leftNothing("cut from another");
+  await reportedAsOwn("cut from another", "main..cut", cut);
+  const cutReport = (await run(reportedCommits(reportedRange("main", cut))))
+    .stdout;
+  law(
+    "Law J (cut from another, the commit it was cut from named)",
+    cutReport.includes("Delegate commit S") &&
+      cutReport.includes("Went on from S"),
+    `the report says ${JSON.stringify(cutReport)}`
+  );
 } finally {
   rmSync(dir, { recursive: true, force: true });
   rmSync(scratch, { recursive: true, force: true });
@@ -421,5 +473,5 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(
-  "logs-trailer-check: laws A–J held over 6 landings of 6 commits (first, again, rebased onto a newer upstream, kept on its base, again) and one that conflicts"
+  "logs-trailer-check: laws A–J held over 7 landings of 8 commits (first, again, rebased onto a newer upstream, kept on its base, again, cut from another's commit) and one that conflicts"
 );

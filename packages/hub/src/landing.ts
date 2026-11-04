@@ -451,29 +451,40 @@ const stampCommand = (url: string): string =>
   `m=$(git log -1 --format=%B) && t=$(git log -1 --format=%aI | sed 's/+/%2B/') && s=$(printf '%s\\n' "$m" | git interpret-trailers --if-exists replace --trailer ${quote(`${LOGS_TRAILER}: ${url}?at=`)}"$t") && { test "$m" = "$s" || printf '%s\\n' "$s" | git commit --amend --no-verify --allow-empty --cleanup=whitespace --quiet --file=-; }`;
 
 /**
- * The commits a worktree's session made since `since` (unix seconds), as
- * HEAD holds them now, one hash per line. It runs on the machine and prints
- * only the hashes, so the whole reflog never crosses the wire.
+ * What a landing's report names as its commits (work-items.ts
+ * `reportedChanges`): the commits its workspace held that its base did not,
+ * as the range `from..to`. Landed on the base (`landed.onto` set), they are
+ * what the landing put there: from the commit it rebased onto to the one it
+ * pushed, every commit the workspace held among them, its session's own and
+ * those its clone was cut with (a workspace cut `from` another holds that
+ * one's). A push to a branch of its own ends at the commit it pushed; one
+ * refused, or an item that lands none, at HEAD; both start at `base`,
+ * origin's branch as last fetched, so they name what a landing on it would
+ * put there.
  *
- * What the session made is its HEAD reflog's entries whose action made or
- * rewrote a commit (commit, amend, merge, cherry-pick, a rebase pick),
- * written at or after `since`, each once. A landing rewrites them where
- * that reflog never sees: its rebase and stamp run in a worktree of their
- * own, whose reflog goes with it ({@link stampedRebase}), and the
- * workspace's HEAD moves to the result in one `reset` entry
- * ({@link landedRebase}). A rewrite keeps a commit's author and author date
- * (git-rebase(1): only `--ignore-date` changes it; the stamp amends the
- * message alone, its subject kept), so of HEAD's commits made or rewritten
- * since `since` (`--since`, the committer date), the session's are those
- * whose author, author date and subject are those of one it made.
+ * Not who made them: the session's HEAD reflog names neither the commits a
+ * clone was cut with, nor the landing's own rewrite of the session's, which
+ * runs in a worktree of its own whose reflog goes with it
+ * ({@link stampedRebase}).
  */
-export const keptCommits = (since: number): string =>
-  `m=$(git reflog --date=unix --format='%H %gd %gs' HEAD` +
-  ` | grep -E '^[0-9a-f]{40} HEAD@\\{[0-9]+\\} (commit|commit \\((amend|merge)\\)|cherry-pick|rebase( -i)? \\((pick|reword|edit|squash|fixup)\\)): '` +
-  ` | awk -v since=${since} '{ t = $2; gsub(/[^0-9]/, "", t) } t + 0 >= since && !seen[$1]++ { print $1 }')` +
-  ` && if [ -n "$m" ]; then k=$(git log --no-walk --ignore-missing --format='%ae %at %s' $m)` +
-  ` && git log --since=@${since} --format='%H %ae %at %s' HEAD` +
-  ` | K="$k" awk 'BEGIN { n = split(ENVIRON["K"], k, "\\n"); for (i = 1; i <= n; i++) made[k[i]] = 1 } { h = $1; sub(/^[^ ]+ /, "") } $0 in made { print h }'; fi`;
+export const reportedRange = (
+  base: string,
+  landed?: { onto: string | null; sha: string }
+): { from: string; to: string } => ({
+  from: landed?.onto ?? base,
+  to: landed?.sha ?? "HEAD",
+});
+
+/** The commits of {@link reportedRange}'s `range`, one `git log --oneline` line each, newest first. */
+export const reportedCommits = (range: { from: string; to: string }): string =>
+  `git log --oneline ${quote(`${range.from}..${range.to}`)}`;
+
+/** The diffstat of {@link reportedRange}'s `range`, from where `to` left `from` (`...`), its last `lines` lines. */
+export const reportedDiffstat = (
+  range: { from: string; to: string },
+  lines: number
+): string =>
+  `git diff --stat ${quote(`${range.from}...${range.to}`)} | tail -n ${lines}`;
 
 /** The line before the rebased commit in {@link stampedRebase}'s output. */
 const HEAD_MARK = "cawco-head";
