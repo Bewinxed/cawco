@@ -90,6 +90,7 @@
     "./words/tools": "./src/words/tools.ts",
     "./words/preview-ports": "./src/words/preview-ports.ts",
     "./words/loop": "./src/words/loop.ts",
+    "./words/image-generation": "./src/words/image-generation.ts",
     "./words/search": "./src/words/search.ts",
     "./words/gate": "./src/words/gate.ts",
     "./words/turns": "./src/words/turns.ts",

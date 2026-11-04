@@ -3,7 +3,6 @@ import { lstat, mkdir, readFile, stat } from "node:fs/promises";
 import { arch, platform, release } from "node:os";
 import { basename, dirname, extname, resolve } from "node:path";
 import {
-  configurePage,
   type GeneratedImage,
   IMAGE_GENERATION_TIMEOUT_MS,
   IMAGE_QUALITIES,
@@ -12,10 +11,14 @@ import { readWithin } from "@cawco/core/bounded";
 import { credentialAccountIds } from "@cawco/core/paths";
 import { unhandled } from "@cawco/core/unhandled";
 import { chatgptBaseUrl, chatgptClaims } from "@cawco/core/usage/chatgpt";
+import {
+  type BlockedLogin,
+  imageGenerationWords,
+} from "@cawco/core/words/image-generation";
 import { z } from "zod";
 import { isWorkspaceRef } from "./hub-command";
 import { admitFiles, type Kept, placeInWorkspace, writeKept } from "./inputs";
-import { freshen, readHeld } from "./provider-accounts";
+import { chatgptStanding, freshen, readHeld } from "./provider-accounts";
 
 /** Native Codex's image model and edit-image cap (codex-rs/ext/image-generation/src/tool.rs). */
 const IMAGE_MODEL = "gpt-image-2";
@@ -39,7 +42,6 @@ interface ChatgptAuth {
 }
 /** Codex's image backend: CHATGPT_CODEX_BASE_URL + images/{generations,edits} (openai/codex codex-api). */
 const codexImages = (): string => `${chatgptBaseUrl()}/codex/images`;
-const SIGN_IN = `Run \`opencode auth login\` and choose OpenAI → ChatGPT (CawCo moves that login into a ChatGPT account), or add a ChatGPT account in ${configurePage("accounts")}.`;
 const SIZE = /^(\d+)x(\d+)$/u;
 const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const activeOutputs = new Set<string>();
@@ -133,9 +135,10 @@ function imageMime(bytes: Buffer): string {
 
 /**
  * The CawCo accounts on this machine holding a ChatGPT sign-in (OAuth only:
- * an OpenAI key is never one), a paid plan's first: a free plan cannot make
- * images. The machine's own OpenCode login is one of them once CawCo has
- * moved it in.
+ * an OpenAI key is never one), those whose token claims a plan other than
+ * Free first, so a paid login is tried before a free one. The claim only
+ * orders them; {@link usableLogin} judges each on its plan as it is now. The
+ * machine's own OpenCode login is one of them once CawCo has moved it in.
  */
 function chatgptAccounts(): string[] {
   const held = credentialAccountIds().flatMap((accountId) => {
@@ -156,50 +159,90 @@ function chatgptAccounts(): string[] {
 }
 
 /**
- * The sign-in a request goes out on, from the account's own store, renewed
- * first when it is near its expiry by the account machinery's one refresher
- * ({@link freshen}: pi-ai's ChatGPT refresh, on OpenCode's own client id
- * `app_EMoamEEZ73f0CkXaXp7hrann`, pi-ai auth/oauth/openai-codex.js 18), which
- * writes the rotated tokens back to that store and the account's OpenCode
- * store. No second copy of the grant is kept or refreshed here.
+ * The one plan known to make no images: "Image generation isn't available
+ * on the Free plan" (https://learn.chatgpt.com/docs/pricing). Codex's own
+ * plan names (codex-rs/protocol/src/account.rs `PlanType`) are `free`,
+ * `go`, `plus`, `pro`, `team`, `business`, `enterprise`, `edu` and more;
+ * any plan but this one, or none, goes on to the request, whose answer is
+ * ChatGPT's final word.
  */
-async function subscriptionAuth(): Promise<ChatgptAuth> {
-  const [accountId] = chatgptAccounts();
-  if (!accountId) {
-    throw new Error(
-      `No ChatGPT subscription login is held by a CawCo account on this machine. ${SIGN_IN} API keys are not accepted.`
-    );
-  }
+const NO_IMAGES_PLAN = "free";
+
+/**
+ * One account's sign-in a request may go out on, or what stops it, decided
+ * before any image request: its token renewed first when near its expiry by
+ * the account machinery's one refresher ({@link freshen}: pi-ai's ChatGPT
+ * refresh, on OpenCode's own client id `app_EMoamEEZ73f0CkXaXp7hrann`, pi-ai
+ * auth/oauth/openai-codex.js 18), which writes the rotated tokens back to
+ * that store and the account's OpenCode store; then its plan as ChatGPT's
+ * usage endpoint answers it now ({@link chatgptStanding}), so an upgrade or
+ * a downgrade since the token was issued counts. No second copy of the
+ * grant is kept or refreshed here.
+ */
+async function standingOf(
+  accountId: string
+): Promise<{ auth: ChatgptAuth } | { blocked: BlockedLogin }> {
+  const before = readHeld(accountId);
+  const claims = chatgptClaims(
+    before?.credential.type === "oauth" ? before.credential.access : ""
+  );
+  const blocked = (block: BlockedLogin["block"], plan = claims.plan) => ({
+    blocked: { block, email: claims.email, plan },
+  });
   try {
     await freshen(accountId);
   } catch (cause) {
-    throw new Error(
-      `The ChatGPT login could not be renewed: ${cause instanceof Error ? cause.message : String(cause)} ${SIGN_IN}`,
-      { cause }
-    );
+    return blocked({
+      kind: "renew",
+      error: cause instanceof Error ? cause.message : String(cause),
+    });
   }
   const held = readHeld(accountId);
   if (held?.credential.type !== "oauth") {
-    throw new Error(
-      `The ChatGPT account's sign-in is gone from this machine. ${SIGN_IN}`
-    );
+    return blocked({ kind: "gone" });
   }
   const { credential } = held;
   const accountIdClaim =
     (typeof credential.accountId === "string" ? credential.accountId : null) ??
     chatgptClaims(credential.access).accountId;
+  const standing = await chatgptStanding(credential.access, accountIdClaim);
+  if (standing.rejected) {
+    return blocked({ kind: "rejected" }, standing.plan);
+  }
+  if (standing.plan === NO_IMAGES_PLAN) {
+    return blocked({ kind: "free" }, standing.plan);
+  }
   return {
-    access: credential.access,
-    ...(accountIdClaim ? { accountId: accountIdClaim } : {}),
+    auth: {
+      access: credential.access,
+      ...(accountIdClaim ? { accountId: accountIdClaim } : {}),
+    },
   };
 }
 
-/** What the access token says about its ChatGPT account; never the token itself. */
-function accountFacts(access: string): {
-  email?: string;
-  planType?: string;
-  residency?: string;
-} {
+/**
+ * The first held sign-in that can make an image ({@link chatgptAccounts}'
+ * order, each judged by {@link standingOf}); none, and it throws naming each
+ * login, what stops it and its fix, before any image request is sent.
+ */
+async function usableLogin(): Promise<ChatgptAuth> {
+  const accounts = chatgptAccounts();
+  if (!accounts.length) {
+    throw new Error(imageGenerationWords.noLogin());
+  }
+  const blocked: BlockedLogin[] = [];
+  for (const accountId of accounts) {
+    const standing = await standingOf(accountId);
+    if ("auth" in standing) {
+      return standing.auth;
+    }
+    blocked.push(standing.blocked);
+  }
+  throw new Error(imageGenerationWords.noUsableLogin(blocked));
+}
+
+/** The residency the access token's ChatGPT account asks of a request; never the token itself. */
+function accountFacts(access: string): { residency?: string } {
   let claims: Record<string, unknown> | undefined;
   try {
     claims = JSON.parse(
@@ -212,16 +255,12 @@ function accountFacts(access: string): {
     typeof value === "string" && value ? value : undefined;
   const auth = claims?.["https://api.openai.com/auth"] as
     Record<string, unknown> | undefined;
-  const profile = claims?.["https://api.openai.com/profile"] as
-    Record<string, unknown> | undefined;
   // Residency-enforced workspaces require the data (else compute) residency.
   const residency =
     text(auth?.chatgpt_data_residency) ??
     text(auth?.chatgpt_compute_residency) ??
     text(claims?.chatgpt_compute_residency);
   return {
-    email: text(profile?.email) ?? text(claims?.email),
-    planType: text(auth?.chatgpt_plan_type),
     residency: residency === "no_constraint" ? undefined : residency,
   };
 }
@@ -242,23 +281,16 @@ async function errorDetail(response: Response): Promise<string> {
 }
 
 /**
- * Names the cause of a refused request. An expired token was renewed before
- * the request, so only a 401 asks for a new sign-in; a 403 on the free plan
- * names the plan.
+ * Names the cause of a refused request: only what {@link usableLogin} could
+ * not know beforehand reaches here (a login revoked since the check, a
+ * refusal of the plan or quota ChatGPT alone decides), so a 401 asks for a
+ * new sign-in and anything else is the server's own words.
  */
-async function failure(
-  response: Response,
-  account: { email?: string; planType?: string }
-): Promise<string> {
+async function failure(response: Response): Promise<string> {
   const detail = await errorDetail(response);
-  const suffix = "No image was saved and no API-key request was made.";
-  if (response.status === 403 && account.planType === "free") {
-    return `This machine's ChatGPT login (${account.email ?? "unknown email"}) is on the free plan, which can't generate images. Sign in with a paid ChatGPT account: \`opencode auth login\` → OpenAI → ChatGPT. ${suffix}`;
-  }
-  if (response.status === 401) {
-    return `ChatGPT rejected this machine's login (HTTP 401: ${detail}). Sign in again: \`opencode auth login\` → OpenAI → ChatGPT. ${suffix}`;
-  }
-  return `ChatGPT image generation returned HTTP ${response.status}: ${detail} ${suffix} No retry was submitted.`;
+  return response.status === 401
+    ? imageGenerationWords.requestRejected(detail)
+    : imageGenerationWords.requestRefused(response.status, detail);
 }
 
 /**
@@ -363,7 +395,7 @@ async function askImage(
     }
   );
   if (!response.ok) {
-    throw new Error(await failure(response, account));
+    throw new Error(await failure(response));
   }
   const result = z
     .object({
@@ -394,7 +426,8 @@ export async function generateImage(
   validateSize(args.size);
   const kept = outputOf(cwd, args.output_path, bound);
   const output = kept.shown;
-  const auth = await subscriptionAuth();
+  // Before any reference is read or any image request goes out.
+  const auth = await usableLogin();
   const images = await referenceImages(
     cwd,
     args.reference_images ?? [],

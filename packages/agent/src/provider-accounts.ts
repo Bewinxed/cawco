@@ -464,17 +464,36 @@ export const providerAccountReports = (): AccountReport[] =>
     } satisfies AccountReport;
   });
 
-/** The plan a ChatGPT token's account is on: the usage endpoint's word, else the token's claim. */
+/**
+ * A ChatGPT access token's standing now: the plan its account is on, the
+ * usage endpoint's word (current, so an upgrade counts at once), else the
+ * token's claim (set when the token was issued); or the HTTP status 401 the
+ * endpoint refused the token with, a sign-in ChatGPT no longer takes.
+ * `accountId`: the ChatGPT account the token is for, which the endpoint asks
+ * (the credential's own, else its claim).
+ */
+export const chatgptStanding = async (
+  access: string,
+  accountId: string | null
+): Promise<{ plan: string | null; rejected: boolean }> => {
+  const claims = chatgptClaims(access);
+  if (!accountId) {
+    return { plan: claims.plan, rejected: false };
+  }
+  const read = await readChatgptUsage(access, accountId);
+  if (read.ok) {
+    return { plan: read.plan ?? claims.plan, rejected: false };
+  }
+  return { plan: claims.plan, rejected: read.status === 401 };
+};
+
+/** The plan a ChatGPT token's account is on ({@link chatgptStanding}). */
 const planOf = async (held: Held): Promise<string | null> => {
   if (held.provider !== "openai-codex" || held.credential.type !== "oauth") {
     return null;
   }
-  const claims = chatgptClaims(held.credential.access);
-  if (!claims.accountId) {
-    return claims.plan;
-  }
-  const read = await readChatgptUsage(held.credential.access, claims.accountId);
-  return read.ok && read.plan ? read.plan : claims.plan;
+  const { accountId } = chatgptClaims(held.credential.access);
+  return (await chatgptStanding(held.credential.access, accountId)).plan;
 };
 
 // ── One grant, lent ──────────────────────────────────────────────────────
