@@ -2059,6 +2059,20 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return !!sentAt && (!revisedAt || sentAt > revisedAt);
   };
 
+  /**
+   * A `try` the person has before them (not a draft, not handed up to a
+   * parent that hasn't opened it, not a version held for one) and hasn't
+   * sent since its last revision ({@link sentOf}): still his to judge,
+   * which a workspace's archive waits on (`waitingOnPerson`).
+   */
+  const unsentTry = (row: ArtifactRow): boolean => {
+    if (row.does !== "try" || row.heldFor !== null || sentOf(row)) {
+      return false;
+    }
+    const facts = factsOf(row);
+    return !(facts.draft || facts.handed);
+  };
+
   const summaryOf = (row: ArtifactRow): ArtifactSummary => {
     const pending = pendingFor(row);
     return {
@@ -6812,10 +6826,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
     /**
      * Of `served` (the artifacts a workspace serves: work-items.ts
-     * `servedFrom`), each one waiting on the person (Needs you's rule,
-     * `artifact_list`'s `waitingOn: ["person"]`), and every decision page
-     * waiting on the person that shows one of them as a Canvas or Preview
-     * piece: what a workspace's archive or discard refuses on.
+     * `servedFrom`), each one waiting on the person, and every decision
+     * page waiting on the person that shows one of them as a Canvas or
+     * Preview piece: what a workspace's archive or discard refuses on. One
+     * waits as Needs you reads it (`pendingFor`, `artifact_list`'s
+     * `waitingOn: ["person"]`), or, for this guard alone, as a `try` the
+     * person has before them and hasn't sent since its last revision
+     * ({@link unsentTry}): the owner's rule, 2026-11-04, that a preview he
+     * hasn't sent is still his to judge. Needs you keeps its own rule (a
+     * `try` asks nothing there, needs.ts `asks`).
      */
     waitingOnPerson: (served: readonly ArtifactRow[]): ArtifactRow[] => {
       const ids = new Set(served.map((one) => one.heldFor ?? one.id));
@@ -6824,7 +6843,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const asks = new Map<string, ArtifactRow>();
       for (const one of served) {
-        if (one.heldFor === null && pendingFor(one) !== null) {
+        if (
+          one.heldFor === null &&
+          (pendingFor(one) !== null || unsentTry(one))
+        ) {
           asks.set(one.id, one);
         }
       }

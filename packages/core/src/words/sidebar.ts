@@ -17,6 +17,13 @@ export const sidebarWords = {
   heldUnreadThen: "so what the workspace holds is unread.",
   /** A workspace archived, refused by the hub: what came of it (`hubRefusal`). */
   notArchivedThen: "so the workspace was not archived. Try again.",
+  /**
+   * WORDS OWED (a placeholder): the archive confirm's line (dashboard
+   * LiveSessionMenu) when what the workspace serves still waits on the
+   * person, `names` each artifact's name: confirming archives it anyway.
+   */
+  archiveStillWaiting: (names: readonly string[]) =>
+    `[words owed: archiveStillWaiting] ${names.join(", ")}`,
   /** The projects list is empty and no machine runs CawCo yet. */
   noProjectsNoMachines:
     "No projects yet — start one with New project. Once CawCo runs on a machine, its checkouts group here too.",

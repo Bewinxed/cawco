@@ -7304,24 +7304,48 @@ export async function workspaceHeld(
 }
 
 /**
+ * What a workspace serves that still waits on the person, each by its id
+ * and name (`GET /api/workspaces/:id/waiting`): what its archive's confirm
+ * names, as confirming archives it anyway. None when the read fails: the
+ * hub refuses an archive it wasn't told was confirmed, in its own words.
+ */
+export async function workspaceWaiting(
+  workspaceId: string
+): Promise<{ id: string; name: string }[]> {
+  const response = await fetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/waiting`
+  ).catch(() => null);
+  if (!response?.ok) {
+    return [];
+  }
+  return (
+    (await response.json()) as { waiting: { id: string; name: string }[] }
+  ).waiting;
+}
+
+/**
  * Archives a workspace through the hub (`POST /api/workspaces/:id/archive`):
  * its machine kills the boundary with everything in it and deletes the
  * clone and its records, a damaged one among them. The hub's refusal (a live
  * item there, or work in the clone that is nowhere else, which holds it) is
  * the error. `discard` lets that work go: its machine saves its unlanded
  * commits, changes and stashes to a carry first. Files git ignores go with
- * the clone.
+ * the clone. `anyway`: the person confirmed it knowing what still waits on
+ * him there ({@link workspaceWaiting}), which the hub otherwise refuses.
  */
 export async function archiveWorkspace(
   workspaceId: string,
-  { discard = false }: { discard?: boolean } = {}
+  {
+    discard = false,
+    anyway = false,
+  }: { discard?: boolean; anyway?: boolean } = {}
 ): Promise<void> {
   const response = await fetch(
     `/api/workspaces/${encodeURIComponent(workspaceId)}/archive`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ discard }),
+      body: JSON.stringify({ discard, anyway }),
     }
   );
   if (!response.ok) {

@@ -23,6 +23,7 @@
   } from "@cawco/core/harness";
   import { machineLabel } from "@cawco/core/machine-names";
   import { unhandled } from "@cawco/core/unhandled";
+  import { sidebarWords } from "@cawco/core/words/sidebar";
   import type { Snippet } from "svelte";
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import {
@@ -50,6 +51,7 @@
     machineControl,
     removeSession,
     workspaceHeld,
+    workspaceWaiting,
   } from "./client.svelte";
   import { continueInNewSession } from "./continue.svelte";
   import {
@@ -216,7 +218,17 @@
   async function askArchiveWorkspace() {
     const workspaceId = damagedWorkspace as string;
     const where = machine ? machineLabel(machine.hostname) : "its machine";
-    const held = await workspaceHeld(workspaceId).catch(() => undefined);
+    const [held, waiting] = await Promise.all([
+      workspaceHeld(workspaceId).catch(() => undefined),
+      workspaceWaiting(workspaceId),
+    ]);
+    // What it serves that still waits on him, named: confirming archives it
+    // anyway, his decision (the hub refuses one he didn't confirm).
+    const stillWaiting =
+      waiting.length > 0
+        ? [sidebarWords.archiveStillWaiting(waiting.map((one) => one.name))]
+        : [];
+    const anyway = waiting.length > 0;
     if (held && !holdsNothing(held)) {
       await asker.ask({
         at: instance.id,
@@ -224,23 +236,27 @@
         body: [
           `Its private copy of ${held.path} on ${held.machine} holds ${held.holds}, ${held.size} in all.`,
           `Save and archive writes its unlanded commits and changes to a carry on ${held.machine} (in ~/.cawco/carries), then deletes its private copy, its boundary and its records. Your folder stays as it is. Keep leaves it all where it is.`,
+          ...stillWaiting,
         ],
         cancelLabel: "Keep",
         confirmLabel: "Save and archive",
         destructive: true,
         pendingLabel: "Saving…",
-        run: () => archiveWorkspace(workspaceId, { discard: true }),
+        run: () => archiveWorkspace(workspaceId, { discard: true, anyway }),
       });
       return;
     }
     await asker.ask({
       at: instance.id,
       title: "Archive this workspace?",
-      body: `Its record ${instance.damaged?.file ?? ""} is damaged, so it cannot run. Archiving deletes its private copy, its boundary and its records on ${where}, for good. Your folder stays as it is, and every other workspace runs as before.`,
+      body: [
+        `Its record ${instance.damaged?.file ?? ""} is damaged, so it cannot run. Archiving deletes its private copy, its boundary and its records on ${where}, for good. Your folder stays as it is, and every other workspace runs as before.`,
+        ...stillWaiting,
+      ],
       confirmLabel: "Archive workspace",
       destructive: true,
       pendingLabel: "Archiving…",
-      run: () => archiveWorkspace(workspaceId),
+      run: () => archiveWorkspace(workspaceId, { anyway }),
     });
   }
 

@@ -178,15 +178,38 @@ export const workWords = {
   /** That notice's headline. */
   notRetiredHeadline: (ws: string) => `Workspace ${ws} could not be retired.`,
   /**
-   * A workspace's archive or discard on purpose refused (hub work-items.ts
-   * `waitingFrom`) while what it serves waits on the person, read by the
-   * person in the dashboard and by a session from `discard_workspace`:
-   * `ws` the workspace's handle, `links` each waiting artifact by its link.
+   * WORDS OWED (a placeholder): `discard_workspace` refused (hub
+   * work-items.ts `discardFor`) while what the workspace serves waits on the
+   * person: `ws` its handle, `links` each waiting artifact by its link. The
+   * words name each, then the session's two ways forward: hand it up again
+   * from another workspace (its parent can), or ask the person to decide by
+   * calling discard_workspace again with `ask: true` and a `reason`, which
+   * waits on his approval and, approved, discards it anyway.
    */
   servesWaiting: (ws: string, links: readonly string[]) =>
-    links.length === 1
-      ? `Workspace ${ws} was not archived: ${links[0]} still waits on the person. Archive the workspace again once a session has handed that up from another workspace, or once the person has settled or deleted it.`
-      : `Workspace ${ws} was not archived: ${links.join(", ")} still wait on the person. Archive the workspace again once a session has handed each up from another workspace, or once the person has settled or deleted them.`,
+    `[words owed: servesWaiting] workspace ${ws}; waiting on the person: ${links.join(", ")}; ways: hand it up again from another workspace, or discard_workspace with ask: true and a reason`,
+  /**
+   * WORDS OWED (a placeholder): a workspace's archive asked by the person
+   * (`POST /api/workspaces/:id/archive`, the dashboard and the app) and
+   * refused because he didn't confirm what still waits on him: `ws`, `links`
+   * as above. The dashboard's confirm names them first and sends the
+   * archive confirmed, so this reaches a client that doesn't.
+   */
+  servesWaitingConfirm: (ws: string, links: readonly string[]) =>
+    `[words owed: servesWaitingConfirm] workspace ${ws}; waiting on you: ${links.join(", ")}; confirm to archive it anyway`,
+  /**
+   * WORDS OWED (a placeholder): the line an approval of `discard_workspace`
+   * shows the person (its ask's `waiting`, hub server.ts): what still waits
+   * on him there, `links` each by its link.
+   */
+  discardAskWaiting: (links: readonly string[]) =>
+    `[words owed: discardAskWaiting] ${links.join(", ")}`,
+  /**
+   * WORDS OWED (a placeholder): `discard_workspace` with `ask: true` and no
+   * `reason`, refused before anything is asked: the person reads the reason
+   * first on the approval.
+   */
+  discardAskReason: "[words owed: discardAskReason]",
   /** The hub's log line as a settle ends what an ended item's awake sessions left running (hub work-items.ts `endLeftWork`). */
   workEnding: (sessions: readonly string[], hold: string) =>
     `its items have all ended, so what ${sessions.length === 1 ? `its session ${sessions[0]}` : `its sessions ${sessions.join(", ")}`} left running there ends; not retired while ${hold}`,

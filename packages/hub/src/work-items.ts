@@ -4107,6 +4107,28 @@ export const createWorkItems = ({
     return { workspace: archived, carry };
   };
 
+  /**
+   * Refuses session `from` the discard of workspace `needle` when it is
+   * not one of that session's ({@link discardFor}); the workspace when it
+   * is. What a discard asked of the person checks before it is recorded.
+   */
+  const discardable = (from: string, needle: string): WorkspaceRow => {
+    const workspace = namedWorkspace(needle);
+    const items = db.workItemsIn(workspace.id);
+    const ours =
+      workspace.createdByInstanceId === from ||
+      items.some(
+        (item) => item.parentInstanceId === from || leadFor(item)?.id === from
+      );
+    if (!ours) {
+      throw new WorkItemRefusal(
+        403,
+        `Workspace ${handle(workspace.id)} is not one of yours: discard_workspace lets go of a workspace your own delegates worked in. Nothing was deleted.`
+      );
+    }
+    return workspace;
+  };
+
   /** Session statuses whose process may still run a command in its workspace. */
   const ATTACHED: ReadonlySet<InstanceStatus> = new Set([
     "running",
@@ -4211,20 +4233,35 @@ export const createWorkItems = ({
   };
 
   /**
-   * Why an archive or discard of a workspace on purpose is refused, or
-   * nothing: what it serves ({@link servedFrom}) that waits on the person,
-   * with every decision page waiting on the person that shows one of
-   * those (artifacts service `waitingOnPerson`), each by its link. Nothing
-   * of them is lost: the session hands each up again from another
-   * workspace (its source moves through its one write, db artifacts.ts
-   * `resource`, and this one is free), or the person settles or deletes it.
+   * What an archive or discard of a workspace on purpose waits on: what it
+   * serves ({@link servedFrom}) that waits on the person, with every
+   * decision page waiting on the person that shows one of those (artifacts
+   * service `waitingOnPerson`). Nothing of them is lost while it waits:
+   * the session hands each up again from another workspace (its source
+   * moves through its one write, db artifacts.ts `resource`, and this one
+   * is free), the person settles or deletes it, or the person decides the
+   * archive goes anyway (the dashboard's confirm, or his approval of the
+   * session's ask, server.ts `discard_workspace`).
    */
-  const waitingFrom = (workspace: WorkspaceRow): string | undefined => {
-    const waiting = waitingOnPerson?.(servedFrom(workspace)) ?? [];
-    if (waiting.length > 0) {
-      return workWords.servesWaiting(
-        handle(workspace.id),
-        waiting.map((row) => artifactLink(row.id, row.name))
+  const waitingFrom = (workspace: WorkspaceRow): ArtifactRow[] =>
+    waitingOnPerson?.(servedFrom(workspace)) ?? [];
+
+  /** Why an archive on purpose is refused, in the words its caller reads (`workspace`'s handle, each waiting artifact by its link). */
+  type WaitingWords = (ws: string, links: readonly string[]) => string;
+
+  /** Refuses an archive of `workspace` in `refused`'s words while what it serves waits on the person ({@link waitingFrom}); nothing without words (he decided it goes). */
+  const refuseWaiting = (
+    workspace: WorkspaceRow,
+    refused: WaitingWords | undefined
+  ): void => {
+    const waiting = refused ? waitingFrom(workspace) : [];
+    if (refused && waiting.length > 0) {
+      throw new WorkItemRefusal(
+        409,
+        refused(
+          handle(workspace.id),
+          waiting.map((row) => artifactLink(row.id, row.name))
+        )
       );
     }
   };
@@ -4865,7 +4902,9 @@ export const createWorkItems = ({
   /** The `archive` method's work, in the workspace's turn: the workspace read as it stands then. */
   const archiveNow = async (
     needle: string,
-    discard: boolean
+    discard: boolean,
+    /** Its refusal while what it serves waits on the person ({@link waitingFrom}); none when the person decided it goes anyway. */
+    refused: WaitingWords | undefined
   ): Promise<ArchivedWorkspace> => {
     const workspace = namedWorkspace(needle);
     if (workspace.state === "archived") {
@@ -4901,13 +4940,11 @@ export const createWorkItems = ({
         `Workspace ${handle(workspace.id)} was not archived and nothing was deleted: ${places}. Delete or move that, then archive it again.`
       );
     }
-    // Nor what it serves that waits on the person: a preview, a sheet, or
-    // a decision page showing one. Anything else it serves does not refuse:
-    // the archive ends its served server ({@link waitingFrom}).
-    const waiting = waitingFrom(workspace);
-    if (waiting) {
-      throw new WorkItemRefusal(409, waiting);
-    }
+    // Nor what it serves that waits on the person, unless he decided it
+    // goes anyway: a preview, a sheet, or a decision page showing one.
+    // Anything else it serves does not refuse: the archive ends its served
+    // server ({@link waitingFrom}).
+    refuseWaiting(workspace, refused);
     const skip = handedOver(workspace);
     // Bounded well inside the HTTP call's own idle timeout: a machine that
     // never confirms leaves the workspace active, and the answer says so.
@@ -10373,36 +10410,61 @@ export const createWorkItems = ({
      */
     archive(
       needle: string,
-      { discard = false }: { discard?: boolean } = {}
+      {
+        discard = false,
+        anyway = false,
+      }: {
+        discard?: boolean;
+        /** The person confirmed it, knowing what still waits on him ({@link waiting}). */
+        anyway?: boolean;
+      } = {}
     ): Promise<ArchivedWorkspace> {
       // In its turn: no settle, bundle or read meets this close.
       return inWorkspaceTurn(namedWorkspace(needle).id, () =>
-        archiveNow(needle, discard)
+        archiveNow(
+          needle,
+          discard,
+          anyway ? undefined : workWords.servesWaitingConfirm
+        )
       );
     },
 
     /**
+     * What workspace `needle` serves that waits on the person
+     * ({@link waitingFrom}), each by its id and name: what an archive or
+     * discard of it waits on, which the person's confirm names and an
+     * approval ask shows.
+     */
+    waiting(needle: string): { id: string; name: string }[] {
+      return waitingFrom(namedWorkspace(needle)).map((row) => ({
+        id: row.id,
+        name: row.name,
+      }));
+    },
+
+    discardable: (from: string, needle: string): WorkspaceRow =>
+      discardable(from, needle),
+
+    /**
      * `discard_workspace` from session `from`: {@link archive} with
      * `discard`, for a workspace that session cut or delegated an item into,
-     * or one of the project it leads. Refused, naming whose it is, for any
-     * other.
+     * or one of the project it leads ({@link discardable}). Refused while
+     * what it serves waits on the person, in words that give the session
+     * its two ways forward, unless `approved`: the person approved that
+     * session's ask to discard it anyway (server.ts, the approve ask's run).
      */
-    discardFor(from: string, needle: string): Promise<ArchivedWorkspace> {
-      const workspace = namedWorkspace(needle);
-      const items = db.workItemsIn(workspace.id);
-      const ours =
-        workspace.createdByInstanceId === from ||
-        items.some(
-          (item) => item.parentInstanceId === from || leadFor(item)?.id === from
-        );
-      if (!ours) {
-        throw new WorkItemRefusal(
-          403,
-          `Workspace ${handle(workspace.id)} is not one of yours: discard_workspace lets go of a workspace your own delegates worked in. Nothing was deleted.`
-        );
-      }
+    discardFor(
+      from: string,
+      needle: string,
+      { approved = false }: { approved?: boolean } = {}
+    ): Promise<ArchivedWorkspace> {
+      const workspace = discardable(from, needle);
       return inWorkspaceTurn(workspace.id, () =>
-        archiveNow(workspace.id, true)
+        archiveNow(
+          workspace.id,
+          true,
+          approved ? undefined : workWords.servesWaiting
+        )
       );
     },
 

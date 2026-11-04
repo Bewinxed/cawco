@@ -914,7 +914,11 @@ export interface HandoffActions {
    * it holds that is nowhere else goes to a carry on its machine, then its
    * clone goes (hub work-items.ts `discardFor`). Answers what the hub did.
    */
-  readonly discardWorkspace: (workspace: string) => Promise<string>;
+  readonly discardWorkspace: (
+    workspace: string,
+    /** `ask`: the person decides, while what it serves waits on him; `reason`, which he reads first. */
+    asked?: { ask?: boolean; reason?: string }
+  ) => Promise<string>;
   /**
    * Finishes this session's work item: the hub runs its landing gate and
    * lands it, or fails it as blocked. Answers what the hub says of it.
@@ -1998,11 +2002,14 @@ export const handoffActions = ({
       );
     },
 
-    async discardWorkspace(workspace: string): Promise<string> {
+    async discardWorkspace(
+      workspace: string,
+      asked: { ask?: boolean; reason?: string } = {}
+    ): Promise<string> {
       return hubText(
         await postToHub(
           `/api/workspaces/${encodeURIComponent(workspace.trim())}/discard`,
-          { from: instanceId },
+          { from: instanceId, ...asked },
           authorization
         )
       );

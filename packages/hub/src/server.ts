@@ -3542,6 +3542,42 @@ export const createServer = (
     const [row] = db.getInstancesByIds([instanceId]);
     return !row || ENDED_STATUSES.has(row.status) || stranded(row);
   };
+  /**
+   * The approved asks the hub runs by a path of its own, by tool, rather
+   * than as an admin tool's call (asks.ts `run`).
+   */
+  const ownApprovedRuns: Record<
+    string,
+    (input: Record<string, unknown>, asker: InstanceRow) => Promise<string>
+  > = {
+    // A relay's opening asks as an admin write does (relay.ts).
+    relay_create: async (input) => {
+      if (!relay) {
+        throw new Error("The hub's relay isn't made yet.");
+      }
+      return await relay.runApproved(input);
+    },
+    // Caw's project setting he asked about (project-settings.ts).
+    [PROJECT_SETTINGS]: async (input, asker) => {
+      if (!projectSettings) {
+        throw new Error("The hub's project settings aren't made yet.");
+      }
+      return await projectSettings.runApproved(asker, input);
+    },
+    // A discard the session asked him to decide while what its workspace
+    // serves waits on him (`discardAsked`): approved, it goes anyway.
+    discard_workspace: async (input, asker) =>
+      await discarded(asker.id, String(input.workspace ?? ""), {
+        approved: true,
+      }),
+    // An install the hub asked about while it requires paired devices (hub-tools.ts).
+    update_machines: async (input) => {
+      const machines = Array.isArray(input.machines)
+        ? input.machines.filter((one): one is string => typeof one === "string")
+        : [];
+      return machinesUpdatedWords(await installBuild(machines));
+    },
+  };
   const hubAsks = createAsks({
     answerRead: (uuid) => db.sendRecord(uuid)?.state === "read",
     asks: db.asks,
@@ -3603,28 +3639,9 @@ export const createServer = (
       ),
     // The hub runs an approved ask itself, as the session that asked.
     run: async (name, input, asker) => {
-      // A relay's opening asks as an admin write does (relay.ts).
-      if (name === "relay_create") {
-        if (!relay) {
-          throw new Error("The hub's relay isn't made yet.");
-        }
-        return await relay.runApproved(input);
-      }
-      // Caw's project setting he asked about (project-settings.ts).
-      if (name === PROJECT_SETTINGS) {
-        if (!projectSettings) {
-          throw new Error("The hub's project settings aren't made yet.");
-        }
-        return await projectSettings.runApproved(asker, input);
-      }
-      // An install the hub asked about while it requires paired devices (hub-tools.ts).
-      if (name === "update_machines") {
-        const machines = Array.isArray(input.machines)
-          ? input.machines.filter(
-              (one): one is string => typeof one === "string"
-            )
-          : [];
-        return machinesUpdatedWords(await installBuild(machines));
+      const own = ownApprovedRuns[name];
+      if (own) {
+        return await own(input, asker);
       }
       const entry = adminTools().find((tool) => tool.name === name);
       if (!entry) {
@@ -14448,6 +14465,65 @@ export const createServer = (
       : undefined;
     return !!item && !isLive(item.state);
   };
+  /**
+   * Workspace `id` discarded for session `from` (work-items.ts
+   * `discardFor`), and what `discard_workspace` answers of it: its carry,
+   * and what its delegates left in the person's panel. `approved`: the
+   * person decided it goes even while what it serves waits on him.
+   */
+  const discarded = async (
+    from: string,
+    id: string,
+    { approved = false }: { approved?: boolean } = {}
+  ): Promise<string> => {
+    const { workspace, carry } = await workItems.discardFor(from, id, {
+      approved,
+    });
+    workspaceArchived(workspace);
+    return `${
+      carry
+        ? `Discarded workspace ${idHandle(workspace.id)}: what it held that was nowhere else is in the carry ${carry} on its machine, and its clone is gone.`
+        : `Archived workspace ${idHandle(workspace.id)}: it held nothing that is nowhere else, so no carry was written, and its clone is gone.`
+    }${leftoverWords(workspace.id, from)}`;
+  };
+
+  /**
+   * Session `from`'s ask that the person decide the discard of workspace
+   * `id` while what it serves waits on him: an approve ask (asks.ts) naming
+   * `discard_workspace`, the workspace, the session's `reason` and what
+   * still waits (`waiting`), which the person reads on its card; approved,
+   * the hub runs it once with `approved` (the ask's `run`). Its words when
+   * recorded; else whether the discard goes now approved: nothing waits
+   * (it goes as asked, not approved), or the session is in Full Send
+   * (approved at once, asks.ts).
+   */
+  const discardAsked = async (
+    from: string,
+    id: string,
+    reason: string | undefined
+  ): Promise<{ recorded: string } | { approved: boolean }> => {
+    const asked = workItems.discardable(from, id);
+    const stillWaiting = workItems.waiting(asked.id);
+    if (stillWaiting.length === 0) {
+      return { approved: false };
+    }
+    if (!reason?.trim()) {
+      throw new WorkItemRefusal(400, workWords.discardAskReason);
+    }
+    const [actor] = db.getInstancesByIds([from]);
+    if (!actor) {
+      throw new WorkItemRefusal(404, `No session ${from} on this hub.`);
+    }
+    const recorded = await hubAsks.ask(actor, "discard_workspace", {
+      workspace: asked.id,
+      reason: reason.trim(),
+      waiting: workWords.discardAskWaiting(
+        stillWaiting.map((one) => artifactLink(one.id, one.name))
+      ),
+    });
+    return recorded === undefined ? { approved: true } : { recorded };
+  };
+
   /**
    * What `discard_workspace` answers past its carry: the artifacts the
    * workspace's sessions still hold in their panels, each by its link and
@@ -35067,13 +35143,25 @@ export const createServer = (
       // (409) whatever `discard` says while a project's folder is inside its
       // clone or scratch dir. A preview of it does not refuse: the archive
       // ends its served server.
+      // While what it serves waits on the person it is refused, unless he
+      // confirmed it knowing that (`anyway`, the dashboard's confirm, which
+      // reads `/waiting` first): his own word alone, never a session's.
       .post(
         "/api/workspaces/:id/archive",
-        { body: t.Optional(t.Object({ discard: t.Optional(t.Boolean()) })) },
-        async ({ params, body, status }) => {
+        {
+          body: t.Optional(
+            t.Object({
+              discard: t.Optional(t.Boolean()),
+              anyway: t.Optional(t.Boolean()),
+            })
+          ),
+        },
+        async ({ params, body, request, server, status }) => {
+          const caller = hubAuth.callerOf(request, addressOf(server, request));
           try {
             const { workspace, carry } = await workItems.archive(params.id, {
               discard: body?.discard === true,
+              anyway: body?.anyway === true && caller.kind === "owner",
             });
             workspaceArchived(workspace);
             return { ...workspace, carry };
@@ -35087,14 +35175,41 @@ export const createServer = (
           }
         }
       )
+      // What a workspace serves that waits on the person, each by its id,
+      // name and link: what an archive of it waits on, which the person's
+      // confirm names (dashboard LiveSessionMenu).
+      .get("/api/workspaces/:id/waiting", ({ params, status }) => {
+        try {
+          return {
+            waiting: workItems.waiting(params.id).map((one) => ({
+              ...one,
+              link: artifactLink(one.id, one.name),
+            })),
+          };
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          return status(
+            error instanceof WorkItemRefusal ? error.status : 502,
+            message
+          );
+        }
+      })
       // `discard_workspace`: a workspace a session's delegates worked in,
       // archived with its unlanded work saved to a carry, by that session
-      // (or its project's conversation) alone.
+      // (or its project's conversation) alone. While what it serves waits
+      // on the person it is refused; `ask` asks the person to decide
+      // instead (asks.ts, an approve ask), and his approval discards it
+      // anyway (`discardAsked`).
       .post(
         "/api/workspaces/:id/discard",
         {
           ...hidden,
-          body: t.Object({ from: t.String({ minLength: 1 }) }),
+          body: t.Object({
+            from: t.String({ minLength: 1 }),
+            ask: t.Optional(t.Boolean()),
+            reason: t.Optional(t.String({ maxLength: 300 })),
+          }),
         },
         async ({ params, body, request, status }) => {
           // A session's own credential, or none: the gate let through only
@@ -35111,17 +35226,16 @@ export const createServer = (
             );
           }
           try {
-            const { workspace, carry } = await workItems.discardFor(
-              body.from,
-              params.id
-            );
-            workspaceArchived(workspace);
+            const asked = body.ask
+              ? await discardAsked(body.from, params.id, body.reason)
+              : { approved: false };
+            if ("recorded" in asked) {
+              return { text: asked.recorded };
+            }
             return {
-              text: `${
-                carry
-                  ? `Discarded workspace ${idHandle(workspace.id)}: what it held that was nowhere else is in the carry ${carry} on its machine, and its clone is gone.`
-                  : `Archived workspace ${idHandle(workspace.id)}: it held nothing that is nowhere else, so no carry was written, and its clone is gone.`
-              }${leftoverWords(workspace.id, body.from)}`,
+              text: await discarded(body.from, params.id, {
+                approved: asked.approved,
+              }),
             };
           } catch (error) {
             const message =

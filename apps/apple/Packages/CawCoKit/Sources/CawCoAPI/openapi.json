@@ -26901,6 +26901,9 @@
                 "properties": {
                   "discard": {
                     "type": "boolean"
+                  },
+                  "anyway": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -26971,6 +26974,83 @@
           },
           "502": {
             "description": "postApiWorkspacesByIdArchive 502",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workspaces/{id}/waiting": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiWorkspacesByIdWaiting",
+        "responses": {
+          "200": {
+            "description": "getApiWorkspacesByIdWaiting 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiWorkspacesByIdWaiting200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiWorkspacesByIdWaiting 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiWorkspacesByIdWaiting 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiWorkspacesByIdWaiting 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiWorkspacesByIdWaiting 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "getApiWorkspacesByIdWaiting 502",
             "content": {
               "text/plain": {
                 "schema": {
@@ -33144,6 +33224,36 @@
           "stageFor",
           "state",
           "tmp"
+        ]
+      },
+      "getApiWorkspacesByIdWaiting200": {
+        "type": "object",
+        "properties": {
+          "waiting": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "link": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "link",
+                "name"
+              ]
+            }
+          }
+        },
+        "required": [
+          "waiting"
         ]
       },
       "getApiAccounts200": {

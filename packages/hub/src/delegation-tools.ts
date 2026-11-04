@@ -811,11 +811,17 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "discard_workspace",
-      "Let go of a held workspace of your delegates' whose work you will not continue: what it holds is saved to a carry in ~/.cawco/carries on its machine, then its clone goes.",
+      "Let go of a held workspace of your delegates' whose work you will not continue: what it holds is saved to a carry in ~/.cawco/carries on its machine, then its clone goes. Refused while it serves what waits on the person; ask lets him decide.",
       {
         workspace: z.string().describe("Its id, as the hub's notice names it."),
+        ask: z.boolean().optional(),
+        reason: z.string().max(300).optional().describe("With ask: why."),
       },
-      ({ workspace }) => actions.discardWorkspace(workspace),
+      ({ workspace, ask, reason }) =>
+        actions.discardWorkspace(workspace, {
+          ...(ask ? { ask } : {}),
+          ...(reason ? { reason } : {}),
+        }),
       sentence
     ),
     tool(

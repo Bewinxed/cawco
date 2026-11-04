@@ -30,20 +30,30 @@
  *   which nothing names now, retires at the next sweep.
  * - (4) With WA gone, `p`'s tab, reloaded, reads B's word with no down
  *   page, and its origin answers B's page.
- * - (5) B stopped, the parent's discard_workspace of WB is refused while
- *   `p` waits on the person, its words naming `p`; nothing is deleted.
- * - (6) The person sends `p`: it waits on the person no more.
- * - (7) The discard goes through, and `p`'s tab, reloaded, says its
+ * - (5) B stopped, `p` a try the person hasn't sent, so it waits on him
+ *   (hub artifacts service `waitingOnPerson`): the parent's
+ *   discard_workspace of WB is refused, its words naming `p` and both ways
+ *   forward (hand it up again from another workspace, or ask him), and WB
+ *   stays.
+ * - (6) The parent asks him to decide (discard_workspace with `ask`): an
+ *   approve ask (hub asks.ts) whose card names `p` as still waiting; his
+ *   approval discards WB anyway. (6b) His own archive: C hands `q` up from
+ *   WC, a try he hasn't sent; the confirm's read names `q`, unconfirmed
+ *   the archive is refused naming `q`, confirmed it archives WC.
+ * - (7) With WB discarded on his approval, `p`'s tab, reloaded, says its
  *   workspace is gone (the pane's `gone` down state), its origin answering
  *   that down page, never a 502.
  *
  *   bun scripts/probe-kit/run.ts preview-rehand
  */
+import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
 import { downOf } from "../../../packages/core/src/preview-proxy";
-import { toolRecord, toolWords } from "../../lib/tool-call";
+import { artifactLink } from "../../../packages/core/src/references";
+import { workWords } from "../../../packages/core/src/words/work";
+import { handle } from "../../../packages/hub/src/presenters/words";
+import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
-import { writePagePins } from "../pins";
 import { passedFetch } from "../preview-pass";
 
 /** The artifact panel's frame (PreviewPane), in an artifact's own tab. */
@@ -52,16 +62,26 @@ const FRAME = 'iframe[title="Preview"]';
 const DOWN = '[data-slot="down"]';
 const PORT_A = 47_641;
 const PORT_B = 47_642;
+const PORT_C = 47_643;
 const WORD_A = "rehand page A";
 const WORD_B = "rehand page B";
+const WORD_C = "rehand page C";
+/** Each delegate's port and page word; A and B hand up `p`, C hands up `q`. */
+const PAGES: Record<Tag, { name: string; port: number; word: string }> = {
+  A: { name: "p", port: PORT_A, word: WORD_A },
+  B: { name: "p", port: PORT_B, word: WORD_B },
+  C: { name: "q", port: PORT_C, word: WORD_C },
+};
 /** A workspace's settle once nothing holds it. */
 const SETTLE_MS = 180_000;
 /** A delegate's ask to its hand-up answered: its server's start and the check of its page. */
 const HAND_UP_MS = 300_000;
 const CREATE = "mcp__cawco__artifact_create";
 const WAIT = "mcp__cawco__wait_item";
-const TAG = /PROBE-REHAND-([AB]):/u;
-type Tag = "A" | "B";
+const TAG = /PROBE-REHAND-([ABC]):/u;
+type Tag = "A" | "B" | "C";
+/** The tool a discard asked of the person names on its card. */
+const DISCARD_TOOL = "mcp__cawco__discard_workspace";
 
 /** `word` as one single-quoted shell word. */
 const quoted = (word: string): string => `'${word.replaceAll("'", `'\\''`)}'`;
@@ -96,14 +116,14 @@ const want = (request: Seen, tag: Tag, name: string, input: object): Reply => {
     : text(`${name} is not offered`);
 };
 
-/** Delegate `tag`'s hand-up of `p`: its own page, served in its workspace. */
+/** Delegate `tag`'s hand-up: its own page to try, served in its workspace. */
 const handUp = (tag: Tag): object => ({
   kind: "preview",
-  does: "judge",
-  ask: "Judge whether this page reads right",
-  name: "p",
-  port: tag === "A" ? PORT_A : PORT_B,
-  serve: { command: served(tag === "A" ? WORD_A : WORD_B) },
+  does: "try",
+  ask: "Try this page and say whether it reads right",
+  name: PAGES[tag].name,
+  port: PAGES[tag].port,
+  serve: { command: served(PAGES[tag].word) },
   to: "parent",
 });
 
@@ -137,7 +157,9 @@ const respond = (request: Seen): Reply => {
     return text("Probe title");
   }
   const tag = TAG.exec(request.all)?.[1];
-  return tag === "A" || tag === "B" ? work(request, tag) : text("ok");
+  return tag === "A" || tag === "B" || tag === "C"
+    ? work(request, tag)
+    : text("ok");
 };
 
 interface Started {
@@ -276,7 +298,23 @@ const spec: Spec = {
       return rowOf(held);
     };
 
-    for (const tag of ["A", "B"] as const) {
+    /** His own archive of workspace `id` (no credential: the person, on a hub that trusts its network), its unlanded work let go, confirmed or not. */
+    const ownerArchive = async (id: string, anyway: boolean) => {
+      const response = await fetch(
+        `${fleet.base}/api/workspaces/${id}/archive`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            discard: true,
+            ...(anyway ? { anyway } : {}),
+          }),
+        }
+      );
+      return { status: response.status, text: await response.text() };
+    };
+
+    for (const tag of ["A", "B", "C"] as const) {
       delete steps[tag];
       delete pending[tag];
     }
@@ -374,101 +412,127 @@ const spec: Spec = {
       JSON.stringify({ readsB, originB })
     );
 
-    // (5) The person leaves a pin on p and has not sent it, so p waits on
-    // them (needs.ts: a page to judge with marks not sent); B stopped, WB's
-    // discard is refused.
-    const page = await (
-      await tab.locator(FRAME).first().elementHandle()
-    )
-      ?.contentFrame()
-      .catch(() => null);
-    const pinnedAt = new Date().toISOString();
-    if (page) {
-      await writePagePins(page, {
-        id: crypto.randomUUID(),
-        number: 1,
-        kind: "comment",
-        by: "person",
-        at: pinnedAt,
-        anchor: { selector: "#word", source: null, text: WORD_B },
-        elements: [],
-        thread: [
-          {
-            id: crypto.randomUUID(),
-            by: "person",
-            text: "Say it bigger",
-            at: pinnedAt,
-          },
-        ],
-      });
-    }
-    const waitingOn = async () => {
-      const listed = await toolRecord<{
-        artifacts: { id: string; waitingOn: string[] }[];
-      }>(await as(parent), "artifact_list", {});
-      return listed.refused
-        ? [listed.text]
-        : (listed.record.artifacts.find((one) => one.id === p)?.waitingOn ??
-            []);
-    };
-    const asking = await until(
-      "p waiting on the person",
-      waitingOn,
-      (on) => on.includes("person"),
-      30_000
-    ).catch(waitingOn);
+    // (5) B stopped, p a try the person hasn't sent: the parent's discard
+    // of WB is refused, naming p and its two ways forward.
     const stoppedB = await toolWords(await as(parent), "stop_delegate", {
       target: b.instanceId,
     });
     const refused = await toolWords(await as(parent), "discard_workspace", {
       workspace: b.workspaceId,
     });
+    const refusal = workWords.servesWaiting(handle(b.workspaceId), [
+      artifactLink(p, "p"),
+    ]);
     check(
-      "(5) with an unsent pin of the person's on p, so p waits on the person, the parent's discard_workspace of WB is refused, its words naming p, and WB stays",
-      asking.includes("person") &&
-        !stoppedB.refused &&
+      "(5) with p a try the person hasn't sent, the parent's discard_workspace of WB is refused in words naming p and both ways forward (hand it up again, or ask him), and WB stays",
+      !stoppedB.refused &&
         refused.refused &&
-        refused.text.includes(p) &&
+        refused.text.includes(refusal) &&
         workspaceState(b.workspaceId) === "active",
       JSON.stringify({
-        pinned: !!page,
-        waitingOn: asking,
         stopped: stoppedB.text.slice(0, 200),
-        refused: refused.text.slice(0, 400),
+        refused: refused.text.slice(0, 600),
         wb: workspaceState(b.workspaceId),
       })
     );
 
-    // (6) The person sends p: it waits on the person no more.
-    const { port } = await fleet.api<{ port: number }>(
-      `/api/artifacts/${p}/preview-address`,
-      {}
-    );
-    const sent = await passedFetch(
-      fleet,
-      `http://127.0.0.1:${port}/__cawco/artifact/${p}/send`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: "It reads right." }),
-      }
-    );
-    const listed = await toolRecord<{
-      artifacts: { id: string; waitingOn: string[] }[];
-    }>(await as(parent), "artifact_list", {});
-    const waiting = listed.refused
-      ? listed.text
-      : listed.record.artifacts.find((one) => one.id === p)?.waitingOn;
+    // (6) The parent asks him to decide; his approval discards it anyway.
+    const asked = await toolWords(await as(parent), "discard_workspace", {
+      workspace: b.workspaceId,
+      ask: true,
+      reason: "B's page moved on; this workspace is done",
+    });
+    const parked = await until(
+      "the discard's ask parked for the person",
+      () =>
+        fleet.api<
+          {
+            requestId?: string;
+            payload?: { input?: { waiting?: string }; toolName?: string };
+          }[]
+        >("/api/pending"),
+      (list) => list.some((one) => one.payload?.toolName === DISCARD_TOOL),
+      60_000
+    ).catch(() => []);
+    const ask = parked.find((one) => one.payload?.toolName === DISCARD_TOOL);
+    if (ask?.requestId) {
+      await fleet.post({
+        type: "command",
+        commandId: crypto.randomUUID(),
+        kind: "permission.answer",
+        machineId: MACHINE,
+        sessionId: parent,
+        payload: {
+          instanceId: parent,
+          requestId: ask.requestId,
+          method: RESOLVE_PERMISSION,
+          args: [ask.requestId, { behavior: "allow" }],
+        },
+      });
+    }
+    const approvedState = await until(
+      "WB archived on his approval",
+      async () => workspaceState(b.workspaceId),
+      (state) => state === "archived",
+      SETTLE_MS
+    ).catch(() => workspaceState(b.workspaceId));
     check(
-      "(6) the person sends p, and it waits on the person no more",
-      sent.ok && Array.isArray(waiting) && !waiting.includes("person"),
-      JSON.stringify({ sent: sent.status, waiting })
+      "(6) the parent's discard with ask is recorded as his approval, its card naming p as still waiting, and his approval discards WB anyway",
+      !asked.refused &&
+        !!ask?.requestId &&
+        ask.payload?.input?.waiting ===
+          workWords.discardAskWaiting([artifactLink(p, "p")]) &&
+        approvedState === "archived",
+      JSON.stringify({
+        asked: asked.text.slice(0, 300),
+        card: ask?.payload ?? null,
+        wb: approvedState,
+      })
     );
 
-    // (7) The discard goes through; p's tab says its workspace is gone.
-    const discarded = await toolWords(await as(parent), "discard_workspace", {
-      workspace: b.workspaceId,
+    // His own confirmed archive: C hands q up from WC, a try he hasn't
+    // sent; unconfirmed it is refused naming q, confirmed it goes.
+    const c = await delegate("C");
+    await handedUp("C");
+    const [qRow] = fleet.query<{ id: string }>(
+      "SELECT id FROM artifacts WHERE name = 'q' AND held_for IS NULL"
+    );
+    // Shown by the parent, it is before the person (no longer handed up).
+    if (qRow) {
+      await toolWords(await as(parent), "artifact_show", { id: qRow.id });
+    }
+    await toolWords(await as(parent), "stop_delegate", {
+      target: c.instanceId,
     });
+    const named = await fleet
+      .api<{ waiting: { id: string; name: string }[] }>(
+        `/api/workspaces/${c.workspaceId}/waiting`
+      )
+      .catch(() => ({ waiting: [] }));
+    const unconfirmed = await ownerArchive(c.workspaceId, false);
+    const confirmed = await ownerArchive(c.workspaceId, true);
+    check(
+      "(6b) his own archive of WC, where q waits on him unsent: the confirm's read names q, unconfirmed it is refused naming q, confirmed it archives WC",
+      !!qRow &&
+        named.waiting.some((one) => one.id === qRow.id) &&
+        unconfirmed.status === 409 &&
+        unconfirmed.text.includes(
+          workWords.servesWaitingConfirm(handle(c.workspaceId), [
+            artifactLink(qRow.id, "q"),
+          ])
+        ) &&
+        confirmed.status === 200 &&
+        workspaceState(c.workspaceId) === "archived",
+      JSON.stringify({
+        q: qRow ?? null,
+        named,
+        unconfirmed: `${unconfirmed.status} ${unconfirmed.text.slice(0, 300)}`,
+        confirmed: `${confirmed.status} ${confirmed.text.slice(0, 200)}`,
+        wc: workspaceState(c.workspaceId),
+      })
+    );
+
+    // (7) With WB discarded on his approval, p's tab says its workspace is gone.
     await tab.reload({ waitUntil: "domcontentloaded" });
     const gone = await until(
       "p's tab saying its workspace is gone",
@@ -478,14 +542,12 @@ const spec: Spec = {
     ).catch(() => tabReads(tab));
     const originGone = await originReads(fleet, p);
     check(
-      "(7) WB's discard goes through, and p's tab says its workspace is gone (the pane's gone state), its origin answering that down page, never a 502",
-      !discarded.refused &&
-        workspaceState(b.workspaceId) === "archived" &&
+      "(7) with WB discarded on his approval, p's tab says its workspace is gone (the pane's gone state), its origin answering that down page, never a 502",
+      workspaceState(b.workspaceId) === "archived" &&
         gone.kind === "gone" &&
         originGone.status !== 502 &&
         originGone.down === "gone",
       JSON.stringify({
-        discarded: discarded.text.slice(0, 200),
         wb: workspaceState(b.workspaceId),
         gone,
         originGone,
