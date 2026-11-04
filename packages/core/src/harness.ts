@@ -2281,6 +2281,26 @@ export const CONTROL_PLACE_REPO = "placeRepo";
 export const CONTROL_REPO_ROOT = "repoRoot";
 
 /**
+ * A folder of a project deleted for good removed from its machine (hub
+ * project-delete.ts), the hub having held it to the project's own recorded
+ * places first: a checkout or folder of the project (`place`), or a carry
+ * one of its workspaces left (`carry`, which must stand in the machine's
+ * carries dir). The machine refuses a path that is not absolute, its root,
+ * its home or a folder holding it, or anything in CawCo's own dirs; a link
+ * goes as the link. Args `[RemoveFolder]`; answers {@link FolderRemoved}.
+ * Machine-scoped; only the hub sends it.
+ */
+export const CONTROL_REMOVE_FOLDER = "removeFolder";
+export interface RemoveFolder {
+  kind: "place" | "carry";
+  path: string;
+}
+/** What {@link CONTROL_REMOVE_FOLDER} answers: false when nothing stood there. */
+export interface FolderRemoved {
+  removed: boolean;
+}
+
+/**
  * The delegation workspace whose clone holds a folder, by the machine's own
  * workspace records: the boundary a spawn naming no workspace would run in
  * there (agent workspace-records.ts `cloneHolding`), or null when none
@@ -2640,9 +2660,12 @@ export interface WorkspaceWorkEnd {
  *   build wrote is the build's. Not read.
  * - `unmade`: a create that never finished, whose clone nobody worked in.
  *   Not read; `path` may be absent, and the machine's create record names it.
+ * - `drop`: its project was deleted for good (hub project-delete.ts): not
+ *   read, nothing carried, the clone and its records gone. An agent from
+ *   before it reads it as a `keep`, and deletes nothing that holds work.
  * Letting it go is {@link CONTROL_WORKSPACE_DISCARD}.
  */
-export type WorkspaceUnlanded = "keep" | "check" | "unmade";
+export type WorkspaceUnlanded = "keep" | "check" | "unmade" | "drop";
 
 /** What {@link CONTROL_WORKSPACE_ARCHIVE} and {@link CONTROL_WORKSPACE_DISCARD} are asked. `skip`, its items' handed-over outputs, `git status` passes over; `base`, the branch it lands on, named first as the branch its `head` is on when that branch holds it. */
 export interface WorkspaceArchive {

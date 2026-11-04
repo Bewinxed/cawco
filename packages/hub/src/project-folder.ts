@@ -33,6 +33,7 @@ import {
   readFile,
   realpath,
   rename,
+  rm,
   rmdir,
   stat,
   unlink,
@@ -1878,6 +1879,20 @@ export const hasProjectFolder = (projectId: string): Promise<boolean> =>
   exists(join(projectRoot(projectId), ".git"));
 
 /**
+ * A folder leaving its place (forgotten, or deleted for good): nothing read
+ * of it is kept, and no read that outlives it makes it again.
+ */
+const letGo = (projectId: string): void => {
+  ready.delete(projectId);
+  forgotten.add(projectId);
+  for (const key of timesRead.keys()) {
+    if (key.startsWith(`${projectId}\0`)) {
+      timesRead.delete(key);
+    }
+  }
+};
+
+/**
  * Moves a forgotten project's folder, history and all, to
  * `<data>/projects/.trash/<entry>` (never erased; project-trash.ts names the
  * entry). Answers where it went, or undefined when the project never had a
@@ -1889,13 +1904,7 @@ export const trashProjectFolder = async (
 ): Promise<string | undefined> => {
   const root = projectRoot(projectId);
   return await inTurn(projectId, async () => {
-    ready.delete(projectId);
-    forgotten.add(projectId);
-    for (const key of timesRead.keys()) {
-      if (key.startsWith(`${projectId}\0`)) {
-        timesRead.delete(key);
-      }
-    }
+    letGo(projectId);
     if (!(await exists(root))) {
       return;
     }
@@ -1903,6 +1912,24 @@ export const trashProjectFolder = async (
     const target = join(PROJECT_TRASH_DIR, entry);
     await rename(root, target);
     return target;
+  });
+};
+
+/**
+ * A project deleted for good: its folder on the hub, history and all, gone,
+ * and never made again by a read that outlives it. False when it had none.
+ */
+export const deleteProjectFolder = async (
+  projectId: string
+): Promise<boolean> => {
+  const root = projectRoot(projectId);
+  return await inTurn(projectId, async () => {
+    letGo(projectId);
+    if (!(await exists(root))) {
+      return false;
+    }
+    await rm(root, { recursive: true, force: true });
+    return true;
   });
 };
 

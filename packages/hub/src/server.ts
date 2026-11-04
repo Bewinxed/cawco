@@ -925,6 +925,7 @@ import {
   makeProjectDelegateTypes,
   projectDelegateTypesRoutes,
 } from "./project-delegate-types";
+import { DeleteRefusal, projectDelete } from "./project-delete";
 import { createProjectEdits, ProjectEditRefusal } from "./project-edit";
 import {
   changeFolderFiles,
@@ -22607,6 +22608,21 @@ export const createServer = (
   /** Forgotten projects, set aside in the trash and brought back (project-trash.ts). */
   const forgottenProjects = projectTrash(db);
 
+  /** Projects deleted for good, live or forgotten (project-delete.ts). */
+  const deletedProjects = projectDelete({
+    call: (machineId, method, args) => callMachine(machineId, method, args),
+    db,
+    endSession: (instanceId, intent) =>
+      endSession(instanceId, intent, {
+        kind: "hub",
+        why: "its project was deleted for good",
+      }),
+    machineName: (machineId) => machineName(machineId),
+    online: (machineId) => !!registry.agent(machineId),
+    removeBrowser: (key, machineId) => browsers.remove(key, machineId),
+    stillRunning: (projectId) => projectStops.stillRunning(projectId),
+  });
+
   /**
    * The presence id a request's tab sent (core `PRESENCE_HEADER`), when it is
    * one: the journal names who asked by it.
@@ -35519,6 +35535,52 @@ export const createServer = (
         projectMoved(params.id, machines, forgot.folder !== undefined);
         return { ok: true };
       })
+      // A project deleted for good, live or forgotten (project-delete.ts):
+      // nothing CawCo holds of it remains; `fromDisk`, its places on disk
+      // and its sessions' transcripts go too. Refused, in the hub's words,
+      // while a session of it runs, a place it would remove from disk is
+      // another live project's, or a machine holding part of it is away.
+      .post(
+        "/api/projects/:id/delete",
+        {
+          body: t.Optional(t.Object({ fromDisk: t.Optional(t.Boolean()) })),
+        },
+        async ({ params, body, status, request }) => {
+          const fromDisk = body?.fromDisk === true;
+          const head = `${projectTrashWords.deleteLine(params.id)} ${askerOf(request)} fromDisk=${fromDisk}`;
+          const machines =
+            db.project(params.id)?.places.map((place) => place.machineId) ?? [];
+          try {
+            const deleted = await deletedProjects.delete(params.id, {
+              fromDisk,
+            });
+            console.log(
+              `${head} outcome=deleted name=${JSON.stringify(deleted.name)} hub=rows:${deleted.hub.rows},folder:${deleted.hub.folder},trash:${deleted.hub.trash}${Object.entries(
+                deleted.machines
+              )
+                .map(
+                  ([machine, counts]) =>
+                    ` ${JSON.stringify(machine)}=${Object.entries(counts)
+                      .map(([what, n]) => `${what}:${n}`)
+                      .join(",")}`
+                )
+                .join("")}`
+            );
+            // Its pages' origin goes with it, as a forget's does.
+            previewListeners.release(projectOrigin(params.id));
+            projectMoved(params.id, machines, deleted.hub.folder);
+            return deleted;
+          } catch (error) {
+            if (error instanceof DeleteRefusal) {
+              console.log(
+                `${head} outcome=refused status=${error.status}: ${error.message}`
+              );
+              return status(error.status, error.message);
+            }
+            throw error;
+          }
+        }
+      )
       // A forgotten project brought back from the trash, as it was when it
       // was forgotten (project-trash.ts): its newest entry, or the one
       // forgotten at `forgottenAt`; `name` names one forgotten before the hub

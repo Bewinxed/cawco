@@ -166,6 +166,7 @@ import { type MoveEndingsDb, moveEndingsDb } from "./move-endings";
 import { type OwedMovesDb, owedMovesDb } from "./owed-moves";
 import { type PreviewPassesDb, previewPassesDb } from "./preview-passes";
 import { type PreviewsDb, previewsDb } from "./previews";
+import { type ProjectWorkDb, projectWorkDb } from "./project-work";
 import { type RelaysDb, relaysDb } from "./relays";
 import { type RoutinesDb, routinesDb } from "./routines";
 import {
@@ -1790,6 +1791,8 @@ export interface DbShape {
    * (server.ts `machineFleetItems`).
    */
   readonly projectsWorkedOn: (machineId: string) => string[];
+  /** A project's sessions and workspaces, read and dropped as it is deleted for good (project-work.ts). */
+  readonly projectWork: ProjectWorkDb;
   /** Every work item of the project, newest first (handed-inputs.ts names one by its handle). */
   readonly projectWorkItems: (projectId: string) => WorkItemRow[];
   /** Drops the fleet MCP relay sessions unused since `before`; answers how many. */
@@ -10752,6 +10755,7 @@ const make = async (path: string): Promise<DbShape> => {
     trash: trashDb(db),
     forgetProject: forgetting.forget,
     restoreProject: forgetting.restore,
+    projectWork: projectWorkDb(db),
 
     ruleStats: () => {
       const rows = db

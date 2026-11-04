@@ -58,6 +58,7 @@ import {
   CONTROL_PLACE_PUSH,
   CONTROL_PLACE_REPO,
   CONTROL_READ_HOME_CREDENTIALS,
+  CONTROL_REMOVE_FOLDER,
   CONTROL_REPO_ROOT,
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
@@ -79,6 +80,7 @@ import {
   invariant,
   lawPolicy,
   MACHINE_PART_MS,
+  type RemoveFolder,
   type TranscriptQuery,
   type TranscriptTurnsQuery,
   UPDATE_CAWCO,
@@ -313,6 +315,7 @@ import {
   redactConsole,
   storedHashes,
 } from "./redaction";
+import { removeFolder } from "./remove-folder";
 import { fenced, setRestartSource } from "./restart";
 import { TranscriptSearchService } from "./search";
 import { resumableSessions, SessionSupervisor } from "./session";
@@ -3539,6 +3542,13 @@ const startDaemon = (rediscover = false) =>
     // A place's first commit writes its folder: none starts behind a raised fence.
     supervisor.registerDaemonFunction(CONTROL_PLACE_REPO, (path) =>
       fenced() ? Promise.reject(new Error(AGENT_RESTARTING)) : placeRepo(path)
+    );
+    // A folder of a project deleted for good, held to this machine's floor
+    // (remove-folder.ts) after the hub held it to the project's places.
+    supervisor.registerDaemonFunction(CONTROL_REMOVE_FOLDER, (asked) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : removeFolder(asked as RemoveFolder)
     );
     // What a workspace cut from a folder is cut from: read only.
     supervisor.registerDaemonFunction(CONTROL_REPO_ROOT, (path) =>

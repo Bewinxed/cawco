@@ -2592,7 +2592,7 @@ const closeClone = async (
 ): Promise<WorkspaceArchived> => {
   // Read unless it names a copy with nothing of anyone's own: a request
   // naming no mode is a `keep`.
-  const unread: WorkspaceUnlanded[] = ["check", "unmade"];
+  const unread: WorkspaceUnlanded[] = ["check", "unmade", "drop"];
   const read = !unread.includes(request.unlanded);
   const path = request.path ?? (await createdPath(request.id));
   const forget = async () => {

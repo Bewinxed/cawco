@@ -381,6 +381,88 @@ const newestEntry = async (id: string, forgottenAt: number | undefined) => {
   return { entry, record };
 };
 
+/** What a forgotten project held, as its record names it: what a delete for good removes of it. */
+export interface TrashedProject {
+  /** Its browsers, kept on their machines. */
+  browsers: { key: string; machineId: string }[];
+  /** The trash entries it has, newest first. */
+  entries: string[];
+  /** The name its newest record gives it; null when none does. */
+  name: string | null;
+  /** Its places as its records keep them. */
+  places: { id: string; kind: string; machineId: string; path: string }[];
+  /** The sessions its forgets unlinked. */
+  sessions: string[];
+}
+
+/** One table's rows of a record as objects, by column name. */
+const objectsIn = (rows: ProjectRows, table: string) => {
+  const kept = rows.tables.find((one) => one.table === table);
+  return (kept?.rows ?? []).map((row) =>
+    Object.fromEntries(
+      kept?.columns.map((column, at) => [column, row[at]]) ?? []
+    )
+  );
+};
+
+/**
+ * What project `id` holds in the trash, every entry of it read (a record
+ * that does not read names nothing); undefined when it has none.
+ */
+export const trashedProject = async (
+  id: string
+): Promise<TrashedProject | undefined> => {
+  const mine = (await entries()).filter((one) => one.id === id);
+  if (mine.length === 0) {
+    return;
+  }
+  const held: TrashedProject = {
+    browsers: [],
+    entries: mine.map((one) => one.entry),
+    name: null,
+    places: [],
+    sessions: [],
+  };
+  for (const entry of mine) {
+    const record = await recordOf(entry).catch(() => undefined);
+    if (record?.kind !== "forgotten") {
+      continue;
+    }
+    held.name ??= record.name;
+    held.browsers.push(...record.browsers);
+    held.sessions.push(
+      ...record.rows.unlinked
+        .filter((one) => one.table === "instances")
+        .flatMap((one) => {
+          const at = one.key.indexOf("id");
+          return at < 0 ? [] : one.rows.map((row) => String(row[at]));
+        })
+    );
+    for (const place of objectsIn(record.rows, "project_places")) {
+      held.places.push({
+        id: String(place.id),
+        kind: String(place.kind),
+        machineId: String(place.machine_id),
+        path: String(place.path),
+      });
+    }
+  }
+  return held;
+};
+
+/** Every entry of project `id` in the trash gone for good, its folder and its record: how many. */
+export const purgeTrash = async (id: string): Promise<number> => {
+  const mine = (await entries()).filter((one) => one.id === id);
+  for (const entry of mine) {
+    await rm(join(PROJECT_TRASH_DIR, entry.entry), {
+      recursive: true,
+      force: true,
+    });
+    await rm(recordPath(entry.entry), { force: true });
+  }
+  return mine.length;
+};
+
 /** A restore the hub turns down: its status, and the words the caller reads. */
 export class RestoreRefusal extends Error {
   readonly status: 400 | 404 | 409 | 422;
