@@ -8,6 +8,7 @@ import {
   type BrowserListenArgs,
   isBrowserKey,
 } from "@cawco/core/browser";
+import { PREVIEW_RELAYED_HEADER } from "@cawco/core/browser-gate";
 import {
   asksUpgrade,
   cachePreview,
@@ -863,6 +864,9 @@ async function start(
         const headers = proxyHeaders(request.headers);
         // The relay's credential is this listener's, never the app's.
         headers.delete(RELAY_HEADER);
+        // A hub the app passes it on to records no origin of it (core
+        // `dashboardOriginOf`): the page's is the address given just below.
+        headers.set(PREVIEW_RELAYED_HEADER, "1");
         headers.set("host", `localhost:${source.port}`);
         for (const name of FORWARDING_HEADERS) {
           headers.delete(name);

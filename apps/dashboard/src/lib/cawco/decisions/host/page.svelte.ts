@@ -8,7 +8,7 @@
 import type { ChoiceEntry } from "@cawco/core/choices";
 import { PICTURES_TAG, type PictureSize } from "@cawco/core/decisions-library";
 import { OVERLAY_PATH } from "@cawco/core/frames";
-import type { CanvasShapes } from "@cawco/core/stage";
+import type { DecisionMedia } from "@cawco/core/stage";
 import { decisionsWords } from "@cawco/core/words/decisions";
 import { getContext } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
@@ -88,18 +88,8 @@ export const picks = $state<{ now: Record<string, ChoiceEntry> }>({ now: {} });
 /** When the person last pressed Send, ISO, as the hub keeps it (its doc's `meta.sentAt`); null before. */
 export const sent = $state<{ at: string | null }>({ at: null });
 
-/** An artifact a Canvas or Preview names, as the hub has it; null when it is gone. */
-export type MediaArtifact = {
-  /** A dev server's preview or a sheet: the address of the origin the hub opened for it. */
-  embed?: string;
-  /** The version the page draws: the artifact's newest, a next version its owner's panel has not opened yet included (hub artifacts service `newestVersion`). */
-  id: string;
-  kind: string;
-  /** That version's revision: its frame loads again when it moves. */
-  revision: number;
-  /** A component canvas's shapes as embeds said them and as its stage drew its stories: a Preview's skeleton stands at them. */
-  shapes?: CanvasShapes;
-} | null;
+/** An artifact a Canvas or Preview names, as the hub has it; null when it is gone (core `DecisionMedia`). */
+export type MediaArtifact = DecisionMedia;
 
 export const served = $state<{
   /** Each Image's file as written, to its address beside the page. */

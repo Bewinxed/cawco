@@ -28,8 +28,10 @@
  *    the id and `since` it names: the answer holds the pick and the final
  *    note as typed, its inner line break kept and no Return at its end.
  * 6. The line then says "read".
- * 7. A pick after that makes the pane's head offer Send again, counting the
- *    one pick the session hasn't heard ("Send 1").
+ * 7. A pick after that is one the session hasn't heard: the hub counts it
+ *    unsent (artifact_list's `picks.unsent`), and the page's own Send at
+ *    its foot is the one that sends it, the pane's head standing none for a
+ *    decision page (PreviewPane.svelte `ownSend`, 88d8ed976).
  *
  *   bun scripts/probe-kit/run.ts artifact-responses
  */
@@ -126,6 +128,11 @@ const respond = (request: Seen): Reply => {
   if (notice && !reading.answer) {
     reading.heard ??= request;
     reading.input = { id: notice[3], since: Number(notice[4]) };
+  }
+  // The notice heard and artifact_read not called yet: called now. It is
+  // deferred, so the notice's turn loads it through ToolSearch first, and
+  // the request after that answers the search, the notice no longer last.
+  if (reading.input && !reading.issued && !reading.answer) {
     const reply = callTool(request, READ, reading.input);
     if (reply.tool?.name === READ) {
       reading.issued = true;
@@ -452,24 +459,26 @@ const run = async (kit: Kit) => {
     readWord
   );
 
-  // 7. A pick after the Send is offered again.
+  // 7. A pick after the Send: unsent on the hub, sent by the page's own Send.
   await pressIn(frame, '[data-option="original"]');
-  const label = sendControl.locator('[data-slot="send-label"]');
-  const figure = sendControl.locator('[data-slot="send-count"]');
-  const labelNow = async () =>
-    (await label.count()) > 0
-      ? `${(await label.innerText()).trim()} ${(await figure.innerText()).trim()}`
-      : "no Send control";
-  const afterPick = await until(
-    "the head reading Send 1",
-    labelNow,
-    (words) => words === "Send 1",
+  const unsent = async () =>
+    (
+      await fleet.api<{
+        artifacts: { id: string; picks?: { unsent: number } }[];
+      }>(`/api/instances/${session}/artifacts/list`)
+    ).artifacts.find((one) => one.id === id)?.picks?.unsent ?? null;
+  const unsentNow = await until(
+    "the later pick counted unsent",
+    unsent,
+    (count) => count === 1,
     10_000
-  ).catch(labelNow);
+  ).catch(unsent);
+  const headSends = await sendControl.count();
+  const ownSend = await frame.locator("[data-dp-send]:enabled").count();
   kit.check(
-    "7: a later pick makes the pane's head offer Send again, counting it: Send 1",
-    afterPick === "Send 1",
-    afterPick
+    "7: a later pick is counted unsent on the hub (1), the page's own Send stands to send it, and the pane's head stands no Send of its own",
+    unsentNow === 1 && ownSend === 1 && headSends === 0,
+    JSON.stringify({ unsentNow, ownSend, headSends })
   );
 };
 

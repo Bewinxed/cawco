@@ -20,7 +20,11 @@ import {
   OVERLAY_KEY,
   overlayResponse,
 } from "../../packages/core/src/preview-proxy";
-import { type EmbedShape, storiesKey } from "../../packages/core/src/stage";
+import {
+  type DecisionMedia,
+  type EmbedShape,
+  storiesKey,
+} from "../../packages/core/src/stage";
 import {
   DECISION_ASSETS,
   FACE_PRELOADS,
@@ -366,20 +370,23 @@ function decisionPage(
   },
   withOverlay: boolean
 ): Response {
-  const named = Object.fromEntries([
+  // Each piece as the hub serves it (core `DecisionMedia`): a piece the page
+  // can't parse leaves the whole script unread, and every Preview says its
+  // artifact is gone.
+  const named: Record<string, DecisionMedia> = Object.fromEntries([
     ...Object.entries(media.files).map(([id, held]) => [
       id,
       {
         id,
         kind: "component",
-        name: held[0]?.split("/").at(-1) ?? id,
+        revision: 1,
         embed: `${media.embedAt}/@cawco/canvas?${held.map((file) => `file=${encodeURIComponent(file)}`).join("&")}&scheme=${media.theme}`,
         shapes: { said: media.said.get(id) ?? {}, drawn: {} },
-      },
+      } satisfies DecisionMedia,
     ]),
     ...Object.keys(media.pages).map((id) => [
       id,
-      { id, kind: "page", name: id },
+      { id, kind: "page", revision: 1 } satisfies DecisionMedia,
     ]),
   ]);
   const title = program.match(TITLE)?.[1] ?? "";
@@ -395,6 +402,23 @@ function decisionPage(
     headers: { "content-type": "text/html; charset=utf-8" },
   });
 }
+
+/**
+ * Every stage host this process started that has not ended: each is ended as
+ * the process exits, however it exits but a SIGKILL, as the kit ends its
+ * vite servers (kit.ts `VITES`). A stop signal reaches the exit through
+ * scratch-fleet.ts's own handlers, past the spec's `finally` that would have
+ * called {@link DecisionStage.stop}: a canvas-parallel run stopped that way
+ * left its host serving, its parent the init process. SIGKILL, since the
+ * host is still serving a moment after a SIGTERM and the exit waits for
+ * nothing.
+ */
+const STAGE_HOSTS = new Set<ReturnType<typeof spawn>>();
+process.on("exit", () => {
+  for (const host of STAGE_HOSTS) {
+    host.kill("SIGKILL");
+  }
+});
 
 /**
  * Starts the stage of `project` (the dashboard's own by default) and serves
@@ -438,6 +462,8 @@ export async function startDecisionStage(
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  STAGE_HOSTS.add(stage);
+  stage.once("exit", () => STAGE_HOSTS.delete(stage));
   let words = "";
   const hear = (chunk: Buffer) => {
     words += chunk.toString("utf8");

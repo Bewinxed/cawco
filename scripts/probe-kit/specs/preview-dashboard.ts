@@ -23,6 +23,11 @@
  * 5. A decision page whose card shows the Accounts preview: the card's
  *    embed draws the account, and a pick on the page reaches the hub over
  *    the page's doc socket within 15 s.
+ * 6. Once the previews' sockets have opened, a preview's answer names
+ *    the fleet's dashboard (its 127.0.0.1 address) among the origins that
+ *    may frame it, and never `http://localhost:<port>`, the address the
+ *    agent's listener gave the dashboard's server: a socket the listener
+ *    relayed is recorded as no dashboard origin (core `dashboardOriginOf`).
  *
  *   bun scripts/probe-kit/run.ts preview-dashboard
  */
@@ -43,6 +48,9 @@ const TITLE = "Heron ledger";
 const DRAWN_MS = 60_000;
 /** A pick's way to the hub over the page's doc socket (the page's Send bound, 8f252e5d9). */
 const PICK_MS = 15_000;
+
+/** What parts a policy directive's words. */
+const SPACES = /\s+/u;
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
@@ -193,6 +201,38 @@ const run = async (kit: Kit) => {
       options,
       pickMs: Date.now() - pickedAt,
     })
+  );
+  await pageTab.context().close();
+
+  // 6. What the hub recorded of the previews' sockets.
+  const again = await kit.page("desk");
+  const ancestors = await ancestorsOf(again, `${base}/artifact/${accounts.id}`);
+  kit.check(
+    `desk: 6: a preview may be framed from the fleet's dashboard (${base}) and never from http://localhost:${port}, where the preview listener reached the dashboard's server`,
+    ancestors.includes(new URL(base).origin) &&
+      !ancestors.includes(`http://localhost:${port}`),
+    JSON.stringify(ancestors)
+  );
+};
+
+/** The `frame-ancestors` the first preview document `page` loads in the artifact tab at `url` is answered with. */
+const ancestorsOf = async (page: Page, url: string): Promise<string[]> => {
+  const answer = page.waitForResponse(
+    (response) =>
+      response.request().resourceType() === "document" &&
+      response.request().frame() !== page.mainFrame() &&
+      response.status() === 200,
+    { timeout: DRAWN_MS }
+  );
+  await open(page, url, FRAME);
+  const policy = (await answer).headers()["content-security-policy"] ?? "";
+  return (
+    policy
+      .split(";")
+      .map((one) => one.trim())
+      .find((one) => one.startsWith("frame-ancestors"))
+      ?.split(SPACES)
+      .slice(1) ?? []
   );
 };
 

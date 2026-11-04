@@ -59,6 +59,28 @@ export const pageOrigin = (
 ): string | undefined => headers[PAGE_ORIGIN_HEADER] ?? headers.origin;
 
 /**
+ * What the agent's preview listener sets on every request it relays to a
+ * previewed app (agent preview.ts), so a hub the app passes it on to knows
+ * the page behind it was served as a preview. Such a page's origin, as the
+ * app's relay reads it, is the address the listener gave the app
+ * (`localhost:<port>`), never one the hub's dashboard is reached at. A
+ * header anyone may set: it only keeps a socket's origin out of the hub's
+ * record ({@link dashboardOriginOf}), and grants nothing.
+ */
+export const PREVIEW_RELAYED_HEADER = "x-cawco-preview-relayed";
+
+/**
+ * Where a page's socket says the hub's dashboard is reached, for the hub's
+ * record of it (the origins that may frame a preview, the dashboard address
+ * a sign-in comes back to): its {@link pageOrigin}, and none for a page the
+ * preview listener relayed ({@link PREVIEW_RELAYED_HEADER}).
+ */
+export const dashboardOriginOf = (
+  headers: Record<string, string | undefined>
+): string | undefined =>
+  headers[PREVIEW_RELAYED_HEADER] ? undefined : pageOrigin(headers);
+
+/**
  * Where a page an agent opened in its project's browser holds the gate id
  * that owns it, a workspace's or a session's own: a global the agent's
  * DevTools gate defines in every document of the page as the page becomes

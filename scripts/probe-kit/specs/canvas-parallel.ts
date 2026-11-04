@@ -254,7 +254,23 @@ async function open(
       ).__kitPaints ?? {}
   );
   const busy = browser ? mainBusy(await browser.stopTracing()) : null;
-  const faults: string[] = painted ? [] : ["not every Preview painted"];
+  // Where each Preview stands when one never painted: its frame's shape,
+  // load and turn, or the line its well says in a frame's place.
+  const standing = painted
+    ? []
+    : await page.evaluate(() =>
+        [...document.querySelectorAll("[data-slot=media]")].map((media) => {
+          const frame = media.querySelector<HTMLIFrameElement>(
+            "iframe[data-slot=embed]"
+          );
+          return frame
+            ? `${frame.dataset.cawcoArtifact} shape=${frame.dataset.shape} drawn=${frame.dataset.drawn !== undefined} turn=${frame.dataset.turn}`
+            : `no frame: "${media.textContent?.replace(/\s+/gu, " ").trim().slice(0, 160) ?? ""}"`;
+        })
+      );
+  const faults: string[] = painted
+    ? []
+    : [`not every Preview painted (${standing.join("; ") || "no frame"})`];
   for (const handle of await page.$$(EMBED_FRAME)) {
     const id = (await handle.getAttribute("data-cawco-artifact")) ?? "";
     const name = names.find((one) => idFor(one) === id) ?? id;

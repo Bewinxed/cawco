@@ -75,6 +75,7 @@ import type {
 } from "@cawco/core/protocol";
 import type {
   CanvasShapes as CanvasShapesType,
+  DecisionMedia as DecisionMediaType,
   EmbedShape as EmbedShapeType,
   StageErrorKind as StageErrorKindType,
   StageError as StageErrorType,
@@ -203,7 +204,7 @@ const CanvasShapesShape = z.object({
   said: z.record(z.string(), EmbedShapeShape),
 });
 
-const MediaArtifactShape = z
+const DecisionMediaShape = z
   .object({
     embed: z.string().optional(),
     id: z.string(),
@@ -212,6 +213,8 @@ const MediaArtifactShape = z
     shapes: CanvasShapesShape.optional(),
   })
   .nullable();
+
+const MediaArtifactShape = DecisionMediaShape;
 export const MediaArtifactSchema: z.ZodType<MediaArtifactType> =
   MediaArtifactShape;
 
@@ -1001,6 +1004,7 @@ prove<
     Same<z.output<typeof ContinueSourceShape>, ContinueSourceType>,
     Same<z.output<typeof EmbedShapeShape>, EmbedShapeType>,
     Same<z.output<typeof CanvasShapesShape>, CanvasShapesType>,
+    Same<z.output<typeof DecisionMediaShape>, DecisionMediaType>,
     Same<z.output<typeof MediaArtifactShape>, MediaArtifactType>,
     Same<z.output<typeof DraftCanvasShape>, DraftCanvasType>,
     Same<z.output<typeof PendingFileShape>, PendingFileType>,

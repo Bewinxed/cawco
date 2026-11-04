@@ -445,6 +445,7 @@ import {
 } from "@cawco/core/browser";
 import {
   crossSiteRefusal,
+  dashboardOriginOf,
   GATED_PAGE_PARAM,
   pageOrigin,
 } from "@cawco/core/browser-gate";
@@ -500,6 +501,7 @@ import {
 } from "@cawco/core/remote-credential";
 import { protocolRange } from "@cawco/core/runtime";
 import {
+  type DecisionMedia,
   type DesignMap,
   isEmbedShape,
   type RenderReport,
@@ -15661,15 +15663,7 @@ export const createServer = (
       if (!served) {
         return null;
       }
-      const media: Record<
-        string,
-        {
-          embed?: string;
-          id: string;
-          kind: string;
-          revision: number;
-        } | null
-      > = {};
+      const media: Record<string, DecisionMedia> = {};
       for (const [id, held] of Object.entries(served.media)) {
         media[id] =
           held && (held.kind === "preview" || held.kind === "component")
@@ -39235,8 +39229,9 @@ export const createServer = (
             socket: ws,
             device: caller.device?.id ?? null,
           });
-          // An artifact's own tab frames its preview from this origin.
-          noteParent(pageOrigin(ws.headers));
+          // An artifact's own tab frames its preview from this origin; a
+          // tab the preview listener relayed names none (`dashboardOriginOf`).
+          noteParent(dashboardOriginOf(ws.headers));
           artifactSessions.open(ws, instance, artifact);
         },
         message: guardedDashboardMessage((ws, message) => {
@@ -39328,9 +39323,13 @@ export const createServer = (
           registry.addDashboard(ws, older);
           // The one moment the hub learns a URL that reaches its own dashboard:
           // this browser just used one. See `dashboardUrl` in dashboard-url.ts.
-          registry.noteDashboardOrigin(page);
+          // A dashboard served as a preview reached it at the address the
+          // preview listener gave its server, never one of the hub's
+          // (`dashboardOriginOf`): it is recorded as neither.
+          const reachedAt = dashboardOriginOf(ws.headers);
+          registry.noteDashboardOrigin(reachedAt);
           // Its previews may be framed from it, and from no other origin.
-          noteParent(page);
+          noteParent(reachedAt);
           // The board, then the browsers: the FIRST messages every dashboard
           // receives, unconditionally.
           greetDashboard(ws, older);
