@@ -143,6 +143,7 @@
     parkedHeight = 0,
     latestInset,
     afterRows,
+    afterRowsAtWork = false,
 
     /**
      * Whether this transcript is on screen at all. Governs how OFTEN rows are
@@ -178,6 +179,12 @@
     firstScreen?: boolean;
     /** What stands after the last row, in the list's flow (a project's setup element, SetupWell). */
     afterRows?: Snippet;
+    /**
+     * What stands after the rows says the agent is at work, in words of
+     * its own (a setup element's live line and steps): the bare working
+     * line ("Thinking…") stands down, so his work is said once.
+     */
+    afterRowsAtWork?: boolean;
     /**
      * How far what rises past the composer lent to this conversation (an
      * ask it grows into, an offer on its tray row) stands over the foot, px.
@@ -4735,7 +4742,9 @@
   <!-- The live row, and the answer it streamed once that has
        landed (rows.ts `keepLive`): one branch, so the settle is
        the same LiveRow updating, not a MessageRow mounting. -->
-  {#if row.kind === "live" || (row.kind === "single" && row.streamed)}
+  {#if row.kind === "live" && afterRowsAtWork && row.indicating && !row.thinking && !row.text}
+    <!-- Said by what stands after the rows. -->
+  {:else if row.kind === "live" || (row.kind === "single" && row.streamed)}
     <LiveRow {agentName} {announce} {row} />
   {:else if row.kind === "single" || row.kind === "queued"}
     <MessageRow

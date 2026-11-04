@@ -65,8 +65,8 @@
   }: {
     /**
      * His questions stand in view on the board, each with its own Answer:
-     * the view's coral is theirs, and the bar's Answer Caw, which only
-     * takes the keys to the first, stands in the outline.
+     * the bar says what waits and offers nothing of its own, since Answer
+     * Caw would only point at what is already in view.
      */
     asksInView?: boolean;
     /** The delegate types the setup proposes: who may do a stage's work. */
@@ -180,12 +180,12 @@
         </p>
       {/if}
     </div>
-    {#if asking > 0}
+    {#if asking > 0 && !asksInView}
       <Button
         label={setupWords.answer}
         onclick={onanswer}
         size="sm"
-        variant={barState === "drafting" || asksInView ? "outline" : "default"}
+        variant={barState === "drafting" ? "outline" : "default"}
       />
     {:else if !drafting}
       <!-- Its own glyph, so the pending spinner takes the glyph's slot and

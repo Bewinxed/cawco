@@ -131,6 +131,7 @@
     serverTail = null,
     docked,
     afterRows,
+    afterRowsAtWork = false,
     asksElsewhere,
 
     /** Whether this pane is on screen at all — governs row building. */
@@ -162,6 +163,8 @@
     docked?: { draft: ComposerDraft };
     /** What stands at the transcript's end, after its last row (a project's setup element, SetupWell). */
     afterRows?: Snippet;
+    /** What stands after the rows says the agent is at work: the bare working line stands down (Transcript). */
+    afterRowsAtWork?: boolean;
     /**
      * Asks another surface on the page draws and answers (a project's
      * questions on its board before setup, SetupScene): the composer does
@@ -1385,6 +1388,7 @@
               parkedHeight={writable ? parkedRoom : 0}
               session={held}
               {afterRows}
+              {afterRowsAtWork}
               {visible}
             />
           </RegionBoundary>

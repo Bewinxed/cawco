@@ -382,9 +382,23 @@
     return span;
   }
 
+  // The server's paint draws the field before the page wakes, and words
+  // typed into it then are the person's: as the field wakes with nothing
+  // of its own to show, it keeps them and hands them up, rather than
+  // drawing its empty value over them.
+  let woke = false;
   $effect(() => {
     const next = value;
-    if (editor && next !== written) {
+    if (!editor) {
+      return;
+    }
+    const first = !woke;
+    woke = true;
+    if (first && next === "" && (editor.textContent ?? "") !== "") {
+      untrack(sync);
+      return;
+    }
+    if (next !== written) {
       untrack(() => draw(next));
     }
   });

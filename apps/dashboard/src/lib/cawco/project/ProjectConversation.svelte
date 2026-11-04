@@ -507,6 +507,7 @@
             docked={{ draft: lead.draft }}
             focused={!onPreview}
             afterRows={setup ? setupTail : undefined}
+            afterRowsAtWork={setup !== null && !handedOver(setup)}
             viewId={shown}
             visible={!onPreview}
           />

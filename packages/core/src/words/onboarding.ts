@@ -72,11 +72,16 @@ export const setupWords = {
   },
   /** Said before a done step's label, for a screen reader. */
   stepDone: "Done:",
-  /** What he is on now, under him in his setup element. */
+  /**
+   * What he is on now, under him in his setup element, over the steps: the
+   * whole while he works (the step he is on breathes under it, so the line
+   * never repeats it), what holds him while a question does, and where the
+   * draft is once he hands it over.
+   */
   doing: {
-    reading: "Reading what you wrote",
-    naming: "Naming it",
-    drafting: "Drafting the stages",
+    reading: "Setting it up",
+    naming: "Setting it up",
+    drafting: "Setting it up",
     asking: "Drafting the rest while you decide",
     waiting: "Waiting on your answer",
     board: "The draft is on the board",

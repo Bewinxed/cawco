@@ -108,6 +108,8 @@ export const noticeWords = {
    * the order asked: what the person reads of it in the conversation.
    */
   askAnsweredWith: (answers: string) => `Your answer: ${answers}`,
+  /** A question dismissed, with what it asked, so the record says which. */
+  askDismissedWith: (questions: string) => `You dismissed: ${questions}`,
 };
 
 /** What a notice is about, without its live state: the line written where it was made, else its kind's. */

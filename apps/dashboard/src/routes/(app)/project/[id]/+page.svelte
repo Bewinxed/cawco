@@ -1615,7 +1615,9 @@
         run: () =>
           setupPage?.artifactId
             ? document
-                .querySelector<HTMLElement>('[data-slot="draft-bar"] button')
+                .querySelector<HTMLElement>(
+                  '[data-slot="draft-bar"] button, [data-slot="setup-asks"] [data-slot="option-group"] [tabindex="0"]'
+                )
                 ?.focus({ focusVisible: true } as FocusOptions)
             : lead.ask(setupWords.askSetupWords, "board"),
       };

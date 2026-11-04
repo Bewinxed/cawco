@@ -408,6 +408,16 @@ export const answersOf = (text: string): string[] =>
       return at < 0 ? [] : [line.slice(at + 2)];
     });
 
+/**
+ * The questions a dismissed question's message names (`questionAnsweredText`),
+ * in the order asked: each `- <question>` line, whole.
+ */
+export const dismissedOf = (text: string): string[] =>
+  text
+    .split("\n")
+    .filter((line) => line.startsWith("- "))
+    .map((line) => line.slice(2));
+
 /** An answered ask's message read back: its id, kind and outcome; null for any other text. */
 export const parseAskAnswered = (
   text: string
