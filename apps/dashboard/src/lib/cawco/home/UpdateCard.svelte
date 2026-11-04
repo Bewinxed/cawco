@@ -58,12 +58,20 @@
   let {
     notice,
     alone,
+    outranked = false,
     ondismiss,
     onaction,
   }: {
     notice: Notice;
     /** It is all the panel holds: its notes stand open unless the reader folded them. */
     alone: boolean;
+    /**
+     * Something needs the person above it in the panel: a notice never
+     * outranks an ask, and a view for deciding spends its one coral on the
+     * decision (DESIGN.md, The Coral Is Where You Act Rule), so its act
+     * takes the kit's secondary look.
+     */
+    outranked?: boolean;
     ondismiss: () => void;
     onaction: (action: NonNullable<Notice["action"]>) => void;
   } = $props();
@@ -325,11 +333,16 @@
         {/if}
         {#if notice.action}
           {@const action = notice.action}
+          <!-- The act: the panel's primary while nothing needs the person,
+               the kit's secondary under an ask (`outranked`). The secondary
+               draws its hairline edge on its box, so its ink ends where its
+               box does and it hangs past by nothing. -->
           <Button
             label={ACTS[action]}
-            margin="hairline-overlap"
+            margin={outranked ? undefined : "hairline-overlap"}
             onclick={() => onaction(action)}
             size="sm"
+            variant={outranked ? "secondary" : "default"}
           />
         {/if}
       </div>

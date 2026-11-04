@@ -2,12 +2,17 @@
   import type { Account, AccountHue } from "@cawco/core/accounts";
   import type { BinaryUpdateState } from "@cawco/core/binary-updates";
   import { machineLabel } from "@cawco/core/machine-names";
+  import {
+    type RelayJourneyView,
+    STREAM_RELAY_WORDS,
+  } from "@cawco/core/stream-relay";
   /**
    * CAW'S NOTICES BENCH (dev only) — the real CawPanel in the real popover
    * shell (a HangCard on the top bar's own glass, as NeedsCaw hangs it),
    * driven by a fixture feed with no hub. Dismissing, Clear all and
-   * Show changes work against the fixture; Reset brings it back. The fixture (update, 5 logins and 2 asks; update only; nothing)
-   * and the width are switches.
+   * Show changes work against the fixture; Reset brings it back. The fixture (update, 5 logins and 2 asks; update only; nothing;
+   * the relay's set-up asking for its name over an update to install, the
+   * two acts that would each be coral alone) and the width are switches.
    *
    * The phone width is the same page in a 390×844 frame (`?frame`), whose
    * viewport is a phone's, so the panel's own phone rules apply. Every
@@ -35,7 +40,7 @@
   import { page } from "$app/state";
 
   /* ── The switches, from the URL ────────────────────────────────────── */
-  type Fixture = "full" | "update" | "none";
+  type Fixture = "full" | "update" | "none" | "relay";
   type Width = "desk" | "phone";
   const query = page.url.searchParams;
   const pick = <T extends string>(key: string, options: T[]): T =>
@@ -43,7 +48,12 @@
 
   /** Inside the phone frame: the stage alone. */
   const framed = query.has("frame");
-  const firstFixture = pick<Fixture>("fixture", ["full", "update", "none"]);
+  const firstFixture = pick<Fixture>("fixture", [
+    "full",
+    "update",
+    "none",
+    "relay",
+  ]);
   let fixture = $state<Fixture>(firstFixture);
   let width = $state<Width>(pick("width", ["desk", "phone"]));
 
@@ -124,6 +134,61 @@
     },
     machineLabel
   ) as Notice;
+  /**
+   * A build every machine waits to install, with auto-update off: the
+   * notice whose act is Install now.
+   */
+  const INSTALL = noticeFor(
+    {
+      refused: new Map(),
+      commanded: new Set(),
+      machines: MACHINES.map((one) => ({
+        ...one,
+        binaryUpdate: binary({
+          availableVersion: "0.2.0-nightly.2512+fed321cba654",
+          phase: "available",
+        }),
+      })),
+      newerBuild: null,
+      policy: { autoUpdate: false, channel: "nightly" },
+      seen: new Set(),
+    },
+    machineLabel
+  ) as Notice;
+
+  /**
+   * The stream relay's set-up in Needs you, on a machine with a public
+   * interface and its own container engine (so no router or runtime step
+   * applies, core stream-relay.ts), reached by the tailnet, so no name is
+   * known and the name step's field asks for one with Use this name, the
+   * step's act.
+   */
+  const RELAY_JOURNEY: RelayJourneyView = {
+    asks: true,
+    candidates: 1,
+    done: false,
+    machine: { name: "obelisk", address: "37.211.158.28", lan: null },
+    open: true,
+    revision: 1,
+    steps: [
+      { step: "machine", state: "done" },
+      { step: "name", state: "needs", name: "" },
+      { step: "certificate", state: "waiting" },
+      { step: "start", state: "waiting" },
+      { step: "prove", state: "waiting" },
+    ],
+    summary: null,
+    urls: [],
+  };
+  const RELAY: NeedsItem = {
+    kind: "relay",
+    key: "relay:journey",
+    journey: RELAY_JOURNEY,
+    done: false,
+    title: STREAM_RELAY_WORDS.title,
+    place: "Onboarding",
+    raisedAt: undefined,
+  };
 
   const account = (
     id: string,
@@ -289,8 +354,10 @@
   let generation = $state(0);
 
   function load(which: Fixture): void {
-    needs = which === "full" ? NEEDS : [];
-    updated = which === "none" ? null : UPDATE;
+    needs = { full: NEEDS, relay: [RELAY], update: [], none: [] }[which];
+    updated = { full: UPDATE, relay: INSTALL, update: UPDATE, none: null }[
+      which
+    ];
     moved = which === "full" ? MOVED : [];
   }
   load(firstFixture);
@@ -404,6 +471,9 @@
           >
           <ToggleGroup.Item value="update">Update only</ToggleGroup.Item>
           <ToggleGroup.Item value="none">Nothing</ToggleGroup.Item>
+          <ToggleGroup.Item value="relay"
+            >Relay set-up, update to install</ToggleGroup.Item
+          >
         </ToggleGroup.Root>
       </div>
       <div class="type-meta grid gap-space-1 text-ink-muted">

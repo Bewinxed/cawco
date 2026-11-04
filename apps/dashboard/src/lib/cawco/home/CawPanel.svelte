@@ -6,7 +6,9 @@
    * Notices, the update notice, the logins moved in, what an account's
    * arrival set moving and each artifact's notice (ArtifactNoticeRow), each
    * with its ✕, and `Clear all` at the head's trailing edge acknowledging
-   * every one. A notice never outranks an ask.
+   * every one. A notice never outranks an ask: while Needs you holds a row,
+   * the update's act takes the kit's secondary look, so the panel's one
+   * coral is the ask's to spend (DESIGN.md, The Coral Is Where You Act Rule).
    * A section with nothing in it is not drawn; with neither, the empty
    * block says what he knows (The Claim Of Nothing Rule).
    *
@@ -311,6 +313,7 @@
             <UpdateCard
               {alone}
               {notice}
+              outranked={needs.length > 0}
               onaction={(action) => feed.actOnUpdate(notice, action)}
               ondismiss={() => dismissUpdate(notice)}
             />

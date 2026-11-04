@@ -24,7 +24,7 @@
  * | rule        | read by                     | what it reads |
  * | ----------- | --------------------------- | ------------- |
  * | overflow    | scan.ts + impeccable `text-occlusion` | boxes past the screen, out of their control or box, a control out of its row, card or panel, text under a control or an opaque box; what is hidden (a 1px box, `sr-only`'s `clip-path: inset(50%)`) is not read |
- * | coral       | own code                    | each view's (the spec's `views`, else the scope; and each `data-specimen`) controls and grounded chips whose fill, border or (a control's) ink resolves to a coral token from tokens.css; at most one; a checked checkbox, switch or radio, a chosen record (`data-chosen`), an identity tile on its mark hue, and a mark out of the accessibility tree (`data-mark`: a comment's pin) are allowed and named |
+ * | coral       | own code                    | each view's (the spec's `views`, else the scope; and each `data-specimen`) controls and grounded chips whose fill, border or (a control's) ink resolves to a coral token from tokens.css; at most one; a checked checkbox, switch or radio, a chosen record (`data-chosen`), an identity tile on its mark hue, a mark out of the accessibility tree (`data-mark`: a comment's pin) and a region's one coral hairline side (the vermillion section rule) are allowed and named |
  * | glyph       | own code                    | a control whose only content is a glyph: no fill, border or shadow on it or on a wrapper that holds it alone; its svg holds no solid disc, tile or rounded shape spanning 70% of its viewBox |
  * | bar-ground  | own code                    | bars (toolbars, the bar data-slots, foot bars, and a `header` that does not scroll with its content: one that does, or one under another bar of its surface, heads a group of it, no bar) paint no fill, border or shadow; a folder-tab shelf (DESIGN.md, Shapes, Folder tabs), a group's capsule (DESIGN.md, The Title Bars Follow Liquid Glass Rule: Floating groups) and a foot's lone top hairline (DESIGN.md, Borders are graded) are named, not failed |
  * | head        | own code                    | a bar's (as bar-ground reads one) title and controls share one row (centres within 4px), no second line in the bar (a popover, menu or dialog it opens is no part of it), the title not repeated by the first heading under it |
@@ -805,13 +805,13 @@ function readInPage(args: InPageArgs): InPageRead {
         const stop = stopsOf(s.backgroundImage)
           .map(coralOf)
           .find((one) => one);
-        const edge = (["top", "right", "bottom", "left"] as const)
-          .map((side) =>
+        const coralSides = (["top", "right", "bottom", "left"] as const).map(
+          (side) =>
             Number.parseFloat(s.getPropertyValue(`border-${side}-width`)) > 0
               ? coralOf(rgba(s.getPropertyValue(`border-${side}-color`)))
               : null
-          )
-          .find((one) => one);
+        );
+        const edge = coralSides.find((one) => one);
         const ink = coralOf(rgba(s.color));
         const hasWords = visibleWords(el).length > 0;
         let what: string | null = null;
@@ -832,6 +832,25 @@ function readInPage(args: InPageArgs): InPageRead {
           continue;
         }
         if (spends.some((one) => one.el.contains(el))) {
+          continue;
+        }
+        // The vermillion rule that parts two regions of a glass card (Files,
+        // Caw's panel: `border-t border-brand-solid`): one hairline side of
+        // a region, no fill, no other edge. A mark with no words, brand-solid's
+        // job (DESIGN.md, The Coral Is Where You Act Rule; Primary: Brand,
+        // "a vermillion section rule"), not an act.
+        if (
+          !(isControl || bg || stop || ink) &&
+          coralSides.filter(Boolean).length === 1 &&
+          (["top", "right", "bottom", "left"] as const).every(
+            (side, i) =>
+              !coralSides[i] ||
+              Number.parseFloat(s.getPropertyValue(`border-${side}-width`)) <= 1
+          )
+        ) {
+          named.push(
+            `a vermillion section rule, not the act (DESIGN.md, The Coral Is Where You Act Rule: the vermillion rule that parts two regions): ${describe(el)} (${what})`
+          );
           continue;
         }
         // An identity tile stands on its mark hue (DESIGN.md, Identity marks

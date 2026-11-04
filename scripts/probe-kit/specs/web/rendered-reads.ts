@@ -11,7 +11,9 @@
  *    reader's own row mark"), and a record of what was picked (ui/chip
  *    `data-chosen`, the chosen option) beside the one act; a bench's sheet
  *    of specimens, each `data-specimen` (a panel, or a button itself) with
- *    its one act.
+ *    its one act; the vermillion rule parting Caw's panel's sections, over
+ *    the ask's act (DESIGN.md: "the vermillion rule that parts two regions
+ *    of a glass card").
  *  - mixed-icons: a task ring (two circles on one centre, stroked; its
  *    check waiting at opacity 0) beside filled glyphs in a bar (DESIGN.md,
  *    Task ring).
@@ -35,7 +37,7 @@
  *    content (DESIGN.md, Borders are graded).
  *
  * The mistake each rule is for, still named: two coral acts, two in one
- * specimen, a worded chip
+ * specimen, a worded chip edged in coral, a worded chip
  * on coral beside the act; an outlined mark beside filled ones; a scroller
  * cut with no cue, the usage strip's clip outside any control, a masked
  * strip with nothing peeking; a list stretched apart; one-line rows grown
@@ -166,6 +168,17 @@ const FIXTURES: Record<string, Fixture> = {
     rule: "coral",
     html: `${BASE}<main><div class="panel" data-specimen><button class="act" type="button">Retry</button> <button class="act" type="button">Install now</button></div> <button class="act" data-specimen type="button">Save</button></main>`,
     want: "Install now",
+  },
+  "coral, a vermillion section rule over the act": {
+    rule: "coral",
+    html: `${BASE}<main style="inline-size: 360px"><section aria-label="Needs you"><p>Stream relay: use this name</p><button class="act" type="button">Use this name</button></section><section aria-label="Notices" style="margin-block-start: 7px; padding-block-start: 7px; border-block-start: 1px solid oklch(0.645 0.175 33)"><p>A new build is ready on 2 machines.</p><button class="filled" type="button">Install now</button></section></main>`,
+    named: "a vermillion section rule",
+    want: null,
+  },
+  "coral, a worded chip edged in coral beside the act": {
+    rule: "coral",
+    html: `${BASE}<main><span class="tag" style="display: inline-flex; padding-inline: 7px; border: 1px solid oklch(0.645 0.175 33); border-radius: 5px">New</span> <button class="act" type="button">Reply</button></main>`,
+    want: "Reply",
   },
   "coral, a worded chip on coral beside the act": {
     rule: "coral",
