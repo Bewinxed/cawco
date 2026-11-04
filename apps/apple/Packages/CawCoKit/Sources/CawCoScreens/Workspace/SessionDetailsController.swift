@@ -62,7 +62,7 @@ final class SessionReadings {
 /// (the tab strip, `TabDetails`) hangs it from its tab on every width, and
 /// moves one card between tabs with `show(sessionId:title:link:dir:)`.
 ///
-/// Two levels and no more (DESIGN.md, "Session card."): "The card's head
+/// Two levels and no more (the session tabs' surface brief, "Session card."): "The card's head
 /// (title and meta) is on `surface-recess`, the tab's own surface", and
 /// "Everything under the head sits on the card's one body surface,
 /// `surface-raised`, with no fill of its own … They part by space, with one

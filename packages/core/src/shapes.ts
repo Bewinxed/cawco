@@ -1,6 +1,6 @@
 /**
  * A stroke held still at its end, read as the shape it was drawn as
- * (Projects spec §5.10; DESIGN.md, Artifact panel, canvas and ink: "Pen
+ * (Projects spec §5.10; the artifact panel's surface brief, Artifact panel, canvas and ink: "Pen
  * rules on the canvas"): a line, an arrow, a rectangle, an ellipse or a
  * triangle, on the stroke's own box; null when it is none of them well
  * enough, and the stroke stays as drawn.

@@ -11,7 +11,7 @@
    * `count`: a glyph and the count it holds on one line (a pane head's
    * More: menu-dots, then the counted control's own glyph and its count),
    * at `space-2` in so the three stand where Send keeps its room. `look`: the trigger by its role.
-   * `attach`: the composer's Attach (DESIGN.md, Composer: "34px Attach
+   * `attach`: the composer's Attach (the composer's surface brief, Composer: "34px Attach
    * (raised, control edge) … at the concentric 4px radius. They scale to
    * 0.97 on press"); while the composer's controls are inert under an ask
    * (`group/ctrls`), its edge is the outline button's and it lifts.

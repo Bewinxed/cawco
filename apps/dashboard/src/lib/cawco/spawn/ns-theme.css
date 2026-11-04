@@ -62,7 +62,7 @@
   }
 }
 
-/* The form's one-shot entrances (DESIGN.md, New-session popover: "Sections
+/* The form's one-shot entrances (the new-session form; "Sections
    fade up 8px in a stagger"; a chip's panel rises with `ns-panel`): the
    theme's `animate-ns-*` (scripts/build-tokens.ts), read inline because each
    reads a duration the form sets on `.ns-theme`, not on the root. Interruptible

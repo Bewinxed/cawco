@@ -363,8 +363,7 @@ a {
 .dp-opt :is(.dp-cost, .dp-builds) {
   font-size: var(--text-meta);
 }
-/* Recommended, first in its option, over the label: the badge (DESIGN.md,
-   Badges and state chips), so the option's line under the label reads as
+/* Recommended, first in its option, over the label: the badge (DESIGN.md, Badges, chips and pills), so the option's line under the label reads as
    its reason. */
 .dp-opt .dp-tag {
   align-self: flex-start;

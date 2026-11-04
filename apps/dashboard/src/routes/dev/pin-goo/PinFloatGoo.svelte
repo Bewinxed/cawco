@@ -51,7 +51,7 @@
      shape's own edge at the pin's far end, the end away from its card, and
      spreads round its curve, in the dot's hue and on the open's clock; it
      gathers back into the dot on the close's, landing on its last frame.
-     The rim is the session tab's (DESIGN.md, Session tab status rim): a
+     The rim is the session tab's (the session tabs' surface brief, Session tab status rim): a
      `tab-rim-width` tint on the edge at `tab-rim-mix-chosen`, a
      `tab-rim-glow` glow out from it at `tab-rim-mix-subtle` (a gradient,
      no filter), breathing on the shared breath while the agent works.

@@ -1,6 +1,6 @@
 import UIKit
 
-/// A notice's ✕ (DESIGN.md, Caw's panel; the dashboard's NoticeRow `.x`): a
+/// A notice's ✕ (Caw's panel's surface brief, Caw's panel; the dashboard's NoticeRow `.x`): a
 /// 24pt ghost round a 12pt close glyph in muted ink, always shown. Under a
 /// pointer it takes `surface-hover` and `ink-strong`; a press dips it to
 /// `pressScale`. It stands in its row's first line's trailing cell, its box

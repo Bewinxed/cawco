@@ -4,7 +4,7 @@
   import { pinName } from "@cawco/core/pin-name";
   import { artifactWords as words } from "@cawco/core/words/artifacts";
   /**
-   * The Comments rail (DESIGN.md, The Comments rail): beside the page on a
+   * The Comments rail (the artifact panel's surface brief, The Comments rail): beside the page on a
    * desk, the head's Comments its pressed toggle, the page narrowed to meet
    * it; on a phone, or a pane under 640px, the well's foot sheet, at most 60%
    * of it. It closes only by its Close or by Comments, never by a press

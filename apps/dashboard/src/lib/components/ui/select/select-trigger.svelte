@@ -7,7 +7,7 @@
     variants: {
       /** Its height: the input's (DESIGN.md, Inputs and fields: "Select
           trigger: the input's look"), or a control standing in a composer
-          shell (DESIGN.md, Composer: 34px). */
+          shell (the composer's surface brief, Composer: 34px). */
       size: {
         default: "h-c-input-h",
         composer: "h-c-composer-field",

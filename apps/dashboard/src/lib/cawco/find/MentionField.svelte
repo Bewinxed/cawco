@@ -31,7 +31,7 @@
    *
    * The menu is placed against `menuHost` when given (the host's composer,
    * `position: relative`), else against the nearest positioned box around
-   * this field, so it matches the composer's width (DESIGN.md, the slash
+   * this field, so it matches the composer's width (the composer's slash
    * and @ menu).
    *
    * Keys while the menu is open: ↑↓ move, ↵ or Tab inserts, Escape leaves

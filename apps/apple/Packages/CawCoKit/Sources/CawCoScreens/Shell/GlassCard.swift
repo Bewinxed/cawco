@@ -2,7 +2,7 @@ import CawCoDesign
 import OSLog
 import UIKit
 
-/// What one of the glass's cards holds (DESIGN.md, "Caw's panel", "The
+/// What one of the glass's cards holds (Caw's panel's surface brief, "Caw's panel", "The
 /// glass's cards"): Caw's notifications (`CawPanel`), the machines
 /// (`MachinesCard`) and the Jump palette (`JumpCard`). The shell's one
 /// `GlassCard` shows one at a time; a content lays itself out in its own
@@ -120,7 +120,7 @@ class GlassContent: UIView {
 final class GlassCard: UIView, UIGestureRecognizerDelegate {
     /// Kept from a wide screen's edges, pt.
     static let edge: CGFloat = 8
-    /// A phone's margin on its leading side (DESIGN.md, "Caw's panel": 12px).
+    /// A phone's margin on its leading side (Caw's panel's surface brief, "Caw's panel": 12px).
     static let phoneMargin: CGFloat = 12
     private static let fallbackLog = Logger(subsystem: "dev.cawco.app", category: "GlassCard")
 
@@ -193,7 +193,7 @@ final class GlassCard: UIView, UIGestureRecognizerDelegate {
     private func placement(of content: GlassContent, in host: UIView, under glass: GlassCapsule) -> Placement {
         let cap = Self.restingBox(of: glass, under: head, in: host)
         let compact = host.traitCollection.horizontalSizeClass == .compact
-        // On a phone "its leading side keeps the 12px margin" (DESIGN.md,
+        // On a phone "its leading side keeps the 12px margin" (Caw's panel's surface brief,
         // "Caw's panel."), whatever the content's own widest: a 380pt panel
         // on a 402pt screen stood 22pt in.
         let width = compact

@@ -44,8 +44,8 @@
   embed of its stories said, in any browser, else its stories as the stage
   drew them; the kit's picture where none was ever drawn) until it stands
   drawn, never an empty box. Every one not yet drawn says so past the wait
-  grace, one muted line after the live dot at its box's top (DESIGN.md,
-  Browser view, Waiting; Skeleton; The Claim Of Nothing Rule): waiting its
+  grace, one muted line after the live dot at its box's top (BrowserView.svelte's
+  wait; DESIGN.md, Skeleton; The Claim Of Nothing Rule): waiting its
   turn, or opening. One that can't stand says why in
   one line in its place and shape, with Try again: an origin unreached, the
   proxy's own page in its frame (`cawco:down`: its workspace not running,
@@ -756,7 +756,7 @@
 {/snippet}
 
 {#snippet wait()}
-  <!-- The well's wait (DESIGN.md, Browser view, Waiting): one muted meta line at the well's top, `--space-5` in, after the live dot, arriving after the wait grace. The well stands it over its piece and holds it at the page's top while any of the piece is in view (Well.svelte `status`), so a frame taller than the view says it however far it is scrolled, never from a middle below the fold or under the page's foot. The live region stands throughout; its line comes and goes inside it. -->
+  <!-- The well's wait (BrowserView.svelte's wait): one muted meta line at the well's top, `--space-5` in, after the live dot, arriving after the wait grace. The well stands it over its piece and holds it at the page's top while any of the piece is in view (Well.svelte `status`), so a frame taller than the view says it however far it is scrolled, never from a middle below the fold or under the page's foot. The live region stands throughout; its line comes and goes inside it. -->
   <p
     class="m-0 p-space-5 text-ink-muted type-meta"
     data-slot="wait-row"

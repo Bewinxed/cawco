@@ -1,5 +1,5 @@
 /**
- * Ink on any artifact (Projects spec §5.10, D27; DESIGN.md, Artifact panel,
+ * Ink on any artifact (Projects spec §5.10, D27; the artifact panel's surface brief, Artifact panel,
  * canvas and ink: "Ink on any artifact"). A pen inks at once, in every mode
  * of the pane; a finger and a mouse ink in its Draw mode alone (in Comment
  * they pin, in Interact they are the page's).
@@ -70,7 +70,7 @@ const SVG = "http://www.w3.org/2000/svg";
 
 /**
  * perfect-freehand's outline: `size` is the width at middle pressure
- * (DESIGN.md's 2.5px); `thinning` 0.6 makes it 1px at none and 4px at full.
+ * (2.5px, Ink on any artifact); `thinning` 0.6 makes it 1px at none and 4px at full.
  */
 const STROKE = {
   size: 2.5,

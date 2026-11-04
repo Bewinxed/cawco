@@ -570,8 +570,8 @@ const isCompactSummary = (m: Message | undefined): m is Message =>
  * The harness's own word on the compaction it just made: a `/compact`'s
  * stdout ("Compacted"), a local command's note right after the compaction's
  * boundary and summary. The divider says it, so the compaction takes it in
- * (DESIGN.md, Compaction divider: "A compaction has this one row from its
- * first moment and nothing else in the transcript announces it").
+ * (the compaction divider: a compaction has this one row from its first
+ * moment and nothing else in the transcript announces it).
  */
 const isCompactReport = (m: Message | undefined): boolean =>
   m?.type === "ui.system_note" &&

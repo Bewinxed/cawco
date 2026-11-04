@@ -18,7 +18,7 @@
         attn: "bg-transparent text-status-attn-ink",
         done: "bg-status-done-bg text-status-done-ink",
         fail: "bg-status-fail-bg text-status-fail-ink",
-        /* A release note's section (DESIGN.md, Update notice: "New in
+        /* A release note's section (Caw's panel's surface brief, Update notice: "New in
            `note-new-*` with stars, Improved in `note-improved-*` with a
            rising graph, Fixed in `note-fixed-*` with a bug; each ink holds
            4.5:1 on its fill in both themes"). */
@@ -31,7 +31,7 @@
       /**
        * A cell's chip: at least 24px tall, wider pads; or with room above and
        * below for its words, which wrap and grow it line by line from the
-       * start (an update's long status). A tab's count (DESIGN.md, Work tab
+       * start (an update's long status). A tab's count (the work tabs' surface brief, Work tab
        * count): its numeral in the meta role and tabular figures, and a press
        * on it is a press on its tab. In a head that is short of room (the
        * head's inherited `--tight`, a length above 0 while its words are
@@ -94,7 +94,7 @@
     BadgeLooks & {
       variant?: BadgeVariant;
       /** Its element: a span, or the heading it is when it names a section
-          (a release note's section, DESIGN.md Update notice). A link is an
+          (a release note's section, Caw's panel's surface brief, Update notice). A link is an
           `a` whatever this says. */
       as?: "span" | "h3";
     } = $props();

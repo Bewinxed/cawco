@@ -100,7 +100,7 @@
  * on the session as the person has it, the browser's colour-scheme
  * emulation off so a frame hears its element's `color-scheme`:
  *
- * 18. The panel head (side/head.ts `standing`, DESIGN.md Artifact panel):
+ * 18. The panel head (side/head.ts `standing`, the artifact panel's surface brief, Artifact panel):
  *     at the desk, the canvas's name short of the 120px it keeps, every
  *     control stands, in head order, with no More, each in the form
  *     `standing` gives it: under a 640px head (the desk's pane is 523px)
@@ -771,7 +771,7 @@ const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const FRAME = `${PANE} iframe[data-scheme]`;
 /** The controls with words, which only a head 640px or wider draws (side/head.ts `WORDS_FROM`). */
 const WORDED = new Set(["send", "comments"]);
-/** DESIGN.md's head order, Send to Expand; Close stands after them all. */
+/** The panel head's order (the artifact panel's surface brief), Send to Expand; Close stands after them all. */
 const HEAD_ORDER = [
   "send",
   "create",

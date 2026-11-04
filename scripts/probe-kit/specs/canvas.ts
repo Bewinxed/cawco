@@ -317,8 +317,7 @@ const runSpec = async (kit: Kit) => {
 };
 
 /**
- * The rail and the empty canvas as DESIGN.md draws them (Artifact panel,
- * canvas and ink), from geometry and computed style: the tool group 11px
+ * The rail and the empty canvas as the canvas host draws them (canvas-host/rail.tsx), from geometry and computed style: the tool group 11px
  * in, 34px boxes at the concentric 4px, the chosen one on surface-pressed, the groups apart,
  * Excalidraw's own chrome gone; an empty canvas made by the agent says so,
  * shows the empty recipe, and its Draw picks the pen.

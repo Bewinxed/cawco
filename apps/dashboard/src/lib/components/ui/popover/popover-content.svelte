@@ -8,7 +8,7 @@
    * padding, raised surface; every kit popover, menu, submenu and select
    * wears it, and HangCard's cards.
    *
-   * `pop` (DESIGN.md, Motion (origin-aware)): it opens from its trigger's
+   * `pop` (DESIGN.md, Navigation, menus and floating surfaces): it opens from its trigger's
    * side (`--kit-rise`, by bits-ui's `data-side`) over --dur-pop on the
    * drawer curve, rising --pop-rise and growing from --pop-scale as it fades
    * in from its @starting-style (which iOS 27.2 Safari applies to a surface

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-04T05:42:31.000Z",
+  "generatedAt": "2026-11-04T06:06:55.000Z",
   "title": "Design System: CawCo",
   "source": "design/tokens/cawco.resolver.json",
   "extensions": {
@@ -3143,17 +3143,17 @@
       },
       {
         "name": "The Fast Exit Rule",
-        "body": "Exits are shorter than entrances, and a thing leaves the way it came: in over `--dur-pop` or `--dur-panel`, out over `--dur-exit`; a grown surface in over `--dur-grow`, out over `--dur-grow-exit`. Nothing outlasts `--dur-panel` but a flight (`--dur-lift`), a grown surface and the two picked recipes; ambient loops are not beats.",
+        "body": "Exits are shorter than entrances, and a thing leaves the way it came: in over `--dur-pop` or `--dur-panel`, out over `--dur-exit`; a grown surface in over `--dur-grow`, out over `--dur-grow-exit`. Nothing outlasts `--dur-panel` but a message lifted between its bubble and the field (`--dur-lift`), a grown surface and the two picked recipes; ambient loops are not beats.",
         "section": "overview"
       },
       {
         "name": "The Enter Rule",
-        "body": "Nothing appears from nothing. A surface arrives from `--pop-scale` or `--pop-rise` short of its place, fading in, from its trigger's side (a dialog from its centre); every travel is `--pop-rise`, and a view handing its place along a strip comes `--swap-nudge` from its side. A press scales to `--press-scale`. Entrances and exits are `transform` and `opacity` (a `clip-path` where a box opens out of another, `height` only for a disclosure), and no keyframe writes a length (lint `house/no-raw-motion`).",
+        "body": "Nothing appears from nothing. A surface arrives from `--pop-scale` or `--pop-rise` short of its place, fading in, from its trigger's side (a dialog rises `--pop-rise`); every travel is `--pop-rise`, and a view handing its place along a strip comes `--swap-nudge` from its side. A press scales to `--press-scale`. Entrances and exits are `transform` and `opacity` (a `clip-path` where a box opens out of another, `height` only for a disclosure), and no keyframe writes a length (lint `house/no-raw-motion`). The tooltip is the one exception, because it is seen tens of times a day (The Frequency Rule): it fades in over `--dur-fade` settling 2px toward its trigger, and leaves at once.",
         "section": "overview"
       },
       {
         "name": "The One Object Rule",
-        "body": "What is on both sides of a change travels; it never vanishes on one side and appears on the other (`motion/share.svelte.ts`). A flight runs on the drawer curve as a transform or a clip from the source's box, the source hidden meanwhile so the screen never shows two. A surface that closes on running work travels into the place that work is parked.",
+        "body": "What is on both sides of a change travels; it never vanishes on one side and appears on the other (`motion/share.svelte.ts`). A flight runs `--dur-panel` on the drawer curve as a transform or a clip from the source's box, the source hidden meanwhile so the screen never shows two. A surface that closes on running work travels into the place that work is parked.",
         "section": "overview"
       },
       {
@@ -3223,7 +3223,7 @@
       },
       {
         "name": "The Coral Is Where You Act Rule",
-        "body": "Coral marks the action (one per view: the act the view is for, so a view for deciding spends it on the decision), the selected nav row, the focus ring, checked controls, the chosen option and the selection tint. Advice is never coral: a recommended option wears the Recommended badge, and when it starts chosen it wears both, so moving the pick moves only the coral. Coral is never a status, so it never reads as an alarm and an alarm never reads as a button.",
+        "body": "Coral marks the action (one per view: the act the view is for, so a view for deciding spends it on the decision), the selected nav row, the focus ring, checked controls, the chosen option, the selection tint, and the vermillion rule that parts two regions of a glass card (Files, Caw's panel). Advice is never coral: a recommended option wears the Recommended badge, and when it starts chosen it wears both, so moving the pick moves only the coral. Coral is never a status, so it never reads as an alarm and an alarm never reads as a button.",
         "section": "colors"
       },
       {

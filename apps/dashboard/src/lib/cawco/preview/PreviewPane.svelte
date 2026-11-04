@@ -1242,7 +1242,7 @@
     }
   });
   /**
-   * The head's line under the name (DESIGN.md, Artifact panel): the ask the
+   * The head's line under the name (the artifact panel's surface brief, Artifact panel): the ask the
    * session gave it, carried by the panel's frame, so it stands from the
    * first frame in every state from on its way to failed; once the person's
    * Send is in and the session has not changed the artifact or its ask since
@@ -1467,7 +1467,7 @@
       : 0
   );
   /**
-   * What Send sends (DESIGN.md, How comments reach the session): each pick
+   * What Send sends (the artifact panel's surface brief, How comments reach the session): each pick
    * since the last Send. The person's comments go by themselves. Drawn only
    * above 0.
    */
@@ -1493,7 +1493,7 @@
     watch.observe(pane);
     return () => watch.disconnect();
   });
-  /** A pane this wide or wider holds the rail beside its page (DESIGN.md, The Comments rail: "a pane under 640px" takes it as the foot sheet). */
+  /** A pane this wide or wider holds the rail beside its page (the artifact panel's surface brief, The Comments rail: "a pane under 640px" takes it as the foot sheet). */
   const RAIL_BESIDE_FROM = 640;
   /** The rail is the well's foot sheet: on a phone, and in a pane under 640px. */
   const railSheet = $derived(
@@ -1787,7 +1787,7 @@
   }
 
   /*
-   * The comments (Projects spec §5.7; DESIGN.md, Placing a comment, The
+   * The comments (Projects spec §5.7; the artifact panel's surface brief, Placing a comment, The
    * Comments rail, A thread beside its pin): the composer beside the pill
    * the press put down, the thread as a card beside its pin, the rail beside
    * the page, J and K stepping through them.
@@ -4135,7 +4135,7 @@
 {/snippet}
 
 <!-- The Comments rail beside the well, on the card, outside the page's
-     mode seam (DESIGN.md, The Comments rail): in from its end over
+     mode seam (the artifact panel's surface brief, The Comments rail): in from its end over
      `--dur-panel` on `--ease-drawer`, out over `--dur-exit`; with less
      motion it fades. -->
 {#snippet railBeside()}
@@ -4191,7 +4191,7 @@
   </SideSurface>
 {/if}
 
-<!-- Changed since you looked, in its own room above the well (DESIGN.md, Changed since you looked). -->
+<!-- Changed since you looked, in its own room above the well (the artifact panel's surface brief, Changed since you looked). -->
 {#snippet changesBar()}
   {#if changeStops.length > 0 && !isCanvas}
     {@const total = tour?.length ?? changeStops.length}
@@ -4589,7 +4589,7 @@
   {/if}
   {#if listOpen && railPlaced && !isCanvas && railSheet && !railAway}
     <!-- The rail as the well's foot sheet, at most 60% of it: on a phone and
-         in a pane under 640px. A layer over the page (DESIGN.md, The
+         in a pane under 640px. A layer over the page (the artifact panel's surface brief, The
          Comments rail): the frame keeps its whole box under it, so the page
          neither moves, resizes nor scrolls as it opens, drags or closes.
          A keyboard's lift stands it over the keyboard, no taller than the

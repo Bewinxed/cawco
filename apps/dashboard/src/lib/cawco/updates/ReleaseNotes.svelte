@@ -60,7 +60,7 @@
     {#if section.heading}
       {@const known = TONES[section.heading]}
       <!-- A section's name: the kit Badge as its heading, in its note's hue
-           (DESIGN.md, Update notice), a 12px glyph before its words. -->
+           (Caw's panel's surface brief, Update notice), a 12px glyph before its words. -->
       <Badge
         as="h3"
         data-slot="release-notes-label"

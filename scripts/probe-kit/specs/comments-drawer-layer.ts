@@ -2,7 +2,7 @@
  * The Comments drawer is a layer over the preview, and the preview covers
  * the composer on a phone (the owner, iOS Safari: "the comments drawer is
  * pushing the preview tab up instead of layering over it. Also the preview
- * and drawer should cover the composer"). DESIGN.md, The Comments rail and
+ * and drawer should cover the composer"). the artifact panel's surface brief, The Comments rail and
  * The Open Page Rule.
  *
  *   bun scripts/probe-kit/run.ts comments-drawer-layer

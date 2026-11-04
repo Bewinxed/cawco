@@ -48,7 +48,7 @@
  * 14. A preview of a port nothing listens on answers `opened: false` with
  *    the server sentence within 10 s, and the pane draws its failure.
  *
- * The theme follows ours (DESIGN.md, Artifact panel, canvas and ink):
+ * The theme follows ours (the artifact panel's surface brief, Artifact panel, canvas and ink):
  *
  * 18. The fields page's root reads `data-theme` and `color-scheme` light
  *    from the pane's hello, dark after the dashboard's switch flips to dark,
@@ -527,7 +527,7 @@ const run = async (kit: Kit) => {
     listed === 1,
     `${listed} rows`
   );
-  // DESIGN.md (Artifact panel, canvas and ink): a 44px row, the kind's 16px
+  // The artifact panel's surface brief (Artifact panel, canvas and ink): a 44px row, the kind's 16px
   // glyph, the name in the label role, its age in meta ink.
   const row = await page
     .locator(`[data-artifact-row][data-artifact="${id}"]`)

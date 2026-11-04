@@ -18,19 +18,19 @@ Under "Motion grammar" (DESIGN.md line 506); rule at line 519.
 
 Under "Motion grammar" (DESIGN.md line 506); rule at line 521.
 
-**The Fast Exit Rule.** Exits are shorter than entrances, and a thing leaves the way it came: in over `--dur-pop` or `--dur-panel`, out over `--dur-exit`; a grown surface in over `--dur-grow`, out over `--dur-grow-exit`. Nothing outlasts `--dur-panel` but a flight (`--dur-lift`), a grown surface and the two picked recipes; ambient loops are not beats.
+**The Fast Exit Rule.** Exits are shorter than entrances, and a thing leaves the way it came: in over `--dur-pop` or `--dur-panel`, out over `--dur-exit`; a grown surface in over `--dur-grow`, out over `--dur-grow-exit`. Nothing outlasts `--dur-panel` but a message lifted between its bubble and the field (`--dur-lift`), a grown surface and the two picked recipes; ambient loops are not beats.
 
 ## The Enter Rule
 
 Under "Motion grammar" (DESIGN.md line 506); rule at line 523.
 
-**The Enter Rule.** Nothing appears from nothing. A surface arrives from `--pop-scale` or `--pop-rise` short of its place, fading in, from its trigger's side (a dialog from its centre); every travel is `--pop-rise`, and a view handing its place along a strip comes `--swap-nudge` from its side. A press scales to `--press-scale`. Entrances and exits are `transform` and `opacity` (a `clip-path` where a box opens out of another, `height` only for a disclosure), and no keyframe writes a length (lint `house/no-raw-motion`).
+**The Enter Rule.** Nothing appears from nothing. A surface arrives from `--pop-scale` or `--pop-rise` short of its place, fading in, from its trigger's side (a dialog rises `--pop-rise`); every travel is `--pop-rise`, and a view handing its place along a strip comes `--swap-nudge` from its side. A press scales to `--press-scale`. Entrances and exits are `transform` and `opacity` (a `clip-path` where a box opens out of another, `height` only for a disclosure), and no keyframe writes a length (lint `house/no-raw-motion`). The tooltip is the one exception, because it is seen tens of times a day (The Frequency Rule): it fades in over `--dur-fade` settling 2px toward its trigger, and leaves at once.
 
 ## The One Object Rule
 
 Under "Motion grammar" (DESIGN.md line 506); rule at line 525.
 
-**The One Object Rule.** What is on both sides of a change travels; it never vanishes on one side and appears on the other (`motion/share.svelte.ts`). A flight runs on the drawer curve as a transform or a clip from the source's box, the source hidden meanwhile so the screen never shows two. A surface that closes on running work travels into the place that work is parked.
+**The One Object Rule.** What is on both sides of a change travels; it never vanishes on one side and appears on the other (`motion/share.svelte.ts`). A flight runs `--dur-panel` on the drawer curve as a transform or a clip from the source's box, the source hidden meanwhile so the screen never shows two. A surface that closes on running work travels into the place that work is parked.
 
 ## The Nothing Jumps Rule
 
@@ -122,7 +122,7 @@ Under "Named Rules" (DESIGN.md line 598); rule at line 599.
 
 Under "Named Rules" (DESIGN.md line 598); rule at line 601.
 
-**The Coral Is Where You Act Rule.** Coral marks the action (one per view: the act the view is for, so a view for deciding spends it on the decision), the selected nav row, the focus ring, checked controls, the chosen option and the selection tint. Advice is never coral: a recommended option wears the Recommended badge, and when it starts chosen it wears both, so moving the pick moves only the coral. Coral is never a status, so it never reads as an alarm and an alarm never reads as a button.
+**The Coral Is Where You Act Rule.** Coral marks the action (one per view: the act the view is for, so a view for deciding spends it on the decision), the selected nav row, the focus ring, checked controls, the chosen option, the selection tint, and the vermillion rule that parts two regions of a glass card (Files, Caw's panel). Advice is never coral: a recommended option wears the Recommended badge, and when it starts chosen it wears both, so moving the pick moves only the coral. Coral is never a status, so it never reads as an alarm and an alarm never reads as a button.
 
 ## The White On Coral Rule
 
@@ -259,79 +259,79 @@ Under "Buttons" (DESIGN.md line 719); rule at line 725.
 
 ## The Hold-To-Select Rule
 
-Under "Dialog, sheet and drawer" (DESIGN.md line 765); rule at line 771.
+Under "Dialog, sheet and drawer" (DESIGN.md line 767); rule at line 773.
 
 **The Hold-To-Select Rule.** A press that starts in a text field is never captured by a drawer or gesture round it, so iOS hold-to-select and Paste reach the field. A held press on a context-menu trigger suppresses the platform callout.
 
 ## The Empty Starts Work Rule
 
-Under "Empty, loading and skeleton states" (DESIGN.md line 779); rule at line 784.
+Under "Empty, loading and skeleton states" (DESIGN.md line 781); rule at line 786.
 
 **The Empty Starts Work Rule.** An empty state always offers to start the work that would fill it: its one action starts a session with Caw (or the screen's own agent) already asking for the thing, its words editable before they go. Where that can't start, it says why and offers the way by hand.
 
 ## The Caw Stands On The Axis Rule
 
-Under "Empty, loading and skeleton states" (DESIGN.md line 779); rule at line 786.
+Under "Empty, loading and skeleton states" (DESIGN.md line 781); rule at line 788.
 
 **The Caw Stands On The Axis Rule.** Caw sits in the 28px lead column only on a row. Everywhere else (an empty page, a hero, a setup card, a fault at a surface's centre) he stands centred on the composition's own axis.
 
 ## The Claim Of Nothing Rule
 
-Under "Empty, loading and skeleton states" (DESIGN.md line 779); rule at line 788.
+Under "Empty, loading and skeleton states" (DESIGN.md line 781); rule at line 790.
 
 **The Claim Of Nothing Rule.** An empty state renders only once the data is known to be empty. While it loads, the skeleton stands at the real layout's size, and the first read replaces it in the reveal. Nothing claims zero while the hub connection is down.
 
 ## The Real Wait Rule
 
-Under "Empty, loading and skeleton states" (DESIGN.md line 779); rule at line 790.
+Under "Empty, loading and skeleton states" (DESIGN.md line 781); rule at line 792.
 
 **The Real Wait Rule.** Nothing stands in for a wait until it has lasted `--dur-wait-grace`. Caw, once he appears, finishes his enter before what arrives lands, then fades out from the drawing he is on (assets/mascot/README.md, Contract).
 
 ## The Solar Duotone Rule
 
-Under "Icons" (DESIGN.md line 805); rule at line 806.
+Under "Icons" (DESIGN.md line 807); rule at line 808.
 
 **The Solar Duotone Rule.** Every product icon is Solar's bold-duotone cut, imported through `$lib/icons.ts` (packages/icons): one face for the whole product. The duotone's second layer is `currentColor` at 50%. A status glyph keeps its `status-*-glyph` hue and holds 3:1 as a whole on its surfaces. Chevrons and arrows use Solar's linear cut. Close, Plus and Tick are local glyphs on Solar's 24px grid with a 1.5 linear stroke and round caps; the Tick is also the done glyph, in `status-done-glyph`. An icon is the glyph alone: no circle, square, squircle or box stands round it, and where Solar ships only a contained cut, a container-less glyph is drawn in Solar's style.
 - **Sizes:** 12px beside meta text, 16px in controls and rows (the default), 20px in nav and headers.
 
 ## The Caret Rule
 
-Under "Focus and hit areas" (DESIGN.md line 809); rule at line 810.
+Under "Focus and hit areas" (DESIGN.md line 811); rule at line 812.
 
 **The Caret Rule.** A text field's focus indicator is its caret (WCAG 2.2 Understanding 2.4.7): no field, editor or search strip draws the coral ring. A field with a frame steps that frame's edge to `border-control-strong` while its text has focus (`field-edge`); a field that is the whole surface shows its caret alone.
 
 ## The One Ring Rule
 
-Under "Focus and hit areas" (DESIGN.md line 809); rule at line 812.
+Under "Focus and hit areas" (DESIGN.md line 811); rule at line 814.
 
 **The One Ring Rule.** Every control shows one ring on keyboard focus only (`:focus-visible`): a 2px outline in `focus-ring`, 2px outside, never a box-shadow, so it follows the radius and survives forced colours; inset on rows, tabs and anything flush or clipped. The ring is for focus alone: a selection or a mode takes the selected marks instead.
 
 ## The 44 Touch Rule
 
-Under "Focus and hit areas" (DESIGN.md line 809); rule at line 814.
+Under "Focus and hit areas" (DESIGN.md line 811); rule at line 816.
 
 **The 44 Touch Rule.** On a coarse pointer every control's tappable area reaches 44×44 through a transparent `::after` (`.touch-hit`) while its drawn size stays; neighbours stop at the midpoint (`--hit-gap-x`, `--hit-gap-y`). A text field's area lies under it (`.hit-under`). A chip in running text takes its line's height, as a link does (WCAG 2.5.8's inline exception).
 
 ## The 24 Pointer Rule
 
-Under "Focus and hit areas" (DESIGN.md line 809); rule at line 816.
+Under "Focus and hit areas" (DESIGN.md line 811); rule at line 818.
 
 **The 24 Pointer Rule.** On a fine pointer a control drawn under 24×24 reaches 24px through `.pointer-hit`.
 
 ## The Peer Rule
 
-Under "Answering a permission" (DESIGN.md line 820); rule at line 821.
+Under "Answering a permission" (DESIGN.md line 822); rule at line 823.
 
 **The Peer Rule.** Approve and Deny are peers on every surface that answers a permission (Caw's panel, the transcript's card `transcript/Prompt.svelte`, the peek): the operator answers under time pressure, often from a phone, and a rushed thumb must not grant when it meant deny. They are the same size (`sm`, with a 44×44 hit area on every pointer), the same label type, the same `surface-recess` fill and `border-button-outline` edge, in `ink-strong`, reading apart by glyph, word and place, never by hue; no status fill or ink touches either, and neither changes under the pointer. They stand at opposite ends of their row, at least `--space-8` apart, with no third control between them.
 
 ## The Consequential Grant Rule
 
-Under "Answering a permission" (DESIGN.md line 820); rule at line 823.
+Under "Answering a permission" (DESIGN.md line 822); rule at line 825.
 
 **The Consequential Grant Rule.** A standing grant ("Always allow … for …") is wider than the request, so it is kept apart: under a break and a hairline, after a sentence saying what it would allow, in the warning tint with warning ink, a shield glyph and a real edge, the most salient control on the card on purpose. Above the answer row the card says who asks, what will happen and to what, and the change itself, open (the diff, scrolling inside). Nothing is behind a disclosure: a grant is made on what it changes.
 
 ## The Should It Exist Rule
 
-Under "Voice" (DESIGN.md line 825); rule at line 829.
+Under "Voice" (DESIGN.md line 827); rule at line 831.
 
 **The Should It Exist Rule.** Before a string is phrased, it earns its place on the screen (the `clean-copy` skill). Walk it down in order and cut at the first that fires: a thing the person would never have wondered about, unprompted, goes, since naming it plants the question; a caption that restates its label, field or value goes; a line that rules out a failure, defends a choice or remembers a fixed bug goes (the fix is the fix). Cut whole clauses; when nothing is left, the element goes with its words, its empty hint prop and its `<p>` too.

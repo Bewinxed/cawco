@@ -86,7 +86,7 @@
 
 <!-- Where the ledger no longer holds Action's room beside Status and When
      (the kit's `narrow` tier, a 424px ledger: a phone), each action is a
-     two-line card (DESIGN.md, Fleet board): the service's mark down its
+     two-line card (DESIGN.md, Table): the service's mark down its
      start, the action across the card with when at its end, then its
      status. -->
 <div

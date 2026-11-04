@@ -65,8 +65,7 @@ import { watchRendered } from "#lib/utils/rendered.js";
  *   stands on; gliding, it moves 120ms on --ease-drawer. The trail is the
  *   old selection fading where it was (`data-fade`). With less motion a
  *   selection that moves cross-fades (`data-swap`) over --dur-fade.
- * - `card` (the host's `data-highlight`): a grid of icon cards (DESIGN.md,
- *   Channel cards), whose pill is the channel card's selection frame, 1px
+ * - `card` (the host's `data-highlight`): a grid of icon cards (updates/ChannelCards.svelte), whose pill is the channel card's selection frame, 1px
  *   brand-solid over the recess at the card's own radius, drawn over the
  *   card's border and fill and under its face (CardFace).
  */

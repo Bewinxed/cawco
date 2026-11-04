@@ -197,7 +197,7 @@ document.documentElement.append(host);
 const chrome = inkChrome(shadow);
 
 /*
- * The One Target Rule (DESIGN.md): the overlay draws one target at a time.
+ * The One Target Rule (the artifact panel's surface brief): the overlay draws one target at a time.
  * At rest (Comment mode, the element under the pointer) it is a see-through
  * coral tint (`c-target-tint`; the opaque `brand-wash` would hide the element's words)
  * and the label; chosen (a pin's element: its thread open, its disc

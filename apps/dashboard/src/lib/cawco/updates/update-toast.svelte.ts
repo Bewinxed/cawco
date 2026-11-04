@@ -92,7 +92,7 @@ function offer(minutes: number): void {
     // The words take the toast's first line whole, the two acts the second
     // at its trailing edge, together: sonner gives each button an auto
     // leading margin, so the second's is taken back. The acts are the kit's
-    // `sm` buttons (DESIGN.md, Update toast): Update now its primary, Update
+    // `sm` buttons (the update toast's surface brief, Update toast): Update now its primary, Update
     // when idle its secondary, on the Toast recipe's 8px radius.
     classes: {
       toast: "flex-wrap",

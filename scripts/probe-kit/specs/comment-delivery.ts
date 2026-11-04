@@ -431,9 +431,9 @@ const numbered = (pins: Pins, number: number) =>
   Object.values(pins).find((pin) => pin.number === number);
 
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
-/** The Comments rail (DESIGN.md, The Comments rail). */
+/** The Comments rail (the artifact panel's surface brief, The Comments rail). */
 const RAIL = '[data-slot="comment-rail"]';
-/** The composer a press on the page opens (DESIGN.md, Placing a comment). */
+/** The composer a press on the page opens (the artifact panel's surface brief, Placing a comment). */
 const COMPOSE = '[data-slot="pin-composer"]';
 
 /** The pane's Comments rail, beside the page, opened when shut. */

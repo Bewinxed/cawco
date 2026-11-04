@@ -727,7 +727,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     // MARK: The head's room (HIG Toolbars: "Prioritize only the most important items", the rest in a More menu)
 
-    /// The head's controls after the name, in DESIGN.md §5.10's order;
+    /// The head's controls after the name, in the Projects PRD §5.10's order;
     /// `view` is a component canvas's view, `modePick` the mode where its
     /// three segments have no room.
     private enum HeadItem: String, CaseIterable {

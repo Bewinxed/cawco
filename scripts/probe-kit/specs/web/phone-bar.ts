@@ -13,7 +13,7 @@
  *    stroke's outer edge when arcs stand).
  *
  *    One exception, by design: Caw's glass is a tab tucked into the
- *    screen's trailing edge (DESIGN.md, Top bar: "flush with it …, square
+ *    screen's trailing edge (the top bar's surface brief, Top bar: "flush with it …, square
  *    on that side, which draws no hairline"), so its glass's shadow
  *    (`[data-slot="tools"]::before`) runs on past that edge and is cut
  *    there, and only there. Its box itself still ends at `innerWidth`.
@@ -227,7 +227,7 @@ async function leg(kit: Kit, bench: string, engine: Engine, width: number) {
   );
   const { glass } = read;
   kit.check(
-    `${at}: Caw's glass, the one exception, is the flush tab DESIGN.md draws: its box ends at the trailing edge, square there with no hairline`,
+    `${at}: Caw's glass, the one exception, is the flush tab the top bar's surface brief draws: its box ends at the trailing edge, square there with no hairline`,
     !!glass &&
       Math.abs(read.innerWidth - glass.right) < 0.5 &&
       px(glass.borderEnd) === 0 &&

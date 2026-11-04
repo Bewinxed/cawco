@@ -29,7 +29,7 @@
       {:else if "strong" in part}
         <b class="font-medium text-ink-strong">{part.strong}</b>
       {:else if "figure" in part}
-        <!-- A time never wraps (DESIGN.md, the dial wall's time). -->
+        <!-- A time never wraps (the usage popover's surface brief, the dial wall). -->
         <b class="mono-figure font-medium whitespace-nowrap text-ink-strong"
           >{part.figure}</b
         >

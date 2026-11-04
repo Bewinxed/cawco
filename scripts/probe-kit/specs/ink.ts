@@ -1,5 +1,5 @@
 /**
- * Ink on any artifact, slice 4a (Projects spec §5.10, D27; DESIGN.md,
+ * Ink on any artifact, slice 4a (Projects spec §5.10, D27; the artifact panel's surface brief,
  * Artifact panel, canvas and ink: "Ink on any artifact", "The icon at the
  * stroke's end"), on a scratch fleet (real hub, agent and sessiond; Claude
  * Code against the mock model, which calls the artifact tools as each
@@ -1207,7 +1207,7 @@ const placeChecks = async (
 };
 
 /**
- * 5. The ink and its pins go by themselves (DESIGN.md, How comments reach
+ * 5. The ink and its pins go by themselves (the artifact panel's surface brief, How comments reach
  * the session): with no Send, the session hears the paragraph's and the
  * second paragraph's pins, and the hub stamps every pin and group.
  */

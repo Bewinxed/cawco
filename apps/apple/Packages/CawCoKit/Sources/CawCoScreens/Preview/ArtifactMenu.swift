@@ -15,7 +15,7 @@ extension ArtifactKind {
     }
 }
 
-/// The artifact panel's title control (preview/ArtifactMenu.svelte, DESIGN.md
+/// The artifact panel's title control (preview/ArtifactMenu.svelte, the artifact panel's surface brief
 /// Artifact panel): the shown artifact's kind and name in the label role,
 /// and the unfold mark, as the head's first control. It opens the menu.
 final class ArtifactTitleButton: UIButton {

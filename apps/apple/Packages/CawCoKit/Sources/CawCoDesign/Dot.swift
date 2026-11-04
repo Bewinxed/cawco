@@ -1,7 +1,7 @@
 import UIKit
 
 /// The house's one dot: a branch's live beat, an ask's mark, and the
-/// activity dot (DESIGN.md "Activity dot"), as a pin the agent is working on
+/// activity dot, as a pin the agent is working on
 /// wears it in its row and card.
 public final class Dot: UIView {
     /// The pulse asked for: the lowest opacity at its half, and its period.

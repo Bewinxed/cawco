@@ -37,7 +37,7 @@ export const peekRises = (): boolean => touch.current;
  * Whether the peek stands open beside the page, a fine pointer's sheet from
  * the right: the page gives it its width at its trailing edge (the Shell's
  * `data-peek-beside`), so what the page holds stays whole and usable beside
- * it (DESIGN.md, Peek) instead of under it.
+ * it (the peek's surface brief, Peek) instead of under it.
  */
 export const peekBeside = (): boolean => peek.open && !touch.current;
 

@@ -11,7 +11,7 @@ import UIKit
 /// update that landed, logins moved in and what a new account set moving,
 /// each with its ✕. A row opens what it asks for and closes the panel.
 ///
-/// What the glass's card shows for Caw (`GlassContent`; DESIGN.md, "Caw's
+/// What the glass's card shows for Caw (`GlassContent`; Caw's panel's surface brief, "Caw's
 /// panel"): it hangs from the glass Caw stands on, and on a phone from his
 /// tab, past his foot by the glass's neck, on the tab row's floor so it
 /// covers no tab. A finger pulls it down out of his glass and pushes it back
@@ -21,7 +21,7 @@ final class CawPanel: GlassContent {
     /// Its width at most, pt.
     static let wide: CGFloat = 380
     static let tallest: CGFloat = 560
-    /// Its content stands this far in from its drawn edge (DESIGN.md, "Caw's panel": 7px).
+    /// Its content stands this far in from its drawn edge (Caw's panel's surface brief, "Caw's panel": 7px).
     static let inset: CGFloat = 7
     fileprivate static let log = Logger(subsystem: "dev.cawco.app", category: "CawPanel")
 
@@ -294,7 +294,7 @@ private final class PanelScroll: UIScrollView {
 
 // MARK: The sections' rule
 
-/// The hairline between Needs you and Notices (DESIGN.md, Caw's panel): 1pt
+/// The hairline between Needs you and Notices (Caw's panel's surface brief, Caw's panel): 1pt
 /// of the brand's vermillion (`brand-solid`), solid, as Files draws it
 /// (CawPanel.svelte `1px solid var(--brand-solid)`), across the rows' width,
 /// no glow and no fade.

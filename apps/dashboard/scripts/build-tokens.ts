@@ -180,7 +180,7 @@ const ANIMATIONS: Record<string, string> = {
   // A kit sheet slides in and out from its side (`--sheet-away`).
   "animate-sheet-in": "sheet-in var(--dur-panel) var(--ease-drawer)",
   "animate-sheet-out": "sheet-out var(--dur-exit) var(--ease-drawer) forwards",
-  // The new-session form (DESIGN.md New-session popover): its sections fade
+  // The new-session form (NewSessionForm.svelte): its sections fade
   // up in turn (`--delay`).
   "animate-ns-sec":
     "ns-in var(--dur-pop) var(--ease-out) var(--delay, 0s) backwards",

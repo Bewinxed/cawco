@@ -20,7 +20,7 @@ import { toSegment } from "@cawco/core/shapes";
  *   here;
  * - `scene`, what Excalidraw is bound to: it takes what `live` hears only
  *   while no pointer is down, so nothing moves under a hand and a change
- *   that lands mid-stroke waits for the pen to lift (DESIGN.md, The agent's
+ *   that lands mid-stroke waits for the pen to lift (the artifact panel's surface brief, The agent's
  *   turn on the canvas). The scene's own changes go out at once.
  *
  * y-excalidraw takes a changed remote element as it is, with no version
@@ -368,7 +368,7 @@ export function bindScene(
 
   // The agent's elements arrive as a transcript row does: each fades up
   // where it stands over `--dur-menu`, the changed ones first, staggered
-  // across `--dur-stagger` (DESIGN.md, The agent's turn on the canvas). Each
+  // across `--dur-stagger` (the artifact panel's surface brief, The agent's turn on the canvas). Each
   // element's clock is an `agent-arrival` run (motion.ts); with reduced
   // motion they fade the same, since nothing travels.
   const fadeIn = (ids: string[]) => {

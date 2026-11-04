@@ -140,8 +140,8 @@
   }
 
   /* DialKit's controls in a Dials well (its variables, kit/vendor/dialkit
-     styles.css), no glass and no blur. Each row is DESIGN.md's Effort chip
-     field: "a 30px raised field (38px on a phone) with a 10px radius", drawn
+     styles.css), no glass and no blur. Each row is the effort chip's
+     field (spawn/EffortPips.svelte): "a 30px raised field (38px on a phone) with a 10px radius", drawn
      on the row's own box (`::before`), so under a finger the row keeps its
      44px area (The 44 Touch Rule) while it draws 38. A slider's fill is
      recess-deep with "a lifted 8px block with a neutral-8 inner edge" at its

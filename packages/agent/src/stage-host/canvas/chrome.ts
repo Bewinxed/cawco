@@ -349,7 +349,7 @@ const BEZIER = /cubic-bezier\(([^)]+)\)/u;
 const CLIP_NAME = /[^A-Za-z0-9_]/gu;
 
 /**
- * DialKit drawn in CawCo's own tokens (DESIGN.md: its theme follows ours),
+ * DialKit drawn in CawCo's own tokens (its theme follows ours),
  * through its own custom properties, over its sheet's layer: every colour a
  * token that follows the page's scheme live (light-dark()), the house faces,
  * no weight past 500, our radii and shadows. The vendored file is untouched.

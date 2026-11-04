@@ -1,4 +1,4 @@
-/* The canvas's host page (DESIGN.md, Artifact panel, canvas and ink), on
+/* The canvas's host page (the artifact panel's surface brief, Artifact panel, canvas and ink), on
    the decision-page kit's tokens, which host.tsx sets as written in the
    host's colour scheme: the rail's two groups in the panel material,
    Excalidraw's own chrome hidden, the canvas on surface-raised with our
@@ -118,8 +118,8 @@ body {
 
 /* Too narrow for the two groups side by side (under 560px, or under 640px
    with 44px boxes under a finger): the view's stands under the tools', clear
-   of them however many rows they take. Our call; DESIGN.md places them only
-   for the desk and the phone. */
+   of them however many rows they take. Our call; the tool rail's recipe places
+   them only for the desk and the phone. */
 @media (max-width: 559px), (max-width: 639px) and (pointer: coarse) {
   .rail-view {
     top: calc(
@@ -543,7 +543,7 @@ body {
   }
 }
 
-/* ---- Changed since you looked (changes.tsx; DESIGN.md, Changed since you
+/* ---- Changed since you looked (changes.tsx; the artifact panel's surface brief, Changed since you
    looked): the agent's changes the person hasn't looked at, ringed in the
    scene's coordinates over the drawing, outside each element's shape, never
    taking a press; and the tag

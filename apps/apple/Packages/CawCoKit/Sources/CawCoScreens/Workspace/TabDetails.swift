@@ -4,7 +4,7 @@ import OSLog
 import UIKit
 
 /// A group's session details as its tabs host them (PaneTabs.svelte;
-/// DESIGN.md, "Session card."): one card hung from a tab, at every width,
+/// the session tabs' surface brief, "Session card."): one card hung from a tab, at every width,
 /// opened by resting a pointer on the tab for 350ms and let go 250ms after
 /// the pointer leaves both the tab and the card, or pinned by a press (the
 /// chosen tab, its chevron, the menu's Session details), when it stays until

@@ -610,7 +610,7 @@ public final class PushRegistry {
     }
 }
 
-/// The free week's one reminder (DESIGN.md T6, ruling 9, App Review R14): a
+/// The free week's one reminder (the paywall spec T6, ruling 9, App Review R14): a
 /// local notification at 10:00 local time on the day before it ends, scheduled
 /// only while the week is live, notifications are allowed and H5 is on.
 @MainActor

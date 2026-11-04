@@ -4,7 +4,7 @@ public import UIKit
 import UIKit.UIGestureRecognizerSubclass
 import WebKit
 
-// The composer's canvas (DESIGN.md Artifact panel, canvas and ink; Composer,
+// The composer's canvas (the artifact panel's surface brief, Artifact panel, canvas and ink; Composer,
 // The pen's swipe; canvas-room.svelte.ts on the web): the draft's canvas
 // standing over the field, grown out of the pill as the recall wheel grows,
 // the field below it writable.
@@ -236,12 +236,12 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         web.scrollView.contentInsetAdjustmentBehavior = .never
         web.isInspectable = true
         web.accessibilityLabel = "Canvas"
-        // The canvas's theme follows the app's (DESIGN.md: "its theme follows ours").
+        // The canvas's theme follows the app's (its theme follows ours).
         web.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak self] (_: WKWebView, _: UITraitCollection) in
             guard let self else { return }
             deliver(["type": "cawco:theme", "theme": theme])
         }
-        // The pencil's double-tap toggles the eraser (DESIGN.md, Pen rules on the canvas).
+        // The pencil's double-tap toggles the eraser (the artifact panel's surface brief, Pen rules on the canvas).
         let pencil = UIPencilInteraction()
         pencil.delegate = self
         web.addInteraction(pencil)
@@ -485,7 +485,7 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
             pictureWaiter = nil
             waiter?.continuation.resume()
         case "cawco:snap":
-            // DESIGN.md, Pen rules on the canvas: "a `selection` tick under a finger".
+            // the artifact panel's surface brief, Pen rules on the canvas: "a `selection` tick under a finger".
             snapTick.selectionChanged()
         case "cawco:dock": onDock()
         case "cawco:undock": onUndock()

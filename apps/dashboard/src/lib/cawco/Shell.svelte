@@ -330,7 +330,7 @@
       case "new-session":
         newSession();
         return true;
-      // ⌘K opens and closes Jump (DESIGN.md, "The glass's cards").
+      // ⌘K opens and closes Jump (the top bar's surface brief, "The glass's cards").
       case "jump":
         barGlass.toggle("jump");
         return true;
@@ -1092,7 +1092,7 @@
          from the right, peek.svelte.ts `peekBeside`) the page, its bar
          included, ends where the sheet begins: what it holds (the glass
          group, a docked card) stays whole and usable beside the sheet
-         (DESIGN.md, Peek), never cut under it. -->
+         (the peek's surface brief, Peek), never cut under it. -->
     <div
       data-slot="shell-main"
       class="relative flex-auto min-w-0 flex flex-col overflow-hidden data-peek-beside:pe-c-peek-sheet-w"

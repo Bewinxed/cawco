@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * The artifact panel's title control (DESIGN.md Artifact panel, canvas and
+   * The artifact panel's title control (the artifact panel's surface brief, Artifact panel, canvas and
    * ink): the shown artifact's name as a menu button listing the session's
    * artifacts, newest first, each promoted one tagged with its commit and
    * each waiting on the person (core artifact-needs.ts) wearing the

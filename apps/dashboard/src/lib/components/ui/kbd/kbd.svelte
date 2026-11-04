@@ -14,7 +14,7 @@
        * that ink at 20% inside it, read off its button as the keycap reads
        * its option, so a button that turns primary turns its keys with it.
        *
-       * An option chip's keycap digit (DESIGN.md, Permission gate: "option
+       * An option chip's keycap digit (DESIGN.md, Option chip: "option
        * chips (30px, 8px radius, keycap digits)"): the code face at the meta
        * size in strong ink (Typography, Code: "code, commands, paths, tool
        * names, keycaps"), on the spacing ladder's 18px; filled vermillion with

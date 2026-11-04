@@ -1,5 +1,5 @@
 /**
- * Artifacts, slice 3b (Projects spec §5.10, DESIGN.md Composer "The pen's
+ * Artifacts, slice 3b (Projects spec §5.10, the composer's surface brief, Composer "The pen's
  * swipe" and Artifact panel, canvas and ink): the composer's canvas, on a
  * scratch fleet (real hub, agent and sessiond; Claude Code against the mock
  * model) and the built dashboard. Read from the engine, never from pixels:

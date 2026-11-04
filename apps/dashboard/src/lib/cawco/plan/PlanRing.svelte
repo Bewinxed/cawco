@@ -9,7 +9,7 @@
    * While the plan holds away notes the person hasn't opened (the hub's
    * `awayUnseen`), its glyph wears the needs-you dot on its top-end corner,
    * the glyph cut away round it, its echo three loops and then still: the
-   * mark a pin's unread answer wears (DESIGN.md, Status dot; A pin's pill).
+   * mark a pin's unread answer wears (DESIGN.md, Status dot; the artifact panel's surface brief, A pin's pill).
    * The dot is decoration: the chip's name says it.
    */
   import { planWords } from "@cawco/core/words/plan";

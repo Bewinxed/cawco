@@ -1,5 +1,5 @@
 /**
- * The composer's canvas (DESIGN.md Artifact panel, canvas and ink; Composer,
+ * The composer's canvas (the artifact panel's surface brief, Artifact panel, canvas and ink; Composer,
  * The pen's swipe): the draft's canvas standing over the field, grown out of
  * the pill as the recall wheel grows, the field below it writable.
  *
@@ -66,7 +66,7 @@ import { boxCut, type ClipBox, GrownShape, measureShape } from "./grown";
 
 /** Keyframes a growth or fold of the shape is sampled at: its own curve, linear between. */
 const STEPS = 24;
-/** How much of the drag past a bound the canvas follows (DESIGN.md, Drag to dismiss). */
+/** How much of the drag past a bound the canvas follows (DESIGN.md, Dialog, sheet and drawer: a sheet under the finger). */
 const RUBBER = 0.35;
 /** The furthest past a bound it follows, as a share of its height. */
 const RUBBER_MAX = 0.25;

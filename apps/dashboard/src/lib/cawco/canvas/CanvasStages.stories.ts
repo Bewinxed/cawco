@@ -3,7 +3,7 @@
  * components): the grown shape's top in a frame of its own
  * (canvas-stages-frame), its top grab and its corner grips as the stage
  * stands them, so the grips' corners are read against the shape's (The
- * Concentric Rule) and their stroke at its width (DESIGN.md, The canvas's
+ * Concentric Rule) and their stroke at its width (the artifact panel's surface brief, The canvas's
  * entrance). The meta's args are every story's.
  */
 import CanvasStagesFrame from "./canvas-stages-frame.svelte";

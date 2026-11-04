@@ -4,7 +4,7 @@ import CawCoTranscript
 import OSLog
 import UIKit
 
-// The preview's pins (Projects spec §5.7, §5.10; tsk-3; DESIGN.md
+// The preview's pins (Projects spec §5.7, §5.10; tsk-3; the artifact panel's surface brief
 // "Artifact panel, canvas and ink"): the page's overlay draws each pin on
 // the page itself; the app draws their list (the Comments panel, floating
 // over the page from the head's Comments) and the open pin's card over the page, as the web's PinList.svelte
@@ -58,7 +58,7 @@ private func pinWords(_ name: KitLabel, _ under: KitLabel) -> UIStackView {
     return words
 }
 
-/// The activity dot's Working form (DESIGN.md "Activity dot"; PinList.svelte
+/// The activity dot's Working form (PinList.svelte
 /// `.live`): 8pt, `status-live-glyph`, pulsing on the one loop, on a pin the
 /// agent is working on.
 private func liveDot() -> Dot {

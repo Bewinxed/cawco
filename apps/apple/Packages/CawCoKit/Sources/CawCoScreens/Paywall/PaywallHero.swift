@@ -130,7 +130,7 @@ nonisolated struct StorySlots: Decodable {
     }()
 }
 
-/// The paywall's hero band (DESIGN.md §2 and §4, ruling 6): brand art, a
+/// The paywall's hero band (the paywall spec §2 and §4, ruling 6): brand art, a
 /// night scene in both appearances.
 ///
 /// The scene is the desk film (`paywall-story.mp4`, once, muted) from

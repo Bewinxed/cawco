@@ -190,9 +190,9 @@ public enum Palette {
     public static let brandSolid = Palette.named("brand-solid")
     public static let brandHover = Palette.named("brand-hover")
     public static let brandWash = Palette.named("brand-wash")
-    /// The overlay's see-through tint on a target in Comment mode; content reads through it (DESIGN.md, The One Target Rule): brand-solid at 8%, never the opaque brand-wash; drawn by the overlay over the element, not under it, so it must stay see-through.
+    /// The overlay's see-through tint on a target in Comment mode; content reads through it (the artifact panel's surface brief, The One Target Rule): brand-solid at 8%, never the opaque brand-wash; drawn by the overlay over the element, not under it, so it must stay see-through.
     public static let cTargetTint = Palette.named("c-target-tint")
-    /// The ring round what a revision changed that the person hasn't looked at (DESIGN.md, Changed since you looked): the done glyph's green, drawn on the element's own shape outside its box, so it never covers what the element says; never coral (The One Target Rule).
+    /// The ring round what a revision changed that the person hasn't looked at (the artifact panel's surface brief, Changed since you looked): the done glyph's green, drawn on the element's own shape outside its box, so it never covers what the element says; never coral (The One Target Rule).
     public static let cChangeRing = Palette.named("c-change-ring")
     public static let brandInk = Palette.named("brand-ink")
     /// Brand ink under the pointer: the most saturated vermillion a word can take and still hold 4.5:1 on the pane (4.78:1 by day, 7.65:1 at night). brand-hover measures 3.9:1 by day and is for fills.
@@ -359,7 +359,7 @@ public enum Shadow {
     public static let actionRing: [ShadowLayer] = [ShadowLayer(x: 0, y: 1, blur: 0, spread: 0, ink: Ink(light: P3(1.0000, 1.0000, 1.0000, 0.1800), dark: P3(1.0000, 1.0000, 1.0000, 0.1800)), inset: true), ShadowLayer(x: 0, y: 1, blur: 2, spread: 0, ink: Ink(light: P3(0.5066, 0.2338, 0.1694, 0.2500), dark: P3(0.0000, 0.0000, 0.0000, 0.4000)), inset: false)]
     /// Inner vermillion ring and soft inner glow on code blocks.
     public static let codeRing: [ShadowLayer] = [ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.7434, 0.3271, 0.2310, 0.2800), dark: P3(0.8285, 0.4329, 0.3286, 0.3200)), inset: true), ShadowLayer(x: 0, y: 1, blur: 6, spread: 0, ink: Ink(light: P3(0.7434, 0.3271, 0.2310, 0.0600), dark: P3(0.8285, 0.4329, 0.3286, 0.1000)), inset: true)]
-    /// The effort knob's and Browse's lifted block: a neutral-8 inner edge over shadow-raised's layers (DESIGN.md Effort chip).
+    /// The effort knob's and Browse's lifted block: a neutral-8 inner edge over shadow-raised's layers (the effort chip, spawn/EffortPips.svelte).
     public static let shadowKnob: [ShadowLayer] = [ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.6824, 0.6604, 0.6225, 1.0000), dark: P3(0.3888, 0.3730, 0.3499, 1.0000)), inset: true), ShadowLayer(x: 0, y: 1, blur: 3, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 1, blur: 1, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
 }
 
@@ -525,35 +525,35 @@ public enum Size {
     public static let cRailRowH: Double = 38
     /// `cRailRowH` under a coarse pointer or a window under 640pt wide.
     public static let cRailRowHCompact: Double = 44
-    /// A row of the artifact panel's list: the kind's glyph, the name, its age (DESIGN.md Artifact panel, canvas and ink).
+    /// A row of the artifact panel's list: the kind's glyph, the name, its age (the artifact panel's surface brief, Artifact panel, canvas and ink).
     public static let cArtifactRowH: Double = 44
-    /// A comment's pill: its height on the page, in the Comments rail and in its thread's head, and its least width, a square at one figure: past the 24 Pointer Rule's floor, so the bubble has room round its number and is a whole target under a mouse (DESIGN.md, A pin's pill).
+    /// A comment's pill: its height on the page, in the Comments rail and in its thread's head, and its least width, a square at one figure: past the 24 Pointer Rule's floor, so the bubble has room round its number and is a whole target under a mouse (the artifact panel's surface brief, A pin's pill).
     public static let cPin: Double = 28
-    /// A comment's pill: the room each side of its figures, so it grows from the `c-pin` square into a pill once they need more: 7 is 28px wide, 42 is 32px, 128 is 40px, in every state (DESIGN.md, A pin's pill).
+    /// A comment's pill: the room each side of its figures, so it grows from the `c-pin` square into a pill once they need more: 7 is 28px wide, 42 is 32px, 128 is 40px, in every state (the artifact panel's surface brief, A pin's pill).
     public static let cPinPad: Double = 8
-    /// A comment whose element is gone, in the Comments rail: its pill's dashed `border-control` ring, 2px out (DESIGN.md, The Comments rail). Whole, as every border and outline is (lint: a fractional width snaps to whole device pixels, and a dashed stroke has no inset-ring form).
+    /// A comment whose element is gone, in the Comments rail: its pill's dashed `border-control` ring, 2px out (the artifact panel's surface brief, The Comments rail). Whole, as every border and outline is (lint: a fractional width snaps to whole device pixels, and a dashed stroke has no inset-ring form).
     public static let cPinGoneRing: Double = 1
     /// The tallest a fault's Show details stands before it scrolls inside, so a long stack never pushes the fault's own action out of reach; a dozen lines of code type, as Peek's plan is capped.
     public static let cFaultDetailsH: Double = 192
-    /// The Comments rail beside the page (DESIGN.md, The Comments rail): a row's three lines beside its pill, the search field and Open and Resolved over them, and the Send bar's note at its foot.
+    /// The Comments rail beside the page (the artifact panel's surface brief, The Comments rail): a row's three lines beside its pill, the search field and Open and Resolved over them, and the Send bar's note at its foot.
     public static let cCommentsW: Double = 320
-    /// A pin's peek and a chip's peek at most (DESIGN.md, A pin's pill), and the app's comment card. On the web the composer and the thread beside a pin take `c-pin-card-reading-w`, never under this. Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px holds the thread's head beside its four controls, and a field of 178px beside Attach and the send glyph.
+    /// A pin's peek and a chip's peek at most (the artifact panel's surface brief, A pin's pill), and the app's comment card. On the web the composer and the thread beside a pin take `c-pin-card-reading-w`, never under this. Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px holds the thread's head beside its four controls, and a field of 178px beside Attach and the send glyph.
     public static let cPinCardW: Double = 280
-    /// The overlay's line round a chosen target and the page's root in Comment mode: the content's own edge weight, never the focus ring's (DESIGN.md, The One Target Rule).
+    /// The overlay's line round a chosen target and the page's root in Comment mode: the content's own edge weight, never the focus ring's (the artifact panel's surface brief, The One Target Rule).
     public static let cTargetStroke: Double = 1
-    /// How far outside a bare chosen target (no border and no background of its own: a bare text container, a label-and-field group) the overlay's line stands, so it never touches the glyphs; its corners grow with it. A target that draws its own box takes the line on its border box, at 0 (DESIGN.md, The One Target Rule).
+    /// How far outside a bare chosen target (no border and no background of its own: a bare text container, a label-and-field group) the overlay's line stands, so it never touches the glyphs; its corners grow with it. A target that draws its own box takes the line on its border box, at 0 (the artifact panel's surface brief, The One Target Rule).
     public static let cTargetGap: Double = 2
     /// A sheet's inspector beside the page on a desk (live components spec §5): a prop's name over its control, a five-segment variant or a field at the body size, and the story row's list with its four 30px buttons.
     public static let cSheetInspectorW: Double = 296
-    /// The inspector's head, Inspect and Close: the artifact panel's own head height (DESIGN.md Artifact panel, canvas and ink).
+    /// The inspector's head, Inspect and Close: the artifact panel's own head height (the artifact panel's surface brief, Artifact panel, canvas and ink).
     public static let cSheetInspectorHeadH: Double = 44
-    /// A component canvas's frame on its way, where its story names no form width: the skeleton's width, a button-to-card component's own (DESIGN.md Artifact panel, canvas and ink; Skeleton).
+    /// A component canvas's frame on its way, where its story names no form width: the skeleton's width, a button-to-card component's own (the artifact panel's surface brief, Artifact panel, canvas and ink; Skeleton).
     public static let cCanvasSkeletonW: Double = 240
-    /// A component canvas's frame on its way: the skeleton's height, two rows of a card's content, so the frames that land under it move the layout least (DESIGN.md Artifact panel, canvas and ink; Skeleton).
+    /// A component canvas's frame on its way: the skeleton's height, two rows of a card's content, so the frames that land under it move the layout least (the artifact panel's surface brief, Artifact panel, canvas and ink; Skeleton).
     public static let cCanvasSkeletonH: Double = 96
-    /// An edge's stroke on a graph canvas: a component canvas's map, from one card to the next (DESIGN.md Artifact panel, canvas and ink).
+    /// An edge's stroke on a graph canvas: a component canvas's map, from one card to the next (the artifact panel's surface brief, Artifact panel, canvas and ink).
     public static let cGraphEdge: Double = 1.5
-    /// A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (DESIGN.md Artifact panel, canvas and ink).
+    /// A component on a canvas's map: its name, file and counts over its frames at 16:10, live when chosen; the widest that keeps five across a desk pane at the map's fit (the artifact panel's surface brief, Artifact panel, canvas and ink).
     public static let cMapNodeW: Double = 264
     /// The iOS app's Comments panel (until its parity with the web's Comments rail, c-comments-w), floating over the well's top-right: its share of the well's width, held between c-pin-list-min and c-pin-list-max. At 0.3 a desk well past about 930px gives the rows more than the floor's 225px text column, so a longer comment wraps to fewer lines.
     public static let cPinListShare: Double = 0.3
@@ -718,7 +718,7 @@ public enum Size {
     public static let rowMarkGlyph: Double = 11
     public static let rowMarkBox: Double = 18
     public static let wellX: Double = 0.5
-    /// The changed ring's line (DESIGN.md, Changed since you looked): as heavy as the focus ring, never heavier.
+    /// The changed ring's line (the artifact panel's surface brief, Changed since you looked): as heavy as the focus ring, never heavier.
     public static let cChangeRingWidth: Double = 2
     /// How far outside the changed element's box its ring stands, so the line never touches its words or its own border.
     public static let cChangeRingOffset: Double = 3
@@ -881,7 +881,7 @@ public enum Size {
     public static let cSheetMaxH: Double = 717.4
     /// The peek sheet's height on a touch screen: fixed, so it holds its size from the first frame.
     public static let cPeekSheetH: Double = 675.2
-    /// The peek sheet's width with a fine pointer, beside the page, and the room the page gives it at its trailing edge while it stands open (DESIGN.md Peek: "a sheet from the right beside the home it was opened from").
+    /// The peek sheet's width with a fine pointer, beside the page, and the room the page gives it at its trailing edge while it stands open (the peek's surface brief, Peek: "a sheet from the right beside the home it was opened from").
     public static let cPeekSheetW: Double = 384
     /// The drawer grabber's width (DESIGN.md Drawer: "A 100×6 grabber").
     public static let cGrabberW: Double = 100
@@ -970,7 +970,7 @@ public enum Size {
     public static let cCawListClear: Double = 120
     /// The room kept clear under Caw's panel's list on a phone: the composer's row and the home indicator's gap.
     public static let cCawListClearPhone: Double = 96
-    /// The session card hung from Caw's seat (DESIGN.md: "The card is 416px wide").
+    /// The session card hung from Caw's seat (the session card, the session tabs' surface brief: 416px wide).
     public static let cLeadCardW: Double = 416
     /// That card's height cap.
     public static let cLeadCardMaxH: Double = 760
@@ -984,11 +984,11 @@ public enum Size {
     public static let cMoveWaitFileBarW: Double = 96
     /// The glass's machines card.
     public static let cMachinesW: Double = 320
-    /// A session tab's rim glow radius (DESIGN.md Session tab status rim).
+    /// A session tab's rim glow radius (the session tabs' surface brief, Session tab status rim).
     public static let tabRimGlow: Double = 6
     /// How far past a folder tab's top and sides its rim's glow may draw before the fold's clip cuts it: four glow radii.
     public static let tabRimGlowRoom: Double = 24
-    /// A finder row's floor, two lines (DESIGN.md Find rows).
+    /// A finder row's floor, two lines (find/find-rows.ts).
     public static let cFindRowH: Double = 52
     /// A finder row's floor on a phone.
     public static let cFindRowHPhone: Double = 56
@@ -1034,7 +1034,7 @@ public enum Size {
     public static let cSideGripW: Double = 6
     /// A side surface's floor (SideSurface SIDE_FLOOR_PX).
     public static let cSideSurfaceMin: Double = 320
-    /// The effort track's drawn height on a phone (DESIGN.md Effort chip: "38px on a phone"); its touch area is the 44 Touch Rule's, through touch-hit.
+    /// The effort track's drawn height on a phone (the effort chip, spawn/EffortPips.svelte: 38px on a phone); its touch area is the 44 Touch Rule's, through touch-hit.
     public static let cEffortTrackHPhone: Double = 38
     /// The model list's viewport: fixed, so the section keeps its height while filtering.
     public static let cModelListH: Double = 300
@@ -1263,7 +1263,7 @@ public enum Size {
     public static let cTabStripFade: Double = 16
     /// The tab strip's fade cap while no tab is drawn chosen: wider than any fade, so the min() never caps it.
     public static let cTabStripUncapped: Double = 390
-    /// The session details card's width (DESIGN.md: "the card is 416px wide"); equal to cardWidth()'s 416 in PaneTabs.
+    /// The session details card's width (the session tabs' surface brief, Session card: 416px wide); equal to cardWidth()'s 416 in PaneTabs.
     public static let cDetailsCardW: Double = 416
     /// The session details card's height cap on a desk.
     public static let cDetailsCardMaxH: Double = 760
@@ -1358,7 +1358,7 @@ public enum Motion {
     public static let durControl: TimeInterval = 0.12
     /// In seconds.
     public static let durMenu: TimeInterval = 0.14
-    /// How long the pointer rests on a comment's pill before its peek comes, one within this of the last coming at once; and how long the peek stays once the pointer has left the pill and the peek (DESIGN.md, A pin's pill).
+    /// How long the pointer rests on a comment's pill before its peek comes, one within this of the last coming at once; and how long the peek stays once the pointer has left the pill and the peek (the artifact panel's surface brief, A pin's pill).
     /// In seconds.
     public static let durPeek: TimeInterval = 0.3
     /// A switch's knob and a checkbox's tick.

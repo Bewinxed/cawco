@@ -17,7 +17,7 @@
    * Caw's 48px seat, every control centred on it.
    *
    * Leading, the name, renamed where it stands, on one line that ends in an
-   * ellipsis; then the place, a bare item of the top bar's recipe (DESIGN.md,
+   * ellipsis; then the place, a bare item of the top bar's recipe (the top bar's surface brief,
    * Top bar's trailing edge): the primary checkout's machine as its OS mark,
    * or the folder while the project's one place is its folder on the hub,
    * named in its tooltip ("A place shown as a place … A path is never
@@ -605,7 +605,7 @@
 {/if}
 <!-- A forget asked from More, under the head, from where its title starts. -->
 <!-- The tray on the page's gutters: 25px in at the start (18 under the desk
-     line, DESIGN.md L643) and 18 at the end, so it never meets the screen. -->
+     line, DESIGN.md, Layout) and 18 at the end, so it never meets the screen. -->
 <div
   data-slot="project-forget"
   class="contents"
