@@ -246,6 +246,8 @@ export {
   default as IconRenew,
   default as IconWorking,
 } from "~icons/solar/refresh-bold-duotone";
+/** Repeat: a move played round again each time it ends (the design graph's Animation face). */
+export { default as IconRepeat } from "~icons/solar/repeat-bold-duotone";
 /** Reopen a resolved pin. */
 export { default as IconReopen } from "~icons/solar/restart-bold-duotone";
 /*

@@ -20,7 +20,15 @@
    *
    * Keyboard (WAI-ARIA APG, Slider): each bar's body and each end is a
    * slider of its own; the arrows move it 10 ms, with Shift 100 ms, Home and
-   * End to its least and most, through the same `moveRun`. Its ends are
+   * End to its least and most, through the same `moveRun`. A key's nudge
+   * plays nothing (T9: stillness after a keyboard nudge).
+   *
+   * A press on a bar, or a drag of it, selects its row (the row's settings
+   * open under it). Unless ⌥ is held, a dragged edge settles on another
+   * bar's edge it comes within `--space-2` of, as on a duration token.
+   * Under a finger a bar's ends grip outside it, so its whole width is its
+   * body's: two 44px end areas covered a 29px bar, and no finger could
+   * move it. Its ends are
    * our own slider elements, not bits-ui's Slider: a Slider's track takes a
    * press and moves its nearest thumb, the jump a press on a bar once made.
    *
@@ -32,6 +40,8 @@
   import { graphWords as words } from "@cawco/core/words/graph";
   import interact from "interactjs";
   import { frameSize } from "#lib/cawco/frame-observer.js";
+  import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
+  import { browser } from "$app/env";
   import { figureOf } from "./figures";
   import {
     type ClipKind,
@@ -50,14 +60,23 @@
     onretime,
     onhold,
     lang,
+    selected = false,
+    onselect,
+    edges,
   }: {
     track: Track;
+    /** Its row is the one whose settings are open. */
+    selected?: boolean;
+    /** A press or a drag on one of its bars. */
+    onselect: () => void;
+    /** Every other bar's edges on the lane, ms: where a dragged edge settles. */
+    edges: (run: Run) => number[];
     /** The row as a person says it, for each part's name. */
     name: string;
     /** The lane's end, ms: the ruler's. */
     scale: number;
     /** A run's new stretch, ms into the move. */
-    onretime: (run: Run, from: number, to: number) => void;
+    onretime: (run: Run, from: number, to: number, replay: boolean) => void;
     /** The stretch a drag holds, as it moves (null: let go), so the row's words follow it. */
     onhold: (run: Run, span: { from: number; to: number } | null) => void;
     /** The page's language, for the figures. */
@@ -79,11 +98,17 @@
   const runName = (at: number) =>
     many ? words.runOf(name, at + 1, track.runs.length) : name;
 
-  const commit = (run: Run, next: { from: number; to: number }) => {
+  const commit = (
+    run: Run,
+    next: { from: number; to: number },
+    replay: boolean
+  ) => {
     if (next.from !== run.from || next.to !== run.to) {
-      onretime(run, next.from, next.to);
+      onretime(run, next.from, next.to, replay);
     }
   };
+  /** How near a dragged edge must come to another bar's to settle on it: `--space-2` of the lane, in ms. */
+  const NEAR_PX = browser ? numberOf("--space-2") : 0;
 
   /**
    * The bar of `run` made an interact.js target: its body draggable, its
@@ -99,11 +124,15 @@
       travelled += dx * sign();
       held = {
         id: run.id,
-        ...moveRun({ ...run, ...taken }, part, toMs(travelled), scale, free),
+        ...moveRun({ ...run, ...taken }, part, toMs(travelled), scale, free, {
+          edges: edges(run),
+          within: toMs(NEAR_PX),
+        }),
       };
       onhold(run, held);
     };
     const start = (part: RunPart) => () => {
+      onselect();
       taken = { from: run.from, to: run.to };
       travelled = 0;
       holding = { id: run.id, part };
@@ -114,7 +143,7 @@
       holding = null;
       onhold(run, null);
       if (next) {
-        commit(run, next);
+        commit(run, next, true);
       }
     };
     const target = interact(node)
@@ -160,7 +189,7 @@
       return;
     }
     event.preventDefault();
-    commit(run, moveRun(run, part, by, scale, true));
+    commit(run, moveRun(run, part, by, scale, true), false);
   };
 
   /** Each kind's bar: its wash and its edge, as whole classes. */
@@ -240,6 +269,7 @@
       class={[
         "absolute inset-y-0 start-(--from) w-(--wide) touch-none rounded-xs border",
         BAR[track.kind],
+        selected && "ring-(length:--focus-ring-width) ring-ink-strong",
         holding?.id === run.id && holding.part === "body"
           ? "cursor-grabbing"
           : "cursor-grab",
@@ -248,6 +278,7 @@
       data-run={run.id}
       data-slot="bar"
       onkeydown={keyOf(run, "body")}
+      onpointerdown={onselect}
       role="slider"
       style:--from={pct(span.from)}
       style:--wide={pct(span.to - span.from)}
@@ -275,18 +306,19 @@
           class={[
             "pointer-hit absolute inset-y-0 grid w-space-2 cursor-ew-resize touch-none place-items-center rounded-xs",
             end === "start" ? "start-0" : "end-0",
-            // A bar too narrow for its grips stands them outside its ends,
-            // and under a finger gives its whole width to the body: two
-            // 44px end areas covered a 20px bar, so it could not be moved
-            // (its length is the editor's Duration there).
-            narrow
-              ? [
-                  "coarse:pointer-events-none",
-                  end === "start"
-                    ? "-translate-x-full rtl:translate-x-full"
-                    : "translate-x-full rtl:-translate-x-full",
-                ]
-              : "touch-hit",
+            // A bar too narrow for its grips stands them outside its ends.
+            // Under a finger every end grips outside its bar, its area
+            // reaching away from the bar, never over it, so the whole bar
+            // is its body's (the review of round three: a 29px bar's two
+            // 44px end areas covered it).
+            narrow &&
+              (end === "start"
+                ? "-translate-x-full rtl:translate-x-full"
+                : "translate-x-full rtl:-translate-x-full"),
+            "coarse:-inset-y-space-3 coarse:w-space-7",
+            end === "start"
+              ? "coarse:-translate-x-full coarse:justify-items-end coarse:rtl:translate-x-full"
+              : "coarse:translate-x-full coarse:justify-items-start coarse:rtl:-translate-x-full",
             ring,
           ]}
           data-run-end={end}

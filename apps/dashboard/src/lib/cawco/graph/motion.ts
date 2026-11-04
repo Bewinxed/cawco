@@ -80,6 +80,12 @@ const LADDER = [
   "--dur-settle",
 ] as const;
 
+/** The design system's durations, shortest first: what the Length setting offers, by token and length. */
+export const durationTokens = (): { token: string; ms: number }[] =>
+  LADDER.map((token) => ({ token, ms: Math.round(dur(token)) })).sort(
+    (a, b) => a.ms - b.ms
+  );
+
 /** The house curves, by token. */
 const CURVES = [
   "--ease-out",
@@ -179,7 +185,7 @@ export function curveTokenOf(easing: string): string | null {
 /** A curve in words. */
 const curveWords = (easing: string): string => {
   const token = curveTokenOf(easing);
-  return token ? (words.curves[token] ?? token) : words.ownCurve;
+  return token ? (words.curves[token] ?? token) : words.asWritten;
 };
 
 const MOTION_KEYS = new Set([
@@ -478,6 +484,72 @@ function runsOf(clips: readonly Clip[]): Run[] {
 const asRan = (a: Clip, b: Clip) =>
   beginOf(untune(a)) - beginOf(untune(b)) || Number(a.id) - Number(b.id);
 
+/** A row's clips in the order the engine ran them: its rows per animation keep their places while one is retimed. */
+export const inRunOrder = (clips: readonly Clip[]): Clip[] =>
+  [...clips].sort(asRan);
+
+/** A row's own lengths, the shortest and the longest of its animations' durations: what each was written to last, never a measured span. */
+export const ownLengths = (clips: readonly Clip[]): [number, number] => [
+  Math.min(...clips.map((clip) => clip.duration)),
+  Math.max(...clips.map((clip) => clip.duration)),
+];
+
+/** A clip as the same animation in another read of the move: its thing's name, its property and its place among the clips that share both. */
+const identities = (clips: readonly Clip[]): Map<Clip, string> => {
+  const seen = new Map<string, number>();
+  const named = new Map<Clip, string>();
+  for (const clip of [...clips].sort(asRan)) {
+    const base = `${clip.element}\u0000${clip.property}`;
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    named.set(clip, `${base}\u0000${n}`);
+  }
+  return named;
+};
+
+/** The tuned clips of a move by their identity, to put back on its next read. */
+export const tuningOf = (clips: readonly Clip[]): Map<string, Clip> => {
+  const named = identities(clips);
+  return new Map(
+    clips.flatMap((clip) =>
+      clip.was ? [[named.get(clip) as string, clip] as const] : []
+    )
+  );
+};
+
+/**
+ * A fresh read of a move with what he tuned on an earlier read put back:
+ * each tuned animation's delay, length and curve over the clip as the engine
+ * ran it this time. Choosing another move and back kept nothing.
+ */
+export function withTuning(
+  clips: readonly Clip[],
+  tuning: ReadonlyMap<string, Clip>
+): Clip[] {
+  if (tuning.size === 0) {
+    return [...clips];
+  }
+  const named = identities(clips);
+  return clips.map((clip) => {
+    const tuned = tuning.get(named.get(clip) as string);
+    return tuned
+      ? {
+          ...clip,
+          delay: tuned.delay,
+          duration: tuned.duration,
+          easing: tuned.easing,
+          frames: tuned.framed === clip.framed ? clip.frames : tuned.frames,
+          framed: tuned.framed,
+          spring: tuned.spring,
+          curve: tuned.curve,
+          token: tuned.token,
+          adHoc: tuned.adHoc,
+          was: clip,
+        }
+      : clip;
+  });
+}
+
 /**
  * The move's rows: its clips by the thing each moves, in the order each
  * thing first moved as the engine ran it. The order is the untuned one, so
@@ -570,30 +642,61 @@ const snapRun = (part: RunPart, ms: number, free: boolean): number =>
     ? Math.round(ms / RUN_STEP) * RUN_STEP
     : snapLength(ms);
 
+/** The other bars' edges a run's moving edge settles on, and how near it must come, ms. */
+export interface Neighbours {
+  edges: readonly number[];
+  within: number;
+}
+
+/** `at` settled on the nearest neighbouring edge within reach, else as it stands. */
+const toEdge = (at: number, near: Neighbours | null): number => {
+  if (!near) {
+    return at;
+  }
+  let best = at;
+  let gap = near.within;
+  for (const edge of near.edges) {
+    if (Math.abs(edge - at) <= gap) {
+      gap = Math.abs(edge - at);
+      best = edge;
+    }
+  }
+  return best;
+};
+
 /**
  * Where a run stands after `part` is moved by `by` ms, snapped and held
- * to the lane `[0, end]`: one rule for a drag and a key.
+ * to the lane `[0, end]`: one rule for a drag and a key. Unless `free`
+ * (⌥ held, or a key's own step), the edge that moves settles on another
+ * bar's edge it comes near (T9: "settles on the project's duration tokens
+ * and on neighbouring clips' edges").
  */
 export function moveRun(
   run: Run,
   part: RunPart,
   by: number,
   end: number,
-  free: boolean
+  free: boolean,
+  near: Neighbours | null = null
 ): { from: number; to: number } {
   const length = run.to - run.from;
+  const edges = free ? null : near;
   if (part === "body") {
-    const at = clampRunMove(
-      snapRun("body", run.from + by, free),
-      length,
-      run.floor,
-      end
-    );
+    const snapped = snapRun("body", run.from + by, free);
+    // Either edge of the body may meet a neighbour; the nearer one wins.
+    const byStart = toEdge(snapped, edges) - snapped;
+    const byEnd = toEdge(snapped + length, edges) - (snapped + length);
+    const shift =
+      byStart !== 0 && (byEnd === 0 || Math.abs(byStart) <= Math.abs(byEnd))
+        ? byStart
+        : byEnd;
+    const at = clampRunMove(snapped + shift, length, run.floor, end);
     return { from: at, to: at + length };
   }
   if (part === "end") {
+    const snapped = run.from + snapRun("end", length + by, free);
     const next = clampRunResizeEnd(
-      snapRun("end", length + by, free),
+      toEdge(snapped, edges) - run.from,
       run.from,
       end
     );
@@ -602,7 +705,7 @@ export function moveRun(
   const moved = clampRunResizeStart(run.from + by, run.from, length, run.floor);
   const snapped = snapRun("start", moved.length, free);
   const begins = clampRunResizeStart(
-    run.to - snapped,
+    toEdge(run.to - snapped, edges),
     run.from,
     length,
     run.floor
@@ -672,36 +775,17 @@ export const redelay = (track: Track, delay: number): Clip[] => {
   );
 };
 
-/**
- * A curve in plain words, as motion tools name them (Jitter's presets, each
- * with its intensity: jitter.video/changelog/2023-11-08-easings-intensity):
- * a shape and how strongly it bends, from 0 (a straight line) to 1.
- */
-export type Shape = "linear" | "smooth" | "slowDown" | "speedUp" | "spring";
-type Bent = "smooth" | "slowDown" | "speedUp";
-
-/** The straight line, and each shape at its strongest, as cubic-bezier's four numbers. */
-const LINE = [1 / 3, 1 / 3, 2 / 3, 2 / 3];
-const STRONGEST: Record<Bent, number[]> = {
-  smooth: [0.87, 0, 0.13, 1],
-  slowDown: [0.16, 1, 0.3, 1],
-  speedUp: [0.7, 0, 0.84, 0],
-};
 /** CSS's keywords as their four numbers (CSS Easing Functions Level 1). */
 const KEYWORDS: Record<string, number[]> = {
   ease: [0.25, 0.1, 0.25, 1],
   "ease-in": [0.42, 0, 1, 1],
   "ease-out": [0, 0, 0.58, 1],
   "ease-in-out": [0.42, 0, 0.58, 1],
-  linear: LINE,
+  linear: [1 / 3, 1 / 3, 2 / 3, 2 / 3],
 };
-/** How far off a shape a curve may stand and still be called by its name. */
-const NEAR = 0.2;
-/** A straight line, near enough. */
-const STRAIGHT = 0.02;
 
 /** A cubic-bezier's four numbers, from its CSS; null for a spring's `linear(…)` or steps. */
-export function bezierOf(easing: string): number[] | null {
+function bezierOf(easing: string): number[] | null {
   const said = easing.trim();
   const keyword = KEYWORDS[said];
   if (keyword) {
@@ -711,63 +795,6 @@ export function bezierOf(easing: string): number[] | null {
     ? (said.match(NUMBERS) ?? []).map(Number)
     : [];
   return numbers.length === 4 ? numbers : null;
-}
-
-/** Four numbers as CSS. */
-export const cubic = (at: readonly number[]): string =>
-  // golar-ignore-next-line house/no-raw-motion -- a curve for the component under review, never the dashboard's own motion
-  `cubic-bezier(${at.map((one) => Number(one.toFixed(3))).join(", ")})`;
-
-/** A shape at `intensity`, as CSS. */
-export const easingOf = (shape: Bent, intensity: number): string =>
-  cubic(
-    LINE.map((one, i) => one + ((STRONGEST[shape][i] ?? one) - one) * intensity)
-  );
-
-/** How near `bezier` stands to `shape`, and at what intensity. */
-function nearness(
-  bezier: readonly number[],
-  shape: Bent
-): { intensity: number; off: number } {
-  const way = LINE.map((one, i) => (STRONGEST[shape][i] ?? one) - one);
-  const from = bezier.map((one, i) => one - (LINE[i] ?? 0));
-  const along =
-    way.reduce((sum, one, i) => sum + one * (from[i] ?? 0), 0) /
-    way.reduce((sum, one) => sum + one * one, 0);
-  const intensity = Math.max(0, Math.min(1, along));
-  return {
-    intensity,
-    off: Math.hypot(...from.map((one, i) => one - (way[i] ?? 0) * intensity)),
-  };
-}
-
-/** A clip's curve as a shape and its intensity; `own` when no shape is near it. */
-export function shapeOfCurve(
-  easing: string,
-  spring: Spring | null
-): { intensity: number; shape: Shape | "own" } {
-  if (spring) {
-    return { shape: "spring", intensity: spring.bounce };
-  }
-  const bezier = bezierOf(easing);
-  if (!bezier) {
-    return { shape: "own", intensity: 0 };
-  }
-  if (bezier.every((one, i) => Math.abs(one - (LINE[i] ?? 0)) < STRAIGHT)) {
-    return { shape: "linear", intensity: 0 };
-  }
-  let best: { intensity: number; off: number; shape: Shape | "own" } = {
-    shape: "own",
-    intensity: 0,
-    off: NEAR,
-  };
-  for (const shape of Object.keys(STRONGEST) as Bent[]) {
-    const near = nearness(bezier, shape);
-    if (near.off < best.off) {
-      best = { shape, ...near };
-    }
-  }
-  return { shape: best.shape, intensity: best.intensity };
 }
 
 const STEP = 1 / 120;
@@ -928,85 +955,4 @@ export function curveGlyph(easing: string): string | null {
   }
   const [x1 = 0, y1 = 0, x2 = 1, y2 = 1] = bezier;
   return `M2 22 C${x(x1)} ${y(y1)} ${x(x2)} ${y(y2)} 22 2`;
-}
-
-/** What a clip changes, when it is one property between two plain numbers: its name, from, to and unit. */
-export interface Delta {
-  from: number;
-  property: string;
-  to: number;
-  unit: string;
-}
-
-const PLAIN = /^(-?\d*\.?\d+)([a-z%]*)$/u;
-/** A transform that only moves: `matrix(1, 0, 0, 1, x, y)`, or a `translate`. */
-const MATRIX = /^matrix\(([^)]*)\)$/u;
-
-/** A frame's value as plain numbers by axis: `120px` → {"": [120, "px"]}; a moving matrix → x and y in px. */
-function plainOf(value: string): Map<string, [number, string]> | null {
-  const said = value.trim();
-  const plain = said.match(PLAIN);
-  if (plain) {
-    return new Map([["", [Number(plain[1]), plain[2] ?? ""]]]);
-  }
-  if (said === "none") {
-    return new Map([
-      ["x", [0, "px"]],
-      ["y", [0, "px"]],
-    ]);
-  }
-  const matrix = said.match(MATRIX);
-  const n = (matrix?.[1] ?? "").split(",").map(Number);
-  if (n.length === 6 && n[0] === 1 && n[1] === 0 && n[2] === 0 && n[3] === 1) {
-    return new Map([
-      ["x", [n[4] ?? 0, "px"]],
-      ["y", [n[5] ?? 0, "px"]],
-    ]);
-  }
-  return null;
-}
-
-/**
- * What a clip of one property changes, as its first and last frames say
- * it, when both are plain numbers in one unit (`height 0 → 120 px`,
- * `opacity 0 → 1`); a transform that only moves is said by the axis that
- * moves (`y 16 → 0 px`). Null for anything else: the row says how it moves.
- */
-export function deltaOf(clip: Clip): Delta | null {
-  if (clip.property.includes(",")) {
-    return null;
-  }
-  const key = clip.property.replace(/-([a-z])/gu, (_, c: string) =>
-    c.toUpperCase()
-  );
-  const first = clip.frames[0]?.[key];
-  const last = clip.frames.at(-1)?.[key];
-  if (typeof first !== "string" || typeof last !== "string") {
-    return null;
-  }
-  const a = plainOf(first);
-  const b = plainOf(last);
-  if (!(a && b)) {
-    return null;
-  }
-  const moved = [...a.keys()].filter(
-    (one) => b.has(one) && a.get(one)?.[0] !== b.get(one)?.[0]
-  );
-  const [axis] = moved;
-  if (moved.length !== 1 || axis === undefined) {
-    return null;
-  }
-  const [from, unit] = a.get(axis) as [number, string];
-  const [to, toUnit] = b.get(axis) as [number, string];
-  // 0 is written bare in either unit.
-  if (unit !== toUnit && from !== 0 && to !== 0) {
-    return null;
-  }
-  const round = (v: number) => Math.round(v * 100) / 100;
-  return {
-    property: axis === "" ? clip.property : axis,
-    from: round(from),
-    to: round(to),
-    unit: unit || toUnit,
-  };
 }

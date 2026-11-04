@@ -476,20 +476,32 @@
     const seen = new Map<Animation, number>();
     /** Each clip as the engine had it when it was first seen: a transition's engine drops its effect once it ends. */
     const clips: Clip[] = [];
+    /** Each clip's animation, whose own start time on the document's clock places it. */
+    const started = new Map<Clip, Animation>();
+    /**
+     * Where a clip was set off, ms after the press: its animation's own
+     * start time on the document's timeline (the clock `performance.now()`
+     * reads), so animations set off in one frame share one moment; the
+     * frame it was first seen in only while the engine has not yet started
+     * it. Read at the frame it was seen, the same move read 832, 833 and
+     * 831 ms across replays, and a fade begun with its label at 1 ms.
+     */
+    const startOf = (animation: Animation, firstSeen: number) =>
+      typeof animation.startTime === "number"
+        ? animation.startTime - t0
+        : firstSeen;
     /** A new animation read as a clip (a loop is a state's own, not the move's); with `still`, landed at once. */
     const take = (animation: Animation) => {
       if (statesOwn(animation)) {
         return;
       }
-      const clip = clipOf(
-        animation,
-        Math.round(performance.now() - t0),
-        clips.length
-      );
+      const clip = clipOf(animation, performance.now() - t0, clips.length);
       if (clip.duration > 0) {
         clips.push(clip);
+        started.set(clip, animation);
       }
       if (still) {
+        clip.start = startOf(animation, clip.start);
         land(animation);
       }
     };
@@ -530,6 +542,11 @@
       await settle();
       scan();
       await quietOf(seen);
+      if (!still) {
+        for (const [clip, animation] of started) {
+          clip.start = startOf(animation, clip.start);
+        }
+      }
       // A move longer than its read (a 30-minute fill, cut at MOTION_MS)
       // is whole in its clips, read from its timing: the stage rests at
       // its end, where a shorter move's own animations end, and nothing of
@@ -561,7 +578,7 @@
     // Each thing named as it stands once the move has ended: what he sees.
     return clips.map((clip) => ({
       ...clip,
-      start: clip.start - origin,
+      start: Math.round(clip.start - origin),
       ...(clip.thing?.isConnected ? { element: nameOf(clip.thing) } : {}),
     }));
   }

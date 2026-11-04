@@ -56,8 +56,21 @@ export const graphWords = {
   /** One line per difference. */
   cameIn: (element: string) => `${element} added`,
   went: (element: string) => `${element} removed`,
-  changed: (element: string, before: string, after: string) =>
-    `${element}: ${before} → ${after}`,
+  /**
+   * A value that changed, its two values in the order the drawings stand
+   * side by side (the kept state's, then the compared one's), the arrow
+   * pointing the way it changed: from the compared state into the kept
+   * one, as "added" and "removed" read. An empty side is said in words,
+   * never an arrow to nothing.
+   */
+  changed: (element: string, kept: string, compared: string) => {
+    if (compared === "") {
+      return `${element} filled in: ${kept}`;
+    }
+    return kept === ""
+      ? `${element} emptied (was ${compared})`
+      : `${element}: ${kept} ← ${compared}`;
+  },
   changedPlain: (element: string) => `${element} changed`,
   sameAs: (state: string) => `No difference from ${state}.`,
   /** The list of differences at the stage's head, its name for a screen reader. */
@@ -73,12 +86,16 @@ export const graphWords = {
   /** A move's arrow on the map, for a reader: its two states and the act that makes it. */
   moveEdge: (from: string, to: string, act: string | null) =>
     act ? `${from} → ${to}, ${act}` : `${from} → ${to}`,
-  noMove: (state: string) =>
-    `${state} has no animation. Choose a move above, or press an arrow on the map.`,
-  /** The Animation face's list of moves: its name, and its words while none is chosen. */
+  /** A state no animated move leads into. */
+  noMove: (state: string) => `Nothing animates into ${state}.`,
+  /** The face's title while no move is on it: the menu of moves. */
   chooseMove: "Choose a move",
+  /** The title's menu, for a reader. */
+  moves: "Moves",
   play: "Play",
   pause: "Pause",
+  /** Play goes round again from its start each time the move ends. */
+  repeat: "Repeat",
   /** The playhead's time over the move's length, tabular figures; a narrow corner breaks it after the slash, never between a figure and its unit. */
   playhead: (at: Figure, of: Figure) => `${at}\u00a0/ ${of}\u00a0ms`,
   scrub: "Time",
@@ -113,7 +130,7 @@ export const graphWords = {
   } as Record<string, string>,
   /** How a clip moves when its property is none of those (a custom property's). */
   changes: "changes",
-  /** A curve named by its token, else said as what it is. */
+  /** A curve named by its token. */
   curves: {
     "--ease-out": "Ease-out",
     "--ease-in-out": "Ease-in-out",
@@ -122,82 +139,76 @@ export const graphWords = {
     "--ease-goo": "Goo",
     linear: "Linear",
   } as Record<string, string>,
-  /** A curve no token names. */
-  ownCurve: "Custom curve",
+  /** The design system's durations, by token: the lengths a drag settles on. */
+  durations: {
+    "--dur-control": "Control",
+    "--dur-menu": "Menu",
+    "--dur-toggle": "Toggle",
+    "--dur-exit": "Exit",
+    "--dur-morph": "Morph",
+    "--dur-fade": "Fade",
+    "--dur-grow-exit": "Grow exit",
+    "--dur-pop": "Pop",
+    "--dur-panel": "Panel",
+    "--dur-glide": "Glide",
+    "--dur-grow": "Grow",
+    "--dur-lift": "Lift",
+    "--dur-settle": "Settle",
+  } as Record<string, string>,
+  /** The curve the agent wrote, when it is none of the design system's: offered to go back to. */
+  asWritten: "As written",
   /** A clip's element when nothing names it. */
   element: "Element",
 
-  /** A row of the move, one per thing that moves, named as a person says it: "Form failure unfolds". Its length stands in its own column; its words are the press that opens its editor. */
+  /** A row of the move, one per thing that moves, named as a person says it: "Form failure unfolds". */
   clipName: (element: string, how: string) => `${element} ${how}`,
-  length: "Duration",
-  /** Lengths offered first, in plain words with their figure beside each. */
-  lengths: [
-    { name: "Quick", ms: 150 },
-    { name: "Standard", ms: 250 },
-    { name: "Slow", ms: 400 },
-  ],
-  longer: "Longer",
-  shorter: "Shorter",
-  curve: "Curve",
-  /** The curves offered first, by their shape (Jitter's presets). */
-  shapes: {
-    linear: "Linear",
-    smooth: "Smooth",
-    slowDown: "Slow down",
-    speedUp: "Speed up",
-    spring: "Spring",
-  } as Record<string, string>,
-  /** A curve no shape is near: its four numbers stand under Advanced. */
-  ownShape: "Custom curve: none of these shapes matches it",
-  /** How strongly the chosen shape bends. */
-  intensity: "Intensity",
-  advanced: "Advanced",
-  custom: "Curve numbers",
-  bounce: "Bounce",
-  mass: "Mass",
-  stiffness: "Stiffness",
-  damping: "Damping",
+  /** A clip's three settings, each a chip under its selected row. */
+  length: "Length",
   delay: "Delay",
-  reset: "Reset",
+  curve: "Curve",
+  /** A length typed by hand, off the design system's durations. */
+  ownLength: "Own length",
+  /** The delay's steppers. */
+  earlier: "Earlier",
+  later: "Later",
+  spring: "Spring",
+  bounce: "Bounce",
   ms: (value: Figure) => `${value} ms`,
-  /** A length's unit, beside its figure in the editor. */
+  /** A length's unit, beside its figure in a field. */
   msUnit: "ms",
-  /** A value he changed, marked on itself (the row's length, the editor's value names): pressing it puts that one value back as the agent built it. Its name and tooltip. */
+  /** A value he changed carries the restore glyph; its name and tooltip say what it goes back to. */
   resetLength: (ms: Figure) => `Reset length to ${ms} ms`,
   resetCurve: (curve: string) => `Reset curve to ${curve}`,
   resetDelay: (ms: Figure) => `Reset delay to ${ms} ms`,
-  /** Reset, every value back: the visible word is `reset`; a reader hears its object. */
-  resetAll: "Reset all edits",
-  /** The editor's row naming what the clip changes, when it is one number. */
-  changesHead: "Changes",
-  /** What the clip changes, when it is one number: the editor's Changes row. */
-  property: (name: string, from: Figure, to: Figure, unit: string) =>
-    `${name} ${from} → ${to} ${unit}`,
-  propertyOf: (name: string, from: Figure, to: Figure, unit: string) =>
-    `${name} from ${from} to ${to} ${unit}`,
+  /** A changed row's restore glyph: every value of that row back. */
+  resetRow: (row: string) => `Reset ${row}`,
+  /** Every value of every row back: its visible words, and what a reader hears. */
+  resetAll: "Reset all",
+  resetAllSaid: "Reset all edits",
+  /** The two whole versions of the move's timing, once he changed any. */
+  versions: "Timing",
+  written: "As written",
+  yours: "Yours",
+  /** How many animations his version changes, beside Yours. */
+  changedCount: (n: Figure) => `${n} changed`,
 
   /** A row with several animations, opened into one row each. */
   showClips: (n: number) => `Show ${n} animations`,
   hideClips: (n: number) => `Hide ${n} animations`,
   /** A spring row: its length's figure; a spring has no set length, so its figure is when it settles. */
   springFigure: (ms: Figure) => `~${ms} ms`,
-  springSettles: (ms: Figure) => `A spring, settled by ${ms} ms`,
+  /** A row whose animations run for different lengths: the shortest and the longest. */
+  lengthRange: (low: Figure, high: Figure) => `${low}–${high}\u00a0ms`,
   /** The bar's body, dragged: the whole animation along the lane. */
   moveClip: (clip: string) => `Move ${clip}`,
   /** One run of a row that runs more than once: its bar's name for a reader. */
   runOf: (clip: string, at: number, of: number) =>
     `${clip}, run ${at} of ${of}`,
-  /** An animation's row under its row, by the run it is in: "Run 2". */
-  runShort: (at: number) => `Run ${at}`,
+  /** An animation's row under its row, when its thing runs more than once: which run it is in. */
+  runAt: (at: number) => `run ${at}`,
   /** A run's bar's tooltip: its name and where it runs. */
   runSpan: (run: string, from: Figure, to: Figure) =>
     `${run}: ${from}–${to} ms`,
-  /** A row of several runs: its length figure is its whole span; its tooltip says so. */
-  runsSpan: (n: number, from: Figure, to: Figure) =>
-    `${n} runs, ${from}–${to} ms`,
-  /** The editor's curve sections: the house's curves, then the shapes. */
-  designSystem: "Design system",
-  shapesHead: "Shapes",
 
   /** A list state's record sets, each a variant. */
   recordsOne: "One record",

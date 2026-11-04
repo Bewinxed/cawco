@@ -234,7 +234,9 @@ export function differences(
           shown,
           "changed",
           said
-            ? words.changed(name, short(said[0]), short(said[1]))
+            ? // In the order the two drawings stand side by side, the kept
+              // one first (its value is `part`'s, the compared one's `was`'s).
+              words.changed(name, short(said[1]), short(said[0]))
             : words.changedPlain(name)
         )
       );

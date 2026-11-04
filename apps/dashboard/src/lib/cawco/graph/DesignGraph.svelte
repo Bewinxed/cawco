@@ -104,7 +104,15 @@
     type ReviewInput,
     reviewOf,
   } from "./model";
-  import { type Clip, lengthOf, Replays, tunedRecord, untune } from "./motion";
+  import {
+    type Clip,
+    lengthOf,
+    Replays,
+    tunedRecord,
+    tuningOf,
+    untune,
+    withTuning,
+  } from "./motion";
   import Stage, { type Shown } from "./Stage.svelte";
   import Stepper from "./Stepper.svelte";
   import WholeSet from "./WholeSet.svelte";
@@ -288,6 +296,19 @@
   let move = $state<MoveState>({ kind: "none", state: "" });
   let playhead = $state(0);
   let playing = $state(false);
+  /** Play runs the move again from its start each time it ends, until pressed off. */
+  let repeat = $state(false);
+  /** Which timing the face shows and Play plays: his, or the agent's as written (two whole versions, the owner's pick). */
+  let version = $state<"yours" | "written">("yours");
+  /** A scrub left the move held on a frame between its two states. */
+  let holding = false;
+  /**
+   * What he tuned on every move, by the move's states (`from->to`): put
+   * back on each new read of that move, and every one of them sent to the
+   * agent. Choosing another move and back lost his edits, and the record
+   * held the last move's alone.
+   */
+  const tunings = new Map<string, { name: string; clips: Clip[] }>();
   let run = 0;
   let clock = 0;
   const replays = new Replays();
@@ -302,8 +323,13 @@
     playing = false;
     cancelAnimationFrame(clock);
   };
-  /** The animation as read, with what he changed: what the rows show and Play plays. */
-  const clipsNow = (): Clip[] => (move.kind === "ready" ? move.clips : []);
+  /** The animation as Play plays it: his timing, or the agent's as written. */
+  const clipsNow = (): Clip[] => {
+    if (move.kind !== "ready") {
+      return [];
+    }
+    return version === "written" ? move.clips.map(untune) : move.clips;
+  };
 
   /**
    * The stage is on its way to the kept state (mounting it, or playing and
@@ -456,18 +482,22 @@
     if (mine !== run) {
       return;
     }
+    const tuned = movePair ? tunings.get(movePair) : undefined;
+    // What he tuned on this move before, put back on its fresh read.
+    const read = tuned ? withTuning(clips, tuningOf(tuned.clips)) : clips;
     // What the press changed, brought into view where it stands out of
     // it (bring-into-view moves nothing for a region already in view): on
     // a phone, Next to Hub didn't answer changed a line 500px under the
     // drawer's top. The stage's first arrival moves nothing.
     if (from) {
-      requestAnimationFrame(() => stage?.reveal(regionOf(clips)));
+      requestAnimationFrame(() => stage?.reveal(regionOf(read)));
     }
     // The stage's scroll stays where it stands: on open, at the drawing's
     // top, its head whole at every width (a reveal of the region the move
     // changed, at the form's foot, scrolled its top out of view under
     // 1200px); after that, where he left it.
-    move = from ? { kind: "ready", from, to, clips } : none;
+    holding = false;
+    move = from ? { kind: "ready", from, to, clips: read } : none;
   };
   // Each kept state is reached on the one live instance; a width or a
   // scheme picked lays it out anew and moves nothing.
@@ -482,8 +512,6 @@
     });
   });
 
-  /** A scrub during play: once let go, the move plays on. */
-  let resume = false;
   const play = () => {
     const clips = clipsNow();
     if (clips.length === 0) {
@@ -494,6 +522,7 @@
     // the drawer, the stage scrolled to the form's head.
     stage?.reveal(regionOf(clips));
     const length = lengthOf(clips);
+    holding = false;
     if (still) {
       replays.seek(clips, length);
       stage?.fadeIn();
@@ -503,26 +532,40 @@
     const from = playhead >= length ? 0 : playhead;
     replays.play(clips, from);
     playing = true;
-    const t0 = performance.now();
+    let t0 = performance.now() - from;
     const step = () => {
-      playhead = Math.min(length, from + (performance.now() - t0));
+      playhead = Math.min(length, performance.now() - t0);
       if (playhead >= length) {
-        playing = false;
-        playhead = 0;
-        return;
+        // On repeat it goes round again from its start; else it rests, its
+        // playhead back at the start (his answer: it plays, then rests at
+        // its start).
+        if (repeat) {
+          replays.play(clips, 0);
+          t0 = performance.now();
+          playhead = 0;
+        } else {
+          playing = false;
+          playhead = 0;
+          return;
+        }
       }
       clock = requestAnimationFrame(step);
     };
     clock = requestAnimationFrame(step);
   };
-  /** A scrub while the move plays pauses it; let go, it plays on from there (DialKit's rule). */
+  /** A scrub, during a play too: the move held on that frame where he lets go (T3). */
   const scrub = (t: number) => {
-    if (playing) {
-      resume = true;
-    }
     stop();
+    holding = true;
     playhead = t;
     replays.seek(clipsNow(), t);
+  };
+  /** A scrub let go on the move's end lands on its to state: the replays let go, the stage the kept state as it stands. */
+  const scrubbed = (t: number) => {
+    if (t >= lengthOf(clipsNow())) {
+      replays.release();
+      holding = false;
+    }
   };
   /**
    * A move whose play threw, played again (its Try again): the stage is
@@ -534,39 +577,37 @@
     heading = null;
     arrive(review, kept);
   };
-  const scrubbed = () => {
-    if (resume) {
-      resume = false;
-      play();
-    }
-  };
   /**
-   * Every change he made goes to the artifact as the component canvas's
+   * Every move he tuned goes to the artifact as the component canvas's
    * `tuned` record (stage-host canvas chrome.ts `openMove`), the tuned clips
-   * alone, 300 ms after the last change, through the preview's bridge;
-   * `artifact_read` answers it. A reset clip leaves the record.
+   * alone of every move, 300 ms after the last change, through the
+   * preview's bridge; `artifact_read` answers it. A reset clip leaves the
+   * record.
    */
   const SEND_AFTER_MS = 300;
   let sending: ReturnType<typeof setTimeout> | undefined;
   const sendTuned = () => {
     clearTimeout(sending);
-    const now = move;
     sending = setTimeout(() => {
-      if (now.kind === "ready") {
-        bridge()
-          ?.set("tuned", tunedRecord(words.move(now.from, now.to), now.clips))
-          .catch(() => undefined);
-      }
+      bridge()
+        ?.set(
+          "tuned",
+          [...tunings.values()].flatMap((one) =>
+            tunedRecord(one.name, one.clips)
+          )
+        )
+        .catch(() => undefined);
     }, SEND_AFTER_MS);
   };
   /**
-   * The clips he tuned put in the move, which plays at once from where the
-   * changed row now begins: he nudges a length or a curve "and feel[s] the
-   * difference before he writes a remark" (spec.md §2, "That's too slow.
-   * Let me try 260."), and the difference is that row's. What ran before
-   * it stands at its end; what runs with it plays with it.
+   * The clips he tuned put in the move. A press or a drag let go plays it
+   * at once from where the changed row now begins: he nudges a length or
+   * a curve "and feel[s] the difference before he writes a remark" (spec.md
+   * §2); what ran before it stands at its end. A key's nudge plays nothing
+   * (T9: "stillness after a keyboard nudge"; DESIGN.md, The Frequency
+   * Rule): a held frame is drawn again on the new timing, the rest stays.
    */
-  const retime = (changed: readonly Clip[]) => {
+  const retime = (changed: readonly Clip[], replay = true) => {
     if (move.kind !== "ready" || changed.length === 0) {
       return;
     }
@@ -575,8 +616,28 @@
       ...move,
       clips: move.clips.map((clip) => by.get(clip.id) ?? clip),
     };
+    version = "yours";
+    if (movePair) {
+      tunings.set(movePair, {
+        name: words.move(move.from, move.to),
+        clips: move.clips,
+      });
+    }
     sendTuned();
+    if (!replay) {
+      if (holding) {
+        replays.seek(clipsNow(), playhead);
+      }
+      return;
+    }
     playhead = Math.min(...changed.map((clip) => clip.start + clip.delay));
+    play();
+  };
+  /** One version or the other on the face: Play plays it, from its start. */
+  const showVersion = (next: "yours" | "written") => {
+    version = next;
+    stop();
+    playhead = 0;
     play();
   };
 
@@ -926,9 +987,12 @@
     }}
     onpause={stop}
     onplay={play}
+    onrepeat={(next) => {
+      repeat = next;
+    }}
     onreset={(ids) =>
       retime(
-        clipsNow()
+        (move.kind === "ready" ? move.clips : [])
           .filter((clip) => ids.includes(clip.id))
           .map(untune)
       )}
@@ -936,10 +1000,13 @@
     onretry={retry}
     onseek={scrub}
     onseekend={scrubbed}
+    onversion={showVersion}
     {lang}
     {peek}
     {playhead}
     {playing}
+    {repeat}
+    {version}
   />
 {/snippet}
 
