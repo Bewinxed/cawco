@@ -3085,8 +3085,15 @@ workspace_archive_ends_all() {
   [[ "$answer" == *"HTTP 200" ]]
   wait_until 60 '[[ "$(ws_item | json "d => [\"starting\", \"running\"].includes(d.state) ? \"live\" : \"ended\"")" == ended ]]' || { echo "the work item is still $(ws_item_says)"; return 1; }
   echo "the work item before the archive: $(ws_item_says)"
+  # Its preview proof-served is a try the person hasn't sent, so it still waits on him: his archive is refused unless
+  # he confirmed it knowing that (work-items.ts archive, `anyway`: the dashboard's confirm), naming what still waits,
+  # 409, and nothing ends. Confirmed, it goes.
   answer=$(ws_post "/api/workspaces/$id/archive" '{"discard":true}')
-  echo "the hub answered the archive: $answer"
+  echo "the hub answered the archive unconfirmed: $answer"
+  [[ "$answer" == *"proof-served"*"HTTP 409" ]]
+  as_user "$joinerc" kill -0 "$inner"
+  answer=$(ws_post "/api/workspaces/$id/archive" '{"discard":true,"anyway":true}')
+  echo "the hub answered the archive confirmed: $answer"
   [[ "$answer" == *"HTTP 200" ]]
   wait_until 60 '! as_user "$joinerc" kill -0 "'"$inner"'" 2> /dev/null'
   left=""
