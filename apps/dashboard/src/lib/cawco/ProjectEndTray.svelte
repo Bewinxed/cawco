@@ -43,6 +43,7 @@
     at,
     projectId,
     parks = false,
+    opener,
     class: className,
   }: {
     /** This place: the end asked here (`head:<id>`, `rail:<id>`) shows here. */
@@ -56,6 +57,8 @@
      * stands in one place, one press from the page.
      */
     parks?: boolean;
+    /** What asks here (the head's More, the row's link): the focus goes back to it as the tray is put away. */
+    opener?: () => HTMLElement | null | undefined;
     class?: string;
   } = $props();
 
@@ -149,7 +152,7 @@
     {#if job.kind === "caw-off"}
       <CawOffTray class={className} {job} />
     {:else}
-      <StopTray class={className} {job} />
+      <StopTray class={className} {job} {opener} />
     {/if}
   {/if}
   <!-- Caw's off tray put away in his settings is said there while they

@@ -35,13 +35,13 @@
   import ThemeSwitcher from "#lib/components/ui/ThemeSwitcher.svelte";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
+    IconArchive,
     IconBox,
     IconFiles,
     IconPlus,
     IconSearch,
     IconSettings,
     IconSort,
-    IconTrash,
   } from "#lib/icons.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import { page } from "$app/state";
@@ -722,6 +722,8 @@
   const fleetCount = $derived(
     cawco.blockedCount || cawco.runningInstances.length
   );
+  /** A project row's link in the rail: its end's tray hands the focus back to it. */
+  const railLinkId = (projectId: string) => `rail-project-${projectId}`;
 </script>
 
 {#snippet pending(rows: number)}
@@ -1101,7 +1103,7 @@
                   size="icon-sm"
                   variant="ghost"
                 >
-                  <IconTrash />
+                  <IconArchive />
                 </Button>
               {/snippet}
             </Tip>
@@ -1159,6 +1161,7 @@
                         <a
                           {href}
                           {...props}
+                          id={railLinkId(project.id)}
                           aria-current={here ? "page" : undefined}
                           class="{props.class} mark-line"
                           style:--mark-hit-gap="var(--space-3)"
@@ -1194,6 +1197,8 @@
                   >
                     <ProjectEndTray
                       at={endAtRail(project.id)}
+                      opener={() =>
+                        document.getElementById(railLinkId(project.id))}
                       parks
                       projectId={project.id}
                     />

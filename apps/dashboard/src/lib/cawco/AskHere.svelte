@@ -161,7 +161,7 @@
         />
         <Button
           failed={failure !== null}
-          icon={asked.grant ? IconShield : undefined}
+          icon={asked.grant ? IconShield : asked.icon}
           label={asked.confirmLabel}
           onclick={accept}
           pending={running}

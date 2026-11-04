@@ -7,6 +7,8 @@
 
 import type {
   ForgottenBrings,
+  ForgottenFolderHints,
+  ForgottenPlace,
   ForgottenProject,
 } from "@cawco/core/forgotten-project";
 
@@ -32,26 +34,58 @@ const brings = (over: Partial<ForgottenBrings> = {}): ForgottenBrings => ({
   ...over,
 });
 
+/** Its folder in the hub's trash, which every delete removes. */
+const trash = (id: string, at: string): ForgottenPlace => ({
+  kind: "hub",
+  machineId: "hub",
+  machineName: "hub",
+  path: `/home/bewinxed/.local/share/cawco/trash/projects/${id}-${Date.parse(at)}`,
+});
+
 const named = (
   id: string,
   name: string,
   at: string,
-  over: Partial<ForgottenBrings>
+  over: Partial<ForgottenBrings>,
+  checkouts: Omit<ForgottenPlace, "kind">[] = []
 ): ForgottenProject => ({
   id,
   name,
   by: null,
   forgottenAt: Date.parse(at),
-  brings: brings({ settings: true, places: 1, ...over }),
+  brings: brings({ settings: true, places: 1 + checkouts.length, ...over }),
+  hints: null,
+  places: [
+    trash(id, at),
+    ...checkouts.map((one) => ({ ...one, kind: "checkout" as const })),
+  ],
 });
 
-const folder = (id: string, at: string, tasks = 0): ForgottenProject => ({
+/** A folder forgotten before names, and what it says of itself. */
+const folder = (
+  id: string,
+  at: string,
+  said: Partial<ForgottenFolderHints> = {},
+  tasks = 0
+): ForgottenProject => ({
   id,
   name: null,
   by: null,
   forgottenAt: Date.parse(at),
   brings: brings({ tasks }),
+  hints: {
+    heading: null,
+    newestTask: null,
+    pages: [],
+    stages: [],
+    changedAt: Date.parse(at) - 60_000,
+    ...said,
+  },
+  places: [trash(id, at)],
 });
+
+const SETUP = { pages: ["setup"] };
+const STAGES = { stages: ["Backlog", "Doing", "Review", "Done"] };
 
 export const SPRING = named(
   "ad960668-2b87-4c56-af49-b1339d599a96",
@@ -63,36 +97,103 @@ export const BALCONY = named(
   "49faef85-c288-40f1-a3b1-1e5c25e035f8",
   "Balcony garden",
   "2026-11-04T20:50:02Z",
-  { pages: 1, sessions: 1, rows: 25 }
+  { pages: 1, sessions: 1, rows: 25 },
+  [{ machineId: "m1", machineName: "obelisk", path: "/home/bewinxed/garden" }]
 );
 
 /** Every row this hub's trash held, newest first. */
+/**
+ * Every row this hub's trash held, newest first. The headings, pages and
+ * stages are what the hub read off the folders (cockpit's read on the host,
+ * 2026-11-04); the task titles stand in for theirs.
+ */
 export const ALL: ForgottenProject[] = [
   SPRING,
   BALCONY,
-  folder("fc8c6bba-f8da-4492-9a73-1f5fb3434432", "2026-11-04T18:55:50Z"),
-  folder("68d9477f-49a4-4eab-a988-90b3224ae56d", "2026-11-04T18:55:34Z"),
-  folder("f30edca5-1504-46cf-8b00-3f839668b922", "2026-11-04T18:17:36Z"),
-  folder("b0a6d00d-e68d-4574-8677-d045347871a9", "2026-11-04T18:16:59Z"),
-  folder("74d6b2c0-476a-408c-9f19-b091dba116eb", "2026-11-04T18:01:17Z"),
-  folder("ba60a989-51df-4527-86bb-5edca83773b3", "2026-11-02T14:30:05Z"),
-  folder("e04cd486-1bad-4f46-b51e-f83232b7973d", "2026-11-02T13:44:19Z"),
+  folder("fc8c6bba-f8da-4492-9a73-1f5fb3434432", "2026-11-04T18:55:50Z", {
+    heading: "ds-probe-landing",
+    ...SETUP,
+  }),
+  folder("68d9477f-49a4-4eab-a988-90b3224ae56d", "2026-11-04T18:55:34Z", {
+    heading: "ds-probe-offer",
+    ...SETUP,
+  }),
+  folder("f30edca5-1504-46cf-8b00-3f839668b922", "2026-11-04T18:17:36Z", {
+    heading: "ds-probe-brand",
+    ...SETUP,
+  }),
+  folder("b0a6d00d-e68d-4574-8677-d045347871a9", "2026-11-04T18:16:59Z", SETUP),
+  folder("74d6b2c0-476a-408c-9f19-b091dba116eb", "2026-11-04T18:01:17Z", {
+    ...SETUP,
+    ...STAGES,
+  }),
+  folder("ba60a989-51df-4527-86bb-5edca83773b3", "2026-11-02T14:30:05Z", {
+    changedAt: null,
+  }),
+  folder("e04cd486-1bad-4f46-b51e-f83232b7973d", "2026-11-02T13:44:19Z", SETUP),
   folder("eeee727d-63a6-4905-835e-e46356116a57", "2026-11-02T11:49:11Z"),
-  folder("abe0b29a-1571-4aa5-8710-09f6db620abd", "2026-10-17T23:40:32Z", 2),
-  folder("f8a10c41-03a7-4590-8436-a54453635dcc", "2026-10-17T23:39:26Z", 1),
+  folder(
+    "abe0b29a-1571-4aa5-8710-09f6db620abd",
+    "2026-10-17T23:40:32Z",
+    {
+      heading: "Sister's June wedding",
+      newestTask: { number: 2, title: "Book the photographer" },
+      ...STAGES,
+    },
+    2
+  ),
+  folder(
+    "f8a10c41-03a7-4590-8436-a54453635dcc",
+    "2026-10-17T23:39:26Z",
+    { newestTask: { number: 1, title: "Measure the hallway" } },
+    1
+  ),
   folder("fa2dc73e-6ace-4690-80cf-bc1d17a5bb71", "2026-10-17T23:39:19Z"),
-  folder("7a75ce63-b3e7-4045-8a1b-f652c6b384fc", "2026-10-17T23:39:17Z", 2),
-  folder("737110bb-d4ad-408a-944b-2841b01cc67f", "2026-10-17T23:39:16Z"),
-  folder("59af646e-e1fc-4447-97c3-a7bc99e0ec01", "2026-10-17T23:39:14Z", 2),
-  folder("4f6094e6-835c-48f2-b0a7-d7db6bbf868b", "2026-10-17T23:39:12Z", 2),
+  folder(
+    "7a75ce63-b3e7-4045-8a1b-f652c6b384fc",
+    "2026-10-17T23:39:17Z",
+    {
+      heading: "Flat hunt",
+      newestTask: { number: 2, title: "Shortlist three viewings" },
+    },
+    2
+  ),
+  folder(
+    "737110bb-d4ad-408a-944b-2841b01cc67f",
+    "2026-10-17T23:39:16Z",
+    STAGES
+  ),
+  folder(
+    "59af646e-e1fc-4447-97c3-a7bc99e0ec01",
+    "2026-10-17T23:39:14Z",
+    {
+      heading: "Flat hunt",
+      newestTask: { number: 2, title: "Ask the agent about the deposit" },
+    },
+    2
+  ),
+  folder(
+    "4f6094e6-835c-48f2-b0a7-d7db6bbf868b",
+    "2026-10-17T23:39:12Z",
+    { newestTask: { number: 2, title: "Draft the brief" } },
+    2
+  ),
   folder("11e2feca-693e-40ae-908f-fb99e1d61862", "2026-10-17T20:34:14Z"),
-  folder("2de131b7-1ee4-438e-92c2-9db73a113ebe", "2026-10-17T19:27:14Z"),
-  folder("b36f1b08-d678-407f-b492-02a7b9c16132", "2026-10-09T22:25:07Z"),
+  folder("2de131b7-1ee4-438e-92c2-9db73a113ebe", "2026-10-17T19:27:14Z", SETUP),
+  folder("b36f1b08-d678-407f-b492-02a7b9c16132", "2026-10-09T22:25:07Z", SETUP),
 ];
 
 /** A folder whose tasks may live on in Cawco, folded in before the trash kept records. */
 export const FOLDED: ForgottenProject = {
-  ...folder("7a75ce63-b3e7-4045-8a1b-f652c6b384fc", "2026-10-17T23:39:17Z", 2),
+  ...folder(
+    "7a75ce63-b3e7-4045-8a1b-f652c6b384fc",
+    "2026-10-17T23:39:17Z",
+    {
+      heading: "Flat hunt",
+      newestTask: { number: 2, title: "Shortlist three viewings" },
+    },
+    2
+  ),
   brings: brings({
     tasks: 2,
     tasksIn: { id: "4d2f1968", name: "Cawco", tasks: 2 },

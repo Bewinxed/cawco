@@ -72,6 +72,7 @@
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
+    IconArchive,
     IconChatAdd,
     IconColumns,
     IconDeleteForGood,
@@ -83,7 +84,6 @@
     IconPlus,
     IconSettings,
     IconSparkles,
-    IconTrash,
     IconUsage,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
@@ -537,15 +537,13 @@
             <IconUsage />
             <span>Spend</span>
           </DropdownMenu.Item>
-          <!-- The project's two ends, as every menu draws its destructive
-               rows: the house's destructive item, set apart at the end. -->
+          <!-- The project's two ends, set apart at the end: Forget, which
+               can be undone, a plain row with the archive glyph; Delete,
+               which cannot, the house's destructive item. -->
           <DropdownMenu.Separator />
           <!-- Each end unfolds under this head (project-end.svelte.ts). -->
-          <DropdownMenu.Item
-            onSelect={() => askEnd(project, endAt, "forget")}
-            variant="destructive"
-          >
-            <IconTrash />
+          <DropdownMenu.Item onSelect={() => askEnd(project, endAt, "forget")}>
+            <IconArchive />
             <span>{projectEndWords.forgetProject}</span>
           </DropdownMenu.Item>
           <DropdownMenu.Item
@@ -615,6 +613,7 @@
 <div data-slot="project-end" class="contents" style:--ask-end="var(--space-5)">
   <ProjectEndTray
     at={endAt}
+    opener={() => more}
     projectId={project.id}
     class="tray-indent-space-7 max-w-128 max-desk:tray-indent-space-5"
   />

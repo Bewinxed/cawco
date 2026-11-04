@@ -16,7 +16,11 @@
   } from "#lib/cawco/client.svelte.js";
   import ForgottenPage from "#lib/cawco/forgotten/ForgottenPage.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import { bringBack, bringBackKey } from "#lib/cawco/project-end.svelte.js";
+  import {
+    bringBack,
+    bringBackKey,
+    bringBackRefusal,
+  } from "#lib/cawco/project-end.svelte.js";
   import { refusals } from "#lib/cawco/refusals.svelte.js";
 
   let list = $state<ForgottenProject[] | null>(null);
@@ -47,6 +51,23 @@
     }
   });
 
+  /** The live project that holds one of its checkouts now: a refused restore links to it. */
+  function holderOf(
+    one: ForgottenProject
+  ): { href: string; name: string } | null {
+    const mine = new Set(
+      one.places.map((place) => `${place.machineId}\0${place.path}`)
+    );
+    const holder = cawco.projects.find((project) =>
+      project.places.some((place) =>
+        mine.has(`${place.machineId}\0${place.path}`)
+      )
+    );
+    return holder
+      ? { href: `/project/${encodeURIComponent(holder.id)}`, name: holder.name }
+      : null;
+  }
+
   async function remove(
     one: ForgottenProject,
     fromDisk: boolean
@@ -66,7 +87,8 @@
   bringBack={(one, name) =>
     bringBack(one.id, { forgottenAt: one.forgottenAt, name })}
   {list}
-  refusalOf={(id) => refusals.reason(bringBackKey(id))}
+  {holderOf}
+  refusalOf={bringBackRefusal}
   reread={read}
   {remove}
   {unread}

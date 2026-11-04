@@ -7172,6 +7172,9 @@ export async function deleteProjectForGood(
   }
 }
 
+/** A refusal that asking again the same way can't change (a conflict, an entry gone): no Try again. */
+export class StandingRefusal extends Error {}
+
 /** Every forgotten project the hub can bring back, newest first. */
 export async function readForgottenProjects(): Promise<ForgottenProject[]> {
   const response = await fetch("/api/projects/forgotten");
@@ -7199,7 +7202,15 @@ export async function restoreProject(
     body: JSON.stringify(asked),
   });
   if (!response.ok) {
-    throw await hubRefusal(response, projectEndWords.notBroughtBackThen);
+    const refused = await hubRefusal(
+      response,
+      projectEndWords.notBroughtBackThen
+    );
+    // A conflict or a gone entry stands until something else changes: asking
+    // again the same way can't bring it back.
+    throw response.status === 409 || response.status === 404
+      ? new StandingRefusal(refused.message)
+      : refused;
   }
   const restored = (await response.json()) as ProjectRestored;
   await readProjects();

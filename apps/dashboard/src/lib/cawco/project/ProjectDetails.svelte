@@ -853,10 +853,11 @@
                         : hostWords(each.machineId)}</span
                     >
                     <!-- The path reads from its end: the folder's tail
-                         stays when it is cut. -->
+                         stays when it is cut, and one that fits starts
+                         under its host (the end of a right-to-left line). -->
                     <span
                       data-slot="path"
-                      class="dir-rtl type-meta truncate text-start text-ink-muted"
+                      class="dir-rtl type-meta truncate text-end text-ink-muted"
                       title={each.path}><bdi>{each.path}</bdi></span
                     >
                   </div>

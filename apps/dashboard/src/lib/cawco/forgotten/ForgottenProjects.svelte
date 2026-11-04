@@ -27,13 +27,17 @@
   import { projectEndWords } from "@cawco/core/words/project-ends";
   import { untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { IconFolder, IconTrash } from "#lib/icons.js";
+  import {
+    IconArchive,
+    IconDeleteForGood,
+    IconFolder,
+    IconReset,
+  } from "#lib/icons.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
-  import { unfold } from "../motion/fold.svelte";
+  import FromDiskBox from "../FromDiskBox.svelte";
   import { reflow } from "../motion/rows.svelte";
   import RowFault from "../RowFault.svelte";
 
@@ -44,6 +48,7 @@
     bringBack,
     remove,
     refusalOf,
+    holderOf = () => null,
     now = Date.now(),
     bringing = null,
     asking = null,
@@ -58,8 +63,13 @@
     bringBack: (one: ForgottenProject, name?: string) => Promise<boolean>;
     /** Deletes one for good; a refusal is thrown in the hub's words. */
     remove: (one: ForgottenProject, fromDisk: boolean) => Promise<void>;
-    /** A refused Bring back's words for the row, or null. */
-    refusalOf: (id: string) => string | null;
+    /**
+     * A refused Bring back for the row: the hub's words, and `standing` when
+     * asking again the same way can't change it (no Try again); or null.
+     */
+    refusalOf: (id: string) => { reason: string; standing: boolean } | null;
+    /** The live project that holds one of its places now, linked from a refusal; null: none. */
+    holderOf?: (one: ForgottenProject) => { href: string; name: string } | null;
     /** The clock its dates are read against. */
     now?: number;
     /** A story's: the row whose Bring back is pending. */
@@ -86,26 +96,52 @@
   /** Rows whose Bring back is waiting on the hub. */
   let pending = $state<string[]>([]);
 
-  const nameOf = (one: ForgottenProject): string =>
-    (typed[one.id] ?? names[one.id] ?? "").trim();
+  /** What a nameless row's field starts from: the heading its folder gives itself, else nothing. */
+  const seedOf = (one: ForgottenProject): string => one.hints?.heading ?? "";
+  /** The name a nameless row would come back under, as its field stands. */
+  const fieldOf = (one: ForgottenProject): string =>
+    typed[one.id] ?? names[one.id] ?? seedOf(one);
+  const nameOf = (one: ForgottenProject): string => fieldOf(one).trim();
   const keyOf = (one: ForgottenProject) => `${one.id}:${one.forgottenAt}`;
 
-  /** When it was forgotten: a time today, a day this year, else a date. */
+  /**
+   * A moment as the list reads it: its day and its time, the year only when
+   * it is not this one. Folders forgotten together tell apart by the minute.
+   */
   function when(at: number): string {
     const date = new Date(at);
-    const today = new Date(now);
-    if (date.toDateString() === today.toDateString()) {
-      return date.toLocaleTimeString(undefined, {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    }
-    return date.toLocaleDateString(undefined, {
+    return date.toLocaleString(undefined, {
       month: "short",
       day: "numeric",
-      ...(date.getFullYear() === today.getFullYear()
+      hour: "2-digit",
+      minute: "2-digit",
+      ...(date.getFullYear() === new Date(now).getFullYear()
         ? {}
         : { year: "numeric" }),
+    });
+  }
+
+  /**
+   * The line under a row's name that tells it from the rest: a named
+   * project's checkout; a folder's newest task, its pages, its stages, and
+   * when its files last changed, which is all that tells two stubs apart.
+   */
+  function detailOf(one: ForgottenProject): string {
+    const checkout = one.places.find((place) => place.kind === "checkout");
+    if (one.name !== null) {
+      return checkout
+        ? projectEndWords.placeAt(checkout.machineName, checkout.path)
+        : "";
+    }
+    const { hints } = one;
+    if (!hints) {
+      return "";
+    }
+    return projectEndWords.folderSays({
+      task: hints.newestTask,
+      pages: hints.pages,
+      stages: hints.stages.length,
+      changed: hints.changedAt === null ? null : when(hints.changedAt),
     });
   }
 
@@ -141,9 +177,21 @@
     }
   }
 
+  /** The checkouts a delete with its files removes, by machine name and path (its hub folder goes either way). */
+  const checkoutsOf = (one: ForgottenProject) =>
+    one.places
+      .filter((place) => place.kind === "checkout")
+      .map((place) => ({ machine: place.machineName, path: place.path }));
+
+  /** What a row is called to a reader and in its question: its name, else when it was forgotten. */
+  const rowName = (one: ForgottenProject): string =>
+    one.name ??
+    one.hints?.heading ??
+    projectEndWords.unnamedAt(when(one.forgottenAt));
+
   function askDelete(one: ForgottenProject, box = false): void {
     fromDisk = box;
-    const name = one.name ?? projectEndWords.unnamed;
+    const name = rowName(one);
     detach(
       asker.ask({
         at: keyOf(one),
@@ -152,6 +200,7 @@
         confirmLabel: projectEndWords.deletePlain,
         pendingLabel: projectEndWords.deleting,
         destructive: true,
+        icon: IconDeleteForGood,
         run: () => remove(one, fromDisk),
       }),
       "delete forgotten"
@@ -193,7 +242,7 @@
       style:--narrow-cols={COLUMNS_NARROW}
     >
       <span class="grid place-items-center text-ink-muted" data-box>
-        <IconTrash aria-hidden="true" class="size-icon-md" />
+        <IconArchive aria-hidden="true" class="size-icon-md" />
       </span>
       <span class="block min-w-0 type-label text-ink-row"
         >{projectEndWords.noneTitle}</span
@@ -215,6 +264,8 @@
         {@const busy = pending.includes(one.id) || bringing === one.id}
         {@const facts = projectEndWords.brings(one.brings)}
         {@const forgot = when(one.forgottenAt)}
+        {@const refusal = refusalOf(one.id)}
+        {@const holder = refusal ? holderOf(one) : null}
         <li
           class="col-span-full grid grid-cols-subgrid border-b border-border-hairline last:border-b-0"
           data-flip
@@ -238,11 +289,14 @@
                   title={one.name}>{one.name}</span
                 >
               {:else if !isNaming(one)}
-                <!-- Forgotten before the hub kept names: Bring back asks
-                     for one here. -->
+                <!-- Forgotten before the hub kept names: the heading its
+                     folder gives itself, else Unnamed; Bring back asks for a
+                     name here, starting from that heading. -->
                 <span
-                  class="block overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-muted"
-                  >{projectEndWords.unnamed}</span
+                  class={[
+                    "block overflow-clip type-label text-ellipsis whitespace-nowrap",
+                    one.hints?.heading ? "text-ink-row" : "text-ink-muted",
+                  ]}>{one.hints?.heading ?? projectEndWords.unnamed}</span
                 >
               {:else}
                 <Input
@@ -259,13 +313,21 @@
                     if (event.key === "Enter") {
                       event.preventDefault();
                       detach(back(one), "bring back");
-                    } else if (event.key === "Escape" && !nameOf(one)) {
+                    } else if (event.key === "Escape") {
                       naming = naming.filter((id) => id !== one.id);
+                      delete typed[one.id];
                     }
                   }}
                   placeholder={projectEndWords.namePlaceholder}
-                  value={typed[one.id] ?? names[one.id] ?? ""}
+                  value={fieldOf(one)}
                 />
+              {/if}
+              {#if detailOf(one)}
+                <span
+                  class="mt-space-row block overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+                  data-slot="detail"
+                  title={detailOf(one)}>{detailOf(one)}</span
+                >
               {/if}
               {#if one.brings.tasksIn}
                 <span
@@ -301,9 +363,11 @@
               class="flex items-center justify-end gap-space-2 @max-forgotten/forgotten:col-start-2 @max-forgotten/forgotten:justify-start"
             >
               <Button
+                aria-label={projectEndWords.bringBackOne(rowName(one))}
                 data-bring-back
-                failed={refusalOf(one.id) !== null}
+                failed={refusal !== null}
                 disabled={isNaming(one) && !name}
+                icon={IconReset}
                 label={projectEndWords.bringBack}
                 onclick={() => back(one)}
                 pending={busy}
@@ -312,6 +376,7 @@
                 variant="outline"
               />
               <Button
+                aria-label={projectEndWords.deleteOne(rowName(one))}
                 data-delete-forgotten
                 disabled={busy}
                 label={projectEndWords.deleteRow}
@@ -321,11 +386,19 @@
               />
             </div>
           </div>
+          <!-- A refusal that can't change by asking again offers no Try
+               again; where a live project holds its place, the way to it. -->
           <RowFault
-            again={() => back(one)}
+            again={refusal && !refusal.standing ? () => back(one) : undefined}
             class="col-span-full"
+            goTo={holder
+              ? {
+                  href: holder.href,
+                  label: projectEndWords.openHolder(holder.name),
+                }
+              : undefined}
             indent="calc(var(--c-row-lead) + var(--space-3))"
-            reason={refusalOf(one.id)}
+            reason={refusal?.reason ?? null}
           />
           <AskHere
             {asker}
@@ -333,29 +406,15 @@
             class="col-span-full pb-space-2"
             indent="calc(var(--c-row-lead) + var(--space-3))"
           >
-            <label
-              class="mark-line flex min-w-0 items-center gap-space-2 type-label text-ink-strong"
-            >
-              <Checkbox
-                data-box
-                checked={fromDisk}
-                onCheckedChange={(on) => {
-                  fromDisk = on === true;
-                }}
-              />
-              <span class="min-w-0">{projectEndWords.fromDisk}</span>
-            </label>
-            {#key fromDisk}
-              <p
-                class="m-0 ps-(--box-indent) type-meta text-pretty text-ink-muted"
-                style:--box-indent="calc(var(--icon-md) + var(--space-2))"
-                in:unfold
-              >
-                {fromDisk
-                  ? projectEndWords.checkoutsGo
-                  : projectEndWords.transcriptsStay}
-              </p>
-            {/key}
+            <!-- The same choice as a live project's delete, said the same:
+                 its checkouts by machine and path, its transcripts. -->
+            <FromDiskBox
+              checked={fromDisk}
+              onchange={(on) => {
+                fromDisk = on;
+              }}
+              places={checkoutsOf(one)}
+            />
           </AskHere>
         </li>
       {/each}

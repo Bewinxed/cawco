@@ -6,6 +6,7 @@
  */
 
 import type { Activity } from "@cawco/core/activity";
+import { type EndWords, projectEndWords } from "@cawco/core/words/project-ends";
 import type { StopJob, StopRow } from "./stop-work.svelte";
 
 export const NAME = "Private office";
@@ -58,7 +59,7 @@ const PLACES: StopJob["places"] = [
   { machineId: "m2", path: "/Users/omar/Documents/office-archive-2026" },
 ];
 
-export const job = (over: Partial<StopJob>): StopJob => ({
+const job = (over: Partial<StopJob>): StopJob => ({
   at: "head:office",
   fromDisk: false,
   kind: "forget",
@@ -83,3 +84,17 @@ export const partway = (rows: StopRow[]): StopRow[] =>
       ? { ...each, state: "stopped", departed: true, arrived: true, gone: true }
       : { ...each, state: "stopping" }
   );
+
+/** A tray's args for StopTrayView: the job, and its end's words. */
+export const tray = (
+  over: Partial<StopJob>
+): { job: StopJob; words: EndWords } => {
+  const one = job(over);
+  return {
+    job: one,
+    words:
+      one.kind === "delete"
+        ? projectEndWords.delete(one.projectName)
+        : projectEndWords.forget(one.projectName),
+  };
+};

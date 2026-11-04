@@ -11,13 +11,13 @@
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import {
+    IconArchive,
     IconCollapseOthers,
     IconDeleteForGood,
     IconExternal,
     IconPalette,
     IconPin,
     IconSessionAdd,
-    IconTrash,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import type { ProjectRow } from "./client.svelte";
@@ -155,9 +155,8 @@
       <!-- Each end unfolds under this row (project-end.svelte.ts). -->
       <ContextMenu.Item
         onSelect={() => askEnd(project, endAtRail(project.id), "forget")}
-        variant="destructive"
       >
-        <IconTrash />
+        <IconArchive />
         <span>{projectEndWords.forgetProject}</span>
       </ContextMenu.Item>
       <ContextMenu.Item

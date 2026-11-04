@@ -88,6 +88,8 @@ export interface AskHereRequest extends Askable {
    * person has allowed so far.
    */
   grant?: boolean;
+  /** The confirm's glyph, so its pending wording is drawn beside it (DESIGN.md, Buttons: Pending). */
+  icon?: Component<SVGAttributes<SVGSVGElement>>;
   /** What the action reaches, named, read live while the question stands. */
   items?: () => AskItem[];
   /** What the confirm button says while `run` runs ("Removing…"). */
