@@ -52,7 +52,6 @@ import type {
   ProjectOfferSummary,
   ProjectStopFrame,
 } from "@cawco/core/frames";
-import { servedAsPreview } from "@cawco/core/frames";
 import type {
   EffortLevel,
   HarnessCapabilities,
@@ -5900,18 +5899,20 @@ function dropDeadSocket(socket: WebSocket): void {
 let keptSendsResumed = false;
 
 /**
- * What routes call on mount: the socket is app-scoped, not page-scoped. A
- * document the hub's preview proxy served (core `servedAsPreview`: the
- * dashboard run as a workspace's preview, embedded in a decision page or
- * shown in a panel, on an artifact's own origin) holds no dashboard socket:
- * that origin is no dashboard's, its `/ws/dashboard` is refused, and every
- * retry's handshake queues with the page's other sockets to the same
- * address (a browser opens one at a time per address, RFC 6455 §4.1).
+ * What routes call on mount: the socket is app-scoped, not page-scoped.
+ *
+ * The dashboard served as a workspace's preview (or embedded from one) dials
+ * it too, on its preview origin: the hub relays it to the machine's
+ * listener, that to the workspace's dev server, and its `/ws` proxy to the
+ * hub it names (vite.config.ts `CAWCO_DEV_HUB_URL`), so the page draws that
+ * hub's records. Its handshake holds the browser's one-at-a-time lock per
+ * address (RFC 6455 §4.1.2) for the hub's own answer alone, never the dev
+ * server's: the preview proxy answers 101 before it dials onward (core
+ * preview-proxy.ts `upgradePreview`, `previewWebSocket.open`), and 503 at
+ * once while the preview isn't up (`notUpYet`). A dev server with no hub
+ * closes it, and the retries back off as any refused socket's do.
  */
 export function ensureConnected(): void {
-  if (servedAsPreview(document)) {
-    return;
-  }
   globalThis.__cawcoHubAsked = true;
   if (!keptSendsResumed) {
     keptSendsResumed = true;

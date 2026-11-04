@@ -195,15 +195,6 @@ export const PREVIEW_PING_PATH = "/__cawco/ping";
 export const OVERLAY_PATH = "/__cawco/overlay.js";
 
 /**
- * Whether this document is a page the hub's preview proxy served (the
- * overlay's tag stands in it): a preview, an embed or a stage's canvas on
- * an artifact's own origin, never the dashboard on its own.
- */
-export const servedAsPreview = (doc: {
-  querySelector: (selectors: string) => unknown;
-}): boolean => doc.querySelector(`script[src^="${OVERLAY_PATH}"]`) !== null;
-
-/**
  * Where a page on a preview origin sends its errors (a decision page's host,
  * dashboard lib/cawco/error-report.ts): the hub's own path there, answered as
  * its `/api/dashboard-errors` is (hub dashboard-errors.ts), since every path
