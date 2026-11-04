@@ -30,7 +30,7 @@ export const projectTrashWords = {
     `${machines.join(", ")} ${machines.length === 1 ? "holds" : "hold"} part of ${name} and ${machines.length === 1 ? "is" : "are"} not connected, so nothing of it was deleted. Delete it again once ${machines.length === 1 ? "it is" : "they are"} back.`,
   /** A machine's agent predates deleting a workspace's clone: it is updated first, then the delete runs again. */
   agentTooOld: (name: string, what: string, machine: string) =>
-    `${machine}'s agent is too old to remove ${what.charAt(0).toLowerCase()}${what.slice(1)}, so ${name} is not deleted yet. Update CawCo on ${machine} (Configure › Updates), then delete it again.`,
+    `CawCo on ${machine} is too old to remove ${what.charAt(0).toLowerCase()}${what.slice(1)}, so ${name} is not deleted yet. Update it (Configure › Updates), then delete ${name} again.`,
   /** A machine refused or failed one removal: what went before it stays gone, the project stays listed. */
   notRemoved: (name: string, what: string, machine: string, why: string) =>
     `${what} on ${machine} was not removed (${why}), so ${name} is not deleted yet. What was removed before it stays removed; delete it again to finish.`,

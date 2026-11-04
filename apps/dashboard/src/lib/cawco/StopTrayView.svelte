@@ -622,8 +622,16 @@
                followed the morph's own box and narrowed mid-morph. Its
                words say each state ("Stopped 3 sessions."), so they are
                announced as they change. -->
-          <p aria-live="polite" class="m-0 type-meta text-ink-muted">
-            <MorphText text={description} wrap />
+          <!-- No line where its words are empty (a delete with nothing
+               stopped, once it runs). -->
+          <p
+            aria-live="polite"
+            class="m-0 type-meta text-ink-muted data-empty:hidden"
+            data-empty={description === "" || undefined}
+          >
+            {#if description !== ""}
+              <MorphText text={description} wrap />
+            {/if}
           </p>
         </div>
       </div>

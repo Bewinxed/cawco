@@ -134,15 +134,8 @@ export const projectEndWords = {
         case "fail":
           return kept;
         case "ending":
-          return after(
-            stopped,
-            "Removing its tasks, pages, routines, workspaces and signed-in browsers…"
-          );
         case "done":
-          return after(
-            stopped,
-            "Its tasks, pages, routines, workspaces and signed-in browsers are removed."
-          );
+          return stopped;
       }
     },
     parked: (stopped, total) =>
@@ -192,20 +185,17 @@ export const projectEndWords = {
     const parts = [
       said.task && `#${said.task.number} ${said.task.title}`,
       said.pages.length > 0 &&
-        (said.pages.length === 1
-          ? `${said.pages[0]} page`
-          : `pages ${listed(said.pages)}`),
+        `${listed(said.pages)} ${plural(said.pages.length, "page", "pages")}`,
       said.stages > 0 && count(said.stages, "stage", "stages"),
     ].filter((part): part is string => typeof part === "string");
-    const changed = said.changed ? `files changed ${said.changed}` : null;
-    if (parts.length === 0) {
-      return changed ? `Only its stub; ${changed}` : "Only its stub";
-    }
-    const line = [...parts, ...(changed ? [changed] : [])].join(" · ");
+    const line = [
+      ...(parts.length > 0 ? parts : ["no tasks, pages or stages"]),
+      ...(said.changed ? [`files changed ${said.changed}`] : []),
+    ].join(" · ");
     return line.charAt(0).toUpperCase() + line.slice(1);
   },
   /** A nameless row, to a reader and in its delete question. */
-  unnamedAt: (when: string) => `The unnamed project forgotten ${when}`,
+  unnamedAt: (when: string) => `the unnamed project forgotten ${when}`,
   /** A row's buttons, to a reader: which project each acts on. */
   bringBackOne: (name: string) => `Bring back ${name}`,
   deleteOne: (name: string) => `Delete ${name}…`,
