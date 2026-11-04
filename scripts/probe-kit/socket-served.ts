@@ -5,10 +5,17 @@
  * front of the hub.
  */
 import { existsSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { $ } from "bun";
 import type { KitFleet } from "./kit";
-import { ROOT } from "./kit";
+import {
+  ADAPTER_OUTPUT,
+  builtKey,
+  PUBLISHED_STAMP,
+  publishedKey,
+  ROOT,
+} from "./kit";
 
 /** A loopback port free now. */
 export const freePort = async (): Promise<number> => {
@@ -24,15 +31,24 @@ export const freePort = async (): Promise<number> => {
 
 /**
  * The run's built dashboard (built before `kit.fleet` answers) published
- * where serve.js reads it, `apps/dashboard/build`. A build of this tree an
- * earlier run already published leaves no `.build-next`: the kit builds
- * again only when the tree changed, so `build` is that build.
+ * where serve.js reads it, `apps/dashboard/build`, as the product publishes
+ * it (apps/dashboard/scripts/publish-build.ts moves adapter-node's half
+ * there), stamped with the tree it was built from (kit.ts
+ * `PUBLISHED_STAMP`), so the build stays whole for every spec and run that
+ * serves it (kit.ts `stampSays`). Published already, `build` is that build.
  */
 export const publishBuild = async (): Promise<void> => {
-  if (!existsSync(join(ROOT, "apps/dashboard/.build-next"))) {
-    return;
+  const key = await builtKey();
+  if (!existsSync(ADAPTER_OUTPUT)) {
+    if (key !== "" && (await publishedKey()) === key) {
+      return;
+    }
+    throw new Error(
+      `apps/dashboard/.build-next is gone and build/ holds no build of the run's tree ${key.slice(0, 12) || "(none built)"}: something outside the kit published there`
+    );
   }
   await $`bun ${join(ROOT, "apps/dashboard/scripts/publish-build.ts")}`.quiet();
+  await writeFile(PUBLISHED_STAMP, key);
 };
 
 /**

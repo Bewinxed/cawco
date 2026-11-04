@@ -725,34 +725,82 @@ const treeKey = async (): Promise<string> => {
 };
 
 /**
- * adapter-node's half of the build (vite.config.ts `BUILD_OUT`), which a spec's
- * publish step (apps/dashboard/scripts/publish-build.ts) consumes: it renames
- * it to `build/`. A build whose `.build-next` was published is not whole, and
- * a second run of that spec on the tree would find nothing to publish.
+ * adapter-node's half of the build (vite.config.ts `BUILD_OUT`), which a
+ * spec's publish (socket-served.ts `publishBuild`) moves to `build/`, where
+ * serve.js serves it (apps/dashboard/scripts/publish-build.ts), stamping it
+ * ({@link PUBLISHED_STAMP}).
  */
-const ADAPTER_OUTPUT = join(DASHBOARD, ".build-next");
+export const ADAPTER_OUTPUT = join(DASHBOARD, ".build-next");
 
-/** The checkout's build is this tree's, and whole: its stamp says `key` and adapter-node's output stands unpublished. */
-const stampSays = (key: string): Promise<boolean> =>
-  Bun.file(OUTPUT_STAMP)
+/**
+ * The tree key of the build a publish put in `build/` ({@link treeKey}),
+ * inside it: a publish of any other build (the product's own `bun run
+ * build`) takes the stamp away with the build it replaces.
+ */
+export const PUBLISHED_STAMP = join(DASHBOARD, "build", "probe-tree.txt");
+
+/** A stamp's key, or "" where there is none. */
+const stampOf = (file: string): Promise<string> =>
+  Bun.file(file)
     .text()
-    .then(
-      (stamp) => stamp === key && existsSync(ADAPTER_OUTPUT),
-      () => false
-    );
+    .catch(() => "");
+
+/** The tree key the checkout's build was made from, "" before any. */
+export const builtKey = (): Promise<string> => stampOf(OUTPUT_STAMP);
+
+/** The tree key of the build in `build/`, "" where none of the kit's publishes put it there. */
+export const publishedKey = (): Promise<string> => stampOf(PUBLISHED_STAMP);
+
+/**
+ * The checkout's build is this tree's, and whole: its stamp says `key`, and
+ * adapter-node's half of it stands unpublished or is the build a publish
+ * put in `build/`. A publish leaves the build whole: on 2026-11-04 it made
+ * the build stale, and typed-causes, in a process of its own after
+ * tailnet-serve-titles' publish in its run, waited for a rebuild its own
+ * run's hold refused.
+ */
+const stampSays = async (key: string): Promise<boolean> =>
+  (await builtKey()) === key &&
+  (existsSync(ADAPTER_OUTPUT) || (await publishedKey()) === key);
+
+/**
+ * Set in a run's process once it holds the checkout's build
+ * ({@link builtOutput}): the tree key of that build. Every process run.ts
+ * starts for one of its specs (`runOwnProcess`) inherits it and serves that
+ * build under its run's hold, never deciding again: the run holds the lock
+ * shared until it closes, so a process of its own that wanted the build
+ * made again, for a checkout changed since the run began or a build it
+ * read as not whole, would wait on its own run for ever. A run serves one
+ * build, in every process of it.
+ */
+const RUN_BUILD_ENV = "CAWCO_PROBE_RUN_BUILD";
 
 /**
  * The checkout's build of this tree, built here when it is not, and the
- * descriptor that holds it shared until the run lets it go (`unlock`).
+ * descriptor that holds it shared until the run lets it go (`unlock`). In
+ * a process of a run that holds it already ({@link RUN_BUILD_ENV}), that
+ * run's build, as it is.
  */
 const builtOutput = async (): Promise<number> => {
   await mkdir(KIT_DIR, { recursive: true });
   const fd = openLockFile(OUTPUT_LOCK, true);
   try {
+    const held = process.env[RUN_BUILD_ENV];
+    if (held) {
+      // The run holds the lock shared while this process runs, so no build
+      // can start meanwhile, and none is this process's to start.
+      if (tryShare(fd) && (await stampSays(held))) {
+        return fd;
+      }
+      throw new Error(
+        `this spec's run holds the checkout's build of tree ${held.slice(0, 12)}, and apps/dashboard holds no whole build of it (its stamp says ${(await builtKey()).slice(0, 12) || "none"}, build/'s ${(await publishedKey()).slice(0, 12) || "none"}): something outside the kit built or published there during the run`
+      );
+    }
     const key = await treeKey();
     let waiting = false;
     for (;;) {
       if (tryShare(fd) && (await stampSays(key))) {
+        process.env[RUN_BUILD_ENV] = key;
         return fd;
       }
       release(fd);
@@ -1417,6 +1465,7 @@ export class Run {
     if (this.output !== null) {
       unlock(this.output);
       this.output = null;
+      delete process.env[RUN_BUILD_ENV];
     }
   }
 }

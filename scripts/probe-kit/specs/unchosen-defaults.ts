@@ -76,6 +76,7 @@ import {
   type Spec,
   settle,
 } from "../kit";
+import { publishBuild } from "../socket-served";
 import { shaped, startsWith } from "../words";
 
 const CREATE = "mcp__cawco__artifact_create";
@@ -201,7 +202,7 @@ const connectOnce = async (
 
 /** Checks 1 and 2: serve.js on the published build. */
 const server = async (kit: Kit) => {
-  await $`bun ${join(ROOT, "apps/dashboard/scripts/publish-build.ts")}`.quiet();
+  await publishBuild();
 
   // 1. No CAWCO_HUB_URL. The activator starts serve.js at the first
   // connection, which asks for the page.
