@@ -43,9 +43,13 @@ import { join } from "node:path";
 import type { BrowserKey } from "@cawco/core/browser";
 import type {
   ForgottenBrings,
+  ForgottenFolderHints,
+  ForgottenPlace,
   ForgottenProject,
   ProjectRestored,
 } from "@cawco/core/forgotten-project";
+import { machineCalled } from "@cawco/core/machine-names";
+import { ARTIFACT_NAME } from "@cawco/core/protocol";
 import {
   isDamagedRecord,
   readRecord,
@@ -63,6 +67,7 @@ import {
   trashProjectFolder,
   untrashProjectFolder,
 } from "./project-folder";
+import { readStages } from "./stages";
 import {
   ARCHIVE_DIR,
   fileTaskNumber,
@@ -120,6 +125,9 @@ const MERGE_LINE = `${TRAILERS.change}: ${CHANGES.merge}`;
 
 const entryOf = (projectId: string, at: Date): string =>
   `${projectId}-${at.toISOString().replaceAll(":", "-")}`;
+
+/** The machine the trash's folders are named on: the hub's own, as its places' rows name it (db `HUB_PLACE_MACHINE`). */
+const TRASH_MACHINE = "hub";
 
 const recordPath = (entry: string): string =>
   join(PROJECT_TRASH_DIR, `${entry}${RECORD}`);
@@ -191,28 +199,109 @@ const taskFiles = async (root: string): Promise<number> =>
     (file) => fileTaskNumber(file) !== undefined
   ).length;
 
-/**
- * The slugs of a trashed folder's task files, archived ones too, from each
- * file's title: the names a fold gave them in the project it joined
- * (tasks.ts `adopt`, task-file.ts `taskPath`).
- */
-const trashedSlugs = async (entry: string): Promise<string[]> => {
+/** A trashed folder's task files, archived ones too: each one's number and title. */
+const trashedTasks = async (
+  entry: string
+): Promise<{ number: number; title: string }[]> => {
   const root = join(PROJECT_TRASH_DIR, entry);
-  const slugs: string[] = [];
+  const tasks: { number: number; title: string }[] = [];
   for (const dir of ["tasks", ARCHIVE_DIR]) {
     for (const file of await readdir(join(root, dir)).catch(() => [])) {
-      if (fileTaskNumber(file) === undefined) {
+      const number = fileTaskNumber(file);
+      if (number === undefined) {
         continue;
       }
       const content = await readFile(join(root, dir, file), "utf8").catch(
         () => undefined
       );
       if (content !== undefined) {
-        slugs.push(taskSlug(new TaskDoc(`${dir}/${file}`, content).title()));
+        tasks.push({
+          number,
+          title: new TaskDoc(`${dir}/${file}`, content).title(),
+        });
       }
     }
   }
-  return slugs;
+  return tasks;
+};
+
+/** The heading AGENTS.md's stub opens with (project-folder.ts), which names no project. */
+const STUB_HEADING = "AGENTS.md";
+/** A markdown heading's text, its closing hashes dropped. */
+const HEADING = /^#{1,6}[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/u;
+
+/** The first heading of the folder's AGENTS.md but the stub's; null for none. */
+const headingIn = async (root: string): Promise<string | null> => {
+  const text = await readFile(join(root, "AGENTS.md"), "utf8").catch(() => "");
+  for (const line of text.split("\n")) {
+    const heading = HEADING.exec(line.trim())?.[1]?.trim();
+    if (heading && heading !== STUB_HEADING) {
+      return heading;
+    }
+  }
+  return null;
+};
+
+/** The stage names the folder's stages.md reads to; none when it has none or it does not read. */
+const stagesIn = async (root: string): Promise<string[]> => {
+  const text = await readFile(join(root, "stages.md"), "utf8").catch(
+    () => undefined
+  );
+  const reading = text === undefined ? undefined : readStages(text);
+  return reading?.ok ? reading.stages.stages.map((stage) => stage.name) : [];
+};
+
+/** The folder's decision pages: each folder under decisions/ named as a page is. */
+const pagesIn = async (root: string): Promise<string[]> =>
+  (
+    await readdir(join(root, "decisions"), { withFileTypes: true }).catch(
+      () => []
+    )
+  )
+    .filter((one) => one.isDirectory() && ARTIFACT_NAME.test(one.name))
+    .map((one) => one.name)
+    .sort();
+
+/** When a file under `dir` last changed, git's own left out; null when it holds none. */
+const changedIn = async (dir: string): Promise<number | null> => {
+  let newest: number | null = null;
+  for (const one of await readdir(dir, { withFileTypes: true }).catch(
+    () => []
+  )) {
+    if (one.name === ".git") {
+      continue;
+    }
+    const path = join(dir, one.name);
+    let at: number | null = null;
+    if (one.isDirectory()) {
+      at = await changedIn(path);
+    } else if (one.isFile()) {
+      at = (await stat(path).catch(() => undefined))?.mtimeMs ?? null;
+    }
+    if (at !== null && (newest === null || at > newest)) {
+      newest = at;
+    }
+  }
+  return newest === null ? null : Math.floor(newest);
+};
+
+/** What a trashed folder with no record says about the project, read off its files. */
+const hintsOf = async (
+  entry: string,
+  tasks: readonly { number: number; title: string }[]
+): Promise<ForgottenFolderHints> => {
+  const root = join(PROJECT_TRASH_DIR, entry);
+  const newest = tasks.reduce<{ number: number; title: string } | null>(
+    (best, one) => (best && best.number >= one.number ? best : one),
+    null
+  );
+  return {
+    changedAt: await changedIn(root),
+    heading: await headingIn(root),
+    newestTask: newest,
+    pages: await pagesIn(root),
+    stages: await stagesIn(root),
+  };
 };
 
 /** A fold a live project's folder holds: the task files one merge commit wrote, by slug. */
@@ -387,6 +476,8 @@ export interface TrashedProject {
   browsers: { key: string; machineId: string }[];
   /** The trash entries it has, newest first. */
   entries: string[];
+  /** Its folders in the trash, absolute, newest first. */
+  folders: string[];
   /** The name its newest record gives it; null when none does. */
   name: string | null;
   /** Its places as its records keep them. */
@@ -413,12 +504,17 @@ export const trashedProject = async (
   id: string
 ): Promise<TrashedProject | undefined> => {
   const mine = (await entries()).filter((one) => one.id === id);
-  if (mine.length === 0) {
-    return;
-  }
+  return mine.length === 0 ? undefined : await heldIn(mine);
+};
+
+/** What one project's trash entries hold, `mine` newest first. */
+const heldIn = async (mine: readonly Entry[]): Promise<TrashedProject> => {
   const held: TrashedProject = {
     browsers: [],
     entries: mine.map((one) => one.entry),
+    folders: mine
+      .filter((one) => one.folder)
+      .map((one) => join(PROJECT_TRASH_DIR, one.entry)),
     name: null,
     places: [],
     sessions: [],
@@ -448,6 +544,51 @@ export const trashedProject = async (
     }
   }
   return held;
+};
+
+/** Every place of project `id` the hub records: its live ones, then those its trash records keep. */
+export const recordedPlaces = (
+  db: Pick<DbShape, "project">,
+  id: string,
+  trashed: TrashedProject | undefined
+): { id: string; kind: string; machineId: string; path: string }[] => [
+  ...(db.project(id)?.places ?? []),
+  ...(trashed?.places ?? []),
+];
+
+/** A checkout on a machine's disk that a delete with `fromDisk` removes. */
+export interface DiskPlace {
+  id: string;
+  machineId: string;
+  path: string;
+}
+
+/**
+ * The checkouts a delete of project `id` with `fromDisk` removes
+ * (project-delete.ts): its own live ones and those its trash records keep,
+ * each machine and path once, on machines still in the fleet (one removed
+ * from it holds nothing CawCo can reach). The list of forgotten projects
+ * names the same.
+ */
+export const diskPlaces = (
+  db: Pick<DbShape, "listAgents" | "project">,
+  id: string,
+  trashed: TrashedProject | undefined
+): DiskPlace[] => {
+  const joined = new Set(db.listAgents().map((agent) => agent.machineId));
+  return [
+    ...new Map(
+      recordedPlaces(db, id, trashed)
+        .filter((place) => place.kind === "checkout")
+        .map((place) => [`${place.machineId}\0${place.path}`, place])
+    ).values(),
+  ]
+    .filter((place) => joined.has(place.machineId))
+    .map(({ id: placeId, machineId, path }) => ({
+      id: placeId,
+      machineId,
+      path,
+    }));
 };
 
 /** Every entry of project `id` in the trash gone for good, its folder and its record: how many. */
@@ -543,7 +684,9 @@ export const projectTrash = (
     | "browsers"
     | "createProject"
     | "forgetProject"
+    | "listAgents"
     | "listProjects"
+    | "namedMachines"
     | "project"
     | "restoreProject"
   >
@@ -589,9 +732,11 @@ export const projectTrash = (
   };
   /** What a folder with no record brings, and the project it was folded into when every task of it lives there. */
   const folderAlone = async (entry: Entry, merges: () => Promise<Merge[]>) => {
-    const slugs = await trashedSlugs(entry.entry);
+    const tasks = await trashedTasks(entry.entry);
+    const slugs = tasks.map((one) => taskSlug(one.title));
     const fold = slugs.length > 0 ? foldOf(slugs, await merges()) : undefined;
     return {
+      tasks,
       brings: folderBrings(
         await taskFiles(join(PROJECT_TRASH_DIR, entry.entry)),
         fold ? { ...fold.into, tasks: fold.tasks } : null
@@ -632,11 +777,60 @@ export const projectTrash = (
     };
   };
 
+  /** A machine by the name the hub holds for it now, else its id. */
+  const nameOf = (
+    machineId: string,
+    fleet: ReturnType<typeof db.namedMachines>
+  ): string =>
+    fleet.some((one) => one.machineId === machineId)
+      ? machineCalled(machineId, fleet)
+      : machineId;
+  /**
+   * Every place deleting project `id` with its files removes, read as the
+   * delete reads them (project-delete.ts): its folders in the trash, then
+   * {@link diskPlaces}.
+   */
+  const placesOf = (
+    id: string,
+    held: TrashedProject,
+    fleet: ReturnType<typeof db.namedMachines>
+  ): ForgottenPlace[] => [
+    ...held.folders.map((path): ForgottenPlace => ({
+      kind: "hub",
+      machineId: TRASH_MACHINE,
+      machineName: TRASH_MACHINE,
+      path,
+    })),
+    ...diskPlaces(db, id, held).map(({ machineId, path }): ForgottenPlace => ({
+      kind: "checkout",
+      machineId,
+      machineName: nameOf(machineId, fleet),
+      path,
+    })),
+  ];
+
   /** Every forgotten project of the trash's entries, but folds. */
   const listed = async (): Promise<ForgottenProject[]> => {
     const out: ForgottenProject[] = [];
     const merges = mergesOnce();
-    for (const entry of await entries()) {
+    const all = await entries();
+    const fleet = db.namedMachines();
+    const places = new Map<string, ForgottenPlace[]>();
+    /** Project `id`'s places, read once per call: every entry of it is deleted together. */
+    const placesFor = async (id: string): Promise<ForgottenPlace[]> => {
+      const kept = places.get(id);
+      if (kept) {
+        return kept;
+      }
+      const read = placesOf(
+        id,
+        await heldIn(all.filter((one) => one.id === id)),
+        fleet
+      );
+      places.set(id, read);
+      return read;
+    };
+    for (const entry of all) {
       const record = await recordOf(entry).catch((error: unknown) => {
         if (isDamagedRecord(error)) {
           console.warn(`[hub] forgotten project ${entry.id}: ${error.message}`);
@@ -654,6 +848,8 @@ export const projectTrash = (
           name: record.name,
           forgottenAt: record.forgottenAt,
           by: record.by,
+          hints: null,
+          places: await placesFor(entry.id),
           brings: bringsOf(
             (table) => rows(table).length,
             {
@@ -677,6 +873,8 @@ export const projectTrash = (
           forgottenAt: entry.at,
           by: null,
           brings: alone.brings,
+          hints: await hintsOf(entry.entry, alone.tasks),
+          places: await placesFor(entry.id),
         });
       }
     }

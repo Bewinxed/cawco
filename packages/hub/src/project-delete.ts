@@ -49,7 +49,13 @@ import { projectTrashWords } from "@cawco/core/words/project-trash";
 import type { DbShape } from "./db";
 import type { HeldSession, HeldWorkspace } from "./db/project-work";
 import { deleteProjectFolder } from "./project-folder";
-import { purgeTrash, trashedProject } from "./project-trash";
+import {
+  type DiskPlace,
+  diskPlaces,
+  purgeTrash,
+  recordedPlaces,
+  trashedProject,
+} from "./project-trash";
 
 /** What a delete removed on one machine, by kind. */
 export interface MachineRemoved {
@@ -127,13 +133,6 @@ export interface ProjectDeleteDeps {
   stillRunning: (projectId: string) => number;
 }
 
-/** A place on a machine's disk. */
-interface DiskPlace {
-  id: string;
-  machineId: string;
-  path: string;
-}
-
 /** Whether one of two paths on a machine holds the other, or they are one. */
 const nested = (a: string, b: string): boolean => {
   const slash = (path: string) => (path.endsWith("/") ? path : `${path}/`);
@@ -158,23 +157,7 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
     trashed: Awaited<ReturnType<typeof trashedProject>>
   ): Plan => {
     const joined = new Set(db.listAgents().map((agent) => agent.machineId));
-    const recorded = [
-      ...(db.project(id)?.places ?? []),
-      ...(trashed?.places ?? []),
-    ];
-    const places = [
-      ...new Map(
-        recorded
-          .filter((place) => place.kind === "checkout")
-          .map((place) => [`${place.machineId}\0${place.path}`, place])
-      ).values(),
-    ]
-      .filter((place) => joined.has(place.machineId))
-      .map(({ id: placeId, machineId, path }) => ({
-        id: placeId,
-        machineId,
-        path,
-      }));
+    const recorded = recordedPlaces(db, id, trashed);
     const { sessions, workspaces } = db.projectWork.held(
       id,
       recorded.map((place) => place.id),
@@ -185,7 +168,7 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
         .list()
         .filter((row) => row.key === `project:${id}`)
         .map(({ key, machineId }) => ({ key, machineId })),
-      places,
+      places: diskPlaces(db, id, trashed),
       sessions,
       workspaces: workspaces.filter((one) => joined.has(one.machineId)),
     };

@@ -45,6 +45,40 @@ export interface ForgottenBrings {
   tasksIn: { id: string; name: string; tasks: number } | null;
 }
 
+/**
+ * A place of a forgotten project on disk that deleting it with its files
+ * (`POST /api/projects/:id/delete`, `fromDisk`) removes: a checkout on a
+ * machine, or its folder in the hub's trash.
+ */
+export interface ForgottenPlace {
+  /** `checkout`: a folder on a machine; `hub`: its folder in the hub's trash. */
+  kind: "checkout" | "hub";
+  /** The machine's id; `hub` for the hub's own trash. */
+  machineId: string;
+  /** The machine's name as the hub holds it now; its id when the hub holds none. */
+  machineName: string;
+  /** Absolute on its machine. */
+  path: string;
+}
+
+/**
+ * What a folder forgotten before the hub kept records says about the
+ * project, read off its files: the hub kept nothing else of it. Its task
+ * count is {@link ForgottenBrings.tasks}.
+ */
+export interface ForgottenFolderHints {
+  /** When a file in it last changed, ms since the epoch; null when it holds none outside git's own. */
+  changedAt: number | null;
+  /** The first heading of its AGENTS.md, but the stub's own `AGENTS.md`; null when it has none. */
+  heading: string | null;
+  /** Its newest task, open or archived, by number; null when it has none. */
+  newestTask: { number: number; title: string } | null;
+  /** Its decision pages' names, sorted. */
+  pages: string[];
+  /** Its stages as its stages.md names them; none when it has no stages.md or it does not read. */
+  stages: string[];
+}
+
 export interface ForgottenProject {
   /** What it brings back. */
   brings: ForgottenBrings;
@@ -52,9 +86,20 @@ export interface ForgottenProject {
   by: string | null;
   /** When it was forgotten, ms since the epoch. */
   forgottenAt: number;
+  /**
+   * What its folder says about it, for one forgotten before the hub kept
+   * records (`name` null); null for every other.
+   */
+  hints: ForgottenFolderHints | null;
   id: string;
   /** Null: forgotten before the hub kept its name; a restore names it. */
   name: string | null;
+  /**
+   * Every place deleting it with its files removes, as the delete itself
+   * reads them (hub project-trash.ts `diskPlaces`): its folders in the
+   * hub's trash, then its checkouts on machines still in the fleet.
+   */
+  places: ForgottenPlace[];
 }
 
 /** A restore's answer: the project back, and what came back of it. */

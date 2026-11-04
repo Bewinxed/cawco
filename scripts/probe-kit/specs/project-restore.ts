@@ -30,6 +30,12 @@
  *   a fold's commit wrote into the project that kept it is neither listed
  *   nor restored; one only some of whose tasks one wrote is listed with
  *   that project in `tasksIn`.
+ * - h. Each row names the places deleting it with its files removes, the
+ *   same the delete removes: a forgotten project with a record names its
+ *   folder in the trash and its checkout on its machine, by the machine's
+ *   name; one forgotten before records names its folder and what the
+ *   folder says of it (its AGENTS.md heading, newest task, decision pages,
+ *   stages and newest file's time).
  *
  *   bun scripts/probe-kit/run.ts project-restore
  */
@@ -90,8 +96,15 @@ interface Listed {
   brings: Record<string, unknown>;
   by: string | null;
   forgottenAt: number;
+  hints: Record<string, unknown> | null;
   id: string;
   name: string | null;
+  places: {
+    kind: string;
+    machineId: string;
+    machineName: string;
+    path: string;
+  }[];
 }
 
 const idOf = (answer: Answer): string =>
@@ -638,6 +651,135 @@ const foldLeg = async (rig: Rig): Promise<void> => {
   );
 };
 
+/**
+ * h: what each row names to tell it apart and what a delete with its files
+ * removes. One with a record names its trash folder and its checkout, its
+ * machine by name, and the delete with `fromDisk` removes that checkout
+ * (refused first while its machine is away, naming the same machine); one
+ * forgotten before records names its folder and what its files say.
+ */
+const placesLeg = async (rig: Rig): Promise<void> => {
+  const { call, db } = rig;
+  const { writeFolderFiles } =
+    await import("../../../packages/hub/src/project-folder");
+  const checkout = machinePath(
+    "/home/probe",
+    "/home/probe/src/places",
+    MACHINE
+  );
+  const recorded = crypto.randomUUID();
+  db.createProject({
+    id: recorded,
+    name: "Probe places",
+    checkout: { machineId: MACHINE, path: checkout },
+    remote: null,
+  });
+  db.setProjectTemplate(recorded, "code");
+  await call("POST", `/api/projects/${recorded}/tasks`, { title: "Placed" });
+  await call("DELETE", `/api/projects/${recorded}`);
+  const row = (await listed(rig)).find((one) => one.id === recorded);
+  const folder = (await rig.trash()).find(
+    (one) => one.startsWith(`${recorded}-`) && !one.endsWith(".json")
+  );
+  check(
+    rig,
+    "h. a forgotten project with a record names its trash folder and its checkout, its machine by name, and no hints",
+    row?.hints === null &&
+      JSON.stringify(row.places) ===
+        JSON.stringify([
+          {
+            kind: "hub",
+            machineId: "hub",
+            machineName: "hub",
+            path: join(rig.trashDir, folder ?? ""),
+          },
+          {
+            kind: "checkout",
+            machineId: MACHINE,
+            machineName: MACHINE,
+            path: checkout,
+          },
+        ]),
+    JSON.stringify(row)
+  );
+  // The delete reads the same places: its machine away, it is refused
+  // naming that machine; nothing of it went.
+  const away = await call("POST", `/api/projects/${recorded}/delete`, {
+    fromDisk: true,
+  });
+  check(
+    rig,
+    "h. a delete with its files reads the same checkout: refused while its machine is away, naming it",
+    away.status === 409 &&
+      away.text === projectTrashWords.machinesAway("Probe places", [MACHINE]) &&
+      (await listed(rig)).some((one) => one.id === recorded),
+    away.text
+  );
+
+  const old = crypto.randomUUID();
+  db.createProject({ id: old, name: "Probe hinted", remote: null });
+  db.setProjectTemplate(old, "code");
+  for (const title of ["First hinted task", "Newest hinted task"]) {
+    await call("POST", `/api/projects/${old}/tasks`, { title });
+  }
+  await writeFolderFiles(
+    old,
+    [
+      {
+        path: "AGENTS.md",
+        content:
+          "# AGENTS.md\n\nOwned by you.\n\n## Probe hinted, the garden planner\n",
+      },
+      { path: "stages.md", content: "---\nbeds  todo\nsowing  active\n---\n" },
+      { path: "decisions/zeta-pick/page.oui", content: "x" },
+      { path: "decisions/alpha-pick/page.oui", content: "x" },
+    ],
+    {
+      author: { name: "probe", email: "probe@cawco.invalid" },
+      message: "probe",
+    }
+  );
+  const wrote = Date.now();
+  await forgetAsBefore(rig, old);
+  const hinted = (await listed(rig)).find((one) => one.id === old);
+  const hints = hinted?.hints as
+    | {
+        changedAt: number | null;
+        heading: string | null;
+        newestTask: { number: number; title: string } | null;
+        pages: string[];
+        stages: string[];
+      }
+    | null
+    | undefined;
+  const oldFolder = (await rig.trash()).find((one) =>
+    one.startsWith(`${old}-`)
+  );
+  check(
+    rig,
+    "h. one forgotten before records names its folder and what its files say",
+    hinted?.name === null &&
+      JSON.stringify(hinted.places) ===
+        JSON.stringify([
+          {
+            kind: "hub",
+            machineId: "hub",
+            machineName: "hub",
+            path: join(rig.trashDir, oldFolder ?? ""),
+          },
+        ]) &&
+      hints?.heading === "Probe hinted, the garden planner" &&
+      JSON.stringify(hints.newestTask) ===
+        JSON.stringify({ number: 2, title: "Newest hinted task" }) &&
+      JSON.stringify(hints.pages) ===
+        JSON.stringify(["alpha-pick", "zeta-pick"]) &&
+      JSON.stringify(hints.stages) === JSON.stringify(["beds", "sowing"]) &&
+      hints.changedAt !== null &&
+      Math.abs(hints.changedAt - wrote) < 60_000,
+    JSON.stringify(hinted)
+  );
+};
+
 export default {
   group: "The hub and machines",
   name: "project-restore",
@@ -701,6 +843,7 @@ export default {
         await oldFolderLeg(rig);
         await runningBrowserLeg(rig);
         await foldLeg(rig);
+        await placesLeg(rig);
       } finally {
         raw.close();
       }

@@ -55978,6 +55978,10 @@
             "description": "When it was forgotten, ms since the epoch.",
             "type": "number"
           },
+          "hints": {
+            "description": "What its folder says about it, for one forgotten before the hub kept\nrecords (`name` null); null for every other.",
+            "$ref": "#/components/schemas/ForgottenFolderHints"
+          },
           "id": {
             "type": "string"
           },
@@ -55987,6 +55991,13 @@
               "null",
               "string"
             ]
+          },
+          "places": {
+            "description": "Every place deleting it with its files removes, as the delete itself\nreads them (hub project-trash.ts `diskPlaces`): its folders in the\nhub's trash, then its checkouts on machines still in the fleet.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ForgottenPlace"
+            }
           }
         },
         "required": [
@@ -55994,7 +56005,8 @@
           "by",
           "forgottenAt",
           "id",
-          "name"
+          "name",
+          "places"
         ]
       },
       "ForgottenBrings": {
@@ -56091,6 +56103,90 @@
           "sessions",
           "settings",
           "tasks"
+        ]
+      },
+      "ForgottenFolderHints": {
+        "description": "What a folder forgotten before the hub kept records says about the\nproject, read off its files: the hub kept nothing else of it. Its task\ncount is {@link ForgottenBrings.tasks}.",
+        "type": "object",
+        "properties": {
+          "changedAt": {
+            "description": "When a file in it last changed, ms since the epoch; null when it holds none outside git's own.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "heading": {
+            "description": "The first heading of its AGENTS.md, but the stub's own `AGENTS.md`; null when it has none.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "newestTask": {
+            "description": "Its newest task, open or archived, by number; null when it has none.",
+            "type": "object",
+            "properties": {
+              "number": {
+                "type": "number"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "number",
+              "title"
+            ]
+          },
+          "pages": {
+            "description": "Its decision pages' names, sorted.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stages": {
+            "description": "Its stages as its stages.md names them; none when it has no stages.md or it does not read.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "changedAt",
+          "heading",
+          "pages",
+          "stages"
+        ]
+      },
+      "ForgottenPlace": {
+        "description": "A place of a forgotten project on disk that deleting it with its files\n(`POST /api/projects/:id/delete`, `fromDisk`) removes: a checkout on a\nmachine, or its folder in the hub's trash.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/PlaceKind",
+            "description": "`checkout`: a folder on a machine; `hub`: its folder in the hub's trash."
+          },
+          "machineId": {
+            "description": "The machine's id; `hub` for the hub's own trash.",
+            "type": "string"
+          },
+          "machineName": {
+            "description": "The machine's name as the hub holds it now; its id when the hub holds none.",
+            "type": "string"
+          },
+          "path": {
+            "description": "Absolute on its machine.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "machineId",
+          "machineName",
+          "path"
         ]
       },
       "ProjectDeleted": {
