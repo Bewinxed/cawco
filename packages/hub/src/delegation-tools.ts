@@ -596,13 +596,13 @@ export function handoffTools(deps: HandoffDeps) {
           .boolean()
           .optional()
           .describe(
-            "Run on `machine` itself in `cwd`, outside any clone or boundary: its network, processes and the agent user's groups (docker). For work whose subject is the machine. Lands nothing; files it leaves in its $TMPDIR/outputs/ come back to its project's folder under assets/<item>/, readable from any machine. Not with from, workspace, owns or outputs."
+            "Run on `machine` in `cwd`, outside any clone or boundary: its network, processes and the agent user's groups (docker). For work on the machine. Lands nothing; $TMPDIR/outputs/ returns as assets/<item>/. Not with from, workspace, owns, outputs."
           ),
         outputs: z
           .array(z.string())
           .optional()
           .describe(
-            "Deliverables that are not commits, from the repository's root; copied into the project's folder under assets/<item>/, as is whatever the delegate leaves in its $TMPDIR/outputs/ without being named here. With host: none; it hands files back in $TMPDIR/outputs/."
+            "Deliverables that are not commits, from the repository's root; copied into the project's folder under assets/<item>/, as is whatever the delegate leaves in its $TMPDIR/outputs/ without being named here."
           ),
         group: groupParameter().optional(),
         owns: ownsParameter().optional(),
