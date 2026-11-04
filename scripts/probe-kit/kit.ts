@@ -516,6 +516,12 @@ const freePort = async (): Promise<number> => {
 declare global {
   interface Window {
     /**
+     * Every run the page itself cancelled (`Animation.prototype.cancel`):
+     * the clock's late pause brings such a run back, and its release
+     * cancels it again (anim.ts `release`).
+     */
+    kitCancelled: WeakSet<Animation>;
+    /**
      * Whether `el` lies inside what `selector` names, out through every
      * shadow host it sits in (`closest` stops at a shadow root).
      */
@@ -530,8 +536,15 @@ declare global {
   }
 }
 
-/** Installs `kitRuns` and `kitInside` on every page and frame, before its own scripts. */
+/** Installs `kitRuns`, `kitInside` and `kitCancelled` on every page and frame, before its own scripts. */
 export function installRuns(): void {
+  const cancelled = new WeakSet<Animation>();
+  const { cancel } = Animation.prototype;
+  Animation.prototype.cancel = function (this: Animation) {
+    cancelled.add(this);
+    cancel.call(this);
+  };
+  window.kitCancelled = cancelled;
   const walk = (root: Document | ShadowRoot): Animation[] => {
     const runs = [...root.getAnimations()];
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);

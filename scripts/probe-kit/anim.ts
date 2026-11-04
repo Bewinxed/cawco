@@ -194,6 +194,11 @@ export class Clock {
   private readonly started: Described[] = [];
   /** Each run held since the catch began, by id: where its target lies. */
   private readonly held = new Map<string, Promise<Place>>();
+  /** Each held run's target node and name, by id: where `release` looks for it on the page. */
+  private readonly heldWhere = new Map<
+    string,
+    { name: string; node: number | undefined }
+  >();
   /** The catch's `within` while the clock holds; null while it runs. */
   private within: string | null = null;
   /** Whether the catch leaves loops running and off the clock (an enter or an exit has none). */
@@ -235,6 +240,10 @@ export class Clock {
     this.cdp
       .send("Animation.setPaused", { animations: [run.id], paused: true })
       .catch(() => undefined);
+    this.heldWhere.set(run.id, {
+      name: run.name,
+      node: run.source?.backendNodeId,
+    });
     this.held.set(run.id, this.letGoUnlessOwn(run, within));
   }
 
@@ -243,6 +252,7 @@ export class Clock {
     const at = await this.place(run.source?.backendNodeId, within);
     if (!at.own) {
       this.held.delete(run.id);
+      this.heldWhere.delete(run.id);
       await this.cdp
         .send("Animation.setPaused", { animations: [run.id], paused: false })
         .catch(() => undefined);
@@ -623,26 +633,88 @@ export class Clock {
   async playOn(runs: readonly Run[]): Promise<void> {
     for (const run of runs) {
       this.held.delete(run.id);
+      this.heldWhere.delete(run.id);
       await this.cdp
         .send("Animation.setPaused", { animations: [run.id], paused: false })
         .catch(() => undefined);
     }
   }
 
-  /** Lets the clock run again: every held run plays out from where it stands. */
+  /**
+   * Lets the clock run again: every held run plays out from where it
+   * stands, but one the page had cancelled before the clock's pause landed.
+   * `animationStarted` reaches the protocol's client after the page has
+   * run on: a run that was over within a frame (the canvas's reduced-motion
+   * fold, 17 ms) was finished and cancelled by the page before the clock
+   * paused it, and pausing an idle run gives it a hold time of 0 (Web
+   * Animations, "pause an animation"), so unpaused it played again, to its
+   * end and its fill (composer-canvas 13: the stage held at opacity 0, the
+   * next open drawn as nothing and taking no press). The protocol cannot
+   * tell: Blink sends `animationCanceled` for a pause and a cancel alike
+   * (inspector_animation_agent.cc), and a run is never resolved
+   * (`Animation.resolveAnimation`, above). The page can: every `cancel()`
+   * it makes is kept (kit.ts `installRuns`, `kitCancelled`), and a held run
+   * it had cancelled is cancelled again, back to idle, before the rest
+   * play.
+   */
   async release(): Promise<void> {
     this.within = null;
     this.noLoops = false;
     this.own = false;
     const ids = [...this.held.keys()];
+    const targets = new Map(this.heldWhere);
     this.held.clear();
+    this.heldWhere.clear();
+    const byNode = new Map<number, string[]>();
     for (const id of ids) {
-      // A run the page has since replaced or cancelled has nothing to play out.
+      const at = targets.get(id);
+      if (at?.node !== undefined) {
+        byNode.set(at.node, [...(byNode.get(at.node) ?? []), at.name]);
+      }
+    }
+    for (const [node, names] of byNode) {
+      const undone = await this.cancelledAgain(node, names);
+      if (undone > 0) {
+        console.log(
+          `… clock: ${undone} run(s) the page cancelled before the clock's pause landed on node ${node}, cancelled again`
+        );
+      }
+    }
+    for (const id of ids) {
+      // A run the page has since replaced or cancelled has nothing to play
+      // out: Blink's `Unpause` moves only a paused run.
       await this.cdp
         .send("Animation.setPaused", { animations: [id], paused: false })
         .catch(() => undefined);
     }
     this.runs = [];
+  }
+
+  /**
+   * Cancels again, on the page, each paused run on `node` named one of
+   * `names` (its id, a CSS animation's name or a transition's property) that
+   * the page had cancelled itself; answers how many.
+   */
+  private async cancelledAgain(node: number, names: string[]): Promise<number> {
+    const resolved = (await this.cdp
+      .send("DOM.resolveNode", { backendNodeId: node })
+      .catch(() => null)) as { object: { objectId?: string } } | null;
+    const objectId = resolved?.object.objectId;
+    if (!objectId) {
+      return 0;
+    }
+    const { result } = (await this.cdp
+      .send("Runtime.callFunctionOn", {
+        objectId,
+        functionDeclaration:
+          "function (names) { const t = this instanceof Element ? this : this.element; const pseudo = this instanceof Element ? null : this.type; if (!(t && t.isConnected && window.kitCancelled)) { return 0; } let undone = 0; for (const r of window.kitRuns()) { const named = r.animationName ?? r.transitionProperty ?? r.id; if (r.playState === 'paused' && window.kitCancelled.has(r) && r.effect && r.effect.target === t && (r.effect.pseudoElement || null) === pseudo && names.includes(named)) { r.cancel(); undone += 1; } } return undone; }",
+        arguments: [{ value: names }],
+        returnByValue: true,
+      })
+      .catch(() => ({ result: { value: 0 } }))) as {
+      result: { value: number };
+    };
+    return result.value;
   }
 }
 
