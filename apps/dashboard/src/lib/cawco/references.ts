@@ -76,7 +76,7 @@ const REFERENCE_ELEMENTS: Record<ReferenceKind, ReferenceElement> = {
    * A pin, by its artifact and number (`<artifact>/<number>`): its artifact
    * held or named, and its pins known (artifact-names.svelte.ts
    * `artifactMarksKnown`). Its chip shows what the pin stands on (DESIGN.md,
-   * "its label what it stands on"), so it is drawn once that is known, never
+   * Inline chip: it keeps its words and box from its first paint), so it is drawn once that is known, never
    * before with the written label and again with the pin's name: a chip
    * keeps its words and its width from its first paint. It is the comment
    * chip (CommentChip): pressed, it opens the pin's thread there, as the

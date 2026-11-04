@@ -2,7 +2,7 @@ import type { VariantProps } from "tailwind-variants";
 import { tv } from "#lib/utils.js";
 
 /**
- * The kit's chip (DESIGN.md, Permission gate: "option chips (30px, 8px
+ * The kit's chip (DESIGN.md, Option chip: "option chips (30px, 8px
  * radius, keycap digits)"; Typography: the label role for chips). A chip is
  * written on the element its caller already has (a button, a bits-ui toggle
  * item, a record's span), so the part is its recipe, applied as a class.
@@ -48,7 +48,7 @@ import { tv } from "#lib/utils.js";
  * (`touch-hit`, DESIGN.md, The 44 Touch Rule), the drawn chip unchanged; a
  * row of chips sets its gaps for it (`chipsVariants`).
  * - `setting`: a setting shown as a small trigger that opens its picker
- *   (DESIGN.md, New-session dialog: "Setting chips are 30px with an 8px
+ *   (DESIGN.md, Setting chip: "30px, 8px
  *   radius, a 16px glyph and a 12px chevron. A setting that cannot be
  *   changed where it is shown is the same chip sunk into the surface:
  *   `surface-recess` fill, `border-hairline` edge, no chevron and no hover").
@@ -59,7 +59,7 @@ import { tv } from "#lib/utils.js";
  *   chip hovers and scales on press; a static one does neither.
  *
  * `size` (setting chips): `regular`, or `compact` for the session card's
- * settings group (DESIGN.md, Session card: "the four settings (model,
+ * settings group (the session tabs' surface brief, Session card: "the four settings (model,
  * effort, permission, account) as one group of equal chips `--space-1`
  * apart"): a compact row's height, and on a phone a finger's 44px with the
  * chevron gone (an account chip, `data-account-chip`, keeps its own, the

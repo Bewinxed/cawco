@@ -3582,7 +3582,7 @@
    * the reader may scroll into, never a place the view is taken: at the
    * tail the last row stands on the foot whether a card is parked over it
    * or not, so a card parking or leaving moves no row (owner, a7443251: "it
-   * shouldn't push the transcript up"; DESIGN.md, The Composer Layer Rule).
+   * shouldn't push the transcript up"; the composer's surface brief, The Composer Layer Rule).
    * Read after the layout the scroll height has just forced, as laid out.
    */
   function tailTop(node: HTMLElement): number {

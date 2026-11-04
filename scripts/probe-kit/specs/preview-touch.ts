@@ -465,7 +465,7 @@ const groupsAt = (page: Page, ids: string[]) =>
   }, ids);
 
 /**
- * 7. The artifact panel by screen (DESIGN.md, Artifact panel: "the side
+ * 7. The artifact panel by screen (the artifact panel's surface brief, Artifact panel: "the side
  * sheet on a wide screen and an iPad's regular width, the bottom drawer on
  * a phone"): a coarse pointer at the 640px phone breakpoint or wider is an
  * iPad's regular width, and gets the side sheet in a pane 640px or wider,

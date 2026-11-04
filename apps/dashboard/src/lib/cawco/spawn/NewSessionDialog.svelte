@@ -2,7 +2,7 @@
   import { commonWords } from "@cawco/core/words/common";
   /**
    * The New Session form on a phone: the kit drawer's bottom sheet under
-   * 640px (DESIGN.md: "the new-session dialog becomes a bottom sheet"). A
+   * 640px (DESIGN.md, Breakpoints: "dialogs become bottom sheets"). A
    * desk opens the same form as a popover (NewSessionPopover), which hands
    * this its props under 640px. The form inside is NewSessionForm; the
    * sheet's head is the kit's, titled with the form's own name.

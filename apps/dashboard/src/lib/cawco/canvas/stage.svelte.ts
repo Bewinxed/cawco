@@ -1,5 +1,5 @@
 /**
- * A canvas on screen (Projects spec §5.10, DESIGN.md Artifact panel, canvas
+ * A canvas on screen (Projects spec §5.10, the artifact panel's surface brief, Artifact panel, canvas
  * and ink): one iframe of its host page, standing over one slot at a time,
  * the composer's or the artifact panel's. The iframe never moves in the
  * DOM: a moved iframe reloads, and the one move that keeps it (`moveBefore`)

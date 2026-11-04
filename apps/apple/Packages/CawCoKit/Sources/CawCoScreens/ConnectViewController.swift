@@ -32,7 +32,7 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
     private let searching = UIStackView()
     private let noWifi = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
     private var connectButton: UIButton!
-    // The hub sheet's Notifications section (paywall DESIGN.md H): never empty,
+    // The hub sheet's Notifications section (the paywall spec H): never empty,
     // and the one CawCo Pro surface an owner sees. No price, no selling row.
     private let notifications = UIStackView()
     private let notifyLine = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)

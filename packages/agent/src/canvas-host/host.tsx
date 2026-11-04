@@ -464,7 +464,7 @@ function Host() {
    * The pencil's double-tap (`cawco:pencil-double-tap`, which the iOS app
    * posts into the page, or the dashboard relays) toggles the eraser: the
    * box of the tool the pen was on stays chosen and swaps its glyph for the
-   * eraser's (DESIGN.md, Pen rules on the canvas), and a second double-tap
+   * eraser's (the artifact panel's surface brief, Pen rules on the canvas), and a second double-tap
    * goes back to that tool. Any other way to a tool ends the swap.
    */
   const [swappedFrom, setSwappedFrom] = useState<string | null>(null);

@@ -4,7 +4,7 @@ import CawCoMascot
 import OSLog
 import UIKit
 
-/// One window's half of CawCo Pro (paywall DESIGN.md §1): it locks the board
+/// One window's half of CawCo Pro (the paywall spec §1): it locks the board
 /// when no entitlement holds, stands the gate bar over it, raises the
 /// onboarding paywall once, opens P1e over an ended week at launch, and shows
 /// the free week's day-6 card. The entitlement alone decides; the sheet only sells.

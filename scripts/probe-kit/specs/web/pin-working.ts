@@ -1,5 +1,5 @@
 /**
- * A comment's thread while the agent works on it (DESIGN.md, A thread beside
+ * A comment's thread while the agent works on it (the artifact panel's surface brief, A thread beside
  * its pin; Live dot; Live work breathes), on the /motion/pin-working bench:
  * the real PinCard in the real PinFloat, its pin a fixture, put to work, its
  * reply landed and set at rest through `window.__pinWorking`.

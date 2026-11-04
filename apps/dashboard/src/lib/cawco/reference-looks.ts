@@ -1,6 +1,6 @@
 /**
  * How each reference kind looks, one entry per kind and nowhere else: the
- * one place the chosen design of each kind's chip is applied (DESIGN.md, A
+ * one place the chosen design of each kind's chip is applied (the artifact panel's surface brief, A
  * pin's, a card's and an artifact's chip). Nothing of a chip's behaviour
  * (what it names, its peek, its press) reads anything here, and nothing of
  * its look is written anywhere but here.

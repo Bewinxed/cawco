@@ -1,5 +1,5 @@
 /**
- * The Comments rail's rows (DESIGN.md, The Comments rail): how they are
+ * The Comments rail's rows (the artifact panel's surface brief, The Comments rail): how they are
  * found, ordered and what each carries, shared by the rail and the peek.
  */
 import {

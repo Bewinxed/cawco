@@ -1,6 +1,6 @@
 /**
  * A side surface's head controls where the head lacks room for them all
- * (DESIGN.md, Artifact panel, canvas and ink: the head's priority rule, the
+ * (the artifact panel's surface brief, Artifact panel, canvas and ink: the head's priority rule, the
  * web's as the native app's): the name keeps its own width up to
  * {@link NAME_KEEPS}px, Close stands last, and the rest stand by priority
  * ({@link HEAD_PRIORITY}) while they fit, each in its narrowest form (the

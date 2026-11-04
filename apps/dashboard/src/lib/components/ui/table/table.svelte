@@ -4,8 +4,8 @@
   import { tv } from "#lib/utils.js";
 
   /**
-   * Where a table's rows become cards (DESIGN.md, Fleet board: "Under 640px
-   * each row becomes a two-line card"), by the table's own width
+   * Where a table's rows become cards (DESIGN.md, Table: "each row becomes
+   * a two-line card"), by the table's own width
    * (`@container/table`), so a ledger in a narrow panel on a wide window is
    * a card too. One recipe, keyed at each tier's width: the table and its
    * body are blocks, its header hidden (or a `section`'s band, its first

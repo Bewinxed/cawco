@@ -1,6 +1,6 @@
 /**
  * Comments on any artifact, slice 4b (Projects spec §5.7, §5.10; tsk-3;
- * DESIGN.md, Artifact panel, canvas and ink), on a scratch fleet (real hub,
+ * the artifact panel's surface brief, Artifact panel, canvas and ink), on a scratch fleet (real hub,
  * agent and sessiond; Claude Code against the mock model, which calls the
  * tools each PROBE-CALL names) and the built dashboard at the desk. Read
  * from the engine: the page's doc (`window.cawcoArtifact.doc`), the pane's
@@ -159,7 +159,7 @@
  *
  * And the owner's pins (2026-10-21: "this line is too tihck and too
  * prominent, why is it so thick?", "why use such thick and solid lines?"),
- * The One Target Rule (DESIGN.md):
+ * The One Target Rule (the artifact panel's surface brief):
  * 7c. In Comment mode, resting on an element tints it (`c-target-tint`)
  *    with no line; the page's root takes a 1px dashed `brand-solid` line
  *    inset `space-1`, no tint, its tag commentWords.wholePage at rest and none once
@@ -180,7 +180,7 @@
  *    id; re-rendered with the ids handed round, each pin stays on its own
  *    element.
  *
- * And the commenting redesign's picks (DESIGN.md, Placing a comment, A
+ * And the commenting redesign's picks (the artifact panel's surface brief, Placing a comment, A
  * pin's pill, The Comments rail, A thread beside its pin, How comments
  * reach the session), each a leg:
  * - The reading card: the composer at the element `c-pin-card-reading-w`
@@ -513,9 +513,9 @@ const pageInComment = (frame: Frame, on: boolean) =>
 
 /** The artifact panel, in a session's split or the artifact's own tab. */
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
-/** The Comments rail (DESIGN.md, The Comments rail). */
+/** The Comments rail (the artifact panel's surface brief, The Comments rail). */
 const RAIL = '[data-slot="comment-rail"]';
-/** The composer a press on the page opens beside its hollow pill (DESIGN.md, Placing a comment). */
+/** The composer a press on the page opens beside its hollow pill (the artifact panel's surface brief, Placing a comment). */
 const COMPOSE = '[data-slot="pin-composer"]';
 /**
  * The width a composer or a thread beside its pill takes in `screen`'s
@@ -567,7 +567,7 @@ const shutList = async (on: On) => {
 };
 
 /**
- * A press at the screen's `x`, `y` in Comment mode (DESIGN.md, Placing a
+ * A press at the screen's `x`, `y` in Comment mode (the artifact panel's surface brief, Placing a
  * comment): its composer opens beside a hollow pill, writing nothing; with
  * `words`, they are typed in its field and Enter comments, the pin and its
  * first entry written at once. Whether the composer opened with its field
@@ -1043,7 +1043,7 @@ const commentChecks = async (on: On, frame: Frame) => {
     ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
   );
   await comment.focus();
-  // DESIGN.md, The mode: "Comment and Draw mark the well's edge with a 1px
+  // the artifact panel's surface brief, The mode: "Comment and Draw mark the well's edge with a 1px
   // `seam` inside its box": seam, 1px solid, offset -1px.
   const readEdge = () =>
     on.page.evaluate(() => {
@@ -2204,7 +2204,7 @@ const innerApp = (
 
 /**
  * Where pin `number`'s pill stands on its point in the outer page's
- * viewport: its tail corner (DESIGN.md, A pin's pill); null when it is not
+ * viewport: its tail corner (the artifact panel's surface brief, A pin's pill); null when it is not
  * drawn.
  */
 const discAt = (outer: Frame, number: number) =>
@@ -7181,7 +7181,7 @@ const insertChecks = async (on: On) => {
       const places = doc.getMap("places");
       const marks = [...document.querySelectorAll<HTMLElement>("h2, img")];
       return ids.map((id) => {
-        // The pill's tail corner, on its point (DESIGN.md, A pin's pill).
+        // The pill's tail corner, on its point (the artifact panel's surface brief, A pin's pill).
         const g = document.querySelector<SVGGElement>(
           `svg[data-cawco-pins] [data-pin-id="${id}"]`
         );
@@ -7439,7 +7439,7 @@ const rowDress = (screen: Page, number: number) =>
     });
 
 /**
- * The picks on a page of their own, at the desk (DESIGN.md, Placing a
+ * The picks on a page of their own, at the desk (the artifact panel's surface brief, Placing a
  * comment, A pin's pill, The Comments rail, A thread beside its pin,
  * How comments reach the session): the 280px composer and its parts; attachments by
  * reference, their pills on one baseline; a picture alone sending; the
@@ -10836,7 +10836,7 @@ const threadHead = (card: Locator) =>
  * Delete is one press in the thread's head (the owner's "deleting the
  * thread shouldn't be two clicks hidden"): Resolve, Delete comment, ⋯ and
  * Close stand on the head's row; ⋯ keeps Copy link alone; one press on
- * Delete asks in the card itself ("Delete comment N?", no dialog, DESIGN.md
+ * Delete asks in the card itself ("Delete comment N?", no dialog, the artifact panel's surface brief
  * A thread beside its pin), and its confirm deletes the pin. On the desk,
  * and on the phone's foot sheet.
  */

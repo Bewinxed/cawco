@@ -1,6 +1,6 @@
 /**
  * The person's comments on a page, as their pins (Projects spec §5.7,
- * §5.10; core comments.ts; DESIGN.md, A pin's pill). A pin is a pill with a
+ * §5.10; core comments.ts; the artifact panel's surface brief, A pin's pill). A pin is a pill with a
  * tail corner: `--c-pin` tall, as wide as its number needs, three corners
  * round and the fourth, the tail, a 2px corner standing on the point the
  * person pressed; a point in the middle of a line of words stands at that
@@ -892,7 +892,7 @@ export function startPins(deps: PinsDeps): Pins {
    * the group itself kept (a press on it lands whatever is drawn under it
    * meanwhile): `under` first (its hit area), then its focus ring when the
    * keyboard reached it, its raised ring with the xs shadow, its face by
-   * state (DESIGN.md, A pin's pill), its number, its dot, and `over`.
+   * state (the artifact panel's surface brief, A pin's pill), its number, its dot, and `over`.
    */
   const paintPill = (
     g: SVGGElement,

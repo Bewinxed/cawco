@@ -57,7 +57,7 @@ import { writePagePins } from "../pins";
 
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const FRAME = `${PANE} iframe[title="Preview"]`;
-/** The Comments rail (DESIGN.md, The Comments rail). */
+/** The Comments rail (the artifact panel's surface brief, The Comments rail). */
 const LIST = '[data-slot="comment-rail"]';
 type Theme = "light" | "dark";
 /** Each leg: where it runs and in which scheme. */

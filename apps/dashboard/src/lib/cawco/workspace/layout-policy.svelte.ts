@@ -37,7 +37,7 @@ export const layoutPolicy = {
   },
   /**
    * The artifact panel is the bottom drawer, not the side sheet, for a pane
-   * `paneWidth` wide (DESIGN.md, Artifact panel): an iPad at its regular
+   * `paneWidth` wide (the artifact panel's surface brief, Artifact panel): an iPad at its regular
    * width keeps the side sheet in a pane at the phone breakpoint or wider,
    * so a group split beside another (choices b and c) is never squeezed
    * into two phone-narrow columns; a fine pointer gets the drawer in a

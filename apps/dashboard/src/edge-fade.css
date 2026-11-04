@@ -77,7 +77,7 @@
   /* `--fade-inset-end` stands the foot's fade clear of a bar docked over
      the scroller's foot (a phone's views bar), so it ends at the bar's top
      edge and what passes under the bar is the fade's, as a footer's
-     (DESIGN.md: the house edge fade above it so the notes pass under it). */
+     (the update notice's footer: the house edge fade above it so the notes pass under it). */
   .kit-edge-fade-block {
     mask-image: linear-gradient(
       to bottom,

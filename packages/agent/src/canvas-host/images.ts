@@ -1,5 +1,5 @@
 /**
- * Images on the canvas (DESIGN.md, Artifact panel, canvas and ink): a PNG,
+ * Images on the canvas (the artifact panel's surface brief, Artifact panel, canvas and ink): a PNG,
  * JPEG, WebP, SVG or GIF of at most 4 MB (Excalidraw's own ceiling), pasted
  * or dropped (placed at the pointer) or picked from the rail's Image box
  * (placed at the middle of the view, as Excalidraw's own picker places it),

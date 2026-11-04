@@ -48,7 +48,7 @@ struct TabAction {
 /// tint card; the chosen one is a sheet in the transcript's surface with
 /// rounded shoulders and a foot that flares into the page. A switch is two
 /// states trading places where they stand, on one clock (`durSettle` on
-/// `easeCrossfade`, DESIGN.md "One clock"), a jump past a neighbour the same
+/// `easeCrossfade`, the session tabs' surface brief, one clock), a jump past a neighbour the same
 /// as a step: the old sheet fades out over its own card as the new one fades
 /// in over its own, every tab's rim, title ink and recede step move between
 /// how they rest, the front changes at half way and the seam where two tabs
@@ -630,7 +630,7 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     }
 
     /// Each tab's place in the stack, by index, higher drawn over lower: a
-    /// tab as far back as it is unchosen now (DESIGN.md "Stack"), so two
+    /// tab as far back as it is unchosen now (DESIGN.md, Shapes, Folder tabs), so two
     /// trade places only at equal depth; ties to the one nearer `tie`, so
     /// every edge tucks under its neighbour toward the choice, the first on
     /// top with none; the earlier lower among those.
@@ -664,7 +664,7 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     /// began and where it rests then, the tab in front at that frame drawing
     /// it: its card, sheet and rim stand in from its own edge to it, its
     /// side's ink leaning toward the neighbour's as far as it stands in, and
-    /// the side of the tab behind stands under it (DESIGN.md, "Session tab
+    /// the side of the tab behind stands under it (the session tabs' surface brief, "Session tab
     /// status rim"). At the handover, half way, the two sides stand on the
     /// same pixels in the same ink. A touch on an overlap is the tab drawn
     /// there.

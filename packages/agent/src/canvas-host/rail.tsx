@@ -1,5 +1,5 @@
 /**
- * The canvas's tool rail (DESIGN.md, Artifact panel, canvas and ink): two
+ * The canvas's tool rail (the artifact panel's surface brief, Artifact panel, canvas and ink): two
  * floating groups in the panel material over Excalidraw, whose own chrome
  * is hidden. Tools at the top-left (select, hand, pen, shapes as a menu,
  * arrow, text, Image, eraser), view at the top-right (zoom as a menu, Dock,

@@ -15,7 +15,7 @@
    *
    * `again`: the rebuild threw again at once on the same data, so Try again
    * can't help: the way on is Reload page, which reads everything fresh from
-   * the hub (a reload is safe: DESIGN.md, Update toast). His pose turns from
+   * the hub (a reload is safe: the update toast's surface brief, Update toast). His pose turns from
    * `needs-you` to `trying` before the words do.
    *
    * He holds his still (`caw`, the bundle's drawing of him: fault/caw.ts),

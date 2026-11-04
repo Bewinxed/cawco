@@ -577,7 +577,7 @@
     <!-- The content's ground: a well inside its edge (surface-well,
          border-well: the recess and hairline by day, deeper with a clear
          edge at night). A page's Comment or Draw mode marks its edge with a
-         1px `seam` inside its box (DESIGN.md, The mode: it only says the page
+         1px `seam` inside its box (the artifact panel's surface brief, The mode: it only says the page
          hears nothing; the cue is the cursor and the pressed segment), the
          edge easing in and out except while the split slides, and points a
          crosshair. -->

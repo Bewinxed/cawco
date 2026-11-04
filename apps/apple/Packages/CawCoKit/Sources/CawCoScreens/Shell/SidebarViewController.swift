@@ -18,7 +18,7 @@ protocol SidebarHost: AnyObject {
     func showLimits()
     /// The phone sheet's Search: Jump, once the sheet has stepped aside.
     func search()
-    /// The free week's line (paywall DESIGN.md T): the paywall in its Get Pro form.
+    /// The free week's line (the paywall spec T): the paywall in its Get Pro form.
     func keepPro()
     /// What a session row's menu does, and the window's one question about a session.
     var sessionMenus: SessionMenuContext { get }
@@ -59,10 +59,10 @@ final class SidebarViewController: ObservedViewController {
     private let soundButton = SoundButton()
     private let cawLoopButton = CawLoopButton()
     private let usage = UsageCell(frame: .zero)
-    /// The account row, and under the name the one place CawCo Pro shows (DESIGN.md T):
+    /// The account row, and under the name the one place CawCo Pro shows (the paywall spec T):
     /// the free week's days left, or the Pro tag.
     private let user = RailRow(height: nil, leading: 6, trailing: 6, gap: 0)
-    /// CawCo Pro's one place in the rail (DESIGN.md T): the free week's line, or the Pro tag.
+    /// CawCo Pro's one place in the rail (the paywall spec T): the free week's line, or the Pro tag.
     private let access = RailRow(height: nil, leading: 10, trailing: 10, gap: 10)
     private lazy var accessFold = access.heightAnchor.constraint(equalToConstant: 0)
     private weak var footer: UIStackView?

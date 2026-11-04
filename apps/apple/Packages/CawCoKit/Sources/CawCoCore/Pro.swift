@@ -5,7 +5,7 @@ import OSLog
 public import StoreKit
 public import UIKit
 
-// CawCo Pro (paywall DESIGN.md §1): the native app runs on one StoreKit
+// CawCo Pro (the paywall spec §1): the native app runs on one StoreKit
 // non-consumable, or on a live free week started from a $0 non-consumable.
 // The entitlement is read at launch and on every `Transaction.updates`, from
 // `Transaction.currentEntitlements`; nothing here keeps its own record of a

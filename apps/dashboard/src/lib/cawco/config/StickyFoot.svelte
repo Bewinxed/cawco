@@ -3,7 +3,7 @@
    * A Configure card's commit row: the card's own foot, on the card's
    * surface, held at the page's foot (sticky) while what it commits runs on
    * under it, with the house edge fade above it so that passes under it
-   * (DESIGN.md, the update notice's footer: "on the panel's surface with the
+   * (the update notice's footer, UpdateCard.svelte: "on the panel's surface with the
    * house edge fade above it"), at every width. Over a keyboard it stands on
    * the keyboard with the fields kept clear of it (aboveKeyboard).
    *

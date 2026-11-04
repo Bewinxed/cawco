@@ -1,7 +1,7 @@
 import { tv } from "#lib/utils.js";
 
 /**
- * Send (DESIGN.md, Composer controls: "Send/Stop (coral action), each at the
+ * Send (the composer's surface brief, Composer controls: "Send/Stop (coral action), each at the
  * concentric 4px radius. They scale to 0.97 on press"): the one coral control
  * in a dock shell, a square of the composer's field height, concentric with
  * the shell (its radius less the inset and the edge that seat it), its glyph

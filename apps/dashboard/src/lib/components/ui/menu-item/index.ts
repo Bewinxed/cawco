@@ -18,10 +18,10 @@ import { tv } from "#lib/utils.js";
  *
  * Its leading glyph (the row's first child, a Solar duotone svg or the
  * icon-swap a copy row holds its copy and its tick in) is in `ink-muted`,
- * as every lead glyph is (DESIGN.md, Caw's panel: a section's glyph "in
+ * as every lead glyph is (Caw's panel's surface brief, Caw's panel: a section's glyph "in
  * `ink-muted` in the lead column"). In the row's own `ink-strong` its
  * half-ink layer was near-black too, so a filled shape (Copy's two
- * squares, Stop, Archive) read as one solid dark square (DESIGN.md, Files:
+ * squares, Stop, Archive) read as one solid dark square (Files' surface brief, Files:
  * "read as a half-ink square"). A destructive row's red, and a chosen
  * row's tick or dot in the row's own ink, stand over it.
  */

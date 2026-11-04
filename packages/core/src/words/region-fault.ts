@@ -9,7 +9,7 @@ export const regionFaultWords = {
   couldntShow: (what: string) => `Couldn't show ${what}`,
   /** Try again threw again at once on the same data. */
   stillCantShow: (what: string) => `Still can't show ${what}`,
-  /** What a reload costs, where the person would fear for it (DESIGN.md, Update toast). */
+  /** What a reload costs, where the person would fear for it (the update toast's surface brief, Update toast). */
   reloadKeeps: "Everything you had open comes back after a reload.",
   reloadPage: "Reload page",
   /** An OpenUI element on a decision page or in a view, named by its component: "the Badge". */

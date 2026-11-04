@@ -92,7 +92,7 @@
   const stateWord = $derived(pin?.resolvedAt ? "resolved" : "answered");
   /*
    * In written words, what the pin stands on as its first paint draws it,
-   * kept (DESIGN.md, a pin's chip: "its label what it stands on"): opening
+   * kept (DESIGN.md, Inline chip: it keeps its words and box from its first paint): opening
    * its thread and the doc loading never rewrite it, so the chip keeps its
    * words and its width. Its state stays live; none of it moves its width.
    */

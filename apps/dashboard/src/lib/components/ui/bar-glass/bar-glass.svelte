@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * The top bar's glass (DESIGN.md, Top bar's trailing edge): one group on
+   * The top bar's glass (the top bar's surface brief, Top bar's trailing edge): one group on
    * the bar's control height, a capsule of the panel's glass holding the
    * bar's borderless items concentric inside it, Caw's head last at the
    * edge. Under the desk line it is Caw's tab tucked into the screen's
@@ -20,7 +20,7 @@
    * and its items at every width, with no Caw tab and no join.
    *
    * While a card hangs from it (Caw's panel, the machines, Jump, Files:
-   * HangCard `glass`) the glass is one shape with the card (DESIGN.md, Caw's
+   * HangCard `glass`) the glass is one shape with the card (Caw's panel's surface brief, Caw's
    * panel): its join takes the card's `surface-raised` and `border-control`
    * edge over its top, down its flanks and up a `radius-lg` flare at its
    * leading foot, with no edge across the foot, fading in over `--dur-pop`

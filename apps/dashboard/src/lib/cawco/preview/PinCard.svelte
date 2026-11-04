@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * A comment's thread, as a card beside its pin (the owner's pick; DESIGN.md,
+   * A comment's thread, as a card beside its pin (the owner's pick; the artifact panel's surface brief,
    * A thread beside its pin). Its head's first row: the pin's pill, only
    * while the page's own pill is out of view (`marked` says it stands
    * beside it), the element's nearest parent in meta ("on Routine form";
@@ -439,7 +439,7 @@
           />
         {/if}
         {#if !fromChip}
-          <!-- One press asks, in the card itself (DESIGN.md, A thread beside its pin). -->
+          <!-- One press asks, in the card itself (the artifact panel's surface brief, A thread beside its pin). -->
           <Button
             aria-label={said.deleteComment}
             data-slot="delete"

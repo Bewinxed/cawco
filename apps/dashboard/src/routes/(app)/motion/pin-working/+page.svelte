@@ -4,7 +4,7 @@
    * PIN WORKING BENCH — a comment's thread (the real PinCard in the real
    * PinFloat, as the artifact panel stands it beside its pill) while the
    * agent works on it: its speaker line where its reply will stand, its mark
-   * wearing the live dot (DESIGN.md, A thread beside its pin). No fleet: the
+   * wearing the live dot (the artifact panel's surface brief, A thread beside its pin). No fleet: the
    * pin is a fixture, and `window.__pinWorking` (or the head's buttons) puts
    * the agent to work, lands its reply, or sets it at rest, so the pin-working
    * probe reads where the mark stands, where the reply lands, and the dot's

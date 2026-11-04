@@ -82,7 +82,7 @@ let package = Package(
         .target(
             name: "CawCoScreens",
             dependencies: ["CawCoCore", "CawCoDesign", "CawCoMascot", "CawCoTranscript"],
-            // The paywall's story stills (paywall DESIGN.md §4); `paywall-story.mp4` joins them.
+            // The paywall's story stills (the paywall spec §4); `paywall-story.mp4` joins them.
             resources: [.process("Resources")],
             swiftSettings: concurrency + [.defaultIsolation(MainActor.self)]
         ),

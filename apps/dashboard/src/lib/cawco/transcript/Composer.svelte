@@ -3185,7 +3185,7 @@
      back the same way as the ask folds. A minimized question's bar takes
      the tray row: the tray and the plan's ring step aside under it and come
      back as it goes. At every width the dock's foot stands 14px above the
-     bottom plus the safe area (DESIGN.md, Composer column: "docked 14px
+     bottom plus the safe area (the composer's surface brief, Composer column: "docked 14px
      above the bottom plus the safe area"), the room the transcript's foot
      clears for it; on a narrow screen the composer, the tray row and the
      cards keep the composer's 11px edges. It stays absolute

@@ -474,8 +474,8 @@
                glyph it gives way to share the cell. A failed call carries
                its state on the glyph — the completed row's done/failed cue,
                next to the running row's breathing glyph in the live tool. -->
-          <!-- The tool family's hue (DESIGN.md, Tool rows: "the tool
-               family's hue on its 16px glyph"); a failed call's crimson
+          <!-- The tool family's hue (DESIGN.md, Identity: "Tool families",
+               tinting the tool glyph); a failed call's crimson
                over it. -->
           <span
             data-slot="glyph"

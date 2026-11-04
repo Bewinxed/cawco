@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Files, the item the top bar's glass group leads with (DESIGN.md, Top
+   * Files, the item the top bar's glass group leads with (the top bar's surface brief, Top
    * bar's trailing edge): the folder as the group's bar symbol in its
    * muted ink and, once there is anything, the number beside it as the
    * machines show theirs (Shell's item-with-a-number recipe, `data-counted`): the

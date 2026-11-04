@@ -1,6 +1,6 @@
 /**
  * A moment's place on a bar of spans laid end to end, the house's one
- * mapping of time onto a line (DESIGN.md, the relay bar): the spans share the
+ * mapping of time onto a line (the usage popover's surface brief, the relay bar): the spans share the
  * bar's width less the gaps between them in proportion to their lengths, so a
  * moment inside the k-th span sits at its share of that width plus the k gaps
  * before it. The relay draws its hours by it; a routine's schedule strip draws

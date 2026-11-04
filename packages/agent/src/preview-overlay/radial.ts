@@ -1,6 +1,6 @@
 import { solarGlyphs } from "./glyphs" with { type: "macro" };
 /**
- * The icon at a stroke's end and its radial menu (DESIGN.md, Artifact
+ * The icon at a stroke's end and its radial menu (the artifact panel's surface brief, Artifact
  * panel, canvas and ink: "The icon at the stroke's end"), drawn in the
  * overlay's shadow root on the house tokens (the decision-page kit's
  * `tokens.css`, the one generated file every page we serve shares).
@@ -36,7 +36,7 @@ const SECTORS: { pick: Pick; glyph: GlyphName; word: string }[] = [
   { pick: "erase", glyph: "eraser", word: "Erase" },
 ];
 
-/** DESIGN.md's numbers. */
+/** The radial menu's numbers (the artifact panel's canvas and ink). */
 const ICON = 24;
 const OUTER = 56;
 /** The ring's inner edge: the icon's own edge and a step of the ladder past it. */

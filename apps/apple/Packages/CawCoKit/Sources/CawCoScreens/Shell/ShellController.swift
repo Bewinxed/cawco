@@ -1172,7 +1172,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     // MARK: The glass's cards
 
-    /// The one card on the glass (DESIGN.md, "The glass's cards"): it shows
+    /// The one card on the glass (the top bar's surface brief, "The glass's cards"): it shows
     /// Caw's panel, the machines or Jump, one at a time, and morphs from one
     /// into the next while it hangs.
     private let glassCard = GlassCard()

@@ -2,7 +2,7 @@
   /**
    * One of a canvas's resize handles over the composer (CanvasStages): the
    * top grab, the drawer's grabber laid flat, or a top corner's grip, the
-   * typical corner grip (DESIGN.md, The canvas's entrance): an L whose
+   * typical corner grip (the artifact panel's surface brief, The canvas's entrance): an L whose
    * `c-corner-grip-leg` legs run along the corner's two edges in a
    * `c-corner-grip-stroke` line of `border-control`, `c-corner-grip-inset`
    * inside the corner and concentric with its radius. A focusable separator

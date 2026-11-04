@@ -15,7 +15,7 @@
  * reduced motion too: it is a fade, and nothing travels.
  *
  * A snap tells the page's host (`cawco:snap` with the shape's id), whose
- * app plays the `selection` tick under the finger (DESIGN.md, Pen rules on
+ * app plays the `selection` tick under the finger (the artifact panel's surface brief, Pen rules on
  * the canvas); the page cannot.
  */
 import { recognise } from "@cawco/core/shapes";

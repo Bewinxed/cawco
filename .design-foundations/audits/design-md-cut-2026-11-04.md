@@ -2,7 +2,7 @@
 
 DESIGN.md now holds only what spans screens: the principles, what the tokens mean, and the kit's recipes. A decision about one screen moved to that screen's surface brief under `apps/dashboard/.impeccable/surfaces/`; an agent's description of what the code does was deleted. `scripts/design-budget-check.ts` (in `bun run check`) holds the body to 8,000 words and 800 characters a paragraph.
 
-Body before: 44,586 words. Body after: 7,731 words, the longest paragraph 717 characters.
+Body before: 44,586 words. Body after: 7,900 words, the longest paragraph 717 characters (after the follow-up of the same day).
 
 Sizes are the section's own text, its subsections apart. "Whole brief" is the brief's word count, shared by every section that fed it.
 
@@ -100,3 +100,17 @@ Sizes are the section's own text, its subsections apart. "Whole brief" is the br
 - comment-card-sizing left open where a comment opens on a tablet with the rail open (his note: a compact rail the comments grow out of).
 - Sections deleted with no owner trace in the clause or its commit, which he may want back as a screen's rule: Browser view, Channel cards, Effort chip, the usage popover's detail beyond the dial wall, the recall wheel and queued edit, the transcript's rows and compaction divider, the thinking indicator, the canvas's tool rail and pen rules (the PRD §5.10 keeps their intent).
 - Token descriptions in `design/tokens/*.tokens.json` (and the generated `Tokens.swift`, the decision-page kit's `tokens.css`) still name sections that moved ("DESIGN.md, The Comments rail", "DESIGN.md Effort chip"); the brief kept the tokens as they are.
+
+## How each contradiction ended (follow-up, 2026-11-04)
+
+1. Goo vs ease-out: the code opens the comment card on `--dur-pop` and `--ease-out` (PinFloat.svelte); `--ease-goo` runs only on the `/dev/pin-goo` bench. DESIGN.md now says so.
+2. "Two recipes": the two on `--ease-crossfade` are named as two, and `--ease-goo` stands apart as the bench's.
+3. Flight duration: `motion/share` flies on `--dur-panel`; `--dur-lift` is the lifted message's (lift.svelte.ts). Both rules now say which.
+4. Dialog motion: `kit-dialog-in` rises `--pop-rise` over `--dur-panel` on ease-out. The Enter Rule and the Dialog recipe now say that; the Drawer curve names popovers, not every floating surface.
+5. Tooltip: it fades in over `--dur-fade` settling 2px toward its trigger and leaves at once (tooltip-content.svelte). The Enter Rule names it as the one exception, under The Frequency Rule.
+6. Permission card shadow: the ask stands inside the composer's grown shape, which carries `shadow-drop`; `shadow-stat` is the stat tile's alone. The vocabulary now says so.
+7. Activity dot: deleted in the cut; gone.
+8. Vermillion section rule: Files and Caw's panel draw it (`border-brand-solid`). The Coral Is Where You Act Rule now lists it.
+9. New-session "dialog" vs "popover": DESIGN.md no longer names the surface; Breakpoints says dialogs become bottom sheets.
+10. Toolbar zone and fleet ledger: gone in the cut; the 44px bar is the one bar height.
+11. The 11-03 rail: gone in the cut.

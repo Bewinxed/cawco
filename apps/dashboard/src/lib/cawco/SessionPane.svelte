@@ -1097,7 +1097,7 @@
    * transcript's room ends over it: nothing scrolls under it. The place is
    * the composer at rest, from its tokens (`composerRoom`), never its
    * measured height: what grows out of it stands over the transcript's foot
-   * as it does in a tab (DESIGN.md, The Composer Layer Rule).
+   * as it does in a tab (the composer's surface brief, The Composer Layer Rule).
    */
   const reserved = $derived(
     docked && writable

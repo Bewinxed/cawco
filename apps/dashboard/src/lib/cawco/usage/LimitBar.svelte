@@ -14,7 +14,7 @@
    *
    * The fill takes the window's state colour on a groove that is no state's
    * (`border-control`, the paint of a ring's empty track, which shows on
-   * the raised surface and the session card's alike, DESIGN.md Relay bar),
+   * the raised surface and the session card's alike, the usage popover's relay bar),
    * so an empty bar reads empty and never as a fill. Any share above
    * nothing draws at least a nub as long as the bar is tall: 1% shows.
    * Nothing here carries visible text. A new reading tweens the fill once;

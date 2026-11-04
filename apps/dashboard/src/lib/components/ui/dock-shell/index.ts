@@ -1,7 +1,7 @@
 import { tv } from "#lib/utils.js";
 
 /**
- * The composer's shell (DESIGN.md, Composer: "a 12px pill in the panel
+ * The composer's shell (the composer's surface brief, Composer: "a 12px pill in the panel
  * material (composer glass) with a 1px control edge and the tile shadow"):
  * what docks at a page's foot stands in it (a session's composer, a decision
  * page's note, the project's views). The composer glass (the panel material

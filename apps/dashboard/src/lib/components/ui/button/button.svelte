@@ -55,7 +55,7 @@
            that inset from the glyph and the edge. */
         sm: "h-c-btn-h-sm in-form-compact:min-w-c-btn-h-sm gap-(--btn-gap) in-form-compact:px-[calc((var(--c-btn-h-sm)-var(--btn-icon))/2-1px)] px-space-3 text-label [--btn-gap:var(--space-2)] [--btn-icon:var(--icon-md)] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         lg: "h-11 gap-(--btn-gap) px-4 [--btn-gap:var(--c-btn-gap)] [--btn-icon:var(--icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
-        /* A control standing in a composer shell (DESIGN.md, Composer:
+        /* A control standing in a composer shell (the composer's surface brief, Composer:
            "34px Attach … and Send/Stop … each at the concentric 4px
            radius"): the default's recipe at the composer field's height. */
         composer:
@@ -140,7 +140,7 @@
           "can-hover:opacity-0 can-hover:transition-[opacity] can-hover:duration-(--dur-control) can-hover:ease-out can-hover:not-disabled:focus-visible:opacity-100 can-hover:disabled:opacity-0 can-hover:disabled:focus-visible:opacity-100 can-hover:group-hover:not-disabled:opacity-100 can-hover:group-hover:disabled:opacity-100",
         /* In reach whenever its row (`group/row`) is under the pointer or
            holds the focus anywhere in it, not only on the button itself
-           (Files' Show in conversation, DESIGN.md Files: "shown on the
+           (Files' Show in conversation, Files' surface brief, Files: "shown on the
            row's hover and focus and always under a finger"). */
         "row-reach":
           "can-hover:opacity-0 can-hover:transition-[opacity] can-hover:duration-(--dur-control) can-hover:ease-out can-hover:group-focus-within/row:not-disabled:opacity-100 can-hover:group-hover/row:not-disabled:opacity-100",

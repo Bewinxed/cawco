@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * The @ menu (DESIGN.md, Composer, "Slash and @ menu"): a floating surface
+   * The @ menu (the composer's surface brief, Composer, "Slash and @ menu"): a floating surface
    * above the field and matched to its width, growing from its bottom edge,
    * flat rows in one group. Its rows are the finder's rows, whole: a long
    * title clips on the desk only past the menu's width, and wraps on a phone.

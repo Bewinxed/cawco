@@ -1,7 +1,7 @@
 import { tv } from "#lib/utils.js";
 
 /**
- * The icon tile (DESIGN.md, New-session dialog: "Icon tiles are raised 8px
+ * The icon tile (DESIGN.md, Icon tile: "a raised 26px square at 8px
  * squares with the tile shadow, dashed for empty or inverted for chosen";
  * Identity marks and tiles: "Icon tile: a raised 26px square at 8px radius
  * with the tile shadow, holding a 16px duotone glyph in its section or

@@ -6,7 +6,7 @@
       (`aria-current`, in the strong ink, over a destructive item's ink as
       the list's own rule was) and any of which may be busy (`aria-busy`,
       at half). An artifact's row stands on the artifact row's measure
-      (DESIGN.md, Files: "rows on the artifact row's measure (44px)"). */
+      (Files' surface brief, Files: "rows on the artifact row's measure (44px)"). */
   const dropdownMenuItemVariants = tv({
     variants: {
       marks: {

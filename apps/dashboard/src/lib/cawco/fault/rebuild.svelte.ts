@@ -2,7 +2,7 @@
  * How a failed part's face knows that Try again can't help: the rebuild
  * threw the same way within a second of the press, so the data it reads is
  * what throws, and the way on is Reload page, which reads everything fresh
- * from the hub (a reload is safe: DESIGN.md, Update toast).
+ * from the hub (a reload is safe: the update toast's surface brief, Update toast).
  */
 
 /** How soon after Try again a throw counts as the rebuild's own. */

@@ -15,7 +15,7 @@
  *           no banned generic button labels anywhere
  *
  * Does NOT touch or weaken the visual gates; built-mocks consistency is still the
- * byte-identity gate's job. Exits non-zero on any miss so verify.sh fails red.
+ * byte-identity gate's job. Exits non-zero on any miss.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";

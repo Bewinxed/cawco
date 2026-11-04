@@ -4,8 +4,8 @@ import CawCoMascot
 import OSLog
 import UIKit
 
-/// The paywall sheet and the notification setup it turns into (paywall
-/// DESIGN.md §2, copy COPY.md): one house sheet, its hero band on top and its
+/// The paywall sheet and the notification setup it turns into (the
+/// paywall spec §2, copy COPY.md): one house sheet, its hero band on top and its
 /// panel under it. The panel morphs from screen to screen (P1, P2, S1 to S8,
 /// R) as the sheet re-sizes; the hero cross-fades between the scene and Caw
 /// alone on the field.

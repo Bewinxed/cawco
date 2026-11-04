@@ -1237,7 +1237,7 @@ export const unheardEntries = (pin: Pin): ThreadEntry[] => {
 };
 
 /**
- * Where a pin's pill stands (DESIGN.md, A pin's pill): `provisional` while it
+ * Where a pin's pill stands (the artifact panel's surface brief, A pin's pill): `provisional` while it
  * is still being placed, `unsent` while the session has not heard it, `sent`
  * once it has, `resolved` once it is settled.
  */

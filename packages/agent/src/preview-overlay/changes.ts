@@ -13,7 +13,7 @@
  * inside its first row (`page-scroll`), so neither its pictures loading nor
  * its scrolling ever moved the document, nor the rings. The ring hides while its element is scrolled out of its scroller
  * (`position-visibility: anchors-visible`). A ring the host stops naming
- * fades off over `--dur-fade`, on its element until it goes. Coral is the target's alone (DESIGN.md, The One Target
+ * fades off over `--dur-fade`, on its element until it goes. Coral is the target's alone (the artifact panel's surface brief, The One Target
  * Rule): a ring is never coral.
  *
  * A ring pings once as its change lands, and again when the person steps

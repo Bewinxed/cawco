@@ -509,20 +509,20 @@ Motion is continuity, never decoration: "we fly instead of teleport" (Family), i
 
 - **Ease-out** (`--ease-out`): entrances, exits, colour and any change in place; the default.
 - **Ease-in-out** (`--ease-in-out`): something already on screen moving to another place, or a figure filling to a new value.
-- **Drawer** (`--ease-drawer`): floating surfaces, sheets, page swaps, flights and container size changes.
+- **Drawer** (`--ease-drawer`): popovers and menus, sheets, page swaps, flights and container size changes.
 - **Linear**: constant motion, a spinner's turn or a steady glide. Progress does not ease.
 
-Two recipes the owner picked from transitions.dev are bound to their components alone: the skeleton's pulse and reveal and the folder tab's choice on `--ease-crossfade`, for beats of 400ms and longer; and a comment card pouring out of its pin on `--ease-goo`, the one overshoot. CSS `ease` is never used.
+Two recipes the owner picked from transitions.dev run on `--ease-crossfade`, the one gentle curve, and are bound to their components alone: the skeleton's pulse and reveal, and the folder tab's choice, beats of 400ms and longer. `--ease-goo`, the one overshoot, stands on the `/dev/pin-goo` bench and no shipped component; a comment card grows out of its pin as every popover opens. CSS `ease` is never used.
 
 **The No Ease-In Rule.** No ease-in curve exists, and no run starts slow: anything that starts slow feels like the interface hesitating.
 
 **The Frequency Rule.** How often the reader sees a motion decides whether it exists. A keyboard-initiated action never animates; the same action from a pointer keeps its motion (typing is not an action). What is seen tens of times a day (a hover, a row's highlight) gets a colour or opacity change on `--dur-control` or nothing; what is occasional (a popover, a sheet, a toast) gets the standard motion; delight belongs only to what is rare. Motion is never the only sign that something happened.
 
-**The Fast Exit Rule.** Exits are shorter than entrances, and a thing leaves the way it came: in over `--dur-pop` or `--dur-panel`, out over `--dur-exit`; a grown surface in over `--dur-grow`, out over `--dur-grow-exit`. Nothing outlasts `--dur-panel` but a flight (`--dur-lift`), a grown surface and the two picked recipes; ambient loops are not beats.
+**The Fast Exit Rule.** Exits are shorter than entrances, and a thing leaves the way it came: in over `--dur-pop` or `--dur-panel`, out over `--dur-exit`; a grown surface in over `--dur-grow`, out over `--dur-grow-exit`. Nothing outlasts `--dur-panel` but a message lifted between its bubble and the field (`--dur-lift`), a grown surface and the two picked recipes; ambient loops are not beats.
 
-**The Enter Rule.** Nothing appears from nothing. A surface arrives from `--pop-scale` or `--pop-rise` short of its place, fading in, from its trigger's side (a dialog from its centre); every travel is `--pop-rise`, and a view handing its place along a strip comes `--swap-nudge` from its side. A press scales to `--press-scale`. Entrances and exits are `transform` and `opacity` (a `clip-path` where a box opens out of another, `height` only for a disclosure), and no keyframe writes a length (lint `house/no-raw-motion`).
+**The Enter Rule.** Nothing appears from nothing. A surface arrives from `--pop-scale` or `--pop-rise` short of its place, fading in, from its trigger's side (a dialog rises `--pop-rise`); every travel is `--pop-rise`, and a view handing its place along a strip comes `--swap-nudge` from its side. A press scales to `--press-scale`. Entrances and exits are `transform` and `opacity` (a `clip-path` where a box opens out of another, `height` only for a disclosure), and no keyframe writes a length (lint `house/no-raw-motion`). The tooltip is the one exception, because it is seen tens of times a day (The Frequency Rule): it fades in over `--dur-fade` settling 2px toward its trigger, and leaves at once.
 
-**The One Object Rule.** What is on both sides of a change travels; it never vanishes on one side and appears on the other (`motion/share.svelte.ts`). A flight runs on the drawer curve as a transform or a clip from the source's box, the source hidden meanwhile so the screen never shows two. A surface that closes on running work travels into the place that work is parked.
+**The One Object Rule.** What is on both sides of a change travels; it never vanishes on one side and appears on the other (`motion/share.svelte.ts`). A flight runs `--dur-panel` on the drawer curve as a transform or a clip from the source's box, the source hidden meanwhile so the screen never shows two. A surface that closes on running work travels into the place that work is parked.
 
 **The Nothing Jumps Rule.** When a list changes, rows that stay slide, rows that leave close while fading, and rows that arrive are uncovered while what follows makes room, all from one frame (`motion/rows.svelte.ts`). A move wholly off screen jumps, so nothing drifts into view behind the reader's scroll.
 
@@ -598,7 +598,7 @@ Four functional hues, each with a 3 / 9 / 11 step: info, warning, success and er
 ### Named Rules
 **The Reserved Hue Rule.** Crimson, spark yellow, olive and blue mean status, and status only. Progress rings, identity and decoration take `currentColor` or an identity hue. A finished task ring is the one decoration that earns a state colour, because by then it is a result.
 
-**The Coral Is Where You Act Rule.** Coral marks the action (one per view: the act the view is for, so a view for deciding spends it on the decision), the selected nav row, the focus ring, checked controls, the chosen option and the selection tint. Advice is never coral: a recommended option wears the Recommended badge, and when it starts chosen it wears both, so moving the pick moves only the coral. Coral is never a status, so it never reads as an alarm and an alarm never reads as a button.
+**The Coral Is Where You Act Rule.** Coral marks the action (one per view: the act the view is for, so a view for deciding spends it on the decision), the selected nav row, the focus ring, checked controls, the chosen option, the selection tint, and the vermillion rule that parts two regions of a glass card (Files, Caw's panel). Advice is never coral: a recommended option wears the Recommended badge, and when it starts chosen it wears both, so moving the pick moves only the coral. Coral is never a status, so it never reads as an alarm and an alarm never reads as a button.
 
 **The White On Coral Rule.** Text on coral sits on `action-solid` or `chip-chosen-bg`, never on `brand-solid`. A new coral fill under text is measured to 4.5:1, top gradient stop included, before it ships.
 
@@ -647,7 +647,7 @@ The dense roles keep one size at every width; they are already the smallest that
 
 ## Layout
 
-The shell is a resizable rail, a 44px top bar with no ground of its own, and a page on the recessed field, padded 25px on its inline start and 21px on its end, its groups 18px apart. A page has no head under the bar: its name, where one helps, is the bar's title.
+The shell is a resizable rail (228px by default, the reader's own width wins), a 44px top bar with no ground of its own, and a page on the recessed field, padded 25px on its inline start and 21px on its end, its groups 18px apart. A page has no head under the bar: its name, where one helps, is the bar's title.
 
 **The Title Bars Follow Liquid Glass Rule.** Every bar that heads a surface (the top bar, a pane, a side panel, a sheet, a canvas's band) follows Apple's toolbar model as Liquid Glass revised it (HIG, Toolbars, 2025-12-16), on the web and in the native app:
 - **One bar, one row.** Title and controls share one line. Facts about the surface (its place, a path, an id, a count, its ask) are content, never a second line in the bar.
@@ -670,11 +670,11 @@ Depth is tonal first and shadowed second. The frame (the app field, dialog tray,
 
 ### Shadow Vocabulary
 - **Tile** (`shadow-tile`): cards, machine tiles, icon tiles.
-- **Hairline** (`shadow-hairline`): a drop under a tile without a ring. **Stat** (`shadow-stat`): the stat tile and the permission card.
+- **Hairline** (`shadow-hairline`): a drop under a tile without a ring. **Stat** (`shadow-stat`): the stat tile.
 - **Raised** (`shadow-raised`): a thumb in a groove, a card hanging under a row.
 - **Overlay** (`shadow-overlay`, and `shadow-modal`, the same value): popovers, menus, the dialog tray, toasts, floating tags. `shadow-overlay-hung` is the overlay's drop without the night ring, for a card that hangs from its anchor.
 - **Drawer** (`shadow-drawer`): sheets.
-- **Drop** (`shadow-drop`, `shadow-drop-near`): a drawn shape rather than a box, as two `drop-shadow()` filters following its edge.
+- **Drop** (`shadow-drop`, `shadow-drop-near`): a drawn shape rather than a box, as two `drop-shadow()` filters following its edge: the composer grown round a permission ask or the recall wheel.
 - **Pressed inset**, **action ring** and **code ring** (`shadow-inset-sel`, `action-ring`, `code-ring`): the markdown editor's pressed button, the action and code blocks.
 
 The Tailwind ladder has four steps, `shadow-xs`, `-md`, `-lg` and `-xl`; md, lg and xl carry the night ring.
@@ -749,7 +749,9 @@ Tactile and quiet: a hairline-edged raised block that dips under the hand.
 - **Submenu:** the same surface, portalled, beside its row, or hanging from its row's foot where neither side holds it (`submenu-side.ts`).
 - **Menu item:** 5px, 32px tall (44px on a coarse pointer), label role. A chosen item shows its tick in its own ink; `surface-hover` is the only fill it takes.
 - **Hover ghost and selection pill** (`highlight.svelte.ts`): one of each per list, drawn under its rows. The ghost is `surface-hover` and glides to the row under the pointer; the pill glides to a new selection, and a row picked under the ghost becomes the pill at once. No ghost on touch.
-- **Limit bar** (`usage/LimitBar`): a track, a fill in its state colour (`meter-*`), a pace tick; it says whether it reads used or left.
+- **Limit bar** (`usage/LimitBar`): a track, a fill in its state colour (`meter-*`), a pace tick, 4px tall in a stats strip and 8px on a page; it says whether it reads used or left.
+- **Ticks and dots:** a checkbox tick draws itself along its stroke; a radio dot grows from 0.6 as it fades in; with reduced motion both only fade.
+- **Table** (`ui/table`): a ledger under a `surface-band` header band in the column-head role, 44px rows, figures tabular. Where the table's own width is a phone's (`@container/table`), each row becomes a two-line card.
 
 ### Segmented controls and tabs
 - **Segmented** (`kit-segmented`, used by Tabs and single toggle groups): a `surface-recess-deep` groove (10px, 3px padding) holding a lifted thumb (7px, concentric, raised shadow). Segments are 30px, label weight, muted until chosen. The thumb glides with position and size together on ease-in-out from wherever it is drawn. A segment presses with the tint, never a scale.
@@ -757,16 +759,16 @@ Tactile and quiet: a hairline-edged raised block that dips under the hand.
 - **Folder tabs:** fluid-tabs' folder variant on `surface-shelf` (Shapes, Folder tabs).
 
 ### Tooltip
-Solid ink, never coral: `ink-solid` fill and arrow, `on-ink` text, meta role, 8px radius, with a rotated square arrow. It fades in and settles from 0.96, and leaves the same way.
+Solid ink, never coral: `ink-solid` fill and arrow, `on-ink` text, meta role, 8px radius, with a rotated square arrow. It fades in over `--dur-fade` settling 2px toward its trigger and leaves at once (The Enter Rule names it the one exception).
 
 ### Asking in the page
 The one way to ask before doing (`AskHere.svelte`, `ask-here.svelte.ts`). The question unfolds in the page's flow under the control that asked it, indented to its row's title: a raised tile holding the title in label, the consequence in meta, then Cancel (ghost) and the verb (destructive, or the grant's shield). It takes the focus on Cancel. The verb stays pending until its work ends; a refusal stays under the question in the refuser's words, and only work that went closes it. An action that reaches several things names them inside the question, read live.
 
 ### Dialog, sheet and drawer
 For the rare holds The Open Page Rule allows; no confirmation is a dialog.
-- **Dialog:** a recess tray (18px, 6px padding) holding a raised body (12px) over the scrim, Close a ghost icon in its corner.
+- **Dialog:** a recess tray (18px, 6px padding) holding a raised body (12px) over the scrim, Close a ghost icon in its corner. It enters over `--dur-panel` on ease-out, rising `--pop-rise`, and leaves over `--dur-exit`.
 - **Sheet:** a raised edge panel with the drawer shadow, sliding its whole size on the drawer curve. A finger drags it 1:1 and lets go past 30% or on a flick, settling on the spring; a mouse has Close and Escape.
-- **Drawer (vaul):** every bottom sheet: full-bleed, 12px top corners, a grabber, one header (title and Close, 44px under a finger), as tall as its content up to 85vh.
+- **Drawer (vaul):** every bottom sheet: full-bleed, 12px top corners, a 100×6 grabber, one header (title and Close, 44px under a finger), as tall as its content up to 85vh.
 
 **The Hold-To-Select Rule.** A press that starts in a text field is never captured by a drawer or gesture round it, so iOS hold-to-select and Paste reach the field. A held press on a context-menu trigger suppresses the platform callout.
 
