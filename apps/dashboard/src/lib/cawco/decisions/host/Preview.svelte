@@ -216,6 +216,8 @@
   let turn: EmbedTurn | undefined;
   /** Where its canvas's graph stands in the page's turns: told and waiting, fetching its share on its turn, or its share fetched whole. */
   let turnState = $state<"waiting" | "fetching" | "fetched">("waiting");
+  /** Its frame's load now told its graph (core `CANVAS_EMBED_GRAPH`): its load then takes no turn for a page that told none. */
+  let graphHeard = false;
 
   /**
    * The shape its canvas said at rest, told beside the page's own address
@@ -267,6 +269,7 @@
       // Its graph, told before it fetches any of it, by every load of its
       // frame: each load fetches on a turn of its own.
       if (said?.type === CANVAS_EMBED_GRAPH && Array.isArray(said.urls)) {
+        graphHeard = true;
         turnState = "waiting";
         turn?.graph(said.urls.map(String));
         return;
@@ -606,7 +609,7 @@
     // Every embed of the page takes its place in its turns now, as it mounts, so every Preview of the page is in the queue before the first turn, the one in view first (embed-turns.ts). A canvas fetches its graph on its turn, its frame loading meanwhile, its skeleton standing; a whole screen loads on its turn, alone, once its origin answers, which it tells as an empty graph: seven dashboards asked at once held every frame of the page white for most of a minute.
     turnState = "waiting";
     if (canvas) {
-      const origin = new URL(address).origin;
+      const { origin } = new URL(address);
       // Each load of its frame takes a turn of its own (embed-turns.ts
       // `graph`): its go, then its rest, told again for every load.
       turn = embedTurn(() => box, {
@@ -919,8 +922,14 @@
             data-turn={turnState}
             onload={() => {
               drawn = true;
-              // A page that told no graph by its load has none to fetch (a stage's error page): it holds no turn.
-              turn?.graph([]);
+              // A canvas's page that told no graph by its load has none to
+              // fetch (a stage's error page): it holds no turn. One that told
+              // it has its turn already; told again here, it would take a
+              // second.
+              if (!(screen || graphHeard)) {
+                turn?.graph([]);
+              }
+              graphHeard = false;
             }}
             src={ready}
             style:block-size={framedHeight}

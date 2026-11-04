@@ -4,6 +4,12 @@
  * dashboard and host-mode names), and the certificate its https answers
  * carry.
  */
+import {
+  createHash,
+  createPublicKey,
+  generateKeyPairSync,
+  type KeyObject,
+} from "node:crypto";
 import { $ } from "bun";
 
 const HOP = new Set([
@@ -208,8 +214,41 @@ export const outpostTo = (
   });
 
 /**
- * A self-signed certificate for `names` (RSA 2048, SHA-256, the names as
- * SANs, a day), made in `dir`: what {@link cloudflareTo} answers https with.
+ * This process's one key for the certificates it makes ({@link
+ * scratchCertificate}), made once as it is first asked for. A browser the
+ * kit launches trusts it ({@link scratchKeySpki}).
+ */
+let scratchKey: KeyObject | undefined;
+const keyOfRun = (): KeyObject => {
+  scratchKey ??= generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey;
+  return scratchKey;
+};
+
+/**
+ * The SHA-256 of {@link keyOfRun}'s public key, base64: what the kit's
+ * Chromium is launched with (`--ignore-certificate-errors-spki-list`), so a
+ * certificate this run made is a valid one there, as the hub's tailnet
+ * certificate and Cloudflare's edge are to the owner's browser.
+ *
+ * Accepted only past `ignoreHTTPSErrors`, the answer carried its error, and
+ * Chromium keeps no answer with a certificate error in its HTTP cache
+ * (net/http/http_cache_transaction.cc: "Do not cache content with cert
+ * errors", `if (IsCertStatusError(response.ssl_info.cert_status) || …)
+ * StopCachingImpl`). Every frame of a decision page then fetched each
+ * address its page shares (a canvas's entry, runtime, sheet, Vite's
+ * client, the faces) one frame after another through the cache's lock, a
+ * hop apart: canvas-parallel's page of five painted its last at 3.3 s where
+ * the same page with its answers cached paints it at 2.0 s.
+ */
+export const scratchKeySpki = (): string =>
+  createHash("sha256")
+    .update(createPublicKey(keyOfRun()).export({ type: "spki", format: "der" }))
+    .digest("base64");
+
+/**
+ * A certificate for `names` (SHA-256, the names as SANs, a day), made in
+ * `dir` on this run's key ({@link keyOfRun}): what {@link cloudflareTo}
+ * answers https with, and the kit's Chromium trusts.
  */
 export async function scratchCertificate(
   dir: string,
@@ -217,7 +256,9 @@ export async function scratchCertificate(
 ): Promise<{ cert: string; key: string }> {
   const cert = `${dir}/front.pem`;
   const key = `${dir}/front.key`;
+  const keyPem = keyOfRun().export({ type: "pkcs8", format: "pem" }).toString();
+  await Bun.write(key, keyPem);
   const san = `subjectAltName=${names.map((name) => `DNS:${name}`).join(",")}`;
-  await $`openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 1 -keyout ${key} -out ${cert} -subj /CN=${names[0] ?? "localhost"} -addext ${san}`.quiet();
-  return { cert: await Bun.file(cert).text(), key: await Bun.file(key).text() };
+  await $`openssl req -x509 -key ${key} -nodes -sha256 -days 1 -out ${cert} -subj /CN=${names[0] ?? "localhost"} -addext ${san}`.quiet();
+  return { cert: await Bun.file(cert).text(), key: keyPem };
 }

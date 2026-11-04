@@ -56,6 +56,7 @@ import {
   tagOf,
   takeLaunches,
 } from "./browser-leftovers";
+import { scratchKeySpki } from "./cloudflare-front";
 import {
   type BrowserLog,
   browserLog,
@@ -1164,6 +1165,9 @@ export class Run {
                 ]
               : []),
             DESK_POINTER,
+            // A certificate the run made (cloudflare-front.ts
+            // `scratchCertificate`) is a valid one, its answers cached.
+            `--ignore-certificate-errors-spki-list=${scratchKeySpki()}`,
           ],
           ...(scrollbars ? { ignoreDefaultArgs: ["--hide-scrollbars"] } : {}),
           env,
