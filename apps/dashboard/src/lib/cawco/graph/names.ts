@@ -142,7 +142,14 @@ export function nameOf(el: Element): string {
   const slot = own && !WORDS_ONLY.has(own) ? own : null;
   if (slot) {
     const label = labelIn(el);
-    return label ? `${slotWords(slot)} ${quoted(label)}` : slotWords(slot);
+    if (label) {
+      return `${slotWords(slot)} ${quoted(label)}`;
+    }
+    // A kit wrapper round one control (a native select's) is that control:
+    // "Native select wrapper" named the box, not the menu.
+    const controls = el.querySelectorAll("input, select, textarea");
+    const [only] = controls;
+    return controls.length === 1 && only ? nameOf(only) : slotWords(slot);
   }
   const kind = KIND[el.localName] ?? null;
   const label = el.getAttribute("aria-label") ?? fieldLabelOf(el);

@@ -38,6 +38,8 @@ const READ =
 interface Part {
   disabled: boolean;
   el: Element;
+  /** What a person calls it (names `nameOf`): a field by its label, a menu by its field's. */
+  ident: string;
   key: string;
   text: string;
   value: string;
@@ -75,12 +77,23 @@ function placeOf(el: Element, root: Element): string {
 function partsOf(root: Element): Part[] {
   const parts: Part[] = [];
   for (const el of root.querySelectorAll("*")) {
-    if (!((el.matches(READ) || ownWords(el)) && drawn(el))) {
+    // A decoration a reader is never told of (a menu's chevron) is no part:
+    // its wrapper changing named "Native select icon removed".
+    // (The compared drawing is hidden from a reader whole: only a hider
+    // inside the root counts.)
+    const hider = el.closest("[aria-hidden='true']");
+    if (
+      !((el.matches(READ) || ownWords(el)) && drawn(el)) ||
+      (hider && hider !== root && root.contains(hider))
+    ) {
       continue;
     }
     const slot = el.getAttribute("data-slot");
     parts.push({
       el,
+      // Its name and its element: a kit wrapper is named by the one control
+      // it holds, and the two are two parts.
+      ident: `${nameOf(el)}#${el.localName}`,
       key: slot ? `${slot}@${placeOf(el, root)}` : placeOf(el, root),
       text: ownWords(el) ? wordsOf(el) : "",
       value:
@@ -110,7 +123,26 @@ const SHORT = 40;
 const short = (text: string) =>
   text.length > SHORT ? `${text.slice(0, SHORT - 1).trimEnd()}…` : text;
 
-/** Each part of `after` matched to its part of `before`: by its name and place, else by its words. */
+/** The parts of `list` by what a person calls them, only the names one part holds. */
+const byOneName = (list: Part[]): Map<string, Part> => {
+  const counts = new Map<string, number>();
+  for (const part of list) {
+    counts.set(part.ident, (counts.get(part.ident) ?? 0) + 1);
+  }
+  return new Map(
+    list
+      .filter((part) => counts.get(part.ident) === 1)
+      .map((part) => [part.ident, part])
+  );
+};
+
+/**
+ * Each part of `after` matched to its part of `before`: by what a person
+ * calls it, where one part on each side holds that name; else by its
+ * part's name and place; else by its words. Paired by place first, the
+ * Time zone menu of Every hour was matched to the day menu standing where
+ * it stands in Every week ("Menu “Time zone”: 1 → Asia/Qatar").
+ */
 function pair(before: Part[], after: Part[]): Map<Part, Part> {
   const pairs = new Map<Part, Part>();
   const unpaired = new Set(before);
@@ -121,8 +153,17 @@ function pair(before: Part[], after: Part[]): Map<Part, Part> {
       unpaired.delete(match);
     }
   };
+  const named = byOneName(before);
+  const namedAfter = byOneName(after);
   for (const part of after) {
-    take(part, byKey.get(part.key));
+    if (namedAfter.get(part.ident) === part) {
+      take(part, named.get(part.ident));
+    }
+  }
+  for (const part of after) {
+    if (!pairs.has(part)) {
+      take(part, byKey.get(part.key));
+    }
   }
   for (const part of after) {
     if (!pairs.has(part) && part.text) {
