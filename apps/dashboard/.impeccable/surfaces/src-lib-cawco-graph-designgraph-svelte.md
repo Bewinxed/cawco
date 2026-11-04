@@ -64,6 +64,9 @@ He asked for the Animation face designed from what a person comes to do there: a
 Pin 26: the timeline as round 29 drew it; an edited value styled as changed on itself, pressed to restore it, as other software does.
 Pins 1 and 2 on design-graph-animation-r29: rows told apart, bars inside the lane, the playhead on its time, no jump on a click, a head of only what is used; round 29 is the idea, built as a professional tool would (the orchestrator's brief).
 
+## Where a person reaches it (5 November 2026)
+Only at `/dev/design-graph` (dev and the bench build). A component artifact in the artifact panel still frames the stage's canvas page (`/@cawco/canvas`, stage-host chrome.ts, DialKit's timeline). The PRD (§5.10) has the graph replace that page, slice by slice. The slice that does it moves Stage's work (reach, play and read a move, seek and replay, differences, rings, reveal) into the stage page behind messages, the face's chrome into the panel.
+
 ## Open with him
 Whether group heads become column heads (a deviation from DESIGN.md); whether a width pick replays the move. 
 
