@@ -502,6 +502,28 @@
           oklch(from var(--neutral-12) l c h / 0.035),
           oklch(from var(--neutral-12) l c h / 0.06)
         );
+    /* The tile shadow of a tab flush against the screen's trailing edge (BarGlass's Caw tab on a phone, beside its `border-e-0`): shadow-tile's elevation, and its ring drawn over the top, the foot and the leading side only, as the border is, so no hairline stands on the flush side. One-sided as shadow-tab-end is: the trailing side is the right. */
+    --shadow-tile-flush-end:
+      0 1px 2px
+        light-dark(
+          oklch(from var(--neutral-12) l c h / 0.07),
+          oklch(0% 0 0 / 0.3)
+        ),
+      0 -1px 0 0
+        light-dark(
+          oklch(from var(--neutral-12) l c h / 0.035),
+          oklch(from var(--neutral-12) l c h / 0.06)
+        ),
+      0 1px 0 0
+        light-dark(
+          oklch(from var(--neutral-12) l c h / 0.035),
+          oklch(from var(--neutral-12) l c h / 0.06)
+        ),
+      -1px 0 0 0
+        light-dark(
+          oklch(from var(--neutral-12) l c h / 0.035),
+          oklch(from var(--neutral-12) l c h / 0.06)
+        );
     --shadow-raised:
       0 1px 3px var(--shadow-tint), 0 1px 1px var(--shadow-tint),
       inset 0 0 0 1px var(--night-ring);

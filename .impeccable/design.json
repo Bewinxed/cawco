@@ -2372,6 +2372,11 @@
         "purpose": "Cards, tiles, icon tiles, report cards, the fluid-tabs segment."
       },
       {
+        "name": "shadow-tile-flush-end",
+        "value": "0 1px 2px light-dark(oklch(from var(--neutral-12) l c h / 0.07), oklch(0% 0 0 / 0.3)), 0 -1px 0 0 light-dark(oklch(from var(--neutral-12) l c h / 0.035), oklch(from var(--neutral-12) l c h / 0.06)), 0 1px 0 0 light-dark(oklch(from var(--neutral-12) l c h / 0.035), oklch(from var(--neutral-12) l c h / 0.06)), -1px 0 0 0 light-dark(oklch(from var(--neutral-12) l c h / 0.035), oklch(from var(--neutral-12) l c h / 0.06))",
+        "purpose": "shadow-tile on a tab flush against the screen's trailing edge (the phone's Caw tab): its ring on the top, the foot and the leading side only, as its border is."
+      },
+      {
         "name": "shadow-raised",
         "value": "0 1px 3px var(--shadow-tint), 0 1px 1px var(--shadow-tint), inset 0 0 0 1px var(--night-ring)",
         "purpose": "A thumb in a groove; the night ring edges it at night."

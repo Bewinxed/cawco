@@ -1583,6 +1583,109 @@
         }
       }
     },
+    "shadow-tile-flush-end": {
+      "$type": "shadow",
+      "$description": "The tile shadow of a tab flush against the screen's trailing edge (BarGlass's Caw tab on a phone, beside its `border-e-0`): shadow-tile's elevation, and its ring drawn over the top, the foot and the leading side only, as the border is, so no hairline stands on the flush side. One-sided as shadow-tab-end is: the trailing side is the right.",
+      "$value": [
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0, 0, 0],
+            "alpha": 0.3
+          },
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 1,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 2,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.934, 0.01, 82],
+            "alpha": 0.06
+          },
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": -1,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.934, 0.01, 82],
+            "alpha": 0.06
+          },
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 1,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": {
+            "colorSpace": "oklch",
+            "components": [0.934, 0.01, 82],
+            "alpha": 0.06
+          },
+          "offsetX": {
+            "value": -1,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 0,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        }
+      ],
+      "$extensions": {
+        "dev.cawco": {
+          "css": "0 1px 2px light-dark(oklch(from {color.neutral-12} l c h / 0.07), oklch(0% 0 0 / 0.3)), 0 -1px 0 0 light-dark(oklch(from {color.neutral-12} l c h / 0.035), oklch(from {color.neutral-12} l c h / 0.06)), 0 1px 0 0 light-dark(oklch(from {color.neutral-12} l c h / 0.035), oklch(from {color.neutral-12} l c h / 0.06)), -1px 0 0 0 light-dark(oklch(from {color.neutral-12} l c h / 0.035), oklch(from {color.neutral-12} l c h / 0.06))"
+        }
+      }
+    },
     "action-ring": {
       "$type": "shadow",
       "$value": [
