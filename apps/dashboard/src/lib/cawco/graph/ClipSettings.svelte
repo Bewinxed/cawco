@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { HOUR_MS } from "@cawco/core/time";
   /**
    * The selected row's settings, opened in place under its row (his pick:
    * a clip is adjusted in place), as one line of three setting chips
@@ -25,6 +24,8 @@
    * restore it). Coral is the selected row's alone. A pick or a typed value
    * plays the move from the row once (DesignGraph `retime`).
    */
+  import { bringIntoView } from "@cawco/core/bring-into-view";
+  import { HOUR_MS } from "@cawco/core/time";
   import { graphWords as words } from "@cawco/core/words/graph";
   import { Slider } from "bits-ui";
   import { ease } from "#lib/cawco/motion/curves.svelte.js";
@@ -215,7 +216,9 @@
       const chosen =
         list()?.querySelector<HTMLElement>('[aria-selected="true"]') ??
         list()?.querySelector<HTMLElement>('[role="option"]');
-      chosen?.scrollIntoView({ block: "nearest" });
+      if (chosen) {
+        bringIntoView(chosen);
+      }
       chosen?.focus({ preventScroll: true });
     });
   };
