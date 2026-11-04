@@ -8,12 +8,12 @@
  */
 
 /**
- * Claude Code 2.1.316 (bundled with `@anthropic-ai/claude-agent-sdk`
- * 0.3.316) compacts once a request's context reaches its auto-compact window
- * less the output it reserves, less 13,000: `var sjr=20000`, `function
- * DZ(e,n){let r=Math.min(e.maxOutputTokens,sjr),…,{window:h}=BS(e,s);return
- * h-r}`, `function AJ(e,n){let r=e-13000,…return r}`, and `if(r.enabled&&
- * e>=y)return{level:"compact",…}` with `y` that `AJ(DZ(…))`. Its window is
+ * Claude Code 2.1.318 (bundled with `@anthropic-ai/claude-agent-sdk`
+ * 0.3.318) compacts once a request's context reaches its auto-compact window
+ * less the output it reserves, less 13,000: `var r9r=20000`, `function
+ * Rne(e,n){let r=Math.min(e.maxOutputTokens,r9r),…,{window:h}=xb(e,s);return
+ * h-r}`, `function Nee(e,n){let r=e-13000,…return r}`, and `if(r.enabled&&
+ * e>=y)return{level:"compact",…}` with `y` that `Nee(Rne(…))`. Its window is
  * the model's context window unless the person set another
  * (`autoCompactWindow`, `CLAUDE_CODE_AUTO_COMPACT_WINDOW`), which this does
  * not read: 1M → 967,000, 200K → 167,000.
