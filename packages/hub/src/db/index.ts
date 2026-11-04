@@ -1122,6 +1122,12 @@ export interface DbShape {
    * link — reads it here.
    */
   readonly instanceIdOf: (id: string) => string;
+  /**
+   * Every kept row that names `accountId`, however long ago it last moved
+   * (a session stopped a week ago is still one a person can wake): what an
+   * account's removal moves off it.
+   */
+  readonly instancesOnAccount: (accountId: string) => PublicInstanceRow[];
   /** The MCP servers and tools a session's newest `init` announced. */
   readonly instanceTooling: (id: string) => SessionTooling | null | undefined;
   /**
@@ -7592,6 +7598,13 @@ const make = async (path: string): Promise<DbShape> => {
         .select(publicColumns)
         .from(instances)
         .where(and(eq(instances.machineId, machineId), listedInstances()))
+        .all()
+        .map(asListed),
+    instancesOnAccount: (accountId) =>
+      db
+        .select(publicColumns)
+        .from(instances)
+        .where(and(eq(instances.accountId, accountId), keptInstances()))
         .all()
         .map(asListed),
     listedInstancesByIds: (ids) =>

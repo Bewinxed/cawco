@@ -140,6 +140,16 @@ public enum Words {
         /// A session moved to another account, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`).
         public static let notMovedThen = "so the session stayed on its account."
 
+        /// A session's transcript line once it moved off an account a person removed (core `MoveBecause` `removed`). Placeholder copy.
+        public static func removedMove(to: String, from: String) -> String {
+            "Moved to \(to): \(from) was removed"
+        }
+
+        /// The same move as a line's last clause says why it went. Placeholder copy.
+        public static func removedFrom(from: String) -> String {
+            "\(from) was removed"
+        }
+
         public static let add = "Add account"
 
         public static let addFirst = "Add your first account"
@@ -230,6 +240,11 @@ public enum Words {
             /// What the removal reaches: the machines signed in to it, named.
             public static func removeBody(machines: [String], harnesses: String) -> String {
                 machines.count > 0 ? "\(Words.andList(machines)) \(machines.count == 1 ? "is" : "are") signed in to it: \(machines.count == 1 ? "it signs" : "each signs") it out of \(harnesses) and forgets it. New sessions stop being placed on it." : "No machine is signed in to it. New sessions stop being placed on it."
+            }
+
+            /// What the removal does with the sessions on it, after `removeBody`: how many move to another account (one in a turn when that turn ends) and how many no account can take. Placeholder copy.
+            public static func removeSessions(moving: Int, staying: Int) -> String {
+                "\(moving > 0 ? "\(moving == 1 ? "1 session on it moves" : "\(moving) sessions on it move") to another account; one in a turn moves when that turn ends." : "")\(moving > 0 && staying > 0 ? " " : "")\(staying > 0 ? "\(staying == 1 ? "1 session has" : "\(staying) sessions have") no other account to run on and \(staying == 1 ? "waits" : "wait") until one is signed in." : "")"
             }
 
             public static let machines = "Machines"

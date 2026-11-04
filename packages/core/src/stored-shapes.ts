@@ -1360,6 +1360,7 @@ const AccountMoveShape = z.union([
   z.object({
     kind: z.literal("moved"),
     asked: z.literal(true).optional(),
+    removed: z.literal(true).optional(),
     compact: CompactStageShape.optional(),
     compactFirst: z.literal(true).optional(),
     compactBy: z.enum(["opencode", "pi"]).optional(),

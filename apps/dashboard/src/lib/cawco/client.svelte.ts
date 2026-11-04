@@ -2835,7 +2835,20 @@ export const patchAccount = (
 ): Promise<Account> =>
   accountsWrite(`/api/accounts/${encodeURIComponent(id)}`, "PATCH", patch);
 
-/** Removes an account, signing it out on every machine signed in to it. */
+/**
+ * What removing an account does with the sessions on it, for its confirm:
+ * how many move to another account and how many have none to go to.
+ * Null when the hub could not say.
+ */
+export const accountRemoval = (
+  id: string
+): Promise<{ moving: number; staying: number } | null> =>
+  load(`/api/accounts/${encodeURIComponent(id)}/removal`);
+
+/**
+ * Removes an account, signing it out on every machine signed in to it; its
+ * sessions move to the accounts placement carries them to.
+ */
 export const deleteAccount = (id: string): Promise<{ ok: true }> =>
   accountsWrite(`/api/accounts/${encodeURIComponent(id)}`, "DELETE");
 

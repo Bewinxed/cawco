@@ -4,14 +4,16 @@
    * it is signed in, its colour, and, where CawCo reads its provider's
    * limits, whether a strategy may fall back to it and the share of its
    * week past which no new work is placed on it. Save writes what changed;
-   * Remove signs it out everywhere first, and a refusal (a session still on
-   * it, a machine away) is the hub's sentence.
+   * Remove asks first, saying the machines it signs out of and how many of
+   * its sessions move to another account; a refusal (a machine that did
+   * not sign it out) is the hub's sentence.
    */
   import type { Account } from "@cawco/core/accounts";
   import { detach } from "@cawco/core/detach";
   import { accountsWords as words } from "@cawco/core/words/accounts";
   import { untrack } from "svelte";
   import {
+    accountRemoval,
     cawco,
     deleteAccount,
     patchAccount,
@@ -115,9 +117,18 @@
           signinState(signins, account.id, machine.machineId) === "signed-in"
       )
       .map(machineName);
+    // And the sessions on it: how many move to another account.
+    const sessions = await accountRemoval(account.id);
+    const moves =
+      sessions && sessions.moving + sessions.staying > 0
+        ? [words.editor.removeSessions(sessions.moving, sessions.staying)]
+        : [];
     await question.ask({
       title: words.editor.removeTitle(nameOf(account)),
-      body: words.editor.removeBody(on, harnessWords(account.provider)),
+      body: [
+        words.editor.removeBody(on, harnessWords(account.provider)),
+        ...moves,
+      ],
       confirmLabel: words.editor.remove,
       destructive: true,
       pendingLabel: words.editor.removing,

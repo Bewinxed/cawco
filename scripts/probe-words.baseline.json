@@ -66,12 +66,9 @@
     "sync refused": 1
   },
   "scripts/probe-kit/specs/fleet-basics.ts": {
-    "could not write": 1,
-    "It refused the fleet's last change": 1,
     "MCP server": 1,
     "not set up": 2,
     "setting up": 1,
-    "sync refused": 2,
     "timed out after": 1
   },
   "scripts/probe-kit/specs/git-door.ts": {

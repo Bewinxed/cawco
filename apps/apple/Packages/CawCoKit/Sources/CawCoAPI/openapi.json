@@ -27237,6 +27237,43 @@
         }
       }
     },
+    "/api/accounts/{id}/removal": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiAccountsByIdRemoval",
+        "responses": {
+          "200": {
+            "description": "getApiAccountsByIdRemoval 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiAccountsByIdRemoval200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiAccountsByIdRemoval 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/accounts/{id}/machines/{machineId}": {
       "delete": {
         "parameters": [
@@ -33133,13 +33170,36 @@
               "type": "string"
             }
           },
+          "moving": {
+            "type": "number"
+          },
           "ok": {
             "type": "boolean"
+          },
+          "staying": {
+            "type": "number"
           }
         },
         "required": [
           "later",
-          "ok"
+          "moving",
+          "ok",
+          "staying"
+        ]
+      },
+      "getApiAccountsByIdRemoval200": {
+        "type": "object",
+        "properties": {
+          "moving": {
+            "type": "number"
+          },
+          "staying": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "moving",
+          "staying"
         ]
       },
       "deleteApiAccountsByIdMachinesByMachineId200": {
@@ -49170,6 +49230,11 @@
                     "const": true,
                     "type": "boolean"
                   },
+                  "removed": {
+                    "description": "Moved because a person removed `from` (`DELETE /api/accounts/:id`): every session on it moves off.",
+                    "const": true,
+                    "type": "boolean"
+                  },
                   "compact": {
                     "$ref": "#/components/schemas/BlockMetadataCompact",
                     "description": "Moved to another organization with a context of the policy's\n`moveWholeUnderK` or more, compacted natively ({@link Compaction}):\nit files its open items, then its harness's `/compact` runs, as its\nfirst steps on `to`, or on `from` before the move\n({@link compactFirst}). The line is said again under its id as that\ngoes."
@@ -58129,6 +58194,11 @@
                   },
                   "asked": {
                     "description": "Moved because a person asked (`POST /api/instances/:id/account`), not at a limit.",
+                    "const": true,
+                    "type": "boolean"
+                  },
+                  "removed": {
+                    "description": "Moved because a person removed `from` (`DELETE /api/accounts/:id`): every session on it moves off.",
                     "const": true,
                     "type": "boolean"
                   },

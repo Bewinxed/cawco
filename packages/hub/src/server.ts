@@ -690,7 +690,7 @@ import {
   MEMORY_ID,
   TURN_UNRECORDED,
 } from "./db";
-import type { LoginMove } from "./db/accounts";
+import type { AccountLeave, LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import { type LimitCompaction, waitsLine } from "./db/at-limit";
 import type { OwedMove } from "./db/owed-moves";
@@ -5053,17 +5053,21 @@ export const createServer = (
   ): { accountId?: string } | { refusal: string; cause: SendRefusal } => {
     const { harness } = row;
     // A row on an account stays on it (nothing moves it on its own); one
-    // with none is placed when its model is an account provider's here.
-    const provider = row.accountId
-      ? db.accounts.get(row.accountId)?.provider
+    // with none is placed when its model is an account provider's here. So
+    // is one whose account a person removed while its process still ran
+    // (its row names that account until the process is gone, `leaveAccounts`):
+    // no account is not one.
+    const on = row.accountId ? db.accounts.get(row.accountId) : undefined;
+    const provider = on
+      ? on.provider
       : accountProviderFor(machineId, harness, row.model);
     if (!provider) {
       return {};
     }
     const machine = machineName(machineId);
     const claimed =
-      row.accountId || !row.id
-        ? { accountId: row.accountId ?? undefined }
+      on || !row.id
+        ? { accountId: on?.id }
         : accountFor(machineId, { ...row, id: row.id }, use);
     if ("refusal" in claimed) {
       return {
@@ -5855,7 +5859,7 @@ export const createServer = (
    * there ({@link settleRefusal}), other than `refused` (whose own turn's
    * end moves it, {@link takeCredentialTurn}): each whose process is gone
    * owes a move to the account placement carries it to now
-   * ({@link oweRefusedMove}), so its next wake launches there and what it
+   * ({@link oweMoveOff}), so its next wake launches there and what it
    * is sent goes to it ({@link wakeOf} reads the owed account). One with a
    * process moves when its next turn meets the same refusal. One no account
    * can take stays, and a send to it is refused with the way back
@@ -5875,7 +5879,7 @@ export const createServer = (
         wakesForSend(row) &&
         !owedMoves.has(row.id)
       ) {
-        oweRefusedMove(row.id, accountId);
+        oweMoveOff(row.id, accountId, "refused");
       }
     }
   };
@@ -11849,7 +11853,7 @@ export const createServer = (
    * ({@link rowsLeave}).
    */
   const forgetOn = (
-    account: Account,
+    account: Pick<Account, "id" | "provider">,
     machineId: string,
     into: string | null = null
   ) =>
@@ -11905,33 +11909,151 @@ export const createServer = (
 
   /**
    * The rows on an account that is gone (from every machine, or from
-   * `machineId` alone) say where their sessions' data went with its dir
-   * ({@link forgetOn}): the account it joined, else none. A machine that was
-   * away carries the data out when it next connects (its account sweep, then
-   * the carry of every session into its row's dir).
+   * `machines` alone) say where their sessions' data went with its dir
+   * ({@link forgetOn}): the account it joined, else none. Every row kept,
+   * however long ago it last ran: one a person wakes a month on starts
+   * where its data is. A machine that was away carries the data out when it
+   * next connects (its account sweep, then the carry of every session into
+   * its row's dir).
    */
   const rowsLeave = (
     accountId: string,
     into: string | null,
-    machineId?: string
+    machines?: readonly string[]
   ): void => {
     const rows = db
-      .listInstances()
+      .instancesOnAccount(accountId)
       .filter(
-        (row) =>
-          row.accountId === accountId &&
-          (machineId === undefined || row.machineId === machineId)
+        (row) => machines === undefined || machines.includes(row.machineId)
       );
     for (const row of rows) {
       db.patchInstance(row.id, { accountId: into });
     }
     if (rows.length > 0) {
+      const named = accountWords(accountId);
       console.log(
-        `[accounts] ${rows.length} session${rows.length === 1 ? "" : "s"} that ran on ${accountWords(accountId)} ${rows.length === 1 ? "runs" : "run"} on ${accountWords(into)} now: ${accountWords(accountId)} left ${machineId ? machineName(machineId) : "every machine"}, and its conversations went with its store. Each one's next start runs there.`
+        `[accounts] ${rows.length} session${rows.length === 1 ? "" : "s"} that ran on ${named} ${rows.length === 1 ? "runs" : "run"} on ${accountWords(into)} now: ${named} left ${machines ? machines.map(machineName).join(", ") : "every machine"}, and its conversations went with its store. Each one's next start runs there.`
       );
       publishInstances("");
     }
   };
+
+  /**
+   * Whether a process of `row` may be running, or on its way: one an
+   * account's store must not be signed out from under ({@link
+   * leaveAccounts}). A stopping one too, whose machine has not yet said its
+   * process is gone.
+   */
+  const processMayRun = (row: { id: string; status: string }): boolean =>
+    mayRun(row.status) ||
+    row.status === "stopping" ||
+    row.status === "moving" ||
+    launchInFlight(row.id) ||
+    owedCarries.has(row.id);
+
+  /**
+   * Signs a removed account out of each machine that kept its store because
+   * a process there still ran in it ({@link AccountsDb.leaves}), once none
+   * does: Claude Code's `claude auth logout` would leave a running process
+   * no credential to refresh from (it reads the store again before every
+   * refresh), and the store's removal carries every conversation in it out
+   * from under the process writing it (agent claude-sessions.ts
+   * `carrySessions`: "The caller makes sure no process of a session runs
+   * while its data moves"). A process that owes a move goes at its turn's
+   * end ({@link oweMoveOff}); one that owes none is put to sleep at rest,
+   * as a moved login's are ({@link sleepMovedFrom}). Then its rows there
+   * name no account, as a removal's on a machine with nothing running do. A
+   * machine away, or one whose sign-out fails, is asked again at the next
+   * tick.
+   */
+  const leaveAccounts = async (): Promise<void> => {
+    for (const leave of db.accounts.leaves()) {
+      if (registry.agent(leave.machineId)) {
+        await leaveOne(leave);
+      }
+    }
+  };
+  /** {@link leaveAccounts} on one machine. */
+  const leaveOne = async (leave: AccountLeave): Promise<void> => {
+    const { accountId, machineId } = leave;
+    const running = db
+      .listInstancesOn(machineId)
+      .filter((row) => row.accountId === accountId && processMayRun(row));
+    if (running.length > 0) {
+      sleepUnmoved(machineId, running);
+      return;
+    }
+    const answer = await forgetOn(
+      { id: accountId, provider: leave.provider },
+      machineId
+    );
+    if (answer.kind !== "answered" || !answer.value.ok) {
+      return;
+    }
+    db.accounts.dropLeave(accountId, machineId);
+    console.log(
+      `[accounts] ${machineName(machineId)} signed out ${accountId}, removed while a session there still ran on it: none does now.`
+    );
+    rowsLeave(accountId, null, [machineId]);
+  };
+  /**
+   * Each of `rows` that owes no move and whose process is up is asked to
+   * sleep, which its machine does only at rest ({@link CONTROL_SLEEP}).
+   */
+  const sleepUnmoved = (
+    machineId: string,
+    rows: readonly { id: string; status: string }[]
+  ): void => {
+    for (const row of rows) {
+      if (
+        owedMoves.has(row.id) ||
+        !mayRun(row.status) ||
+        row.status === "unknown"
+      ) {
+        continue;
+      }
+      detach(
+        callAgent(
+          machineId,
+          CONTROL_SLEEP,
+          [],
+          SLEEP_TIMEOUT_MS,
+          undefined,
+          row.id
+        ),
+        "sleep request"
+      );
+    }
+  };
+  /** Whether {@link leaveAccounts} is running: one at a time. */
+  let leavingNow = false;
+  let leaveTicker: HubTimer | undefined;
+  /**
+   * Starts the tick that signs removed accounts out where processes kept
+   * them ({@link leaveAccounts}); it stops once none is left. A hub that
+   * starts with one in its database starts it at once.
+   */
+  const tickLeaves = (): void => {
+    leaveTicker ??= lifetime.every(MOVE_TICK_MS, () => {
+      if (db.accounts.leaves().length === 0) {
+        lifetime.cancel(leaveTicker);
+        leaveTicker = undefined;
+        return;
+      }
+      if (leavingNow) {
+        return;
+      }
+      leavingNow = true;
+      leaveAccounts()
+        .catch(console.error)
+        .finally(() => {
+          leavingNow = false;
+        });
+    });
+  };
+  if (db.accounts.leaves().length > 0) {
+    tickLeaves();
+  }
 
   const undoRemovedSignin = async (
     account: Account,
@@ -12242,8 +12364,17 @@ export const createServer = (
     const unheld = stores.filter(
       (id): id is string => typeof id === "string" && !db.accounts.get(id)
     );
-    const removed = db.accounts.removedOf(unheld);
-    const strangers = unheld.filter((id) => !removed.includes(id));
+    // A store a process there still runs in stays until none does: its
+    // sign-out is {@link leaveAccounts}'s.
+    const leaving = new Set(
+      db.accounts
+        .leaves()
+        .filter((leave) => leave.machineId === machineId)
+        .map((leave) => leave.accountId)
+    );
+    const gone = db.accounts.removedOf(unheld);
+    const removed = gone.filter((id) => !leaving.has(id));
+    const strangers = unheld.filter((id) => !gone.includes(id));
     if (removed.length > 0) {
       console.log(
         `[accounts] ${machineName(machineId)} still holds the stores of ${removed.length} account${removed.length === 1 ? "" : "s"} this hub removed, so it is told to forget them. Their folders are named by account id, the only name left for them: ${removed.join(", ")}.`
@@ -29685,7 +29816,7 @@ export const createServer = (
       return;
     }
     // A move owed to its next launch off this refusal is the controller's
-    // to make now ({@link oweRefusedMove}).
+    // to make now ({@link oweMoveOff}).
     const owed = owedMoves.get(instanceId)?.move;
     const take = (): void => {
       if (owed?.kind === "moved" && owed.because?.kind === "refused") {
@@ -29718,18 +29849,26 @@ export const createServer = (
   };
 
   /**
-   * A session whose item failed on its account's refused credential: its
-   * next launch (its parent's word wakes it) runs on the account placement
-   * carries it to, its line written once its data is there
-   * ({@link owedMoves}). None, when no account can take it.
+   * A session that has to leave `accountId` (`why`): its account's
+   * credential was refused (its item failed on it, or it rests there), or a
+   * person removed the account. Its next launch runs on the account
+   * placement carries it to, its line written once its data is there
+   * ({@link owedMoves}): a wake judges that account, and a machine's
+   * register carries one at rest without waking it ({@link takeUpMovesOn});
+   * one in a turn moves at its end. None, when no account can take it:
+   * false then.
    */
-  const oweRefusedMove = (instanceId: string, accountId: string): void => {
+  const oweMoveOff = (
+    instanceId: string,
+    accountId: string,
+    why: "refused" | "removed"
+  ): boolean => {
     const [row] = db.getInstancesByIds([instanceId]);
     const from = db.accounts.get(accountId);
     const toId = row && from ? atLimit.credentialMoveTo(row.id) : undefined;
     const to = toId ? db.accounts.get(toId) : undefined;
     if (!(row && from && to) || row.accountId !== from.id) {
-      return;
+      return false;
     }
     const accounts = db.accounts.list();
     owedMoves.set(row.id, {
@@ -29742,10 +29881,115 @@ export const createServer = (
         tokens: row.contextTokens,
         window: null,
         resetsAt: null,
-        because: { kind: "refused" },
+        ...(why === "removed"
+          ? { removed: true as const }
+          : { because: { kind: "refused" as const } }),
       },
       waits: "turn",
     });
+    return true;
+  };
+
+  /**
+   * What removing `account` does with the sessions on it: every kept row
+   * naming it, however long ago it ran, either has an account placement
+   * carries it to (`moving`) or none (`staying`: its next send is refused
+   * with the way back, core `SendRefusal` `no-account`).
+   */
+  const removalOf = (account: Account): { moving: number; staying: number } => {
+    const rows = db.instancesOnAccount(account.id);
+    const moving = rows.filter(
+      (row) =>
+        (owedMoves.get(row.id)?.to ?? account.id) !== account.id ||
+        atLimit.credentialMoveTo(row.id) !== undefined
+    ).length;
+    return { moving, staying: rows.length - moving };
+  };
+
+  /**
+   * Every session on `account`, which a person is removing, owes a move to
+   * the account placement carries it to ({@link oweMoveOff}): one at rest
+   * is never woken for it, one in a turn moves at its end. A move owed to
+   * `account` is dropped. Answers the counts {@link removalOf} says, and
+   * the rows whose process may still run (`live`).
+   */
+  const moveOff = (
+    account: Account
+  ): {
+    live: PublicInstanceRow[];
+    moving: number;
+    staying: number;
+  } => {
+    for (const [id, owed] of owedMoves.list()) {
+      if (owed.to === account.id) {
+        owedMoves.delete(id);
+      }
+    }
+    const rows = db.instancesOnAccount(account.id);
+    let moving = 0;
+    for (const row of rows) {
+      // One a person (or rebalance) already moves elsewhere goes there.
+      if (
+        owedMoves.get(row.id)?.to !== undefined ||
+        oweMoveOff(row.id, account.id, "removed")
+      ) {
+        moving += 1;
+      }
+    }
+    return {
+      live: rows.filter(processMayRun),
+      moving,
+      staying: rows.length - moving,
+    };
+  };
+
+  /**
+   * Removes `account` (`named`), its other machines already signed out:
+   * every session on it owes its move ({@link moveOff}), its rows where
+   * nothing runs on it name no account (their data went into the machine's
+   * own dir with its store), and `leavesOn`, the machines where a process
+   * still runs in its store, sign it out once none does
+   * ({@link leaveAccounts}). One whose process is up between turns moves
+   * now, as at a turn's end; one in a turn at that end.
+   */
+  const removeWithSessions = (
+    account: Account,
+    named: string,
+    leavesOn: readonly string[]
+  ): { moving: number; staying: number } => {
+    const { moving, staying, live } = moveOff(account);
+    db.accounts.remove(account.id, "removed", leavesOn);
+    forgetPendingOf(account.id);
+    const settled = new Set(
+      db.instancesOnAccount(account.id).map((row) => row.machineId)
+    );
+    rowsLeave(
+      account.id,
+      null,
+      [...settled].filter((machineId) => !leavesOn.includes(machineId))
+    );
+    for (const row of live) {
+      detach(
+        (async () => {
+          if (owedMoves.has(row.id) && (await sessionIdle(row))) {
+            relaunchOnAccount(row.id);
+          }
+        })(),
+        "removed account's move"
+      );
+    }
+    if (leavesOn.length > 0) {
+      tickLeaves();
+    }
+    const signsOutLater =
+      leavesOn.length > 0
+        ? `; ${leavesOn.map(machineName).join(", ")} ${leavesOn.length === 1 ? "signs" : "sign"} it out once no session there runs on it`
+        : "";
+    console.log(
+      `[accounts] ${named} removed: ${moving} session${moving === 1 ? " owes" : "s owe"} a move to another account, ${staying} ${staying === 1 ? "has" : "have"} none to go to${signsOutLater}.`
+    );
+    publishUsage();
+    return { moving, staying };
   };
 
   workItems.resumeWaits();
@@ -34712,6 +34956,16 @@ export const createServer = (
           );
         }
       )
+      // What removing the account does with the sessions on it, for its
+      // confirm to say: how many move to another account, how many have
+      // none to go to.
+      .get("/api/accounts/:id/removal", ({ params, status }) => {
+        const account = accountOf(params.id);
+        if (!account) {
+          return status(404, `There is no account ${params.id}.`);
+        }
+        return removalOf(account);
+      })
       .delete("/api/accounts/:id", async ({ params, status }) => {
         const account = accountOf(params.id);
         if (!account) {
@@ -34730,28 +34984,28 @@ export const createServer = (
         const signins = db.accounts
           .signins()
           .filter((one) => one.accountId === account.id);
-        const live = db
-          .listInstances()
-          .filter(
-            (row) =>
-              row.accountId === account.id &&
-              ["starting", "running", "sleeping"].includes(row.status)
-          );
-        if (live.length > 0) {
-          return status(
-            409,
-            `${live.length} session${live.length === 1 ? "" : "s"} still run on ${named}; stop them first.`
-          );
-        }
-        // Each machine signed in to it signs it out (Claude Code itself for a
-        // Claude dir, the agent for any other) and drops the account's store
-        // there. One that is offline does so when it next connects: it names
-        // its stores, and this hub answers the ones it removed, by the record
-        // `remove` keeps (`unknownAccountsOf`). One that is online and fails
-        // says why.
+        // A machine where a process still runs in the account's store keeps
+        // it until none does ({@link leaveAccounts}): signed out under a
+        // turn, the turn would lose its credential and its transcript.
+        const leavesOn = [
+          ...new Set(
+            db
+              .instancesOnAccount(account.id)
+              .filter(processMayRun)
+              .map((row) => row.machineId)
+          ),
+        ];
+        // Each other machine signed in to it signs it out now (Claude Code
+        // itself for a Claude dir, the agent for any other) and drops the
+        // account's store there. One that is offline does so when it next
+        // connects: it names its stores, and this hub answers the ones it
+        // removed, by the record `remove` keeps (`unknownAccountsOf`). One
+        // that is online and fails says why.
         const { failed, silent, later } = await signOutEverywhere(
           account,
-          signins.map((signin) => signin.machineId)
+          signins
+            .map((signin) => signin.machineId)
+            .filter((machineId) => !leavesOn.includes(machineId))
         );
         if (failed.length > 0 || silent.length > 0) {
           return status(
@@ -34769,12 +35023,13 @@ export const createServer = (
               .join(" ")
           );
         }
-        db.accounts.remove(account.id, "removed");
-        forgetPendingOf(account.id);
-        rowsLeave(account.id, null);
-        publishUsage();
+        const { moving, staying } = removeWithSessions(
+          account,
+          named,
+          leavesOn
+        );
         // Machines offline now, which sign it out when they next connect.
-        return { ok: true, later };
+        return { ok: true, later, moving, staying };
       })
       // Signs an account out on one machine and drops that sign-in: the same
       // sign-out the account's removal runs on each of its machines, here on
@@ -34837,7 +35092,7 @@ export const createServer = (
               throw unreachable(answer);
           }
           db.accounts.removeSignin(account.id, params.machineId);
-          rowsLeave(account.id, null, params.machineId);
+          rowsLeave(account.id, null, [params.machineId]);
           publishUsage();
           return { ok: true };
         }
@@ -37807,7 +38062,7 @@ export const createServer = (
                       handBack(delegate);
                     }
                     if (refused) {
-                      oweRefusedMove(turnId, refused.accountId);
+                      oweMoveOff(turnId, refused.accountId, "refused");
                     }
                     // Nothing waits on whether a rule answered a turn that is
                     // not held, but the owner's push does: a turn a rule

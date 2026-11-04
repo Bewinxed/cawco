@@ -31,6 +31,11 @@ export interface SwatchWords {
 export const accountsWords = {
   /** A session moved to another account, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`). */
   notMovedThen: "so the session stayed on its account.",
+  /** A session's transcript line once it moved off an account a person removed (core `MoveBecause` `removed`). Placeholder copy. */
+  removedMove: (to: string, from: string) =>
+    `Moved to ${to}: ${from} was removed`,
+  /** The same move as a line's last clause says why it went. Placeholder copy. */
+  removedFrom: (from: string) => `${from} was removed`,
   // ── The list (accounts/+page.svelte, AccountListRow) ──────────────────
   add: "Add account",
   addFirst: "Add your first account",
@@ -94,6 +99,13 @@ export const accountsWords = {
       machines.length > 0
         ? `${andList(machines)} ${machines.length === 1 ? "is" : "are"} signed in to it: ${machines.length === 1 ? "it signs" : "each signs"} it out of ${harnesses} and forgets it. New sessions stop being placed on it.`
         : "No machine is signed in to it. New sessions stop being placed on it.",
+    /**
+     * What the removal does with the sessions on it, after `removeBody`:
+     * how many move to another account (one in a turn when that turn
+     * ends) and how many no account can take. Placeholder copy.
+     */
+    removeSessions: (moving: number, staying: number) =>
+      `${moving > 0 ? `${moving === 1 ? "1 session on it moves" : `${moving} sessions on it move`} to another account; one in a turn moves when that turn ends.` : ""}${moving > 0 && staying > 0 ? " " : ""}${staying > 0 ? `${staying === 1 ? "1 session has" : `${staying} sessions have`} no other account to run on and ${staying === 1 ? "waits" : "wait"} until one is signed in.` : ""}`,
     machines: "Machines",
     looks: "Looks",
     limits: "Limits",

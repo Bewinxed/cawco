@@ -1311,6 +1311,8 @@ export type AccountMove =
       kind: "moved";
       /** Moved because a person asked (`POST /api/instances/:id/account`), not at a limit. */
       asked?: true;
+      /** Moved because a person removed `from` (`DELETE /api/accounts/:id`): every session on it moves off. */
+      removed?: true;
       /**
        * Moved to another organization with a context of the policy's
        * `moveWholeUnderK` or more, compacted natively ({@link Compaction}):
@@ -1665,6 +1667,14 @@ const movedWords = (
   if (move.compact) {
     return compactedMoveWords(move, cost, now);
   }
+  if (move.removed) {
+    return {
+      line: accountsWords.removedMove(move.to.name, move.from.name),
+      detail: move.sameOrganization
+        ? "Same organization, cache kept"
+        : `Re-read ${tokenWords(move.tokens)}${cost}`,
+    };
+  }
   if (move.because?.kind === "refused") {
     return {
       line: `Moved to ${move.to.name}: ${move.from.name}'s sign-in was refused`,
@@ -1714,6 +1724,7 @@ interface MoveSent {
   asked?: true;
   because?: MoveBecause;
   from: { name: string };
+  removed?: true;
   resetsAt: number | null;
   window: string | null;
 }
@@ -1741,10 +1752,14 @@ const costWords = (
  * window that refused it and when that resets ("A hit its 5-hour limit ·
  * resets in 3h 10m"), or its refused sign-in.
  */
-const hitWords = (move: MoveSent, now: number): string =>
-  move.because?.kind === "refused"
-    ? `${move.from.name}’s sign-in was refused`
+const hitWords = (move: MoveSent, now: number): string => {
+  if (move.because?.kind === "refused") {
+    return `${move.from.name}’s sign-in was refused`;
+  }
+  return move.removed
+    ? accountsWords.removedFrom(move.from.name)
     : limitHitWords(move, now);
+};
 
 /**
  * What sent a move ahead of its account's limit, as its line's last clause

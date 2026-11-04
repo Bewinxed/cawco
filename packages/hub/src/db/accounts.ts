@@ -26,6 +26,7 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   accountBench,
   accountCatalogs,
+  accountLeaves,
   accountModelEfforts,
   accountReadings,
   accountRouting,
@@ -64,6 +65,17 @@ export interface LoginMove {
   storeProvider: string;
 }
 
+/**
+ * A removed account's store a machine still holds because a process there
+ * still runs in it (`account_leaves`): signed out there once none does.
+ */
+export interface AccountLeave {
+  accountId: string;
+  machineId: string;
+  provider: AccountProvider;
+  since: number;
+}
+
 export interface AccountsDb {
   readonly bench: (now?: number) => AccountBench[];
   /**
@@ -97,6 +109,8 @@ export interface AccountsDb {
     /** Made by a setup still under way: the step it stands at. */
     setupStep?: AccountSetupStep;
   }) => Account;
+  /** The leave of `accountId` from `machineId` is over: its store there is signed out. */
+  readonly dropLeave: (accountId: string, machineId: string) => void;
   readonly get: (id: string) => Account | undefined;
   readonly history: (q: {
     accountId: string;
@@ -104,6 +118,8 @@ export interface AccountsDb {
     since?: number;
     until?: number;
   }) => AccountHistoryRow[];
+  /** The removed accounts' stores machines still hold under a running process. */
+  readonly leaves: () => AccountLeave[];
   readonly list: () => Account[];
   /** The sessions still running from a moved credential, by instance id → machine id. */
   readonly movedFrom: () => Map<string, string>;
@@ -162,9 +178,14 @@ export interface AccountsDb {
   /**
    * Removes the account, kept in the record of removed accounts with when
    * and why (`removed_accounts`): a machine that missed it forgets its store
-   * at its next connect.
+   * at its next connect. `leavesOn`: the machines that keep its store until
+   * no process there runs in it ({@link AccountLeave}), recorded with it.
    */
-  readonly remove: (id: string, why: "removed" | "joined") => boolean;
+  readonly remove: (
+    id: string,
+    why: "removed" | "joined",
+    leavesOn?: readonly string[]
+  ) => boolean;
   /** Of `ids`, the ones this hub removed. */
   readonly removedOf: (ids: readonly string[]) => string[];
   readonly removeMove: (
@@ -440,19 +461,51 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         .run();
     },
     // Its sign-ins, readings, catalog and bench go with it (cascade).
-    remove: (id, why) =>
+    remove: (id, why, leavesOn = []) =>
       db.transaction((tx) => {
-        const gone =
-          tx.delete(accounts).where(eq(accounts.id, id)).returning().all()
-            .length > 0;
+        const [gone] = tx
+          .delete(accounts)
+          .where(eq(accounts.id, id))
+          .returning()
+          .all();
         if (gone) {
+          const removedAt = new Date();
           tx.insert(removedAccounts)
-            .values({ id, removedAt: new Date(), why })
+            .values({ id, removedAt, why })
             .onConflictDoNothing()
             .run();
+          if (leavesOn.length > 0) {
+            tx.insert(accountLeaves)
+              .values(
+                leavesOn.map((machineId) => ({
+                  accountId: id,
+                  machineId,
+                  provider: gone.provider,
+                  since: removedAt,
+                }))
+              )
+              .onConflictDoNothing()
+              .run();
+          }
         }
-        return gone;
+        return gone !== undefined;
       }),
+    leaves: () =>
+      db
+        .select()
+        .from(accountLeaves)
+        .all()
+        .map((row) => ({ ...row, since: row.since.getTime() })),
+    dropLeave: (accountId, machineId) => {
+      db.delete(accountLeaves)
+        .where(
+          and(
+            eq(accountLeaves.accountId, accountId),
+            eq(accountLeaves.machineId, machineId)
+          )
+        )
+        .run();
+    },
     removedOf: (ids) =>
       ids.length === 0
         ? []

@@ -2396,6 +2396,25 @@ export const removedAccounts = sqliteTable("removed_accounts", {
   why: text("why").$type<"removed" | "joined">().notNull(),
 });
 
+/**
+ * A removed account's store a machine still holds because a process there
+ * still runs in it: the machine signs it out once none does (server.ts
+ * `leaveAccounts`). Kept here so a hub restart still signs it out, and so a
+ * connecting machine is not told to forget it under that process
+ * (`unknownAccountsOf`).
+ */
+export const accountLeaves = sqliteTable(
+  "account_leaves",
+  {
+    accountId: text("account_id").notNull(),
+    machineId: text("machine_id").notNull(),
+    /** The removed account's provider: which harness signs it out. */
+    provider: text("provider").$type<AccountProvider>().notNull(),
+    since: timestamp("since").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.accountId, table.machineId] })]
+);
+
 /** Where each account is signed in, as each machine's agent last reported it. */
 export const accountSignins = sqliteTable(
   "account_signins",
