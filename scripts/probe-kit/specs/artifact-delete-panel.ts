@@ -6,7 +6,7 @@
  * me on that view"). On a scratch fleet, at the API: the agent's moves are
  * its own MCP tools on the mock model, the person's are the routes the
  * dashboard calls, and what the panel shows is the hub's word
- * (`artifacts/status`, each row's `shown`). No view is open, so each show
+ * (`artifacts/list`, each row's `shown`). No view is open, so each show
  * waits out its 10 s for one; nothing here reads a picture.
  *
  * (a) The person opens A over a newer X; the agent shows B and deletes it:
@@ -25,8 +25,8 @@
  *     the session has, and one of an artifact already removed, is refused
  *     naming what it asked (never a 500), and the list keeps its length.
  * (f) The session's own `mcp__cawco__artifact_delete` by an eight-character
- *     id, read as the words an agent reads: "Removed <name> (<kind> <whole
- *     id>)." once, the list one shorter. The same call again (what a second
+ *     id, read as the words an agent reads: "Removed “<name>” (<kind>)."
+ *     once, the list one shorter. The same call again (what a second
  *     session deleting the same artifacts seconds later sends) is refused
  *     naming the id, never a 500, and removes nothing.
  */
@@ -158,10 +158,10 @@ const run = async (kit: Kit) => {
   };
   /** What the session's panel shows now, by the hub: an id, or null. */
   const panel = async (): Promise<string | null> => {
-    const rows = await fleet.api<{ id: string; shown: boolean }[]>(
-      `/api/instances/${encodeURIComponent(session)}/artifacts/status`
-    );
-    return rows.find((row) => row.shown)?.id ?? null;
+    const { artifacts } = await fleet.api<{
+      artifacts: { id: string; shown: boolean }[];
+    }>(`/api/instances/${encodeURIComponent(session)}/artifacts/list`);
+    return artifacts.find((row) => row.shown)?.id ?? null;
   };
   const label = (
     known: Record<string, string>,
@@ -294,8 +294,10 @@ const run = async (kit: Kit) => {
   const removedGolf = await agent(DELETE, { id: short }, true);
   const afterGolf = await listed();
   kit.check(
-    "(f) the session's own artifact_delete by an eight-character id answers its removal once, by name and whole id, and the list loses it alone",
-    removedGolf.startsWith(`Removed golf (page ${golf}).`) &&
+    "(f) the session's own artifact_delete by an eight-character id answers its removal once, by its name and kind, and the list loses it alone",
+    // By name and kind, no bare id: an answer names an artifact by its link
+    // or its name (ced8261ed), and a removed one has no link to open.
+    removedGolf.startsWith("Removed “golf” (page).") &&
       removedGolf.split("Removed ").length === 2 &&
       !afterGolf.includes(golf) &&
       afterGolf.length === beforeGolf.length - 1,

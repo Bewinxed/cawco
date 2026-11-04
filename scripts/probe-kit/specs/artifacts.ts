@@ -51,9 +51,10 @@
  * The theme follows ours (the artifact panel's surface brief, Artifact panel, canvas and ink):
  *
  * 18. The fields page's root reads `data-theme` and `color-scheme` light
- *    from the pane's hello, dark after the dashboard's switch flips to dark,
- *    light after it flips back; a preview of a live port keeps its root
- *    untouched through the same flips.
+ *    from the pane's hello; written for light only, it stays light when the
+ *    dashboard's switch flips to dark; once it says it draws dark too, dark
+ *    after the flip and light after it flips back. A preview of a live port
+ *    keeps its root untouched through the same flips.
  * 19. The head says no path under the artifact's name (owner: "a stray /
  *    below the preview title"): for the page, the live preview and a canvas
  *    the session makes, at 1440 and at 390, the head stands with the
@@ -1163,6 +1164,8 @@ const HELD_ID = /"held":"([0-9a-f-]{36})"/u;
 
 /** What the hub reads of an artifact: its revision, page hash and outline (artifacts/service.ts `ArtifactRead`). */
 interface HeldRead {
+  /** The next version a read's outline and picture are from, while the panel hasn't opened it (service.ts `canvasNow`). */
+  held?: string;
   outline?: string;
   pageHash: string | null;
   revision: number;
@@ -1305,7 +1308,10 @@ const heldChecks = async ({
     `opened r${opened.revision} ${opened.pageHash?.slice(0, 8)}; next gone ${gone}; list ${JSON.stringify(listed ?? null)}`
   );
 
-  // H12. Elements for the canvas held in H8: drawn on its next version, merged on show.
+  // H12. Elements for the canvas held in H8: drawn on its next version, merged
+  // on show. A read takes the newest version's outline (a672442aa,
+  // service.ts `canvasNow`), so the panel's own is the one the read names
+  // as `held` until the parent opens it.
   const drawn = await callDelegate(UPDATE, {
     id: canvasId,
     elements: [
@@ -1330,11 +1336,12 @@ const heldChecks = async ({
     "H12: the delegate's elements for the held canvas are drawn on its next version, not the panel's, the parent told no more, and its artifact_show merges them in",
     heldOf(drawn) === canvasNext &&
       drawn.includes('"wrote":["held-box"') &&
-      liveCanvas.outline?.includes("Held box") === false &&
+      liveCanvas.held === canvasNext &&
       nextCanvas?.outline?.includes("Held box") === true &&
       changedSends(canvasId).length === 1 &&
+      openedCanvas.held === undefined &&
       openedCanvas.outline?.includes("Held box") === true,
-    `update: ${drawn.slice(Math.max(0, drawn.indexOf('{"')), drawn.indexOf('{"') + 300)}; live ${JSON.stringify(liveCanvas.outline)}; next ${JSON.stringify(nextCanvas?.outline)}; opened ${JSON.stringify(openedCanvas.outline)}; ${changedSends(canvasId).length} change send(s)`
+    `update: ${drawn.slice(Math.max(0, drawn.indexOf('{"')), drawn.indexOf('{"') + 300)}; live held ${liveCanvas.held ?? "none"}; next ${JSON.stringify(nextCanvas?.outline)}; opened held ${openedCanvas.held ?? "none"} ${JSON.stringify(openedCanvas.outline)}; ${changedSends(canvasId).length} change send(s)`
   );
 
   // H13. The page the parent opened, no longer in front (the canvas is): a
@@ -1426,7 +1433,8 @@ const refusedHandChecks = async ({
     "P3: a delegate's to: parent preview of a port nothing listens on is refused with the server sentence",
     !ANSWERED_ID.test(deaf) &&
       deaf.includes(artifactToolWords.serverOnPort(String(silent), "on ")) &&
-      deaf.includes(artifactToolWords.notListening("")) &&
+      // The why in brackets goes before the stop (DESIGN.md Voice).
+      deaf.includes(artifactToolWords.notListening("").slice(0, -1)) &&
       deaf.includes(artifactToolWords.notHanded),
     deaf.slice(-400)
   );
@@ -1463,8 +1471,9 @@ const refusedHandChecks = async ({
       errored.includes(
         artifactToolWords.serverOnPort(String(failingPort), "on ")
       ) &&
-      errored.includes(artifactToolWords.pageErrored("")) &&
-      errored.includes(`(500: ${THROWN})`) &&
+      errored.includes(
+        `${artifactToolWords.pageErrored("").slice(0, -1)} (500: ${THROWN}). ${artifactToolWords.notHanded}`
+      ) &&
       errored.includes(artifactToolWords.notHanded),
     errored.slice(-400)
   );
@@ -1609,7 +1618,10 @@ const askChecks = async ({
   }
   writeFileSync(
     join(folder, "page.html"),
-    `<!doctype html><html lang="en"><body>${[1, 2, 3]
+    // A head as the kit's page.html has one: the build places images there (decision-page.ts, 04f64b02b).
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"></head><body>${[
+      1, 2, 3,
+    ]
       .map((n) => `<img alt="State ${n}" src="state-${n}.png">`)
       .join("")}</body></html>`
   );
@@ -2022,7 +2034,7 @@ const promoteChecks = async ({
         sketchFiles.includes(`artifacts/sketch/${name}`)
       ) &&
       outline.includes("rectangle"),
-    `picture drawn: ${pictured}; git show --stat: ${sketchFiles.join(", ")}; outline: ${outline.slice(0, 120)}`
+    `picture drawn: ${pictured}; git show --stat: ${sketchFiles.join(", ")}; outline: ${outline.slice(0, 120)}; promote: ${sketch.slice(0, 300)}`
   );
 };
 
@@ -2089,8 +2101,10 @@ const flipTheme = (page: Page, from: "light" | "dark") =>
 /**
  * 18. A page artifact draws in the dashboard's theme (DESIGN.md: the theme
  * follows ours): its root reads `data-theme` and `color-scheme` light from
- * the pane's hello, dark after the dashboard flips to dark, light again
- * after it flips back. A preview is someone's own app: its root is untouched.
+ * the pane's hello. Written for light only, it stays light when the
+ * dashboard flips to dark (86fbf7f68); once it says it draws dark too, it
+ * reads dark after the flip and light again after it flips back. A preview
+ * is someone's own app: its root is untouched.
  */
 const themeChecks = async (
   { kit, page, call }: Pick<OnSession, "call" | "kit" | "page">,
@@ -2103,20 +2117,76 @@ const themeChecks = async (
       (root) => root.data === scheme && root.scheme === scheme,
       5000
     ).catch(() => rootTheme(frame));
+  /** The dashboard's own scheme, as its root's `dark` class draws it. */
+  const ours = () =>
+    page.evaluate(() =>
+      document.documentElement.classList.contains("dark") ? "dark" : "light"
+    );
   const hello = await turned(pageFrame, "light");
+  // What the page hears of the theme, kept on its window.
+  await pageFrame.evaluate(() => {
+    const heard: unknown[] = [];
+    (window as unknown as { __themesHeard: unknown[] }).__themesHeard = heard;
+    addEventListener("message", (event) => {
+      const data = event.data as { type?: unknown; theme?: unknown } | null;
+      if (data?.type === "cawco:theme") {
+        heard.push(`${event.origin} ${String(data.theme)}`);
+      }
+    });
+  });
+  const themesHeard = () =>
+    pageFrame.evaluate(
+      () =>
+        (window as unknown as { __themesHeard?: unknown[] }).__themesHeard ?? []
+    );
+  const heardDark = (count: number) =>
+    until(
+      "the page's word of the dashboard's dark",
+      themesHeard,
+      (heard) =>
+        heard.filter((one) => String(one).endsWith(" dark")).length >= count,
+      5000
+    ).catch(() => null);
+  // The fields page is written for light only (no color-scheme, no dark
+  // rule): it keeps the canvas its colours were chosen on (86fbf7f68,
+  // overlay page.ts `themeRoot`, "A page artifact written for light only
+  // draws light whatever the host's theme").
+  await flipTheme(page, "light");
+  const oursDark = await ours();
+  await heardDark(1);
+  const lightOnly = await rootTheme(pageFrame);
+  await flipTheme(page, "dark");
+  const backLight = await turned(pageFrame, "light");
+  kit.check(
+    "18: a page artifact written for light only reads light from the hello, stays light when the dashboard flips to dark, and light after it flips back",
+    hello.data === "light" &&
+      hello.scheme === "light" &&
+      oursDark === "dark" &&
+      lightOnly.data === "light" &&
+      lightOnly.scheme === "light" &&
+      backLight.data === "light" &&
+      backLight.scheme === "light",
+    `hello ${JSON.stringify(hello)}; dark ${JSON.stringify(lightOnly)} (dashboard ${oursDark}); light ${JSON.stringify(backLight)}; the page heard ${JSON.stringify(await themesHeard())}`
+  );
+  // The same page saying it draws dark too follows the dashboard both ways.
+  await pageFrame.evaluate(() => {
+    const meta = document.createElement("meta");
+    meta.name = "color-scheme";
+    meta.content = "light dark";
+    document.head.append(meta);
+  });
   await flipTheme(page, "light");
   const dark = await turned(pageFrame, "dark");
   await flipTheme(page, "dark");
+  const oursLight = await ours();
   const light = await turned(pageFrame, "light");
   kit.check(
-    "18: a page artifact's root reads data-theme and color-scheme light from the hello, dark after the dashboard flips to dark, light after it flips back",
-    hello.data === "light" &&
-      hello.scheme === "light" &&
-      dark.data === "dark" &&
+    "18: a page artifact that draws dark too reads data-theme and color-scheme dark after the dashboard flips to dark, light after it flips back",
+    dark.data === "dark" &&
       dark.scheme === "dark" &&
       light.data === "light" &&
       light.scheme === "light",
-    `hello ${JSON.stringify(hello)}; dark ${JSON.stringify(dark)}; light ${JSON.stringify(light)}`
+    `dark ${JSON.stringify(dark)}; light ${JSON.stringify(light)} (dashboard ${oursLight}); the page heard ${JSON.stringify(await themesHeard())}`
   );
   const lines: Record<string, Awaited<ReturnType<typeof headLines>>> = {
     page: await headLines(page),
