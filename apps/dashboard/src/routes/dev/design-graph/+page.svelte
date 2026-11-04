@@ -21,6 +21,18 @@
   const inputs = story?.alone
     ? [story.alone]
     : [routineForm, ...(story && !story.withRoster ? [] : [roster])];
+  // The page never scrolls, its stage and its room do: its root keeps no
+  // gutter (core preview-proxy `GUTTER_FLOOR`, which a page's own word
+  // outranks), or a scrollbar's width stood empty at its trailing edge and
+  // the gutters read 21px and 30px in the panel.
+  $effect(() => {
+    const root = document.documentElement;
+    const was = root.style.scrollbarGutter;
+    root.style.scrollbarGutter = "auto";
+    return () => {
+      root.style.scrollbarGutter = was;
+    };
+  });
   const face =
     (["states", "whole", "move"] as const).find(
       (one) => one === (said.get("face") ?? story?.ask?.face)

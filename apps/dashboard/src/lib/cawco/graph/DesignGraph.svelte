@@ -53,6 +53,7 @@
   import { bridge } from "#lib/cawco/decisions/host/page.svelte.js";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import {
+    dur,
     motionOk,
     numberOf,
     sheetSlide,
@@ -217,6 +218,19 @@
       : 0
   );
   const desk = $derived(surface === 0 || surface >= besideLine);
+  /**
+   * The page is held from view until the split is laid out for the
+   * drawing (Stage `need`), so its first paint is its last: drawn at once,
+   * the stage stood 973px wide and jumped to 693 under him. Held no longer
+   * than the wait grace, past which a mounting stage draws its skeleton.
+   */
+  let graceOver = $state(false);
+  onMount(() => {
+    const timer = setTimeout(() => {
+      graceOver = true;
+    }, dur("--dur-wait-grace"));
+    return () => clearTimeout(timer);
+  });
 
   /**
    * A state as the stage draws it: a record set's args when one is picked;
@@ -335,11 +349,18 @@
    * What the engine ran is the Animation face's, from the state that stood
    * there; then its playhead rests at its start.
    */
+  /** The pick the stage is on its way to (the last press), by key: a press is measured against it, not the state that last landed. */
+  let heading: string | null = null;
   const arrive = async (on: Review, pick: Pick) => {
     const key = keyOf(on, pick);
-    if (onStage?.key === key) {
+    // Against where the stage is heading: measured against the state that
+    // last landed, a press back to it within the first press's flight
+    // (Filled in, then Hub didn't answer in 300 ms) was taken as already
+    // there, and the stage stayed on Filled in under Hub's name.
+    if ((heading ?? onStage?.key) === key) {
       return;
     }
+    heading = key;
     stop();
     replays.release();
     run += 1;
@@ -397,6 +418,13 @@
     onStage = { key: keyOf(on, pick), review: on.name, state: pick.state };
     if (mine !== run) {
       return;
+    }
+    // What the press changed, brought into view where it stands out of
+    // it (bring-into-view moves nothing for a region already in view): on
+    // a phone, Next to Hub didn't answer changed a line 500px under the
+    // drawer's top. The stage's first arrival moves nothing.
+    if (from) {
+      requestAnimationFrame(() => stage?.reveal(regionOf(clips)));
     }
     // The stage's scroll stays where it stands: on open, at the drawing's
     // top, its head whole at every width (a reveal of the region the move
@@ -466,6 +494,7 @@
    */
   const retry = () => {
     onStage = null;
+    heading = null;
     arrive(review, kept);
   };
   const scrubbed = () => {
@@ -604,6 +633,16 @@
    * panels until a reload.
    */
   let viewOpen = $state(false);
+  /** The card just closed, its control holding the focus it handed back: no tooltip until the focus or the pointer leaves. */
+  let viewQuiet = $state(false);
+  let viewWasOpen = false;
+  $effect(() => {
+    const open = viewOpen;
+    if (viewWasOpen && !open) {
+      viewQuiet = true;
+    }
+    viewWasOpen = open;
+  });
   /**
    * The drawer's stops, as vaul takes them: shares of the window's height
    * for a sheet as tall as its cap (`--c-sheet-max-h`, a share of the
@@ -731,6 +770,7 @@
   let viewTrigger = $state<HTMLElement | null>(null);
   /** The room stands beside the stage on a desk. */
   const beside = $derived(desk && roomOpen);
+  const laidOut = $derived(!beside || stageNeed > 0 || graceOver);
 
   /**
    * The stage and the room beside it are one resizable split (the kit's
@@ -1010,14 +1050,24 @@
           {/if}
           <Popover.Root bind:open={viewOpen}>
             <!-- No tooltip over its own open card: shown, it took the
-                 card's Escape for itself. -->
-            <Tip disabled={viewOpen} label={words.stageView}>
+                 card's Escape for itself. Nor as the card hands the focus
+                 back on its close: it stood over the stage's edge until
+                 the focus left (390, Escape); it shows again once the
+                 focus or the pointer leaves the control. -->
+            <Tip disabled={viewOpen || viewQuiet} label={words.stageView}>
               {#snippet children(tip)}
                 <Popover.Trigger>
                   {#snippet child({ props })}
                     <button
                       data-bar-item
-                      {...mergeProps(tip, props)}
+                      {...mergeProps(tip, props, {
+                        onblur: () => {
+                          viewQuiet = false;
+                        },
+                        onpointerleave: () => {
+                          viewQuiet = false;
+                        },
+                      })}
                       bind:this={viewTrigger}
                       aria-label={words.stageView}
                       class="select-none touch-hit press-tint"
@@ -1147,6 +1197,7 @@
     <div
       data-slot="graph-page"
       class={[
+        !laidOut && "invisible",
         "flex min-h-0 min-w-0 flex-1 overflow-clip px-space-6 max-desk:px-space-5",
         !desk && roomOpen ? "pb-(--drawer-cover)" : "pb-space-6",
       ]}
