@@ -1529,6 +1529,13 @@ hero = Decision("hero", "Which hero leads?", [a, b], "A reads at a glance.", [],
 a = Option("a", "Hero A", "One line, one button.", true, [], "Says less.")
 b = Option("b", "Hero B", "A picture and a quote.", false, [], "Slower to read.")`;
 
+/** A project's setup page as the project-setup skill opens it: its Setup alone. */
+const SETUP_ONLY = `root = Decisions("Flat hunt", [setup])
+setup = Setup("Flat hunt", "Find a flat to rent and book viewings.", [found, call, done], [], "own")
+found = Stage("Found", "todo", "inbox", "cyan")
+call = Stage("Your call", "you")
+done = Stage("Done", "done", "done", "green")`;
+
 /** A PNG of `width` × `height`, one flat colour: a desk capture as the page holds it. */
 const capturePng = (width: number, height: number): Buffer => {
   const png = new PNG({ width, height });
@@ -1597,7 +1604,21 @@ const askChecks = async ({
       ask: "Pick the hero",
       html: '<!doctype html><html lang="en"><body><h1>Heroes</h1><p>Two of them.</p></body></html>',
     },
-    "A page for picking holds a choice: a Decision in its program, or a data-cawco-choice in its HTML. This one holds none."
+    "A page for picking holds a choice: a Decision or a Setup in its program, or a data-cawco-choice in its HTML. This one holds none."
+  );
+  // ask 14b: a project's setup page holds its Setup alone, Caw's questions
+  // going through ask (the project-setup skill): the Setup is its choice.
+  const setupOnly = await call(CREATE, {
+    kind: "page",
+    name: "setup",
+    does: "pick",
+    ask: "Set up Flat hunt",
+    program: SETUP_ONLY,
+  });
+  kit.check(
+    "ask 14b: a pick page whose program holds only a Setup is made",
+    ANSWERED_ID.test(setupOnly),
+    setupOnly.slice(0, 400)
   );
   await refused(
     "ask 15",

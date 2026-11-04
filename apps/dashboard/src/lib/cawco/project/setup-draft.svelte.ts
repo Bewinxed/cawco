@@ -121,6 +121,11 @@ export class SetupDraftSource {
   kept = $state<Record<string, unknown>>({});
   /** Why the draft could not be read or kept, in the hub's words; null when it was. */
   problem = $state<string | null>(null);
+  /**
+   * The setup page is one the board can't draw: made before setups were
+   * drafted on the board, it has no program, or its program holds no Setup.
+   */
+  stale = $state(false);
   /** Set up is on its way. */
   sending = $state(false);
 
@@ -154,6 +159,7 @@ export class SetupDraftSource {
       this.leave();
       this.drafted = null;
       this.cards = [];
+      this.stale = false;
       return;
     }
     if (this.#joined !== page.artifactId) {
@@ -180,15 +186,18 @@ export class SetupDraftSource {
     const ticket = this.#read;
     try {
       const response = await fetch(folderRawHref(projectId, PROGRAM));
-      if (!response.ok) {
+      // No program: a page from before the Setup, built as HTML alone.
+      const missing = response.status === 404;
+      if (!(response.ok || missing)) {
         throw new Error(
           `The setup page's program did not read (${response.status}).`
         );
       }
-      const read = setupIn(await response.text());
+      const read = missing ? null : setupIn(await response.text());
       if (ticket === this.#read) {
         this.drafted = read?.drafted ?? null;
         this.cards = read?.cards ?? [];
+        this.stale = read === null;
         this.problem = null;
       }
     } catch (error) {

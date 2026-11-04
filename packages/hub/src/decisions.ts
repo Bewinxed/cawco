@@ -137,9 +137,10 @@ const PART_LABEL = /^(?:Gets|Costs|Builds):\s*/u;
 /** An option's part as the writer's own sentence: a page from before the kit dropped its labels keeps them out of the card. */
 const unlabelled = (raw: string): string => shown(raw).replace(PART_LABEL, "");
 
-/** What a page says of itself: its title and its cards, in page order. */
+/** What a page says of itself: its title and its cards, in page order, and whether its program holds a project's Setup. */
 export interface ReadPage {
   cards: DecisionCard[];
+  setup?: boolean;
   title: string;
 }
 
@@ -691,8 +692,8 @@ export const createDecisions = (deps: DecisionsDeps) => {
     if (kept) {
       return kept;
     }
-    const { title, cards } = readKept(program);
-    const read = { title, cards };
+    const { title, cards, setup } = readKept(program);
+    const read = { title, cards, setup };
     programReads.set(hash, read);
     if (programReads.size > PROGRAM_READS) {
       programReads.delete(programReads.keys().next().value as string);
@@ -751,13 +752,15 @@ export const createDecisions = (deps: DecisionsDeps) => {
 
   /**
    * Whether a page is a decision page: its built page has cards (the kit's
-   * choice groups, {@link readPage}), or a record was made from it. A page
+   * choice groups, {@link readPage}), its program holds a project's Setup
+   * (a setup page, whose questions go through `ask`), or a record was made
+   * from it. A page
    * artifact without them, a design system's Foundations specimen
    * ("Caw&Co foundations", nightly 3944), is no decision: it is not listed,
    * read, sent on, or a session's open question.
    */
   const decisionPage = (read: DecisionPageRead, page: ReadPage): boolean =>
-    page.cards.length > 0 || read.record !== null;
+    page.cards.length > 0 || page.setup === true || read.record !== null;
 
   /** A record with each card's tasks as the task list has them now. */
   const withTasks = (

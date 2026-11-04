@@ -96,6 +96,13 @@ export const setupWords = {
   askSetup: "Set it up with Caw",
   /** What that action sends him. */
   askSetupWords: "Set this project up with me.",
+  /**
+   * Under the draft while its setup page is one the board can't draw (a
+   * page made before setups were drafted on the board: no program, or one
+   * with no Setup); its way on is `askSetup`.
+   */
+  pageUnread:
+    "This setup page is from an earlier build, so the board can't draw it. Ask Caw to set the project up again.",
   /** The head's ⋯ while the project is not set up. */
   finishSetup: "Finish setting it up",
   /** The head's ⋯ once it is: the same page, to change how it runs. */

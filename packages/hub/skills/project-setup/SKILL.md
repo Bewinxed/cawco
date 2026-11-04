@@ -38,7 +38,7 @@ done = Stage("Done", "done", "done", "green")
 writer = Delegate("writer", "Writer", "Drafts applications, posts and replies in your voice.", "Claude Code · Opus")
 ```
 
-Pass it to `artifact_create({ kind: "page", name: "setup", does: "pick", ask: "Set up <name>", program })` as soon as you hold the aim and the first stages: the board draws it from then on, so the person watches the draft arrive. The person edits the aim in place, renames, re-kinds, restyles, reorders, adds and removes stages and sets who does a stage's work; the page keeps each change.
+Pass it to `artifact_create({ kind: "page", name: "setup", does: "pick", ask: "Set up <name>", program })` as soon as you hold the aim and the first stages: the board draws it from then on, so the person watches the draft arrive. The Setup alone is a whole page, and the person sees it on the board. The person edits the aim in place, renames, re-kinds, restyles, reorders, adds and removes stages and sets who does a stage's work; the page keeps each change.
 
 - **`Setup(name, aim, stages, delegates, shape)`.** `name`: the name you gave. `aim`: your restatement of what the project is for and how its work is done, never quoting the person: the seed of AGENTS.md. `shape`: the shipped template the stages start from, or `own`.
 - **`Stage(name, kind, icon, color, hooks, line)`**, one per stage in order. Its name as the board reads it ("Your call", plain lowercase words after the first letter, no punctuation). Its kind (todo, active, waiting, you, done, dropped). Its look: a glyph you pick for what the stage is and a colour that groups stages of one kind of work, from the library's lists; no colour for a stage that needs none (dropped). A stage of kind `you` shows the Needs-you mark whatever its look. `hooks`: its stages.md hooks as written (`{runs: "writer"}`, `{after: "7d"}`), and `line` what they do in words ("Runs the writer"). Keep one stage of kind `you`.
@@ -49,7 +49,7 @@ Write it as a product's interface would: no line that restates what a control sh
 
 ## 4. Draft on the page, asking as you go
 
-Draft the rest from their words: the stages, who does the work, the place, any routine. Add each part to the page as you draft it with `artifact_update`'s `statements`, a stage or a few at a time, so the board grows with your draft; what the person changed is kept. Where the words leave something open that changes the draft, ask it with `ask` the moment you meet it, rather than guessing or holding it for the page:
+Draft the rest from their words: the stages, who does the work, the place, any routine. Add each part to the page as you draft it with `artifact_update`'s `statements`, a stage or a few at a time, so the board grows with your draft; what the person changed is kept. The page holds the Setup and the `place`, `routines` and `what-moves` cards; every question goes through `ask`, which stands it on the board and says whether it holds you up. Where the words leave something open that changes the draft, ask it with `ask` the moment you meet it, rather than guessing or holding it for the page:
 
 - **`blocks: true`** only when the draft cannot go on without the answer; `waiting` names what is paused ("drafting the visa stages"). End your turn after it.
 - **`blocks: false`** for everything else, with `meanwhile` saying the assumption you go on with ("drafting for LinkedIn and X"), then keep drafting.

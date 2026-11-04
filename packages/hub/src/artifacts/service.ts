@@ -517,9 +517,9 @@ const doesProblem = (
 /** A choice in a page's HTML: a kit choice, or a field the person fills. */
 const HTML_CHOICE = /data-cawco-choice=|<(input|select|textarea)[^>]*\sname=/iu;
 
-/** Check 3b: a page for picking that holds no choice, once built. */
+/** Check 3b: a page for picking that holds no choice (a Decision, a Setup, a kit choice), once built. */
 const NO_CHOICE =
-  "A page for picking holds a choice: a Decision in its program, or a data-cawco-choice in its HTML. This one holds none.";
+  "A page for picking holds a choice: a Decision or a Setup in its program, or a data-cawco-choice in its HTML. This one holds none.";
 
 /** Check 5: a page for judging or picking that is a catalogue of desk captures. */
 const capturesRefused = (n: number): string =>
@@ -5859,8 +5859,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   ): Promise<void> => {
     const { html, program, weight } = made;
     if (input.does === "pick") {
+      // A project's setup page holds its Setup alone, Caw's questions going
+      // through `ask` (the project-setup skill): the Setup is its choice.
       const holds = program
-        ? program.read.cards.length > 0
+        ? program.read.cards.length > 0 || program.read.setup
         : HTML_CHOICE.test(html ?? "");
       if (!holds) {
         throw new ArtifactRefusal(400, NO_CHOICE);

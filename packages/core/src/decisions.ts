@@ -297,6 +297,8 @@ export interface ProgramRead {
   images: string[];
   intro: string;
   sections: { cards: string[]; id: string; title: string }[];
+  /** It holds a project's `Setup`: a page whose one input is the setup, its choices kept under `name`, `aim`, `shape`, `stages` and `delegates`. */
+  setup: boolean;
   title: string;
 }
 
@@ -371,7 +373,8 @@ const sectionId = (title: string, taken: Set<string>): string => {
 };
 
 /**
- * A parsed program's cards, Sections and media, in page order (the root's
+ * A parsed program's cards, Sections and media, in page order, and whether
+ * it holds a Setup (the root's
  * tree as lang-core's parser leaves it: a static program's props are its
  * values). Each Option's keycap is its place in its decision, as the card
  * draws it.
@@ -384,6 +387,7 @@ export const readProgram = (root: ElementNode | null): ProgramRead => {
     sections: [],
     artifacts: [],
     images: [],
+    setup: false,
   };
   if (root?.typeName !== "Decisions") {
     return read;
@@ -428,6 +432,8 @@ export const readProgram = (root: ElementNode | null): ProgramRead => {
       read.artifacts.push(artifactOf(typeName, props));
     } else if (typeName === "Image") {
       read.images.push(text(props.file));
+    } else if (typeName === "Setup") {
+      read.setup = true;
     } else {
       walk(props.children, section);
     }

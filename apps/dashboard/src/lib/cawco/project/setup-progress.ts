@@ -33,6 +33,22 @@ export interface SetupProgress {
 /** The page the setup skill writes and opens: `decisions/setup/` (hub setup.ts `SETUP_PAGE`). */
 export const SETUP_PAGE = "setup";
 
+/**
+ * Whether decision page `page`, asked for at `card`, lands on the board
+ * instead: the setup page is the data behind the board while the project
+ * is not set up (decision page `onboarding-first-minutes`, `draft-where`:
+ * "the page no longer opens in his Preview"), so asked for in Decisions,
+ * by its row, a link, Needs you or his showing it, it lands on the board
+ * his draft is drawn on. A link naming one of its cards (`#place`, the
+ * board's way to what else it asks) opens it at that card, which stands
+ * only there.
+ */
+export const setupLandsOnBoard = (
+  notSetUp: boolean,
+  page: string | null,
+  card: string | null
+): boolean => notSetUp && page === SETUP_PAGE && !card;
+
 /** A CawCo tool by its bare name, under any harness's naming of it (`mcp__cawco__…`, `cawco_…`). */
 const calls = (message: Message, bare: string): boolean => {
   const name = message.metadata?.toolName ?? "";

@@ -93,6 +93,7 @@
   import {
     handedOver,
     SETUP_PAGE,
+    setupLandsOnBoard,
     setupProgressOf,
   } from "#lib/cawco/project/setup-progress.js";
   import ViewBar from "#lib/cawco/project/ViewBar.svelte";
@@ -214,6 +215,14 @@
     data.stages.ok ? data.stages.value : null
   );
   let stagesProblem = $derived(refusal(data.stages));
+  /**
+   * The project is not set up yet (hub tasks.ts `stagesOf`, source `none`):
+   * no stages.md and no template. While Caw sets it up, its board is his
+   * draft drawn as the board it becomes (SetupDraft, fed by the setup page
+   * he writes: setup-draft.svelte.ts); with no setup under way, the scene
+   * that offers one (SetupScene).
+   */
+  const notSetUp = $derived(stages?.source === "none");
   /** The project's starters, live: a new set the hub writes replaces the one its stages carried. */
   const starters = $derived(
     cawco.startersOf(projectId, "board", stages?.starters)
@@ -532,10 +541,22 @@
     }))
   );
   let tab = $derived(data.view);
-  /** The view on screen: the one asked for once it exists, the board meanwhile. */
-  const current = $derived(
-    tabs.some((each) => each.value === tab) ? tab : "board"
+  /** The decision page open in the tab. */
+  let decisionPage = $derived<string | null>(data.decisionPage);
+  /** The card a link names (`#<card>`): the page opens scrolled to it. */
+  let decisionCard = $derived<string | null>(
+    page.url.hash ? decodeURIComponent(page.url.hash.slice(1)) : null
   );
+  /** The setup page lands on the board while the project is not set up (setup-progress.ts `setupLandsOnBoard`). */
+  const setupLands = (at: string | null, card: string | null): boolean =>
+    setupLandsOnBoard(notSetUp, at, card);
+  /** The view on screen: the one asked for once it exists, the board meanwhile. */
+  const current = $derived.by(() => {
+    if (tab === "decisions" && setupLands(decisionPage, decisionCard)) {
+      return "board";
+    }
+    return tabs.some((each) => each.value === tab) ? tab : "board";
+  });
   /** A view the URL names is still being read: its place holds a skeleton. */
   const awaiting = $derived(
     tab.startsWith("view:") && !viewsRead && current !== tab
@@ -545,8 +566,6 @@
 
   /** The project's decision pages (decisions.svelte.ts): the tab and its trail read them. */
   const decisions = new ProjectDecisions(() => projectId);
-  /** The decision page open in the tab. */
-  let decisionPage = $derived<string | null>(data.decisionPage);
   /** The decision page the person has open, in the Decisions tab. */
   const openPage = $derived(current === "decisions" ? decisionPage : null);
   /**
@@ -573,10 +592,6 @@
       }
     });
   });
-  /** The card a link names (`#<card>`): the page opens scrolled to it. */
-  let decisionCard = $derived<string | null>(
-    page.url.hash ? decodeURIComponent(page.url.hash.slice(1)) : null
-  );
   interface DecisionsPlace {
     card?: string | null;
     page?: string | null;
@@ -636,7 +651,8 @@
    * reveal a panel acts on (client `revealPreview`: a new open frame, or
    * his artifact card pressed) is this page's. Only a reveal heard while
    * the page stands: the panel's frame as the page arrives leaves the view
-   * the URL names.
+   * the URL names. The setup page of a project not set up yet lands on the
+   * board instead ({@link setupLands}).
    */
   let revealsSeen: { count: number | undefined; id: string } | null = null;
   $effect(() => {
@@ -649,14 +665,31 @@
         return;
       }
       const frame = cawco.previews[id];
-      if (
+      if (!(
         frame?.state === "open" &&
         frame.project === projectId &&
         frame.artifact.kind === "page"
-      ) {
-        decisionsGo({ page: frame.artifact.name, card: null });
-        choose("decisions");
+      )) {
+        return;
       }
+      if (setupLands(frame.artifact.name, null)) {
+        choose("board");
+        return;
+      }
+      decisionsGo({ page: frame.artifact.name, card: null });
+      choose("decisions");
+    });
+  });
+  // The URL says the board too once the setup page lands on it, so a reload
+  // or a shared link opens where the person is.
+  $effect(() => {
+    if (!(tab === "decisions" && setupLands(decisionPage, decisionCard))) {
+      return;
+    }
+    untrack(() => {
+      tab = "board";
+      decisionPage = null;
+      remember();
     });
   });
 
@@ -1506,14 +1539,6 @@
   );
   // --- before setup -------------------------------------------------------------
 
-  /**
-   * The project is not set up yet (hub tasks.ts `stagesOf`, source `none`):
-   * no stages.md and no template. While Caw sets it up, its board is his
-   * draft drawn as the board it becomes (SetupDraft, fed by the setup page
-   * he writes: setup-draft.svelte.ts); with no setup under way, the scene
-   * that offers one (SetupScene).
-   */
-  const notSetUp = $derived(stages?.source === "none");
   /** The setup page, once Caw has opened it (the project-setup skill's `decisions/setup/`). */
   const setupPage = $derived(
     decisions.list?.pages.find((one) => one.name === SETUP_PAGE) ?? null
@@ -1629,9 +1654,12 @@
   });
 
   /**
-   * Caw stands over the empty board while he can start; elsewhere he sits
-   * in the head, and the board is drawn — its columns and the new task's
-   * form — once a task is being added by hand.
+   * Caw stands over the empty board while he can start (the empty board's
+   * seat, the setup scene's); elsewhere he sits in the head, and the board
+   * is drawn — its columns and the new task's form — once a task is being
+   * added by hand. His draft in the board's place draws no seat of its
+   * own, so he sits in the head over it: the page always shows the one
+   * seat that opens his panel.
    */
   const standing = $derived(
     current === "decisions"
@@ -1639,6 +1667,7 @@
       : empty &&
           canTalk &&
           !adding &&
+          !(notSetUp && drafting) &&
           !(setUpFresh && current === "board") &&
           !current.startsWith("view:") &&
           current !== "routines"
@@ -2075,11 +2104,17 @@
       onaim={(next) => draft.keep("aim", next)}
       onanswercaw={() => detach(lead.answerAsks(), "answer Caw")}
       onBoard={asksOnBoard}
-      pageHref={`/project/${projectId}?view=decisions&page=${SETUP_PAGE}`}
+      pageHref={draft.cards[0]
+        ? `/project/${projectId}?view=decisions&page=${SETUP_PAGE}#${encodeURIComponent(draft.cards[0])}`
+        : null}
       onsetup={() => detach(setUp(), "set the project up")}
       onstages={(next) => draft.keep("stages", next)}
+      onaskagain={canTalk
+        ? () => lead.ask(setupWords.askSetupWords, "board")
+        : undefined}
       problem={draft.problem}
       sending={draft.sending}
+      stale={draft.stale}
       stages={draft.stages}
     />
   {:else if notSetUp && !adding}

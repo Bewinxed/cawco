@@ -19,7 +19,8 @@
    * send says the words to the session and never sends the page's picks:
    * talk is never a Send) and the page's one coral act, the next step: I'm
    * done picking, which decides it; then Make tasks, a decided page's
-   * optional next step, until its tasks are filed; then none. A refusal
+   * optional next step, until its tasks are filed; then none (and none on
+   * a project's setup page, whose own Send is Set up). A refusal
    * stays the page as it was and says why in the composer's line.
    */
   import { decisionsWords as words } from "@cawco/core/words/decisions";
@@ -32,6 +33,7 @@
     reveal,
     revealOut,
   } from "#lib/cawco/motion/curves.svelte.js";
+  import { SETUP_PAGE } from "#lib/cawco/project/setup-progress.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import FootFade from "#lib/cawco/transcript/FootFade.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -167,9 +169,13 @@
     return () => watch.disconnect();
   });
 
-  /** The page's one act, the next step: Make tasks once decided, none once its tasks are filed. */
+  /**
+   * The page's one act, the next step: Make tasks once decided, none once
+   * its tasks are filed. A project's setup page has none: its own Send is
+   * Set up, the one way a project is set up, and it makes no tasks.
+   */
   const primary = $derived.by(() => {
-    if (!shown || shown.tasks > 0) {
+    if (!shown || shown.tasks > 0 || name === SETUP_PAGE) {
       return null;
     }
     if (shown.state === "picking") {

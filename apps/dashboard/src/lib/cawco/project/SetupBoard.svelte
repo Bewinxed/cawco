@@ -42,6 +42,8 @@
     onBoard,
     sending,
     problem,
+    stale = false,
+    onaskagain,
     onaim,
     onstages,
     onanswercaw,
@@ -57,13 +59,17 @@
     asks: BlockedRequest[];
     /** The ids of the setup page's cards beside the draft (`place`, `routines`, `what-moves`). */
     cards?: string[];
-    /** The setup page in the project's Decisions, where those cards are answered. */
+    /** The setup page in the project's Decisions at the first of those cards, where they are answered (a link naming no card lands on this board). */
     pageHref?: string | null;
     /** The board draws his questions (a desk); else his composer does. */
     onBoard: boolean;
     sending: boolean;
     /** Why the draft could not be read, kept or sent; null when it was. */
     problem: string | null;
+    /** The setup page is one the board can't draw (setup-draft.svelte.ts `stale`). */
+    stale?: boolean;
+    /** Asks Caw to set the project up again, where the page can't be drawn; none while he can't start. */
+    onaskagain?: () => void;
     onaim: (next: string) => void;
     onstages: (next: Stage[]) => void;
     /** The draft bar's Answer Caw where the board holds no questions: his composer. */
@@ -153,6 +159,12 @@
   />
   {#if problem}
     <RowFault reason={problem} />
+  {:else if stale}
+    <RowFault
+      again={onaskagain}
+      againLabel={setupWords.askSetup}
+      reason={setupWords.pageUnread}
+    />
   {/if}
 </div>
 
