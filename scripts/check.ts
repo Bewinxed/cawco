@@ -667,6 +667,9 @@ const gated: Gated[] = [
     "packages/hub/src/landing.ts",
     "packages/core/src/safe-git.ts",
   ]),
+  bun("scripts/compress-answer-check.ts", [
+    "packages/core/src/compress-answer.ts",
+  ]),
   bun("scripts/open-at-check.ts", [
     "apps/dashboard/src/lib/cawco/transcript/open-at.svelte.ts",
     "apps/dashboard/src/lib/cawco/transcript/rows.ts",

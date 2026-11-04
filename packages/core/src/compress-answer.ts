@@ -101,8 +101,15 @@ export const compressAnswer = async (
   const type = response.headers.get("content-type");
   const encoding = chosenEncoding(request.headers.get("accept-encoding"));
   const declared = response.headers.get("content-length");
+  // `body` is read last, once the answer is one to compress: Bun gives an
+  // answer made from a string no `Content-Type` until it sends it, and
+  // writes `text/plain;charset=utf-8` then, from the string; once its
+  // `body` is read it is a stream, which Bun sends as
+  // `application/octet-stream`. A browser saves that as a file: the hub's
+  // cross-site refusal of a form's POST, read for a client that takes an
+  // encoding, reached the person as an empty download (hub-auth p5c).
   if (
-    !(encoding && response.body && type && TEXT.test(type)) ||
+    !(encoding && type && TEXT.test(type) && response.body) ||
     request.method === "HEAD" ||
     request.headers.has("range") ||
     NO_BODY.has(response.status) ||
