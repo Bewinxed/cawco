@@ -25,6 +25,7 @@ import {
   COMPOSER,
   type Engine,
   type Kit,
+  kitsOwnMessage,
   open,
   type Spec,
   settle,
@@ -190,7 +191,9 @@ const toggleResolve = async (screen: Page, n: number, touch: boolean) => {
   const row = screen.locator(`${RAIL} [data-pin-row="${n}"]`);
   if (touch) {
     await row.click();
-    const card = screen.locator(`[data-slot="pin-card"][data-pin-card="${n}"]`);
+    // Under a finger the thread is the well's bottom sheet (PreviewPane's
+    // ThreadSheet), named for its comment.
+    const card = screen.getByRole("dialog", { name: `Comment ${n}` });
     await card.waitFor({ timeout: 10_000 });
     await card
       .getByRole("button", {
@@ -252,7 +255,9 @@ const legChecks = async (kit: Kit, fleet: Fleet, leg: Leg) => {
   const said: string[] = [];
   screen.on("pageerror", (error) => said.push(`pageerror: ${error.message}`));
   screen.on("console", (message) => {
-    if (message.type() === "error") {
+    // WebKit's word on the kit's own scripts turned away by the overlay's
+    // sandboxed frame is no error of the page's (kit.ts `kitsOwnMessage`).
+    if (message.type() === "error" && !kitsOwnMessage(message.text())) {
       said.push(`error: ${message.text()}`);
     }
   });

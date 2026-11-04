@@ -57,6 +57,12 @@ import {
   type View,
 } from "../kit";
 
+/**
+ * Where an open thread stands in both views: the well's bottom sheet
+ * (PreviewPane's ThreadSheet), as the preview here is a sheet (SideSheet's
+ * `sheet`), on a phone or in a desk's pane under 640px alike.
+ */
+const THREAD = '[data-slot="thread-sheet"]';
 const CREATE = "mcp__cawco__artifact_create";
 const SHEET = "[data-preview-sheet]";
 const FRAME = `${SHEET} iframe[title="Preview"]`;
@@ -238,7 +244,7 @@ const keyboardUp = async (
   before: PageBox,
   label: string
 ) => {
-  const card = page.locator('[data-slot="pin-card"]');
+  const card = page.locator(THREAD);
   const reply = card.getByRole("combobox").last();
   await reply.evaluate((el, height) => {
     const field = el as HTMLElement;
@@ -262,22 +268,23 @@ const keyboardUp = async (
   await page.touchscreen.tap(at.x + at.width / 2, at.y + at.height / 2);
   await settle(page, 300);
   const read = () =>
-    page.evaluate((keyboard) => {
-      const sheet = document
-        .querySelector('[data-slot="pin-card"]')
-        ?.getBoundingClientRect();
-      const lift = getComputedStyle(
-        document.querySelector('[data-slot="pin-card"]') ?? document.body
-      ).getPropertyValue("--keyboard-lift");
-      const layout = document.documentElement.clientHeight;
-      return {
-        keyboard: document.documentElement.hasAttribute("data-keyboard"),
-        keyboardTop: layout - keyboard,
-        sheetBottom: sheet ? sheet.bottom : null,
-        lift,
-        focused: !!document.activeElement?.closest('[data-slot="pin-card"]'),
-      };
-    }, KEYBOARD);
+    page.evaluate(
+      ([keyboard, thread]) => {
+        const sheet = document.querySelector(thread)?.getBoundingClientRect();
+        const lift = getComputedStyle(
+          document.querySelector(thread) ?? document.body
+        ).getPropertyValue("--keyboard-lift");
+        const layout = document.documentElement.clientHeight;
+        return {
+          keyboard: document.documentElement.hasAttribute("data-keyboard"),
+          keyboardTop: layout - keyboard,
+          sheetBottom: sheet ? sheet.bottom : null,
+          lift,
+          focused: !!document.activeElement?.closest(thread),
+        };
+      },
+      [KEYBOARD, THREAD] as const
+    );
   const up = await read();
   const upPage = await pageBox(page, frame);
   const upCover = await atComposer(page);
@@ -474,7 +481,7 @@ const leg = async (
   await row.waitFor({ timeout: 20_000 });
   await stillWithin(page, SHEET);
   await row.click();
-  const card = page.locator('[data-slot="pin-card"]');
+  const card = page.locator(THREAD);
   await card.waitFor({ timeout: 10_000 });
   const reply = card.getByRole("combobox").last();
   await reply.click();
