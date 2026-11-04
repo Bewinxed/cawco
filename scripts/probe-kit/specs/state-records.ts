@@ -108,9 +108,12 @@ const delegate = async (
     harness: "claude",
     cwd,
   });
-  // Its item fails on its third quiet turn, in seconds; the parent's preview
-  // of its server holds the workspace (hub work-items.ts `settle`), so it
-  // stands with its records for the crash and the archive below.
+  // Its item fails on its third quiet turn, in under a second against the
+  // mock model, and its session sleeps as its item ends (hub server.ts
+  // `sleepFinished`): running, or asleep after it ran, it started. The
+  // parent's preview of its server holds the workspace (hub work-items.ts
+  // `settle`), so it stands with its records for the crash and the archive
+  // below.
   const now = Date.now();
   fleet.write(
     // Its preview origin is minted with the row, as db artifacts.ts `create`
@@ -128,9 +131,9 @@ const delegate = async (
     now
   );
   await until(
-    `delegate ${tag} running`,
+    `delegate ${tag} started`,
     () => fleet.instance(started.instanceId),
-    (row) => row?.status === "running",
+    (row) => row?.status === "running" || row?.status === "sleeping",
     180_000
   );
   return started;

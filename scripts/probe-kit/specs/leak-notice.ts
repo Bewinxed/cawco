@@ -1,9 +1,8 @@
 /**
  * What a session starts and leaks, the session is told, and nothing is
- * stopped (agent leak-watch.ts, hub server.ts `tellLeak`); heavy runs start
- * at once, with no slot and no queue. On a scratch fleet (real hub, agent
- * and sessiond; Claude Code against the mock model), with no workspace: it
- * runs inside one.
+ * stopped (agent leak-watch.ts, hub server.ts `tellLeak`). On a scratch
+ * fleet (real hub, agent and sessiond; Claude Code against the mock model),
+ * with no workspace: it runs inside one.
  *
  * The agent's leak threshold is set to {@link THRESHOLD_GIB} GiB
  * (`CAWCO_LEAK_MEMORY_GIB`; 8 unset) so a probe's process crosses it in
@@ -21,12 +20,14 @@
  *   its end the session reads a message saying a process it started is still
  *   running after what started it ended, naming `sleep 600.0951`.
  * - (o2) That `sleep` is still alive once the session has read it.
- * - (h1) Two `bun run typecheck`s, each a heavy run the old gate held in a
- *   slot, started at the same moment: each prints its first check's line
- *   before either ends, neither prints a `CAWCO-QUEUE` line, and both pass.
  *
- * On main the agent says nothing of either leak, and the second typecheck
- * waits behind the first's slot whenever the machine's eight are held.
+ * The fleet's keeper reaps for its sessions (scratch-fleet-leash.ts
+ * `SUBREAPER_ENV`): the `sleep` the leftover leg plants is re-parented to
+ * it, still the fleet's session's leftover, and never one of the session
+ * that runs this spec in its workspace, whose own machine would tell it so.
+ *
+ * On main the agent says nothing of either leak. Heavy runs that start
+ * together are the heavy-slots spec's (core heavy-slots.ts).
  *
  *   bun scripts/probe-kit/run.ts leak-notice
  */
@@ -38,7 +39,8 @@ import {
 } from "../../../packages/core/src/signal";
 import { leakWords } from "../../../packages/core/src/words/leaks";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { SUBREAPER_ENV } from "../../scratch-fleet-leash";
+import type { Kit, Spec } from "../kit";
 
 /** The agent's leak threshold for this spec, in GiB. */
 const THRESHOLD_GIB = 0.25;
@@ -102,46 +104,13 @@ const toldWith = (seen: readonly Seen[], words: readonly string[]) =>
   seen.find((request) => words.every((word) => request.last.includes(word)))
     ?.last;
 
-/** A typecheck run: its first line's time, its end's time, its exit and everything it said. */
-interface Checked {
-  code: number;
-  ended: number;
-  first: number;
-  said: string;
-}
-
-const typecheck = async (): Promise<Checked> => {
-  const child = Bun.spawn(["bun", "scripts/typecheck.ts"], {
-    cwd: ROOT,
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...process.env },
-  });
-  let first = 0;
-  const read = async (stream: ReadableStream<Uint8Array>): Promise<string> => {
-    let all = "";
-    const decoder = new TextDecoder();
-    for await (const chunk of stream) {
-      first ||= Date.now();
-      all += decoder.decode(chunk);
-    }
-    return all;
-  };
-  const [out, err, code] = await Promise.all([
-    read(child.stdout),
-    read(child.stderr),
-    child.exited,
-  ]);
-  return { code, ended: Date.now(), first, said: `${out}${err}` };
-};
-
 const spec: Spec = {
   group: "Workspaces and what agents may touch",
   name: "leak-notice",
   run: async (kit: Kit) => {
     const { check } = kit;
     const fleet = await kit.fleet(respond);
-    fleet.launch("sessiond");
+    fleet.launch("sessiond", [], { [SUBREAPER_ENV]: "1" });
     await fleet.sessiondUp();
     fleet.launch("hub");
     await fleet.hubUp();
@@ -210,21 +179,6 @@ const spec: Spec = {
         signalPid(listedPid(pid), "SIGKILL");
       }
     }
-
-    // ── (h1) two heavy runs at once ───────────────────────────────────────
-    const started = Date.now();
-    const [one, two] = await Promise.all([typecheck(), typecheck()]);
-    const queued = `${one.said}${two.said}`.includes("CAWCO-QUEUE");
-    check(
-      "(h1) two typechecks started together both run at once: each says its first check before either ends, no queue line, both pass",
-      one.first > 0 &&
-        two.first > 0 &&
-        Math.max(one.first, two.first) < Math.min(one.ended, two.ended) &&
-        !queued &&
-        one.code === 0 &&
-        two.code === 0,
-      `first lines at +${one.first - started} ms and +${two.first - started} ms, ends at +${one.ended - started} ms and +${two.ended - started} ms, exits ${one.code} and ${two.code}, ${queued ? "a CAWCO-QUEUE line" : "no queue line"}${one.code || two.code ? `\n${one.code ? one.said.slice(-1500) : two.said.slice(-1500)}` : ""}`
-    );
   },
 };
 

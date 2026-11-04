@@ -36,10 +36,46 @@
  * until a reading finds nothing new, then all killed (SIGKILL), the service
  * last.
  */
+import { dlopen, FFIType } from "bun:ffi";
 import { processLineage } from "../packages/core/src/process-identity";
 import { listedPid, ownPid, signal as send } from "../packages/core/src/signal";
 
 export const STARTER_ENV = "CAWCO_FLEET_STARTER";
+
+/**
+ * Set on a service that is to reap for everything it starts: Linux
+ * `prctl(PR_SET_CHILD_SUBREAPER)`, so a process one of the fleet's sessions
+ * leaves running (`setsid`, double-forked) is re-parented to the service, not
+ * to whoever reaps for the run. In a workspace that is its sandbox's init,
+ * and the machine's leak watch then tells the workspace's own session that
+ * it left the process behind (agent leak-watch.ts: a leftover's parent is
+ * outside its child's processes, or the sandbox's init), though the fleet's
+ * session left it, on purpose when a spec plants one (leak-notice). Under the
+ * fleet's keeper it is still a leftover of the fleet's session, whose parent
+ * is not among that session's processes, and of none of the run's; it is
+ * among the service's descendants, which {@link endAll} ends. Read once, as
+ * the service starts, and taken out of its environment, so nothing it
+ * starts inherits it. macOS has no subreaper.
+ */
+export const SUBREAPER_ENV = "CAWCO_FLEET_SUBREAPER";
+/** `PR_SET_CHILD_SUBREAPER`, from `<linux/prctl.h>`. */
+const PR_SET_CHILD_SUBREAPER = 36;
+if (process.env[SUBREAPER_ENV] === "1") {
+  delete process.env[SUBREAPER_ENV];
+  if (process.platform === "linux") {
+    const { prctl } = dlopen("libc.so.6", {
+      prctl: {
+        args: [FFIType.i32, FFIType.u64, FFIType.u64, FFIType.u64, FFIType.u64],
+        returns: FFIType.i32,
+      },
+    }).symbols;
+    if (prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) !== 0) {
+      console.error(
+        `[scratch-fleet] pid ${process.pid}: the kernel refused prctl(PR_SET_CHILD_SUBREAPER), so what its sessions leave running is re-parented past it`
+      );
+    }
+  }
+}
 const EVERY_MS = 500;
 /** Readings after the first, at most, before the kill: each catches what forked before its freeze. */
 const MAX_READINGS = 8;

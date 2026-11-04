@@ -47,12 +47,15 @@ const GONE_SESSION = "b0b0b0b0-dead-4000-8000-000000000000";
 const DRIZZLE = join(import.meta.dir, "../../../packages/hub/drizzle");
 
 /**
- * The artifacts' project key migration's own statements, when this tree has
- * it (main before it does not). Run again by hand over what an older hub
- * left: the migrator runs only what is newer than the newest migration it
- * recorded, so with a later one recorded (0280) dropping this one's row no
- * longer runs it, and running the later ones again fails (0280 drops a
- * column already gone).
+ * The artifacts' project key migration's own row statements, when this tree
+ * has it (main before it does not), up to its table rebuild. Run again by
+ * hand over what an older hub left: the migrator runs only what is newer
+ * than the newest migration it recorded, so with a later one recorded (0280)
+ * dropping this one's row no longer runs it, and running the later ones
+ * again fails (0280 drops a column already gone). Its rebuild is left out:
+ * it makes `artifacts` as it stood then, without every column a later
+ * migration added (0346's `origin`, which the hub could not start without),
+ * and the table holds its key already.
  */
 const cleanupStatements = (): string[] | undefined => {
   const journal = JSON.parse(
@@ -64,10 +67,14 @@ const cleanupStatements = (): string[] | undefined => {
   if (!entry) {
     return;
   }
-  return readFileSync(join(DRIZZLE, `${entry.tag}.sql`), "utf8")
+  const statements = readFileSync(join(DRIZZLE, `${entry.tag}.sql`), "utf8")
     .split("--> statement-breakpoint")
     .map((statement) => statement.trim())
     .filter(Boolean);
+  const rebuild = statements.findIndex((statement) =>
+    statement.startsWith("CREATE TABLE `__new_")
+  );
+  return rebuild < 0 ? statements : statements.slice(0, rebuild);
 };
 
 const run = async (kit: Kit) => {
