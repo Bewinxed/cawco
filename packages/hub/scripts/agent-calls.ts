@@ -266,6 +266,7 @@ export const agentCalls = (files: SourceFile[]): AgentCalls => {
 
 const git = (cwd: string, args: string[], stdin?: string): Buffer => {
   const run = Bun.spawnSync(["git", ...args], {
+    env: process.env,
     cwd,
     stdin: stdin === undefined ? undefined : new TextEncoder().encode(stdin),
     stderr: "pipe",

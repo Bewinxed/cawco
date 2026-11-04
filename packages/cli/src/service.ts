@@ -439,6 +439,7 @@ const managerPath = (): string[] => {
     ];
   }
   const shown = Bun.spawnSync(["systemctl", "--user", "show-environment"], {
+    env: process.env,
     stdin: "ignore",
     stdout: "pipe",
     stderr: "ignore",
@@ -2315,8 +2316,10 @@ const launchAgentLogs = async (
   const tail = follow
     ? ["tail", "-n", `${LOG_TAIL_LINES}`, "-f"]
     : ["tail", "-n", `${LOG_TAIL_LINES}`];
-  await Bun.spawn([...tail, path], { stdio: ["inherit", "inherit", "inherit"] })
-    .exited;
+  await Bun.spawn([...tail, path], {
+    env: process.env,
+    stdio: ["inherit", "inherit", "inherit"],
+  }).exited;
 };
 
 const systemdLogs = async (
@@ -2334,7 +2337,10 @@ const systemdLogs = async (
   if (follow) {
     journal.push("-f");
   }
-  await Bun.spawn(journal, { stdio: ["inherit", "inherit", "inherit"] }).exited;
+  await Bun.spawn(journal, {
+    env: process.env,
+    stdio: ["inherit", "inherit", "inherit"],
+  }).exited;
 };
 
 export interface ServiceOptions {

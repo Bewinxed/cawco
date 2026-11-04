@@ -362,7 +362,11 @@ const isJdk = (home: string | undefined): home is string => {
 
 /** What `argv` prints, trimmed, when it exits 0; none when it fails or is missing. */
 const printed = (argv: string[]): string | undefined => {
-  const ran = Bun.spawnSync(argv, { stdout: "pipe", stderr: "ignore" });
+  const ran = Bun.spawnSync(argv, {
+    env: { ...process.env, PATH: STARTED_PATH },
+    stdout: "pipe",
+    stderr: "ignore",
+  });
   return ran.exitCode === 0 ? ran.stdout.toString().trim() : undefined;
 };
 

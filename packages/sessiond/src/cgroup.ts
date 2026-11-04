@@ -217,7 +217,11 @@ const askSystemd: CgroupSystem["delegation"] = async (unit, manager) => {
     unit,
   ];
   try {
-    const asked = Bun.spawn(command, { stdout: "pipe", stderr: "pipe" });
+    const asked = Bun.spawn(command, {
+      env: process.env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
     const [out, err, code] = await Promise.all([
       new Response(asked.stdout).text(),
       new Response(asked.stderr).text(),

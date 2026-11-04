@@ -141,7 +141,11 @@ export function runInBackground(): void {
       ? ["ionice", "-c3", "-p", ...tids.map(String)]
       : ["taskpolicy", "-B", "-p", String(process.pid)];
   if (Bun.which(io[0] as string)) {
-    Bun.spawnSync(io, { stdout: "ignore", stderr: "inherit" });
+    Bun.spawnSync(io, {
+      env: process.env,
+      stdout: "ignore",
+      stderr: "inherit",
+    });
   }
 }
 

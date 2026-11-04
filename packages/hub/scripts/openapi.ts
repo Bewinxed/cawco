@@ -1322,7 +1322,7 @@ if (leftNulls.length) {
  * ships first and the old build's record ends once the hub moves past it.
  */
 const git = (...args: string[]): string => {
-  const run = Bun.spawnSync(["git", ...args], { cwd: HUB });
+  const run = Bun.spawnSync(["git", ...args], { env: process.env, cwd: HUB });
   if (run.exitCode !== 0) {
     throw new Error(`git ${args.join(" ")}: ${run.stderr.toString().trim()}`);
   }

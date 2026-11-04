@@ -130,6 +130,7 @@ export class SearchProcess {
       return this.#running;
     }
     const child = Bun.spawn(HOST, {
+      env: process.env,
       stdin: "ignore",
       stdout: "inherit",
       stderr: "inherit",

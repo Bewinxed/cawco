@@ -123,6 +123,7 @@ async function offerTools(ask: boolean): Promise<boolean> {
       // before it runs it (core ToolInstallMethod `command`), gone after.
       const dir = await mkdtemp(join(tmpdir(), "cawco-install-"));
       const child = Bun.spawn([systemProgram("sh"), "-c", command], {
+        env: process.env,
         cwd: dir,
         stdio: ["inherit", "inherit", "inherit"],
       });

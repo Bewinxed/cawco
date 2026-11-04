@@ -43,7 +43,7 @@ const { CSS_TARGET } = await import(
 process.chdir(DASHBOARD);
 // The dashboard's tsconfig extends the one `svelte-kit sync` writes; a fresh
 // checkout has none, and the TypeScript transform refuses without it.
-const sync = Bun.spawnSync([join(DASHBOARD, "node_modules/.bin/svelte-kit"), "sync"], {
+const sync = Bun.spawnSync([join(DASHBOARD, "node_modules/.bin/svelte-kit"), "sync"], { env: process.env,
   cwd: DASHBOARD,
   stdout: "inherit",
   stderr: "inherit",

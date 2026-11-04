@@ -65,7 +65,7 @@ const git = (cwd: string, args: string[]) => {
   if (!repo) {
     const found = Bun.spawnSync(
       ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
-      { cwd, stderr: "pipe" }
+      { env: process.env, cwd, stderr: "pipe" }
     );
     if (found.exitCode !== 0) {
       throw new Error(
@@ -76,6 +76,7 @@ const git = (cwd: string, args: string[]) => {
     repoDirs.set(cwd, repo);
   }
   return Bun.spawnSync(["git", `--git-dir=${repo}`, ...args], {
+    env: process.env,
     cwd,
     stderr: "pipe",
   });

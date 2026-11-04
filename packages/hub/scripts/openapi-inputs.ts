@@ -38,7 +38,7 @@ const INPUT_FILES = ["bun.lock", "tsconfig.base.json", "package.json"];
 const STAMP = join(REPO, "node_modules/.cache/cawco/openapi-check.key");
 
 const git = (...args: string[]): string => {
-  const run = Bun.spawnSync(["git", ...args], { cwd: REPO });
+  const run = Bun.spawnSync(["git", ...args], { env: process.env, cwd: REPO });
   if (run.exitCode !== 0) {
     throw new Error(`git ${args.join(" ")}: ${run.stderr.toString().trim()}`);
   }

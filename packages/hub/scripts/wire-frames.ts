@@ -274,6 +274,7 @@ if (import.meta.main) {
   const repo = resolve(import.meta.dir, "../../..");
   const show = (commit: string, path: string): string => {
     const run = Bun.spawnSync(["git", "show", `${commit}:${path}`], {
+      env: process.env,
       cwd: repo,
     });
     if (run.exitCode !== 0) {

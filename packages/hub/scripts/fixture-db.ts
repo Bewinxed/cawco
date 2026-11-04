@@ -226,6 +226,7 @@ if (out) {
 const started = performance.now();
 const run = (command: string[], cwd: string): void => {
   const child = Bun.spawnSync(command, {
+    env: process.env,
     cwd,
     stdout: "inherit",
     stderr: "inherit",

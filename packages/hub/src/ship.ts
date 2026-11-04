@@ -36,6 +36,7 @@ export const shipLanded = async (options: {
       .replaceAll("{notes}", quote(notes));
     const ran = await readWithin(SHIP_TIMEOUT_MS, async (signal) => {
       const child = Bun.spawn(["sh", "-c", command], {
+        env: process.env,
         cwd: options.checkout,
         stdout: "pipe",
         stderr: "pipe",

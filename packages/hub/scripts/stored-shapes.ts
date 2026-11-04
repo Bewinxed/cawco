@@ -103,7 +103,7 @@ const SDK_TYPES = ["shared/auth.js", "client/auth.js"].map((path) =>
 const SCANNED = DASHBOARD ? /\.(?:ts|svelte)$/u : /\.ts$/u;
 const listed = Bun.spawnSync(
   ["git", "ls-files", DASHBOARD ? "apps/dashboard/src" : "packages"],
-  { cwd: ROOT }
+  { env: process.env, cwd: ROOT }
 )
   .stdout.toString()
   .split("\n")

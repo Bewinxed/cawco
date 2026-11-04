@@ -445,6 +445,7 @@ async function binaryUnits(
   const what = `${version}'s binary-units${args.length > 0 ? ` ${args.join(" ")}` : ""}`;
   const ran = await readWithin(BINARY_UNITS_MS, (signal) =>
     runCaptured([versionExecutable(version), "binary-units", ...args], {
+      env: process.env,
       signal,
     })
   );

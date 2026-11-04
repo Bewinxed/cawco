@@ -221,7 +221,12 @@ const runAgy = async (
       }
       Bun.spawn(
         [systemProgram("taskkill"), "/PID", String(leader), "/T", "/F"],
-        { stdin: "ignore", stdout: "ignore", stderr: "ignore" }
+        {
+          env: process.env,
+          stdin: "ignore",
+          stdout: "ignore",
+          stderr: "ignore",
+        }
       );
     };
     signal.addEventListener("abort", stop, { once: true });

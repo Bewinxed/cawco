@@ -863,7 +863,9 @@ if (import.meta.main) {
     return value;
   };
   const show = (commit: string, path: string): string => {
-    const run = Bun.spawnSync(["git", "show", `${commit}:${path}`]);
+    const run = Bun.spawnSync(["git", "show", `${commit}:${path}`], {
+      env: process.env,
+    });
     if (run.exitCode !== 0) {
       throw new Error(`git show ${commit}:${path}: ${run.stderr.toString()}`);
     }
