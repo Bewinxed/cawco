@@ -1,4 +1,8 @@
-import type { ArtifactChoices, ChoiceEntry } from "@cawco/core/choices";
+import {
+  type ArtifactChoices,
+  type ChoiceEntry,
+  choiceEntryProblem,
+} from "@cawco/core/choices";
 import {
   type ActivityLine,
   type ArtifactChanges,
@@ -108,6 +112,13 @@ export interface ArtifactDoc {
   /** The person deletes pin `pin`, and the ink it alone stands on; a sentence when it was not. */
   delete: (pin: string) => string | null;
   destroy: () => void;
+  /**
+   * A value kept under `key` on a page, as its own `cawco.set` keeps one
+   * (a setup's stages, drawn as the board in the project's page): the hub
+   * takes it within the bridge's bounds (core `choiceEntryProblem`); a
+   * sentence when it was not kept.
+   */
+  keep: (key: string, value: unknown) => string | null;
   /** The person's words, and what they attached, in pin `pin`'s thread; a sentence when they were not kept. */
   reply: (pin: string, said: Said) => string | null;
   /** The person resolves pin `pin`, or reopens it; a sentence when it was not. */
@@ -471,6 +482,25 @@ export function joinArtifact(
     see: (pin) => seePin(doc, pin, new Date().toISOString()),
     seeChanges: (revision, anchors) => seeChanges(doc, revision, anchors),
     delete: (pin) => deletePin(doc, pin),
+    keep: (key, value) => {
+      const pageHash = doc.getMap("meta").get("pageHash");
+      if (typeof pageHash !== "string") {
+        return "The page has not loaded yet, so nothing was kept.";
+      }
+      const entry: ChoiceEntry = {
+        options: [],
+        note: null,
+        value,
+        pageHash,
+        at: new Date().toISOString(),
+      };
+      const problem = choiceEntryProblem(key, entry);
+      if (problem) {
+        return problem;
+      }
+      doc.getMap("state").set(key, entry);
+      return null;
+    },
     retry: () => {
       clearDown();
       if (!held) {

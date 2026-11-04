@@ -413,6 +413,7 @@
 @custom-variant slot-dock (&[data-slot="dock"]);
 @custom-variant slot-done (&[data-slot="done"]);
 @custom-variant slot-dot (&[data-slot="dot"]);
+@custom-variant slot-draft-bar (&[data-slot="draft-bar"]);
 @custom-variant slot-draft-column (&[data-slot="draft-column"]);
 @custom-variant slot-drawer-content (&[data-slot="drawer-content"]);
 @custom-variant slot-drop (&[data-slot="drop"]);

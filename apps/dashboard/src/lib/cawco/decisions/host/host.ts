@@ -11,6 +11,7 @@
 import { PREVIEW_ERRORS_PATH } from "@cawco/core/frames";
 import { mount } from "svelte";
 import { reportErrorsTo } from "../../error-report.js";
+import { watchEdgeFades } from "../../motion/fade-runs.svelte";
 import { relayAway } from "./away";
 import Host from "./Host.svelte";
 import { bridge, picks, sent, takeServed } from "./page.svelte.js";
@@ -31,4 +32,6 @@ relayAway();
 const target = document.getElementById("decision-root");
 if (target) {
   mount(Host, { target });
+  // Each edge fade stands only on a scroller that runs past its box.
+  watchEdgeFades();
 }

@@ -83,12 +83,6 @@
      the scroller's foot (a phone's views bar), so it ends at the bar's top
      edge and what passes under the bar is the fade's, as a footer's
      (the update notice's footer: the house edge fade above it so the notes pass under it). */
-  /* A scroller that says whether it runs past its box (`fadeRuns`,
-     motion/fade-runs: a timeline whose range collapsed is left at its
-     end by Chromium) wears no fade while it does not. */
-  .kit-edge-fade-block[data-fade-watch]:not([data-fade-runs]) {
-    mask-image: none;
-  }
   .kit-edge-fade-block {
     mask-image: linear-gradient(
       to bottom,
@@ -141,5 +135,12 @@
     to {
       --fade-end: 0px;
     }
+  }
+  /* A scroller that does not run past its box wears no fade
+     (motion/fade-runs `watchEdgeFades` says which do): Chromium leaves a
+     scroll timeline whose range collapsed at its end, which stood the
+     start fade in full over a box that does not scroll. */
+  :is(.kit-edge-fade, .kit-edge-fade-block):not([data-fade-runs]) {
+    mask-image: none;
   }
 }

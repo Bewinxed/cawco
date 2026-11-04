@@ -1,51 +1,123 @@
 /**
- * Whether a scroller runs past its box, for the house edge fade to stand
- * only then: `{@attach fadeRuns}` sets `data-fade-runs` on the scroller
- * while its content is taller than it by a pixel or more, read on the
- * scroller and each of its children in the next frame after a change
- * (frameObserver), and `data-fade-watch` saying it is watched: edge-fade.css
- * draws the block fade on a watched scroller only while it runs past.
+ * Whether each house edge-fade scroller (`.kit-edge-fade` across,
+ * `.kit-edge-fade-block` down) runs past its box, so the fade stands only
+ * then: one watch over the document (`watchEdgeFades`, from the app's root
+ * and the decision host), which sets `data-fade-runs` on a scroller while
+ * its content is longer than it along its axis by a pixel or more.
+ * edge-fade.css draws no fade on a scroller without it.
  *
  * Why: the fade's lengths ride a scroll timeline, and Chromium leaves one
  * whose range has collapsed to nothing (the content shrank to fit, a card
  * that overflowed while it rose) at its end, 100%, "finished", rather than
- * inactive: the top fade then stood in full over a box that does not
+ * inactive: the start fade then stood in full over a box that does not
  * scroll (measured: scrollTop 0, scrollHeight 715 = clientHeight 715,
- * `--fade-start` 40px; the cold review 78bedc47 measured 101/101 on a
- * question's body). A box that does not run past has no fade to draw.
+ * `--fade-start` 40px; a question's body at 101/101). A box that does not
+ * run past has no fade to draw.
+ *
+ * A scroller is read when it or one of its parts changes size (one
+ * ResizeObserver, frameObserver), and when anything is put in or taken out
+ * inside it (one MutationObserver over the document, each change read on
+ * its nearest scroller), in the next frame.
  */
-import type { Attachment } from "svelte/attachments";
 import { frameObserver } from "../frame-observer";
 
-export const fadeRuns: Attachment<HTMLElement> = (node) => {
-  node.toggleAttribute("data-fade-watch", true);
+const FADES = ".kit-edge-fade, .kit-edge-fade-block";
+
+/** Whether a scroller runs past its box along its fade's axis. */
+const runs = (node: Element): boolean =>
+  node.classList.contains("kit-edge-fade-block")
+    ? node.scrollHeight - node.clientHeight >= 1
+    : node.scrollWidth - node.clientWidth >= 1;
+
+/** Starts the watch over `root`; hands back its stop. */
+export function watchEdgeFades(root: ParentNode = document): () => void {
   const watched = new Set<Element>();
+  const due = new Set<Element>();
+  let frame = 0;
   const read = () => {
-    node.toggleAttribute(
-      "data-fade-runs",
-      node.scrollHeight - node.clientHeight >= 1
-    );
+    frame = 0;
+    for (const node of due) {
+      if (node.isConnected) {
+        node.toggleAttribute("data-fade-runs", runs(node));
+      }
+    }
+    due.clear();
   };
-  const sizes = frameObserver(() => {
-    read();
-    // Parts that came since are watched too.
-    for (const part of node.children) {
-      if (!watched.has(part)) {
-        watched.add(part);
-        sizes.observe(part);
+  const soon = (node: Element) => {
+    due.add(node);
+    frame ||= requestAnimationFrame(read);
+  };
+  const sizes = frameObserver((changed) => {
+    for (const node of changed) {
+      const scroller = watched.has(node) ? node : node.parentElement;
+      if (scroller && watched.has(scroller)) {
+        soon(scroller);
       }
     }
   });
-  sizes.observe(node);
-  for (const part of node.children) {
-    watched.add(part);
-    sizes.observe(part);
-  }
-  const parts = new MutationObserver(() => read());
-  parts.observe(node, { childList: true });
-  read();
-  return () => {
-    sizes.disconnect();
-    parts.disconnect();
+  const watch = (node: Element) => {
+    if (watched.has(node)) {
+      return;
+    }
+    watched.add(node);
+    sizes.observe(node);
+    for (const part of node.children) {
+      sizes.observe(part);
+    }
+    soon(node);
   };
-};
+  const found = (node: Node) => {
+    if (!(node instanceof Element)) {
+      return;
+    }
+    if (node.matches(FADES)) {
+      watch(node);
+    }
+    for (const inner of node.querySelectorAll(FADES)) {
+      watch(inner);
+    }
+  };
+  /** Parts put into a watched scroller: watched for their size from now on, and the scroller read again. */
+  const grew = (record: MutationRecord) => {
+    const target = record.target instanceof Element ? record.target : null;
+    const scroller = target?.closest(FADES);
+    if (!(scroller && watched.has(scroller))) {
+      return;
+    }
+    for (const added of record.addedNodes) {
+      if (added instanceof Element && added.parentElement === scroller) {
+        sizes.observe(added);
+      }
+    }
+    soon(scroller);
+  };
+  const changes = new MutationObserver((records) => {
+    for (const record of records) {
+      if (record.type === "attributes") {
+        found(record.target);
+        continue;
+      }
+      for (const added of record.addedNodes) {
+        found(added);
+      }
+      grew(record);
+    }
+    for (const node of watched) {
+      if (!node.isConnected) {
+        watched.delete(node);
+      }
+    }
+  });
+  changes.observe(root, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["class"],
+  });
+  found(root as Node);
+  return () => {
+    changes.disconnect();
+    sizes.disconnect();
+    cancelAnimationFrame(frame);
+  };
+}

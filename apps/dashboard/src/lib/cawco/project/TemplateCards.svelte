@@ -7,7 +7,7 @@
    * the new-session dialog's list), drawn in that recipe: it glides to the
    * picked card with the house timing and the cards share its hover ghost.
    * Caw's ledge peek stands on the card that fits the prompt, the ledge line
-   * on its top edge, "Fits your prompt" on it.
+   * on its top edge, "Fits your prompt" on it in the house badge.
    *
    * Each card shows its own Caw, its template's pose (template-<name>.riv),
    * between its head and its name: a rest, drawn as a picture (`CawPosePicture`),
@@ -20,9 +20,11 @@
    * and a tap on it again clears it (a radio group never unchecks, so that
    * tap is taken before the group's own).
    */
+  import { onboardingWords } from "@cawco/core/words/onboarding";
   import { RadioGroup } from "bits-ui";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import {
@@ -45,7 +47,10 @@
     peekSize,
     peekShare,
     action,
+    disabled = false,
   }: {
+    /** Held while the project is made: the send went with the card it had. */
+    disabled?: boolean;
     cards: readonly TemplateCard[];
     /** The tapped card, or null. */
     selected: TemplateName | null;
@@ -166,6 +171,7 @@
     data-cards
     aria-label="Template"
     data-slot="icon-cards"
+    {disabled}
     class={iconCardsVariants({ class: "gap-y-space-8" })}
     onValueChange={(next) => {
       selected = (next || null) as TemplateName | null;
@@ -208,8 +214,11 @@
             {/snippet}
             {#snippet aside()}
               {#if fit === card.template && peek}
-                <span class="type-label text-brand-ink" transition:appear
-                  >Fits your prompt</span
+                <!-- Advice, never coral (DESIGN.md, The Coral Is Where You
+                     Act Rule): the house badge, as a decision page's
+                     Recommended wears it. -->
+                <span class="inline-flex" transition:appear
+                  ><Badge><span>{onboardingWords.fits}</span></Badge></span
                 >
               {/if}
             {/snippet}

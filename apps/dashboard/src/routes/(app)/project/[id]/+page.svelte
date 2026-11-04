@@ -46,7 +46,6 @@
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
-  import { showArtifact } from "#lib/cawco/artifact-api.js";
   import { barStrip } from "#lib/cawco/bar-strip.svelte.js";
   import {
     isBlockPage,
@@ -60,7 +59,6 @@
     cawco,
     type PendingPermission,
     requestView,
-    submitCommand,
   } from "#lib/cawco/client.svelte.js";
   import DecisionsView from "#lib/cawco/decisions/DecisionsView.svelte";
   import { ProjectDecisions } from "#lib/cawco/decisions/decisions.svelte.js";
@@ -87,8 +85,11 @@
   import NeedsYouChip from "#lib/cawco/project/NeedsYouChip.svelte";
   import ProjectDock from "#lib/cawco/project/ProjectDock.svelte";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
+  import SetUpBar from "#lib/cawco/project/SetUpBar.svelte";
+  import SetupBoard from "#lib/cawco/project/SetupBoard.svelte";
   import SetupScene from "#lib/cawco/project/SetupScene.svelte";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
+  import { SetupDraftSource } from "#lib/cawco/project/setup-draft.svelte.js";
   import {
     handedOver,
     SETUP_PAGE,
@@ -343,8 +344,8 @@
    * Arrived on the project, its board and its row read: his panel opens as
    * the person last left it here, else while the board is empty, so a
    * project just made opens on Caw (PRD §5.6; CawLead.arrive). Arriving on
-   * a decision page on a phone, where his sheet would stand over it, his
-   * panel stays put away.
+   * a decision page or a draft on a phone, where his sheet would stand over
+   * it, his panel stays put away.
    */
   $effect(() => {
     if (list !== null && lead.project !== null) {
@@ -548,8 +549,15 @@
   let decisionPage = $derived<string | null>(data.decisionPage);
   /** The decision page the person has open, in the Decisions tab. */
   const openPage = $derived(current === "decisions" ? decisionPage : null);
-  /** On a phone Caw's panel is a sheet over the page's foot: an open decision page stands under it. */
-  const sheetCovers = () => openPage !== null && pageScrollsQuery.current;
+  /**
+   * On a phone Caw's panel is a sheet over the page's foot: an open
+   * decision page stands under it, and so does a project's draft before it
+   * is set up, which is its board (decision page `onboarding-first-minutes`,
+   * card `draft-where`). Arriving on either, the sheet stays put away; the
+   * draft bar's Answer Caw brings it up on his questions.
+   */
+  const sheetCovers = () =>
+    pageScrollsQuery.current && (openPage !== null || notSetUp);
   /**
    * A decision page opened on a phone puts Caw's sheet away, as his Close
    * does (DESIGN.md, The Work Outlives Its Surface Rule): the sheet leaves
@@ -1500,8 +1508,10 @@
 
   /**
    * The project is not set up yet (hub tasks.ts `stagesOf`, source `none`):
-   * no stages.md and no template. Its board is the setup scene (SetupScene)
-   * until the setup page is sent and Caw writes its stages.
+   * no stages.md and no template. While Caw sets it up, its board is his
+   * draft drawn as the board it becomes (SetupDraft, fed by the setup page
+   * he writes: setup-draft.svelte.ts); with no setup under way, the scene
+   * that offers one (SetupScene).
    */
   const notSetUp = $derived(stages?.source === "none");
   /** The setup page, once Caw has opened it (the project-setup skill's `decisions/setup/`). */
@@ -1539,7 +1549,9 @@
       open: setupAsks.map((one) => ({
         blocks: (one.request.input as { blocks?: unknown }).blocks === true,
       })),
-      page: setupPage !== null,
+      // Handed over once the page holds his draft and he is at rest: he
+      // writes it early and adds to it as he drafts (project-setup skill).
+      page: setupPage !== null && lead.status !== "working",
     });
     const going =
       lead.status === "working" ||
@@ -1547,40 +1559,51 @@
       setupAsks.length > 0;
     return handedOver(progress) || going ? progress : null;
   });
-  /** The setup page, opened where Caw showed it: his panel's Preview, else its place in Decisions. */
-  async function openSetupPage() {
+  /** His draft, read from the setup page he writes, kept and sent from the board. */
+  const draft = new SetupDraftSource();
+  $effect(() => {
+    const id = projectId;
+    const row = notSetUp ? setupPage : null;
+    untrack(() => detach(draft.follow(id, row), "read the setup draft"));
+  });
+  $effect(() => () => draft.leave());
+  /** The draft stands on the board: the page holds it, or he is drafting it. */
+  const drafting = $derived(
+    notSetUp && (Boolean(setupPage?.artifactId) || setupProgress !== null)
+  );
+  /** Stages still to come while he writes: skeletons at a stage's size. */
+  const draftComing = $derived.by(() => {
+    if (!setupProgress || handedOver(setupProgress)) {
+      return 0;
+    }
+    return draft.stages.length === 0 ? 4 : 1;
+  });
+  /** Set up: the page sent; the hub applies it and he writes the stages. */
+  async function setUp() {
     const artifactId = setupPage?.artifactId;
-    const writer = setupPage?.writer?.instanceId;
-    if (artifactId && writer && writer === lead.conversationId) {
-      try {
-        await showArtifact(writer, artifactId);
-        lead.open = true;
-        lead.tab = "preview";
-        return;
-      } catch {
-        // Its place in Decisions still holds it.
-      }
+    if (artifactId) {
+      await draft.send(projectId, artifactId);
     }
-    await goto(hrefOf(null, "decisions", { page: SETUP_PAGE }));
   }
-  /** The scene's one action, as the setup stands. */
-  const setupAction = $derived.by(() => {
-    if (setupPage?.artifactId) {
-      return {
-        kind: "page" as const,
-        open: () => detach(openSetupPage(), "open the setup page"),
-      };
-    }
-    if (setupProgress) {
-      return { kind: "drafting" as const };
-    }
-    return canTalk
+  /**
+   * Just set up through his page, before its first task: the board draws
+   * the columns his draft became (each landing from its draft column) with
+   * the set-up bar over them naming the next step (SetUpBar), not the
+   * empty board's scene (decision page `onboarding-first-minutes`, card
+   * `draft-where`: "the stages travelling into the board's columns").
+   */
+  const setUpFresh = $derived(
+    !notSetUp && empty && setupPage !== null && newIn !== undefined
+  );
+  /** The scene's one action with no setup under way. */
+  const setupAction = $derived(
+    canTalk
       ? {
           kind: "ask" as const,
           ask: () => lead.ask(setupWords.askSetupWords, "board"),
         }
-      : { kind: "none" as const };
-  });
+      : { kind: "none" as const }
+  );
   /** The head's ⋯: finish the setup, or change how a set-up project runs, through the same page. */
   const setupAct = $derived.by(() => {
     if (!(canTalk && stages)) {
@@ -1591,7 +1614,9 @@
         label: setupWords.finishSetup,
         run: () =>
           setupPage?.artifactId
-            ? detach(openSetupPage(), "open the setup page")
+            ? document
+                .querySelector<HTMLElement>('[data-slot="draft-bar"] button')
+                ?.focus({ focusVisible: true } as FocusOptions)
             : lead.ask(setupWords.askSetupWords, "board"),
       };
     }
@@ -1600,20 +1625,6 @@
       run: () => lead.ask(setupWords.changeSetupWords, "board"),
     };
   });
-  /** An answer to one of his questions on the board, as his composer would send it. */
-  const answerAsk = (
-    asked: BlockedRequest,
-    result: Parameters<typeof submitCommand<"permission.answer">>[3]["result"]
-  ): string | null =>
-    submitCommand(
-      asked.request.instanceId,
-      asked.machineId,
-      "permission.answer",
-      {
-        requestId: asked.request.requestId,
-        result,
-      }
-    );
 
   /**
    * Caw stands over the empty board while he can start; elsewhere he sits
@@ -1626,6 +1637,7 @@
       : empty &&
           canTalk &&
           !adding &&
+          !(setUpFresh && current === "board") &&
           !current.startsWith("view:") &&
           current !== "routines"
   );
@@ -2050,13 +2062,38 @@
         {/snippet}
       </EmptyState>
     </div>
-  {:else if notSetUp && !adding}
-    <SetupScene
-      act={setupAction}
-      asks={asksOnBoard ? setupAsks : []}
-      onanswer={answerAsk}
-      seat={canTalk ? setupSeat : undefined}
+  {:else if notSetUp && !adding && drafting}
+    <SetupBoard
+      aim={draft.aim}
+      asks={setupAsks}
+      cards={draft.cards}
+      coming={draftComing}
+      delegates={draft.delegates}
+      name={project?.name ?? ""}
+      onaim={(next) => draft.keep("aim", next)}
+      onanswercaw={() => detach(lead.answerAsks(), "answer Caw")}
+      onBoard={asksOnBoard}
+      pageHref={`/project/${projectId}?view=decisions&page=${SETUP_PAGE}`}
+      onsetup={() => detach(setUp(), "set the project up")}
+      onstages={(next) => draft.keep("stages", next)}
+      problem={draft.problem}
+      sending={draft.sending}
+      stages={draft.stages}
     />
+  {:else if notSetUp && !adding}
+    <SetupScene act={setupAction} seat={canTalk ? setupSeat : undefined} />
+  {:else if setUpFresh && value === "board" && newIn}
+    <div class="flex min-h-0 w-full flex-auto flex-col gap-space-4">
+      <SetUpBar
+        first={newIn}
+        name={project?.name ?? ""}
+        onask={() => {
+          lead.tab = "assistant";
+          lead.open = true;
+        }}
+      />
+      <div class="min-h-0 flex-auto">{@render boardBody("board")}</div>
+    </div>
   {:else if empty && !adding}
     {#if !lead.project}
       <div class="w-full" out:revealOut>
@@ -2423,6 +2460,12 @@
       paneFoot,
     ]}
     data-view={reading ? "board" : paneView}
+    style:--draft-bleed-end={sheetQuery.current
+      ? "var(--space-5)"
+      : "var(--space-6)"}
+    style:--draft-bleed-start={sheetQuery.current
+      ? "var(--space-5)"
+      : "var(--space-7)"}
     style:--pane-min={docked ? "calc(50cqb + var(--c-sheet-max-h))" : "50cqb"}
   >
     {#if reading}

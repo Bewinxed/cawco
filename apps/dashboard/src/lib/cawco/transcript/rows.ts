@@ -8,6 +8,7 @@
 
 import type { AccountMove } from "@cawco/core/accounts";
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
+import { ASK_ORIGIN } from "@cawco/core/asks";
 import { connectAnswerOf, isConnectAskTool } from "@cawco/core/connect-ask";
 import type { ConnectAnswer } from "@cawco/core/frames";
 import { CAWCO_NOTICE } from "@cawco/core/harness";
@@ -719,25 +720,33 @@ function accountRunAt(
 const isNotice = (m: Message | undefined): m is Message =>
   m?.type === "ui.system_note" && m.metadata?.subtype === CAWCO_NOTICE;
 
+/** A notice telling the agent the person's answer to one of its asks (core asks.ts `ASK_ORIGIN`): their own act. */
+const isAnswer = (m: Message): boolean => m.metadata?.notice === ASK_ORIGIN;
+
 /**
  * A RUN OF NOTICES IS ONE ROW. CawCo's notices to the agent that stand
  * together, nothing the session or its person said between them (only
  * messages that paint nothing), are one row from `messages[i]`, as a run of
  * account lines is ({@link accountRunAt}): a leak told twice and a wake read
- * as three of the person's own messages stacked. Null at anything but a
- * notice.
+ * as three of the person's own messages stacked. An answer of the person's
+ * is a row of its own, never folded behind another's "1 more": each answer
+ * stays where it was given. Null at anything but a notice.
  */
 function noticeRunAt(
   messages: Message[],
   i: number
 ): { row: Extract<Row, { kind: "notices" }>; span: number } | null {
-  if (!isNotice(messages[i])) {
+  const first = messages[i];
+  if (!isNotice(first)) {
     return null;
   }
-  const run = [messages[i]];
+  const run = [first];
   let end = i + 1;
-  for (let j = i + 1; j < messages.length; j += 1) {
+  for (let j = i + 1; j < messages.length && !isAnswer(first); j += 1) {
     const m = messages[j];
+    if (isNotice(m) && isAnswer(m)) {
+      break;
+    }
     if (isNotice(m)) {
       run.push(m);
       end = j + 1;

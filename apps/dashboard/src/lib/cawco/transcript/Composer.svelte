@@ -2812,10 +2812,6 @@
   let askPanel = $state<HTMLElement>();
   let dockEl = $state<HTMLElement>();
   let askShape: GrownShape | null = null;
-  /** The asks answered here since the first of a run came up ("2 of 3"). */
-  let askRun = $state(0);
-  /** Whose asks the run counts: a switch to another conversation starts anew. */
-  let askDraft: ComposerDraft | null = null;
   /** The newest change of ask; an older one still landing leaves it be. */
   let askTurn = 0;
   /** The field had the keys when the ask came up: it has them back after. */
@@ -2823,7 +2819,7 @@
   const askId = $derived(grownAsk?.request.requestId ?? null);
   const askPlace = $derived(
     grownAsk && drawnAsk?.request.requestId === grownAsk.request.requestId
-      ? { at: askRun + 1, of: askRun + 1 + grownAsk.more }
+      ? { at: draft.askRun + 1, of: draft.askRun + 1 + grownAsk.more }
       : null
   );
 
@@ -2876,13 +2872,10 @@
       askRefocus = true;
       field.blur();
     }
-    // A run goes on through a minimize: the card stood up again is the
-    // same question, at the same place in the same run ("2 of 3", never
-    // "1 of 2" on its way back up).
-    if (askDraft !== draft) {
-      askRun = 0;
-    }
-    askDraft = draft;
+    // A run goes on through a minimize and a composer drawn again: the
+    // card stood up again is the same question, at the same place in the
+    // same run ("2 of 3", never "1 of 2" on its way back up), its count
+    // kept by its conversation's draft.
     askBox = { base: size.base, ext: 0, max };
     drawnAsk = next;
     askRaised = true;
@@ -2921,8 +2914,7 @@
     const same = drawnAsk?.request.requestId === next.request.requestId;
     askRaised = true;
     if (!same) {
-      askRun = askDraft === draft ? askRun + 1 : 0;
-      askDraft = draft;
+      draft.askRun += 1;
       askShown = false;
       if (motionOk.current) {
         await new Promise((done) => setTimeout(done, dur("--dur-exit")));
@@ -2968,7 +2960,7 @@
     askBox = null;
     // Minimized, the run is put down, not ended: its asks still wait.
     if (!minimized) {
-      askRun = 0;
+      draft.askRun = 0;
     }
     if (askRefocus) {
       askRefocus = false;

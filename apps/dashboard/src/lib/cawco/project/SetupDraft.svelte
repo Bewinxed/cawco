@@ -32,20 +32,20 @@
    */
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import { setupPageWords, setupWords } from "@cawco/core/words/onboarding";
-  import { tick } from "svelte";
+  import { type Snippet, tick } from "svelte";
   import {
     moved,
     patched,
+    type SetupDelegate,
     type Stage,
   } from "#lib/cawco/decisions/host/setup/stage.js";
   import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
-  import { fadeRuns } from "#lib/cawco/motion/fade-runs.svelte.js";
   import DraftColumn from "#lib/cawco/project/DraftColumn.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
-  import { IconNeedsYou, IconPlus } from "#lib/icons.js";
+  import { IconNeedsYou, IconPlus, IconSend } from "#lib/icons.js";
 
   let {
     name,
@@ -59,7 +59,13 @@
     onstages,
     onanswer,
     onsetup,
+    delegates = [],
+    questions,
   }: {
+    /** The delegate types the setup proposes: who may do a stage's work. */
+    delegates?: SetupDelegate[];
+    /** His open questions where the board draws them (a desk): above the stages. */
+    questions?: Snippet;
     /** The project's name, as Caw named it. */
     name: string;
     /** What it is for, as drafted or as the person changed it. */
@@ -172,10 +178,16 @@
         variant={barState === "drafting" ? "outline" : "default"}
       />
     {:else if !drafting}
+      <!-- Its own glyph, so the pending spinner takes the glyph's slot and
+           the label morphs to its pending words in place (the kit's
+           Pending recipe); with none, the spinner stood over an empty
+           slab (cold review a89636bb). -->
       <Button
+        icon={IconSend}
         label={setupPageWords.send(name)}
         onclick={onsetup}
         pending={sending}
+        pendingLabel={setupPageWords.sending}
         size="sm"
         variant="default"
       />
@@ -188,10 +200,10 @@
        scrollbar stands clear of the cards, a field's hover never meets its
        edge, and what passes under the bar fades under the house edge. -->
   <div
-    {@attach fadeRuns}
     class="kit-edge-fade-block -ms-(--draft-bleed-start) -me-(--draft-bleed-end) flex min-h-0 flex-auto flex-col gap-space-4 overflow-y-auto ps-(--draft-bleed-start) pe-(--draft-bleed-end) pb-space-6"
     data-slot="draft-scroll"
   >
+    {@render questions?.()}
     {#if aim}
       <Textarea
         aria-label={setupPageWords.aim}
@@ -218,6 +230,7 @@
           onchange={(patch) => onstages(patched(stages, at, patch))}
           onmove={(by) => onstages(moved(stages, at, at + by))}
           onremove={() => onstages(stages.filter((_, index) => index !== at))}
+          {delegates}
           {stage}
         />
       {/each}

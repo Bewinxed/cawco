@@ -27,60 +27,55 @@
    * his seat, the board's place, his panel docked beside it (CawFloat), its
    * sheet on a phone.
    *
-   * `?beat=` walks the first minutes: `sent` (the words just sent, the
-   * project unnamed), `drafting` (named, his setup element in his panel),
-   * `questions` (three of his questions on the board, one holding him),
-   * `page` (the setup page open: the board's action opens it), `set` (the
-   * page sent: the board on his eight stages with their looks); `first-run`
-   * is the fleet board's first-run row. `?closed` puts his panel away;
-   * `?tab=assistant` keeps the page's beat on his conversation;
-   * `?switch=start` stands Assistant | Preview leading the bar, the other
-   * option of the card `artifact-open` to its top-right default.
-   *
-   * `?way=` draws one way of the first minutes for the decision page
-   * `onboarding-first-minutes`, Caw's questions in his composer on every
-   * width: `board` (the draft drawn as the board it becomes, SetupDraft),
-   * `page` (the setup page in the board's place), `panel` (the setup page
-   * in his panel's Preview, as today, with no stills on the floor).
+   * `?beat=` walks the first minutes as the project's page draws them
+   * (SetupBoard: the draft as the board it becomes, his questions on it on
+   * a desk and in his composer on a phone, decision page
+   * `onboarding-first-minutes`): `sent` (the words just sent, the project
+   * unnamed), `drafting` (named, five stages written), `questions` (three
+   * of his questions, one holding him), `drafted` (every stage written,
+   * Set up in the draft bar), `set` (the board on its stages, the set-up
+   * bar over it); `first-run` is the fleet board's first-run row. An
+   * answer and Set up go to the bench's hub, which answers them as the hub
+   * does. `?closed` puts his panel away; `?switch=start` stands
+   * Assistant | Preview leading the bar (card `artifact-open`).
    */
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { blankSession, cawco } from "#lib/cawco/client.svelte.js";
-  import type { Stage as DraftStage } from "#lib/cawco/decisions/host/setup/stage.js";
-  import SetupPagePreview from "#lib/cawco/decisions/SetupPagePreview.svelte";
   import FirstRun from "#lib/cawco/home/FirstRun.svelte";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
   import CawFloat from "#lib/cawco/project/CawFloat.svelte";
-  import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import ProjectDock from "#lib/cawco/project/ProjectDock.svelte";
+  import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
   import SetUpBar from "#lib/cawco/project/SetUpBar.svelte";
-  import SetupDraft from "#lib/cawco/project/SetupDraft.svelte";
-  import SetupScene from "#lib/cawco/project/SetupScene.svelte";
+  import SetupBoard from "#lib/cawco/project/SetupBoard.svelte";
   import {
+    PR_AIM,
     PR_ASKS,
+    PR_DELEGATES,
+    PR_DRAFT,
     PR_NAME,
-    PR_STAGES,
     SETUP_CALLS,
   } from "#lib/cawco/project/setup.fixtures.js";
   import { setupProgressOf } from "#lib/cawco/project/setup-progress.js";
   import { firstTodoStage } from "#lib/cawco/project-tasks.js";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
   import type { Message } from "#lib/cawco/types.js";
-  import { IconFolder } from "#lib/icons.js";
   import { page } from "$app/state";
 
-  type Beat = "sent" | "drafting" | "questions" | "page" | "set" | "first-run";
+  type Beat =
+    "sent" | "drafting" | "questions" | "drafted" | "set" | "first-run";
   const BEATS: Beat[] = [
     "sent",
     "drafting",
     "questions",
-    "page",
+    "drafted",
     "set",
     "first-run",
   ];
-  const asked = page.url.searchParams.get("beat");
-  const beat: Beat = BEATS.find((one) => one === asked) ?? "drafting";
+  const beatAsked = page.url.searchParams.get("beat");
+  const beat: Beat = BEATS.find((one) => one === beatAsked) ?? "drafting";
   const ID = "pr-team-conversation";
   const PROJECT = "pr-team";
   const now = Date.now();
@@ -89,45 +84,14 @@
   const switchAt: "start" | "end" =
     page.url.searchParams.get("switch") === "start" ? "start" : "end";
   const name = named ? PR_NAME : projectWords.placeholderName;
-  const WAYS = ["board", "page", "panel"] as const;
-  const way = WAYS.find((one) => one === page.url.searchParams.get("way"));
-  /** His questions stand on the board only in today's way, on a desk. */
-  const asksOnBoard = way === undefined;
-  /** The PR team's draft as the setup page holds it (SetupPagePreview's program). */
-  const DRAFT: DraftStage[] = [
-    { name: "Inbox", kind: "todo", icon: "inbox", color: "cyan" },
-    {
-      name: "Researching",
-      kind: "active",
-      icon: "search",
-      color: "cyan",
-      hooks: { runs: "researcher" },
-    },
-    {
-      name: "Drafted",
-      kind: "active",
-      icon: "pen",
-      color: "amber",
-      hooks: { runs: "writer" },
-    },
-    { name: "Your call", kind: "you" },
-    { name: "Sent", kind: "waiting", icon: "send", color: "orange" },
-    {
-      name: "Waiting on reply",
-      kind: "waiting",
-      icon: "hourglass",
-      color: "orange",
-      hooks: { after: "7d" },
-    },
-    { name: "Done", kind: "done", icon: "done", color: "green" },
-    { name: "Dropped", kind: "dropped", icon: "trash" },
-  ];
-  const AIM =
-    "A personal PR team: the job search, visa applications and renewals, travel booked around them, and a public voice. Research and drafts are done by delegates; every message, post and application goes out only once you send it.";
+  const DRAFT = PR_DRAFT;
+  const AIM = PR_AIM;
+  const DELEGATES = PR_DELEGATES;
   /** While he drafts, the stages he has written so far. */
   const WRITTEN: Partial<Record<Beat, number>> = {
     sent: 0,
-    page: DRAFT.length,
+    drafted: DRAFT.length,
+    set: DRAFT.length,
   };
   /** Where the bench stands now: its beat, moved on by an answer or Set up. */
   let at = $state<Beat>(beat);
@@ -151,13 +115,10 @@
   const first = said(
     "caw-first",
     "assistant",
-    way === "board"
-      ? "A personal PR team: your job search, visa applications and renewals, travel, and a public voice, with every message going out only once you send it. The board shows how it runs as I draft it."
-      : "A personal PR team: your job search, visa applications and renewals, travel, and a public voice, with every message going out only once you send it. A page opens to confirm how it runs."
+    "A personal PR team: your job search, visa applications and renewals, travel, and a public voice, with every message going out only once you send it. The board shows how it runs as I draft it."
   );
-  /** What he calls once drafted: the board way's draft is the board, so no page of his opens. */
-  const drafted = way === "board" ? SETUP_CALLS.named : SETUP_CALLS.page;
-  /** His words as he hands the draft over (the board way): where it is, and what is next. */
+  const drafted = SETUP_CALLS.named;
+  /** His words as he hands the draft over: where it is, and what is next. */
   const handed = said(
     "handed",
     "assistant",
@@ -185,14 +146,15 @@
       first,
       ...SETUP_CALLS.named.slice(1),
     ],
-    page: [
+    drafted: [sent, ...drafted.slice(0, 1), first, ...drafted.slice(1), handed],
+    set: [
       sent,
       ...drafted.slice(0, 1),
       first,
       ...drafted.slice(1),
-      ...(way === "board" ? [handed] : []),
+      handed,
+      done,
     ],
-    set: [sent, ...drafted.slice(0, 1), first, ...drafted.slice(1), done],
     "first-run": [],
   };
 
@@ -201,7 +163,6 @@
       __cawcoDebug: {
         frame: (frame: PulseFrame) => void;
         state: {
-          previews: Record<string, unknown>;
           projects: unknown[];
           sessions: Record<string, ReturnType<typeof blankSession>>;
         };
@@ -258,27 +219,11 @@
       session.pending = PR_ASKS.map((ask) => ask.request);
     }
     debug.state.sessions[ID] = session;
-    // The setup page open: his panel's Preview holds it (`?beat=page`), in
-    // the ways where it is his Preview's.
-    if (beat === "page" && (way === undefined || way === "panel")) {
-      debug.state.previews[ID] = {
-        kind: "preview",
-        instanceId: ID,
-        artifact: {
-          id: "pr-team-setup",
-          kind: "page",
-          name: "setup",
-          ask: `Set up ${PR_NAME}`,
-        },
-        revision: "1",
-        state: "open",
-      };
-    }
     // Held on a question with nothing else to do, he has ended his turn
     // (core asks.ts `askQuestionWords`): at rest, so his composer offers
     // Send, not Stop.
     pulse(
-      beat === "set" || beat === "page" || beat === "questions"
+      beat === "set" || beat === "drafted" || beat === "questions"
         ? "idle"
         : "working"
     );
@@ -304,8 +249,8 @@
   // hub is out of reach), and it answers the page's commands as the hub
   // does (hub asks.ts): an answer to one of his questions takes it off his
   // queue and reaches his conversation as CawCo's notice, its text the
-  // hub's own (core asks.ts `askAnsweredText`, title "Told you their
-  // answer"), which wakes him. Once none holds him, he writes the rest of
+  // hub's own (core asks.ts `askAnsweredText`, titled with the answers,
+  // transcript-rules `askAnsweredTitle`), which wakes him. Once none holds him, he writes the rest of
   // the draft, a stage a beat, and hands it over in words of his.
   const STAGE_BEAT_MS = 900;
   let writing: ReturnType<typeof setInterval> | undefined;
@@ -373,7 +318,7 @@
     const holding = session.pending.some(
       (one) => (one.input as { blocks?: unknown }).blocks === true
     );
-    if (way !== "board" || holding || writing || at === "page") {
+    if (holding || writing || at === "drafted") {
       return;
     }
     if (at === "questions" || at === "drafting") {
@@ -384,7 +329,7 @@
         if (written >= DRAFT.length) {
           clearInterval(writing);
           writing = undefined;
-          at = "page";
+          at = "drafted";
           session.messages = [...session.messages, handed];
           pulse("idle");
         }
@@ -439,17 +384,16 @@
     tasks: () => [],
   });
   untrack(() => {
-    lead.open = !page.url.searchParams.has("closed");
-    if (
-      beat === "page" &&
-      (way === undefined || way === "panel") &&
-      page.url.searchParams.get("tab") !== "assistant"
-    ) {
-      lead.tab = "preview";
-    }
+    // On a phone his sheet would stand over the draft, which is the board:
+    // he arrives put away, as on the project's page (its `sheetCovers`).
+    lead.open =
+      !page.url.searchParams.has("closed") &&
+      (at === "set" || !matchMedia("(max-width: 639px)").matches);
   });
 
-  const asks = $derived(lead.asks);
+  const asks = $derived(
+    lead.asks.filter((one) => one.request.toolName === "AskUserQuestion")
+  );
   const blocks = (one: (typeof asks)[number]): boolean =>
     (one.request.input as { blocks?: unknown }).blocks === true;
   const notSetUp = $derived(at !== "set");
@@ -460,8 +404,7 @@
           name,
           named,
           open: asks.map((one) => ({ blocks: blocks(one) })),
-          page: at === "page",
-          ends: way === "board" ? "board" : "page",
+          page: at === "drafted",
         })
       : null
   );
@@ -477,15 +420,17 @@
   /** A desk's pads (the column's own, `desk:`), which the draft's scroller reaches through. */
   const desk = new MediaQuery("(min-width: 900px)");
   const phone = $derived(phoneQuery.current);
+  /** His questions stand on the board on a desk; on a phone his composer holds them. */
+  const asksOnBoard = $derived(notSetUp && !phone);
   /** His panel stands docked beside the page while it is open and anchored, as the page's `docked`. */
   const docked = $derived(lead.open && lead.anchor !== null);
   const none = () => undefined;
+  const project = $derived(cawco.project(PROJECT));
 
   onMount(() => () => {
     clearInterval(writing);
     debug.leaveHub();
     delete debug.state.sessions[ID];
-    delete debug.state.previews[ID];
     debug.adoptInstances([]);
     debug.state.projects.splice(debug.state.projects.indexOf(row), 1);
   });
@@ -513,23 +458,23 @@
 {:else}
   <ProjectDock {docked} preview={lead.tab === "preview"}>
     {#snippet page()}
-      <div
-        class="flex min-h-c-mark items-center gap-space-3 ps-space-7 pe-space-6 pt-space-5 pb-space-4 max-desk:px-space-5"
-      >
-        <h1
-          class={[
-            "m-0 min-w-0 type-title",
-            named ? "text-ink-strong" : "text-ink-subtle",
-          ]}
-        >
-          {name}
-        </h1>
-        {#if at === "set" || way === "board" || (way === "page" && at === "page")}
-          <span class="ms-auto" data-box>
-            <CawSeat {lead} projectId={PROJECT} projectName={name} />
-          </span>
-        {/if}
-      </div>
+      <!-- The project's own head, as its page draws it: Caw's seat and
+           its capsule at its trailing edge. -->
+      {#if project}
+        <ProjectHead
+          {lead}
+          machine={null}
+          onask={() => {
+            lead.tab = "assistant";
+            lead.open = true;
+          }}
+          onfilter={none}
+          onnewtask={none}
+          {project}
+          seated
+          setup={null}
+        />
+      {/if}
       <!-- The draft scrolls in the page's whole column, its pads inside the
            scroller: the scrollbar stands at the column's edge, clear of the
            cards, a field's bleed is never cut, and what passes under the
@@ -543,35 +488,32 @@
           ? "var(--space-7)"
           : "var(--space-5)"}
       >
-        {#if way === "board" && at !== "set"}
+        {#if at !== "set"}
           <div class="min-h-0 flex-auto">
-            <SetupDraft
+            <SetupBoard
               aim={draftAim}
-              asking={asks.length}
+              {asks}
               coming={Math.max(DRAFT.length - written, 0)}
+              delegates={DELEGATES}
               {name}
               onaim={(next) => {
                 draftAim = next;
               }}
-              onanswer={() => detach(lead.answerAsks(), "answer Caw")}
+              onanswercaw={() => detach(lead.answerAsks(), "answer Caw")}
+              onBoard={asksOnBoard}
               onsetup={setUp}
               onstages={(next) => {
                 draft = next;
               }}
+              problem={null}
               {sending}
               stages={draft}
-              waiting={asks.filter(blocks).length}
             />
           </div>
-        {:else if way === "page" && at === "page"}
-          <div class="min-h-0 flex-auto overflow-y-auto">
-            <SetupPagePreview />
-          </div>
-        {:else if at === "set"}
-          {@const stages = way === "board" ? boardStages : PR_STAGES}
-          {@const first = firstTodoStage(stages)?.name}
+        {:else}
+          {@const first = firstTodoStage(boardStages)?.name}
           <div class="flex min-h-0 flex-auto flex-col gap-space-4">
-            {#if way === "board" && first}
+            {#if first}
               <SetUpBar
                 {first}
                 {name}
@@ -589,27 +531,18 @@
                 oncreate={async () => undefined}
                 onmove={none}
                 onopen={none}
-                {stages}
+                stages={boardStages}
                 tasks={[]}
               />
             </div>
           </div>
-        {:else}
-          <SetupScene
-            act={at === "page"
-              ? { kind: "page", open: none }
-              : { kind: "drafting" }}
-            asks={asksOnBoard ? asks : []}
-            onanswer={() => null}
-            {seat}
-          ></SetupScene>
         {/if}
       </div>
     {/snippet}
     {#snippet dock()}
       <CawFloat
         asksElsewhere={(request) =>
-          asksOnBoard && !phone && request.toolName === "AskUserQuestion"}
+          asksOnBoard && request.toolName === "AskUserQuestion"}
         {lead}
         projectId={PROJECT}
         projectName={name}
@@ -619,13 +552,3 @@
     {/snippet}
   </ProjectDock>
 {/if}
-
-{#snippet seat()}
-  <CawSeat
-    {lead}
-    projectId={PROJECT}
-    projectName={name}
-    size={80}
-    standIn={IconFolder}
-  />
-{/snippet}

@@ -183,6 +183,12 @@ export class ComposerDraft {
    */
   focusWanted = $state(false);
   /**
+   * The asks answered in this conversation's composer since the first of a
+   * run came up ("2 of 3"): kept with the draft, so a composer drawn again
+   * (a phone's sheet closed and opened) goes on counting where it was.
+   */
+  askRun = $state(0);
+  /**
    * The message last emptied into a send, kept whole until the hub takes it
    * (`settle`). A reload in that gap, or after the send failed, brings it
    * back rather than losing it.

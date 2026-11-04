@@ -49,7 +49,6 @@
   import { tick, untrack } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
-  import { fadeRuns } from "#lib/cawco/motion/fade-runs.svelte.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -860,7 +859,6 @@
          (touch-hit's reach past a 30px chip), which otherwise ran a pixel
          past the box and drew a scrollbar beside the options. -->
     <div
-      {@attach fadeRuns}
       data-slot="body"
       class="group/body kit-edge-fade-block relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain coarse:pb-(--hit-reach) opacity-0 blur-(--part-blur) transition-fade-blur motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none group-data-prompt-shown/hitl:filter-none motion-safe:transition-fade-slide-blur group-data-prompt-shown/hitl:delay-(--part-delay)"
       data-railed={questions.length > 1 || undefined}

@@ -10,7 +10,7 @@ import { setupWords } from "@cawco/core/words/onboarding";
 import type { Message } from "../types";
 
 /** The setup's four steps, in the skill's order. */
-type SetupStepId = "read" | "name" | "draft" | "page" | "board";
+type SetupStepId = "read" | "name" | "draft" | "board";
 
 export interface SetupStep {
   done: boolean;
@@ -39,21 +39,7 @@ const calls = (message: Message, bare: string): boolean => {
   return name === bare || name.endsWith(`_${bare}`);
 };
 
-/** He opened the setup page: an `artifact_create` of `setup` that went. */
-const openedPage = (message: Message): boolean =>
-  calls(message, "artifact_create") &&
-  message.metadata?.toolStatus !== "error" &&
-  (message.metadata?.toolInput as { name?: unknown } | undefined)?.name ===
-    SETUP_PAGE;
-
 export interface SetupFacts {
-  /**
-   * Where the draft is handed over (decision page
-   * `onboarding-first-minutes`, card `draft-where`): the setup page he
-   * opens (`page`, as today), or the board drawn from it (`board`), where
-   * the last step is the draft handed to the person, not a page opened.
-   */
-  ends?: "page" | "board";
   /** His conversation's messages, oldest first. */
   messages: readonly Message[];
   /** The project's name, and whether it is still the placeholder. */
@@ -61,13 +47,18 @@ export interface SetupFacts {
   named: boolean;
   /** Questions of his still open: whether any holds his work up. */
   open: { blocks: boolean }[];
-  /** The setup page exists in the project (its Decisions list has it). */
+  /**
+   * The draft is handed over: the setup page holds it and he is at rest.
+   * He writes the page early and adds to it as he drafts, the board
+   * drawing it as it becomes (decision page `onboarding-first-minutes`,
+   * card `draft-where`), so the page alone does not say he is done.
+   */
   page: boolean;
 }
 
-/** The draft is handed over: its page is open, or it stands on the board. */
+/** The draft is handed over: it stands on the board, his work on it done. */
 export const handedOver = (progress: SetupProgress): boolean =>
-  progress.phase === "page" || progress.phase === "board";
+  progress.phase === "board";
 
 /** The setup's steps and what he is on, from what has happened so far. */
 export function setupProgressOf(facts: SetupFacts): SetupProgress {
@@ -77,9 +68,8 @@ export function setupProgressOf(facts: SetupFacts): SetupProgress {
   const named =
     facts.named ||
     facts.messages.some((message) => calls(message, "project_name"));
-  const page = facts.page || facts.messages.some(openedPage);
-  const board = facts.ends === "board";
-  const phase = phaseOf(read, named, page, facts.open, board);
+  const { page } = facts;
+  const phase = phaseOf(read, named, page, facts.open);
   const steps: SetupStep[] = [
     {
       id: "read",
@@ -101,9 +91,7 @@ export function setupProgressOf(facts: SetupFacts): SetupProgress {
       done: page,
       live: phase === "drafting" || phase === "asking" || phase === "waiting",
     },
-    board
-      ? { id: "board", label: setupWords.steps.board, done: page, live: false }
-      : { id: "page", label: setupWords.steps.page, done: page, live: false },
+    { id: "board", label: setupWords.steps.board, done: page, live: false },
   ];
   return { phase, steps, doing: setupWords.doing[phase] };
 }
@@ -112,11 +100,10 @@ function phaseOf(
   read: boolean,
   named: boolean,
   page: boolean,
-  open: { blocks: boolean }[],
-  board: boolean
+  open: { blocks: boolean }[]
 ): SetupPhase {
   if (page) {
-    return board ? "board" : "page";
+    return "board";
   }
   if (!read) {
     return "reading";

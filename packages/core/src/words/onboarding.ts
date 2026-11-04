@@ -35,8 +35,6 @@ export const onboardingWords = {
   noMachine: "No machine has joined yet, so Caw can't start.",
   /** Machines registered, none online. */
   noneOnline: "No machine is online, so Caw can't start.",
-  /** Over the template row under the field: a template shapes what the words start. */
-  templates: "Shape it with a template",
   /**
    * The field's placeholder once a template is picked and the field is
    * empty: what that work needs said before Caw can start it.
@@ -49,8 +47,8 @@ export const onboardingWords = {
     design: "What are you designing, and for whom?",
     social: "Which accounts, and what should they say?",
   } satisfies Record<OfferedTemplate, string>,
-  /** The fold that opens the template row, where it stands folded. */
-  showTemplates: "Start from a template",
+  /** On the template card the typed words fit: a hint, worn as a badge. */
+  fits: "Fits your prompt",
   addMachine: "Add machine",
   checkMachines: "Check machines",
 } as const;
@@ -70,7 +68,6 @@ export const setupWords = {
     name: "Name it",
     named: (name: string) => `Named it ${name}`,
     draft: "Draft the stages and who does the work",
-    page: "Open the setup page",
     board: "Hand you the draft",
   },
   /** Said before a done step's label, for a screen reader. */
@@ -82,7 +79,6 @@ export const setupWords = {
     drafting: "Drafting the stages",
     asking: "Drafting the rest while you decide",
     waiting: "Waiting on your answer",
-    page: "The setup page is open",
     board: "The draft is on the board",
   },
   /** His element's name, for a screen reader. */
@@ -91,10 +87,6 @@ export const setupWords = {
   notSetUp: "Not set up yet",
   /** Under the claim: what fills the board, and when. */
   notSetUpLine: "Its stages show here once you set it up.",
-  /** The board's one action: the setup page, once it is there. */
-  openPage: "Open the setup page",
-  /** Over the held action while he drafts the page. */
-  drafting: "Caw is drafting it.",
   /** The board's one action with no setup under way (Caw off, or a setup left unsent long ago). */
   askSetup: "Set it up with Caw",
   /** What that action sends him. */
@@ -136,6 +128,19 @@ export const setupWords = {
   isSetUp: (name: string) => `${name} is set up`,
   firstTask: (stage: string) =>
     `Add the first task to ${stage}, or tell Caw what to work on.`,
+  /**
+   * Over the draft while his setup page holds cards beyond the draft (the
+   * project-setup skill's `place`, `routines`, `what-moves`): what else it
+   * asks, each part named, and the way to the page where they are answered.
+   */
+  alsoAsks: {
+    place: "where it lives",
+    routines: "its routines",
+    "what-moves": "where its tasks move",
+  } as Record<string, string>,
+  alsoOnPage: (parts: string[]) =>
+    `The setup page also asks ${parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : parts[0]}.`,
+  openPage: "Open the setup page",
   /** His setup element once the draft is on the board: where the person goes next. */
   reviewDraft: "Review the draft",
   /** The bar's act while he asks: his questions, where they are asked. */
@@ -145,14 +150,6 @@ export const setupWords = {
   /** What a draft column says in its body: what happens to work in it. */
   stageRuns: (who: string) => `Runs the ${who.toLowerCase()}`,
   stageAfter: (span: string) => `Moves on after ${span}`,
-  stageHolds: {
-    todo: "New work lands here.",
-    active: "Work in hand.",
-    waiting: "Waiting on someone else.",
-    you: "Waits on you before it goes on.",
-    done: "Finished work.",
-    dropped: "Work let go.",
-  } satisfies Record<StageKind, string>,
 } as const;
 
 /**
@@ -189,6 +186,10 @@ export const setupPageWords = {
   /** The Notion list's rename item, and its kind submenu. */
   rename: "Rename",
   kindItem: "Kind",
+  /** A stage's menu: who does its work, a level in place. */
+  worker: "Who does it",
+  /** No type does the stage's work. */
+  noWorker: "No one",
   /** A stage's menu: its glyph and colour, a level in place. */
   look: "Glyph and colour",
   /** Back to the menu's first level. */
@@ -210,6 +211,8 @@ export const setupPageWords = {
   addBack: "Add back",
   /** The page's Send: what it does, to the project by name. */
   send: (name: string) => `Set up ${name}`,
+  /** Set up on its way. */
+  sending: "Setting up…",
 } as const;
 
 /**

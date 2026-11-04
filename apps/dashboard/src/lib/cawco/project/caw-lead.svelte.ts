@@ -252,7 +252,9 @@ export class CawLead {
     if (bar) {
       bringIntoView(bar);
     }
-    act?.focus({ preventScroll: true });
+    // Seen to move: the ring stands on it whatever the pointer did (a
+    // press that only moved focus showed nothing, cold review a89636bb).
+    act?.focus({ preventScroll: true, focusVisible: true } as FocusOptions);
   }
 
   /**
