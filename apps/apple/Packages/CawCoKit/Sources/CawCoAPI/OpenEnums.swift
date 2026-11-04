@@ -4313,6 +4313,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/ImageProviderId`.
+    public enum ImageProviderId: OpenEnum {
+        case antigravity
+        case chatgpt
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "antigravity": self = .antigravity
+            case "chatgpt": self = .chatgpt
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .antigravity: "antigravity"
+            case .chatgpt: "chatgpt"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.antigravity, .chatgpt]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/InboundVia`.
     public enum InboundVia: OpenEnum {
         case connector

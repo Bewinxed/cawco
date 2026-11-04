@@ -19844,7 +19844,8 @@
                   "provider": {
                     "type": "string",
                     "enum": [
-                      "chatgpt"
+                      "chatgpt",
+                      "antigravity"
                     ]
                   },
                   "model": {
@@ -48676,10 +48677,7 @@
             "type": "string"
           },
           "provider": {
-            "type": "string",
-            "enum": [
-              "chatgpt"
-            ]
+            "$ref": "#/components/schemas/ImageProviderId"
           },
           "width": {
             "type": "number"
@@ -48699,6 +48697,13 @@
         "enum": [
           "jpeg",
           "png"
+        ]
+      },
+      "ImageProviderId": {
+        "type": "string",
+        "enum": [
+          "antigravity",
+          "chatgpt"
         ]
       },
       "ContinuationJob": {

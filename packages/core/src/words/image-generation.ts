@@ -16,13 +16,18 @@ import { configurePage } from "./configure";
 
 /** Each provider by the name a person knows it by, and what it runs on. */
 const PROVIDER_NAMES: Readonly<Record<ImageProviderId, string>> = {
-  chatgpt: "ChatGPT (this machine's ChatGPT login)",
+  chatgpt: "ChatGPT, on this machine's ChatGPT login",
+  antigravity: "Gemini, through this machine's Antigravity CLI",
 };
 
 /** A provider's short name, for a sentence. */
 const SHORT_NAMES: Readonly<Record<ImageProviderId, string>> = {
   chatgpt: "ChatGPT",
+  antigravity: "Antigravity CLI",
 };
+
+/** Where the Antigravity CLI is installed and signed in on each machine. */
+const AGY_ROW = `its row in ${configurePage("cli-tools")}`;
 
 const FORMAT_NAMES: Readonly<Record<ImageFormat, string>> = {
   png: "PNG",
@@ -90,7 +95,7 @@ export const imageGenerationWords = {
   /** More reference images than the provider takes; none taken at all when `most` is 0. */
   tooManyReferences: (id: ImageProviderId, most: number) =>
     most === 0
-      ? `${SHORT_NAMES[id]} takes no reference images, so nothing was uploaded and no image was generated.`
+      ? `${SHORT_NAMES[id]} takes no reference images, so nothing was uploaded and no image was generated.${id === "antigravity" ? " Editing with references through Gemini needs the Gemini API route, which CawCo doesn't offer yet." : ""}`
       : `${SHORT_NAMES[id]} takes at most ${most} reference images, so nothing was uploaded and no image was generated.`,
   /** A reference the inputs' gate refused. */
   referenceRefused: (cause: string) =>
@@ -129,6 +134,37 @@ export const imageGenerationWords = {
       `, made by ${SHORT_NAMES[image.provider]} on ${image.model}; show it with show_image.`,
       ...(image.notes ?? []).map((note) => `\n${note}`),
     ].join(""),
+
+  /** No Antigravity CLI on the machine. */
+  agyMissing: (machine: string) =>
+    `Antigravity CLI isn't installed on ${machine}, so no image request was sent. Install it in ${configurePage("cli-tools")}, or require it on every machine there.`,
+  /** An Antigravity CLI CawCo doesn't run, in the tool probe's words. */
+  agyNotRunnable: (detail: string) =>
+    `Antigravity CLI on this machine can't run (${detail}), so no image request was sent. See ${AGY_ROW}.`,
+  /** Not signed in to Google, by its own read or its run. */
+  agySignedOut: (said: string) =>
+    `Antigravity CLI on this machine isn't signed in to Google${said ? ` (it said: ${said})` : ""}, so no image was made. Sign it in on ${AGY_ROW}.`,
+  /** A note: whether it is signed in couldn't be read, and the run went on. */
+  agySigninUnread: (detail: string) =>
+    `Whether Antigravity CLI is signed in couldn't be read beforehand (${detail}); the run went ahead.`,
+  /** A note: the plan is never readable on this route. */
+  agyPlanUnread:
+    "Antigravity CLI doesn't say which Google AI plan it is signed in on, so the plan wasn't checked; images need Pro or Ultra.",
+  /** A note: quality is not a knob on this route. */
+  agyQualityIgnored: (quality: string) =>
+    `Antigravity CLI's image tool has no quality setting, so quality ${quality} had no effect.`,
+  /** A note: the run ended in an error after the image was written. */
+  agyEndedAfterImage: (error: string) =>
+    `Antigravity CLI ended with "${error}" after it wrote the image; the image is the one it made.`,
+  /** The run's quota is spent. */
+  agyQuota: (error: string) =>
+    `Google's image quota for this machine's Antigravity sign-in is spent (${error}). No image was saved and no retry was submitted; failed attempts count against the quota too.`,
+  /** The image tool failed inside Google's service. */
+  agyInternal: (error: string) =>
+    `Antigravity CLI's image tool failed (${error}). On Google AI Plus every image run fails this way; Pro or Ultra make images. No image was saved and no retry was submitted.`,
+  /** The run ended with no image written. */
+  agyNoImage: (status: string, error: string, said: string) =>
+    `Antigravity CLI ended (${status}${error ? `: ${error}` : ""}) without writing an image, so nothing was saved and no retry was submitted.${said ? ` It said: ${said}` : ""}`,
 
   /** No CawCo account on the machine holds a ChatGPT sign-in. */
   noLogin: () =>

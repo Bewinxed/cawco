@@ -201,6 +201,15 @@ function modelOf(provider: ImageProvider, asked: string | undefined): string {
   return asked;
 }
 
+/** `error` as a refusal of `provider`'s, naming each other provider and how to ask for it. */
+const refusal = (provider: ImageProvider, error: unknown): Error =>
+  new Error(
+    imageGenerationWords.refused(
+      provider.id,
+      error instanceof Error ? error.message : String(error)
+    )
+  );
+
 /** image-size's type of each format CawCo keeps. */
 const FORMAT_OF: Readonly<Record<string, ImageFormat>> = {
   png: "png",
@@ -220,7 +229,7 @@ function readImage(
   }
   const format = read?.type ? FORMAT_OF[read.type] : undefined;
   if (!(read && format && read.width && read.height)) {
-    throw new Error(imageGenerationWords.notAnImage(provider.id));
+    throw refusal(provider, imageGenerationWords.notAnImage(provider.id));
   }
   return { format, width: read.width, height: read.height };
 }
@@ -240,15 +249,6 @@ async function made(
       return unhandled("read", read);
   }
 }
-
-/** `error` as a refusal of `provider`'s, naming each other provider and how to ask for it. */
-const refusal = (provider: ImageProvider, error: unknown): Error =>
-  new Error(
-    imageGenerationWords.refused(
-      provider.id,
-      error instanceof Error ? error.message : String(error)
-    )
-  );
 
 /**
  * One image through the provider the call names, else the default. In
@@ -276,7 +276,8 @@ export async function generateImage(
   const model = modelOf(provider, args.model);
   const asked = args.reference_images ?? [];
   if (asked.length > provider.references) {
-    throw new Error(
+    throw refusal(
+      provider,
       imageGenerationWords.tooManyReferences(provider.id, provider.references)
     );
   }

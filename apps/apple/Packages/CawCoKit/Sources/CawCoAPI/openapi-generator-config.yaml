@@ -108,6 +108,7 @@ typeOverrides:
     HookEvent: OpenEnums.HookEvent
     HubAuthMode: OpenEnums.HubAuthMode
     ImageFormat: OpenEnums.ImageFormat
+    ImageProviderId: OpenEnums.ImageProviderId
     InboundVia: OpenEnums.InboundVia
     InstallCheck: OpenEnums.InstallCheck
     InstallRoute: OpenEnums.InstallRoute

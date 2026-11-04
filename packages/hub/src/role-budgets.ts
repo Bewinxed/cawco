@@ -67,7 +67,7 @@ import type { Tasks } from "./tasks";
  * 2026-11-04: generate_image takes a `provider` (ChatGPT by default, the
  * Antigravity CLI on asking), so an agent can make an image through the
  * owner's Gemini subscription too, and says a JPEG lands as .jpg (worker
- * 29,452 measured).
+ * 29,456 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 29_500,

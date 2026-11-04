@@ -9,7 +9,7 @@ export type ImageQuality = (typeof IMAGE_QUALITIES)[number];
  * provider that cannot generate is refused before any request, and nothing
  * switches provider by itself.
  */
-export const IMAGE_PROVIDERS = ["chatgpt"] as const;
+export const IMAGE_PROVIDERS = ["chatgpt", "antigravity"] as const;
 export type ImageProviderId = (typeof IMAGE_PROVIDERS)[number];
 
 /** The provider a call that names none goes to. */
