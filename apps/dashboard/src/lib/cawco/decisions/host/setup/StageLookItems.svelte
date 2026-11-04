@@ -38,7 +38,7 @@
   value={stage.icon ?? ""}
 >
   <div
-    class="grid grid-cols-7 gap-space-1 px-space-1 pb-space-1 coarse:grid-cols-5"
+    class="grid grid-cols-7 gap-space-1 px-space-1 pb-space-1 coarse:phone:grid-cols-5"
   >
     {#each STAGE_ICONS as icon (icon)}
       {@const Mark = STAGE_GLYPHS[icon]}

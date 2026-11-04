@@ -136,6 +136,8 @@ export const setupWords = {
   isSetUp: (name: string) => `${name} is set up`,
   firstTask: (stage: string) =>
     `Add the first task to ${stage}, or tell Caw what to work on.`,
+  /** His setup element once the draft is on the board: where the person goes next. */
+  reviewDraft: "Review the draft",
   /** The bar's act while he asks: his questions, where they are asked. */
   answer: "Answer Caw",
   /** A draft column's name, for a screen reader. */
@@ -187,6 +189,12 @@ export const setupPageWords = {
   /** The Notion list's rename item, and its kind submenu. */
   rename: "Rename",
   kindItem: "Kind",
+  /** A stage's menu: its glyph and colour, a level in place. */
+  look: "Glyph and colour",
+  /** Back to the menu's first level. */
+  back: "Back",
+  /** Under the kinds, on a stage that needs you: why it has no look of its own. */
+  youMark: "A stage that needs you keeps the Needs-you mark.",
   /** A kind's head's add button (Notion's + on a group). */
   addTo: (kind: string) => `Add a stage to ${kind}`,
   lookOf: (name: string) => `Look of ${name}`,

@@ -14,13 +14,19 @@
    */
   import type { StageKind } from "@cawco/core/views";
   import { setupPageWords, setupWords } from "@cawco/core/words/onboarding";
+  import { tick } from "svelte";
   import StageKindItems from "#lib/cawco/decisions/host/setup/StageKindItems.svelte";
   import StageLookItems from "#lib/cawco/decisions/host/setup/StageLookItems.svelte";
   import type { Stage } from "#lib/cawco/decisions/host/setup/stage.js";
   import { markOf } from "#lib/cawco/tasks/stage-look.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  import { IconMore, IconNeedsYou } from "#lib/icons.js";
+  import {
+    IconChevronLeft,
+    IconChevronRight,
+    IconMore,
+    IconNeedsYou,
+  } from "#lib/icons.js";
 
   let {
     stage,
@@ -62,11 +68,23 @@
     return setupWords.stageHolds[stage.kind];
   });
   const kindWord = $derived(setupPageWords.kinds[stage.kind]);
+  /** Which level of the stage's menu stands: its items, its kind, or its look. */
+  let level = $state<"root" | "kind" | "look">("root");
+  /** A level stood up in place: the keys go to its first item, as a submenu's would. */
+  async function to(next: "root" | "kind" | "look") {
+    level = next;
+    await tick();
+    document
+      .querySelector<HTMLElement>(
+        "[data-slot=dropdown-menu-content] [role^=menuitem]:not([data-disabled])"
+      )
+      ?.focus();
+  }
 </script>
 
 <section
   aria-label={setupWords.draftStage(stage.name)}
-  class="group/col flex min-h-c-draft-col-h flex-col gap-space-1 rounded-lg bg-surface-band p-space-1 inset-ring inset-ring-border-hairline"
+  class="group/col flex flex-col phone:min-h-c-draft-col-h gap-space-1 rounded-lg bg-surface-band p-space-1 inset-ring inset-ring-border-hairline"
   data-kind={stage.kind}
   data-share="stage:{stage.name}"
   data-slot="draft-column"
@@ -97,7 +115,17 @@
         text="label"
         value={stage.name}
       />
-      <DropdownMenu.Root>
+      <!-- One menu, its second level in place (HIG Menus: a submenu on a
+           touch screen is a level in the same menu): Kind and Look each
+           replace the menu's items with theirs under a Back row, so it
+           never flies out beside its row nor runs past a phone's screen. -->
+      <DropdownMenu.Root
+        onOpenChange={(open) => {
+          if (!open) {
+            level = "root";
+          }
+        }}
+      >
         <DropdownMenu.Trigger
           aria-label={setupPageWords.moreFor(stage.name)}
           class="ms-auto"
@@ -106,33 +134,72 @@
         >
           <IconMore />
         </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end" width="wide">
-          <DropdownMenu.Sub>
-            <DropdownMenu.SubTrigger
-              ><span>{setupPageWords.kindItem}</span></DropdownMenu.SubTrigger
+        <DropdownMenu.Content align="end" width="tiles">
+          {#if level === "root"}
+            <DropdownMenu.Item
+              closeOnSelect={false}
+              onSelect={() => {
+                to("kind");
+              }}
             >
-            <DropdownMenu.SubContent>
+              <span>{setupPageWords.kindItem}</span>
+              <span class="ms-auto type-meta text-ink-muted">{kindWord}</span>
+              <IconChevronRight aria-hidden="true" class="size-icon-sm" />
+            </DropdownMenu.Item>
+            {#if stage.kind !== "you"}
+              <DropdownMenu.Item
+                closeOnSelect={false}
+                onSelect={() => {
+                  to("look");
+                }}
+              >
+                <span>{setupPageWords.look}</span>
+                <IconChevronRight
+                  aria-hidden="true"
+                  class="ms-auto size-icon-sm"
+                />
+              </DropdownMenu.Item>
+            {/if}
+            <DropdownMenu.Separator />
+            <DropdownMenu.Item disabled={at === 0} onSelect={() => onmove(-1)}>
+              <span>{setupPageWords.earlier}</span>
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              disabled={at === of - 1}
+              onSelect={() => onmove(1)}
+            >
+              <span>{setupPageWords.later}</span>
+            </DropdownMenu.Item>
+            <DropdownMenu.Separator />
+            <DropdownMenu.Item onSelect={onremove} variant="destructive">
+              <span>{setupPageWords.remove(stage.name)}</span>
+            </DropdownMenu.Item>
+          {:else}
+            <DropdownMenu.Item
+              closeOnSelect={false}
+              onSelect={() => {
+                to("root");
+              }}
+            >
+              <IconChevronLeft aria-hidden="true" class="size-icon-sm" />
+              <span>{setupPageWords.back}</span>
+            </DropdownMenu.Item>
+            <DropdownMenu.Separator />
+            {#if level === "kind"}
               <StageKindItems
                 kind={stage.kind}
                 onkind={(kind: StageKind) => onchange({ kind })}
               />
-            </DropdownMenu.SubContent>
-          </DropdownMenu.Sub>
-          <StageLookItems onlook={(patch) => onchange(patch)} {stage} />
-          <DropdownMenu.Separator />
-          <DropdownMenu.Item disabled={at === 0} onSelect={() => onmove(-1)}>
-            <span>{setupPageWords.earlier}</span>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            disabled={at === of - 1}
-            onSelect={() => onmove(1)}
-          >
-            <span>{setupPageWords.later}</span>
-          </DropdownMenu.Item>
-          <DropdownMenu.Separator />
-          <DropdownMenu.Item onSelect={onremove} variant="destructive">
-            <span>{setupPageWords.remove(stage.name)}</span>
-          </DropdownMenu.Item>
+              {#if stage.kind === "you"}
+                <DropdownMenu.Separator />
+                <DropdownMenu.Label kind="line"
+                  >{setupPageWords.youMark}</DropdownMenu.Label
+                >
+              {/if}
+            {:else}
+              <StageLookItems onlook={(patch) => onchange(patch)} {stage} />
+            {/if}
+          {/if}
         </DropdownMenu.Content>
       </DropdownMenu.Root>
     </span>

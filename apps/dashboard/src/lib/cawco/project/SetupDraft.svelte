@@ -39,6 +39,7 @@
     type Stage,
   } from "#lib/cawco/decisions/host/setup/stage.js";
   import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { fadeRuns } from "#lib/cawco/motion/fade-runs.svelte.js";
   import DraftColumn from "#lib/cawco/project/DraftColumn.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
@@ -124,7 +125,7 @@
   }
 </script>
 
-<div class="flex min-h-0 flex-col gap-space-4" data-slot="setup-draft">
+<div class="flex h-full min-h-0 flex-col gap-space-4" data-slot="setup-draft">
   <div
     class="flex flex-wrap items-center gap-x-space-4 gap-y-space-2 rounded-lg bg-surface-band px-space-3 py-space-2 inset-ring inset-ring-border-hairline"
     data-slot="draft-bar"
@@ -181,48 +182,59 @@
     {/if}
   </div>
 
-  {#if aim}
-    <Textarea
-      aria-label={setupPageWords.aim}
-      look="prose"
-      measure="reading"
-      oninput={(event: Event) =>
-        onaim((event.currentTarget as HTMLTextAreaElement).value)}
-      value={aim}
-    />
-  {/if}
-
-  <!-- The stages in the board's order, wrapping at the board's column
-       width: every stage in view on a desk, down the page on a phone. -->
+  <!-- The bar holds still over the draft; what it is for and the stages
+       scroll under it, in a scroller that reaches the page's edges (its
+       pads the page's, `--draft-bleed-start` and `-end`), so its
+       scrollbar stands clear of the cards, a field's hover never meets its
+       edge, and what passes under the bar fades under the house edge. -->
   <div
-    bind:this={grid}
-    class="grid grid-cols-(--cols) items-start gap-space-3 pb-space-3"
-    data-slot="board"
-    style:--cols={COLS}
+    {@attach fadeRuns}
+    class="kit-edge-fade-block -ms-(--draft-bleed-start) -me-(--draft-bleed-end) flex min-h-0 flex-auto flex-col gap-space-4 overflow-y-auto ps-(--draft-bleed-start) pe-(--draft-bleed-end) pb-space-6"
+    data-slot="draft-scroll"
   >
-    {#each stages as stage, at (at)}
-      <DraftColumn
-        {at}
-        of={stages.length}
-        onchange={(patch) => onstages(patched(stages, at, patch))}
-        onmove={(by) => onstages(moved(stages, at, at + by))}
-        onremove={() => onstages(stages.filter((_, index) => index !== at))}
-        {stage}
+    {#if aim}
+      <Textarea
+        aria-label={setupPageWords.aim}
+        look="prose"
+        measure="reading"
+        oninput={(event: Event) =>
+          onaim((event.currentTarget as HTMLTextAreaElement).value)}
+        value={aim}
       />
-    {/each}
-    {#each Array.from({ length: coming }, (_, index) => index) as index (index)}
-      <Skeleton height="draft-column" radius="card" />
-    {/each}
-    {#if !drafting}
-      <button
-        class="select-none press-tint mark-line flex min-h-c-draft-col-h items-center justify-center gap-space-2 rounded-lg border-none bg-transparent text-ink-muted inset-ring inset-ring-border-control hover:bg-surface-hover"
-        data-slot="add-stage"
-        onclick={add}
-        type="button"
-      >
-        <IconPlus aria-hidden="true" class="size-icon-md" />
-        <span class="type-label">{setupPageWords.addStage}</span>
-      </button>
     {/if}
+
+    <!-- The stages in the board's order, wrapping at the board's column
+       width: every stage in view on a desk, down the page on a phone. -->
+    <div
+      bind:this={grid}
+      class="grid grid-cols-(--cols) items-start gap-space-3 pb-space-3"
+      data-slot="board"
+      style:--cols={COLS}
+    >
+      {#each stages as stage, at (at)}
+        <DraftColumn
+          {at}
+          of={stages.length}
+          onchange={(patch) => onstages(patched(stages, at, patch))}
+          onmove={(by) => onstages(moved(stages, at, at + by))}
+          onremove={() => onstages(stages.filter((_, index) => index !== at))}
+          {stage}
+        />
+      {/each}
+      {#each Array.from({ length: coming }, (_, index) => index) as index (index)}
+        <Skeleton height="draft-column" radius="card" />
+      {/each}
+      {#if !drafting}
+        <button
+          class="select-none press-tint mark-line flex min-h-c-draft-col-h items-center justify-center gap-space-2 rounded-lg border-none bg-transparent text-ink-muted inset-ring inset-ring-border-control hover:bg-surface-hover"
+          data-slot="add-stage"
+          onclick={add}
+          type="button"
+        >
+          <IconPlus aria-hidden="true" class="size-icon-md" />
+          <span class="type-label">{setupPageWords.addStage}</span>
+        </button>
+      {/if}
+    </div>
   </div>
 </div>

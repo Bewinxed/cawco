@@ -2876,8 +2876,13 @@
       askRefocus = true;
       field.blur();
     }
+    // A run goes on through a minimize: the card stood up again is the
+    // same question, at the same place in the same run ("2 of 3", never
+    // "1 of 2" on its way back up).
+    if (askDraft !== draft) {
+      askRun = 0;
+    }
     askDraft = draft;
-    askRun = 0;
     askBox = { base: size.base, ext: 0, max };
     drawnAsk = next;
     askRaised = true;
@@ -2961,7 +2966,10 @@
     askShape = null;
     drawnAsk = null;
     askBox = null;
-    askRun = 0;
+    // Minimized, the run is put down, not ended: its asks still wait.
+    if (!minimized) {
+      askRun = 0;
+    }
     if (askRefocus) {
       askRefocus = false;
       // Once the field's label is no longer inert: focus does not land in

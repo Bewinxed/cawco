@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { detach } from "@cawco/core/detach";
   /**
    * Caw's panel on the project's page (CawFloat): the project's
    * conversation, a session like any other drawn by SessionPane, docked, so
@@ -496,7 +497,7 @@
             browsingHarness={undefined}
             docked={{ draft: lead.draft }}
             focused={!onPreview}
-            afterRows={setup && !handedOver(setup) ? setupTail : undefined}
+            afterRows={setup ? setupTail : undefined}
             viewId={shown}
             visible={!onPreview}
           />
@@ -622,7 +623,11 @@
 
 {#snippet setupTail()}
   {#if setup}
-    <SetupWell progress={setup} status={lead.status} />
+    <SetupWell
+      onreview={() => detach(lead.reviewDraft(), "review the draft")}
+      progress={setup}
+      status={lead.status}
+    />
   {/if}
 {/snippet}
 

@@ -395,6 +395,19 @@ const OUTCOMES: ReadonlySet<string> = new Set<AskOutcome>([
   "dismissed",
 ]);
 
+/**
+ * The answers an answered question's message gives (`questionAnsweredText`),
+ * in the order asked: each `- <question>: <answer>` line's answer.
+ */
+export const answersOf = (text: string): string[] =>
+  text
+    .split("\n")
+    .filter((line) => line.startsWith("- "))
+    .flatMap((line) => {
+      const at = line.lastIndexOf(": ");
+      return at < 0 ? [] : [line.slice(at + 2)];
+    });
+
 /** An answered ask's message read back: its id, kind and outcome; null for any other text. */
 export const parseAskAnswered = (
   text: string

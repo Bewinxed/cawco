@@ -142,13 +142,24 @@
   <NewTaskForm {oncreate} stage={newIn ?? ""} bind:open={adding} />
 {/snippet}
 
+<!-- On a phone the page is the one scroller and the board is as tall as its
+     cards; with none yet it keeps the room it is given, so an empty board
+     (a project just set up) is a column with its Add task, not a strip
+     over an empty screen. -->
 <div
-  class="group flex h-full min-h-0 gap-space-3 max-phone:h-auto"
+  class={[
+    "group flex h-full min-h-0 gap-space-3",
+    tasks.length > 0 && "max-phone:h-auto",
+  ]}
   data-rail-open={railed && railOpen ? "" : undefined}
 >
   <div
     data-slot="board"
-    class="kit-edge-fade grid h-full min-h-0 min-w-0 flex-auto auto-cols-(--cols) grid-flow-col gap-space-3 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-space-3 max-phone:h-auto max-phone:auto-cols-(--cols-phone) max-phone:snap-x max-phone:snap-mandatory max-phone:group-data-rail-open:hidden"
+    class={[
+      "kit-edge-fade grid h-full min-h-0 min-w-0 flex-auto auto-cols-(--cols) grid-flow-col gap-space-3 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-space-3 max-phone:auto-cols-(--cols-phone)",
+      "max-phone:snap-x max-phone:snap-mandatory max-phone:group-data-rail-open:hidden",
+      tasks.length > 0 && "max-phone:h-auto",
+    ]}
     style:--cols="minmax(var(--c-board-col-min), var(--c-board-col-max))"
     style:--cols-phone="calc(100% - var(--space-8))"
   >

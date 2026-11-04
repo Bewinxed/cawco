@@ -416,6 +416,7 @@
 @custom-variant slot-draft-column (&[data-slot="draft-column"]);
 @custom-variant slot-drawer-content (&[data-slot="drawer-content"]);
 @custom-variant slot-drop (&[data-slot="drop"]);
+@custom-variant slot-dropdown-menu-content (&[data-slot="dropdown-menu-content"]);
 @custom-variant slot-edge-bottom (&[data-slot="edge-bottom"]);
 @custom-variant slot-edge-label (&[data-slot="edge-label"]);
 @custom-variant slot-edge-top (&[data-slot="edge-top"]);

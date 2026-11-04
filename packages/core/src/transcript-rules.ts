@@ -10,7 +10,7 @@
  */
 
 import { accountMoveWords } from "./accounts";
-import { ASK_ORIGIN, parseAskAnswered } from "./asks";
+import { ASK_ORIGIN, answersOf, parseAskAnswered } from "./asks";
 import { attachedFiles, withoutPictureLines } from "./attachments";
 import type { ContextLine } from "./context-filing";
 import type {
@@ -2159,11 +2159,32 @@ function cawcoRow(
       subtype: CAWCO_NOTICE,
       noteKind: "CawCo",
       noteTitle: answered
-        ? noticeWords.askAnswered[answered.outcome]
+        ? askAnsweredTitle(answered, said.content as string)
         : noticeLine(origin),
       notice: origin.name ?? "",
     },
   };
+}
+
+/**
+ * What the person reads of an answer CawCo told a session: for a question
+ * answered, the answers themselves ("Your answer: A renewal"), so they stay
+ * in the conversation where it was asked; else the outcome in words.
+ */
+export function askAnsweredTitle(
+  answered: Pick<
+    NonNullable<ReturnType<typeof parseAskAnswered>>,
+    "kind" | "outcome"
+  >,
+  text: string
+): string {
+  const answers =
+    answered.kind === "question" && answered.outcome === "answered"
+      ? answersOf(text)
+      : [];
+  return answers.length > 0
+    ? noticeWords.askAnsweredWith(answers.join(" · "))
+    : noticeWords.askAnswered[answered.outcome];
 }
 
 const byAcceptance = (a: SendRecord, b: SendRecord): number =>
