@@ -47,6 +47,7 @@
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import { queriesIn, userEventIn } from "@cawco/core/stage-play";
   import { graphWords as words } from "@cawco/core/words/graph";
+  import { BitsConfig } from "bits-ui";
   import { type Component as SvelteComponent, tick, untrack } from "svelte";
   import { detailsOf } from "#lib/cawco/fault/rebuild.svelte.js";
   import { frameSize } from "#lib/cawco/frame-observer.js";
@@ -355,6 +356,48 @@
     await resting?.done;
   }
 
+  /** The state's args drawn on a hidden fresh instance, to hold the live one to; null when none is checked. */
+  let fresh = $state<{ args: Record<string, unknown>; n: number } | null>(null);
+  let freshHost = $state<HTMLElement>();
+  /**
+   * A state set in place lands whatever the component's own handlers did
+   * with the one before: the live instance is read against the state drawn
+   * afresh, and mounted anew with its args where they differ. Set in place
+   * on Open one member, a press outside the open column closed it through
+   * the roster's own handler, and Open many members, naming the same
+   * column, reached a component that held it shut. Any states file, not
+   * one fixture: the lint (house/follows-props) holds a component to its
+   * props, and this to what its args draw.
+   */
+  /** What a drawing's controls say they stand at (open, pressed, checked, chosen), in order: what its words alone don't show. */
+  const STATED = [
+    "aria-expanded",
+    "aria-pressed",
+    "aria-checked",
+    "aria-selected",
+  ];
+  const statesOf = (root: Element): string =>
+    [...root.querySelectorAll(STATED.map((name) => `[${name}]`).join(","))]
+      .map((el) => STATED.map((name) => el.getAttribute(name) ?? "").join(""))
+      .join("|");
+  async function landed(args: Record<string, unknown>): Promise<void> {
+    fresh = { args, n: (fresh?.n ?? 0) + 1 };
+    await tick();
+    const host = freshHost;
+    const holder = frame;
+    if (host && holder) {
+      await restOf(host).done;
+      await settle();
+      if (
+        differences(host, holder, 1).length > 0 ||
+        statesOf(host) !== statesOf(holder)
+      ) {
+        await open(args);
+      }
+    }
+    fresh = null;
+  }
+
   /** The last `reach` asked for: one still waiting its turn is passed over. */
   let asked = 0;
   /** The reach under way: each waits for the one before it, so no two act on the instance at once. */
@@ -386,7 +429,7 @@
         await open(args);
         return [];
       }
-      return await act(
+      const clips = await act(
         play ??
           (async () => {
             live = { ...args };
@@ -394,6 +437,10 @@
           }),
         still
       );
+      if (!play && mine === asked) {
+        await landed(args);
+      }
+      return clips;
     });
     reaching = turn.catch(() => undefined);
     return turn;
@@ -639,6 +686,24 @@
   const ringed = $derived(found.filter((mark) => mark.kind !== "went"));
   /** What went: ringed, dashed, where it stood, on the compared drawing while it is shown. */
   const went = $derived(found.filter((mark) => mark.kind === "went"));
+  /** The gap between two drawings side by side, px. */
+  const besideGap = browser ? numberOf("--space-6") : 0;
+  /**
+   * Compare draws the two states side by side where the stage holds both
+   * at their width with the gap between (a desk with the room closed, a
+   * narrow component, a wide window); else the flip shows one in the
+   * other's place.
+   */
+  const beside = $derived(
+    against !== null && room > 0 && room >= 2 * drawnWidth + besideGap
+  );
+  /** The rings drawn: side by side both drawings' (what went on the compared one); flipped what went; else what came in or changed. */
+  const drawnRings = $derived.by(() => {
+    if (beside) {
+      return [...ringed, ...went];
+    }
+    return flipped ? went : ringed;
+  });
   /** The compared state stands in the kept one's place (Compare's flip). */
   let flipped = $state(false);
   $effect(() => {
@@ -701,7 +766,12 @@
           >{shown.variant}</span
         >
       {/if}
-      {#if against}
+      {#if against && beside}
+        <span
+          class="min-w-0 truncate type-label text-ink-muted"
+          data-slot="stage-against">{words.comparedWith(against.name)}</span
+        >
+      {:else if against}
         <!-- The state it is compared with, a press that shows it in the
              kept one's place, rings where its gone parts stood, and back. -->
         <button
@@ -782,8 +852,12 @@
                 type="button"
                 class="mark-line pointer-hit touch-hit flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2 rounded-sm px-space-1 text-start type-label text-ink-row transition-control can-hover:hover:bg-surface-hover"
                 onclick={() => {
-                  flipped = line.kind === "went";
-                  showBox(line.box);
+                  flipped = !beside && line.kind === "went";
+                  showBox(
+                    beside && line.kind === "went"
+                      ? { ...line.box, x: line.box.x + drawnWidth + besideGap }
+                      : line.box
+                  );
                 }}
               >
                 <span
@@ -852,21 +926,64 @@
         fault && "hidden",
       ]}
     >
+      {#if beside && against}
+        <!-- Side by side: each drawing named over it, on its own column. -->
+        <div
+          class="mb-space-2 flex gap-(--beside-gap) type-meta text-ink-muted"
+          data-slot="beside-names"
+          style:--beside-gap="{besideGap}px"
+        >
+          <span class="w-(--frame-w) truncate" style:--frame-w="{drawnWidth}px"
+            >{shown.name}</span
+          >
+          <span class="w-(--frame-w) truncate" style:--frame-w="{drawnWidth}px"
+            >{against.name}</span
+          >
+        </div>
+      {/if}
       <div
         data-slot="stage-frame"
         style:--frame-w="{drawnWidth}px"
+        style:--beside-x="{beside ? drawnWidth + besideGap : 0}px"
+        style:--frame-span="{beside
+          ? 2 * drawnWidth + besideGap
+          : drawnWidth}px"
         style:--against-h="{Math.max(
           against ? againstTall : 0,
           mounted ? 0 : lastTall
         )}px"
-        class="relative min-h-(--against-h) w-(--frame-w)"
+        class="relative min-h-(--against-h) w-(--frame-span)"
       >
+        {#if fresh}
+          <!-- The state just set in place, drawn afresh and hidden, read
+               against the live instance (`landed`) and gone. -->
+          <div
+            bind:this={freshHost}
+            id="{uid}-fresh"
+            aria-hidden="true"
+            data-stage-drawing
+            inert
+            class="pointer-events-none invisible absolute inset-x-0 top-0"
+          >
+            {#key fresh.n}
+              <!-- Its layers (a popover the state opens) portal into it,
+                   hidden with it, never onto the page. -->
+              <BitsConfig defaultPortalTo="#{uid}-fresh">
+                <svelte:boundary>
+                  <RegionHeld />
+                  <Component {...fresh.args} />
+                </svelte:boundary>
+              </BitsConfig>
+            {/key}
+          </div>
+        {/if}
         {#if against}
           <!-- The state it is compared with, drawn hidden under the kept one
                at the same width, read for what differs and never seen or
                pressed. -->
           <div
             bind:this={hidden}
+            id="{uid}-against"
             {@attach relaid}
             {@attach frameSize((node: HTMLElement) => {
               againstTall = node.offsetHeight;
@@ -875,15 +992,17 @@
             data-stage-drawing
             inert
             class={[
-              "pointer-events-none absolute inset-x-0 top-0",
-              !flipped && "invisible",
+              "pointer-events-none absolute start-(--beside-x) top-0 w-(--frame-w)",
+              !(flipped || beside) && "invisible",
             ]}
           >
             {#key against}
-              <svelte:boundary>
-                <RegionHeld />
-                <Component {...against.args} />
-              </svelte:boundary>
+              <BitsConfig defaultPortalTo="#{uid}-against">
+                <svelte:boundary>
+                  <RegionHeld />
+                  <Component {...against.args} />
+                </svelte:boundary>
+              </BitsConfig>
             {/key}
           </div>
         {/if}
@@ -895,7 +1014,7 @@
           data-cawco-source={shown.line
             ? `${review.file}:${shown.line}:1`
             : undefined}
-          class={["relative", flipped && "invisible"]}
+          class={["relative w-(--frame-w)", flipped && !beside && "invisible"]}
         >
           {#key mount}
             <svelte:boundary
@@ -947,7 +1066,7 @@
           <!-- The rings: outside each element's box on its own shape, in
                the stage's own layer, taking no press. -->
           <div aria-hidden="true" class="pointer-events-none absolute inset-0">
-            {#each flipped ? went : ringed as mark, at (at)}
+            {#each drawnRings as mark, at (at)}
               <span
                 data-slot="change-ring"
                 data-kind={mark.kind}
@@ -955,7 +1074,10 @@
                   "absolute start-(--ring-x) top-(--ring-y) h-(--ring-h) w-(--ring-w) rounded-(--ring-r) border-(length:--c-change-ring-width) border-c-change-ring",
                   mark.kind === "went" && "border-dashed",
                 ]}
-                style:--ring-x="calc({mark.box.x}px - {ringOut})"
+                style:--ring-x="calc({mark.box.x}px - {ringOut}{beside &&
+                mark.kind === 'went'
+                  ? ` + ${drawnWidth + besideGap}px`
+                  : ''})"
                 style:--ring-y="calc({mark.box.y}px - {ringOut})"
                 style:--ring-w="calc({mark.box.w}px + 2 * {ringOut})"
                 style:--ring-h="calc({mark.box.h}px + 2 * {ringOut})"

@@ -48,6 +48,7 @@
     SvelteFlow,
   } from "@xyflow/svelte";
   import { untrack } from "svelte";
+  import { on } from "svelte/events";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import FlowAutoFit from "#lib/components/features/flow/FlowAutoFit.svelte";
   import FlowCanvasTools from "#lib/components/features/flow/FlowCanvasTools.svelte";
@@ -71,12 +72,15 @@
     kept,
     against,
     onpress,
+    onmove,
     narrow = false,
   }: {
     review: Review;
     kept: string;
     against: string | null;
     onpress: (state: string, variant: string | null) => void;
+    /** A move's arrow pressed: its move opens on the Animation face. */
+    onmove: (from: string, to: string) => void;
     /** A pane under 640px: the map is a list (DESIGN.md, Map mode; WholeList). */
     narrow?: boolean;
   } = $props();
@@ -211,6 +215,7 @@
         labelAt: route.label,
         played: move.played !== null,
         points: route.points,
+        open: () => onmove(move.from, move.to),
       };
       return [
         {
@@ -221,7 +226,9 @@
           // Over the groups, under the cards.
           zIndex: 1,
           selectable: false,
-          focusable: false,
+          // A press, Enter or Space on it opens its move.
+          focusable: true,
+          ariaRole: "button",
           // Its name as a person says it, never the states' ids.
           ariaLabel: words.moveEdge(
             review.states[move.from]?.name ?? move.from,
@@ -294,6 +301,13 @@
       ];
     }
   );
+  /** A move by its arrow's id (`from->to`), opened on the Animation face. */
+  const openMove = (id: string) => {
+    const one = review.moves.find((move) => `${move.from}->${move.to}` === id);
+    if (one) {
+      onmove(one.from, one.to);
+    }
+  };
   /** The map's own box on screen, read as a fit asks: the first fit comes before any observer has reported its size. */
   let pane = $state<HTMLElement>();
   /** `at` held so a view of `span` around it stays inside `[low, high]`; the middle when the view is the wider. */
@@ -331,11 +345,25 @@
 </script>
 
 {#if narrow}
-  <WholeList {cardOf} {kept} {review} />
+  <WholeList {cardOf} {kept} {onmove} {review} />
 {:else}
+  <!-- Enter and Space on a focused arrow (Svelte Flow's edge, role
+       button) open its move: the key is the arrow's, heard where it
+       bubbles. -->
   <div
     data-slot="whole-set"
     bind:this={pane}
+    {@attach (node: HTMLElement) =>
+      on(node, "keydown", (event) => {
+        const edge = (event.target as Element | null)?.closest(
+          ".svelte-flow__edge"
+        );
+        const id = edge?.getAttribute("data-id");
+        if (id && (event.key === "Enter" || event.key === " ")) {
+          event.preventDefault();
+          openMove(id);
+        }
+      })}
     class="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-surface-raised"
     style:--xy-edge-stroke="var(--border-contrast)"
     style:--xy-edge-stroke-width="var(--c-graph-edge)"
@@ -358,6 +386,7 @@
           held = true;
         }
       }}
+      onedgeclick={({ edge }) => openMove(edge.id)}
       panOnDrag
       {translateExtent}
       proOptions={{ hideAttribution: true }}

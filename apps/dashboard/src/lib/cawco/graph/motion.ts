@@ -819,6 +819,18 @@ export const springOf = (seconds: number, bounce: number): Spring => ({
   damping: (4 * Math.PI * (1 - bounce)) / seconds,
 });
 
+/**
+ * A spring that settles in `ms`, its bounce and mass kept: one length a
+ * spring is told by, where it settles, the same in its row and its editor
+ * (the editor set its response, 260 ms, while the row said it settled at
+ * ~450). For one bounce the settling time grows as the response does.
+ */
+export function springSettling(ms: number, bounce: number, mass = 1): Spring {
+  const unit = { ...springOf(1, bounce), mass };
+  const settles = springEasing(unit).duration;
+  return { ...springOf(ms / Math.max(1, settles), bounce), mass };
+}
+
 /** A value of a row's timing he may change, and put back alone: when it begins, how long it runs, its curve. */
 export type Timing = "start" | "length" | "curve";
 

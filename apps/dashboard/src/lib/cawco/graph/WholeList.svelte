@@ -23,12 +23,15 @@
     review,
     kept,
     cardOf,
+    onmove,
   }: {
     review: Review;
     /** The state on stage: the list opens on it. */
     kept: string;
     /** A state's card, as the map draws it. */
     cardOf: (id: string) => StateCard | null;
+    /** A move pressed: it opens on the Animation face, as the map's arrow does. */
+    onmove: (from: string, to: string) => void;
   } = $props();
 
   const nameOf = (id: string) => review.states[id]?.name ?? id;
@@ -65,14 +68,20 @@
             <li class="min-w-0" data-state-id={id}>
               <WholeCard {card} wide>
                 {#each outOf(id) as move (move.to)}
-                  <span class="flex min-w-0 flex-wrap gap-x-space-2 type-meta">
+                  <!-- A move is a press of its own over the card's: it
+                       opens on the Animation face, as the map's arrow does. -->
+                  <button
+                    type="button"
+                    class="pointer-hit touch-hit relative -mx-space-1 flex min-w-0 flex-wrap gap-x-space-2 rounded-xs px-space-1 text-start type-meta transition-control can-hover:hover:bg-surface-hover"
+                    onclick={() => onmove(move.from, move.to)}
+                  >
                     {#if move.label}
                       <span class="text-ink-row">{move.label}</span>
                     {/if}
                     <span class="min-w-0 text-ink-muted wrap-anywhere"
                       >{words.move(nameOf(move.from), nameOf(move.to))}</span
                     >
-                  </span>
+                  </button>
                 {/each}
               </WholeCard>
             </li>

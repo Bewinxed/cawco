@@ -52,6 +52,7 @@
     shapeOfCurve,
     springEasing,
     springOf,
+    springSettling,
     type Timing,
     type Track,
     untune,
@@ -163,7 +164,7 @@
       return;
     }
     if (shape === "spring") {
-      sendSpring(springOf(duration / 1000, SPRING_START));
+      sendSpring(springSettling(duration, SPRING_START));
       return;
     }
     const keep = curve.shape === shape ? curve.intensity : START;
@@ -188,10 +189,7 @@
   const setLength = (ms: number) => {
     const next = Math.max(STEP, Math.round(ms));
     if (first.spring) {
-      sendSpring({
-        ...springOf(next / 1000, first.spring.bounce),
-        mass: first.spring.mass,
-      });
+      sendSpring(springSettling(next, first.spring.bounce, first.spring.mass));
       return;
     }
     onretime(relength(track, next));
@@ -207,10 +205,8 @@
       sendSpring({ ...base, [key]: value });
     }
   };
-  /** The spring's length as he sets it: its response, ms. */
-  const shownLength = $derived(
-    first.spring ? Math.round(responseOf(first.spring) * 1000) : duration
-  );
+  /** The row's length as he sets it; a spring's where it settles, as its row says. */
+  const shownLength = $derived(duration);
 
   /** Each shape drawn: its curve from the start to the end, in a 24-unit box (motion `curveGlyph`, as the rows draw theirs). */
   const glyphOf = (shape: Shape): string => {
@@ -465,7 +461,7 @@
   data-slot="clip-editor"
   aria-label={name}
   class="grid min-w-0 grid-cols-(--cols) items-start gap-x-space-5 gap-y-space-3 rounded-md bg-surface-recess p-space-3"
-  style:--cols="auto minmax(0, 1fr)"
+  style:--cols="var(--c-graph-editor-label) minmax(0, 1fr)"
 >
   {@render named(words.length, "length", `${track.id}-length`)}
   <div class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2">

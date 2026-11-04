@@ -57,6 +57,7 @@
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
   import { IconChevronDown, IconPause, IconPlay } from "#lib/icons.js";
   import { browser } from "$app/env";
   import ClipBar from "./ClipBar.svelte";
@@ -84,6 +85,9 @@
     onretime,
     onreset,
     onlight,
+    choices,
+    chosen,
+    onchoose,
     onfocusthing,
     peek = false,
     onretry,
@@ -104,6 +108,12 @@
     onreset: (ids: string[]) => void;
     /** The thing a row names, rested on (null: none). */
     onlight: (thing: Element | null) => void;
+    /** Every move the states file names, by its states' ids. */
+    choices: { from: string; key: string; name: string; to: string }[];
+    /** The move on the face, `from->to`; null with none. */
+    chosen: string | null;
+    /** A move picked from the list: played from its from state. */
+    onchoose: (from: string, to: string) => void;
     /** A row took the focus (a key, or a press on its words): the thing it names, to bring into view on the stage. */
     onfocusthing: (thing: Element | null) => void;
     /** The phone drawer at its head stop: the move's name and Play with its time, one line. */
@@ -264,6 +274,10 @@
       onseek(Math.max(0, Math.min(length, handle + by)));
     }
   };
+  /** The head's words: the move on the face, else the ask to choose one. */
+  const headName = $derived(
+    move.kind === "none" ? words.chooseMove : words.move(move.from, move.to)
+  );
   /** The drawer's head line while the move has no rows to play. */
   const peekLine = $derived.by(() => {
     if (move.kind === "none") {
@@ -392,16 +406,43 @@
     <p class="m-0 min-w-0 truncate type-label text-ink-muted">
       {peekLine}
     </p>
-  {:else if move.kind === "none"}
-    <p class="m-0 max-w-c-measure type-body text-ink-muted text-pretty">
-      {words.noMove(move.state)}
-    </p>
   {:else}
-    <!-- The head: the move, and Reset once he changed anything. -->
+    <!-- The head: the move, a list of every move the states file names
+         (a press on one plays it from its from state), and Reset once he
+         changed anything. -->
     <header class="flex min-h-c-btn-h-sm min-w-0 items-center gap-space-3">
-      <h3 class="m-0 min-w-0 flex-1 type-label text-ink-strong">
-        <span class="block truncate">{words.move(move.from, move.to)}</span>
-      </h3>
+      <Select.Root
+        onValueChange={(next: string) => {
+          const one = choices.find((each) => each.key === next);
+          if (one) {
+            onchoose(one.from, one.to);
+          }
+        }}
+        type="single"
+        value={chosen ?? ""}
+      >
+        <Select.Trigger
+          aria-label={words.chooseMove}
+          class="min-w-0 flex-1"
+          look="field"
+          press="tint"
+        >
+          <span class="min-w-0 truncate" data-slot="select-value"
+            >{headName}</span
+          >
+        </Select.Trigger>
+        <Select.Content>
+          {#if chosen && !choices.some((each) => each.key === chosen)}
+            <Select.Item label={headName} value={chosen}>{headName}</Select.Item
+            >
+          {/if}
+          {#each choices as one (one.key)}
+            <Select.Item label={one.name} value={one.key}
+              >{one.name}</Select.Item
+            >
+          {/each}
+        </Select.Content>
+      </Select.Root>
       {#if move.kind === "ready" && changed}
         <button
           type="button"
@@ -417,7 +458,11 @@
       {/if}
     </header>
 
-    {#if move.kind === "reading"}
+    {#if move.kind === "none"}
+      <p class="m-0 max-w-c-measure type-body text-ink-muted text-pretty">
+        {words.noMove(move.state)}
+      </p>
+    {:else if move.kind === "reading"}
       <p class="m-0 type-meta text-ink-muted" role="status">{words.reading}</p>
     {:else if move.kind === "failed"}
       <!-- Why it didn't play, and the way back: Try again plays it once
