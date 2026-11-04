@@ -157,6 +157,20 @@ export function groupsOf(): ProviderGroup[] {
   });
 }
 
+/**
+ * Whether Claude Code refused the account account-wide and the hub holds it
+ * out on some machine for it: what the hub's check (Check again) can bring
+ * back.
+ */
+export function refusedAccountWide(account: Account): boolean {
+  return (cawco.accounts?.signins ?? []).some(
+    (one) =>
+      one.accountId === account.id &&
+      one.state === "signed-out" &&
+      one.refusalReach === "account"
+  );
+}
+
 /** Where the account stands on a machine; signed out when the hub has no row. */
 export function signinState(
   signins: AccountSignin[],

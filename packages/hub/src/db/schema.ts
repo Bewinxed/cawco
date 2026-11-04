@@ -33,6 +33,7 @@ import type {
   OnCap,
   PermissionMode,
   PresenceClient,
+  RefusalReach,
   RoutineMadeEvent,
   RuleMatchKind,
   RuleScope,
@@ -2364,6 +2365,13 @@ export const accounts = sqliteTable(
     orgId: text("org_id"),
     /** Where its unfinished setup stands (core `AccountSetupStep`); null once done. */
     setupStep: text("setup_step").$type<AccountSetupStep>(),
+    /**
+     * When the hub last checked, with one turn as the account, whether
+     * Claude Code still refuses it account-wide (hub accounts.ts
+     * `checkRefusal`); null when never. Kept here so a hub restart keeps
+     * the hourly clock.
+     */
+    refusalCheckedAt: timestamp("refusal_checked_at"),
     createdAt: stampedNow("created_at"),
   },
   (table) => [
@@ -2403,6 +2411,8 @@ export const accountSignins = sqliteTable(
     movedFrom: text("moved_from").$type<HomeStore>(),
     /** Why the hub signed it out itself: the refusal a session on it met (`AccountSignin.reason`); null otherwise. */
     reason: text("reason"),
+    /** How far that refusal reaches (`AccountSignin.refusalReach`): `account` comes back on a check, `machine` on a sign-in; null with no reason. */
+    refusalReach: text("refusal_reach").$type<RefusalReach>(),
     checkedAt: stampedNow("checked_at"),
   },
   (table) => [primaryKey({ columns: [table.accountId, table.machineId] })]

@@ -273,6 +273,15 @@ export type AccountSetupStep = (typeof ACCOUNT_SETUP_STEPS)[number];
 export type SigninState = "signed-in" | "signed-out" | "mismatch";
 
 /**
+ * How far a refusal that signed an account out reaches (hub accounts.ts
+ * `claudeCredentialRefused`): `machine`, one machine's credential, back on a
+ * sign-in there; `account`, the account's own access, signed out on every
+ * machine and back on all of them once a check's turn as the account is
+ * answered (hub accounts.ts `checkRefusal`).
+ */
+export type RefusalReach = "machine" | "account";
+
+/**
  * One account signed in (or not) on one machine: its one credential there,
  * which every harness on the machine that speaks its provider uses.
  */
@@ -295,9 +304,13 @@ export interface AccountSignin {
    * or a refresh that can't succeed), or the account's own subscription
    * access, which signs it out on every machine (hub accounts.ts
    * `claudeCredentialRefused`). It stays signed out, whatever the store says,
-   * until it is signed in again through CawCo. Null for any other state.
+   * until it is signed in again through CawCo, or, for an account-wide
+   * refusal, until a check's turn as the account is answered. Null for any
+   * other state.
    */
   reason: string | null;
+  /** How far the refusal that signed it out reaches; null with no {@link reason}. */
+  refusalReach: RefusalReach | null;
   state: SigninState;
 }
 
@@ -729,6 +742,34 @@ export const CONTROL_FORGET_ACCOUNT = "forgetAccount";
  * {@link AccountProbe}.
  */
 export const CONTROL_PROBE_ACCOUNT = "probeAccount";
+/**
+ * Claude harness control: one real turn as an account in its dir (arg:
+ * account id), which the API answers or refuses: the hub's check of an
+ * account Claude Code refused account-wide. Answers an {@link AccountCheck}.
+ */
+export const CONTROL_CHECK_ACCOUNT = "checkAccount";
+
+/**
+ * What one check's turn as an account came to ({@link CONTROL_CHECK_ACCOUNT}):
+ * answered, or Claude Code's error in place of an answer (its
+ * `SDKAssistantMessageError` and its words). A turn that did neither is no
+ * answer, and the control fails.
+ */
+export type AccountCheck =
+  { kind: "answered" } | { kind: "error"; error: string; text: string };
+
+/**
+ * What a check of an account Claude Code refused account-wide came to
+ * (`POST /api/accounts/:id/refusal-check`, and the hub's hourly look):
+ * `back` on every machine (`machines`) its refusal had signed out;
+ * `refused` still, in `reason`'s words; `none`, no verdict (`why`), and it
+ * stays out; or `not-refused`, nothing to check.
+ */
+export type RefusalVerdict =
+  | { kind: "back"; machines: string[] }
+  | { kind: "refused"; reason: string }
+  | { kind: "none"; why: string }
+  | { kind: "not-refused" };
 
 /**
  * The one-time move of a machine's own Claude Code login into CawCo, run

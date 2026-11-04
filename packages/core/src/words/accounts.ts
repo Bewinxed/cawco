@@ -50,6 +50,17 @@ export const accountsWords = {
      * sign-in's `reason`, Claude Code's own words): placeholder copy.
      */
     refused: (reason: string) => `Refused by Claude Code: ${reason}`,
+    /**
+     * The button beside an account-wide refusal (`refused`): runs the hub's
+     * check now, one turn as the account. Placeholder copy.
+     */
+    checkAgain: "Check again",
+    /** That button while its check runs. Placeholder copy. */
+    checking: "Checking…",
+    /** Under the refusal once a check ran and Claude Code refused it again. Placeholder copy. */
+    stillRefused: "Still refused",
+    /** Under the refusal once a check gave no verdict (no machine answered), with why. Placeholder copy. */
+    noVerdict: (why: string) => `Couldn't check: ${why}`,
     missingOn: (machine: string, others: number) =>
       others === 0
         ? `Not signed in on ${machine}`

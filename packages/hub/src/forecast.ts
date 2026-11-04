@@ -480,6 +480,7 @@ class Walk {
           movedAt: null,
           movedFrom: null,
           reason: null,
+          refusalReach: null,
           checkedAt: t,
         })),
     });

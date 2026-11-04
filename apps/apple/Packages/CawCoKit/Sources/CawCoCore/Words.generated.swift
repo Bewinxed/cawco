@@ -170,6 +170,20 @@ public enum Words {
                 "Refused by Claude Code: \(reason)"
             }
 
+            /// The button beside an account-wide refusal (`refused`): runs the hub's check now, one turn as the account. Placeholder copy.
+            public static let checkAgain = "Check again"
+
+            /// That button while its check runs. Placeholder copy.
+            public static let checking = "Checking…"
+
+            /// Under the refusal once a check ran and Claude Code refused it again. Placeholder copy.
+            public static let stillRefused = "Still refused"
+
+            /// Under the refusal once a check gave no verdict (no machine answered), with why. Placeholder copy.
+            public static func noVerdict(why: String) -> String {
+                "Couldn't check: \(why)"
+            }
+
             public static func missingOn(machine: String, others: Int) -> String {
                 others == 0 ? "Not signed in on \(machine)" : "Not signed in on \(machine) and \(others) other\(others == 1 ? "" : "s")"
             }

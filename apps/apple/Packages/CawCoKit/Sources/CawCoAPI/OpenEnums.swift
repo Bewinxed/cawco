@@ -152,6 +152,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/AccountSigninRefusalReach`.
+    public enum AccountSigninRefusalReach: OpenEnum {
+        case account
+        case machine
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "account": self = .account
+            case "machine": self = .machine
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .account: "account"
+            case .machine: "machine"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.account, .machine]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/ActionState`.
     public enum ActionState: OpenEnum {
         case approved

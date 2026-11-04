@@ -128,6 +128,7 @@ import {
   type Account,
   type AccountBorrowFrame,
   type AccountCatalogFault,
+  type AccountCheck,
   type AccountIdentity,
   type AccountJoined,
   type AccountJoinedOn,
@@ -185,6 +186,7 @@ import {
   CONTROL_BORROW_ACCOUNT,
   CONTROL_CANCEL_COMMAND,
   CONTROL_CARRY_SESSIONS,
+  CONTROL_CHECK_ACCOUNT,
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_CONTEXT_USAGE,
@@ -368,6 +370,7 @@ import {
   READ_SKILL_FOLDER,
   RESOLVE_PERMISSION,
   type RebalanceNotice,
+  type RefusalVerdict,
   type Relaunch,
   ROOM_HELD,
   RULE_TEMPLATES,
@@ -516,7 +519,7 @@ import {
 import { NeutralSessionInfoSchema } from "@cawco/core/stored-shapes";
 import type { RelayFrame } from "@cawco/core/stream-relay";
 import { CAPABILITY_KINDS } from "@cawco/core/suggest";
-import { DAY_MS, HOUR_MS } from "@cawco/core/time";
+import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { containerWords } from "@cawco/core/words/containers";
@@ -534,6 +537,7 @@ import { websocket } from "elysia/websocket";
 import {
   type AccountProber,
   accountOfIdentity,
+  checkRefusal,
   claudeCredentialRefused,
   confirmReading,
   keepProbe,
@@ -542,8 +546,10 @@ import {
   noteProviderReading,
   noteRateLimit,
   probeRetryDelay,
+  REFUSAL_CHECK_EVERY_MS,
   reconcileAccounts,
   refreshCatalog,
+  refusalsDue,
   sessionLimitsReader,
   signOutRefused,
   uncompared,
@@ -5334,6 +5340,111 @@ export const createServer = (
         throw unreachable(answer);
     }
   };
+
+  /**
+   * How long a check's turn as an account may take on its machine: the
+   * agent's own bound on the turn (agent accounts.ts `CHECK_TIMEOUT_MS`),
+   * with its start and the keychain's look before it.
+   */
+  const REFUSAL_CHECK_TIMEOUT_MS = 2 * MINUTE_MS;
+  /** The check of each account under way now, by account id: a second ask joins it ({@link checkRefused}). */
+  const refusalChecks = new Map<string, Promise<RefusalVerdict>>();
+  /**
+   * Whether Claude Code still refuses `accountId` account-wide (accounts.ts
+   * `checkRefusal`): one turn as the account on a connected machine its
+   * refusal signed out ({@link CONTROL_CHECK_ACCOUNT}). Answered, the
+   * account is back on every such machine, said in the log, and placement
+   * and the rebalancer take it again ({@link publishUsage}). One check of an
+   * account at a time: the hourly look ({@link checkDueRefusals}) and
+   * Configure → Accounts' Check again share it.
+   */
+  const checkRefused = (accountId: string): Promise<RefusalVerdict> => {
+    const running = refusalChecks.get(accountId);
+    if (running !== undefined) {
+      return running;
+    }
+    const named = accountWords(accountId);
+    const run = checkRefusal(
+      db,
+      accountId,
+      async (machineId, account) => {
+        const answer = await readAgent(
+          machineId,
+          CONTROL_CHECK_ACCOUNT,
+          [account],
+          REFUSAL_CHECK_TIMEOUT_MS,
+          "claude"
+        );
+        switch (answer.kind) {
+          case "unanswered":
+            return {
+              kind: "unread",
+              why: `${machineName(machineId)} didn't answer: ${unansweredFault(machineId, answer)}`,
+            };
+          case "answered":
+            return answer.value.ok
+              ? (answer.value.result as AccountCheck)
+              : {
+                  kind: "unread",
+                  why: `${machineName(machineId)} couldn't run it: ${answer.value.error ?? "it gave no reason"}`,
+                };
+          default:
+            throw unreachable(answer);
+        }
+      },
+      (machineId) => registry.agent(machineId) !== undefined
+    )
+      .then((verdict) => {
+        switch (verdict.kind) {
+          case "back":
+            console.info(
+              `[accounts] ${named} is back on ${verdict.machines.map(machineName).join(", ")}: a turn as it was answered, so Claude Code no longer refuses it, and new sessions are placed on it again.`
+            );
+            for (const machineId of verdict.machines) {
+              publishUsage(machineId);
+            }
+            break;
+          case "refused":
+            console.info(
+              `[accounts] ${named} is still refused: ${verdict.reason}. It is checked again within ${REFUSAL_CHECK_EVERY_MS / HOUR_MS} hour, or on Check again in ${configurePage("accounts")}.`
+            );
+            publishUsage();
+            break;
+          case "none":
+            console.warn(
+              `[accounts] ${named}'s check gave no verdict (${verdict.why}); it stays out of placement until a check is answered.`
+            );
+            break;
+          case "not-refused":
+            break;
+          default:
+            throw unreachable(verdict);
+        }
+        return verdict;
+      })
+      .finally(() => refusalChecks.delete(accountId));
+    refusalChecks.set(accountId, run);
+    return run;
+  };
+  /**
+   * Checks each account refused account-wide whose hour has come
+   * (accounts.ts `refusalsDue`): at boot, then every
+   * {@link REFUSAL_LOOK_MS} on the hub's lifetime timer (`lifetime.every`).
+   * The hour is read off each account's kept time, so a restart neither
+   * resets it nor checks early; an account with no machine connected is
+   * looked at again at the next look.
+   */
+  const checkDueRefusals = (): void => {
+    for (const accountId of refusalsDue(db, Date.now())) {
+      detach(checkRefused(accountId), "account refusal check");
+    }
+  };
+  /** How often the hub looks for refused accounts due a check: well under their hour, so one is checked close to it. */
+  const REFUSAL_LOOK_MS = 5 * MINUTE_MS;
+  offBoot.push(() => {
+    checkDueRefusals();
+    lifetime.every(REFUSAL_LOOK_MS, checkDueRefusals);
+  });
 
   /**
    * Each machine's last account report of each kind (its Claude dirs, its
@@ -34917,6 +35028,22 @@ export const createServer = (
           }
           const { ok: _ok, ...explain } = placed;
           return { ...explain, model: resolved } satisfies PlacementPreview;
+        }
+      )
+      // Checks now whether Claude Code still refuses an account it refused
+      // account-wide, as the hourly look does (`checkRefused`): one turn as
+      // the account on a machine its refusal signed out. Answers the
+      // verdict: `back` on those machines, `refused` with Claude Code's
+      // words, `none` with why there was none, or `not-refused` for an
+      // account no account-wide refusal holds out.
+      .post(
+        "/api/accounts/:id/refusal-check",
+        { params: t.Object({ id: t.String() }) },
+        async ({ params, status }) => {
+          if (!accountOf(params.id)) {
+            return status(404, `There is no account ${params.id}.`);
+          }
+          return await checkRefused(params.id);
         }
       )
       // Signs an account in on a machine, into the account's own store there.

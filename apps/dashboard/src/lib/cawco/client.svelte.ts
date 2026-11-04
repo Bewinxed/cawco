@@ -23,6 +23,7 @@ import type {
   ProviderSigninChallenge,
   ProviderSigninResult,
   RebalanceNotice,
+  RefusalVerdict,
 } from "@cawco/core/accounts";
 import type { ApprovedActionView } from "@cawco/core/actions";
 import type { Activity } from "@cawco/core/activity";
@@ -2885,6 +2886,17 @@ export const awaitDeviceSignin = (
   machineId: string
 ): Promise<ProviderSigninResult> =>
   accountsWrite(`${signinUrl(id, machineId)}/complete`, "POST", {});
+
+/**
+ * Checks now whether Claude Code still refuses an account it refused
+ * account-wide: one turn as the account on a machine its refusal signed
+ * out. The accounts are read again once it answers.
+ */
+export const checkRefusalOf = (id: string): Promise<RefusalVerdict> =>
+  accountsWrite(
+    `/api/accounts/${encodeURIComponent(id)}/refusal-check`,
+    "POST"
+  );
 
 /**
  * Signs an account out on one machine and drops its store there; the hub

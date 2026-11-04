@@ -76,6 +76,7 @@ import {
   CAWCO_ENV,
   CLAUDE_SETTINGS_REFUSED,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
+  CONTROL_CHECK_ACCOUNT,
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
   CONTROL_CONTEXT_USAGE,
   CONTROL_FLEET_SETTINGS,
@@ -144,6 +145,7 @@ import {
   accountEnv,
   accountReports,
   changingSignins,
+  checkAccount,
   claudeSignins,
   dirIdentity,
   linkProjectMemory,
@@ -5108,6 +5110,8 @@ class ClaudeHarness implements Harness {
         return { forgotten: true };
       case CONTROL_PROBE_ACCOUNT:
         return probeAccount(args[0] as string);
+      case CONTROL_CHECK_ACCOUNT:
+        return checkAccount(args[0] as string);
       case CONTROL_READ_HOME_LOGIN:
         return readHomeLogin();
       case CONTROL_MOVE_HOME_LOGIN:

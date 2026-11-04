@@ -13,14 +13,66 @@
    * An account whose setup was left unfinished is where that setup is
    * parked (The Work Outlives Its Surface Rule): its second line says the
    * step it stands at, and the row opens the setup there again.
+   *
+   * An account Claude Code refused account-wide carries Check again under
+   * its refusal, in the name's column and outside the link: the hub's check
+   * runs now, the button working while it does. Answered, the refusal and
+   * the button go as the accounts are read again; refused again, or with no
+   * verdict, a meta line under it says so until the next press.
    */
-  import type { Account } from "@cawco/core/accounts";
+  import type { Account, RefusalVerdict } from "@cawco/core/accounts";
   import { accountsWords as words } from "@cawco/core/words/accounts";
+  import { checkRefusalOf } from "#lib/cawco/client.svelte.js";
+  import { failureWords } from "#lib/cawco/hub-read.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import { IconChevronRight, IconWarningTriangle } from "#lib/icons.js";
-  import { hueVar, nameOf, problemOf } from "./model.svelte";
+  import {
+    IconChevronRight,
+    IconRefresh,
+    IconWarningTriangle,
+  } from "#lib/icons.js";
+  import {
+    hueVar,
+    nameOf,
+    problemOf,
+    refusedAccountWide,
+  } from "./model.svelte";
 
   let { account }: { account: Account } = $props();
+
+  const checkable = $derived(!account.setupStep && refusedAccountWide(account));
+  let checking = $state(false);
+  /**
+   * What the last press came to, said under the button until the next: the
+   * account is still out, so the button draws no check (`failed`).
+   */
+  let said = $state<string | null>(null);
+
+  const sayVerdict = (verdict: RefusalVerdict): string | null => {
+    switch (verdict.kind) {
+      case "refused":
+        return words.problem.stillRefused;
+      case "none":
+        return words.problem.noVerdict(verdict.why);
+      case "back":
+      case "not-refused":
+        return null;
+      default:
+        return null;
+    }
+  };
+
+  async function checkAgain() {
+    checking = true;
+    said = null;
+    try {
+      said = sayVerdict(await checkRefusalOf(account.id));
+    } catch (error) {
+      said = failureWords(error);
+    } finally {
+      checking = false;
+    }
+  }
 
   const href = $derived(
     account.setupStep
@@ -38,8 +90,9 @@
 </script>
 
 <li
-  class="@container/arow flex min-h-c-row-h min-w-0 border-t border-t-border-hairline"
+  class="@container/arow flex min-h-c-row-h min-w-0 flex-col border-t border-t-border-hairline"
   data-flip
+  style:--link-cols="var(--space-3) minmax(0, 1fr) var(--icon-md)"
 >
   <a
     data-setup={account.setupStep}
@@ -49,7 +102,6 @@
     {href}
     style:--link-areas={'"dot name chev"'}
     style:--link-areas-two={'"dot name chev" ". problem chev"'}
-    style:--link-cols="var(--space-3) minmax(0, 1fr) var(--icon-md)"
   >
     <i
       data-slot="dot"
@@ -86,4 +138,32 @@
       style:--area="chev"><IconChevronRight class="size-icon-md" /></span
     >
   </a>
+  {#if checkable}
+    <div
+      data-slot="refusal-check"
+      class="grid min-w-0 grid-cols-(--link-cols) items-center gap-x-space-4 gap-y-space-row px-space-2 pb-space-3"
+    >
+      <span
+        class="col-start-2 flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-1"
+      >
+        <Button
+          failed={said !== null}
+          icon={IconRefresh}
+          label={words.problem.checkAgain}
+          onclick={checkAgain}
+          pending={checking}
+          pendingLabel={words.problem.checking}
+          size="xs"
+          variant="outline"
+        />
+        {#if said}
+          <span
+            data-slot="check-said"
+            class="min-w-0 type-meta text-ink-muted"
+            role="status">{said}</span
+          >
+        {/if}
+      </span>
+    </div>
+  {/if}
 </li>

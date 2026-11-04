@@ -1,5 +1,6 @@
 import {
   type Account,
+  type AccountCheck,
   type AccountIdentity,
   type AccountKind,
   type AccountOverage,
@@ -16,6 +17,7 @@ import {
   extraUsageOn,
   freshWindows,
   type ProviderAccountReading,
+  type RefusalVerdict,
   type SessionAccountRead,
   type SigninState,
   sameIdentity,
@@ -487,9 +489,132 @@ export const signOutRefused = (
       machineId: machine,
       state: "signed-out",
       reason: refusal.reason,
+      refusalReach: refusal.reach,
     });
   }
   return out;
+};
+
+/** How often an account Claude Code refused account-wide is checked again ({@link refusalsDue}). */
+export const REFUSAL_CHECK_EVERY_MS = HOUR_MS;
+
+/** The sign-ins of `accountId` an account-wide refusal signed out: the ones a check that is answered brings back. */
+export const refusedAccountWide = (
+  db: DbShape,
+  accountId: string
+): AccountSignin[] =>
+  db.accounts
+    .signins()
+    .filter(
+      (one) =>
+        one.accountId === accountId &&
+        one.state === "signed-out" &&
+        one.refusalReach === "account"
+    );
+
+/**
+ * The accounts refused account-wide whose last check (kept with the
+ * account, `refusal_checked_at`, so a hub restart keeps the clock) is
+ * {@link REFUSAL_CHECK_EVERY_MS} old by `now`, or that were never checked.
+ */
+export const refusalsDue = (db: DbShape, now: number): string[] => {
+  const refused = new Set(
+    db.accounts
+      .signins()
+      .filter(
+        (one) => one.state === "signed-out" && one.refusalReach === "account"
+      )
+      .map((one) => one.accountId)
+  );
+  return [...refused].filter((accountId) => {
+    const at = db.accounts.refusalCheckedAt(accountId);
+    return at === null || now - at >= REFUSAL_CHECK_EVERY_MS;
+  });
+};
+
+/**
+ * One machine's answer to a check's turn as the account (core
+ * `AccountCheck`), or `unread` with why there was none (offline, no answer
+ * in time, its control failed): no verdict.
+ */
+export type RefusalCheckAnswer = AccountCheck | { kind: "unread"; why: string };
+
+/** Runs a check's turn as `accountId` on `machineId` (server.ts, {@link CONTROL_CHECK_ACCOUNT}). */
+export type RefusalChecker = (
+  machineId: string,
+  accountId: string
+) => Promise<RefusalCheckAnswer>;
+
+/**
+ * Checks whether Claude Code still refuses `accountId` account-wide: one
+ * turn as the account (`check`) on a machine its refusal signed out, which
+ * still holds its credential, each `online` one in turn until one gives a
+ * verdict. The first that is answered brings every such sign-in back,
+ * signed in, its reason gone: placement takes the account again. The same
+ * refusal ({@link claudeCredentialRefused}, reach `account`) keeps them out,
+ * their reason Claude Code's words now. Anything else (a machine offline,
+ * no answer in time, another error) is no verdict from that machine. The
+ * check's time is kept with the account once a machine is asked
+ * ({@link refusalsDue}). A refusal of one machine's credential (reach
+ * `machine`) is never checked: it comes back on a sign-in.
+ */
+export const checkRefusal = async (
+  db: DbShape,
+  accountId: string,
+  check: RefusalChecker,
+  online: (machineId: string) => boolean,
+  now = Date.now()
+): Promise<RefusalVerdict> => {
+  const out = refusedAccountWide(db, accountId);
+  if (out.length === 0) {
+    return { kind: "not-refused" };
+  }
+  const machines = out.map((one) => one.machineId).filter(online);
+  if (machines.length === 0) {
+    return {
+      kind: "none",
+      why: "no machine that holds its sign-in is connected",
+    };
+  }
+  db.accounts.setRefusalCheckedAt(accountId, now);
+  const whys: string[] = [];
+  for (const machineId of machines) {
+    const answer = await check(machineId, accountId);
+    if (answer.kind === "answered") {
+      // Read again: a sign-in may have settled one while the turn ran.
+      const back = refusedAccountWide(db, accountId).map(
+        (one) => one.machineId
+      );
+      for (const machine of back) {
+        db.accounts.putSignin({
+          accountId,
+          machineId: machine,
+          state: "signed-in",
+        });
+      }
+      return { kind: "back", machines: back };
+    }
+    if (answer.kind === "unread") {
+      whys.push(answer.why);
+      continue;
+    }
+    const word = claudeCredentialRefused(answer.error, answer.text);
+    if (word?.reach !== "account") {
+      whys.push(`Claude Code said ${answer.error}: ${answer.text.trim()}`);
+      continue;
+    }
+    for (const one of refusedAccountWide(db, accountId)) {
+      db.accounts.putSignin({
+        accountId,
+        machineId: one.machineId,
+        state: "signed-out",
+        reason: word.reason,
+        refusalReach: "account",
+      });
+    }
+    return { kind: "refused", reason: word.reason };
+  }
+  return { kind: "none", why: whys.join("; ") };
 };
 
 /** Why extra usage is off, by Claude Code's `overageDisabledReason`, in words. */

@@ -12,6 +12,7 @@ typeOverrides:
     AccountHue: OpenEnums.AccountHue
     AccountKind: OpenEnums.AccountKind
     AccountSetupStep: OpenEnums.AccountSetupStep
+    AccountSigninRefusalReach: OpenEnums.AccountSigninRefusalReach
     ActionState: OpenEnums.ActionState
     AgentRowAuth: OpenEnums.AgentRowAuth
     ArtifactDoes: OpenEnums.ArtifactDoes

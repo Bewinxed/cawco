@@ -13,6 +13,7 @@ import { platform, userInfo } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import {
+  type AccountCheck,
   type AccountIdentity,
   type AccountKind,
   type AccountProbe,
@@ -590,6 +591,115 @@ export const claudeAuthNote = (state: AuthState): string | undefined => {
 const PROBE_TIMEOUT_MS = 60_000;
 
 /**
+ * Throws the sentence why an account dir's Claude Code is not started
+ * (`done`: "probed", "checked"): its login is in the locked login keychain
+ * ({@link lockedAway}), or the keychain's look gave no answer in time.
+ */
+const notLockedAway = async (account: string, done: string): Promise<void> => {
+  const away = await readWithin(AUTH_STATUS_TIMEOUT_MS, (signal) =>
+    lockedAway(keychainService(account), signal)
+  );
+  switch (away.kind) {
+    case "unanswered":
+      throw new Error(
+        `${accountConfigDir(account)} was not ${done}: the keychain looks before it gave no answer within ${AUTH_STATUS_TIMEOUT_MS / 1000} s (let go after ${away.after} ms).`
+      );
+    case "answered":
+      if (away.value) {
+        throw new Error(
+          `${accountConfigDir(account)} was not ${done}: its login is in the login keychain, which is locked, and Claude Code reads it only by unlocking it.`
+        );
+      }
+      return;
+    default:
+      unhandled("read", away);
+  }
+};
+
+/** How long a check's one turn may take to end. */
+const CHECK_TIMEOUT_MS = 90_000;
+
+/**
+ * What the check asks: the shortest prompt that still gets a turn. Its
+ * system prompt is the same words, so the request carries next to nothing
+ * beyond them (no tools, no settings, no MCP servers, no CLAUDE.md).
+ */
+const CHECK_PROMPT = "Reply with OK.";
+
+/**
+ * Whether Claude Code answers as `account` now: one real turn in its dir,
+ * which the API answers or refuses (the hub's check of an account Claude
+ * Code refused account-wide, hub accounts.ts `checkRefusal`). Built on
+ * {@link probeAccount}'s session (its dir's env, the version gate's
+ * `claude`, no user settings, no MCP servers, nothing persisted) with a
+ * prompt, as few tokens as a turn takes: Haiku, no tools, no thinking, its
+ * own one-line system prompt, one turn. `answered` when the turn ended with
+ * an answer; `error` with Claude Code's `SDKAssistantMessageError` and its
+ * words when its error stood in for one. Throws when the turn neither
+ * answered nor was refused in {@link CHECK_TIMEOUT_MS} (or never started),
+ * which says nothing of the account.
+ */
+export const checkAccount = async (account: string): Promise<AccountCheck> => {
+  await notLockedAway(account, "checked");
+  const handle = query({
+    prompt: CHECK_PROMPT,
+    options: {
+      pathToClaudeCodeExecutable: await claudeToStart(),
+      env: envFor(account),
+      settingSources: [],
+      strictMcpConfig: true,
+      mcpServers: {},
+      persistSession: false,
+      model: "haiku",
+      tools: [],
+      maxTurns: 1,
+      thinking: { type: "disabled" },
+      systemPrompt: CHECK_PROMPT,
+    },
+  });
+  try {
+    const read = await readWithin(CHECK_TIMEOUT_MS, async () => {
+      for await (const message of handle) {
+        if (
+          message.type === "assistant" &&
+          !message.parent_tool_use_id &&
+          message.error
+        ) {
+          return {
+            kind: "error" as const,
+            error: message.error,
+            text: message.message.content
+              .flatMap((block) => (block.type === "text" ? [block.text] : []))
+              .join("\n"),
+          };
+        }
+        if (message.type === "result") {
+          if (message.subtype === "success" && !message.is_error) {
+            return { kind: "answered" as const };
+          }
+          throw new Error(
+            `Claude Code ended the check's turn without an answer (${message.subtype})`
+          );
+        }
+      }
+      throw new Error("Claude Code ended before the check's turn did");
+    });
+    switch (read.kind) {
+      case "unanswered":
+        throw new Error(
+          `Claude Code did not end the check's turn within ${CHECK_TIMEOUT_MS / 1000}s`
+        );
+      case "answered":
+        return read.value;
+      default:
+        unhandled("read", read);
+    }
+  } finally {
+    handle.close();
+  }
+};
+
+/**
  * One dir's initialize response, read by a session that never takes a turn:
  * its prompt is held open and yields nothing, so the CLI answers the SDK's
  * initialize and waits. Nothing it loads makes a request: no user settings,
@@ -600,24 +710,7 @@ const PROBE_TIMEOUT_MS = 60_000;
  * carries the organization id the dir's `auth status` names.
  */
 export const probeAccount = async (account: string): Promise<AccountProbe> => {
-  const away = await readWithin(AUTH_STATUS_TIMEOUT_MS, (signal) =>
-    lockedAway(keychainService(account), signal)
-  );
-  switch (away.kind) {
-    case "unanswered":
-      throw new Error(
-        `${accountConfigDir(account)} was not probed: the keychain looks before it gave no answer within ${AUTH_STATUS_TIMEOUT_MS / 1000} s (let go after ${away.after} ms).`
-      );
-    case "answered":
-      if (away.value) {
-        throw new Error(
-          `${accountConfigDir(account)} was not probed: its login is in the login keychain, which is locked, and Claude Code reads it only by unlocking it.`
-        );
-      }
-      break;
-    default:
-      unhandled("read", away);
-  }
+  await notLockedAway(account, "probed");
   const handle = query({
     prompt: idle,
     options: {

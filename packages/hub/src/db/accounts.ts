@@ -17,6 +17,7 @@ import {
   type LimitWindow,
   type ModelInfo,
   type ProviderRouting,
+  type RefusalReach,
   windowKey as windowSetKey,
 } from "@cawco/core";
 import { DAY_MS } from "@cawco/core/time";
@@ -147,13 +148,17 @@ export interface AccountsDb {
   readonly putSignin: (
     signin: Omit<
       AccountSignin,
-      "checkedAt" | "movedAt" | "movedFrom" | "reason"
+      "checkedAt" | "movedAt" | "movedFrom" | "reason" | "refusalReach"
     > & {
       moved?: { at: number; from: HomeStore } | null;
       reason?: string | null;
+      /** How far the refusal `reason` says reaches; dropped with no reason. */
+      refusalReach?: RefusalReach | null;
     }
   ) => boolean;
   readonly readings: () => AccountReading[];
+  /** When the hub last checked whether the account is still refused account-wide (`accounts.refusal_checked_at`), epoch ms; null when never. */
+  readonly refusalCheckedAt: (id: string) => number | null;
   /**
    * Removes the account, kept in the record of removed accounts with when
    * and why (`removed_accounts`): a machine that missed it forgets its store
@@ -175,6 +180,8 @@ export interface AccountsDb {
     until: number
   ) => void;
   readonly setIdentity: (id: string, identity: AccountIdentity) => void;
+  /** Keeps `at` as the account's last refusal check. */
+  readonly setRefusalCheckedAt: (id: string, at: number) => void;
   readonly setRouting: (routing: ProviderRouting) => void;
   readonly signins: () => AccountSignin[];
 }
@@ -419,6 +426,19 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         .where(eq(accounts.id, id))
         .run();
     },
+    refusalCheckedAt: (id) =>
+      db
+        .select({ at: accounts.refusalCheckedAt })
+        .from(accounts)
+        .where(eq(accounts.id, id))
+        .get()
+        ?.at?.getTime() ?? null,
+    setRefusalCheckedAt: (id, at) => {
+      db.update(accounts)
+        .set({ refusalCheckedAt: new Date(at) })
+        .where(eq(accounts.id, id))
+        .run();
+    },
     // Its sign-ins, readings, catalog and bench go with it (cascade).
     remove: (id, why) =>
       db.transaction((tx) => {
@@ -453,8 +473,16 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           movedAt: row.movedAt?.getTime() ?? null,
           movedFrom: row.movedFrom ?? null,
           reason: row.reason ?? null,
+          refusalReach: row.reason ? (row.refusalReach ?? null) : null,
         })),
-    putSignin: ({ accountId, machineId, state, moved, reason = null }) => {
+    putSignin: ({
+      accountId,
+      machineId,
+      state,
+      moved,
+      reason = null,
+      refusalReach = null,
+    }) => {
       if (!get(accountId)) {
         return false;
       }
@@ -469,6 +497,8 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         )
         .get();
       const checkedAt = new Date();
+      // A reach goes with a reason, and only with one.
+      const reach = reason === null ? null : refusalReach;
       let movedAt = before?.movedAt ?? null;
       let movedFrom = before?.movedFrom ?? null;
       if (moved !== undefined) {
@@ -483,16 +513,25 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           movedAt,
           movedFrom,
           reason,
+          refusalReach: reach,
           checkedAt,
         })
         .onConflictDoUpdate({
           target: [accountSignins.accountId, accountSignins.machineId],
-          set: { state, movedAt, movedFrom, reason, checkedAt },
+          set: {
+            state,
+            movedAt,
+            movedFrom,
+            reason,
+            refusalReach: reach,
+            checkedAt,
+          },
         })
         .run();
       return (
         before?.state !== state ||
         (before.reason ?? null) !== reason ||
+        (before.refusalReach ?? null) !== reach ||
         (before.movedAt?.getTime() ?? null) !== (movedAt?.getTime() ?? null)
       );
     },
