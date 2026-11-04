@@ -2097,7 +2097,7 @@
     {#if !lead.project}
       <div class="w-full" out:revealOut>
         <Skeleton
-          class="w-full"
+          class="mx-auto w-full"
           height="chart"
           radius="card"
           width="chart-cap"
@@ -2108,7 +2108,11 @@
            The Empty Starts Work Rule): while his panel is open they are in
            it (CawFloat); put away, they stand here and open it with their
            words. -->
-      <div data-slot="caw-empty" class="w-full max-w-c-starters-w" in:reveal>
+      <div
+        data-slot="caw-empty"
+        class="mx-auto w-full max-w-c-starters-w"
+        in:reveal
+      >
         <EmptyState
           actionWidth="fill"
           axis

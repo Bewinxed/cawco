@@ -137,7 +137,7 @@
             </EmptyState>
           </div>
         {:else if empty && canTalk}
-          <div class="max-w-c-starters-w" data-slot="first-use">
+          <div class="mx-auto w-full max-w-c-starters-w" data-slot="first-use">
             <EmptyState
               actionWidth="fill"
               axis
