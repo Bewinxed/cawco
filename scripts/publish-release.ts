@@ -17,7 +17,8 @@
  * refusing and ends it. Requests that make something look first for what an
  * unanswered earlier attempt may have made: a draft is looked up by its tag
  * before it is created again, and an asset of the same name is removed
- * before each upload (what `--clobber` did).
+ * before each upload (what `--clobber` did). One refusal is asked again: an
+ * upload's 404 while the draft still stands ({@link uploadAssets}).
  */
 import { basename, join } from "node:path";
 import type { Subprocess } from "bun";
@@ -210,28 +211,92 @@ export async function createDraft(release: DraftOf): Promise<void> {
   });
 }
 
-/** Files uploaded to the draft `tag`, each replacing an asset of its name. */
+/** The release `id` as GitHub has it now, read by its id (drafts too, for a publisher with push access). */
+const releaseById = async (id: number): Promise<Release> =>
+  JSON.parse(
+    (await request(`read release ${id}`, "GET", `${REPO}/releases/${id}`)).text
+  ) as Release;
+
+/**
+ * What an upload's failure on attempt `n` to draft `id` of `tag` is: a 404
+ * while the draft, read again, stands, or a 422 after an earlier attempt,
+ * becomes {@link NoAnswer}; every other failure is itself.
+ */
+const sortUpload = async (
+  what: string,
+  n: number,
+  error: unknown,
+  id: number,
+  tag: string
+): Promise<unknown> => {
+  if (!(error instanceof Refused)) {
+    return error;
+  }
+  if (error.status === 422 && n > 1) {
+    return new NoAnswer(
+      `${what} answered 422 after an attempt that may have left it: ${error.said.trim()}`,
+      { cause: error }
+    );
+  }
+  if (error.status !== 404) {
+    return error;
+  }
+  const now = await releaseById(id).catch((read: unknown) => {
+    if (read instanceof Refused && read.status === 404) {
+      throw new Refused(
+        what,
+        404,
+        `${error.said.trim()} (and draft ${id} answers 404 itself: it is gone or out of reach)`
+      );
+    }
+    throw read;
+  });
+  if (!(now.draft && now.tag_name === tag)) {
+    return error;
+  }
+  return new NoAnswer(
+    `${what} answered 404 while draft ${now.id} stands: ${error.said.trim()}`,
+    { cause: error }
+  );
+};
+
+/**
+ * Files uploaded to the draft `tag`, each replacing an asset of its name.
+ *
+ * An upload GitHub answers 404 while the draft, read again by its id, still
+ * stands is taken for no answer and asked again (dc19ebb1a's nightly: one
+ * `release.json.sig` upload answered 404, the draft was there to delete two
+ * seconds later, and the release was thrown away). The upload endpoint
+ * documents only 201 and 422 (docs.github.com/rest/releases/assets
+ * #upload-a-release-asset), and GitHub answers 404 for what the caller may
+ * not reach as well as for what is not there; the re-read tells them apart:
+ * a draft that answers 404 too is gone or out of reach, and the upload's
+ * refusal stands. Every other 4xx stays final, but for a 422 on an attempt
+ * after the first: that is the earlier attempt's half-arrived asset, removed
+ * before the next one ("If you upload an asset with the same filename as
+ * another uploaded asset, you'll receive an error and must delete the old
+ * file before you can re-upload the new asset").
+ */
 export async function uploadAssets(
   tag: string,
   files: string[]
 ): Promise<void> {
-  const release = await releaseOf(tag);
-  if (!release) {
+  const found = await releaseOf(tag);
+  if (!found) {
     throw new Error(`upload to ${tag}: there is no release under the tag`);
   }
-  const uploads = release.upload_url.replace(URI_TEMPLATE, "");
   await Promise.all(
     files.map((file) => {
       const name = basename(file);
       const what = `upload ${name}`;
+      let draft = found;
       return call(what, async (n) => {
-        // What --clobber did, and what an unanswered attempt may have left.
-        const assets =
-          n === 1
-            ? release.assets
-            : ((await releaseOf(tag))?.assets ?? release.assets);
+        // What --clobber did, and what an earlier attempt may have left.
+        if (n > 1) {
+          draft = await releaseById(draft.id);
+        }
         await Promise.all(
-          assets
+          draft.assets
             .filter((row) => row.name === name)
             .map((asset) =>
               remove(
@@ -240,16 +305,21 @@ export async function uploadAssets(
               )
             )
         );
-        return request(
-          what,
-          "POST",
-          `${uploads}?name=${encodeURIComponent(name)}`,
-          {
-            file,
-            headers: ["Content-Type: application/octet-stream"],
-            timeoutMs: UPLOAD_TIMEOUT_MS,
-          }
-        );
+        const uploads = draft.upload_url.replace(URI_TEMPLATE, "");
+        try {
+          return await request(
+            what,
+            "POST",
+            `${uploads}?name=${encodeURIComponent(name)}`,
+            {
+              file,
+              headers: ["Content-Type: application/octet-stream"],
+              timeoutMs: UPLOAD_TIMEOUT_MS,
+            }
+          );
+        } catch (error) {
+          throw await sortUpload(what, n, error, draft.id, tag);
+        }
       });
     })
   );
