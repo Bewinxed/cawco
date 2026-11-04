@@ -50,6 +50,9 @@ export const graphWords = {
   /** Compare: a switch that stays on until he turns it off. */
   compare: "Compare with previous state",
   comparedWith: (state: string) => `Compared with ${state}`,
+  /** Compare's flip: the compared state shown in the kept one's place; its tooltip, and its words while shown. */
+  showCompared: (state: string) => `Show ${state} in its place`,
+  showingCompared: (state: string) => `Showing ${state}`,
   /** One line per difference. */
   cameIn: (element: string) => `${element} added`,
   went: (element: string) => `${element} removed`,
@@ -65,6 +68,8 @@ export const graphWords = {
 
   /** The move into the kept state. */
   move: (from: string, to: string) => `${from} → ${to}`,
+  /** The map's fit tool: it frames the set at a size its words read at, on the chosen state when the whole is larger. */
+  fitReadable: "Fit at a readable size",
   /** A move's arrow on the map, for a reader: its two states and the act that makes it. */
   moveEdge: (from: string, to: string, act: string | null) =>
     act ? `${from} → ${to}, ${act}` : `${from} → ${to}`,

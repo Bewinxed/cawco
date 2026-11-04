@@ -10,7 +10,6 @@
    * on and off again asks again.
    */
   import { conversationWords } from "@cawco/core/words/project-conversation";
-  import { untrack } from "svelte";
   import { grabberVariants } from "#lib/components/ui/drawer/drawer-content.svelte";
   import { sheetHeadVariants } from "#lib/components/ui/drawer/sheet-head.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
@@ -48,14 +47,14 @@
         : { ...row, ran: "", stop: "stopped", landed: true }
     );
 
-  // The story's args set where it starts; the presses move it from there.
-  let step = $state<PickStep>(untrack(() => stepArg));
-  let shown = $state<PickRow[]>(
-    untrack(() => (stepArg === "off" ? landedAll(rows) : rows))
-  );
-  let checked = $state<string[]>(untrack(() => rows.map((row) => row.id)));
+  // The story's args set where it stands; the presses move it from there
+  // until the next story's args arrive (it follows its props while
+  // mounted: house/follows-props).
+  let step = $derived<PickStep>(stepArg);
+  let shown = $derived<PickRow[]>(stepArg === "off" ? landedAll(rows) : rows);
+  let checked = $derived<string[]>(rows.map((row) => row.id));
   let open = $state(true);
-  let on = $state(untrack(() => stepArg === "pick"));
+  let on = $derived(stepArg === "pick");
 
   /** The landings still to come; the frame going clears them. */
   let timers: ReturnType<typeof setTimeout>[] = [];
