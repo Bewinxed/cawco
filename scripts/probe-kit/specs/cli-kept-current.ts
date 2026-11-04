@@ -72,7 +72,10 @@
  * (m) Where the engine says a switch is set, as a row names it: Claude
  *     Code's macOS profile, HKLM and HKCU registry policies, managed
  *     settings files and server-managed settings each stand over the
- *     user's settings, and the settings' `env` over the environment's.
+ *     user's settings, and the settings' `env` over the environment's. The
+ *     read's process answers the settings it printed, or none.
+ * (n) A read of the settings that fails decides nothing: neither CawCo's
+ *     own update nor a press runs, and the row says why.
  *
  *   bun scripts/probe-kit/run.ts cli-kept-current
  */
@@ -86,13 +89,14 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { homedir, platform, tmpdir } from "node:os";
 import { join } from "node:path";
-import type {
-  PolicySettingsOrigin,
-  ResolvedSettings,
-} from "@anthropic-ai/claude-agent-sdk";
-import { switchedOffIn } from "../../../packages/agent/src/tools";
+import type { PolicySettingsOrigin } from "@anthropic-ai/claude-agent-sdk";
+import type { SettingsRead } from "../../../packages/agent/src/claude-settings";
+import {
+  settingsAnswer,
+  switchedOffIn,
+} from "../../../packages/agent/src/tools";
 import { type Bounded, readWithin } from "../../../packages/core/src/bounded";
 import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import { machineLabel } from "../../../packages/core/src/machine-names";
@@ -440,6 +444,19 @@ const TRAFFIC_SCRIPT = `
   const out = {};
   writeFileSync(join(S, "release"), ${JSON.stringify(NEWEST)});
   process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "0";
+  out.declined = await installTool("claude", undefined, { newest: ${JSON.stringify(NEWEST)}, automatic: true });
+  out.pressed = await installTool("claude", undefined, { newest: ${JSON.stringify(NEWEST)} });
+  console.log(JSON.stringify(out));
+`;
+
+/** What the stand-in settings read says as it fails. */
+const UNREAD_SAID = "cawco: the settings engine stood in for here fails";
+
+/** (n): the settings read's runtime stood in for by one that fails, then an automatic update and a press. */
+const UNREAD_SCRIPT = `
+  const out = {};
+  writeFileSync(join(S, "release"), ${JSON.stringify(NEWEST)});
+  process.execPath = join(S, "unreadable");
   out.declined = await installTool("claude", undefined, { newest: ${JSON.stringify(NEWEST)}, automatic: true });
   out.pressed = await installTool("claude", undefined, { newest: ${JSON.stringify(NEWEST)} });
   console.log(JSON.stringify(out));
@@ -1276,6 +1293,7 @@ const machineLegs = async (kit: Kit, root: string): Promise<void> => {
   }
 
   await switchLegs(kit, fresh);
+  await unreadLegs(kit, fresh);
 
   {
     const { dir, claude } = await fresh("cask", BEHIND, "brew");
@@ -1320,15 +1338,14 @@ const settingsLegs = (kit: Kit): void => {
     check("(m) the catalog has Claude Code's switches", false);
     return;
   }
-  const user: ResolvedSettings["sources"][number] = {
+  const user: SettingsRead["sources"][number] = {
     source: "user",
     path: join(homedir(), CLAUDE_DIR_NAME, "settings.json"),
     settings: { env: { DISABLE_AUTOUPDATER: "0" } },
   };
   /** The engine's answer: the managed source `origin` names sets DISABLE_AUTOUPDATER on over the user's off. */
-  const managed = (policyOrigin: PolicySettingsOrigin): ResolvedSettings => ({
+  const managed = (policyOrigin: PolicySettingsOrigin): SettingsRead => ({
     effective: { env: { DISABLE_AUTOUPDATER: "1" } },
-    provenance: {},
     sources: [
       user,
       {
@@ -1338,7 +1355,15 @@ const settingsLegs = (kit: Kit): void => {
       },
     ],
   });
-  // Where Claude Code keeps each, as the managed-settings docs name them.
+  // Where Claude Code keeps each, as the managed-settings docs name them:
+  // the files "in the system directory: `/Library/Application
+  // Support/ClaudeCode/` on macOS, `/etc/claude-code/` on Linux and WSL, and
+  // `C:\\Program Files\\ClaudeCode\\` on Windows".
+  const system =
+    {
+      darwin: "/Library/Application Support/ClaudeCode",
+      win32: "C:\\Program Files\\ClaudeCode",
+    }[platform() as string] ?? "/etc/claude-code";
   const places: [PolicySettingsOrigin, string][] = [
     ["plist", toolWords.inProfile("com.anthropic.claudecode")],
     [
@@ -1349,7 +1374,13 @@ const settingsLegs = (kit: Kit): void => {
       "hkcu",
       toolWords.inRegistry("Settings", "HKCU\\SOFTWARE\\Policies\\ClaudeCode"),
     ],
-    ["file", toolWords.inManagedFiles],
+    [
+      "file",
+      toolWords.inManagedFiles(
+        join(system, "managed-settings.json"),
+        join(system, "managed-settings.d")
+      ),
+    ],
     ["remote", toolWords.inServerManaged],
     ["helper", toolWords.inManaged],
   ];
@@ -1389,6 +1420,88 @@ const settingsLegs = (kit: Kit): void => {
   );
 };
 
+/**
+ * (m) The settings read's process as its answer (agent tools.ts
+ * `settingsAnswer`): what it printed when it printed the settings; none read
+ * when it didn't finish, failed, or printed anything else.
+ */
+const answerLegs = (kit: Kit): void => {
+  const { check } = kit;
+  const printed: SettingsRead = {
+    effective: { env: { DISABLE_UPDATES: true } },
+    sources: [
+      {
+        source: "managed",
+        policyOrigin: "plist",
+        settings: { env: { DISABLE_UPDATES: true } },
+      },
+    ],
+  };
+  const ran = (code: number, stdout: string, stderr = "") => ({
+    code,
+    signalCode: null,
+    stdout,
+    stderr,
+  });
+  const read = settingsAnswer(ran(0, `${JSON.stringify(printed)}\n`));
+  check(
+    "(m) a read that printed the settings answers them, a profile's boolean kept as itself",
+    JSON.stringify(read) === JSON.stringify(printed),
+    JSON.stringify(read)
+  );
+  const unread = [
+    settingsAnswer(undefined),
+    settingsAnswer(ran(1, "", `first\n${UNREAD_SAID}\n`)),
+    settingsAnswer(ran(0, "not the settings")),
+    settingsAnswer(ran(0, '{"sources":[]}')),
+  ];
+  check(
+    "(m) a read that didn't finish, failed, or printed anything but the settings answers none, with the last line it said when it failed",
+    JSON.stringify(unread) ===
+      JSON.stringify([
+        { unread: undefined },
+        { unread: UNREAD_SAID },
+        { unread: undefined },
+        { unread: undefined },
+      ]),
+    JSON.stringify(unread)
+  );
+};
+
+/**
+ * (n) A machine whose read of Claude Code's settings fails: neither CawCo's
+ * own update nor a press runs anything, and the row says why. The read's
+ * process is this child's runtime, stood in for by one that fails.
+ */
+const unreadLegs = async (kit: Kit, fresh: Fresh): Promise<void> => {
+  const { check } = kit;
+  const { dir, claude } = await fresh("unread", BEHIND, "native");
+  await executable(
+    join(claude.dir, "unreadable"),
+    `#!${systemProgram("bash")}
+echo ${JSON.stringify(UNREAD_SAID)} >&2
+exit 1
+`
+  );
+  const read = await onMachine<{
+    declined?: ToolStatus;
+    pressed?: ToolStatus;
+  }>(kit, dir, claude, UNREAD_SCRIPT);
+  const calls = await claude.calls();
+  const words = toolWords.settingsUnread(NAME, UNREAD_SAID);
+  check(
+    "(n) a settings read that fails declines CawCo's automatic update and a press alike, says why, and runs nothing",
+    read.declined?.state === "installed" &&
+      read.declined.version === BEHIND &&
+      read.declined.detail === words &&
+      read.pressed?.state === "installed" &&
+      read.pressed.version === BEHIND &&
+      read.pressed.detail === words &&
+      calls.length === 0,
+    `${JSON.stringify(read)}; what ran: ${calls.join(", ") || "nothing"}`
+  );
+};
+
 const spec: Spec = {
   group: "The hub and machines",
   name: "cli-kept-current",
@@ -1400,6 +1513,7 @@ const spec: Spec = {
     try {
       await machineLegs(kit, root);
       settingsLegs(kit);
+      answerLegs(kit);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

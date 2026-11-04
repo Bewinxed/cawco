@@ -9,11 +9,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { homedir, platform, tmpdir } from "node:os";
 import { basename, delimiter, dirname, join, sep } from "node:path";
-import {
-  type PolicySettingsOrigin,
-  type ResolvedSettings,
-  resolveSettings,
-} from "@anthropic-ai/claude-agent-sdk";
+import type { PolicySettingsOrigin } from "@anthropic-ai/claude-agent-sdk";
 import type {
   ToolFootprint,
   ToolInstallMethod,
@@ -31,8 +27,11 @@ import {
   toolSpec,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { type Ran, runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { toolWords } from "@cawco/core/words/tools";
+import { cawcoCommand } from "./cawco-command";
+import { type SettingsRead, SettingsReadSchema } from "./claude-settings";
 import { expandHome } from "./fs";
 import { probeStarted } from "./probe-count";
 
@@ -298,6 +297,21 @@ interface Found {
 const HOLDS_WAIT_MS = 5000;
 
 /**
+ * Asks a program: `argv` run in the tools' environment (core
+ * `runCaptured`), given `ms` to finish and killed when they run out. None
+ * when it couldn't start or didn't finish in time.
+ */
+const askProgram = async (
+  argv: string[],
+  ms: number
+): Promise<Ran | undefined> => {
+  const read = await readWithin(ms, (signal) =>
+    runCaptured(argv, { env: toolEnv(), signal })
+  ).catch(() => undefined);
+  return read?.kind === "answered" ? read.value : undefined;
+};
+
+/**
  * Whether the package manager a method runs (`needs`) says it holds `file`:
  * `<needs> <holds…> <file>` exits 0 and names the package, within
  * {@link HOLDS_WAIT_MS} (core `ToolInstallMethod.holds`). As Claude Code asks
@@ -313,22 +327,8 @@ const asksHold = async (
   if (!(manager && method.holds)) {
     return false;
   }
-  const question = [manager, ...method.holds, file];
-  const read = await readWithin(HOLDS_WAIT_MS, async (signal) => {
-    const child = Bun.spawn(question, {
-      env: toolEnv(),
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "ignore",
-      signal,
-    });
-    const [out, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      child.exited,
-    ]);
-    return code === 0 && out.trim() !== "";
-  });
-  return read.kind === "answered" && read.value;
+  const ran = await askProgram([manager, ...method.holds, file], HOLDS_WAIT_MS);
+  return ran?.code === 0 && ran.stdout.trim() !== "";
 };
 
 /** Whether a method is for the copies it holds: a footprint, or a question for its package manager. */
@@ -577,39 +577,62 @@ const methodFor = (
   return chosen ? { method: chosen } : { none: true };
 };
 
+/** How long one read of a tool's settings is given, its own process's start included. */
+const SETTINGS_READ_MS = 30_000;
+
+/** A read of a tool's settings that gave none to decide on: the last line it said, when it said one. */
+export interface SettingsUnread {
+  unread: string | undefined;
+}
+
 /**
- * A tool's settings as its own engine resolves them on this machine: their
- * `env` as the tool runs with it, and each source, by the engine's
- * precedence, lowest first, with its `env`, its file when it is one, and
- * the managed policy that supplied it when it is that.
+ * A settings read's process as its answer (agent claude-settings.ts): the
+ * settings when it printed them; none read when it didn't finish, failed
+ * (with the last line it said), or printed anything else.
  */
-type SettingsRead = Pick<ResolvedSettings, "effective" | "sources">;
+export const settingsAnswer = (
+  ran: Ran | undefined
+): SettingsRead | SettingsUnread => {
+  if (ran?.code !== 0) {
+    return { unread: ran?.stderr.trim().split("\n").at(-1) || undefined };
+  }
+  let answer: unknown;
+  try {
+    answer = JSON.parse(ran.stdout);
+  } catch {
+    return { unread: undefined };
+  }
+  const parsed = SettingsReadSchema.safeParse(answer);
+  return parsed.success ? parsed.data : { unread: undefined };
+};
 
 /**
  * Each engine a tool's switches name (core `ToolUpdateSwitches.engine`), as
- * it reads the settings an owner turns updates off in:
- * - `claude-code`: the Agent SDK's `resolveSettings`, which "Resolves the
- *   effective Claude Code settings for a given directory using the same
- *   merge engine as the CLI, without spawning the Claude CLI" and "reads MDM
- *   sources, including macOS plist and Windows HKLM/HKCU"
- *   (code.claude.com/docs/en/agent-sdk/typescript, read 2026-11-04), its
- *   policy tier as at the CLI's start, "managed-settings.json,
- *   remote-cached managed settings, MDM via macOS plist / Windows HKLM/HKCU"
- *   (its sdk.d.ts). The user's settings alone of the filesystem's: a
- *   project's apply where Claude Code runs in it, not to the machine.
+ * it reads the settings that hold them, given the variables to read:
+ * - `claude-code`: `cawco claude-settings <variable>...` (agent
+ *   claude-settings.ts), the Agent SDK's `resolveSettings` in a process of
+ *   its own for each read, so the machine's policy is read as it stands
+ *   at each update, not as it stood when the agent started.
+ * Each read is given {@link SETTINGS_READ_MS}.
  */
 const SETTINGS_ENGINES: Record<
   ToolUpdateSwitches["engine"],
-  () => Promise<SettingsRead>
+  (variables: string[]) => Promise<SettingsRead | SettingsUnread>
 > = {
-  "claude-code": () => resolveSettings({ settingSources: ["user"] }),
+  "claude-code": async (variables) =>
+    settingsAnswer(
+      await askProgram(
+        [...cawcoCommand("claude-settings"), ...variables],
+        SETTINGS_READ_MS
+      )
+    ),
 };
 
 /**
  * Where one source of a tool's settings is, in the words a row says it with
  * (core `ToolUpdateSwitches.places`): a file by its path; a managed policy by
  * the place the engine says it came from, the managed settings when it names
- * none of these.
+ * none of these, or the files are kept nowhere on this platform.
  */
 const sourceWhere = (
   places: ToolUpdateSwitches["places"],
@@ -618,14 +641,22 @@ const sourceWhere = (
   if (source.path) {
     return shownPath(source.path);
   }
-  const { registry } = places;
-  const named: Partial<Record<PolicySettingsOrigin, string>> = {
-    file: toolWords.inManagedFiles,
+  const { files, registry } = places;
+  const dir = files.dirs[platform() as ToolPlatform];
+  const named: Record<string, string> = {
+    ...(dir
+      ? {
+          file: toolWords.inManagedFiles(
+            join(dir, files.file),
+            join(dir, files.folder)
+          ),
+        }
+      : {}),
     hkcu: toolWords.inRegistry(registry.value, registry.hkcu),
     hklm: toolWords.inRegistry(registry.value, registry.hklm),
     plist: toolWords.inProfile(places.profile),
     remote: toolWords.inServerManaged,
-  };
+  } satisfies Partial<Record<PolicySettingsOrigin, string>>;
   return (
     (source.policyOrigin && named[source.policyOrigin]) ?? toolWords.inManaged
   );
@@ -688,17 +719,25 @@ export const switchedOffIn = (
   }
 };
 
-/** {@link switchedOffIn} on this machine: its tools' environment, and the tool's settings as its engine resolves them now. */
+/**
+ * {@link switchedOffIn} on this machine: its tools' environment, and the
+ * tool's settings as its engine reads them now; unread when the engine
+ * gave none, which no update goes ahead on.
+ */
 const switchedOff = async (
   switches: ToolUpdateSwitches,
   automatic: boolean
-): Promise<{ variable: string; where: string } | undefined> =>
-  switchedOffIn(
-    switches,
-    automatic,
-    toolEnv(),
-    await SETTINGS_ENGINES[switches.engine]()
-  );
+): Promise<
+  { variable: string; where: string } | SettingsUnread | undefined
+> => {
+  const read = await SETTINGS_ENGINES[switches.engine]([
+    ...switches.every,
+    ...switches.automatic,
+  ]);
+  return "unread" in read
+    ? read
+    : switchedOffIn(switches, automatic, toolEnv(), read);
+};
 
 /**
  * The tool as it stands after an install that ran nothing, with why: the
@@ -1167,6 +1206,7 @@ const install = async (
   const { method } = choice;
   // A copy's owner may have turned its updates off: CawCo's own (automatic)
   // with either switch, a press with the one that turns off every update.
+  // Settings that couldn't be read decide nothing, and nothing runs.
   const off =
     at && spec.updatesOff
       ? await switchedOff(spec.updatesOff, ask.automatic === true)
@@ -1175,7 +1215,10 @@ const install = async (
     return remember(
       await standing(
         spec,
-        () => toolWords.updatesOff(spec.name, off.variable, off.where),
+        () =>
+          "unread" in off
+            ? toolWords.settingsUnread(spec.name, off.unread)
+            : toolWords.updatesOff(spec.name, off.variable, off.where),
         undefined
       )
     );

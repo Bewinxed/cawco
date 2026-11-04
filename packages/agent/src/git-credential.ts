@@ -24,43 +24,15 @@
 import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { CAWCO_ENV } from "@cawco/core";
 import { cawcoDataDir } from "@cawco/core/paths";
-import { standalone } from "@cawco/core/runtime";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
-
-/**
- * Defined only in the published package's bundle (scripts/build-binary.ts),
- * where this module is `cli.js` itself.
- */
-declare const __CAWCO_RELEASE__: boolean | undefined;
+import { cawcoCommand } from "./cawco-command";
 
 /** One argument as sh reads it back unchanged. */
 const shellWord = (word: string): string =>
   `'${word.replaceAll("'", "'\\''")}'`;
-
-/** This build's `cawco <verb>` as argv, the way the keeper is launched (sessiond-client.ts). */
-const cawcoCommand = (verb: string): string[] => {
-  if (standalone) {
-    return [process.execPath, verb];
-  }
-  return [
-    process.execPath,
-    typeof __CAWCO_RELEASE__ === "boolean"
-      ? fileURLToPath(import.meta.url)
-      : join(
-          dirname(fileURLToPath(import.meta.url)),
-          "..",
-          "..",
-          "cli",
-          "src",
-          "cli.ts"
-        ),
-    verb,
-  ];
-};
 
 /** The hub's HTTP origin, from the socket address this agent is connected on. */
 const hubOrigin = (): string | undefined => {

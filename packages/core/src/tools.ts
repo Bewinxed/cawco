@@ -106,11 +106,18 @@ export interface ToolUpdateSwitches {
   engine: "claude-code";
   every: string[];
   /**
-   * Where the tool's managed policies that are no file are kept, as a row
-   * names the place a switch is set: its macOS managed preferences domain,
-   * and the registry value its settings are kept in, under each key.
+   * Where the tool's managed settings are kept, as a row names the place a
+   * switch is set: its managed settings files (the system directory each
+   * platform keeps them in, and the file and the folder of `.json` files
+   * there), its macOS managed preferences domain, and the registry value its
+   * settings are kept in, under each key.
    */
   places: {
+    files: {
+      dirs: Partial<Record<ToolPlatform, string>>;
+      file: string;
+      folder: string;
+    };
     profile: string;
     registry: { hkcu: string; hklm: string; value: string };
   };
@@ -394,12 +401,25 @@ export const TOOL_CATALOG: ToolSpec[] = [
       anyValue: ["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"],
       every: ["DISABLE_UPDATES"],
       engine: "claude-code",
-      // "the `com.anthropic.claudecode` managed preferences domain", "the
-      // JSON as a `REG_SZ` or `REG_EXPAND_SZ` value named `Settings` under
-      // `HKLM\SOFTWARE\Policies\ClaudeCode`", and "the same `Settings` value
-      // under `HKCU\SOFTWARE\Policies\ClaudeCode`"
+      // "`managed-settings.json`, an optional `managed-settings.d/`
+      // directory, and `managed-mcp.json` in the system directory:
+      // `/Library/Application Support/ClaudeCode/` on macOS,
+      // `/etc/claude-code/` on Linux and WSL, and `C:\Program Files\ClaudeCode\`
+      // on Windows", "the `com.anthropic.claudecode` managed preferences
+      // domain", "the JSON as a `REG_SZ` or `REG_EXPAND_SZ` value named
+      // `Settings` under `HKLM\SOFTWARE\Policies\ClaudeCode`", and "the same
+      // `Settings` value under `HKCU\SOFTWARE\Policies\ClaudeCode`"
       // (code.claude.com/docs/en/managed-settings, read 2026-11-04).
       places: {
+        files: {
+          dirs: {
+            linux: "/etc/claude-code",
+            darwin: "/Library/Application Support/ClaudeCode",
+            win32: "C:\\Program Files\\ClaudeCode",
+          },
+          file: "managed-settings.json",
+          folder: "managed-settings.d",
+        },
         profile: "com.anthropic.claudecode",
         registry: {
           value: "Settings",

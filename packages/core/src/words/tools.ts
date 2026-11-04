@@ -35,23 +35,25 @@ export const toolWords = {
     `the registry's ${value} value under ${key}`,
   /**
    * {@link toolWords.updatesOff}'s `where` for a switch set in the tool's
-   * managed settings files (`managed-settings.json` and its
-   * `managed-settings.d` folder). A placeholder until reviewed.
+   * managed settings files: the system directory's `managed-settings.json`
+   * and its folder of `.json` files (core `ToolUpdateSwitches.places`).
    */
-  inManagedFiles: "the managed settings files",
+  inManagedFiles: (file: string, folder: string) =>
+    `${file} or a .json file in ${folder}`,
+  /** {@link toolWords.updatesOff}'s `where` for a switch set in the server-managed settings, as Claude Code last fetched them. */
+  inServerManaged:
+    "the managed settings of your claude.ai organization (Organization settings → Claude Code → Managed settings)",
+  /** {@link toolWords.updatesOff}'s `where` for a switch set in managed settings whose source the tool's engine names as none of the others. */
+  inManaged:
+    "the managed settings Claude Code reads on the machine (its /status names the source)",
   /**
-   * {@link toolWords.updatesOff}'s `where` for a switch set in the
-   * server-managed settings an organization sets for the tool (on claude.ai
-   * or a gateway), as the tool last fetched them. A placeholder until
-   * reviewed.
-   */
-  inServerManaged: "the server-managed settings",
-  /**
-   * {@link toolWords.updatesOff}'s `where` for a switch set in managed
-   * settings whose source the tool's engine names as none of the others. A
+   * A read of the tool's settings that gave none (agent tools.ts
+   * `settingsAnswer`): CawCo can't tell whether its owner turned its updates
+   * off, so it updates nothing; the read's last line when it said one. A
    * placeholder until reviewed.
    */
-  inManaged: "the managed settings",
+  settingsUnread: (name: string, said: string | undefined) =>
+    `CawCo couldn't read ${name}'s settings to see whether its updates are off, so it left it as it is.${said ? ` The read said: ${said}` : ""} CawCo reads them again at the next update.`,
   /** A pinned version the copy's method can't install (a Homebrew cask carries one version): nothing was run. */
   cannotPin: (method: string, name: string, version: string) =>
     `${method} installs only the version it carries, not ${name} ${version}, the version the fleet pins. Pin the version ${method} carries, or install ${name} there without ${method}.`,

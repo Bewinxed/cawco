@@ -88,6 +88,10 @@ Usage
   cawco git-credential <get|store|erase>  git's credential helper for the hub's git
                                           remote, as this session; set up for every
                                           session, not run by hand
+  cawco claude-settings <variable>...     those variables of Claude Code's settings,
+                                          as its own engine resolves them, as JSON;
+                                          read by the agent before it updates Claude
+                                          Code, not run by hand
 
 Services
   ${SERVICE_IDS.join(", ")} — each its own per-user service, started by systemd or
@@ -707,6 +711,24 @@ const gitCredential = async (args: Args): Promise<number> => {
   return 0;
 };
 
+/**
+ * `cawco claude-settings <variable>...`: those variables of Claude Code's
+ * settings as its own engine resolves them now, as JSON on stdout (agent
+ * claude-settings.ts). The agent runs it in a process of its own for each
+ * update it decides on, so the machine's policy is read as it stands.
+ */
+const claudeSettingsVerb = async (args: Args): Promise<number> => {
+  const variables = [args.action, ...args.rest].filter(
+    (variable): variable is string => variable !== undefined
+  );
+  if (variables.length === 0) {
+    throw new UsageError("claude-settings needs the variables to read");
+  }
+  const { claudeSettings } = await import("@cawco/agent/claude-settings");
+  process.stdout.write(`${JSON.stringify(await claudeSettings(variables))}\n`);
+  return 0;
+};
+
 /** `cawco connections set-key <name>`: a connection's key, from this terminal to the hub. */
 const runConnections = async (args: Args): Promise<number> => {
   if (args.action !== "set-key") {
@@ -932,6 +954,8 @@ const run = async (argv: string[]): Promise<number> => {
       return runTool(args);
     case "git-credential":
       return gitCredential(args);
+    case "claude-settings":
+      return claudeSettingsVerb(args);
     case "connections":
       return runConnections(args);
     case "jev":

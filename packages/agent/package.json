@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./browser": "./src/browser/browsers.ts",
     "./capabilities": "./src/capabilities.ts",
+    "./claude-settings": "./src/claude-settings.ts",
     "./config": "./src/config.ts",
     "./discovery": "./src/discovery.ts",
     "./keeper-jobs": "./src/keeper-jobs.ts",
