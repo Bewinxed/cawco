@@ -409,7 +409,7 @@
   /* ── The popover, hanging from his glass ───────────────────────────── */
   /*
    * It hangs from the top bar's own glass (Shell's `[data-bar-group]`, his
-   * group on the desk and his tucked tab on a phone), where NeedsCaw hangs
+   * group on the desk and his own glass on a phone), where NeedsCaw hangs
    * it, so it stands where it stands in the product. The glass draws its
    * joined foot while it hangs, as it does for his own panel.
    */

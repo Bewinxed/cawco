@@ -2147,109 +2147,6 @@
         }
       }
     },
-    "shadow-tile-flush-end": {
-      "$type": "shadow",
-      "$description": "The tile shadow of a tab flush against the screen's trailing edge (BarGlass's Caw tab on a phone, beside its `border-e-0`): shadow-tile's elevation, and its ring drawn over the top, the foot and the leading side only, as the border is, so no hairline stands on the flush side. One-sided as shadow-tab-end is: the trailing side is the right.",
-      "$value": [
-        {
-          "color": {
-            "colorSpace": "oklch",
-            "components": [0.295, 0.01, 70],
-            "alpha": 0.07
-          },
-          "offsetX": {
-            "value": 0,
-            "unit": "px"
-          },
-          "offsetY": {
-            "value": 1,
-            "unit": "px"
-          },
-          "blur": {
-            "value": 2,
-            "unit": "px"
-          },
-          "spread": {
-            "value": 0,
-            "unit": "px"
-          }
-        },
-        {
-          "color": {
-            "colorSpace": "oklch",
-            "components": [0.295, 0.01, 70],
-            "alpha": 0.035
-          },
-          "offsetX": {
-            "value": 0,
-            "unit": "px"
-          },
-          "offsetY": {
-            "value": -1,
-            "unit": "px"
-          },
-          "blur": {
-            "value": 0,
-            "unit": "px"
-          },
-          "spread": {
-            "value": 0,
-            "unit": "px"
-          }
-        },
-        {
-          "color": {
-            "colorSpace": "oklch",
-            "components": [0.295, 0.01, 70],
-            "alpha": 0.035
-          },
-          "offsetX": {
-            "value": 0,
-            "unit": "px"
-          },
-          "offsetY": {
-            "value": 1,
-            "unit": "px"
-          },
-          "blur": {
-            "value": 0,
-            "unit": "px"
-          },
-          "spread": {
-            "value": 0,
-            "unit": "px"
-          }
-        },
-        {
-          "color": {
-            "colorSpace": "oklch",
-            "components": [0.295, 0.01, 70],
-            "alpha": 0.035
-          },
-          "offsetX": {
-            "value": -1,
-            "unit": "px"
-          },
-          "offsetY": {
-            "value": 0,
-            "unit": "px"
-          },
-          "blur": {
-            "value": 0,
-            "unit": "px"
-          },
-          "spread": {
-            "value": 0,
-            "unit": "px"
-          }
-        }
-      ],
-      "$extensions": {
-        "dev.cawco": {
-          "css": "0 1px 2px light-dark(oklch(from {color.neutral-12} l c h / 0.07), oklch(0% 0 0 / 0.3)), 0 -1px 0 0 light-dark(oklch(from {color.neutral-12} l c h / 0.035), oklch(from {color.neutral-12} l c h / 0.06)), 0 1px 0 0 light-dark(oklch(from {color.neutral-12} l c h / 0.035), oklch(from {color.neutral-12} l c h / 0.06)), -1px 0 0 0 light-dark(oklch(from {color.neutral-12} l c h / 0.035), oklch(from {color.neutral-12} l c h / 0.06))"
-        }
-      }
-    },
     "shadow-raised": {
       "$type": "shadow",
       "$value": [
@@ -4314,7 +4211,7 @@
         "value": 32,
         "unit": "px"
       },
-      "$description": "Caw's own glass on the phone bar, its side: round at its leading side, square at its trailing one, flush with the screen's trailing edge. Caw's phone glass tops with the tabs and stands clear of the floor; open, his panel hangs from the floor through a neck (c-tab-row-h less this, his glass's foot to the row's floor)."
+      "$description": "Caw's own glass on the phone bar, its side: round at its leading side, square at its trailing one, its trailing edge c-bar-phone-edge in from the screen's, as the sidebar toggle's glyph is from the other. Caw's phone glass tops with the tabs and stands clear of the floor; open, his panel hangs from the floor through a neck (c-tab-row-h less this, his glass's foot to the row's floor)."
     },
     "c-bar-caw-head-phone": {
       "$type": "dimension",

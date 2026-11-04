@@ -563,18 +563,19 @@
    * The shadow of every card hanging from the glass (HangCard `glass`),
    * drawn ahead of any press (motion/hung-shadow): a picture of
    * `--shadow-overlay-hung` round its corners, the glass's trailing flank
-   * square and, on a phone, its foot at the screen's edge square (HangCard's
-   * `glass` recipe), drawn again for a new scheme, device ratio or width.
+   * square (HangCard's `glass` recipe), drawn again for a new scheme or
+   * device ratio.
    */
   $effect(() => {
-    const look = [theme.resolved, deviceRatio.current, !railed] as const;
+    // biome-ignore lint/complexity/noVoid: read-only dependencies
+    void [theme.resolved, deviceRatio.current];
     const corner = Number.parseFloat(
       getComputedStyle(document.documentElement).getPropertyValue("--radius-lg")
     );
     hangShadow("[data-glass-card]", "--shadow-overlay-hung", [
       corner,
       0,
-      look[2] ? 0 : corner,
+      corner,
       corner,
     ]).catch((error: unknown) => {
       console.error("The glass's card shadow did not draw", error);
@@ -1105,10 +1106,14 @@
            slot starts at the bar's edge whether it holds the crumb or the
            tabs. Under the narrow query (NARROW_QUERY) its first paint is the
            narrow bar already, its inset and ground. On the phone's one row
-           (44px, the compact bar's) the toggle and Caw's glass start from
-           the screen's edges, each inside a landscape notch's inset, so the
-           row has no pad of its own (each draws its focus ring inside its
-           box, so neither ring runs past the screen); with a conversation in front the bar
+           (44px, the compact bar's) the toggle's glyph and Caw's glass each
+           stand c-bar-phone-edge in from the screen's edge, inside a
+           landscape notch's inset: the toggle's touch area starts at the
+           screen's edge and pads its glyph in, so the row's leading pad is
+           only the notch's; its trailing pad is the margin and the notch,
+           and Caw's touch area reaches back across it to the screen's edge
+           (each draws its focus ring inside its box, so neither ring runs
+           past the screen); with a conversation in front the bar
            floats over the group's own tab row and takes only its two
            controls' touches. Hosting the tabs, the bar is the shelf they
            stand on: two steps below the transcript and one below an
@@ -1126,7 +1131,7 @@
         class="group/top peer/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 ps-0 pe-(--top-end) coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-c-top-bar-h max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:shelf-hairline"
         style:--top-end="calc(var(--space-6) + env(safe-area-inset-right, 0px))"
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
-        style:--top-inset-end="env(safe-area-inset-right, 0px)"
+        style:--top-inset-end={"calc(var(--c-bar-phone-edge) + env(safe-area-inset-right, 0px))"}
       >
         <!-- The sidebar toggle; at the 900px line the rail returns and it
              retires (`desk:hidden`). On the phone's row it is a bare

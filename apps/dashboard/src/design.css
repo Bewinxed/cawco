@@ -1368,7 +1368,9 @@
     saturate(var(--material-saturate));
 }
 /* The bar's join to the strip under it: a flared foot (--f) into a rounded
-   top (--r) over its height (--h); on a phone it runs to the edge. */
+   top (--r) over its height (--h); on a phone its trailing top corner is
+   square, as Caw's glass is there, and its edge runs straight down that side
+   into the card's. */
 @utility clip-join {
   clip-path: shape(
     from 0 100%,
@@ -1389,8 +1391,8 @@
       calc(var(--f) + 1px) ccw,
     line to calc(var(--f) + 1px) var(--r),
     arc to calc(var(--f) + var(--r)) 1px of calc(var(--r) - 1px) cw,
-    line to 100% 1px,
-    line to 100% 100%,
+    line to calc(100% - 1px) 1px,
+    line to calc(100% - 1px) 100%,
     close
   );
 }

@@ -135,9 +135,10 @@
    * leaves the screen. The number itself is in his label, his tooltip and
    * the drawer's head. His circle is the bar's control height across,
    * round his item's centre: the wide group's trailing end. On the phone
-   * his glass is his own, a tab tucked into the screen's trailing edge,
-   * round on its leading side and square on the edge's (Shell), and the
-   * arcs run along that outline instead (`outlinePath`).
+   * his glass is his own, standing the bar's phone margin in from the
+   * screen's trailing edge, round on its leading side and square on its
+   * trailing one (BarGlass), and the arcs run along that outline instead
+   * (`outlinePath`).
    * Apple's NeedsCawButton draws the same arcs.
    */
   const ARC = 30;
@@ -637,11 +638,11 @@
       {/if}
     </g>
   </svg>
-  <!-- The phone's: its box is the standing glass, which meets the screen's
-       trailing edge, and its viewBox that glass's square inside the circle's
-       box, so the outline draws one to one where the circle's box drew it
-       and no box of it reaches past the screen (the circle's 36px box stood
-       2px past it, and the shell scrolled sideways by that). -->
+  <!-- The phone's: its box is the standing glass, and its viewBox that
+       glass's square inside the circle's box, so the outline draws one to
+       one where the circle's box drew it and no box of it reaches past the
+       glass (the circle's 36px box, flush with the screen's edge, stood 2px
+       past it, and the shell scrolled sideways by that). -->
   <svg
     data-slot="rim"
     data-foot={low || undefined}
@@ -684,9 +685,11 @@
   {#snippet children(tip)}
     <!-- An item of the bar's group (Shell's bar-item recipe, on
          [data-bar-item], draws its box, hover and focus); a circle whatever
-         the strips' boxes: the beat's reaches past it. On the phone's glass,
-         flush with the screen's trailing edge, its focus ring is drawn over
-         its own box (`focus-inset`), so the edge never cuts it. -->
+         the strips' boxes: the beat's reaches past it. On the phone's glass
+         its focus ring is drawn over its own box (`focus-inset`), as the
+         sidebar toggle's is, and a finger's 44px area runs from the glass's
+         leading edge across the bar's phone margin to the screen's edge, as
+         the toggle's starts at the other. -->
     <button
       data-bar-item
       data-glass-opens="caw"
@@ -699,7 +702,7 @@
       aria-expanded={barGlass.open === "caw"}
       aria-haspopup="dialog"
       aria-label={label}
-      class="select-none touch-hit press-tint relative grid w-c-bar-item flex-none place-items-center p-0 tap-highlight-none @max-desk/shell:focus-inset @max-desk/shell:coarse:after:start-auto @max-desk/shell:coarse:after:end-0 @max-desk/shell:coarse:after:top-(--caw-hit-top) @max-desk/shell:coarse:after:bottom-auto @max-desk/shell:coarse:after:size-c-btn-h-lg"
+      class="select-none touch-hit press-tint relative grid w-c-bar-item flex-none place-items-center p-0 tap-highlight-none @max-desk/shell:focus-inset @max-desk/shell:coarse:after:start-0 @max-desk/shell:coarse:after:end-auto @max-desk/shell:coarse:after:top-(--caw-hit-top) @max-desk/shell:coarse:after:bottom-auto @max-desk/shell:coarse:after:size-c-btn-h-lg"
       data-needs-caw
       style:--caw-hit-top={"calc((var(--c-bar-caw-glass-phone) - var(--c-btn-h-lg)) / 2)"}
       type="button"

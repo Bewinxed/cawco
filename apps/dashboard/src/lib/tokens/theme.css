@@ -1006,7 +1006,6 @@
 @theme inline reference {
   --shadow-xs: var(--shadow-xs);
   --shadow-tile: var(--shadow-tile);
-  --shadow-tile-flush-end: var(--shadow-tile-flush-end);
   --shadow-raised: var(--shadow-raised);
   --shadow-hairline: var(--shadow-hairline);
   --shadow-stat: var(--shadow-stat);
