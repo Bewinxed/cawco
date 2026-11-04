@@ -658,7 +658,7 @@
   {#if artifacts && artifacts.length > 0}
     <Rail
       axis="x"
-      class="flex flex-none gap-space-row rounded-md bg-surface-recess-deep p-space-row"
+      class="flex flex-none gap-space-row rounded-md concentric-in r-outer-md r-inset-space-row bg-surface-recess-deep p-space-row"
       itemClass="touch-hit press-tint grid size-c-btn-h-xs place-items-center"
       items={VIEWS}
       label={filesWords.artifactsView}

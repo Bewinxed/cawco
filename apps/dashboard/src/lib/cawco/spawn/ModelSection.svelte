@@ -307,7 +307,7 @@
     {#if !runtime}
       <Rail
         axis="y"
-        class="grid content-box-start gap-(--rail-gap) hit-gap-x-(--rail-gap) hit-gap-y-(--rail-gap) rounded-s-md border-e border-e-border-hairline bg-surface-recess p-space-2"
+        class="grid content-box-start gap-(--rail-gap) hit-gap-x-(--rail-gap) hit-gap-y-(--rail-gap) rounded-s-md concentric-in r-outer-md r-inset-space-2 border-e border-e-border-hairline bg-surface-recess p-space-2"
         itemClass="ns-in touch-hit press-tint grid size-c-btn-h place-items-center"
         stagger
         items={railItems}

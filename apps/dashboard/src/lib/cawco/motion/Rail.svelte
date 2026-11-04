@@ -213,7 +213,7 @@
   <span
     data-slot="thumb"
     aria-hidden="true"
-    class="pointer-events-none absolute top-0 left-0 rounded-sm bg-surface-lift shadow-raised motion-safe:data-placed:transition-[transform,width,height] motion-safe:data-placed:duration-(--dur-morph) motion-safe:data-placed:ease-in-out"
+    class="pointer-events-none absolute top-0 left-0 concentric-sm bg-surface-lift shadow-raised motion-safe:data-placed:transition-[transform,width,height] motion-safe:data-placed:duration-(--dur-morph) motion-safe:data-placed:ease-in-out"
     data-placed={placed || undefined}
     style:height={thumbBox ? `${thumbBox.h}px` : undefined}
     style:opacity={thumbBox ? 1 : 0}
@@ -226,7 +226,7 @@
       aria-checked={entry.id === value}
       aria-label={entry.label}
       class={cn(
-        "press-tint relative select-none rounded-sm border-none border-current bg-transparent p-0 text-ink-muted transition-[background-color] duration-(--dur-control) ease-out hover:enabled:aria-checked-false:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50 aria-checked:text-ink-strong",
+        "press-tint relative select-none concentric-sm border-none border-current bg-transparent p-0 text-ink-muted transition-[background-color] duration-(--dur-control) ease-out hover:enabled:aria-checked-false:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-50 aria-checked:text-ink-strong",
         itemClass
       )}
       data-rail-item-class={itemClass}
