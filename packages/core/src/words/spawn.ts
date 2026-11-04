@@ -62,6 +62,12 @@ export const spawnWords = {
   /** The mode chip while no mode is picked: Start waits on one. */
   unchosenMode: "Choose a mode",
   /**
+   * A start that names no permission mode, refused before anything starts
+   * (hub server.ts `settleMode`): the harness and the machine by name.
+   */
+  modeUnchosen: (harness: string, machine: string) =>
+    `A permission mode must be chosen for the ${harness} session on ${machine}, and none was. Choose one, then start it again. Nothing was started.`,
+  /**
    * Why Start is held, beside it (PRODUCT.md: a control that can't act is
    * disabled with the reason stated), for what nothing else on the form says.
    */

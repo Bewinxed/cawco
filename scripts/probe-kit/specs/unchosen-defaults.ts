@@ -76,7 +76,7 @@ import {
   type Spec,
   settle,
 } from "../kit";
-import { startsWith } from "../words";
+import { shaped, startsWith } from "../words";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/gu;
@@ -493,10 +493,14 @@ const fromProject = async (kit: Kit, fleet: KitFleet, base: string) => {
   await starter.click();
   const dialog = page.getByRole("dialog", { name: "New Session" });
   await dialog.waitFor({ timeout: 30_000 });
+  // Nothing held beside Start once the reason it waited on has morphed out
+  // (MorphText draws the old words until its swap settles): Start goes as
+  // the machine is read, a moment before its reason's words have gone.
   const opened = (read: FormRead) =>
     read.project === `Project: ${name}` &&
     read.mode === spawnWords.permissionMode(spawnWords.modes.acceptEdits) &&
-    !read.disabled;
+    !read.disabled &&
+    read.held === "";
   const ready =
     (await until(
       "the form on its project",
@@ -506,7 +510,7 @@ const fromProject = async (kit: Kit, fleet: KitFleet, base: string) => {
     ).catch(() => null)) ?? (await formRead(page));
   kit.check(
     `13: New Session from a project's page opens on that project and the hub's last chosen mode (${spawnWords.modes.acceptEdits}), Start enabled, nothing held beside it`,
-    opened(ready) && ready.held === "",
+    opened(ready),
     JSON.stringify(ready)
   );
 
@@ -595,7 +599,7 @@ const modes = async (kit: Kit, fleet: KitFleet) => {
   });
   kit.check(
     "8a: a Claude Code spawn that names no permission mode is refused in words saying one must be chosen, and no session is made",
-    bare.words?.includes("A permission mode must be chosen") === true &&
+    shaped(spawnWords.modeUnchosen).test(bare.words ?? "") &&
       fleet.instance(bare.instanceId) === undefined,
     `said ${bare.words ?? "nothing"}; row ${JSON.stringify(fleet.instance(bare.instanceId) ?? null)}`
   );

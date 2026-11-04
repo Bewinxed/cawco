@@ -116,7 +116,6 @@
     "This item changes": 1
   },
   "scripts/probe-kit/specs/move-settled.ts": {
-    ", and none was. Choose one, then start it again. Nothing was started.": 1,
     "git init": 1
   },
   "scripts/probe-kit/specs/own-lane.ts": {
@@ -197,7 +196,6 @@
     "signing in over SSH": 1
   },
   "scripts/probe-kit/specs/unchosen-defaults.ts": {
-    "A permission mode must be chosen": 1,
     "couldn't read its models": 1
   },
   "scripts/probe-kit/specs/web/hub-states.ts": {

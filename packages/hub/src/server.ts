@@ -8344,7 +8344,7 @@ export const createServer = (
 
   /** Why a spawn that names no permission mode does not start ({@link settleMode}). */
   const unchosenMode = (machineId: string, harness: string): string =>
-    `A permission mode must be chosen for the ${harness} session on ${machineName(machineId)}, and none was. Choose one, then start it again. Nothing was started.`;
+    spawnWords.modeUnchosen(harness, machineName(machineId));
 
   /**
    * The mode a revive, restore or relaunch runs on: the row's own, else the
