@@ -1,56 +1,40 @@
-<script lang="ts" module>
-  /** What the agent's ask names: the component in front, the state it opens on, and the face the room opens on. */
-  export interface Ask {
-    component?: string;
-    /** The room's face it opens on: the states (the default), the whole set, or the move. */
-    face?: Face;
-    state?: string;
-  }
-
-  /** The room's three faces: the states list with its steps, the whole set, the move. */
-  export type Face = "states" | "whole" | "move";
-</script>
-
 <script lang="ts">
   /**
-   * The design graph (spec.md §5; its surface brief under
-   * apps/dashboard/.impeccable/surfaces): where the owner judges a
-   * component an agent built. The stage holds the real component in the
-   * state he keeps, and only that: a press on a state keeps it, and
-   * nothing else changes the stage. Beside it one room, its one switch
-   * (fluid-tabs) choosing its face: the states list with its steps, the
-   * whole set, or the move into the kept state. Compare, a switch that
-   * stays on, compares the kept state with the one before it (model
-   * `previousOf`, the state the Move face plays from) at once,
-   * and a press on another state compares with that one instead; the
-   * stage keeps the kept state and rings what differs. The move into a
-   * kept state plays once as it arrives, then its playhead rests at its
-   * start. Several components under one ask: one in front, the others
+   * The design graph (Projects spec §5.10; its surface brief under
+   * apps/dashboard/.impeccable/surfaces): what the artifact panel shows of a
+   * component artifact, where the owner judges a component an agent built.
+   * The stage holds the real component in the state he keeps, and only
+   * that: a press on a state keeps it, and nothing else changes the stage.
+   * The component lives in the project's toolchain, on the stage's origin,
+   * in the one frame the stage's panel holds (StagePane); the graph says
+   * what to stand at by messages (StageLink, core stage-graph.ts) and the
+   * page answers. Beside the stage one room, the states list with its
+   * steps. Several components under one ask: one in front, the others
    * behind its name's menu.
    *
    * One bar of one row (DESIGN.md, The Title Bars Follow Liquid Glass
    * Rule): leading the component's name (its menu when there are several),
-   * trailing one glass group of bare symbols (Compare, the stage's view,
-   * and Show states only while the room is put away: the room's one close
-   * is its own). The view is a card hung from the glass (HangCard, as the
-   * app's own glass hangs its cards): one settings row each, its name
-   * leading and its control trailing, the widths as device glyphs with
-   * their figures, the scheme as sun and moon, Reduce motion as a switch.
+   * trailing one glass group of bare symbols (the stage's view, and Show
+   * states only while the room is put away: the room's one close is its
+   * own). The view is a card hung from the glass (HangCard, as the app's
+   * own glass hangs its cards): one settings row each, its name leading and
+   * its control trailing, the widths as device glyphs with their figures,
+   * the scheme as sun and moon, Reduce motion as a switch.
    *
    * One grid under the bar: the stage and the room are two panels of one
    * kind (one corner, one edge, one raised head on one head line), sharing
    * a top and a foot inside the page's gutters; the bar's title starts on
    * their leading edge and its glass ends on their trailing one. The stage
-   * holds its drawing and no more (Stage `need`), so the room, and the map
-   * and the timeline in it, take what a form held to its measure leaves.
-   * Under the desk line
-   * (900px of its own width) the room is the kit's bottom drawer, its
-   * stops head, half and whole, the stage whole above it at the head stop.
+   * holds its drawing and no more (the page's `laid`), so the room takes
+   * what a form held to its measure leaves. Under the line where the
+   * surface holds both whole the room is the kit's bottom drawer, its stops
+   * head, half and whole, the stage whole above it at the head stop.
    */
+  import type { CanvasSpec } from "@cawco/core/stage";
+  import type { StateRef } from "@cawco/core/stage-graph";
   import { graphWords as words } from "@cawco/core/words/graph";
   import { mergeProps } from "bits-ui";
-  import { onMount, tick, untrack } from "svelte";
-  import { bridge } from "#lib/cawco/decisions/host/page.svelte.js";
+  import { onMount, type Snippet, untrack } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import {
     dur,
@@ -62,11 +46,6 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import {
-    TabItem,
-    Tabs,
-    TabsList,
-  } from "#lib/components/ui/fluid-tabs/index.js";
   import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
@@ -78,113 +57,109 @@
   import {
     IconChevronDown,
     IconClose,
-    IconCompare,
     IconLayers,
     IconListRows,
     IconMaximize,
     IconMonitor,
     IconMoon,
     IconPhone,
-    IconPlay,
     IconSidebar,
-    IconStructure,
     IconSun,
     IconTablet,
   } from "#lib/icons.js";
   import { browser } from "$app/env";
   import { figureOf, pageLang } from "./figures";
   import Journey from "./Journey.svelte";
-  import MoveFace, { type MoveState } from "./MoveFace.svelte";
-  import {
-    type Move,
-    moveInto,
-    pathOf,
-    previousOf,
-    type Review,
-    type ReviewInput,
-    reviewOf,
-  } from "./model";
-  import {
-    type Clip,
-    lengthOf,
-    Replays,
-    tunedRecord,
-    tuningOf,
-    untune,
-    withTuning,
-  } from "./motion";
-  import Stage, { type Shown } from "./Stage.svelte";
+  import { pathOf, type Review, reviewOf } from "./model";
+  import StagePane from "./StagePane.svelte";
   import Stepper from "./Stepper.svelte";
-  import WholeSet from "./WholeSet.svelte";
+  import type { StageLink } from "./stage-link.svelte";
 
   let {
-    inputs,
-    ask = {},
+    link,
+    files,
+    spec,
+    ask = "",
     stale = false,
     lang = pageLang(),
-    opensAt = "head",
+    frame,
   }: {
-    /** The components under review, each its states file and the agent's spec. */
-    inputs: ReviewInput[];
-    ask?: Ask;
+    /** The line to the stage page: what it said, and what the graph asks of it. */
+    link: StageLink;
+    /** The canvas's states files, in its order: the components under review. */
+    files: readonly string[];
+    /** The agent's canvas spec: its groups and edges. */
+    spec: CanvasSpec;
+    /** The artifact's ask, in words: the component and the state it names open in front. */
+    ask?: string;
     /** The hub's link is down. */
     stale?: boolean;
     /** The page's language, which every figure is written in (figures.ts); the document's when not given. */
     lang?: string;
-    /** The phone drawer's stop it opens at: its head, as the spec opens it, unless a states file's state stands it taller. */
-    opensAt?: "head" | "half" | "whole";
+    /** The frame that holds the stage page. */
+    frame: Snippet;
   } = $props();
 
   /** The page's own ids, for a label's `for`. */
   const uid = $props.id();
   /** `n` as a figure in the page's language. */
   const figure = (n: number) => figureOf(n, lang);
-  const reviews = $derived(inputs.map((one) => reviewOf(one, figure)));
-  /** The component the ask names, else the first: the one in front until he picks another. */
-  const askedFront = $derived(
-    Math.max(
-      0,
-      reviews.findIndex((one) => one.name === ask.component)
-    )
+  /** Each states file the page has said, in the canvas's order. */
+  const reviews = $derived(
+    files.flatMap((file) => {
+      const sheet = link.sheets[file];
+      return sheet ? [reviewOf(sheet, spec, figure)] : [];
+    })
   );
+  /** Whether the ask names `words` (a component's or a state's name), as a person writes it. */
+  const asks = (named: string) =>
+    named.length > 0 && ask.toLowerCase().includes(named.toLowerCase());
+  /** The component the ask names (its longest name it holds), else the first: the one in front until he picks another. */
+  const askedFront = $derived.by(() => {
+    let best = 0;
+    let longest = 0;
+    reviews.forEach((one, index) => {
+      if (asks(one.name) && one.name.length > longest) {
+        best = index;
+        longest = one.name.length;
+      }
+    });
+    return best;
+  });
   let front = $derived(askedFront);
-  const review = $derived(reviews[front] as Review);
+  const review = $derived<Review | undefined>(reviews[front] ?? reviews[0]);
 
   /** A state and one of its variants (null: the state as written). */
   interface Pick {
     state: string;
     variant: string | null;
   }
-  /** Where a component opens: the state the ask names (a variant's or a width's state too), else its first. */
+  /** Where a component opens: the state the ask names (a variant of it too; its longest name the ask holds), else its first. */
   const first = (one: Review): Pick => {
-    const asked =
-      one.name === ask.component || reviews.length === 1
-        ? ask.state
-        : undefined;
-    const holder = one.order.find(
-      (id) =>
-        id === asked ||
-        one.states[id]?.variants.some((each) => each.id === asked) ||
-        one.states[id]?.widths.some((size) => size.story === asked)
-    );
-    const state = holder ?? one.order[0] ?? "";
-    const variant =
-      one.states[state]?.variants.find((each) => each.id === asked)?.id ?? null;
-    return { state, variant };
+    const said = one === reviews[askedFront];
+    let best: Pick = { state: one.order[0] ?? "", variant: null };
+    let longest = 0;
+    const consider = (named: string, pick: Pick) => {
+      if (said && asks(named) && named.length > longest) {
+        best = pick;
+        longest = named.length;
+      }
+    };
+    for (const id of one.order) {
+      const state = one.states[id];
+      consider(state?.name ?? id, { state: id, variant: null });
+      consider(id, { state: id, variant: null });
+      for (const variant of state?.variants ?? []) {
+        consider(variant.name, { state: id, variant: variant.id });
+      }
+    }
+    return best;
   };
   /** The kept state of each component, by its name. */
-  let keptOf = $state<Record<string, Pick>>(
-    untrack(() =>
-      Object.fromEntries(reviews.map((one) => [one.name, first(one)]))
-    )
+  let keptOf = $state<Record<string, Pick>>({});
+  const kept = $derived<Pick | null>(
+    review ? (keptOf[review.name] ?? first(review)) : null
   );
-  const kept = $derived(keptOf[review.name] ?? first(review));
-  let comparing = $state(false);
-  /** The state the kept one is compared with, while comparing. */
-  let against = $state<string | null>(null);
-  /** The face the ask names: the room's until he picks another. */
-  const askedFace = $derived<Face>(ask.face ?? "states");
-  let face = $derived<Face>(askedFace);
   let roomOpen = $state(true);
   let width = $state<number | null>(null);
   let scheme = $state<"light" | "dark">(
@@ -196,8 +171,6 @@
   let reduce = $state(false);
   const still = $derived(reduce || !motionOk.current);
   let surface = $state(0);
-  /** A phone's width and under (DESIGN.md's 640px line). */
-  const PHONE_LINE = 640;
   /**
    * The divider's width (the kit handle's `w-px`): paneforge shares what is
    * left of the group beside it between the panes, so every share is of
@@ -210,10 +183,9 @@
    * The room stands beside the stage only where the surface holds both
    * whole: the stage at its least (`c-graph-stage-min`), the room at its
    * least (`c-graph-room-w`), each pane's inset beside the split's
-   * divider, the divider and the page's gutters. Under that (1058px today) the room is the
-   * drawer, as the stage's least width says it becomes ("under it the room
-   * becomes the drawer"); a narrower desk ran the room past the surface's
-   * edge.
+   * divider, the divider and the page's gutters. Under that (1058px today)
+   * the room is the drawer, measured on the panel's own width, so a pane
+   * under it gets the drawer on a desk too.
    */
   const besideLine = $derived(
     browser
@@ -228,9 +200,9 @@
   const desk = $derived(surface === 0 || surface >= besideLine);
   /**
    * The page is held from view until the split is laid out for the
-   * drawing (Stage `need`), so its first paint is its last: drawn at once,
-   * the stage stood 973px wide and jumped to 693 under him. Held no longer
-   * than the wait grace, past which a mounting stage draws its skeleton.
+   * drawing (the page's `laid`), so its first paint is its last. Held no
+   * longer than the wait grace, past which the stage page draws its own
+   * skeleton.
    */
   let graceOver = $state(false);
   onMount(() => {
@@ -240,460 +212,103 @@
     return () => clearTimeout(timer);
   });
 
-  /**
-   * A state as the stage draws it: a record set's args when one is picked;
-   * at a width he picked that one of its stories is written for (its
-   * phone story at 390), that story's; else as written.
-   */
-  const drawOf = (pick: Pick, atWidth: number | null): Shown => {
-    const state = review.states[pick.state];
+  /** The state the stage stands at, as the page names it: a variant's own story or record set; at a width he picked that one of its stories is written for (its phone story at 390), that story. */
+  const refOf = (on: Review, pick: Pick, atWidth: number | null): StateRef => {
+    const state = on.states[pick.state];
     const variant = state?.variants.find((one) => one.id === pick.variant);
+    if (variant) {
+      return { file: on.file, story: pick.state, variant: variant.variant };
+    }
     const sized =
       atWidth === null
-        ? null
+        ? undefined
         : state?.widths.find((one) => one.width === atWidth);
-    return {
-      args: variant?.args ?? sized?.args ?? state?.args ?? review.args,
-      name: state?.name ?? pick.state,
-      story: variant?.story ?? sized?.story ?? pick.state,
-      variant: variant?.name ?? null,
-      width: sized?.width ?? state?.width ?? null,
-      line: state?.line ?? null,
-    };
+    return { file: on.file, story: sized?.story ?? pick.state };
   };
-  const shown = $derived(drawOf(kept, width));
-  const againstShown = $derived(
-    comparing && against
-      ? drawOf({ state: against, variant: null }, width)
-      : null
-  );
-
-  /** Compare turned on compares with the state before the kept one (`previousOf`), the one the move plays from. It leaves the room as it stands: the states are what he compares against. */
-  const setComparing = (on: boolean) => {
-    comparing = on;
-    against = on ? previousOf(review, kept.state) : null;
-  };
-  /** A press on a state: while comparing, compare with it; else keep it (a record set too). */
-  const press = (state: string, variant: string | null) => {
-    if (comparing && state !== kept.state) {
-      against = state;
-      return;
-    }
-    keep(state, variant);
-  };
+  /** A press on a state keeps it (a record set too). */
   const keep = (state: string, variant: string | null) => {
-    keptOf = { ...keptOf, [review.name]: { state, variant } };
-    if (comparing && against === state) {
-      against = previousOf(review, state);
+    if (review) {
+      keptOf = { ...keptOf, [review.name]: { state, variant } };
     }
   };
 
-  // --- The move into the kept state ------------------------------------------
+  // --- The stage brought to the kept state -------------------------------------
 
-  let stage = $state<ReturnType<typeof Stage>>();
-  /** The width the stage asks of its column, px (Stage `need`): the drawing and its panel; 0 until laid out. */
+  /** The width the stage asks of its column, px (StagePane `need`): the drawing and its panel; 0 until laid out. */
   let stageNeed = $state(0);
-  let move = $state<MoveState>({ kind: "none", state: "" });
-  let playhead = $state(0);
-  let playing = $state(false);
-  /** Play runs the move again from its start each time it ends, until pressed off. */
-  let repeat = $state(false);
-  /** Which timing the face shows and Play plays: his, or the agent's as written (two whole versions, the owner's pick). */
-  let version = $state<"yours" | "written">("yours");
-  /** A scrub left the move held on a frame between its two states. */
-  let holding = false;
   /**
-   * What he tuned on every move, by the move's states (`from->to`): put
-   * back on each new read of that move, and every one of them sent to the
-   * agent. Choosing another move and back lost his edits, and the record
-   * held the last move's alone.
-   */
-  const tunings = new Map<string, { name: string; clips: Clip[] }>();
-  let run = 0;
-  let clock = 0;
-  const replays = new Replays();
-
-  /** What the move changed on the stage: each moving thing. */
-  const regionOf = (clips: readonly Clip[]): Element[] =>
-    clips.flatMap((clip) => (clip.thing ? [clip.thing] : []));
-  /** What a row rested on in the move names on the stage. */
-  let lit = $state<Element | null>(null);
-
-  const stop = () => {
-    playing = false;
-    cancelAnimationFrame(clock);
-  };
-  /** The animation as Play plays it: his timing, or the agent's as written. */
-  const clipsNow = (): Clip[] => {
-    if (move.kind !== "ready") {
-      return [];
-    }
-    return version === "written" ? move.clips.map(untune) : move.clips;
-  };
-
-  /**
-   * The stage is on its way to the kept state (mounting it, or playing and
-   * reading the move into it); the surface says so as `data-arriving`, so
-   * a read of the page (the probe kit's `--wait-for`) waits for its rest.
+   * The stage is on its way to the kept state; the surface says so as
+   * `data-arriving`, so a read of the page (the probe kit's `--wait-for`)
+   * waits for its rest.
    */
   let arriving = $state(true);
-  /** The state the live instance stands in, by component, and the pick it was reached for. */
-  let onStage: { key: string; review: string; state: string } | null = null;
-  const keyOf = (on: Review, pick: Pick) =>
-    `${on.name}\u0000${pick.state}\u0000${pick.variant ?? ""}`;
-  /** A state's args as the stage draws it at the width he picked. */
-  const argsOf = (pick: Pick) => drawOf(pick, width).args;
+  /** The ask the stage answers next, and the state it stands at (by this page load). */
+  let asking = 0;
+  let stood: StateRef | null = null;
+  /** The page load the stage stands at a state on: a new page holds no drawing. */
+  let loadSeen = 0;
+  /** The reach pressed in place from the state that stood: what it changed is brought into view once it lands. */
+  let pressed = false;
 
-  /** The state a pick names, by its name; "" when it names none. */
-  const nameIn = (on: Review, state: string) => on.states[state]?.name ?? "";
-
-  /**
-   * The component opened on the stage for `pick`: at the from state when
-   * the states file plays a move into it (the move then plays once as it
-   * arrives), else at the pick itself, at rest. Answers whether the move is
-   * still to play.
-   */
-  const openFor = async (
-    on: Review,
-    pick: Pick,
-    played: Move | null
-  ): Promise<boolean> => {
-    const opening: Pick = played ? { state: played.from, variant: null } : pick;
-    await stage?.reach(argsOf(opening));
-    onStage = {
-      key: keyOf(on, opening),
-      review: on.name,
-      state: opening.state,
-    };
-    return played !== null;
-  };
-
-  /**
-   * The stage brought to `pick` on `on` (Stage `reach`, the one way it
-   * moves): its args set on the live instance, or, when the states file
-   * plays the move into it from the state on stage, that play run on it.
-   * What the engine ran is the Animation face's, from the state that stood
-   * there; then its playhead rests at its start.
-   */
-  /** The pick the stage is on its way to (the last press), by key: a press is measured against it, not the state that last landed. */
-  let heading: string | null = null;
-  /** The move on the Animation face, as its states' ids (`from->to`); null with none. */
-  let movePair = $state<string | null>(null);
-  /**
-   * A move chosen by name (the Animation face's picker, an arrow on the
-   * map): the stage stood at its from state at once, its own motion landed
-   * where it stands, then brought to its to state, so the move read is that
-   * one, whatever state stood before. Only the last two states pressed
-   * gave a move, and a move no arrow names ("Delegate type refused → Every
-   * hour") could be all there was.
-   */
-  const chooseMove = async (from: string, to: string) => {
-    face = "move";
-    const on = review;
-    const at: Pick = { state: from, variant: null };
-    stop();
-    replays.release();
-    heading = keyOf(on, at);
-    await stage?.reach(argsOf(at), null, true);
-    onStage = { key: keyOf(on, at), review: on.name, state: from };
-    if (kept.state === to && kept.variant === null) {
-      arrive(on, kept);
-    } else {
-      keep(to, null);
-    }
-  };
-  /** Every move the states file names, for the Animation face's picker. */
-  const moveChoices = $derived(
-    review.moves
-      .filter((one) => one.from !== one.to)
-      .map((one) => ({
-        key: `${one.from}->${one.to}`,
-        from: one.from,
-        to: one.to,
-        name: words.move(nameIn(review, one.from), nameIn(review, one.to)),
-      }))
-  );
-  const arrive = async (on: Review, pick: Pick) => {
-    const key = keyOf(on, pick);
-    // Against where the stage is heading: measured against the state that
-    // last landed, a press back to it within the first press's flight
-    // (Filled in, then Hub didn't answer in 300 ms) was taken as already
-    // there, and the stage stayed on Filled in under Hub's name.
-    if ((heading ?? onStage?.key) === key) {
-      return;
-    }
-    heading = key;
-    stop();
-    replays.release();
-    run += 1;
-    const mine = run;
-    playhead = 0;
-    const to = nameIn(on, pick.state) || pick.state;
-    const into = pick.variant === null ? moveInto(on, pick.state) : null;
-    const played = into && on.states[pick.state]?.play ? into : null;
-    const none: MoveState = { kind: "none", state: to };
-    arriving = true;
-    try {
-      if (onStage?.review !== on.name && !(await openFor(on, pick, played))) {
-        move = mine === run ? none : move;
-        return;
+  // The view first, so the state reached on a new page is laid out at it.
+  $effect(() => {
+    const view = { scheme, width, motion: reduce ? "reduce" : "on" } as const;
+    const { loads } = link;
+    untrack(() => {
+      if (loads > 0) {
+        link.view(view);
       }
-      await pressOn(on, pick, played, mine);
-    } catch (error) {
-      // A play that threw left the instance part-way: no state is on stage.
-      onStage = { key: "", review: on.name, state: "" };
-      if (mine === run && move.kind === "reading") {
-        move = {
-          kind: "failed",
-          from: move.from,
-          to: move.to,
-          why: error instanceof Error ? error.message : String(error),
-        };
-      }
-    } finally {
-      if (mine === run) {
-        arriving = false;
-      }
-    }
-  };
-
-  /** The live instance moved to `pick` from the state on stage: by the played move when it starts there, else by its args; its clips read. */
-  const pressOn = async (
-    on: Review,
-    pick: Pick,
-    played: Move | null,
-    mine: number
-  ) => {
-    const to = nameIn(on, pick.state) || pick.state;
-    const none: MoveState = { kind: "none", state: to };
-    const from = nameIn(on, onStage?.state ?? "");
-    movePair = from ? `${onStage?.state}->${pick.state}` : null;
-    const play =
-      played && onStage?.state === played.from
-        ? (on.states[pick.state]?.play ?? null)
-        : null;
-    move = from ? { kind: "reading", from, to } : none;
-    await tick();
-    const clips = await stage?.reach(argsOf(pick), play, still);
-    if (!clips) {
-      return;
-    }
-    onStage = { key: keyOf(on, pick), review: on.name, state: pick.state };
-    if (mine !== run) {
-      return;
-    }
-    const tuned = movePair ? tunings.get(movePair) : undefined;
-    // What he tuned on this move before, put back on its fresh read.
-    const read = tuned ? withTuning(clips, tuningOf(tuned.clips)) : clips;
-    // What the press changed, brought into view where it stands out of
-    // it (bring-into-view moves nothing for a region already in view): on
-    // a phone, Next to Hub didn't answer changed a line 500px under the
-    // drawer's top. The stage's first arrival moves nothing.
-    if (from) {
-      requestAnimationFrame(() => stage?.reveal(regionOf(read)));
-    }
-    // The stage's scroll stays where it stands: on open, at the drawing's
-    // top, its head whole at every width (a reveal of the region the move
-    // changed, at the form's foot, scrolled its top out of view under
-    // 1200px); after that, where he left it.
-    holding = false;
-    beforeReset = null;
-    move = from ? { kind: "ready", from, to, clips: read } : none;
-    // The move played as the stage arrived: its playhead rests on its end.
-    playhead = from ? lengthOf(read) : 0;
-  };
-  // Each kept state is reached on the one live instance; a width or a
-  // scheme picked lays it out anew and moves nothing.
+    });
+  });
+  // Each kept state is reached on the one live instance: set in place from
+  // the state that stood, or mounted afresh on a new page. A width he picks
+  // that the state has a story for reaches that story. A state the states
+  // file plays a move into arrives by that move, played from its from state
+  // (the page docks the move's timeline over it).
   $effect(() => {
     const on = review;
     const pick = kept;
-    const drawn = stage;
+    const { loads } = link;
+    const to = on && pick ? refOf(on, pick, width) : null;
     untrack(() => {
-      if (drawn) {
-        arrive(on, pick);
+      if (!(on && pick && to) || loads === 0) {
+        return;
+      }
+      const fresh = loads !== loadSeen;
+      if (!fresh && JSON.stringify(to) === JSON.stringify(stood)) {
+        return;
+      }
+      loadSeen = loads;
+      const into = pick.variant === null ? on.states[pick.state] : undefined;
+      const played = into?.play && into.from ? into.from : null;
+      let from = fresh ? null : stood;
+      if (played) {
+        from = { file: on.file, story: played } satisfies StateRef;
+      }
+      pressed = !(fresh || played);
+      arriving = true;
+      asking = link.reach(to, from, { play: played !== null, still });
+      stood = to;
+    });
+  });
+  // The reach landed (or its mount threw): the stage is at rest; a press's
+  // change brought into view where it stands out of it (bring-into-view
+  // moves nothing for a region already in view): on a phone, a line 500px
+  // under the drawer's top.
+  $effect(() => {
+    const { reached, fault } = link;
+    untrack(() => {
+      if (fault || (reached && reached.ask === asking)) {
+        arriving = false;
+      }
+      if (reached?.ask === asking && !reached.superseded && pressed) {
+        pressed = false;
+        link.reveal();
       }
     });
   });
 
-  const play = () => {
-    const clips = clipsNow();
-    if (clips.length === 0) {
-      return;
-    }
-    stop();
-    // The move plays in sight: on a phone the thing it moves stood under
-    // the drawer, the stage scrolled to the form's head.
-    stage?.reveal(regionOf(clips));
-    const length = lengthOf(clips);
-    holding = false;
-    if (still) {
-      replays.seek(clips, length);
-      stage?.fadeIn();
-      playhead = length;
-      return;
-    }
-    const from = playhead >= length ? 0 : playhead;
-    replays.play(clips, from);
-    playing = true;
-    let t0 = performance.now() - from;
-    const step = () => {
-      playhead = Math.min(length, performance.now() - t0);
-      if (playhead >= length) {
-        // On repeat it goes round again from its start; else it rests on
-        // its end, over the stage as it stands, and Play goes round again
-        // from 0 (his pick, animation-face-questions#playhead-rest: "On
-        // the move's end").
-        if (repeat) {
-          replays.play(clips, 0);
-          t0 = performance.now();
-          playhead = 0;
-        } else {
-          playing = false;
-          playhead = length;
-          return;
-        }
-      }
-      clock = requestAnimationFrame(step);
-    };
-    clock = requestAnimationFrame(step);
-  };
-  /** Pause: the move held on the frame it stands at, the stage with it (stopping the clock alone let the stage run on to the end). */
-  const pause = () => {
-    stop();
-    holding = true;
-    replays.seek(clipsNow(), playhead);
-  };
-  /** The clips before Reset all, while nothing has changed since: Undo reset puts them back (the house answer, undo over confirm). */
-  let beforeReset = $state<Clip[] | null>(null);
-  const resetAll = (ids: string[]) => {
-    if (move.kind !== "ready") {
-      return;
-    }
-    const before = move.clips;
-    retime(move.clips.filter((clip) => ids.includes(clip.id)).map(untune));
-    beforeReset = before;
-  };
-  const undoReset = () => {
-    const before = beforeReset;
-    if (before) {
-      retime(before);
-    }
-  };
-  /** A scrub, during a play too: the move held on that frame where he lets go (T3). */
-  const scrub = (t: number) => {
-    stop();
-    holding = true;
-    playhead = t;
-    replays.seek(clipsNow(), t);
-  };
-  /** A scrub let go on the move's end lands on its to state: the replays let go, the stage the kept state as it stands. */
-  const scrubbed = (t: number) => {
-    if (t >= lengthOf(clipsNow())) {
-      replays.release();
-      holding = false;
-    }
-  };
-  /**
-   * A move whose play threw, played again (its Try again): the stage is
-   * left part-way by the throw, so its from state is reached anew and the
-   * move plays from there, as it played on arrival.
-   */
-  const retry = () => {
-    onStage = null;
-    heading = null;
-    arrive(review, kept);
-  };
-  /**
-   * Every move he tuned goes to the artifact as the component canvas's
-   * `tuned` record (stage-host canvas chrome.ts `openMove`), the tuned clips
-   * alone of every move, 300 ms after the last change, through the
-   * preview's bridge; `artifact_read` answers it. A reset clip leaves the
-   * record.
-   */
-  const SEND_AFTER_MS = 300;
-  let sending: ReturnType<typeof setTimeout> | undefined;
-  const sendTuned = () => {
-    clearTimeout(sending);
-    sending = setTimeout(() => {
-      bridge()
-        ?.set(
-          "tuned",
-          [...tunings.values()].flatMap((one) =>
-            tunedRecord(one.name, one.clips)
-          )
-        )
-        .catch(() => undefined);
-    }, SEND_AFTER_MS);
-  };
-  /**
-   * The clips he tuned put in the move. A press or a drag let go plays it
-   * at once from where the changed row now begins: he nudges a length or
-   * a curve "and feel[s] the difference before he writes a remark" (spec.md
-   * §2); what ran before it stands at its end. A key's nudge plays nothing
-   * (T9: "stillness after a keyboard nudge"; DESIGN.md, The Frequency
-   * Rule): a held frame is drawn again on the new timing, the rest stays.
-   */
-  const retime = (changed: readonly Clip[], replay = true) => {
-    if (move.kind !== "ready" || changed.length === 0) {
-      return;
-    }
-    const by = new Map(changed.map((clip) => [clip.id, clip]));
-    beforeReset = null;
-    move = {
-      ...move,
-      clips: move.clips.map((clip) => by.get(clip.id) ?? clip),
-    };
-    version = "yours";
-    if (movePair) {
-      tunings.set(movePair, {
-        name: words.move(move.from, move.to),
-        clips: move.clips,
-      });
-    }
-    sendTuned();
-    if (!replay) {
-      if (holding) {
-        replays.seek(clipsNow(), playhead);
-      }
-      return;
-    }
-    playhead = Math.min(...changed.map((clip) => clip.start + clip.delay));
-    play();
-  };
-  /** One version or the other on the face: Play plays it, from its start. */
-  const showVersion = (next: "yours" | "written") => {
-    version = next;
-    stop();
-    playhead = 0;
-    play();
-  };
-
-  // --- Keys ---------------------------------------------------------------------
-
-  /**
-   * Only the person's own press or key closes what he opened. A move's
-   * play presses inside the stage with events of its own making
-   * (core stage-play.ts `userEventIn`: a `pointerdown` that bubbles to the
-   * document, a focus, keys), and the view card's layer read that
-   * `pointerdown` as a press outside it and closed: picking a width draws
-   * the state's story at that width, whose move plays as it arrives.
-   */
-  const personsOwn = (event: Event) => {
-    if (!event.isTrusted) {
-      event.preventDefault();
-    }
-  };
-  /**
-   * Escape closes the card unless the stage is acting a move: bits-ui hands
-   * its layer a copy of the key (use-escape-layer `new KeyboardEvent(e.type,
-   * e)`), never trusted, so the trust test kept the card open on his own
-   * Escape; a play's keys land only while it arrives.
-   */
-  const personsEscape = (event: KeyboardEvent) => {
-    if (arriving) {
-      event.preventDefault();
-    }
-  };
+  // --- Keys and presses ------------------------------------------------------
 
   onMount(() => {
     const key = (event: KeyboardEvent) => {
@@ -718,15 +333,19 @@
     return () => {
       window.removeEventListener("resize", resized);
       window.removeEventListener("keydown", key);
-      stop();
-      replays.release();
     };
   });
 
   /** The journey's one order: the component's path, as the list shows it. */
-  const path = $derived(pathOf(review));
-  const at = $derived(path.indexOf(kept.state));
-  const single = $derived(review.order.length === 1);
+  const path = $derived(review ? pathOf(review) : []);
+  const at = $derived(kept ? path.indexOf(kept.state) : -1);
+  const single = $derived((review?.order.length ?? 0) <= 1);
+  const keptState = $derived(
+    review && kept ? review.states[kept.state] : undefined
+  );
+  const keptVariant = $derived(
+    keptState?.variants.find((one) => one.id === kept?.variant)
+  );
   /** The widths the stage is drawn at, each a device's glyph; its own first. */
   const WIDTHS = [
     { value: 390, icon: IconPhone, name: words.phone },
@@ -734,18 +353,19 @@
     { value: 1440, icon: IconMonitor, name: words.desk },
   ] as const;
   const DESK_FORM = 1280;
-  const ownWidth = $derived(drawOf(kept, null).width ?? DESK_FORM);
+  const ownWidth = $derived(
+    keptVariant?.width ?? keptState?.width ?? DESK_FORM
+  );
   /**
-   * The stage's share of a wide surface: the widest of the component's own
-   * widths, so it holds still from state to state. Taken from the kept
-   * state's own width, a press on a state written at 680 after one at
-   * 1440 narrowed the stage and widened the room beside it, and the list's
-   * rows wrapped anew.
+   * The stage's share of a wide surface before the page has laid the
+   * drawing out: the widest of the component's own widths, so it holds
+   * still from state to state.
    */
   const stageWidth = $derived(
     Math.max(
       0,
-      ...review.order.map((id) => review.states[id]?.width ?? DESK_FORM)
+      ...(review?.order.map((id) => review.states[id]?.width ?? DESK_FORM) ??
+        [])
     ) || DESK_FORM
   );
   /** The head's glass, which the view's card hangs from, and whether it hangs. */
@@ -758,6 +378,19 @@
    * panels until a reload.
    */
   let viewOpen = $state(false);
+  /** The components' menu is open. */
+  let menuOpen = $state(false);
+  // A press on the stage lands in its frame and never reaches this page:
+  // the page says it (`cawco:press`), and what is open here closes, as a
+  // press outside it does.
+  $effect(() => {
+    if (link.presses > 0) {
+      untrack(() => {
+        viewOpen = false;
+        menuOpen = false;
+      });
+    }
+  });
   /** The card just closed, its control holding the focus it handed back: no tooltip until the focus or the pointer leaves. */
   let viewQuiet = $state(false);
   let viewWasOpen = false;
@@ -768,13 +401,6 @@
     }
     viewWasOpen = open;
   });
-  /**
-   * The drawer's stops, as vaul takes them: shares of the window's height
-   * for a sheet as tall as its cap (`--c-sheet-max-h`, a share of the
-   * window), so a stop showing `px` of it is that share less what the cap
-   * leaves above the sheet. Its head (the faces and the steps), half, and
-   * whole.
-   */
   /** What takes the focus when pressed: a control or a field. */
   const FOCUSABLE =
     "button, input, select, textarea, a[href], [contenteditable='true'], [tabindex]:not([tabindex='-1'])";
@@ -799,6 +425,12 @@
   let windowHeight = $state(
     typeof window === "undefined" ? 844 : window.innerHeight
   );
+  /**
+   * The drawer's stops, as vaul takes them: shares of the window's height
+   * for a sheet as tall as its cap (`--c-sheet-max-h`, a share of the
+   * window), so a stop showing `px` of it is that share less what the cap
+   * leaves above the sheet. Its head (the steps), half, and whole.
+   */
   const capShare = $derived(
     Number.parseFloat(rootValue("--c-sheet-max-h")) / 100 || 1
   );
@@ -809,24 +441,14 @@
   );
   const SNAPS = $derived([head, shareOf(windowHeight / 2), 1]);
   let snap = $state<number | string | null>(null);
-  /** The drawer stands at its head stop: the faces and the steps, no face's body. */
+  /** The drawer stands at its head stop: the steps, no list. */
   const atHead = $derived(snap === null || snap === head);
   $effect(() => {
     if (snap === null) {
       snap = head;
-      // A taller stop once the sheet stands at its head: vaul places a
-      // sheet's first stop itself as it opens, and a stop asked for before
-      // its node is drawn moves nothing (use-snap-points.svelte.js
-      // `snapToPoint` sets the style of a node not there yet).
-      const taller = SNAPS[["head", "half", "whole"].indexOf(opensAt)];
-      if (taller !== undefined && taller !== head) {
-        setTimeout(() => {
-          snap = taller;
-        });
-      }
     }
   });
-  /** How much of the window the drawer stands over at a stop (a share as vaul takes it), px: the stage's scroller ends at its top. */
+  /** How much of the window the drawer stands over at a stop (a share as vaul takes it), px: the stage ends at its top. */
   const coverOf = (share: number) =>
     Math.max(0, (share - (1 - capShare)) * windowHeight);
   const cover = $derived(
@@ -839,11 +461,10 @@
   };
   /** The drawer's stop the stage was last brought to; null until the drawer stands at its first. */
   let stopShown: number | string | null = null;
-  // At each stop he moves the drawer to, the region he is judging stays in
-  // view above it: the first difference while comparing, else what the
-  // move changed. The stop the drawer opens at moves nothing (the stage
-  // opens at its drawing's top), and nor does a press, a retime or a play:
-  // only the stop changing does.
+  // At each stop he moves the drawer to, what the last press changed stays
+  // in view above it. The stop the drawer opens at moves nothing (the stage
+  // opens at its drawing's top), and nor does a press: only the stop
+  // changing does.
   $effect(() => {
     const standing = snap;
     if (desk || standing === null) {
@@ -857,8 +478,7 @@
         return;
       }
       stopShown = standing;
-      const clips = clipsNow();
-      requestAnimationFrame(() => stage?.reveal(regionOf(clips)));
+      requestAnimationFrame(() => link.reveal());
     });
   });
 
@@ -931,12 +551,11 @@
   );
   /**
    * The room's share: the width he dragged it to, else what the stage
-   * leaves once it holds its drawing (Stage `need`: a form held to its
-   * measure asks for that and no more, so the room, and the map and the
-   * timeline in it, take the rest), each held between the least widths.
-   * paneforge lays the split out again from it whenever a least width
-   * changes with the split's width; the dragged width is read untracked, so
-   * a drag never lays it out anew.
+   * leaves once it holds its drawing (a form held to its measure asks for
+   * that and no more, so the room takes the rest), each held between the
+   * least widths. paneforge lays the split out again from it whenever a
+   * least width changes with the split's width; the dragged width is read
+   * untracked, so a drag never lays it out anew.
    */
   const roomShare: number = $derived(
     Math.min(
@@ -959,8 +578,7 @@
   // The room takes its share whenever the share changes (the stage's
   // drawing measured, the surface resized), until he has moved the edge
   // himself: paneforge takes `defaultSize` once, as the split first lays
-  // out, so the stage stood at the width it had before its drawing was
-  // measured, with paper beside a form held to its measure.
+  // out.
   $effect(() => {
     const share = roomShare;
     const pane = roomPane;
@@ -971,103 +589,40 @@
 </script>
 
 {#snippet statesFace(stepperHere: boolean)}
-  {#if single}
-    <p class="m-0 max-w-c-measure type-body text-ink-muted text-pretty">
-      {words.oneState}
-    </p>
-  {:else if face === "whole"}
-    <WholeSet
-      against={comparing ? against : null}
-      kept={kept.state}
-      onmove={chooseMove}
-      onpress={press}
-      narrow={surface > 0 && surface < PHONE_LINE}
-      {review}
-    />
-  {:else}
-    <Journey
-      against={comparing ? against : null}
-      kept={kept.state}
-      keptVariant={kept.variant}
-      {lang}
-      onpress={press}
-      onstep={(next) => keep(next, null)}
-      {review}
-      stepper={stepperHere}
-    />
+  {#if review && kept}
+    {#if single}
+      <p class="m-0 max-w-c-measure type-body text-ink-muted text-pretty">
+        {words.oneState}
+      </p>
+    {:else}
+      <Journey
+        against={null}
+        kept={kept.state}
+        keptVariant={kept.variant}
+        {lang}
+        onpress={keep}
+        onstep={(next) => keep(next, null)}
+        {review}
+        stepper={stepperHere}
+      />
+    {/if}
   {/if}
 {/snippet}
 
-{#snippet moveFace(peek = false)}
-  <MoveFace
-    choices={moveChoices}
-    chosen={movePair}
-    {move}
-    onchoose={chooseMove}
-    onfocusthing={(thing) => {
-      if (thing) {
-        stage?.reveal([thing]);
-      }
-    }}
-    onlight={(thing) => {
-      lit = thing;
-    }}
-    onpause={pause}
-    onplay={play}
-    onrepeat={(next) => {
-      repeat = next;
-    }}
-    onreset={(ids) => {
-      const all =
-        move.kind === "ready" &&
-        move.clips
-          .filter((clip) => clip.was)
-          .every((clip) => ids.includes(clip.id));
-      if (all) {
-        resetAll(ids);
-      } else {
-        retime(
-          (move.kind === "ready" ? move.clips : [])
-            .filter((clip) => ids.includes(clip.id))
-            .map(untune)
-        );
-      }
-    }}
-    onundo={undoReset}
-    undoable={beforeReset !== null}
-    {still}
-    onretime={retime}
-    onretry={retry}
-    onseek={scrub}
-    onseekend={scrubbed}
-    onversion={showVersion}
-    {lang}
-    {peek}
-    {playhead}
-    {playing}
-    {repeat}
-    {version}
-  />
-{/snippet}
-
-{#snippet faces()}
-  <Tabs
-    class="min-w-0 flex-1"
-    onValueChange={(next) => {
-      face = next === "whole" || next === "move" ? next : "states";
-      lit = null;
-    }}
-    size="compact"
-    value={face}
+{#snippet faceName()}
+  <!-- The room's one face: its Solar duotone glyph before its name. -->
+  <h2
+    class="mark-line m-0 flex min-w-0 flex-1 items-center gap-space-2 type-label text-ink-strong"
   >
-    <TabsList aria-label={words.faces}>
-      <!-- Each face its Solar duotone glyph before its name, at the
-           tabs' own icon size and ink (fluid-tabs TabItem `icon`). -->
-      <TabItem icon={IconListRows} label={words.statesFace} value="states" />
-      <TabItem icon={IconStructure} label={words.wholeSet} value="whole" />
-      <TabItem icon={IconPlay} label={words.moveFace} value="move" />
-    </TabsList>
-  </Tabs>
+    <IconListRows
+      aria-hidden="true"
+      class="size-icon-md flex-none text-ink-muted"
+      data-box
+    />
+    <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+      >{words.statesFace}</span
+    >
+  </h2>
 {/snippet}
 
 {#snippet stepper()}
@@ -1111,8 +666,8 @@
       class="flex h-c-top-bar-h min-w-0 flex-none items-center gap-space-3 px-space-6 max-desk:px-space-5"
     >
       <div class="flex min-w-0 flex-1 items-center">
-        {#if reviews.length > 1}
-          <DropdownMenu.Root>
+        {#if reviews.length > 1 && review}
+          <DropdownMenu.Root bind:open={menuOpen}>
             <DropdownMenu.Trigger>
               {#snippet child({ props })}
                 <button
@@ -1145,13 +700,10 @@
                   () => String(front),
                   (next: string) => {
                     front = Number(next);
-                    against = null;
-                    comparing = false;
-                    lit = null;
                   }
                 }
               >
-                {#each reviews as one, index (one.name)}
+                {#each reviews as one, index (one.file)}
                   <DropdownMenu.RadioItem value={String(index)}>
                     <span
                       class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap"
@@ -1162,7 +714,7 @@
               </DropdownMenu.RadioGroup>
             </DropdownMenu.Content>
           </DropdownMenu.Root>
-        {:else}
+        {:else if review}
           <h1 class="m-0 min-w-0 truncate type-label text-ink-strong">
             {review.name}
           </h1>
@@ -1175,33 +727,14 @@
           glass = node.querySelector<HTMLElement>('[data-slot="tools"]');
         }}
       >
-        <!-- Compare and the view; Show states only while the room is put
-             away. The room's one close is its own. -->
+        <!-- The view; Show states only while the room is put away. The
+             room's one close is its own. -->
         <BarGlass form="group" joined={viewJoined}>
-          {#if !single}
-            <Tip label={words.compare}>
-              {#snippet children(tip)}
-                <button
-                  data-bar-item
-                  {...mergeProps(tip, {
-                    onclick: () => setComparing(!comparing),
-                  })}
-                  aria-label={words.compare}
-                  aria-pressed={comparing}
-                  class="select-none touch-hit press-tint aria-pressed:bg-selected-bg aria-pressed:text-selected-ink"
-                  type="button"
-                >
-                  <IconCompare data-slot="bar-symbol" aria-hidden="true" />
-                </button>
-              {/snippet}
-            </Tip>
-          {/if}
           <Popover.Root bind:open={viewOpen}>
             <!-- No tooltip over its own open card: shown, it took the
                  card's Escape for itself. Nor as the card hands the focus
-                 back on its close: it stood over the stage's edge until
-                 the focus left (390, Escape); it shows again once the
-                 focus or the pointer leaves the control. -->
+                 back on its close; it shows again once the focus or the
+                 pointer leaves the control. -->
             <Tip disabled={viewOpen || viewQuiet} label={words.stageView}>
               {#snippet children(tip)}
                 <Popover.Trigger>
@@ -1237,8 +770,6 @@
               customAnchor={glass}
               onCloseAutoFocus={(event: Event) =>
                 quietFocus(event, viewTrigger)}
-              onEscapeKeydown={personsEscape}
-              onInteractOutside={personsOwn}
               onOpenAutoFocus={(event: Event) => quietFocus(event, viewTrigger)}
               frame="settings"
               side="bottom"
@@ -1339,9 +870,9 @@
       </div>
     </header>
 
-    <!-- The page: the stage, and on a desk the room beside or under it. On
-         a phone its foot stands at the drawer's top at each stop, so the
-         stage's scroller ends where the drawer begins. -->
+    <!-- The page: the stage, and on a desk the room beside it. On a phone
+         its foot stands at the drawer's top at each stop, so the stage
+         ends where the drawer begins. -->
     <div
       data-slot="graph-page"
       class={[
@@ -1358,24 +889,10 @@
           Number.parseFloat(style.paddingInlineEnd);
       })}
     >
-      {#snippet stagePane()}
-        <Stage
-          bind:this={stage}
-          bind:need={stageNeed}
-          against={againstShown}
-          {lang}
-          {lit}
-          at={playhead}
-          {review}
-          {scheme}
-          {shown}
-          {stale}
-          {width}
-        />
-      {/snippet}
       <!-- The stage, and on a desk the room beside it: one resizable split.
            The stage's pane stays while the room comes and goes, so the
-           component on it stays the one live instance. -->
+           frame in it, and the component on its page, stay the one live
+           instance. -->
       <Resizable.PaneGroup
         class="min-w-0 flex-1"
         direction="horizontal"
@@ -1388,13 +905,22 @@
           minSize={beside ? stageLeast : 100}
           order={1}
         >
+          <!-- The panes clip: the panels inside stand a border's width in
+               from each clipped edge, so their ring draws whole. -->
           <div
             class={[
-              "flex min-h-0 min-w-0 flex-1 flex-col",
-              beside && "pe-space-2",
+              "flex min-h-0 min-w-0 flex-1 flex-col py-(--border-width) ps-(--border-width)",
+              beside ? "pe-space-2" : "pe-(--border-width)",
             ]}
           >
-            {@render stagePane()}
+            <StagePane
+              bind:need={stageNeed}
+              {frame}
+              laid={link.laid}
+              name={keptState?.name ?? ""}
+              {stale}
+              variant={keptVariant?.name ?? null}
+            />
           </div>
         </Resizable.Pane>
         {#if beside}
@@ -1421,29 +947,27 @@
               }
             }}
           >
-            <!-- The room: one surface, three faces, closed by its Close or
-                 Esc. It comes in from its edge and goes back there, as the
-                 app's panels do (the sheet recipe's motion, `sheetSlide`:
-                 the inspector's): from the trailing edge beside the stage. -->
+            <!-- The room: one surface, closed by its Close or Esc. It
+                 comes in from its edge and goes back there, as the app's
+                 panels do (the sheet recipe's motion, `sheetSlide`). -->
             <aside
               data-slot="graph-room"
               aria-label={words.room}
               in:sheetSlide|global={{ axis: "X", leaving: false }}
               out:sheetSlide|global={{ axis: "X", leaving: true }}
-              class="relative ms-space-2 flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile"
+              class="relative my-(--border-width) ms-space-2 me-(--border-width) flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile"
             >
-              <!-- Its head on the stage's head line: the faces, its Close. -->
+              <!-- Its head on the stage's head line: its face, its Close. -->
               <div
                 class="flex min-h-c-top-bar-h min-w-0 flex-none items-center gap-space-2 border-b border-border-hairline ps-space-4 pe-space-2"
               >
-                {@render faces()}
+                {@render faceName()}
                 <Tip label={words.closeRoom}>
                   {#snippet children(tip)}
                     <button
                       {...mergeProps(tip, {
                         onclick: () => {
                           roomOpen = false;
-                          lit = null;
                         },
                       })}
                       type="button"
@@ -1455,17 +979,8 @@
                   {/snippet}
                 </Tip>
               </div>
-              <div
-                class={[
-                  "flex min-h-0 min-w-0 flex-1 flex-col",
-                  face === "whole" && !single ? "" : "p-space-4",
-                ]}
-              >
-                {#if face === "move"}
-                  {@render moveFace()}
-                {:else}
-                  {@render statesFace(true)}
-                {/if}
+              <div class="flex min-h-0 min-w-0 flex-1 flex-col p-space-4">
+                {@render statesFace(true)}
               </div>
             </aside>
           </Resizable.Pane>
@@ -1474,12 +989,12 @@
     </div>
 
     {#if !desk}
-      <!-- Under the desk line: the room is the kit's bottom drawer, its stops
-         head (the faces and the steps), half and whole; the page above it
-         stays live and ends at its top. Its grabber steps between the
-         stops; its Close is its own, 44px to a finger. Drawn in place, the
-         surface its containing block (`contain: layout`), so it stands on
-         the surface's foot wherever the surface stands. -->
+      <!-- Under the beside line: the room is the kit's bottom drawer, its
+         stops head (the steps), half and whole; the page above it stays
+         live and ends at its top. Its grabber steps between the stops; its
+         Close is its own, 44px to a finger. Drawn in place, the surface its
+         containing block (`contain: layout`), so it stands on the
+         surface's foot wherever the surface stands. -->
       <Drawer.Root
         bind:activeSnapPoint={snap}
         bind:open={roomOpen}
@@ -1505,21 +1020,18 @@
             * 100dvh)"
           >
             <div class="flex min-w-0 items-center gap-space-2">
-              {@render faces()}
+              {@render faceName()}
               <!-- The drawer's one Close, the ghost the kit's sheet heads
                    draw. It puts the room away itself: vaul's Close asks
                    the dialog to close, and a root that is not
-                   `dismissible` refuses every such ask
-                   (use-drawer-root.svelte.js `onDialogOpenChange`: "if
-                   (!opts.dismissible.current && !o) return;"); the drawer
-                   is not dismissible so that a drag past its head stop
-                   never closes it. -->
+                   `dismissible` refuses every such ask; the drawer is not
+                   dismissible so that a drag past its head stop never
+                   closes it. -->
               <Button
                 aria-label={words.closeRoom}
                 icon={IconClose}
                 onclick={() => {
                   roomOpen = false;
-                  lit = null;
                 }}
                 press="pressable"
                 size="icon-sm"
@@ -1527,19 +1039,13 @@
                 variant="ghost"
               />
             </div>
-            <!-- At the head stop the drawer holds its head alone, the faces
-                 and the steps: a face's body drawn into its sliver ran the
-                 map at a fit of 1.8px words with its tools cut, and the
-                 animation's lines past the screen's foot. -->
-            {#if face === "move"}
-              {@render moveFace(atHead)}
-            {:else}
-              {#if !single && face === "states"}
-                {@render stepper()}
-              {/if}
-              {#if single || !atHead}
-                {@render statesFace(false)}
-              {/if}
+            <!-- At the head stop the drawer holds its head alone, the steps:
+                 the list drawn into its sliver ran past the screen's foot. -->
+            {#if !single}
+              {@render stepper()}
+            {/if}
+            {#if single || !atHead}
+              {@render statesFace(false)}
             {/if}
           </div>
         </Drawer.Content>

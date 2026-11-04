@@ -34,19 +34,6 @@ import {
 import { until } from "../scratch-fleet";
 import { ROOT, type Theme } from "./kit";
 
-declare global {
-  interface Window {
-    /** The component canvas's state (agent stage-host canvas/runtime.ts `CanvasState`), what these specs read. */
-    __cawcoCanvas?: {
-      frames: () => { interaction: string; key: string; story: string }[];
-      go: (key: string) => void;
-      loaded: () => string[];
-      swept: boolean;
-      world: () => { x: number; y: number; z: number };
-    };
-  }
-}
-
 /** The dashboard, whose states files the stage draws. */
 export const APP = join(ROOT, "apps/dashboard");
 export const STAGE_START_MS = 240_000;

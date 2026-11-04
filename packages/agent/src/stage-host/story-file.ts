@@ -841,10 +841,20 @@ export function readStoryFile(file: string, text: string): StaticSheet {
   const title = literal(
     child(propertyOf(meta, "title") ?? { type: "" }, "value")
   )?.value;
-  /** A story's canvas fields: its label (doc comment), form, and flow move. */
+  /** A story's canvas fields: its label (doc comment), form, flow move, the name it is shown by, its record sets' list and its tags. */
   const canvasOf = (
     one: Export
-  ): Pick<Story, "form" | "formUnread" | "from" | "label" | "play"> => {
+  ): Pick<
+    Story,
+    | "display"
+    | "form"
+    | "formUnread"
+    | "from"
+    | "label"
+    | "play"
+    | "records"
+    | "tags"
+  > => {
     const later = assigned.get(one.name);
     const from = literal(
       later?.get("from") ??
@@ -862,6 +872,7 @@ export function readStoryFile(file: string, text: string): StaticSheet {
           : null,
       from: typeof from === "string" ? from : null,
       play: Boolean(propertyOf(one.object, "play") || later?.has("play")),
+      ...shownBy(reading, one),
     };
   };
   return {
@@ -887,6 +898,47 @@ export function readStoryFile(file: string, text: string): StaticSheet {
       ...storyRead(reading, one),
       ...canvasOf(one),
     })),
+  };
+}
+
+/**
+ * The value `key` ends up with in the object `at` builds (its spreads,
+ * names and local helpers followed), as a literal the file writes;
+ * undefined when it writes none, or the reader can't follow it.
+ */
+function valueAt(reading: Reading, at: Bound | null, key: string): unknown {
+  if (!at) {
+    return;
+  }
+  const flat = flatten(reading, at);
+  const entry =
+    "why" in flat ? undefined : flat.entries.findLast((one) => one.key === key);
+  if (!entry) {
+    return;
+  }
+  const read = constOf(reading, { node: entry.value, env: entry.env });
+  return "why" in read ? undefined : read.value;
+}
+
+/**
+ * What the design graph reads of a story besides its frame: the name it is
+ * shown by (CSF `name`), the list arg its record sets are cut from
+ * (`parameters.records`) and its CSF `tags`.
+ */
+function shownBy(
+  reading: Reading,
+  story: Export
+): Pick<Story, "display" | "records" | "tags"> {
+  const own = story.init ? { node: story.init, env: NO_ENV } : null;
+  const display = valueAt(reading, own, "name");
+  const records = valueAt(reading, parametersOf(reading, story), "records");
+  const tags = valueAt(reading, own, "tags");
+  return {
+    display: typeof display === "string" ? display : null,
+    records: typeof records === "string" ? records : null,
+    tags: Array.isArray(tags)
+      ? tags.filter((one): one is string => typeof one === "string")
+      : [],
   };
 }
 

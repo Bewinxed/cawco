@@ -1,12 +1,18 @@
 /**
- * The component canvas (component canvas §2–3): the page a stage serves at
- * `CANVAS_PATH`, in the project's own page and CSS. Every story of each
- * states file is mounted live as a frame, in every interaction state the
- * CSS reaches (pseudo.ts), at the canvas's schemes and widths; frames stand
- * in sections, a section per states file loaded only when it comes into
- * view; the world pans and zooms by one transform. After each draw the page
- * measures every frame and posts a render report to the stage, the one
- * source every tool answers from.
+ * The component canvas page (component canvas §2–3): the page a stage serves
+ * at `CANVAS_PATH`, in the project's own page and CSS. What every page of it
+ * shares lives here: each states file's section and its module (loaded,
+ * failed, loaded again as it is edited), the CSS rewritten so a forced
+ * interaction and a frame's width reach the project's rules, the rig off
+ * screen where each story's states are probed and its moves played, the
+ * render report posted to the stage (the one source every tool answers
+ * from) and the sheet told to the pane's inspector.
+ *
+ * What a page draws is its mode's. A person's panel and the stage's own
+ * render (`by=panel`, the default, and `by=stage`) draw the stage (stage.ts):
+ * the one live instance of the state the panel keeps, the design graph's
+ * stage. A decision page's Preview and the panel map's live card
+ * (`by=embed`, `by=map`) draw the frames grid (frames.ts).
  *
  * The stage's entry module hands {@link boot} the framework's adapter
  * (`mountStory`, answering `unmount` and `update`) and how to load each
@@ -14,27 +20,20 @@
  * section, `spec` (core `CanvasSpec`), and `scheme`, `width`, `motion`,
  * `all` and `by`; and from the plan the stage writes into the page (core
  * `SectionPlan`): each section's name and its stories, so a section names
- * itself and stands its frames in their places before its module loads.
+ * itself before its module loads.
  */
 
 import { readWithin } from "@cawco/core/bounded";
 import {
   type AnimationRead,
   awaySaid,
-  CANVAS_EMBED_FAILED,
-  CANVAS_EMBED_FETCHED,
-  CANVAS_EMBED_SEEN,
-  CANVAS_EMBED_SIZE,
-  CANVAS_GRAPH_FETCHED,
   CANVAS_PLAN_ID,
-  type CanvasGraph,
   type CanvasSpec,
   canvasSpecOf,
   FORMS,
   type FormName,
   type FramePictureRead,
   type FrameRender,
-  INTERACTIONS,
   type Interaction,
   type MoveRender,
   type PageError,
@@ -51,7 +50,6 @@ import {
   type StageErrorKind,
   type Story,
   type SweepAt,
-  type SweepStep,
   screenHeight,
   sectionName,
   sectionPlansOf,
@@ -59,16 +57,14 @@ import {
 import { queriesIn, userEventIn } from "@cawco/core/stage-play";
 import { shellWords } from "@cawco/core/words/shell";
 import { Chrome } from "./chrome";
+import { bootFrames } from "./frames";
 import {
   deltaOf,
-  drew,
   firedBetween,
-  firstWords,
   fromRoot,
   type Motion,
   motionOf,
   pageError,
-  partsOf,
   readAnimation,
   snapshot,
   valuesOf,
@@ -82,7 +78,7 @@ import {
   rewriteSheet,
 } from "./pseudo";
 import { onPageScheme, pageScheme } from "./scheme";
-import { frameAsViewport, windowHeight, windowWidth } from "./viewport";
+import { bootStage } from "./stage";
 import {
   frameWidths,
   SCREEN_VH,
@@ -134,14 +130,17 @@ interface ViteError {
  * stage couldn't compile a module it imports (`compile`, with Vite's code
  * frame when it sent one), or its code threw in the page (`page`).
  */
-interface SectionFailure {
+export interface SectionFailure {
   error: PageError;
   frame: string | null;
   kind: StageErrorKind;
 }
 
 /** Each failure's line, the error formula's what happened and what it means: the stage's words stand under Show details. */
-const FAILED_LINE: Record<SectionFailure["kind"], (name: string) => string> = {
+export const FAILED_LINE: Record<
+  SectionFailure["kind"],
+  (name: string) => string
+> = {
   missing: (name) =>
     `${name}'s states file isn't there yet, so none of its stories are drawn.`,
   compile: (name) =>
@@ -149,8 +148,21 @@ const FAILED_LINE: Record<SectionFailure["kind"], (name: string) => string> = {
   page: (name) => `${name} didn't load, so none of its stories are drawn.`,
 };
 
-/** The most of a story's error an embed's failure carries (`CANVAS_EMBED_FAILED`): its Preview says it on one line. Our call. */
-const EMBED_WHY_MAX = 200;
+/** The house's disclosure (dashboard RowFault) over `text`: Show details, its words saying what a press does. */
+export function detailsOf(text: string): HTMLDetailsElement {
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = shellWords.showDetails;
+  details.addEventListener("toggle", () => {
+    summary.textContent = details.open
+      ? shellWords.hideDetails
+      : shellWords.showDetails;
+  });
+  const words = document.createElement("pre");
+  words.textContent = text;
+  details.append(summary, words);
+  return details;
+}
 
 /** How long a section's failed import waits for the stage's words. Our call: Vite sends them before it answers the request. */
 const STAGE_SAYS_MS = 1000;
@@ -159,7 +171,6 @@ export interface BootOptions {
   adapter: Adapter;
   /** The house faces' `@font-face` rules (Figtree, JetBrains Mono), their files served beside the canvas. */
   faces: string;
-  /** How to load each section's module, by its states file. */
   /** A section's module; `fresh`, past whatever the browser kept of an import of it that failed. */
   load: (file: string, fresh?: boolean) => Promise<SectionModule>;
   /** The toolchain root, absolute: dev paths are made relative to it. */
@@ -168,20 +179,20 @@ export interface BootOptions {
   tokens: string;
 }
 
-/** The pseudo-classes each forced interaction puts on a frame. */
-const FORCED: Record<Exclude<Interaction, "rest">, PseudoState[]> = {
+/** The pseudo-classes each forced interaction puts on a body. */
+export const FORCED: Record<Exclude<Interaction, "rest">, PseudoState[]> = {
   hover: ["hover"],
   focus: ["focus", "focus-visible", "focus-within"],
   pressed: ["active", "hover"],
 };
-/** The pseudo-class whose rules decide whether an interaction has a column. */
+/** The pseudo-class whose rules decide whether an interaction is reached. */
 const DECIDES: Record<Exclude<Interaction, "rest">, PseudoState[]> = {
   hover: ["hover"],
   focus: ["focus", "focus-visible", "focus-within"],
   pressed: ["active"],
 };
 /** The class a probe's body carries while its values are read: nothing in it moves (chrome.ts PAGE_CSS). */
-const HELD = "cawco-held";
+export const HELD = "cawco-held";
 const FOCUSABLE =
   'a[href],button,input,select,textarea,summary,[tabindex],[contenteditable="true"]';
 
@@ -189,44 +200,26 @@ const FOCUSABLE =
 const PLAY_LIMIT_MS = 6000;
 /** How long a move's animations are waited on after its play ends. Ours. */
 const SETTLE_LIMIT_MS = 3000;
-/** How far past the view a section loads, and past which a loaded one is taken down (viewports). Ours. */
-const LOAD_MARGIN = 1;
-const UNMOUNT_MARGIN = 3;
-/** How many sections a stage's render keeps mounted as it sweeps. Ours: a whole canvas's picture holds a few. */
-const SWEEP_KEPT = 3;
 /** The quiet after the last change before a report is posted. Ours. */
 const REPORT_QUIET_MS = 200;
 
 export type WidthSlot = number | "own";
 
 export interface View {
-  /** Every scheme and every preset width, as more columns. */
+  /** Every scheme and every preset width, as more columns (the frames grid's). */
   all: boolean;
   motion: "on" | "reduce";
-  /** `page`: the frames take the page's own scheme. */
+  /** `page`: drawn in the page's own scheme. */
   scheme: Scheme | "both" | "page";
   /** Null: each story at its own form (or its content's width). */
   widths: number[] | null;
 }
 
+/** Where a story is drawn: its forced interaction, its scheme and its width. */
 export interface Column {
   interaction: Interaction;
   scheme: Scheme | "page";
   width: WidthSlot;
-}
-
-export interface Frame {
-  body: HTMLElement;
-  column: Column;
-  el: HTMLElement;
-  error?: PageError;
-  key: string;
-  label: HTMLElement;
-  /** Whether its story stands mounted in its body ({@link Frame.mounted} stays unset where it threw): see `liveNow`. */
-  live?: boolean;
-  mounted?: Mounted;
-  section: Section;
-  story: Story;
 }
 
 /** A story's interaction reading, from its off-screen probe. */
@@ -246,14 +239,11 @@ interface RigProbe {
   story: Story;
 }
 
+/** One states file's section of the page, whatever the page draws of it. */
 export interface Section {
-  el: HTMLElement;
-  /** Why its module didn't load, which it says where its frames would stand; null while it hasn't failed. */
+  /** Why its module didn't load; null while it hasn't failed. */
   failure: SectionFailure | null;
   file: string;
-  frames: Map<string, Frame>;
-  grid: HTMLElement;
-  head: HTMLElement;
   /** The interactions each story reaches, by story. */
   interactions: Map<string, Interaction[]>;
   loaded: boolean;
@@ -263,16 +253,15 @@ export interface Section {
   /** Its name in plain words: its states file's title, else its component's, else its file's. */
   name: string;
   probes: Map<string, Probe>;
-  /** Its columns, probes and moves read since it was last shown ({@link settle}): one pass, which a stage's sweep waits on. */
+  /** Its interactions, probes and moves read since it was last shown: one pass at a time in the rig. */
   settling?: Promise<void>;
-  /** What stands for its frames until they draw: the line saying what it waits for and each story's frame on its way, or why it didn't load. */
-  standIns: HTMLElement[];
 }
+
+/** Which page this is: a person's panel or the stage's render (the stage), a decision page's Preview or the map's live card (the frames grid). */
+export type PageBy = "panel" | "stage" | "embed" | "map";
 
 /** A section module's address as an HMR update names it: `/@id/__x00__cawco:sheet/<the states file, encoded>.js`. */
 const SECTION_PATH = /cawco:sheet\/([^?]+)\.js(?:\?|$)/u;
-/** The space between an ARIA id reference list's ids. */
-const WHITESPACE = /\s+/u;
 
 /** The states file (from the toolchain root) an update's module path is the section of; null for any other module. */
 const sectionOfPath = (path: string): string | null => {
@@ -283,7 +272,8 @@ const sectionOfPath = (path: string): string | null => {
 /** The next task: the page draws and answers between two. */
 const nextTask = () => new Promise<void>((done) => setTimeout(done, 0));
 
-const frameTick = () =>
+/** Two frames on: what was mounted has drawn and its first frames' work is done. */
+export const frameTick = () =>
   new Promise<void>((done) =>
     requestAnimationFrame(() => requestAnimationFrame(() => done()))
   );
@@ -309,29 +299,6 @@ function viewOf(params: URLSearchParams): View {
   };
 }
 
-/**
- * A section's head: its name in plain words in the title role, over its file
- * in small print on one row inside the head (PAGE_CSS), its middle let go
- * first so its file's own name stays; the whole path on hover.
- */
-const headOf = (head: HTMLElement, file: string, name: string): void => {
-  const named = document.createElement("span");
-  named.className = "cawco-section-title";
-  named.textContent = name;
-  const path = document.createElement("span");
-  path.className = "cawco-section-file";
-  path.title = file;
-  const cut = file.lastIndexOf("/") + 1;
-  const folder = document.createElement("span");
-  folder.className = "cawco-section-file-folder";
-  folder.textContent = file.slice(0, cut);
-  const own = document.createElement("span");
-  own.className = "cawco-section-file-name";
-  own.textContent = file.slice(cut);
-  path.append(folder, own);
-  head.replaceChildren(named, path);
-};
-
 /** Each states file's plan as the stage wrote it into the page; none when the page has no plan. */
 const planOfPage = (): Record<string, SectionPlan> => {
   try {
@@ -351,54 +318,49 @@ const specOf = (params: URLSearchParams): CanvasSpec => {
   }
 };
 
-/** A frame's key: its file, story and column. */
-export const frameKey = (file: string, story: string, column: Column): string =>
-  `${file}|${story}|${column.interaction}|${column.scheme}|${column.width}`;
+const byOf = (params: URLSearchParams): PageBy => {
+  const by = params.get("by");
+  return by === "stage" || by === "embed" || by === "map" ? by : "panel";
+};
 
 /** The canvas's state, for the stage's daemon render and the probe kit. */
 export interface CanvasState {
   files: string[];
   /**
-   * The frame of story `name` (`Story`, or `file:Story` where two states
-   * files name one story alike) in state `interaction`, for its picture:
-   * its key, its section woken when the stage's sweep took it down; or why
-   * there is none, in words.
+   * The stage's room the window lacks to hold state `key`'s drawing whole
+   * at 1:1, {0, 0} when it does; null when the stage doesn't stand at it.
+   * None on a frames page.
    */
-  frameNamed: (
+  lacks?: (key: string) => { h: number; w: number } | null;
+  loaded: () => string[];
+  /** State `key`'s drawing as it stands, for its picture; null when the stage doesn't stand at it. None on a frames page. */
+  picture?: (key: string) => FramePictureRead | null;
+  /**
+   * The stage brought to state `key` for its picture: mounted afresh at
+   * rest, its interaction forced on the drawing; answers the room the
+   * window still lacks for it (`lacks`). None on a frames page.
+   */
+  pose?: (key: string) => Promise<{ h: number; w: number } | null>;
+  report: PageReport | null;
+  reports: number;
+  /** Whether state `key`'s drawing is settled: fonts loaded, no finite animation running in it. None on a frames page. */
+  settled?: (key: string) => boolean;
+  setView: (next: Partial<View>) => void;
+  /**
+   * The state of story `name` (`Story`, or `file:Story` where two states
+   * files name one story alike) in interaction `interaction`, for its
+   * picture: its key once its section has drawn; or why there is none, in
+   * words. None on a frames page.
+   */
+  stateNamed?: (
     name: string,
     interaction?: Interaction
   ) => Promise<{ key: string } | { refused: string }>;
-  frames: () => { key: string; story: string; interaction: Interaction }[];
-  go: (key: string) => void;
-  /**
-   * For a picture of frame `key`: how much wider and taller the window must
-   * be for the canvas to hold it whole at its own size, {0, 0} when it does;
-   * null when no such frame is drawn. On a phone, read after `pose`: a frame
-   * not shown there has no box.
-   */
-  lacks: (key: string) => { h: number; w: number } | null;
-  loaded: () => string[];
-  /** Frame `key`'s body as it stands, for its picture; null when no such frame is drawn. */
-  picture: (key: string) => FramePictureRead | null;
-  playMove: (file: string, to: string) => Promise<MoveRender | null>;
-  /**
-   * Frame `key` placed for its picture: at its own size (zoom 1) whatever
-   * the window's width, a phone's included, in the middle of the canvas,
-   * at once, and held there as its box or the canvas changes. Answers the
-   * room the window still lacks for it (`lacks`), read once it is shown.
-   */
-  pose: (key: string) => { h: number; w: number } | null;
-  report: PageReport | null;
-  reports: number;
-  /** Whether frame `key` is settled: fonts loaded, no finite animation on it, in it or on what holds it still running. */
-  settled: (key: string) => boolean;
-  setView: (next: Partial<View>) => void;
   /** The section the stage's sweep is on, and its step; null before it starts and once it has swept. */
   sweepAt: SweepAt | null;
   /** Every section drawn once: a stage's render reads the stage's report then. */
   swept: boolean;
   view: View;
-  world: () => { x: number; y: number; z: number };
 }
 
 declare global {
@@ -406,7 +368,8 @@ declare global {
     __cawcoCanvas?: CanvasState;
     __cawcoErrors?: { at: number; error: unknown }[];
     __cawcoSheetChosen?: string | null;
-    __cawcoSheetOnPage?: SheetOnPage;
+    /** Each section's sheet as last told the pane, by its file: the overlay tells a pane that says hello late every one. */
+    __cawcoSheetsOnPage?: Record<string, SheetOnPage>;
   }
 }
 
@@ -499,30 +462,115 @@ function holdWhileAway(): void {
   });
 }
 
+/**
+ * What a mode (the stage, or the frames grid) answers the page's shared
+ * work with: the frames its report says, what it does as a section is
+ * shown, fails, is restyled or overridden, and what it holds mounted.
+ */
+export interface Mode {
+  /** The bodies mounted where the person sees them, each with its story: the dials reach every one. */
+  bodies: () => Iterable<{ body: HTMLElement; mounted: Mounted | undefined }>;
+  /** A section's module didn't load: it says why in its own place. */
+  failed: (section: Section, failure: SectionFailure) => void;
+  /** A section's frames as its report says them. */
+  framesOf: (section: Section) => FrameRender[];
+  /** The width script asking `matchMedia` between mounts is answered at; null for the page's own. */
+  mediaWidth: () => number | null;
+  /** The inspector set or let go story `story`'s args in `section`. */
+  overridden: (section: Section, story: string) => void;
+  /** The page's scheme turned, or the view did: what draws in it is dressed again. */
+  redressed: () => void;
+  /** A report was read: what the mode draws from it. */
+  reported: (report: PageReport) => void;
+  /** The project's sheets changed: what reads them reads again. */
+  restyled: () => void;
+  /** The inspector's story, or none. */
+  selected: (story: string | null) => void;
+  /** A section's module loaded (or loaded again as it was edited): its stories are to be drawn. */
+  shown: (section: Section) => void;
+  /** Vite applied an update (a component's own edit redrew through its framework's HMR): what was read of the stories is read again. */
+  updated: () => void;
+}
+
+/** What the page shares with its mode: its sections, its rig, mounting, probing, playing, reporting. */
+export interface Page {
+  /** The args a story mounts with: the meta's, its own, the pane's live ones, then the dials'. */
+  argsOf: (section: Section, name: string) => Record<string, unknown>;
+  /** A frame of no width of its own that drew at its body's floor: its failure, in words. */
+  atFloor: (
+    story: Story,
+    slot: WidthSlot,
+    body: HTMLElement
+  ) => PageError | null;
+  readonly base: string;
+  readonly by: PageBy;
+  readonly chrome: Chrome;
+  /** A story's CSF object (a function story is its `render`). */
+  csfOf: (
+    mod: Record<string, unknown>,
+    name: string
+  ) => Record<string, unknown> | null;
+  /** A body dressed as a story drawn in `column` is: its scheme, width, forced state and the dials' variables. */
+  dressBody: (
+    body: HTMLElement,
+    column: Column,
+    story: Story,
+    fills: boolean
+  ) => void;
+  /** The card a section whose module didn't load says it in. */
+  failedCard: (section: Section, failure: SectionFailure) => HTMLElement;
+  readonly files: string[];
+  /** Whether story `story` of `section` is drawn as tall as its screen. */
+  fills: (section: Section, story: string) => boolean;
+  /** Story `rest` drawn in `body` has a width and no height of its own: from now on it is drawn as tall as its screen. */
+  fillsScreen: (section: Section, story: Story, body: HTMLElement) => boolean;
+  /** A story's own width in a column: its form's, or the column's. */
+  formWords: (story: Story, slot: WidthSlot) => string;
+  heard: (error: unknown) => void;
+  /** A report soon, once the page has been quiet a moment. */
+  later: () => void;
+  loadSection: (section: Section) => Promise<void>;
+  mountInto: (
+    body: HTMLElement,
+    section: Section,
+    name: string,
+    args: Record<string, unknown>,
+    into: { error?: PageError }
+  ) => Mounted | undefined;
+  readonly options: BootOptions;
+  readonly plans: Record<string, SectionPlan>;
+  /** Every move of a section played in the rig: what each fires, for the report. */
+  playAll: (section: Section, sweep?: (to: string) => void) => Promise<void>;
+  post: () => Promise<void>;
+  /** Every story of a section that reaches an interaction, probed in the rig. */
+  probeAll: (section: Section) => Promise<void>;
+  quietly: (promise: Promise<unknown>) => void;
+  /** The interactions a story drawn in `body` reaches: each whose CSS rules match an element in it. */
+  reachedIn: (body: HTMLElement) => Interaction[];
+  readonly rewrite: Rewrite;
+  rewriteAll: () => void;
+  /** Off screen: where a story's states are probed and its moves played, never seen. */
+  readonly rig: HTMLElement;
+  readonly root: string;
+  /** The section's sheet told to the pane's inspector. */
+  said: (section: Section) => Promise<void>;
+  schemeOf: (column: Column) => Scheme;
+  sectionOf: (file: string) => Section | undefined;
+  readonly sections: Section[];
+  sizeBody: (body: HTMLElement, width: number | null, fills?: boolean) => void;
+  readonly spec: CanvasSpec;
+  readonly state: CanvasState;
+  readonly view: View;
+  widthOf: (story: Story, slot: WidthSlot) => number | null;
+}
+
 export function boot(options: BootOptions): void {
   holdWhileAway();
   const { adapter, root } = options;
   const params = new URLSearchParams(location.search);
   const files = params.getAll("file");
   const spec = specOf(params);
-  const by = params.get("by") === "stage" ? "stage" : "panel";
-  /**
-   * The panel map's live card (`by=map`): a second page of a canvas that
-   * draws its frames fitted to the card and never posts, so the report
-   * stays the panel's own page's (chrome `asCard`).
-   */
-  const card = params.get("by") === "map";
-  /**
-   * A decision page's Preview (`by=embed`): a second page of a canvas that
-   * draws only the stories `story` names (every story when it names none),
-   * at rest, one under another in the page's own flow, each at its own size
-   * (1 CSS px per px, never scaled), with none of the canvas's chrome; it
-   * never posts, and tells the page holding it how tall it stands and how
-   * wide its widest story is (`cawco:embed-size`, `sayShape`), so the frame
-   * is that wide and that tall.
-   */
-  const embed = params.get("by") === "embed";
-  const named = new Set(params.getAll("story"));
+  const by = byOf(params);
   const view = viewOf(params);
   const base = location.pathname.slice(
     0,
@@ -532,23 +580,14 @@ export function boot(options: BootOptions): void {
   const pageErrors: PageError[] = [];
   const sections: Section[] = [];
   const overrides = new Map<string, Record<string, unknown>>();
-  let chosen = window.__cawcoSheetChosen ?? null;
   let reportTimer: ReturnType<typeof setTimeout> | undefined;
   /** Each section's newest ask of its whole sheet, by its file (`said`). */
   const sheetAsks = new Map<string, number>();
   let reports = 0;
-  /** The person's drags, by frame key, from the artifact's doc. */
-  let moved: Record<string, [number, number]> = {};
+  /** The mode, made once what it is handed stands. */
+  let mode: Mode | null = null;
+  const embed = by === "embed";
 
-  document.documentElement.classList.add("cawco-canvas-page");
-  document.documentElement.classList.toggle("cawco-embed", embed);
-  const canvas = document.getElementById("cawco-canvas") as HTMLElement;
-  const world = document.createElement("div");
-  world.className = "cawco-world";
-  const edges = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  edges.classList.add("cawco-edges", "cawco-ui");
-  world.append(edges);
-  canvas.append(world);
   /** Off screen: where a story's states are probed and its moves played, never seen. */
   const rig = document.createElement("div");
   rig.className = "cawco-rig";
@@ -663,8 +702,8 @@ export function boot(options: BootOptions): void {
       if (!canvasOwned(sheet)) {
         frameWidths(sheet, rewrite.refused);
       }
-      // An embed draws each story at rest only (`columnsFor`): no state is
-      // forced in it, so its sheets' state rules stay as written.
+      // An embed draws each story at rest only: no state is forced in it,
+      // so its sheets' state rules stay as written.
       if (!embed) {
         rewriteSheet(sheet, rewrite);
       }
@@ -674,7 +713,7 @@ export function boot(options: BootOptions): void {
       }
     }
   };
-  /** The project's page background and ink, as its body's rules write them: each frame draws on them under its own scheme. */
+  /** The project's page background and ink, as its body's rules write them: each body draws on them under its own scheme. */
   let pageGround: { background: string; color: string } | null = null;
   const groundOf = () => {
     if (pageGround) {
@@ -729,11 +768,7 @@ export function boot(options: BootOptions): void {
       rewriting = false;
       rewriteAll();
       pageGround = null;
-      for (const section of sections) {
-        if (section.loaded) {
-          quietly(columnsFor(section));
-        }
-      }
+      mode?.restyled();
     });
   }).observe(document.head, {
     childList: true,
@@ -755,27 +790,16 @@ export function boot(options: BootOptions): void {
   );
   rewriteAll();
 
-  /* --- Script that asks matchMedia: reduced motion, and the frame's width */
+  /* --- Script that asks matchMedia: reduced motion, and the drawing's width */
 
   const media = window.matchMedia.bind(window);
-  /** The width of the frame whose story mounts now: undefined between mounts, null for a frame without one. */
+  /** The width of the body whose story mounts now: undefined between mounts, null for a body without one. */
   let mounting: number | null | undefined;
-  /** The one width every frame drawn has, null where they differ or one has none. */
-  const sharedWidth = (): number | null => {
-    const widths = new Set<number | null>();
-    for (const section of sections) {
-      for (const frame of section.frames.values()) {
-        widths.add(widthOf(frame.story, frame.column.width));
-      }
-    }
-    const [only] = widths;
-    return widths.size === 1 && only !== undefined ? only : null;
-  };
   /**
    * Where the engine answers a width condition at a given width: a hidden
    * container (`cawco-probe`) set to that width, a rule per condition
    * marking its child, so every syntax a container query takes (ranges,
-   * `and`, `or`) answers as the frame's CSS does.
+   * `and`, `or`) answers as the project's CSS does.
    */
   const probeStyle = document.createElement("style");
   probeStyle.dataset.cawcoProbe = "";
@@ -814,287 +838,6 @@ export function boot(options: BootOptions): void {
       getComputedStyle(probeMark).getPropertyValue("--cawco-q").trim() === "1"
     );
   };
-  /* --- Floating layers: the frame they open from is their viewport (viewport.ts) */
-
-  /** The frame last pressed or focused in, where a menu or a popover opens from. */
-  let touched: Frame | null = null;
-  /** Each frame by its body ({@link frameFor}): an element in a body is that frame's. */
-  const frameOfBody = new WeakMap<Element, Frame>();
-  /** Whether `frame` stands drawn with a width of its own: its story's viewport. */
-  const isWidthFrame = (frame: Frame | null | undefined): frame is Frame =>
-    !!frame &&
-    frame.el.isConnected &&
-    widthOf(frame.story, frame.column.width) !== null;
-  /** The frame with a width of its own that `el` stands in; null for one in no frame (the rig's probes, the chrome) or in one of no width. */
-  const widthFrameOf = (el: Element): Frame | null => {
-    const body = el.closest(".cawco-frame-body");
-    const frame = body ? frameOfBody.get(body) : undefined;
-    return isWidthFrame(frame) ? frame : null;
-  };
-  /** The one frame drawn with a width of its own; null for none or several. */
-  const soleWidthFrame = (): Frame | null => {
-    let sole: Frame | null = null;
-    for (const section of sections) {
-      for (const frame of section.frames.values()) {
-        if (isWidthFrame(frame)) {
-          if (sole) {
-            return null;
-          }
-          sole = frame;
-        }
-      }
-    }
-    return sole;
-  };
-  const touchedIn = (event: Event) => {
-    touched =
-      event.target instanceof Element ? widthFrameOf(event.target) : null;
-  };
-  document.addEventListener("pointerdown", touchedIn, true);
-  document.addEventListener(
-    "focusin",
-    (event) => {
-      if (acted) {
-        touchedIn(event);
-      }
-    },
-    true
-  );
-  /** The person has pressed, typed or scrolled here: what moves the view from then on is theirs. */
-  let acted = false;
-  for (const input of ["pointerdown", "keydown", "wheel"] as const) {
-    document.addEventListener(
-      input,
-      () => {
-        acted = true;
-      },
-      { capture: true, passive: true }
-    );
-  }
-  /** The ids a floating layer holds: its own and its parts' (a menu's content inside its positioned wrapper). */
-  const idsIn = (layer: Element): string[] =>
-    [layer, ...layer.querySelectorAll("[id]")]
-      .map((one) => one.id)
-      .filter(Boolean);
-
-  /*
-   * The world's triggers, kept as the world changes: each id an
-   * `aria-controls` or `aria-describedby` in it names, with the elements
-   * naming it, and the elements standing `aria-expanded="true"`. Script
-   * reads the viewport many times a placement (floating-ui's
-   * `getViewportRect`, for every open layer, on every scroll, resize and
-   * mount near it), and each read asks for its layer's frame: searched
-   * across every frame's elements, a read cost the whole page, and a
-   * canvas's reads grew with its frames, so the cost grew as their square
-   * (who-decides-member-settings' 187 frames: 4,611 reads took 66 s of the
-   * stage's render, the last section's one frame of probes 22 s). Read off
-   * this index, a read costs its layer's own ids.
-   */
-  const NAMING = ["aria-controls", "aria-describedby"] as const;
-  const TRIGGERS = "[aria-controls],[aria-describedby],[aria-expanded]";
-  /** Each id the world's triggers name, and the elements naming it. */
-  const naming = new Map<string, Set<Element>>();
-  /** What each indexed element named as it was indexed: what its drop takes out. */
-  const namedBy = new WeakMap<Element, string[]>();
-  /** The world's elements standing `aria-expanded="true"`. */
-  const expanded = new Set<Element>();
-  const namesOf = (el: Element, attribute: string): string[] =>
-    (el.getAttribute(attribute) ?? "").split(WHITESPACE).filter(Boolean);
-  const dropTrigger = (el: Element) => {
-    expanded.delete(el);
-    for (const id of namedBy.get(el) ?? []) {
-      const set = naming.get(id);
-      set?.delete(el);
-      if (set?.size === 0) {
-        naming.delete(id);
-      }
-    }
-    namedBy.delete(el);
-  };
-  const indexTrigger = (el: Element) => {
-    dropTrigger(el);
-    const ids = NAMING.flatMap((attribute) => namesOf(el, attribute));
-    for (const id of ids) {
-      const set = naming.get(id) ?? new Set<Element>();
-      set.add(el);
-      naming.set(id, set);
-    }
-    if (ids.length > 0) {
-      namedBy.set(el, ids);
-    }
-    if (el.getAttribute("aria-expanded") === "true") {
-      expanded.add(el);
-    }
-  };
-  const eachTrigger = (nodes: NodeList, run: (el: Element) => void) => {
-    for (const node of nodes) {
-      if (node instanceof Element) {
-        run(node);
-        for (const el of node.querySelectorAll(TRIGGERS)) {
-          run(el);
-        }
-      }
-    }
-  };
-  const readTriggers = (records: MutationRecord[]) => {
-    for (const record of records) {
-      if (record.type === "attributes") {
-        indexTrigger(record.target as Element);
-      } else {
-        eachTrigger(record.removedNodes, dropTrigger);
-        eachTrigger(record.addedNodes, indexTrigger);
-      }
-    }
-  };
-  const triggerWatch = new MutationObserver(readTriggers);
-  triggerWatch.observe(world, {
-    subtree: true,
-    childList: true,
-    attributes: true,
-    attributeFilter: [...NAMING, "aria-expanded"],
-  });
-  /** The index as the world stands now: the changes not yet delivered read first. */
-  const triggersNow = () => readTriggers(triggerWatch.takeRecords());
-
-  /**
-   * The frame a floating layer belongs to: the one it stands in, or the one
-   * holding the trigger that names it (`aria-controls`, a menu's or a
-   * popover's; `aria-describedby`, a tooltip's), as a layer portalled out
-   * of its frame (bits-ui's Portal, to the body) is named. None for an
-   * element holding frames (the body, the canvas) or standing among them
-   * outside a story (a section's head), which is no layer.
-   */
-  const layerFrame = (layer: Element | null): Frame | null => {
-    if (!layer?.isConnected) {
-      return null;
-    }
-    if (layer.closest(".cawco-frame-body")) {
-      return widthFrameOf(layer);
-    }
-    if (layer.contains(world) || world.contains(layer)) {
-      return null;
-    }
-    return triggerFrame(layer);
-  };
-  /** The frame holding a trigger that names one of `layer`'s ids; null for none. */
-  const triggerFrame = (layer: Element): Frame | null => {
-    triggersNow();
-    for (const id of idsIn(layer)) {
-      for (const el of naming.get(id) ?? []) {
-        const frame = el.isConnected ? widthFrameOf(el) : null;
-        if (frame) {
-          return frame;
-        }
-      }
-    }
-    return null;
-  };
-  /**
-   * The frame script asks the viewport of when no layer of a frame asks:
-   * the one frame with a trigger open in it (`aria-expanded`), else the
-   * frame last pressed or focused in, else the one frame with a width; none
-   * (the window's own) where that names no one frame.
-   */
-  const askedFrame = (): Frame | null => {
-    triggersNow();
-    const open = new Set<Frame>();
-    for (const el of expanded) {
-      const frame = el.isConnected ? widthFrameOf(el) : null;
-      if (frame) {
-        open.add(frame);
-      }
-    }
-    if (open.size === 1) {
-      return open.values().next().value ?? null;
-    }
-    if (isWidthFrame(touched) && (open.size === 0 || open.has(touched))) {
-      return touched;
-    }
-    return open.size === 0 ? soleWidthFrame() : null;
-  };
-  /** Each layer that asked at a frame, and that frame: the layers a shown frame brings into sight. */
-  const layersAt = new Map<Element, Frame>();
-  /** Layers brought into sight as they opened: where the person moves the view after that is theirs. */
-  const sighted = new WeakSet<Element>();
-  /** A layer stands open: it, or the content it positions, says so (bits-ui's `data-state`). */
-  const standsOpen = (layer: Element) =>
-    layer.isConnected &&
-    (layer.matches('[data-state="open"]') ||
-      layer.querySelector(':scope > [data-state="open"]') !== null);
-  /**
-   * A frame's layer collides with the frame's own box (viewport.ts), so a
-   * frame the window cuts could place it where nobody sees it (a 1440
-   * frame in a 1440 window, the canvas's edge past the window's). The
-   * canvas moves the frame, never the layer: an open layer standing past
-   * what the person sees across is brought in by its overflow, the canvas's
-   * world panned. An embed is as wide as its widest frame (`sayShape`), so
-   * its layers stand where they open; the page holding it scrolls it. False
-   * while it is not open and placed, so it is asked again.
-   */
-  const reveal = (layer: Element): boolean => {
-    const box = layer.getBoundingClientRect();
-    if (!standsOpen(layer) || box.width === 0) {
-      return false;
-    }
-    if (embed) {
-      return true;
-    }
-    /** What the person sees across: the canvas, cut by the window. */
-    const seen = canvas.getBoundingClientRect();
-    const from = Math.max(0, seen.left);
-    const to = Math.min(windowWidth(), seen.right);
-    let over = 0;
-    if (box.left < from) {
-      over = box.left - from;
-    } else if (box.right > to) {
-      over = Math.min(box.right - to, box.left - from);
-    }
-    if (Math.abs(over) < 0.5) {
-      return true;
-    }
-    letGo();
-    zoom.x -= over;
-    place();
-    return true;
-  };
-  /**
-   * A layer as it opens, once placed (the frame after it asks): in sight,
-   * once, where the person opened it (a press or focus in its frame). A
-   * layer a story stands open as its frame mounts stands where it opens:
-   * a states file whose every story opens one would otherwise move the
-   * canvas once per frame, each move past the last, and leave the person's
-   * first view on no frame at all.
-   */
-  const keepInSight = (layer: Element, frame: Frame) => {
-    layersAt.set(layer, frame);
-    if (sighted.has(layer) || touched !== frame) {
-      return;
-    }
-    sighted.add(layer);
-    requestAnimationFrame(() => {
-      if (!reveal(layer)) {
-        sighted.delete(layer);
-      }
-    });
-  };
-  /** A frame the canvas shows: its open layers in sight with it. */
-  const revealLayersOf = (el: HTMLElement) => {
-    for (const [layer, frame] of layersAt) {
-      if (!layer.isConnected) {
-        layersAt.delete(layer);
-      } else if (frame.el === el) {
-        reveal(layer);
-      }
-    }
-  };
-  // Each layer asks at its own frame, the one it stands in or its trigger's.
-  frameAsViewport((layer) => {
-    const own = layerFrame(layer);
-    if (own && layer) {
-      keepInSight(layer, own);
-    }
-    return (own ?? askedFrame())?.body.getBoundingClientRect() ?? null;
-  });
 
   window.matchMedia = (query: string) => {
     if (view.motion === "reduce" && REDUCED_QUERY.test(query)) {
@@ -1109,10 +852,11 @@ export function boot(options: BootOptions): void {
     if (split.kind !== "frame") {
       return media(query);
     }
-    // A frame's story asks at its frame's width; asked between mounts, at the one width every frame has; else the canvas's, as a frame without one answers its CSS.
+    // A body's story asks at its body's width while it mounts; between mounts, at the width the mode says; else the window's, as a body without one answers its CSS.
     const asked = mounting;
     const widthNow = () =>
-      (asked === undefined ? sharedWidth() : asked) ?? canvas.clientWidth;
+      (asked === undefined ? (mode?.mediaWidth() ?? null) : asked) ??
+      document.documentElement.getBoundingClientRect().width;
     // What the window still answers (a media type, a hover), and where its changes are heard.
     const rest = media(split.media || query);
     return {
@@ -1136,190 +880,29 @@ export function boot(options: BootOptions): void {
 
   const plans = planOfPage();
   for (const file of files) {
-    const plan = plans[file];
-    const name = plan?.name ?? sectionName(null, null, file);
-    const el = document.createElement("section");
-    el.className = "cawco-section";
-    el.dataset.cawcoFile = file;
-    // The overlay's picks: each story's label is an option of its states file.
-    el.dataset.cawcoChoice = file;
-    const head = document.createElement("header");
-    head.className = "cawco-section-head cawco-ui";
-    headOf(head, file, name);
-    const grid = document.createElement("div");
-    grid.className = "cawco-grid";
-    el.append(head, grid);
-    world.append(el);
-    const section: Section = {
+    sections.push({
       file,
-      el,
-      head,
-      grid,
-      name,
-      standIns: [],
+      name: plans[file]?.name ?? sectionName(null, null, file),
       failure: null,
-      frames: new Map(),
       interactions: new Map(),
       loaded: false,
       moves: [],
       probes: new Map(),
-    };
-    sections.push(section);
-  }
-
-  /**
-   * A section on its way: one line saying what it waits for, its columns'
-   * heads, and each planned story's frame as a skeleton in the cell its
-   * frame takes (its label, then a block at its width), so the frames land
-   * where they stood. All of it is seen only once the wait has lasted the
-   * grace (`cawco-waiting`, PAGE_CSS; DESIGN.md's Real Wait Rule); before
-   * it, nothing. Run once the columns' rules below are defined.
-   */
-  function standIn(section: Section, stories: SectionPlan["stories"]): void {
-    const status = document.createElement("p");
-    status.className = "cawco-section-status cawco-waiting cawco-ui";
-    status.setAttribute("role", "status");
-    status.textContent =
-      stories.length > 0
-        ? `Drawing ${stories.length} ${stories.length === 1 ? "story" : "stories"}`
-        : "Drawing its stories";
-    heads(section);
-    const columns = columnsOfSection(section);
-    const frames = stories.flatMap((story, row) =>
-      columns.map((column, at) => {
-        const one = document.createElement("div");
-        one.className = "cawco-stand-in cawco-waiting cawco-ui";
-        one.setAttribute("aria-hidden", "true");
-        one.style.gridRow = String(row + 2);
-        one.style.gridColumn = String(at + 1);
-        const words = document.createElement("span");
-        words.className = "cawco-frame-words";
-        words.textContent = story.label ?? story.name;
-        const body = document.createElement("div");
-        body.className = "cawco-stand-in-body";
-        const width = column.width === "own" ? story.width : column.width;
-        if (width !== null) {
-          body.style.inlineSize = `${width}px`;
-        }
-        one.append(words, body);
-        return one;
-      })
-    );
-    const columnHeads = [
-      ...section.grid.querySelectorAll<HTMLElement>(":scope > .cawco-colhead"),
-    ];
-    for (const head of columnHeads) {
-      head.classList.add("cawco-waiting");
-    }
-    // In the head's title row, beside the name: when it goes, nothing under it moves.
-    section.head.append(status);
-    section.grid.append(...frames);
-    section.standIns = [status, ...columnHeads, ...frames];
-  }
-
-  /** What stood for a section's frames, taken away: they drew, or it says why not. */
-  const clearStandIns = (section: Section) => {
-    for (const one of section.standIns) {
-      one.remove();
-    }
-    section.standIns = [];
-  };
-
-  /**
-   * The skeleton's reveal (DESIGN.md Skeleton; transitions.dev Skeleton
-   * loader and reveal), one keyframe pair each way: opacity with a cross-blur
-   * of --skeleton-reveal-blur, over --dur-skeleton-reveal on --ease-crossfade.
-   * None with reduced motion.
-   */
-  function revealOf(): { blur: string; ease: string; ms: number } | null {
-    if (!media("(prefers-reduced-motion: no-preference)").matches) {
-      return null;
-    }
-    const tokens = getComputedStyle(document.documentElement);
-    return {
-      blur: tokens.getPropertyValue("--skeleton-reveal-blur").trim(),
-      ease: tokens.getPropertyValue("--ease-crossfade").trim(),
-      ms: chrome.duration("--dur-skeleton-reveal", 400),
-    };
-  }
-
-  /**
-   * A section's stand-ins taken away as its frames come, in the skeleton's
-   * reveal: each stand-in frame stays in its cell (`held`, answered here),
-   * and `revealed` fades it out into the blur, taking it away once gone,
-   * while each frame drawn since comes out of the blur in the same cell on
-   * the same clock. The status line and the rest go at once, as everything
-   * does with reduced motion, and in an embed: the page holding it shows
-   * its own skeleton until it draws and reveals the frame (dashboard
-   * decisions host Preview.svelte), and a stand-in held there stood in the
-   * shape it says (`sayShape`), 107px under every picture of caw-panel's
-   * that drew off the page's screen, where no reveal runs to take it away.
-   */
-  function holdStandIns(section: Section): HTMLElement[] {
-    const kept =
-      !embed && revealOf()
-        ? section.standIns.filter((one) =>
-            one.classList.contains("cawco-stand-in")
-          )
-        : [];
-    section.standIns = section.standIns.filter((one) => !kept.includes(one));
-    clearStandIns(section);
-    return kept;
-  }
-
-  /** `going` (from {@link holdStandIns}) going and `drawn` coming, in the reveal. */
-  function revealed(going: HTMLElement[], drawn: HTMLElement[]): void {
-    // An embed reveals nothing: the page holding it does (holdStandIns).
-    const look = embed ? null : revealOf();
-    // A stand-in still unseen (inside the wait's grace) has nothing to reveal.
-    const seen = going.map((one) => Number(getComputedStyle(one).opacity));
-    if (!look || seen.every((opacity) => opacity === 0)) {
-      for (const one of going) {
-        one.remove();
-      }
-      return;
-    }
-    const standing = { opacity: 1, filter: "blur(0px)" };
-    const away = { opacity: 0, filter: `blur(${look.blur})` };
-    const timing = { duration: look.ms, easing: look.ease };
-    going.forEach((one, at) => {
-      const out = one.animate([{ ...standing, opacity: seen[at] ?? 1 }, away], {
-        ...timing,
-        fill: "forwards",
-      });
-      const done = () => one.remove();
-      out.finished.then(done, done);
     });
-    for (const el of drawn) {
-      el.animate([away, standing], timing);
-    }
   }
+  const sectionOf = (file: string) => sections.find((one) => one.file === file);
 
-  /**
-   * A section whose module didn't load: it says so in its own place, its
-   * error and where it threw under Show details, never a blank canvas.
-   */
-  function failedSection(section: Section, failure: SectionFailure): void {
+  /** The card a section whose module didn't load says so in: the error formula's line, then its error and where it threw under Show details. */
+  function failedCard(section: Section, failure: SectionFailure): HTMLElement {
     const { error, frame, kind } = failure;
-    clearStandIns(section);
     const failed = document.createElement("div");
     failed.className = "cawco-section-failed cawco-ui";
+    failed.dataset.cawcoFile = section.file;
     failed.setAttribute("role", "alert");
     const line = document.createElement("p");
     line.className = "cawco-section-failed-line";
     line.textContent = FAILED_LINE[kind](section.name);
-    const details = document.createElement("details");
-    const summary = document.createElement("summary");
-    summary.textContent = shellWords.showDetails;
-    // The house's disclosure (dashboard RowFault): its words say what a press does.
-    details.addEventListener("toggle", () => {
-      summary.textContent = details.open
-        ? shellWords.hideDetails
-        : shellWords.showDetails;
-    });
-    const words = document.createElement("pre");
-    words.textContent = error.message;
-    details.append(summary, words);
+    const details = detailsOf(error.message);
     if (error.file) {
       // Its place on one line: the path gives way inside, its line and column never.
       const at = `:${error.line ?? 1}:${error.column ?? 1}`;
@@ -1340,45 +923,8 @@ export function boot(options: BootOptions): void {
       details.append(code);
     }
     failed.append(line, details);
-    section.head.after(failed);
-    section.standIns = [failed];
-    section.failure = failure;
-    sayShape();
-    later();
+    return failed;
   }
-
-  const sectionOf = (file: string) => sections.find((one) => one.file === file);
-
-  /**
-   * The stories of `all` the page draws: an embed's the ones it names, in
-   * the order it names them (a Preview's `stories`), any other page's every
-   * one, in its file's order.
-   */
-  const toDraw = <One extends { name: string }>(all: readonly One[]): One[] =>
-    named.size === 0
-      ? [...all]
-      : [...named].flatMap((name) => all.filter((one) => one.name === name));
-
-  /** The stories a section draws, in the order `toDraw` gives. */
-  const storiesOf = (section: Section): Story[] =>
-    toDraw(section.mod?.SHEET.stories ?? []);
-
-  /** The columns a section's stories take, from the view. */
-  const slotsOf = (): { scheme: Column["scheme"]; width: WidthSlot }[] => {
-    let schemes: Column["scheme"][] = [
-      view.scheme === "both" ? "light" : view.scheme,
-    ];
-    if (view.scheme === "both" || view.all) {
-      schemes = ["light", "dark"];
-    }
-    let widths: WidthSlot[] = view.widths ?? ["own"];
-    if (view.all) {
-      widths = [390, 768, 1280];
-    }
-    return widths.flatMap((width) =>
-      schemes.map((scheme) => ({ scheme, width }))
-    );
-  };
 
   const widthOf = (story: Story, slot: WidthSlot): number | null =>
     slot === "own" ? (story.form?.width ?? null) : slot;
@@ -1394,134 +940,11 @@ export function boot(options: BootOptions): void {
     return `${preset ?? "width"} ${width}`;
   };
 
-  /** A frame's scheme: its column's, or the page's own (scheme.ts: the host's theme, else the system's). */
+  /** A column's scheme: its own, or the page's (scheme.ts: the host's theme, else the system's). */
   const schemeOf = (column: Column): Scheme =>
     column.scheme === "page" ? pageScheme() : column.scheme;
 
-  /**
-   * A frame's small line: its story's name where the label above it says
-   * other words (an unnamed story's label says "Unnamed"), its form, its
-   * scheme when the frames show both, and its state past rest.
-   */
-  const smallOf = (story: Story, column: Column): string => {
-    const bits = [formWords(story, column.width)];
-    if (story.label !== story.name) {
-      bits.unshift(story.name);
-    }
-    if (column.scheme !== "page" && (view.scheme === "both" || view.all)) {
-      bits.push(column.scheme);
-    }
-    if (column.interaction !== "rest") {
-      bits.push(column.interaction);
-    }
-    return bits.join(" · ");
-  };
-
-  /** One frame's element: its label (a pick of its story) over its body, in the section's grid. */
-  function frameFor(section: Section, story: Story, column: Column): Frame {
-    const key = frameKey(section.file, story.name, column);
-    const had = section.frames.get(key);
-    if (had) {
-      return had;
-    }
-    const el = document.createElement("section");
-    el.className = "cawco-frame";
-    el.dataset.cawcoStory = story.name;
-    el.dataset.cawcoFile = section.file;
-    el.dataset.cawcoKey = key;
-    el.dataset.cawcoInteraction = column.interaction;
-    el.dataset.cawcoScheme = column.scheme;
-    el.dataset.cawcoWidth = String(column.width);
-    el.dataset.cawcoSource = `${section.file}:${story.line}:${story.column}`;
-    const label = document.createElement("button");
-    label.type = "button";
-    label.className = "cawco-frame-label cawco-ui";
-    label.dataset.option = story.name;
-    const words = document.createElement("span");
-    words.className = "cawco-frame-words";
-    words.textContent = story.label ?? "Unnamed";
-    const small = document.createElement("span");
-    small.className = "cawco-frame-small";
-    small.textContent = smallOf(story, column);
-    label.append(words, small);
-    if (!story.label) {
-      label.dataset.cawcoUnnamed = "";
-    }
-    const body = document.createElement("div");
-    body.className = "cawco-frame-body";
-    const status = document.createElement("div");
-    status.className = "cawco-frame-status cawco-ui";
-    el.append(label, body, status);
-    const frame: Frame = { key, el, label, body, column, section, story };
-    section.frames.set(key, frame);
-    frameOfBody.set(body, frame);
-    placeFrame(frame);
-    return frame;
-  }
-
-  /** The grid place of a frame: its story's row, its column's place among the section's columns. */
-  function placeFrame(frame: Frame): void {
-    const { section } = frame;
-    const stories = storiesOf(section);
-    const row = stories.findIndex((one) => one.name === frame.story.name) + 2;
-    const columns = columnsOfSection(section);
-    const at =
-      columns.findIndex(
-        (one) =>
-          one.interaction === frame.column.interaction &&
-          one.scheme === frame.column.scheme &&
-          one.width === frame.column.width
-      ) + 1;
-    frame.el.style.gridRow = String(row);
-    frame.el.style.gridColumn = String(Math.max(1, at));
-    const offset = moved[frame.key];
-    frame.el.style.translate = offset ? `${offset[0]}px ${offset[1]}px` : "";
-    if (!frame.el.isConnected) {
-      section.grid.append(frame.el);
-    }
-  }
-
-  /** Every column the section's stories reach, in the grid's order: interactions within each scheme and width. */
-  function columnsOfSection(section: Section): Column[] {
-    const reached = new Set<Interaction>(["rest"]);
-    for (const list of section.interactions.values()) {
-      for (const one of list) {
-        reached.add(one);
-      }
-    }
-    return slotsOf().flatMap((slot) =>
-      INTERACTIONS.filter((one) => reached.has(one)).map((interaction) => ({
-        interaction,
-        ...slot,
-      }))
-    );
-  }
-
-  /** The column heads of a section's grid. */
-  function heads(section: Section): void {
-    for (const old of section.grid.querySelectorAll(
-      ":scope > .cawco-colhead"
-    )) {
-      old.remove();
-    }
-    columnsOfSection(section).forEach((column, at) => {
-      const head = document.createElement("div");
-      head.className = "cawco-colhead cawco-ui";
-      const bits: string[] = [column.interaction];
-      if (column.width !== "own") {
-        bits.unshift(formWords({ form: null } as Story, column.width));
-      }
-      if (column.scheme !== "page" && (view.scheme === "both" || view.all)) {
-        bits.push(column.scheme);
-      }
-      head.textContent = bits.join(" · ");
-      head.style.gridRow = "1";
-      head.style.gridColumn = String(at + 1);
-      section.grid.prepend(head);
-    });
-  }
-
-  /** The args a story mounts with: the meta's, its own, then the pane's live ones. */
+  /** The args a story mounts with: the meta's, its own, the pane's live ones, then the dials'. */
   const argsOf = (section: Section, name: string): Record<string, unknown> => {
     const mod = section.mod?.module ?? {};
     const meta = (mod.default ?? {}) as Record<string, unknown>;
@@ -1530,6 +953,7 @@ export function boot(options: BootOptions): void {
       ...((meta.args ?? {}) as object),
       ...((csf?.args ?? {}) as object),
       ...(overrides.get(`${section.file}|${name}`) ?? {}),
+      ...dialArgs,
     };
   };
 
@@ -1590,14 +1014,13 @@ export function boot(options: BootOptions): void {
   ): Mounted | undefined {
     into.error = undefined;
     const was = mounting;
-    // What the story's script asks of matchMedia while it mounts, its frame answers.
+    // What the story's script asks of matchMedia while it mounts, its body answers.
     const width = Number.parseFloat(body.style.width);
     mounting = Number.isFinite(width) ? width : null;
     try {
       return adapter.mountStory(body, specFor(section, name, args), (error) => {
         into.error = pageError(error, root, base);
         later();
-        sayShape();
       });
     } catch (error) {
       into.error = pageError(error, root, base);
@@ -1608,16 +1031,11 @@ export function boot(options: BootOptions): void {
   }
 
   /**
-   * A frame body at a story's width: its width, and the width container its
-   * story's width conditions answer to (width.ts). A body without one shrinks
-   * to its story, so it can be no container: it answers the canvas.
-   */
-  /**
    * A body at `width`: that width, the container its width rules answer,
    * and its screen (width.ts `SCREEN_VW`, `SCREEN_VH`: the device's at that
    * width, core `screenHeight`), which its viewport lengths answer; `fills`:
    * as tall as that screen, for a story with no height of its own
-   * ({@link fillsScreen}). None of them with no width: the canvas's.
+   * ({@link fillsScreen}). None of them with no width: the page's.
    */
   function sizeBody(
     body: HTMLElement,
@@ -1637,13 +1055,13 @@ export function boot(options: BootOptions): void {
    * The stories, by `file|story`, drawn as tall as their screen: each has a
    * width and no height of its own. An app laid out to fill its window
    * (`height: 100%` down from its root, its parts placed absolutely or
-   * fixed) stands 0 tall in a body whose height is its content's, so its
-   * frame drew at the body's floor, and no picture of it could be taken. It
+   * fixed) stands 0 tall in a body whose height is its content's, so it
+   * drew at the body's floor, and no picture of it could be taken. It
    * fills the screen its width names instead, as it fills a window.
    */
   const screenFilled = new Set<string>();
   const fillKey = (file: string, story: string) => `${file}|${story}`;
-  /** Whether a rest frame's body holds nothing with a height: its content measured with the body's floor let go. */
+  /** Whether a body holds nothing with a height: its content measured with the body's floor let go. */
   const heightless = (body: HTMLElement): boolean => {
     const { blockSize, minBlockSize } = body.style;
     body.style.blockSize = "";
@@ -1653,293 +1071,22 @@ export function boot(options: BootOptions): void {
     body.style.minBlockSize = minBlockSize;
     return height === 0;
   };
-  /** Story `rest`'s frames as tall as their screen when its rest frame, drawn in `body`, has a width and no height of its own; whether they now are. */
-  function fillsScreen(
+  /** Story `story` drawn as tall as its screen from now on when, drawn in `body`, it has a width and no height of its own; whether it now is. */
+  const fillsScreen = (
     section: Section,
-    rest: Frame,
+    story: Story,
     body: HTMLElement
-  ): boolean {
-    const key = fillKey(section.file, rest.story.name);
-    if (
-      screenFilled.has(key) ||
-      widthOf(rest.story, rest.column.width) === null ||
-      !heightless(body)
-    ) {
+  ): boolean => {
+    const key = fillKey(section.file, story.name);
+    const width = Number.parseFloat(body.style.width);
+    if (screenFilled.has(key) || !Number.isFinite(width) || !heightless(body)) {
       return false;
     }
     screenFilled.add(key);
-    for (const frame of section.frames.values()) {
-      if (frame.story.name === rest.story.name) {
-        sizeBody(frame.body, widthOf(frame.story, frame.column.width), true);
-      }
-    }
     return true;
-  }
+  };
 
-  /**
-   * The page holding an embed hears its whole graph arrived (core
-   * `CANVAS_EMBED_FETCHED`), once its page's preloads have all answered,
-   * before it is evaluated and drawn: its modules are the page's now, and
-   * the budget they held is free for the embeds still waiting (dashboard
-   * decisions host embed-turns.ts). Every page the stage serves carries its
-   * graph (host.ts `closureOf`).
-   */
-  function tellGraphFetched(): void {
-    const graph = (window as unknown as { __cawcoGraph: CanvasGraph })
-      .__cawcoGraph;
-    const tell = () =>
-      window.parent.postMessage({ type: CANVAS_EMBED_FETCHED }, "*");
-    if (graph.whole) {
-      tell();
-    } else {
-      addEventListener(CANVAS_GRAPH_FETCHED, tell, { once: true });
-    }
-  }
-
-  let saidShape = "";
-  /**
-   * Whether the next shape said is its stories' at rest: the first said
-   * since they mounted, before the person pressed or typed in the embed. The
-   * page holding it keeps only that one for the next Preview's first paint
-   * (`rest`, dashboard decisions host Preview.svelte `tellShape`): a list
-   * opened or closed changes the live frame, never what the next load holds.
-   */
-  let atRest = true;
-  if (embed) {
-    for (const input of ["pointerdown", "keydown"] as const) {
-      document.addEventListener(
-        input,
-        () => {
-          atRest = false;
-        },
-        true
-      );
-    }
-  }
-  /** A measure of the embed's shape waits on its world to settle ({@link settledHeight}): the calls meanwhile are answered by it. */
-  let shaping = false;
-  /**
-   * The page holding an embed (a decision page's Preview) makes its frame
-   * this tall and, where a story says its own width, as wide as the widest
-   * (null where none does): every frame at its own size, 1 CSS px per px,
-   * never scaled, the frames whole, no inner scroll; the page holding it
-   * scrolls it where its room is narrower. Said whenever it changes: from
-   * the world's resize observer and as its sections draw, each time only
-   * once the world has settled ({@link settledHeight}), so the first height
-   * it says is its last.
-   *
-   * Said once every section has drawn or says why it didn't, never of its
-   * stand-ins: the page holding it ends this embed's turn at its shape
-   * where it said no graph arrived (dashboard decisions host
-   * embed-turns.ts), and a shape said at boot, 0.6 s in with no frame
-   * drawn, let the next start while this one still fetched its graph; a
-   * page of 33 such Previews had ten say "didn't load".
-   *
-   * An embed that can't draw what its Preview names says why instead, at
-   * once (`CANVAS_EMBED_FAILED`, {@link embedFailure}): a shape of nothing
-   * drawn stood in its Preview as an empty box.
-   */
-  function sayShape(): void {
-    if (
-      !embed ||
-      sections.some((section) => !(section.loaded || section.failure))
-    ) {
-      return;
-    }
-    const why = embedFailure();
-    if (why !== null) {
-      if (saidShape !== `failed ${why}`) {
-        saidShape = `failed ${why}`;
-        window.parent.postMessage({ type: CANVAS_EMBED_FAILED, why }, "*");
-      }
-      return;
-    }
-    if (shaping) {
-      return;
-    }
-    shaping = true;
-    quietly(
-      settledHeight().then((height) => {
-        shaping = false;
-        // A story that threw meanwhile said why from its own call.
-        if (embedFailure() === null) {
-          postShape(height);
-        }
-      })
-    );
-  }
-
-  /** The shape `height` tall said to the page holding the embed, unless it is the one said last. */
-  function postShape(height: number): void {
-    const widths = sections.flatMap((section) =>
-      [...section.frames.values()].flatMap(
-        (frame) => widthOf(frame.story, frame.column.width) ?? []
-      )
-    );
-    const width = widths.length > 0 ? Math.max(...widths) : null;
-    const shape = `${width} ${height}`;
-    if (shape === saidShape) {
-      return;
-    }
-    saidShape = shape;
-    window.parent.postMessage(
-      { type: CANVAS_EMBED_SIZE, height, width, rest: atRest },
-      "*"
-    );
-    atRest = false;
-  }
-
-  /**
-   * When the page holding the embed said its box stood in its view
-   * (`CANVAS_EMBED_SEEN`), by `performance.now()`; null until then, and
-   * `seenOnce` settles then.
-   */
-  let seenAt: number | null = null;
-  let heardSeen: () => void = () => undefined;
-  const seenOnce = new Promise<void>((done) => {
-    heardSeen = done;
-  });
-  if (embed) {
-    addEventListener("message", (event) => {
-      if (
-        event.source === window.parent &&
-        (event.data as { type?: unknown } | null)?.type === CANVAS_EMBED_SEEN
-      ) {
-        seenAt ??= performance.now();
-        heardSeen();
-      }
-    });
-  }
-
-  /** The page's animations running now that end: a story's transitions (a Svelte `in:`/`out:`, a fold), never a loop. */
-  const ending = (): Animation[] =>
-    document
-      .getAnimations()
-      .filter(
-        (run) =>
-          run.playState === "running" &&
-          Number.isFinite(Number(run.effect?.getComputedTiming().endTime))
-      );
-
-  /**
-   * The world's height once it has settled: the faces loaded, every
-   * animation that ends ended, and the height the same across a frame. A
-   * story mounted lays itself out over its first frames: it measures itself
-   * in a frame's callbacks or its observers (the dashboard's frameObserver),
-   * and what that changes runs its transitions on the Web Animations API,
-   * an outro's element taken away only as it finishes. A browser runs all
-   * of that only in a frame's rendering steps, which a cross-origin frame
-   * off the page's screen is not given (Chromium throttles it) until it is
-   * scrolled to, while its height read here lays it out whatever: read
-   * there, a who-decides roster said 829, 1263, 985 and 960 off the page's
-   * screen, 3 transitions mid-flight, and 795 once scrolled to, every
-   * Preview under it moving 165px. Here an embed off the page's screen says
-   * its shape once it has its frames, and the page holding it stands its
-   * skeleton at the shape it last said until then. Once its box has stood
-   * in that page's view (`CANVAS_EMBED_SEEN`), it waits on its animations at
-   * most {@link longMotionMs}, then says the height that held across a
-   * frame: it never fails for animating.
-   */
-  async function settledHeight(): Promise<number> {
-    const longest = longMotionMs();
-    for (;;) {
-      const settling = () =>
-        Promise.allSettled([
-          document.fonts.ready,
-          ...ending().map((run) => run.finished),
-        ]);
-      // Unseen, until they end or its box is seen; seen, until they end or the long motion's time is up: measured after either way.
-      await (seenAt === null
-        ? Promise.race([settling(), seenOnce])
-        : readWithin(
-            Math.max(0, seenAt + longest - performance.now()),
-            settling
-          ));
-      const before = Math.ceil(world.offsetHeight);
-      await frameTick();
-      const height = Math.ceil(world.offsetHeight);
-      if (!(height === before && document.fonts.status === "loaded")) {
-        continue;
-      }
-      if (ending().length === 0) {
-        return height;
-      }
-      if (seenAt !== null && performance.now() - seenAt >= longest) {
-        console.warn(
-          `[cawco] ${drawnStories().join(", ")} still animating ${longest} ms after coming into view: its height is said as it held across a frame, ${height}px.`
-        );
-        return height;
-      }
-    }
-  }
-
-  /** The stories the embed draws, by name, each once. */
-  const drawnStories = (): string[] => [
-    ...new Set(
-      sections.flatMap((section) =>
-        storiesOf(section).map((story) => story.name)
-      )
-    ),
-  ];
-
-  /**
-   * How long an embed in view waits on its stories' animations before it
-   * says its height anyway ({@link settledHeight}): the house's longest
-   * motion that ends, `--dur-goo-settle` (DESIGN.md's motion tokens, as the
-   * page's own tokens write it). A story that starts one animation after
-   * another (a ticker, a carousel) never settles, and its Preview would
-   * otherwise say it didn't load: the height that held across a frame is
-   * said, and the canvas warns, naming its stories.
-   */
-  function longMotionMs(): number {
-    const value = getComputedStyle(document.documentElement)
-      .getPropertyValue("--dur-goo-settle")
-      .trim();
-    return value.endsWith("ms")
-      ? Number.parseFloat(value)
-      : Number.parseFloat(value) * 1000;
-  }
-
-  /**
-   * Why an embed can't draw what its Preview names, in plain words; null
-   * while it draws: a story of it that threw as it mounted, or, with no
-   * story of it drawn, a states file that didn't load (its section's line).
-   */
-  function embedFailure(): string | null {
-    const frames = sections.flatMap((section) => [...section.frames.values()]);
-    const threw = frames.find((frame) => frame.error);
-    if (threw?.error) {
-      const first = threw.error.message.split("\n")[0]?.trim() ?? "";
-      const words =
-        first.length > EMBED_WHY_MAX
-          ? `${first.slice(0, EMBED_WHY_MAX - 1)}…`
-          : first;
-      return `its story ${threw.story.name} threw as it mounted${words ? `: ${words}` : "."}`;
-    }
-    const failed = sections.find((section) => section.failure);
-    if (frames.length === 0 && failed?.failure) {
-      return FAILED_LINE[failed.failure.kind](failed.name);
-    }
-    return null;
-  }
-
-  /** The frame's body set for its column: its scheme, width and forced state. */
-  function dress(frame: Frame): void {
-    const { story } = frame;
-    dressBody(
-      frame.body,
-      frame.column,
-      story,
-      screenFilled.has(fillKey(frame.section.file, story.name))
-    );
-    frame.el.toggleAttribute("data-cawco-selected", chosen === story.name);
-    frame.el.toggleAttribute(
-      "data-cawco-edited",
-      overrides.has(`${frame.section.file}|${story.name}`)
-    );
-  }
-
-  /** A body dressed as a frame of `column` is: its scheme, width, forced state and the dials' variables. */
+  /** A body dressed as a story drawn in `column` is: its scheme, width, forced state and the dials' variables. */
   function dressBody(
     body: HTMLElement,
     column: Column,
@@ -1969,99 +1116,12 @@ export function boot(options: BootOptions): void {
     }
   }
 
-  /**
-   * Whether a frame's story is mounted: every frame on a desk, where each
-   * stands in view with its section; on a phone only the frame shown, as
-   * the phone shows one at a time (chrome.ts PAGE_CSS puts every other
-   * frame and section out of rendering, `display: none`). Mounted there
-   * unseen, a frame still cost its whole story: in Safari's engine at a
-   * phone's 440 px, a canvas of four states files mounted all 108 of its
-   * frames, 50,899 elements and 2.2 GB in its web process.
-   */
-  const live = (frame: Frame): boolean =>
-    !chrome.phone() || chrome.shown() === frame.key;
-
-  /** A frame's story mounted afresh where it is {@link live}; else its body dressed and empty. */
-  function mountFrame(frame: Frame): void {
-    frame.mounted?.unmount();
-    frame.mounted = undefined;
-    frame.body.replaceChildren();
-    dress(frame);
-    frame.live = live(frame);
-    if (!frame.live) {
-      return;
-    }
-    frame.mounted = mountInto(
-      frame.body,
-      frame.section,
-      frame.story.name,
-      { ...argsOf(frame.section, frame.story.name), ...dialArgs },
-      frame
-    );
-  }
-
-  /** A frame's story taken down, its body left empty: it is not {@link live}. */
-  function sleepFrame(frame: Frame): void {
-    frame.mounted?.unmount();
-    frame.mounted = undefined;
-    frame.body.replaceChildren();
-    frame.live = false;
-  }
-
-  /**
-   * Each frame mounted or taken down as {@link live} says now: the chrome
-   * showed another frame, or turned desk or phone.
-   */
-  function liveNow(): void {
-    let changed = false;
-    for (const section of sections) {
-      changed = liveIn(section) || changed;
-    }
-    if (changed) {
-      later();
-    }
-  }
-
-  /**
-   * A section's frames mounted or taken down as {@link live} says; a
-   * state's frame mounted whose story has no probe yet is probed, after the
-   * pass its section runs. Answers whether any changed.
-   */
-  function liveIn(section: Section): boolean {
-    let changed = false;
-    let unprobed = false;
-    for (const frame of section.frames.values()) {
-      const want = live(frame);
-      if (want === !!frame.live) {
-        continue;
-      }
-      changed = true;
-      if (want) {
-        mountFrame(frame);
-        unprobed ||=
-          frame.column.interaction !== "rest" &&
-          !section.probes.has(frame.story.name);
-      } else {
-        sleepFrame(frame);
-      }
-    }
-    if (unprobed && section.loaded) {
-      const probe = () => probeAll(section, true);
-      section.settling = (section.settling ?? Promise.resolve()).then(
-        probe,
-        probe
-      );
-      quietly(section.settling);
-    }
-    return changed;
-  }
-
-  /** The interactions a story's rest frame reaches: each whose CSS rules match an element in it. */
+  /** The interactions a story drawn in `body` reaches: each whose CSS rules match an element in it. */
   function reachedIn(body: HTMLElement): Interaction[] {
     const found: Interaction[] = ["rest"];
     for (const interaction of ["hover", "focus", "pressed"] as const) {
-      const hit = DECIDES[interaction].some((state) =>
-        [...rewrite.reach[state]].some((selector) => {
+      const hit = DECIDES[interaction].some((pseudo) =>
+        [...rewrite.reach[pseudo]].some((selector) => {
           let els: Element[];
           try {
             els = [...body.querySelectorAll(selector)];
@@ -2074,7 +1134,7 @@ export function boot(options: BootOptions): void {
           return els.some(
             (el) =>
               el.matches(FOCUSABLE) ||
-              (state === "focus-within" && el.querySelector(FOCUSABLE))
+              (pseudo === "focus-within" && el.querySelector(FOCUSABLE))
           );
         })
       );
@@ -2086,116 +1146,33 @@ export function boot(options: BootOptions): void {
   }
 
   /**
-   * Each story's columns, from its rest frame: frames made for each, frames
-   * of columns it no longer reaches taken down, and the section probed
-   * again. Answers whether the columns changed, and so it probed.
+   * A body that drew at its floor (its `min-inline-size`) with no width of
+   * its own: the story gave it none, and its content measures nothing (a
+   * size container), so it shrank to the floor and reads as a sliver. Said
+   * as its failure, in words; no width is put in its place. Null when it
+   * stands at a width of its own or past the floor.
    */
-  async function columnsFor(section: Section): Promise<boolean> {
-    // An embed shows each story at rest only.
-    if (!section.mod || embed) {
-      return false;
+  function atFloor(
+    story: Story,
+    slot: WidthSlot,
+    body: HTMLElement
+  ): PageError | null {
+    if (widthOf(story, slot) !== null) {
+      return null;
     }
-    // The frames mounted just now draw first: what a person sees comes before what the canvas reads.
-    await frameTick();
-    const rests = (section.mod?.SHEET.stories ?? []).flatMap((story) => {
-      const rest = [...section.frames.values()].find(
-        (one) =>
-          one.story.name === story.name && one.column.interaction === "rest"
-      );
-      return rest ? [rest] : [];
-    });
-    // A rest frame not mounted (a phone's, not shown: `live`) is read from its story mounted in the rig as the frame would be, then taken down.
-    const stand = rests
-      .filter((rest) => !rest.live)
-      .map((rest) => {
-        const body = document.createElement("div");
-        body.className = `cawco-frame-body ${HELD}`;
-        dressBody(
-          body,
-          rest.column,
-          rest.story,
-          screenFilled.has(fillKey(section.file, rest.story.name))
-        );
-        rig.append(body);
-        const mounted = mountInto(
-          body,
-          section,
-          rest.story.name,
-          { ...argsOf(section, rest.story.name), ...dialArgs },
-          {}
-        );
-        return { rest, body, mounted };
-      });
-    let changed = false;
-    try {
-      if (stand.length > 0) {
-        await frameTick();
-      }
-      rewriteAll();
-      for (const rest of rests) {
-        const body = stand.find((one) => one.rest === rest)?.body ?? rest.body;
-        fillsScreen(section, rest, body);
-        const reached = reachedIn(body);
-        const before = section.interactions.get(rest.story.name)?.join() ?? "";
-        if (before !== reached.join()) {
-          section.interactions.set(rest.story.name, reached);
-          changed = true;
+    const width = body.offsetWidth;
+    const floor = Number.parseFloat(getComputedStyle(body).minInlineSize) || 0;
+    return floor > 0 && width <= floor + 0.5
+      ? {
+          message: `drawn ${Math.round(width)}px wide: the story has no width of its own; give it a viewport or a width`,
+          file: null,
+          line: null,
+          column: null,
         }
-      }
-    } finally {
-      for (const one of stand) {
-        one.mounted?.unmount();
-        one.body.remove();
-      }
-    }
-    if (!changed) {
-      return false;
-    }
-    syncFrames(section);
-    await probeAll(section);
-    later();
-    return true;
+      : null;
   }
 
-  /** The section's frames as its stories and columns say: new ones mounted, gone ones taken down. */
-  function syncFrames(section: Section): void {
-    const stories = storiesOf(section);
-    const wanted = new Set<string>();
-    for (const story of stories) {
-      const reached = section.interactions.get(story.name) ?? ["rest"];
-      for (const slot of slotsOf()) {
-        for (const interaction of reached) {
-          const column = { interaction, ...slot };
-          const key = frameKey(section.file, story.name, column);
-          wanted.add(key);
-          const had = section.frames.get(key);
-          const frame = frameFor(section, story, column);
-          frame.story = story;
-          if (had) {
-            placeFrame(frame);
-          } else {
-            mountFrame(frame);
-          }
-        }
-      }
-    }
-    for (const [key, frame] of section.frames) {
-      if (!wanted.has(key)) {
-        frame.mounted?.unmount();
-        frame.el.remove();
-        section.frames.delete(key);
-      }
-    }
-    // An embed's section holding none of the stories it draws takes no place in it (PAGE_CSS `data-cawco-none`).
-    section.el.toggleAttribute(
-      "data-cawco-none",
-      embed && !!section.mod && stories.length === 0
-    );
-    heads(section);
-    chrome.outline();
-  }
-
-  /** Loads a section's states file and mounts its stories. */
+  /** Loads a section's states file; the mode draws its stories. */
   function loadSection(section: Section): Promise<void> {
     section.loading ??= (async () => {
       const since = performance.now();
@@ -2203,17 +1180,19 @@ export function boot(options: BootOptions): void {
         section.mod = await options.load(section.file, !!section.failure);
       } catch (error) {
         heard(error);
-        failedSection(section, await loadFailure(error, since));
+        section.failure = await loadFailure(error, since);
+        mode?.failed(section, section.failure);
+        later();
         section.loading = undefined;
         return;
       }
-      showSection(section);
+      show(section);
     })();
     return section.loading;
   }
 
-  /** A section's stories mounted from its module: rest first, then the columns its CSS reaches. */
-  function showSection(section: Section): void {
+  /** A section's module, loaded: what every mode reads of it, then the mode's drawing. */
+  function show(section: Section): void {
     const mod = section.mod as SectionModule;
     // Its stories measured afresh as they mount (`fillsScreen`): an edit may have given one a height of its own.
     for (const story of mod.SHEET.stories) {
@@ -2221,321 +1200,22 @@ export function boot(options: BootOptions): void {
     }
     section.loaded = true;
     section.failure = null;
-    const had = new Set(section.frames.values());
-    const going = holdStandIns(section);
     section.name = sectionName(
       mod.SHEET.meta.title,
       section.name,
       section.file
     );
-    headOf(section.head, section.file, section.name);
-    delete section.el.dataset.cawcoAsleep;
     for (const story of mod.SHEET.stories) {
       if (!section.interactions.has(story.name)) {
         section.interactions.set(story.name, ["rest"]);
       }
     }
-    syncFrames(section);
-    revealed(
-      going,
-      [...section.frames.values()]
-        .filter((frame) => !had.has(frame))
-        .map((frame) => frame.el)
-    );
+    mode?.shown(section);
     quietly(said(section));
-    if (embed) {
-      // Mounted afresh: the next shape said is its stories' at rest.
-      atRest = true;
-      unnamedInEmbed();
-      sayShape();
-    } else {
-      quietly(settle(section));
-    }
     later();
-  }
-
-  /**
-   * A section's columns, probes and moves read once it is shown, one after
-   * another: its probes once (columnsFor probes when the columns change,
-   * else they are probed here), its moves after them, never two passes at
-   * once in the rig. The stage's sweep waits on this same pass.
-   */
-  function settle(section: Section): Promise<void> {
-    section.settling = (async () => {
-      if (!(await columnsFor(section))) {
-        await probeAll(section);
-      }
-      await playAll(section);
-    })();
-    return section.settling;
-  }
-
-  /** The line saying which stories an embed names that no states file of its canvas has; none while every one is held. */
-  let unnamedLine: HTMLElement | null = null;
-
-  /**
-   * An embed's named stories that no section holds, said once in the
-   * embed's own place, in words, after every section has loaded: a story
-   * is the canvas's, from whichever states file holds it. While a section
-   * is still on its way, or failed (it says why in its own place), nothing
-   * is said: its stories are not known.
-   */
-  function unnamedInEmbed(): void {
-    unnamedLine?.remove();
-    unnamedLine = null;
-    if (sections.some((one) => !one.loaded || one.failure)) {
-      return;
-    }
-    const have = new Set(
-      sections.flatMap(
-        (one) => one.mod?.SHEET.stories.map((story) => story.name) ?? []
-      )
-    );
-    const missing = [...named].filter((name) => !have.has(name));
-    if (missing.length === 0) {
-      return;
-    }
-    unnamedLine = document.createElement("p");
-    unnamedLine.className = "cawco-section-failed-line cawco-ui";
-    unnamedLine.setAttribute("role", "alert");
-    unnamedLine.textContent = `${spec.name ?? "This canvas"} has no ${missing.length === 1 ? "story" : "stories"} named ${missing.join(", ")}.`;
-    world.prepend(unnamedLine);
-  }
-
-  /** Takes a far section's frames down; its module and its last report stay. */
-  function sleepSection(section: Section): void {
-    if (!section.loaded || movePlaying === section) {
-      return;
-    }
-    const box = section.el.getBoundingClientRect();
-    section.el.style.minHeight = `${box.height / zoom.z}px`;
-    for (const frame of section.frames.values()) {
-      frame.mounted?.unmount();
-      frame.el.remove();
-    }
-    section.frames.clear();
-    section.loaded = false;
-    section.loading = undefined;
-    section.el.dataset.cawcoAsleep = "";
-  }
-
-  /**
-   * Whether a section stands within a viewport of the canvas's view. One
-   * out of rendering (a phone's section not shown: chrome.ts PAGE_CSS) is
-   * near: a phone loads every section, so its outline and its picker name
-   * every story, and mounts only the frame it shows (`live`).
-   */
-  const nearView = (section: Section): boolean => {
-    if (unrendered(section)) {
-      return true;
-    }
-    const box = section.el.getBoundingClientRect();
-    const bounds = canvas.getBoundingClientRect();
-    const mx = bounds.width * LOAD_MARGIN;
-    const my = bounds.height * LOAD_MARGIN;
-    return (
-      box.bottom >= bounds.top - my &&
-      box.top <= bounds.bottom + my &&
-      box.right >= bounds.left - mx &&
-      box.left <= bounds.right + mx
-    );
-  };
-  /** A section out of rendering: it has no box. */
-  const unrendered = (section: Section): boolean =>
-    section.el.getClientRects().length === 0;
-  let pumping = false;
-  /**
-   * Loads the sections near the view, in the file's order: one only once
-   * every section before it stands at its drawn height (a section not yet
-   * drawn is a short placeholder, which would put the next one in view
-   * before its time). An embed loads every one, in order.
-   */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one walk of the sections, in order, for a person's view and for the stage's sweep alike
-  const pump = async () => {
-    if (pumping) {
-      return;
-    }
-    pumping = true;
-    try {
-      // An embed's stories wait until the page holding it says its whole graph is in the renderer (host.ts `graphPreloads`, core `CANVAS_EMBED_READY`): imported before, they would ask the network again for modules another frame is still fetching.
-      if (embed) {
-        await (window as unknown as { __cawcoGraph: CanvasGraph }).__cawcoGraph
-          .go;
-      }
-      for (const section of sections) {
-        if (section.loaded) {
-          continue;
-        }
-        // A section taken down keeps its drawn height; one never drawn is a placeholder, past which nothing is judged yet.
-        const asleep = section.el.dataset.cawcoAsleep !== undefined;
-        if (!(sweeping || embed || nearView(section))) {
-          if (asleep) {
-            continue;
-          }
-          break;
-        }
-        sweepOn(section, "load");
-        await loadSection(section);
-        // An embed draws every section, judging no view, and says its shape only once all have drawn (`sayShape`), so until then its frame is 0px tall and gets no rendering steps: it waits on no frame.
-        if (!embed) {
-          sweepOn(section, "draw");
-          await frameTick();
-        }
-        if (sweeping) {
-          await settled(section);
-        }
-      }
-      if (sweeping) {
-        canvasState.sweepAt = null;
-        canvasState.swept = true;
-      }
-    } finally {
-      pumping = false;
-    }
-  };
-  /**
-   * The stage's own render draws every section in turn, view or not, each
-   * reported before the next, at most {@link SWEEP_KEPT} kept mounted: the
-   * stage keeps each section's report, so one taken down is still said.
-   */
-  const sweeping = by === "stage";
-  /** Where the stage's sweep stands, for its render to name when it runs out of time (stage-render.ts). */
-  const sweepOn = (section: Section, step: SweepStep, story?: string) => {
-    if (sweeping) {
-      canvasState.sweepAt = {
-        file: section.file,
-        step,
-        ...(story ? { story } : {}),
-      };
-    }
-  };
-  const settled = async (section: Section) => {
-    // Its columns, probes and moves (the one pass its showing began), then its report.
-    sweepOn(section, "probe");
-    await (section.settling ?? settle(section));
-    sweepOn(section, "post");
-    await post();
-    const mounted = sections.filter((one) => one.loaded);
-    for (const one of mounted.slice(0, -SWEEP_KEPT)) {
-      sleepSection(one);
-    }
-  };
-  const near = new IntersectionObserver(
-    () => quietly(pump()),
-    // The canvas is the root: it clips its world, so a margin on the page's own viewport would never reach past its fold.
-    { root: canvas, rootMargin: `${LOAD_MARGIN * 100}% ${LOAD_MARGIN * 100}%` }
-  );
-  const far = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        const section = sections.find((one) => one.el === entry.target);
-        // A section a phone puts out of rendering mounts no frame (`live`) and stays loaded: slept, the pass would load it again at once (`nearView`) and probe it anew.
-        if (section && !entry.isIntersecting && !unrendered(section)) {
-          sleepSection(section);
-        }
-      }
-    },
-    {
-      root: canvas,
-      rootMargin: `${UNMOUNT_MARGIN * 100}% ${UNMOUNT_MARGIN * 100}%`,
-    }
-  );
-  for (const section of sections) {
-    near.observe(section.el);
-    // An embed never sleeps a section: its page scrolls it in and out of
-    // view, and nothing would wake it (pump passes a section asleep).
-    if (!(sweeping || embed)) {
-      far.observe(section.el);
-    }
   }
 
   /* --- Probes: each story's states read off screen ----------------------- */
-
-  /** How many of the sweep's move passes run now, the world out of the page's rendering for each ({@link apart}). */
-  let apartRuns = 0;
-  /** What waits for the world to be back in the page's rendering: a report, which reads the frames' boxes. */
-  const backWaiters = new Set<() => void>();
-  const worldBack = (): Promise<void> =>
-    apartRuns === 0
-      ? Promise.resolve()
-      : new Promise((done) => {
-          backWaiters.add(done);
-        });
-  /**
-   * A section's moves as the stage's sweep plays them in the rig, played
-   * with the world out of the page's rendering (`display: none`) and put
-   * back after. A move is read from the engine's own animations, its body's
-   * asked for each frame it plays (`playIn`), and Chromium's
-   * `getAnimations` costs as many animations as the page holds; every drawn
-   * frame's loops held thousands of CSS animations on a canvas of dot
-   * clouds (the pairing canvas: 10,869 over its 80 frames, 128 ms a call),
-   * and a frame of the page drew all of them. Taken out of rendering, the
-   * frames' CSS animations end (CSS Animations: an element with
-   * `display: none` runs none) and begin again once they are back, the
-   * report posted then ({@link worldBack}); a person's panel never hides
-   * what it shows.
-   */
-  async function apart<T>(run: () => Promise<T>): Promise<T> {
-    if (!sweeping) {
-      return await run();
-    }
-    // The frames mounted just now first draw as a person's page draws them: what their stories do on their first frames (a still held two frames in) is done.
-    await frameTick();
-    apartRuns += 1;
-    world.style.display = "none";
-    try {
-      return await run();
-    } finally {
-      apartRuns -= 1;
-      if (apartRuns === 0) {
-        world.style.display = "";
-        for (const done of backWaiters) {
-          done();
-        }
-        backWaiters.clear();
-      }
-    }
-  }
-
-  /**
-   * A section's stories probed: each that reaches an interaction and has a
-   * frame of one {@link live} (every such story on a desk; on a phone the
-   * story of the frame shown, if it shows a state), `unread`: only those
-   * not probed yet. A probe reads every element of its story in each state
-   * it reaches; a phone's 30 stories took 13.6 s of its page's main thread
-   * in Safari's engine as it loaded, for deltas of frames it never showed
-   * (the stage keeps an earlier draw's for those: host.ts `keepReport`).
-   */
-  async function probeAll(section: Section, unread = false): Promise<void> {
-    const liveState = (story: Story) =>
-      [...section.frames.values()].some(
-        (frame) =>
-          frame.story.name === story.name &&
-          frame.column.interaction !== "rest" &&
-          frame.live
-      );
-    const asked = (section.mod?.SHEET.stories ?? []).map((story) => ({
-      story,
-      reached: (section.interactions.get(story.name) ?? []).filter(
-        (one) => one !== "rest"
-      ),
-    }));
-    for (const { story, reached } of asked) {
-      if (reached.length === 0) {
-        section.probes.delete(story.name);
-      }
-    }
-    const probed = asked.filter(
-      (one) =>
-        one.reached.length > 0 &&
-        liveState(one.story) &&
-        !(unread && section.probes.has(one.story.name))
-    );
-    if (probed.length > 0) {
-      await probeTogether(section, probed);
-    }
-    later();
-  }
 
   /**
    * A section's stories that reach an interaction, probed together in the
@@ -2550,6 +1230,25 @@ export function boot(options: BootOptions): void {
    * heavy probe canvas 32,400. So a pass costs its own section's elements,
    * whatever the page around it holds.
    */
+  async function probeAll(section: Section): Promise<void> {
+    const asked = (section.mod?.SHEET.stories ?? []).map((story) => ({
+      story,
+      reached: (section.interactions.get(story.name) ?? []).filter(
+        (one) => one !== "rest"
+      ),
+    }));
+    for (const { story, reached } of asked) {
+      if (reached.length === 0) {
+        section.probes.delete(story.name);
+      }
+    }
+    const probed = asked.filter((one) => one.reached.length > 0);
+    if (probed.length > 0) {
+      await probeTogether(section, probed);
+    }
+    later();
+  }
+
   async function probeTogether(
     section: Section,
     asked: { reached: Interaction[]; story: Story }[]
@@ -2574,7 +1273,7 @@ export function boot(options: BootOptions): void {
       return { body, mounted, read: { delta: new Map() }, reached, story };
     });
     try {
-      // Once mounted, as a frame stands: its stories' first frames done.
+      // Once mounted, as a drawing stands: its stories' first frames done.
       await frameTick();
       for (const interaction of ["hover", "focus", "pressed"] as const) {
         const now = probes.filter((one) => one.reached.includes(interaction));
@@ -2693,24 +1392,12 @@ export function boot(options: BootOptions): void {
       .filter((one) => one.play && one.from)
       .map((one) => ({ from: one.from as string, to: one.name }));
 
-  let movePlaying: Section | null = null;
-
-  interface Played {
-    move: MoveRender;
-    records: {
-      animation: Animation;
-      keyframes: Keyframe[];
-      read: AnimationRead;
-      target: Element | null;
-    }[];
-  }
-
   /** Plays move `to` (from its `from`) in `body`: mounted from the start story's args, then its `play`; every animation it fired, read as it started. */
   async function playIn(
     section: Section,
     to: string,
     body: HTMLElement
-  ): Promise<Played> {
+  ): Promise<{ mounted: Mounted | undefined; move: MoveRender }> {
     const mod = section.mod?.module ?? {};
     const csf = csfOf(mod, to) ?? {};
     const from = String(
@@ -2719,7 +1406,6 @@ export function boot(options: BootOptions): void {
         ""
     );
     const move: MoveRender = { from, to, animations: [] };
-    const records: Played["records"] = [];
     if (!(from && typeof csf.play === "function")) {
       move.error = {
         message: `${to} has no from and play to move by.`,
@@ -2727,26 +1413,21 @@ export function boot(options: BootOptions): void {
         line: null,
         column: null,
       };
-      return { move, records };
+      return { mounted: undefined, move };
     }
     const into: { error?: PageError } = {};
     const args = argsOf(section, from);
     const mounted = mountInto(body, section, from, args, into);
     await frameTick();
     const seen = new Set<Animation>();
+    const reads: AnimationRead[] = [];
     const t0 = document.timeline.currentTime as number;
     let watching = true;
     const watch = () => {
       for (const one of body.getAnimations({ subtree: true })) {
         if (!seen.has(one)) {
           seen.add(one);
-          const effect = one.effect as KeyframeEffect | null;
-          records.push({
-            animation: one,
-            keyframes: effect?.getKeyframes() ?? [],
-            read: readAnimation(one, t0),
-            target: effect?.target ?? null,
-          });
+          reads.push(readAnimation(one, t0));
         }
       }
       if (watching) {
@@ -2789,119 +1470,53 @@ export function boot(options: BootOptions): void {
     if (into.error && !move.error) {
       move.error = into.error;
     }
-    move.animations = records.map((one) => one.read);
-    (body as HTMLElement & { __cawcoMounted?: Mounted }).__cawcoMounted =
-      mounted;
-    return { move, records };
+    move.animations = reads;
+    return { mounted, move };
   }
 
-  /** Every move of a section played off screen: what each fires, for the report. */
-  async function playAll(section: Section): Promise<void> {
+  /** Every move of a section played off screen: what each fires, for the report. `sweep` hears each as it starts. */
+  async function playAll(
+    section: Section,
+    sweep?: (to: string) => void
+  ): Promise<void> {
     const moves: MoveRender[] = [];
-    const asked = movesOf(section);
-    const playOne = async (to: string) => {
+    for (const { to } of movesOf(section)) {
       const body = document.createElement("div");
       body.className = "cawco-frame-body";
-      const story = storiesOf(section).find((one) => one.name === to);
+      const story = section.mod?.SHEET.stories.find((one) => one.name === to);
       sizeBody(
         body,
         story ? widthOf(story, "own") : null,
         screenFilled.has(fillKey(section.file, to))
       );
       rig.append(body);
+      let mounted: Mounted | undefined;
       try {
-        sweepOn(section, "move", to);
-        moves.push((await playIn(section, to, body)).move);
+        sweep?.(to);
+        const played = await playIn(section, to, body);
+        ({ mounted } = played);
+        moves.push(played.move);
       } finally {
-        (
-          body as HTMLElement & { __cawcoMounted?: Mounted }
-        ).__cawcoMounted?.unmount();
+        mounted?.unmount();
         body.remove();
       }
-    };
-    if (asked.length > 0) {
-      await apart(async () => {
-        for (const { to } of asked) {
-          await playOne(to);
-        }
-      });
     }
     section.moves = moves;
-    drawEdges();
     later();
-  }
-
-  /**
-   * A move played where the person sees it, in its destination's rest frame,
-   * then held for the timeline: each animation it fired made again, paused,
-   * on its own element with its own keyframes, so the timeline's playhead
-   * seeks what the engine ran and its tuned timing previews live.
-   */
-  async function playVisible(
-    file: string,
-    to: string
-  ): Promise<{
-    move: MoveRender;
-    replays: { animation: Animation | null; read: AnimationRead }[];
-  } | null> {
-    const section = sectionOf(file);
-    if (!section?.mod) {
-      return null;
-    }
-    const frame = [...section.frames.values()].find(
-      (one) => one.story.name === to && one.column.interaction === "rest"
-    );
-    if (!frame) {
-      return null;
-    }
-    movePlaying = section;
-    frame.mounted?.unmount();
-    frame.mounted = undefined;
-    frame.body.replaceChildren();
-    dress(frame);
-    const played = await playIn(section, to, frame.body);
-    frame.mounted = (
-      frame.body as HTMLElement & { __cawcoMounted?: Mounted }
-    ).__cawcoMounted;
-    frame.live = true;
-    // Each animation again, paused, where its element still stands; an
-    // outro's element is gone once the move ends, so its clip is tuned
-    // without a preview.
-    const replays = played.records.map((one) => {
-      if (!(one.target?.isConnected && one.keyframes.length > 0)) {
-        return { animation: null, read: one.read };
-      }
-      const animation = one.target.animate(one.keyframes, {
-        duration: one.read.duration,
-        delay: one.read.start + one.read.delay,
-        easing: one.read.easing,
-        fill: "both",
-      });
-      animation.pause();
-      animation.currentTime = 0;
-      return { animation, read: one.read };
-    });
-    const kept = section.moves.findIndex((one) => one.to === to);
-    if (kept === -1) {
-      section.moves.push(played.move);
-    } else {
-      section.moves[kept] = played.move;
-    }
-    later();
-    return { move: played.move, replays };
   }
 
   /* --- What the page says: the sheet for the inspector, the report -------- */
 
   /**
    * The section's whole sheet, its components' props too, read from the
-   * stage (core `SHEET_PATH`) once it has drawn and told the pane's inspector: its
-   * module carries none, so no draw waits on docgen. A page with no
-   * inspector (a map's card, a Preview's embed) asks for none. An answer
-   * older than the section's newest ask is let go.
+   * stage (core `SHEET_PATH`) once it has drawn, and told the pane (the
+   * inspector, the design graph's model): its module carries none, so no
+   * draw waits on docgen. A page no pane reads (a map's card, a Preview's
+   * embed) asks for none. An answer older than the section's newest ask is
+   * let go.
    */
   async function said(section: Section): Promise<void> {
-    if (!section.mod || card || embed) {
+    if (!section.mod || by === "map" || embed) {
       return;
     }
     const asked = (sheetAsks.get(section.file) ?? 0) + 1;
@@ -2924,7 +1539,10 @@ export function boot(options: BootOptions): void {
       return;
     }
     const sheet: SheetOnPage = { ...read, file: section.file };
-    window.__cawcoSheetOnPage = sheet;
+    window.__cawcoSheetsOnPage = {
+      ...window.__cawcoSheetsOnPage,
+      [section.file]: sheet,
+    };
     dispatchEvent(new CustomEvent("cawco:sheet", { detail: sheet }));
   }
 
@@ -2933,93 +1551,13 @@ export function boot(options: BootOptions): void {
     reportTimer = setTimeout(() => quietly(post()), REPORT_QUIET_MS);
   }
 
-  /**
-   * A frame that drew at its body's floor (its `min-inline-size`) with no
-   * width of its own: the story gave it none, and its content measures
-   * nothing (a size container), so it shrank to the floor and reads as a
-   * sliver. Said as the frame's failure, in words; no width is put in its
-   * place. Null when it stands at a width of its own or past the floor.
-   */
-  function atFloor(frame: Frame, width: number): PageError | null {
-    if (widthOf(frame.story, frame.column.width) !== null) {
-      return null;
-    }
-    const floor =
-      Number.parseFloat(getComputedStyle(frame.body).minInlineSize) || 0;
-    return floor > 0 && width <= floor + 0.5
-      ? {
-          message: `drawn ${Math.round(width)}px wide: the story has no width of its own; give it a viewport or a width`,
-          file: null,
-          line: null,
-          column: null,
-        }
-      : null;
-  }
-
-  /**
-   * A frame as it drew. Its box is read from layout, in the world's own
-   * pixels, never from the screen: the same whatever the zoom. Read off the
-   * screen and divided by the zoom, it came out a pixel either way as a
-   * pinch went on, so each report rewrote the frame's status line and asked
-   * for another (the world's resize observer), each repainting the frame:
-   * in Safari's engine a pinch on a phone drew a frame every 350 ms.
-   */
-  function frameRender(frame: Frame): FrameRender {
-    const at = worldBox(frame.el);
-    const box = {
-      x: at.x + frame.body.offsetLeft,
-      y: at.y + frame.body.offsetTop,
-      w: frame.body.offsetWidth,
-      h: frame.body.offsetHeight,
-    };
-    let state: FrameRender["state"] = "empty";
-    let { error } = frame;
-    if (error) {
-      state = "failed";
-    } else if (frame.el.getClientRects().length === 0) {
-      // Not on screen at this width (a phone shows one frame at a time): it has not drawn nothing, it is not shown.
-      state = "unshown";
-    } else if (frame.column.width === "own" && frame.story.formUnread) {
-      // Its own width is one the stage can't read: drawn at none, it would pass for drawn at a width it never asked for.
-      error = {
-        message: frame.story.formUnread,
-        file: null,
-        line: null,
-        column: null,
-      };
-      state = "failed";
-    } else if (drew(frame.body)) {
-      error = atFloor(frame, box.w) ?? undefined;
-      state = error ? "failed" : "drawn";
-    }
-    const probeRead = frame.section.probes
-      .get(frame.story.name)
-      ?.delta.get(frame.column.interaction);
-    return {
-      story: frame.story.name,
-      label: frame.story.label,
-      form: formWords(frame.story, frame.column.width),
-      interaction: frame.column.interaction,
-      scheme: schemeOf(frame.column),
-      width: box.w,
-      state,
-      box,
-      text: firstWords(frame.body),
-      parts: partsOf(frame.body, root),
-      ...(error ? { error } : {}),
-      ...(frame.column.interaction === "rest" || !probeRead
-        ? {}
-        : { delta: probeRead }),
-    };
-  }
-
   function reportNow(): PageReport {
     const drawn: PageSection[] = sections
       .filter((one) => one.loaded && one.mod)
       .map((section) => ({
         file: section.file,
         title: section.mod?.SHEET.meta.title ?? section.file,
-        frames: [...section.frames.values()].map(frameRender),
+        frames: mode?.framesOf(section) ?? [],
         moves: section.moves,
         notForced: [...rewrite.refused].slice(0, 20),
       }));
@@ -3029,7 +1567,7 @@ export function boot(options: BootOptions): void {
         .map((story) => `${section.file}:${story.name}`)
     );
     return {
-      by,
+      by: by === "stage" ? "stage" : "panel",
       at: new Date().toISOString(),
       page: { errors: [...pageErrors] },
       sections: drawn,
@@ -3038,16 +1576,11 @@ export function boot(options: BootOptions): void {
   }
 
   async function post(): Promise<void> {
-    // The frames are read where they stand, never while the sweep has them out of rendering.
-    await worldBack();
     const report = reportNow();
-    chrome.counts(report);
-    drawEdges();
-    if (card) {
-      fit();
-    }
+    mode?.reported(report);
     try {
-      if (!(card || embed)) {
+      // A Preview's embed and a map's card never post: the report stays the panel's own page's, or the stage's render's.
+      if (!(by === "map" || embed)) {
         // A section whose module the page couldn't load posts no section: its error goes as the stage's, which knows only what it served.
         const posted: PostedReport = {
           ...report,
@@ -3067,508 +1600,14 @@ export function boot(options: BootOptions): void {
       // The stage is away: the next draw posts again.
     }
     reports += 1;
-    canvasState.report = report;
-    canvasState.reports = reports;
+    state.report = report;
+    state.reports = reports;
   }
 
-  /* --- Pan and zoom: one transform -------------------------------------- */
-
-  const zoom = { x: 0, y: 0, z: 1 };
-  const place = () => {
-    // An embed stands in the page's own flow: it never pans or zooms.
-    world.style.transform = embed
-      ? ""
-      : `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.z})`;
-    chrome.where();
-  };
-  const ZOOM_MIN = 0.1;
-  const ZOOM_MAX = 4;
-  const zoomAt = (z: number, px: number, py: number) => {
-    const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
-    zoom.x = px - ((px - zoom.x) * next) / zoom.z;
-    zoom.y = py - ((py - zoom.y) * next) / zoom.z;
-    zoom.z = next;
-    place();
-  };
-  canvas.addEventListener(
-    "wheel",
-    (event) => {
-      // An embed's wheel scrolls the page holding it.
-      if (embed) {
-        return;
-      }
-      event.preventDefault();
-      letGo();
-      if (event.ctrlKey || event.metaKey) {
-        // The world's translate is the canvas's own: the pointer measured from the canvas's corner, which stands under the head.
-        const box = canvas.getBoundingClientRect();
-        zoomAt(
-          zoom.z * Math.exp(-event.deltaY * 0.01),
-          event.clientX - box.x,
-          event.clientY - box.y
-        );
-      } else {
-        zoom.x -= event.shiftKey ? event.deltaY : event.deltaX;
-        zoom.y -= event.shiftKey ? 0 : event.deltaY;
-        place();
-      }
-    },
-    { passive: false }
-  );
-  // The browser scrolls a clipped box to bring a focused or clicked element
-  // into view; the canvas turns that scroll into its own pan, so the
-  // transform stays the one place a frame stands.
-  canvas.addEventListener("scroll", () => {
-    if (canvas.scrollTop === 0 && canvas.scrollLeft === 0) {
-      return;
-    }
-    // A story that takes the focus as it mounts (a question asking in its
-    // page) moves nothing: the view is the person's until they press, type
-    // or scroll.
-    if (!acted) {
-      canvas.scrollTop = 0;
-      canvas.scrollLeft = 0;
-      return;
-    }
-    letGo();
-    zoom.x -= canvas.scrollLeft;
-    zoom.y -= canvas.scrollTop;
-    canvas.scrollTop = 0;
-    canvas.scrollLeft = 0;
-    place();
-  });
-  /** A drag on the canvas's ground pans; on a frame's label it moves the frame (past a few px, else it picks). */
-  let drag: {
-    key?: string;
-    x: number;
-    y: number;
-    ox: number;
-    oy: number;
-    moved: boolean;
-    id: number;
-  } | null = null;
-  canvas.addEventListener("pointerdown", (event) => {
-    if (embed || (event.button !== 0 && event.button !== 1)) {
-      return;
-    }
-    const label = (event.target as Element).closest?.(".cawco-frame-label");
-    const ground =
-      event.target === canvas ||
-      event.target === world ||
-      (event.target as Element).classList?.contains("cawco-grid") ||
-      (event.target as Element).classList?.contains("cawco-section");
-    if (!(label || ground || event.button === 1)) {
-      return;
-    }
-    const key = label?.closest<HTMLElement>(".cawco-frame")?.dataset.cawcoKey;
-    const was = key ? (moved[key] ?? [0, 0]) : [zoom.x, zoom.y];
-    drag = {
-      key,
-      x: event.clientX,
-      y: event.clientY,
-      ox: was[0] as number,
-      oy: was[1] as number,
-      moved: false,
-      id: event.pointerId,
-    };
-  });
-  window.addEventListener("pointermove", (event) => {
-    if (!drag || event.pointerId !== drag.id) {
-      return;
-    }
-    const dx = event.clientX - drag.x;
-    const dy = event.clientY - drag.y;
-    if (!drag.moved && Math.hypot(dx, dy) < 4) {
-      return;
-    }
-    if (!drag.moved) {
-      canvas.setPointerCapture?.(event.pointerId);
-    }
-    drag.moved = true;
-    if (drag.key) {
-      moved[drag.key] = [drag.ox + dx / zoom.z, drag.oy + dy / zoom.z];
-      const el = world.querySelector<HTMLElement>(
-        `[data-cawco-key="${CSS.escape(drag.key)}"]`
-      );
-      if (el) {
-        el.style.translate = `${moved[drag.key]?.[0]}px ${moved[drag.key]?.[1]}px`;
-      }
-      drawEdges();
-    } else {
-      letGo();
-      zoom.x = drag.ox + dx;
-      zoom.y = drag.oy + dy;
-      place();
-    }
-  });
-  window.addEventListener("pointerup", (event) => {
-    if (!drag || event.pointerId !== drag.id) {
-      return;
-    }
-    if (drag.moved && drag.key) {
-      keepLayout();
-      // The drag was no pick.
-      window.addEventListener("click", (click) => click.stopPropagation(), {
-        capture: true,
-        once: true,
-      });
-    }
-    drag = null;
-  });
-
-  let layoutTimer: ReturnType<typeof setTimeout> | undefined;
-  /** The person's drags go into the artifact's doc, never the project. */
-  const keepLayout = () => {
-    clearTimeout(layoutTimer);
-    layoutTimer = setTimeout(() => {
-      bridge()
-        ?.set("layout", moved)
-        .catch(() => undefined);
-      later();
-    }, 400);
-  };
-  const resetLayout = () => {
-    moved = {};
-    for (const section of sections) {
-      for (const frame of section.frames.values()) {
-        frame.el.style.translate = "";
-      }
-    }
-    keepLayout();
-    drawEdges();
-  };
-
-  /**
-   * An element's box in the world's own coordinates, before the world's
-   * transform: its layout offsets up to the world, and a frame's drag
-   * (`translate`). Unlike a screen rect it is the same whatever the world's
-   * transform is now, or is animating through.
-   */
-  const worldBox = (el: HTMLElement) => {
-    let x = 0;
-    let y = 0;
-    for (
-      let at: HTMLElement | null = el;
-      at && at !== world;
-      at = at.offsetParent as HTMLElement | null
-    ) {
-      x += at.offsetLeft;
-      y += at.offsetTop;
-    }
-    const dragged = moved[el.dataset.cawcoKey ?? ""] ?? [0, 0];
-    return {
-      x: x + dragged[0],
-      y: y + dragged[1],
-      w: el.offsetWidth,
-      h: el.offsetHeight,
-    };
-  };
-
-  /**
-   * The frame `go` last showed while the view is still where it put it; the
-   * person's own pan or zoom lets it go. While it is held, it is shown again
-   * as its box changes (its component mounting, the faces arriving, the
-   * scheme re-dressing it), so where it stands never depends on when.
-   */
-  let held: { key: string; el: HTMLElement; own: boolean } | null = null;
-  /** The world's move to the frame `show` last animated to, while it runs. */
-  let flight: Animation | null = null;
-  const holding = new ResizeObserver(() => {
-    if (held?.el.isConnected) {
-      show(held.key, held.el, false, held.own);
-    }
-  });
-  const letGo = () => {
-    held = null;
-    holding.disconnect();
-  };
-
-  /**
-   * Places the world so frame `el` stands in the middle of the view, from
-   * its world box alone: the same at any moment for the same frame and view.
-   * `ownSize`: at zoom 1 and without its section's head, as its picture is
-   * taken, whatever the window's width.
-   */
-  const show = (
-    key: string,
-    el: HTMLElement,
-    animate: boolean,
-    ownSize = false
-  ) => {
-    // Marked current first: on a phone that is what shows the frame and its
-    // section (chrome.ts PAGE_CSS hides the rest), and so what gives it the
-    // box it is placed by.
-    chrome.current(key);
-    // Where the world stands now, a flight still going included; that
-    // flight ends here, or it would draw its stale end over this placement.
-    const from = getComputedStyle(world).transform;
-    flight?.cancel();
-    flight = null;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-    const own = worldBox(el);
-    if (ownSize) {
-      zoom.z = 1;
-    } else if (chrome.phone()) {
-      // One frame at a time, as wide as the screen lets it be, never past its own size.
-      zoom.z = Math.max(
-        ZOOM_MIN,
-        Math.min(1, (width - 24) / Math.max(1, own.w))
-      );
-    }
-    // On a phone the frame stands alone in its section: it is shown with its section's head, which names its sheet.
-    const headEl =
-      chrome.phone() && !ownSize
-        ? el
-            .closest(".cawco-section")
-            ?.querySelector<HTMLElement>(".cawco-section-head")
-        : null;
-    const top = headEl ? Math.min(worldBox(headEl).y, own.y) : own.y;
-    const box = { x: own.x, y: top, w: own.w, h: own.y + own.h - top };
-    zoom.x = width / 2 - (box.x + box.w / 2) * zoom.z;
-    zoom.y =
-      Math.min(height / 2, WORLD_INSET.y + (box.h * zoom.z) / 2) -
-      (box.y + box.h / 2) * zoom.z;
-    place();
-    if (animate && !media("(prefers-reduced-motion: reduce)").matches) {
-      flight = world.animate(
-        [{ transform: from }, { transform: world.style.transform }],
-        {
-          duration: chrome.duration("--dur-panel", 280),
-          easing: "cubic-bezier(0.23, 1, 0.32, 1)",
-        }
-      );
-    }
-    // On a phone the frame shown changed: its edges are drawn again, to frames now drawn only.
-    drawEdges();
-    // Its open layers in sight with it, once the view stands where it goes;
-    // a frame posed for its picture stays where its pose puts it.
-    const landed = () =>
-      requestAnimationFrame(() => {
-        if (el.isConnected) {
-          revealLayersOf(el);
-        }
-      });
-    if (ownSize) {
-      return;
-    }
-    if (flight) {
-      flight.finished.then(landed, () => undefined);
-    } else {
-      landed();
-    }
-  };
-
-  /** The drawn frame element of `key`. */
-  const frameEl = (key: string) =>
-    world.querySelector<HTMLElement>(`[data-cawco-key="${CSS.escape(key)}"]`);
-
-  /** Brings a frame to the middle of the view, and holds it there until the person moves the view; `own`: at its own size, for its picture. */
-  const go = (key: string, own = false) => {
-    const el = frameEl(key);
-    if (!el) {
-      return;
-    }
-    // A frame posed for its picture stays posed when it is shown again: the
-    // chrome shows its current frame anew as the window resizes or its
-    // outline is rebuilt (chrome.ts `layout`, `outline`), which on a phone's
-    // width would zoom it to fit under the picture being taken. Only the
-    // person's own pan or zoom (`letGo`), or another frame, ends a pose.
-    const posed = own || (held?.own === true && held.key === key);
-    letGo();
-    show(key, el, !posed, posed);
-    held = { key, el, own: posed };
-    holding.observe(el);
-    // The canvas resizing (a dock taking its room, the pane resized) shows it again too.
-    holding.observe(canvas);
-    const headEl = el
-      .closest(".cawco-section")
-      ?.querySelector<HTMLElement>(".cawco-section-head");
-    if (headEl) {
-      holding.observe(headEl);
-    }
-  };
-
-  /* --- Edges: moves always, the agent's own when it sent them ---------- */
-
-  /** The rest frame (first column) of a story, named `Story` or `file:Story`. */
-  const restFrame = (name: string, file?: string): HTMLElement | null => {
-    const [inFile, story] =
-      name.includes(":") && !file
-        ? (name.split(LAST_COLON) as [string, string])
-        : [file, name];
-    for (const section of sections) {
-      if (inFile && section.file !== inFile) {
-        continue;
-      }
-      for (const frame of section.frames.values()) {
-        if (frame.story.name === story && frame.column.interaction === "rest") {
-          return frame.el;
-        }
-      }
-    }
-    return null;
-  };
-
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: gathers the three kinds of edge and draws each from one frame's box side to the other's in one pass
-  function drawEdges(): void {
-    const lines: {
-      from: HTMLElement;
-      to: HTMLElement;
-      label: string;
-      kind: "move" | "edge" | "group";
-      file?: string;
-      story?: string;
-    }[] = [];
-    for (const section of sections) {
-      for (const move of movesOf(section)) {
-        const from = restFrame(move.from, section.file);
-        const to = restFrame(move.to, section.file);
-        if (from && to) {
-          const fired = section.moves.find((one) => one.to === move.to);
-          lines.push({
-            from,
-            to,
-            kind: "move",
-            // The arrow is the edge's own marker: the words name the two ends.
-            label: fired
-              ? `${move.from} to ${move.to} · ${fired.animations.length} animation${fired.animations.length === 1 ? "" : "s"}`
-              : `${move.from} to ${move.to}`,
-            file: section.file,
-            story: move.to,
-          });
-        }
-      }
-    }
-    for (const edge of spec.edges ?? []) {
-      const from = restFrame(edge.from);
-      const to = restFrame(edge.to);
-      if (from && to) {
-        lines.push({ from, to, kind: "edge", label: edge.label ?? "" });
-      }
-    }
-    for (const [child, parent] of Object.entries(spec.group ?? {})) {
-      const from = restFrame(parent);
-      const to = restFrame(child);
-      if (from && to) {
-        lines.push({ from, to, kind: "group", label: "" });
-      }
-    }
-    // An end not drawn (a phone shows one frame) has no box: no edge is drawn to it.
-    const drawn = lines.filter((line) =>
-      [line.from, line.to].every((el) => {
-        const box = el.getBoundingClientRect();
-        return box.width > 0 && box.height > 0;
-      })
-    );
-    // None to draw and none drawn: nothing is written, so nothing in the world repaints.
-    if (drawn.length === 0 && edges.childElementCount === 1) {
-      return;
-    }
-    edges.replaceChildren();
-    edges.innerHTML = `<defs><marker id="cawco-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker></defs>`;
-    // Every edge joins two stories' rest frames, and a rest frame stands in
-    // its section's first column: so every edge runs in the world's left
-    // gutter, out of its frame's left side, along a lane of its own and into
-    // the other's, crossing no frame whatever the grid; its label stands in
-    // the gutter too, left of every lane. The labels' widths set the gutter.
-    const svg = "http://www.w3.org/2000/svg";
-    const texts = drawn.map((line) => {
-      if (!line.label) {
-        return null;
-      }
-      const text = document.createElementNS(svg, "text");
-      text.classList.add("cawco-edge-label");
-      text.setAttribute("text-anchor", "end");
-      text.textContent = line.label;
-      if (line.kind === "move") {
-        text.dataset.cawcoMove = `${line.file}|${line.story}`;
-      }
-      edges.append(text);
-      return text;
-    });
-    const widest = Math.max(
-      0,
-      ...texts.map((text) => text?.getComputedTextLength() ?? 0)
-    );
-    const lanesWide =
-      drawn.length > 0 ? EDGE_OUT + EDGE_LANE * (drawn.length - 1) : 0;
-    const gutter =
-      drawn.length > 0
-        ? Math.ceil(lanesWide + (widest > 0 ? EDGE_LABEL_GAP * 2 + widest : 0))
-        : 0;
-    world.style.setProperty("--cawco-gutter", `${gutter}px`);
-    const origin = world.getBoundingClientRect();
-    const local = (rect: DOMRect) => ({
-      x: (rect.x - origin.x) / zoom.z,
-      y: (rect.y - origin.y) / zoom.z,
-      w: rect.width / zoom.z,
-      h: rect.height / zoom.z,
-    });
-    const labelsEnd = gutter - lanesWide - EDGE_LABEL_GAP;
-    let below = Number.NEGATIVE_INFINITY;
-    const placed = drawn
-      .map((line, lane) => {
-        const a = local(line.from.getBoundingClientRect());
-        const b = local(line.to.getBoundingClientRect());
-        return { line, lane, a, b, words: texts[lane] ?? null };
-      })
-      .sort((one, two) => (one.a.y + one.b.y) / 2 - (two.a.y + two.b.y) / 2);
-    for (const { line, lane, a, b, words } of placed) {
-      const x = gutter - EDGE_OUT - EDGE_LANE * lane;
-      const fromY = a.y + a.h / 2;
-      const toY = b.y + b.h / 2;
-      const turn = Math.min(EDGE_TURN, Math.abs(toY - fromY) / 2);
-      const down = toY >= fromY ? 1 : -1;
-      const path = document.createElementNS(svg, "path");
-      path.setAttribute(
-        "d",
-        [
-          `M${a.x - EDGE_CLEAR} ${fromY}`,
-          `H${x + turn}`,
-          `Q${x} ${fromY} ${x} ${fromY + down * turn}`,
-          `V${toY - down * turn}`,
-          `Q${x} ${toY} ${x + turn} ${toY}`,
-          `H${b.x - EDGE_CLEAR}`,
-        ].join(" ")
-      );
-      path.classList.add("cawco-edge", `cawco-edge-${line.kind}`);
-      if (line.kind !== "group") {
-        path.setAttribute("marker-end", "url(#cawco-arrow)");
-      }
-      path.dataset.cawcoFrom = line.from.dataset.cawcoKey ?? "";
-      path.dataset.cawcoTo = line.to.dataset.cawcoKey ?? "";
-      if (line.kind === "move") {
-        path.dataset.cawcoMove = `${line.file}|${line.story}`;
-        const title = document.createElementNS(svg, "title");
-        title.textContent = `${line.label}: open its timeline`;
-        path.append(title);
-      }
-      edges.append(path);
-      if (words) {
-        // At its lane's middle, below the label above it where two would meet.
-        const y = Math.max((fromY + toY) / 2 + 4, below + EDGE_LABEL_LINE);
-        below = y;
-        words.setAttribute("x", String(labelsEnd));
-        words.setAttribute("y", String(y));
-      }
-    }
-  }
-  edges.addEventListener("click", (event) => {
-    const move = (event.target as Element)
-      .closest?.("[data-cawco-move]")
-      ?.getAttribute("data-cawco-move");
-    if (move) {
-      const [file, to] = move.split("|") as [string, string];
-      quietly(chrome.openMove(file, to));
-    }
-  });
-
-  /* --- Dials: CSS variables on every frame, or args through update -------- */
+  /* --- Dials: CSS variables on every body, or args through update -------- */
 
   const dialVars = new Map<string, string>();
   let dialArgs: Record<string, unknown> = {};
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: a dial is a CSS variable on every frame or an arg through every frame's update, said in one pass
   const applyDials = (values: Record<string, unknown>) => {
     const args: Record<string, unknown> = {};
     for (const dial of spec.dials ?? []) {
@@ -3584,14 +1623,12 @@ export function boot(options: BootOptions): void {
     }
     const argsChanged = JSON.stringify(args) !== JSON.stringify(dialArgs);
     dialArgs = args;
-    for (const section of sections) {
-      for (const frame of section.frames.values()) {
-        for (const [name, value] of dialVars) {
-          frame.body.style.setProperty(name, value);
-        }
-        if (argsChanged && Object.keys(args).length > 0) {
-          frame.mounted?.update(args);
-        }
+    for (const { body, mounted } of mode?.bodies() ?? []) {
+      for (const [name, value] of dialVars) {
+        body.style.setProperty(name, value);
+      }
+      if (argsChanged && Object.keys(args).length > 0) {
+        mounted?.update(args);
       }
     }
     later();
@@ -3608,7 +1645,9 @@ export function boot(options: BootOptions): void {
         }>
       ).detail ?? {};
     for (const section of sections) {
-      if (!section.mod?.SHEET.stories.some((one) => one.name === story)) {
+      if (!(
+        story && section.mod?.SHEET.stories.some((one) => one.name === story)
+      )) {
         continue;
       }
       const key = `${section.file}|${story}`;
@@ -3617,41 +1656,29 @@ export function boot(options: BootOptions): void {
       } else {
         overrides.delete(key);
       }
-      for (const frame of section.frames.values()) {
-        if (frame.story.name === story) {
-          mountFrame(frame);
-        }
-      }
+      mode?.overridden(section, story);
     }
     dispatchEvent(new CustomEvent("cawco:hmr"));
     later();
   });
   // The pane's mode, as the overlay hears it (preview-overlay page.ts
-  // `mode`): in Comment mode the frame in view keeps no fill of its own on
-  // its label (chrome.ts), since the comment target's tint is the one mark.
+  // `mode`): in Comment mode what the page marks of its own stays quiet,
+  // since the comment target's tint is the one mark.
   window.addEventListener("cawco:mode", (event) => {
-    const mode = (event as CustomEvent<{ mode?: unknown }>).detail?.mode;
+    const paneMode = (event as CustomEvent<{ mode?: unknown }>).detail?.mode;
     document.documentElement.toggleAttribute(
       "data-cawco-commenting",
-      mode === "comment"
+      paneMode === "comment"
     );
   });
   window.addEventListener("cawco:story-select", (event) => {
     const story = (event as CustomEvent<{ story?: unknown }>).detail?.story;
-    chosen = typeof story === "string" ? story : null;
+    const chosen = typeof story === "string" ? story : null;
     window.__cawcoSheetChosen = chosen;
-    for (const section of sections) {
-      for (const frame of section.frames.values()) {
-        frame.el.toggleAttribute(
-          "data-cawco-selected",
-          frame.story.name === chosen
-        );
-      }
-    }
+    mode?.selected(chosen);
   });
-  /** The pane's toggles: scheme, widths, motion, all permutations, zoom. */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the pane's five toggles, each re-dressing the frames it changes
-  const setView = (next: Partial<View> & { zoom?: number | "fit" }) => {
+  /** The pane's view: scheme, widths, motion. */
+  const setView = (next: Partial<View>) => {
     const motionWas = view.motion;
     Object.assign(view, {
       ...(next.scheme ? { scheme: next.scheme } : {}),
@@ -3664,50 +1691,12 @@ export function boot(options: BootOptions): void {
         forceMotion(sheet, view.motion);
       }
     }
-    for (const section of sections) {
-      if (section.loaded) {
-        syncFrames(section);
-        for (const frame of section.frames.values()) {
-          dress(frame);
-          const label = frame.label.querySelector(".cawco-frame-small");
-          if (label) {
-            label.textContent = smallOf(frame.story, frame.column);
-          }
-        }
-      }
-    }
-    if (next.zoom === "fit") {
-      letGo();
-      fit();
-    } else if (typeof next.zoom === "number") {
-      letGo();
-      zoomAt(next.zoom, canvas.clientWidth / 2, canvas.clientHeight / 2);
-    }
-    chrome.view(view);
+    mode?.redressed();
     later();
   };
   window.addEventListener("cawco:canvas-view", (event) => {
-    setView(
-      (event as CustomEvent<Partial<View> & { zoom?: number | "fit" }>)
-        .detail ?? {}
-    );
+    setView((event as CustomEvent<Partial<View>>).detail ?? {});
   });
-  window.addEventListener("cawco:canvas-go", (event) => {
-    const key = (event as CustomEvent<{ key?: string }>).detail?.key;
-    if (key) {
-      go(key);
-    }
-  });
-
-  /** Zoom to the content's width, never past 1. */
-  const fit = () => {
-    const box = canvas.getBoundingClientRect();
-    const width = world.scrollWidth || box.width;
-    zoom.z = Math.max(ZOOM_MIN, Math.min(1, (box.width - 48) / width));
-    zoom.x = WORLD_INSET.x;
-    zoom.y = WORLD_INSET.y;
-    place();
-  };
 
   /* --- HMR ------------------------------------------------------------- */
 
@@ -3718,14 +1707,9 @@ export function boot(options: BootOptions): void {
       return;
     }
     section.mod = mod;
-    for (const frame of section.frames.values()) {
-      frame.mounted?.unmount();
-      frame.el.remove();
-    }
-    section.frames.clear();
     section.interactions.clear();
     section.probes.clear();
-    showSection(section);
+    show(section);
     dispatchEvent(new CustomEvent("cawco:hmr"));
   });
   // A states file it found missing is written: its section loads again, with no reload of the canvas.
@@ -3771,295 +1755,79 @@ export function boot(options: BootOptions): void {
     }
   });
   window.addEventListener("cawco:after-update", () => {
-    for (const section of sections) {
-      if (section.loaded) {
-        quietly(columnsFor(section));
-      }
-    }
+    mode?.updated();
     dispatchEvent(new CustomEvent("cawco:hmr"));
     later();
   });
 
-  /* --- The chrome: what the canvas says about itself ------------------- */
+  /* --- The chrome: the page's own style, and the agent's dials ----------- */
 
   const chrome = new Chrome({
-    canvas,
     embedded: embed,
     spec,
     tokens: options.tokens,
     faces: options.faces,
-    view,
-    sections: () => sections,
-    go,
-    resetLayout,
-    setView,
-    playVisible,
     applyDials,
-    shown: liveNow,
-    world: () => zoom,
   });
 
-  // The page's scheme turned (the host's theme, or the system's): every frame drawn in it, and the chrome's DialKit, follow.
+  // The page's scheme turned (the host's theme, or the system's): every body drawn in it, and the dials, follow.
   onPageScheme((scheme) => {
-    for (const section of sections) {
-      for (const frame of section.frames.values()) {
-        if (frame.column.scheme === "page") {
-          dress(frame);
-        }
-      }
-    }
+    mode?.redressed();
     chrome.scheme(scheme);
     later();
   });
 
-  bridge()?.on("picks", (picks) => {
-    const layout = picks.layout?.value;
-    if (layout && typeof layout === "object" && !drag) {
-      moved = layout as Record<string, [number, number]>;
-      for (const section of sections) {
-        for (const frame of section.frames.values()) {
-          placeFrame(frame);
-        }
-      }
-      drawEdges();
-    }
-  });
-
-  window.addEventListener("resize", () => {
-    chrome.layout();
-    drawEdges();
-  });
-  new ResizeObserver(() => {
-    drawEdges();
-    later();
-    sayShape();
-  }).observe(world);
-
-  /* --- Pictures: a frame posed, settled and read for its picture --------- */
-
-  /**
-   * How much wider and taller the window must be for the canvas to hold
-   * frame `key` whole at its own size, {0, 0} when it does; null when no
-   * such frame is drawn. Read once the frame is shown: on a phone a frame
-   * not shown has no box.
-   */
-  const lacksFor = (key: string) => {
-    const el = frameEl(key);
-    return el
-      ? {
-          w: Math.max(
-            0,
-            Math.ceil(el.offsetWidth + 2 * WORLD_INSET.x - canvas.clientWidth)
-          ),
-          h: Math.max(
-            0,
-            Math.ceil(el.offsetHeight + 2 * WORLD_INSET.y - canvas.clientHeight)
-          ),
-        }
-      : null;
-  };
-
-  /**
-   * The frame of story `name` (`Story`, or `file:Story` where two states
-   * files name one story alike) in state `interaction`, for its picture:
-   * its key, its section woken first when the stage's sweep took it down
-   * (`sleepSection`); or why there is none, in words.
-   */
-  const frameNamed = async (
-    name: string,
-    interaction: Interaction = "rest"
-  ): Promise<{ key: string } | { refused: string }> => {
-    const [inFile, storyName] = name.includes(":")
-      ? (name.split(LAST_COLON) as [string, string])
-      : [undefined, name];
-    const holders = sections.filter(
-      (one) =>
-        (inFile === undefined || one.file === inFile) &&
-        one.mod?.SHEET.stories.some((each) => each.name === storyName)
-    );
-    const [section] = holders;
-    if (!section) {
-      return {
-        refused: `No states file of this canvas has a story ${name}: ${sections.map((one) => `${one.file} has ${one.mod?.SHEET.stories.map((each) => each.name).join(", ") || "none drawn yet"}`).join("; ")}.`,
-      };
-    }
-    if (holders.length > 1) {
-      return {
-        refused: `${storyName} is a story of ${holders.length} states files here: name one, ${holders.map((one) => `${one.file}:${storyName}`).join(" or ")}.`,
-      };
-    }
-    if (!section.loaded) {
-      await loadSection(section);
-    }
-    if (!section.loaded) {
-      return {
-        refused: `${section.file} did not load: the canvas's report says why.`,
-      };
-    }
-    // Its pass of probes and moves done first: the stage's sweep plays them with the world out of rendering.
-    await section.settling;
-    await columnsFor(section);
-    await worldBack();
-    await frameTick();
-    const frame = [...section.frames.values()].find(
-      (one) =>
-        one.story.name === storyName && one.column.interaction === interaction
-    );
-    return frame
-      ? { key: frame.key }
-      : {
-          refused: `${name} has no ${interaction} frame: its states are ${(section.interactions.get(storyName) ?? ["rest"]).join(", ")}.`,
-        };
-  };
-
-  /** Whether frame `key` is settled: fonts loaded, and no finite animation running on it, in it (its open shadow roots too) or on what holds it (the world's flight to it). */
-  const settledFor = (key: string): boolean => {
-    const el = frameEl(key);
-    if (!el || document.fonts.status !== "loaded") {
-      return false;
-    }
-    const running = document.getAnimations().filter((run) => {
-      const target = (run.effect as KeyframeEffect | null)?.target;
-      return !!target && (target.contains(el) || el.contains(target));
-    });
-    const trees: (Element | ShadowRoot)[] = [el];
-    for (let tree = trees.pop(); tree; tree = trees.pop()) {
-      for (const one of tree.querySelectorAll("*")) {
-        if (one.shadowRoot) {
-          running.push(...one.shadowRoot.getAnimations());
-          trees.push(one.shadowRoot);
-        }
-      }
-    }
-    return !running.some(
-      (run) =>
-        run.playState === "running" &&
-        Number.isFinite(Number(run.effect?.getComputedTiming().endTime ?? 0))
-    );
-  };
-
-  /** Frame `key`'s body as it stands on the page, for its picture: its rect, its own CSS size, the device's scale, whether it stands whole in the canvas, and the view in words. */
-  const pictureOf = (key: string): FramePictureRead | null => {
-    const body = frameEl(key)?.querySelector<HTMLElement>(
-      ":scope > .cawco-frame-body"
-    );
-    if (!body) {
-      return null;
-    }
-    const rect = body.getBoundingClientRect();
-    const room = canvas.getBoundingClientRect();
-    // Its border box as layout sizes it, unrounded (offsetWidth rounds) and
-    // untouched by any transform: what its picture is held to.
-    const style = getComputedStyle(body);
-    const px = (value: string) => Number.parseFloat(value) || 0;
-    const content = style.boxSizing === "border-box";
-    const own = {
-      w:
-        px(style.width) +
-        (content
-          ? 0
-          : px(style.paddingLeft) +
-            px(style.paddingRight) +
-            px(style.borderLeftWidth) +
-            px(style.borderRightWidth)),
-      h:
-        px(style.height) +
-        (content
-          ? 0
-          : px(style.paddingTop) +
-            px(style.paddingBottom) +
-            px(style.borderTopWidth) +
-            px(style.borderBottomWidth)),
-    };
-    return {
-      rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
-      own,
-      scale: devicePixelRatio,
-      whole:
-        rect.left >= Math.max(0, room.left) - 0.5 &&
-        rect.top >= Math.max(0, room.top) - 0.5 &&
-        rect.right <= Math.min(windowWidth(), room.right) + 0.5 &&
-        rect.bottom <= Math.min(windowHeight(), room.bottom) + 0.5,
-      view: `the world at zoom ${zoom.z} in a ${Math.round(room.width)}×${Math.round(room.height)} canvas, a ${windowWidth()}×${windowHeight()} window${chrome.phone() ? " (a phone's)" : ""}`,
-    };
-  };
-
-  const canvasState: CanvasState = {
+  const state: CanvasState = {
     files,
     view,
     report: null,
     reports: 0,
     swept: false,
     sweepAt: null,
-    go: (key) => go(key),
-    pose: (key) => {
-      go(key, true);
-      return lacksFor(key);
-    },
-    lacks: (key) => lacksFor(key),
-    frameNamed,
-    settled: settledFor,
-    picture: pictureOf,
     setView,
     loaded: () => sections.filter((one) => one.loaded).map((one) => one.file),
-    frames: () =>
-      sections.flatMap((section) =>
-        [...section.frames.values()].map((frame) => ({
-          key: frame.key,
-          story: frame.story.name,
-          interaction: frame.column.interaction,
-        }))
-      ),
-    playMove: async (file, to) => (await playVisible(file, to))?.move ?? null,
-    world: () => ({ ...zoom }),
   };
-  // Each section stands in its place until it draws, now every column's rule is defined; its load waits on the observer's first callback.
-  for (const section of sections) {
-    standIn(section, toDraw(plans[section.file]?.stories ?? []));
-  }
-  window.__cawcoCanvas = canvasState;
-  if (card) {
-    chrome.asCard();
-  }
-  if (embed) {
-    tellGraphFetched();
-    // Its stories load now, not on the observer's first callback: a frame off the page's screen gets no rendering steps until it is scrolled to, and its module is fetched and mounted meanwhile.
-    quietly(pump());
-  } else {
-    zoom.x = WORLD_INSET.x;
-    zoom.y = WORLD_INSET.y;
-  }
-  place();
-  chrome.layout();
+  const page: Page = {
+    base,
+    by,
+    chrome,
+    files,
+    options,
+    plans,
+    rewrite,
+    rig,
+    root,
+    sections,
+    spec,
+    state,
+    view,
+    argsOf,
+    atFloor,
+    csfOf,
+    dressBody,
+    failedCard,
+    fills: (section, story) => screenFilled.has(fillKey(section.file, story)),
+    fillsScreen,
+    formWords,
+    heard,
+    later,
+    loadSection,
+    mountInto,
+    playAll,
+    post,
+    probeAll,
+    quietly,
+    reachedIn,
+    rewriteAll,
+    said,
+    schemeOf,
+    sectionOf,
+    sizeBody,
+    widthOf,
+  };
+  window.__cawcoCanvas = state;
+  mode = embed || by === "map" ? bootFrames(page) : bootStage(page);
 }
 
-/**
- * Where the world stands from the canvas's corner when fitted, and the
- * least a frame shown by `go` keeps from its top. The canvas begins under
- * the head (chrome.ts PAGE_CSS), so this is room from the head's foot.
- */
-const WORLD_INSET = { x: 24, y: 16 };
-
-/** `file:Story`: the colon before the story's name. */
-const LAST_COLON = /:(?=[^:]+$)/u;
-/**
- * The edges' gutter, on DESIGN.md's spacing ladder: a lane's first stands
- * 18px out from the frames, each next one 7px further, its corners turn on
- * a 7px radius, the labels stand 7px clear of the lanes, a line (16px, the
- * meta role's) apart where two would meet.
- */
-const EDGE_OUT = 18;
-const EDGE_LANE = 7;
-const EDGE_TURN = 7;
-const EDGE_LABEL_GAP = 7;
-const EDGE_LABEL_LINE = 16;
-/**
- * How far clear of a frame's side an edge starts and its arrow's tip ends,
- * px: the move's 2px stroke and its arrow (the marker's tip 1.6px past the
- * path's end) never stand on the frame, so a frame's picture, taken by its
- * own rect, holds none of the canvas's lines (a review read the tip at
- * every frame's left edge as a stray speck).
- */
-const EDGE_CLEAR = 4;
 const BODY_RULE = /(^|,)\s*(body|html|:root)\s*(,|$)/u;
 const REDUCED_QUERY = /prefers-reduced-motion/u;

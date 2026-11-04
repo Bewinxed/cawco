@@ -37,10 +37,19 @@
   } from "@cawco/core/protocol";
   import type { PaneKey } from "@cawco/core/shell-shortcuts";
   import {
+    canvasOf,
     STAGE_CLONE_MS,
     STAGE_READY_MS,
     type StageErrorKind,
   } from "@cawco/core/stage";
+  import {
+    STAGE_FAULT,
+    STAGE_LAID,
+    STAGE_REACHED,
+    stageFaultOf,
+    stageLaidOf,
+    stageReachedOf,
+  } from "@cawco/core/stage-graph";
   import { artifactWords } from "@cawco/core/words/artifacts";
   import { browserWords } from "@cawco/core/words/browser";
   import { commentWords } from "@cawco/core/words/comments";
@@ -122,6 +131,8 @@
   import EmptyAsk from "../EmptyAsk.svelte";
   import { artifactReached } from "../files/reached";
   import { frameObserver, frameSize } from "../frame-observer";
+  import DesignGraph from "../graph/DesignGraph.svelte";
+  import { StageLink } from "../graph/stage-link.svelte";
   import { resolveSessionTitle } from "../links";
   import {
     type MarkdownFleet,
@@ -3096,6 +3107,8 @@
         if (message.type === "cawco:ready") {
           readyFrom = event.origin;
           connected = true;
+          // A new page holds no drawing: the design graph reaches its state again.
+          link?.loaded();
           refusedEntries = 0;
           // It was let in: a later turn-away is a pass lost since, which a new entry answers.
           frameSince = performance.now();
@@ -3273,8 +3286,12 @@
       case "cawco:press":
         // A press on the page, outside the composer: the outside-press rule,
         // heard from the page's own process. A thread stays: it closes by its
-        // Close or Esc alone.
+        // Close or Esc alone. The design graph's open layers close on it, a
+        // press on its stage being outside them.
         cancelComposer();
+        if (link) {
+          link.presses += 1;
+        }
         break;
       case "cawco:pin-at": {
         if (openPin && previewPinId(message.id) === openPin) {
@@ -3323,10 +3340,35 @@
         }
         break;
       case "cawco:sheet": {
-        // A sheet's page said its stories and props: the inspector's controls.
+        // A sheet's page said its stories and props: the inspector's controls, and the design graph's model.
         const said = previewSheet(message.sheet);
-        if (said && inspector) {
-          inspector.heard(said);
+        if (said) {
+          inspector?.heard(said);
+          link?.heardSheet(said);
+        }
+        break;
+      }
+      case STAGE_REACHED: {
+        // The stage reached the state the design graph asked for.
+        const said = stageReachedOf(message);
+        if (said && link) {
+          link.reached = said;
+        }
+        break;
+      }
+      case STAGE_LAID: {
+        // The stage laid its drawing out: the design graph's split gives it what it needs.
+        const said = stageLaidOf(message);
+        if (said && link) {
+          link.laid = said;
+        }
+        break;
+      }
+      case STAGE_FAULT: {
+        // The component threw as it mounted: the page says so in the stage.
+        const said = stageFaultOf(message);
+        if (said && link) {
+          link.fault = said;
         }
         break;
       }
@@ -3536,19 +3578,55 @@
       closing = false;
     }
   }
-  /** A component canvas's view, one for its head button and More's submenu alike; each load of the page takes the view kept for this session. */
+  /** A component artifact's view in the head (Map, Verify), one for its head button and More's submenu alike. */
   const canvasView = $derived.by(() => {
     const session = instanceId;
     // Built untracked: the view depends on the session and the kind alone,
-    // never on the state it holds, which the effect below sends (nightly
-    // 4202's crash was a view's effect re-running on the state it wrote).
-    return isSheet ? untrack(() => new CanvasViewState(session, post)) : null;
+    // never on the state it holds (nightly 4202's crash was a view's effect
+    // re-running on the state it wrote).
+    return isSheet ? untrack(() => new CanvasViewState(session)) : null;
   });
+  /**
+   * A component artifact's design graph's line to its stage page: what the
+   * page said (its sheets, its drawing, its answers), and what the graph
+   * asks of it, through `post`. One per session and kind, as the view.
+   */
+  const link = $derived.by(() => {
+    const session = instanceId;
+    return isSheet && session ? untrack(() => new StageLink(post)) : null;
+  });
+  /** The component artifact's states files and the agent's spec, as its address carries them (core `canvasPath`). */
+  const sheetCanvas = $derived(isSheet ? canvasOf(startAt) : null);
+  /**
+   * Where the frame stands in the well when the design graph holds it in
+   * its stage: the pins' room takes that box, so a place the page says is a
+   * place on the stage.
+   */
+  let frameBox = $state<{ h: number; w: number; x: number; y: number } | null>(
+    null
+  );
   $effect(() => {
-    const held = canvasView;
-    if (connected && held) {
-      untrack(() => held.send(held.chosen));
+    const frameNode = iframe;
+    const wellNode = well;
+    if (!(isSheet && frameNode && wellNode)) {
+      frameBox = null;
+      return;
     }
+    const measure = () => {
+      const box = frameNode.getBoundingClientRect();
+      const origin = wellNode.getBoundingClientRect();
+      frameBox = {
+        x: box.left - origin.left,
+        y: box.top - origin.top,
+        w: box.width,
+        h: box.height,
+      };
+    };
+    const watch = frameObserver(measure);
+    watch.observe(frameNode);
+    watch.observe(wellNode);
+    measure();
+    return () => watch.disconnect();
   });
   /** The canvas view's Verify: a design system round on the canvas, its verdict to the session; the hub's sentence says what it did. */
   let verifying = $state(false);
@@ -4307,6 +4385,44 @@
   {/if}
 {/snippet}
 
+<!-- The page's frame (and, while a new one loads, the one it replaces): in
+     the well, or in a component artifact's design graph's stage. -->
+{#snippet frameTags()}
+  {#each reached?.origin === paneOrigin ? frames : [] as key (key)}
+    {@const current = key === frameKey}
+    <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
+    <!-- biome-ignore lint/security/useIframeSandbox: the previewed app runs on its own origin (the preview proxy's), which is the boundary; a sandbox would take the forms, popups and downloads it is being tried with. -->
+    <iframe
+      data-ready={!current || loaded || undefined}
+      data-panel-inspector={(!isSheet &&
+        inspecting &&
+        inspectorLayout === "panel") ||
+        undefined}
+      class="absolute inset-0 scheme-light scheme-dark:scheme-dark bg-system-canvas block size-full border-none border-current opacity-0 transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
+      style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
+      allow="clipboard-write"
+      inert={!current}
+      onerror={() => arrived(key)}
+      onload={() => {
+        arrived(key);
+        if (key === frameKey) {
+          loadedFrame(key);
+          announce();
+        }
+      }}
+      src={`${paneOrigin}${framePlace}`}
+      data-scheme={themedFrame ? theme.resolved : undefined}
+      title="Preview"
+      {@attach (node) => {
+        if (key === frameKey) {
+          iframe = node;
+          frameSince = performance.now();
+        }
+      }}
+    ></iframe>
+  {/each}
+{/snippet}
+
 <!-- The page in the well, and what stands over it: the panel's and an
      inset's alike. -->
 {#snippet framed()}
@@ -4364,38 +4480,30 @@
       </EmptyState>
     </div>
   {:else}
-    <!-- The frame loads once its origin answered the probe; the cover stands meanwhile. -->
-    {#each reached?.origin === paneOrigin ? frames : [] as key (key)}
-      {@const current = key === frameKey}
-      <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
-      <!-- biome-ignore lint/security/useIframeSandbox: the previewed app runs on its own origin (the preview proxy's), which is the boundary; a sandbox would take the forms, popups and downloads it is being tried with. -->
-      <iframe
-        data-ready={!current || loaded || undefined}
+    <!-- The frame loads once its origin answered the probe; the cover stands
+         meanwhile. A component artifact's frame stands in its design graph's
+         stage (the graph's chrome round it, the panel's DOM), the inspector's
+         panel beside the graph. -->
+    {#if isSheet && artifact && link && sheetCanvas}
+      <div
+        data-slot="graph-host"
         data-panel-inspector={(inspecting && inspectorLayout === "panel") ||
           undefined}
-        class="absolute inset-0 scheme-light scheme-dark:scheme-dark bg-system-canvas block size-full border-none border-current opacity-0 transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
+        class="absolute inset-0 data-panel-inspector:w-(--frame-w)"
         style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
-        allow="clipboard-write"
-        inert={!current}
-        onerror={() => arrived(key)}
-        onload={() => {
-          arrived(key);
-          if (key === frameKey) {
-            loadedFrame(key);
-            announce();
-          }
-        }}
-        src={`${paneOrigin}${framePlace}`}
-        data-scheme={themedFrame ? theme.resolved : undefined}
-        title="Preview"
-        {@attach (node) => {
-          if (key === frameKey) {
-            iframe = node;
-            frameSince = performance.now();
-          }
-        }}
-      ></iframe>
-    {/each}
+      >
+        <DesignGraph
+          ask={artifact.ask ?? ""}
+          files={sheetCanvas.files}
+          frame={frameTags}
+          {link}
+          spec={sheetCanvas.spec}
+          stale={linkDown !== null}
+        />
+      </div>
+    {:else}
+      {@render frameTags()}
+    {/if}
     <div
       data-ready={((loaded || standing !== null) && !stageWaiting) || undefined}
       data-slot="cover"
@@ -4443,7 +4551,6 @@
         {instanceId}
         ready={loaded}
         revision={preview?.revision ?? ""}
-        view={canvasView.chosen}
       />
     {/if}
     {#if compileErrors.length > 0}
@@ -4654,10 +4761,20 @@
   <!-- What stands over the page beside a pill (the frame fills the well):
        the composer while a comment is written, the thread once it is, and
        the peek while the pointer rests on one. -->
-  <!-- The size container a card's width reads (`--c-pin-card-reading-w`, two fifths of the well). -->
+  <!-- The size container a card's width reads (`--c-pin-card-reading-w`, two fifths of the well).
+       Over a component artifact's stage it stands where the frame stands, so a place the page says is a place on it. -->
   <div
     data-slot="pin-room"
-    class="@container absolute inset-0 pointer-events-none"
+    class={[
+      "@container absolute pointer-events-none",
+      frameBox
+        ? "start-(--frame-x) top-(--frame-y) w-(--frame-w) h-(--frame-h)"
+        : "inset-0",
+    ]}
+    style:--frame-x={frameBox ? `${frameBox.x}px` : undefined}
+    style:--frame-y={frameBox ? `${frameBox.y}px` : undefined}
+    style:--frame-w={frameBox ? `${frameBox.w}px` : undefined}
+    style:--frame-h={frameBox ? `${frameBox.h}px` : undefined}
     data-mode={mode !== "interact" && !isCanvas ? mode : undefined}
     {@attach measureRoom}
   >

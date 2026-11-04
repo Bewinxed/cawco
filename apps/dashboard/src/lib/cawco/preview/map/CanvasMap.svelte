@@ -37,7 +37,6 @@
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconAlert, IconRefresh } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
-  import type { CanvasChosen } from "../canvas-view.svelte";
   import MapCard, { type MapRole } from "./MapCard.svelte";
   import MapFit from "./MapFit.svelte";
   import MapNode from "./MapNode.svelte";
@@ -48,7 +47,6 @@
     instanceId,
     ready,
     revision,
-    view,
   }: {
     /** The canvas page's address on the pane's origin, absolute; null until the pane has one. */
     address: string | null;
@@ -58,8 +56,6 @@
     ready: boolean;
     /** The show's revision: a new one reads the map again. */
     revision: string;
-    /** The canvas view: a live card draws in its scheme and motion. */
-    view: CanvasChosen;
   } = $props();
 
   /**
@@ -136,12 +132,6 @@
       }
     }
     url.searchParams.set("by", "map");
-    if (view.scheme !== "page") {
-      url.searchParams.set("scheme", view.scheme);
-    }
-    if (view.motion === "reduce") {
-      url.searchParams.set("motion", "reduce");
-    }
     return url.href;
   }
 

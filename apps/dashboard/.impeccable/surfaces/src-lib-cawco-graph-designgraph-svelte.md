@@ -64,8 +64,8 @@ He asked for the Animation face designed from what a person comes to do there: a
 Pin 26: the timeline as round 29 drew it; an edited value styled as changed on itself, pressed to restore it, as other software does.
 Pins 1 and 2 on design-graph-animation-r29: rows told apart, bars inside the lane, the playhead on its time, no jump on a click, a head of only what is used; round 29 is the idea, built as a professional tool would (the orchestrator's brief).
 
-## Where a person reaches it (5 November 2026)
-Only at `/dev/design-graph` (dev and the bench build). A component artifact in the artifact panel still frames the stage's canvas page (`/@cawco/canvas`, stage-host chrome.ts, DialKit's timeline). The PRD (§5.10) has the graph replace that page, slice by slice. The slice that does it moves Stage's work (reach, play and read a move, seek and replay, differences, rings, reveal) into the stage page behind messages, the face's chrome into the panel.
+## Where a person reaches it (5 November 2026, the first slice)
+A component artifact opens in the artifact panel as the design graph. The panel holds the graph's chrome (the bar, the view card, the split and the drawer, the room) and the frame that holds the stage page (`/@cawco/canvas`, stage-host canvas stage.ts) in the stage's panel (StagePane); the two speak by messages (core stage-graph.ts): the panel reaches a state (`cawco:stage-reach`), the page says how its drawing is laid out (`cawco:stage-laid`), which the split gives the stage, and that the reach landed. The room has its States face alone until the Map and Animation faces move onto the page in their slices, and Compare with them; until then a state the states file plays a move into arrives by that move, and the page docks DialKit's timeline over its floor, the agent's dials at its top. The wall of frames, its outline, crumb, J and K, and the panel page's pan and zoom are gone; a decision page's Preview and the map's cards still draw the frames grid. `/dev/design-graph` is gone with them.
 
 ## Open with him
 Whether group heads become column heads (a deviation from DESIGN.md); whether a width pick replays the move. 

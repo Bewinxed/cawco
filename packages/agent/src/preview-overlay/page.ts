@@ -41,6 +41,14 @@ import { pinName, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
 import { paneKeyOf, shellShortcutOf } from "@cawco/core/shell-shortcuts";
 import { interactionOf } from "@cawco/core/stage";
 import {
+  STAGE_FAULT,
+  STAGE_LAID,
+  STAGE_REACH,
+  STAGE_REACHED,
+  STAGE_REVEAL,
+  stageReachOf,
+} from "@cawco/core/stage-graph";
+import {
   type Anchorable,
   anchorable,
   anchorName,
@@ -3289,11 +3297,12 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       }
       takeTheme(message.theme);
       takeInset(message.inset);
-      // A sheet's module ran before the pane said hello: its sheet goes now.
-      const onPage = (window as { __cawcoSheetOnPage?: object })
-        .__cawcoSheetOnPage;
-      if (onPage) {
-        post("cawco:sheet", { sheet: onPage });
+      // A sheet's sections ran before the pane said hello: each one's sheet goes now.
+      const onPage = (
+        window as { __cawcoSheetsOnPage?: Record<string, object> }
+      ).__cawcoSheetsOnPage;
+      for (const said of Object.values(onPage ?? {})) {
+        post("cawco:sheet", { sheet: said });
       }
     },
     "cawco:place": (message) => takeInset(message.inset),
@@ -3318,7 +3327,7 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         })
       );
     },
-    // A component canvas's view from the pane's head: scheme, widths, motion, every permutation, zoom.
+    // A component artifact's stage view from the design graph's view card: its scheme, the width he picked, motion.
     "cawco:canvas-view": (message) => {
       const view = message.view as Record<string, unknown> | undefined;
       if (!view || typeof view !== "object") {
@@ -3342,14 +3351,20 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
             ...(view.motion === "on" || view.motion === "reduce"
               ? { motion: view.motion }
               : {}),
-            ...(typeof view.all === "boolean" ? { all: view.all } : {}),
-            ...(view.zoom === "fit" ||
-            (typeof view.zoom === "number" && view.zoom > 0 && view.zoom <= 4)
-              ? { zoom: view.zoom }
-              : {}),
           },
         })
       );
+    },
+    // The design graph's reach: the stage brought to a state (core stage-graph.ts).
+    [STAGE_REACH]: (message) => {
+      const reach = stageReachOf(message);
+      if (reach) {
+        dispatchEvent(new CustomEvent(STAGE_REACH, { detail: reach }));
+      }
+    },
+    // What the last reach changed, brought into the stage's view.
+    [STAGE_REVEAL]: () => {
+      dispatchEvent(new CustomEvent(STAGE_REVEAL));
     },
     "cawco:theme": (message) => takeTheme(message.theme),
     // A host that holds no doc of its own (the app) writes the person's reply,
@@ -3554,6 +3569,17 @@ window.addEventListener("cawco:element-press", (event) => {
 window.addEventListener("cawco:sheet", (event) => {
   post("cawco:sheet", { sheet: (event as CustomEvent<object>).detail });
 });
+
+/*
+ * A component artifact's stage (stage-host canvas stage.ts) answers the
+ * design graph in the pane: a reach landed, the drawing laid out, the
+ * component threw as it mounted (core stage-graph.ts).
+ */
+for (const type of [STAGE_REACHED, STAGE_LAID, STAGE_FAULT]) {
+  window.addEventListener(type, (event) => {
+    post(type, (event as CustomEvent<object>).detail ?? {});
+  });
+}
 
 /** What this page reads of one of its elements for a page that frames it from another origin (embeds.ts). */
 function remoteOf(el: Element): Remote {

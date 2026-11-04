@@ -1,12 +1,13 @@
 /**
  * The design graph's model of one component under review, read from what
- * the component canvas already speaks (core stage.ts): its states file
- * (CSF 3, `<Component>.stories.ts`) and the agent's canvas spec (`group`,
- * `edges`). Nothing new is asked of either:
+ * its stage page already says (core stage.ts): the states file's sheet
+ * (`cawco:sheet`, CSF 3 as the stage reads it) and the agent's canvas spec
+ * (`group`, `edges`, from the artifact's address). Nothing is declared
+ * twice:
  * - a **state** is a story, named by its CSF `name` when it has one, else
- *   by its export in plain words (CSF 3's own rule), its note
- *   its own doc comment, its width its `parameters.viewport`, an error
- *   state where its CSF `tags` say `failure`;
+ *   by its export in plain words (CSF 3's own rule), its note its own doc
+ *   comment, its width its `parameters.viewport`, an error state where its
+ *   CSF `tags` say `failure`;
  * - a **machine** is a heading the spec's `group` names (a story grouped
  *   under a word that is no story's), its path the file's own order; a
  *   file the spec groups nothing of is one machine, the section's name;
@@ -15,87 +16,55 @@
  *   a variant of its own;
  * - a **variant** is a story grouped under another at the same width, or,
  *   for a story whose `parameters.records` names a list arg, that list in
- *   three sizes (one, many, the longest names); the state as written is no
- *   variant, it is the state with none picked;
- * - a **move** is a story's `from` (with its `play`, run on the stage) or
- *   one of the spec's `edges` (drawn, nothing to play).
+ *   three sizes (one, many, the longest names), cut on the page; the state
+ *   as written is no variant, it is the state with none picked;
+ * - a **move** is a story's `from` or one of the spec's `edges`.
+ *
+ * The panel holds names, order, groups, moves and widths; the page resolves
+ * a state to its args (core stage-graph.ts `StateRef`).
  */
-import type { CanvasEdge } from "@cawco/core/stage";
-import { sectionName } from "@cawco/core/stage";
-import type { CanvasQueries, UserEvent } from "@cawco/core/stage-play";
+import {
+  type CanvasEdge,
+  type CanvasSpec,
+  type SheetOnPage,
+  type Story,
+  sectionName,
+} from "@cawco/core/stage";
+import {
+  MANY_RECORDS,
+  RECORD_SETS,
+  type StateRef,
+  storyWords,
+} from "@cawco/core/stage-graph";
 import { type Figure, graphWords as words } from "@cawco/core/words/graph";
-import type { Component } from "svelte";
-
-/** What a story's `play` is handed on the stage (the canvas's own: core stage-play.ts). */
-export interface PlayContext {
-  args: Record<string, unknown>;
-  canvas: CanvasQueries;
-  update: (next: Record<string, unknown>) => Promise<void>;
-  userEvent: UserEvent;
-}
-
-/** A story as its states file exports it. */
-interface Story {
-  args?: Record<string, unknown>;
-  from?: string;
-  /** Its display name, where its export can't hold it (CSF 3 `name`: an apostrophe). */
-  name?: string;
-  parameters?: { records?: string; viewport?: number | string };
-  play?: (context: PlayContext) => Promise<void> | void;
-  tags?: string[];
-}
-
-/** A states file's module: its meta and its stories. */
-interface StatesModule {
-  default: {
-    args?: Record<string, unknown>;
-    component: Component<Record<string, unknown>>;
-    title?: string;
-  };
-  [story: string]: unknown;
-}
-
-/** One component to review: its states file, as module and source, and the agent's spec. */
-export interface ReviewInput {
-  /** Moves the states file plays none of (core `CanvasSpec.edges`). */
-  edges?: CanvasEdge[];
-  /** The states file, from the repository's root: where a pin's source points. */
-  file: string;
-  /** Story → the story or heading it groups under (core `CanvasSpec.group`). */
-  group?: Record<string, string>;
-  module: StatesModule;
-  /** The states file's source, for its doc comments and its order. */
-  source: string;
-}
 
 /** A way a state is drawn other than as written: a story grouped under it at its width, or a record set. */
 interface Variant {
-  args: Record<string, unknown>;
   id: string;
   name: string;
   note: string | null;
-  /** The story it is drawn from (a record set is drawn from its state's). */
-  story: string;
+  /** How the page draws it from its state's story. */
+  variant: NonNullable<StateRef["variant"]>;
   width: number | null;
 }
 
 export interface GraphState {
-  args: Record<string, unknown>;
   failure: boolean;
   /** Its story's `from`, when it plays one. */
   from: string | null;
   id: string;
   /** 1-based line of its export in the states file. */
-  line: number | null;
+  line: number;
   machine: string;
   name: string;
   note: string | null;
-  play: Story["play"] | null;
+  /** Its story has a `play`: the move into it is acted, not only drawn. */
+  play: boolean;
   /** The stories under it at its width, then its record sets. */
   variants: Variant[];
   width: number | null;
   /** The state drawn at other widths, by its stories at those widths. */
-  widths: { args: Record<string, unknown>; story: string; width: number }[];
+  widths: { story: string; width: number }[];
 }
 
 interface Machine {
@@ -104,7 +73,7 @@ interface Machine {
   path: string[];
 }
 
-export interface Move {
+interface Move {
   between: boolean;
   from: string;
   label: string | null;
@@ -114,8 +83,7 @@ export interface Move {
 }
 
 export interface Review {
-  args: Record<string, unknown>;
-  component: Component<Record<string, unknown>>;
+  /** The states file, from the toolchain root: what every state the panel names is named in. */
   file: string;
   machines: Machine[];
   moves: Move[];
@@ -125,120 +93,80 @@ export interface Review {
   states: Record<string, GraphState>;
 }
 
-/** The holes in a state's place in its machine: nothing reaches it, nothing leaves it. */
-export interface Holes {
-  leaves: boolean;
-  reaches: boolean;
-}
-
-const CASE_BREAK = /([a-z0-9])([A-Z])/gu;
-/** An export and the doc comment right over it: a comment's words never cross its own `*\/`, so the file's header is no story's note. */
-const COMMENTED_EXPORT =
-  /(?:\/\*\*((?:(?!\*\/)[\s\S])*)\*\/\s*)?export const (\w+)\s*(?::[^=]+)?=/gu;
-const COMMENT_LINE = /^\s*\*\s?/gmu;
-
-/** `FailedSave` → "Failed save". */
-export const storyWords = (name: string): string => {
-  const spaced = name.replace(CASE_BREAK, "$1 $2").toLowerCase();
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-};
-
-/** Each export's doc comment and line, in the file's order. */
-function exportsOf(
-  source: string
-): { line: number; name: string; note: string | null }[] {
-  const found: { line: number; name: string; note: string | null }[] = [];
-  for (const match of source.matchAll(COMMENTED_EXPORT)) {
-    const [, comment, name] = match;
-    if (!name) {
-      continue;
-    }
-    const at = (match.index ?? 0) + match[0].indexOf("export const");
-    found.push({
-      name,
-      line: source.slice(0, at).split("\n").length,
-      note: comment ? comment.replace(COMMENT_LINE, "").trim() : null,
-    });
-  }
-  return found;
-}
-
-const widthOf = (story: Story): number | null => {
-  const said = story.parameters?.viewport;
-  if (typeof said === "number") {
+/** A story's own key in a spec's `group` or `edges`: its export, or `file:Story` across states files. */
+const ownName = (file: string, said: string): string | null => {
+  if (!said.includes(":")) {
     return said;
   }
-  return { phone: 390, tablet: 768, desk: 1280 }[said ?? ""] ?? null;
+  const cut = said.lastIndexOf(":");
+  return said.slice(0, cut) === file ? said.slice(cut + 1) : null;
 };
 
-/** A list record's name, for the longest names: its `name`, `title` or `label`. */
-const recordName = (record: unknown): string => {
-  const one = record as Record<string, unknown> | null;
-  const named = one?.name ?? one?.title ?? one?.label;
-  return typeof named === "string" ? named : "";
-};
+/** The list a story's record sets cut, as the sheet reads it: its length when the states file writes it out, unread when it builds it in code; null when it names none or the list is empty. */
+function listOf(
+  sheet: SheetOnPage,
+  story: Story
+): { length: number | null } | null {
+  const arg = story.records;
+  if (!arg) {
+    return null;
+  }
+  const written = story.args[arg] ?? sheet.meta.args[arg];
+  if (Array.isArray(written)) {
+    return written.length > 0 ? { length: written.length } : null;
+  }
+  return arg in story.code || arg in sheet.meta.code ? { length: null } : null;
+}
 
-/** The most a "many" set holds (spec: the whole set, or twenty of it when larger). */
-const MANY = 20;
-
-/** A list state's three record sets, from the list as the state has it. */
+/** A list state's three record sets, each cut on the page from its list. */
 function recordSets(
-  state: Pick<Variant, "args" | "story" | "width">,
-  arg: string,
-  id: string,
+  state: GraphState,
+  list: { length: number | null },
   figure: (n: number) => Figure
 ): Variant[] {
-  const list = state.args[arg];
-  if (!Array.isArray(list) || list.length === 0) {
-    return [];
-  }
-  const many = list.slice(0, MANY);
-  const longest = [...list]
-    .sort((a, b) => recordName(b).length - recordName(a).length)
-    .slice(0, Math.min(MANY, Math.max(3, Math.ceil(list.length / 2))));
-  const set = (key: string, name: string, records: unknown[]): Variant => ({
-    id: `${id}:${key}`,
-    story: state.story,
+  const set = (key: keyof typeof RECORD_SETS, name: string): Variant => ({
+    id: `${state.id}:${key}`,
     name,
     note: null,
     width: state.width,
-    args: { ...state.args, [arg]: records },
+    variant: { records: RECORD_SETS[key] },
   });
   return [
-    set("one", words.recordsOne, list.slice(0, 1)),
-    set("many", words.recordsMany(figure(many.length)), many),
-    set("longest", words.recordsLongest, longest),
+    set("one", words.recordsOne),
+    set(
+      "many",
+      list.length === null
+        ? words.recordsSome
+        : words.recordsMany(figure(Math.min(MANY_RECORDS, list.length)))
+    ),
+    set("longest", words.recordsLongest),
   ];
 }
 
-/** A state from its story, as written: its own args over the meta's. */
+/** A state from its story, as written. */
 function stateOf(
-  input: ReviewInput,
-  one: { line: number; name: string; note: string | null },
+  story: Story,
   machine: string,
   names: ReadonlySet<string>
 ): GraphState {
-  const story = input.module[one.name] as Story;
-  const args = { ...input.module.default.args, ...story.args };
-  const width = widthOf(story);
   return {
-    id: one.name,
-    name: story.name ?? storyWords(one.name),
-    note: one.note,
+    id: story.name,
+    name: story.display ?? storyWords(story.name),
+    note: story.label,
     machine,
-    line: one.line,
-    width,
-    args,
-    failure: story.tags?.includes("failure") ?? false,
+    line: story.line,
+    width: story.form?.width ?? null,
+    failure: story.tags.includes("failure"),
     from: story.from && names.has(story.from) ? story.from : null,
-    play: story.play ?? null,
+    play: story.play,
     variants: [],
     widths: [],
   };
 }
 
-/** Every move: each story's `from`, then the spec's edges, once each. */
+/** Every move: each story's `from`, then the spec's edges in this file, once each. */
 function movesOf(
+  file: string,
   states: Record<string, GraphState>,
   order: readonly string[],
   edges: readonly CanvasEdge[]
@@ -246,43 +174,89 @@ function movesOf(
   const moves: Move[] = [];
   const seen = new Set<string>();
   const add = (
-    from: string,
-    to: string,
+    from: string | null,
+    to: string | null,
     label: string | null,
     played: string | null
   ) => {
-    const a = states[from];
-    const b = states[to];
+    const a = from ? states[from] : undefined;
+    const b = to ? states[to] : undefined;
     const key = `${from}→${to}`;
     if (a && b && !seen.has(key)) {
       seen.add(key);
-      moves.push({ from, to, label, played, between: a.machine !== b.machine });
+      moves.push({
+        from: a.id,
+        to: b.id,
+        label,
+        played,
+        between: a.machine !== b.machine,
+      });
     }
   };
   for (const id of order) {
-    const from = states[id]?.from;
+    const from = states[id]?.from ?? null;
     if (from) {
       add(from, id, null, id);
     }
   }
   for (const edge of edges) {
-    add(edge.from, edge.to, edge.label ?? null, null);
+    add(
+      ownName(file, edge.from),
+      ownName(file, edge.to),
+      edge.label ?? null,
+      null
+    );
   }
   return moves;
 }
 
-/** The review of one states file: its states, machines and moves; its words' figures written by `figure`. */
+/** The spec's `group` read for one states file: each of its stories, by its export, under the story or heading it groups under. */
+function groupOf(file: string, spec: CanvasSpec): Record<string, string> {
+  const group: Record<string, string> = {};
+  for (const [child, parent] of Object.entries(spec.group ?? {})) {
+    const own = ownName(file, child);
+    if (own) {
+      group[own] = ownName(file, parent) ?? parent;
+    }
+  }
+  return group;
+}
+
+/** Each story grouped under a state: that state at another width, or a variant of it at its own. */
+function holdUnder(
+  sheet: SheetOnPage,
+  states: Record<string, GraphState>,
+  parentOf: (story: string) => string | null
+): void {
+  for (const story of sheet.stories) {
+    const held = states[parentOf(story.name) ?? ""];
+    if (!held) {
+      continue;
+    }
+    const width = story.form?.width ?? null;
+    if (width !== null && width !== held.width) {
+      held.widths.push({ story: story.name, width });
+      continue;
+    }
+    held.variants.push({
+      id: story.name,
+      name: story.display ?? storyWords(story.name),
+      note: story.label,
+      width,
+      variant: { story: story.name },
+    });
+  }
+}
+
+/** The review of one states file, as its page said its sheet; its words' figures written by `figure`. */
 export function reviewOf(
-  input: ReviewInput,
+  sheet: SheetOnPage,
+  spec: CanvasSpec,
   figure: (n: number) => Figure
 ): Review {
-  const meta = input.module.default;
-  const group = input.group ?? {};
-  const exported = exportsOf(input.source).filter(
-    (one) => typeof input.module[one.name] === "object"
-  );
-  const names = new Set(exported.map((one) => one.name));
-  const name = sectionName(meta.title ?? null, null, input.file);
+  const group = groupOf(sheet.file, spec);
+  const names = new Set(sheet.stories.map((one) => one.name));
+  const name = sectionName(sheet.meta.title, null, sheet.file);
   const parentOf = (story: string): string | null => {
     const held = group[story];
     return held && names.has(held) ? held : null;
@@ -290,76 +264,30 @@ export function reviewOf(
 
   const states: Record<string, GraphState> = {};
   const machines = new Map<string, string[]>();
-  for (const one of exported.filter((each) => !parentOf(each.name))) {
-    const machine = group[one.name] ?? name;
-    states[one.name] = stateOf(input, one, machine, names);
-    machines.set(machine, [...(machines.get(machine) ?? []), one.name]);
+  for (const story of sheet.stories.filter((one) => !parentOf(one.name))) {
+    const machine = group[story.name] ?? name;
+    states[story.name] = stateOf(story, machine, names);
+    machines.set(machine, [...(machines.get(machine) ?? []), story.name]);
   }
   const order = Object.keys(states);
-  for (const one of exported) {
-    const held = states[parentOf(one.name) ?? ""];
-    const story = input.module[one.name] as Story;
-    const width = widthOf(story);
-    const args = { ...meta.args, ...story.args };
-    if (!held) {
-      continue;
-    }
-    if (width !== null && width !== held.width) {
-      held.widths.push({ args, story: one.name, width });
-      continue;
-    }
-    held.variants.push({
-      id: one.name,
-      story: one.name,
-      name: story.name ?? storyWords(one.name),
-      note: one.note,
-      width,
-      args,
-    });
-  }
-  for (const id of order) {
-    const state = states[id] as GraphState;
-    const arg = (input.module[id] as Story).parameters?.records;
-    if (arg) {
-      state.variants.push(
-        ...recordSets(
-          { args: state.args, story: id, width: state.width },
-          arg,
-          id,
-          figure
-        )
-      );
+  holdUnder(sheet, states, parentOf);
+  for (const story of sheet.stories) {
+    const state = states[story.name];
+    const list = state ? listOf(sheet, story) : null;
+    if (state && list) {
+      state.variants.push(...recordSets(state, list, figure));
     }
   }
 
   return {
     name,
-    file: input.file,
-    component: meta.component,
-    args: meta.args ?? {},
+    file: sheet.file,
     states,
     order,
     machines: [...machines].map(([machine, path]) => ({ name: machine, path })),
-    moves: movesOf(states, order, input.edges ?? []),
+    moves: movesOf(sheet.file, states, order, spec.edges ?? []),
   };
 }
-
-/** Whether `state` has holes in its machine (spec, The whole set): not a start with no move in, not an end with no move out. */
-export function holesOf(review: Review, state: string): Holes {
-  const machine = review.machines.find((one) =>
-    one.path.includes(state)
-  ) as Machine;
-  const start = machine.path[0] === state;
-  const end = machine.path.at(-1) === state;
-  return {
-    reaches: start || review.moves.some((move) => move.to === state),
-    leaves: end || review.moves.some((move) => move.from === state),
-  };
-}
-
-/** The move into `state` its states file plays, when it plays one. */
-export const moveInto = (review: Review, state: string): Move | null =>
-  review.moves.find((move) => move.to === state && move.played) ?? null;
 
 /**
  * The component's one path: every state in the order the list shows them,
@@ -368,19 +296,3 @@ export const moveInto = (review: Review, state: string): Move | null =>
  */
 export const pathOf = (review: Review): string[] =>
   review.machines.flatMap((machine) => machine.path);
-
-/**
- * The state before `state`: where the move into it starts, when the states
- * file plays one (the Move face's "Filled → Failed save"), else the state
- * before it on the component's path, else the one after. Compare compares
- * with it and the Move face plays from it, so both name one state.
- */
-export function previousOf(review: Review, state: string): string | null {
-  const from = moveInto(review, state)?.from;
-  if (from) {
-    return from;
-  }
-  const path = pathOf(review);
-  const at = path.indexOf(state);
-  return path[at - 1] ?? path[at + 1] ?? null;
-}

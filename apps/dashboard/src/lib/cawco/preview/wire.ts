@@ -21,6 +21,11 @@ import {
   type SheetOnPage,
   type Story,
 } from "@cawco/core/stage";
+import {
+  STAGE_FAULT,
+  STAGE_LAID,
+  STAGE_REACHED,
+} from "@cawco/core/stage-graph";
 
 const ERROR_MAX = 300;
 /** A base64 PNG this long is ~3 MB: a page's thumbnail, a pin's picture. */
@@ -232,6 +237,7 @@ const SHEET_BOUNDS = {
   options: 100,
   args: 100,
   tokens: 2000,
+  tags: 20,
   name: 200,
   text: 1000,
 } as const;
@@ -338,6 +344,11 @@ function storyOf(value: unknown): Story | null {
     formUnread: text(raw.formUnread, SHEET_BOUNDS.text),
     from: text(raw.from, SHEET_BOUNDS.name),
     play: raw.play === true,
+    display: text(raw.display, SHEET_BOUNDS.text),
+    records: text(raw.records, SHEET_BOUNDS.name),
+    tags: list(raw.tags, SHEET_BOUNDS.tags).flatMap(
+      (one) => text(one, SHEET_BOUNDS.name) ?? []
+    ),
   };
 }
 
@@ -432,6 +443,10 @@ const PAGE_MESSAGES = [
   "cawco:error",
   "cawco:resolved",
   "cawco:sheet",
+  // A component artifact's stage, answering its design graph (core stage-graph.ts; each read by its reader there).
+  STAGE_REACHED,
+  STAGE_LAID,
+  STAGE_FAULT,
 ] as const;
 
 /** A message the pane answers by its `type`; each field besides is checked by what reads it. */

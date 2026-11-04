@@ -30,6 +30,9 @@ const STAT_TILE: SheetOnPage = {
       formUnread: null,
       from: null,
       play: false,
+      display: null,
+      records: null,
+      tags: [],
     },
     {
       name: "Live",
@@ -44,6 +47,9 @@ const STAT_TILE: SheetOnPage = {
       formUnread: null,
       from: null,
       play: false,
+      display: null,
+      records: null,
+      tags: [],
     },
   ],
   meta: {

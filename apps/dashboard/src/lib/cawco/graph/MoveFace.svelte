@@ -59,6 +59,7 @@
    * Resting on a row, or focusing in it, rings the thing it names on the
    * stage (DesignGraph `lit`); nothing else on the stage changes.
    */
+  import type { ClipKind } from "@cawco/core/stage-graph";
   import { graphWords as words } from "@cawco/core/words/graph";
   import { Slider } from "bits-ui";
   import { frameSize } from "#lib/cawco/frame-observer.js";
@@ -85,7 +86,6 @@
   import { figureOf, inkWidth } from "./figures";
   import {
     type Clip,
-    type ClipKind,
     editsOf,
     lengthOf,
     type Part,

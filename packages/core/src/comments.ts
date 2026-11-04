@@ -1256,7 +1256,7 @@ export type PinState = (typeof PIN_STATES)[number];
  * page's own, light, dark, or both side by side.
  */
 export const PREVIEW_SCHEMES = ["page", "light", "dark", "both"] as const;
-export type PreviewScheme = (typeof PREVIEW_SCHEMES)[number];
+type PreviewScheme = (typeof PREVIEW_SCHEMES)[number];
 
 /** The schemes one story is drawn in: one at a time, never both. */
 const STORY_SCHEMES = [

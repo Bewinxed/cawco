@@ -16,7 +16,7 @@
  * and {@link SCREEN_VH}. Read off the window, an `h-dvh` app stood as tall
  * as the render's window in every frame, a phone's included, and grew with
  * it as the picture's pose grew the window for its room, so it never had
- * the room (frame-picture.ts `poseFrame`). Outside a frame with a width
+ * the room (frame-picture.ts `poseState`). Outside a frame with a width
  * each unit is the window's, as written.
  */
 

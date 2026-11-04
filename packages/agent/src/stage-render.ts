@@ -30,7 +30,7 @@ import type { Socket, TCPSocketListener } from "bun";
 import type { Page } from "playwright-core";
 import { chromiumSandboxed } from "./capabilities";
 import { launchChromium } from "./chromium";
-import { findFrame, framePicture, poseFrame } from "./frame-picture";
+import { findState, poseState, statePicture } from "./frame-picture";
 
 /** How long a render may take, Chromium's launch to its picture: one limit, which every wait of the render shares (the hub waits this long on it). */
 const RENDER_WAIT_MS = STAGE_RENDER_MS;
@@ -38,10 +38,10 @@ const RENDER_WAIT_MS = STAGE_RENDER_MS;
 const SAID_WAIT_MS = 5000;
 /** The quiet a page keeps after its last report before it is read. Ours: the canvas posts 200 ms after its last change. */
 const SETTLE_MS = 600;
-/** The window a render opens in: the desk's. A frame its canvas can't hold whole at its own size grows it (frame-picture.ts `poseFrame`). */
+/** The window a render opens in: the desk's. A state the stage can't hold whole at its own size grows it (frame-picture.ts `poseState`). */
 const VIEWPORT = { width: 1440, height: 900 };
 
-/** One frame a render is asked for: its story and state, for its picture. */
+/** One state a render is asked for: its story and interaction, for its picture. */
 interface RenderState {
   interaction?: Interaction;
   scheme?: "light" | "dark";
@@ -52,7 +52,7 @@ interface RenderState {
 
 export interface RenderAsk {
   files: string[];
-  /** A picture: of `state`'s frame when it names one, else the canvas in view. */
+  /** A picture: of `state` when it names one, else the stage in view. */
   png?: boolean;
   spec?: CanvasSpec;
   state?: RenderState;
@@ -182,7 +182,7 @@ interface CanvasOnPage {
 /** A step of the sweep, as a render that ran out of time says it. */
 const STEP_WORDS: Record<SweepAt["step"], (story?: string) => string> = {
   load: () => "loading its states file",
-  draw: () => "drawing its frames",
+  draw: () => "reading its stories in the rig",
   probe: () => "reading its stories' hover, focus and pressed states",
   move: (story) => `playing ${story ?? "a story"}'s move`,
   post: () => "posting its report",
@@ -280,11 +280,11 @@ export async function renderCanvas(
         png: (await page.screenshot()).toString("base64"),
       };
     }
-    const key = await findFrame(page, state.story, state.interaction);
-    await poseFrame(page, key, deadline);
+    const key = await findState(page, state.story, state.interaction);
+    await poseState(page, key, deadline);
     return {
       report,
-      png: (await framePicture(page, key)).png.toString("base64"),
+      png: (await statePicture(page, key)).png.toString("base64"),
     };
   } finally {
     await browser.close().catch(() => undefined);

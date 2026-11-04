@@ -5,7 +5,7 @@ export default {
   title: "Preview/Canvas view",
   component: CanvasView,
   args: {
-    view: new CanvasViewState("probe", () => undefined),
+    view: new CanvasViewState("probe"),
     onverify: () => undefined,
   },
 };

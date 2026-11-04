@@ -252,6 +252,8 @@ export const graphWords = {
   /** A list state's record sets, each a variant. */
   recordsOne: "One record",
   recordsMany: (n: Figure) => `${n} records`,
+  /** The many records of a list the states file builds in code, its length unread until the page cuts it. */
+  recordsSome: "Many records",
   recordsLongest: "Longest names",
 
   /** The stage's view. */

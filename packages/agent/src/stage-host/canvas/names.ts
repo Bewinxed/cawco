@@ -1,6 +1,7 @@
 /**
- * An element on the stage in words a person would say ("Form failure",
- * "Button “Create routine”"), for a clip's row and a difference's line:
+ * An element of the stage's drawing (stage.ts) in words a person would
+ * say ("Form failure", "Button “Create routine”"), for a clip's row and a
+ * difference's line, read on the page where the element stands:
  * its `data-slot` (the house's name for a part), else its accessible name
  * with its kind, else its kind with its first words, else the part it
  * stands in, never one of the stage's own round the drawing
@@ -8,8 +9,8 @@
  * read.
  */
 import { FORM_CONTROLS } from "@cawco/core/pin-name";
+import { storyWords } from "@cawco/core/stage-graph";
 import { graphWords as words } from "@cawco/core/words/graph";
-import { storyWords } from "./model";
 
 const KIND: Record<string, string> = {
   a: "Link",

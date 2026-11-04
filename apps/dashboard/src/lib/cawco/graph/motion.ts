@@ -1,16 +1,13 @@
 /**
  * A move's clips (spec, The move): every animation the engine ran on the
- * stage while a story's `play` moved the live component, read as each
- * first ran (its element, frames and timing), so the move can be played
- * again, at a quarter of its speed, scrubbed and tuned without running
- * the play again (`Replays`; the canvas's timeline does the same:
- * component-canvas moves.md). Each
- * clip is named in words: what moves, how, how long with its token, on
- * which curve. A clip whose length or curve no token names is ad hoc.
+ * stage while a story's `play` moved the live component, as the Animation
+ * face draws and tunes them. Each clip is named in words: what moves, how,
+ * how long with its token, on which curve. A clip whose length or curve no
+ * token names is ad hoc.
  */
+import { type ClipKind, clipKindOf } from "@cawco/core/stage-graph";
 import { graphWords as words } from "@cawco/core/words/graph";
 import { dur, ease } from "#lib/cawco/motion/curves.svelte.js";
-import { nameOf, thingOf } from "./names";
 
 /** How the person tuned a clip: when it begins, how long it runs, and its curve. */
 interface Tuning {
@@ -120,65 +117,14 @@ const snapLength = (ms: number): number =>
     Math.abs(one - ms) < Math.abs(best - ms) ? one : best
   );
 
-/** What a clip changes, as the timeline colours it (the `c-clip-*` tokens). */
-export type ClipKind = "size" | "move" | "fade" | "tint" | "effect" | "other";
-// golar-ignore-next-line house/no-clip-with-move -- a table from a property to its colour, no animation effect
-const KINDS: Record<string, ClipKind> = {
-  height: "size",
-  "block-size": "size",
-  width: "size",
-  "inline-size": "size",
-  "clip-path": "size",
-  transform: "move",
-  translate: "move",
-  scale: "move",
-  rotate: "move",
-  opacity: "fade",
-  "background-color": "tint",
-  color: "tint",
-  "border-color": "tint",
-  filter: "effect",
-  "box-shadow": "effect",
-};
 /**
- * A row's kind: the family of its most telling property over all its clips,
- * in the order the words name how a thing moves (`words.how`), so a row
- * whose clips animate "height, opacity", or a custom property and opacity,
- * takes the kind a person sees (size; fade), and only a row of custom
- * properties alone is "other". Read off the joined property string, every
- * row fell through to "other" and drew grey.
+ * A row's kind: the family of its most telling property over all its clips
+ * (core `clipKindOf`), so a row whose clips animate "height, opacity", or a
+ * custom property and opacity, takes the kind a person sees (size; fade),
+ * and only a row of custom properties alone is "other".
  */
-const kindOf = (clips: readonly Clip[]): ClipKind => {
-  const properties = new Set(
-    clips.flatMap((clip) => clip.property.split(",").map((one) => one.trim()))
-  );
-  const telling = Object.keys(words.how).find((one) => properties.has(one));
-  return (telling && KINDS[telling]) || "other";
-};
-
-/** One timing as the component canvas's `tuned` record says it (stage-host canvas chrome.ts `openMove`): the agent writes it into the CSS or the motion call. */
-export interface TunedRecord {
-  animation: string;
-  delay: number;
-  duration: number;
-  easing: string;
-  move: string;
-  /** Its length or its curve is none of the design system's tokens: the agent's note, never shown on the face. */
-  offTokens: boolean;
-}
-
-/** The clips the person tuned, as the canvas's `tuned` record: the move, the animation by its element and property, its begin from the move's start, its length and its curve. */
-export const tunedRecord = (move: string, clips: readonly Clip[]) =>
-  clips
-    .filter((clip) => clip.was)
-    .map((clip): TunedRecord => ({
-      move,
-      animation: `${clip.element} ${clip.property}`,
-      delay: Math.round(clip.start + clip.delay),
-      duration: Math.round(clip.duration),
-      easing: clip.easing,
-      offTokens: clip.adHoc,
-    }));
+const kindOf = (clips: readonly Clip[]): ClipKind =>
+  clipKindOf(clips.flatMap((clip) => clip.property.split(",")));
 
 /** The token whose curve is `easing`, when one is; `linear` is its own. */
 export function curveTokenOf(easing: string): string | null {
@@ -206,153 +152,9 @@ const MOTION_KEYS = new Set([
   "composite",
 ]);
 
-function propertyOf(animation: Animation): string {
-  if (
-    typeof CSSTransition !== "undefined" &&
-    animation instanceof CSSTransition
-  ) {
-    return animation.transitionProperty;
-  }
-  if (
-    typeof CSSAnimation !== "undefined" &&
-    animation instanceof CSSAnimation
-  ) {
-    return animation.animationName;
-  }
-  const effect = animation.effect as KeyframeEffect | null;
-  const keys = new Set<string>();
-  for (const frame of effect?.getKeyframes() ?? []) {
-    for (const key of Object.keys(frame)) {
-      if (!MOTION_KEYS.has(key)) {
-        keys.add(key.replace(/[A-Z]/gu, (c) => `-${c.toLowerCase()}`));
-      }
-    }
-  }
-  return [...keys].join(", ");
-}
-
-/** Whether its curve lives in its frames: a run of three or more frames on a linear timing (Svelte's transitions). */
-const framedOf = (animation: Animation): boolean => {
-  const effect = animation.effect as KeyframeEffect | null;
-  return (
-    (effect?.getTiming().easing ?? "linear") === "linear" &&
-    (effect?.getKeyframes().length ?? 0) > 2
-  );
-};
-
-/** A clip from an animation the engine ran, `start` ms after the move began. */
-export function clipOf(animation: Animation, start: number, at: number): Clip {
-  const effect = animation.effect as KeyframeEffect | null;
-  const timing = effect?.getComputedTiming();
-  const property = propertyOf(animation);
-  const easing = effect?.getTiming().easing ?? "linear";
-  const duration = Math.round(Number(timing?.duration) || 0);
-  const framed = framedOf(animation);
-  const token = tokenOf(duration);
-  const curveToken = framed ? "framed" : curveTokenOf(easing);
-  const properties = property.split(",").map((one) => one.trim());
-  /** The property that says most of how it moves, in the words' order. */
-  const first =
-    Object.keys(words.how).find((one) => properties.includes(one)) ??
-    properties[0] ??
-    "";
-  const target = effect?.target ?? null;
-  const thing = target ? thingOf(target) : null;
-  return {
-    id: `${at}`,
-    target,
-    thing,
-    spring: null,
-    frames: effect?.getKeyframes() ?? [],
-    element: thing ? nameOf(thing) : words.element,
-    property,
-    how: words.how[first] ?? words.changes,
-    start,
-    delay: Math.round(Number(timing?.delay) || 0),
-    duration,
-    easing,
-    framed,
-    // A curve drawn into its frames has no name of its own: its row says its length alone.
-    curve: framed ? "" : curveWords(easing),
-    token,
-    adHoc: token === null || curveToken === null,
-    was: null,
-  };
-}
-
 /** The move's length: its last clip's end. */
 export const lengthOf = (clips: readonly Clip[]): number =>
   Math.max(0, ...clips.map((clip) => clip.start + clip.delay + clip.duration));
-
-/**
- * The move's replays: each clip drawn again from its frames and its timing
- * as they stand (tuned or not), on its element, over what the element is
- * now; the engine's own animation is gone once it ends (a transition's,
- * Svelte's). Each lasts until it ends, then lets the element go.
- */
-export class Replays {
-  readonly #running = new Map<string, Animation>();
-
-  #of(clip: Clip): Animation | null {
-    this.#running.get(clip.id)?.cancel();
-    if (!clip.target) {
-      return null;
-    }
-    const replay = clip.target.animate(clip.frames, {
-      delay: clip.delay,
-      duration: clip.duration,
-      easing: clip.framed ? "linear" : clip.easing,
-      fill: "both",
-    });
-    replay.pause();
-    this.#running.set(clip.id, replay);
-    return replay;
-  }
-
-  /** Every clip stood at `t` ms into the move, held there. */
-  seek(clips: readonly Clip[], t: number): void {
-    for (const clip of clips) {
-      const replay = this.#running.get(clip.id) ?? this.#of(clip);
-      if (replay) {
-        // A replay that was playing stops where it is put: Pause set the
-        // time and the move ran on to its end.
-        replay.pause();
-        replay.currentTime = t - clip.start;
-      }
-    }
-  }
-
-  /** Every clip played from `t`, at `rate` (1, or a quarter); each lets its element go as it ends. */
-  play(clips: readonly Clip[], t: number): void {
-    for (const clip of clips) {
-      const replay = this.#of(clip);
-      if (replay) {
-        replay.onfinish = () => this.#let(clip.id, replay);
-        // Played, then placed: `play()` on a paused animation whose time
-        // stands before 0 rewinds it to 0 (Web Animations, "play an
-        // animation", auto-rewind), so a clip the move set off later ran at
-        // once and every staggered move played collapsed.
-        replay.play();
-        replay.currentTime = t - clip.start;
-      }
-    }
-  }
-
-  #let(id: string, replay: Animation): void {
-    if (this.#running.get(id) === replay) {
-      this.#running.delete(id);
-    }
-    replay.cancel();
-  }
-
-  /** Every replay ended, its element let go: the state as it stands. */
-  release(): void {
-    for (const replay of this.#running.values()) {
-      replay.cancel();
-    }
-    this.#running.clear();
-  }
-}
 
 /** The clip run with the person's tuning; the clip as the engine ran it kept as `was`. */
 function tune(clip: Clip, tuning: Tuning): Clip {
@@ -506,62 +308,6 @@ export const ownLengths = (clips: readonly Clip[]): [number, number] => [
   Math.min(...clips.map((clip) => clip.duration)),
   Math.max(...clips.map((clip) => clip.duration)),
 ];
-
-/** A clip as the same animation in another read of the move: its thing's name, its property and its place among the clips that share both. */
-const identities = (clips: readonly Clip[]): Map<Clip, string> => {
-  const seen = new Map<string, number>();
-  const named = new Map<Clip, string>();
-  for (const clip of [...clips].sort(asRan)) {
-    const base = `${clip.element}\u0000${clip.property}`;
-    const n = seen.get(base) ?? 0;
-    seen.set(base, n + 1);
-    named.set(clip, `${base}\u0000${n}`);
-  }
-  return named;
-};
-
-/** The tuned clips of a move by their identity, to put back on its next read. */
-export const tuningOf = (clips: readonly Clip[]): Map<string, Clip> => {
-  const named = identities(clips);
-  return new Map(
-    clips.flatMap((clip) =>
-      clip.was ? [[named.get(clip) as string, clip] as const] : []
-    )
-  );
-};
-
-/**
- * A fresh read of a move with what he tuned on an earlier read put back:
- * each tuned animation's delay, length and curve over the clip as the engine
- * ran it this time. Choosing another move and back kept nothing.
- */
-export function withTuning(
-  clips: readonly Clip[],
-  tuning: ReadonlyMap<string, Clip>
-): Clip[] {
-  if (tuning.size === 0) {
-    return [...clips];
-  }
-  const named = identities(clips);
-  return clips.map((clip) => {
-    const tuned = tuning.get(named.get(clip) as string);
-    return tuned
-      ? {
-          ...clip,
-          delay: tuned.delay,
-          duration: tuned.duration,
-          easing: tuned.easing,
-          frames: tuned.framed === clip.framed ? clip.frames : tuned.frames,
-          framed: tuned.framed,
-          spring: tuned.spring,
-          curve: tuned.curve,
-          token: tuned.token,
-          adHoc: tuned.adHoc,
-          was: clip,
-        }
-      : clip;
-  });
-}
 
 /**
  * The move's rows: its clips by the thing each moves, in the order each

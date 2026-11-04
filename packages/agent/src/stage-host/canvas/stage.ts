@@ -1,0 +1,1407 @@
+/**
+ * The stage (the design graph's, Projects spec §5.10): what a person's
+ * panel frames for a component artifact (`by=panel`) and what the stage's
+ * own render draws (`by=stage`). The page holds the project's component
+ * and its one live instance, standing in the state the panel keeps, at
+ * 1:1: laid out at the width he picked, else its own up to the page's room
+ * (a form asked at 1440 lays itself out at the room's width, as a window
+ * that wide would), never scaled; a drawing wider than the page scrolls
+ * sideways. It stands on the page it lives on, the page's gutter round it,
+ * and shows its own width where it stands narrower than the width it was
+ * laid out at, so no paper stands beside a form held to its measure.
+ *
+ * The panel draws the design graph round the frame that holds this page
+ * and says what to stand at by messages alone (core stage-graph.ts):
+ * `cawco:stage-reach` brings the live instance to a state, which the page
+ * answers `cawco:stage-reached` once it has settled; `cawco:stage-laid`
+ * tells the panel the width the drawing needs, which its split gives the
+ * stage; `cawco:stage-fault` says the component threw as it mounted, the
+ * error formula drawn in the drawing's place with its own Try again.
+ *
+ * The instance mounts once for as long as the panel stays with it (again
+ * only for another states file, a reach from nothing, Try again after a
+ * fault, or an edit of its states file), and a reach sets the next state's
+ * args on it in place, its own motion running and read as it runs. A state
+ * set in place is then held to the same state drawn afresh, hidden
+ * (`landed`): where the two differ (a press outside an open column closed
+ * it through the component's own handler) it is mounted anew.
+ *
+ * A reach to a state its states file plays a move into (`play`, from the
+ * story's `from`) plays that move on the drawing from its from state, and
+ * docks the move's timeline across the page's floor (DialKit's, chrome.ts
+ * `openMove`), where the person tunes it and the artifact keeps it as
+ * `tuned`; the agent's dials stand at the page's top. Both stay until the
+ * design graph's own controls take them.
+ *
+ * Every states file's report is read in the rig, a section at a time: each
+ * story mounted off screen as the person's drawing would be, read, then
+ * taken down, a few at a time; then its probes and its moves. The page
+ * posts it as each section is read, so the hub answers an open canvas from
+ * the panel's own draw.
+ */
+
+import { readWithin } from "@cawco/core/bounded";
+import { bringIntoView } from "@cawco/core/bring-into-view";
+import {
+  type AnimationRead,
+  FORMS,
+  type FramePictureRead,
+  type FrameRender,
+  type Interaction,
+  type PageError,
+  type Story,
+  type SweepStep,
+} from "@cawco/core/stage";
+import {
+  type ClipRead,
+  clipKindOf,
+  cutRecords,
+  STAGE_FAULT,
+  STAGE_LAID,
+  STAGE_REACH,
+  STAGE_REACHED,
+  STAGE_REVEAL,
+  type StageFault,
+  type StageLaid,
+  type StageReach,
+  type StageReached,
+  type StateRef,
+  stageReachOf,
+  storyWords,
+} from "@cawco/core/stage-graph";
+import { queriesIn, userEventIn } from "@cawco/core/stage-play";
+import { graphWords as words } from "@cawco/core/words/graph";
+import { differences } from "./diff";
+import { drew, firstWords, partsOf, readAnimation } from "./measure";
+import { nameOf, thingOf } from "./names";
+import { allClass } from "./pseudo";
+import {
+  type Column,
+  detailsOf,
+  FORCED,
+  frameTick,
+  type Mode,
+  type Mounted,
+  type Page,
+  type Section,
+  type SectionFailure,
+} from "./runtime";
+import {
+  frameAsViewport,
+  windowHeight,
+  windowRoom,
+  windowWidth,
+} from "./viewport";
+
+/** How long a reach's play may run, then its motion (component-canvas moves.md). */
+const PLAY_MS = 6000;
+const MOTION_MS = 3000;
+/** The quiet that ends a move: no new animation and none running for this long. */
+const QUIET_MS = 250;
+/** The rest a drawing comes to as it mounts: its own arrivals (a read-back the hub answered) have played. */
+const REST_MS = 600;
+/** How many stories a section's read keeps mounted in the rig at once. Ours: a few, never a whole sheet's. */
+const SWEEP_KEPT = 3;
+/** The quiet after the last edit or view change before the report's sections are read again. Ours. */
+const READ_AGAIN_MS = 300;
+/** The gap between two stories' boxes in a section's read, px: their places in the report, one under another. */
+const ROW_GAP = 24;
+/** The page's gutter round the drawing (the panel's stage head's inset). */
+const GUTTER = "--space-4";
+/** What a drawing's controls say they stand at (open, pressed, checked, chosen), in order: what its words alone don't show. */
+const STATED = [
+  "aria-expanded",
+  "aria-pressed",
+  "aria-checked",
+  "aria-selected",
+];
+/** Solar's close glyph (bold duotone), the error formula's mark (DESIGN.md, Icons): the dashboard's `IconError`. */
+const ERROR_GLYPH =
+  '<g fill="currentColor"><path d="M5.53717 19.5302C5.24427 19.8231 4.7694 19.8231 4.47651 19.5302C4.18361 19.2373 4.18361 18.7624 4.47651 18.4696L18.4764 4.46967C18.7693 4.17678 19.2442 4.17678 19.5371 4.46967C19.8299 4.76256 19.8299 5.23744 19.5371 5.53033L5.53717 19.5302Z" opacity=".5"/><path d="M4.46978 5.53033C4.17689 5.23744 4.17689 4.76256 4.46978 4.46967C4.76268 4.17678 5.23755 4.17678 5.53044 4.46967L19.5303 18.4696C19.8232 18.7624 19.8232 19.2373 19.5303 19.5302C19.2374 19.8231 18.7626 19.8231 18.4697 19.5302L4.46978 5.53033Z"/></g>';
+
+/** A state resolved on the page: its section, the story drawn (a variant's own), and the args it is drawn with. */
+interface Target {
+  args: Record<string, unknown>;
+  ref: StateRef;
+  section: Section;
+  story: Story;
+}
+
+/** The live instance: what it stands at, how it was mounted, and what its mount said of itself. */
+interface Live extends Target {
+  into: { error?: PageError };
+  mounted: Mounted | undefined;
+}
+
+/** An animation a reach set off, as first seen: its element, its frames and its timing. */
+interface Taken {
+  animation: Animation;
+  /** Ms after the press it was first seen at. */
+  first: number;
+  keyframes: Keyframe[];
+  /** What it animates, read as it was first seen (`propertyOf`). */
+  property: string;
+  read: AnimationRead;
+  target: Element | null;
+}
+
+/** A story's `play`, as the stage runs it (core stage-play.ts's context). */
+type PlayFn = (context: object) => Promise<void> | void;
+
+/** A section's stories as the rig read them, for the report. */
+type Reads = Map<Section, FrameRender[]>;
+
+/** Whether two state names name one state. */
+const sameRef = (a: StateRef | null, b: StateRef | null): boolean =>
+  !!a && !!b && JSON.stringify(a) === JSON.stringify(b);
+
+/** A picture's key: a state of a story in an interaction. */
+const pictureKey = (file: string, story: string, interaction: Interaction) =>
+  `${file}|${story}|${interaction}`;
+
+/**
+ * Motion that is the state's own and never a move's: a loop, or one that
+ * runs on a scroller and not on the clock (the house edge fade, a
+ * scroll-driven animation). Landed, an edge fade jumped to its scroll's end.
+ */
+const statesOwn = (animation: Animation) =>
+  !(animation.timeline instanceof DocumentTimeline) ||
+  animation.effect?.getComputedTiming().iterations === Number.POSITIVE_INFINITY;
+
+/** An animation at its end at once; one that can't be (paused at no rate) is left as it stands. */
+function land(animation: Animation): void {
+  try {
+    animation.finish();
+  } catch {
+    // InvalidStateError: a rate of 0 or an endless effect has no end to land on.
+  }
+}
+
+const nextFrame = () =>
+  new Promise<void>((done) => requestAnimationFrame(() => done()));
+
+const MOTION_KEYS = new Set([
+  "offset",
+  "computedOffset",
+  "easing",
+  "composite",
+]);
+const UPPER = /[A-Z]/gu;
+
+/** What an animation animates: a transition's property, a keyframes' name, a Web Animation's keyframes' properties. */
+function propertyOf(animation: Animation): string {
+  if (
+    typeof CSSTransition !== "undefined" &&
+    animation instanceof CSSTransition
+  ) {
+    return animation.transitionProperty;
+  }
+  if (
+    typeof CSSAnimation !== "undefined" &&
+    animation instanceof CSSAnimation
+  ) {
+    return animation.animationName;
+  }
+  const effect = animation.effect as KeyframeEffect | null;
+  const keys = new Set<string>();
+  for (const frame of effect?.getKeyframes() ?? []) {
+    for (const key of Object.keys(frame)) {
+      if (!MOTION_KEYS.has(key)) {
+        keys.add(key.replace(UPPER, (c) => `-${c.toLowerCase()}`));
+      }
+    }
+  }
+  return [...keys].join(", ");
+}
+
+/** What a drawing's controls say they stand at, in order. */
+const statesOf = (root: Element): string =>
+  [...root.querySelectorAll(STATED.map((name) => `[${name}]`).join(","))]
+    .map((el) => STATED.map((name) => el.getAttribute(name) ?? "").join(""))
+    .join("|");
+
+/** A token's length on the page's own tokens, px. */
+const tokenPx = (name: string): number =>
+  Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue(name)
+  ) || 0;
+
+export function bootStage(page: Page): Mode {
+  const { chrome, rig, root, sections, state, view } = page;
+  /**
+   * A panel frames the page and says what it stands at; a page on its own
+   * (the stage's render, the canvas opened in its own tab) stands at its
+   * first states file's first story.
+   */
+  const framed = window.top !== window;
+  document.documentElement.classList.add("cawco-stage-page");
+  const canvas = document.getElementById("cawco-canvas") as HTMLElement;
+  canvas.classList.add("cawco-stage");
+  const frame = document.createElement("div");
+  frame.className = "cawco-stage-frame";
+  frame.hidden = true;
+  const drawing = document.createElement("div");
+  drawing.className = "cawco-frame-body cawco-stage-drawing";
+  drawing.toggleAttribute("data-stage-drawing", true);
+  frame.append(drawing);
+  /** What stands for the drawing until it first mounts, seen only past the wait's grace. */
+  const waiting = document.createElement("div");
+  waiting.className = "cawco-stage-waiting cawco-waiting";
+  waiting.setAttribute("role", "status");
+  waiting.setAttribute("aria-busy", "true");
+  const waitingWords = document.createElement("span");
+  waitingWords.className = "cawco-sr";
+  const block = document.createElement("div");
+  block.className = "cawco-stand-in-body";
+  waiting.append(waitingWords, block);
+  canvas.append(waiting, frame);
+
+  let live: Live | null = null;
+  let fault: HTMLElement | null = null;
+  /** Each section's card saying it didn't load, by its file. */
+  const failedCards = new Map<string, HTMLElement>();
+  /** How many reaches the panel has asked for, in the order they came; the last one's place: one still waiting its turn behind it is passed over. */
+  let arrivals = 0;
+  let latest = 0;
+  /** The reach under way: each waits for the one before it, so no two act on the instance at once. */
+  let reaching: Promise<unknown> = Promise.resolve();
+  /** The things the last reach moved, by the ids its clips name them by. */
+  let moved = new Map<string, Element>();
+  /** The drawing's own width where it stands narrower than the width it was laid out at, by states file and width picked; only ever widened. */
+  const fitOf = new Map<string, number>();
+  let laidSaid = "";
+  /** The state a picture stands the drawing at, and its forced interaction. */
+  let posed: { interaction: Interaction; key: string } | null = null;
+  const reads: Reads = new Map();
+
+  /** Tells the panel, through the overlay (preview-overlay page.ts relays each to the pane). */
+  const tell = <Message extends object>(type: string, message: Message) =>
+    dispatchEvent(new CustomEvent(type, { detail: message }));
+
+  const scheme = (): Column["scheme"] =>
+    view.scheme === "both" ? "light" : view.scheme;
+  /** The page's room for the drawing: its own width inside its scroller's gutters, less its gutters. */
+  const room = () => windowRoom() - 2 * tokenPx(GUTTER);
+  /** The width a story is laid out at: his pick, else its own up to the page's room (the desk's form when it names none). */
+  const roomWidth = (story: Story): number =>
+    view.widths?.[0] ??
+    Math.min(story.form?.width ?? FORMS.desk, room() > 0 ? room() : FORMS.desk);
+  const columnOf = (story: Story): Column => ({
+    interaction: "rest",
+    scheme: scheme(),
+    width: roomWidth(story),
+  });
+
+  /** A state named by the panel, resolved to its section, the story drawn and its args; or why it can't be, in words. */
+  function resolved(ref: StateRef): Target | { refused: string } {
+    const section = page.sectionOf(ref.file);
+    const sheet = section?.mod?.SHEET;
+    if (!(section && sheet)) {
+      return { refused: `${ref.file} is no states file of this canvas.` };
+    }
+    const drawn =
+      ref.variant && "story" in ref.variant ? ref.variant.story : ref.story;
+    const story = sheet.stories.find((one) => one.name === drawn);
+    if (!story) {
+      return { refused: `${ref.file} has no story ${drawn}.` };
+    }
+    let args = page.argsOf(section, drawn);
+    if (ref.variant && "records" in ref.variant) {
+      const arg = sheet.stories.find((one) => one.name === ref.story)?.records;
+      const list = arg ? args[arg] : undefined;
+      if (arg && Array.isArray(list)) {
+        args = { ...args, [arg]: cutRecords(list, ref.variant.records) };
+      }
+    }
+    return { section, story, args, ref };
+  }
+
+  /** A body dressed and sized for `target` as the drawing stands: its scheme, its width. */
+  const dress = (body: HTMLElement, target: Target) =>
+    page.dressBody(
+      body,
+      columnOf(target.story),
+      target.story,
+      page.fills(target.section, target.story.name)
+    );
+
+  /** The page round the drawing in the drawing's own ground and scheme: the page the component lives on, the gutter its own. */
+  const ground = () => {
+    const rootStyle = document.documentElement.style;
+    rootStyle.backgroundColor = drawing.style.backgroundColor;
+    rootStyle.colorScheme = drawing.style.colorScheme;
+  };
+
+  /** The drawing's own marks, read by the overlay's pins (page.ts `sheetChain`) and the probe kit. */
+  function mark(target: Target): void {
+    const { section, story } = target;
+    drawing.dataset.cawcoStory = story.name;
+    drawing.dataset.cawcoFile = section.file;
+    drawing.dataset.cawcoSource = `${section.file}:${story.line}:${story.column}`;
+    drawing.dataset.cawcoInteraction = "rest";
+    drawing.dataset.cawcoScheme = scheme();
+    drawing.dataset.cawcoWidth = String(roomWidth(story));
+    if (target.ref.variant) {
+      drawing.dataset.cawcoVariant = JSON.stringify(target.ref.variant);
+    } else {
+      delete drawing.dataset.cawcoVariant;
+    }
+  }
+
+  /* --- Coming to rest --------------------------------------------------- */
+
+  /**
+   * A drawing as it mounts comes to rest: every animation it starts of its
+   * own (a read-back the hub answered unfolding) is landed at once, until
+   * none has started for {@link REST_MS}, at most {@link MOTION_MS}. The
+   * stage shows a state at rest, so a press changes what it shows and
+   * nothing slides in. A loop is the state's own and runs.
+   */
+  async function restOf(holder: HTMLElement): Promise<void> {
+    const end = performance.now() + MOTION_MS;
+    const known = new Set<Animation>();
+    let still = performance.now();
+    while (performance.now() < end && performance.now() - still < REST_MS) {
+      await nextFrame();
+      for (const animation of holder.getAnimations({ subtree: true })) {
+        if (!(known.has(animation) || statesOwn(animation))) {
+          known.add(animation);
+          land(animation);
+          still = performance.now();
+        }
+      }
+    }
+  }
+
+  /** Waits until no animation it saw has run for {@link QUIET_MS}, at most {@link MOTION_MS}. */
+  async function quietOf(seen: Map<Animation, number>): Promise<void> {
+    const end = performance.now() + MOTION_MS;
+    let quiet = performance.now();
+    while (performance.now() < end) {
+      await frameTick();
+      if (
+        [...seen.keys()].some(
+          (one) => one.playState === "running" && !statesOwn(one)
+        )
+      ) {
+        quiet = performance.now();
+      } else if (performance.now() - quiet > QUIET_MS) {
+        return;
+      }
+    }
+  }
+
+  /* --- The fault, and the drawing's place while it mounts ---------------- */
+
+  function clearFault(): void {
+    fault?.remove();
+    fault = null;
+  }
+
+  /** The component threw as it mounted: the error formula in the drawing's place, its own Try again, the stack under Show details. */
+  function faulted(target: Target, error: PageError): void {
+    clearFault();
+    frame.hidden = true;
+    const card = document.createElement("div");
+    card.className = "cawco-stage-failed cawco-ui";
+    card.setAttribute("role", "alert");
+    const head = document.createElement("p");
+    head.className = "cawco-stage-failed-head";
+    const glyph = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    glyph.setAttribute("viewBox", "0 0 24 24");
+    glyph.setAttribute("aria-hidden", "true");
+    glyph.innerHTML = ERROR_GLYPH;
+    const line = document.createElement("span");
+    line.textContent = words.mountFailed(
+      target.section.name,
+      target.story.display ?? storyWords(target.story.name)
+    );
+    head.append(glyph, line);
+    const message = document.createElement("p");
+    message.className = "cawco-stage-failed-message";
+    message.textContent = error.message.split("\n")[0] ?? error.message;
+    const again = document.createElement("button");
+    again.type = "button";
+    again.textContent = words.tryAgain;
+    again.addEventListener("click", () => {
+      queue(() => open(target));
+    });
+    const details = detailsOf(
+      error.file
+        ? `${error.message}\n${error.file}:${error.line ?? 1}:${error.column ?? 1}`
+        : error.message
+    );
+    const actions = document.createElement("div");
+    actions.append(again);
+    card.append(head, message, actions, details);
+    canvas.append(card);
+    fault = card;
+    tell<StageFault>(STAGE_FAULT, { on: target.ref, message: error.message });
+  }
+
+  /* --- Mounting, and the one way the instance moves ---------------------- */
+
+  /** Holds the drawing's height while the next mounts, so the page's scroll stays where it stood. */
+  const holdHeight = (on: boolean) =>
+    frame.style.setProperty(
+      "--held-h",
+      on && !frame.hidden ? `${drawing.offsetHeight}px` : ""
+    );
+
+  /** The component mounted afresh at `target`, at rest: its own arrivals landed. */
+  async function open(target: Target): Promise<void> {
+    chrome.closeMove();
+    holdHeight(true);
+    live?.mounted?.unmount();
+    drawing.replaceChildren();
+    clearFault();
+    posed = null;
+    moved = new Map();
+    dress(drawing, target);
+    ground();
+    mark(target);
+    frame.style.setProperty("--frame-w", `${roomWidth(target.story)}px`);
+    frame.hidden = false;
+    waiting.remove();
+    const into: { error?: PageError } = {};
+    const mounted = page.mountInto(
+      drawing,
+      target.section,
+      target.story.name,
+      target.args,
+      into
+    );
+    live = { ...target, mounted, into };
+    await frameTick();
+    if (into.error) {
+      holdHeight(false);
+      faulted(target, into.error);
+      return;
+    }
+    if (page.fillsScreen(target.section, target.story, drawing)) {
+      dress(drawing, target);
+    }
+    await restOf(drawing);
+    holdHeight(false);
+    laid();
+    chrome.dials(() => drawing);
+  }
+
+  /** `next` set on the live instance, replacing its args whole: a key the next state lacks falls to the component's default. */
+  async function setArgs(next: Record<string, unknown>): Promise<void> {
+    if (!live?.mounted) {
+      return;
+    }
+    const gone = Object.fromEntries(
+      Object.keys(live.args)
+        .filter((key) => !(key in next))
+        .map((key) => [key, undefined])
+    );
+    live.mounted.update({ ...gone, ...next });
+    live.args = { ...next };
+    await frameTick();
+  }
+
+  /**
+   * A state set in place lands whatever the component's own handlers did
+   * with the one before: the live instance is read against the state drawn
+   * afresh, hidden, and mounted anew where they differ. Its layers (a
+   * popover the state opens, portalled to the body) are hidden while it
+   * stands, never seen.
+   */
+  async function landed(target: Target): Promise<void> {
+    const fresh = document.createElement("div");
+    fresh.className = "cawco-frame-body cawco-stage-fresh";
+    fresh.toggleAttribute("data-stage-drawing", true);
+    fresh.toggleAttribute("inert", true);
+    fresh.setAttribute("aria-hidden", "true");
+    dress(fresh, target);
+    const layers = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node instanceof HTMLElement && node !== rig) {
+            node.style.visibility = "hidden";
+          }
+        }
+      }
+    });
+    layers.observe(document.body, { childList: true });
+    frame.append(fresh);
+    const mounted = page.mountInto(
+      fresh,
+      target.section,
+      target.story.name,
+      target.args,
+      {}
+    );
+    try {
+      await restOf(fresh);
+      await frameTick();
+      if (
+        differences(fresh, drawing, 1).length > 0 ||
+        statesOf(fresh) !== statesOf(drawing)
+      ) {
+        await open(target);
+      }
+    } finally {
+      mounted?.unmount();
+      fresh.remove();
+      layers.disconnect();
+    }
+  }
+
+  /** The play pressed inside the drawing: the person's focus goes back where it was, or off the drawing. */
+  function giveBack(had: Element | null): void {
+    if (!drawing.contains(document.activeElement)) {
+      return;
+    }
+    if (
+      had instanceof HTMLElement &&
+      had !== document.body &&
+      had.isConnected
+    ) {
+      had.focus({ preventScroll: true });
+    } else {
+      (document.activeElement as HTMLElement | null)?.blur();
+    }
+  }
+
+  /** `run` done on the live instance, every animation it starts read as a clip; with `still`, each landed as it is read. */
+  async function act(
+    run: () => Promise<void>,
+    still: boolean
+  ): Promise<{ clips: ClipRead[]; taken: Taken[] }> {
+    const had = document.activeElement;
+    // Where he left the page's scroll: a play's press focuses a control,
+    // which scrolls it into view; the scroll is held there while it runs.
+    const scroller = document.scrollingElement ?? document.documentElement;
+    const left = { top: scroller.scrollTop, left: scroller.scrollLeft };
+    const pin = () => scroller.scrollTo({ ...left, behavior: "instant" });
+    addEventListener("scroll", pin);
+    const t0 = performance.now();
+    const seen = new Map<Animation, number>();
+    const taken: Taken[] = [];
+    const t0Timeline = Number(document.timeline.currentTime) || t0;
+    /**
+     * Where a clip was set off, ms after the press: its animation's own
+     * start time on the document's timeline, so animations set off in one
+     * frame share one moment; the frame it was first seen in only while
+     * the engine has not yet started it.
+     */
+    const startOf = (animation: Animation, first: number) =>
+      typeof animation.startTime === "number"
+        ? animation.startTime - t0
+        : first;
+    const take = (animation: Animation, first: number) => {
+      if (statesOwn(animation)) {
+        return;
+      }
+      const effect = animation.effect as KeyframeEffect | null;
+      if ((Number(effect?.getComputedTiming().duration) || 0) > 0) {
+        // Its frames and timing as the engine has them when first seen: a transition's engine drops its effect once it ends.
+        taken.push({
+          animation,
+          first,
+          target: effect?.target ?? null,
+          keyframes: effect?.getKeyframes() ?? [],
+          property: propertyOf(animation),
+          read: readAnimation(animation, t0Timeline),
+        });
+      }
+      if (still) {
+        land(animation);
+      }
+    };
+    let watching = true;
+    const scan = () => {
+      for (const animation of drawing.getAnimations({ subtree: true })) {
+        if (!seen.has(animation)) {
+          const first = performance.now() - t0;
+          seen.set(animation, first);
+          take(animation, first);
+        }
+      }
+    };
+    const watch = () => {
+      if (watching) {
+        scan();
+        requestAnimationFrame(watch);
+      }
+    };
+    // What already runs is the state's own, not this press's.
+    for (const animation of drawing.getAnimations({ subtree: true })) {
+      seen.set(animation, -1);
+    }
+    requestAnimationFrame(watch);
+    const starts = new Map<Animation, number>();
+    try {
+      const ran = await readWithin(PLAY_MS, run);
+      if (ran.kind === "unanswered") {
+        throw new Error(`The play ran past ${PLAY_MS / 1000} s.`);
+      }
+      // The press's own frame: what it set has started its animations.
+      await frameTick();
+      scan();
+      for (const one of taken) {
+        starts.set(one.animation, startOf(one.animation, one.first));
+      }
+      await quietOf(seen);
+      // A move longer than its read (a 30-minute fill, cut at MOTION_MS) is whole in its clips: nothing of it is left running.
+      for (const [animation, since] of seen) {
+        if (
+          since >= 0 &&
+          animation.playState === "running" &&
+          !statesOwn(animation)
+        ) {
+          land(animation);
+        }
+      }
+    } finally {
+      removeEventListener("scroll", pin);
+      watching = false;
+      giveBack(had);
+      scroller.scrollTo({ ...left, behavior: "instant" });
+    }
+    return { clips: clipsOf(taken, starts), taken };
+  }
+
+  /** The clips a reach read, each placed from where the move's first animation was set off, its thing named as it stands now. */
+  function clipsOf(taken: Taken[], starts: Map<Animation, number>): ClipRead[] {
+    moved = new Map();
+    const ids = new Map<Element, string>();
+    const origin = Math.min(
+      ...taken.map((one) => starts.get(one.animation) ?? one.first)
+    );
+    // Each read as it was first seen: an animation's engine may drop its effect once it ends (a transition's), or cancel it (a Svelte outro).
+    return taken.map((one, at) => {
+      const { easing } = one.read;
+      const { property } = one;
+      const thing = one.target ? thingOf(one.target) : null;
+      let id: string | null = null;
+      if (thing?.isConnected) {
+        id = ids.get(thing) ?? `t${ids.size}`;
+        ids.set(thing, id);
+        moved.set(id, thing);
+      }
+      return {
+        id: String(at),
+        element: thing?.isConnected ? nameOf(thing) : words.element,
+        property,
+        start: Math.round((starts.get(one.animation) ?? one.first) - origin),
+        delay: Math.round(one.read.delay),
+        duration: Math.round(one.read.duration),
+        easing,
+        framed: easing === "linear" && one.keyframes.length > 2,
+        thing: id,
+        kind: clipKindOf(property.split(",")),
+      };
+    });
+  }
+
+  /** Runs `turn` after every reach before it: no two act on the instance at once. */
+  function queue<T>(turn: () => Promise<T>): Promise<T> {
+    const next = reaching.then(turn);
+    reaching = next.catch(page.heard);
+    return next;
+  }
+
+  /**
+   * The panel's reach (core `STAGE_REACH`): the first, one on another
+   * states file, or one from nothing mounts the component at `to`, at
+   * rest; with `play`, the move into `to` plays on the drawing from `from`
+   * (stood there first unless it stands there now), its timeline docked
+   * over it; else `to`'s args are set on it in place, then it is held to
+   * `to` drawn afresh. A later reach passes over one still waiting.
+   */
+  function reach(asking: StageReach): void {
+    arrivals += 1;
+    latest = arrivals;
+    const mine = arrivals;
+    page.quietly(queue(() => reachTurn(asking, mine)));
+  }
+
+  /** A reach's turn, once every reach before it is done. */
+  async function reachTurn(asking: StageReach, mine: number): Promise<void> {
+    const answer = (rest: Omit<StageReached, "ask" | "on">) =>
+      tell<StageReached>(STAGE_REACHED, {
+        ask: asking.ask,
+        on: asking.to,
+        ...rest,
+      });
+    if (mine !== latest) {
+      answer({ move: null, superseded: true });
+      return;
+    }
+    const target = await targetOf(asking.to);
+    if ("refused" in target) {
+      answer(refusal(target.refused));
+      return;
+    }
+    // Whatever timeline stood was the last move's.
+    chrome.closeMove();
+    const play = playOf(asking, target);
+    const stood = await standFor(asking, target, play);
+    if (stood === "opened") {
+      answer({ move: null });
+    } else if (stood !== "acts") {
+      answer(refusal(stood.refused));
+    } else if (fault) {
+      answer(refusal(fault.textContent ?? ""));
+    } else {
+      answer(await actOn(asking, target, play));
+    }
+  }
+
+  /** A refusal as a reach's answer. */
+  const refusal = (said: string): Omit<StageReached, "ask" | "on"> => ({
+    move: null,
+    failed: { message: said, stack: said },
+  });
+
+  /** A state the panel names, resolved once its states file has loaded. */
+  async function targetOf(
+    ref: StateRef
+  ): Promise<Target | { refused: string }> {
+    const section = page.sectionOf(ref.file);
+    if (section && !section.loaded) {
+      await page.loadSection(section);
+    }
+    return resolved(ref);
+  }
+
+  /** The play that moves the drawing into `target`, when the panel asked for the move and its story has one. */
+  function playOf(asking: StageReach, target: Target): PlayFn | null {
+    const csf = page.csfOf(target.section.mod?.module ?? {}, target.ref.story);
+    return asking.play &&
+      asking.from !== null &&
+      typeof csf?.play === "function"
+      ? (csf.play as PlayFn)
+      : null;
+  }
+
+  /** Whether the live instance stands at `ref` of `section`, mounted and unfaulted. */
+  const standsAt = (section: Section, ref: StateRef): boolean =>
+    !!live && !fault && live.section === section && sameRef(live.ref, ref);
+
+  /**
+   * Where the drawing stands before a reach acts: a move's from state for
+   * a played move (mounted afresh unless it stands there); for a first
+   * reach, one on another states file, one from nothing or one after a
+   * fault, `to` itself, mounted afresh, and nothing more is done
+   * (`opened`).
+   */
+  async function standFor(
+    asking: StageReach,
+    target: Target,
+    play: PlayFn | null
+  ): Promise<"opened" | "acts" | { refused: string }> {
+    if (play && asking.from) {
+      if (standsAt(target.section, asking.from)) {
+        return "acts";
+      }
+      const start = resolved(asking.from);
+      if ("refused" in start) {
+        return start;
+      }
+      await open(start);
+      return "acts";
+    }
+    if (
+      !live ||
+      live.section !== target.section ||
+      asking.from === null ||
+      fault
+    ) {
+      await open(target);
+      return "opened";
+    }
+    return "acts";
+  }
+
+  /** The reach done on the live instance: `to`'s play run on it, or its args set in place and held to `to` drawn afresh; what it set off, read. */
+  async function actOn(
+    asking: StageReach,
+    target: Target,
+    play: PlayFn | null
+  ): Promise<Omit<StageReached, "ask" | "on">> {
+    const from = live?.ref ?? null;
+    try {
+      const read = await act(
+        () => (play ? runPlay(play, target) : setArgs(target.args)),
+        asking.still
+      );
+      if (live) {
+        live = { ...live, ...target };
+      }
+      mark(target);
+      if (!play) {
+        await landed(target);
+      }
+      laid();
+      if (play) {
+        await timeline(target, from, read.taken);
+      }
+      return {
+        move: {
+          from: from?.story ?? "",
+          to: target.ref.story,
+          clips: read.clips,
+          length: Math.max(
+            0,
+            ...read.clips.map((clip) => clip.start + clip.delay + clip.duration)
+          ),
+        },
+      };
+    } catch (error) {
+      const said = error instanceof Error ? error : new Error(String(error));
+      return {
+        move: null,
+        failed: { message: said.message, stack: said.stack ?? said.message },
+      };
+    }
+  }
+
+  /**
+   * A move played on the drawing, held for its timeline (DialKit's, chrome.ts
+   * `openMove`, until the design graph's Animation face takes it): each
+   * animation it fired made again, paused, on its own element with its own
+   * frames, so the timeline's playhead seeks what the engine ran and its
+   * tuned timing previews live. An outro's element is gone once the move
+   * ends, so its clip is tuned without a preview.
+   */
+  async function timeline(
+    target: Target,
+    from: StateRef | null,
+    taken: Taken[]
+  ): Promise<void> {
+    const replays = taken.map((one) => {
+      if (!(one.target?.isConnected && one.keyframes.length > 0)) {
+        return { animation: null, read: one.read };
+      }
+      const animation = one.target.animate(one.keyframes, {
+        duration: one.read.duration,
+        delay: one.read.start + one.read.delay,
+        easing: one.read.easing,
+        fill: "both",
+      });
+      animation.pause();
+      animation.currentTime = 0;
+      return { animation, read: one.read };
+    });
+    await chrome.openMove(
+      {
+        move: {
+          from: from?.story ?? "",
+          to: target.ref.story,
+          animations: taken.map((one) => one.read),
+        },
+        replays,
+      },
+      `${target.section.file}|${target.ref.story}`
+    );
+  }
+
+  /** `to`'s story's `play` on the live instance: its args and `update` the instance's own. */
+  async function runPlay(play: PlayFn, target: Target): Promise<void> {
+    let current = { ...(live?.args ?? {}) };
+    await play({
+      args: current,
+      canvasElement: drawing,
+      canvas: queriesIn(drawing),
+      userEvent: userEventIn(drawing),
+      step: async (_name: string, run: () => Promise<void>) => await run(),
+      update: async (next: Record<string, unknown>) => {
+        current = { ...current, ...next };
+        live?.mounted?.update(next);
+        if (live) {
+          live.args = current;
+        }
+        await frameTick();
+      },
+    });
+    if (live) {
+      live.args = { ...target.args, ...current };
+    }
+  }
+
+  /* --- What the panel's split sizes the stage by --------------------------- */
+
+  /**
+   * The drawing measured: its own width where it stands narrower than the
+   * width it was laid out at (its root's box, or what overflows it), kept
+   * per states file and width picked and only ever widened, so a reach
+   * never narrows the stage under him; and told the panel when it changed.
+   */
+  function laid(): void {
+    if (!live || frame.hidden) {
+      return;
+    }
+    const width = roomWidth(live.story);
+    const own = drawing.firstElementChild as HTMLElement | null;
+    const key = `${live.section.file}@${view.widths?.[0] ?? "own"}`;
+    if (own) {
+      const read = Math.ceil(
+        Math.max(own.getBoundingClientRect().width, own.scrollWidth)
+      );
+      const known = fitOf.get(key);
+      if (known === undefined ? read < width - 1 : read > known) {
+        fitOf.set(key, Math.min(width, read));
+      }
+    }
+    const fit = fitOf.get(key) ?? null;
+    const drawn = fit === null ? width : Math.min(width, fit);
+    frame.style.setProperty("--frame-w", `${drawn}px`);
+    const laidOut: StageLaid = {
+      need: Math.ceil(
+        drawn + 2 * tokenPx(GUTTER) + windowWidth() - windowRoom()
+      ),
+      tall: Math.ceil(drawing.offsetHeight),
+      fit,
+    };
+    const said = JSON.stringify(laidOut);
+    if (said !== laidSaid) {
+      laidSaid = said;
+      tell<StageLaid>(STAGE_LAID, laidOut);
+    }
+  }
+
+  /** The drawing laid out again at the width the page's room or his pick now gives it, in the scheme he picked: nothing remounts. */
+  function relay(): void {
+    if (!live) {
+      return;
+    }
+    dress(drawing, live);
+    ground();
+    mark(live);
+    laid();
+  }
+
+  /** The region the last reach changed, brought into the page's view with room for a ring round it (DESIGN.md, The One Ring Rule). */
+  function reveal(): void {
+    const els = [...moved.values()].filter(
+      (el) => el.isConnected && drawing.contains(el)
+    );
+    if (els.length === 0) {
+      return;
+    }
+    const at = frame.getBoundingClientRect();
+    const boxes = els.map((el) => el.getBoundingClientRect());
+    const top = Math.min(...boxes.map((box) => box.top)) - at.top;
+    const left = Math.min(...boxes.map((box) => box.left)) - at.left;
+    const marker = document.createElement("span");
+    marker.setAttribute("aria-hidden", "true");
+    marker.style.cssText = `position: absolute; visibility: hidden; pointer-events: none; inset-block-start: ${top}px; inset-inline-start: ${left}px; inline-size: ${Math.max(...boxes.map((box) => box.right)) - at.left - left}px; block-size: ${Math.max(...boxes.map((box) => box.bottom)) - at.top - top}px; scroll-margin: var(${GUTTER});`;
+    frame.append(marker);
+    bringIntoView(marker, {
+      behavior:
+        view.motion === "reduce" ||
+        !matchMedia("(prefers-reduced-motion: no-preference)").matches
+          ? "instant"
+          : "smooth",
+    });
+    marker.remove();
+  }
+
+  new ResizeObserver(() => laid()).observe(drawing);
+  addEventListener("resize", () => relay());
+  // Each layer the drawing opens collides with the drawing, as with the app's window at its width.
+  frameAsViewport(() =>
+    live && !frame.hidden ? drawing.getBoundingClientRect() : null
+  );
+
+  addEventListener(STAGE_REACH, (event) => {
+    const asking = stageReachOf((event as CustomEvent<unknown>).detail);
+    if (asking) {
+      reach(asking);
+    }
+  });
+  addEventListener(STAGE_REVEAL, () => reveal());
+
+  /* --- The report: each section read in the rig --------------------------- */
+
+  /** Where the sweep stands, for the stage's render to name when it runs out of time (stage-render.ts). */
+  const sweepOn = (section: Section, step: SweepStep, story?: string) => {
+    state.sweepAt = { file: section.file, step, ...(story ? { story } : {}) };
+  };
+
+  /** A story read as the rig drew it, in `column`, its box at `y` in the section's column of reads. */
+  function rigRender(
+    story: Story,
+    body: HTMLElement,
+    column: Column,
+    error: PageError | undefined,
+    y: number
+  ): FrameRender {
+    const box = { x: 0, y, w: body.offsetWidth, h: body.offsetHeight };
+    let drawnAs: FrameRender["state"] = "empty";
+    let said = error;
+    if (said) {
+      drawnAs = "failed";
+    } else if (story.formUnread && view.widths === null) {
+      // Its own width is one the stage can't read: drawn at none, it would pass for drawn at a width it never asked for.
+      said = {
+        message: story.formUnread,
+        file: null,
+        line: null,
+        column: null,
+      };
+      drawnAs = "failed";
+    } else if (drew(body)) {
+      said = page.atFloor(story, column.width, body) ?? undefined;
+      drawnAs = said ? "failed" : "drawn";
+    }
+    return {
+      story: story.name,
+      label: story.label,
+      form: page.formWords(story, column.width),
+      interaction: column.interaction,
+      scheme: page.schemeOf(column),
+      width: box.w,
+      state: drawnAs,
+      box,
+      text: firstWords(body),
+      parts: partsOf(body, root),
+      ...(said ? { error: said } : {}),
+    };
+  }
+
+  /** The column a section's stories are read in: the view's scheme, its width picked or each story's own. */
+  const rigColumn = (): Column => ({
+    interaction: "rest",
+    scheme: scheme(),
+    width: view.widths?.[0] ?? "own",
+  });
+
+  /** Stories mounted in the rig, each in a body of its own dressed as the drawing would be. */
+  function mountInRig(section: Section, stories: Story[]) {
+    return stories.map((story) => {
+      const body = document.createElement("div");
+      body.className = "cawco-frame-body";
+      page.dressBody(body, rigColumn(), story, page.fills(section, story.name));
+      rig.append(body);
+      const into: { error?: PageError } = {};
+      const mounted = page.mountInto(
+        body,
+        section,
+        story.name,
+        page.argsOf(section, story.name),
+        into
+      );
+      return { story, body, mounted, into };
+    });
+  }
+
+  /** A story mounted in the rig read at rest and in each interaction its CSS reaches, its box at `y`. */
+  function readMounted(
+    section: Section,
+    one: ReturnType<typeof mountInRig>[number],
+    y: number
+  ): FrameRender[] {
+    if (page.fillsScreen(section, one.story, one.body)) {
+      page.dressBody(one.body, rigColumn(), one.story, true);
+    }
+    const reached = page.reachedIn(one.body);
+    section.interactions.set(one.story.name, reached);
+    return reached.map((interaction) => {
+      const forced = interaction === "rest" ? [] : FORCED[interaction];
+      for (const pseudo of forced) {
+        one.body.classList.add(allClass(pseudo));
+      }
+      const read = rigRender(
+        one.story,
+        one.body,
+        { ...rigColumn(), interaction },
+        one.into.error,
+        y
+      );
+      for (const pseudo of forced) {
+        one.body.classList.remove(allClass(pseudo));
+      }
+      return read;
+    });
+  }
+
+  /**
+   * A section's stories read in the rig, {@link SWEEP_KEPT} at a time: each
+   * mounted as the drawing would be (the view's scheme, its own width or
+   * the one picked), read at rest and in each interaction its CSS reaches,
+   * then taken down; their boxes one under another, as a column.
+   */
+  async function readInRig(section: Section): Promise<void> {
+    const stories = section.mod?.SHEET.stories ?? [];
+    const read: FrameRender[] = [];
+    let y = 0;
+    for (let at = 0; at < stories.length; at += SWEEP_KEPT) {
+      const batch = mountInRig(section, stories.slice(at, at + SWEEP_KEPT));
+      try {
+        await frameTick();
+        page.rewriteAll();
+        for (const one of batch) {
+          read.push(...readMounted(section, one, y));
+          y += one.body.offsetHeight + ROW_GAP;
+        }
+      } finally {
+        for (const one of batch) {
+          one.mounted?.unmount();
+          one.body.remove();
+        }
+      }
+    }
+    reads.set(section, read);
+  }
+
+  /** A section read for the report: its stories in the rig, then their probes, then its moves; one pass at a time. */
+  function readSection(section: Section): Promise<void> {
+    const before = section.settling ?? Promise.resolve();
+    section.settling = before
+      .catch(() => undefined)
+      .then(async () => {
+        sweepOn(section, "draw");
+        await readInRig(section);
+        sweepOn(section, "probe");
+        await page.probeAll(section);
+        await page.playAll(section, (to) => sweepOn(section, "move", to));
+      });
+    return section.settling;
+  }
+
+  /** Every section read again once the page has been quiet a moment: an edit, or another view, reached what the report says. */
+  let againTimer: ReturnType<typeof setTimeout> | undefined;
+  const readAgain = () => {
+    clearTimeout(againTimer);
+    againTimer = setTimeout(() => {
+      for (const section of sections) {
+        if (section.loaded) {
+          page.quietly(readSection(section).then(() => page.later()));
+        }
+      }
+    }, READ_AGAIN_MS);
+  };
+
+  /**
+   * Every section in turn, each read and reported before the next: the
+   * panel's page and the stage's render alike, so the hub answers an open
+   * canvas from the report the person's own page posts.
+   */
+  async function sweep(): Promise<void> {
+    for (const section of sections) {
+      sweepOn(section, "load");
+      await page.loadSection(section);
+      if (section.loaded) {
+        await section.settling;
+      }
+      sweepOn(section, "post");
+      await page.post();
+    }
+    state.sweepAt = null;
+    state.swept = true;
+  }
+
+  /* --- Pictures: the stage at a state, posed and read for the daemon ------- */
+
+  /** The section and story a picture names (`Story`, or `file:Story`), or why there is none. */
+  async function stateNamed(
+    name: string,
+    interaction: Interaction = "rest"
+  ): Promise<{ key: string } | { refused: string }> {
+    const cut = name.lastIndexOf(":");
+    const [inFile, storyName] =
+      cut > 0 ? [name.slice(0, cut), name.slice(cut + 1)] : [undefined, name];
+    for (const section of sections) {
+      if (inFile === undefined || section.file === inFile) {
+        await page.loadSection(section);
+      }
+    }
+    const holders = sections.filter(
+      (one) =>
+        (inFile === undefined || one.file === inFile) &&
+        one.mod?.SHEET.stories.some((each) => each.name === storyName)
+    );
+    const [section] = holders;
+    if (!section) {
+      return {
+        refused: `No states file of this canvas has a story ${name}: ${sections.map((one) => `${one.file} has ${one.mod?.SHEET.stories.map((each) => each.name).join(", ") || "none drawn yet"}`).join("; ")}.`,
+      };
+    }
+    if (holders.length > 1) {
+      return {
+        refused: `${storyName} is a story of ${holders.length} states files here: name one, ${holders.map((one) => `${one.file}:${storyName}`).join(" or ")}.`,
+      };
+    }
+    // Its read done first: it says which interactions the story reaches.
+    await section.settling;
+    const reached = section.interactions.get(storyName) ?? ["rest"];
+    return reached.includes(interaction)
+      ? { key: pictureKey(section.file, storyName, interaction) }
+      : {
+          refused: `${name} has no ${interaction} state: its states are ${reached.join(", ")}.`,
+        };
+  }
+
+  /** The room the window lacks to hold the drawing whole at 1:1, posed at `key`; null when it isn't. */
+  const lacks = (key: string) =>
+    posed?.key === key
+      ? {
+          w: Math.max(
+            0,
+            Math.ceil(frame.offsetWidth + 2 * tokenPx(GUTTER) - windowRoom())
+          ),
+          h: Math.max(
+            0,
+            Math.ceil(frame.offsetHeight + 2 * tokenPx(GUTTER) - windowHeight())
+          ),
+        }
+      : null;
+
+  /** The stage posed at `key` for its picture: mounted afresh at its story, at rest, its interaction forced on the drawing. */
+  async function pose(key: string): Promise<{ h: number; w: number } | null> {
+    const [file, story, interaction] = key.split("|") as [
+      string,
+      string,
+      Interaction,
+    ];
+    if (posed?.key !== key) {
+      const target = resolved({ file, story });
+      if ("refused" in target) {
+        return null;
+      }
+      await queue(() => open(target));
+      posed = { key, interaction };
+    }
+    if (interaction !== "rest") {
+      for (const pseudo of FORCED[interaction]) {
+        drawing.classList.add(allClass(pseudo));
+      }
+      drawing.dataset.cawcoInteraction = interaction;
+    }
+    scrollTo({ top: 0, left: 0, behavior: "instant" });
+    return lacks(key);
+  }
+
+  /** Whether the drawing posed at `key` is settled: fonts loaded, and no finite animation running in it (its open shadow roots too). */
+  function settled(key: string): boolean {
+    if (posed?.key !== key || document.fonts.status !== "loaded") {
+      return false;
+    }
+    const running: Animation[] = [...drawing.getAnimations({ subtree: true })];
+    const trees: (Element | ShadowRoot)[] = [drawing];
+    for (let tree = trees.pop(); tree; tree = trees.pop()) {
+      for (const one of tree.querySelectorAll("*")) {
+        if (one.shadowRoot) {
+          running.push(...one.shadowRoot.getAnimations());
+          trees.push(one.shadowRoot);
+        }
+      }
+    }
+    return !running.some(
+      (run) =>
+        run.playState === "running" &&
+        Number.isFinite(Number(run.effect?.getComputedTiming().endTime ?? 0))
+    );
+  }
+
+  /** The drawing as it stands on the page, for its picture: its rect, its own CSS size, the device's scale, whether it stands whole in the window. */
+  function picture(key: string): FramePictureRead | null {
+    if (posed?.key !== key) {
+      return null;
+    }
+    const rect = frame.getBoundingClientRect();
+    const style = getComputedStyle(frame);
+    return {
+      rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+      own: {
+        w: Number.parseFloat(style.width) || 0,
+        h: Number.parseFloat(style.height) || 0,
+      },
+      scale: devicePixelRatio,
+      whole:
+        rect.left >= -0.5 &&
+        rect.top >= -0.5 &&
+        rect.right <= windowWidth() + 0.5 &&
+        rect.bottom <= windowHeight() + 0.5,
+      view: `the stage's drawing at 1:1 in a ${windowWidth()}×${windowHeight()} window`,
+    };
+  }
+
+  Object.assign(state, { stateNamed, pose, lacks, picture, settled });
+
+  /* --- The first drawing --------------------------------------------------- */
+
+  /** A page on its own stands at its first states file's first story once that has loaded; a panel's page waits for the panel's reach. */
+  function standFirst(section: Section): void {
+    const [first] = section.mod?.SHEET.stories ?? [];
+    if (framed || live || arrivals > 0 || !first) {
+      return;
+    }
+    const target = resolved({ file: section.file, story: first.name });
+    if (!("refused" in target)) {
+      page.quietly(queue(() => open(target)));
+    }
+  }
+
+  waitingWords.textContent = words.mounting(
+    sections[0]?.name ?? "the component"
+  );
+  page.quietly(sweep());
+
+  return {
+    bodies: () => (live ? [{ body: drawing, mounted: live.mounted }] : []),
+    framesOf: (section) =>
+      (reads.get(section) ?? []).map((one) => {
+        const delta = section.probes.get(one.story)?.delta.get(one.interaction);
+        return one.interaction === "rest" || !delta ? one : { ...one, delta };
+      }),
+    mediaWidth: () =>
+      live && !frame.hidden ? Number.parseFloat(drawing.style.width) : null,
+    overridden: (section, story) => {
+      const now = live;
+      if (now && now.section === section && now.story.name === story) {
+        page.quietly(
+          queue(async () => {
+            const target = resolved(now.ref);
+            if (!("refused" in target) && live) {
+              await act(() => setArgs(target.args), view.motion === "reduce");
+              live = { ...live, ...target };
+              laid();
+            }
+          })
+        );
+      }
+      readAgain();
+    },
+    shown: (section) => {
+      failedCards.get(section.file)?.remove();
+      failedCards.delete(section.file);
+      page.quietly(readSection(section));
+      const now = live;
+      if (now?.section === section) {
+        // Its states file edited: the drawing stands at its state, from the module as it reads now.
+        const target = resolved(now.ref);
+        if (!("refused" in target)) {
+          page.quietly(queue(() => open(target)));
+        }
+      }
+      standFirst(section);
+    },
+    failed: (section, failure: SectionFailure) => {
+      failedCards.get(section.file)?.remove();
+      const card = page.failedCard(section, failure);
+      failedCards.set(section.file, card);
+      canvas.prepend(card);
+      if (!live) {
+        waiting.remove();
+      }
+    },
+    reported: () => undefined,
+    restyled: () => laid(),
+    updated: () => {
+      laid();
+      readAgain();
+    },
+    redressed: () => {
+      relay();
+      readAgain();
+    },
+    selected: () => undefined,
+  };
+}

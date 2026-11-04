@@ -19,7 +19,7 @@ interface Box {
   y: number;
 }
 
-export interface Difference {
+interface Difference {
   /** Where it stands on the stage, unscaled: for one that went, where it stood. */
   box: Box;
   kind: "came" | "changed" | "went";
@@ -28,9 +28,6 @@ export interface Difference {
   /** Its corner radius as drawn, so the ring stands on its own shape. */
   radius: string;
 }
-
-/** The most lines a comparison names; the rest are counted. */
-export const LINES_SHOWN = 12;
 
 const READ =
   "input, textarea, select, button, img, svg[aria-label], [data-slot]";

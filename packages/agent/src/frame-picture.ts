@@ -1,64 +1,61 @@
 /**
- * A picture of one frame of a component canvas: the one path every picture
- * of a frame is taken by (the daemon's render, stage-render.ts).
+ * A picture of one state of a component canvas: the one path every picture
+ * of a state is taken by (the daemon's render, stage-render.ts).
  *
- * The canvas draws its frames in one world that pans and zooms by a single
- * transform, inside a box that clips it (stage-host canvas runtime.ts). So
- * where a frame stands on the page, and at what size, depends on the view
- * and the window: a frame scrolled "into view" can stand outside the
- * canvas's box, and a window as narrow as a phone's shows a frame zoomed to
- * fit, so a 390 frame's picture came out 272 px wide. A picture depends on
- * neither. The canvas answers for its own frames: which frame a story names
- * (`frameNamed`, waking its section if the stage's sweep took it down),
- * where it stands for its picture (`pose`: zoom 1, in the middle, whatever
- * the window's width, held there; it answers the room the window lacks),
- * whether it has settled (`settled`) and how its body stands (`picture`).
- * Here the window is grown by the room the canvas lacks, the frame is posed
- * again in it and left to settle, and the picture is of its body alone, by
- * its own rect, refused unless the body stands whole in the canvas at its
- * own size and the png is its CSS size times the device's scale, the
- * scale written in it (its `pHYs`, core picture-scale.ts).
+ * The canvas page stands the component on its stage (stage-host canvas
+ * stage.ts): one drawing at a time, at 1:1, laid out at its width, the page
+ * scrolling where the drawing is larger than the window. So a picture
+ * depends on the window being large enough. The stage answers for its own
+ * drawing: which state a story names (`stateNamed`, once its states file
+ * has drawn), the drawing stood at it for its picture (`pose`: mounted
+ * afresh at rest, its interaction forced; it answers the room the window
+ * lacks), whether it has settled (`settled`) and how it stands
+ * (`picture`). Here the window is grown by the room the stage lacks, the
+ * state is posed again in it and left to settle, and the picture is of the
+ * drawing alone, by its own rect, refused unless it stands whole in the
+ * window at its own size and the png is its CSS size times the device's
+ * scale, the scale written in it (its `pHYs`, core picture-scale.ts).
  */
 import { withPngScale } from "@cawco/core/picture-scale";
 import type { FramePictureRead, Interaction } from "@cawco/core/stage";
 import type { Page } from "playwright-core";
 
-/** Why a frame's picture can't be taken as it is, in words a tool answers. */
+/** Why a state's picture can't be taken as it is, in words a tool answers. */
 class FramePictureRefusal extends Error {}
 
-/** What the canvas answers for its frames' pictures (runtime.ts `CanvasState`). */
+/** What the stage answers for its pictures (stage-host canvas runtime.ts `CanvasState`, stage.ts). */
 interface Pictures {
   __cawcoCanvas?: {
-    frameNamed: (
+    lacks?: (key: string) => { h: number; w: number } | null;
+    picture?: (key: string) => FramePictureRead | null;
+    pose?: (key: string) => Promise<{ h: number; w: number } | null>;
+    settled?: (key: string) => boolean;
+    stateNamed?: (
       name: string,
       interaction?: Interaction
     ) => Promise<{ key: string } | { refused: string }>;
-    lacks: (key: string) => { h: number; w: number } | null;
-    picture: (key: string) => FramePictureRead | null;
-    pose: (key: string) => { h: number; w: number } | null;
-    settled: (key: string) => boolean;
   };
 }
 
 /**
- * The key of the frame story `name` (`Story`, or `file:Story` where two
- * states files name one story alike) draws in state `interaction`.
+ * The key of the state story `name` (`Story`, or `file:Story` where two
+ * states files name one story alike) stands at in interaction `interaction`.
  */
-export async function findFrame(
+export async function findState(
   page: Page,
   name: string,
   interaction: Interaction = "rest"
 ): Promise<string> {
   const found = await page.evaluate(
     ([story, state]) =>
-      (globalThis as unknown as Pictures).__cawcoCanvas?.frameNamed(
+      (globalThis as unknown as Pictures).__cawcoCanvas?.stateNamed?.(
         story,
         state
       ) ?? null,
     [name, interaction] as const
   );
   if (!found) {
-    throw new FramePictureRefusal("The page holds no canvas.");
+    throw new FramePictureRefusal("The page holds no stage.");
   }
   if ("refused" in found) {
     throw new FramePictureRefusal(found.refused);
@@ -67,25 +64,25 @@ export async function findFrame(
 }
 
 /**
- * Places frame `key` for its picture: the canvas's `pose`, which shows it
- * (on a phone a frame not shown has no box to measure) and answers the room
- * the window lacks to hold it whole at its own size; the window grown by
- * that, and the frame posed again in the room; then settled: its fonts
- * loaded, every finite animation on it, in it or on what holds it (the
- * world's move) landed. All before `deadline` (epoch ms): the render's one
- * limit, which every wait of its draw shares.
+ * Stands the stage at state `key` for its picture: the stage's `pose`,
+ * which mounts it and answers the room the window lacks to hold it whole at
+ * its own size; the window grown by that, and the state posed again in the
+ * room; then settled: its fonts loaded, every finite animation in it
+ * landed. All before `deadline` (epoch ms): the render's one limit, which
+ * every wait of its draw shares.
  */
-export async function poseFrame(
+export async function poseState(
   page: Page,
   key: string,
   deadline: number
 ): Promise<void> {
   const left = () => Math.max(1, deadline - Date.now());
-  const pose = (one: string) =>
-    (globalThis as unknown as Pictures).__cawcoCanvas?.pose(one) ?? null;
+  const pose = async (one: string) =>
+    (await (globalThis as unknown as Pictures).__cawcoCanvas?.pose?.(one)) ??
+    null;
   const lacks = await page.evaluate(pose, key);
   if (!lacks) {
-    throw new FramePictureRefusal(`The canvas draws no frame ${key}.`);
+    throw new FramePictureRefusal(`The stage draws no state ${key}.`);
   }
   if (lacks.w > 0 || lacks.h > 0) {
     const view = page.viewportSize() ?? { width: 0, height: 0 };
@@ -94,14 +91,13 @@ export async function poseFrame(
       height: view.height + lacks.h,
     };
     await page.setViewportSize(grown);
-    // `pose` centres the frame in the canvas as it stands when called: the
-    // canvas has its room first, or the frame is centred in the old one.
+    // The stage lays the drawing out in the window as it stands: it has its room first.
     await page
       .waitForFunction(
         (one) => {
-          const room = (globalThis as unknown as Pictures).__cawcoCanvas?.lacks(
-            one
-          );
+          const room = (
+            globalThis as unknown as Pictures
+          ).__cawcoCanvas?.lacks?.(one);
           return !!room && room.w === 0 && room.h === 0;
         },
         key,
@@ -109,7 +105,7 @@ export async function poseFrame(
       )
       .catch(() => {
         throw new FramePictureRefusal(
-          `The canvas never had the room for frame ${key} at its own size, in a ${grown.width}×${grown.height} window.`
+          `The stage never had the room for state ${key} at its own size, in a ${grown.width}×${grown.height} window.`
         );
       });
     await page.evaluate(pose, key);
@@ -117,14 +113,14 @@ export async function poseFrame(
   await page
     .waitForFunction(
       (one) =>
-        (globalThis as unknown as Pictures).__cawcoCanvas?.settled(one) ??
+        (globalThis as unknown as Pictures).__cawcoCanvas?.settled?.(one) ??
         false,
       key,
       { timeout: left() }
     )
     .catch(() => {
       throw new FramePictureRefusal(
-        `Frame ${key} did not settle within the render's time: its fonts or animations are still going.`
+        `State ${key} did not settle within the render's time: its fonts or animations are still going.`
       );
     });
 }
@@ -139,15 +135,15 @@ const pngSize = (png: Buffer) => ({
 });
 
 /**
- * The picture of frame `key`'s body, posed (`poseFrame`): its own rect,
+ * The picture of state `key`'s drawing, posed (`poseState`): its own rect,
  * time's animations held (a scroller's drawn where its scroller stands), the
  * caret hidden, with the clip it was taken by in page
  * CSS px (its corner on a whole device pixel at or before the body's, so a
  * point of the page stands in the png at `(x − clip.x) × scale`). Refused
- * when the body stands scaled or not whole in the canvas, or when the png is
+ * when the drawing stands scaled or not whole in the window, or when the png is
  * not its CSS size times the device's scale.
  */
-export async function framePicture(
+export async function statePicture(
   page: Page,
   key: string
 ): Promise<{
@@ -157,30 +153,30 @@ export async function framePicture(
 }> {
   const read = await page.evaluate(
     (one) =>
-      (globalThis as unknown as Pictures).__cawcoCanvas?.picture(one) ?? null,
+      (globalThis as unknown as Pictures).__cawcoCanvas?.picture?.(one) ?? null,
     key
   );
   if (!read) {
-    throw new FramePictureRefusal(`The canvas draws no frame ${key}.`);
+    throw new FramePictureRefusal(`The stage draws no state ${key}.`);
   }
   const { rect, own, scale } = read;
   // At its own size the box on the page is its layout box; anything else is
   // a zoom or a transform still running over it.
   if (Math.abs(rect.w - own.w) > SAME || Math.abs(rect.h - own.h) > SAME) {
     throw new FramePictureRefusal(
-      `Frame ${key} stands ${rect.w.toFixed(2)}×${rect.h.toFixed(2)} px on the page for its own ${own.w.toFixed(2)}×${own.h.toFixed(2)}, ${read.view}: its picture would be scaled.`
+      `State ${key} stands ${rect.w.toFixed(2)}×${rect.h.toFixed(2)} px on the page for its own ${own.w.toFixed(2)}×${own.h.toFixed(2)}, ${read.view}: its picture would be scaled.`
     );
   }
   if (!read.whole) {
     throw new FramePictureRefusal(
-      `Frame ${key} does not stand whole in the canvas (${JSON.stringify(rect)}, ${read.view}): its picture would be cut.`
+      `State ${key} does not stand whole in the window (${JSON.stringify(rect)}, ${read.view}): its picture would be cut.`
     );
   }
   // The clip as the screenshot takes it, so it rounds nothing: its corner on
   // a whole device pixel at or before the box's, and its size in whole CSS
   // pixels (Playwright floors a clip's size to whole CSS pixels before
   // Chromium sees it, `helper.enclosingIntSize`), out to the box's far edge.
-  // The picture then holds every pixel the frame touches.
+  // The picture then holds every pixel the drawing touches.
   const left = Math.floor(rect.x * scale) / scale;
   const top = Math.floor(rect.y * scale) / scale;
   const width = Math.ceil(rect.x + rect.w - left - SAME);
@@ -228,11 +224,11 @@ export async function framePicture(
     size.h < own.h * scale - SAME
   ) {
     throw new FramePictureRefusal(
-      `Frame ${key}'s picture came out ${size.w}×${size.h} px for its own ${own.w.toFixed(2)}×${own.h.toFixed(2)} at ×${scale} (its clip, ${width}×${height} CSS px from (${left}, ${top}), is ${want.w}×${want.h}).`
+      `State ${key}'s picture came out ${size.w}×${size.h} px for its own ${own.w.toFixed(2)}×${own.h.toFixed(2)} at ×${scale} (its clip, ${width}×${height} CSS px from (${left}, ${top}), is ${want.w}×${want.h}).`
     );
   }
   // The png records the scale it was taken at (core picture-scale.ts), so a
-  // page that shows it draws it at the frame's own size.
+  // page that shows it draws it at the drawing's own size.
   return {
     clip: { x: left, y: top, w: width, h: height },
     png: Buffer.from(withPngScale(png, scale)),

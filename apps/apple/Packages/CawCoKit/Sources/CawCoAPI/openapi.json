@@ -40673,6 +40673,13 @@
               "string"
             ]
           },
+          "display": {
+            "description": "Its CSF `name`, the name it is shown by where its export can't hold it (an apostrophe); null when it writes none.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "form": {
             "description": "Its form, from `parameters.viewport` (the story's, else the meta's); null when it names none.",
             "$ref": "#/components/schemas/Form"
@@ -40723,6 +40730,20 @@
               "read",
               "reason"
             ]
+          },
+          "records": {
+            "description": "The list arg its record sets are cut from (`parameters.records`); null when it names none.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tags": {
+            "description": "Its CSF `tags`, as the file writes them (`failure`: an error state).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -40730,12 +40751,15 @@
           "code",
           "column",
           "component",
+          "display",
           "formUnread",
           "from",
           "label",
           "line",
           "name",
-          "play"
+          "play",
+          "records",
+          "tags"
         ]
       },
       "Form": {

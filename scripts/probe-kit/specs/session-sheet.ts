@@ -114,9 +114,9 @@
  * 20. A real held press on the canvas view stands it `data-pressed` at
  *     scale 0.97 while held and lets both go on release; its menu opens on
  *     the press and stays open.
- * 22. Once the panel has opened (its page resized a frame at a time), the
- *     first frame stands in the middle of the canvas, at the desk and at 390:
- *     each centring measured where the world stands, never mid-move.
+ * 22. Once the panel has opened (its stage sized a frame at a time), the
+ *     drawing stands in the middle of the design graph's stage, at the desk
+ *     and at 390: measured once the drawing holds still, never mid-move.
  * 23. Name once, its ask once, no route (owner: "ur also repeating the
  *     title of the card twice, the url should have the description there
  *     instead"; the artifact purpose spec: the ask is that line): at the desk
@@ -1182,7 +1182,7 @@ async function panelLegs(
   );
 }
 
-/** Leg 22: the first frame stands in the middle of the canvas once the panel has opened, at the desk and at 390. */
+/** Leg 22: the drawing stands in the middle of the design graph's stage once the panel has opened, at the desk and at 390. */
 async function centredLegs(
   kit: Kit,
   base: string,
@@ -1196,32 +1196,39 @@ async function centredLegs(
     )?.contentFrame();
     const said = frame
       ? await frame.evaluate(async () => {
-          const world = document.querySelector(".cawco-world") as HTMLElement;
-          // The panel's opening resizes the page a frame at a time: read once it and its moves have settled.
-          let width = 0;
-          while (width !== innerWidth) {
-            width = innerWidth;
+          // The panel's opening sizes the stage a frame at a time: read once the drawing holds still.
+          const drawing = () =>
+            document
+              .querySelector("[data-cawco-story]")
+              ?.getBoundingClientRect();
+          let was = "";
+          for (;;) {
+            const now = JSON.stringify(drawing());
+            if (now === was) {
+              break;
+            }
+            was = now;
             await new Promise((done) => setTimeout(done, 300));
           }
-          await Promise.all(world.getAnimations().map((one) => one.finished));
-          const canvas = document
-            .querySelector(".cawco-canvas")
-            ?.getBoundingClientRect();
-          const first = document
-            .querySelector(".cawco-frame")
-            ?.getBoundingClientRect();
-          return canvas && first
-            ? {
-                canvas: canvas.x + canvas.width / 2,
-                frame: first.x + first.width / 2,
-                width: canvas.width,
-              }
-            : null;
+          const stage = document.querySelector<HTMLElement>(".cawco-stage");
+          const box = drawing();
+          if (!(stage && box)) {
+            return null;
+          }
+          const room = stage.getBoundingClientRect();
+          const style = getComputedStyle(stage);
+          const start = room.left + Number.parseFloat(style.paddingLeft);
+          const end = room.right - Number.parseFloat(style.paddingRight);
+          return {
+            before: box.left - start,
+            after: end - box.right,
+            width: box.width,
+          };
         })
       : null;
     kit.check(
-      `22: at ${view === "desk" ? "the desk" : "390"} the first frame stands in the middle of the canvas once the panel has opened`,
-      !!said && Math.abs(said.frame - said.canvas) <= 0.5,
+      `22: at ${view === "desk" ? "the desk" : "390"} the drawing stands in the middle of the design graph's stage once the panel has opened`,
+      !!said && Math.abs(said.before - said.after) <= 0.5,
       JSON.stringify(said)
     );
   }

@@ -861,6 +861,8 @@ export interface Story {
   column: number;
   /** The story's own component, from the toolchain root, when it names one apart from the meta's. */
   component: string | null;
+  /** Its CSF `name`, the name it is shown by where its export can't hold it (an apostrophe); null when it writes none. */
+  display: string | null;
   /** Its form, from `parameters.viewport` (the story's, else the meta's); null when it names none. */
   form: Form | null;
   /** Why its `parameters.viewport` can't be read from its states file (an imported const, code), naming the story; null when it reads or names none. Its frames say it as their failure. */
@@ -883,6 +885,10 @@ export interface Story {
    * shared code that is edited in the file.
    */
   readOnly: { read: boolean; reason: string } | null;
+  /** The list arg its record sets are cut from (`parameters.records`); null when it names none. */
+  records: string | null;
+  /** Its CSF `tags`, as the file writes them (`failure`: an error state). */
+  tags: string[];
 }
 
 /** What a story file's default export says every story shares: its args, and the component each mounts unless it names its own. */

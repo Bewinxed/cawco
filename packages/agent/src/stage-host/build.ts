@@ -106,7 +106,7 @@ const CANVAS = new URL("./canvas/runtime.ts", import.meta.url).pathname;
 const REPO = new URL("../../../../", import.meta.url).pathname;
 /** CawCo's tokens as the dashboard builds them (`bun run tokens`), for the canvas's own chrome. */
 const TOKENS = join(REPO, "apps/dashboard/src/lib/tokens/tokens.css");
-/** DialKit's vanilla build, vendored once for the decision pages and reused here for the canvas's timeline and dials. */
+/** DialKit's vanilla build, vendored once for the decision pages and reused here for the canvas's dials. */
 const DIALKIT = join(
   REPO,
   "packages/hub/skills/decision-page/kit/vendor/dialkit"

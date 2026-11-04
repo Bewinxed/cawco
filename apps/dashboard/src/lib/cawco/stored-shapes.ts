@@ -26,10 +26,8 @@ import type {
 } from "@cawco/core/browser";
 import type {
   CommentAttachment as CommentAttachmentType,
-  PreviewScheme as PreviewSchemeType,
   ThreadEntry as ThreadEntryType,
 } from "@cawco/core/comments";
-import { PREVIEW_SCHEMES } from "@cawco/core/comments";
 import type {
   ArtifactSessionFrame as ArtifactSessionFrameType,
   BrowserAskFrame as BrowserAskFrameType,
@@ -104,10 +102,6 @@ import type {
   PairingStage as PairingStageType,
 } from "./hub-auth.svelte";
 import type { ArtifactSessionHeard as ArtifactSessionHeardType } from "./preview/artifact-session.svelte";
-import type {
-  CanvasChosen as CanvasChosenType,
-  CanvasWidth as CanvasWidthType,
-} from "./preview/canvas-view.svelte";
 import type { CalledArtifact as CalledArtifactType } from "./preview/source";
 import type { ComposeTarget as ComposeTargetType } from "./preview/wire";
 import type {
@@ -559,16 +553,6 @@ const ArtifactSessionHeardShape = z.union([
 ]);
 export const ArtifactSessionHeardSchema: z.ZodType<ArtifactSessionHeardType> =
   ArtifactSessionHeardShape;
-
-const PreviewSchemeShape = z.enum(PREVIEW_SCHEMES);
-
-const CanvasWidthShape = z.enum(["own", "390", "768", "1280", "all"]);
-
-export const CanvasChosenShape = z.object({
-  motion: z.enum(["on", "reduce"]),
-  scheme: PreviewSchemeShape,
-  width: CanvasWidthShape,
-});
 
 export const CalledArtifactShape = z.object({
   id: z.string(),
@@ -1047,9 +1031,6 @@ prove<
     Same<z.output<typeof PreviewFrameShape>, PreviewFrameType>,
     Same<z.output<typeof ArtifactSessionFrameShape>, ArtifactSessionFrameType>,
     Same<z.output<typeof ArtifactSessionHeardShape>, ArtifactSessionHeardType>,
-    Same<z.output<typeof PreviewSchemeShape>, PreviewSchemeType>,
-    Same<z.output<typeof CanvasWidthShape>, CanvasWidthType>,
-    Same<z.output<typeof CanvasChosenShape>, CanvasChosenType>,
     Same<z.output<typeof CalledArtifactShape>, CalledArtifactType>,
     Same<z.output<typeof RailSortShape>, RailSortType>,
     Same<z.output<typeof RailLayoutShape>, RailLayoutType>,

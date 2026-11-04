@@ -1,19 +1,19 @@
 /**
- * A frame is a viewport to the story's floating layers too (width.ts makes
- * it one to its CSS and matchMedia). A menu, a popover or a tooltip placed
+ * A frame (the stage's drawing, a grid's frame) is a viewport to the
+ * story's floating layers too (width.ts makes it one to its CSS and
+ * matchMedia). A menu, a popover or a tooltip placed
  * by floating-ui (bits-ui's floating layer, its `collisionBoundary` empty
  * by default) collides with the viewport alone: what `getViewportRect`
  * reads, `visualViewport` (its width, height and offsets) and else the
  * root's `clientWidth`, and what script reads as `innerWidth`. Those answer
- * at the frame a floating layer opens from (runtime.ts says which), its
- * left and right as the frame stands, never cut by the window: a layer
- * placed in a 1440 frame collides where the app's 1440 window has it
- * collide, wherever the frame stands on the screen. What the window cuts
- * off is the canvas's to bring back into sight, by moving the frame
- * (runtime.ts `keepInSight`), never by squeezing the layer. Its top and
- * height stay the window's, so a layer still flips up and down as the
- * window allows. The canvas reads the window's own through `windowWidth`
- * and `windowHeight`.
+ * at the frame a floating layer opens from (the mode says which: the
+ * stage's one drawing, a grid's frame by its triggers), its left and right
+ * as the frame stands, never cut by the window: a layer placed in a 1440
+ * drawing collides where the app's 1440 window has it collide, wherever
+ * the drawing stands on the screen; what the window cuts off the page
+ * scrolls to. Its top and height stay the window's, so a layer still flips
+ * up and down as the window allows. The canvas reads the window's own
+ * through `windowWidth`, `windowHeight` and `windowRoom`.
  *
  * Which layer asks: floating-ui's `getViewportRect(element)` is handed the
  * floating layer itself, and reads `element.ownerDocument` (its
@@ -64,6 +64,9 @@ let asking: Element | null = null;
 export const windowWidth: Getter<number> = () => innerWidthOf(window);
 /** The window's own height. */
 export const windowHeight: Getter<number> = () => innerHeightOf(window);
+/** The window's own width inside its scroller's gutters, whatever a frame answers. */
+export const windowRoom: Getter<number> = () =>
+  clientWidthOf(document.documentElement);
 
 /** The window's visual viewport answering at a frame's left and width: its events still the window's. */
 function asFrame(real: VisualViewport, frame: DOMRect): VisualViewport {

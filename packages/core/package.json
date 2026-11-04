@@ -9,6 +9,7 @@
     "./loop-watch-shared": "./src/loop-watch-shared.ts",
     "./remote-credential": "./src/remote-credential.ts",
     "./stage-play": "./src/stage-play.ts",
+    "./stage-graph": "./src/stage-graph.ts",
     "./bring-into-view": "./src/bring-into-view.ts",
     "./build-info": "./src/build-info.ts",
     "./run-captured": "./src/run-captured.ts",

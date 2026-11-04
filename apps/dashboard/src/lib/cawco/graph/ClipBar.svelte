@@ -37,6 +37,7 @@
    * the engine ran it stands as a dashed outline under it; the moment the
    * move set it off, when after the lane's start, as a dashed hairline.
    */
+  import type { ClipKind } from "@cawco/core/stage-graph";
   import { graphWords as words } from "@cawco/core/words/graph";
   import interact from "interactjs";
   import { frameSize } from "#lib/cawco/frame-observer.js";
@@ -44,7 +45,6 @@
   import { browser } from "$app/env";
   import { figureOf } from "./figures";
   import {
-    type ClipKind,
     moveRun,
     RUN_BIG_STEP,
     RUN_STEP,
