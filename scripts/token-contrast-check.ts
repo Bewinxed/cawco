@@ -16,7 +16,7 @@
  * in sRGB as the browser composites, each layer clipped into sRGB as the
  * browser clips it (WCAG's luminance is defined there).
  *
- * Each row of PAIRS names the DESIGN.md line or token comment it comes from.
+ * Each row of PAIRS names the rule (DESIGN.md or a surface brief, by name) or token it comes from.
  * A row that fails today is marked `known` with its measured ratio, so it
  * reports without blocking; it fails the day it falls further, and says so
  * the day it holds (take the mark off then).
@@ -90,31 +90,31 @@ const weekRim = (hue: string) =>
   `color-mix(in oklch, {color.account-${hue}}, {color.account-week-toward} calc({motion.account-week-mix} * 100%))`;
 
 const S = {
-  action: "DESIGN.md:536 Coral Action",
-  brandInk: "DESIGN.md:538 Brand ink and wash",
-  selected: "DESIGN.md:539 Selected",
-  chosen: "DESIGN.md:540 Chosen option; token chip-chosen-bg",
-  inkSolid: "DESIGN.md:544 Ink-solid",
-  chips: "DESIGN.md:557 status chips",
-  syntax: "DESIGN.md:561 Syntax; token code-ink",
-  outline: "DESIGN.md:566 Edges; token border-button-outline",
-  contrastEdge: "DESIGN.md:566 Edges; token border-contrast",
-  inks: "DESIGN.md:567 Inks",
-  subtle: "DESIGN.md:567 Inks; token ink-subtle",
-  identity: "DESIGN.md:573 Project identity; token identity-ink",
-  rowOutline: "DESIGN.md:683 Borders are graded; token border-row-outline",
-  rim: "DESIGN.md:693 Session tab status rim; token tab-rim-mix-chosen/-idle",
-  recall:
-    "DESIGN.md:870 Recall wheel ('Every row standing in the shape is whole and holds 4.5:1')",
-  hairline: "DESIGN.md:709 Needs you / Notices hairline",
-  stale: "DESIGN.md:772 relay bar; token account-stale-opacity",
-  dial: "DESIGN.md:776 The dial",
-  week: "DESIGN.md:779 The week",
-  spent: "DESIGN.md:780 The cell; token ring-track-spent",
-  notes: "DESIGN.md:829 Release notes; token note-new-ink",
-  ring: "DESIGN.md:927 One Ring Rule (non-text 3:1, WCAG 2.2 SC 1.4.11)",
+  action: "DESIGN.md, Coral Action",
+  brandInk: "DESIGN.md, Brand ink and wash",
+  selected: "DESIGN.md, Selected",
+  chosen: "DESIGN.md, Chosen option; token chip-chosen-bg",
+  inkSolid: "DESIGN.md, Ink-solid",
+  chips: "DESIGN.md, Tertiary: status (each chip 4.5:1)",
+  syntax: "DESIGN.md, Syntax; token code-ink",
+  outline: "DESIGN.md, Edges; token border-button-outline",
+  contrastEdge: "DESIGN.md, Edges; token border-contrast",
+  inks: "DESIGN.md, Inks",
+  subtle: "DESIGN.md, Inks; token ink-subtle",
+  identity: "DESIGN.md, Project identity; token identity-ink",
+  rowOutline: "DESIGN.md, Borders are graded; token border-row-outline",
+  rim: "session tabs' surface brief (PaneTabs), Status rim; token tab-rim-mix-chosen/-idle",
+  recall: "the recall wheel's rows (Composer), text 4.5:1 (WCAG 2.2 SC 1.4.3)",
+  hairline:
+    "Caw's panel section rule; token brand-solid (non-text 3:1, WCAG 2.2 SC 1.4.11)",
+  stale: "usage relay bar (UsageMeter); token account-stale-opacity",
+  dial: "usage dial (UsageMeter); token account-week-mix",
+  week: "usage week mark (UsageMeter)",
+  spent: "usage cell at its limit (UsageMeter); token ring-track-spent",
+  notes: "release-note labels (UpdateCard); token note-new-ink",
+  ring: "DESIGN.md, The One Ring Rule (non-text 3:1, WCAG 2.2 SC 1.4.11)",
   glyphs: "token status-live-glyph",
-  breath: "DESIGN.md:511 Live work breathes; token breath-floor",
+  breath: "DESIGN.md, Live work breathes; token breath-floor",
   nest: "token nest-ink ('about 2.3:1 to 2.5:1')",
 };
 
@@ -273,13 +273,13 @@ const PAIRS: Pair[] = [
     floor: UI,
     source: S.contrastEdge,
   },
-  // The quiet control edge: no 3:1 floor, held to the figures DESIGN.md states.
+  // The quiet control edge: no 3:1 floor, held to its shipped figures.
   {
     label: "border-control on surface-raised",
     fg: "border-control",
     bg: ["surface-raised"],
     floor: { light: 1.36, dark: 1.43 },
-    source: "DESIGN.md:688 Borders are graded; token border-button-outline",
+    source: "DESIGN.md, Borders are graded; token border-control",
   },
   {
     label: "border-button-outline on surface-recess",
