@@ -53316,6 +53316,11 @@
                         "description": "The delegate's one-or-two-sentence outcome, when it finished with `finish_item`.",
                         "type": "string"
                       },
+                      "notice": {
+                        "description": "The hub's own word about the delegate's work, not the delegate's\nreport (core injected.ts `reportMarker`, its outcome `notice`):\nits workspace held, or retired with its commits in a carry (hub\nwork-items.ts `workspaceNotice`). Absent on a report.",
+                        "const": true,
+                        "type": "boolean"
+                      },
                       "outputs": {
                         "description": "The files its finish copied into its project's folder, as paths\nfrom the folder's root (`assets/tsk-12/plan.md`); absent when it\nhanded in none.",
                         "type": "array",
@@ -53468,6 +53473,11 @@
                       "headline": {
                         "description": "The delegate's one-or-two-sentence outcome, when it finished with `finish_item`.",
                         "type": "string"
+                      },
+                      "notice": {
+                        "description": "The hub's own word about the delegate's work, not the delegate's\nreport (core injected.ts `reportMarker`, its outcome `notice`):\nits workspace held, or retired with its commits in a carry (hub\nwork-items.ts `workspaceNotice`). Absent on a report.",
+                        "const": true,
+                        "type": "boolean"
                       },
                       "outputs": {
                         "description": "The files its finish copied into its project's folder, as paths\nfrom the folder's root (`assets/tsk-12/plan.md`); absent when it\nhanded in none.",

@@ -1329,6 +1329,13 @@ export type DelegateEvent =
         /** The delegate's one-or-two-sentence outcome, when it finished with `finish_item`. */
         headline?: string;
         /**
+         * The hub's own word about the delegate's work, not the delegate's
+         * report (core injected.ts `reportMarker`, its outcome `notice`):
+         * its workspace held, or retired with its commits in a carry (hub
+         * work-items.ts `workspaceNotice`). Absent on a report.
+         */
+        notice?: true;
+        /**
          * The files its finish copied into its project's folder, as paths
          * from the folder's root (`assets/tsk-12/plan.md`); absent when it
          * handed in none.
