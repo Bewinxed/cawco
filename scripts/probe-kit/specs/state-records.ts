@@ -113,9 +113,12 @@ const delegate = async (
   // stands with its records for the crash and the archive below.
   const now = Date.now();
   fleet.write(
-    "INSERT INTO artifacts (id, instance_id, project_id, kind, name, machine_id, source_port, source_workspace, revision, seq, delivered_seq, created_at, updated_at, shown_at) VALUES (?, ?, ?, 'preview', ?, ?, 5199, ?, 1, 0, 0, ?, ?, ?)",
+    // Its preview origin is minted with the row, as db artifacts.ts `create`
+    // mints one (schema.ts `artifacts.origin`, NOT NULL).
+    "INSERT INTO artifacts (id, instance_id, origin, project_id, kind, name, machine_id, source_port, source_workspace, revision, seq, delivered_seq, created_at, updated_at, shown_at) VALUES (?, ?, ?, ?, 'preview', ?, ?, 5199, ?, 1, 0, 0, ?, ?, ?)",
     crypto.randomUUID(),
     parent.id,
+    crypto.randomUUID(),
     parent.projectId,
     `records-${tag}`,
     MACHINE,

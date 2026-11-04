@@ -1513,9 +1513,12 @@ const spec: Spec = {
         const id = crypto.randomUUID();
         const now = Date.now();
         fleet.write(
-          "INSERT INTO artifacts (id, instance_id, project_id, kind, name, machine_id, source_port, source_workspace, revision, seq, delivered_seq, created_at, updated_at, shown_at) VALUES (?, ?, ?, 'preview', ?, ?, 5199, ?, 1, 0, 0, ?, ?, ?)",
+          // Its preview origin is minted with the row, as db artifacts.ts
+          // `create` mints one (schema.ts `artifacts.origin`, NOT NULL).
+          "INSERT INTO artifacts (id, instance_id, origin, project_id, kind, name, machine_id, source_port, source_workspace, revision, seq, delivered_seq, created_at, updated_at, shown_at) VALUES (?, ?, ?, ?, 'preview', ?, ?, 5199, ?, 1, 0, 0, ?, ?, ?)",
           id,
           parent,
+          crypto.randomUUID(),
           project.id,
           name,
           MACHINE,
