@@ -16,7 +16,10 @@
    *
    * `minZoom` is the least zoom a fit takes (a graph whose names must stay
    * readable is panned past it); the canvas's tools ask `fit()` for the same
-   * frame the graph opened on.
+   * frame the graph opened on. A graph too big to fit whole at `minZoom`
+   * stands at that zoom on its `focus` (the point the person came for: the
+   * design graph's kept card), not on the middle of the whole, which may
+   * hold nothing he asked about.
    */
   import { useSvelteFlow } from "@xyflow/svelte";
   import { untrack } from "svelte";
@@ -29,14 +32,25 @@
     held = false,
     layout,
     minZoom,
+    focus,
   }: {
     nodeCount: number;
     held?: boolean;
     /** The nodes' placement, as a key: a change refits in place. */
     layout?: string;
     minZoom?: number;
+    /** Where a fit held at `minZoom` centres, in the flow's own coordinates; null: the whole's middle. */
+    focus?: () => { x: number; y: number } | null;
   } = $props();
-  const { fitView } = useSvelteFlow();
+  const { fitView, getZoom, setCenter } = useSvelteFlow();
+  /** A fit held at `minZoom` (the whole too big for it): centred on the focus instead. */
+  const onFocus = async (fitted: Promise<boolean>, duration = 0) => {
+    await fitted;
+    const at = focus?.();
+    if (at && minZoom !== undefined && getZoom() <= minZoom + 0.001) {
+      await setCenter(at.x, at.y, { zoom: minZoom, duration });
+    }
+  };
   const frame = () => ({
     ...FIT,
     ...(minZoom === undefined ? {} : { minZoom }),
@@ -44,11 +58,8 @@
 
   /** Frames the graph as it opened, gliding there. */
   export function fit(): void {
-    fitView({
-      ...frame(),
-      duration: motionOk.current ? dur("--dur-panel") : 0,
-      ease: easeInOut,
-    });
+    const duration = motionOk.current ? dur("--dur-panel") : 0;
+    onFocus(fitView({ ...frame(), duration, ease: easeInOut }), duration);
   }
 
   let framed: number | undefined;
@@ -61,7 +72,7 @@
   });
   onCanvasResize(() => {
     if (!held) {
-      fitView(frame());
+      onFocus(fitView(frame()));
     }
   });
   let placed: string | undefined;
@@ -70,7 +81,7 @@
     const before = placed;
     placed = key;
     if (before !== undefined && before !== key && !untrack(() => held)) {
-      fitView(untrack(frame));
+      onFocus(fitView(untrack(frame)));
     }
   });
 </script>
