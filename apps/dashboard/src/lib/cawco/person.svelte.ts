@@ -28,6 +28,7 @@ import type {
 } from "@cawco/core/notifications";
 import { PRESENCE_ONBOARDING_SKIPPED } from "@cawco/core/presence-onboarding";
 import { type DeskState, presenceWords } from "@cawco/core/words/presence";
+import { MediaQuery } from "svelte/reactivity";
 import { goto } from "$app/navigation";
 import { failureWords } from "./hub-read";
 import { conversationHref, type InstanceIndex } from "./links";
@@ -359,8 +360,18 @@ export const asksHere = (): boolean => {
     return false;
   }
   const ask = deskAsks();
-  return ask.agent !== null || ask.idle || ask.notify || ask.unavailable;
+  // A browser that can't read presence, with notifications answered, has
+  // nothing to allow: the presence menu says so ("not available here").
+  return ask.agent !== null || ask.idle || ask.notify;
 };
+
+const phoneQuery = new MediaQuery("(pointer: coarse) and (hover: none)");
+/**
+ * The dashboard is on a phone (a touch screen with no hover): the
+ * presence words name the phone, its touches and its lock rather than this
+ * computer's keys, pointer and tabs.
+ */
+export const onPhone = (): boolean => phoneQuery.current;
 
 /** This tab's answer to a desk alert it was named for: the hub sends the item on when none comes. */
 const answerDesk = (collapseId: string, how: DeskAckHow): void => {
