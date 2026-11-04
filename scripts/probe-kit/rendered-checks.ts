@@ -24,9 +24,9 @@
  * | overflow    | scan.ts + impeccable `text-occlusion` | boxes past the screen, out of their control or box, a control out of its row, card or panel, text under a control or an opaque box |
  * | coral       | own code                    | each view's controls and grounded chips whose fill, border or (a control's) ink resolves to a coral token from tokens.css; at most one; a checked checkbox, switch or radio, and an identity tile on its mark hue, are allowed and named |
  * | glyph       | own code                    | a control whose only content is a glyph: no fill, border or shadow on it or on a wrapper that holds it alone; its svg holds no solid disc, tile or rounded shape spanning 70% of its viewBox |
- * | bar-ground  | own code                    | bars (toolbars, the bar data-slots, foot bars, and a `header` that does not scroll with its content: one that does heads a group of it, no bar) paint no fill, border or shadow; a folder-tab shelf (DESIGN.md:665) and a group's capsule (DESIGN.md:666) are named, not failed |
+ * | bar-ground  | own code                    | bars (toolbars, the bar data-slots, foot bars, and a `header` that does not scroll with its content: one that does heads a group of it, no bar) paint no fill, border or shadow; a folder-tab shelf (DESIGN.md, Shapes, Folder tabs) and a group's capsule (DESIGN.md, The Title Bars Follow Liquid Glass Rule: Floating groups) are named, not failed |
  * | head        | own code                    | a bar's (as bar-ground reads one) title and controls share one row (centres within 4px), no second line in the bar (a popover, menu or dialog it opens is no part of it), the title not repeated by the first heading under it |
- * | back-close  | own code                    | no control's words say Back or Close (DESIGN.md:668) |
+ * | back-close  | own code                    | no control's words say Back or Close (DESIGN.md, The Title Bars Follow Liquid Glass Rule: Back and Close are symbols) |
  * | hidden-cue  | own code + ink              | a scroller cut at an edge carries a computed mask there that draws (the edge's pixels with and without it), or an item peeking 16px or more |
  * | contrast    | own code + impeccable `low-contrast` | every text run against the ground under it, 4.5:1 (3:1 at 24px); the lowest is reported |
  * | settled     | own code                    | no finite animation running, fonts loaded (`settle(page)` gets a page there) |
@@ -698,7 +698,7 @@ function readInPage(args: InPageArgs): InPageRead {
 
   // ---- 2. one coral per view ----
   if (!skip.has("coral")) {
-    // Coral DESIGN.md:596 spends beside the act: checked controls, the
+    // Coral (DESIGN.md, The Coral Is Where You Act Rule) spends beside the act: checked controls, the
     // selected nav row and the chosen option, each said by its state.
     const sanctioned = (el: Element) =>
       Boolean(
@@ -745,8 +745,8 @@ function readInPage(args: InPageArgs): InPageRead {
         }
         // A control, or a chip: a ground of its own holding words. A
         // coral mark with no words (the logo, a caret, a progress bar) is
-        // brand-solid's own job (DESIGN.md:553); a coral word with no
-        // ground, a link among them, is link ink (DESIGN.md:554).
+        // brand-solid's own job (DESIGN.md, Primary: Brand); a coral word with no
+        // ground, a link among them, is link ink (DESIGN.md, Brand ink and wash).
         if (!(what && (isControl || (grounded && hasWords)))) {
           continue;
         }
@@ -771,7 +771,7 @@ function readInPage(args: InPageArgs): InPageRead {
         }
         if (sanctioned(el)) {
           named.push(
-            `coral on a checked, selected or chosen control (DESIGN.md:596): ${describe(el)} (${what})`
+            `coral on a checked, selected or chosen control (DESIGN.md, The Coral Is Where You Act Rule): ${describe(el)} (${what})`
           );
           continue;
         }
@@ -927,7 +927,7 @@ function readInPage(args: InPageArgs): InPageRead {
           .find((one) => one);
       if (composer || prominent) {
         named.push(
-          `${composer ? "a composer control on the composer's recipe (DESIGN.md:919: Attach raised, Send/Stop coral)" : "the view's prominent act on the coral (DESIGN.md:667)"}: ${describe(control)}`
+          `${composer ? "a composer control on the composer's recipe (Attach raised, Send/Stop on the coral action: DESIGN.md, Coral Action)" : "the view's prominent act on the coral (DESIGN.md, The Title Bars Follow Liquid Glass Rule: One prominent action)"}: ${describe(control)}`
         );
         continue;
       }
@@ -962,8 +962,8 @@ function readInPage(args: InPageArgs): InPageRead {
           ) {
             break;
           }
-          // A floating bar group's glass (DESIGN.md:666, the narrow bar's
-          // Caw tab of DESIGN.md:800), one item or several; a capsule in
+          // A floating bar group's glass (DESIGN.md, The Title Bars Follow Liquid Glass Rule: Floating groups,
+          // the narrow bar's Caw tab too), one item or several; a capsule in
           // the page's flow is a tile.
           const us = style(up) as CSSStyleDeclaration & {
             webkitBackdropFilter?: string;
@@ -987,7 +987,7 @@ function readInPage(args: InPageArgs): InPageRead {
           }
           if (round && floats) {
             named.push(
-              `a floating group's glass (DESIGN.md:666) round ${describe(control)}: ${up === control ? "itself" : selectorOf(up)}`
+              `a floating group's glass (Title Bars rule: Floating groups) round ${describe(control)}: ${up === control ? "itself" : selectorOf(up)}`
             );
             if (up === scope) {
               break;
@@ -1047,10 +1047,10 @@ function readInPage(args: InPageArgs): InPageRead {
   /**
    * Whether `el` scrolls with the content it stands in: in flow under a
    * scroller (an element's, or the document's where its root scrolls),
-   * neither it nor anything between sticky or fixed. DESIGN.md:665 calls a
-   * bar what heads a surface and never scrolls with its content ("the
-   * content runs to the surface's top edge, and where it scrolls under the
-   * controls the scroll edge effect parts them"), so a `<header>` that
+   * neither it nor anything between sticky or fixed. DESIGN.md, The Title Bars Follow Liquid Glass Rule calls a
+   * bar what heads a surface and never scrolls with its content ("content
+   * runs to the top edge and the scroll edge effect blurs it under the
+   * controls"), so a `<header>` that
    * scrolls with a list or a card heads a group of that content (a list's
    * section, a card's question) and is no bar.
    */
@@ -1091,7 +1091,7 @@ function readInPage(args: InPageArgs): InPageRead {
         Math.hypot(bg[0] - shelf[0], bg[1] - shelf[1], bg[2] - shelf[2]) < 4
       ) {
         named.push(
-          `folder-tab shelf (DESIGN.md:665): ${describe(bar)} on surface-shelf`
+          `folder-tab shelf (DESIGN.md, Shapes, Folder tabs): ${describe(bar)} on surface-shelf`
         );
         continue;
       }
@@ -1101,7 +1101,9 @@ function readInPage(args: InPageArgs): InPageRead {
         (bar.matches('[role="toolbar"]') || nested) &&
         radius >= Math.min(r.height, r.width) / 2 - 1
       ) {
-        named.push(`a group's capsule (DESIGN.md:666): ${describe(bar)}`);
+        named.push(
+          `a group's capsule (Title Bars rule: Floating groups): ${describe(bar)}`
+        );
         continue;
       }
       if (
@@ -1357,7 +1359,7 @@ function readInPage(args: InPageArgs): InPageRead {
       }
       for (const side of cuts) {
         // A bar standing over the cut with its own scroll edge effect
-        // (DESIGN.md:665: the content blurs and fades under the bar).
+        // (Title Bars rule, No bar ground: the content blurs under the bar).
         const point = {
           top: [(box.left + box.right) / 2, box.top + 2],
           bottom: [(box.left + box.right) / 2, box.bottom - 2],
@@ -1385,7 +1387,7 @@ function readInPage(args: InPageArgs): InPageRead {
           }
           if (edge) {
             named.push(
-              `${describe(sc)}'s ${side} cut stands under ${describe(edge)}, its edge effect (DESIGN.md:665)`
+              `${describe(sc)}'s ${side} cut stands under ${describe(edge)}, its edge effect (Title Bars rule: No bar ground)`
             );
             continue;
           }

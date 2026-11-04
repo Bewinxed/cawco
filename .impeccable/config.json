@@ -8,7 +8,7 @@
         "rule": "design-system-font",
         "value": "nunito variable",
         "createdAt": "2026-10-24T17:31:04.938Z",
-        "reason": "DESIGN.md Typography line 612 declares it: 'Wordmark font: Nunito Variable (--font-wordmark)'; the hook reads only the frontmatter"
+        "reason": "DESIGN.md's Typography declares it: 'Wordmark font: Nunito Variable (--font-wordmark)'; the hook reads only the frontmatter"
       },
       {
         "rule": "cream-palette",

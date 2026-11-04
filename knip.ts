@@ -138,6 +138,8 @@ export default {
         "scripts/patched-dependencies-check.ts",
         // scripts/check.ts:571
         "scripts/design-sidecar-check.ts",
+        // scripts/check.ts:621
+        "scripts/design-budget-check.ts",
         // scripts/check.ts:575
         "scripts/page-imports-check.ts",
         // scripts/check.ts:576

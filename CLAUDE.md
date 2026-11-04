@@ -24,10 +24,13 @@ permissions and questions from the lock screen.
   Projects features (Caw, tasks, routines, decisions, live-component sheets). Read it whole before
   briefing or building any of them.
 - **Journey spec**: JOURNEY.md. Structural and IA decisions come from it.
-- **Design spec**: DESIGN.md is the locked design language and it is law. Apply its tokens
-  (the one source is `design/tokens/cawco.resolver.json`, DTCG 2025.10, built by `bun run tokens` in
+- **Design spec**: DESIGN.md holds what spans screens: the principles, what the tokens mean,
+  the named rules and the kit's component recipes. Apply its tokens (the one source is
+  `design/tokens/cawco.resolver.json`, DTCG 2025.10, built by `bun run tokens` in
   apps/dashboard into `src/lib/tokens/tokens.css`), its named rules and its component recipes.
   Do not introduce one-off colours, fonts, spacing, radii, shadows, curves or durations outside
   it; add a token to the JSON first. `.impeccable/design.json` carries its hex values, shadows,
-  motion tokens and breakpoints.
+  motion tokens and breakpoints. DESIGN.md changes when the owner picks a change to the system;
+  a screen's own decisions live in its surface brief at `apps/dashboard/.impeccable/surfaces/`
+  (`impeccable surface-brief read <file>`), and `bun run check` holds DESIGN.md to its word budget.
 - **Product truth**: PRODUCT.md (users, principles, accessibility). **Copy**: the words the product shows live in `packages/core/src/words/**`, written to DESIGN.md's Voice section.
