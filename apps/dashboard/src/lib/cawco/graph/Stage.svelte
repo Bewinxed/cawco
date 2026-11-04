@@ -54,7 +54,8 @@
   import RegionHeld from "#lib/cawco/RegionHeld.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { IconError } from "#lib/icons.js";
+  import { IconChevronDown, IconError } from "#lib/icons.js";
+  import { browser } from "$app/env";
   import { type Difference, differences, LINES_SHOWN } from "./diff";
   import { figureOf } from "./figures";
   import type { PlayContext, Review } from "./model";
@@ -605,6 +606,17 @@
   }
 
   const lines = $derived(found.slice(0, LINES_SHOWN));
+  /** He showed or folded the lines himself; null until he has. */
+  let listOpen = $state<boolean | null>(null);
+  /**
+   * The lines stand open on a stage a desk's least wide or wider
+   * (`c-graph-stage-min`) and folded on a narrower one, until he chooses:
+   * at 390 thirteen lines took the stage above the drawer.
+   */
+  const listShown = $derived(
+    listOpen ?? room + chrome >= (browser ? numberOf("--c-graph-stage-min") : 0)
+  );
+  const uid = $props.id();
   /**
    * What differs on the drawing he sees: what came in and what changed.
    * What went is no part of it, and its box is where it stood in the other
@@ -683,50 +695,87 @@
     {/if}
 
     {#if against && lines.length > 0}
-      <!-- What differs, in words: one line per difference, its mark the
-           ring's own (solid for came in or changed, dashed for went), each a
-           link to its ring: a press brings that ring into view. -->
-      <ul
-        data-slot="differences"
-        aria-label={words.differences}
-        class="-ms-space-1 m-0 flex list-none flex-wrap gap-x-space-1 gap-y-0 p-0 pb-space-2"
+      <!-- What differs: led by its count, a press that shows or folds the
+           lines (folded where the stage is a phone's, so the drawing
+           stands in sight under the head); each line's mark the ring's own,
+           solid for came in or changed, dashed for went, and a line that
+           is ringed a link to its ring. -->
+      <button
+        type="button"
+        aria-controls="{uid}-differences"
+        aria-expanded={listShown}
+        class="mark-line pointer-hit touch-hit -ms-space-1 mb-space-2 flex h-c-btn-h-sm items-center gap-space-1 self-start rounded-sm px-space-1 type-label text-ink-row transition-control can-hover:hover:bg-surface-hover"
+        data-slot="differences-count"
+        onclick={() => {
+          listOpen = !listShown;
+        }}
       >
-        {#each lines as line, at (at)}
-          <li class="min-w-0">
-            {#if line.kind === "went"}
-              <!-- Gone from the drawing: a line with the dashed mark, no ring to bring into view. -->
-              <span
-                class="mark-line flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2 px-space-1 type-label text-ink-muted"
-              >
+        <span
+          aria-hidden="true"
+          data-box
+          class="inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-c-change-ring"
+        ></span>
+        <span class="num"
+          >{words.differenceCount(
+            found.length,
+            figureOf(found.length, lang)
+          )}</span
+        >
+        <IconChevronDown
+          aria-hidden="true"
+          class={[
+            "size-icon-md flex-none text-ink-muted transition-transform duration-(--dur-control) ease-out",
+            listShown && "rotate-180",
+          ]}
+          data-box
+        />
+      </button>
+      {#if listShown}
+        <ul
+          id="{uid}-differences"
+          data-slot="differences"
+          aria-label={words.differences}
+          class="-ms-space-1 m-0 flex list-none flex-wrap gap-x-space-1 gap-y-0 p-0 pb-space-2"
+        >
+          {#each lines as line, at (at)}
+            <li class="min-w-0">
+              {#if line.kind === "went"}
+                <!-- Gone from the drawing: a line with the dashed mark, no ring to bring into view. -->
                 <span
-                  aria-hidden="true"
-                  data-box
-                  class="inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-dashed border-c-change-ring"
-                ></span>
-                <span class="min-w-0 wrap-anywhere">{line.line}</span>
-              </span>
-            {:else}
-              <button
-                type="button"
-                class="mark-line pointer-hit touch-hit flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2 rounded-sm px-space-1 text-start type-label text-ink-row transition-control can-hover:hover:bg-surface-hover"
-                onclick={() => showBox(line.box)}
-              >
-                <span
-                  aria-hidden="true"
-                  data-box
-                  class="inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-c-change-ring"
-                ></span>
-                <span class="min-w-0 wrap-anywhere">{line.line}</span>
-              </button>
-            {/if}
-          </li>
-        {/each}
-        {#if found.length > LINES_SHOWN}
-          <li class="flex items-center px-space-1 type-meta text-ink-muted num">
-            +{figureOf(found.length - LINES_SHOWN, lang)}
-          </li>
-        {/if}
-      </ul>
+                  class="mark-line flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2 px-space-1 type-label text-ink-muted"
+                >
+                  <span
+                    aria-hidden="true"
+                    data-box
+                    class="inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-dashed border-c-change-ring"
+                  ></span>
+                  <span class="min-w-0 wrap-anywhere">{line.line}</span>
+                </span>
+              {:else}
+                <button
+                  type="button"
+                  class="mark-line pointer-hit touch-hit flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2 rounded-sm px-space-1 text-start type-label text-ink-row transition-control can-hover:hover:bg-surface-hover"
+                  onclick={() => showBox(line.box)}
+                >
+                  <span
+                    aria-hidden="true"
+                    data-box
+                    class="inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-c-change-ring"
+                  ></span>
+                  <span class="min-w-0 wrap-anywhere">{line.line}</span>
+                </button>
+              {/if}
+            </li>
+          {/each}
+          {#if found.length > LINES_SHOWN}
+            <li
+              class="flex items-center px-space-1 type-meta text-ink-muted num"
+            >
+              +{figureOf(found.length - LINES_SHOWN, lang)}
+            </li>
+          {/if}
+        </ul>
+      {/if}
     {:else if against && mounted}
       <p class="m-0 pb-space-3 type-label text-ink-muted">
         {words.sameAs(against.name)}
