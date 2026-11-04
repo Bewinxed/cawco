@@ -18,12 +18,15 @@ import { configurePage } from "./configure";
 const PROVIDER_NAMES: Readonly<Record<ImageProviderId, string>> = {
   chatgpt: "ChatGPT, on this machine's ChatGPT login",
   antigravity: "Gemini, through this machine's Antigravity CLI",
+  "gemini-api":
+    "Gemini, on a Gemini API key held on this machine, billed per image",
 };
 
 /** A provider's short name, for a sentence. */
 const SHORT_NAMES: Readonly<Record<ImageProviderId, string>> = {
   chatgpt: "ChatGPT",
   antigravity: "Antigravity CLI",
+  "gemini-api": "The Gemini API",
 };
 
 /** Where the Antigravity CLI is installed and signed in on each machine. */
@@ -95,7 +98,7 @@ export const imageGenerationWords = {
   /** More reference images than the provider takes; none taken at all when `most` is 0. */
   tooManyReferences: (id: ImageProviderId, most: number) =>
     most === 0
-      ? `${SHORT_NAMES[id]} takes no reference images, so nothing was uploaded and no image was generated.${id === "antigravity" ? " Editing with references through Gemini needs the Gemini API route, which CawCo doesn't offer yet." : ""}`
+      ? `${SHORT_NAMES[id]} takes no reference images, so nothing was uploaded and no image was generated.${id === "antigravity" ? ' Editing with references through Gemini is the Gemini API\'s: provider "gemini-api".' : ""}`
       : `${SHORT_NAMES[id]} takes at most ${most} reference images, so nothing was uploaded and no image was generated.`,
   /** A reference the inputs' gate refused. */
   referenceRefused: (cause: string) =>
@@ -150,9 +153,9 @@ export const imageGenerationWords = {
   /** A note: the plan is never readable on this route. */
   agyPlanUnread:
     "Antigravity CLI doesn't say which Google AI plan it is signed in on, so the plan wasn't checked; images need Pro or Ultra.",
-  /** A note: quality is not a knob on this route. */
-  agyQualityIgnored: (quality: string) =>
-    `Antigravity CLI's image tool has no quality setting, so quality ${quality} had no effect.`,
+  /** A note: quality is not a knob of the provider's. */
+  qualityIgnored: (id: ImageProviderId, quality: string) =>
+    `${SHORT_NAMES[id]} has no quality setting, so quality ${quality} had no effect.`,
   /** A note: the run ended in an error after the image was written. */
   agyEndedAfterImage: (error: string) =>
     `Antigravity CLI ended with "${error}" after it wrote the image; the image is the one it made.`,
@@ -165,6 +168,22 @@ export const imageGenerationWords = {
   /** The run ended with no image written. */
   agyNoImage: (status: string, error: string, said: string) =>
     `Antigravity CLI ended (${status}${error ? `: ${error}` : ""}) without writing an image, so nothing was saved and no retry was submitted.${said ? ` It said: ${said}` : ""}`,
+
+  /** No CawCo account on the machine holds a Gemini API key. */
+  geminiNoKey: () =>
+    `No CawCo account on this machine holds a Gemini API key, so no image request was sent. Add a Google account with an API key from Google AI Studio (https://aistudio.google.com/apikey) in ${configurePage("accounts")}, with this machine among its machines; image output needs billing on the key's project.`,
+  /** The key was refused. */
+  geminiKeyRefused: (status: number, detail: string) =>
+    `The Gemini API refused this machine's key (${status}: ${detail}). Check the Google account's key in ${configurePage("accounts")}. No image was saved and no retry was submitted.`,
+  /** A quota, rate or spend limit was met. */
+  geminiQuota: (detail: string) =>
+    `The Gemini API refused on a quota, rate or spend limit (429: ${detail}). A key on the free tier makes no images: turn billing on for its project. No image was saved and no retry was submitted.`,
+  /** Any other refusal, in the API's words. */
+  geminiRefused: (status: number, detail: string) =>
+    `The Gemini API refused the request (${status}): ${detail} No image was saved and no retry was submitted.`,
+  /** An answer with no image in it: blocked, or text alone. */
+  geminiNoImage: (reason: string, text: string) =>
+    `The Gemini API answered without an image (${reason})${text ? `: ${text}` : "."} No image was saved and no retry was submitted.`,
 
   /** No CawCo account on the machine holds a ChatGPT sign-in. */
   noLogin: () =>

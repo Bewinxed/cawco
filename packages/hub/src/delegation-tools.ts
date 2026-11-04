@@ -4,6 +4,7 @@ import {
   HARNESSES,
   type HarnessKind,
   IMAGE_GENERATION_DESCRIPTION,
+  IMAGE_PROVIDER_MODELS,
   IMAGE_PROVIDERS,
   IMAGE_QUALITIES,
   type Kind,
@@ -335,6 +336,12 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe(
             `Default ${DEFAULT_IMAGE_PROVIDER}; another only when asked.`
+          ),
+        model: z
+          .enum(IMAGE_PROVIDER_MODELS["gemini-api"])
+          .optional()
+          .describe(
+            `gemini-api only; left out, ${IMAGE_PROVIDER_MODELS["gemini-api"][0]}.`
           ),
       },
       (request) => actions.generateImage(request),

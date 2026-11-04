@@ -6,7 +6,7 @@
  * - a. Signed out: refused before any image run, naming the fix and the
  *   other provider.
  * - b. Reference images: refused before anything is read or run, naming
- *   the API route and the other provider.
+ *   the Gemini API provider for them and the other providers.
  * - c. `model`: refused, agy has one image model.
  * - d. The image written, then `NOT_FOUND (code 404)`, exit 1 (as agy 1.5.0
  *   ended on Pro): the image is taken from agy's conversation folder, kept
@@ -98,11 +98,11 @@ export default {
       reference_images: ["missing.png"],
     });
     check(
-      "b. reference images: refused before anything is read or run, naming the API route and chatgpt",
+      "b. reference images: refused before anything is read or run, naming the Gemini API and chatgpt",
       !references.ok &&
         references.error ===
           refused(imageGenerationWords.tooManyReferences("antigravity", 0)) &&
-        references.error.includes("Gemini API route") &&
+        references.error.includes('provider "gemini-api"') &&
         (await agy.runs()).length === 0,
       JSON.stringify(references)
     );
@@ -173,7 +173,7 @@ export default {
         JSON.stringify(clean.image.notes) ===
           JSON.stringify([
             imageGenerationWords.agyPlanUnread,
-            imageGenerationWords.agyQualityIgnored("high"),
+            imageGenerationWords.qualityIgnored("antigravity", "high"),
           ]),
       JSON.stringify(clean)
     );

@@ -19845,7 +19845,8 @@
                     "type": "string",
                     "enum": [
                       "chatgpt",
-                      "antigravity"
+                      "antigravity",
+                      "gemini-api"
                     ]
                   },
                   "model": {
@@ -48703,7 +48704,8 @@
         "type": "string",
         "enum": [
           "antigravity",
-          "chatgpt"
+          "chatgpt",
+          "gemini-api"
         ]
       },
       "ContinuationJob": {

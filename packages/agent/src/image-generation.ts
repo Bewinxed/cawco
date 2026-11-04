@@ -5,10 +5,12 @@ import {
   type GeneratedImage,
   IMAGE_EXTENSIONS,
   IMAGE_GENERATION_TIMEOUT_MS,
+  IMAGE_PROVIDER_MODELS,
   IMAGE_PROVIDERS,
   IMAGE_QUALITIES,
   type ImageFormat,
   MAX_REFERENCE_IMAGES,
+  offersModelChoice,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { unhandled } from "@cawco/core/unhandled";
@@ -184,18 +186,17 @@ async function referenceImages(
 
 /** The model a call runs on: the provider's default, or the one it asked for where the provider offers a choice. */
 function modelOf(provider: ImageProvider, asked: string | undefined): string {
-  const [first] = provider.models;
+  const models = IMAGE_PROVIDER_MODELS[provider.id];
+  const [first] = models;
   if (asked === undefined) {
     return first;
   }
-  if (provider.models.length === 1) {
+  if (!offersModelChoice(provider.id)) {
     throw new Error(imageGenerationWords.noModelChoice(provider.id, first));
   }
-  if (!provider.models.includes(asked)) {
+  if (!models.includes(asked)) {
     throw new Error(
-      imageGenerationWords.unknownModel(provider.id, asked, [
-        ...provider.models,
-      ])
+      imageGenerationWords.unknownModel(provider.id, asked, [...models])
     );
   }
   return asked;

@@ -4317,6 +4317,7 @@ public enum OpenEnums {
     public enum ImageProviderId: OpenEnum {
         case antigravity
         case chatgpt
+        case geminiApi
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -4324,6 +4325,7 @@ public enum OpenEnums {
             switch rawValue {
             case "antigravity": self = .antigravity
             case "chatgpt": self = .chatgpt
+            case "gemini-api": self = .geminiApi
             default: self = .unrecognized(rawValue)
             }
         }
@@ -4332,6 +4334,7 @@ public enum OpenEnums {
             switch self {
             case .antigravity: "antigravity"
             case .chatgpt: "chatgpt"
+            case .geminiApi: "gemini-api"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -4340,7 +4343,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.antigravity, .chatgpt]
+        public static let allCases: [Self] = [.antigravity, .chatgpt, .geminiApi]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

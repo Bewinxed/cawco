@@ -6,6 +6,7 @@ import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { z } from "zod";
 import { probeToolStatus, toolBinary, toolEnv } from "../tools";
+import { ratioOf } from "./aspect";
 import type { ImageJob, ImageProvider, MadeImage } from "./provider";
 
 /**
@@ -19,14 +20,6 @@ import type { ImageJob, ImageProvider, MadeImage } from "./provider";
  * ("Run Antigravity CLI non-interactively to script agent tasks",
  * https://antigravity.google/docs/cli/headless/).
  */
-
-/**
- * The one image model Antigravity's image tool runs: "Nano Banana 2: Used
- * by the generative image tool … Antigravity uses other models for various
- * parts of the stack that aren't customizable"
- * (https://antigravity.google/docs/models/).
- */
-const AGY_IMAGE_MODEL = "gemini-3.1-flash-image";
 
 /** Where agy keeps each conversation's files (`--gemini-dir` `.gemini`, `--app-data-dir` `antigravity-cli`, their defaults). */
 const brainDir = (): string =>
@@ -44,37 +37,6 @@ const ANSWER_SCHEMA = JSON.stringify({
  * CLI ends itself and says so before CawCo stops waiting.
  */
 const PRINT_TIMEOUT = "9m";
-
-/** The aspect ratios Nano Banana makes (https://ai.google.dev/gemini-api/docs/image-generation). */
-const RATIOS = [
-  [1, 1],
-  [3, 2],
-  [2, 3],
-  [3, 4],
-  [4, 3],
-  [4, 5],
-  [5, 4],
-  [9, 16],
-  [16, 9],
-  [21, 9],
-] as const;
-
-const SIZE = /^(\d+)x(\d+)$/u;
-
-/** The aspect ratio nearest `size` (`WIDTHxHEIGHT`), or none for `auto`. */
-const ratioOf = (size: string): string | null => {
-  const match = SIZE.exec(size);
-  if (!match) {
-    return null;
-  }
-  const asked = Math.log(Number(match[1]) / Number(match[2]));
-  const [best] = [...RATIOS].sort(
-    (a, b) =>
-      Math.abs(Math.log(a[0] / a[1]) - asked) -
-      Math.abs(Math.log(b[0] / b[1]) - asked)
-  );
-  return best ? `${best[0]}:${best[1]}` : null;
-};
 
 /** What agy is asked: one image through its image tool, and its saved path as the answer. */
 const promptOf = (job: ImageJob): string => {
@@ -325,7 +287,9 @@ async function readiness(): ReturnType<ImageProvider["readiness"]> {
         notes: [
           ...(job.quality === "auto"
             ? []
-            : [imageGenerationWords.agyQualityIgnored(job.quality)]),
+            : [
+                imageGenerationWords.qualityIgnored("antigravity", job.quality),
+              ]),
           ...made.notes,
         ],
       };
@@ -336,7 +300,6 @@ async function readiness(): ReturnType<ImageProvider["readiness"]> {
 /** Gemini through this machine's Antigravity CLI: one model, no reference images, JPEG as it makes it. */
 export const antigravity: ImageProvider = {
   id: "antigravity",
-  models: [AGY_IMAGE_MODEL],
   references: 0,
   readiness,
 };

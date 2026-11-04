@@ -10,8 +10,7 @@ import { z } from "zod";
 import { chatgptStanding, freshen, readHeld } from "../provider-accounts";
 import type { ImageJob, ImageProvider, MadeImage } from "./provider";
 
-/** Native Codex's image model and edit-image cap (codex-rs/ext/image-generation/src/tool.rs). */
-const IMAGE_MODEL = "gpt-image-2";
+/** Native Codex's edit-image cap (codex-rs/ext/image-generation/src/tool.rs). */
 const MAX_EDIT_IMAGES = 5;
 
 /** The ChatGPT sign-in a request goes out on: its access token and ChatGPT account. */
@@ -252,7 +251,6 @@ async function readiness(): ReturnType<ImageProvider["readiness"]> {
  */
 export const chatgpt: ImageProvider = {
   id: "chatgpt",
-  models: [IMAGE_MODEL],
   references: MAX_EDIT_IMAGES,
   readiness,
 };

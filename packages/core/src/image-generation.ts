@@ -9,11 +9,47 @@ export type ImageQuality = (typeof IMAGE_QUALITIES)[number];
  * provider that cannot generate is refused before any request, and nothing
  * switches provider by itself.
  */
-export const IMAGE_PROVIDERS = ["chatgpt", "antigravity"] as const;
+export const IMAGE_PROVIDERS = [
+  "chatgpt",
+  "antigravity",
+  "gemini-api",
+] as const;
 export type ImageProviderId = (typeof IMAGE_PROVIDERS)[number];
+
+/** `id` as a provider's id, or none when it names none. */
+export const imageProviderOf = (id: string): ImageProviderId | undefined =>
+  IMAGE_PROVIDERS.find((one) => one === id);
 
 /** The provider a call that names none goes to. */
 export const DEFAULT_IMAGE_PROVIDER: ImageProviderId = "chatgpt";
+
+/**
+ * Each provider's models, its default first. A call's or the setting's
+ * `model` is taken only from a provider with more than one.
+ * - chatgpt: native Codex's image model (codex-rs/ext/image-generation).
+ * - antigravity: the one model Antigravity's image tool runs, "Nano Banana
+ *   2 … not customizable" (https://antigravity.google/docs/models/).
+ * - gemini-api: the Gemini API's image models, "gemini-nano-banana-2.1"
+ *   recommended for new projects
+ *   (https://ai.google.dev/gemini-api/docs/image-generation, read
+ *   2026-11-04).
+ */
+export const IMAGE_PROVIDER_MODELS: Readonly<
+  Record<ImageProviderId, readonly [string, ...string[]]>
+> = {
+  chatgpt: ["gpt-image-2"],
+  antigravity: ["gemini-3.1-flash-image"],
+  "gemini-api": [
+    "gemini-nano-banana-2.1",
+    "gemini-3.1-flash-image",
+    "gemini-3.1-flash-lite-image",
+    "gemini-3-pro-image",
+  ],
+};
+
+/** Whether `provider` offers a choice of model. */
+export const offersModelChoice = (provider: ImageProviderId): boolean =>
+  IMAGE_PROVIDER_MODELS[provider].length > 1;
 
 /** The formats a provider's image is kept in, as it made it: never re-encoded. */
 export const IMAGE_FORMATS = ["png", "jpeg"] as const;
@@ -25,8 +61,8 @@ export const IMAGE_EXTENSIONS: Readonly<Record<ImageFormat, string>> = {
   jpeg: ".jpg",
 };
 
-/** The most reference images any provider takes on one call. */
-export const MAX_REFERENCE_IMAGES = 5;
+/** The most reference images any provider takes on one call: the Gemini API's "Up to 14 reference images". */
+export const MAX_REFERENCE_IMAGES = 14;
 
 /** One subscription-backed image request, independent of the calling harness. */
 export interface ImageGenerationRequest {

@@ -37,6 +37,7 @@
     "@excalidraw/mermaid-to-excalidraw": "2.2.2",
     "@floating-ui/dom": "1.8.0",
     "@gitbeaker/rest": "43.8.0",
+    "@google/genai": "2.32.0",
     "@modelcontextprotocol/sdk": "1.32.0",
     "@octokit/rest": "22.0.1",
     "@opencode/client": "2.0.29",

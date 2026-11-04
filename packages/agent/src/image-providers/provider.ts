@@ -9,7 +9,7 @@ export interface ReferenceImage {
 
 /** What a provider is asked to make, every argument already checked by the orchestration. */
 export interface ImageJob {
-  /** One of the provider's {@link ImageProvider.models}. */
+  /** One of the provider's models (core `IMAGE_PROVIDER_MODELS`). */
   model: string;
   prompt: string;
   quality: ImageQuality;
@@ -49,8 +49,6 @@ type Readiness =
  */
 export interface ImageProvider {
   id: ImageProviderId;
-  /** Its models, the default first; a call's `model` is taken only when it has several. */
-  models: readonly [string, ...string[]];
   /** Spends nothing: whether this machine can make an image here now, and if not, why. */
   readiness: () => Promise<Readiness>;
   /** The most reference images it takes; 0 takes none. */
