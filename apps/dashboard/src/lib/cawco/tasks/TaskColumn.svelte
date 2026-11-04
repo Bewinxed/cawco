@@ -9,7 +9,9 @@
    * action's (DESIGN.md, The Coral Is Where You Act Rule). A stage with a
    * look of its own (stages.md `icon:`, `color:`) leads its name with that
    * glyph in its section hue (stage-look.ts); a `you` stage keeps the
-   * Needs-you glyph, its status.
+   * Needs-you glyph, its status. A column lands from the stage of Caw's
+   * setup draft it was (`data-share="stage:<name>"`, SetupDraft) when the
+   * draft is set up: one object, never two (motion/share).
    */
   import type { StageColor, StageIcon, StageKind } from "@cawco/core/views";
   import { type Snippet, tick } from "svelte";
@@ -20,6 +22,7 @@
     reflowsFrom,
     reread,
   } from "#lib/cawco/motion/rows.svelte.js";
+  import { land } from "#lib/cawco/motion/share.svelte.js";
   import { KIND_LABEL, type TaskSummary } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
@@ -127,6 +130,7 @@
   data-over={over ? "" : undefined}
   data-picking={picking ? "" : undefined}
   {@attach drop}
+  {@attach land(() => `stage:${label}`)}
 >
   <header data-slot="head" class="flex flex-col gap-0 px-space-2 py-space-1">
     <span class="mark-line flex min-h-c-btn-h-xs items-center gap-space-2">

@@ -111,7 +111,9 @@
     onboardingWords.examples,
     onboardingWords.placeholder
   );
-  $effect(() => typed.run(words.length === 0 && !still));
+  $effect(() =>
+    typed.run(words.length === 0 && !still && !starting && !tapped)
+  );
   /** The row and the fold carry no fit: Caw stays on the page, whatever the words say. */
   const fitting = (text: string): TemplateName | null =>
     under === "cards" ? fitOf(text) : null;
@@ -129,6 +131,11 @@
   /** A card picked on the cards, or the picked one tapped again (null). */
   function tap(next: TemplateName | null) {
     tapped = next;
+    // The template shapes what the words start: the caret goes to the
+    // field, whose placeholder asks for what that work needs said.
+    if (next && under !== "cards") {
+      draft.focusWanted = true;
+    }
   }
 
   /** The prompt's fit, now: where Caw peeks, never the pick. */
@@ -186,6 +193,9 @@
   let unsent: SentWords | null = null;
   async function start(text: string, fresh: string) {
     starting = true;
+    // The words stay in the field while the project is made: the composer
+    // empties it as they leave, and an empty field reads as words lost.
+    draft.restore(text);
     refused = "";
     again = false;
     unsent = idForWords(unsent, text, fresh);
@@ -198,7 +208,6 @@
       });
       unsent = null;
     } catch (error) {
-      draft.restore(text);
       again = unreachable(error);
       refused = again ? PROMPT_UNREACHED : failureWords(error);
       starting = false;
@@ -258,7 +267,9 @@
           detach(start(text, id), "start");
         }}
         label={onboardingWords.ask.replace(/\?$/u, "")}
-        placeholder={typed.text}
+        placeholder={tapped && under !== "cards"
+          ? onboardingWords.templateAsks[tapped]
+          : typed.text}
         sendAgain={again}
         sendError={refused}
         sending={starting}
@@ -343,7 +354,9 @@
        runs reads under the row. Folded, one ghost press opens it. -->
   <div class="w-full max-w-c-new-project-field-w" data-slot="templates">
     <!-- The field's own width (c-composer-w), so the row starts on its text's edge. -->
-    <div class="mx-auto flex w-c-composer-w flex-col gap-space-2 px-space-3">
+    <div
+      class="mx-auto flex w-c-composer-w flex-col gap-space-2 border-s border-transparent px-space-3 max-desk:mx-space-3 max-desk:w-auto"
+    >
       {#if under === "fold" && !unfolded && !tapped}
         <Button
           class="self-start"

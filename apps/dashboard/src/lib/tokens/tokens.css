@@ -1242,6 +1242,8 @@
     --c-board-col-min: 15rem;
     /* A task board column's widest, and the open Archived column's cap. */
     --c-board-col-max: 22rem;
+    /* A stage of Caw's setup draft drawn as its board column (SetupDraft, DraftColumn): its head (mark, name, kind) and two lines of what happens to work in it, so a column of one line and one of two stand at one height in their row, and the skeleton of a stage still coming stands at it. */
+    --c-draft-col-h: 7.5rem;
     /* The key column of a task's Fields and Relations, so the two parts' values stand on one line. */
     --c-task-key-w: 6rem;
     /* The Filter popover's name column. */

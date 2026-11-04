@@ -522,6 +522,7 @@
   --spacing-c-post-media-max-h: var(--c-post-media-max-h);
   --spacing-c-board-col-min: var(--c-board-col-min);
   --spacing-c-board-col-max: var(--c-board-col-max);
+  --spacing-c-draft-col-h: var(--c-draft-col-h);
   --spacing-c-task-key-w: var(--c-task-key-w);
   --spacing-c-filter-label-w: var(--c-filter-label-w);
   --spacing-c-task-label-field-w: var(--c-task-label-field-w);
