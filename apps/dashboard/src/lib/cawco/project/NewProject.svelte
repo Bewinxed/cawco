@@ -295,44 +295,44 @@
     {/if}
     <!-- As wide as the field, so the chips stand on its composer's column. -->
     {#if under === "cards"}
-    <div class="relative w-full max-w-c-new-project-field-w">
-      <div
-        data-slot="chips"
-        class={chipsVariants({
-          class: "px-(--chips-px) max-desk:px-space-3",
-        })}
-        style:--chips-px="calc((100% - var(--c-composer-w)) / 2)"
-      >
-        {#each STARTERS as text (text)}
-          <button
-            class={chipVariants({ class: "select-none" })}
-            onclick={() => starter(text)}
-            type="button"
-          >
-            {text}
-          </button>
-        {/each}
+      <div class="relative w-full max-w-c-new-project-field-w">
+        <div
+          data-slot="chips"
+          class={chipsVariants({
+            class: "px-(--chips-px) max-desk:px-space-3",
+          })}
+          style:--chips-px="calc((100% - var(--c-composer-w)) / 2)"
+        >
+          {#each STARTERS as text (text)}
+            <button
+              class={chipVariants({ class: "select-none" })}
+              onclick={() => starter(text)}
+              type="button"
+            >
+              {text}
+            </button>
+          {/each}
+        </div>
       </div>
-    </div>
     {:else}
       {@render templateRow()}
     {/if}
   </div>
 
   {#if under === "cards"}
-  <div data-slot="cards" class="w-full">
-    <TemplateCards
-      cards={TEMPLATE_CARDS}
-      {fit}
-      metaOf={(card) => card.meta}
-      onpeekgone={gone}
-      peek={caw === "peek"}
-      peekPresent={!leaving}
-      peekShare={made ? `caw:${made}` : undefined}
-      peekSize={CAW_SIZE}
-      bind:selected={() => tapped, tap}
-    />
-  </div>
+    <div data-slot="cards" class="w-full">
+      <TemplateCards
+        cards={TEMPLATE_CARDS}
+        {fit}
+        metaOf={(card) => card.meta}
+        onpeekgone={gone}
+        peek={caw === "peek"}
+        peekPresent={!leaving}
+        peekShare={made ? `caw:${made}` : undefined}
+        peekSize={CAW_SIZE}
+        bind:selected={() => tapped, tap}
+      />
+    </div>
   {/if}
 </main>
 
@@ -342,51 +342,49 @@
        own pressed state) and a second tap clears it; what the picked one
        runs reads under the row. Folded, one ghost press opens it. -->
   <div class="w-full max-w-c-new-project-field-w" data-slot="templates">
-  <!-- The field's own width (c-composer-w), so the row starts on its text's edge. -->
-  <div class="mx-auto flex w-(--c-composer-w) flex-col gap-space-2 px-space-3">
-    {#if under === "fold" && !unfolded && !tapped}
-      <Button
-        class="self-start"
-        label={onboardingWords.showTemplates}
-        onclick={() => {
-          unfolded = true;
-        }}
-        size="sm"
-        variant="ghost"
-      />
-    {:else}
-      <span class="type-meta text-ink-muted" id="templates-head"
-        >{onboardingWords.templates}</span
-      >
-      <div
-        aria-labelledby="templates-head"
-        class={chipsVariants()}
-        role="group"
-      >
-        {#each TEMPLATE_CARDS as card (card.template)}
-          {@const Glyph = card.icon}
-          <button
-            aria-pressed={tapped === card.template}
-            class={chipVariants({ class: "select-none" })}
-            onclick={() =>
-              tap(tapped === card.template ? null : card.template)}
-            type="button"
+    <!-- The field's own width (c-composer-w), so the row starts on its text's edge. -->
+    <div class="mx-auto flex w-c-composer-w flex-col gap-space-2 px-space-3">
+      {#if under === "fold" && !unfolded && !tapped}
+        <Button
+          class="self-start"
+          label={onboardingWords.showTemplates}
+          onclick={() => {
+            unfolded = true;
+          }}
+          size="sm"
+          variant="ghost"
+        />
+      {:else}
+        <fieldset class="m-0 flex min-w-0 flex-col gap-space-2 border-0 p-0">
+          <legend class="mb-space-2 p-0 type-meta text-ink-muted"
+            >{onboardingWords.templates}</legend
           >
-            <Glyph
-              aria-hidden="true"
-              class="size-icon-md flex-none text-(--hue)"
-              style="--hue: {card.hue}"
-            />
-            <span>{card.name}</span>
-          </button>
-        {/each}
-      </div>
-      {#if tappedCard}
-        <span aria-live="polite" class="type-meta text-ink-muted"
-          >{tappedCard.meta}</span
-        >
+          <div class={chipsVariants()}>
+            {#each TEMPLATE_CARDS as card (card.template)}
+              {@const Glyph = card.icon}
+              <button
+                aria-pressed={tapped === card.template}
+                class={chipVariants({ class: "select-none" })}
+                onclick={() =>
+                  tap(tapped === card.template ? null : card.template)}
+                type="button"
+              >
+                <Glyph
+                  aria-hidden="true"
+                  class="size-icon-md flex-none text-(--hue)"
+                  style="--hue: {card.hue}"
+                />
+                <span>{card.name}</span>
+              </button>
+            {/each}
+          </div>
+        </fieldset>
+        {#if tappedCard}
+          <span aria-live="polite" class="type-meta text-ink-muted"
+            >{tappedCard.meta}</span
+          >
+        {/if}
       {/if}
-    {/if}
-  </div>
+    </div>
   </div>
 {/snippet}

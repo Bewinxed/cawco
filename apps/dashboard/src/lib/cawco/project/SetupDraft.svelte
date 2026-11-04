@@ -20,7 +20,11 @@
    * draft stood.
    */
   import { setupPageWords, setupWords } from "@cawco/core/words/onboarding";
-  import { moved, patched, type Stage } from "#lib/cawco/decisions/host/setup/stage.js";
+  import {
+    moved,
+    patched,
+    type Stage,
+  } from "#lib/cawco/decisions/host/setup/stage.js";
   import DraftColumn from "#lib/cawco/project/DraftColumn.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
@@ -71,24 +75,21 @@
     class="flex flex-wrap items-center gap-x-space-4 gap-y-space-2 rounded-lg bg-surface-band px-space-3 py-space-2 inset-ring inset-ring-border-hairline"
     data-slot="draft-bar"
   >
-    <p
-      aria-live="polite"
-      class="mark-line m-0 flex min-w-0 shrink grow basis-c-draft-line items-center gap-space-2"
-    >
+    <div aria-live="polite" class="min-w-0 shrink grow basis-c-draft-line">
       {#if drafting}
-        <LiveDot />
-        <span class="type-label text-ink-strong"
-          >{setupWords.draftingHow(name)}</span
-        >
-      {:else}
-        <span class="flex min-w-0 flex-col">
+        <p class="mark-line m-0 flex items-center gap-space-2">
+          <LiveDot />
           <span class="type-label text-ink-strong"
-            >{setupWords.draftedHow(name)}</span
+            >{setupWords.draftingHow(name)}</span
           >
-          <span class="type-meta text-ink-muted">{setupWords.draftHint}</span>
-        </span>
+        </p>
+      {:else}
+        <p class="m-0 type-label text-ink-strong">
+          {setupWords.draftedHow(name)}
+        </p>
+        <p class="m-0 type-meta text-ink-muted">{setupWords.draftHint}</p>
       {/if}
-    </p>
+    </div>
     <Button
       disabled={drafting}
       label={setupPageWords.send(name)}
@@ -127,8 +128,8 @@
           {stage}
         />
       {/each}
-      {#each { length: coming }, index (index)}
-        <Skeleton class="h-full" radius="card" />
+      {#each Array.from({ length: coming }, (_, index) => index) as index (index)}
+        <Skeleton height="column" radius="card" />
       {/each}
     </div>
     {#if !drafting}

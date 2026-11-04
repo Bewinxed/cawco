@@ -767,8 +767,6 @@
     --c-signin-pop-w: 340px;
     /* Caw's panel floating over a project's page at its tallest (CawFloat): his head, a conversation's worth of rows and the composer, or the hero with his starters; shorter where the room under his seat is less. */
     --c-caw-panel-h: 640px;
-    /* The floor of a project's board before it is set up (SetupScene): Caw's flock stands on it (CawFlock), his rests as pictures, the tallest at 64, and the scene's middle stands clear of it. */
-    --c-flock-h: 120px;
     /* The shell's top bar at every width: 43px and its 1px hairline, the compact bar's height (Apple HIG, Toolbars). Hosted tabs stand on its floor, a tab row's height below its top. */
     --c-top-bar-h: 44px;
     /* The phone bar's sidebar toggle: a bare glyph, its leading edge c-bar-phone-edge from the screen's and its centre on the tabs' centre line, in a 44px touch area. */

@@ -81,7 +81,6 @@
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
   import CawFloat from "#lib/cawco/project/CawFloat.svelte";
-  import CawFlock from "#lib/cawco/project/CawFlock.svelte";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import FolderFile from "#lib/cawco/project/FolderFile.svelte";
@@ -2056,11 +2055,7 @@
       asks={asksOnBoard ? setupAsks : []}
       onanswer={answerAsk}
       seat={canTalk ? setupSeat : undefined}
-    >
-      {#snippet floor()}
-        <CawFlock count={phone ? 2 : 4} />
-      {/snippet}
-    </SetupScene>
+    />
   {:else if empty && !adding}
     {#if !lead.project}
       <div class="w-full" out:revealOut>

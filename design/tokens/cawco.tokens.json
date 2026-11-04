@@ -3873,14 +3873,6 @@
       },
       "$description": "Caw's panel floating over a project's page at its tallest (CawFloat): his head, a conversation's worth of rows and the composer, or the hero with his starters; shorter where the room under his seat is less."
     },
-    "c-flock-h": {
-      "$type": "dimension",
-      "$value": {
-        "value": 120,
-        "unit": "px"
-      },
-      "$description": "The floor of a project's board before it is set up (SetupScene): Caw's flock stands on it (CawFlock), his rests as pictures, the tallest at 64, and the scene's middle stands clear of it."
-    },
     "c-top-bar-h": {
       "$type": "dimension",
       "$value": {
