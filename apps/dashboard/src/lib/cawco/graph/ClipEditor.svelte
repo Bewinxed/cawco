@@ -23,6 +23,7 @@
    * a property inspector's changed label resets its property. Every change
    * plays on the stage once.
    */
+  import { HOUR_MS } from "@cawco/core/time";
   import { graphWords as words } from "@cawco/core/words/graph";
   import { Slider } from "bits-ui";
   import { ease } from "#lib/cawco/motion/curves.svelte.js";
@@ -225,12 +226,8 @@
     return curveGlyph(easingOf(shape, 0.9)) ?? "";
   };
   const SHAPES: Shape[] = ["linear", "smooth", "slowDown", "speedUp", "spring"];
-  /** The design system's name for the row's length, when it is one: "pop". */
-  const token = $derived(
-    !first.spring && track.length === first.duration
-      ? (first.token?.replace("--dur-", "") ?? null)
-      : null
-  );
+  /** The longest a length or a delay is set to, ms: an hour, past the 30-minute fill a states file may play. */
+  const LONGEST = HOUR_MS;
   /**
    * The curve list's value: a design system curve's token, else a shape,
    * else the clip's own (a curve drawn into its frames, or one no shape is
@@ -443,6 +440,7 @@
       field="number"
       text="label"
       tone={edited ? "edited" : undefined}
+      max={LONGEST}
       {min}
       onchange={(event: Event) =>
         set(Number((event.currentTarget as HTMLInputElement).value))}
@@ -493,11 +491,6 @@
         <ToggleGroup.Item value={String(one.ms)}>{one.name}</ToggleGroup.Item>
       {/each}
     </ToggleGroup.Root>
-    {#if token}
-      <span class="type-meta text-ink-muted" title={words.durationOf(token)}
-        >{token}</span
-      >
-    {/if}
   </div>
 
   {@render named(words.delay, "start", `${track.id}-delay`)}

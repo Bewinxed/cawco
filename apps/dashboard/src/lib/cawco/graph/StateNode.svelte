@@ -39,6 +39,20 @@
 </script>
 
 <WholeCard {card}>
-  <Handle isConnectable={false} position={Position.Top} type="target" />
-  <Handle isConnectable={false} position={Position.Bottom} type="source" />
+  <!-- The arrows' ends only: nothing to connect, nothing a reader hears
+       (Svelte Flow names each "Handle" as a button otherwise). -->
+  <Handle
+    aria-hidden="true"
+    isConnectable={false}
+    position={Position.Top}
+    role="presentation"
+    type="target"
+  />
+  <Handle
+    aria-hidden="true"
+    isConnectable={false}
+    position={Position.Bottom}
+    role="presentation"
+    type="source"
+  />
 </WholeCard>

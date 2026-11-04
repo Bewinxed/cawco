@@ -84,6 +84,8 @@
     onretime,
     onreset,
     onlight,
+    onfocusthing,
+    peek = false,
     onretry,
     lang,
   }: {
@@ -102,6 +104,10 @@
     onreset: (ids: string[]) => void;
     /** The thing a row names, rested on (null: none). */
     onlight: (thing: Element | null) => void;
+    /** A row took the focus (a key, or a press on its words): the thing it names, to bring into view on the stage. */
+    onfocusthing: (thing: Element | null) => void;
+    /** The phone drawer at its head stop: the move's name and Play with its time, one line. */
+    peek?: boolean;
     /** A move whose play threw, played again from its from state. */
     onretry: () => void;
     /** The page's language, for the figures. */
@@ -245,11 +251,23 @@
       onseek(Math.max(0, Math.min(length, handle + by)));
     }
   };
+  /** The drawer's head line while the move has no rows to play. */
+  const peekLine = $derived.by(() => {
+    if (move.kind === "none") {
+      return words.noMove(move.state);
+    }
+    return move.kind === "reading"
+      ? words.reading
+      : words.move(move.from, move.to);
+  });
   /** Rest and focus on a row light its thing; leaving lets it go. */
   const lights = (track: Track) => ({
     onpointerenter: () => onlight(track.thing),
     onpointerleave: () => onlight(null),
-    onfocusin: () => onlight(track.thing),
+    onfocusin: () => {
+      onlight(track.thing);
+      onfocusthing(track.thing);
+    },
     onfocusout: () => onlight(null),
   });
 
@@ -338,7 +356,20 @@
 {/snippet}
 
 <div data-slot="move" class="flex min-h-0 min-w-0 flex-1 flex-col gap-space-3">
-  {#if move.kind === "none"}
+  {#if peek && move.kind === "ready" && clips.length > 0}
+    <!-- The drawer at its head stop: Play, the time and the move, one line
+         over the stage, so the move plays in sight of the stage. -->
+    <div class="flex min-h-c-btn-h min-w-0 items-center gap-space-3">
+      {@render transport()}
+      <span class="min-w-0 flex-1 truncate type-label text-ink-strong"
+        >{words.move(move.from, move.to)}</span
+      >
+    </div>
+  {:else if peek}
+    <p class="m-0 min-w-0 truncate type-label text-ink-muted">
+      {peekLine}
+    </p>
+  {:else if move.kind === "none"}
     <p class="m-0 max-w-c-measure type-body text-ink-muted text-pretty">
       {words.noMove(move.state)}
     </p>
