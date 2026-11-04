@@ -274,8 +274,12 @@ export { default as IconRules } from "~icons/solar/shield-check-bold-duotone";
 /** HTTPS on the tailnet: the hub's name served over TLS to every device on it. */
 export { default as IconTailnetHttps } from "~icons/solar/shield-network-bold-duotone";
 export { default as IconShop } from "~icons/solar/shop-bold-duotone";
-/** A canvas's Undock, out of the artifact panel back over the field. */
-export { default as IconUndock } from "~icons/solar/sidebar-minimalistic-bold-duotone";
+export {
+  /** The design graph's Show states: its room brought back beside or under the stage, in its bar's bold duotone (a component artifact's pane offers no Undock). */
+  default as IconRoom,
+  /** A canvas's Undock, out of the artifact panel back over the field. */
+  default as IconUndock,
+} from "~icons/solar/sidebar-minimalistic-bold-duotone";
 export { default as IconSidebar } from "~icons/solar/sidebar-minimalistic-line-duotone";
 export { default as IconToolGeneric } from "~icons/solar/sledgehammer-bold-duotone";
 export { default as IconPhone } from "~icons/solar/smartphone-bold-duotone";

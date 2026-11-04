@@ -63,7 +63,7 @@
     IconMonitor,
     IconMoon,
     IconPhone,
-    IconSidebar,
+    IconRoom,
     IconSun,
     IconTablet,
   } from "#lib/icons.js";
@@ -83,6 +83,8 @@
     stale = false,
     lang = pageLang(),
     frame,
+    paneSheet = false,
+    onroom,
   }: {
     /** The line to the stage page: what it said, and what the graph asks of it. */
     link: StageLink;
@@ -98,6 +100,14 @@
     lang?: string;
     /** The frame that holds the stage page. */
     frame: Snippet;
+    /**
+     * A sheet of the pane's own stands at the surface's foot (the
+     * inspector on a phone): the room's drawer is put away under it and
+     * comes back at its stop as it goes, so one sheet stands at a time.
+     */
+    paneSheet?: boolean;
+    /** He brought the room back while the pane's sheet stands: the pane puts its sheet away. */
+    onroom?: () => void;
   } = $props();
 
   /** The page's own ids, for a label's `for`. */
@@ -187,6 +197,8 @@
     });
   });
   let roomOpen = $state(true);
+  /** The phone's drawer stands: the room open, and no sheet of the pane's own over the surface's foot. */
+  const drawerShown = $derived(roomOpen && !paneSheet);
   let width = $state<number | null>(null);
   let scheme = $state<"light" | "dark">(
     typeof document !== "undefined" &&
@@ -224,6 +236,8 @@
       : 0
   );
   const desk = $derived(surface === 0 || surface >= besideLine);
+  /** The room stands where he sees it: beside the stage on a desk, its drawer elsewhere. */
+  const roomShown = $derived(desk ? roomOpen : drawerShown);
   /**
    * The page is held from view until the split is laid out for the
    * drawing (the page's `laid`), so its first paint is its last. Held no
@@ -397,7 +411,7 @@
         event.isTrusted &&
         !event.defaultPrevented &&
         !field &&
-        roomOpen
+        roomShown
       ) {
         roomOpen = false;
       }
@@ -536,6 +550,29 @@
     const here = typeof snap === "number" ? SNAPS.indexOf(snap) : -1;
     snap = SNAPS[(here + 1) % SNAPS.length] ?? head;
   };
+  /** The stop the drawer stood at as the pane's sheet put it away; null while it stands. */
+  let stopAway: number | string | null = null;
+  // Put away under the pane's sheet, the drawer comes back at the stop it
+  // stood at: vaul opens it at its first stop, so it is stepped there once
+  // it stands again.
+  $effect(() => {
+    const away = paneSheet && roomOpen;
+    untrack(() => {
+      if (away) {
+        stopAway ??= snap;
+        return;
+      }
+      const back = stopAway;
+      stopAway = null;
+      if (back === null || back === head || !drawerShown) {
+        return;
+      }
+      snap = head;
+      requestAnimationFrame(() => {
+        snap = back;
+      });
+    });
+  });
   /** The drawer's stop the stage was last brought to; null until the drawer stands at its first. */
   let stopShown: number | string | null = null;
   // At each stop he moves the drawer to, what the last press changed stays
@@ -924,7 +961,7 @@
               </div>
             </HangCard>
           </Popover.Root>
-          {#if !roomOpen}
+          {#if !roomShown}
             <Tip label={words.openRoom}>
               {#snippet children(tip)}
                 <button
@@ -933,13 +970,17 @@
                     onclick: () => {
                       roomOpen = true;
                       snap = head;
+                      // The one asked for last stands: the pane's sheet goes as the drawer rises.
+                      if (paneSheet) {
+                        onroom?.();
+                      }
                     },
                   })}
                   aria-label={words.openRoom}
                   class="select-none touch-hit press-tint"
                   type="button"
                 >
-                  <IconSidebar data-slot="bar-symbol" aria-hidden="true" />
+                  <IconRoom data-slot="bar-symbol" aria-hidden="true" />
                 </button>
               {/snippet}
             </Tip>
@@ -956,7 +997,7 @@
       class={[
         !laidOut && "invisible",
         "flex min-h-0 min-w-0 flex-1 overflow-clip px-space-6 max-desk:px-space-5",
-        !desk && roomOpen ? "pb-(--drawer-cover)" : "pb-space-6",
+        !desk && drawerShown ? "pb-(--drawer-cover)" : "pb-space-6",
       ]}
       style:--drawer-cover="{cover}px"
       {@attach frameSize((node: HTMLElement) => {
@@ -1075,7 +1116,15 @@
          surface's foot wherever the surface stands. -->
       <Drawer.Root
         bind:activeSnapPoint={snap}
-        bind:open={roomOpen}
+        bind:open={
+          () => drawerShown,
+          (next: boolean) => {
+            // Put away under the pane's sheet, the drawer keeps his choice for when it goes.
+            if (!paneSheet) {
+              roomOpen = next;
+            }
+          }
+        }
         dismissible={false}
         modal={false}
         shouldScaleBackground={false}

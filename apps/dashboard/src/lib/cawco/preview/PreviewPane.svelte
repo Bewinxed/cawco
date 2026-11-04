@@ -4506,6 +4506,8 @@
           files={sheetCanvas.files}
           frame={frameTags}
           {link}
+          onroom={() => showInspector(false)}
+          paneSheet={inspecting && inspectorLayout === "sheet"}
           spec={sheetCanvas.spec}
           stale={linkDown !== null}
         />
