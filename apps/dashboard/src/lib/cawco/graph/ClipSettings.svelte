@@ -204,6 +204,24 @@
     }),
   });
 
+  /**
+   * A list's chosen choice brought into view and focused as it opens: the
+   * kit's popover focuses its first row, and on a phone the chosen length
+   * (Pop, 260 ms) stood scrolled out of the list.
+   */
+  const toChosen = (list: () => HTMLElement | undefined) => (event: Event) => {
+    event.preventDefault();
+    requestAnimationFrame(() => {
+      const chosen =
+        list()?.querySelector<HTMLElement>('[aria-selected="true"]') ??
+        list()?.querySelector<HTMLElement>('[role="option"]');
+      chosen?.scrollIntoView({ block: "nearest" });
+      chosen?.focus({ preventScroll: true });
+    });
+  };
+  let lengthList = $state<HTMLElement>();
+  let curveList = $state<HTMLElement>();
+
   let open = $state<Timing | null>(null);
   const opener = (key: Timing) => ({
     get open() {
@@ -334,10 +352,12 @@
         align="start"
         gap="none"
         height="capped"
+        onOpenAutoFocus={toChosen(() => lengthList)}
         overflow="scroll"
         width="narrow"
       >
         <div
+          bind:this={lengthList}
           aria-label={words.length}
           class="flex flex-col"
           role="listbox"
@@ -426,10 +446,12 @@
         align="start"
         gap="none"
         height="capped"
+        onOpenAutoFocus={toChosen(() => curveList)}
         overflow="scroll"
         width="narrow"
       >
         <div
+          bind:this={curveList}
           aria-label={words.curve}
           class="flex flex-col"
           role="listbox"
