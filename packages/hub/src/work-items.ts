@@ -50,6 +50,8 @@ import type {
   InputFile,
   InputNamed,
   InputsAdmitted,
+  InputsLanded,
+  InputsPlace,
   InputsRead,
   InstanceRow,
   InstanceStatus,
@@ -103,6 +105,8 @@ import {
   type DashboardReach,
   handoffMarker,
   holdingWords,
+  INPUTS_COUNT_LIMIT,
+  INPUTS_DIR,
   INPUTS_LIMIT_BYTES,
   isWorkspaceNeedsRefusal,
   knowsNotControl,
@@ -739,9 +743,6 @@ const CLOSED = /[.\s]+$/u;
 /** A refusal of a delegation's inputs, in `words` closed by one full stop. */
 const inputsRefused = (words: string, options?: ErrorOptions) =>
   new WorkItemRefusal(400, `inputs: ${words.replace(CLOSED, "")}.`, options);
-
-/** Entries one delegation's inputs may name (agent inputs.ts holds its paths to the same). */
-const INPUTS_COUNT_LIMIT = 50;
 
 /** What the hub writes is its reader's to read and write. */
 const HELD_MODE = 0o600;
@@ -1693,8 +1694,8 @@ const folderPathOf = (raw: string): string | undefined => {
   }
 };
 
-/** Outputs one work item may name. */
-const OUTPUTS_LIMIT = 50;
+/** Outputs one work item may name: as many as its inputs (core `INPUTS_COUNT_LIMIT`). */
+const OUTPUTS_LIMIT = INPUTS_COUNT_LIMIT;
 
 /**
  * A request's outputs as paths from the clone's root, each once; null for
@@ -1708,7 +1709,7 @@ const outputsOf = (outputs: string[] | undefined): string[] | null => {
   if (outputs.length > OUTPUTS_LIMIT) {
     throw new WorkItemRefusal(
       400,
-      `outputs names ${outputs.length} files; it stops at ${OUTPUTS_LIMIT}.`
+      workWords.inputsLimits.outputs(outputs.length, OUTPUTS_LIMIT)
     );
   }
   const paths = outputs.map((raw) => {
@@ -2837,6 +2838,24 @@ export const createWorkItems = ({
     const [lead] = id ? db.getInstancesByIds([id]) : [];
     return lead && !not.includes(lead.id) ? lead : undefined;
   };
+
+  /**
+   * Whether files may go with a handoff from `sender` to `receiver`, whose
+   * work item is `item` (none for a session with none): where handoff's own
+   * relations reach, both ways. Down to a session it delegated or started,
+   * or to an item whose project's conversation it is; up to its parent, or
+   * to its project's conversation.
+   */
+  const inputsGo = (
+    sender: InstanceRow,
+    receiver: InstanceRow,
+    item: WorkItemRow | undefined
+  ): boolean =>
+    receiver.parentInstanceId === sender.id ||
+    item?.parentInstanceId === sender.id ||
+    (item !== undefined && leadFor(item)?.id === sender.id) ||
+    receiver.id === sender.parentInstanceId ||
+    projectLead(sender.projectId ?? null, sender.id)?.id === receiver.id;
 
   /** The item's project's conversation, when it has one that is not the item's own session. */
   const leadFor = (item: WorkItemRow): InstanceRow | undefined =>
@@ -6262,7 +6281,7 @@ export const createWorkItems = ({
     if (bytes > INPUTS_LIMIT_BYTES) {
       throw new WorkItemRefusal(
         400,
-        `inputs: what the hub hands comes to more than ${INPUTS_LIMIT_BYTES / MIB} MiB, the most one delegation carries; hand larger data on through git.`
+        workWords.inputsLimits.held(INPUTS_LIMIT_BYTES / MIB)
       );
     }
     return resolved;
@@ -6276,7 +6295,7 @@ export const createWorkItems = ({
       if (twin !== undefined) {
         throw new WorkItemRefusal(
           400,
-          `inputs: ${twin} and ${file.from} would both land as ${file.name} in $TMPDIR/inputs/; hand one under another name.`
+          `inputs: ${twin} and ${file.from} would both land as ${file.name} in the inputs folder; hand one under another name.`
         );
       }
       landing.set(file.name, file.from);
@@ -6307,7 +6326,10 @@ export const createWorkItems = ({
     if (checked.inputs.length > INPUTS_COUNT_LIMIT) {
       throw new WorkItemRefusal(
         400,
-        `inputs: ${checked.inputs.length} entries; one delegation carries ${INPUTS_COUNT_LIMIT} at most.`
+        workWords.inputsLimits.entries(
+          checked.inputs.length,
+          INPUTS_COUNT_LIMIT
+        )
       );
     }
     const paths = checked.inputs.filter(
@@ -6362,19 +6384,42 @@ export const createWorkItems = ({
 
   /**
    * `inputs` put into `workspace`'s `$TMPDIR/inputs/` on its machine for
-   * `receiver`, the session that reads them, before a brief names them.
-   * What the hub resolved it writes there itself, what is made for its
-   * reader (a preview's pass) made for `receiver` now. Paths are admitted
-   * again where they are read. THE ONE DECISION for paths: on the machine
-   * that holds them, that machine copies them itself, and none of their
-   * bytes crosses its link; from another machine, they are read there and
-   * written here, through the hub.
+   * `receiver`, the session that reads them, before a brief names them
+   * ({@link handInto}).
    */
   const handIn = async (
     workspace: WorkspaceRow,
     inputs: Inputs,
     receiver: InstanceRow
   ): Promise<void> => {
+    await handInto(
+      workspace.machineId,
+      scratchRefOf(workspace),
+      inputs,
+      receiver
+    );
+  };
+
+  /**
+   * `inputs` put into the inputs folder `place` names on `machineId` (core
+   * `InputsPlace`: a workspace's scratch dir, or a session with no work
+   * item's own) for `receiver`, the session that reads them, before the
+   * message that names them goes. What the hub resolved it writes there
+   * itself, what is made for its reader (a preview's pass) made for
+   * `receiver` now. Paths are admitted again where they are read. THE ONE
+   * DECISION for paths: on the machine that holds them, that machine copies
+   * them itself, and none of their bytes crosses its link; from another
+   * machine, they are read there and written here, through the hub.
+   * Answers the folder as the machine named it, none from an agent that
+   * names none.
+   */
+  const handInto = async (
+    machineId: string,
+    place: InputsPlace,
+    inputs: Inputs,
+    receiver: InstanceRow
+  ): Promise<string | undefined> => {
+    let folder: string | undefined;
     if (inputs.held.length > 0) {
       const files = await Promise.all(
         inputs.held.map(async (file): Promise<InputFile> => ({
@@ -6382,33 +6427,31 @@ export const createWorkItems = ({
           from: file.from,
           mode: HELD_MODE,
           content: (typeof file.bytes === "function"
-            ? await file.bytes({
-                session: receiver,
-                machineId: workspace.machineId,
-              })
+            ? await file.bytes({ session: receiver, machineId })
             : file.bytes
           ).toString("base64"),
         }))
       );
-      await call(workspace.machineId, CONTROL_INPUTS_WRITE, [
-        scratchRefOf(workspace),
+      const landed = (await call(machineId, CONTROL_INPUTS_WRITE, [
+        place,
         files,
-      ]);
+      ])) as InputsLanded | undefined;
+      folder = landed?.folder;
     }
     if (inputs.paths.length === 0) {
-      return;
+      return folder;
     }
-    if (workspace.machineId === inputs.machineId) {
-      const copied = (await call(workspace.machineId, CONTROL_INPUTS_COPY, [
+    if (machineId === inputs.machineId) {
+      const copied = (await call(machineId, CONTROL_INPUTS_COPY, [
         inputs.paths,
         inputs.bound,
-        scratchRefOf(workspace),
+        place,
         inputs.project,
       ])) as InputsAdmitted;
       if ("refused" in copied) {
         throw inputsRefused(copied.refused);
       }
-      return;
+      return copied.folder ?? folder;
     }
     const read = (await call(inputs.machineId, CONTROL_INPUTS_READ, [
       inputs.paths,
@@ -6418,10 +6461,11 @@ export const createWorkItems = ({
     if ("refused" in read) {
       throw inputsRefused(read.refused);
     }
-    await call(workspace.machineId, CONTROL_INPUTS_WRITE, [
-      scratchRefOf(workspace),
+    const landed = (await call(machineId, CONTROL_INPUTS_WRITE, [
+      place,
       read.files satisfies InputFile[],
-    ]);
+    ])) as InputsLanded | undefined;
+    return landed?.folder ?? folder;
   };
 
   /**
@@ -10276,43 +10320,62 @@ export const createWorkItems = ({
     },
 
     /**
-     * A handoff's inputs (core handed-input.ts): written into the
-     * `$TMPDIR/inputs/` of the workspace `instanceId`'s item runs in (a
-     * host-scope one's scratch dir, agent host-scratch.ts), before
-     * the handoff that names them goes. Only the session that delegated the
-     * item, or its project's conversation, hands it inputs; refused, too, for a
-     * workspace whose work was discarded and an input that may not go
-     * ({@link readInputs}). A retired workspace is cut again first
-     * ({@link recut}). Answers each input's name and where it came from.
+     * A handoff's inputs (core handed-input.ts), sent where handoff's own
+     * relations reach ({@link inputsGo}), written before the handoff that
+     * names them goes: into the `$TMPDIR/inputs/` of the workspace a
+     * receiver's work item runs in (a host-scope one's scratch dir, agent
+     * host-scratch.ts; a retired one cut again first, {@link recut}), or,
+     * for a session with no work item, its own inputs folder on its machine
+     * (core `InputsPlace`). Refused, too, for a workspace whose work was
+     * discarded and an input that may not go ({@link readInputs}). Answers
+     * each input's name and where it came from, and the folder they landed
+     * in as the receiver names it.
      */
     async handInputs(
       instanceId: string,
       from: string,
       entries: unknown[]
-    ): Promise<{ from: string; name: string }[]> {
+    ): Promise<{
+      folder: string;
+      inputs: { from: string; name: string }[];
+    }> {
       const [row] = db.getInstancesByIds([instanceId]);
-      const item = row ? itemOf(row) : undefined;
-      if (!(row && item)) {
-        throw new WorkItemRefusal(
-          404,
-          `${instanceId} runs no work item, so it has no $TMPDIR/inputs/ to hand inputs into. Hand off without inputs.`
-        );
-      }
-      if (!(item.parentInstanceId === from || leadFor(item)?.id === from)) {
-        throw new WorkItemRefusal(
-          403,
-          "Only the session that delegated an item, or its project's conversation, hands it inputs."
-        );
-      }
-      const [named] = db.workspacesNamed(item.workspaceId);
       const [caller] = db.getInstancesByIds([from]);
+      if (!row) {
+        throw new WorkItemRefusal(404, `unknown session ${instanceId}`);
+      }
       if (!caller) {
         throw new WorkItemRefusal(404, `unknown session ${from}`);
+      }
+      const item = itemOf(row);
+      if (!inputsGo(caller, row, item)) {
+        throw new WorkItemRefusal(
+          403,
+          workWords.inputsNotTheirs(sessionLink(row.id, boardTitle(row)))
+        );
       }
       // Read before a retired workspace is cut again: an input that may not
       // go refuses the handoff before anything is cut.
       const inputs = await readInputs(entries, caller);
-      const workspace = named && recuttable(named) ? await recut(named) : named;
+      const named = (list: Inputs) =>
+        list.files.map(({ name, from: read }) => ({ name, from: read }));
+      if (!item) {
+        const folder = await handInto(
+          row.machineId,
+          { session: row.id, cwd: row.cwd },
+          inputs,
+          row
+        );
+        if (!folder) {
+          throw new WorkItemRefusal(
+            409,
+            `${sessionLink(row.id, boardTitle(row))} runs on ${machineName(row.machineId)}, whose agent keeps no inputs folder for a session with no work item: update it, or hand off without inputs.`
+          );
+        }
+        return { folder, inputs: named(inputs) };
+      }
+      const [held] = db.workspacesNamed(item.workspaceId);
+      const workspace = held && recuttable(held) ? await recut(held) : held;
       if (!workspace || workspace.state === "archived") {
         throw new WorkItemRefusal(
           409,
@@ -10320,7 +10383,7 @@ export const createWorkItems = ({
         );
       }
       await handIn(workspace, inputs, row);
-      return inputs.files.map(({ name, from: read }) => ({ name, from: read }));
+      return { folder: `$TMPDIR/${INPUTS_DIR}/`, inputs: named(inputs) };
     },
 
     /** {@link sessionFailed}: a restart cut its turn and nothing can resume it. */

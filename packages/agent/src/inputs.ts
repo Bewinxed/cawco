@@ -33,16 +33,21 @@ import {
   resolve,
 } from "node:path";
 import {
+  INPUTS_COUNT_LIMIT,
   INPUTS_DIR,
   INPUTS_LIMIT_BYTES,
   type InputFile,
   type InputNamed,
   type InputsAdmitted,
+  type InputsLanded,
+  type InputsPlace,
   type InputsRead,
   type WorkspaceRef,
   type WorkspaceSaved,
+  workWords,
 } from "@cawco/core";
 import {
+  sessionScratchDir,
   workspaceClaudeTmpDir,
   workspaceScratchDir,
   workspaceTmpDir,
@@ -54,9 +59,8 @@ import {
   resolveAsFar,
 } from "@cawco/core/workspace-policy";
 import { isWorkspaceRef } from "./hub-command";
+import { cloneHolding } from "./workspace-records";
 
-/** Inputs one delegation may name (the outputs' limit, work-items.ts `OUTPUTS_LIMIT`). */
-const INPUTS_COUNT_LIMIT = 50;
 const MIB = 1024 * 1024;
 
 const within = (path: string, root: string): boolean =>
@@ -258,7 +262,7 @@ const admitFolder = async (
     name: string
   ): Promise<string | undefined> => {
     if (files.length >= INPUTS_COUNT_LIMIT) {
-      return `${named} holds more than ${INPUTS_COUNT_LIMIT} files, the most one delegation carries; name the files or a narrower folder`;
+      return workWords.inputsLimits.folder(named, INPUTS_COUNT_LIMIT);
     }
     const one = await resolved(file, reach);
     if (typeof one === "string") {
@@ -391,7 +395,7 @@ const admitAll = async (
     throw new Error("inputs must be a list of absolute paths");
   }
   if (paths.length > INPUTS_COUNT_LIMIT) {
-    return `inputs names ${paths.length} paths; it stops at ${INPUTS_COUNT_LIMIT}`;
+    return workWords.inputsLimits.paths(paths.length, INPUTS_COUNT_LIMIT);
   }
   const reach = await reachOf(bound, project);
   const tally: Tally = { admitted: [], named: new Map(), bytes: 0 };
@@ -424,15 +428,15 @@ const counted = async (
   for (const one of files) {
     const twin = tally.named.get(one.name);
     if (twin) {
-      return `${twin} and ${one.named} would both land as ${one.name} in $TMPDIR/inputs/; copy one to another name`;
+      return `${twin} and ${one.named} would both land as ${one.name} in the inputs folder; copy one to another name`;
     }
     tally.named.set(one.name, one.named);
     if (tally.named.size > INPUTS_COUNT_LIMIT) {
-      return `the inputs come to more than ${INPUTS_COUNT_LIMIT} files together, the most one delegation carries; name fewer files or a narrower folder`;
+      return workWords.inputsLimits.files(INPUTS_COUNT_LIMIT);
     }
     tally.bytes += (await stat(one.real)).size;
     if (tally.bytes > INPUTS_LIMIT_BYTES) {
-      return `the inputs come to more than ${INPUTS_LIMIT_BYTES / MIB} MiB together, the most one delegation carries; hand larger data on through git or a check with machine`;
+      return workWords.inputsLimits.bytes(INPUTS_LIMIT_BYTES / MIB);
     }
     tally.admitted.push(one);
   }
@@ -493,7 +497,7 @@ export const copyInputs = async (
   if (typeof admitted === "string") {
     return { refused: admitted };
   }
-  await writeInto(
+  const folder = await writeInto(
     ref,
     admitted.map((one) => ({
       name: one.name,
@@ -501,21 +505,21 @@ export const copyInputs = async (
       bytes: () => readFile(one.real),
     }))
   );
-  return { files: admitted.map(namedOf) };
+  return { files: admitted.map(namedOf), folder };
 };
 
 /**
  * {@link CONTROL_INPUTS_WRITE}: each input's bytes, read on another machine,
- * written into the workspace's inputs ({@link writeInto}).
+ * written into the session's inputs folder ({@link writeInto}).
  */
 export const writeInputs = async (
   ref: unknown,
   files: unknown
-): Promise<void> => {
+): Promise<InputsLanded> => {
   if (!Array.isArray(files)) {
     throw new Error("inputs must be a list of files");
   }
-  await writeInto(
+  const folder = await writeInto(
     ref,
     (files as InputFile[]).map((file) => ({
       name: file.name,
@@ -523,6 +527,7 @@ export const writeInputs = async (
       bytes: () => Promise.resolve(Buffer.from(file.content, "base64")),
     }))
   );
+  return { folder };
 };
 
 /**
@@ -620,19 +625,66 @@ const writeUnder = async (
   }
 };
 
+/** A session id as the hub makes one: nothing else names a folder under the scratch root. */
+const SESSION_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+
 /**
- * Each input written into the workspace's scratch dir under {@link
- * INPUTS_DIR} ({@link writeUnder}); a link or a file at `inputs` is taken
- * away first.
+ * Where `place`'s inputs land (core `InputsPlace`): the scratch dir they go
+ * under, the folder as the receiving session names it, and what it is in
+ * words. A work item's workspace's is its scratch dir, its `TMPDIR`. A
+ * session with no work item that works inside a workspace's clone runs in
+ * that clone's boundary (session.ts `#sessionContext`), so it reads that
+ * workspace's; any other has its own (core `sessionScratchDir`), named by
+ * its absolute path, as its `TMPDIR` is none of CawCo's.
+ */
+const inputsHome = async (
+  place: unknown
+): Promise<{ named: string; scratch: string; what: string }> => {
+  const inTmp = `$TMPDIR/${INPUTS_DIR}/`;
+  if (isWorkspaceRef(place)) {
+    return {
+      scratch: workspaceScratchDir(place.id),
+      named: inTmp,
+      what: `workspace ${place.id}'s own inputs folder`,
+    };
+  }
+  const asked = place as Partial<Extract<InputsPlace, { session: string }>>;
+  if (!(
+    typeof asked?.session === "string" &&
+    SESSION_ID.test(asked.session) &&
+    typeof asked.cwd === "string"
+  )) {
+    throw new Error(
+      "inputs are written for a workspace, { id, path }, or a session, { session, cwd }"
+    );
+  }
+  const held = await cloneHolding(asked.cwd);
+  if (held) {
+    return {
+      scratch: workspaceScratchDir(held.id),
+      named: inTmp,
+      what: `workspace ${held.id}'s own inputs folder`,
+    };
+  }
+  const scratch = sessionScratchDir(asked.session);
+  return {
+    scratch,
+    named: `${join(scratch, INPUTS_DIR)}/`,
+    what: `session ${asked.session}'s own inputs folder`,
+  };
+};
+
+/**
+ * Each input written into the inputs folder of `place` ({@link inputsHome})
+ * under {@link INPUTS_DIR} ({@link writeUnder}); a link or a file at
+ * `inputs` is taken away first. Answers the folder as its session names it.
  */
 const writeInto = async (
-  ref: unknown,
+  place: unknown,
   files: { bytes: () => Promise<Buffer>; mode: number; name: string }[]
-): Promise<void> => {
-  if (!isWorkspaceRef(ref)) {
-    throw new Error("inputs are written into a workspace: { id, path }");
-  }
-  const scratch = workspaceScratchDir(ref.id);
+): Promise<string> => {
+  const { named, scratch, what } = await inputsHome(place);
   const dir = join(scratch, INPUTS_DIR);
   const found = await lstat(dir).catch(() => undefined);
   if (found && !found.isDirectory()) {
@@ -644,13 +696,12 @@ const writeInto = async (
       dir,
       own: join(await realpath(scratch), INPUTS_DIR),
       strays: "clear",
-      what: `workspace ${ref.id}'s own inputs folder`,
+      what,
     },
     files
   );
-  console.info(
-    `[inputs] workspace ${ref.id}: ${files.length} input(s) written to ${dir}`
-  );
+  console.info(`[inputs] ${what}: ${files.length} input(s) written to ${dir}`);
+  return named;
 };
 
 /** How a session names its scratch dir in a path it hands a tool, which no shell expands. */

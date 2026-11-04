@@ -158,6 +158,7 @@ import { detach } from "@cawco/core/detach";
 import type { FleetItemKind } from "@cawco/core/fleet-items";
 import { ARTIFACT_PICTURE } from "@cawco/core/frames";
 import { measureMemoryRoom } from "@cawco/core/machine-room";
+import { sessionScratchDir } from "@cawco/core/paths";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import {
@@ -258,6 +259,7 @@ import {
 } from "./preview";
 import { parseProcId, type SESSION_PROC_KINDS } from "./proc-id";
 import { forgetRevoked, rememberCredential } from "./redaction";
+import { removeTree } from "./remove-tree";
 import { arrive, keepAnswer } from "./request-record";
 import { fenced } from "./restart";
 import {
@@ -5325,6 +5327,9 @@ export class SessionSupervisor {
       // can reattach it, so its own browser door goes now.
       if (forget) {
         await forgetBrowserDoor(instanceId);
+        // And its own inputs folder, a session with no work item's
+        // (inputs.ts `inputsHome`): nothing hands it files again.
+        await removeTree(sessionScratchDir(instanceId));
       }
       Effect.runFork(
         Effect.logInfo(

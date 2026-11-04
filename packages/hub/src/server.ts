@@ -35808,13 +35808,11 @@ export const createServer = (
             );
           }
           try {
-            return {
-              inputs: await workItems.handInputs(
-                body.instanceId,
-                body.from,
-                body.inputs
-              ),
-            };
+            return await workItems.handInputs(
+              body.instanceId,
+              body.from,
+              body.inputs
+            );
           } catch (error) {
             return status(
               error instanceof WorkItemRefusal ? error.status : 502,

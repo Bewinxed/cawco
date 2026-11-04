@@ -18,6 +18,7 @@
  * read. Messages stored before the tag were given it once, by the hub's
  * migration over its stored sends (hub db/tag-markers.ts).
  */
+import { INPUTS_DIR } from "./harness";
 import type { ArtifactKind, CarryRestored } from "./index";
 import { NO_REPLY_TOOL } from "./no-reply";
 import { artifactLink, stepLink } from "./references";
@@ -311,19 +312,22 @@ export const withHostLine = (
   );
 
 /**
- * `text` with the line that names a delegate's inputs right after any
- * hand-off marker: where they are, `$TMPDIR/inputs/` in its workspace, and
- * where each was read on its parent's machine. `text` as it is without any.
+ * `text` with the line that names the files handed with it right after any
+ * hand-off marker: the folder they landed in, as the receiver names it
+ * (`$TMPDIR/inputs/` in a work item's, an absolute path in a session's own,
+ * core harness.ts `InputsPlace`), and where each was read on its sender's
+ * machine. `text` as it is without any.
  */
 export const withInputsLine = (
   text: string,
-  inputs: readonly { from: string; name: string }[]
+  inputs: readonly { from: string; name: string }[],
+  folder = `$TMPDIR/${INPUTS_DIR}/`
 ): string =>
   inputs.length === 0
     ? text
     : afterMarker(
         text,
-        `Your parent's inputs are in $TMPDIR/inputs/: ${inputs.map(({ name, from }) => `${name} (from ${from})`).join(", ")}.`
+        `${workWords.inputsIn(folder)}${inputs.map(({ name, from }) => `${name} (from ${from})`).join(", ")}.`
       );
 
 /**

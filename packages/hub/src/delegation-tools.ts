@@ -20,7 +20,7 @@ import {
   startsAny,
 } from "@cawco/core";
 import type { ForgeWrite } from "@cawco/core/forge-post";
-import { type HandedInput, handedInputSchema } from "@cawco/core/handed-input";
+import { handedInputsListed } from "@cawco/core/handed-input";
 import type { DesignMap } from "@cawco/core/stage";
 import { z } from "zod";
 import type {
@@ -201,12 +201,24 @@ const finishItemDescription = (lands: ItemEnd = "main"): string => {
   }
 };
 
-const HANDOFF_DESCRIPTION =
-  "Message another session: guide your delegate while it works, or brief a session that already owns the work; for new standalone work, delegate. " +
+/** What every handoff says of a target's state as the message reaches it. */
+const HANDOFF_DELIVERY =
   "An idle target starts on it at once; a busy one reads it at its next step, its running command kept going. " +
-  "To your delegate after it reported, it reopens its item in the same session; prefer a fresh delegate unless that session is warm. " +
   "A cold target (cache expired; never your parent) with uncommitted changes gets it; one with only unpushed commits is refused once, naming delegate's `from`; otherwise CawCo's Jev model decides when the hub has its route, and that is final. " +
   "Repeat a call any other cold refusal answered to deliver it.";
+
+/**
+ * `handoff`'s description: a session that may start delegates is told how
+ * one is guided and reopened; a leaf that starts none, which has no
+ * delegate of its own, is told what it does have, its parent and the
+ * sessions that own work. Every session hands files with `inputs`.
+ */
+const handoffDescription = (startsNone: boolean): string =>
+  startsNone
+    ? `Message another session: your parent, or a session that already owns the work. ${HANDOFF_DELIVERY}`
+    : "Message another session: guide your delegate while it works, or brief a session that already owns the work; for new standalone work, delegate. " +
+      "To your delegate after it reported, it reopens its item in the same session; prefer a fresh delegate unless that session is warm. " +
+      HANDOFF_DELIVERY;
 
 /** `handoff`'s target and message, every session's. */
 const handoffShape = () => ({
@@ -224,19 +236,21 @@ const handoffShape = () => ({
 
 /**
  * `inputs` of delegate and handoff (core handed-input.ts): a path to a file
- * or a folder, or what the hub holds by name, landing in the receiver's
- * `$TMPDIR/inputs/`, a folder and an item's assets as their trees. Shown
- * open; the hub checks each entry strictly (work-items.ts `readInputs`).
+ * or a folder on the caller's machine, or what the hub holds by name,
+ * landing in the receiver's inputs folder (its `$TMPDIR/inputs/`, or a
+ * session with no work item's own, work-items.ts `handInputs`), a folder
+ * and an item's assets as their trees. Listed open and small
+ * ({@link handedInputsListed}); the hub checks each entry strictly
+ * (work-items.ts `readInputs`). Placeholder words, for a copy pass.
  */
 const inputsParameter = () =>
-  z
-    .array(handedInputSchema(false))
+  handedInputsListed
     .optional()
     .describe(
-      'Files for its $TMPDIR/inputs/: a path to a file, or to a folder (copied as inputs/<folder>/…, every file counted). Or what the hub holds, named by full id, short id or handle like cockpit#5a167bde: report or assets (the files under assets/<item>/ in its project\'s folder, subfolders kept) by item or session; an artifact as its files and picture; attachment by id, a name like "Picture 2", or the name an "Attached picture:" line gives a picture you were sent; blob: base64.'
+      "Files for its inputs folder, named in the message: absolute paths to files or folders on your machine, or hub-held ones by id or handle, {report|assets|artifact|pins|find|attachment}, or {text|blob, name}, blob base64."
     );
 
-/** `handoff`'s call: the message, with the inputs of a session that may delegate. */
+/** `handoff`'s call: the message, with files for the receiver's inputs folder. */
 const handed =
   (actions: ReturnType<typeof handoffActions>) =>
   ({
@@ -244,7 +258,7 @@ const handed =
     message,
     inputs,
   }: {
-    inputs?: HandedInput[];
+    inputs?: unknown[];
     message: string;
     target: string;
   }) =>
@@ -434,23 +448,13 @@ export function handoffTools(deps: HandoffDeps) {
       () => Promise.resolve(actions.listSessions()),
       sentence
     ),
-    // A leaf that starts nothing has no delegate of its own to hand inputs
-    // to: only a session that may start one is listed `inputs`.
-    sessionMayStart(deps).length === 0
-      ? tool(
-          "handoff",
-          HANDOFF_DESCRIPTION,
-          handoffShape(),
-          handed(actions),
-          sentence
-        )
-      : tool(
-          "handoff",
-          HANDOFF_DESCRIPTION,
-          { ...handoffShape(), inputs: inputsParameter() },
-          handed(actions),
-          sentence
-        ),
+    tool(
+      "handoff",
+      handoffDescription(sessionMayStart(deps).length === 0),
+      { ...handoffShape(), inputs: inputsParameter() },
+      handed(actions),
+      sentence
+    ),
     tool(
       "start_session",
       "Start a new session of its own and give it work: its own sidebar row under this session and its own transcript, outliving this turn. " +
@@ -745,11 +749,8 @@ export function handoffTools(deps: HandoffDeps) {
           .describe(
             "One or two plain sentences: what changed and whether it passed. No ids or file names."
           ),
-        summary: z
-          .string()
-          .describe(
-            "All your parent reads: the deliverable or its file's path, then the proof."
-          ),
+        // What it carries is the tool's description's to say, once.
+        summary: z.string(),
         findings: z
           .array(z.object({ title: z.string(), detail: z.string() }))
           .optional()

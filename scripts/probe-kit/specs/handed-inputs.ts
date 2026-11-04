@@ -73,6 +73,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
+import { workWords } from "../../../packages/core/src/index";
 import {
   type ToolSession,
   type ToolWords,
@@ -249,7 +250,7 @@ const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const FRAME = `${PANE} iframe[title="Preview"]`;
 
 /** How a brief or a handoff names its inputs (core `withInputsLine`). */
-const INPUTS_LINE = "Your parent's inputs are in $TMPDIR/inputs/: ";
+const INPUTS_LINE = workWords.inputsIn("$TMPDIR/inputs/");
 
 const say = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const call = (name: string, input: object): Reply => ({

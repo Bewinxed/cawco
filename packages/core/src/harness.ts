@@ -2825,26 +2825,42 @@ export const CONTROL_INPUTS_ADMIT = "inputsAdmit";
 export const CONTROL_INPUTS_READ = "inputsRead";
 
 /**
- * A delegate's inputs written into its workspace's scratch dir, under
- * {@link INPUTS_DIR}, each replacing one of its name: the bytes
+ * A session's inputs written into its inputs folder ({@link InputsPlace}),
+ * under {@link INPUTS_DIR}, each replacing one of its name: the bytes
  * {@link CONTROL_INPUTS_READ} read on another machine. Args
- * `[WorkspaceRef, InputFile[]]`. Machine-scoped.
+ * `[InputsPlace, InputFile[]]`; answers {@link InputsLanded}.
+ * Machine-scoped.
  */
 export const CONTROL_INPUTS_WRITE = "inputsWrite";
 
 /**
- * A delegate's inputs copied on the machine that holds both its parent and
- * its workspace, from where they are into the workspace's scratch dir, as
+ * A session's inputs copied on the machine that holds both its sender and
+ * its inputs folder ({@link InputsPlace}), from where they are, as
  * {@link CONTROL_INPUTS_WRITE} writes them, admitted again first as
  * {@link CONTROL_INPUTS_ADMIT} admits them. No byte of them crosses the link
  * to the hub: read and written back down to the same machine, each input
  * crossed it twice, up to 86 MiB of base64 a delegation each way, and a
  * conductor's lanes queued it ahead of every heartbeat (2026-10-19). Args
- * `[paths, bound: WorkspaceRef | null, WorkspaceRef, project: string |
+ * `[paths, bound: WorkspaceRef | null, InputsPlace, project: string |
  * null]`; answers
- * {@link InputsAdmitted}. Machine-scoped.
+ * {@link InputsAdmitted}, with the folder they landed in. Machine-scoped.
  */
 export const CONTROL_INPUTS_COPY = "inputsCopy";
+
+/**
+ * Where a session's inputs land on its machine: a work item's workspace,
+ * in its scratch dir (`$TMPDIR/inputs/`, a host-scope one's too); or a
+ * session with no work item, by its id and the folder it works in, in its
+ * own inputs folder (core paths.ts `sessionScratchDir`), or, working in a
+ * workspace's clone, which bounds it, that workspace's (agent inputs.ts
+ * `inputsHome`).
+ */
+export type InputsPlace = WorkspaceRef | { cwd: string; session: string };
+
+/** What {@link CONTROL_INPUTS_WRITE} answers: the folder the inputs landed in, as the session names it (`$TMPDIR/inputs/`, or an absolute path). */
+export interface InputsLanded {
+  folder: string;
+}
 
 /**
  * A picture `artifact_read` drew, kept where its session asked (`save`), in
@@ -2881,6 +2897,15 @@ export const OUTPUTS_DIR = "outputs";
  */
 export const INPUTS_LIMIT_BYTES = 64 * 1024 * 1024;
 
+/**
+ * The most files one delegation's or handoff's inputs come to, a folder's
+ * each counted, and the most entries its `inputs` may name: the hub's check
+ * of the entries (work-items.ts `readInputs`) and the machine's of the
+ * files (agent inputs.ts `admitAll`) hold the same number. The same as the
+ * outputs one item may declare (work-items.ts `OUTPUTS_LIMIT`). Our call.
+ */
+export const INPUTS_COUNT_LIMIT = 50;
+
 /** One input, admitted: its name in `inputs/`, where it is read, its permission bits. */
 export interface InputNamed {
   /** The absolute path it is read from on the parent's machine. */
@@ -2897,8 +2922,9 @@ export interface InputFile extends InputNamed {
   content: string;
 }
 
-/** What {@link CONTROL_INPUTS_ADMIT} and {@link CONTROL_INPUTS_COPY} answer: the inputs, or why they may not go. */
-export type InputsAdmitted = { files: InputNamed[] } | { refused: string };
+/** What {@link CONTROL_INPUTS_ADMIT} and {@link CONTROL_INPUTS_COPY} answer: the inputs (a copy's with the folder they landed in), or why they may not go. */
+export type InputsAdmitted =
+  { files: InputNamed[]; folder?: string } | { refused: string };
 
 /** What {@link CONTROL_INPUTS_READ} answers: the files, or why they may not go. */
 export type InputsRead = { files: InputFile[] } | { refused: string };

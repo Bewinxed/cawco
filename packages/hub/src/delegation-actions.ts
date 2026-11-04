@@ -945,8 +945,10 @@ export interface HandoffActions {
   ) => Promise<GeneratedImage>;
   /**
    * Sends `message` to another session; `inputs` (core handed-input.ts)
-   * are written first into the `$TMPDIR/inputs/` of the target's work item,
-   * one this session delegated or whose project it is the conversation of.
+   * are written first into the target's inputs folder (its work item's
+   * `$TMPDIR/inputs/`, or a session with no work item's own), where
+   * handoff's relations reach: its parent, a session it delegated or
+   * started, its project's conversation (work-items.ts `inputsGo`).
    */
   handoff: (
     target: string,
@@ -1169,15 +1171,16 @@ const hubText = async (response: Response): Promise<string> => {
 /**
  * A handoff's inputs, through the hub (work-items.ts `handInputs`): paths
  * admitted on `from`'s machine and what the hub holds by name, written into
- * the `$TMPDIR/inputs/` of `target`'s work item. Answers each one's name and
- * where it came from; the hub's refusal is thrown in its words.
+ * `target`'s inputs folder on its machine. Answers each one's name and
+ * where it came from, and that folder as `target` names it; the hub's
+ * refusal is thrown in its words.
  */
 async function handInputs(
   authorization: string | undefined,
   from: string,
   target: string,
   inputs: unknown[]
-): Promise<{ from: string; name: string }[]> {
+): Promise<{ folder: string; inputs: { from: string; name: string }[] }> {
   const response = await postToHub(
     "/api/work-items/inputs",
     { from, instanceId: target, inputs },
@@ -1190,9 +1193,10 @@ async function handInputs(
   if (!response.ok) {
     throw new Error(await response.text());
   }
-  return (
-    (await response.json()) as { inputs: { from: string; name: string }[] }
-  ).inputs;
+  return (await response.json()) as {
+    folder: string;
+    inputs: { from: string; name: string }[];
+  };
 }
 
 const coldRefusals = new Map<string, string>();
@@ -1838,10 +1842,11 @@ export const handoffActions = ({
       // In its $TMPDIR before the message that names them reaches it.
       const landed = inputs?.length
         ? await handInputs(authorization, instanceId, peer.row.id, inputs)
-        : [];
+        : undefined;
       const body = withInputsLine(
         `${handoffMarker(from, instanceId)}${message}`,
-        landed
+        landed?.inputs ?? [],
+        landed?.folder
       );
       const payload = peerSend(peer.row.id, instanceId, from, body, {
         shouldQuery: false,

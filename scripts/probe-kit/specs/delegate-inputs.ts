@@ -29,6 +29,7 @@
  */
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { workWords } from "../../../packages/core/src/index";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -42,8 +43,10 @@ const ASSET_TOKEN = `delegate-inputs-asset-${crypto.randomUUID()}`;
 /** What the input holds: only a read of the file can put it in a request. */
 const TOKEN = `delegate-inputs-${crypto.randomUUID()}`;
 const HANDED_TOKEN = `delegate-inputs-handoff-${crypto.randomUUID()}`;
+/** How a brief or a handoff names the inputs in a work item's `$TMPDIR/inputs/` (core `withInputsLine`). */
+const TMPDIR_INPUTS_LINE = workWords.inputsIn("$TMPDIR/inputs/");
 /** How the handoff names its input to the leaf (core `withInputsLine`). */
-const HANDED_LINE = `Your parent's inputs are in $TMPDIR/inputs/: ${HANDED}`;
+const HANDED_LINE = `${TMPDIR_INPUTS_LINE}${HANDED}`;
 /** The leaf's output: a folder of two files and a subfolder, by its path in the workspace and what each holds. */
 const OUTPUT = ".decisions/deck/";
 const DECK: Record<string, string> = {
@@ -431,7 +434,7 @@ const spec: Spec = {
     check(
       "the brief names the input in $TMPDIR/inputs/",
       brief.all.includes(
-        `Your parent's inputs are in $TMPDIR/inputs/: ${INPUT} (from ${join(outside, INPUT)})`
+        `${TMPDIR_INPUTS_LINE}${INPUT} (from ${join(outside, INPUT)})`
       )
     );
     await landsAsset(kit, started);

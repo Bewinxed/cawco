@@ -47,29 +47,34 @@ const fileName = z
   .regex(ONE_COMPONENT, "a file name, with no folder");
 
 /**
- * One entry of `inputs`, every kind the hub resolves. `strict`: an object
- * with a key it does not name is refused, as the hub checks every entry
- * ({@link HANDED_INPUT}). Open, it is the shape a tool shows a harness:
- * OpenCode's input repair deletes the keys a schema with
- * `additionalProperties: false` does not name (hub delegation-tools.ts `tool`).
+ * One entry of `inputs`, every kind the hub resolves; an object with a key
+ * it does not name is refused. The one check every caller's entries meet
+ * ({@link handedInputs}).
  */
-export const handedInputSchema = (strict: boolean) => {
-  const shape = strict ? z.strictObject : z.object;
-  return z.union([
-    z.string().min(1),
-    shape({ report: ref }),
-    shape({ artifact: ref }),
-    shape({ pins: ref }),
-    shape({ find: ref }),
-    shape({ attachment: ref, session: ref.optional() }),
-    shape({ assets: ref }),
-    shape({ text: z.string(), name: fileName }),
-    shape({ blob: z.string(), name: fileName }),
-  ]);
-};
+const HANDED_INPUT = z.union([
+  z.string().min(1),
+  z.strictObject({ report: ref }),
+  z.strictObject({ artifact: ref }),
+  z.strictObject({ pins: ref }),
+  z.strictObject({ find: ref }),
+  z.strictObject({ attachment: ref, session: ref.optional() }),
+  z.strictObject({ assets: ref }),
+  z.strictObject({ text: z.string(), name: fileName }),
+  z.strictObject({ blob: z.string(), name: fileName }),
+]);
 
-/** What the hub checks every entry against. */
-const HANDED_INPUT = handedInputSchema(true);
+/**
+ * `inputs` as a tool lists it to a harness: a path, or an object of string
+ * fields, its kinds said in the tool's words. Open and small, as every
+ * session's handoff lists it: the nine shapes of {@link HANDED_INPUT} as
+ * JSON schema cost a leaf's toolset some 300 tokens, and OpenCode's input
+ * repair deletes the keys a schema with `additionalProperties: false` does
+ * not name (hub delegation-tools.ts `tool`). The hub checks each entry
+ * against {@link HANDED_INPUT} ({@link handedInputs}).
+ */
+export const handedInputsListed = z.array(
+  z.union([z.string().min(1), z.object({}).catchall(z.string())])
+);
 
 export type HandedInput = z.infer<typeof HANDED_INPUT>;
 

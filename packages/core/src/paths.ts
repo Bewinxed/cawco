@@ -718,6 +718,16 @@ export const workspaceScratchDir = (id: string): string =>
   join(workspaceScratchRoot(), id.slice(0, 8));
 
 /**
+ * A session with no work item's own scratch dir, where what another session
+ * hands it lands (`inputs/`, agent inputs.ts `inputsHome`): in
+ * {@link workspaceScratchRoot} beside the workspaces', `s-` and its id's
+ * first 8 characters, so it is never a workspace's. It goes when the hub
+ * forgets the session (agent session.ts `#stop`).
+ */
+export const sessionScratchDir = (instanceId: string): string =>
+  join(workspaceScratchRoot(), `s-${instanceId.slice(0, 8)}`);
+
+/**
  * The name a workspace's commands are given for its scratch dir, their
  * `TMPDIR`: on macOS its short name, `/private/tmp/cawco-<uid>/t-<id8>`
  * ({@link shortLink}, made by {@link linkWorkspaceTmp} before the boundary

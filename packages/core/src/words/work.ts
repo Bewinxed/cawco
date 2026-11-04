@@ -33,6 +33,41 @@ export const workWords = {
     `Your $TMPDIR is a scratch dir of your own on this machine. Files you leave in $TMPDIR/outputs/ are copied into the project's folder at ${assets}/ (each at its path under outputs/) when you finish: the one way a file of this machine reaches your parent, wherever it runs. The hub's report names each path for your parent, and the project's delegates read them there with folder_read.`,
   /** A host-scope delegate's scratch dir asked for by a name that is no workspace id (agent host-scratch.ts): nothing is read, made or removed. */
   hostScratchUnnamed: "a host scratch dir is named by its workspace's id",
+  /**
+   * How a brief or a handoff names the files handed with it (core injected.ts
+   * `withInputsLine`): the folder they landed in, as the receiver names it,
+   * then each. Placeholder words, for a copy pass.
+   */
+  inputsIn: (folder: string) => `Files handed with this are in ${folder}: `,
+  /**
+   * A handoff's inputs refused for whom they would go to (hub work-items.ts
+   * `handInputs`): files go only where handoff's own relations reach.
+   * Placeholder words, for a copy pass.
+   */
+  inputsNotTheirs: (receiver: string) =>
+    `Files go with a handoff to your parent, a session you delegated or started, or your project's conversation; ${receiver} is none of them. Hand off without inputs.`,
+  /**
+   * The inputs' limits, as every refusal of them says them (hub
+   * work-items.ts `readInputs`, agent inputs.ts `admitAll`): `limit` is core
+   * `INPUTS_COUNT_LIMIT` or `INPUTS_LIMIT_BYTES` in MiB. Placeholder words,
+   * for a copy pass.
+   */
+  inputsLimits: {
+    entries: (named: number, limit: number) =>
+      `inputs: ${named} entries; one handoff or delegation carries ${limit} at most.`,
+    paths: (named: number, limit: number) =>
+      `inputs names ${named} paths; one handoff or delegation carries ${limit} at most`,
+    folder: (folder: string, limit: number) =>
+      `${folder} holds more than ${limit} files, the most one handoff or delegation carries; name the files or a narrower folder`,
+    files: (limit: number) =>
+      `the inputs come to more than ${limit} files together, the most one handoff or delegation carries; name fewer files or a narrower folder`,
+    bytes: (mib: number) =>
+      `the inputs come to more than ${mib} MiB together, the most one handoff or delegation carries; hand larger data on through git or a check with machine`,
+    held: (mib: number) =>
+      `inputs: what the hub hands comes to more than ${mib} MiB, the most one handoff or delegation carries; hand larger data on through git.`,
+    outputs: (named: number, limit: number) =>
+      `outputs names ${named} files; one item declares ${limit} at most.`,
+  },
   /** What a delegate of no project is told of its `$TMPDIR/outputs/`: nothing there is collected. */
   scratchOutputsNoProject:
     "This item belongs to no project, so nothing in $TMPDIR is collected: what your parent needs goes in your report or a commit.",
