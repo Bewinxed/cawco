@@ -31,7 +31,12 @@
  * point (`elementFromPoint`) and the pointer-events up its ancestors.
  */
 import type { CDPSession, Frame, Page } from "playwright-core";
-import { type Reply, type Seen, until } from "../../scratch-fleet";
+import {
+  heardToolAnswer,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import { COMPOSER, type Kit, open, pressAt, type Spec, settle } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
@@ -70,6 +75,8 @@ const PAGE = `<!doctype html>
 const asks = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
 const answered = new Map<string, string>();
+/** The calls Claude Code moved to the background, by marker: the task each runs as. */
+const movedCalls = new Map<string, string>();
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
@@ -82,8 +89,15 @@ const respond = (request: Seen): Reply => {
     return text("ok");
   }
   if (issued.has(marker)) {
+    // A call Claude Code moved to the background (a send reached the
+    // session while it ran) answers in a later turn's task notification.
     if (!answered.has(marker)) {
-      answered.set(marker, request.last);
+      const said = heardToolAnswer(request, movedCalls.get(marker));
+      if (said.kind === "moved") {
+        movedCalls.set(marker, said.task);
+      } else {
+        answered.set(marker, said.text);
+      }
     }
     return text("done");
   }
@@ -152,8 +166,9 @@ const hitAt = (page: Page, x: number, y: number) =>
       const chain: string[] = [];
       for (let el = hit; el; el = el.parentElement) {
         const s = getComputedStyle(el);
+        const named = el.getAttribute("aria-label");
         chain.push(
-          `${el.localName}${el.id ? `#${el.id}` : ""}${el.classList.length ? `.${[...el.classList].slice(0, 2).join(".")}` : ""}[pe=${s.pointerEvents},ta=${s.touchAction}]`
+          `${el.localName}${el.id ? `#${el.id}` : ""}${el.classList.length ? `.${[...el.classList].slice(0, 2).join(".")}` : ""}${named ? `"${named}"` : ""}[pe=${s.pointerEvents},ta=${s.touchAction}]`
         );
       }
       return chain.slice(0, 10).join(" < ");
@@ -707,7 +722,33 @@ const iPhoneEngine = async (kit: Kit, url: string) => {
     (count) => count === 0,
     5000
   ).catch(() => 1);
-  kit.check("2: Close puts the drawer away", closed === 0, `hit ${closeHit}`);
+  const left =
+    closed === 0
+      ? ""
+      : await page.evaluate((sel) => {
+          const sheet = document.querySelector<HTMLElement>(sel);
+          const style = sheet ? getComputedStyle(sheet) : null;
+          return `${[...document.querySelectorAll(`${sel} button`)]
+            .map(
+              (el) =>
+                `${el.getAttribute("aria-label") ?? el.textContent?.trim()}${el.hasAttribute("disabled") ? " (disabled)" : ""}${el.getAttribute("aria-busy") ? " (busy)" : ""}`
+            )
+            .slice(0, 12)
+            .join(
+              ", "
+            )}; state ${sheet?.getAttribute("data-state")}, drawn ${sheet?.checkVisibility()}, transform ${style?.transform}, animations ${sheet
+            ?.getAnimations()
+            .map(
+              (run) =>
+                `${(run as CSSAnimation).animationName ?? "?"} ${run.playState}`
+            )
+            .join(" ")}`;
+        }, SHEET);
+  kit.check(
+    "2: Close puts the drawer away",
+    closed === 0,
+    `hit ${closeHit}${left ? `; the drawer still holds ${left}` : ""}`
+  );
   kit.check(
     "the page said no error (WebKit)",
     said.length === 0,
