@@ -81,10 +81,12 @@ import {
 } from "@cawco/core/resumable-download";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { readRecord } from "@cawco/core/state-file";
 import { ArchiveFetchingShape } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { downloadWords } from "@cawco/core/words/downloads";
 import { updatesWords } from "@cawco/core/words/updates";
+import { z } from "zod";
 import { leaveRetiringKeepers } from "./boundary";
 import {
   HELPER_START_MS,
@@ -111,6 +113,17 @@ import { heldSessions } from "./sessiond-client";
 const fetch = provenFetch;
 
 const POLL_MS = 60_000;
+/**
+ * The update state's fields earlier builds wrote that nothing reads now
+ * ({@link BinaryUpdater}'s `#load`), read on their own: the state's schema
+ * leaves out every key it does not declare as it reads (core
+ * binary-installation.ts `readUpdateState`), so read through it they are
+ * never there.
+ */
+const RETIRED_FIELDS = z.object({
+  keeperOwed: z.unknown().optional(),
+  unseen: z.unknown().optional(),
+});
 /** The lease of the fence an install raises: the helper restarts the services well within it. */
 const INSTALL_FENCE_MS = 10 * 60_000;
 /** How many of the last commands' ids the state keeps, so one delivered again is not acted on twice. */
@@ -712,17 +725,16 @@ export class BinaryUpdater {
     // 542c392aa). A state that held either is written back without it, so
     // the update helper, which lays its writes over the file, does not bring
     // it back; the hub stores what the agent reports.
-    const { keeperOwed, unseen, ...saved } = ((await readUpdateState()) ??
-      this.#state) as BinaryUpdateState & {
-      keeperOwed?: string;
-      unseen?: boolean;
-    };
+    const [saved, retired] = await Promise.all([
+      readUpdateState(),
+      readRecord(updateStatePath(), RETIRED_FIELDS),
+    ]);
     this.#state = {
-      ...saved,
+      ...(saved ?? this.#state),
       installedVersion: runtimeVersion,
       hostsHub: this.#hostsHub,
     };
-    if (keeperOwed !== undefined || unseen !== undefined) {
+    if (retired && Object.keys(retired).length > 0) {
       await writeJsonAtomic(updateStatePath(), this.#state);
     }
     this.#report(this.#state);
