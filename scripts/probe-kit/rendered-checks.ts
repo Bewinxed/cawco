@@ -3505,6 +3505,13 @@ function readInPage(args: InPageArgs): InPageRead {
             "nested-radius",
             el,
             `${inner.what} ${corner.at} corner is ${px(corner.drawn)} round, ${px(corner.dx)}×${px(corner.dy)} in from ${selectorOf(outer)}'s ${px(corner.big)} corner: concentric is ${px(corner.want)}`
+          );
+          break;
+        }
+      }
+    }
+  }
+
   // Words over words: two text runs drawn, a reader's or not (an
   // aria-hidden ruler's figures run into each other as readily), whose line
   // boxes cross by 2px sideways and a third of the shorter's height. A run
