@@ -59,6 +59,7 @@ import {
 import { homedir } from "node:os";
 import { delimiter, dirname } from "node:path";
 import type { MachineCapability, WorkspaceTool } from "./capabilities";
+import type { ToolPlatform } from "./tools";
 import {
   systemProgramMissing,
   workspaceNeedsRefusal,
@@ -82,7 +83,7 @@ interface Program {
   /** What needs it, in the words a refusal names it by. */
   readonly for: string;
   /** The OS it is run on, when only one. */
-  readonly os?: "darwin" | "linux";
+  readonly os?: ToolPlatform;
   /** The package that ships it, for the install command of a {@link before} program. */
   readonly package?: string;
   /**
@@ -207,6 +208,15 @@ const PROGRAMS = {
   ssh: { for: "the probe kit's SSH checks" },
   sshd: { for: "the probe kit's SSH targets" },
   tail: { for: "the probe kit's SSH box" },
+  /**
+   * Windows' own, for ending a process with every process it started:
+   * "/T Ends the specified process and any child processes started by it"
+   * (learn.microsoft.com/windows-server/administration/windows-commands/taskkill).
+   */
+  taskkill: {
+    for: "ending a stopped Antigravity CLI image run's whole process tree",
+    os: "win32",
+  },
   true: { for: "the check for a macOS sandbox around CawCo" },
   uname: { for: "the probe kit's SSH target" },
   "xcode-select": {

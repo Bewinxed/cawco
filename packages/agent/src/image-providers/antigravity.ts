@@ -4,6 +4,7 @@ import { extname, isAbsolute, join, relative, resolve } from "node:path";
 import { toolSpec } from "@cawco/core";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
+import { systemProgram } from "@cawco/core/workspace-needs";
 import { z } from "zod";
 import { probeToolStatus, toolBinary, toolEnv } from "../tools";
 import { ratioOf } from "./aspect";
@@ -182,9 +183,11 @@ const runAgy = async (
   const cwd = await mkdtemp(join(tmpdir(), "cawco-agy-image-"));
   const since = Date.now() - 1000;
   try {
-    // Its own process group, ended whole when the orchestration stops
-    // waiting: agy starts a language server of its own beside it. Windows
-    // has no process groups to signal: the run alone is ended there.
+    // Its whole process tree is ended when the orchestration stops
+    // waiting: agy starts a language server of its own beside it. On Linux
+    // and macOS it leads a process group of its own, signalled whole; on
+    // Windows, which has no process groups, `taskkill /T` ends the process
+    // and every process it started.
     const grouped = platform() !== "win32";
     const child = Bun.spawn(
       [
@@ -204,14 +207,22 @@ const runAgy = async (
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",
-        ...(grouped ? { detached: true } : { signal }),
+        ...(grouped ? { detached: true } : {}),
       }
     );
     const leader = spawnedPid(child);
     const stop = () => {
-      if (grouped && leader !== undefined && child.exitCode === null) {
-        signalGroup(leader, "SIGTERM");
+      if (leader === undefined || child.exitCode !== null) {
+        return;
       }
+      if (grouped) {
+        signalGroup(leader, "SIGTERM");
+        return;
+      }
+      Bun.spawn(
+        [systemProgram("taskkill"), "/PID", String(leader), "/T", "/F"],
+        { stdin: "ignore", stdout: "ignore", stderr: "ignore" }
+      );
     };
     signal.addEventListener("abort", stop, { once: true });
     const [code, out, err] = await Promise.all([
