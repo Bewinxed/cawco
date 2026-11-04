@@ -39,10 +39,10 @@
       class={cn(
         /* Solid ink, never coral (DESIGN.md, Tooltip): the ink fill, the text
          on it, meta type, 8px radius. It fades in over --dur-fade settling
-         2px toward its trigger (`--kit-tip-from`, by its side); it leaves at
+         `--tip-rise` toward its trigger (`--kit-tip-from`, by its side); it leaves at
          once, so moving on is never held up by the last one. With reduced
          motion only the fade runs. */
-        "type-meta rounded-sm bg-ink-solid text-on-ink [--kit-tip-from:0_2px] data-[state$=open]:animate-tip-fade motion-safe:data-[state$=open]:animate-tip-in data-[side=bottom]:[--kit-tip-from:0_-2px] data-[side=left]:[--kit-tip-from:2px_0] data-[side=right]:[--kit-tip-from:-2px_0]",
+        "type-meta rounded-sm bg-ink-solid text-on-ink [--kit-tip-from:0_var(--tip-rise)] data-[state$=open]:animate-tip-fade motion-safe:data-[state$=open]:animate-tip-in data-[side=bottom]:[--kit-tip-from:0_calc(-1*var(--tip-rise))] data-[side=left]:[--kit-tip-from:var(--tip-rise)_0] data-[side=right]:[--kit-tip-from:calc(-1*var(--tip-rise))_0]",
         "z-(--layer-float) inline-flex w-fit max-w-80 origin-(--bits-tooltip-content-transform-origin) items-center gap-1.5 px-2.5 py-1.5",
         className
       )}

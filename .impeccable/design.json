@@ -2764,6 +2764,11 @@
         "purpose": "How far every surface, row or part travels as it comes or goes (The Enter Rule): a floating surface or toast from its edge, a list swap's rows sideways, a keyframe's rise."
       },
       {
+        "name": "tip-rise",
+        "value": "2px",
+        "purpose": "How far a tooltip settles toward its trigger as it fades in: The Enter Rule's one exception, short because it is seen tens of times a day (The Frequency Rule)."
+      },
+      {
         "name": "swap-nudge",
         "value": "40px",
         "purpose": "How far a view handing its place to the next along a strip travels as it comes in or goes: a tab switch's transcript and its composer's words, from the side of the tab it came from. A cue of which way it went, not a page turn."
@@ -3148,7 +3153,7 @@
       },
       {
         "name": "The Enter Rule",
-        "body": "Nothing appears from nothing. A surface arrives from `--pop-scale` or `--pop-rise` short of its place, fading in, from its trigger's side (a dialog rises `--pop-rise`); every travel is `--pop-rise`, and a view handing its place along a strip comes `--swap-nudge` from its side. A press scales to `--press-scale`. Entrances and exits are `transform` and `opacity` (a `clip-path` where a box opens out of another, `height` only for a disclosure), and no keyframe writes a length (lint `house/no-raw-motion`). The tooltip is the one exception, because it is seen tens of times a day (The Frequency Rule): it fades in over `--dur-fade` settling 2px toward its trigger, and leaves at once.",
+        "body": "Nothing appears from nothing. A surface arrives from `--pop-scale` or `--pop-rise` short of its place, fading in, from its trigger's side (a dialog rises `--pop-rise`); every travel is `--pop-rise`, and a view handing its place along a strip comes `--swap-nudge` from its side. A press scales to `--press-scale`. Entrances and exits are `transform` and `opacity` (a `clip-path` where a box opens out of another, `height` only for a disclosure), and no keyframe writes a length (lint `house/no-raw-motion`). The tooltip is the one exception, because it is seen tens of times a day (The Frequency Rule): it fades in over `--dur-fade` settling `--tip-rise` toward its trigger, and leaves at once.",
         "section": "overview"
       },
       {

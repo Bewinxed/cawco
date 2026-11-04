@@ -672,6 +672,7 @@ export type TokenSize =
   | "motion.deck-step"
   | "motion.ride-fade"
   | "motion.pop-rise"
+  | "motion.tip-rise"
   | "motion.swap-nudge"
   | "motion.fold-blur"
   | "motion.part-blur"

@@ -7420,6 +7420,14 @@
       },
       "$description": "How far every surface, row or part travels as it comes or goes (DESIGN.md, The Enter Rule): a floating surface or toast from its edge, a list swap's rows sideways, a keyframe's rise."
     },
+    "tip-rise": {
+      "$type": "dimension",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
+      "$description": "How far a tooltip settles toward its trigger as it fades in: The Enter Rule's one exception, short because it is seen tens of times a day (The Frequency Rule)."
+    },
     "swap-nudge": {
       "$type": "dimension",
       "$value": {

@@ -1446,6 +1446,8 @@ public enum Motion {
     public static let rideFade: Double = 14
     /// How far every surface, row or part travels as it comes or goes (DESIGN.md, The Enter Rule): a floating surface or toast from its edge, a list swap's rows sideways, a keyframe's rise.
     public static let popRise: Double = 8
+    /// How far a tooltip settles toward its trigger as it fades in: The Enter Rule's one exception, short because it is seen tens of times a day (The Frequency Rule).
+    public static let tipRise: Double = 2
     /// How far a view handing its place to the next along a strip travels as it comes in or goes: a tab switch's transcript and its composer's words, from the side of the tab it came from. A cue of which way it went, not a page turn.
     public static let swapNudge: Double = 40
     /// How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr.
