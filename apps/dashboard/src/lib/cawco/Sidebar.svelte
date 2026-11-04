@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Activity } from "@cawco/core/activity";
   import { topsIn } from "@cawco/core/project-membership";
+  import { projectEndWords } from "@cawco/core/words/project-ends";
   import { sidebarWords } from "@cawco/core/words/sidebar";
   /**
    * Fleet sidebar — reimplemented on top of the shadcn-svelte sidebar primitives
@@ -40,6 +41,7 @@
     IconSearch,
     IconSettings,
     IconSort,
+    IconTrash,
   } from "#lib/icons.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import { page } from "$app/state";
@@ -53,10 +55,8 @@
   } from "./client.svelte";
   import { LAST_KEY as CONFIG_LAST_KEY, SECTIONS } from "./config/sections";
   import FolderMenu from "./FolderMenu.svelte";
-  import ForgetProjectTray from "./ForgetProjectTray.svelte";
   import { files, filesCount } from "./files/files.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
-  import { forgetAtRail } from "./forget.svelte";
   import Home from "./home/Home.svelte";
   import HomeRecent from "./home/HomeRecent.svelte";
   import { home, lastAt } from "./home/home-state.svelte";
@@ -79,7 +79,9 @@
   } from "./older";
   import { openTrees, type TreeList } from "./open-trees.svelte";
   import PresenceMenu from "./PresenceMenu.svelte";
+  import ProjectEndTray from "./ProjectEndTray.svelte";
   import ProjectMark from "./ProjectMark.svelte";
+  import { endAtRail } from "./project-end.svelte";
   import { folderOf } from "./projects";
   import { type RailSort, rail } from "./rail.svelte";
   import SessionHover from "./SessionHover.svelte";
@@ -1085,6 +1087,24 @@
                 </DropdownMenu.Group>
               </DropdownMenu.Content>
             </DropdownMenu.Root>
+            <!-- Where a forgotten project waits, from the list it left
+                 (Forgotten projects, /project/forgotten). -->
+            <Tip label={projectEndWords.forgottenTitle}>
+              {#snippet children(tip)}
+                <Button
+                  {...tip}
+                  aria-current={path === "/project/forgotten"
+                    ? "page"
+                    : undefined}
+                  aria-label={projectEndWords.forgottenTitle}
+                  href="/project/forgotten"
+                  size="icon-sm"
+                  variant="ghost"
+                >
+                  <IconTrash />
+                </Button>
+              {/snippet}
+            </Tip>
             <Tip label="New project">
               {#snippet children(tip)}
                 <Button
@@ -1163,17 +1183,17 @@
                       {/snippet}
                     </Sidebar.MenuButton>
                   </FolderMenu>
-                  <!-- A forget asked from this row's menu, under it. -->
+                  <!-- An end asked from this row's menu, under it. -->
                   <div
-                    data-slot="sidebar-forget"
+                    data-slot="sidebar-end"
                     class="contents"
                     style:--ask-indent="var(--space-1)"
                     style:--ask-end="var(--space-1)"
                     style:--fault-indent="var(--space-2)"
                     style:--fault-end="var(--space-2)"
                   >
-                    <ForgetProjectTray
-                      at={forgetAtRail(project.id)}
+                    <ProjectEndTray
+                      at={endAtRail(project.id)}
                       parks
                       projectId={project.id}
                     />

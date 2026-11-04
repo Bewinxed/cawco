@@ -2,7 +2,7 @@
   /**
    * Caw off's tray: a job of stop-work.svelte.ts drawn as the pick section
    * (StopTrayPick), under his switch (CawLeadSwitch) or, reopened from where
-   * it parked, under the project's row (ForgetProjectTray). The job holds
+   * it parked, under the project's row (ProjectEndTray). The job holds
    * the work (DESIGN.md, The Work Outlives Its Surface Rule): Cancel or
    * Escape before the confirm drops the ask and Caw stays on; after it, Stop
    * waiting, Close or Escape puts the section away and the job parks

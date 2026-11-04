@@ -84,7 +84,7 @@
   {#if offJob.at === at}
     <CawOffTray job={offJob} />
     <!-- Put away here, the stops are said here while his settings stand
-         open; closed, on the project's row (ForgetProjectTray). -->
+         open; closed, on the project's row (ProjectEndTray). -->
     <StopParked {at} job={offJob} />
   {/if}
 {/if}

@@ -33,11 +33,11 @@
    * and More holding its setup (Finish setting it up while it is not set
    * up, Change how it runs once it is: the project-setup skill's one page,
    * through Caw), Project details…, Caw's settings (CawPanel, off More: a popover on a desk, the
-   * bottom sheet on touch), Spend and Forget
+   * bottom sheet on touch), Spend, then Forget and Delete
    * (and, under 640px, Spin off, New task, Filter tasks… and Ask Caw for a
    * view), each with its glyph. Nothing in the head is on the coral: no view
    * of a project is for asking Caw (One prominent action, trailing). One tray
-   * stands under the head at a time: the details or a forget.
+   * stands under the head at a time: the details or an end.
    *
    * Under 640px the capsule holds More alone: Ask Caw is the "+" of the
    * page's views bar (ViewBar), which opens Caw's panel as this one does,
@@ -50,17 +50,18 @@
    */
   import { commonWords } from "@cawco/core/words/common";
   import { projectWords } from "@cawco/core/words/project";
+  import { projectEndWords } from "@cawco/core/words/project-ends";
   import { viewsWords } from "@cawco/core/words/views";
   import { mergeProps } from "bits-ui";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
   import { editProject } from "#lib/cawco/client.svelte.js";
-  import ForgetProjectTray from "#lib/cawco/ForgetProjectTray.svelte";
-  import { forgetHost, forgetProject } from "#lib/cawco/forget.svelte.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
+  import ProjectEndTray from "#lib/cawco/ProjectEndTray.svelte";
+  import { askEnd, endHost } from "#lib/cawco/project-end.svelte.js";
   import { checkoutOf } from "#lib/cawco/projects.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { newSession, spawning } from "#lib/cawco/spawn/new-session.svelte.js";
@@ -73,6 +74,7 @@
   import {
     IconChatAdd,
     IconColumns,
+    IconDeleteForGood,
     IconFilter,
     IconFolder,
     IconFork,
@@ -133,8 +135,8 @@
     })
   );
   let more = $state<HTMLElement | null>(null);
-  /** The place a forget asked from this head's More stands (forget.svelte.ts). */
-  const forgetAt = $derived(`head:${project.id}`);
+  /** The place an end asked from this head's More stands (project-end.svelte.ts). */
+  const endAt = $derived(`head:${project.id}`);
 
   /** Its primary checkout; none while its one place is its folder on the hub. */
   const primary = $derived(checkoutOf(project));
@@ -160,21 +162,23 @@
 
   /**
    * The project's details stand under the head (ProjectDetails). One tray
-   * stands under the head at a time, so a forget asked here gives way to
-   * them and they give way to a forget.
+   * stands under the head at a time, so an end asked here gives way to
+   * them and they give way to an end.
    */
   const details = $derived(standing.has(project.id));
   /** The place that opens them: Escape and Done hand the focus back to it. */
   let placeLine = $state<HTMLButtonElement | null>(null);
 
   function openDetails(): void {
-    if (forgetHost.at === forgetAt) {
-      forgetHost.close();
+    if (endHost.at === endAt) {
+      endHost.close();
     }
-    // A forget's tray standing here gives way too; stops under way park.
-    const forgetting = stopWork.of("forget", project.id);
-    if (forgetting?.open && forgetting.at === forgetAt) {
-      stopWork.dismiss(forgetting);
+    // An end's tray standing here gives way too; stops under way park.
+    for (const kind of ["forget", "delete"] as const) {
+      const ending = stopWork.of(kind, project.id);
+      if (ending?.open && ending.at === endAt) {
+        stopWork.dismiss(ending);
+      }
     }
     standing.add(project.id);
   }
@@ -187,9 +191,9 @@
     }
   }
 
-  // A forget asked here: the details give way to it.
+  // An end asked here: the details give way to it.
   $effect.pre(() => {
-    if (forgetHost.at === forgetAt) {
+    if (endHost.at === endAt) {
       untrack(() => standing.delete(project.id));
     }
   });
@@ -461,14 +465,14 @@
             </DropdownMenu.Trigger>
           {/snippet}
         </Tip>
-        <!-- A forget asked here keeps the focus its tray took, and the New
+        <!-- An end asked here keeps the focus its tray took, and the New
              Session form a Spin off opened keeps the focus it took: the menu
              doesn't hand it back to More as it closes. -->
         <DropdownMenu.Content
           align="end"
           width="regular"
           onCloseAutoFocus={(event) => {
-            if (forgetHost.at === forgetAt || spawning.open) {
+            if (endHost.at === endAt || spawning.open) {
               event.preventDefault();
             }
           }}
@@ -533,16 +537,23 @@
             <IconUsage />
             <span>Spend</span>
           </DropdownMenu.Item>
-          <!-- The one destructive row, as every menu draws one: the house's
-                 destructive item, set apart at the end. -->
+          <!-- The project's two ends, as every menu draws its destructive
+               rows: the house's destructive item, set apart at the end. -->
           <DropdownMenu.Separator />
-          <!-- The forget unfolds under this head (forget.svelte.ts). -->
+          <!-- Each end unfolds under this head (project-end.svelte.ts). -->
           <DropdownMenu.Item
-            onSelect={() => forgetProject(project, forgetAt)}
+            onSelect={() => askEnd(project, endAt, "forget")}
             variant="destructive"
           >
             <IconTrash />
-            <span>{projectWords.forgetProject}</span>
+            <span>{projectEndWords.forgetProject}</span>
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            onSelect={() => askEnd(project, endAt, "delete")}
+            variant="destructive"
+          >
+            <IconDeleteForGood />
+            <span>{projectEndWords.deleteProject}</span>
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Root>
@@ -598,16 +609,12 @@
     {project}
   />
 {/if}
-<!-- A forget asked from More, under the head, from where its title starts. -->
+<!-- An end asked from More, under the head, from where its title starts. -->
 <!-- The tray on the page's gutters: 25px in at the start (18 under the desk
      line, DESIGN.md, Layout) and 18 at the end, so it never meets the screen. -->
-<div
-  data-slot="project-forget"
-  class="contents"
-  style:--ask-end="var(--space-5)"
->
-  <ForgetProjectTray
-    at={forgetAt}
+<div data-slot="project-end" class="contents" style:--ask-end="var(--space-5)">
+  <ProjectEndTray
+    at={endAt}
     projectId={project.id}
     class="tray-indent-space-7 max-w-128 max-desk:tray-indent-space-5"
   />

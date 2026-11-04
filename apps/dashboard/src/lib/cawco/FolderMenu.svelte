@@ -3,13 +3,16 @@
    * Right-click on a folder — the rail's header and the board's group card are
    * the same directory said twice, so they answer to the same menu. What it
    * offers depends on whether the directory is registered: an ad-hoc cwd is
-   * only somewhere work happens, and there is nothing to pin or to forget.
+   * only somewhere work happens, and there is nothing to pin, forget or
+   * delete.
    */
+  import { projectEndWords } from "@cawco/core/words/project-ends";
   import type { Snippet } from "svelte";
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import {
     IconCollapseOthers,
+    IconDeleteForGood,
     IconExternal,
     IconPalette,
     IconPin,
@@ -19,8 +22,8 @@
   import { goto } from "$app/navigation";
   import type { ProjectRow } from "./client.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
-  import { forgetAtRail, forgetHost, forgetProject } from "./forget.svelte";
   import { HUES } from "./identity";
+  import { askEnd, endAtRail, endHost } from "./project-end.svelte";
   import { rail } from "./rail.svelte";
 
   interface Props {
@@ -55,11 +58,11 @@
     {@render children()}
   </ContextMenu.Trigger>
 
-  <!-- A forget asked here keeps the focus its tray took, under the row:
+  <!-- An end asked here keeps the focus its tray took, under the row:
        the menu doesn't hand it back to the row as it closes. -->
   <ContextMenu.Content
     onCloseAutoFocus={(event) => {
-      if (project && forgetHost.at === forgetAtRail(project.id)) {
+      if (project && endHost.at === endAtRail(project.id)) {
         event.preventDefault();
       }
     }}
@@ -149,13 +152,20 @@
 
     {#if project}
       <ContextMenu.Separator />
-      <!-- The forget unfolds under this row (forget.svelte.ts). -->
+      <!-- Each end unfolds under this row (project-end.svelte.ts). -->
       <ContextMenu.Item
-        onSelect={() => forgetProject(project, forgetAtRail(project.id))}
+        onSelect={() => askEnd(project, endAtRail(project.id), "forget")}
         variant="destructive"
       >
         <IconTrash />
-        <span>Forget project…</span>
+        <span>{projectEndWords.forgetProject}</span>
+      </ContextMenu.Item>
+      <ContextMenu.Item
+        onSelect={() => askEnd(project, endAtRail(project.id), "delete")}
+        variant="destructive"
+      >
+        <IconDeleteForGood />
+        <span>{projectEndWords.deleteProject}</span>
       </ContextMenu.Item>
     {/if}
   </ContextMenu.Content>

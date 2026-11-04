@@ -1,0 +1,329 @@
+<script lang="ts">
+  /**
+   * Forgotten projects (`/project/forgotten`, from the glyph in the rail's
+   * Projects head): every project the hub's trash can bring back, newest
+   * first, one row each in fixed columns: its mark, its name, what it
+   * brings back, when it was forgotten, then Bring back and Delete….
+   *
+   * A project forgotten before the hub kept names has a name field where
+   * its name would stand; Bring back waits for a name, and Enter in the
+   * field brings it back. Bring back stays pending until the hub answers and
+   * lands in the project's page; refused, the hub's words stand under the
+   * row with Try again (kept through a reload, project-end.svelte.ts).
+   * Delete… asks under its row (AskHere), with the same files box as a live
+   * project's delete; once it goes, the row leaves and the rows below close
+   * up (motion/rows).
+   *
+   * Under the `forgotten` container width each row takes two lines: its
+   * name, then what it brings and when, the actions trailing under them.
+   *
+   * Its state arrives as props, so every state stands in a story
+   * (ForgottenProjects.stories.ts): `list` null while it is read,
+   * `bringing` and `asking` force a pending Bring back and a standing
+   * delete question.
+   */
+  import { detach } from "@cawco/core/detach";
+  import type { ForgottenProject } from "@cawco/core/forgotten-project";
+  import { projectEndWords } from "@cawco/core/words/project-ends";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Checkbox } from "#lib/components/ui/checkbox/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { IconFolder, IconTrash } from "#lib/icons.js";
+  import AskHere from "../AskHere.svelte";
+  import { Asker, type AskHereRequest } from "../ask-here.svelte";
+  import { unfold } from "../motion/fold.svelte";
+  import { reflow } from "../motion/rows.svelte";
+  import RowFault from "../RowFault.svelte";
+
+  let {
+    list,
+    unread = null,
+    reread,
+    bringBack,
+    remove,
+    refusalOf,
+    now = Date.now(),
+    bringing = null,
+    asking = null,
+    names = {},
+  }: {
+    /** What the hub lists, newest first; null while it is read. */
+    list: ForgottenProject[] | null;
+    /** The list could not be read: the hub's words, with Try again. */
+    unread?: string | null;
+    reread: () => unknown;
+    /** Brings one back (and opens its page); false when the hub refused, its words then kept for `refusalOf`. */
+    bringBack: (one: ForgottenProject, name?: string) => Promise<boolean>;
+    /** Deletes one for good; a refusal is thrown in the hub's words. */
+    remove: (one: ForgottenProject, fromDisk: boolean) => Promise<void>;
+    /** A refused Bring back's words for the row, or null. */
+    refusalOf: (id: string) => string | null;
+    /** The clock its dates are read against. */
+    now?: number;
+    /** A story's: the row whose Bring back is pending. */
+    bringing?: string | null;
+    /** A story's: the row whose delete question stands, its box as given. */
+    asking?: { id: string; fromDisk: boolean } | null;
+    /** A story's: names already typed into nameless rows, by id. */
+    names?: Record<string, string>;
+  } = $props();
+
+  /** The ledger's columns: mark, name, what it brings, when, the actions. */
+  const COLUMNS =
+    "var(--c-row-lead) minmax(0, 1fr) var(--c-forgotten-brings-w) var(--c-ledger-when-w) auto";
+  /** Under the container width: mark, then everything else under the name. */
+  const COLUMNS_NARROW = "var(--c-row-lead) minmax(0, 1fr)";
+  /** Three rows stand in while the list is read. */
+  const SKELETON_ROWS = [0, 1, 2];
+
+  const asker = new Asker<AskHereRequest>();
+  /** Delete's files box, for the question standing. */
+  let fromDisk = $state(false);
+  /** Names typed into nameless rows, by id. */
+  let typed = $state<Record<string, string>>({});
+  /** Rows whose Bring back is waiting on the hub. */
+  let pending = $state<string[]>([]);
+
+  const nameOf = (one: ForgottenProject): string =>
+    (typed[one.id] ?? names[one.id] ?? "").trim();
+  const keyOf = (one: ForgottenProject) => `${one.id}:${one.forgottenAt}`;
+
+  /** When it was forgotten: a time today, a day this year, else a date. */
+  function when(at: number): string {
+    const date = new Date(at);
+    const today = new Date(now);
+    if (date.toDateString() === today.toDateString()) {
+      return date.toLocaleTimeString(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+    return date.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      ...(date.getFullYear() === today.getFullYear()
+        ? {}
+        : { year: "numeric" }),
+    });
+  }
+
+  async function back(one: ForgottenProject): Promise<void> {
+    const name = one.name ?? nameOf(one);
+    if (!name || pending.includes(one.id)) {
+      return;
+    }
+    pending = [...pending, one.id];
+    try {
+      await bringBack(one, one.name === null ? name : undefined);
+    } finally {
+      pending = pending.filter((id) => id !== one.id);
+    }
+  }
+
+  function askDelete(one: ForgottenProject, box = false): void {
+    fromDisk = box;
+    const name = one.name ?? projectEndWords.unnamed;
+    detach(
+      asker.ask({
+        at: keyOf(one),
+        title: projectEndWords.deleteForgotten(name),
+        body: projectEndWords.deleteForgottenBody,
+        confirmLabel: projectEndWords.deletePlain,
+        pendingLabel: projectEndWords.deleting,
+        destructive: true,
+        run: () => remove(one, fromDisk),
+      }),
+      "delete forgotten"
+    );
+  }
+
+  // A story's standing question: asked as the story opens it.
+  $effect(() => {
+    const standing = asking;
+    const one = standing && list?.find((each) => each.id === standing.id);
+    if (standing && one) {
+      askDelete(one, standing.fromDisk);
+    }
+  });
+</script>
+
+<section
+  aria-label={projectEndWords.forgottenTitle}
+  class="@container/forgotten min-w-0"
+  data-forgotten
+>
+  {#if unread !== null}
+    <RowFault again={reread} reason={unread} />
+  {:else if list === null}
+    <!-- Rows where the list will stand, at a row's height each. -->
+    <div class="grid gap-space-1" aria-hidden="true">
+      {#each SKELETON_ROWS as row (row)}
+        <Skeleton height="control" radius="tile" />
+      {/each}
+    </div>
+  {:else if list.length === 0}
+    <EmptyState
+      icon={IconTrash}
+      line={projectEndWords.noneBody}
+      title={projectEndWords.noneTitle}
+    >
+      {#snippet action()}
+        <Button
+          href="/project/new"
+          label={projectEndWords.newProject}
+          size="sm"
+          variant="outline"
+        />
+      {/snippet}
+    </EmptyState>
+  {:else}
+    <ul
+      class="m-0 grid list-none grid-cols-(--wide-cols) gap-x-space-3 p-0 @max-forgotten/forgotten:grid-cols-(--narrow-cols)"
+      style:--wide-cols={COLUMNS}
+      style:--narrow-cols={COLUMNS_NARROW}
+      {@attach reflow()}
+    >
+      {#each list as one (keyOf(one))}
+        {@const named = one.name !== null}
+        {@const name = one.name ?? nameOf(one)}
+        {@const busy = pending.includes(one.id) || bringing === one.id}
+        {@const facts = projectEndWords.brings(one.brings)}
+        {@const forgot = when(one.forgottenAt)}
+        <li
+          class="col-span-full grid grid-cols-subgrid border-b border-border-hairline last:border-b-0"
+          data-flip
+          data-forgotten-row={one.id}
+        >
+          <div
+            data-slot="row"
+            class="mark-line col-span-full grid min-h-c-row-h grid-cols-subgrid items-center gap-y-space-1 py-space-1 @max-forgotten/forgotten:py-space-2"
+          >
+            <span
+              data-slot="mark"
+              class="grid place-items-center self-center text-ink-muted @max-forgotten/forgotten:row-span-3 @max-forgotten/forgotten:self-start @max-forgotten/forgotten:pt-space-2"
+              data-box
+            >
+              <IconFolder aria-hidden="true" class="size-icon-md" />
+            </span>
+            <div data-box data-slot="name" class="min-w-0">
+              {#if named}
+                <span
+                  class="block overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-row"
+                  title={one.name}>{one.name}</span
+                >
+              {:else}
+                <Input
+                  data-box
+                  aria-label={projectEndWords.nameLabel(one.id)}
+                  class="max-w-c-page-column-w"
+                  disabled={busy}
+                  maxlength={200}
+                  oninput={(event) => {
+                    typed[one.id] = event.currentTarget.value;
+                  }}
+                  onkeydown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      detach(back(one), "bring back");
+                    }
+                  }}
+                  placeholder={projectEndWords.namePlaceholder}
+                  value={typed[one.id] ?? names[one.id] ?? ""}
+                />
+              {/if}
+              {#if one.brings.tasksIn}
+                <span
+                  class="mt-space-row block overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted"
+                  >{projectEndWords.tasksIn(
+                    one.brings.tasksIn.name,
+                    one.brings.tasksIn.tasks
+                  )}</span
+                >
+              {/if}
+            </div>
+            <span
+              data-slot="brings"
+              class="overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted @max-forgotten/forgotten:hidden"
+              title={facts}>{facts}</span
+            >
+            <span
+              data-box
+              data-slot="when"
+              class="num overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted @max-forgotten/forgotten:hidden"
+              ><span class="sr-only">{projectEndWords.forgottenAt(forgot)}</span
+              ><span aria-hidden="true">{forgot}</span></span
+            >
+            <!-- Under the container width: what it brings and when, one line. -->
+            <span
+              data-slot="facts"
+              class="col-start-2 hidden overflow-clip type-meta text-ellipsis whitespace-nowrap text-ink-muted @max-forgotten/forgotten:block"
+              >{facts} · <span class="num">{forgot}</span></span
+            >
+            <div
+              data-box
+              data-slot="actions"
+              class="flex items-center justify-end gap-space-2 @max-forgotten/forgotten:col-start-2 @max-forgotten/forgotten:justify-start"
+            >
+              <Button
+                data-bring-back
+                disabled={!name}
+                label={projectEndWords.bringBack}
+                onclick={() => back(one)}
+                pending={busy}
+                pendingLabel={projectEndWords.bringingBack}
+                size="sm"
+                variant="outline"
+              />
+              <Button
+                data-delete-forgotten
+                disabled={busy}
+                label={projectEndWords.deleteRow}
+                onclick={() => askDelete(one)}
+                size="sm"
+                variant="ghost"
+              />
+            </div>
+          </div>
+          <RowFault
+            again={() => back(one)}
+            class="col-span-full"
+            indent="calc(var(--c-row-lead) + var(--space-3))"
+            reason={refusalOf(one.id)}
+          />
+          <AskHere
+            {asker}
+            at={keyOf(one)}
+            class="col-span-full pb-space-2"
+            indent="calc(var(--c-row-lead) + var(--space-3))"
+          >
+            <label
+              class="mark-line flex min-w-0 items-center gap-space-2 type-label text-ink-strong"
+            >
+              <Checkbox
+                data-box
+                checked={fromDisk}
+                onCheckedChange={(on) => {
+                  fromDisk = on === true;
+                }}
+              />
+              <span class="min-w-0">{projectEndWords.fromDisk}</span>
+            </label>
+            {#key fromDisk}
+              <p
+                class="m-0 ps-(--box-indent) type-meta text-pretty text-ink-muted"
+                style:--box-indent="calc(var(--icon-md) + var(--space-2))"
+                in:unfold
+              >
+                {fromDisk
+                  ? projectEndWords.checkoutsGo
+                  : projectEndWords.transcriptsStay}
+              </p>
+            {/key}
+          </AskHere>
+        </li>
+      {/each}
+    </ul>
+  {/if}
+</section>

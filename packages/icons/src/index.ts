@@ -312,6 +312,8 @@ export {
   default as IconTransfer,
 } from "~icons/solar/transfer-horizontal-bold-duotone";
 export { default as IconTrash } from "~icons/solar/trash-bin-minimalistic-bold-duotone";
+/** A project deleted for good: the bin with its lid's lines, beside Forget's plain bin. */
+export { default as IconDeleteForGood } from "~icons/solar/trash-bin-trash-bold-duotone";
 export { default as IconTuning } from "~icons/solar/tuning-2-bold-duotone";
 export { default as IconReset } from "~icons/solar/undo-left-bold-duotone";
 export { default as IconUser } from "~icons/solar/user-bold-duotone";

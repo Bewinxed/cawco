@@ -190,6 +190,7 @@
     "./words/project": "./src/words/project.ts",
     "./words/project-account": "./src/words/project-account.ts",
     "./words/project-trash": "./src/words/project-trash.ts",
+    "./words/project-ends": "./src/words/project-ends.ts",
     "./words/rules": "./src/words/rules.ts",
     "./words/sheet": "./src/words/sheet.ts",
     "./words/side": "./src/words/side.ts",
