@@ -97,12 +97,12 @@
   import ConnectNeedsChip from "./transcript/ConnectNeedsChip.svelte";
   import {
     ComposerDraft,
-    followSends,
     paneDrafts,
   } from "./transcript/composer-draft.svelte";
   import { composerFleet } from "./transcript/composer-fleet";
   import { connectSignIns } from "./transcript/connect-sign-ins.svelte";
   import FootFade from "./transcript/FootFade.svelte";
+  import { followSends } from "./transcript/follow-sends.svelte";
   import HeadFade from "./transcript/HeadFade.svelte";
   import { keepDraft } from "./transcript/keep-draft.svelte";
   import ProjectOffer from "./transcript/ProjectOffer.svelte";

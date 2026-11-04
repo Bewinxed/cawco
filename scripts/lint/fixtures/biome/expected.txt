@@ -47,3 +47,7 @@ spawn-names-env/planted.ts:5:21 spawn-names-env
 spawn-names-env/planted.ts:6:22 spawn-names-env
 spawn-names-env/planted.ts:7:26 spawn-names-env
 spawn-names-env/planted.ts:8:27 spawn-names-env
+reply-composer-no-fleet/cawco/transcript/planted.ts:3:1 reply-composer-no-fleet
+reply-composer-no-fleet/cawco/transcript/planted.ts:4:1 reply-composer-no-fleet
+reply-composer-no-fleet/cawco/transcript/planted.ts:5:1 reply-composer-no-fleet
+reply-composer-no-fleet/cawco/transcript/planted.ts:7:1 reply-composer-no-fleet

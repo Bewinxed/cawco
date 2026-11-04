@@ -382,6 +382,23 @@
       },
     },
     {
+      // A comment card and its reply composer load no fleet store
+      // (composer-weight's legs 1 and 2): the modules they draw from import
+      // the store's types alone and draw a session through the host's
+      // markdown fleet; what reads the store lives in modules only a
+      // conversation imports (transcript/composer-fleet.ts,
+      // follow-sends.svelte.ts). Refused by
+      // scripts/lint/reply-composer-no-fleet.grit.
+      "includes": [
+        "apps/dashboard/src/lib/cawco/transcript/Composer.svelte",
+        "apps/dashboard/src/lib/cawco/transcript/composer-draft.svelte.ts",
+        "apps/dashboard/src/lib/cawco/transcript/rows.ts",
+        "apps/dashboard/src/lib/cawco/preview/CommentComposer.svelte",
+        "apps/dashboard/src/lib/cawco/preview/PinCard.svelte",
+      ],
+      "plugins": ["./scripts/lint/reply-composer-no-fleet.grit"],
+    },
+    {
       // A sheet mounts the piece, not the app around it (design-explore
       // skill): a story, a sheet's fixture folder (`<piece>/preview/`) and a
       // folder preview's source import none of the live shell. The

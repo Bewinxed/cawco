@@ -38,6 +38,7 @@
    * anywhere on it opens the whole thread (PinFloat `onpress`).
    */
   import type { CommentAttachment, Pin } from "@cawco/core/comments";
+  import { referenceHref } from "@cawco/core/references";
   import { artifactWords as words } from "@cawco/core/words/artifacts";
   import { commentWords as said } from "@cawco/core/words/comments";
   import { type Snippet, tick, untrack } from "svelte";
@@ -59,10 +60,10 @@
   import RowMenu from "../config/RowMenu.svelte";
   import { copyRefused, copyToClipboard } from "../copy";
   import MessageBody from "../MessageBody.svelte";
+  import { markdownFleetHere, plainReferenceOf } from "../markdown-fleet";
   import RowFault from "../RowFault.svelte";
   import { refusals } from "../refusals.svelte";
   import { keysChecked } from "../repeated-keys";
-  import SessionReference from "../SessionReference.svelte";
   import type { ComposerDraft } from "../transcript/composer-draft.svelte";
   import DocThumb from "../transcript/DocThumb.svelte";
   import Shot from "../transcript/Shot.svelte";
@@ -283,6 +284,20 @@
       }
     }
   });
+
+  /**
+   * The status line's session, drawn as the thread's references are
+   * (markdown-fleet.ts): its chip where a host hands in the fleet, its name
+   * on the stage, where the card loads no store.
+   */
+  const fleet = markdownFleetHere();
+  const sentTo = $derived(
+    session
+      ? (fleet()?.referenceOf ?? plainReferenceOf)(
+          referenceHref("session", session)
+        )
+      : null
+  );
 
   /** The card's one question: Delete, asked under its foot. */
   const asks = new Asker<AskHereRequest>();
@@ -632,7 +647,11 @@
         class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-1 gap-y-0 text-ink-muted type-meta"
       >
         <span>{said.sentTo}</span>
-        <SessionReference id={session} />
+        {#if sentTo?.draw === "element"}
+          <sentTo.element id={sentTo.id} kind={sentTo.kind} label={agentName} />
+        {:else}
+          <span>{agentName}</span>
+        {/if}
         {#if live}
           <span
             class="inline-flex items-center gap-space-1 mark-line"

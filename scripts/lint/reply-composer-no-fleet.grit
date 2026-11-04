@@ -1,0 +1,23 @@
+language js
+
+// A comment card and its reply composer load no fleet store
+// (client.svelte.ts): scripts/probe-kit/specs/composer-weight.ts weighs
+// them, legs 1 and 2. biome.jsonc hands this plugin the modules they draw
+// from. Those import the store's types alone (`import type`, which leaves
+// nothing in the built module), and never the session chip
+// (SessionReference.svelte, which reads the store): a session is drawn
+// through the host's markdown fleet (markdown-fleet.ts `referenceOf`). What
+// reads the store lives in a module only a conversation imports
+// (transcript/composer-fleet.ts, transcript/follow-sends.svelte.ts).
+// A value import of either pulled the store, Caw's face and the harness
+// block into every comment card (b5d9505f9 PinCard, 234e5ef19 composer-draft).
+JsImport() as $hit where {
+  or {
+    and {
+      $hit <: r"[\s\S]*[\"'](?:[^\"']*/cawco/|\.\.?/)client\.svelte(?:\.js)?[\"'][\s\S]*",
+      $hit <: not r"^import\s+type\b[\s\S]*"
+    },
+    $hit <: r"[\s\S]*[\"'][^\"']*SessionReference\.svelte[\"'][\s\S]*"
+  },
+  register_diagnostic(span=$hit, message="A comment card and its reply composer load no fleet store: import its types alone (`import type`), draw a session through the markdown fleet (markdown-fleet.ts referenceOf), and put what reads the store in a module only a conversation imports (transcript/composer-fleet.ts, follow-sends.svelte.ts).")
+}
