@@ -473,9 +473,11 @@ const warn = (message: string): void => {
  * The bounds of a carry's steps ({@link SessionSupervisor.carrySessions}):
  * reading what the keepers hold, ending a process between turns (Claude
  * Code's stdin EOF and the SDK's ~2 s grace, sessiond-client.ts
- * `sessiondBridge`), and moving its entries within one disk. Together under
- * the hub's 120 s for the whole carry (hub `CARRY_TIMEOUT_MS`), so the hub
- * always hears the machine's own reason, never "not answering". Ours.
+ * `sessiondBridge`) and what its background tasks run in its workspace
+ * (boundary.ts `endSessionWork`, at most its 5 s grace and 2 s kill wait),
+ * and moving its entries within one disk. Together under the hub's 120 s
+ * for the whole carry (hub `CARRY_TIMEOUT_MS`), so the hub always hears the
+ * machine's own reason, never "not answering". Ours.
  */
 /** How often a start waiting for memory measures the room again. Ours: the readings span 10 s, and a start held a few seconds past the room's return costs nothing. */
 const ROOM_POLL_MS = 3000;
@@ -2548,7 +2550,12 @@ export class SessionSupervisor {
    * `failed` when the stop did not end in time and its keeper does not report
    * the process gone. Work it holds for later keeps it `live` (`later`),
    * unless the request says `endLater`: then what that work is goes into
-   * `ended` first, and the process ends with it.
+   * `ended` first, and the process ends with it, and so does everything its
+   * background tasks run, as a stop of it ends that ({@link #stop},
+   * {@link #endWork}): in a workspace a task's command runs inside the
+   * boundary, which the CLI's end never reaches, and the session is told on
+   * its new account that the move ended it (hub server.ts
+   * `endedByMoveWords`).
    */
   async #stopForCarry(
     request: CarrySessionRequest,
@@ -2565,9 +2572,11 @@ export class SessionSupervisor {
         ...(awake.later ? { later: true as const } : {}),
       };
     }
+    let endsTasks = false;
     if (awake && running.endedForMove) {
       const work = await running.endedForMove();
       ended.set(instanceId, work);
+      endsTasks = work.tasks.length > 0;
       console.info(
         `[carry] ${instanceId}: the move waited its bound for ${awake.why}; its process ends with ${work.tasks.length} background task(s) and ${work.wakeups} one-time wake-up(s), which the session is told of on the new account`
       );
@@ -2593,6 +2602,9 @@ export class SessionSupervisor {
         console.info(
           `[carry] ${instanceId}: its process ended between turns in ${Date.now() - at} ms`
         );
+        if (endsTasks) {
+          await this.#endWork(instanceId, "moved");
+        }
         return;
       case "unanswered":
         console.warn(
@@ -2609,6 +2621,9 @@ export class SessionSupervisor {
       console.info(
         `[carry] ${instanceId}: its keeper reports its process gone, so its conversation is carried`
       );
+      if (endsTasks) {
+        await this.#endWork(instanceId, "moved");
+      }
       return;
     }
     return {
@@ -5073,10 +5088,11 @@ export class SessionSupervisor {
 
   /**
    * Ends everything session `instanceId` left running in a workspace
-   * (boundary.ts {@link endSessionWork}): an interrupt or a stop of it, or
-   * the settle of a workspace whose items have all ended
-   * ({@link endFinishedWork}), leaves nothing of its running, on every
-   * harness. Its workspace is `named` when the hub names it, else the one
+   * (boundary.ts {@link endSessionWork}): an interrupt or a stop of it, a
+   * move that ends its background tasks with its process
+   * ({@link #stopForCarry}), or the settle of a workspace whose items have
+   * all ended ({@link endFinishedWork}), leaves nothing of its running, on
+   * every harness. Its workspace is `named` when the hub names it, else the one
    * its last start or attach here ran it in, else the one whose clone holds
    * its directory (`cwd` as its stop names it, or as it was started here).
    * Said in the log; a reading that fails is said, and the interrupt or stop
@@ -5084,7 +5100,7 @@ export class SessionSupervisor {
    */
   async #endWork(
     instanceId: string,
-    why: "interrupted" | "stopped" | "finished",
+    why: "interrupted" | "stopped" | "finished" | "moved",
     cwd?: string,
     named?: string
   ): Promise<void> {
