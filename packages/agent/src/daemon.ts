@@ -171,15 +171,10 @@ import { setSectionMarker } from "@cawco/jsonl-parser";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import { accountStoreIds, forgetUnknownAccounts } from "./account-sweep";
-import {
-  accountReports,
-  claudeAuthNote,
-  claudeSignins,
-  onSigninsChanged,
-} from "./accounts";
+import { claudeAuthNote, onSigninsChanged } from "./accounts";
 import { type Activity, desktopReadable, watchActivity } from "./activity";
 import { recordAgentState } from "./agent-state";
-import { resolveClaudeExecutable, unlockKeychain } from "./auth";
+import { unlockKeychain } from "./auth";
 import { keepAwakeWhileWorking } from "./awake";
 import {
   BinaryUpdater,
@@ -2221,42 +2216,26 @@ const attach = (
     );
 
     /**
-     * Claude's report with its sign-ins and the machine's word on Claude read
-     * again, when either moved since the last one this connection sent (a
-     * login gone, a keychain locked or unlocked under the agent); the whole
-     * report read again when the announce could not read it, so its sign-ins
-     * still reach the hub, and while Claude Code is not installed or has gone
-     * from PATH since, so its installing or going is said. Nothing when there
-     * is nothing new to send.
+     * Claude's report read again whole (harnesses/claude.ts `detect`: its
+     * sign-ins, its version and the machine's word on Claude), when anything
+     * in it moved since the last one this connection sent: a login gone, a
+     * keychain locked or unlocked under the agent, Claude Code installed,
+     * gone from PATH or updated, or its version answered after the read
+     * that announced the machine stopped waiting for it (claude-version.ts:
+     * the read runs on to its answer). A report that kept the fields of an
+     * earlier read said "hasn't said its version yet" until the agent
+     * reconnected. Nothing when there is nothing new to send, or the read
+     * failed (said by `readPart`).
      */
     const rereadClaude = async (): Promise<
       MachineHarnessReport | undefined
     > => {
+      const claude = harness("claude");
+      const report = claude ? await readHarness(claude) : undefined;
       const old = reportedHarnesses.find(
-        (report) => report.harness === "claude"
+        (one) => one.harness === "claude"
       );
-      if (!old?.installed || resolveClaudeExecutable() === undefined) {
-        const claude = harness("claude");
-        const report = claude ? await readHarness(claude) : undefined;
-        return report && old && Bun.deepEquals(report, old)
-          ? undefined
-          : report;
-      }
-      const read = await readPart(
-        "the claude harness's sign-ins",
-        accountReports
-      );
-      if (!read) {
-        return;
-      }
-      const {
-        accounts: _accounts,
-        auth: _auth,
-        unreadAccounts: _unread,
-        ...rest
-      } = old;
-      const next = { ...rest, ...claudeSignins(read) };
-      return Bun.deepEquals(next, old) ? undefined : next;
+      return report && old && Bun.deepEquals(report, old) ? undefined : report;
     };
 
     /**

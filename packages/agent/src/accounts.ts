@@ -164,13 +164,21 @@ const signedInAs = (
 };
 
 /** The sentence for a sign-in read of `dir` that gave no answer in time, or ended before it answered. */
-const noAuthAnswer = (
+export const noAuthAnswer = (
   dir: string,
   { after, reason }: { after: number; reason: "timeout" | "dead" }
 ): string =>
   reason === "timeout"
     ? `The sign-in of ${dir} was not read within ${AUTH_STATUS_TIMEOUT_MS / 1000} s (the keychain looks and \`claude auth status\`; let go after ${after} ms).`
     : `The sign-in read of ${dir} ended before it answered (\`claude auth status\` or a keychain look ended by a signal), after ${after} ms. Its sign-in was not read.`;
+
+/**
+ * The sentence for a sign-in read of `dir` whose `claude auth status` was
+ * not run: the gate refused this machine's Claude Code, `why`
+ * (claude-version.ts `claudeToStart`).
+ */
+export const authStatusNotRun = (dir: string, why: string): string =>
+  `\`claude auth status\` was not run for ${dir}: ${why} Its sign-in was not read.`;
 
 /** `claude auth status --json`'s output read as an answer, or undefined when it is none (no JSON, no `loggedIn`). */
 const statusIn = (
@@ -227,7 +235,7 @@ const authStatusRead = async (
         kind: "answered",
         value: {
           kind: "unread",
-          why: `\`claude auth status\` was not run for ${dir}: ${error.message} Its sign-in was not read.`,
+          why: authStatusNotRun(dir, error.message),
         },
       };
     }

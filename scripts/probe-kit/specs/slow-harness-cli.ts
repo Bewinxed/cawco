@@ -13,19 +13,26 @@
  * the real Claude Code at once. Every call it gets goes to a log.
  *
  * (a) The agent reads online within 3 s of starting, before Claude's report.
- * (b) A Claude start before that report is refused in the hub's sentence
- *     (placement.ts `unreportedHarnessRefusal`), and nothing is left of it.
- * (c) The first read's `auth status` runs out of time: the agent says so
- *     once, naming the account's dir and how long it waited. The hub files
- *     no Claude report from it (it has no word on Claude yet), keeps no
- *     sign-in for the account, and still refuses a Claude start. The
- *     machine's capabilities arrive as their own update.
- * (d) The stand-in answers at once from here: Claude's report arrives on the
- *     agent's next read, the account reads signed in, and a Claude start is
- *     no longer refused for want of a report.
- * (e) The stand-in is slow again: the next read runs out of time, said once
- *     more, and the account still reads signed in, the machine still
- *     authenticated.
+ * (b) A Claude start before that report, naming its permission mode as the
+ *     dashboard's form does, is refused in the hub's sentence (placement.ts
+ *     `unreportedHarnessRefusal`), and nothing is left of it. (A start that
+ *     names none is refused for want of a mode first: the machine's modes
+ *     are not known yet, server.ts `settleMode`.)
+ * (c) The first read waits 5 s for `--version` and gets no answer, so it
+ *     runs no `auth status` (claude-version.ts `claudeToStart`): the agent
+ *     says once that the account's dir was not read, naming the dir and
+ *     why, and reports Claude refused for the version it hasn't said
+ *     (`versionRefusal`). The hub keeps no sign-in for the account, and a
+ *     Claude start is still refused. The machine's capabilities arrive as
+ *     their own update.
+ * (d) The stand-in answers at once from here, and the `--version` it was
+ *     already asked goes on to its answer: Claude's report on the agent's
+ *     next read carries that version and no refusal, the account reads
+ *     signed in, and a Claude start is no longer refused for want of a
+ *     report.
+ * (e) The stand-in is slow again: the next read's `auth status` runs out of
+ *     time, said once, naming the dir and how long it waited, and the
+ *     account still reads signed in, the machine still authenticated.
  * (f) Reconnect: the hub restarts, and the agent reads online within 3 s of
  *     the hub answering.
  * (g) A new agent process (what a binary update starts) reads online within
@@ -35,6 +42,11 @@
  */
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  authStatusNotRun,
+  noAuthAnswer,
+} from "../../../packages/agent/src/accounts";
+import { versionRefusal } from "../../../packages/agent/src/claude-version";
 import { type Bounded, readWithin } from "../../../packages/core/src/bounded";
 import { unhandled } from "../../../packages/core/src/unhandled";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
@@ -44,14 +56,26 @@ import type { Spec } from "../kit";
 
 const SLOW_S = 30;
 const ONLINE_MS = 3000;
-/** The agent's word for a dir whose `auth status` gave no answer (accounts.ts `AuthStatusUnanswered`). */
-const UNANSWERED =
-  /Claude Code did not answer `claude auth status` for (\S+): no answer within 20 s after (\d+) ms\./gu;
+/** How long a read waits for `claude --version` (claude-version.ts `VERSION_WAIT_MS`). */
+const VERSION_WAIT_MS = 5000;
+/** The machine's word on a Claude Code that hasn't said its version within the wait. */
+const VERSION_UNSAID =
+  versionRefusal({
+    kind: "unanswered",
+    after: VERSION_WAIT_MS,
+    reason: "timeout",
+  }) ?? "";
 
 interface AgentRow {
   auth: string;
   custody?: { state: string };
-  harnesses?: { harness: string; auth: string }[];
+  harnesses?: {
+    harness: string;
+    auth: string;
+    authReason?: string;
+    refused?: string;
+    version?: string;
+  }[];
   hostname: string;
   machineCapabilities?: { items: { id: string; available: boolean }[] };
   machineId: string;
@@ -82,16 +106,34 @@ esac
 exec "${real}" "$@"
 `;
 
-/** Every time the agent said the account's dir gave no answer: the dir and how long it waited. */
-const unanswered = async (
-  fleet: Fleet
-): Promise<{ dir: string; ms: number }[]> =>
-  [...(await fleet.logs("agent")).matchAll(UNANSWERED)]
-    .filter(
-      (match) =>
-        match[1] === join(fleet.home, ".cawco", "accounts", ACCOUNT, "claude")
-    )
-    .map((match) => ({ dir: match[1] as string, ms: Number(match[2]) }));
+/** The account's Claude dir, as the agent names it. */
+const accountDir = (fleet: Fleet): string =>
+  join(fleet.home, ".cawco", "accounts", ACCOUNT, "claude");
+
+/** The agent's lines on its sign-in reads (accounts.ts `unreadAccount`). */
+const signinLines = async (fleet: Fleet): Promise<string[]> =>
+  (await fleet.logs("agent"))
+    .split("\n")
+    .filter((line) => line.includes("[accounts] "));
+
+/** Every time the agent said the account's dir was not read because Claude Code hasn't said its version. */
+const notRun = async (fleet: Fleet): Promise<string[]> => {
+  const said = `[accounts] ${authStatusNotRun(accountDir(fleet), VERSION_UNSAID)}`;
+  return (await signinLines(fleet)).filter((line) => line.endsWith(said));
+};
+
+/** Every time the agent said the account's dir gave no answer in time, with how long it waited. */
+const unanswered = async (fleet: Fleet): Promise<{ ms: number }[]> =>
+  (await signinLines(fleet)).flatMap((line) => {
+    const waited = [...line.matchAll(/\d+/gu)]
+      .map((digits) => Number(digits[0]))
+      .find((ms) =>
+        line.endsWith(
+          `[accounts] ${noAuthAnswer(accountDir(fleet), { after: ms, reason: "timeout" })}`
+        )
+      );
+    return waited === undefined ? [] : [{ ms: waited }];
+  });
 
 /** Polls every 100 ms until `read` answers something; undefined past `ms`. */
 const poll = async <T>(
@@ -161,11 +203,14 @@ const drive = (fleet: Fleet) => {
         verb: "spawn",
         machineId: MACHINE,
         instanceId: id,
+        // The dashboard's form names a mode: one that names none is
+        // refused for it before anything else (server.ts `settleMode`).
         payload: {
           instanceId: id,
           cwd: fleet.workdir,
           harness: "claude",
           model: "claude-haiku-4-5",
+          permissionMode: "bypassPermissions",
         },
       })
     );
@@ -306,27 +351,34 @@ const timeouts = async ({
 }): Promise<void> => {
   const { row, claudeReport, signin, startClaude } = drive(fleet);
   {
-    // (c) The first read's `auth status` runs out of time.
-    const cut = await poll(async () => {
-      const said = await unanswered(fleet);
-      return said.length > 0 ? said : undefined;
+    // (c) The first read: `--version` gives no answer within its wait, so
+    // no `auth status` is run.
+    const first = await poll(async () => {
+      const said = await notRun(fleet);
+      const report = claudeReport(await row());
+      return said.length > 0 && report ? { said, report } : undefined;
     }, 45_000);
     await Bun.sleep(1000);
-    const cutOnce = await unanswered(fleet);
+    const notRunOnce = await notRun(fleet);
     check(
-      "(c) the agent says once that the account's dir did not answer, naming the dir and how long it waited",
-      cut !== undefined &&
-        cutOnce.length === 1 &&
-        (cutOnce[0]?.ms ?? 0) >= 20_000,
-      `said: ${JSON.stringify(cutOnce)}; the stand-in: ${await calls()}`
+      "(c) the first read runs no `auth status`: the agent says once that the account's dir was not read, naming the dir and the version Claude Code hasn't said",
+      first !== undefined && notRunOnce.length === 1,
+      `said: ${JSON.stringify(notRunOnce)}; the agent's sign-in lines: ${JSON.stringify(await signinLines(fleet))}; the stand-in: ${await calls()}`
+    );
+    const report = claudeReport(await row());
+    check(
+      "(c) the machine reports Claude refused for the version it hasn't said, and the hub keeps no sign-in for the account",
+      report?.refused === "version" &&
+        report.authReason === VERSION_UNSAID &&
+        signin() === undefined,
+      `report: ${JSON.stringify(report ?? null)}; sign-in: ${signin() ?? "none"}`
     );
     const afterCut = await startClaude();
     check(
-      "(c) the hub files no Claude report from it, keeps no sign-in for the account, and still refuses a Claude start",
-      claudeReport(await row()) === undefined &&
-        signin() === undefined &&
-        refusedWith(afterCut.said, expected),
-      `report: ${JSON.stringify(claudeReport(await row()) ?? null)}; sign-in: ${signin() ?? "none"}; said: ${heard(afterCut.said)}`
+      "(c) a Claude start is still refused, and nothing is left of it",
+      afterCut.said.kind === "answered" &&
+        fleet.instance(afterCut.id) === undefined,
+      `said: ${heard(afterCut.said)}; row: ${JSON.stringify(fleet.instance(afterCut.id) ?? null)}`
     );
     const caps = await poll(
       async () => (await row())?.machineCapabilities,
@@ -338,19 +390,26 @@ const timeouts = async ({
       JSON.stringify(caps?.items.map((item) => item.id) ?? null)
     );
 
-    // (d) The stand-in answers at once from here.
+    // (d) The stand-in answers at once from here; the `--version` already
+    // asked runs on to its answer, 30 s after it was asked.
     await rm(flag);
     const quick = Date.now();
     const answered = await poll(async () => {
       const agent = await row();
-      return claudeReport(agent) && signin() === "signed-in"
+      const claude = claudeReport(agent);
+      return claude?.version !== undefined && signin() === "signed-in"
         ? agent
         : undefined;
-    }, 120_000);
+    }, 150_000);
+    const claude = claudeReport(answered);
     check(
-      "(d) Claude's report arrives on the agent's next read once the stand-in answers, and the account reads signed in",
-      answered !== undefined && answered.auth === "authenticated",
-      `after ${Date.now() - quick} ms: report ${JSON.stringify(claudeReport(answered) ?? null)}; sign-in: ${signin() ?? "none"}; machine: ${answered?.auth ?? "-"}`
+      "(d) on the agent's next read Claude's report carries the version it said and no refusal, and the account reads signed in",
+      answered !== undefined &&
+        answered.auth === "authenticated" &&
+        claude?.version !== undefined &&
+        claude.refused === undefined &&
+        claude.authReason === undefined,
+      `after ${Date.now() - quick} ms: report ${JSON.stringify(claude ?? claudeReport(await row()) ?? null)}; sign-in: ${signin() ?? "none"}; machine: ${answered?.auth ?? "-"}; the stand-in: ${await calls()}`
     );
     const after = await startClaude();
     switch (after.said.kind) {
@@ -373,21 +432,24 @@ const timeouts = async ({
         unhandled("read", after.said);
     }
 
-    // (e) Slow again: the next read runs out of time.
+    // (e) Slow again: the next read's `auth status` runs out of time.
     await writeFile(flag, "");
-    const again = await poll(async () => {
+    const cut = await poll(async () => {
       const said = await unanswered(fleet);
-      return said.length > 1 ? said : undefined;
+      return said.length > 0 ? said : undefined;
     }, 120_000);
     await Bun.sleep(2000);
+    const cutOnce = await unanswered(fleet);
     const machine = await row();
     check(
-      "(e) the next read's timeout is said once more, and the account still reads signed in, the machine still authenticated",
-      again?.length === 2 &&
+      "(e) the next read's `auth status` runs out of time, said once, naming the dir and how long it waited; the account still reads signed in, the machine still authenticated",
+      cut !== undefined &&
+        cutOnce.length === 1 &&
+        (cutOnce[0]?.ms ?? 0) >= 20_000 &&
         signin() === "signed-in" &&
         machine?.auth === "authenticated" &&
         claudeReport(machine)?.auth === "authenticated",
-      `said: ${JSON.stringify(again ?? null)}; sign-in: ${signin() ?? "none"}; machine: ${machine?.auth}; report: ${JSON.stringify(claudeReport(machine) ?? null)}`
+      `said: ${JSON.stringify(cutOnce)}; sign-in: ${signin() ?? "none"}; machine: ${machine?.auth}; report: ${JSON.stringify(claudeReport(machine) ?? null)}; the stand-in: ${await calls()}`
     );
   }
 };
