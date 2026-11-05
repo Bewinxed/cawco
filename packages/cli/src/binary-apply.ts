@@ -8,9 +8,11 @@
  * the new build answers, hand the session keeper over to it (its keeper
  * starts beside the one before, which keeps every session it holds), and say
  * installed (the hub keeps this machine's new session starts only while it
- * says installing); then decide. Healthy, unbroken, for a minute (the
- * hub, the dashboard and this machine's agent on the new build, started after
- * the swap, the agent holding its session keeper connection) confirms it; not
+ * says installing); then decide. Healthy for a minute, unbroken by any
+ * fault of the build's own (the hub, the dashboard and this machine's agent
+ * on the new build, started after the swap, the agent holding its session
+ * keeper connection; a stretch the hub says nothing in pauses the minute,
+ * `TrialWatch`) confirms it; not
  * healthy by the trial's deadline, minutes after the swap and moved only by a
  * running migration, rolls it back. A rollback moves every link the apply
  * moved, restores the database copy, and restarts every unit, so the machine
@@ -117,7 +119,7 @@ const MIGRATION_CAP_MS = 30 * 60_000;
 const SERVICE_TIMEOUT_MS = 120_000;
 /** How long a build has to become healthy, from the swap or from a resumed helper's start, before it is rolled back (core {@link UPDATE_TRIAL_MS}). */
 const TRIAL_WINDOW_S = timerMs(UPDATE_TRIAL_MS) / 1000;
-/** How long the build must stay healthy, unbroken, to be confirmed: a minute. */
+/** How long the build must stay healthy, unbroken by its own fault, to be confirmed: a minute (the hub's silence pauses it, `TrialWatch`). */
 export const CONFIRM_MS = timerMs(60_000);
 
 const lockPath = lockFilePath;
@@ -847,7 +849,8 @@ async function settle(start: TrialMarker): Promise<HealthProblem | undefined> {
 
 /**
  * Whether the trial build is healthy (see probeHealth, with the agent holding
- * its keeper connection), unbroken for `holdMs` (0: the first time it answers):
+ * its keeper connection) for `holdMs` (0: the first time it answers), unbroken
+ * by a problem of its own; a stretch the hub says nothing in pauses the count:
  * `undefined` when it is, the problem that stood at the deadline when it is
  * not. A running migration moves the deadline, up to {@link MIGRATION_CAP_MS}.
  *
@@ -906,7 +909,16 @@ class TrialWatch {
   readonly #holdMs: number;
   readonly #started = Date.now();
   #attempts = 0;
-  #healthySince: number | undefined;
+  /**
+   * The healthy streak: how long it has held, when the last healthy answer
+   * came, and whether the hub has fallen silent since. A stretch the hub
+   * says nothing in (core binary-health.ts `hubSilent`: no answer, no
+   * connection, an answer not about the row) is the hub's, never the
+   * build's: it pauses the streak, and from the last healthy answer to the
+   * next counts neither toward the hold nor against it. A problem that is
+   * the build's own ends the streak.
+   */
+  #streak: { heldMs: number; lastAt: number; paused: boolean } | undefined;
   #lastSaid: { at: number; problem: string } | undefined;
   #migrating = false;
 
@@ -955,8 +967,19 @@ class TrialWatch {
   async #unhealthy(
     problem: HealthProblem
   ): Promise<{ done: boolean; problem?: HealthProblem }> {
-    this.#healthySince = undefined;
     const { version } = this.trial;
+    const streak = this.#streak;
+    if (!problem.hubSilent) {
+      this.#streak = undefined;
+    } else if (streak && !streak.paused && this.#holdMs) {
+      streak.paused = true;
+      await say(
+        `verify ${version}: the hub fell silent at ${this.#elapsed()} with ${(streak.heldMs / 1000).toFixed(1)}s of ${this.#holdMs / 1000}s held; the hold waits for it`
+      );
+    }
+    // Past the deadline the hub's silence decides as it always has: a
+    // rollback that is no verdict on the build (core binary-updates.ts
+    // `HUB_SILENT_TRIALS`).
     if (Date.now() / 1000 > (this.trial.decideBy ?? 0)) {
       await say(
         `verify ${version}: not healthy at its deadline, ${this.#elapsed()} after ${this.#attempts} attempts: ${problem.said}`
@@ -980,14 +1003,29 @@ class TrialWatch {
 
   async #healthy(): Promise<{ done: boolean }> {
     const { version } = this.trial;
-    if (this.#healthySince === undefined) {
-      this.#healthySince = Date.now();
+    const now = Date.now();
+    const streak = this.#streak;
+    if (streak === undefined) {
+      this.#streak = { heldMs: 0, lastAt: now, paused: false };
       this.#lastSaid = undefined;
       await say(
         `verify ${version}: healthy at ${this.#elapsed()}, attempt ${this.#attempts}${this.#holdMs ? `; confirming once it has held for ${this.#holdMs / 1000}s` : ""}`
       );
+    } else if (streak.paused) {
+      // The silent stretch, from the last healthy answer to this one, is the hub's.
+      await say(
+        `verify ${version}: the hub answered again at ${this.#elapsed()}, ${((now - streak.lastAt) / 1000).toFixed(1)}s after its last healthy answer, counted for nothing; ${(streak.heldMs / 1000).toFixed(1)}s of ${this.#holdMs / 1000}s held`
+      );
+      this.#streak = { ...streak, lastAt: now, paused: false };
+      this.#lastSaid = undefined;
+    } else {
+      this.#streak = {
+        ...streak,
+        heldMs: streak.heldMs + now - streak.lastAt,
+        lastAt: now,
+      };
     }
-    if (Date.now() - this.#healthySince < this.#holdMs) {
+    if ((this.#streak?.heldMs ?? 0) < this.#holdMs) {
       return { done: false };
     }
     if (this.#holdMs) {

@@ -20,6 +20,13 @@
  *     healthy and held for the confirmation's minute, never a rollback.
  * (b) Each of the probe's reads of the row waited out the proxy's hold:
  *     the hub was asked, slowly, and answered.
+ * (c) A trial again, the row answered at once, but {@link SILENT_AFTER_MS}
+ *     into the hold the hub falls silent for {@link SILENT_MS}: the proxy
+ *     answers the row 502, as a machine's SSH forward does when the hub
+ *     does not answer behind it (hub ssh-door.ts `unreachable`). The
+ *     silence pauses the hold and counts neither way: the build is
+ *     confirmed once its healthy time adds up to the minute, well before a
+ *     whole new minute after the hub came back would end.
  *
  *   bun scripts/probe-kit/run.ts slow-hub-trial
  */
@@ -40,6 +47,18 @@ const ROW_DELAY_MS = 4500;
 const TRIAL_S = 100;
 /** The longest the verification is waited on: past its deadline by the last probe's bound. */
 const VERIFY_WAIT_MS = (TRIAL_S + 45) * 1000;
+/** (c): how far into the hold the hub falls silent, and for how long. */
+const SILENT_AFTER_MS = 20_000;
+const SILENT_MS = 20_000;
+/**
+ * (c): the latest the confirmation may come after the hub answers again.
+ * The hold is a minute; held {@link SILENT_AFTER_MS} before the silence, the
+ * rest is ~40 s. A silence that reset the hold would need the whole minute.
+ */
+const CONFIRM_AFTER_SILENCE_MS = 50_000;
+
+/** What the SSH door answers when the hub does not answer behind it (hub ssh-door.ts `unreachable`). */
+const DOOR_UNREACHABLE = 502;
 
 interface AgentRow {
   build?: { startedAt?: number; version?: string };
@@ -78,9 +97,15 @@ const spec: Spec = {
       return;
     }
 
-    // The slow hub: the row held, everything else passed straight on.
+    // The slow hub: the row held, everything else passed straight on. In
+    // (c) the row is answered at once, but goes silent for a stretch.
     const rowPath = `/api/agents/${encodeURIComponent(MACHINE)}`;
     const rowReads: number[] = [];
+    let rowDelayMs = ROW_DELAY_MS;
+    let silence: { from: number; to: number } | "armed" | undefined;
+    let silentAnswers = 0;
+    /** When (c)'s silence ends, once its first read set it. */
+    let silenceEnd = Number.NaN;
     const proxy = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
@@ -89,8 +114,24 @@ const spec: Spec = {
         const url = new URL(request.url);
         const held = url.pathname === rowPath;
         const asked = performance.now();
+        if (held && silence === "armed") {
+          // The first read of (c) is the first healthy answer: the hold starts here.
+          silenceEnd = Date.now() + SILENT_AFTER_MS + SILENT_MS;
+          silence = { from: silenceEnd - SILENT_MS, to: silenceEnd };
+        }
+        if (
+          held &&
+          typeof silence === "object" &&
+          Date.now() >= silence.from &&
+          Date.now() < silence.to
+        ) {
+          silentAnswers += 1;
+          return new Response("The hub did not answer on its own port.\n", {
+            status: DOOR_UNREACHABLE,
+          });
+        }
         if (held) {
-          await Bun.sleep(ROW_DELAY_MS);
+          await Bun.sleep(rowDelayMs);
         }
         const answer = await fetch(
           `${fleet.base}${url.pathname}${url.search}`,
@@ -116,18 +157,8 @@ const spec: Spec = {
 
     // The helper's scratch data dir: the install names the proxy as its hub.
     const data = mkdtempSync(join(tmpdir(), "slow-hub-trial-"));
-    try {
-      const binary = join(data, "cawco", "binary");
-      mkdirSync(binary, { recursive: true });
-      writeFileSync(
-        join(binary, "installation.json"),
-        JSON.stringify({
-          hubUrl: proxy.url.origin,
-          installedVersion: version,
-          role: "agent",
-          root: binary,
-        })
-      );
+    /** One trial judged by the helper's own verification: its verdict, when it came, and what the helper said. */
+    const judge = async () => {
       const swappedAt = Math.floor(startedAt / 1000) - 1;
       const trial: TrialMarker = {
         version,
@@ -160,6 +191,9 @@ const spec: Spec = {
       ]);
       const lines = out.trimEnd().split("\n");
       const verdict = lines.findLast((line) => line.startsWith("VERDICT "));
+      const decidedAt = Number(
+        lines.findLast((line) => line.startsWith("DECIDED "))?.slice(8)
+      );
       const said = [
         ...lines.filter((line) => line.startsWith("update: ")).slice(-12),
         err.trim()
@@ -168,15 +202,48 @@ const spec: Spec = {
       ]
         .filter(Boolean)
         .join("\n    ");
+      return {
+        decidedAt,
+        said: `${ended ? (verdict ?? "no verdict") : `no verdict within ${VERIFY_WAIT_MS / 1000}s`}\n    ${said}`,
+        confirmed: ended && verdict === "VERDICT confirm",
+      };
+    };
+    try {
+      const binary = join(data, "cawco", "binary");
+      mkdirSync(binary, { recursive: true });
+      writeFileSync(
+        join(binary, "installation.json"),
+        JSON.stringify({
+          hubUrl: proxy.url.origin,
+          installedVersion: version,
+          role: "agent",
+          root: binary,
+        })
+      );
+      const slow = await judge();
       check(
         `(a) a hub that answers the row in ${ROW_DELAY_MS / 1000}s: the build whose agent registered is kept, never rolled back`,
-        ended && verdict === "VERDICT confirm",
-        `${ended ? (verdict ?? "no verdict") : `no verdict within ${VERIFY_WAIT_MS / 1000}s`}\n    ${said}`
+        slow.confirmed,
+        slow.said
       );
       check(
         `(b) every read of the row waited out the hub's ${ROW_DELAY_MS / 1000}s and was answered`,
         rowReads.length > 0 && rowReads.every((ms) => ms >= ROW_DELAY_MS),
         `${rowReads.length} reads answered, in ${rowReads.join(", ")} ms`
+      );
+
+      rowDelayMs = 0;
+      silence = "armed";
+      const paused = await judge();
+      const back = silenceEnd;
+      const afterBack = paused.decidedAt - back;
+      check(
+        `(c) the hub silent for ${SILENT_MS / 1000}s in the middle of the hold: the build is confirmed once its healthy time adds up to the minute, within ${CONFIRM_AFTER_SILENCE_MS / 1000}s of the hub answering again, not a whole new minute`,
+        paused.confirmed &&
+          silentAnswers >= SILENT_MS / 2000 &&
+          afterBack > 0 &&
+          afterBack < CONFIRM_AFTER_SILENCE_MS,
+        `${silentAnswers} reads answered ${DOOR_UNREACHABLE}; confirmed ${(afterBack / 1000).toFixed(1)}s after the hub answered again\n    ${paused.said}`
       );
     } finally {
       await proxy.stop(true);

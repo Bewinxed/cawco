@@ -9,8 +9,9 @@
  *
  *   bun scripts/probe-kit/trial-verify-child.ts '<trial marker JSON>'
  *
- * Its last line is `VERDICT confirm` or `VERDICT roll-back <problem JSON>`;
- * every line before it is the helper's own (`update: verify …`).
+ * Its last lines are `DECIDED <ms since the epoch>` and `VERDICT confirm`
+ * or `VERDICT roll-back <problem JSON>`; every line before them is the
+ * helper's own (`update: verify …`).
  */
 import { CONFIRM_MS, verify } from "../../packages/cli/src/binary-apply";
 import type { TrialMarker } from "../../packages/core/src/binary-installation";
@@ -21,6 +22,7 @@ if (!marker) {
 }
 const trial = JSON.parse(marker) as TrialMarker;
 const problem = (await verify(trial, 0)) ?? (await verify(trial, CONFIRM_MS));
+console.log(`DECIDED ${Date.now()}`);
 console.log(
   problem ? `VERDICT roll-back ${JSON.stringify(problem)}` : "VERDICT confirm"
 );
