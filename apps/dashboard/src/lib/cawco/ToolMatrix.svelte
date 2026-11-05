@@ -1,12 +1,15 @@
 <script lang="ts">
   import { machineLabel } from "@cawco/core/machine-names";
-  import type { ToolPolicy, ToolSpec } from "@cawco/core/tools";
+  import type { ToolPolicy, ToolSpec, ToolStatus } from "@cawco/core/tools";
   import { unhandled } from "@cawco/core/unhandled";
   import { toolWords } from "@cawco/core/words/tools";
+  import Check from "#lib/cawco/accounts/Check.svelte";
+  import SigninPanel from "#lib/cawco/accounts/SigninPanel.svelte";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
+  import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
+  import { Button, buttonVariants } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -23,6 +26,18 @@
   import NoMachines from "./config/NoMachines.svelte";
   import { EMPTY_LINES } from "./empty-asks";
   import MachineLedger from "./MachineLedger.svelte";
+  import NsPopover from "./spawn/NsPopover.svelte";
+  import NsPopoverGroup from "./spawn/NsPopoverGroup.svelte";
+  import {
+    dropToolSignin,
+    heldToolSignin,
+    openToolSignin,
+    reopenToolSignin,
+    showToolSignin,
+    signinOf,
+    toolSigninFlow,
+    toolSigninKey,
+  } from "./tool-signin.svelte";
   import { installTool, policyFor, setPolicy } from "./tools";
   import { TRY_AGAIN } from "./unanswered";
 
@@ -64,6 +79,65 @@
         (tool?.state === "installing" && tool.version !== undefined)
       );
     }).length;
+
+  /** A copy of the tool is there: installed, or being updated or refused with its version kept. */
+  const hasCopy = (tool: ToolStatus | undefined): boolean =>
+    tool?.state === "installed" ||
+    ((tool?.state === "installing" || tool?.state === "failed") &&
+      tool.version !== undefined);
+  /** Machines whose copy of a tool with its own sign-in reads signed in. */
+  const signedInOn = (spec: ToolSpec): number =>
+    machines.filter((machine) => {
+      const tool = machine.tools?.[spec.id];
+      return hasCopy(tool) && tool?.signin?.state === "signed-in";
+    }).length;
+
+  /**
+   * A sign-in's popover (core `ToolSpec.signin`), one per cell, all one
+   * surface gliding between them (NsPopoverGroup). Opening draws the cell's
+   * sign-in, the same one if it is under way; ×, Esc or a press outside put
+   * it away and leave the sign-in going, parked on its cell. One with
+   * nothing under way and nothing to tell is let go.
+   */
+  function setOpen(machineId: string, toolId: string, open: boolean) {
+    const key = toolSigninKey(machineId, toolId);
+    if (open) {
+      toolSigninFlow(machineId, toolId);
+      showToolSignin(key);
+      return;
+    }
+    if (openToolSignin() === key) {
+      showToolSignin(null);
+    }
+    const flow = heldToolSignin(key);
+    if (
+      flow &&
+      !flow.live &&
+      (flow.problem === null || flow.phase === "signed-in")
+    ) {
+      dropToolSignin(key);
+    }
+  }
+
+  reopenToolSignin();
+
+  // Signed in: the tick draws and holds, then the popover goes; the cell
+  // reads the machine's new status, which the hub published with its answer.
+  $effect(() => {
+    const key = openToolSignin();
+    if (key === null || heldToolSignin(key)?.phase !== "signed-in") {
+      return;
+    }
+    const { machineId, toolId } = signinOf(key);
+    const timer = setTimeout(() => {
+      setOpen(machineId, toolId, false);
+    }, dur("--dur-hold"));
+    return () => clearTimeout(timer);
+  });
+
+  /** A refusal's sentence, without the tool's screen it quotes, for the cell's line; the popover shows it whole. */
+  const sentence = (problem: string): string =>
+    problem.split(` ${toolWords.signinScreen} `)[0] ?? problem;
 
   async function install(machine: Machine, spec: ToolSpec) {
     const key = cellKey(machine.machineId, spec.id);
@@ -333,6 +407,118 @@
   />
 {/snippet}
 
+<!-- A tool's own sign-in on the machine (core ToolSpec.signin), beside the
+     machine it is about. Nothing where there is no copy to sign in; signed
+     in is the quiet tick and its word; any other state says so in muted
+     words and carries its one act, Sign in, which opens the sign-in popover
+     on the cell. Put away, a sign-in under way parks here (Waiting for the
+     pasted code, and Paste code, which opens it again as it was), and a
+     refusal stays under the cell, its sentence without the tool's screen
+     (the popover holds that), until it is tried again. Offline, the state
+     stands alone. -->
+{#snippet signinCell(machine: Machine, spec: ToolSpec, online: boolean)}
+  {@const toolStatus = machine.tools?.[spec.id]}
+  {@const key = toolSigninKey(machine.machineId, spec.id)}
+  {@const flow = heldToolSignin(key)}
+  {@const open = openToolSignin() === key}
+  {@const where = machineLabel(machine.hostname)}
+  {@const read = toolStatus?.signin}
+  {@const signedIn = read?.state === "signed-in"}
+  {@const parked = flow?.live === true}
+  {@const verb = parked ? toolWords.pasteCode : toolWords.signIn}
+  {#if hasCopy(toolStatus) || flow}
+    <!-- The state at the column's start, its act at its end. -->
+    <span class="flex items-center justify-between gap-space-2">
+      {#if signedIn}
+        <span
+          class="mark-line inline-flex items-center gap-space-1 type-label text-ink-strong"
+          data-signin="signed-in"
+        >
+          {#if flow?.phase === "signed-in"}
+            <Check />
+          {:else}
+            <IconCheck class="size-icon-md shrink-0 text-status-done-glyph" />
+          {/if}
+          <span>{toolWords.signedIn}</span>
+        </span>
+      {:else if read?.state === "unknown" && !parked}
+        <Popover.Root>
+          <Popover.Trigger
+            aria-label={toolWords.signinUnknownHead(spec.name, where)}
+            look="mark"
+          >
+            <Badge size="cell" tone="muted" variant="ghost">
+              <span>{toolWords.signinUnknown}</span>
+            </Badge>
+          </Popover.Trigger>
+          <Popover.Content
+            align="start"
+            frame="panel-high"
+            pad="none"
+            width="widest"
+          >
+            <header
+              class="border-b border-border-hairline px-space-3 py-space-2"
+            >
+              <span class="type-label text-ink-strong"
+                >{toolWords.signinTitle(spec.name, where)}</span
+              >
+            </header>
+            {#if read.detail}
+              <pre
+                class="max-h-56 overflow-auto px-space-3 py-space-2 type-code whitespace-pre-wrap wrap-anywhere">{read.detail}</pre>
+            {:else}
+              <p class="px-space-3 py-space-2 type-body text-ink-muted">
+                {toolWords.signinUnknownSilent}
+              </p>
+            {/if}
+          </Popover.Content>
+        </Popover.Root>
+      {:else}
+        <span
+          class="type-meta whitespace-nowrap text-ink-muted"
+          data-signin={parked ? "waiting" : "signed-out"}
+          >{parked ? toolWords.signinWaiting : toolWords.signedOut}</span
+        >
+      {/if}
+      {#if online && (!signedIn || open)}
+        <NsPopover
+          align="start"
+          id="tool-signin-{key}"
+          label={toolWords.signInOn(verb, spec.name, where)}
+          onchange={(next) => setOpen(machine.machineId, spec.id, next)}
+          {open}
+          triggerClass={buttonVariants({ variant: "outline", size: "xs" })}
+          width="var(--c-signin-pop-w)"
+        >
+          {#snippet trigger()}
+            {verb}
+          {/snippet}
+          <div class="flex flex-col gap-space-3 p-space-2">
+            <p data-slot="title" class="type-label text-ink-strong">
+              {toolWords.signinTitle(spec.name, where)}
+            </p>
+            {#if flow}
+              <SigninPanel
+                {flow}
+                got={toolWords.signedIn}
+                machine={where}
+                {online}
+              />
+            {/if}
+          </div>
+        </NsPopover>
+      {/if}
+    </span>
+    {#if !open && flow?.problem && flow.phase !== "signed-in"}
+      <!-- The sign-in's refusal, said on its cell while the popover is put
+           away, until it is opened and tried again. -->
+      <!-- Its way on is the cell's own Sign in, beside the state above. -->
+      <RowFault reason={sentence(flow.problem)} />
+    {/if}
+  {/if}
+{/snippet}
+
 {#if catalog.length === 0}
   <!-- The catalog ships in the hub's build (core TOOL_CATALOG), so no
        session can fill it (The Empty Starts Work Rule's second sentence):
@@ -357,73 +543,95 @@
        scrolls sideways: under 640px each row is a card, the machine across
        its start and the tool's state at its end. An offline machine says so
        in words; its row keeps full ink. -->
-  <div class="flex flex-col gap-space-6">
-    {#each catalog as spec (spec.id)}
-      {@const policy = policyOf(spec)}
-      <section
-        aria-labelledby="tool-{spec.id}"
-        class="flex min-w-0 flex-col gap-space-2"
-        data-tool={spec.id}
-      >
-        <header
-          class="flex flex-wrap items-center justify-between gap-x-space-4 gap-y-space-2"
+  <NsPopoverGroup>
+    <div class="flex flex-col gap-space-6">
+      {#each catalog as spec (spec.id)}
+        {@const policy = policyOf(spec)}
+        <section
+          aria-labelledby="tool-{spec.id}"
+          class="flex min-w-0 flex-col gap-space-2"
+          data-tool={spec.id}
         >
-          <span class="mark-line flex min-w-0 items-center gap-space-2">
-            <h2 id="tool-{spec.id}" class="type-label text-ink-strong">
-              {spec.name}
-            </h2>
-            <a
-              data-box
-              aria-label="{spec.name} homepage"
-              class="pointer-hit touch-hit pressable text-ink-muted transition-colors hover:text-ink-strong"
-              href={spec.homepage}
-              rel="noreferrer"
-              target="_blank"
-              title={spec.homepage}
-            >
-              <IconExternal class="size-icon-sm" />
-            </a>
-            <span data-slot="num" class="num type-meta text-ink-muted"
-              >{installedOn(spec)}/{machines.length} installed</span
-            >
-          </span>
-          <label
-            class="mark-line flex items-center gap-space-2 type-label text-ink-muted"
+          <header
+            class="flex flex-wrap items-center justify-between gap-x-space-4 gap-y-space-2"
           >
-            <Switch
-              data-box
-              checked={policy.required}
-              disabled={saving[spec.id] === true}
-              onCheckedChange={(next) => requireEverywhere(spec, next)}
-              size="sm"
-            />
-            <span>Required on every machine</span>
-          </label>
-        </header>
-        <RowFault
-          again={() => requireEverywhere(spec, !policy.required)}
-          reason={policyRefused[spec.id]}
-        />
-        <MachineLedger
-          {machines}
-          online={(machine) => machine.status === "online"}
-          rowClass="group/cell"
-        >
-          {#snippet heads()}
-            <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head class="w-c-matrix-col-w" scope="col" variant="band"
-              >State</Table.Head
+            <span class="mark-line flex min-w-0 items-center gap-space-2">
+              <h2 id="tool-{spec.id}" class="type-label text-ink-strong">
+                {spec.name}
+              </h2>
+              <a
+                data-box
+                aria-label="{spec.name} homepage"
+                class="pointer-hit touch-hit pressable text-ink-muted transition-colors hover:text-ink-strong"
+                href={spec.homepage}
+                rel="noreferrer"
+                target="_blank"
+                title={spec.homepage}
+              >
+                <IconExternal class="size-icon-sm" />
+              </a>
+              <span data-slot="num" class="num type-meta text-ink-muted"
+                >{installedOn(spec)}/{machines.length} installed{#if spec.signin && signedInOn(spec) > 0}{` · ${toolWords.signedInCount(signedInOn(spec))}`}{/if}</span
+              >
+            </span>
+            <label
+              class="mark-line flex items-center gap-space-2 type-label text-ink-muted"
             >
-          {/snippet}
-          {#snippet cells(machine: Machine, online: boolean)}
-            <Table.Cell variant="ledger-stacks">
-              <div class="flex flex-col gap-space-1 whitespace-normal">
-                {@render cell(machine, spec, online)}
-              </div>
-            </Table.Cell>
-          {/snippet}
-        </MachineLedger>
-      </section>
-    {/each}
-  </div>
+              <Switch
+                data-box
+                checked={policy.required}
+                disabled={saving[spec.id] === true}
+                onCheckedChange={(next) => requireEverywhere(spec, next)}
+                size="sm"
+              />
+              <span>Required on every machine</span>
+            </label>
+          </header>
+          <RowFault
+            again={() => requireEverywhere(spec, !policy.required)}
+            reason={policyRefused[spec.id]}
+          />
+          <MachineLedger
+            {machines}
+            online={(machine) => machine.status === "online"}
+            rowClass="group/cell"
+          >
+            {#snippet heads()}
+              {#if spec.signin}
+                <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+                <Table.Head class="w-c-signin-col-w" scope="col" variant="band"
+                  >{toolWords.signinHead}</Table.Head
+                >
+              {/if}
+              <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+              <Table.Head class="w-c-matrix-col-w" scope="col" variant="band"
+                >State</Table.Head
+              >
+            {/snippet}
+            {#snippet cells(machine: Machine, online: boolean)}
+              {#if spec.signin}
+                <!-- On a phone's card, its own line under the machine and its
+                     State, from the machine's name to the card's end. -->
+                <Table.Cell
+                  class="@max-phone/table:col-span-full @max-phone/table:row-start-2"
+                  variant="ledger-stacks"
+                >
+                  <div
+                    class="flex flex-col gap-space-1 whitespace-normal @max-phone/table:ps-c-ledger-text-inset"
+                  >
+                    {@render signinCell(machine, spec, online)}
+                  </div>
+                </Table.Cell>
+              {/if}
+              <Table.Cell variant="ledger-stacks">
+                <div class="flex flex-col gap-space-1 whitespace-normal">
+                  {@render cell(machine, spec, online)}
+                </div>
+              </Table.Cell>
+            {/snippet}
+          </MachineLedger>
+        </section>
+      {/each}
+    </div>
+  </NsPopoverGroup>
 {/if}

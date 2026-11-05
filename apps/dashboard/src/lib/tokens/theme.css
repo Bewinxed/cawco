@@ -526,6 +526,8 @@
   --spacing-c-ledger-count-w: var(--c-ledger-count-w);
   --spacing-c-ledger-usd-w: var(--c-ledger-usd-w);
   --spacing-c-matrix-col-w: var(--c-matrix-col-w);
+  --spacing-c-ledger-text-inset: var(--c-ledger-text-inset);
+  --spacing-c-signin-col-w: var(--c-signin-col-w);
   --spacing-c-ledger-title-min: var(--c-ledger-title-min);
   --spacing-c-side-grip-w: var(--c-side-grip-w);
   --spacing-c-side-surface-min: var(--c-side-surface-min);

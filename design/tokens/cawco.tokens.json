@@ -5993,6 +5993,27 @@
       },
       "$description": "A matrix's wide column, its floor: a tool's name, its count and its Required switch over each machine's cell (Command-line tools), an update's state and its act (Updates)."
     },
+    "c-ledger-text-inset": {
+      "$type": "dimension",
+      "$value": {
+        "value": 23,
+        "unit": "px"
+      },
+      "$description": "Where a machine ledger's words start inside its row: past the OS mark and its gap (MachineLedger's machine cell), so a phone card's own line under it starts on the machine's name (Command-line tools' Sign-in line).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({size.icon-md} + {space.space-2})"
+        }
+      }
+    },
+    "c-signin-col-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 18,
+        "unit": "rem"
+      },
+      "$description": "A ledger's sign-in column: its state in meta at the column's start and its one act at its end, \"Waiting for the pasted code\" beside Paste code the widest (Command-line tools, a tool with its own sign-in)."
+    },
     "c-ledger-title-min": {
       "$type": "dimension",
       "$value": {
