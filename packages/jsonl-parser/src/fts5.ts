@@ -1106,7 +1106,7 @@ export class TranscriptIndex {
     };
 
     const fullFiles: (TranscriptFile & { mtime: number; size: number })[] = [];
-    const tailFiles: { file: TranscriptFile; checkpoint: Checkpoint }[] = [];
+    const tailFiles: { file: TranscriptFile; checkpoint: Checkpoint; mtime: number }[] = [];
     const { stat } = await import("node:fs/promises");
     await Promise.all(
       files.map(async (file) => {
@@ -1126,7 +1126,7 @@ export class TranscriptIndex {
         if (!checkpoint || checkpoint.offset > size) {
           fullFiles.push({ ...file, mtime, size });
         } else if (checkpoint.offset < size) {
-          tailFiles.push({ file, checkpoint });
+          tailFiles.push({ file, checkpoint, mtime });
         } else {
           result.filesUnchanged++;
         }
@@ -1141,10 +1141,28 @@ export class TranscriptIndex {
     let fullRead = 0;
     const startedAt = Date.now();
 
+    // The grown files, the one written to longest ago first, so the next
+    // one to read is the oldest still out; `tailRead` of them are gathered
+    // (or failed).
+    tailFiles.sort((a, b) => a.mtime - b.mtime);
+    let tailRead = 0;
+    // Another source's documents in the order they were written, as a
+    // catch-up's files are: the sync's last commit takes them all.
+    const docs = options.docs?.toSorted((a, b) =>
+      (a.timestamp ?? "").localeCompare(b.timestamp ?? ""),
+    );
+    // When the oldest of them was written: one with no time (sorted first)
+    // could be of any time, so none is claimed before the last commit.
+    const oldestDoc = docs?.[0];
+    const docsFrom =
+      oldestDoc === undefined ? startedAt : Date.parse(oldestDoc.timestamp ?? "") || 0;
+
     // What this sync will commit, flushed early only when a catch-up makes it
     // large (WRITE_BATCH_BYTES). After each early flush, every transcript
-    // last written before the oldest full file still to read is in: the
-    // grown ones were read first, below.
+    // last written before the oldest of what is still out (a grown file or a
+    // new one still to read, another source's documents, which only the last
+    // commit takes) is in. It said the oldest new file alone, so a grown
+    // file or an OpenCode session older than it was claimed before it was in.
     let pending: FileWrite[] = [];
     let pendingBytes = 0;
     const gather = async (write: FileWrite) => {
@@ -1154,7 +1172,12 @@ export class TranscriptIndex {
         result.docsAdded += await this.#commit(pending);
         pending = [];
         pendingBytes = 0;
-        options.progress?.(Math.min(startedAt, (fullFiles[fullRead]?.mtime ?? startedAt) - 1));
+        const out = Math.min(
+          tailFiles[tailRead]?.mtime ?? startedAt,
+          fullFiles[fullRead]?.mtime ?? startedAt,
+          docsFrom,
+        );
+        options.progress?.(Math.min(startedAt, out - 1));
       }
     };
 
@@ -1162,6 +1185,7 @@ export class TranscriptIndex {
     // the live sessions, whose newest words a catch-up would otherwise keep
     // out of every search until it ends.
     for (const { file, checkpoint } of tailFiles) {
+      tailRead++;
       let write: FileWrite;
       try {
         const tail = await scanDocs(file, { from: checkpoint, extract: options.extract });
@@ -1216,11 +1240,6 @@ export class TranscriptIndex {
       }
     }
 
-    // Another source's documents in the order they were written, as a
-    // catch-up's files are.
-    const docs = options.docs?.toSorted((a, b) =>
-      (a.timestamp ?? "").localeCompare(b.timestamp ?? ""),
-    );
     result.docsAdded += await this.#commit(pending, docs, options.meta, options.ended);
     return result;
   }
