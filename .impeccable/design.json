@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-05T12:00:00.000Z",
+  "generatedAt": "2026-11-05T15:30:00.000Z",
   "title": "Design System: CawCo",
   "source": "design/tokens/cawco.resolver.json",
   "extensions": {
@@ -3430,7 +3430,7 @@
       },
       {
         "name": "The Title Bars Follow Liquid Glass Rule",
-        "body": "Every bar that heads a surface (the top bar, a pane, a side panel, a sheet, a canvas's band) follows Apple's toolbar model as Liquid Glass revised it (HIG, Toolbars, 2025-12-16), on the web and in the native app:",
+        "body": "Every bar that heads a surface (the top bar, a pane, a side panel, a sheet, a canvas's band) follows Apple's toolbar model as Liquid Glass revised it (HIG, Toolbars, 2025-12-16), on web and native:",
         "section": "layout"
       },
       {

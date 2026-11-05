@@ -200,14 +200,14 @@ Under "Named Rules" (DESIGN.md line 631); rule at line 644.
 
 Under "Layout" (DESIGN.md line 648); rule at line 652.
 
-**The Title Bars Follow Liquid Glass Rule.** Every bar that heads a surface (the top bar, a pane, a side panel, a sheet, a canvas's band) follows Apple's toolbar model as Liquid Glass revised it (HIG, Toolbars, 2025-12-16), on the web and in the native app:
+**The Title Bars Follow Liquid Glass Rule.** Every bar that heads a surface (the top bar, a pane, a side panel, a sheet, a canvas's band) follows Apple's toolbar model as Liquid Glass revised it (HIG, Toolbars, 2025-12-16), on web and native:
 - **One bar, one row.** Title and controls share one line. Facts about the surface (its place, a path, an id, a count, its ask) are content, never a second line in the bar.
 - **A title only where it helps.** A panel opened by its name carries none, its actions floating over its content. A title is the view's own short name, never the app's name, an id, a path or a breadcrumb.
 - **A place shown as a place.** A machine is its OS mark and name; a path is never printed in a bar.
 - **No bar ground.** A bar draws no fill, hairline or shadow; content runs to the top edge and the scroll edge effect blurs it under the controls, from the first scroll.
-- **Floating groups of bare symbols.** At most three groups (leading, centre, trailing), each one capsule of the panel's glass. Items are bare symbols until hovered, named in their tooltip; words only where no symbol says it. Trailing: what acts on the view, More, the prominent action, then Close.
+- **Floating groups of bare symbols.** At most three groups (leading, centre, trailing), each one capsule of the panel's glass. Items are bare symbols until hovered, named in their tooltip; words only where no symbol says it. Trailing: what acts on the view, More, the prominent action, then Close (a sheet's leads, before its title).
 - **One prominent action**, trailing, on `action-surface`; colour on the glass is for it and for status alone.
-- **Back and Close are symbols**, named by where they go, never a button that says Back or Close.
+- **Back and Close are symbols**, named by where they go, never the words Back or Close.
 
 ## The Row Grid Rule
 
