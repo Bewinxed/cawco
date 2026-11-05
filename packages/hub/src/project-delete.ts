@@ -17,11 +17,13 @@
  * What it refuses, in core's words (words/project-trash.ts), before anything
  * is removed:
  * - a session of it still running: they stop first, as a forget's do;
- * - with `fromDisk`, a place of it that is a live project's place too, or
- *   inside one, or holding one, on the same machine: removing it would
- *   remove that project's files. Every path removed is one of the project's
- *   own recorded places, and its machine holds it to a floor of its own
- *   (agent remove-folder.ts);
+ * - with `fromDisk`, a place of it that is a live project's checkout too,
+ *   or holds one, on the same machine: removing it would remove that
+ *   project's files whole (core place-nesting.ts). A place inside a live
+ *   project's wider checkout goes, and the files box names that project
+ *   beside it, as losing those files too. Every path removed is one of the
+ *   project's own recorded places, and its machine holds it to a floor of
+ *   its own (agent remove-folder.ts);
  * - a machine that holds something of it to remove and is not connected.
  *   Of what a machine is told to remove, only a session's end has an owed
  *   rule: its end intent is kept on its row and delivered at the machine's
@@ -140,12 +142,6 @@ export interface ProjectDeleteDeps {
   stillRunning: (projectId: string) => number;
 }
 
-/** Whether one of two paths on a machine holds the other, or they are one. */
-const nested = (a: string, b: string): boolean => {
-  const slash = (path: string) => (path.endsWith("/") ? path : `${path}/`);
-  return slash(a).startsWith(slash(b)) || slash(b).startsWith(slash(a));
-};
-
 /** Everything a delete removes of a project, read before anything goes. */
 interface Plan {
   browsers: { key: BrowserKey; machineId: string }[];
@@ -190,26 +186,6 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
         .map((one) => one.machineId),
       ...(fromDisk ? plan.places.map((one) => one.machineId) : []),
     ]);
-
-  /** A place of the project another live project holds too, or inside or around one; undefined when none is. */
-  const shared = (id: string, places: readonly DiskPlace[]) => {
-    for (const other of db.listProjects()) {
-      if (other.id === id) {
-        continue;
-      }
-      for (const theirs of other.places) {
-        const hit = places.find(
-          (place) =>
-            theirs.kind === "checkout" &&
-            place.machineId === theirs.machineId &&
-            nested(place.path, theirs.path)
-        );
-        if (hit) {
-          return { place: hit, holder: other.name };
-        }
-      }
-    }
-  };
 
   /** A clone removed on its machine, nothing read or carried. */
   const dropClone = async (workspace: HeldWorkspace): Promise<void> => {
@@ -355,16 +331,23 @@ export const projectDelete = (deps: ProjectDeleteDeps) => {
         );
       }
       const plan = planOf(id, trashed);
-      const overlap = fromDisk ? shared(id, plan.places) : undefined;
-      if (overlap) {
+      const shared = fromDisk
+        ? plan.places.find((place) => place.refusedBy)
+        : undefined;
+      if (shared?.refusedBy) {
+        const { name: holder, path, same } = shared.refusedBy;
+        const machine = deps.machineName(shared.machineId);
         throw new DeleteRefusal(
           409,
-          projectTrashWords.placeShared(
-            name,
-            overlap.place.path,
-            deps.machineName(overlap.place.machineId),
-            overlap.holder
-          )
+          same
+            ? projectTrashWords.placeShared(name, shared.path, machine, holder)
+            : projectTrashWords.placeHolds(
+                name,
+                shared.path,
+                machine,
+                holder,
+                path
+              )
         );
       }
       const away = [...needed(plan, fromDisk)].filter(

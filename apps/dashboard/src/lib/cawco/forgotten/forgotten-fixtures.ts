@@ -40,6 +40,7 @@ const trash = (id: string, at: string): ForgottenPlace => ({
   machineId: "hub",
   machineName: "hub",
   path: `/home/bewinxed/.local/share/cawco/trash/projects/${id}-${Date.parse(at)}`,
+  within: [],
 });
 
 const named = (
@@ -98,7 +99,15 @@ export const BALCONY = named(
   "Balcony garden",
   "2026-11-04T20:50:02Z",
   { pages: 1, sessions: 1, rows: 25 },
-  [{ machineId: "m1", machineName: "obelisk", path: "/home/bewinxed/garden" }]
+  [
+    {
+      machineId: "m1",
+      machineName: "obelisk",
+      path: "/home/bewinxed/garden",
+      // Its folder sits inside a live project's whole home folder, as on obelisk.
+      within: [{ id: "hyucksfield", name: "HyucksField" }],
+    },
+  ]
 );
 
 /** Every row this hub's trash held, newest first. */

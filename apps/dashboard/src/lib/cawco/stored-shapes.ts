@@ -49,6 +49,7 @@ import type {
   UserQuestion as UserQuestionType,
 } from "@cawco/core/harness";
 import { HARNESSES, WIRE_PERMISSION_MODES } from "@cawco/core/harness";
+import type { PlaceProject as PlaceProjectType } from "@cawco/core/place-nesting";
 import type {
   OrphanedComments as OrphanedCommentsType,
   PlanChange as PlanChangeType,
@@ -875,6 +876,8 @@ const StopPhaseShape = z.enum([
   "done",
 ]);
 
+const PlaceProjectShape = z.object({ id: z.string(), name: z.string() });
+
 const RunningSessionShape = z.object({
   cwd: z.string(),
   id: z.string(),
@@ -907,7 +910,13 @@ const StopJobShape = z.object({
   open: z.boolean(),
   phase: StopPhaseShape,
   picked: z.array(z.string()),
-  places: z.array(z.object({ machineId: z.string(), path: z.string() })),
+  places: z.array(
+    z.object({
+      machineId: z.string(),
+      path: z.string(),
+      within: z.array(PlaceProjectShape),
+    })
+  ),
   pressedAt: z.number(),
   projectId: z.string(),
   projectName: z.string(),
@@ -1087,6 +1096,7 @@ prove<
     Same<z.output<typeof ParkedStartShape>, ParkedStartType>,
     Same<z.output<typeof SpawnPrefsShape>, SpawnPrefsType>,
     Same<z.output<typeof StopKindShape>, StopKindType>,
+    Same<z.output<typeof PlaceProjectShape>, PlaceProjectType>,
     Same<z.output<typeof RunningSessionShape>, RunningSessionType>,
     Same<z.output<typeof StopRowShape>, StopRowType>,
     Same<z.output<typeof StopJobShape>, StopJobType>,

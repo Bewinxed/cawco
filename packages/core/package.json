@@ -244,6 +244,7 @@
     "./words/asks": "./src/words/asks.ts",
     "./attachments": "./src/attachments.ts",
     "./forgotten-project": "./src/forgotten-project.ts",
+    "./place-nesting": "./src/place-nesting.ts",
     "./frames": "./src/frames.ts",
     "./picture-scale": "./src/picture-scale.ts",
     "./words/preview": "./src/words/preview.ts",

@@ -20,8 +20,13 @@
  *   entry gone, its checkout removed from the second machine's disk, its
  *   browser removed, its session's end recorded as a transcript delete;
  *   the journal line says `fromDisk=true`.
- * - c. A project whose checkout another live project holds inside it,
- *   deleted with `fromDisk`: refused in core's words; nothing removed.
+ * - c. Folders nested between live projects, each deleted with `fromDisk`
+ *   (core place-nesting.ts): a project at `/x/a` with another live project
+ *   at `/x` deletes, `/x/a` gone and the rest of `/x` kept, and the
+ *   forgotten list and a live project's places name `/x`'s project as
+ *   holding it; a project at `/x` with another at `/x/a` is refused in
+ *   core's words, as is one at the same folder as another; nothing of
+ *   theirs is removed.
  * - d. A project whose browser stands on a machine that is not connected:
  *   refused in core's words naming the machine; nothing removed.
  * - e. The machine's own floor (agent remove-folder.ts): its home, a folder
@@ -401,34 +406,102 @@ const forgottenLeg = async (rig: Rig): Promise<void> => {
   );
 };
 
-/** c: a place another live project holds inside it, refused with `fromDisk`. */
-const sharedLeg = async (rig: Rig): Promise<void> => {
-  const outer = await folder(join(rig.disk, "src", "delete-shared"));
-  const inner = await folder(join(outer, "inner"));
-  const id = project(
+/** c: folders nested between live projects, each deleted with `fromDisk`. */
+const nestedLeg = async (rig: Rig): Promise<void> => {
+  const at = (path: string) => machinePath(rig.floor.home, path, B);
+  // A project at /x/a, another live at /x: it goes, /x stays.
+  const wide = await folder(join(rig.disk, "src", "delete-wide"));
+  const narrow = await folder(join(wide, "a"));
+  const wideId = project(rig, "Probe delete wide", at(wide));
+  const narrowId = project(rig, "Probe delete narrow", at(narrow));
+  const listed = await rig.call("GET", "/api/projects");
+  const narrowRow = (
+    JSON.parse(listed.text) as {
+      id: string;
+      places: { kind: string; within: { id: string; name: string }[] }[];
+    }[]
+  ).find((one) => one.id === narrowId);
+  check(
     rig,
-    "Probe delete outer",
-    machinePath(rig.floor.home, outer, B)
+    "c. a live project's place inside another's names the wider project",
+    JSON.stringify(
+      narrowRow?.places.find((one) => one.kind === "checkout")?.within
+    ) === JSON.stringify([{ id: wideId, name: "Probe delete wide" }]),
+    JSON.stringify(narrowRow?.places)
   );
-  project(rig, "Probe delete inner", machinePath(rig.floor.home, inner, B));
-  const refused = await rig.call("POST", `/api/projects/${id}/delete`, {
+  await rig.call("DELETE", `/api/projects/${narrowId}`);
+  const forgotten = (
+    JSON.parse((await rig.call("GET", "/api/projects/forgotten")).text) as {
+      id: string;
+      places: { kind: string; within: { id: string; name: string }[] }[];
+    }[]
+  ).find((one) => one.id === narrowId);
+  check(
+    rig,
+    "c. the forgotten list names the wider project beside its place",
+    JSON.stringify(
+      forgotten?.places.find((one) => one.kind === "checkout")?.within
+    ) === JSON.stringify([{ id: wideId, name: "Probe delete wide" }]),
+    JSON.stringify(forgotten?.places)
+  );
+  const inside = await rig.call("POST", `/api/projects/${narrowId}/delete`, {
     fromDisk: true,
   });
   check(
     rig,
-    "c. a place another live project holds inside it: refused in core's words, nothing removed",
-    refused.status === 409 &&
-      refused.text ===
-        projectTrashWords.placeShared(
+    "c. a project at /x/a with another live at /x deletes with its files: /x/a gone, /x kept",
+    inside.status === 200 &&
+      !(await there(narrow)) &&
+      (await there(join(wide, "kept.txt"))) &&
+      rig.db.project(wideId) !== undefined,
+    inside.text
+  );
+  // A project at /x, another live at /x/a: refused.
+  const outer = await folder(join(rig.disk, "src", "delete-outer"));
+  const inner = await folder(join(outer, "a"));
+  const outerId = project(rig, "Probe delete outer", at(outer));
+  project(rig, "Probe delete inner", at(inner));
+  const holds = await rig.call("POST", `/api/projects/${outerId}/delete`, {
+    fromDisk: true,
+  });
+  check(
+    rig,
+    "c. a project at /x with another live at /x/a: refused in core's words, nothing removed",
+    holds.status === 409 &&
+      holds.text ===
+        projectTrashWords.placeHolds(
           "Probe delete outer",
-          machinePath(rig.floor.home, outer, B),
+          at(outer),
           B,
-          "Probe delete inner"
+          "Probe delete inner",
+          at(inner)
         ) &&
-      rig.db.project(id) !== undefined &&
+      rig.db.project(outerId) !== undefined &&
       (await there(join(inner, "kept.txt"))) &&
       (await there(join(outer, "kept.txt"))),
-    refused.text
+    holds.text
+  );
+  // Two projects at one folder: refused.
+  const same = await folder(join(rig.disk, "src", "delete-same"));
+  const sameId = project(rig, "Probe delete same", at(same));
+  project(rig, "Probe delete twin", at(same));
+  const shared = await rig.call("POST", `/api/projects/${sameId}/delete`, {
+    fromDisk: true,
+  });
+  check(
+    rig,
+    "c. a project at the same folder as another: refused in core's words, nothing removed",
+    shared.status === 409 &&
+      shared.text ===
+        projectTrashWords.placeShared(
+          "Probe delete same",
+          at(same),
+          B,
+          "Probe delete twin"
+        ) &&
+      rig.db.project(sameId) !== undefined &&
+      (await there(join(same, "kept.txt"))),
+    shared.text
   );
 };
 
@@ -575,7 +648,7 @@ export default {
       try {
         await liveLeg(rig);
         await forgottenLeg(rig);
-        await sharedLeg(rig);
+        await nestedLeg(rig);
         await awayLeg(rig);
         floorLeg(rig);
       } finally {

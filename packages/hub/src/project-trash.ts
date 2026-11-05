@@ -49,6 +49,7 @@ import type {
   ProjectRestored,
 } from "@cawco/core/forgotten-project";
 import { machineCalled } from "@cawco/core/machine-names";
+import { type PlaceNesting, placeNesting } from "@cawco/core/place-nesting";
 import { ARTIFACT_NAME } from "@cawco/core/protocol";
 import {
   isDamagedRecord,
@@ -556,8 +557,8 @@ export const recordedPlaces = (
   ...(trashed?.places ?? []),
 ];
 
-/** A checkout on a machine's disk that a delete with `fromDisk` removes. */
-export interface DiskPlace {
+/** A checkout on a machine's disk that a delete with `fromDisk` removes, read against the live projects there (core place-nesting.ts). */
+export interface DiskPlace extends PlaceNesting {
   id: string;
   machineId: string;
   path: string;
@@ -567,15 +568,18 @@ export interface DiskPlace {
  * The checkouts a delete of project `id` with `fromDisk` removes
  * (project-delete.ts): its own live ones and those its trash records keep,
  * each machine and path once, on machines still in the fleet (one removed
- * from it holds nothing CawCo can reach). The list of forgotten projects
- * names the same.
+ * from it holds nothing CawCo can reach), each read against the other live
+ * projects' checkouts: the one that refuses it, and those whose wider
+ * folder holds it. The list of forgotten projects names the same, and a
+ * live project's places carry the same reading (server.ts `projectOut`).
  */
 export const diskPlaces = (
-  db: Pick<DbShape, "listAgents" | "project">,
+  db: Pick<DbShape, "listAgents" | "listProjects" | "project">,
   id: string,
   trashed: TrashedProject | undefined
 ): DiskPlace[] => {
   const joined = new Set(db.listAgents().map((agent) => agent.machineId));
+  const live = db.listProjects();
   return [
     ...new Map(
       recordedPlaces(db, id, trashed)
@@ -588,6 +592,7 @@ export const diskPlaces = (
       id: placeId,
       machineId,
       path,
+      ...placeNesting(id, { machineId, path }, live),
     }));
 };
 
@@ -800,13 +805,17 @@ export const projectTrash = (
       machineId: TRASH_MACHINE,
       machineName: TRASH_MACHINE,
       path,
+      within: [],
     })),
-    ...diskPlaces(db, id, held).map(({ machineId, path }): ForgottenPlace => ({
-      kind: "checkout",
-      machineId,
-      machineName: nameOf(machineId, fleet),
-      path,
-    })),
+    ...diskPlaces(db, id, held).map(
+      ({ machineId, path, within }): ForgottenPlace => ({
+        kind: "checkout",
+        machineId,
+        machineName: nameOf(machineId, fleet),
+        path,
+        within,
+      })
+    ),
   ];
 
   /** Every forgotten project of the trash's entries, but folds. */

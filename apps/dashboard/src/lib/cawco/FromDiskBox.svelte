@@ -5,8 +5,10 @@
    * projects): "Also delete its files on disk" (or, with no checkout on any
    * machine, "Also delete its sessions' transcripts"), and under it what
    * that box decides. Checked: each checkout that goes, its machine over its path
-   * (read from the path's end, as Project details lists places), then that
-   * its sessions' transcripts go too. Unchecked: that the transcripts stay,
+   * (read from the path's end, as Project details lists places) and, where
+   * a live project's wider folder holds it, that project named as losing
+   * those files too (core place-nesting.ts); then that its sessions'
+   * transcripts go too. Unchecked: that the transcripts stay,
    * where a machine may list them again as sessions with no project.
    */
   import { projectEndWords } from "@cawco/core/words/project-ends";
@@ -22,8 +24,8 @@
     checked: boolean;
     /** The delete was pressed: the box holds what was chosen. */
     disabled?: boolean;
-    /** Each checkout the box removes, by its machine's name. */
-    places: { machine: string; path: string }[];
+    /** Each checkout the box removes, by its machine's name, with the names of the live projects whose folder holds it. */
+    places: { machine: string; path: string; within: readonly string[] }[];
     onchange: (on: boolean) => void;
   } = $props();
 </script>
@@ -70,6 +72,11 @@
                 class="dir-rtl type-meta truncate text-end text-ink-muted"
                 title={place.path}><bdi>{place.path}</bdi></span
               >
+              {#if place.within.length > 0}
+                <span class="type-meta text-pretty text-ink-muted"
+                  >{projectEndWords.within(place.within)}</span
+                >
+              {/if}
             </li>
           {/each}
         </ul>

@@ -85,6 +85,7 @@ import type { LawBroken } from "@cawco/core/invariant";
 import { machineFaultWords, machineLabel } from "@cawco/core/machine-names";
 import type { MoveJob } from "@cawco/core/move";
 import type { PermissionPresentation } from "@cawco/core/permission-presentation";
+import type { PlaceProject } from "@cawco/core/place-nesting";
 import type { SessionPlan } from "@cawco/core/plan";
 import type {
   CawInitiated,
@@ -304,6 +305,8 @@ export interface ProjectPlace {
   machineId: string;
   path: string;
   projectId: string;
+  /** A checkout's live projects whose checkout holds it: a delete with its files takes their files there too (core place-nesting.ts). */
+  within: PlaceProject[];
 }
 
 /**

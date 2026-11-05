@@ -24,6 +24,7 @@
 import type { Activity } from "@cawco/core/activity";
 import { detach } from "@cawco/core/detach";
 import type { ProjectStopFrame } from "@cawco/core/frames";
+import type { PlaceProject } from "@cawco/core/place-nesting";
 import type {
   CawRunning,
   ProjectConversationView,
@@ -98,8 +99,8 @@ export interface StopJob {
   phase: StopPhase;
   /** Caw off: the rows checked to stop, every one at first. */
   picked: string[];
-  /** A delete only: the checkouts its files box removes, as the project listed them when asked. */
-  places: { machineId: string; path: string }[];
+  /** A delete only: the checkouts its files box removes, as the project listed them when asked, each with the live projects whose checkout holds it. */
+  places: { machineId: string; path: string; within: PlaceProject[] }[];
   /** When the stop was pressed (Date.now()), for a slow row's seconds. */
   pressedAt: number;
   projectId: string;
@@ -217,19 +218,29 @@ class StopWork {
       return;
     }
     // A job kept before a delete could be asked holds no files box and no
-    // places: it reads as a forget with neither, so a stop parked across
+    // places: it reads as a forget with neither; one kept before a place
+    // named the projects holding it names none. So a stop parked across
     // the update is not dropped with the record it sits in.
     const kept = readJson(
       KEY,
       z.record(
         z.string(),
-        z.preprocess(
-          (raw) =>
-            raw && typeof raw === "object"
-              ? { fromDisk: false, places: [], ...raw }
-              : raw,
-          StopJobSchema
-        )
+        z.preprocess((raw) => {
+          if (!(raw && typeof raw === "object")) {
+            return raw;
+          }
+          const job = { fromDisk: false, places: [], ...raw };
+          return Array.isArray(job.places)
+            ? {
+                ...job,
+                places: job.places.map((place: unknown) =>
+                  place && typeof place === "object"
+                    ? { within: [], ...place }
+                    : place
+                ),
+              }
+            : job;
+        }, StopJobSchema)
       ),
       {},
       "session"
@@ -279,7 +290,12 @@ class StopWork {
     project: {
       id: string;
       name: string;
-      places: { kind: string; machineId: string; path: string }[];
+      places: {
+        kind: string;
+        machineId: string;
+        path: string;
+        within: PlaceProject[];
+      }[];
     },
     at: string,
     sessions: RunningSession[]
@@ -295,7 +311,11 @@ class StopWork {
         kind === "delete"
           ? project.places
               .filter((place) => place.kind === "checkout")
-              .map(({ machineId, path }) => ({ machineId, path }))
+              .map(({ machineId, path, within }) => ({
+                machineId,
+                path,
+                within,
+              }))
           : [],
     });
   }

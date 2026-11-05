@@ -509,6 +509,7 @@ import {
   namedModels,
   providerOf,
 } from "@cawco/core/model-names";
+import { placeNesting } from "@cawco/core/place-nesting";
 import type { FolderWeight } from "@cawco/core/preview-proxy";
 import type { ServingPreview } from "@cawco/core/preview-upstream";
 import {
@@ -25362,12 +25363,22 @@ export const createServer = (
    * decision of the person's: the session that started its work is told
    * (work-items.ts `heldNotice`). Each place's `held` is null, sent only
    * while installable apps' documents declare it ({@link BridgedHeldPlace}).
+   * Each place's `within` is the live projects whose checkout holds it, as a
+   * delete with its files reads it (core place-nesting.ts), for its files
+   * box; `live` is every live project, read once by a caller listing them all.
    */
-  const projectOut = (project: ProjectRow) => ({
+  const projectOut = (
+    project: ProjectRow,
+    live: readonly ProjectRow[] = db.listProjects()
+  ) => ({
     ...project,
     places: project.places.map((place) => ({
       ...place,
       held: null as BridgedHeldPlace | null,
+      within:
+        place.kind === "checkout"
+          ? placeNesting(project.id, place, live).within
+          : [],
     })),
     primaryPlaceId: checkoutOf(project)?.id ?? null,
     // Read by nothing: the Apple build is a step a project declares in its
@@ -35503,12 +35514,13 @@ export const createServer = (
       // Each row spread into a fresh object, not the named `ProjectRow`: the
       // native app's client types a project by this route's own schema
       // (`GetApiProjects200Payload`), which a named row would rename.
-      .get("/api/projects", () =>
-        db.listProjects().map((project) => ({
-          ...projectOut(project),
+      .get("/api/projects", () => {
+        const live = db.listProjects();
+        return live.map((project) => ({
+          ...projectOut(project, live),
           cap: caps.capOf(project),
-        }))
-      )
+        }));
+      })
       // One repository is one project: a folder whose remote a project
       // already has joins it as a checkout place (`placeAdded`), and the
       // answer is that project, not a second one. `place` is the folder asked

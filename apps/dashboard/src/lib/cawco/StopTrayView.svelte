@@ -680,6 +680,7 @@
           places={job.places.map((place) => ({
             machine: nameOf(place.machineId),
             path: place.path,
+            within: place.within.map((one) => one.name),
           }))}
         />
       {/if}

@@ -166,6 +166,11 @@ export const projectEndWords = {
   fromDisk: "Also delete its files on disk",
   /** Delete's box for a project with no checkout on any machine: what it still removes. */
   transcriptsOnly: "Also delete its sessions' transcripts",
+  /** Checked, beside a checkout it lists: the live projects whose wider folder holds it lose those files too. */
+  within: (holders: readonly string[]) =>
+    holders.length === 1
+      ? `Inside ${holders[0]}'s folder: ${holders[0]} loses these files too.`
+      : `Inside the folders of ${listed(holders)}: they lose these files too.`,
   /** Checked, under the checkouts it lists: what else goes. */
   transcriptsGo: "Its sessions' transcripts are removed too.",
   /** Unchecked: what a delete leaves, and where it may show again. */

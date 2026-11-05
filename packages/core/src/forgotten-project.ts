@@ -4,6 +4,8 @@
  * (`POST /api/projects/:id/restore`); hub project-trash.ts keeps them.
  */
 
+import type { PlaceProject } from "./place-nesting";
+
 /** What bringing a forgotten project back brings, counted. */
 export interface ForgottenBrings {
   /** The account its sessions start on, by id; null: the fleet's routing, or none kept. */
@@ -59,6 +61,8 @@ export interface ForgottenPlace {
   machineName: string;
   /** Absolute on its machine. */
   path: string;
+  /** The live projects whose checkout holds this folder: they lose these files too (place-nesting.ts). Empty for the hub's own. */
+  within: PlaceProject[];
 }
 
 /**

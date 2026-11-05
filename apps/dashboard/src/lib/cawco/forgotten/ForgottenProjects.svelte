@@ -181,7 +181,11 @@
   const checkoutsOf = (one: ForgottenProject) =>
     one.places
       .filter((place) => place.kind === "checkout")
-      .map((place) => ({ machine: place.machineName, path: place.path }));
+      .map((place) => ({
+        machine: place.machineName,
+        path: place.path,
+        within: place.within.map((holder) => holder.name),
+      }));
 
   /** What a row is called to a reader and in its question: its name, else when it was forgotten. */
   const rowName = (one: ForgottenProject): string =>

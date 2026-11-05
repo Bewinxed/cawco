@@ -32580,6 +32580,12 @@
                       "null",
                       "string"
                     ]
+                  },
+                  "within": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/PlaceProject"
+                    }
                   }
                 },
                 "required": [
@@ -32590,7 +32596,8 @@
                   "machineId",
                   "path",
                   "projectId",
-                  "root"
+                  "root",
+                  "within"
                 ]
               }
             },
@@ -32840,6 +32847,12 @@
                     "null",
                     "string"
                   ]
+                },
+                "within": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlaceProject"
+                  }
                 }
               },
               "required": [
@@ -32850,7 +32863,8 @@
                 "machineId",
                 "path",
                 "projectId",
-                "root"
+                "root",
+                "within"
               ]
             }
           },
@@ -33080,6 +33094,12 @@
                     "null",
                     "string"
                   ]
+                },
+                "within": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlaceProject"
+                  }
                 }
               },
               "required": [
@@ -33090,7 +33110,8 @@
                 "machineId",
                 "path",
                 "projectId",
-                "root"
+                "root",
+                "within"
               ]
             }
           },
@@ -33353,6 +33374,12 @@
                     "null",
                     "string"
                   ]
+                },
+                "within": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlaceProject"
+                  }
                 }
               },
               "required": [
@@ -33363,7 +33390,8 @@
                 "machineId",
                 "path",
                 "projectId",
-                "root"
+                "root",
+                "within"
               ]
             }
           },
@@ -33565,6 +33593,12 @@
                     "null",
                     "string"
                   ]
+                },
+                "within": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlaceProject"
+                  }
                 }
               },
               "required": [
@@ -33575,7 +33609,8 @@
                 "machineId",
                 "path",
                 "projectId",
-                "root"
+                "root",
+                "within"
               ]
             }
           },
@@ -55927,6 +55962,22 @@
           "workspaceId"
         ]
       },
+      "PlaceProject": {
+        "description": "A live project, as a folder's neighbour is named.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
       "PlacePath": {
         "description": "Where a place is: a folder on its machine, or (kind `hub`) the project's\nfolder on the hub. A plain string on the wire, as both sides are; a union\nleft unnamed reaches the API's schema as an anyOf its clients wrap.",
         "type": "string"
@@ -56200,13 +56251,21 @@
           "path": {
             "description": "Absolute on its machine.",
             "type": "string"
+          },
+          "within": {
+            "description": "The live projects whose checkout holds this folder: they lose these files too (place-nesting.ts). Empty for the hub's own.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlaceProject"
+            }
           }
         },
         "required": [
           "kind",
           "machineId",
           "machineName",
-          "path"
+          "path",
+          "within"
         ]
       },
       "ProjectDeleted": {

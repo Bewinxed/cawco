@@ -261,6 +261,7 @@
         machineId: place.machineId,
         machineName: MACHINES[place.machineId] ?? place.machineId,
         path: place.path,
+        within: place.within,
       })),
     };
   }

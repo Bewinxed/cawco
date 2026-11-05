@@ -22,9 +22,18 @@ export const projectTrashWords = {
     count === 1
       ? `1 session still runs in ${name}; stop it first.`
       : `${count} sessions still run in ${name}; stop them first.`,
-  /** One of its places on disk is another live project's too: removing it would remove theirs. */
+  /** One of its places on disk is another live project's checkout too: removing it would remove theirs. */
   placeShared: (name: string, path: string, machine: string, holder: string) =>
     `${path} on ${machine} is ${holder}'s place too, so ${name} was not deleted from disk: removing it would remove ${holder}'s files. Remove that place from one of them first, or delete without removing its files.`,
+  /** One of its places on disk holds another live project's checkout: removing it would remove theirs. */
+  placeHolds: (
+    name: string,
+    path: string,
+    machine: string,
+    holder: string,
+    theirs: string
+  ) =>
+    `${path} on ${machine} holds ${holder}'s place ${theirs}, so ${name} was not deleted from disk: removing it would remove ${holder}'s files. Remove that place from one of them first, or delete without removing its files.`,
   /** A machine holding something of it is away: nothing was removed. */
   machinesAway: (name: string, machines: readonly string[]) =>
     `${machines.join(", ")} ${machines.length === 1 ? "holds" : "hold"} part of ${name} and ${machines.length === 1 ? "is" : "are"} not connected, so nothing of it was deleted. Delete it again once ${machines.length === 1 ? "it is" : "they are"} back.`,

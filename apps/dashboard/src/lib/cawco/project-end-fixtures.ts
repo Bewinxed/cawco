@@ -55,8 +55,20 @@ export const ACTIVITY: Record<string, Activity> = {
 };
 
 const PLACES: StopJob["places"] = [
-  { machineId: "m1", path: "/home/bewinxed/office" },
-  { machineId: "m2", path: "/Users/omar/Documents/office-archive-2026" },
+  // Inside two live projects' home folder, as on obelisk.
+  {
+    machineId: "m1",
+    path: "/home/bewinxed/office",
+    within: [
+      { id: "hyucksfield", name: "HyucksField" },
+      { id: "obeliskcel", name: "OBELISKCEL CHUDMAXXING" },
+    ],
+  },
+  {
+    machineId: "m2",
+    path: "/Users/omar/Documents/office-archive-2026",
+    within: [],
+  },
 ];
 
 const job = (over: Partial<StopJob>): StopJob => ({
