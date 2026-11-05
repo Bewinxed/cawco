@@ -1494,6 +1494,38 @@ export const createCaw = ({
     },
 
     /**
+     * Session `instanceId` is the project's conversation now: one his panel
+     * started in the project (its first words the person's, project/
+     * conversation.ts on the dashboard), so his events, notes and panel are
+     * the one the person talks to him in, as a start of the hub's own makes
+     * it ({@link startConversation}). The project's conversation is the one
+     * its row names, on every surface (isProjectConversation): a session
+     * merely in the project is not one. Refused for a session the hub does
+     * not list, one of another project, or one discarded.
+     */
+    name(projectId: string, instanceId: string): ProjectConversationView {
+      const project = projectOf(projectId);
+      const session = row(instanceId);
+      if (!session || session.projectId !== project.id) {
+        return refuse(
+          404,
+          `Session ${instanceId} is not one of this project's.`
+        );
+      }
+      if (GONE.has(session.status)) {
+        return refuse(409, `Session ${instanceId} was discarded.`);
+      }
+      if (project.conversationInstanceId !== instanceId) {
+        startRefusals.delete(project.id);
+        setConversation(project.id, instanceId);
+        if (project.eventsOn) {
+          conversationStarted(project.id);
+        }
+      }
+      return view(projectId);
+    },
+
+    /**
      * "Ask Caw for a view": your words to the project's conversation, the
      * whole of the message, with where you asked from beside them (a page's
      * end: its draft stands on that page as a proposed block; the strip: a
@@ -1885,6 +1917,18 @@ export const cawRoutes = (caw: Caw) =>
       ({ params, body }) => {
         try {
           return caw.configure(params.id, body);
+        } catch (error) {
+          return answer(error);
+        }
+      }
+    )
+    // A conversation his panel started is the project's conversation now.
+    .post(
+      "/api/projects/:id/caw/conversation",
+      { body: t.Object({ instanceId: t.String({ minLength: 1 }) }) },
+      ({ params, body }) => {
+        try {
+          return caw.name(params.id, body.instanceId);
         } catch (error) {
           return answer(error);
         }

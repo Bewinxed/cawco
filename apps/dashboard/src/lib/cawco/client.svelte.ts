@@ -7142,6 +7142,26 @@ export const configureCaw = async (
 };
 
 /**
+ * Session `instanceId`, started in his panel, is the project's conversation
+ * now (hub caw.ts `name`): the one the project's row names, which his panel
+ * shows and his events reach. The answer's name stands on the row at once.
+ */
+export const nameConversation = async (
+  projectId: string,
+  instanceId: string
+): Promise<ProjectConversationView> => {
+  const view = await askHub<ProjectConversationView>(
+    `${projectPath(projectId)}/caw/conversation`,
+    json("POST", { instanceId })
+  );
+  const row = state.projects.find((project) => project.id === projectId);
+  if (row) {
+    row.conversationInstanceId = view.instanceId;
+  }
+  return view;
+};
+
+/**
  * What a routine's notice reads of it (hub routines.ts `RoutineView`): kept
  * or not, on or off.
  */

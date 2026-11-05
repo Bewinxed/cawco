@@ -308,6 +308,12 @@ const run = async (kit: Kit): Promise<void> => {
     fleet.repo,
     { projectId: project.id }
   );
+  // His panel's start names it the project's conversation (client
+  // `nameConversation`): the one the project's row names is the one his
+  // panel shows (CawLead `conversation`).
+  await fleet.api(`/api/projects/${project.id}/caw/conversation`, {
+    instanceId: conversation,
+  });
   // Spawned with no words and none sent before leg 7: a project's
   // conversation that holds nothing is drawn as itself, never as his start
   // (CawLead `starting` holds only while a start is under way).

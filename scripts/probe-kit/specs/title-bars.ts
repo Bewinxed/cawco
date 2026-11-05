@@ -132,6 +132,11 @@ const run = async (kit: Kit) => {
   const talk = await fleet.spawn("claude", "Glass bars", src, {
     projectId: project.id,
   });
+  // Named as his panel's start names it (client `nameConversation`): the
+  // conversation the project's row names is the one his panel shows.
+  await fleet.api(`/api/projects/${project.id}/caw/conversation`, {
+    instanceId: talk,
+  });
   await fleet.send(talk, "Walk me through the glass bars, step by step.");
   await each("caw conversation tail", async (page) => {
     await page

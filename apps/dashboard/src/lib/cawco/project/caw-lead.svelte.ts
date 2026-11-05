@@ -7,8 +7,8 @@
  * liveness). The hub's view (`GET …/caw`) is read for what only it
  * carries: what the conversation started that still runs, its spend.
  *
- * The conversation is the project's newest session a person or the project
- * started (origin `person` or `project`): what the panel hosts. Its own
+ * The conversation is the one the project's row names, as the hub names it
+ * ({@link CawLead.conversation}): what the panel hosts. Its own
  * status is his (fable-lead-switch.md §3, design §2 States):
  * - `reconnecting` while the hub is unreachable, `loading` while another
  *   project's board is on its way past its grace;
@@ -42,7 +42,6 @@ import { conversationWords } from "@cawco/core/words/project-conversation";
 import { untrack } from "svelte";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import { browser } from "$app/env";
-import { epochOf } from "../board.svelte";
 import {
   type BlockedRequest,
   type BoardRow,
@@ -371,23 +370,20 @@ export class CawLead {
   readonly harness = $derived(this.project?.cawHarness ?? null);
   readonly model = $derived(this.project?.cawModel ?? null);
   /**
-   * The conversation his panel shows: the project's newest session a
-   * person or the project started, at the top of its tree; null for none.
+   * The conversation his panel shows: the project's conversation, the one
+   * its row names (`conversationInstanceId`), as the hub names it (caw.ts
+   * `setConversation`: a start of the hub's own, or one his panel or Ask Caw
+   * started, conversation.ts `makeHis`) and every surface reads it
+   * (isProjectConversation: the one his events reach, his asks named
+   * Caw). A session merely in the project (a New Session start there, a
+   * session the hub is deleting) is not his. Null while it names none, or
+   * names one the board no longer lists.
    */
   readonly conversation = $derived.by((): BoardRow | null => {
-    const id = this.#projectId();
-    let newest: BoardRow | null = null;
-    for (const row of cawco.listedInstances) {
-      if (
-        row.projectId === id &&
-        !row.parentInstanceId &&
-        (row.origin === "person" || row.origin === "project") &&
-        (!newest || epochOf(row, "createdAt") > epochOf(newest, "createdAt"))
-      ) {
-        newest = row;
-      }
-    }
-    return newest;
+    const named = this.project?.conversationInstanceId;
+    return named
+      ? (cawco.listedInstances.find((row) => row.id === named) ?? null)
+      : null;
   });
   /** Its session's id; null for none. */
   readonly conversationId = $derived(this.conversation?.id ?? null);

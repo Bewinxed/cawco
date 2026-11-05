@@ -93,7 +93,7 @@
   import { dropStart } from "../spawn/parked.svelte";
   import CawAtWork from "./CawAtWork.svelte";
   import type { CawLead } from "./caw-lead.svelte";
-  import { cawStartsOf, startConversation } from "./conversation";
+  import { cawStartsOf, makeHis, startConversation } from "./conversation";
   import SetupWell from "./SetupWell.svelte";
   import StarterCards from "./StarterCards.svelte";
   import { handedOver, type SetupProgress } from "./setup-progress";
@@ -365,8 +365,17 @@
         extras,
         lead.draft.keep,
         (drawn) => {
+          // The words went from the field the person is in: the
+          // conversation's own composer takes the caret as it stands, as
+          // a session's keeps it after a send.
+          const inField = Boolean(
+            document.activeElement?.closest("[data-caw-panel]")
+          );
           chosen = drawn;
           fresh = false;
+          if (inField) {
+            lead.draft.focusWanted = true;
+          }
         },
         (withdrawn) => {
           held = withdrawn;
@@ -424,6 +433,7 @@
         if (one.state === "started" && one.target) {
           chosen = one.target;
           fresh = false;
+          makeHis(projectId, one.target);
         } else {
           fresh = true;
           startError = conversationWords.reloadedStart;

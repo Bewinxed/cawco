@@ -6,6 +6,7 @@
  * Routines tab's Ask Caw. The words go as its first prompt.
  */
 
+import { detach } from "@cawco/core/detach";
 import { conversationWords } from "@cawco/core/words/project-conversation";
 import { spawnWords } from "@cawco/core/words/spawn";
 import {
@@ -13,6 +14,7 @@ import {
   cawco,
   drawFirstPrompt,
   type HeldSend,
+  nameConversation,
   type SendExtras,
   spawnSession,
   withdrawFirstPrompt,
@@ -125,7 +127,13 @@ export async function startConversation(
       ...(effort ? { effort } : {}),
       projectId,
     });
-    return answeredOr(place.machineId, started, spawnWords.form.startUnknown);
+    const made = answeredOr(
+      place.machineId,
+      started,
+      spawnWords.form.startUnknown
+    );
+    makeHis(projectId, made);
+    return made;
   } catch (error) {
     withdrawn?.(withdrawFirstPrompt(instanceId, commandId));
     throw error;
@@ -133,6 +141,16 @@ export async function startConversation(
     dropStart(id);
   }
 }
+
+/**
+ * The conversation a start of his made is the project's conversation (hub
+ * caw.ts `name`): the one its row names, which his panel shows (CawLead
+ * `conversation`) and his events reach. A session merely in the project is
+ * none of his. A refusal is logged; the panel that started it shows it on.
+ */
+export const makeHis = (projectId: string, instanceId: string): void => {
+  detach(nameConversation(projectId, instanceId), "name Caw's conversation");
+};
 
 /** The project's Caw starts parked in this tab (reactive): those running, and those a reload settled. */
 export const cawStartsOf = (projectId: string): ParkedStart[] =>
