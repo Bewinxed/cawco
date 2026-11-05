@@ -123,11 +123,17 @@
       sessions && sessions.moving + sessions.staying > 0
         ? [words.editor.removeSessions(sessions.moving, sessions.staying)]
         : [];
+    // And the projects and areas that name it: each falls back.
+    const fallsBack =
+      sessions && sessions.projects.length + sessions.areas.length > 0
+        ? [words.editor.removeFallsBack(sessions.projects, sessions.areas)]
+        : [];
     await question.ask({
       title: words.editor.removeTitle(nameOf(account)),
       body: [
         words.editor.removeBody(on, harnessWords(account.provider)),
         ...moves,
+        ...fallsBack,
       ],
       confirmLabel: words.editor.remove,
       destructive: true,

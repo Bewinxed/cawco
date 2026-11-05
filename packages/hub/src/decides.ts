@@ -29,12 +29,19 @@ import {
   readDecides,
   slugOf,
 } from "@cawco/core/decides";
+import { areaWords } from "@cawco/core/words/areas";
 import { decidesWords } from "@cawco/core/words/decides";
 import { Elysia, status, t } from "elysia";
 import type { DecidesDb } from "./db/decides";
-import { DECIDES_FILE, decidesTable, decidesText } from "./decides-file";
+import {
+  DECIDES_FILE,
+  type DecidesAt,
+  decidesTable,
+  decidesText,
+} from "./decides-file";
 import type { DelegateTypesShape } from "./delegate-types";
 import {
+  areaFolder,
   FolderRefusal,
   MESSAGE_LIMIT,
   refused,
@@ -52,6 +59,12 @@ export interface HarnessOffer {
 }
 
 export interface DecidesDeps {
+  /** Area `id`, by its name; undefined when the hub keeps none (core areas.ts). */
+  readonly area: (id: string) => { id: string; name: string } | undefined;
+  /** An area's decides.md changed: what its projects read moved with it. */
+  readonly areaChanged: () => void;
+  /** Every area, whose decides.md a removal rewrites as a project's. */
+  readonly areas: () => { id: string; name: string }[];
   /** Project `projectId`'s Caw: his conversations' cost since `since`, how many he has had, and his newest turn (ms epoch). */
   readonly cawRecord: (
     projectId: string,
@@ -130,6 +143,11 @@ interface AgentBody {
   skills: string[];
 }
 const HEAR = t.Union(HEARS.map((hear) => t.Literal(hear)));
+/** A decides.md write: each kind to a member (null: back to the level below), and its commit message. */
+const TABLE_WRITE = t.Object({
+  routes: t.Record(t.String(), t.Nullable(t.String())),
+  message: t.String({ minLength: 1, maxLength: MESSAGE_LIMIT }),
+});
 const HUE = t.Integer({ minimum: 1, maximum: 8 });
 
 /** The first of `ids` the fleet knows no member by, refused. */
@@ -173,6 +191,14 @@ export const decidesRoutes = (deps: DecidesDeps) => {
       throw new FolderRefusal(404, `The hub keeps no project ${id}.`);
     }
     return project;
+  };
+  /** The area `id`, refused when the hub keeps none. */
+  const knownArea = (id: string) => {
+    const area = deps.area(id);
+    if (!area) {
+      throw new FolderRefusal(404, areaWords.noArea(id));
+    }
+    return area;
   };
   /** The area a project sits in, for its table (decides-file.ts); null: none. */
   const areaOf = (id: string): string | null =>
@@ -359,22 +385,34 @@ export const decidesRoutes = (deps: DecidesDeps) => {
     );
   };
 
-  /** Writes each project's decides.md that `change` rewrites, one commit each; answers the projects written. */
+  /**
+   * Writes each decides.md that `change` rewrites, one commit each: every
+   * project's and every area's, since a line naming a member or kind the
+   * fleet no longer has leaves the file unread and every kind his. Answers
+   * the files written, each with the project it is (null for an area's).
+   */
   const rewriteProjects = async (
     fleet: FleetDecides,
     change: (own: DecidesOwn) => DecidesOwn | undefined,
     message: string
-  ): Promise<{ id: string; write: () => Promise<unknown> }[]> => {
-    const writes: { id: string; write: () => Promise<unknown> }[] = [];
-    for (const project of deps.projects()) {
-      const read = await projectOwn(project.id, fleet);
+  ): Promise<{ project: string | null; write: () => Promise<unknown> }[]> => {
+    const folders = [
+      ...deps.projects().map((one) => ({ folder: one.id, project: one.id })),
+      ...deps
+        .areas()
+        .map((one) => ({ folder: areaFolder(one.id), project: null })),
+    ];
+    const writes: { project: string | null; write: () => Promise<unknown> }[] =
+      [];
+    for (const { folder, project } of folders) {
+      const read = await projectOwn(folder, fleet);
       const next = read ? change(read.own) : undefined;
       if (read && next) {
         const content = decidesFileOf(next, fleet.kinds, read.text);
         writes.push({
-          id: project.id,
+          project,
           write: () =>
-            writeFolderFile(project.id, DECIDES_FILE, content, {
+            writeFolderFile(folder, DECIDES_FILE, content, {
               author: YOU,
               message,
             }),
@@ -382,6 +420,31 @@ export const decidesRoutes = (deps: DecidesDeps) => {
       }
     }
     return writes;
+  };
+
+  /** A table as its route answers it: the file it is read from and the table in effect there. */
+  const tableAt = async (at: DecidesAt) => ({
+    file: DECIDES_FILE,
+    decides: await decidesTable(at, db.fleet()),
+  });
+
+  /** A folder's decides.md written with `routes` over its own lines, every kind and member checked first. */
+  const writeTable = async (
+    folder: string,
+    body: { message: string; routes: Record<string, string | null> }
+  ): Promise<void> => {
+    const fleet = db.fleet();
+    knownKinds(fleet, Object.keys(body.routes));
+    knownMembers(
+      fleet,
+      Object.values(body.routes).filter((id): id is string => id !== null)
+    );
+    await writeFolderFile(
+      folder,
+      DECIDES_FILE,
+      await projectFile(folder, fleet, body.routes),
+      { author: YOU, message: body.message }
+    );
   };
 
   return (
@@ -540,7 +603,9 @@ export const decidesRoutes = (deps: DecidesDeps) => {
           }
           return {
             kindsReturned,
-            projectsRewritten: writes.map((one) => one.id),
+            projectsRewritten: writes.flatMap((one) =>
+              one.project === null ? [] : [one.project]
+            ),
           };
         })
       )
@@ -617,7 +682,9 @@ export const decidesRoutes = (deps: DecidesDeps) => {
             db.removeKind(kind.id, body.moveTo);
             for (const one of writes) {
               await one.write();
-              projects.add(one.id);
+              if (one.project !== null) {
+                projects.add(one.project);
+              }
             }
             return { moved, projects: [...projects] };
           })
@@ -693,49 +760,51 @@ export const decidesRoutes = (deps: DecidesDeps) => {
         })),
       }))
       .get("/api/projects/:id/decides", ({ params }) =>
-        answered(async () => {
+        answered(() => {
           known(params.id);
-          return {
-            file: DECIDES_FILE,
-            decides: await decidesTable(
-              { projectId: params.id, areaId: areaOf(params.id) },
-              db.fleet()
-            ),
-          };
+          return tableAt({
+            projectId: params.id,
+            areaId: areaOf(params.id),
+          });
         })
       )
       .put(
         "/api/projects/:id/decides",
-        {
-          body: t.Object({
-            routes: t.Record(t.String(), t.Nullable(t.String())),
-            message: t.String({ minLength: 1, maxLength: MESSAGE_LIMIT }),
-          }),
-        },
+        { body: TABLE_WRITE },
         ({ params, body }) =>
           answered(async () => {
             known(params.id);
-            const fleet = db.fleet();
-            knownKinds(fleet, Object.keys(body.routes));
-            knownMembers(
-              fleet,
-              Object.values(body.routes).filter(
-                (id): id is string => id !== null
-              )
-            );
-            await writeFolderFile(
-              params.id,
-              DECIDES_FILE,
-              await projectFile(params.id, fleet, body.routes),
-              { author: YOU, message: body.message }
-            );
-            return {
-              file: DECIDES_FILE,
-              decides: await decidesTable(
-                { projectId: params.id, areaId: areaOf(params.id) },
-                db.fleet()
-              ),
-            };
+            await writeTable(params.id, body);
+            return tableAt({
+              projectId: params.id,
+              areaId: areaOf(params.id),
+            });
+          })
+      )
+      // An area's Who decides (core areas.ts): its decides.md over the
+      // fleet's, read and written as a project's is; each project in it
+      // takes the area's line for a kind its own file leaves out.
+      .get("/api/areas/:id/decides", ({ params }) =>
+        answered(() => {
+          knownArea(params.id);
+          return tableAt({
+            projectId: null,
+            areaId: params.id,
+          });
+        })
+      )
+      .put(
+        "/api/areas/:id/decides",
+        { body: TABLE_WRITE },
+        ({ params, body }) =>
+          answered(async () => {
+            knownArea(params.id);
+            await writeTable(areaFolder(params.id), body);
+            deps.areaChanged();
+            return tableAt({
+              projectId: null,
+              areaId: params.id,
+            });
           })
       )
   );

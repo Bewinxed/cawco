@@ -27942,14 +27942,15 @@ export const createServer = (
   // Areas (areas.ts): every reader of a project's settings reads them in
   // effect with its row, so a change here reaches each at once; what is
   // told of it is told here.
+  const areasChanged = (): void => {
+    projectsChanged();
+    ruleEngine.forgetFacts();
+    caps.recheck();
+    fleetChanged("an area changed");
+  };
   const projectAreas = createAreas({
     accountMoved: conversationToAccount,
-    changed: () => {
-      projectsChanged();
-      ruleEngine.forgetFacts();
-      caps.recheck();
-      fleetChanged("an area changed");
-    },
+    changed: areasChanged,
     db,
     folderSources: async (project) => ({
       decides: Object.values(
@@ -31702,14 +31703,34 @@ export const createServer = (
    * carries it to (`moving`) or none (`staying`: its next send is refused
    * with the way back, core `SendRefusal` `no-account`).
    */
-  const removalOf = (account: Account): { moving: number; staying: number } => {
+  const removalOf = (
+    account: Account
+  ): {
+    areas: string[];
+    moving: number;
+    projects: string[];
+    staying: number;
+  } => {
     const rows = db.instancesOnAccount(account.id);
     const moving = rows.filter(
       (row) =>
         (owedMoves.get(row.id)?.to ?? account.id) !== account.id ||
         atLimit.credentialMoveTo(row.id) !== undefined
     ).length;
-    return { moving, staying: rows.length - moving };
+    // The projects and areas that name it as their own account: the removal
+    // clears it (`ON DELETE SET NULL`), so each starts on what lies under it.
+    return {
+      moving,
+      staying: rows.length - moving,
+      projects: db
+        .listProjects()
+        .filter((project) => project.account === account.id)
+        .map((project) => project.name),
+      areas: db.areas
+        .list()
+        .filter((area) => area.account === account.id)
+        .map((area) => area.name),
+    };
   };
 
   /**
@@ -32491,6 +32512,9 @@ export const createServer = (
             db.trash.put({ kind: "delegateType", key: name }, Date.now()),
           project: (id) => db.project(id),
           projects: () => db.listProjects(),
+          area: (id) => db.areas.get(id),
+          areas: () => db.areas.list(),
+          areaChanged: areasChanged,
           harnesses: harnessOffers,
           skills: () =>
             db
@@ -37263,13 +37287,27 @@ export const createServer = (
               .join(" ")
           );
         }
+        // Read before the row goes: the removal clears it from each.
+        const { projects: fellBack, areas: areasFellBack } = removalOf(account);
         const { moving, staying } = removeWithSessions(
           account,
           named,
           leavesOn
         );
+        // Every dashboard reads the projects again: their settings in
+        // effect fell back with the account.
+        if (fellBack.length > 0 || areasFellBack.length > 0) {
+          projectsChanged();
+        }
         // Machines offline now, which sign it out when they next connect.
-        return { ok: true, later, moving, staying };
+        return {
+          ok: true,
+          later,
+          moving,
+          staying,
+          projects: fellBack,
+          areas: areasFellBack,
+        };
       })
       // Signs an account out on one machine and drops that sign-in: the same
       // sign-out the account's removal runs on each of its machines, here on

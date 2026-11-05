@@ -4415,6 +4415,295 @@
         }
       }
     },
+    "/api/areas/{id}/decides": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiAreasByIdDecides",
+        "responses": {
+          "200": {
+            "description": "getApiAreasByIdDecides 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiAreasByIdDecides200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiAreasByIdDecides 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiAreasByIdDecides 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiAreasByIdDecides 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiAreasByIdDecides 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiAreasByIdDecides 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiAreasByIdDecides 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiAreasByIdDecides 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiAreasByIdDecides 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiAreasByIdDecides 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiAreasByIdDecides 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "routes": {
+                    "type": "object",
+                    "patternProperties": {
+                      "^.*$": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  },
+                  "message": {
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "routes",
+                  "message"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiAreasByIdDecides",
+        "responses": {
+          "200": {
+            "description": "putApiAreasByIdDecides 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiAreasByIdDecides200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiAreasByIdDecides 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "putApiAreasByIdDecides 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiAreasByIdDecides 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiAreasByIdDecides 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "putApiAreasByIdDecides 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "putApiAreasByIdDecides 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiAreasByIdDecides 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "putApiAreasByIdDecides 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "putApiAreasByIdDecides 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "putApiAreasByIdDecides 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/tasks": {
       "get": {
         "parameters": [
@@ -31537,6 +31826,36 @@
           "file"
         ]
       },
+      "getApiAreasByIdDecides200": {
+        "type": "object",
+        "properties": {
+          "decides": {
+            "$ref": "#/components/schemas/DecidesTable"
+          },
+          "file": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "decides",
+          "file"
+        ]
+      },
+      "putApiAreasByIdDecides200": {
+        "type": "object",
+        "properties": {
+          "decides": {
+            "$ref": "#/components/schemas/DecidesTable"
+          },
+          "file": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "decides",
+          "file"
+        ]
+      },
       "deleteApiProjectsByIdTasksByTaskId200": {
         "type": "object",
         "properties": {
@@ -36019,6 +36338,12 @@
       "deleteApiAccountsById200": {
         "type": "object",
         "properties": {
+          "areas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "later": {
             "type": "array",
             "items": {
@@ -36031,29 +36356,51 @@
           "ok": {
             "type": "boolean"
           },
-          "staying": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "later",
-          "moving",
-          "ok",
-          "staying"
-        ]
-      },
-      "getApiAccountsByIdRemoval200": {
-        "type": "object",
-        "properties": {
-          "moving": {
-            "type": "number"
+          "projects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "staying": {
             "type": "number"
           }
         },
         "required": [
+          "areas",
+          "later",
           "moving",
+          "ok",
+          "projects",
+          "staying"
+        ]
+      },
+      "getApiAccountsByIdRemoval200": {
+        "type": "object",
+        "properties": {
+          "areas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "moving": {
+            "type": "number"
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "staying": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "areas",
+          "moving",
+          "projects",
           "staying"
         ]
       },

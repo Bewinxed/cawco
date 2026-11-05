@@ -78,7 +78,8 @@ export interface DecidesAt {
 /**
  * The Who decides a card is settled by: the project's decides.md, over its
  * area's, over the fleet's; outside a project (`projectId` null), the
- * fleet's. A decides.md that does not read, the project's or its area's,
+ * area's over the fleet's when `areaId` names one (an area's own table),
+ * else the fleet's. A decides.md that does not read, the project's or its area's,
  * routes every kind to the person, its problems said.
  */
 export const decidesTable = async (
@@ -88,10 +89,10 @@ export const decidesTable = async (
   const project = projectId
     ? await decidesReading(projectId, fleet)
     : undefined;
-  const area =
-    projectId && areaId
-      ? await decidesReading(areaFolder(areaId), fleet)
-      : undefined;
+  // An area's own table (`projectId` null) reads its file over the fleet's.
+  const area = areaId
+    ? await decidesReading(areaFolder(areaId), fleet)
+    : undefined;
   const problems = [
     ...(project?.ok === false ? project.problems : []),
     ...(area?.ok === false

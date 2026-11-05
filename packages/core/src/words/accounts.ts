@@ -130,6 +130,12 @@ export const accountsWords = {
      */
     removeSessions: (moving: number, staying: number) =>
       `${moving > 0 ? `${moving === 1 ? "1 session on it moves" : `${moving} sessions on it move`} to another account.` : ""}${moving > 0 && staying > 0 ? " " : ""}${staying > 0 ? `${staying === 1 ? "1 session on it has" : `${staying} sessions on it have`} no other account to go to and ${staying === 1 ? "stops" : "stop"} until one is signed in.` : ""}`,
+    /**
+     * The projects and areas whose own account it is, after `removeSessions`:
+     * the removal clears it from each, so each starts on what lies under it.
+     */
+    removeFallsBack: (projects: readonly string[], areas: readonly string[]) =>
+      `${projects.length > 0 ? `${andList(projects)} ${projects.length === 1 ? "starts" : "start"} on ${projects.length === 1 ? "its" : "their"} area's account or the fleet's routing instead.` : ""}${projects.length > 0 && areas.length > 0 ? " " : ""}${areas.length > 0 ? `The ${areas.length === 1 ? "area" : "areas"} ${andList(areas)} ${areas.length === 1 ? "falls" : "fall"} back to the fleet's routing.` : ""}`,
     machines: "Machines",
     looks: "Looks",
     limits: "Limits",

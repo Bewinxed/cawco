@@ -28,6 +28,7 @@ import type {
 } from "@cawco/core/accounts";
 import type { ApprovedActionView } from "@cawco/core/actions";
 import { type Activity, waitingOnYou } from "@cawco/core/activity";
+import type { SettingsInEffect } from "@cawco/core/areas";
 import type {
   ArtifactNeed,
   ArtifactNeedNotice,
@@ -323,6 +324,8 @@ export interface ProjectRow {
   account: string | null;
   /** What its sessions on {@link account} do at that account's limit. */
   accountAtLimit: ProjectAtLimit;
+  /** The area it sits in (core areas.ts); null: none. */
+  areaId: string | null;
   /** Its spend cap as it stands, kept by `project.cap` frames; null: none. */
   cap?: ProjectCap | null;
   /** The harness its Caw runs on. */
@@ -339,6 +342,11 @@ export interface ProjectRow {
   /** Its events reach its conversation (made with Caw: on). */
   eventsOn: boolean;
   id: string;
+  /**
+   * Its settings in effect, each with where it came from: its own, else its
+   * area's, else the fleet's (core `settingsInEffect`), as the hub read them.
+   */
+  inEffect: SettingsInEffect;
   /** Where its attempts land when their task says nothing. */
   lands: LandsMode;
   /** The connection that signs in to {@link lfsUrl}; null with it. */
@@ -2881,13 +2889,20 @@ export const patchAccount = (
 
 /**
  * What removing an account does with the sessions on it, for its confirm:
- * how many move to another account and how many have none to go to.
+ * how many move to another account and how many have none to go to, and the
+ * projects and areas that named it as their own and fall back.
  * Null when the hub could not say.
  */
 export const accountRemoval = (
   id: string
-): Promise<{ moving: number; staying: number } | null> =>
-  load(`/api/accounts/${encodeURIComponent(id)}/removal`);
+): Promise<{
+  /** The areas whose own account it is, by name. */
+  areas: string[];
+  moving: number;
+  /** The projects whose own account it is, by name. */
+  projects: string[];
+  staying: number;
+} | null> => load(`/api/accounts/${encodeURIComponent(id)}/removal`);
 
 /**
  * Removes an account, signing it out on every machine signed in to it; its
