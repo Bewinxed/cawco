@@ -36,20 +36,6 @@ export const Approved = {
   play: press("button", /^Approve$/u),
 };
 
-/** The start of the answer: Tasks, where the needs-you line counts 1 action. */
-export const LineOnTasks = {
-  args: { height: 920, place: "tasks", filter: "needs" },
-  parameters: { viewport: 1440 },
-};
-
-/** "1 action" pressed in the line: Routines opens with the reply waiting in Proposed. */
-export const FromTheLine = {
-  args: { height: 920, place: "routines", filter: "needs" },
-  parameters: { viewport: 1440 },
-  from: "LineOnTasks",
-  play: press("button", /^1 action$/u),
-};
-
 /** The first read: skeleton rows at their real size. */
 export const Loading = {
   args: { place: "routines", height: 920, read: "loading" },
@@ -84,12 +70,4 @@ export const Unread = {
 export const ProposedPhone = {
   args: { place: "routines", height: 844 },
   parameters: { viewport: 390 },
-};
-
-/** A phone, the failed routine pressed: it rises as a drawer. */
-export const FailedOpenPhone = {
-  args: { place: "routines", height: 844, routine: "d86be128" },
-  parameters: { viewport: 390 },
-  from: "ProposedPhone",
-  play: press("button", /^Weekly X milestone check/u),
 };

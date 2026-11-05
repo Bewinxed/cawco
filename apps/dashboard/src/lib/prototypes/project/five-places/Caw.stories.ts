@@ -34,30 +34,6 @@ export const Closed = {
   parameters: { viewport: 1440 },
 };
 
-/** He stays while the place changes: Routines beside his pane. */
-export const BesideRoutines = {
-  args: { height: 920, place: "routines" },
-  parameters: { viewport: 1440 },
-  from: "Docked",
-  play: press("button", /^Routines/u),
-};
-
-/** A starter pressed: it fills the field; nothing sends. */
-export const StarterFilled = {
-  args: { place: "tasks", height: 920, cawDraft: SWING.caw.starters[0] },
-  parameters: { viewport: 1440 },
-  from: "Docked",
-  play: press("button", /^Plan the next release/u),
-};
-
-/** Spin off a session pressed: machine and checkout, harness, delegate type, and what comes along. */
-export const SpinningOff = {
-  args: { place: "tasks", height: 920, spinning: true },
-  parameters: { viewport: 1440 },
-  from: "Docked",
-  play: press("button", /^Spin off a session$/u),
-};
-
 /** A quiet project: a fresh conversation, starters for it, no sessions yet. */
 export const Fresh = {
   args: { place: "tasks", height: 920, records: QUIET },
@@ -103,19 +79,5 @@ export const OverBoardMid = {
 /** A phone: Caw full screen with Back, the bottom bar's Caw chosen. */
 export const FullScreenPhone = {
   args: { place: "tasks", height: 844 },
-  parameters: { viewport: 390 },
-};
-
-/** A phone, Caw pressed in the bottom bar from Tasks. */
-export const OpeningPhone = {
-  args: { place: "tasks", height: 844 },
-  parameters: { viewport: 390 },
-  from: "ClosedPhone",
-  play: press("button", /^Caw/u),
-};
-
-/** A phone on Tasks, Caw closed. */
-export const ClosedPhone = {
-  args: { place: "tasks", height: 844, caw: false },
   parameters: { viewport: 390 },
 };

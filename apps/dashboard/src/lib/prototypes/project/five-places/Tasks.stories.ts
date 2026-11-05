@@ -9,19 +9,11 @@ import { EMPTY, QUIET, SWING } from "./records";
 import { type Play, press } from "./story-kit";
 
 const TITLE_FIELD = /New task's title/u;
-const ALL = /^All/u;
-const WORKING = /^Working/u;
 
 export default {
   title: "Five places/Tasks",
   component: FivePlaces,
   args: { records: SWING, place: "tasks" },
-};
-
-/** Arriving on Cawco-Dev: the board opens on Needs you, three cards, Caw docked beside it. */
-export const NeedsYou = {
-  args: { place: "tasks", height: 920, caw: true },
-  parameters: { viewport: 1440 },
 };
 
 /** The same arrival with Caw's pane closed: the board takes the page's width. */
@@ -36,14 +28,6 @@ export const All = {
   parameters: { viewport: 1440 },
   from: "NeedsYouWide",
   play: press("tab", /^All/u),
-};
-
-/** Stuck pressed: the failed attempt and the blocked task, each with its cause. */
-export const Stuck = {
-  args: { place: "tasks", height: 920, filter: "stuck" },
-  parameters: { viewport: 1440 },
-  from: "NeedsYouWide",
-  play: press("tab", /^Stuck/u),
 };
 
 /** A card pressed: the task opens as a pane over the right third; the board stays live beneath it. */
@@ -69,7 +53,7 @@ export const Filing = {
   from: "All",
   play: async ({ canvas, userEvent }: Play) => {
     const field = canvas.getByRole("textbox", { name: TITLE_FIELD });
-    await userEvent.type(field, "Draw the stale state of the needs-you line");
+    await userEvent.type(field, "Draw the stale line");
     await userEvent.keyboard("Enter");
   },
 };
@@ -133,29 +117,10 @@ export const NeedsYouMid = {
   parameters: { viewport: 900 },
 };
 
-/** 900 with Caw: his pane comes over the board as a drawer from the right. */
-export const CawOverBoardMid = {
-  args: { place: "tasks", height: 920, caw: true },
-  parameters: { viewport: 900 },
-  from: "NeedsYouMid",
-  play: press("button", /^Caw/u),
-};
-
 /** A phone: the needs-you line on top, the switch and filters, the stage strip over a one-stage pager. */
 export const NeedsYouPhone = {
   args: { place: "tasks", height: 844 },
   parameters: { viewport: 390 },
-};
-
-/** A phone on All, paged to Working: the strip's chosen stage follows the page. */
-export const WorkingPhone = {
-  args: { place: "tasks", height: 844, filter: "all", stage: "working" },
-  parameters: { viewport: 390 },
-  from: "NeedsYouPhone",
-  play: async ({ canvas, userEvent }: Play) => {
-    await userEvent.click(canvas.getByRole("tab", { name: ALL }));
-    await userEvent.click(canvas.getByRole("tab", { name: WORKING }));
-  },
 };
 
 /** A phone, a card pressed: the task rises as a drawer; Back returns to the same stage. */
@@ -169,11 +134,5 @@ export const TaskOpenPhone = {
 /** A phone, a new project: stages in the strip, the composer and Ask Caw to plan. */
 export const EmptyPhone = {
   args: { place: "tasks", height: 844, records: EMPTY },
-  parameters: { viewport: 390 },
-};
-
-/** A phone while the hub is unreachable. */
-export const StalePhone = {
-  args: { place: "tasks", height: 844, read: "stale", filter: "all" },
   parameters: { viewport: 390 },
 };

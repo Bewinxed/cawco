@@ -45,9 +45,3 @@ export const SpendPhone = {
   args: { place: "tasks", height: 844, sheet: "spend" },
   parameters: { viewport: 390 },
 };
-
-/** A phone: Configure with Delete asked. */
-export const DeleteAskedPhone = {
-  args: { place: "tasks", height: 844, sheet: "configure", asking: "delete" },
-  parameters: { viewport: 390 },
-};

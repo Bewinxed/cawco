@@ -25,12 +25,6 @@ export const NoMarks = {
   parameters: { viewport: 1440 },
 };
 
-/** The first read: the marks as skeleton dots, no line yet. */
-export const Reading = {
-  args: { place: "tasks", height: 920, read: "loading" },
-  parameters: { viewport: 1440 },
-};
-
 /** The hub is unreachable: marks suppressed, the line says since when. */
 export const Stale = {
   args: { place: "tasks", height: 920, read: "stale" },
@@ -55,11 +49,5 @@ export const AtTheCap = {
 /** A phone: the five as the bottom bar, the line on top of Tasks. */
 export const MarksPhone = {
   args: { place: "tasks", height: 844 },
-  parameters: { viewport: 390 },
-};
-
-/** A phone while the hub is unreachable. */
-export const StalePhone = {
-  args: { place: "tasks", height: 844, read: "stale" },
   parameters: { viewport: 390 },
 };
