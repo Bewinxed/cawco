@@ -1828,6 +1828,8 @@
                 id: artifact.id,
                 kind: artifact.kind,
                 name: artifact.name,
+                // The page's own first heading, when it says this, is its title (overlay `cawco:page-title`).
+                title: artifact.title,
               },
               sync: artifactSyncPath(artifact.id),
             }

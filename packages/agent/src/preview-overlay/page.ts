@@ -2109,15 +2109,37 @@ addEventListener("load", tellPageFoot);
 
 /**
  * Whether the page's own title stands where it can be read: its element
- * marked `data-page-title` (a decision page's `h1`), in the viewport past
+ * marked `data-page-title` (a decision page's `h1`), else the page's first
+ * heading when its words are the artifact's title as the host named it
+ * (`cawco:hello`), case and spacing aside (a page an agent wrote, its `h1`
+ * its title); in the viewport past
  * every scroller clipping it and clear of the host's chrome (`cawco:covered`,
  * a phone's Comments sheet at its whole room). Told to the host
  * (`cawco:page-title`) as it changes: the host's head leaves its own title out
  * while this one stands, so the words are never read twice, and says it once
  * this has scrolled out. A page with no such element is told false from its
- * first word, and its head keeps its title always.
+ * first word, and its head keeps its title always: one whose first heading
+ * says something else too.
  */
 const PAGE_TITLE = "[data-page-title]";
+const HEADINGS = "h1, h2, h3, h4, h5, h6, [role='heading']";
+/** The artifact's title, as the host named it in its hello. */
+let shownTitle = "";
+/** Words as a title compares them: case and runs of spacing aside. */
+const titleWords = (text: string | null | undefined): string =>
+  (text ?? "").replace(/\s+/gu, " ").trim().toLowerCase();
+/** The page's own title: its marked element, else its first heading when that says the artifact's title. */
+function pageTitleNow(): Element | null {
+  const marked = document.querySelector(PAGE_TITLE);
+  if (marked) {
+    return marked;
+  }
+  const first = document.querySelector(HEADINGS);
+  const wants = titleWords(shownTitle);
+  return first && wants && titleWords(first.textContent) === wants
+    ? first
+    : null;
+}
 let pageTitle: Element | null = null;
 let pageTitleSeen = false;
 let pageTitleUnder: Box[] = [];
@@ -2130,7 +2152,7 @@ function tellPageTitle() {
   pageTitleAsked = true;
   requestAnimationFrame(() => {
     pageTitleAsked = false;
-    const el = document.querySelector(PAGE_TITLE);
+    const el = pageTitleNow();
     if (el !== pageTitle) {
       if (pageTitle) {
         pageTitleSight.unobserve(pageTitle);
@@ -2171,7 +2193,11 @@ new MutationObserver((records) => {
   if (records.some((record) => !ownNode(record.target))) {
     tellPageTitle();
   }
-}).observe(document.documentElement, { childList: true, subtree: true });
+}).observe(document.documentElement, {
+  characterData: true,
+  childList: true,
+  subtree: true,
+});
 
 /** The count of the page's changes as they stand now, `doc` watched from here on: changes not yet delivered (a write this very task) taken first. */
 function changesNow(doc: Document): number {
@@ -3420,6 +3446,11 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       pageFootTold = -1;
       tellPageFoot();
       pageTitleTold = null;
+      shownTitle =
+        typeof (message as { artifact?: { title?: unknown } }).artifact
+          ?.title === "string"
+          ? (message as { artifact: { title: string } }).artifact.title
+          : "";
       tellPageTitle();
       // The host names the artifact this page is, and where its doc is synced.
       const hello = message as {
