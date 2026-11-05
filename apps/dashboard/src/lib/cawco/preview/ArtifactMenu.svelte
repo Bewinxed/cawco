@@ -313,7 +313,7 @@
               in:reveal
             >
               <span
-                class="max-w-full overflow-clip text-ellipsis whitespace-nowrap text-ink-strong type-label"
+                class="max-w-full overflow-clip text-ellipsis whitespace-nowrap text-ink-strong type-row"
                 data-slot="name-words">{shown.title}</span
               >
               <span
