@@ -299,11 +299,22 @@ const run = async (kit: Kit) => {
   });
   const SESSION = `${base}/session/${talk}`;
 
-  // Caw's column at its fullest bar: the conversation on show holds that
-  // artifact, so Assistant | Preview stands in the trailing side beside its
-  // three items (and, on a phone, Close). Every width reads it, and the bar's
-  // ink stays on the screen (BarFloat gives its trailing side its whole
-  // width).
+  // Caw's column at its fullest bar: the conversation on show (the
+  // project's newest, Peek me; caw-lead `conversation`) shows an artifact,
+  // so Assistant | Preview stands in the trailing side beside its three
+  // items (and, on a phone, Close). Every width reads it, and the bar's ink
+  // stays on the screen (BarFloat gives its trailing side its whole width).
+  const shown = await fleet.api<{ id: string }>(
+    `/api/instances/${busy}/artifacts`,
+    {
+      kind: "page",
+      does: "judge",
+      ask: "Judge the fullest bar",
+      name: "fullest-bar",
+      html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Fullest bar</title></head><body><h1>Fullest bar</h1></body></html>',
+    }
+  );
+  await fleet.api(`/api/instances/${busy}/artifacts/${shown.id}/show`, {});
   await each("caw preview shown", async (page) => {
     await page
       .locator(`${PANEL} [data-slot="bar"] [role="tablist"]`)
