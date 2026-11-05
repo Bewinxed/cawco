@@ -1446,6 +1446,9 @@ public enum Motion {
     /// A queued message's words flying between its bubble and the composer field, either way, two copies crossfading on the drawer curve.
     /// In seconds.
     public static let durLift: TimeInterval = 0.34
+    /// A thing in the air following the hand: the perceptual duration of the house spring it trails the pointer on (drag/follow.ts), critically damped. It trails a brisk hand (0.5px/ms) by about 13px and comes to rest under it as the hand stops; --dur-settle's 400ms left it 130px behind, which read as lag.
+    /// In seconds.
+    public static let durDragFollow: TimeInterval = 0.08
     /// How long a touch rests on the composer, keyboard down, before the recall wheel comes up under it.
     /// In seconds.
     public static let durPressHold: TimeInterval = 0.38

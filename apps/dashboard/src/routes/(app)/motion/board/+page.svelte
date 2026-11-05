@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onMount } from "svelte";
+  import { standBench } from "#lib/cawco/bench-api.js";
   /**
    * BOARD BENCH (dev only): a set-up project's board as its cards are
    * carried between columns, drawn by the real board (TaskBoard on
@@ -11,10 +13,18 @@
    * would set them: Sending and Sent are the sender's, so a person's card
    * may go anywhere but there. The bench answers each move as the hub does,
    * after a beat: a card let go in Won is refused, with the hub's sentence
-   * under it and Try again; any other move is taken.
+   * under it and Try again; any other move is taken. One card stands in a
+   * stage stages.md does not name (Parked), in Other stages, and is carried
+   * out of it like any other.
+   *
+   * The page stands on the bench's own hub (client.svelte.ts `standHub`,
+   * bench-api.ts `standBench`): the project in the rail, its limits read, and
+   * no band saying the dev server has no hub.
    */
   import {
+    PO_ID,
     PO_NAME,
+    PO_ROW,
     PO_STAGES,
     PO_TASKS,
   } from "#lib/cawco/project/board.fixtures.js";
@@ -25,6 +35,7 @@
     type TaskSummary,
   } from "#lib/cawco/project-tasks.js";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
+  import { browser } from "$app/env";
 
   /** The sender's stages: a person's card is not moved into them. */
   const SENDERS = new Set(["sending", "sent"]);
@@ -49,6 +60,7 @@
     ["drafting", "Write the launch post for the side project"],
     ["your-call", "Approve the reply to the Stripe recruiter"],
     ["sent", "Application to Vercel, design engineer"],
+    ["parked", "Renew the gym membership"],
   ];
   let tasks = $state<TaskSummary[]>(
     CARDS.map(([stage, title], at) => ({
@@ -66,6 +78,16 @@
       droppedAt: null,
     }))
   );
+  // --- the bench's hub ----------------------------------------------------------
+  const restore = browser
+    ? standBench(PO_ROW, (path, method) =>
+        method === "GET" && path === `/api/projects/${PO_ID}/stages`
+          ? stagesView
+          : undefined
+      )
+    : () => undefined;
+  onMount(() => restore);
+
   /** Moves the bench's hub has not answered, by task. */
   let moving = $state<Record<string, string>>({});
   /** Moves it refused, by task. */

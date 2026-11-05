@@ -3137,14 +3137,14 @@ public enum Words {
             "\(name) is at \(place) of \(of)."
         }
 
+        /// It stands at a new place in one of several lists (a board's column, a group's tabs).
+        public static func movedToIn(name: String, `where`: String, place: Int, of: Int) -> String {
+            "\(name) is in \(`where`), at \(place) of \(of)."
+        }
+
         /// It is over somewhere it can land.
         public static func over(name: String, `where`: String) -> String {
             "\(name) is over \(`where`)."
-        }
-
-        /// Over nothing that takes it.
-        public static func overNothing(name: String) -> String {
-            "\(name) is over nothing that takes it."
         }
 
         public static func droppedAt(name: String, place: Int, of: Int) -> String {
@@ -3153,6 +3153,10 @@ public enum Words {
 
         public static func droppedIn(name: String, `where`: String) -> String {
             "Put \(name) down in \(`where`)."
+        }
+
+        public static func droppedAtIn(name: String, `where`: String, place: Int, of: Int) -> String {
+            "Put \(name) down in \(`where`), at \(place) of \(of)."
         }
 
         /// Let go where nothing takes it, or Escape: it goes back.

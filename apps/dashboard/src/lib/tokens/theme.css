@@ -678,6 +678,7 @@
   --duration-goo-content-exit: var(--dur-goo-content-exit);
   --duration-goo-settle: var(--dur-goo-settle);
   --duration-lift: var(--dur-lift);
+  --duration-drag-follow: var(--dur-drag-follow);
   --duration-press-hold: var(--dur-press-hold);
   --duration-settle: var(--dur-settle);
   --duration-glide: var(--dur-glide);

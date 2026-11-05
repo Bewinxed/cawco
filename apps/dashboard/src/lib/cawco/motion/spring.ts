@@ -36,13 +36,17 @@ export interface Sample {
 
 /**
  * The spring's stiffness and damping, from its perceptual duration
- * (--dur-settle) and its bounce, for a mass of 1: what `integrate` steps,
- * and what a value that follows a moving target frame by frame steps (a
- * thing in the air leaning into the hand's travel, drag/lift.ts).
+ * (--dur-settle, or the duration a motion names) and its bounce, for a
+ * mass of 1: what `integrate` steps, and what a value that follows a
+ * moving target frame by frame steps (a thing in the air leaning into the
+ * hand's travel, drag/lift.ts; following the hand, drag/follow.ts).
  */
-export function springForces(): { damping: number; stiffness: number } {
+export function springForces(
+  /** Its perceptual duration, in ms: the house's --dur-settle unless a motion names its own. */
+  ms: number = dur("--dur-settle")
+): { damping: number; stiffness: number } {
   /** The perceptual duration, in seconds. */
-  const settle = dur("--dur-settle") / 1000;
+  const settle = ms / 1000;
   return {
     stiffness: ((2 * Math.PI) / settle) ** 2,
     damping: (4 * Math.PI * (1 - BOUNCE)) / settle,

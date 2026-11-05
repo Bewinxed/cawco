@@ -169,6 +169,19 @@ function arm(by: KeyboardEvent | true): void {
 }
 
 /**
+ * The key just pressed hands back a gesture the pointer is making (Escape
+ * putting back what a drag carries, drag/DragProvider): its return is the
+ * pointer's motion, not a key's action, and keeps its motion. Called while
+ * the key is dispatched, before the frame that would land it.
+ */
+export function spareKey(): void {
+  cancelAnimationFrame(frame);
+  frame = 0;
+  key = null;
+  keyed.current = false;
+}
+
+/**
  * A key pressed where this window never hears it (an artifact's page, a
  * canvas's frame) and handed over to act here (shell-shortcut.ts): what it
  * starts lands at once, as for the window's own keys.

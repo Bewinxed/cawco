@@ -7510,6 +7510,14 @@
       },
       "$description": "A queued message's words flying between its bubble and the composer field, either way, two copies crossfading on the drawer curve."
     },
+    "dur-drag-follow": {
+      "$type": "duration",
+      "$value": {
+        "value": 80,
+        "unit": "ms"
+      },
+      "$description": "A thing in the air following the hand: the perceptual duration of the house spring it trails the pointer on (drag/follow.ts), critically damped. It trails a brisk hand (0.5px/ms) by about 13px and comes to rest under it as the hand stops; --dur-settle's 400ms left it 130px behind, which read as lag."
+    },
     "dur-press-hold": {
       "$type": "duration",
       "$value": {
