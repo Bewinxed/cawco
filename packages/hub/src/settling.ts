@@ -89,6 +89,8 @@ export interface SettlingDeps {
   /** Project `id`'s name, Caw's switch and runs-on. */
   readonly project: (id: string) =>
     | {
+        /** The area it sits in; null: none. */
+        areaId: string | null;
         cawHarness: string;
         cawModel: string | null;
         conversationInstanceId: string | null;
@@ -239,7 +241,15 @@ export const createSettling = (deps: SettlingDeps) => {
     row: ArtifactRow,
     card: DecisionCard
   ): Promise<Routed & { problems: string[] }> => {
-    const table = await decidesTable(row.projectId, fleet);
+    const table = await decidesTable(
+      {
+        projectId: row.projectId,
+        areaId: row.projectId
+          ? (deps.project(row.projectId)?.areaId ?? null)
+          : null,
+      },
+      fleet
+    );
     const id = card.kind ? table.routes[card.kind] : undefined;
     return {
       member: (id && memberOf(fleet, id)) || BUILT_IN.you,

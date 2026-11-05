@@ -10,7 +10,7 @@
  * Nothing is written into a new project before its setup page is sent: the
  * template tapped on New project is kept as what was tapped
  * (`projects.tapped`), and the shape picked on the page is applied on Send
- * ({@link applySetupPicks}), with the name, the account and the place. Caw writes the
+ * ({@link applySetupPicks}), with the name, the area, the account and the place. Caw writes the
  * rest (stages.md, delegates/, AGENTS.md) after it.
  */
 
@@ -29,6 +29,9 @@ const SETUP_PAGE = "setup";
 
 /** The `account` card's option for the fleet's routing: no account of the project's own. */
 const ROUTING = "routing";
+
+/** The `area` card's option for no area. */
+const NO_AREA = "none";
 
 /** The `shape` card's option for a project that fits no template: Caw drafts its stages from what the person wrote. */
 const OWN_SHAPE = "own";
@@ -68,6 +71,10 @@ export const SETUP_CARDS = [
     send: 'Sets the account the project\'s sessions start on (its conversation, its routines\' runs, its delegates, unless one names its own) to the account id kept under "account", one of Accounts above; "routing" leaves them to the fleet\'s routing. Its connectors are the ones those sessions get.',
   },
   {
+    id: "area",
+    send: `Puts the project in the area whose id is kept under "area", one of Areas above, or in none with "${NO_AREA}": it takes that area's account, budget, Who decides, delegate types and connections wherever it sets none of its own.`,
+  },
+  {
     id: "routines",
     send: "Nothing: you make each routine kept.",
   },
@@ -94,10 +101,14 @@ export interface ShippedTemplate {
 
 /** What `project_setup` answers: the facts a setup page is built from. */
 export interface SetupFacts {
-  /** The project's account, by name; null: the fleet's routing. */
+  /** The account its sessions start on, by name with where it came from; null: the fleet's routing. */
   account: string | null;
   /** The fleet's accounts, each a line: its name, id, provider and where it is signed in. */
   accounts: readonly string[];
+  /** The area it sits in, by name; null: none. */
+  area: string | null;
+  /** The hub's areas, each a line: its name and id. */
+  areas: readonly string[];
   cards: typeof SETUP_CARDS;
   /** Parts the person asked to be put to them again. */
   change: readonly SetupPart[];
@@ -165,6 +176,11 @@ export const setupFactsWords = (facts: SetupFacts): string =>
     `Places: ${facts.places.join("; ") || "none"}.`,
     `Machines online: ${facts.machines.join(", ") || "none"}.`,
     `Its sessions start on: ${facts.account ?? "the fleet's routing"}.`,
+    `Its area: ${facts.area ?? "none"}.`,
+    "Areas (a project in one takes its settings where it sets none):",
+    ...(facts.areas.length > 0
+      ? facts.areas.map((line) => `- ${line}`)
+      : ["- none"]),
     "Accounts (each with its own connectors):",
     ...(facts.accounts.length > 0
       ? facts.accounts.map((line) => `- ${line}`)
@@ -177,6 +193,8 @@ export const setupFactsWords = (facts: SetupFacts): string =>
 export interface SetupApply {
   /** Sets the account its sessions start on (project-edit.ts); null: the fleet's routing; a refusal throws. */
   account: (projectId: string, account: string | null) => Promise<void>;
+  /** Puts the project in an area by its id, or in none (null) (areas.ts); a refusal throws. */
+  area: (projectId: string, area: string | null) => Promise<void>;
   /** Renames the project (project-edit.ts, the dashboard's rename); a refusal throws. */
   name: (projectId: string, name: string) => Promise<void>;
   /**
@@ -237,6 +255,18 @@ const accountOf = (
   return value.trim() === ROUTING ? null : value.trim();
 };
 
+/** The `area` pick: an area id, or null for "none"; undefined when the card was not picked. */
+const areaOf = (
+  state: Record<string, ChoiceEntry>
+): string | null | undefined => {
+  const entry: ChoiceEntry | undefined = state.area;
+  const value: unknown = entry?.value;
+  if (typeof value !== "string" || !value.trim()) {
+    return;
+  }
+  return value.trim() === NO_AREA ? null : value.trim();
+};
+
 /**
  * The shape the stages start from: the person's pick on the page, else the
  * Setup's own as Caw drew it (the board, which draws the Setup from the
@@ -274,7 +304,7 @@ export interface SentPage {
  * Set up, the page's own `cawco.send`, the panel's Send), whatever it
  * holds beside its Setup: the name in its `name` field, the shipped
  * template the Setup's shape starts from (the person's pick, else as Caw
- * drew it), the account picked on `account` and the place picked on
+ * drew it), the area picked on `area`, the account picked on `account` and the place picked on
  * `place` are applied before Caw hears the page, so he writes only the
  * project's files. Only what is new since the last Send (`sentAt`) applies:
  * a pick made since, or, for a part the person left as drawn, the page
@@ -311,6 +341,11 @@ export const applySetupPicks = async (
   const shape = shapeOf(state, kept ? undefined : drawn);
   if (shape) {
     await apply.shape(projectId, shape);
+  }
+  // The area before the account: an account of its own is then set over it.
+  const area = areaOf(state);
+  if (area !== undefined) {
+    await apply.area(projectId, area);
   }
   const account = accountOf(state);
   if (account !== undefined) {

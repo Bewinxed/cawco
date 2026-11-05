@@ -16,8 +16,8 @@ import {
   openedAt,
   type PlacementExplain,
   type PlacementStrategy,
-  type ProjectAtLimit,
   type ProviderRouting,
+  type SettingsInEffect,
   type StrategyChoice,
   spanWords,
   windowNoun,
@@ -28,6 +28,7 @@ import {
 } from "@cawco/core";
 import { HOUR_MS } from "@cawco/core/time";
 import { accountsWords } from "@cawco/core/words/accounts";
+import { areaWords } from "@cawco/core/words/areas";
 import { projectAccountWords } from "@cawco/core/words/project-account";
 import { spawnWords } from "@cawco/core/words/spawn";
 import type { AccountPaces } from "./forecast";
@@ -79,11 +80,12 @@ export interface PlacementInput {
    */
   paces?: AccountPaces;
   /**
-   * The account the session's project starts its sessions on (project-edit.ts
-   * `account`), for a start that names none of its own ({@link projectPick});
+   * The account the session's project starts its sessions on, as in effect
+   * (db `inEffect`: the project's own, else its area's, `area` naming that
+   * area), for a start that names none of its own ({@link projectPick});
    * absent: none, or a session already running.
    */
-  projectAccount?: string;
+  projectAccount?: { area: string | null; id: string };
   /**
    * The project's allow-list; null or absent: every account. It holds only
    * sessions of a provider it lists an account of ({@link ofProvider}).
@@ -782,7 +784,8 @@ const projectPick = (
   signedIn: Account[],
   name: (id: string) => string
 ): Placement | undefined => {
-  const account = input.accounts.find((one) => one.id === input.projectAccount);
+  const asked = input.projectAccount;
+  const account = input.accounts.find((one) => one.id === asked?.id);
   const allows = (list: string[] | null | undefined) =>
     !(list && account) || list.includes(account.id);
   if (!(
@@ -792,26 +795,62 @@ const projectPick = (
   )) {
     return;
   }
+  const machine = input.machineName ?? input.machineId;
+  const area = asked?.area ?? null;
   if (!signedIn.includes(account)) {
     return {
       ok: false,
-      refusal: projectAccountWords.notSignedIn(
-        name(account.id),
-        input.machineName ?? input.machineId
-      ),
+      refusal:
+        area === null
+          ? projectAccountWords.notSignedIn(name(account.id), machine)
+          : areaWords.notSignedIn(name(account.id), area, machine),
     };
   }
   return {
     ok: true,
     accountId: account.id,
     strategy: "project",
-    why: projectAccountWords.why(name(account.id)),
+    why:
+      area === null
+        ? projectAccountWords.why(name(account.id))
+        : areaWords.why(name(account.id), area),
+  };
+};
+
+/**
+ * What a start in `project` asks of placement for its account
+ * ({@link PlacementInput.projectAccount}): the account in effect, and the
+ * area's name (by `areaName`) when it is the area's. Nothing when the
+ * project starts on none, or there is no project.
+ */
+export const projectAccountOf = (
+  project:
+    | {
+        areaId: string | null;
+        inEffect: Pick<SettingsInEffect, "account">;
+      }
+    | undefined,
+  areaName: (areaId: string) => string | null
+): Pick<PlacementInput, "projectAccount"> => {
+  const account = project?.inEffect.account;
+  if (!account?.value) {
+    return {};
+  }
+  return {
+    projectAccount: {
+      id: account.value,
+      area:
+        account.from === "area" && project?.areaId
+          ? areaName(project.areaId)
+          : null,
+    },
   };
 };
 
 /**
  * The accounts a running session in a project may run on, as its project's
- * list for placement (`projectAccounts`): the project's account alone for
+ * list for placement (`projectAccounts`): the project's account in effect
+ * (its own, else its area's) alone for
  * one on it while the project waits there at its limit (core
  * `ProjectAtLimit`), so it stays there at a rebalance and its limit; else
  * the project's own list (null: every account), so one that moves at the
@@ -820,19 +859,19 @@ const projectPick = (
 export const runningAccounts = (
   project:
     | {
-        account: string | null;
-        accountAtLimit: ProjectAtLimit;
         accounts: string[] | null;
+        inEffect: Pick<SettingsInEffect, "account" | "accountAtLimit">;
       }
     | undefined,
   on: string | null | undefined
 ): string[] | null => {
+  const account = project?.inEffect.account.value;
   if (
-    project?.account &&
-    project.account === on &&
-    project.accountAtLimit === "wait"
+    account &&
+    account === on &&
+    project.inEffect.accountAtLimit.value === "wait"
   ) {
-    return [project.account];
+    return [account];
   }
   return project?.accounts ?? null;
 };

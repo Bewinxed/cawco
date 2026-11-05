@@ -3,6 +3,7 @@ import { and, eq, gte, inArray, lt, type SQL, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   configTrash,
+  connectionAreas,
   connectionProjects,
   connections,
   fleetAgents,
@@ -11,6 +12,7 @@ import {
   fleetMcpOauth,
   fleetMcpSessions,
   fleetMemory,
+  fleetMemoryDocAreas,
   fleetMemoryDocProjects,
   fleetMemoryDocs,
   fleetMemoryDocTypes,
@@ -125,6 +127,10 @@ const PARTS: Record<Exclude<TrashKind, "memory">, (key: string) => Part[]> = {
       "connection_projects",
       sql`${connectionProjects.connectionId} in (select ${connections.id} from ${connections} where ${eq(connections.name, key)})`
     ),
+    part(
+      "connection_areas",
+      sql`${connectionAreas.connectionId} in (select ${connections.id} from ${connections} where ${eq(connections.name, key)})`
+    ),
     // The GitHub pollers it ran stop, and come back with it, cursors and
     // all, to a project that has named no other meanwhile.
     part("github_pollers", eq(githubPollers.connection, key)),
@@ -162,6 +168,7 @@ const docParts = (paths: readonly string[]): Part[] => [
     "fleet_memory_doc_projects",
     inArray(fleetMemoryDocProjects.path, [...paths])
   ),
+  part("fleet_memory_doc_areas", inArray(fleetMemoryDocAreas.path, [...paths])),
 ];
 
 /** A driver value the trash can keep as JSON; anything else is refused by name. */

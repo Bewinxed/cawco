@@ -308,6 +308,7 @@ const typeLine = (
         ]
       : []),
     ...(type.source === "project" ? ["the project's own"] : []),
+    ...(type.source === "area" ? ["its area's"] : []),
   ];
   return `- ${type.name}: ${type.description.replace(/\s+/gu, " ").trim()} (${runs.join("; ")})`;
 };

@@ -41,7 +41,7 @@ import {
 import { devNull } from "node:os";
 import { basename, dirname, isAbsolute, join, sep } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
-import { hubProjectsDir } from "@cawco/core/paths";
+import { hubAreasDir, hubProjectsDir } from "@cawco/core/paths";
 import { type Ran, runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -54,6 +54,19 @@ import { Elysia, status, t } from "elysia";
  * core's one rule, which the agent's workspace policy reads them by too.
  */
 const PROJECTS_DIR = hubProjectsDir();
+/**
+ * Where every area's folder lives (core areas.ts): `areas/` beside
+ * `projects/`. An area's folder is kept by this module as a project's is,
+ * under its key `area:<id>` ({@link areaFolder}): its `decides.md`,
+ * `delegates/` and `skills/`, read by the project's own loaders, every
+ * change a commit.
+ */
+const AREAS_DIR = hubAreasDir();
+const AREA_KEY = "area:";
+
+/** The key this module keeps area `areaId`'s folder by, in place of a project id. */
+export const areaFolder = (areaId: string): string => `${AREA_KEY}${areaId}`;
+
 /** What forgetting a project set aside, kept rather than erased (project-trash.ts). */
 export const PROJECT_TRASH_DIR = join(PROJECTS_DIR, ".trash");
 
@@ -324,6 +337,13 @@ const guarded = (rel: string, bytes: Uint8Array): void => {
 
 /** The project's folder on disk, whether or not it has been made; refuses anything that is not a project id. */
 export const projectRoot = (projectId: string): string => {
+  if (projectId.startsWith(AREA_KEY)) {
+    const areaId = projectId.slice(AREA_KEY.length);
+    if (!PROJECT_ID.test(areaId)) {
+      throw new FolderRefusal(400, `${areaId} is not an area id.`);
+    }
+    return join(AREAS_DIR, areaId);
+  }
   if (!PROJECT_ID.test(projectId)) {
     throw new FolderRefusal(400, `${projectId} is not a project id.`);
   }
@@ -560,7 +580,17 @@ const prepare = async (projectId: string, root: string): Promise<void> => {
     await git(root, ["init", "-q"]);
   }
   const started = await run(root, ["rev-parse", "--verify", "-q", "HEAD"]);
-  if (started.code !== 0) {
+  if (started.code !== 0 && projectId.startsWith(AREA_KEY)) {
+    // An area's folder holds no AGENTS.md: it is set up, never worked in.
+    await git(root, [
+      "commit",
+      "-q",
+      "--allow-empty",
+      `--author=${HUB_NAME} <${NO_REPLY}>`,
+      "-m",
+      "Start the area folder",
+    ]);
+  } else if (started.code !== 0) {
     const agents = join(root, "AGENTS.md");
     if (!(await exists(agents))) {
       await writeStateFile(agents, AGENTS_STUB, {
@@ -1989,6 +2019,17 @@ export const folderAttempt = async <T>(work: () => T | Promise<T>) => {
  * task file or stages.md may be among them). A standalone Elysia app so
  * `server.ts` mounts it with one `.use()`.
  */
+/** A write of one file in a folder, as its route takes it: the project's, or an area's (areas.ts). */
+export const FOLDER_WRITE = t.Object({
+  path: t.String(),
+  content: t.String({ maxLength: FOLDER_CONTENT_LIMIT }),
+  // `base64`: `content` is the file's bytes (a font, an image).
+  encoding: t.Optional(
+    t.Union(FOLDER_ENCODINGS.map((each) => t.Literal(each)))
+  ),
+  message: t.Optional(t.String({ maxLength: MESSAGE_LIMIT })),
+});
+
 export const projectFolderRoutes = (
   projectExists: (id: string) => boolean,
   changed: (id: string) => void = () => undefined
@@ -2059,17 +2100,7 @@ export const projectFolderRoutes = (
     )
     .put(
       "/api/projects/:id/folder/file",
-      {
-        body: t.Object({
-          path: t.String(),
-          content: t.String({ maxLength: FOLDER_CONTENT_LIMIT }),
-          // `base64`: `content` is the file's bytes (a font, an image).
-          encoding: t.Optional(
-            t.Union(FOLDER_ENCODINGS.map((each) => t.Literal(each)))
-          ),
-          message: t.Optional(t.String({ maxLength: MESSAGE_LIMIT })),
-        }),
-      },
+      { body: FOLDER_WRITE },
       async ({ params, body }) => {
         try {
           known(params.id);

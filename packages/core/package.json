@@ -189,6 +189,8 @@
     "./words/place": "./src/words/place.ts",
     "./words/project": "./src/words/project.ts",
     "./words/project-account": "./src/words/project-account.ts",
+    "./words/areas": "./src/words/areas.ts",
+    "./areas": "./src/areas.ts",
     "./words/project-trash": "./src/words/project-trash.ts",
     "./words/project-ends": "./src/words/project-ends.ts",
     "./words/rules": "./src/words/rules.ts",

@@ -1393,6 +1393,7 @@ const ConnectionViewShape = declared(
   z.object({
     account: z.string(),
     app: ConnectionAppShape.optional(),
+    areas: z.array(z.string()),
     args: z.array(z.string()).optional(),
     auth: ConnectionAuthShape,
     command: z.string().optional(),

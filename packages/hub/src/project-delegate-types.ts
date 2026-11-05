@@ -1,6 +1,9 @@
 /**
  * A project's own delegate types (Projects spec §5.1, D16): one file each in
  * the project folder's `delegates/`, shadowing a fleet type of the same name.
+ * A project in an area (core areas.ts) also has its area's, from the area
+ * folder's `delegates/`, read the same way: the project's own shadow the
+ * area's, and both shadow the fleet's.
  *
  * ```
  * delegates/writer.md
@@ -32,6 +35,7 @@
  */
 import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { SettingSource } from "@cawco/core";
 import {
   DELEGATE_TYPE_NAME,
   type DelegateType,
@@ -46,7 +50,7 @@ import {
 } from "@cawco/core";
 import { Elysia } from "elysia";
 import type { DelegateTypesShape } from "./delegate-types";
-import { FOLDER_FILE_LIMIT, projectRoot } from "./project-folder";
+import { areaFolder, FOLDER_FILE_LIMIT, projectRoot } from "./project-folder";
 import { listOf, scalarOf } from "./task-file";
 
 /** The toolsets a type may run in (§5.3's roles). */
@@ -68,17 +72,19 @@ type CatalogType = DelegateType & {
   /** The type's brief: the file's body. */
   brief?: string;
   lands?: LandsMode;
-  /** The file it was read from, inside the project folder. */
+  /** The file it was read from, inside its folder (the project's, or its area's). */
   path?: string;
-  /** A project type that replaces a fleet type of the same name. */
+  /** A project or area type that replaces a type of the same name below it. */
   shadows?: boolean;
-  source: "project" | "fleet";
+  source: SettingSource;
 };
 
 /** A file under `delegates/` that did not make a type, or a field one ignored. */
 interface TypeFileProblem {
   path: string;
   problem: string;
+  /** The folder it is in: the project's, or its area's. */
+  source: Exclude<SettingSource, "fleet">;
 }
 
 export interface DelegateCatalog {
@@ -301,12 +307,15 @@ export const typeFileProblem = (
  * folder, has none. Links and anything over the folder's file limit are
  * refused: the folder's files are read whole, and only its own.
  */
-const readProjectTypes = (projectId: string): DelegateCatalog => {
+const readFolderTypes = (
+  folder: string,
+  source: Exclude<SettingSource, "fleet">
+): DelegateCatalog => {
   const types: CatalogType[] = [];
   const problems: TypeFileProblem[] = [];
   let dir: string;
   try {
-    dir = join(projectRoot(projectId), DELEGATES);
+    dir = join(projectRoot(folder), DELEGATES);
     if (!lstatSync(dir).isDirectory()) {
       return { types, problems };
     }
@@ -328,11 +337,15 @@ const readProjectTypes = (projectId: string): DelegateCatalog => {
     const full = join(dir, file);
     const info = lstatSync(full);
     if (!info.isFile()) {
-      problems.push({ path, problem: "not a plain file (a link or a folder)" });
+      problems.push({
+        path,
+        problem: "not a plain file (a link or a folder)",
+        source,
+      });
       continue;
     }
     if (info.size > FOLDER_FILE_LIMIT) {
-      problems.push({ path, problem: "larger than the folder reads" });
+      problems.push({ path, problem: "larger than the folder reads", source });
       continue;
     }
     const { type, problem, ignored } = parseTypeFile(
@@ -341,13 +354,13 @@ const readProjectTypes = (projectId: string): DelegateCatalog => {
       readFileSync(full, "utf8")
     );
     if (problem) {
-      problems.push({ path, problem });
+      problems.push({ path, problem, source });
     }
     if (ignored.length > 0) {
-      problems.push({ path, problem: ignoredWords(ignored) });
+      problems.push({ path, problem: ignoredWords(ignored), source });
     }
     if (type) {
-      types.push(type);
+      types.push({ ...type, source });
     }
   }
   return { types, problems };
@@ -355,42 +368,54 @@ const readProjectTypes = (projectId: string): DelegateCatalog => {
 
 /** The catalog, resolver and route surface over the fleet's types and each project's. */
 export interface ProjectDelegateTypes {
-  /** The project's types and the fleet types they leave unshadowed, with what kept files out. */
+  /** The project's types, its area's they leave unshadowed, then the fleet's either leaves, with what kept files out. */
   readonly catalog: (projectId: string | null | undefined) => DelegateCatalog;
   /** One name, as a session of that project resolves it: its project's type first. */
   readonly resolveTypeFor: (
     projectId: string | null | undefined,
     name: string
   ) => CatalogType | undefined;
-  /** What a session of that project may name: project types, then unshadowed fleet types. */
+  /** What a session of that project may name: project types, then its area's, then the fleet's, each unshadowed. */
   readonly typesFor: (projectId: string | null | undefined) => CatalogType[];
 }
 
 export const makeProjectDelegateTypes = (
-  fleet: Pick<DelegateTypesShape, "list">
+  fleet: Pick<DelegateTypesShape, "list">,
+  /** The area a project sits in now; null: none. */
+  areaOf: (projectId: string) => string | null
 ): ProjectDelegateTypes => {
   const catalog = (projectId: string | null | undefined): DelegateCatalog => {
-    const fleetTypes = fleet.list();
+    const fleetTypes: CatalogType[] = fleet
+      .list()
+      .map((type) => ({ ...type, source: "fleet" as const }));
     if (!projectId) {
-      return {
-        types: fleetTypes.map((type) => ({ ...type, source: "fleet" })),
-        problems: [],
-      };
+      return { types: fleetTypes, problems: [] };
     }
-    const own = readProjectTypes(projectId);
-    const names = new Set(own.types.map((type) => type.name));
-    const fleetNames = new Set(fleetTypes.map((type) => type.name));
-    return {
-      types: [
-        ...own.types.map((type) =>
-          fleetNames.has(type.name) ? { ...type, shadows: true } : type
-        ),
-        ...fleetTypes
-          .filter((type) => !names.has(type.name))
-          .map((type) => ({ ...type, source: "fleet" as const })),
-      ],
-      problems: own.problems,
-    };
+    const areaId = areaOf(projectId);
+    const layers = [
+      readFolderTypes(projectId, "project"),
+      ...(areaId ? [readFolderTypes(areaFolder(areaId), "area")] : []),
+      { types: fleetTypes, problems: [] },
+    ];
+    // Each layer's types that no layer above names; each marked when it
+    // replaces one below.
+    const types: CatalogType[] = [];
+    const named = new Set<string>();
+    layers.forEach((layer, at) => {
+      const below = new Set(
+        layers.slice(at + 1).flatMap((one) => one.types.map((t) => t.name))
+      );
+      for (const type of layer.types) {
+        if (named.has(type.name)) {
+          continue;
+        }
+        types.push(below.has(type.name) ? { ...type, shadows: true } : type);
+      }
+      for (const type of layer.types) {
+        named.add(type.name);
+      }
+    });
+    return { types, problems: layers.flatMap((layer) => layer.problems) };
   };
   const typesFor = (projectId: string | null | undefined): CatalogType[] =>
     catalog(projectId).types;

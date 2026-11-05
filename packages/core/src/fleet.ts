@@ -18,6 +18,7 @@ import type {
 import type { FleetHarnessConfig } from "./harness-config";
 import type { FleetHook } from "./hooks";
 import type { ToolPlatform } from "./tools";
+import { areaWords } from "./words/areas";
 import { configurePage } from "./words/configure";
 import { memoryWords } from "./words/memory";
 
@@ -685,9 +686,15 @@ export const isMemoryRole = (value: string): value is MemoryRole =>
  * `delegateTypes` and `model` then name the delegates it is about (none:
  * every delegate); the hub hands it to the caller once before the first
  * such delegate goes out, and again after the caller's next compaction
- * (hub briefings.ts). It takes no `role` or `projectIds`.
+ * (hub briefings.ts). It takes no `role`, `projectIds` or `areaIds`.
+ *
+ * `areaIds` names areas (core areas.ts): a document scoped to an area is
+ * scoped to every project in it as the hub reads it, a project moved in or
+ * out taking it or leaving it then ({@link inScopedProjects}).
  */
 export interface MemoryScope {
+  /** Never empty when present: every project in each area, as read. */
+  areaIds?: string[];
   briefer?: true;
   /** Never empty when present. */
   delegateTypes?: string[];
@@ -721,7 +728,8 @@ export const scoped = (scope: MemoryScope | undefined): boolean =>
     scope?.role ||
     scope?.model ||
     scope?.delegateTypes?.length ||
-    scope?.projectIds?.length
+    scope?.projectIds?.length ||
+    scope?.areaIds?.length
   );
 
 /**
@@ -730,7 +738,7 @@ export const scoped = (scope: MemoryScope | undefined): boolean =>
  * model) or makes it a briefing is the hub's to deliver instead.
  */
 export const placedOnly = (scope: MemoryScope | undefined): boolean =>
-  !!scope?.projectIds?.length &&
+  !!(scope?.projectIds?.length || scope?.areaIds?.length) &&
   !(scope.briefer || scope.role || scope.model || scope.delegateTypes?.length);
 
 /** A scope as one string, every field in order and every list sorted: two scopes are the same when their keys are. */
@@ -741,6 +749,7 @@ export const scopeKey = (scope: MemoryScope | undefined): string =>
     scope?.model ?? null,
     [...(scope?.projectIds ?? [])].sort(),
     scope?.briefer === true,
+    [...(scope?.areaIds ?? [])].sort(),
   ]);
 
 /** Why a scope cannot be stored, in a sentence, or nothing when it can. */
@@ -757,14 +766,19 @@ export const memoryScopeProblem = (scope: MemoryScope): string | undefined => {
   if (scope.projectIds?.length === 0) {
     return "projectIds names at least one project when it is given";
   }
-  if (scope.briefer && (scope.role || scope.projectIds)) {
-    return "a briefer document reaches the session writing a brief, so it takes no role or projectIds: delegateTypes and model name the delegates it is about";
+  if (scope.areaIds?.length === 0) {
+    return "areaIds names at least one area when it is given";
+  }
+  if (scope.briefer && (scope.role || scope.projectIds || scope.areaIds)) {
+    return "a briefer document reaches the session writing a brief, so it takes no role, projectIds or areaIds: delegateTypes and model name the delegates it is about";
   }
   return undefined;
 };
 
 /** What a session is, as a document's scope reads it. */
 export interface DocumentFacts {
+  /** The area its project sits in; null when none (or no project). */
+  areaId: string | null;
   /** The delegate type it was started as; null when none. */
   delegateType: string | null;
   model: string | null;
@@ -772,6 +786,25 @@ export interface DocumentFacts {
   projectId: string | undefined;
   role: MemoryRole;
 }
+
+/**
+ * Whether a project is among those a scope names, by itself or by the area
+ * it sits in now; true when the scope names neither. A scope's areas expand
+ * to their projects here, as it is read, never as it is stored.
+ */
+export const inScopedProjects = (
+  scope: Pick<MemoryScope, "areaIds" | "projectIds"> | undefined,
+  projectId: string | null | undefined,
+  areaId: string | null | undefined
+): boolean => {
+  if (!(scope?.projectIds || scope?.areaIds)) {
+    return true;
+  }
+  return (
+    (!!projectId && !!scope.projectIds?.includes(projectId)) ||
+    (!!areaId && !!scope.areaIds?.includes(areaId))
+  );
+};
 
 /** Whether `model` is one a scope's `model` names: a substring, in any case. */
 export const modelMatches = (
@@ -797,9 +830,7 @@ export const sessionTakes = (
     (facts.delegateType !== null &&
       scope.delegateTypes.includes(facts.delegateType))) &&
   modelMatches(scope.model, facts.model) &&
-  (!scope.projectIds ||
-    (facts.projectId !== undefined &&
-      scope.projectIds.includes(facts.projectId)));
+  inScopedProjects(scope, facts.projectId, facts.areaId);
 
 /** The delegate a brief is being written for, as a briefer's scope reads it. */
 export interface BriefTarget {
@@ -832,7 +863,8 @@ const listed = (names: readonly string[]): string =>
  */
 export const scopeWords = (
   scope: MemoryScope | undefined,
-  projectName: (id: string) => string
+  projectName: (id: string) => string,
+  areaName: (id: string) => string = (id) => id
 ): string => {
   const words = memoryWords;
   const types = scope?.delegateTypes?.length
@@ -846,9 +878,11 @@ export const scopeWords = (
     return words.scopeBriefing(about);
   }
   const role = scope?.role;
-  const projects = scope?.projectIds?.length
-    ? listed(scope.projectIds.map(projectName))
-    : undefined;
+  const named = [
+    ...(scope?.projectIds ?? []).map(projectName),
+    ...(scope?.areaIds ?? []).map((id) => areaWords.scopeArea(areaName(id))),
+  ];
+  const projects = named.length > 0 ? listed(named) : undefined;
   const who = [
     role
       ? `${role === "orchestrator" ? words.orchestrator : words.leaf}`

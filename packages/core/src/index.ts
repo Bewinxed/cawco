@@ -5,6 +5,8 @@ export * from "./actions";
 // "Continue in new session": the size rules the hub and the dashboard share.
 export * from "./activity";
 export * from "./archive";
+// Areas: the group a project sits in, and every setting in effect with its source.
+export * from "./areas";
 export * from "./artifact-kinds";
 // What waits on the person among the artifacts: Needs you's artifact items.
 export * from "./artifact-needs";

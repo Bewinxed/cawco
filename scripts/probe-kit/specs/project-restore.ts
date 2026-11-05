@@ -5,10 +5,11 @@
  *
  * - a. A project carrying a checkout, a task (its folder made), a routine,
  *   a rule, a page (a blob in its log), an account (its own and its allowed
- *   one) and a session is forgotten (`DELETE /api/projects/:id`, a tab's
+ *   one), an area it sits in and a session is forgotten (`DELETE /api/projects/:id`, a tab's
  *   presence id sent): every one of them is gone, the trash holds its
  *   folder and its record, its browser stays on its machine with its
- *   profile, and the journal's line names the project and the presence. No read that outlived the forget (its task's triage) makes
+ *   profile, its area stands with nothing of it deleted, and the journal's
+ *   line names the project and the presence. No read that outlived the forget (its task's triage) makes
  *   its folder again.
  * - b. `GET /api/projects/forgotten` lists it with its name and what a
  *   restore brings back.
@@ -18,7 +19,8 @@
  *   row as it was: the row with its account and allowed accounts, its
  *   places, the task, the routine, the rule, the page and its log's blob,
  *   the session counted its own again, its folder back in place and no
- *   entry left in the trash; the journal's line names it. A second restore
+ *   entry left in the trash, the project in its area again (`area_id` kept
+ *   through the foreign-key walk); the journal's line names it. A second restore
  *   finds nothing to bring back.
  * - e. A project forgotten before the hub kept records (a folder in the
  *   trash, its row gone, nothing beside it) is listed with no name and what
@@ -87,6 +89,8 @@ interface Rig {
 /** The seeded project: its id, and the ids of what it carries. */
 interface Seeded {
   accountId: string;
+  /** The area it sits in. */
+  areaId: string;
   blob: Uint8Array;
   checkout: MachinePath;
   id: string;
@@ -186,6 +190,9 @@ const seed = async (rig: Rig): Promise<Seeded> => {
   const own = await call("PATCH", `/api/projects/${id}`, {
     account: accountId,
   });
+  const area = await call("POST", "/api/areas", { name: "Probe area" });
+  const areaId = idOf(area);
+  const inArea = await call("PUT", `/api/projects/${id}/area`, { areaId });
   const pageId = crypto.randomUUID();
   const now = Date.now();
   raw
@@ -226,17 +233,15 @@ const seed = async (rig: Rig): Promise<Seeded> => {
     projectId: id,
     takeover: null,
   });
+  const seeded = [task, routine, rule, account, allowed, own, area, inArea];
   rig.kit.check(
-    "a. seeded: a task, a routine, a rule, an account (own and allowed)",
-    [task, routine, rule, account, allowed, own].every(
-      (one) => one.status === 200
-    ),
-    JSON.stringify(
-      [task, routine, rule, account, allowed, own].map((one) => one.status)
-    )
+    "a. seeded: a task, a routine, a rule, an account (own and allowed), an area it sits in",
+    seeded.every((one) => one.status === 200),
+    JSON.stringify(seeded.map((one) => one.status))
   );
   return {
     accountId,
+    areaId,
     blob,
     checkout,
     id,
@@ -272,6 +277,7 @@ const held = async (rig: Rig, seeded: Seeded) => {
     name: project?.name ?? null,
     account: project?.account ?? null,
     accounts: project?.accounts ?? null,
+    area: project?.areaId ?? null,
     places: (project?.places ?? [])
       .map((place) => `${place.kind}:${place.machineId}:${place.path}`)
       .sort(),
@@ -298,6 +304,7 @@ const forgetLeg = async (rig: Rig, seeded: Seeded): Promise<Held> => {
     "a. before: each one is the project's",
     before.name === NAME &&
       before.account === seeded.accountId &&
+      before.area === seeded.areaId &&
       before.places.length === 2 &&
       before.tasks &&
       before.routine &&
@@ -330,6 +337,14 @@ const forgetLeg = async (rig: Rig, seeded: Seeded): Promise<Held> => {
     "a. its browser is kept on its machine, its profile with it, not removed",
     gone.browser === "Probe browser",
     JSON.stringify(gone.browser)
+  );
+  const area = await call("GET", `/api/areas/${seeded.areaId}`);
+  kit.check(
+    "a. its area stands, the forget taking nothing of it",
+    area.status === 200 &&
+      (area.json as { projects?: string[] } | undefined)?.projects?.length ===
+        0,
+    area.text.slice(0, 300)
   );
   const entries = (await rig.trash()).filter((one) => one.startsWith(`${id}-`));
   kit.check(
@@ -697,12 +712,14 @@ const placesLeg = async (rig: Rig): Promise<void> => {
             machineId: "hub",
             machineName: "hub",
             path: join(rig.trashDir, folder ?? ""),
+            within: [],
           },
           {
             kind: "checkout",
             machineId: MACHINE,
             machineName: MACHINE,
             path: checkout,
+            within: [],
           },
         ]),
     JSON.stringify(row)
@@ -771,6 +788,7 @@ const placesLeg = async (rig: Rig): Promise<void> => {
             machineId: "hub",
             machineName: "hub",
             path: join(rig.trashDir, oldFolder ?? ""),
+            within: [],
           },
         ]) &&
       hints?.heading === "Probe hinted, the garden planner" &&

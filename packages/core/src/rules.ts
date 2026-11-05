@@ -53,6 +53,11 @@ export type RuleTiming = "turn" | "message" | "immediate";
  * of it.
  */
 export interface RuleScope {
+  /**
+   * The area it fires in (core areas.ts): every project in it, as the rule
+   * is read; with `projectId` too, a session must be in both.
+   */
+  areaId?: string;
   /** The delegate type the session was started as, by name. */
   delegateType?: string;
   harness?: HarnessKind;
@@ -65,6 +70,8 @@ export interface RuleScope {
 
 /** The instance facts a {@link RuleScope} is tested against. */
 export interface RuleFacts {
+  /** The area its project sits in now; null for none. */
+  areaId: string | null;
   delegateType: string | null;
   harness: HarnessKind;
   machineId: string;
@@ -416,6 +423,9 @@ export function ruleInScope(scope: RuleScope, facts: RuleFacts): boolean {
     return false;
   }
   if (scope.projectId && scope.projectId !== facts.projectId) {
+    return false;
+  }
+  if (scope.areaId && scope.areaId !== facts.areaId) {
     return false;
   }
   if (scope.harness && scope.harness !== facts.harness) {

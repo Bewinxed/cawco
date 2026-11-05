@@ -170,6 +170,12 @@ const projectKey = () =>
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" });
 
+/** A row that goes with its area: deleted when the area is. */
+const areaKey = () =>
+  text("area_id")
+    .notNull()
+    .references(() => areas.id, { onDelete: "cascade" });
+
 /**
  * A secret column (secret-box.ts): sealed on every write, opened on every
  * read, the one path either way. A value the hub's key does not open reads
@@ -419,6 +425,40 @@ export const sshMachines = sqliteTable(
  * reads a project as one folder on one machine reads that one.
  */
 /**
+ * An area (core areas.ts, the project-grouping decision): a named group a
+ * project may sit in, carrying the settings the fleet carries. Each setting
+ * column mirrors the project's own, null for none: a project in the area
+ * takes the area's where it sets none itself, the fleet's where the area
+ * sets none too (core `settingsInEffect`). Its `decides.md`, `delegates/`
+ * and `skills/` live in its folder on the hub (`areas/<id>/`). It has no
+ * places, board, conversation or routines; deleting it ungroups its
+ * projects (`projects.area_id` set null) and deletes nothing of them.
+ */
+export const areas = sqliteTable("areas", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  /** Its place among the areas, smallest first. */
+  position: integer("position").notNull().default(0),
+  /** The account its projects' sessions start on where a project names none; null: the fleet's routing. */
+  account: text("account").references(() => accounts.id, {
+    onDelete: "set null",
+  }),
+  /** What its projects' sessions on {@link account} do at that account's limit. */
+  accountAtLimit: text("account_at_limit")
+    .$type<ProjectAtLimit>()
+    .notNull()
+    .default("wait"),
+  /** The permission mode its projects' conversations start in; null: the fleet's. */
+  cawMode: text("caw_mode").$type<OfferedMode>(),
+  /** What each of its projects may spend in `cap_period`, in dollars; null: no cap. */
+  capUsd: real("cap_usd"),
+  capPeriod: text("cap_period").$type<CapPeriod>(),
+  /** What reaching the cap does; null: the fleet's. */
+  onCap: text("on_cap").$type<OnCap>(),
+  createdAt: stampedNow("created_at"),
+});
+
+/**
  * A project (§5.1 of the Projects spec): its name and settings. Where its
  * files are is its places (`project_places`): its folder on the hub from the
  * moment it is made, and the checkouts it gains, one of them primary.
@@ -558,6 +598,14 @@ export const projects = sqliteTable("projects", {
   lfsUrl: text("lfs_url"),
   /** The fleet connection whose key signs in to {@link lfsUrl}, by name; set with it. */
   lfsConnection: text("lfs_connection"),
+  /**
+   * The area it sits in (`areas`), one at most: it takes the area's settings
+   * wherever it sets none. Null: none; deleting the area sets it null, and a
+   * forget keeps it with the row.
+   */
+  areaId: text("area_id").references(() => areas.id, {
+    onDelete: "set null",
+  }),
   createdAt: stampedNow("created_at"),
 });
 
@@ -2280,6 +2328,18 @@ export const memoryBriefings = sqliteTable(
  * project goes, goes with it (db `deleteProject`), never widening to every
  * session.
  */
+/** The areas a scoped memory document reaches: every project in each, as read (core `inScopedProjects`). */
+export const fleetMemoryDocAreas = sqliteTable(
+  "fleet_memory_doc_areas",
+  {
+    path: text("path")
+      .notNull()
+      .references(() => fleetMemoryDocs.path, { onDelete: "cascade" }),
+    areaId: areaKey(),
+  },
+  (table) => [primaryKey({ columns: [table.path, table.areaId] })]
+);
+
 export const fleetMemoryDocProjects = sqliteTable(
   "fleet_memory_doc_projects",
   {
@@ -3005,6 +3065,13 @@ export const rules = sqliteTable("rules", {
    * to every project, and follows it into the project a merge folds it into.
    */
   scopeProjectId: text("scope_project_id").references(() => projects.id, {
+    onDelete: "cascade",
+  }),
+  /**
+   * The area it fires in: every project in it, as read. It goes with its
+   * area, never widened to every project.
+   */
+  scopeAreaId: text("scope_area_id").references(() => areas.id, {
     onDelete: "cascade",
   }),
   /** The harness it fires on. */
@@ -5085,6 +5152,21 @@ export const connectionProjects = sqliteTable(
   (table) => [
     primaryKey({ columns: [table.connectionId, table.projectId] }),
     index("connection_projects_project").on(table.projectId),
+  ]
+);
+
+/** The areas whose every project's sessions may use a connection, read as the area's projects now. */
+export const connectionAreas = sqliteTable(
+  "connection_areas",
+  {
+    connectionId: text("connection_id")
+      .notNull()
+      .references(() => connections.id, { onDelete: "cascade" }),
+    areaId: areaKey(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.connectionId, table.areaId] }),
+    index("connection_areas_area").on(table.areaId),
   ]
 );
 

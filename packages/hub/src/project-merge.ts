@@ -243,7 +243,11 @@ const fold = async (
       );
     }
   }
-  const grants = deps.db.connections.namesForProject(dup.id);
+  // Its own grants alone: what its area grants stays the area's.
+  const grants = deps.db.connections
+    .list()
+    .filter((one) => deps.db.connections.projectsOf(one.id).includes(dup.id))
+    .map((one) => one.name);
   const moved = deps.db.foldProject(dup.id, keep.id, ids);
   deps.connections.projectFolded(grants, keep.id);
   if (await hasProjectFolder(dup.id)) {

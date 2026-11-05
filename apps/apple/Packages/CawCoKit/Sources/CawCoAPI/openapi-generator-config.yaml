@@ -15,6 +15,7 @@ typeOverrides:
     AccountSigninRefusalReach: OpenEnums.AccountSigninRefusalReach
     ActionState: OpenEnums.ActionState
     AgentRowAuth: OpenEnums.AgentRowAuth
+    AreaViewCawMode: OpenEnums.AreaViewCawMode
     ArtifactDoes: OpenEnums.ArtifactDoes
     ArtifactKind: OpenEnums.ArtifactKind
     ArtifactStatusWaitingOn: OpenEnums.ArtifactStatusWaitingOn
@@ -43,7 +44,6 @@ typeOverrides:
     BuiltOnSince: OpenEnums.BuiltOnSince
     CallerKind: OpenEnums.CallerKind
     CapPeriod: OpenEnums.CapPeriod
-    CatalogTypeSource: OpenEnums.CatalogTypeSource
     CawRunningKind: OpenEnums.CawRunningKind
     ClaudeLimitsErrorKind: OpenEnums.ClaudeLimitsErrorKind
     CommandAckOutcome: OpenEnums.CommandAckOutcome
@@ -73,8 +73,8 @@ typeOverrides:
     EffortLevel: OpenEnums.EffortLevel
     ErrorFrameLastErrorKind: OpenEnums.ErrorFrameLastErrorKind
     ErrorSaidKind: OpenEnums.ErrorSaidKind
-    EventRouteViewMode: OpenEnums.EventRouteViewMode
     Exclude: OpenEnums.Exclude
+    Exclude_1: OpenEnums.Exclude_1
     ExternalActorKind: OpenEnums.ExternalActorKind
     ExternalCommentDirection: OpenEnums.ExternalCommentDirection
     ExternalKind: OpenEnums.ExternalKind
@@ -97,7 +97,6 @@ typeOverrides:
     FsEntryKind: OpenEnums.FsEntryKind
     GetApiAccountsPlacement200Strategy: OpenEnums.GetApiAccountsPlacement200Strategy
     GetApiInstances200Kind: OpenEnums.GetApiInstances200Kind
-    GetApiProjects200AccountAtLimit: OpenEnums.GetApiProjects200AccountAtLimit
     GetApiRulesByIdActivity200Status: OpenEnums.GetApiRulesByIdActivity200Status
     HarnessKind: OpenEnums.HarnessKind
     HarnessNoteKind: OpenEnums.HarnessNoteKind
@@ -164,6 +163,7 @@ typeOverrides:
     PresenceDeviceState: OpenEnums.PresenceDeviceState
     PreviewDown: OpenEnums.PreviewDown
     PreviewFrameState: OpenEnums.PreviewFrameState
+    ProjectAtLimit: OpenEnums.ProjectAtLimit
     ProjectOfferReason: OpenEnums.ProjectOfferReason
     ProjectStopFrameOutcome: OpenEnums.ProjectStopFrameOutcome
     PropKind: OpenEnums.PropKind
@@ -186,9 +186,12 @@ typeOverrides:
     SendState: OpenEnums.SendState
     SessionOrigin: OpenEnums.SessionOrigin
     SessionPulseActivity: OpenEnums.SessionPulseActivity
+    SettingSource: OpenEnums.SettingSource
     SigninKind: OpenEnums.SigninKind
     SigninState: OpenEnums.SigninState
     SlashCommandKind: OpenEnums.SlashCommandKind
+    Sourced.T: OpenEnums.Sourced.T
+    Sourced.T_1: OpenEnums.Sourced.T_1
     SshJoinJobState: OpenEnums.SshJoinJobState
     StageColor: OpenEnums.StageColor
     StageHooksBy: OpenEnums.StageHooksBy

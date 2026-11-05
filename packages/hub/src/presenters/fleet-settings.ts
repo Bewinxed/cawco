@@ -358,6 +358,9 @@ const scopeWords = (scope: MemoryScope | undefined): string => {
     ...(scope.projectIds?.length
       ? [`projects ${scope.projectIds.map((id) => id.slice(0, 8)).join(", ")}`]
       : []),
+    ...(scope.areaIds?.length
+      ? [`areas ${scope.areaIds.map((id) => id.slice(0, 8)).join(", ")}`]
+      : []),
     ...(scope.briefer ? ["handed to the delegate's caller"] : []),
   ];
   return parts.length > 0 ? `loaded by ${parts.join(", ")}` : "every session";

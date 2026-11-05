@@ -2,8 +2,10 @@
  * A project's spend cap (Projects spec §5.3). A project may cap what it
  * spends in a day or a month, in dollars: every session of it, its Caw and
  * its attempts, from the usage its machines report, counted from the
- * period's start in the hub's own zone. What reaching the cap does is the
- * project's own choice, else the fleet's default (`spend_settings`):
+ * period's start in the hub's own zone. A project in an area (core
+ * areas.ts) with no cap of its own takes its area's, for itself alone. What
+ * reaching the cap does is the project's own choice, else its area's, else
+ * the fleet's default (`spend_settings`):
  *
  * - `pause`: no new attempt at its tasks starts (work-items.ts refuses one,
  *   dispatch.ts treats the project as paused);
@@ -68,22 +70,25 @@ export interface CapsDeps {
 }
 
 export const createCaps = ({ db, publish }: CapsDeps) => {
-  /** A project's cap as it stands at `now`; null when it has none. */
+  /** A project's cap in effect (its own, else its area's) as it stands at `now`; null when it has none. */
   const capOf = (project: ProjectRow, now = Date.now()): ProjectCap | null => {
-    if (project.capUsd === null || project.capPeriod === null) {
+    const { cap, onCap } = project.inEffect;
+    if (cap.value === null || cap.from === "fleet") {
       return null;
     }
-    const { start, end } = periodOf(project.capPeriod, new Date(now));
+    const { start, end } = periodOf(cap.value.period, new Date(now));
     const spentUsd = db.projectSpentSince(project.id, start);
     return {
-      usd: project.capUsd,
-      period: project.capPeriod,
+      usd: cap.value.usd,
+      period: cap.value.period,
+      from: cap.from,
       spentUsd,
       startsAt: start,
       resetsAt: end,
-      reached: spentUsd >= project.capUsd,
-      onCap: project.onCap ?? db.spendOnCap(),
-      inherited: project.onCap === null,
+      reached: spentUsd >= cap.value.usd,
+      onCap: onCap.value,
+      onCapFrom: onCap.from,
+      inherited: onCap.from !== "project",
     };
   };
 
@@ -141,7 +146,7 @@ export const createCaps = ({ db, publish }: CapsDeps) => {
     /** Every capped project's state, told to the dashboards where it moved. */
     recheck(): void {
       for (const project of db.listProjects()) {
-        if (project.capUsd !== null || told.has(project.id)) {
+        if (project.inEffect.cap.value !== null || told.has(project.id)) {
           tell(project);
         }
       }
@@ -160,7 +165,7 @@ export const createCaps = ({ db, publish }: CapsDeps) => {
           ({ body }) => {
             db.setSpendOnCap(body.onCap);
             for (const project of db.listProjects()) {
-              if (project.capUsd !== null) {
+              if (project.inEffect.cap.value !== null) {
                 tell(project);
               }
             }

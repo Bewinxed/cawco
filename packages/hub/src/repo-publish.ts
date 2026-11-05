@@ -129,7 +129,11 @@ export const createRepoPublish = ({
         ? refuse(`There is no GitHub connection ${named.trim()}.`)
         : undefined) ||
       (() => {
-        const mine = github.filter((one) => one.projects.includes(project.id));
+        const mine = github.filter(
+          (one) =>
+            one.projects.includes(project.id) ||
+            (!!project.areaId && one.areas.includes(project.areaId))
+        );
         const from = mine.length > 0 ? mine : github;
         if (from.length === 1) {
           return from[0];

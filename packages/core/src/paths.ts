@@ -1022,6 +1022,13 @@ export const hubProjectsDir = (): string =>
   join(dirname(hubDbPath()), "projects");
 
 /**
+ * Where the hub keeps every area's folder (core areas.ts): `areas/` beside
+ * its database, each `areas/<id>/` holding the area's `decides.md`,
+ * `delegates/` and `skills/`. Only on the hub's machine does it exist.
+ */
+export const hubAreasDir = (): string => join(dirname(hubDbPath()), "areas");
+
+/**
  * The fleet's update policy (hub binary-updates.ts): `update-policy.json`
  * beside the hub's database ({@link hubDbPath}), a file of its own, never
  * inside a cache anything trims. Only on the hub's machine does it exist.

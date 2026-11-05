@@ -21,6 +21,7 @@ import type {
   FleetPlugin,
   FleetRefresh,
   FleetScope,
+  FleetSettings,
   FleetSkillMeta,
   FleetSyncOutcome,
   FleetSyncReport,
@@ -56,6 +57,7 @@ import type {
   SessionLimits,
   SessionOrigin,
   SessionTooling,
+  SettingsInEffect,
   SkillFile,
   SpawnPayload,
   StagesTemplate,
@@ -82,6 +84,7 @@ import {
   resolveRates,
   ruleSettings,
   scoped,
+  settingsInEffect,
   stoppedWords,
 } from "@cawco/core";
 import { FILE_HASH_SCHEME, hashFiles } from "@cawco/core/file-hash";
@@ -131,6 +134,7 @@ import { HubLifetime } from "../lifetime";
 import type { MoveState } from "../moves";
 import { type AccountsDb, accountsDb } from "./accounts";
 import { type ActionsDb, actionsDb } from "./actions";
+import { type AreaRow, type AreasDb, areasDb } from "./areas";
 import {
   type ArtifactsDb,
   artifactsDb,
@@ -176,6 +180,7 @@ import {
   agentHarnesses,
   agents,
   agentTools,
+  areas,
   artifacts,
   askPushes,
   capabilityUsageDaily,
@@ -197,6 +202,7 @@ import {
   fleetMcpOauth,
   fleetMcpSessions,
   fleetMemory,
+  fleetMemoryDocAreas,
   fleetMemoryDocProjects,
   fleetMemoryDocs,
   fleetMemoryDocTypes,
@@ -436,6 +442,12 @@ export type ProjectRow = Omit<
 > & {
   /** The accounts its sessions may run on (`project_accounts`); null: every account. */
   accounts: string[] | null;
+  /**
+   * Its settings in effect, each with where it came from: its own, else its
+   * area's, else the fleet's (core `settingsInEffect`), read with the row.
+   * Every reader that acts on one of them reads it here.
+   */
+  inEffect: SettingsInEffect;
   /** Its links (`project_links`), one per repository, oldest first. */
   links: string[];
   places: PlaceRow[];
@@ -603,7 +615,11 @@ export interface MemoryDocRow {
 /** A stored row as the hub answers it, its projects and types read off their link tables. */
 const memoryDocRow = (
   row: typeof fleetMemoryDocs.$inferSelect,
-  links: { projectIds: readonly string[]; typeNames: readonly string[] }
+  links: {
+    areaIds: readonly string[];
+    projectIds: readonly string[];
+    typeNames: readonly string[];
+  }
 ): MemoryDocRow => {
   const scope: MemoryScope = {
     ...(row.briefer ? { briefer: true as const } : {}),
@@ -615,6 +631,7 @@ const memoryDocRow = (
     ...(links.projectIds.length > 0
       ? { projectIds: [...links.projectIds].sort() }
       : {}),
+    ...(links.areaIds.length > 0 ? { areaIds: [...links.areaIds].sort() } : {}),
   };
   return {
     path: row.path,
@@ -735,6 +752,8 @@ export interface DbShape {
     machineId: string,
     paths: readonly MachinePath[]
   ) => WorkspaceRow[];
+  /** The areas projects sit in, and which project sits in which (areas.ts). */
+  readonly areas: AreasDb;
   /** Artifacts and their documents' update logs (artifacts/). */
   readonly artifacts: ArtifactsDb;
   /**
@@ -2779,6 +2798,7 @@ const ruleOf = (row: typeof rules.$inferSelect): Rule => ({
   scope: {
     ...(row.scopeMachineId ? { machineId: row.scopeMachineId } : {}),
     ...(row.scopeProjectId ? { projectId: row.scopeProjectId } : {}),
+    ...(row.scopeAreaId ? { areaId: row.scopeAreaId } : {}),
     ...(row.scopeHarness ? { harness: row.scopeHarness } : {}),
     ...(row.scopeModel ? { model: row.scopeModel } : {}),
     ...(row.scopeRole ? { role: row.scopeRole } : {}),
@@ -2793,6 +2813,7 @@ const ruleValues = (rule: Rule): typeof rules.$inferInsert => ({
   ...ruleSettings(rule),
   scopeMachineId: rule.scope.machineId || null,
   scopeProjectId: rule.scope.projectId || null,
+  scopeAreaId: rule.scope.areaId || null,
   scopeHarness: rule.scope.harness || null,
   scopeModel: rule.scope.model || null,
   scopeRole: rule.scope.role || null,
@@ -3027,8 +3048,10 @@ const withPlaces = (
   rows: (typeof projects.$inferSelect)[],
   places: PlaceRow[],
   allowed: { accountId: string; projectId: string }[],
-  links: { projectId: string; remote: string }[]
+  links: { projectId: string; remote: string }[],
+  above: { areas: readonly AreaRow[]; fleet: FleetSettings }
 ): ProjectRow[] => {
+  const areaById = new Map(above.areas.map((area) => [area.id, area]));
   const linksOf = new Map<string, string[]>();
   for (const { projectId, remote } of links) {
     linksOf.set(projectId, [...(linksOf.get(projectId) ?? []), remote]);
@@ -3051,6 +3074,11 @@ const withPlaces = (
   }
   return rows.map(({ accountsLimited, ...project }) => ({
     ...project,
+    inEffect: settingsInEffect(
+      project,
+      (project.areaId && areaById.get(project.areaId)) || null,
+      above.fleet
+    ),
     accounts: accountsLimited ? (accountsOf.get(project.id) ?? []) : null,
     links: linksOf.get(project.id) ?? [],
     places: (byProject.get(project.id) ?? []).sort(
@@ -3209,6 +3237,8 @@ const make = async (path: string): Promise<DbShape> => {
       .orderBy(sql`rowid`)
       .all()
       .map(({ tool }) => tool);
+  /** The areas and which project sits in which (db/areas.ts). */
+  const areasStore = areasDb(db);
   /** The fleet's choices row, which drizzle 0032 writes on every hub. */
   const supervisorChoices = (): typeof supervisorConfig.$inferSelect => {
     const row = db
@@ -3651,6 +3681,36 @@ const make = async (path: string): Promise<DbShape> => {
       .run();
   };
 
+  /** What reaching a cap does across the fleet (`spend_settings`): `both` until it is set. */
+  const fleetOnCap = (): OnCap =>
+    db
+      .select({ onCap: spendSettings.onCap })
+      .from(spendSettings)
+      .where(eq(spendSettings.id, "spend"))
+      .get()?.onCap ?? "both";
+
+  /**
+   * What stands above the projects read: their areas (`areaIds`, else every
+   * area) and the fleet's settings, from which each reads its settings in
+   * effect ({@link withPlaces}).
+   */
+  const aboveProjects = (
+    from: Pick<Tx, "select">,
+    areaIds?: string[]
+  ): { areas: AreaRow[]; fleet: FleetSettings } => {
+    const fleet = { cawMode: supervisorChoices().cawMode, onCap: fleetOnCap() };
+    if (areaIds?.length === 0) {
+      return { areas: [], fleet };
+    }
+    const query = from.select().from(areas);
+    return {
+      areas: areaIds
+        ? query.where(inArray(areas.id, areaIds)).all()
+        : query.all(),
+      fleet,
+    };
+  };
+
   /** One project and its places, read inside a transaction or out of one. */
   const projectOf = (
     from: Pick<Tx, "select">,
@@ -3676,7 +3736,8 @@ const make = async (path: string): Promise<DbShape> => {
             .from(projectLinks)
             .where(eq(projectLinks.projectId, id))
             .orderBy(asc(projectLinks.createdAt), sql`rowid`)
-            .all()
+            .all(),
+          aboveProjects(from, row.areaId ? [row.areaId] : [])
         )[0]
       : undefined;
   };
@@ -4492,6 +4553,23 @@ const make = async (path: string): Promise<DbShape> => {
     return byPath;
   };
 
+  /** Each document's areas, by its path. */
+  const memoryDocAreas = (docPath?: string): Map<string, string[]> => {
+    const byPath = new Map<string, string[]>();
+    for (const link of db
+      .select()
+      .from(fleetMemoryDocAreas)
+      .where(
+        docPath === undefined
+          ? undefined
+          : eq(fleetMemoryDocAreas.path, docPath)
+      )
+      .all()) {
+      byPath.set(link.path, [...(byPath.get(link.path) ?? []), link.areaId]);
+    }
+    return byPath;
+  };
+
   /** Each document's delegate types, by its path. */
   const memoryDocTypes = (docPath?: string): Map<string, string[]> => {
     const byPath = new Map<string, string[]>();
@@ -4511,6 +4589,7 @@ const make = async (path: string): Promise<DbShape> => {
 
   const listFleetMemoryDocs = (): MemoryDocRow[] => {
     const projectsOf = memoryDocProjects();
+    const areasOf = memoryDocAreas();
     const typesOf = memoryDocTypes();
     return db
       .select()
@@ -4520,6 +4599,7 @@ const make = async (path: string): Promise<DbShape> => {
       .map((row) =>
         memoryDocRow(row, {
           projectIds: projectsOf.get(row.path) ?? [],
+          areaIds: areasOf.get(row.path) ?? [],
           typeNames: typesOf.get(row.path) ?? [],
         })
       );
@@ -4534,6 +4614,7 @@ const make = async (path: string): Promise<DbShape> => {
     return row
       ? memoryDocRow(row, {
           projectIds: memoryDocProjects(docPath).get(docPath) ?? [],
+          areaIds: memoryDocAreas(docPath).get(docPath) ?? [],
           typeNames: memoryDocTypes(docPath).get(docPath) ?? [],
         })
       : undefined;
@@ -6817,11 +6898,19 @@ const make = async (path: string): Promise<DbShape> => {
         // places there (project-placements.ts, agent fleet-place.ts).
         // One with a role, type or model goes to its sessions as they launch
         // instead, and a briefer's to the sessions that delegate.
-        // A document of several projects is one row per project.
+        // A document of several projects is one row per project; one of
+        // an area, one row per project in it now.
         placedMemory: listFleetMemoryDocs().flatMap(
           ({ path: docPath, hash, content, scope }) =>
             placedOnly(scope)
-              ? (scope?.projectIds ?? []).map((projectId) => ({
+              ? [
+                  ...new Set([
+                    ...(scope?.projectIds ?? []),
+                    ...(scope?.areaIds ?? []).flatMap((areaId) =>
+                      areasStore.projectsIn(areaId)
+                    ),
+                  ]),
+                ].map((projectId) => ({
                   path: docPath,
                   hash,
                   content,
@@ -7505,6 +7594,14 @@ const make = async (path: string): Promise<DbShape> => {
             .values({ path: docPath, projectId })
             .run();
         }
+        tx.delete(fleetMemoryDocAreas)
+          .where(eq(fleetMemoryDocAreas.path, docPath))
+          .run();
+        for (const areaId of new Set(scope.areaIds ?? [])) {
+          tx.insert(fleetMemoryDocAreas)
+            .values({ path: docPath, areaId })
+            .run();
+        }
         tx.delete(fleetMemoryDocTypes)
           .where(eq(fleetMemoryDocTypes.path, docPath))
           .run();
@@ -7914,7 +8011,8 @@ const make = async (path: string): Promise<DbShape> => {
           .select()
           .from(projectLinks)
           .orderBy(asc(projectLinks.createdAt), sql`rowid`)
-          .all()
+          .all(),
+        aboveProjects(db)
       ),
     project: (id) => projectOf(db, id),
     projectsWorkedOn: (machineId) =>
@@ -8253,12 +8351,7 @@ const make = async (path: string): Promise<DbShape> => {
         ...(cpuPercent === undefined ? {} : { cpuPercent }),
       };
     },
-    spendOnCap: () =>
-      db
-        .select({ onCap: spendSettings.onCap })
-        .from(spendSettings)
-        .where(eq(spendSettings.id, "spend"))
-        .get()?.onCap ?? "both",
+    spendOnCap: fleetOnCap,
     projectSpentSince: (projectId, since) =>
       db
         .select({
@@ -10097,6 +10190,7 @@ const make = async (path: string): Promise<DbShape> => {
     },
     listUsageLimits: () => db.select().from(usageLimits).all(),
     accounts: accountsDb(db),
+    areas: areasStore,
     turnUsage: turnUsageDb(db),
     toolCallKeys: toolCallKeysDb(db),
     turnCuts: turnCutsDb(db),
@@ -10809,6 +10903,7 @@ const make = async (path: string): Promise<DbShape> => {
             repeat: values.repeat,
             scopeMachineId: values.scopeMachineId,
             scopeProjectId: values.scopeProjectId,
+            scopeAreaId: values.scopeAreaId,
             scopeHarness: values.scopeHarness,
             scopeModel: values.scopeModel,
             scopeRole: values.scopeRole,

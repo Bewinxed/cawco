@@ -50,8 +50,14 @@
  * - `set_account_at_limit`: what the project's sessions on that account do
  *   at its limit (core `ProjectAtLimit`): wait for the reset, or move to an
  *   account with room; through the same edit.
+ * - `set_area`: the area it sits in (core areas.ts), by its id or name, or
+ *   null for none, through the person's own move (areas.ts `place`): it
+ *   takes the area's settings wherever it sets none, and the note says what
+ *   it takes and what falls back to the fleet's.
  * Called with no changes, it answers the project's settings as they stand,
- * each named by the change that sets it, and what dispatch would do now.
+ * each named by the change that sets it, every setting in effect with where
+ * it came from (its own, its area's, the fleet's), and what dispatch would
+ * do now.
  * Only the session's own project, named by its id or its name in any case:
  * naming another is refused. What its work's landing gate runs is the project's
  * gate.md (gate-file.ts), not a setting.
@@ -68,12 +74,15 @@ import {
   projectSettingsWords,
   projectSettingWords,
   publishedWords,
+  type SettingSource,
 } from "@cawco/core";
 import { PROJECT_SETTINGS } from "@cawco/core/asks";
 import { hubRepoSegment } from "@cawco/core/hub-repo";
 import { unhandled } from "@cawco/core/unhandled";
+import { areaWords } from "@cawco/core/words/areas";
 import { projectAccountWords } from "@cawco/core/words/project-account";
 import { z } from "zod";
+import type { Areas } from "./areas";
 import type { Connections } from "./connections";
 import type { DbShape, ProjectRow } from "./db";
 import {
@@ -154,6 +163,11 @@ const ASKED_CHANGE = z.object({
     .optional()
     .describe("set_account: id, nickname or email; null: routing"),
   at_limit: z.enum(PROJECT_AT_LIMIT).optional(),
+  area: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("set_area: an area's id or name; null: none"),
 });
 type AskedChange = z.infer<typeof ASKED_CHANGE>;
 
@@ -206,6 +220,8 @@ const askedOf = (change: ProjectSettingChange): AskedChange => {
       return { kind: change.kind, account: change.account };
     case "set_account_at_limit":
       return { kind: change.kind, at_limit: change.atLimit };
+    case "set_area":
+      return { kind: change.kind, area: change.area };
     default:
       return unhandled("project setting", change);
   }
@@ -301,6 +317,11 @@ const alreadyWords = (change: DispatchSetting): string => {
 export interface ProjectSettingsDeps {
   /** The fleet's accounts, every provider's. */
   readonly accounts: () => Account[];
+  /** The areas, by id or name, and a project put in one (areas.ts). */
+  readonly areas: Pick<Areas, "named" | "place"> & {
+    /** Every area's name, in its order. */
+    readonly names: () => string[];
+  };
   /**
    * Records the change as the person's ask in the session that asked (asks.ts):
    * what the call answers; undefined in Full Send, when it applies now.
@@ -334,6 +355,15 @@ export interface ProjectSettingsDeps {
     projectId: string,
     change: ProjectEdit
   ) => Promise<Pick<Edited, "conversation">>;
+  /**
+   * Its Who decides and delegate types in effect (decides-file.ts,
+   * project-delegate-types.ts): each kind's member and each type, with
+   * where it came from.
+   */
+  readonly inEffect: (project: ProjectRow) => Promise<{
+    decides: { kind: string; member: string; from: SettingSource }[];
+    types: { name: string; from: SettingSource }[];
+  }>;
   /** Notes what happened in the project's conversation (caw.ts `notice`). */
   readonly note: (actor: InstanceRow, note: ProjectNote) => void;
   /** A place published to a new GitHub repository (repo-publish.ts). */
@@ -342,12 +372,14 @@ export interface ProjectSettingsDeps {
 
 export const createProjectSettings = ({
   accounts,
+  areas,
   ask,
   caw,
   connections,
   db,
   dispatch,
   edit,
+  inEffect,
   note,
   publish,
 }: ProjectSettingsDeps) => {
@@ -484,6 +516,27 @@ export const createProjectSettings = ({
     return { kind: "set_account_at_limit", atLimit };
   };
 
+  /** The area it is put in, by id or name, or none; refused when it is there already. */
+  const areaSet = (
+    project: ProjectRow,
+    asked: AskedChange
+  ): ProjectSettingChange => {
+    const { area: wanted } = asked;
+    if (wanted === undefined) {
+      return refuse(areaWords.needs);
+    }
+    const area =
+      wanted === null
+        ? null
+        : (areas.named(wanted) ??
+          refuse(areaWords.unknown(wanted, areas.names())));
+    const id = area?.id ?? null;
+    if (id === project.areaId) {
+      refuse(areaWords.already(area?.name ?? null));
+    }
+    return { kind: "set_area", area: id, name: area?.name ?? null };
+  };
+
   /** One asked change, checked against the project as it stands, as the hub stores it. */
   const checked = async (
     project: ProjectRow,
@@ -539,6 +592,8 @@ export const createProjectSettings = ({
         return accountSet(project, asked);
       case "set_account_at_limit":
         return atLimitSet(project, asked);
+      case "set_area":
+        return areaSet(project, asked);
       case "set_lands":
         break;
       default:
@@ -629,6 +684,10 @@ export const createProjectSettings = ({
       case "set_account_at_limit":
         await edit(project.id, { accountAtLimit: change.atLimit });
         break;
+      case "set_area": {
+        const { said } = await areas.place(project.id, change.area);
+        return [projectSettingWords(change), ...said];
+      }
       case "set_lands":
         await edit(project.id, { lands: change.lands });
         break;
@@ -704,10 +763,31 @@ export const createProjectSettings = ({
   /** The project's settings as they stand, and what dispatch would do now. */
   const read = async (project: ProjectRow): Promise<string> => {
     const now = await dispatch.view(project.id);
+    const area = project.areaId
+      ? (areas.named(project.areaId)?.name ?? null)
+      : null;
+    const from = (source: SettingSource) => areaWords.source(source, area);
+    const { cap, cawMode, onCap } = project.inEffect;
+    const folder = await inEffect(project);
     return projectSettingsWords.read({
       name: project.name,
-      account: accountName(project.account),
-      accountAtLimit: project.accountAtLimit,
+      area,
+      account: accountName(project.inEffect.account.value),
+      accountAtLimit: project.inEffect.accountAtLimit.value,
+      accountFrom: from(project.inEffect.account.from),
+      cawMode: {
+        value: cawMode.value ?? "the mode last chosen on its machine",
+        from: from(cawMode.from),
+      },
+      cap: {
+        value: cap.value ? `$${cap.value.usd} a ${cap.value.period}` : "none",
+        from: from(cap.from),
+      },
+      onCap: { value: onCap.value, from: from(onCap.from) },
+      decides: folder.decides.map(
+        (one) => `${one.kind}: ${one.member} (${from(one.from)})`
+      ),
+      types: folder.types.map((one) => `${one.name} (${from(one.from)})`),
       events: project.eventsOn,
       dispatch: now.dispatch,
       maxAttempts: now.maxAttempts,
@@ -717,10 +797,14 @@ export const createProjectSettings = ({
       runsOn: now.runsOn,
       review: project.review,
       links: project.links,
-      connections: connections
-        .list()
-        .filter((view) => view.projects.includes(project.id))
-        .map((view) => view.name),
+      connections: connections.list().flatMap((view) => {
+        if (view.projects.includes(project.id)) {
+          return [`${view.name} (${from("project")})`];
+        }
+        return project.areaId && view.areas.includes(project.areaId)
+          ? [`${view.name} (${from("area")})`]
+          : [];
+      }),
       live: now.live,
       reviewing: now.review,
       paused: now.paused,

@@ -161,7 +161,9 @@
     if (!cap) {
       return "";
     }
-    return cap.inherited ? "Fleet default" : ON_CAP_LABEL[cap.onCap];
+    return cap.onCapFrom === "fleet"
+      ? "Fleet default"
+      : ON_CAP_LABEL[cap.onCap];
   });
 
   const fleetDefault = $derived(spend ? ON_CAP_LABEL[spend.fleetOnCap] : "");
@@ -177,7 +179,7 @@
     if (capOpen) {
       capAmount = cap ? String(cap.usd) : "";
       capPeriod = cap?.period ?? "month";
-      capOnCap = cap && !cap.inherited ? cap.onCap : "";
+      capOnCap = cap?.onCapFrom === "project" ? cap.onCap : "";
       capRefused = null;
     }
   });

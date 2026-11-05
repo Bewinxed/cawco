@@ -564,6 +564,7 @@ import { CAPABILITY_KINDS } from "@cawco/core/suggest";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { accountsWords } from "@cawco/core/words/accounts";
+import { areaWords } from "@cawco/core/words/areas";
 import { containerWords } from "@cawco/core/words/containers";
 import { contextWords } from "@cawco/core/words/context";
 import { turnCutWords } from "@cawco/core/words/cuts";
@@ -611,6 +612,7 @@ import {
   usdWords,
 } from "./admission";
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
+import { AreaRefusal, createAreas } from "./areas";
 import { createArtifactSessions } from "./artifact-session";
 import { createArtifactDocs } from "./artifacts/docs";
 import { createArtifactLane } from "./artifacts/lane";
@@ -755,7 +757,7 @@ import { TAG_MARKERS, tagStoredSend } from "./db/tag-markers";
 import { refOf as linkRefOf, viaOf as linkViaOf } from "./db/task-links";
 import { undoable } from "./db/trash";
 import { decidesRoutes, type HarnessOffer } from "./decides";
-import { DECIDES_FILE } from "./decides-file";
+import { DECIDES_FILE, decidesTable } from "./decides-file";
 import { buildDecisionPage, type PageSources } from "./decision-page";
 import {
   type ArtifactNamed,
@@ -895,6 +897,7 @@ import {
   onAccountMachines,
   type PlacementInput,
   place as placeAccount,
+  projectAccountOf,
   runningAccounts,
   unreportedHarnessRefusal,
 } from "./placement";
@@ -1950,6 +1953,7 @@ const ruleBody = t.Object({
   scope: t.Object({
     machineId: t.Optional(t.String()),
     projectId: t.Optional(t.String()),
+    areaId: t.Optional(t.String()),
     harness: t.Optional(t.String()),
     model: t.Optional(t.String()),
     role: t.Optional(t.Union(MEMORY_ROLES.map((role) => t.Literal(role)))),
@@ -8096,10 +8100,15 @@ export const createServer = (
     // and project, as the fleet says them now (memory-scopes.ts). Its
     // project's for its folder are placed there already: in a checkout as
     // its rows reached the machine, in a clone as the clone was cut.
-    const places = db.listProjects().flatMap((project) => project.places);
+    const projects = db.listProjects();
     const instructions = sessionInstructions(
       db.listFleetMemoryDocs(),
-      documentFacts(stored, places)
+      documentFacts(
+        stored,
+        projects.flatMap((project) => project.places),
+        (projectId) =>
+          projects.find((project) => project.id === projectId)?.areaId ?? null
+      )
     );
     return {
       sessionCredential: identities.mint(read.id),
@@ -15133,6 +15142,15 @@ export const createServer = (
         // Its name field's and account's refusals are the send's to answer, as a place's is.
         name: (projectId, name) => setupEdit(projectId, { name }),
         account: (projectId, account) => setupEdit(projectId, { account }),
+        area: async (projectId, area) => {
+          try {
+            await projectAreas.place(projectId, area);
+          } catch (error) {
+            throw error instanceof AreaRefusal
+              ? new PlaceRefusal(error.status, error.message)
+              : error;
+          }
+        },
         shape: async (projectId, template) => {
           await tasks.applyTemplate(projectId, template, YOU_ACTOR);
         },
@@ -16383,7 +16401,7 @@ export const createServer = (
       taskAccounts: taskAccounts(projectId, task.taskId),
       // The start's own account wins over its project's (placement.ts `place`).
       ...(payload.account ? { explicit: payload.account } : {}),
-      ...(project?.account ? { projectAccount: project.account } : {}),
+      ...projectAccountOf(project, (id) => db.areas.get(id)?.name ?? null),
       ...(typeAccount ? { typeAccount } : {}),
     };
   };
@@ -24929,7 +24947,10 @@ export const createServer = (
   // What each ask says on every surface, read as it parks (ask-presentation.ts).
   pending.presentWith(createAskPresenter(db, delegateTypes));
   // A project's own types (`delegates/*.md` in its folder) shadow the fleet's.
-  const projectTypes = makeProjectDelegateTypes(delegateTypes);
+  const projectTypes = makeProjectDelegateTypes(
+    delegateTypes,
+    (projectId) => db.project(projectId)?.areaId ?? null
+  );
   /**
    * What the delegate type on a row adds to a session brought back (a wake,
    * a restore): the same denials its first spawn had, read from the type as
@@ -25257,7 +25278,7 @@ export const createServer = (
   ): Promise<{ machineId: string; cwd: string } | undefined> => {
     const machines = onAccountMachines(
       onlineMachines().map((id) => ({ machineId: id })),
-      db.project(projectId)?.account,
+      db.project(projectId)?.inEffect.account.value,
       db.accounts.signins()
     ).map((one) => one.machineId);
     const own = await ownMachineId;
@@ -27381,6 +27402,7 @@ export const createServer = (
     lifetime,
     hubOrigin: hubHttpUrl,
     projectExists: (id) => Boolean(db.project(id)),
+    areaExists: (id) => db.areas.get(id) !== undefined,
     // A connection's projects poll their repositories with it (ingress.ts),
     // made further down: no connection is written before the hub serves.
     projectsWritten: (connection, dropped) =>
@@ -27533,26 +27555,54 @@ export const createServer = (
   // files and its account: the person's PATCH and Caw's project_settings
   // both change them here (project-edit.ts), its landing through the
   // dispatcher's own write.
+  // The project's conversation, the one session of it that lives on, moves
+  // to the account it starts on now as a person's move of it would
+  // (`moveByHand`): at rest now, else at its turn's end.
+  const conversationToAccount = async (
+    project: ProjectRow
+  ): Promise<string | undefined> => {
+    const account = project.inEffect.account.value;
+    const to = account ? db.accounts.get(account) : undefined;
+    const [row] = project.conversationInstanceId
+      ? db.getInstancesByIds([project.conversationInstanceId])
+      : [];
+    if (!(to && row) || row.accountId === to.id) {
+      return;
+    }
+    const refusal = handMoveRefusal(row, to);
+    if (refusal) {
+      return refusal;
+    }
+    const moved = await moveByHand(row, to);
+    return "refusal" in moved ? moved.refusal : moved.why;
+  };
+  // Areas (areas.ts): every reader of a project's settings reads them in
+  // effect with its row, so a change here reaches each at once; what is
+  // told of it is told here.
+  const projectAreas = createAreas({
+    accountMoved: conversationToAccount,
+    changed: () => {
+      projectsChanged();
+      ruleEngine.forgetFacts();
+      caps.recheck();
+      fleetChanged("an area changed");
+    },
+    db,
+    folderSources: async (project) => ({
+      decides: Object.values(
+        (
+          await decidesTable(
+            { projectId: project.id, areaId: project.areaId },
+            db.decides.fleet()
+          )
+        ).from
+      ),
+      types: projectTypes.typesFor(project.id).map((type) => type.source),
+    }),
+  });
   const projectEdits = createProjectEdits({
     accounts: () => db.accounts.list(),
-    // The project's conversation, the one session of it that lives on, moves
-    // to its new account as a person's move of it would (`moveByHand`):
-    // at rest now, else at its turn's end.
-    conversationTo: async (project) => {
-      const to = project.account ? db.accounts.get(project.account) : undefined;
-      const [row] = project.conversationInstanceId
-        ? db.getInstancesByIds([project.conversationInstanceId])
-        : [];
-      if (!(to && row) || row.accountId === to.id) {
-        return;
-      }
-      const refusal = handMoveRefusal(row, to);
-      if (refusal) {
-        return refusal;
-      }
-      const moved = await moveByHand(row, to);
-      return "refusal" in moved ? moved.refusal : moved.why;
-    },
+    conversationTo: conversationToAccount,
     db,
     lands: (projectId, lands) => dispatcher.configure(projectId, { lands }),
     lfsProblem: (connection) => connections.lfsProblem(connection),
@@ -27574,6 +27624,27 @@ export const createServer = (
   // asked about as an admin write is (project-settings.ts).
   const settings = createProjectSettings({
     accounts: () => db.accounts.list(),
+    areas: {
+      named: projectAreas.named,
+      place: projectAreas.place,
+      names: () => db.areas.list().map((area) => area.name),
+    },
+    inEffect: async (project) => {
+      const table = await decidesTable(
+        { projectId: project.id, areaId: project.areaId },
+        db.decides.fleet()
+      );
+      return {
+        decides: Object.entries(table.routes).map(([kind, member]) => ({
+          kind,
+          member,
+          from: table.from[kind] ?? "fleet",
+        })),
+        types: projectTypes
+          .typesFor(project.id)
+          .map((type) => ({ name: type.name, from: type.source })),
+      };
+    },
     ask: (actor, input, toolUseId) =>
       hubAsks.ask(actor, PROJECT_SETTINGS, input, toolUseId),
     // His switch's own path: off, what he started finishes, his turn among them.
@@ -30431,7 +30502,10 @@ export const createServer = (
       return true;
     }
     const project = row.projectId ? db.project(row.projectId) : undefined;
-    return row.namedAccount === accountId || project?.account === accountId;
+    return (
+      row.namedAccount === accountId ||
+      project?.inEffect.account.value === accountId
+    );
   };
 
   /**
@@ -31980,6 +32054,7 @@ export const createServer = (
         relayRoutes(relays),
         actionRoutes(actions),
         caps.routes(),
+        projectAreas.routes(),
         sessionLimitRoutes(db),
         viewRoutes(views, blocks),
         blockRoutes(blocks),
@@ -34016,6 +34091,9 @@ export const createServer = (
         if (draft.scope.projectId && !db.project(draft.scope.projectId)) {
           return status(400, `There is no project ${draft.scope.projectId}.`);
         }
+        if (draft.scope.areaId && !db.areas.get(draft.scope.areaId)) {
+          return status(400, areaWords.scopeNoArea(draft.scope.areaId));
+        }
         // The hub mints the id: the client never invents identity, it asks for it.
         const rule: Rule = {
           ...draft,
@@ -34041,6 +34119,9 @@ export const createServer = (
         }
         if (draft.scope.projectId && !db.project(draft.scope.projectId)) {
           return status(400, `There is no project ${draft.scope.projectId}.`);
+        }
+        if (draft.scope.areaId && !db.areas.get(draft.scope.areaId)) {
+          return status(400, areaWords.scopeNoArea(draft.scope.areaId));
         }
         const rule: Rule = {
           ...draft,
@@ -34940,6 +35021,7 @@ export const createServer = (
                   t.Union(MEMORY_ROLES.map((role) => t.Literal(role)))
                 ),
                 projectIds: t.Optional(t.Array(t.String(), { minItems: 1 })),
+                areaIds: t.Optional(t.Array(t.String(), { minItems: 1 })),
                 delegateTypes: t.Optional(t.Array(t.String(), { minItems: 1 })),
                 model: t.Optional(t.String({ minLength: 1 })),
                 briefer: t.Optional(t.Literal(true)),
@@ -34957,6 +35039,10 @@ export const createServer = (
           const unknown = body.scope?.projectIds?.find((id) => !db.project(id));
           if (unknown) {
             return status(400, `there is no project ${unknown}`);
+          }
+          const noArea = body.scope?.areaIds?.find((id) => !db.areas.get(id));
+          if (noArea) {
+            return status(400, areaWords.scopeNoArea(noArea));
           }
           const typeNames = new Set([
             ...delegateTypes.list().map((type) => type.name),

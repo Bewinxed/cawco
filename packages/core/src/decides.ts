@@ -10,6 +10,7 @@
  * A settled card's pick is signed by its member (choices.ts `SettledBy`); a
  * pick by the person is his, its why his note.
  */
+import type { SettingSource } from "./areas";
 import type { SettledBy } from "./choices";
 import { unhandled } from "./unhandled";
 import { decidesWords } from "./words/decides";
@@ -150,8 +151,9 @@ export interface FleetDecides {
 
 /** A project's table as the hub reads it. */
 export interface DecidesTable {
-  from: Record<string, "project" | "fleet">;
-  /** decides.md's problems; the table is then every kind → `you`. */
+  /** Where each kind's member came from: the project's decides.md, its area's, or the fleet's (core areas.ts). */
+  from: Record<string, SettingSource>;
+  /** decides.md's problems, the project's and its area's; the table is then every kind → `you`. */
   problems: string[];
   routes: Record<string, string>;
   /** Paths whose change needs a card the person picked (enforced later); empty when none. */

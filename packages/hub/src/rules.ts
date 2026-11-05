@@ -462,6 +462,11 @@ export class RuleEngine {
     const facts: Facts = {
       machineId: row.machineId,
       projectId: row.projectId ?? null,
+      // The area it sits in as read now: a move between areas drops the
+      // cache (`forgetFacts`), so an area's rules follow its projects.
+      areaId: row.projectId
+        ? (this.#db.project(row.projectId)?.areaId ?? null)
+        : null,
       harness: row.harness ?? null,
       model: row.model ?? null,
       role: memoryRoleOf(row as InstanceRow),

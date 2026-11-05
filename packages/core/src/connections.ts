@@ -135,6 +135,8 @@ export interface ConnectionView {
   account: string;
   /** For `app` auth, once its registration is held: what names the app. */
   app?: ConnectionApp;
+  /** Areas whose every project's sessions may use it, read as each area's projects now (core areas.ts). */
+  areas: string[];
   args?: string[];
   auth: ConnectionAuth;
   /** For `stdio`: the command the hub runs. */

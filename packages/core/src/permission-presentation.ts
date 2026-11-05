@@ -25,6 +25,7 @@ import type { LandsMode } from "./injected";
 import { commonEnds, editScript, linesOf } from "./line-diff";
 import { questionsOf } from "./question";
 import { DAY_MS } from "./time";
+import { areaWords } from "./words/areas";
 import { projectAccountWords } from "./words/project-account";
 import {
   projectSettingsWords,
@@ -1271,6 +1272,7 @@ export const PROJECT_SETTING_KINDS = [
   "set_events",
   "set_account",
   "set_account_at_limit",
+  "set_area",
 ] as const;
 
 /**
@@ -1308,6 +1310,11 @@ export type ProjectSettingChange =
   | { account: string | null; kind: "set_account"; name: string | null }
   /** What its sessions on its account do at that account's limit (core `ProjectAtLimit`). */
   | { atLimit: ProjectAtLimit; kind: "set_account_at_limit" }
+  /**
+   * The area it sits in (core areas.ts), by id, with its name as the change
+   * was checked; null: none.
+   */
+  | { area: string | null; kind: "set_area"; name: string | null }
   | {
       /** The account the GitHub connection signs in as: the repository's owner. */
       account?: string;
@@ -1370,6 +1377,8 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
       return projectAccountWords.change(change.name);
     case "set_account_at_limit":
       return projectAccountWords.atLimit.change(change.atLimit);
+    case "set_area":
+      return areaWords.change(change.name);
     case "set_lands":
       break;
   }

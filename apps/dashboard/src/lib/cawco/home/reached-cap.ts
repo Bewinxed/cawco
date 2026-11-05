@@ -7,8 +7,10 @@ import type { ProjectCap } from "@cawco/core/project-conversation";
 import { HOUR_MS } from "@cawco/core/time";
 
 export const reachedCap = (): ProjectCap => ({
+  from: "project",
   inherited: false,
   onCap: "quiet",
+  onCapFrom: "project",
   period: "day",
   reached: true,
   resetsAt: Date.now() + 6 * HOUR_MS,

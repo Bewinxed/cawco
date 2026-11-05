@@ -5788,7 +5788,9 @@ export const createWorkItems = ({
     parent: Parent,
     projectId: string | null
   ): WorkItemRequest => {
-    const account = projectId ? db.project(projectId)?.account : undefined;
+    const account = projectId
+      ? db.project(projectId)?.inEffect.account.value
+      : undefined;
     if (
       !(account && projectId) ||
       request.machineId ||

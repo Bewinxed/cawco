@@ -63,7 +63,9 @@ export interface DecidesDeps {
   /** Whether work item `id` is still starting or running. */
   readonly live: (workItemId: string) => boolean;
   /** Project `id`, by its name; undefined when the hub keeps none. */
-  readonly project: (id: string) => { id: string; name: string } | undefined;
+  readonly project: (
+    id: string
+  ) => { areaId: string | null; id: string; name: string } | undefined;
   /** Every project, for the files a removal rewrites. */
   readonly projects: () => { id: string; name: string }[];
   /** Refiles open cards of page `artifactId` from kind `from` to `to` through the page's revision path; answers whether it took. */
@@ -172,6 +174,9 @@ export const decidesRoutes = (deps: DecidesDeps) => {
     }
     return project;
   };
+  /** The area a project sits in, for its table (decides-file.ts); null: none. */
+  const areaOf = (id: string): string | null =>
+    deps.project(id)?.areaId ?? null;
 
   /** A member he added, or refused: unknown, or built in. */
   const added = (id: string): Member => {
@@ -692,7 +697,10 @@ export const decidesRoutes = (deps: DecidesDeps) => {
           known(params.id);
           return {
             file: DECIDES_FILE,
-            decides: await decidesTable(params.id, db.fleet()),
+            decides: await decidesTable(
+              { projectId: params.id, areaId: areaOf(params.id) },
+              db.fleet()
+            ),
           };
         })
       )
@@ -723,7 +731,10 @@ export const decidesRoutes = (deps: DecidesDeps) => {
             );
             return {
               file: DECIDES_FILE,
-              decides: await decidesTable(params.id, db.fleet()),
+              decides: await decidesTable(
+                { projectId: params.id, areaId: areaOf(params.id) },
+                db.fleet()
+              ),
             };
           })
       )

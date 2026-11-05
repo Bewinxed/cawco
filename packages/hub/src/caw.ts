@@ -72,6 +72,7 @@ import {
 } from "@cawco/core";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import { unhandled } from "@cawco/core/unhandled";
+import { areaWords } from "@cawco/core/words/areas";
 import { noticeWords } from "@cawco/core/words/notices";
 import { projectWords } from "@cawco/core/words/project";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
@@ -492,6 +493,7 @@ export interface CawDeps {
   readonly db: Pick<
     DbShape,
     | "accounts"
+    | "areas"
     | "cawMode"
     | "cawSpentSince"
     | "getInstancesByIds"
@@ -663,7 +665,7 @@ export const createCaw = ({
       project.places.filter(
         (place) => place.kind === "checkout" && online(place.machineId)
       ),
-      project.account,
+      project.inEffect.account.value,
       db.accounts.signins()
     );
     return checkouts.find((place) => place.isPrimary) ?? checkouts[0];
@@ -701,7 +703,8 @@ export const createCaw = ({
   /**
    * The permission mode a start of the project's conversation takes for
    * `event`, the most specific set one: the event route's that delivered
-   * it, its routine's, the project's, the fleet's. Undefined: none is set,
+   * it, its routine's, the project's in effect (its own, its area's, the
+   * fleet's: db `inEffect`). Undefined: none is set,
    * and the start takes the mode the person last chose for its harness on
    * that machine (server.ts `settleMode`).
    */
@@ -711,8 +714,7 @@ export const createCaw = ({
   ): OfferedMode | undefined =>
     (event?.route ? db.ingress.route(event.route)?.mode : undefined) ??
     (event?.routine ? db.routines.get(event.routine)?.mode : undefined) ??
-    project.cawMode ??
-    db.cawMode() ??
+    project.inEffect.cawMode.value ??
     undefined;
 
   /**
@@ -1197,11 +1199,22 @@ export const createCaw = ({
           : `${machines.name(place.machineId)} — ${place.path}${place.isPrimary ? " (primary)" : ""}`
       ),
       machines: machines.online(),
-      account: project.account ? accountLine(project.account, false) : null,
+      account: project.inEffect.account.value
+        ? `${accountLine(project.inEffect.account.value, false)} (${areaWords.source(
+            project.inEffect.account.from,
+            areaName(project.areaId)
+          )})`
+        : null,
       accounts: db.accounts.list().map((one) => accountLine(one.id, true)),
+      area: areaName(project.areaId),
+      areas: db.areas.list().map((one) => `${one.name} (id ${one.id})`),
       cards: SETUP_CARDS,
     };
   };
+
+  /** An area by its name; null for none, or one gone. */
+  const areaName = (id: string | null): string | null =>
+    (id && db.areas.get(id)?.name) || null;
 
   /**
    * An account as `project_setup` names it: its name, and with `whole` its

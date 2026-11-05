@@ -5,6 +5,7 @@
  * person in its transcript, and what the project spends.
  */
 
+import type { SettingSource } from "./areas";
 import type { HarnessKind, OfferedMode, PlaceLfsRow } from "./harness";
 import type { ItemEnd } from "./work-items";
 
@@ -305,10 +306,18 @@ export type CapPeriod = "day" | "month";
  * project's (its Caw and its attempts) since the period began.
  */
 export interface ProjectCap {
-  /** `onCap` is the fleet default, not the project's own. */
+  /** Where its amount and period came from: the project's own or its area's (core areas.ts). */
+  from: Exclude<SettingSource, "fleet">;
+  /**
+   * `onCap` is not the project's own (`onCapFrom` is its area or the fleet).
+   * Read by the shipped apps and dashboard tabs on an older wire; `onCapFrom`
+   * says where it came from.
+   */
   inherited: boolean;
-  /** What reaching it does: the project's own, else the fleet's. */
+  /** What reaching it does: the project's own, else its area's, else the fleet's. */
   onCap: OnCap;
+  /** Where `onCap` came from. */
+  onCapFrom: SettingSource;
   period: CapPeriod;
   /** Spent at or past the cap. Read with `resetsAt`: past it, the cap is not reached. */
   reached: boolean;

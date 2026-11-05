@@ -74,6 +74,7 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { HOUR_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { areaWords } from "@cawco/core/words/areas";
 import { LinearClient } from "@linear/sdk";
 import {
   auth,
@@ -255,6 +256,8 @@ const RESERVED_HEADERS = new Set([
 /** What a connection is made from, and what an update may change (never its name). */
 export interface ConnectionInput {
   account: string;
+  /** Areas whose every project's sessions may use it (core areas.ts). */
+  areas?: string[];
   args?: string[];
   auth: ConnectionAuth;
   command?: string;
@@ -276,6 +279,8 @@ export interface SessionTool {
 }
 
 export interface ConnectionsDeps {
+  /** Whether the hub keeps an area of that id. */
+  readonly areaExists: (id: string) => boolean;
   /** Something a session's tool list depends on moved. */
   readonly changed: () => void;
   readonly db: ConnectionsDb;
@@ -1019,6 +1024,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
         : {}),
       hasSecret: Boolean(sealed.key || sealed.tokens || sealed.app),
       projects: db.projectsOf(r.id),
+      areas: db.areasOf(r.id),
       ...(tools ? { tools: tools.map((tool) => tool.name) } : {}),
       createdAt: r.createdAt.getTime(),
       updatedAt: r.updatedAt.getTime(),
@@ -1682,6 +1688,14 @@ export const createConnections = (deps: ConnectionsDeps) => {
     return await callConnection(parsed.connection, tool.name, args);
   };
 
+  /** Refuses an area the hub keeps none of. */
+  const areasProblem = (areas: string[] | undefined) => {
+    const unknown = (areas ?? []).find((id) => !deps.areaExists(id));
+    if (unknown) {
+      problem(areaWords.scopeNoArea(unknown));
+    }
+  };
+
   const projectsProblem = (projects: string[] | undefined) => {
     const unknown = (projects ?? []).filter((id) => !deps.projectExists(id));
     if (unknown.length > 0) {
@@ -1759,6 +1773,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       problem(`There is a connection ${input.name} already.`);
     }
     projectsProblem(input.projects);
+    areasProblem(input.areas);
     const now = new Date();
     const id = crypto.randomUUID();
     db.insert({
@@ -1773,6 +1788,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       updatedAt: now,
     });
     writeProjects({ id, name: input.name }, input.projects ?? []);
+    db.setAreas(id, input.areas ?? []);
     console.info(`[connections] made ${input.name} (${input.service})`);
     if (input.auth === "none") {
       await probe(input.name);
@@ -1798,6 +1814,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       problem(said);
     }
     projectsProblem(patch.projects);
+    areasProblem(patch.areas);
     const where = whereOf(next);
     const moved = JSON.stringify(where) !== JSON.stringify(whereOf(r));
     if (moved && (next.auth === "gh" || r.auth === "gh")) {
@@ -1815,6 +1832,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
     // Written even when only its service or sign-in changed: its pollers
     // follow what it is now.
     writeProjects(r, patch.projects ?? [...had]);
+    if (patch.areas) {
+      db.setAreas(r.id, patch.areas);
+    }
     if (moved) {
       drop(r.id);
       listed.delete(r.id);
@@ -2855,6 +2875,7 @@ const INPUT = {
   ]),
   header: t.Optional(t.String()),
   projects: t.Optional(t.Array(t.String())),
+  areas: t.Optional(t.Array(t.String())),
 };
 
 /** A page of plain text for a browser that lands on the hub: nothing it carries is read as markup. */

@@ -81,10 +81,16 @@ export const sessionInstructions = (
 /** What a launching session's row says about it, as a document's scope reads it. */
 export const documentFacts = (
   row: InstanceRow,
-  places: readonly PlacementPlace[]
-): DocumentFacts => ({
-  role: memoryRoleOf(row),
-  delegateType: row.delegateType ?? null,
-  model: row.model ?? null,
-  projectId: sessionProject(row, places),
-});
+  places: readonly PlacementPlace[],
+  /** The area a project sits in now; null: none. */
+  areaOf: (projectId: string) => string | null
+): DocumentFacts => {
+  const projectId = sessionProject(row, places);
+  return {
+    role: memoryRoleOf(row),
+    delegateType: row.delegateType ?? null,
+    model: row.model ?? null,
+    projectId,
+    areaId: projectId ? areaOf(projectId) : null,
+  };
+};

@@ -14028,6 +14028,12 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "areas": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
@@ -14139,6 +14145,12 @@
                     "type": "string"
                   },
                   "projects": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "areas": {
                     "type": "array",
                     "items": {
                       "type": "string"
@@ -16750,6 +16762,1507 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/areas": {
+      "get": {
+        "operationId": "getApiAreas",
+        "responses": {
+          "200": {
+            "description": "getApiAreas 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiAreas200"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "maxLength": 2000,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiAreas",
+        "responses": {
+          "200": {
+            "description": "postApiAreas 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AreaView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiAreas 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiAreas 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiAreas 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiAreas 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiAreas 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiAreas 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiAreas 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiAreas 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiAreas 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiAreas 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/areas/order": {
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "ids"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiAreasOrder",
+        "responses": {
+          "200": {
+            "description": "putApiAreasOrder 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiAreasOrder200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiAreasOrder 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "putApiAreasOrder 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiAreasOrder 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiAreasOrder 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "putApiAreasOrder 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "putApiAreasOrder 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiAreasOrder 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "putApiAreasOrder 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "putApiAreasOrder 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "putApiAreasOrder 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/areas/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiAreasById",
+        "responses": {
+          "200": {
+            "description": "getApiAreasById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AreaView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiAreasById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiAreasById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiAreasById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiAreasById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiAreasById 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiAreasById 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiAreasById 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiAreasById 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiAreasById 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiAreasById 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  "account": {
+                    "maxLength": 320,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "accountAtLimit": {
+                    "type": "string",
+                    "enum": [
+                      "wait",
+                      "move"
+                    ]
+                  },
+                  "cawMode": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "default",
+                      "acceptEdits",
+                      "plan",
+                      "bypassPermissions",
+                      "fullSend"
+                    ]
+                  },
+                  "cap": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "usd": {
+                        "type": "number"
+                      },
+                      "period": {
+                        "type": "string",
+                        "enum": [
+                          "day",
+                          "month"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "usd",
+                      "period"
+                    ]
+                  },
+                  "onCap": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "pause",
+                      "quiet",
+                      "both"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchApiAreasById",
+        "responses": {
+          "200": {
+            "description": "patchApiAreasById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patchApiAreasById200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "patchApiAreasById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "patchApiAreasById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "patchApiAreasById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "patchApiAreasById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "patchApiAreasById 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "patchApiAreasById 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "patchApiAreasById 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "patchApiAreasById 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "patchApiAreasById 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "patchApiAreasById 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiAreasById",
+        "responses": {
+          "200": {
+            "description": "deleteApiAreasById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiAreasById200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "deleteApiAreasById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "deleteApiAreasById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiAreasById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiAreasById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "deleteApiAreasById 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "deleteApiAreasById 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "deleteApiAreasById 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "deleteApiAreasById 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "deleteApiAreasById 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "deleteApiAreasById 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/area": {
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "areaId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "areaId"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiProjectsByIdArea",
+        "responses": {
+          "200": {
+            "description": "putApiProjectsByIdArea 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiProjectsByIdArea200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiProjectsByIdArea 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "putApiProjectsByIdArea 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiProjectsByIdArea 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiProjectsByIdArea 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "putApiProjectsByIdArea 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "putApiProjectsByIdArea 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiProjectsByIdArea 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "putApiProjectsByIdArea 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "putApiProjectsByIdArea 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "putApiProjectsByIdArea 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/areas/{id}/folder": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiAreasByIdFolder",
+        "responses": {
+          "200": {
+            "description": "getApiAreasByIdFolder 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderListing"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiAreasByIdFolder 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiAreasByIdFolder 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiAreasByIdFolder 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiAreasByIdFolder 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiAreasByIdFolder 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiAreasByIdFolder 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiAreasByIdFolder 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiAreasByIdFolder 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiAreasByIdFolder 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiAreasByIdFolder 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/areas/{id}/folder/file": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiAreasByIdFolderFile",
+        "responses": {
+          "200": {
+            "description": "getApiAreasByIdFolderFile 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderFile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiAreasByIdFolderFile 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiAreasByIdFolderFile 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiAreasByIdFolderFile 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiAreasByIdFolderFile 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiAreasByIdFolderFile 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiAreasByIdFolderFile 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiAreasByIdFolderFile 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiAreasByIdFolderFile 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiAreasByIdFolderFile 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiAreasByIdFolderFile 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "maxLength": 1398104,
+                    "type": "string"
+                  },
+                  "encoding": {
+                    "type": "string",
+                    "enum": [
+                      "utf8",
+                      "base64"
+                    ]
+                  },
+                  "message": {
+                    "maxLength": 2000,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path",
+                  "content"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiAreasByIdFolderFile",
+        "responses": {
+          "200": {
+            "description": "putApiAreasByIdFolderFile 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderCommit"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiAreasByIdFolderFile 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "putApiAreasByIdFolderFile 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiAreasByIdFolderFile 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiAreasByIdFolderFile 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "putApiAreasByIdFolderFile 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "putApiAreasByIdFolderFile 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiAreasByIdFolderFile 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "putApiAreasByIdFolderFile 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "putApiAreasByIdFolderFile 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "putApiAreasByIdFolderFile 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "message",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiAreasByIdFolderFile",
+        "responses": {
+          "200": {
+            "description": "deleteApiAreasByIdFolderFile 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderCommit"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "deleteApiAreasByIdFolderFile 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "deleteApiAreasByIdFolderFile 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiAreasByIdFolderFile 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiAreasByIdFolderFile 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "deleteApiAreasByIdFolderFile 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "deleteApiAreasByIdFolderFile 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "deleteApiAreasByIdFolderFile 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "deleteApiAreasByIdFolderFile 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "deleteApiAreasByIdFolderFile 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "deleteApiAreasByIdFolderFile 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -23256,6 +24769,9 @@
                       "projectId": {
                         "type": "string"
                       },
+                      "areaId": {
+                        "type": "string"
+                      },
                       "harness": {
                         "type": "string"
                       },
@@ -23398,6 +24914,9 @@
                         "type": "string"
                       },
                       "projectId": {
+                        "type": "string"
+                      },
+                      "areaId": {
                         "type": "string"
                       },
                       "harness": {
@@ -25305,6 +26824,13 @@
                         ]
                       },
                       "projectIds": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "areaIds": {
                         "minItems": 1,
                         "type": "array",
                         "items": {
@@ -30183,7 +31709,7 @@
         "type": "object",
         "properties": {
           "mode": {
-            "$ref": "#/components/schemas/EventRouteViewMode"
+            "$ref": "#/components/schemas/AreaViewCawMode"
           }
         }
       },
@@ -30191,7 +31717,7 @@
         "type": "object",
         "properties": {
           "mode": {
-            "$ref": "#/components/schemas/EventRouteViewMode"
+            "$ref": "#/components/schemas/AreaViewCawMode"
           }
         }
       },
@@ -30454,6 +31980,150 @@
             "$ref": "#/components/schemas/ProjectCap"
           }
         }
+      },
+      "getApiAreas200": {
+        "type": "object",
+        "properties": {
+          "areas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AreaView"
+            }
+          }
+        },
+        "required": [
+          "areas"
+        ]
+      },
+      "putApiAreasOrder200": {
+        "type": "object",
+        "properties": {
+          "areas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AreaView"
+            }
+          }
+        },
+        "required": [
+          "areas"
+        ]
+      },
+      "patchApiAreasById200": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "accountAtLimit": {
+            "$ref": "#/components/schemas/ProjectAtLimit"
+          },
+          "capPeriod": {
+            "$ref": "#/components/schemas/CapPeriod"
+          },
+          "capUsd": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "cawMode": {
+            "$ref": "#/components/schemas/AreaViewCawMode"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "onCap": {
+            "$ref": "#/components/schemas/OnCap"
+          },
+          "position": {
+            "description": "Its place among the areas, smallest first.",
+            "type": "number"
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "said": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "account",
+          "accountAtLimit",
+          "capUsd",
+          "createdAt",
+          "id",
+          "name",
+          "position",
+          "projects",
+          "said"
+        ]
+      },
+      "deleteApiAreasById200": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "said": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "projects",
+          "said"
+        ]
+      },
+      "putApiProjectsByIdArea200": {
+        "type": "object",
+        "properties": {
+          "areaId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inEffect": {
+            "$ref": "#/components/schemas/SettingsInEffect"
+          },
+          "said": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "areaId",
+          "inEffect",
+          "said"
+        ]
       },
       "getApiSessionLimits200": {
         "type": "object",
@@ -32455,7 +34125,7 @@
               ]
             },
             "accountAtLimit": {
-              "$ref": "#/components/schemas/GetApiProjects200AccountAtLimit"
+              "$ref": "#/components/schemas/ProjectAtLimit"
             },
             "accounts": {
               "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
@@ -32466,6 +34136,12 @@
             },
             "appleGate": {
               "type": "boolean"
+            },
+            "areaId": {
+              "type": [
+                "null",
+                "string"
+              ]
             },
             "budget": {
               "$ref": "#/components/schemas/WorkBudget"
@@ -32486,7 +34162,7 @@
               "$ref": "#/components/schemas/HarnessKind"
             },
             "cawMode": {
-              "$ref": "#/components/schemas/EventRouteViewMode"
+              "$ref": "#/components/schemas/AreaViewCawMode"
             },
             "cawModel": {
               "type": [
@@ -32512,6 +34188,10 @@
             },
             "id": {
               "type": "string"
+            },
+            "inEffect": {
+              "$ref": "#/components/schemas/SettingsInEffect",
+              "description": "Its settings in effect, each with where it came from: its own, else its\narea's, else the fleet's (core `settingsInEffect`), read with the row.\nEvery reader that acts on one of them reads it here."
             },
             "lands": {
               "$ref": "#/components/schemas/LandsMode"
@@ -32642,6 +34322,7 @@
             "account",
             "accountAtLimit",
             "appleGate",
+            "areaId",
             "capUsd",
             "cawHarness",
             "cawModel",
@@ -32650,6 +34331,7 @@
             "dispatch",
             "eventsOn",
             "id",
+            "inEffect",
             "lands",
             "lfsConnection",
             "lfsUrl",
@@ -32676,7 +34358,7 @@
             ]
           },
           "accountAtLimit": {
-            "$ref": "#/components/schemas/GetApiProjects200AccountAtLimit"
+            "$ref": "#/components/schemas/ProjectAtLimit"
           },
           "accounts": {
             "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
@@ -32687,6 +34369,12 @@
           },
           "appleGate": {
             "type": "boolean"
+          },
+          "areaId": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "budget": {
             "$ref": "#/components/schemas/WorkBudget"
@@ -32704,7 +34392,7 @@
             "$ref": "#/components/schemas/HarnessKind"
           },
           "cawMode": {
-            "$ref": "#/components/schemas/EventRouteViewMode"
+            "$ref": "#/components/schemas/AreaViewCawMode"
           },
           "cawModel": {
             "type": [
@@ -32733,6 +34421,10 @@
           },
           "id": {
             "type": "string"
+          },
+          "inEffect": {
+            "$ref": "#/components/schemas/SettingsInEffect",
+            "description": "Its settings in effect, each with where it came from: its own, else its\narea's, else the fleet's (core `settingsInEffect`), read with the row.\nEvery reader that acts on one of them reads it here."
           },
           "lands": {
             "$ref": "#/components/schemas/LandsMode"
@@ -32909,6 +34601,7 @@
           "account",
           "accountAtLimit",
           "appleGate",
+          "areaId",
           "capUsd",
           "cawHarness",
           "cawModel",
@@ -32917,6 +34610,7 @@
           "dispatch",
           "eventsOn",
           "id",
+          "inEffect",
           "lands",
           "lfsConnection",
           "lfsUrl",
@@ -32969,7 +34663,7 @@
             ]
           },
           "accountAtLimit": {
-            "$ref": "#/components/schemas/GetApiProjects200AccountAtLimit"
+            "$ref": "#/components/schemas/ProjectAtLimit"
           },
           "accounts": {
             "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
@@ -32980,6 +34674,12 @@
           },
           "appleGate": {
             "type": "boolean"
+          },
+          "areaId": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "budget": {
             "$ref": "#/components/schemas/WorkBudget"
@@ -33000,7 +34700,7 @@
             "$ref": "#/components/schemas/HarnessKind"
           },
           "cawMode": {
-            "$ref": "#/components/schemas/EventRouteViewMode"
+            "$ref": "#/components/schemas/AreaViewCawMode"
           },
           "cawModel": {
             "type": [
@@ -33026,6 +34726,10 @@
           },
           "id": {
             "type": "string"
+          },
+          "inEffect": {
+            "$ref": "#/components/schemas/SettingsInEffect",
+            "description": "Its settings in effect, each with where it came from: its own, else its\narea's, else the fleet's (core `settingsInEffect`), read with the row.\nEvery reader that acts on one of them reads it here."
           },
           "lands": {
             "$ref": "#/components/schemas/LandsMode"
@@ -33156,6 +34860,7 @@
           "account",
           "accountAtLimit",
           "appleGate",
+          "areaId",
           "capUsd",
           "cawHarness",
           "cawModel",
@@ -33164,6 +34869,7 @@
           "dispatch",
           "eventsOn",
           "id",
+          "inEffect",
           "lands",
           "lfsConnection",
           "lfsUrl",
@@ -33206,7 +34912,7 @@
             ]
           },
           "accountAtLimit": {
-            "$ref": "#/components/schemas/GetApiProjects200AccountAtLimit"
+            "$ref": "#/components/schemas/ProjectAtLimit"
           },
           "accounts": {
             "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
@@ -33217,6 +34923,12 @@
           },
           "appleGate": {
             "type": "boolean"
+          },
+          "areaId": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "budget": {
             "$ref": "#/components/schemas/WorkBudget"
@@ -33234,7 +34946,7 @@
             "$ref": "#/components/schemas/HarnessKind"
           },
           "cawMode": {
-            "$ref": "#/components/schemas/EventRouteViewMode"
+            "$ref": "#/components/schemas/AreaViewCawMode"
           },
           "cawModel": {
             "type": [
@@ -33260,6 +34972,10 @@
           },
           "id": {
             "type": "string"
+          },
+          "inEffect": {
+            "$ref": "#/components/schemas/SettingsInEffect",
+            "description": "Its settings in effect, each with where it came from: its own, else its\narea's, else the fleet's (core `settingsInEffect`), read with the row.\nEvery reader that acts on one of them reads it here."
           },
           "lands": {
             "$ref": "#/components/schemas/LandsMode"
@@ -33436,6 +35152,7 @@
           "account",
           "accountAtLimit",
           "appleGate",
+          "areaId",
           "capUsd",
           "cawHarness",
           "cawModel",
@@ -33444,6 +35161,7 @@
           "dispatch",
           "eventsOn",
           "id",
+          "inEffect",
           "lands",
           "lfsConnection",
           "lfsUrl",
@@ -33471,7 +35189,7 @@
             ]
           },
           "accountAtLimit": {
-            "$ref": "#/components/schemas/GetApiProjects200AccountAtLimit"
+            "$ref": "#/components/schemas/ProjectAtLimit"
           },
           "accounts": {
             "description": "The accounts its sessions may run on (`project_accounts`); null: every account.",
@@ -33482,6 +35200,12 @@
           },
           "appleGate": {
             "type": "boolean"
+          },
+          "areaId": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "budget": {
             "$ref": "#/components/schemas/WorkBudget"
@@ -33499,7 +35223,7 @@
             "$ref": "#/components/schemas/HarnessKind"
           },
           "cawMode": {
-            "$ref": "#/components/schemas/EventRouteViewMode"
+            "$ref": "#/components/schemas/AreaViewCawMode"
           },
           "cawModel": {
             "type": [
@@ -33525,6 +35249,10 @@
           },
           "id": {
             "type": "string"
+          },
+          "inEffect": {
+            "$ref": "#/components/schemas/SettingsInEffect",
+            "description": "Its settings in effect, each with where it came from: its own, else its\narea's, else the fleet's (core `settingsInEffect`), read with the row.\nEvery reader that acts on one of them reads it here."
           },
           "lands": {
             "$ref": "#/components/schemas/LandsMode"
@@ -33655,6 +35383,7 @@
           "account",
           "accountAtLimit",
           "appleGate",
+          "areaId",
           "capUsd",
           "cawHarness",
           "cawModel",
@@ -33663,6 +35392,7 @@
           "dispatch",
           "eventsOn",
           "id",
+          "inEffect",
           "lands",
           "lfsConnection",
           "lfsUrl",
@@ -36638,11 +38368,23 @@
           },
           "problem": {
             "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Exclude",
+            "description": "The folder it is in: the project's, or its area's."
           }
         },
         "required": [
           "path",
-          "problem"
+          "problem",
+          "source"
+        ]
+      },
+      "Exclude": {
+        "type": "string",
+        "enum": [
+          "area",
+          "project"
         ]
       },
       "CatalogType": {
@@ -36667,15 +38409,15 @@
                 "description": "Where a work item's work goes once it finishes (hub/src/landing.ts):\n`main` onto the repository's default branch, `branch` to a branch of its\nown on origin, `pr` to that branch with a pull request, `none` nowhere (the\nwork is not commits; its outputs are the deliverable)."
               },
               "path": {
-                "description": "The file it was read from, inside the project folder.",
+                "description": "The file it was read from, inside its folder (the project's, or its area's).",
                 "type": "string"
               },
               "shadows": {
-                "description": "A project type that replaces a fleet type of the same name.",
+                "description": "A project or area type that replaces a type of the same name below it.",
                 "type": "boolean"
               },
               "source": {
-                "$ref": "#/components/schemas/CatalogTypeSource"
+                "$ref": "#/components/schemas/SettingSource"
               }
             },
             "required": [
@@ -36701,6 +38443,15 @@
             "type": "number"
           }
         }
+      },
+      "SettingSource": {
+        "description": "Where a setting in effect came from: the project's own, its area's, or the fleet's.",
+        "type": "string",
+        "enum": [
+          "area",
+          "fleet",
+          "project"
+        ]
       },
       "ListedBrowser": {
         "description": "One browser of the fleet as the hub lists it (`GET /api/browsers`, and\n{@link BrowserListFrame}): the row its machine last reported, kept by the\nhub, with the machine's name and what the machine says of it now (`why`,\n`progress`, `origin`, from its latest frame).",
@@ -37963,10 +39714,11 @@
         "type": "object",
         "properties": {
           "from": {
-            "type": "object"
+            "type": "object",
+            "description": "Where each kind's member came from: the project's decides.md, its area's, or the fleet's (core areas.ts)."
           },
           "problems": {
-            "description": "decides.md's problems; the table is then every kind → `you`.",
+            "description": "decides.md's problems, the project's and its area's; the table is then every kind → `you`.",
             "type": "array",
             "items": {
               "type": "string"
@@ -42860,10 +44612,10 @@
           "styles": {
             "type": "object",
             "properties": {
-              "color": {
+              "position": {
                 "type": "string"
               },
-              "position": {
+              "color": {
                 "type": "string"
               },
               "display": {
@@ -44421,7 +46173,7 @@
             ]
           },
           "mode": {
-            "$ref": "#/components/schemas/EventRouteViewMode",
+            "$ref": "#/components/schemas/AreaViewCawMode",
             "description": "The permission mode the hub starts the project's conversation in, the\nproject's own; null: the fleet's, else the one the person last chose\nfor its harness on that machine. A routine's or an event route's own\nwins over it."
           },
           "model": {
@@ -44666,13 +46418,21 @@
         "description": "A project's spend cap as it stands now: what the period has spent\nagainst it, and what reaching it does. Spend is every session of the\nproject's (its Caw and its attempts) since the period began.",
         "type": "object",
         "properties": {
+          "from": {
+            "$ref": "#/components/schemas/Exclude",
+            "description": "Where its amount and period came from: the project's own or its area's (core areas.ts)."
+          },
           "inherited": {
-            "description": "`onCap` is the fleet default, not the project's own.",
+            "description": "`onCap` is not the project's own (`onCapFrom` is its area or the fleet).\nRead by the shipped apps and dashboard tabs on an older wire; `onCapFrom`\nsays where it came from.",
             "type": "boolean"
           },
           "onCap": {
             "$ref": "#/components/schemas/OnCap",
-            "description": "What reaching it does: the project's own, else the fleet's."
+            "description": "What reaching it does: the project's own, else its area's, else the fleet's."
+          },
+          "onCapFrom": {
+            "$ref": "#/components/schemas/SettingSource",
+            "description": "Where `onCap` came from."
           },
           "period": {
             "$ref": "#/components/schemas/CapPeriod"
@@ -44697,8 +46457,10 @@
           }
         },
         "required": [
+          "from",
           "inherited",
           "onCap",
+          "onCapFrom",
           "period",
           "reached",
           "resetsAt",
@@ -44839,7 +46601,7 @@
             ]
           },
           "mode": {
-            "$ref": "#/components/schemas/EventRouteViewMode",
+            "$ref": "#/components/schemas/AreaViewCawMode",
             "description": "The mode a conversation run starts the project's conversation in when it has none; null: the project's."
           },
           "name": {
@@ -45104,6 +46866,13 @@
               }
             ]
           },
+          "areas": {
+            "description": "Areas whose every project's sessions may use it, read as each area's projects now (core areas.ts).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "args": {
             "type": "array",
             "items": {
@@ -45232,6 +47001,7 @@
         },
         "required": [
           "account",
+          "areas",
           "auth",
           "createdAt",
           "hasSecret",
@@ -45880,7 +47650,7 @@
             ]
           },
           "mode": {
-            "$ref": "#/components/schemas/EventRouteViewMode",
+            "$ref": "#/components/schemas/AreaViewCawMode",
             "description": "The mode its event starts the project's conversation in when it has none; null: its routine's."
           },
           "projectId": {
@@ -46264,6 +48034,199 @@
           "proposed",
           "running",
           "unknown"
+        ]
+      },
+      "AreaView": {
+        "description": "An area as the API answers it: its row and the projects in it, oldest first.",
+        "type": "object",
+        "properties": {
+          "projects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "description": "Its place among the areas, smallest first.",
+            "type": "number"
+          },
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "accountAtLimit": {
+            "$ref": "#/components/schemas/ProjectAtLimit"
+          },
+          "capPeriod": {
+            "$ref": "#/components/schemas/CapPeriod"
+          },
+          "capUsd": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "cawMode": {
+            "$ref": "#/components/schemas/AreaViewCawMode"
+          },
+          "onCap": {
+            "$ref": "#/components/schemas/OnCap"
+          }
+        },
+        "required": [
+          "account",
+          "accountAtLimit",
+          "capUsd",
+          "createdAt",
+          "id",
+          "name",
+          "position",
+          "projects"
+        ]
+      },
+      "ProjectAtLimit": {
+        "type": "string",
+        "enum": [
+          "move",
+          "wait"
+        ]
+      },
+      "SettingsInEffect": {
+        "description": "A project's settings in effect, each with its source:\n\n- `account`: the account its sessions start on when a start names none;\n  null from the fleet is the fleet's routing.\n- `accountAtLimit`: what its sessions on that account do at its limit, from\n  whoever set the account (the fleet's is `wait`, with no account to wait on).\n- `cawMode`: the permission mode its conversation starts in; null from the\n  fleet is the mode last chosen for the harness on that machine.\n- `cap`: what it may spend in a period; null from the fleet is no cap.\n- `onCap`: what reaching the cap does.",
+        "type": "object",
+        "properties": {
+          "account": {
+            "description": "A setting in effect, and where it came from.",
+            "type": "object",
+            "properties": {
+              "from": {
+                "$ref": "#/components/schemas/SettingSource"
+              },
+              "value": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "from",
+              "value"
+            ]
+          },
+          "accountAtLimit": {
+            "description": "A setting in effect, and where it came from.",
+            "type": "object",
+            "properties": {
+              "from": {
+                "$ref": "#/components/schemas/SettingSource"
+              },
+              "value": {
+                "$ref": "#/components/schemas/Sourced.T"
+              }
+            },
+            "required": [
+              "from",
+              "value"
+            ]
+          },
+          "cap": {
+            "description": "A setting in effect, and where it came from.",
+            "type": "object",
+            "properties": {
+              "from": {
+                "$ref": "#/components/schemas/SettingSource"
+              },
+              "value": {
+                "$ref": "#/components/schemas/CapAmount"
+              }
+            },
+            "required": [
+              "from"
+            ]
+          },
+          "cawMode": {
+            "description": "A setting in effect, and where it came from.",
+            "type": "object",
+            "properties": {
+              "from": {
+                "$ref": "#/components/schemas/SettingSource"
+              },
+              "value": {
+                "$ref": "#/components/schemas/AreaViewCawMode"
+              }
+            },
+            "required": [
+              "from"
+            ]
+          },
+          "onCap": {
+            "description": "A setting in effect, and where it came from.",
+            "type": "object",
+            "properties": {
+              "from": {
+                "$ref": "#/components/schemas/SettingSource"
+              },
+              "value": {
+                "$ref": "#/components/schemas/Sourced.T_1"
+              }
+            },
+            "required": [
+              "from",
+              "value"
+            ]
+          }
+        },
+        "required": [
+          "account",
+          "accountAtLimit",
+          "cap",
+          "cawMode",
+          "onCap"
+        ]
+      },
+      "Sourced.T": {
+        "type": "string",
+        "enum": [
+          "move",
+          "wait"
+        ]
+      },
+      "CapAmount": {
+        "description": "A spend cap's amount and the span it counts over.",
+        "type": "object",
+        "properties": {
+          "period": {
+            "$ref": "#/components/schemas/CapPeriod"
+          },
+          "usd": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "period",
+          "usd"
+        ]
+      },
+      "Sourced.T_1": {
+        "description": "What reaching a project's spend cap does (Projects spec §5.3): `pause`\nstarts no new attempts at its tasks, `quiet` books what would wake its Caw\nwithout a turn, `both` does both. The fleet has a default (Configure,\nSpend); a project may set its own.",
+        "type": "string",
+        "enum": [
+          "both",
+          "pause",
+          "quiet"
         ]
       },
       "ProjectView": {
@@ -50205,7 +52168,7 @@
                     "type": "boolean"
                   },
                   "compactBy": {
-                    "$ref": "#/components/schemas/Exclude",
+                    "$ref": "#/components/schemas/Exclude_1",
                     "description": "The harness whose own `/compact` runs, when it is not Claude Code's: what its compaction keeps is less."
                   },
                   "summaryRefused": {
@@ -54983,9 +56946,16 @@
         ]
       },
       "MemoryScope": {
-        "description": "Which sessions a fleet memory document reaches. No scope at all is a\nlinked document under `~/.claude/memories/`, read on purpose. A scope\nmakes it instructions every matching session loads at its start; each\nfield narrows, and the fields are ANDed:\n\n- `role`: the sessions of that role;\n- `delegateTypes`: the sessions started as one of those delegate types;\n- `model`: the sessions whose model id contains it, in any case (`opus`\n  covers every dated build of it, as a rule's model scope does);\n- `projectIds`: the sessions in a checkout or workspace of one of those\n  projects. With nothing else, the document is written into each such\n  place as `.claude/rules/cawco/<path>` ({@link FleetPlacedMemoryDoc}).\n\nA document scoped by role, type or model reaches its sessions as they\nlaunch, from the hub ({@link SessionInstruction}), in the instructions a\ncompaction keeps.\n\n`briefer` turns the scope around: the document is guidance for writing a\nbrief, and reaches the session that calls `delegate`, never the delegate.\n`delegateTypes` and `model` then name the delegates it is about (none:\nevery delegate); the hub hands it to the caller once before the first\nsuch delegate goes out, and again after the caller's next compaction\n(hub briefings.ts). It takes no `role` or `projectIds`.",
+        "description": "Which sessions a fleet memory document reaches. No scope at all is a\nlinked document under `~/.claude/memories/`, read on purpose. A scope\nmakes it instructions every matching session loads at its start; each\nfield narrows, and the fields are ANDed:\n\n- `role`: the sessions of that role;\n- `delegateTypes`: the sessions started as one of those delegate types;\n- `model`: the sessions whose model id contains it, in any case (`opus`\n  covers every dated build of it, as a rule's model scope does);\n- `projectIds`: the sessions in a checkout or workspace of one of those\n  projects. With nothing else, the document is written into each such\n  place as `.claude/rules/cawco/<path>` ({@link FleetPlacedMemoryDoc}).\n\nA document scoped by role, type or model reaches its sessions as they\nlaunch, from the hub ({@link SessionInstruction}), in the instructions a\ncompaction keeps.\n\n`briefer` turns the scope around: the document is guidance for writing a\nbrief, and reaches the session that calls `delegate`, never the delegate.\n`delegateTypes` and `model` then name the delegates it is about (none:\nevery delegate); the hub hands it to the caller once before the first\nsuch delegate goes out, and again after the caller's next compaction\n(hub briefings.ts). It takes no `role`, `projectIds` or `areaIds`.\n\n`areaIds` names areas (core areas.ts): a document scoped to an area is\nscoped to every project in it as the hub reads it, a project moved in or\nout taking it or leaving it then ({@link inScopedProjects}).",
         "type": "object",
         "properties": {
+          "areaIds": {
+            "description": "Never empty when present: every project in each area, as read.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "briefer": {
             "const": true,
             "type": "boolean"
@@ -55071,6 +57041,10 @@
         "description": "What narrows a rule from \"every session on the fleet\" to some of them. Every\nfield is optional and they are ANDed; an empty scope is the default and means\neverywhere. `model` is a substring test, so `opus` covers every dated build\nof it.",
         "type": "object",
         "properties": {
+          "areaId": {
+            "description": "The area it fires in (core areas.ts): every project in it, as the rule\nis read; with `projectId` too, a session must be in both.",
+            "type": "string"
+          },
           "delegateType": {
             "description": "The delegate type the session was started as, by name.",
             "type": "string"
@@ -57662,7 +59636,7 @@
             "type": "string"
           },
           "store": {
-            "$ref": "#/components/schemas/Exclude"
+            "$ref": "#/components/schemas/Exclude_1"
           },
           "storeProvider": {
             "description": "The provider's id in that store, as the store names it (`openai` in OpenCode's for ChatGPT).",
@@ -57677,7 +59651,7 @@
           "storeProvider"
         ]
       },
-      "Exclude": {
+      "Exclude_1": {
         "type": "string",
         "enum": [
           "opencode",
@@ -59751,7 +61725,7 @@
                     "type": "boolean"
                   },
                   "compactBy": {
-                    "$ref": "#/components/schemas/Exclude",
+                    "$ref": "#/components/schemas/Exclude_1",
                     "description": "The harness whose own `/compact` runs, when it is not Claude Code's: what its compaction keeps is less."
                   },
                   "summaryRefused": {
@@ -63785,6 +65759,16 @@
           "unreadable-credentials"
         ]
       },
+      "AreaViewCawMode": {
+        "type": "string",
+        "enum": [
+          "acceptEdits",
+          "bypassPermissions",
+          "default",
+          "fullSend",
+          "plan"
+        ]
+      },
       "ArtifactStatusWaitingOn": {
         "type": "string",
         "enum": [
@@ -63910,13 +65894,6 @@
         "enum": [
           "decided differently",
           "reopened"
-        ]
-      },
-      "CatalogTypeSource": {
-        "type": "string",
-        "enum": [
-          "fleet",
-          "project"
         ]
       },
       "CawRunningKind": {
@@ -64069,16 +66046,6 @@
           "compile",
           "missing",
           "page"
-        ]
-      },
-      "EventRouteViewMode": {
-        "type": "string",
-        "enum": [
-          "acceptEdits",
-          "bypassPermissions",
-          "default",
-          "fullSend",
-          "plan"
         ]
       },
       "ExternalActorKind": {
@@ -64655,13 +66622,6 @@
           "mainline",
           "scratch",
           "summariser"
-        ]
-      },
-      "GetApiProjects200AccountAtLimit": {
-        "type": "string",
-        "enum": [
-          "move",
-          "wait"
         ]
       },
       "GetApiRulesByIdActivity200Status": {
