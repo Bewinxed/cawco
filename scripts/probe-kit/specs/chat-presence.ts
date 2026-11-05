@@ -54,6 +54,7 @@ import {
 } from "../../../packages/core/src/injected";
 import { NO_REPLY_OWED } from "../../../packages/core/src/no-reply";
 import type { PersonView } from "../../../packages/core/src/notifications";
+import { cawPanelWords } from "../../../packages/core/src/words/onboarding";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
@@ -604,6 +605,29 @@ const run = async (kit: Kit): Promise<void> => {
   await seat.waitFor({ timeout: 60_000 });
   await panel.waitFor({ timeout: 5000 }).catch(() => seat.click());
   await panel.waitFor({ timeout: 60_000 });
+  // His pages from legs 15 and 17 stand open, so the panel comes to Preview
+  // as they are read (ProjectConversation `previewOpen`), the conversation
+  // laid out under it unseen and unsaid (SessionPane `visible`). Its switch
+  // stands once they are read; the person goes back to Assistant to read him.
+  await panel
+    .locator('[data-slot="caw-tabs"]')
+    .first()
+    .waitFor({ timeout: 60_000 });
+  const cameTo = await panel.getAttribute("data-caw-tab");
+  check(
+    "7: setup: his panel comes to Preview, the page he shows standing open",
+    cameTo === "preview",
+    `data-caw-tab=${cameTo}`
+  );
+  if (cameTo === "preview") {
+    await panel
+      .getByRole("tab", { name: cawPanelWords.assistant, exact: true })
+      .first()
+      .click();
+    await second
+      .locator('[data-caw-panel][data-caw-tab="assistant"]')
+      .waitFor({ timeout: 10_000 });
+  }
   await touch(second);
   await shows(
     conversation,
