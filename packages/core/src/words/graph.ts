@@ -315,8 +315,8 @@ export const graphWords = {
     off: "Off",
     /** The head's line while As written is shown: the dials take no turn, and the way on is Yours. */
     readOnly: "Switch to Yours to change the values.",
-    /** The head's line otherwise: his values are the artifact's, and the agent reads them with his other answers when he sends. */
-    reachAgent: "The agent gets these values when you send.",
+    /** The head's line otherwise: his values are the artifact's answer, and the hub sends them to the agent by itself once his changes stand quiet (hub artifacts `sendAnswered`, `COMMENTS_QUIET_MS`). */
+    reachAgent: "These go to the agent 3 seconds after your last change.",
     /** The dial glyph in the bar's glass while values are changed: its name says how many. */
     glassChanged: (n: Figure) => `Dials, ${n} changed`,
   },

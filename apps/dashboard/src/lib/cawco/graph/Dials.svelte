@@ -16,9 +16,10 @@
    *
    * The head's line stands at every moment, so no row moves as he turns
    * the first dial or resets the last: it says what becomes of his values
-   * (the artifact keeps them, and the agent reads them with his other
-   * answers when he sends: hub artifacts service, `artifact_read`'s
-   * `dials`), and once he turned anything it holds what the move's timing
+   * (the artifact keeps them as its doc's `dials`, which answer a component
+   * he judges, so the hub sends them to the agent by itself once his
+   * changes stand quiet: hub artifacts `sendAnswered`, `artifact_read`'s
+   * `dials`; nothing here asks for Send), and once he turned anything it holds what the move's timing
    * holds, in the same place: As written | Yours (Yours counting the dials
    * he changed; As written draws the agent's values on the face, muted and
    * read only, and on the drawing, the line saying so) and Reset all, which
