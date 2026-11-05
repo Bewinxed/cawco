@@ -92,6 +92,7 @@
     "./words/onboarding": "./src/words/onboarding.ts",
     "./words/decides": "./src/words/decides.ts",
     "./words/routines": "./src/words/routines.ts",
+    "./words/proto-five-places": "./src/words/proto-five-places.ts",
     "./words/graph": "./src/words/graph.ts",
     "./words/story-read": "./src/words/story-read.ts",
     "./words/leaks": "./src/words/leaks.ts",
