@@ -329,12 +329,13 @@
             onSelect={() => choose(artifact)}
           >
             <Glyph />
-            <!-- The name and its promoted tag on one line: the name whole while
-               it fits, the tag giving way first. -->
+            <!-- The name and its promoted tag: the name whole while it fits
+               in two lines (an agent's title runs to 80 characters), the tag
+               giving way first. -->
             <span class="flex min-w-0 flex-auto gap-inherit" data-box>
               <span
                 data-slot="row-name"
-                class="max-w-full flex-none overflow-clip text-ellipsis whitespace-nowrap type-label"
+                class="max-w-full flex-none line-clamp-2 text-pretty type-label"
                 id={part(artifact.id, "name")}>{artifact.title}</span
               >
               {#if artifact.promoted}
