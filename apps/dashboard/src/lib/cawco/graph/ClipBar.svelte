@@ -510,10 +510,12 @@
           style:--wide={len(period)}
         ></span>
       {/each}
+      <!-- Held inside the lane at its end: past it, it widened the face's scroller. -->
       <span
         aria-hidden="true"
         class="pointer-events-none absolute inset-y-0 start-(--from) grid place-items-center ps-space-1 text-ink-muted"
-        style:--from={pct(span.to + times * period)}
+        style:--from="min({pct(span.to + times * period)}, calc(100% -
+        var(--icon-sm) - var(--space-1)))"
       >
         <IconRepeat class="size-icon-sm" />
       </span>

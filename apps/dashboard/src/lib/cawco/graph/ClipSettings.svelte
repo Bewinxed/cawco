@@ -245,8 +245,22 @@
   // --- Values and repeats ----------------------------------------------------
   const LEADING_DASHES = /^-+/u;
   const JOINERS = /[-_]+/gu;
-  /** What the row's clips run between, per property: its first clip's. */
-  const values = $derived(first.values);
+  /**
+   * What the row's clips run between, per property: its first clip's; none
+   * for a clip whose curve lives in its frames (a Svelte transition's, a
+   * frame every 16 ms), whose ends typed anew would leave the frames
+   * between them where they were.
+   */
+  const values = $derived(first.framed ? [] : first.values);
+  /** The Values chip's value: its first property's ends, and how many more stand in its card. */
+  const valuesShown = $derived.by(() => {
+    const [one, ...more] = values;
+    if (!one) {
+      return "";
+    }
+    const ends = words.valueEnds(one.from, one.to);
+    return more.length > 0 ? words.andMore(ends, more.length) : ends;
+  });
   /** A property's name in words: its own where the words have one, else said plainly. */
   const propertyName = (property: string) =>
     words.properties[property] ??
@@ -314,18 +328,23 @@
 {/snippet}
 
 {#snippet chip(label: string, value: string, key: Timing, path: string | null)}
+  <!-- Never wider than the settings' line: a long value is cut inside its chip, its whole in the chip's name. -->
   <Popover.Trigger
     aria-label="{label}: {value}"
+    class="max-w-full min-w-0"
     data-changed={edits.has(key) || undefined}
     look="chip"
   >
     {#if path}
       {@render glyph(path)}
     {:else}
-      <span class="text-ink-muted">{label}</span>
+      <span class="flex-none text-ink-muted">{label}</span>
     {/if}
     <span
-      class={["num", edits.has(key) ? "text-ink-strong" : "text-ink-row"]}
+      class={[
+        "num min-w-0 overflow-clip text-ellipsis whitespace-nowrap",
+        edits.has(key) ? "text-ink-strong" : "text-ink-row",
+      ]}
       data-slot="chip-label">{value}</span
     >
     <IconChevronDown data-slot="chevron" />
@@ -338,7 +357,7 @@
   data-slot="clip-settings"
 >
   <!-- Delay -->
-  <span class="inline-flex items-center gap-space-1">
+  <span class="inline-flex max-w-full min-w-0 items-center gap-space-1">
     <Popover.Root bind:open={delayOpen.open}>
       {@render chip(words.delay, words.ms(figure(delay)), "start", null)}
       <Popover.Content align="start" pad="inset">
@@ -382,7 +401,7 @@
   </span>
 
   <!-- Length -->
-  <span class="inline-flex items-center gap-space-1">
+  <span class="inline-flex max-w-full min-w-0 items-center gap-space-1">
     <Popover.Root bind:open={lengthOpen.open}>
       {@render chip(words.length, lengthShown, "length", null)}
       <Popover.Content
@@ -442,7 +461,7 @@
   </span>
 
   <!-- Curve -->
-  <span class="inline-flex items-center gap-space-1">
+  <span class="inline-flex max-w-full min-w-0 items-center gap-space-1">
     <Popover.Root bind:open={curveOpen.open}>
       {@render chip(
         words.curve,
@@ -505,14 +524,9 @@
 
   {#if values.length > 0}
     <!-- Values: what it runs between, each end typed. -->
-    <span class="inline-flex items-center gap-space-1">
+    <span class="inline-flex max-w-full min-w-0 items-center gap-space-1">
       <Popover.Root bind:open={valuesOpen.open}>
-        {@render chip(
-          words.values,
-          values.map((one) => `${one.from} → ${one.to}`).join(", "),
-          "values",
-          null
-        )}
+        {@render chip(words.values, valuesShown, "values", null)}
         <Popover.Content align="start" pad="inset" width="wide">
           <div
             class="grid min-w-0 grid-cols-(--cols) items-center gap-x-space-2 gap-y-space-2"
@@ -559,7 +573,7 @@
   {/if}
 
   <!-- Repeats: once, round again, or back and forth. -->
-  <span class="inline-flex items-center gap-space-1">
+  <span class="inline-flex max-w-full min-w-0 items-center gap-space-1">
     <Popover.Root bind:open={repeatOpen.open}>
       {@render chip(
         words.clipRepeat,

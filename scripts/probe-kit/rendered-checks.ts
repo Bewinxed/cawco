@@ -4015,15 +4015,26 @@ function placeIn(args: {
   // it opens, a dialog, sheet or drawer.
   const LAYER =
     '[data-popover], [data-slot="popover-content"], [role="menu"], [role="listbox"], [role="dialog"], [role="alertdialog"], [data-slot="dialog-content"], [data-slot="sheet-content"], [data-slot="drawer-content"]';
-  /** The open layer drawn over `el`'s middle, when one is and does not hold it. */
+  /**
+   * The open layer drawn over `el`, when one is and does not hold it: read
+   * at its middle and a quarter in from either end of its middle line, so
+   * words half under a layer (a chip's value under its neighbour's open
+   * card) are named as under it too, not only words whose middle is.
+   */
   const layerOver = (el: Element): string | null => {
     const r = el.getBoundingClientRect();
-    const [top] = document.elementsFromPoint(
-      r.left + r.width / 2,
-      r.top + r.height / 2
-    );
-    const layer = top?.closest(LAYER);
-    if (!layer || layer.contains(el)) {
+    const layer =
+      [0.5, 0.25, 0.75]
+        .map((across) =>
+          document
+            .elementsFromPoint(
+              r.left + r.width * across,
+              r.top + r.height / 2
+            )[0]
+            ?.closest(LAYER)
+        )
+        .find((one) => one && !one.contains(el)) ?? null;
+    if (!layer) {
       return null;
     }
     const slot = layer.getAttribute("data-slot");

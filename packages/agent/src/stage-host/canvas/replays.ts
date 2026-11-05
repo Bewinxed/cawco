@@ -32,6 +32,9 @@ import {
   type Tuning,
 } from "@cawco/core/stage-graph";
 
+/** The id every replay carries (Web Animations' `Animation.id`): a read of the page tells the replays from the component's own animations. */
+export const REPLAY_ID = "cawco-replay";
+
 /** One clip of the move the page last read: what the face names, its element and its frames as first seen. */
 export interface Held {
   keyframes: Keyframe[];
@@ -362,6 +365,7 @@ export class Replays {
       // Frames the engine won't take again (a property it computed but won't animate): that clip stands as it is.
       return null;
     }
+    animation.id = REPLAY_ID;
     animation.pause();
     this.#running.set(held.read.id, { animation, sign });
     return animation;

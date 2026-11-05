@@ -1108,9 +1108,11 @@
   let stopAt = $state(0);
   // Opened on a face of its own body (the map, the dials), the drawer stands
   // at its half stop: vaul opens it at its first, so it is stepped there once
-  // it stands.
+  // it stands. Opened on the Animation face it stands at its head, its
+  // transport and the move on one line over the stage, as a press on that
+  // face's tab leaves it.
   onMount(() => {
-    if (startFace && dialsAt === "face") {
+    if (startFace === "map" || (startFace === "dials" && dialsAt === "face")) {
       requestAnimationFrame(() => {
         if (!desk && SNAPS.length > 1) {
           stopAt = 1;

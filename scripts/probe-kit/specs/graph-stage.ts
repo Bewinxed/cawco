@@ -93,7 +93,9 @@
  * move 2. Play is followed by `cawco:stage-time` as it starts and as it
  *    ends, its `length` the clips' last end.
  * move 3. A press on the ruler at 35% of its lane holds the page's replays
- *    there: every one of `document.getAnimations()` paused.
+ *    there: every one of `document.getAnimations()` the page made (its
+ *    `REPLAY_ID`) paused; the component's own, finished ones among them,
+ *    said beside them.
  * move 4. A drag of Form failure's end writes `tuned` into the doc, and the
  *    hub's read answers it with `offTokens`.
  * move 5. Another move from the title's menu and back keeps the edit.
@@ -103,8 +105,9 @@
  * move-chips. Every row, and each animation's row under it, opened in
  *    turn: its chips each opened and read with their list over the face,
  *    no press ending on an error page.
- * move-runs. "Button “Create routine” changes" stands as two runs; a drag
- *    on run A moves it alone, an arrow on run B moves it alone.
+ * move-runs. "Button “Create routine” changes" stands as more than one run
+ *    (its windows as the engine ran them, motion.ts `runsOf`); a drag on
+ *    the first moves it alone, an arrow on the last moves it alone.
  *
  * The graph-dials leg (slice 4, the graph's dials), on a canvas of a
  * swatch made with one dial of each kind (a `cssVar` number, a colour, a
@@ -130,6 +133,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Frame, Page } from "playwright-core";
+import { REPLAY_ID } from "../../../packages/agent/src/stage-host/canvas/replays";
 import {
   STAGE_COMPARE,
   STAGE_DIFFERENCES,
@@ -1279,16 +1283,27 @@ async function moveDesk(
     );
   }
   await page.waitForTimeout(500);
-  const held = await frame.evaluate(() =>
-    document
-      .getAnimations()
-      .filter((one) => one.timeline instanceof DocumentTimeline)
-      .map((one) => one.playState)
+  // The replays (each carries the page's REPLAY_ID), and apart from them the component's own animations, said as they stand.
+  const held = await frame.evaluate(
+    (replay) =>
+      document
+        .getAnimations()
+        .filter((one) => one.timeline instanceof DocumentTimeline)
+        .map((one) => ({
+          replay: one.id === replay,
+          state: one.playState,
+          kind: one.constructor.name,
+        })),
+    REPLAY_ID
   );
+  const replays = held.filter((one) => one.replay);
   kit.check(
     "move 3: a press on the ruler at 35% holds the page's replays there: every one paused",
-    held.length > 0 && held.every((one) => one === "paused"),
-    JSON.stringify(held)
+    replays.length > 0 && replays.every((one) => one.state === "paused"),
+    JSON.stringify({
+      replays: replays.map((one) => one.state),
+      own: held.filter((one) => !one.replay),
+    })
   );
 
   // move 4. A drag of Form failure's end: tuned in the doc, with offTokens.
@@ -1499,15 +1514,27 @@ async function moveRuns(kit: Kit, page: Page, at: string): Promise<void> {
     Math.abs(one.left - other.left) < 0.5 &&
     Math.abs(one.right - other.right) < 0.5;
   const before = await barsOf();
-  const [a, b] = before;
+  // Its runs as the engine ran them (motion.ts runsOf: clips whose windows overlap are one run): two or more, by the move's own timing.
+  const [a] = before;
+  const b = before.at(-1);
   kit.check(
-    `move-runs ${at}: “${RUNS_ROW}” stands as two runs, each its own bar`,
-    before.length === 2,
+    `move-runs ${at}: “${RUNS_ROW}” stands as more than one run, each its own bar`,
+    before.length >= 2,
     JSON.stringify(before)
   );
-  if (!(a && b)) {
+  if (!(a && b && a !== b)) {
     return;
   }
+  /** Every bar but run `moved`'s stands where it stood. */
+  const restStay = (now: Bar[], was: Bar[], moved: string) =>
+    was
+      .filter((one) => one.run !== moved)
+      .every((one) =>
+        same(
+          now.find((bar) => bar.run === one.run),
+          one
+        )
+      );
   const row = rowNamed(page, RUNS_ROW);
   const box = await row
     .locator(`[data-slot="run-bar"][data-run="${a.run}"]`)
@@ -1523,8 +1550,9 @@ async function moveRuns(kit: Kit, page: Page, at: string): Promise<void> {
   await settle(page);
   const dragged = await barsOf();
   kit.check(
-    `move-runs ${at}: a drag on run A moves run A, and run B's start and end stay`,
-    dragged[0]?.now !== a.now && same(dragged[1], b),
+    `move-runs ${at}: a drag on the first run moves it, and every other run's start and end stay`,
+    dragged.find((one) => one.run === a.run)?.now !== a.now &&
+      restStay(dragged, before, a.run),
     `before ${JSON.stringify(before)} after ${JSON.stringify(dragged)}`
   );
   await row
@@ -1534,8 +1562,10 @@ async function moveRuns(kit: Kit, page: Page, at: string): Promise<void> {
   await settle(page);
   const keyed = await barsOf();
   kit.check(
-    `move-runs ${at}: an arrow on run B moves run B, and run A stays`,
-    keyed[1]?.now !== dragged[1]?.now && same(keyed[0], dragged[0]),
+    `move-runs ${at}: an arrow on the last run moves it, and every other run stays`,
+    keyed.find((one) => one.run === b.run)?.now !==
+      dragged.find((one) => one.run === b.run)?.now &&
+      restStay(keyed, dragged, b.run),
     `before ${JSON.stringify(dragged)} after ${JSON.stringify(keyed)}`
   );
 }

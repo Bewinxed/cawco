@@ -194,6 +194,10 @@ export const graphWords = {
   curve: "Curve",
   /** What a clip runs between, per property: its first frame's value and its last's. */
   values: "Values",
+  /** A property's two ends on the Values chip: "0 → 1". */
+  valueEnds: (from: string, to: string) => `${from} → ${to}`,
+  /** The first property's ends and how many more the card holds: "0 → 1 +2". */
+  andMore: (first: string, more: number) => `${first} +${more}`,
   valueFrom: (property: string) => `${property} at the start`,
   valueTo: (property: string) => `${property} at the end`,
   resetValues: "Reset values to as written",
