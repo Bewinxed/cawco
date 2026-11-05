@@ -69,7 +69,12 @@
  *    onboarding issues)", "Hint removed". The page tells them
  *    (`cawco:stage-differences`) and the stage's head lists them.
  * compare 2. Each line's press brings its ring into view: the ring the
- *    page draws for it (`data-at`) stands inside the frame's view.
+ *    page draws for it (`data-at`) stands inside the frame's view, read by
+ *    the platform's own `clientWidth` getter: the stage page answers the
+ *    root's `clientWidth` and `innerWidth` at the drawing's box, for the
+ *    component's floating layers (stage-host canvas viewport.ts
+ *    `frameAsViewport`), so read through them a ring at the drawing's edge
+ *    stood past a view 28px wider.
  * compare 3. A press on a line of what went flips: the panel posts
  *    `cawco:stage-compare` with `show: "compared"`, and the page stands the
  *    compared drawing in the kept one's place.
@@ -866,13 +871,20 @@ async function compareDesk(
       const compares = (
         window as unknown as { __compares?: { show?: string }[] }
       ).__compares;
+      // The frame's own view, by the platform's getter: the page answers
+      // the root's clientWidth at the drawing's box (viewport.ts).
+      const root = document.documentElement;
+      const across = Object.getOwnPropertyDescriptor(
+        Element.prototype,
+        "clientWidth"
+      )?.get?.call(root) as number;
       return {
         inView:
           !!box &&
           box.top >= 0 &&
           box.left >= 0 &&
-          box.bottom <= innerHeight &&
-          box.right <= document.documentElement.clientWidth,
+          box.bottom <= root.clientHeight &&
+          box.right <= across,
         flipped: !!document.querySelector(
           ".cawco-stage-frame.cawco-stage-flipped"
         ),
