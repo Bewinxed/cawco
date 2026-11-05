@@ -68,7 +68,7 @@
     ThreadEntrySchema,
   } from "#lib/cawco/stored-shapes.js";
   import { track } from "#lib/cawco/track.js";
-  import { BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
@@ -1952,6 +1952,9 @@
   let changesTag = $state<HTMLFieldSetElement>();
   /** How tall the page's own foot bar stands over its viewport's foot, px (`cawco:page-foot`): the tag stands above it. */
   let pageFoot = $state(0);
+  /** The artifact whose page says its own title, in view (`cawco:page-title`): the head's title stands aside while that artifact is on show. */
+  let pageSaysTitle = $state<string | null>(null);
+  const titleAway = $derived(!!artifact && pageSaysTitle === artifact.id);
   /** A whole-page comment asked from the rail beside the page: its composer hangs from the rail's glass, not over the page. */
   const pageHung = $derived(
     composingPage && !!composing && listOpen && !railSheet
@@ -3355,6 +3358,10 @@
             ? Math.max(0, message.px)
             : 0;
         break;
+      // The page's own title, in view or not: the head leaves its title out while it is.
+      case "cawco:page-title":
+        pageSaysTitle = message.inView === true ? (artifact?.id ?? null) : null;
+        break;
       case "cawco:change-pressed":
         changePressed(message.anchor);
         break;
@@ -4208,38 +4215,41 @@
   <!-- The mode: Interact, Comment, Draw (V, C, D; Esc back to Interact),
        the kit's segmented control, its indicator on the chosen one. -->
   <div data-slot="modes">
-    <Tabs
-      onValueChange={(next) => setMode(previewMode(next) ?? "interact")}
-      value={mode}
-      values={["interact", "comment", "draw"]}
-    >
-      <TabsList aria-label={previewWords.previewMode}>
-        <TabItem
-          aria-keyshortcuts="V"
-          glyphOnly
-          icon={IconInteract}
-          label="Interact"
-          title="Interact (V): the page gets every click"
-          value="interact"
-        />
-        <TabItem
-          aria-keyshortcuts="C"
-          glyphOnly
-          icon={IconPin}
-          label="Comment"
-          title="Comment (C): a click pins a comment"
-          value="comment"
-        />
-        <TabItem
-          aria-keyshortcuts="D"
-          glyphOnly
-          icon={IconPen}
-          label="Draw"
-          title="Draw (D): drag to draw on the page"
-          value="draw"
-        />
-      </TabsList>
-    </Tabs>
+    <BarGlass form="group">
+      <Tabs
+        onValueChange={(next) => setMode(previewMode(next) ?? "interact")}
+        size="bar"
+        value={mode}
+        values={["interact", "comment", "draw"]}
+      >
+        <TabsList aria-label={previewWords.previewMode}>
+          <TabItem
+            aria-keyshortcuts="V"
+            glyphOnly
+            icon={IconInteract}
+            label="Interact"
+            title="Interact (V): the page gets every click"
+            value="interact"
+          />
+          <TabItem
+            aria-keyshortcuts="C"
+            glyphOnly
+            icon={IconPin}
+            label="Comment"
+            title="Comment (C): a click pins a comment"
+            value="comment"
+          />
+          <TabItem
+            aria-keyshortcuts="D"
+            glyphOnly
+            icon={IconPen}
+            label="Draw"
+            title="Draw (D): drag to draw on the page"
+            value="draw"
+          />
+        </TabsList>
+      </Tabs>
+    </BarGlass>
   </div>
 {/snippet}
 {#snippet modeMenu()}
@@ -4361,6 +4371,7 @@
         });
       }}
       shown={artifact}
+      {titleAway}
     />
   {/if}
 {/snippet}
@@ -4492,6 +4503,7 @@
     {switcher}
     {switcherAt}
     titleControl={artifact ? artifactTitle : undefined}
+    {titleAway}
     beside={railBeside}
     bind:section
     bind:well

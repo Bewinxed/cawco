@@ -58,6 +58,7 @@
     title,
     titleControl,
     titleCode = false,
+    titleAway = false,
     subtitle,
     subtitleId,
     subtitleCode = false,
@@ -91,6 +92,14 @@
     titleControl?: Snippet;
     /** The title is a path or an identifier (a folder file's path), set as code. */
     titleCode?: boolean;
+    /**
+     * The page under the head says this title itself, in view: the title
+     * control draws without its words (ArtifactMenu `titleAway`), and the
+     * name holds the room it last measured, so nothing in the head moves as
+     * the words come and go (HIG, Toolbars, iOS: a large title "transitions to
+     * a standard title as people begin scrolling").
+     */
+    titleAway?: boolean;
     /** What describes it (an artifact's ask, a task's id): never a line in the bar (DESIGN.md, The Title Bars Follow Liquid Glass Rule: "Facts about the surface … are content, never a second line in the bar"); the title's tooltip and its description, and a title control says it in its own menu. */
     subtitle?: string;
     /** The description's id, for the control it describes. */
@@ -156,10 +165,30 @@
   );
   let head = $state<HTMLElement>();
   let identity = $state<HTMLElement>();
+  /**
+   * Where a control stands in the head: the mode's segments in the centre,
+   * the one prominent action after the glass, the rest in the glass. A
+   * centre control drawn in its one-button form is one of the glass's
+   * symbols, beside More (HIG, Toolbars, Item groupings: on iPhone, "controls
+   * for tool selection and the More menu grouped on the trailing edge"; a
+   * glass of its own would be a third group for one symbol).
+   */
+  const inCentre = $derived(
+    all.filter((one) => one.place === "centre" && formOf(one.key) !== "compact")
+  );
+  const inGlass = $derived(
+    all.filter(
+      (one) =>
+        !one.place || (one.place === "centre" && formOf(one.key) === "compact")
+    )
+  );
+  const prominent = $derived(all.filter((one) => one.place === "prominent"));
   /** The controls standing in the head, and how; null until the head is measured: all of them whole. */
   let shown = $state<Map<string, Standing> | null>(null);
   /** The name's own width, up to {@link NAME_KEEPS}: it gives up no more of it to the controls. */
   let nameKeeps = $state(0);
+  /** What the name wanted past that as its words last stood ({@link nameWants}): held with it while they are away. */
+  let nameWanted = 0;
   /** Each control's width as last drawn in the head, whole (`key`) and in its narrowest form (`key:compact`), and More's, its glyph alone (`more`) and saying a count (`more:counted`): what a control in More would take back. */
   const widths = new Map<string, number>();
   const stands = (key: string) => shown === null || shown.has(key);
@@ -367,7 +396,9 @@
       return null;
     }
     zoom = zoomOf(head);
-    const keeps = nameWidth(identity);
+    // Measured with its words drawn; held while they are away.
+    const held = titleAway && nameKeeps > 0;
+    const keeps = held ? nameKeeps : nameWidth(identity);
     const name = () => {
       nameKeeps = keeps;
     };
@@ -376,6 +407,9 @@
     }
     const { gap, room } = roomOf(head);
     const { kept } = drawnWidths(head, identity);
+    if (!held) {
+      nameWanted = nameWants(identity, keeps);
+    }
     // More and a form not drawn yet are a bar item, its symbol alone, until
     // they stand to be read.
     const glyph =
@@ -400,7 +434,7 @@
       })),
       // The pane's width: the card's, the head's box inside it.
       head.clientWidth >= WORDS_FROM,
-      nameWants(identity, keeps)
+      nameWanted
     );
     return () => {
       name();
@@ -439,9 +473,9 @@
     if (identity) {
       seen.observe(identity);
     }
-    // Each of the pane's controls by its key, so a pane's items arriving
-    // re-observes them.
-    for (const one of all) {
+    // Each of the pane's controls by its key, where it stands now, so a pane's
+    // items arriving or a control changing places re-observes them.
+    for (const one of [...inCentre, ...inGlass, ...prominent]) {
       const child = el.querySelector(
         `[data-head-item="${CSS.escape(one.key)}"]`
       );
@@ -462,11 +496,6 @@
       untrack(fit);
     }
   });
-
-  /** Where a control stands in the head: the mode in the centre, the one prominent action after the glass, the rest in the glass. */
-  const centre = $derived(all.filter((one) => one.place === "centre"));
-  const inGlass = $derived(all.filter((one) => !one.place));
-  const prominent = $derived(all.filter((one) => one.place === "prominent"));
 </script>
 
 {#snippet expandBar()}
@@ -619,7 +648,7 @@
       {/if}
     </div>
     {@render actions?.()}
-    {#each centre as one (one.key)}
+    {#each inCentre as one (one.key)}
       {@render headItem(one)}
     {/each}
     {#if inGlass.length > 0 || more.length > 0 || (!items && expand?.available)}

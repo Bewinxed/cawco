@@ -182,10 +182,14 @@ export { default as IconListCheck } from "~icons/solar/list-check-bold-duotone";
 export { default as IconLock } from "~icons/solar/lock-keyhole-minimalistic-bold-duotone";
 export { default as IconLogout } from "~icons/solar/logout-2-bold-duotone";
 export { default as IconSparkles } from "~icons/solar/magic-stick-3-bold-duotone";
-export {
-  default as IconSearch,
-  default as IconToolSearch,
-} from "~icons/solar/magnifer-bold-duotone";
+/** A search tool's call in the transcript, among the tool glyphs' duotone. */
+export { default as IconToolSearch } from "~icons/solar/magnifer-bold-duotone";
+/**
+ * Search, a control: Solar's linear cut, the line Close and Plus are drawn in
+ * beside it (the bold-duotone's lens is a filled disc, the one solid body in
+ * a bar's glass of line glyphs: the owner's pin on the Comments sheet's bar).
+ */
+export { default as IconSearch } from "~icons/solar/magnifer-linear";
 export { default as IconMapPoint } from "~icons/solar/map-point-bold-duotone";
 export { default as IconMaximize } from "~icons/solar/maximize-bold-duotone";
 export { default as IconMore } from "~icons/solar/menu-dots-bold-duotone";

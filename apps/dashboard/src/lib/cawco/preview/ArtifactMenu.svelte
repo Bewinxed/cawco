@@ -12,6 +12,12 @@
    * choosing one shows it.
    * Its line (the ask, or "Sent to <session>") is the menu's first row, and
    * the control's tooltip and description; never a line under the title.
+   * While the page says this title itself, in view (`titleAway`, the page's
+   * `cawco:page-title`), the words go from the bar and the control is the
+   * artifact's kind glyph and the chevron, so the title is never read twice
+   * and the menu stands where it stood (HIG, Toolbars, Titles: "If titling a
+   * toolbar seems redundant, you can leave the title area empty"); they come
+   * back once the page's own has scrolled out of view.
    * The row on show is marked (the selection wash, and its words at full
    * ink). No row carries a Remove at rest: the menu's last item removes the
    * one on show, and Delete or Backspace on a highlighted row asks for that
@@ -49,6 +55,7 @@
   import { listArtifacts, removeArtifact, showArtifact } from "../artifact-api";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import { failureClause } from "../hub-read";
+  import { reveal } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import RowFault from "../RowFault.svelte";
   import { refusals } from "../refusals.svelte";
@@ -59,6 +66,7 @@
     line,
     lineId,
     shown,
+    titleAway = false,
     onrefused,
   }: {
     instanceId: string;
@@ -74,6 +82,8 @@
     held: string[] | undefined;
     /** The artifact the panel shows. */
     shown: { id: string; kind: ArtifactKind; title: string };
+    /** The page says this title itself, in view: the bar draws its glyph, the words only for a screen reader. */
+    titleAway?: boolean;
     /** A chosen artifact the hub would not show: the words, and which it was. */
     onrefused: (
       reason: string,
@@ -91,6 +101,7 @@
 
   /** Under the phone line the title takes two lines, centred as a box: its optical trim's padding would show a third. */
   const phone = new MediaQuery("(width < 640px)");
+  const KindGlyph = $derived(GLYPHS[shown.kind]);
   let open = $state(false);
   let listed = $state<ArtifactSummary[] | null>(null);
   /** Until the list is read, the one the panel shows, with no age or promote to say. */
@@ -289,23 +300,29 @@
           title={line || undefined}
           type="button"
         >
-          <!-- On a phone two lines, clamped in the bar's row, so a title of
-               ordinary length reads whole at 390 (the artifact panel's
-               surface brief, The title), its chevron inline after its last
-               word (a wrapped box is as wide as its room, so a chevron after
-               the box stood far from the words); one line, cut at its end,
-               and the chevron after it on a desk. -->
-          <span
-            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-start text-ink-strong type-row max-phone:line-clamp-2 max-phone:whitespace-normal max-phone:text-pretty mark-line"
-            data-box={phone.current || undefined}
-            data-slot="name-lead"
-            ><span data-slot="name-words">{shown.title}</span
-            >{#if phone.current}&nbsp;<IconChevronDown
-                aria-hidden="true"
-                class="inline size-icon-sm align-middle text-ink-muted"
-              />{/if}</span
-          >
-          {#if !phone.current}
+          {#if titleAway}
+            <KindGlyph aria-hidden="true" data-slot="bar-symbol" />
+            <span class="sr-only" data-slot="name-words">{shown.title}</span>
+          {:else}
+            <!-- On a phone two lines, clamped in the bar's row, so a title of
+                 ordinary length reads whole at 390 (the artifact panel's
+                 surface brief, The title), its chevron inline after its last
+                 word (a wrapped box is as wide as its room, so a chevron after
+                 the box stood far from the words); one line, cut at its end,
+                 and the chevron after it on a desk. -->
+            <span
+              class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-start text-ink-strong type-row max-phone:line-clamp-2 max-phone:whitespace-normal max-phone:text-pretty mark-line"
+              data-box={phone.current || undefined}
+              data-slot="name-lead"
+              in:reveal
+              ><span data-slot="name-words">{shown.title}</span
+              >{#if phone.current}&nbsp;<IconChevronDown
+                  aria-hidden="true"
+                  class="inline size-icon-sm align-middle text-ink-muted"
+                />{/if}</span
+            >
+          {/if}
+          {#if titleAway || !phone.current}
             <IconChevronDown
               aria-hidden="true"
               class="size-icon-sm flex-none text-ink-muted"
