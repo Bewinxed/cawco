@@ -2172,7 +2172,7 @@ const HEAD_TITLES = {
 /** Their slugs that no other word holds ("fields" is a common word), which no surface that names them shows. */
 const HEAD_SLUGS = ["own-app", "head-sketch"];
 
-/** Leg 19's artifacts' asks: the line each one's head says under its title. */
+/** Leg 19's artifacts' asks: what each one's head says of it, its name's tooltip and its menu's first row. */
 const HEAD_ASKS = {
   page: "Judge this page: pin anything that reads wrong",
   preview: "Try this page and say whether it works",
