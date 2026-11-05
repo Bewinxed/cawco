@@ -5836,6 +5836,9 @@ export class OpencodeHarness implements Harness {
       fence: spec.fence === true,
       applied,
       ready,
+      // Skills load natively, each as a message of its own, at its first
+      // dispatch: before that, the session is not yet published.
+      skills: existing?.running ? [] : (spec.skills ?? []),
       // Only the machine's server sends with the machine's own sign-ins; an
       // account's runs on the account, whose faults stand on its own row.
       turnOutcome: (provider, refusal) => {
@@ -5959,10 +5962,6 @@ export class OpencodeHarness implements Harness {
         detach(this.#reconcile(session), "reconcile");
       }
     };
-    // Skills load natively, each as a message of its own, before the first prompt.
-    if (!existing?.running && spec.skills?.length) {
-      await session.loadSkills(spec.skills);
-    }
     return session;
   }
 

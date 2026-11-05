@@ -704,6 +704,8 @@ export interface OpencodeSessionOptions {
   /** The pid of the server the session runs on now: what its commands run under. */
   serverPid: () => number | undefined;
   sessionId: string;
+  /** The skills it loads natively before its first prompt, in order; none for a session reattached mid-turn. */
+  skills: readonly string[];
   /**
    * A turn ended on `provider` (its last model step's): refused by it with
    * `refusal` (an execution failed `provider.auth`, in the provider's words),
@@ -928,6 +930,15 @@ export class OpencodeSession implements HarnessSession {
     this.#isConfigGateHeld = options.isConfigGateHeld;
     this.#readActivity = options.readActivity;
     this.#serverPid = options.serverPid;
+    /** A start that cannot take work fails the session with why; the send that met it fails with it. */
+    const takesNoWork = (error: unknown): never => {
+      const reason = new Error(
+        `This OpenCode session takes no work: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error }
+      );
+      this.#ctx.failed(reason);
+      throw reason;
+    };
     // No prompt or command reaches the server before its location is ready:
     // a location whose plugin is missing or whose CawCo MCP server does not
     // connect fails the session with why, and every send it was handed fails
@@ -935,22 +946,23 @@ export class OpencodeSession implements HarnessSession {
     // session runs without it.
     // Awaited at dispatch, never at publication (bb65de38: publishing must
     // not wait on cold MCP servers).
-    const admitted = options.ready.catch((error: unknown) => {
-      const reason = new Error(
-        `This OpenCode session takes no work: ${error instanceof Error ? error.message : String(error)}`,
-        { cause: error }
-      );
-      this.#ctx.failed(reason);
-      throw reason;
-    });
+    const admitted = options.ready.catch(takesNoWork);
     // Its rejection is a send's, at dispatch; unawaited it is not unhandled.
     admitted.catch(() => undefined);
+    // The skills it starts with load once, at its first dispatch, after its
+    // settings and instructions and before what that dispatch sends: the
+    // session is published by then, which its harness's dispatch checks it
+    // is. A skill that does not load fails the session with why, and every
+    // send it was handed fails with it.
+    let skillsLoaded: Promise<void> | undefined;
     this.#prepareDispatch = async () => {
       const unconnected = await admitted;
       await options.prepareDispatch();
       await this.#sayUnconnected(unconnected);
       await this.#applySettings();
       await this.#syncInstructions();
+      skillsLoaded ??= this.#loadSkills(options.skills).catch(takesNoWork);
+      await skillsLoaded;
     };
   }
 
@@ -3175,12 +3187,11 @@ export class OpencodeSession implements HarnessSession {
     }
   }
 
-  /** The session's skills loaded before its first prompt, each as a message of its own, in order. */
-  async loadSkills(names: readonly string[]): Promise<void> {
+  /** The session's skills, each as a message of its own, in order: its first dispatch's last step (constructor). */
+  async #loadSkills(names: readonly string[]): Promise<void> {
     if (names.length === 0) {
       return;
     }
-    await this.#prepareDispatch();
     const { skills } = await this.#commandsOf();
     const sessionID = this.#opencodeSessionId();
     for (const name of names) {
