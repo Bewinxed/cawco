@@ -203,7 +203,14 @@ import { shellWords } from "../../../packages/core/src/words/shell";
 import { storyReadWords } from "../../../packages/core/src/words/story-read";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
-import { buttonNames, type Kit, open, ROOT, type Spec } from "../kit";
+import {
+  buttonNames,
+  type Kit,
+  type KitFleet,
+  open,
+  ROOT,
+  type Spec,
+} from "../kit";
 import { passInto } from "../preview-pass";
 
 const STORY = "src/Card.stories.js";
@@ -369,6 +376,8 @@ const STATUS = /"status":"(\w+)"/u;
 
 const ERRORS = /"errors":(\[[^\]]*\])/u;
 const ID = /"id":"([0-9a-f-]{36})"/u;
+/** When an answer's frames were drawn (component.ts `renderSaid`). */
+const RENDERED = /"render":\{"by":"\w+","at":"([^"]+)"/u;
 const short = (said: string) => said.replaceAll(/\s+/gu, " ").slice(0, 500);
 
 /** The files of a detailed design_map record's components, or undefined when the answer is not that record. */
@@ -594,6 +603,69 @@ const sweep = async (
   (await (
     await fetch(`${base}/api/workspaces/retire`, { method: "POST" })
   ).json()) as Awaited<ReturnType<typeof sweep>>;
+
+/**
+ * Leg 9b: the person's Send of the npm canvas leg 9 made and the daemon
+ * drew, a note on it (preview-routes.ts, the panel head's Send). Answers
+ * the canvas and when its create said it was drawn.
+ */
+const sentNpm = async (
+  kit: Kit,
+  fleet: KitFleet,
+  who: string,
+  created: string
+): Promise<{ drawnAt: string | undefined; id: string | undefined }> => {
+  const id = created.match(ID)?.[1];
+  const drawnAt = created.match(RENDERED)?.[1];
+  const sent = id
+    ? await fleet
+        .api<{ sentAt?: string }>(
+          `/api/instances/${who}/artifacts/${id}/send`,
+          {
+            text: "The card reads right",
+          }
+        )
+        .then((answer) => answer.sentAt ?? "no sentAt")
+        .catch((error: unknown) => String(error))
+    : "no canvas from leg 9";
+  kit.check(
+    "9b: the person's Send of the npm canvas, a note on it, is taken",
+    !!drawnAt && !Number.isNaN(Date.parse(sent)),
+    `drawn at ${drawnAt}; sent ${sent}`
+  );
+  return { id, drawnAt };
+};
+
+/**
+ * Leg 12b: the npm canvas read once it was sent, its stage slept and its
+ * clone was cut again (legs 9b to 12): every frame as the draw left it,
+ * with its box and the draw's time, never unseen at 1970 (hub
+ * artifacts/component.ts `drawsHeld`).
+ */
+const readNpm = async (
+  kit: Kit,
+  call: (
+    n: string,
+    name: string,
+    input: object,
+    who: string
+  ) => Promise<string>,
+  who: string,
+  sent: { drawnAt: string | undefined; id: string | undefined }
+) => {
+  const read = sent.id
+    ? await call("12b", "mcp__cawco__artifact_read", { id: sent.id }, who)
+    : "no canvas from leg 9";
+  kit.check(
+    "12b: after the Send and its stage's sleep, artifact_read says every frame as drawn, with its box, at the draw's time",
+    !!sent.drawnAt &&
+      read.match(RENDERED)?.[1] === sent.drawnAt &&
+      read.includes('"state":"drawn"') &&
+      !read.includes('"state":"unseen"') &&
+      !read.includes('"box":{"w":0'),
+    `drawn at ${sent.drawnAt}; ${short(read.slice(read.indexOf('"render"')))}`
+  );
+};
 
 /** {@link PROJECT} written into `dir` with the bun.lock bun resolves for it, nothing installed: the stage clone installs from it (agent stage-clone.ts `installOf`). */
 const writeProject = async (dir: string) => {
@@ -1630,6 +1702,9 @@ const run = async (kit: Kit) => {
     short(npmCreated)
   );
 
+  // 9b. The person's Send of it, with a note: no Send writes what it drew.
+  const npmSent = await sentNpm(kit, fleet, npmSession, npmCreated);
+
   // 10. The hub holds the clone, filed as a workspace, while its stage serves.
   const clone = await stageCloneIn(fleet.env.HOME as string, npmDir);
   const serving = clone ? await sweep(fleet.base) : undefined;
@@ -1675,6 +1750,9 @@ const run = async (kit: Kit) => {
       again.kept.some((one) => one.workspaceId === clone.id),
     `${short(relisted)}; sweep ${JSON.stringify(again).slice(0, 300)}`
   );
+
+  // 12b. Sent, its stage asleep and its clone cut again: its frames read as the draw left them.
+  await readNpm(kit, call, npmSession, npmSent);
 
   await configLoads();
   await scopedAndStyled(kitCreated.match(ID)?.[1]);

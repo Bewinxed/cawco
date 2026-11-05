@@ -14,7 +14,9 @@ import {
   type CanvasSpec,
   type FrameRender,
   type Interaction,
+  type PageError,
   type RenderReport,
+  type SectionRender,
   type SheetRead,
   type SheetWeight,
   type StageError,
@@ -249,3 +251,74 @@ export const unseen = (report: RenderReport, story?: string): boolean => {
     frames.length === 0 || frames.every((frame) => frame.state === "unseen")
   );
 };
+
+/** One states file's last draw as a component canvas's doc keeps it (`meta.drawn`): the section, when and by whom, and the page's errors with it. */
+export interface DrawnKept {
+  at: string;
+  by: RenderReport["by"];
+  errors: PageError[];
+  section: SectionRender;
+}
+
+/**
+ * A stage's report with the canvas's last draws held past the stage: its
+ * host keeps what a browser drew in memory alone, so a stage that slept,
+ * restarted, or whose daemon or clone was made again answers every frame
+ * `unseen`, 0×0, drawn at 1970. Each section the stage holds a draw of
+ * (`drawn`) is kept in `had`'s place; each it holds none of, every frame
+ * unseen, whose files hash as the kept draw's did, is that draw again: the
+ * same content, already drawn. A file changed since stays unseen until a
+ * browser draws it, and a stage's standing problem (`failed`) stands. The
+ * report's time, drawer and page errors are its newest draw's. Answers the
+ * report and the record to keep, one entry per states file the canvas has.
+ */
+export function drawsHeld(
+  report: RenderReport,
+  had: Readonly<Record<string, DrawnKept>>
+): { kept: Record<string, DrawnKept>; report: RenderReport } {
+  const kept: Record<string, DrawnKept> = {};
+  let newest: Omit<DrawnKept, "section"> = {
+    at: report.at,
+    by: report.by,
+    errors: report.page.errors,
+  };
+  const sections = report.sections.map((section): SectionRender => {
+    const last = had[section.file];
+    if (section.drawn) {
+      const { drawn, ...rest } = section;
+      kept[section.file] = {
+        at: drawn.at,
+        by: drawn.by,
+        // The page's errors ride with the newest draw the stage answers.
+        errors: drawn.at === report.at ? report.page.errors : [],
+        section: rest,
+      };
+      return section;
+    }
+    if (last) {
+      kept[section.file] = last;
+    }
+    const restored =
+      last &&
+      section.hash !== "" &&
+      last.section.hash === section.hash &&
+      section.frames.every((frame) => frame.state === "unseen");
+    if (!restored) {
+      return section;
+    }
+    if (last.at > newest.at) {
+      newest = { at: last.at, by: last.by, errors: last.errors };
+    }
+    return { ...last.section, drawn: { at: last.at, by: last.by } };
+  });
+  return {
+    kept,
+    report: {
+      ...report,
+      at: newest.at,
+      by: newest.by,
+      page: { errors: newest.errors },
+      sections,
+    },
+  };
+}

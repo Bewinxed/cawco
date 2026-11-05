@@ -394,6 +394,14 @@ export interface MoveRender {
 
 /** One states file's section of a canvas, as a browser drew it. */
 export interface SectionRender {
+  /**
+   * When a browser drew this section's content and which one: the stage
+   * stamps it as it answers a draw it holds of the files as they stand.
+   * Absent when it holds none (its frames `unseen`, or `failed` with the
+   * stage's problem): no browser drew this content since the stage started,
+   * or the files changed since one did.
+   */
+  drawn?: { at: string; by: RenderReport["by"] };
   file: string;
   frames: FrameRender[];
   /** The content hash of the states file and every file of the project's its frames are drawn from, as they stood when the stage kept the report: an edit since the draw loads the section again, which draws and reports again. */
@@ -436,8 +444,8 @@ export interface PostedReport extends PageReport {
   unloaded: SectionUnloaded[];
 }
 
-/** A section as its page drew it: the stage stamps its content hash as it keeps it ({@link SectionRender} `hash`). */
-export type PageSection = Omit<SectionRender, "hash">;
+/** A section as its page drew it: the stage stamps its content hash as it keeps it ({@link SectionRender} `hash`), and when it was drawn as it answers it (`drawn`). */
+export type PageSection = Omit<SectionRender, "drawn" | "hash">;
 
 /** A report as the canvas page reads it of itself, before the stage keeps it: its sections unstamped ({@link PageSection}). */
 export interface PageReport extends Omit<RenderReport, "sections"> {

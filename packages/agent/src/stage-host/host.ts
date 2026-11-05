@@ -937,7 +937,11 @@ function canvasPage(): string {
 /**
  * The newest report of each states file, kept by the stage from whichever
  * browser drew it (a person's panel or the daemon's), under the content
- * hash it was drawn from.
+ * hash it was drawn from. Held by this process alone: it ends with the
+ * stage (asleep, restarted, its daemon or its clone made again), so each
+ * section it answers says whether it holds a draw (`drawn`), and the hub
+ * keeps a canvas's last draws past it (hub artifacts/component.ts
+ * `drawsHeld`).
  */
 const reports = new Map<
   string,
@@ -1108,8 +1112,9 @@ async function reportOf(files: string[]): Promise<RenderReport> {
     if (kept && (!newest || kept.at > newest.at)) {
       newest = kept;
     }
+    // A draw of the files as they stand: said with when and by whom, which the hub keeps past this process (hub artifacts/component.ts `drawsHeld`).
     if (kept && kept.section.hash === hash) {
-      sections.push(kept.section);
+      sections.push({ ...kept.section, drawn: { at: kept.at, by: kept.by } });
       continue;
     }
     const failed = unloadedState(file);

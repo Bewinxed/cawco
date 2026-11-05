@@ -204,6 +204,8 @@ import {
   COMPONENT_EXAMPLE,
   CREATE_SHAPE,
   canvasProblem,
+  type DrawnKept,
+  drawsHeld,
   errorsSaid,
   movesSaid,
   READ_HINT,
@@ -5694,6 +5696,27 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
   };
 
+  /**
+   * The stage's report of component canvas `row` with its last draws held
+   * past the stage (component.ts `drawsHeld`): what a browser drew is kept
+   * in the canvas's doc (`meta.drawn`), so a stage that slept, restarted or
+   * was made again never reads as nothing drawn. Only a new draw changes
+   * it; a Send, the person's or the hub's, never touches it. Every report
+   * the hub takes from a stage comes through here.
+   */
+  const drawnHeld = (row: ArtifactRow, from: RenderReport): RenderReport => {
+    const meta = docs.doc(row.id).getMap("meta");
+    const had = (meta.get("drawn") ?? {}) as Record<string, DrawnKept>;
+    const { kept, report } = drawsHeld(from, had);
+    if (JSON.stringify(kept) !== JSON.stringify(had)) {
+      docs.transact(row.id, "hub", (written) => {
+        written.getMap("meta").set("drawn", kept);
+      });
+    }
+    drawnWritten(row, report);
+    return report;
+  };
+
   /** The shapes a decision page's media carries of component canvas `row` (core `CanvasShapes`). */
   const shapesOf = (row: ArtifactRow): CanvasShapes => {
     const meta = docs.doc(row.id).getMap("meta");
@@ -5897,9 +5920,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const at: StageAt = { workspace: sheet.workspace };
       const deadline = Date.now() + PANEL_DRAW_MS;
       for (;;) {
-        const { report } = (
-          await deps.stage(at, sheet.files[0] as string, sheet.files)
-        ).opened;
+        const report = drawnHeld(
+          row,
+          (await deps.stage(at, sheet.files[0] as string, sheet.files)).opened
+            .report
+        );
         if (!unseen(report, name)) {
           frames = renderSaid(report).frames.filter(
             (one) => one.story === name
@@ -6023,14 +6048,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       throw new ArtifactRefusal(503, shown.why);
     }
     const owned = sheetOf(row);
-    const report = await drawnReport(
-      { workspace },
-      owned?.files ?? asked,
-      spec,
-      opened,
-      openedOf(shown).opened
+    const report = drawnHeld(
+      row,
+      await drawnReport(
+        { workspace },
+        owned?.files ?? asked,
+        spec,
+        opened,
+        openedOf(shown).opened
+      )
     );
-    drawnWritten(row, report);
     return {
       id: row.id,
       kind: row.kind,
@@ -6092,7 +6119,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         }));
       }
       if (report) {
-        drawnWritten(row, report);
+        report = drawnHeld(row, report);
       }
     }
     const meta = docs.doc(row.id).getMap("meta");
