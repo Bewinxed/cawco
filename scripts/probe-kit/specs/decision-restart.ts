@@ -23,6 +23,15 @@
  *    (its Comments control's `data-link-down`), and a pick made then stays
  *    marked on the page; started again, the pick is in the hub's doc within
  *    {@link REACH_MS}, nothing pressed.
+ * 4. A pick and the page's Send made while it is down, the hub started
+ *    again {@link PRESS_DOWN_MS} later: the Send is held and resolves once
+ *    it is back, no error to retry, and the doc holds the pick and a newer
+ *    `sentAt`.
+ *
+ * Every leg runs in the frame the page first loaded in: a restart keeps the
+ * show's revision (hub db `shown_previews.revision`), so no panel loads its
+ * page again and no press in it is lost (r453: "Frame was detached" in leg 2,
+ * the restored show's new revision a new frame).
  *
  *   bun scripts/probe-kit/run.ts decision-restart
  */
@@ -44,6 +53,8 @@ const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 const DOWN_MS = 13_000;
 /** How long a pick has to reach the hub's doc once it is up. Our call: y-websocket's backoff tops at 2.5 s, a sync takes one round. */
 const REACH_MS = 20_000;
+/** How long the hub stays down under a held Send (leg 4): a nightly's restart, about 6 s on the owner's machine. */
+const PRESS_DOWN_MS = 6000;
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 /** The pane's word that the page's link is down (PreviewPane `linkDown`). */
 const DOWN = `${PANE} button[data-slot="comments"][data-link-down]`;
@@ -146,12 +157,13 @@ const run = async (kit: Kit) => {
     }
   });
   await open(tab, `${tunnel.board}/session/${session}`, PANE);
-  let frame = await pageFrame(tab);
+  // The one frame the page loaded in: no restart loads it again, so a press
+  // in it is never lost to a new frame.
+  const frame = await pageFrame(tab);
   await frame.locator('[data-option="a"]').waitFor();
-  const pick = async (option: string) => {
-    frame = await pageFrame(tab);
-    await frame.locator(`[data-option="${option}"]`).click();
-  };
+  const kept = () => (frame.isDetached() ? "loaded again" : "kept");
+  const pick = (option: string) =>
+    frame.locator(`[data-option="${option}"]`).click({ timeout: 10_000 });
   const reached = (option: string, within = REACH_MS) =>
     until(
       `the hub's doc holding ${option}`,
@@ -161,6 +173,18 @@ const run = async (kit: Kit) => {
     )
       .then(() => true)
       .catch(() => false);
+  /** The page's own Send (`cawco.send`), as its Send button calls it: how it ended. */
+  const press = () =>
+    frame
+      .evaluate(() =>
+        (
+          window as unknown as { cawco: { send: () => Promise<void> } }
+        ).cawco.send()
+      )
+      .then(
+        () => "resolved",
+        (error: unknown) => `refused: ${String(error).slice(0, 300)}`
+      );
   const sends: string[] = [];
   tab.on("request", (request) => {
     if (request.method() === "POST" && request.url().endsWith("/send")) {
@@ -180,32 +204,22 @@ const run = async (kit: Kit) => {
   await pick("b");
   const one = await reached("b");
   kit.check(
-    "1: a pick made as the hub comes back reaches its doc with no Send",
-    one && sends.length === 0,
-    `hub holds "${await pickOf()}"; page marks "${await marked(frame)}"; sends ${sends.length}; said: ${said.slice(before1).slice(-4).join(" | ") || "nothing"}`
+    "1: a pick made as the hub comes back reaches its doc with no Send, in the page as it was loaded",
+    one && sends.length === 0 && !frame.isDetached(),
+    `hub holds "${await pickOf()}"; page marks "${await marked(frame)}", ${kept()}; sends ${sends.length}; said: ${said.slice(before1).slice(-4).join(" | ") || "nothing"}`
   );
 
   // 2. A pick and the page's Send at once after a restart.
   await restart();
   const before2 = said.length;
   await pick("a");
-  frame = await pageFrame(tab);
-  const pressed = await frame
-    .evaluate(() =>
-      (
-        window as unknown as { cawco: { send: () => Promise<void> } }
-      ).cawco.send()
-    )
-    .then(
-      () => "resolved",
-      (error: unknown) => `refused: ${String(error).slice(0, 200)}`
-    );
+  const pressed = await press();
   const two = await reached("a");
   const sent = (await read()).sentAt;
   kit.check(
     "2: a pick and Send made as the hub comes back: the Send goes, and the doc holds the pick and its sentAt",
-    pressed === "resolved" && two && sent !== null,
-    `send ${pressed}; hub holds "${await pickOf()}", sentAt ${sent}; said: ${said.slice(before2).slice(-4).join(" | ") || "nothing"}`
+    pressed === "resolved" && two && sent !== null && !frame.isDetached(),
+    `send ${pressed}; hub holds "${await pickOf()}", sentAt ${sent}; page ${kept()}; said: ${said.slice(before2).slice(-4).join(" | ") || "nothing"}`
   );
 
   // 3. A pick while the hub is down: said, kept, delivered once it is back.
@@ -226,8 +240,29 @@ const run = async (kit: Kit) => {
   const three = await reached("b");
   kit.check(
     "3: with the hub down the pane says so and the page keeps the pick; once the hub is back the pick is in its doc, nothing pressed",
-    toldDown && keptWhileDown === "b" && three,
-    `said down ${toldDown}; page marks "${keptWhileDown}"; hub holds "${await pickOf()}"`
+    toldDown && keptWhileDown === "b" && three && !frame.isDetached(),
+    `said down ${toldDown}; page marks "${keptWhileDown}", ${kept()}; hub holds "${await pickOf()}"`
+  );
+
+  // 4. Send pressed while the hub restarts: held, and it goes once the hub is back.
+  const sentBefore = (await read()).sentAt;
+  await fleet.stop("hub");
+  await pick("a");
+  const pressing = press();
+  await tab.waitForTimeout(PRESS_DOWN_MS);
+  fleet.launch("hub");
+  await fleet.hubUp();
+  const pressedDown = await pressing;
+  const four = await reached("a");
+  const sentAfter = (await read()).sentAt;
+  kit.check(
+    "4: a Send pressed while the hub is down goes once it is back, no error to retry: the doc holds the pick and a newer sentAt",
+    pressedDown === "resolved" &&
+      four &&
+      sentAfter !== null &&
+      sentAfter !== sentBefore &&
+      !frame.isDetached(),
+    `send ${pressedDown}; hub holds "${await pickOf()}", sentAt ${sentBefore} → ${sentAfter}; page ${kept()}`
   );
   tunnel.stop();
 };

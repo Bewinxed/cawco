@@ -36,7 +36,7 @@ import {
   type MadeArtifactKind,
 } from "@cawco/core/artifact-kinds";
 import { base64ToBytes, bytesToBase64 } from "@cawco/core/base64";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { readWithin } from "@cawco/core/bounded";
 import {
   CHOICE_LIMITS,
   type ChoiceChange,
@@ -186,8 +186,16 @@ let worker: Worker | null = null;
 let workerless = false;
 const tell = (message: ToWorker) => worker?.postMessage(message);
 
-/** How long a Send waits for its answer, the page's writes asked of the worker and the hub's reply both, ms. Our call: a Send is answered in a second or two. */
-const SEND_WITHIN_MS = 15_000;
+/**
+ * How long the person's Send is held for the hub, ms: the link down (a
+ * restart, a tunnel's blip) and back, then the hub's answer. Our call: a
+ * nightly's restart stood the hub down 6 s on the owner's machine
+ * (2026-11-05), a scratch fleet's hub takes about 15 s to start.
+ */
+const SEND_HOLD_MS = 60_000;
+/** A gateway's own answer for a hub it couldn't reach (cloudflared's 502, Cloudflare's 504 and 52x): the Send never reached the hub. */
+const DOOR_FAILED = (answered: number) =>
+  answered === 502 || answered === 504 || (answered >= 520 && answered <= 530);
 
 /** The worker's answers to the page's asks for its own writes (`writes`), by ask. */
 const writesAsked = new Map<number, (update: Uint8Array) => void>();
@@ -218,6 +226,23 @@ let seeded: string | null = null;
 let seededKind: ArtifactRef["kind"] | null = null;
 let syncPath: string | null = null;
 const holders = new Set<(hold: ArtifactHold) => void>();
+/** What waits for the link to stand synced (a held Send), each heard once it next does. */
+const syncWaiters = new Set<() => void>();
+/**
+ * Resolves once the link stands synced: at once when it does now, unless
+ * `fresh`, which waits for its next sync (a Send whose post the door
+ * dropped waits for the link to come back); never once `signal` aborts.
+ */
+const linkSynced = (fresh: boolean, signal: AbortSignal): Promise<void> =>
+  !fresh && link.state === "synced"
+    ? Promise.resolve()
+    : new Promise((resolve) => {
+        const heard = () => resolve();
+        syncWaiters.add(heard);
+        signal.addEventListener("abort", () => syncWaiters.delete(heard), {
+          once: true,
+        });
+      });
 const replicas = new Set<(generation: number, update: Uint8Array) => void>();
 let link: Link = { state: "connecting", error: null, silent: false };
 /** The doc has synced with the hub since it was joined. */
@@ -254,6 +279,10 @@ const linked = (said: Omit<Link, "silent"> & { silent?: boolean }) => {
   };
   if (next.state === "synced") {
     everSynced = true;
+    for (const heard of syncWaiters) {
+      heard();
+    }
+    syncWaiters.clear();
   }
   if (next.state !== "lost") {
     clearTimeout(lostTimer);
@@ -831,19 +860,25 @@ export const artifact = {
    * (core `SEND_CONTROLS`; the hub's journal names it). The send carries
    * what the doc holds that the hub isn't known to ({@link artifact.writes},
    * core `SendBody.writes`), which the hub applies before it reads the
-   * picks, so what the page shows is what is sent whether or not the doc's
-   * socket is open. Answered within
-   * {@link SEND_WITHIN_MS}, else it fails in the error formula and the
-   * picks stay on the page for Send again.
+   * picks, so what the page shows is what is sent.
+   *
+   * The press is held for the hub, never failed on a link that is reopening:
+   * it posts once the doc's link stands synced (at once when it does), and a
+   * post the door dropped (the browser's network error, a gateway's answer
+   * for a hub it couldn't reach: {@link DOOR_FAILED}) goes again at the
+   * link's next sync. Only a hub not back within {@link SEND_HOLD_MS} fails
+   * it, saying so; the picks stay on the page and reach the hub by its doc.
+   * The hub's own refusal is said in its words.
    */
   send: async (text?: string, control?: unknown): Promise<void> => {
     if (!syncPath) {
       throw new Error(NO_ARTIFACT);
     }
     const path = `${syncPath}/send`;
-    let read: Bounded<string | null>;
-    try {
-      read = await readWithin(SEND_WITHIN_MS, async (signal) => {
+    const held = await readWithin(SEND_HOLD_MS, async (signal) => {
+      let fresh = false;
+      for (;;) {
+        await linkSynced(fresh, signal);
         const writes = bytesToBase64(await unheardWrites());
         const response = await fetch(path, {
           method: "POST",
@@ -854,26 +889,27 @@ export const artifact = {
             writes,
           }),
           signal,
+        }).catch((error: unknown) => {
+          if (signal.aborted) {
+            throw error;
+          }
+          return null;
         });
-        if (response.ok) {
+        if (response?.ok) {
           return null;
         }
-        const said = await response.text().catch(() => "");
-        return said.slice(0, 300) || "The hub refused the send.";
-      });
-    } catch (error) {
-      throw new Error(
-        commentWords.sendUnreached(
-          error instanceof Error ? error.message : String(error)
-        ),
-        { cause: error }
-      );
+        if (response && !DOOR_FAILED(response.status)) {
+          const said = await response.text().catch(() => "");
+          return said.slice(0, 300) || "The hub refused the send.";
+        }
+        fresh = true;
+      }
+    });
+    if (held.kind === "unanswered") {
+      throw new Error(commentWords.sendHeld(SEND_HOLD_MS / 1000));
     }
-    if (read.kind === "unanswered") {
-      throw new Error(commentWords.sendUnanswered(SEND_WITHIN_MS / 1000));
-    }
-    if (read.value !== null) {
-      throw new Error(read.value);
+    if (held.value !== null) {
+      throw new Error(held.value);
     }
   },
 

@@ -272,10 +272,18 @@ export interface ArtifactsDb {
   ) =>
     | { from: SourceKey | null; row: ArtifactRow; to: SourceKey | null }
     | undefined;
-  /** Keeps `artifactId` as what session `instanceId`'s panel shows, in place of any other. */
-  readonly show: (instanceId: string, artifactId: string) => void;
-  /** Every session's shown artifact, with its row: what the hub serves after a restart. */
-  readonly shown: () => { artifact: ArtifactRow; instanceId: string }[];
+  /** Keeps `artifactId` as what session `instanceId`'s panel shows, in place of any other, as the show `revision` (`PreviewTarget.revision`). */
+  readonly show: (
+    instanceId: string,
+    artifactId: string,
+    revision: string
+  ) => void;
+  /** Every session's shown artifact, with its row and its show's revision (null on a row kept before it was): what the hub serves after a restart. */
+  readonly shown: () => {
+    artifact: ArtifactRow;
+    instanceId: string;
+    revision: string | null;
+  }[];
   /** Every artifact whose doc took an update (or that changed) at or after `at`. */
   readonly touchedSince: (at: Date) => ArtifactRow[];
   /** Session `instanceId`'s panel shows nothing. */
@@ -627,23 +635,28 @@ export const artifactsDb = (
     }
     return { row, from, to };
   },
-  show: (instanceId, artifactId) => {
+  show: (instanceId, artifactId, revision) => {
     db.insert(shownPreviews)
-      .values({ instanceId, artifactId })
+      .values({ instanceId, artifactId, revision })
       .onConflictDoUpdate({
         target: shownPreviews.instanceId,
-        set: { artifactId },
+        set: { artifactId, revision },
       })
       .run();
   },
   shown: () =>
     db
-      .select({ instanceId: shownPreviews.instanceId, artifact: artifacts })
+      .select({
+        instanceId: shownPreviews.instanceId,
+        revision: shownPreviews.revision,
+        artifact: artifacts,
+      })
       .from(shownPreviews)
       .innerJoin(artifacts, eq(artifacts.id, shownPreviews.artifactId))
       .all()
-      .map(({ instanceId, artifact }) => ({
+      .map(({ instanceId, revision, artifact }) => ({
         instanceId,
+        revision,
         artifact: artifactOf(artifact),
       })),
   touchedSince: (at) =>

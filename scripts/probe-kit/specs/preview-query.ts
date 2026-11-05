@@ -462,7 +462,7 @@ const run = async (kit: Kit) => {
       beside: () => ({ close: () => undefined }),
       origin: () => undefined,
     },
-    { listens: true }
+    { listens: true, after: () => undefined }
   );
   /** `target` through `port`, then what the server behind read: its check, numbered `leg`. */
   const through = async (

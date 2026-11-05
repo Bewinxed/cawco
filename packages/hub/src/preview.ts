@@ -1306,6 +1306,9 @@ const probePattern = async (pattern: HostPattern): Promise<string | null> => {
   }
 };
 
+/** How often host mode tries its port again while another listener holds it at start, ms. Our call: a hub restart lets go of its ports within a second or two. */
+const HOST_RETRY_MS = 2000;
+
 /**
  * Every session's preview origin. In either mode each session that shows a
  * preview or a canvas takes a port of the range and a listener on it, on the
@@ -1337,9 +1340,12 @@ export function createPreviewListeners(
   tailnet: Pick<TailnetHttpsService, "beside" | "origin">,
   {
     listens,
+    after,
   }: {
     /** False for a hub built only to be read (server.ts `serves`): it opens no listener, and every ask for an origin's port is refused. */
     listens: boolean;
+    /** Runs `run` once after `ms`, on the hub's lifetime (lifetime.ts `after`): host mode's next try at a port held at start. */
+    after: (ms: number, run: () => void) => void;
   }
 ) {
   const proxy = previewWebSocket as unknown as WebSocketHandler<ListenerSocket>;
@@ -1941,15 +1947,19 @@ export function createPreviewListeners(
     );
   };
 
-  /** Host mode's listener on the range's first port; why it didn't open, or null. */
-  const startHostMode = (): string | null => {
+  /**
+   * Host mode's listener on the range's first port; why it didn't open, and
+   * whether only another listener holding the port stopped it (`held`), or
+   * null.
+   */
+  const startHostMode = (): { held: boolean; why: string } | null => {
     let pattern: HostPattern;
     try {
       pattern = parsePattern(settings.pattern ?? "");
     } catch (thrown) {
       const why = `The stored host pattern ${JSON.stringify(settings.pattern)} isn't one: ${causeOf(thrown)}`;
       previewFailed(HOP, null, why);
-      return why;
+      return { held: false, why };
     }
     const fleet =
       FLEET_PORTS.get(PREVIEW_PORTS.first) ??
@@ -1957,7 +1967,7 @@ export function createPreviewListeners(
     if (fleet) {
       const why = `Port ${PREVIEW_PORTS.first} is ${fleet} port, so host-mode previews can't take it: set CAWCO_PREVIEW_PORTS to a range whose first port is free.`;
       previewFailed(HOP, null, why);
-      return why;
+      return { held: false, why };
     }
     try {
       // Its listener binds with `reusePort`, which succeeds beside any other
@@ -1967,7 +1977,7 @@ export function createPreviewListeners(
       if (!unheld(PREVIEW_PORTS.first)) {
         const why = `Port ${PREVIEW_PORTS.first} is held by another listener, so host-mode previews can't take it: free it, or set CAWCO_PREVIEW_PORTS to a range whose first port is free.`;
         previewFailed(HOP, null, why);
-        return why;
+        return { held: true, why };
       }
       byHost = listen(
         PREVIEW_PORTS.first,
@@ -1979,8 +1989,29 @@ export function createPreviewListeners(
     } catch (thrown) {
       const why = `Port ${PREVIEW_PORTS.first} didn't open for host-mode previews (${causeOf(thrown)}): free it, or set CAWCO_PREVIEW_PORTS to a range whose first port is free.`;
       previewFailed(HOP, null, why);
-      return why;
+      return { held: false, why };
     }
+  };
+
+  /**
+   * Host mode's listener opened at start, and again every
+   * {@link HOST_RETRY_MS} while another listener holds its port: a hub
+   * started as the one before it still lets go of the port (every nightly
+   * restarts it) opens host mode once the port is free, rather than leaving
+   * every name refused until the next restart. A mode changed meanwhile
+   * stops the tries.
+   */
+  const hostModeOnceFree = (): void => {
+    const failed = startHostMode();
+    if (!failed?.held) {
+      return;
+    }
+    const { pattern } = settings;
+    after(HOST_RETRY_MS, () => {
+      if (settings.mode === "host" && settings.pattern === pattern && !byHost) {
+        hostModeOnceFree();
+      }
+    });
   };
 
   /** A port that would not open for a reason no other port avoids, in one sentence. */
@@ -2148,7 +2179,7 @@ export function createPreviewListeners(
      */
     start(): void {
       if (settings.mode === "host") {
-        startHostMode();
+        hostModeOnceFree();
       }
       bindKept();
     },
@@ -2276,7 +2307,7 @@ export function createPreviewListeners(
           // Nothing changes: the mode before goes on as it was.
           settings = before;
           this.start();
-          throw new PreviewRefusal(503, failed);
+          throw new PreviewRefusal(503, failed.why);
         }
         db.setSettings(settings);
         // Its sessions' own ports, which clients reached outside the

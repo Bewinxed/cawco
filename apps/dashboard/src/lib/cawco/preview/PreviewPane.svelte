@@ -1692,18 +1692,18 @@
   /**
    * Why comment `id` hasn't reached the session, in words, when it is
    * owed for a reason: a delivery of it no one took (the hub's `notSent`),
-   * or it stands only in the page's doc, which hasn't reached the hub (what
-   * closed its link, else that it hasn't yet), kept on the device meanwhile.
+   * or it stands only in the page's doc while the page's link has stood down
+   * past its grace ({@link linkDown}): the hub can't be reached, and it goes
+   * once the hub is back. Inside the grace a reopening link says nothing,
+   * and no close code is ever his to read here.
    */
   const notSentWhy = (pin: Pin): string | null =>
     refusedReplies[pin.id]?.why ??
     pageReplies[pin.id]?.why ??
     pin.notSent?.why ??
-    (onlyOnPage(pin.id) ? (linkDown ?? commentWords.notOnHub) : null);
+    (onlyOnPage(pin.id) && linkDown ? commentWords.hubUnreached : null);
   /** How long a comment only the page holds is given to reach the hub, once its link is opened again, before its Try again says it didn't. Our call. */
   const REACH_HUB_MS = 10_000;
-  /** A reason's own full stop, which the sentence that quotes it puts back. */
-  const REASON_STOP = /\.$/u;
   /** Resolves once the pane's doc holds comment `id` (the page's link carried it to the hub); rejects, saying why, when it doesn't within {@link REACH_HUB_MS}. */
   const reachedHub = (id: string) =>
     new Promise<void>((resolve, reject) => {
@@ -1714,11 +1714,7 @@
           resolve();
         } else if (Date.now() - started > REACH_HUB_MS) {
           clearInterval(look);
-          reject(
-            new Error(
-              `This comment hasn't reached the hub: ${(linkDown ?? commentWords.notOnHub).replace(REASON_STOP, "")}. It's kept on this device, and goes once its link is back.`
-            )
-          );
+          reject(new Error(commentWords.notReachedHub));
         }
       }, 200);
     });

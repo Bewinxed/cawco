@@ -943,7 +943,7 @@ const run = async (kit: Kit) => {
     // its locked page, which carries the preview's headers this leg reads.
     {} as Parameters<typeof createPreviewListeners>[3],
     tailnet,
-    { listens: true }
+    { listens: true, after: () => undefined }
   );
   const session = "00000000-0000-4000-8000-00000000a011";
   try {

@@ -13576,7 +13576,7 @@ export const createServer = (
       }
     }
     previewTargets.set(instanceId, target);
-    db.artifacts.show(instanceId, artifact.id);
+    db.artifacts.show(instanceId, artifact.id, target.revision);
     const frame = await timedShowStep("publish", artifact, instanceId, () =>
       publishPreview(instanceId, "open", target)
     );
@@ -15611,14 +15611,20 @@ export const createServer = (
    * board draws it, never a panel (service `boardOf`).
    */
   const restoreShownPreviews = (): void => {
-    for (const { instanceId, artifact } of db.artifacts.shown()) {
+    for (const { instanceId, artifact, revision } of db.artifacts.shown()) {
       if (boardOf(artifact)) {
         db.artifacts.unshow(instanceId);
         continue;
       }
+      // The show's own revision, so a panel open across the restart keeps
+      // its page (and a press in it) rather than loading it again.
+      const kept = revision ?? crypto.randomUUID();
+      if (revision === null) {
+        db.artifacts.show(instanceId, artifact.id, kept);
+      }
       previewTargets.set(instanceId, {
         artifact: shownArtifact(artifact),
-        revision: crypto.randomUUID(),
+        revision: kept,
       });
     }
   };
@@ -16142,7 +16148,7 @@ export const createServer = (
     db.previews,
     db.previewPasses,
     tailnetHttps,
-    { listens: serves }
+    { listens: serves, after: lifetime.after }
   );
   /** Each machine preview origin's upstream, following its artifact's row (preview-service.ts). */
   const previewService = createPreviewService({
@@ -32312,6 +32318,7 @@ export const createServer = (
             for (const [instanceId, target] of previewTargets) {
               const moved = { ...target, revision: crypto.randomUUID() };
               previewTargets.set(instanceId, moved);
+              db.artifacts.show(instanceId, target.artifact.id, moved.revision);
               publishPreview(instanceId, "open", moved);
             }
             // The board's publish carries the mode (`previewSettings`, which

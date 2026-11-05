@@ -69,16 +69,18 @@ export const commentWords = {
   retryComment: (n: number) => `Try comment ${n} again`,
   notSentHead: NOT_SENT,
   notSent: (why: string) => `${NOT_SENT} ${why.replace(FINAL_STOP, "")}.`,
-  notOnHub: "it hasn't reached the hub yet, and is kept on this device",
-  /** The page's Send that the hub didn't answer within its bound, `seconds`. */
-  sendUnanswered: (seconds: number) =>
-    `${NOT_SENT} the hub didn't answer within ${seconds} seconds (timeout). Your picks are kept on this page. Press Send again.`,
+  /** Why a mark only the page holds isn't sent, once its link has stood down past its grace: the hub can't be reached, never what closed the socket. */
+  hubUnreached:
+    "the hub can't be reached. It's kept on this device and goes once the hub is back",
+  /** A comment's Try again that didn't reach the hub within its bound. */
+  notReachedHub:
+    "This comment hasn't reached the hub, which can't be reached. It's kept on this device and goes once the hub is back.",
   /** A Send the dashboard makes whose open page didn't hand over its picks within `seconds`. */
   sendPageSilent: (seconds: number) =>
     `${NOT_SENT} the page open here didn't hand over its picks within ${seconds} seconds (timeout). Your picks are kept on the page. Press Send again.`,
-  /** The page's Send that never reached the hub: the browser's reason. */
-  sendUnreached: (cause: string) =>
-    `${NOT_SENT} the hub couldn't be reached (${cause.replace(FINAL_STOP, "")}). Your picks are kept on this page. Press Send again.`,
+  /** The page's Send, held while the hub couldn't be reached for `seconds`: the picks stay on the page and reach the hub once it is back. */
+  sendHeld: (seconds: number) =>
+    `${NOT_SENT} the hub couldn't be reached for ${seconds} seconds. Your picks are kept on this page and reach the hub once it's back; press Send again then.`,
   // Changed since you looked: the tag over the page, and what a screen reader hears.
   changedSince: (n: number) => `${n} changed since you looked`,
   changeOf: (k: number, n: number) => `${k} of ${n}`,
