@@ -85,7 +85,13 @@
   import { figureOf, pageLang } from "./figures";
   import Journey from "./Journey.svelte";
   import { keepUnder, keptUnder } from "./kept";
-  import { pathOf, previousOf, type Review, reviewOf } from "./model";
+  import {
+    ownStateOf,
+    pathOf,
+    previousOf,
+    type Review,
+    reviewOf,
+  } from "./model";
   import StagePane from "./StagePane.svelte";
   import Stepper from "./Stepper.svelte";
   import type { StageLink } from "./stage-link.svelte";
@@ -339,11 +345,11 @@
         : state?.widths.find((one) => one.width === atWidth);
     return { file: on.file, story: sized?.story ?? pick.state };
   };
-  /** A state kept (a record set too); kept while it is the one compared with, Compare turns to the state before it. */
+  /** A state kept (a record set too); kept while it (or its phone twin) is the one compared with, Compare turns to the state before it. */
   const keep = (state: string, variant: string | null) => {
     if (review) {
       keptOf = { ...keptOf, [review.file]: { state, variant } };
-      if (comparing && against === state) {
+      if (comparing && against === ownStateOf(review, state)) {
         compareWith(previousOf(review, state));
       }
     }
@@ -705,10 +711,17 @@
       });
     }
   };
-  /** A press on a state in the room: while comparing, on another state, compare with it; else keep it. */
+  /**
+   * A press on a state in the room: while comparing, on another state,
+   * compare with it; else keep it. A phone twin's row is its state at a
+   * phone's width: Compare compares with its state, and the kept state's
+   * own twin is kept (the drawing at that width), as Compare draws both at
+   * the kept one's width, where a twin differs in nothing.
+   */
   const press = (state: string, variant: string | null) => {
-    if (comparing && kept && state !== kept.state) {
-      compareWith(state);
+    const own = review ? ownStateOf(review, state) : state;
+    if (comparing && review && kept && own !== ownStateOf(review, kept.state)) {
+      compareWith(own);
       return;
     }
     choose(state, variant);

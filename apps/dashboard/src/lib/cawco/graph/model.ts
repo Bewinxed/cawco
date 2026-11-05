@@ -20,7 +20,13 @@
  *   for a story whose `parameters.records` names a list arg, that list in
  *   three sizes (one, many, the longest names), cut on the page; the state
  *   as written is no variant, it is the state with none picked;
- * - a **move** is a story's `from` or one of the spec's `edges`.
+ * - a **move** is a story's `from` or one of the spec's `edges`;
+ * - a **phone twin** (core stage-graph.ts `twinOf`: `FailedSavePhone`
+ *   beside `FailedSave`) the spec groups nothing under stands as a row of
+ *   its own, named for its state, and is marked as that state at another
+ *   width (`twin`): never the state before or after one on the path, so
+ *   Compare never compares with one, and it is reached and left as its
+ *   state is.
  *
  * The panel holds names, order, groups, moves and widths; the page resolves
  * a state to its args (core stage-graph.ts `StateRef`).
@@ -37,6 +43,7 @@ import {
   RECORD_SETS,
   type StateRef,
   shownName,
+  twinOf,
 } from "@cawco/core/stage-graph";
 import { type Figure, graphWords as words } from "@cawco/core/words/graph";
 
@@ -62,6 +69,8 @@ export interface GraphState {
   note: string | null;
   /** Its story has a `play`: the move into it is acted, not only drawn. */
   play: boolean;
+  /** The state it is at a phone's width, when it is a phone twin of one (`twinOf`); null for a state of its own. */
+  twin: string | null;
   /** The stories under it at its width, then its record sets. */
   variants: Variant[];
   width: number | null;
@@ -168,6 +177,7 @@ function stateOf(
     failure: story.tags.includes("failure"),
     from: story.from && names.has(story.from) ? story.from : null,
     play: story.play,
+    twin: null,
     variants: [],
     widths: [],
   };
@@ -282,6 +292,13 @@ export function reviewOf(
   holdUnder(sheet, states, parentOf);
   for (const story of sheet.stories) {
     const state = states[story.name];
+    const stem = state ? twinOf(story, sheet.stories) : null;
+    if (state && stem && states[stem.name]) {
+      state.twin = stem.name;
+    }
+  }
+  for (const story of sheet.stories) {
+    const state = states[story.name];
     const list = state ? listOf(sheet, story) : null;
     if (state && list) {
       state.variants.push(...recordSets(state, list, figure));
@@ -298,14 +315,28 @@ export function reviewOf(
   };
 }
 
-/** Whether `state` has holes in its machine (the map's marks): not a start with no move in, not an end with no move out. */
+/** The state a row stands for: a phone twin's state, else its own. */
+export const ownStateOf = (review: Review, state: string): string =>
+  review.states[state]?.twin ?? state;
+
+/** The states along `path` that are steps of their own: no phone twin, which stands where its state does. */
+const stepsOf = (review: Review, path: readonly string[]): string[] =>
+  path.filter((id) => !review.states[id]?.twin);
+
+/**
+ * Whether `state` has holes in its machine (the map's marks): not a start
+ * with no move in, not an end with no move out. A phone twin has its
+ * state's: it is that state at another width, reached and left as it is.
+ */
 export function holesOf(review: Review, state: string): Holes {
-  const machine = review.machines.find((one) => one.path.includes(state));
-  const start = machine?.path[0] === state;
-  const end = machine?.path.at(-1) === state;
+  const own = ownStateOf(review, state);
+  const machine = review.machines.find((one) => one.path.includes(own));
+  const steps = stepsOf(review, machine?.path ?? []);
+  const ours = (id: string) => ownStateOf(review, id) === own;
   return {
-    reaches: start || review.moves.some((move) => move.to === state),
-    leaves: end || review.moves.some((move) => move.from === state),
+    reaches: steps[0] === own || review.moves.some((move) => ours(move.to)),
+    leaves:
+      steps.at(-1) === own || review.moves.some((move) => ours(move.from)),
   };
 }
 
@@ -321,16 +352,25 @@ export const pathOf = (review: Review): string[] =>
  * The state before `state`: where the move into it starts, when its states
  * file plays one (Hub didn't answer's Filled in), else the state before it
  * on the component's path, else the one after. Compare compares with it,
- * as the move into the kept state plays from it: one state before.
+ * as the move into the kept state plays from it: one state before. A phone
+ * twin is never it (it is the same state at another width, and drawn at
+ * the kept one's width it differs in nothing), and a twin's state before
+ * is its state's.
  */
 export function previousOf(review: Review, state: string): string | null {
-  const from = review.moves.find(
-    (move) => move.to === state && move.played !== null
-  )?.from;
-  if (from) {
-    return from;
+  const own = ownStateOf(review, state);
+  const from = [state, own]
+    .map(
+      (to) =>
+        review.moves.find((move) => move.to === to && move.played !== null)
+          ?.from
+    )
+    .find((one) => one !== undefined);
+  const before = from === undefined ? null : ownStateOf(review, from);
+  if (before && before !== own) {
+    return before;
   }
-  const path = pathOf(review);
-  const at = path.indexOf(state);
-  return at < 0 ? null : (path[at - 1] ?? path[at + 1] ?? null);
+  const steps = stepsOf(review, pathOf(review));
+  const at = steps.indexOf(own);
+  return at < 0 ? null : (steps[at - 1] ?? steps[at + 1] ?? null);
 }

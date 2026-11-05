@@ -464,11 +464,27 @@ export interface NamedStory {
 }
 
 /**
+ * The story `story` is the phone twin of: an export ending in `Phone`
+ * beside an export of its stem in `stories` (`FailedSavePhone` beside
+ * `FailedSave`), the same state drawn at a phone's width; null for any
+ * other. The one rule a twin is told by: its name (`shownName`) and the
+ * design graph's model (a twin is its state at another width, never a
+ * state before or after it) both read it.
+ */
+export const twinOf = <Named extends NamedStory>(
+  story: NamedStory,
+  stories: readonly Named[]
+): Named | null => {
+  const stem = PHONE_TWIN.exec(story.name)?.[1];
+  return (stem && stories.find((one) => one.name === stem)) || null;
+};
+
+/**
  * The name a story is shown by, the one the states list, the inspector and
- * the stage page all say: its CSF `name`; else, for a phone twin (an export
- * ending in `Phone` beside an export of its stem in `stories`), that
- * story's name ", on a phone" ("Hub didn't answer, on a phone"), so no
- * states file names its twins by hand; else its export in plain words.
+ * the stage page all say: its CSF `name`; else, for a phone twin
+ * (`twinOf`), its state's name ", on a phone" ("Hub didn't answer, on a
+ * phone"), so no states file names its twins by hand; else its export in
+ * plain words.
  */
 export const shownName = (
   story: NamedStory,
@@ -477,8 +493,7 @@ export const shownName = (
   if (story.display) {
     return story.display;
   }
-  const stem = PHONE_TWIN.exec(story.name)?.[1];
-  const sibling = stem ? stories.find((one) => one.name === stem) : undefined;
+  const sibling = twinOf(story, stories);
   return sibling
     ? words.onAPhone(shownName(sibling, stories))
     : storyWords(story.name);
