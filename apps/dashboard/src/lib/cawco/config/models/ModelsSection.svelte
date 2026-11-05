@@ -10,10 +10,7 @@
     type ImageMachine,
     imageReadiness,
   } from "@cawco/core/image-readiness";
-  import {
-    type ImageFix,
-    imageSettingsWords,
-  } from "@cawco/core/words/image-settings";
+  import { imageSettingsWords } from "@cawco/core/words/image-settings";
   import { onMount } from "svelte";
   import { blur } from "svelte/transition";
   import Field from "#lib/cawco/config/Field.svelte";
@@ -290,8 +287,8 @@
   let imagePhase = $state<"idle" | "saving" | "saved" | "failed">("idle");
   /** Why the image settings couldn't be read. */
   let imageUnread = $state<string | null>(null);
-  /** Why the last save didn't hold, and where that is put right. */
-  let imageFault = $state<{ words: string; fix?: ImageFix } | null>(null);
+  /** Why the last save didn't hold. */
+  let imageFault = $state<string | null>(null);
   /** A pick made while a save was on its way: saved once that one settles. */
   let imageNext: ImageSettings | null = null;
   const readiness = $derived(imageReadiness(orderMachines(machines), accounts));
@@ -330,11 +327,11 @@
   }
 
   /**
-   * Saves one pick. A 400 for a provider or model this dashboard offers
-   * means the hub is older than it (the hub checks against its own list):
-   * said as that, with the way to update the hub. Anything else is said in
-   * the hub's words, or why the save never reached it. A failed save puts
-   * the hub's choice back.
+   * Saves one pick. A refusal is said in the hub's words, a save that never
+   * reached it by why; either puts the hub's choice back. (The options are
+   * core's IMAGE_PROVIDERS and IMAGE_PROVIDER_MODELS, the list the hub
+   * checks a save against, and every hub that answers this route has them
+   * all, so no option is one the hub doesn't offer.)
    */
   async function saveImage(next: ImageSettings) {
     const held = image;
@@ -343,7 +340,7 @@
     }
     imagePhase = "saving";
     imageFault = null;
-    let fault: { words: string; fix?: ImageFix } | null = null;
+    let fault: string | null = null;
     try {
       const response = await fetch("/api/image-settings", {
         method: "PUT",
@@ -352,29 +349,14 @@
       });
       if (response.ok) {
         image = (await response.json()) as ImageSettings;
-      } else if (response.status === 400) {
-        fault = {
-          words:
-            next.provider !== held.provider || !next.model
-              ? imageSettingsWords.hubLacksProvider(
-                  next.provider,
-                  held.provider
-                )
-              : imageSettingsWords.hubLacksModel(next.model, held.provider),
-          fix: imageSettingsWords.updateHub,
-        };
       } else {
-        fault = {
-          words: imageSettingsWords.refused(
-            await hubSaid(response),
-            held.provider
-          ),
-        };
+        fault = imageSettingsWords.refused(
+          await hubSaid(response),
+          held.provider
+        );
       }
     } catch (error) {
-      fault = {
-        words: imageSettingsWords.unsent(failureWords(error), held.provider),
-      };
+      fault = imageSettingsWords.unsent(failureWords(error), held.provider);
     }
     const later = imageNext;
     imageNext = null;
@@ -477,7 +459,7 @@
   {section}
 >
   <div data-slot="group" class="flex flex-col gap-space-2">
-    <SectionHeader hue={HUE} icon={IconGlobe} label="OpenRouter">
+    <SectionHeader level={2} hue={HUE} icon={IconGlobe} label="OpenRouter">
       {#snippet right()}
         {#if openrouter?.connected}
           <Button
@@ -560,7 +542,7 @@
     data-group="jev"
     onsubmit={saveKey}
   >
-    <SectionHeader hue={HUE} icon={IconJev} label="Jev">
+    <SectionHeader level={2} hue={HUE} icon={IconJev} label="Jev">
       {#snippet right()}
         <div data-slot="actions" class="flex gap-space-2">
           {#if jev?.typesafe}
@@ -672,7 +654,7 @@
     data-slot="group"
     class="flex flex-col gap-space-2 border-t border-border-hairline pt-space-5"
   >
-    <SectionHeader hue={HUE} icon={IconRules} label="Fleet watch" />
+    <SectionHeader level={2} hue={HUE} icon={IconRules} label="Fleet watch" />
     <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       Reads every session's stream for a loop or a stall. A yes from Jev, or a
       second signal while Jev is off, starts one triage that tells the session's

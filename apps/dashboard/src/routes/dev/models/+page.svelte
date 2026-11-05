@@ -9,8 +9,7 @@
    * watch on, and the image default as the hub keeps it, checked by the
    * hub's rules (server.ts `PUT /api/image-settings`). Fleet sets what the
    * machines hold; Hub sets how the next save is answered: at once, after a
-   * wait, refused by an older hub that knows no `gemini-api`, or never
-   * reaching it.
+   * wait, refused with a 500 in the hub's words, or never reaching it.
    */
   import { FLEET_WATCH_LIMITS } from "@cawco/core/fleet-watch";
   import {
@@ -70,7 +69,7 @@
   const HUBS = {
     answers: "Saves at once",
     slow: "Saves after 2 s",
-    older: "Older hub: no gemini-api",
+    fails: "Refuses: its database is locked",
     unreachable: "Unreachable",
   } as const;
   type Hub = keyof typeof HUBS;
@@ -147,11 +146,9 @@
           throw new TypeError("Failed to fetch");
         }
         await wait(hub === "slow" ? 2000 : 450);
-        if (hub === "older" && body.provider === "gemini-api") {
-          // A hub from before the Gemini API: its own list, in its words.
-          return said(
-            "There is no image provider gemini-api; there are chatgpt, antigravity."
-          );
+        if (hub === "fails") {
+          // A hub that can't write its row: a 500 in its words.
+          return new Response("database is locked", { status: 500 });
         }
         return save(body);
       }
