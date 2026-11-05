@@ -352,8 +352,23 @@ export class CdpTakeover {
       .catch(() => undefined);
   }
 
-  /** One message of a view's: the person's pointer, keys or words, onto the page. */
-  async input(input: CdpInput): Promise<void> {
+  /** The inputs landing, one after another. */
+  #landing: Promise<void> = Promise.resolve();
+
+  /**
+   * One message of a view's: the person's pointer, keys or words, onto the
+   * page, after every message before it has landed. A message can take more
+   * than one call (Enter's press, then its character), and the view sends
+   * the next without waiting: run side by side, a word typed after Return
+   * went in before Return's newline.
+   */
+  input(input: CdpInput): Promise<void> {
+    const landed = this.#landing.then(() => this.#land(input));
+    this.#landing = landed.catch(() => undefined);
+    return landed;
+  }
+
+  async #land(input: CdpInput): Promise<void> {
     if (this.#state === "stopped" || this.#watch) {
       return;
     }

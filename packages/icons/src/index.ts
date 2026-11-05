@@ -165,6 +165,8 @@ export { default as IconHistory } from "~icons/solar/history-bold-duotone";
 export { default as IconHourglass } from "~icons/solar/hourglass-bold-duotone";
 export { default as IconHandoff } from "~icons/solar/inbox-in-bold-duotone";
 export { default as IconKey } from "~icons/solar/key-bold-duotone";
+/** A browser take-over's Show keyboard: the phone's keyboard, typing into the page. */
+export { default as IconKeyboard } from "~icons/solar/keyboard-bold-duotone";
 export { default as IconLaptopAlt } from "~icons/solar/laptop-bold-duotone";
 export { default as IconLaptop } from "~icons/solar/laptop-minimalistic-bold-duotone";
 export { default as IconLayers } from "~icons/solar/layers-bold-duotone";

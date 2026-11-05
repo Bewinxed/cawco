@@ -11,7 +11,9 @@
    *
    * The well's states: starting (the browser woken, its image built), live
    * (the agent driving, the person watching), you have control (the
-   * person's pointer, keys and paste go to the browser), and each failure in
+   * person's pointer, keys and paste go to the browser; on a touch screen
+   * the band's Show keyboard raises the phone's keyboard, its typing read
+   * from a field of the view's own, keyboard-sink.ts), and each failure in
    * the error formula with its way out: the machine away, the browser that
    * didn't start, the view's link lost or refused, the stream that found no
    * way here (the stream relay's settings), a codec this browser can't play.
@@ -25,7 +27,14 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
-  import { IconAlert, IconGlobe, IconLock, IconRefresh } from "#lib/icons.js";
+  import { IsCoarsePointer } from "#lib/hooks/is-mobile.svelte.js";
+  import {
+    IconAlert,
+    IconGlobe,
+    IconKeyboard,
+    IconLock,
+    IconRefresh,
+  } from "#lib/icons.js";
   import { newId } from "../id";
   import { appear } from "../motion/curves.svelte";
   import OriginText from "../OriginText.svelte";
@@ -38,6 +47,13 @@
     type StreamState,
     streamUrl,
   } from "./browser-stream";
+  import {
+    SINK_AT_SPACE,
+    SINK_MOST,
+    SINK_PAD,
+    sinkKeyRole,
+    typedBetween,
+  } from "./keyboard-sink";
 
   let {
     instanceId,
@@ -54,6 +70,7 @@
   } = $props();
 
   const detailsId = $props.id();
+  const sinkId = `${detailsId}-keys`;
 
   /** The view's name for itself on the hub (its `?token`): one neko session per tab and artifact, kept through a reload. */
   const viewer = $derived.by(() => {
@@ -86,6 +103,14 @@
   let canvas = $state<HTMLCanvasElement>();
   let well = $state<HTMLDivElement>();
   let layer = $state<HTMLDivElement>();
+  /** The field the phone's keyboard types into (keyboard-sink.ts), while the person drives. */
+  let sink = $state<HTMLTextAreaElement>();
+  /** The sink has the focus: the phone's keyboard is up for it. */
+  let sinkFocused = $state(false);
+  /** What the sink held when its typing was last sent. */
+  let sent = SINK_PAD;
+  /** A finger, not a cursor: Show keyboard stands in the band. */
+  const coarse = new IsCoarsePointer();
   let details = $state(false);
   /** A start or a control hand-off the hub refused, in its words. */
   let refusal = $state<string | null>(null);
@@ -255,7 +280,14 @@
       return;
     }
     if (phase === "down") {
-      layer?.focus();
+      // With the keyboard up the sink keeps the focus, so it stays up while
+      // the person taps from field to field; what it held was typed where
+      // the caret stood before.
+      if (keyboardUp) {
+        resetSink();
+      } else {
+        layer?.focus();
+      }
       layer?.setPointerCapture(event.pointerId);
     }
     event.preventDefault();
@@ -298,6 +330,94 @@
     if (text) {
       stream.paste(text);
     }
+  }
+
+  /** The phone's keyboard is up for the sink while the person drives. */
+  const keyboardUp = $derived(driving && sinkFocused);
+
+  /** The sink as it stands with nothing typed, its caret at its end. */
+  function resetSink() {
+    if (!sink) {
+      return;
+    }
+    sink.value = SINK_PAD;
+    sent = SINK_PAD;
+    sink.setSelectionRange(SINK_PAD.length, SINK_PAD.length);
+  }
+
+  /**
+   * Show keyboard, inside the person's tap: the sink focused there, where a
+   * phone raises its keyboard for it. Without a scroll: the sink stands at
+   * the well's top, in view.
+   */
+  function toggleKeyboard() {
+    if (keyboardUp) {
+      sink?.blur();
+      return;
+    }
+    resetSink();
+    sink?.focus({ preventScroll: true });
+  }
+
+  /** The keyboard changed the sink: the change typed into the browser. */
+  function sinkInput(event: Event) {
+    if (!(driving && stream && sink)) {
+      return;
+    }
+    const now = sink.value;
+    const typed = typedBetween(sent, now);
+    sent = now;
+    if (typed.back > 0 || typed.text) {
+      stream.type(typed);
+    }
+    // A composition's field is the IME's until it ends.
+    if ((event as InputEvent).isComposing) {
+      return;
+    }
+    const caret = now.length;
+    if (
+      !now.startsWith(SINK_PAD) ||
+      (caret > SINK_MOST && SINK_AT_SPACE.test(now))
+    ) {
+      resetSink();
+    } else if (sink.selectionStart !== caret || sink.selectionEnd !== caret) {
+      sink.setSelectionRange(caret, caret);
+    }
+  }
+
+  /** Enter that would break the sink's line, when no key press said so first: typed as Enter. */
+  function sinkBeforeInput(event: InputEvent) {
+    if (!(driving && stream)) {
+      return;
+    }
+    const breaks =
+      event.inputType === "insertLineBreak" ||
+      event.inputType === "insertParagraph";
+    // One that can't be cancelled reaches the sink, and its input types it.
+    if (breaks && event.cancelable) {
+      event.preventDefault();
+      stream.type({ back: 0, text: "\n" });
+    }
+  }
+
+  /** A key in the sink: the sink takes what edits it, the browser the rest (keyboard-sink.ts `sinkKeyRole`). */
+  function sinkKey(event: KeyboardEvent, down: boolean) {
+    if (!(driving && stream)) {
+      return;
+    }
+    event.stopPropagation();
+    const role = sinkKeyRole(event);
+    if (role === "field") {
+      return;
+    }
+    if (role === "enter") {
+      event.preventDefault();
+      if (down) {
+        stream.type({ back: 0, text: "\n" });
+      }
+      return;
+    }
+    key(event, down);
   }
 
   /** What the well says when it shows no stream: a wait, or a failure with its way out. */
@@ -384,7 +504,7 @@
 
 <section
   aria-label={browserWords.view}
-  class="absolute inset-0 flex flex-col min-h-0 bg-surface-well"
+  class="absolute inset-x-0 top-0 bottom-(--keyboard-lift,0px) flex flex-col min-h-0 bg-surface-well"
   data-browser-host={host ?? undefined}
   data-browser-mine={mine || undefined}
   data-slot="browser-view"
@@ -394,8 +514,11 @@
     class="flex flex-none flex-wrap items-center gap-x-space-2 gap-y-space-1 min-w-0 px-space-3 py-space-2 border-b border-border-hairline bg-surface-raised type-meta"
     data-slot="browser-band"
   >
+    <!-- The origin takes half the band at least, so on a phone who has
+         control and Show keyboard wrap under it rather than squeezing it to
+         a letter a line. -->
     <span
-      class="mark-line flex flex-1 items-center gap-space-1 min-w-0 text-ink-strong"
+      class="mark-line flex grow basis-1/2 items-center gap-space-1 min-w-0 text-ink-strong"
     >
       <span class="mark-cell flex-none text-ink-muted">
         {#if mine}<IconLock />{:else}<IconGlobe />{/if}
@@ -417,6 +540,22 @@
         >
       {/if}
     </span>
+    {#if driving && coarse.current}
+      <!-- Held off the focus, so a press that hides the keyboard doesn't
+           first take the focus from the sink (noVNC's keepVirtualKeyboard). -->
+      <Button
+        aria-controls={sinkId}
+        data-slot="browser-keyboard"
+        icon={IconKeyboard}
+        label={keyboardUp
+          ? browserWords.hideKeyboard
+          : browserWords.showKeyboard}
+        onclick={toggleKeyboard}
+        onmousedown={(event: MouseEvent) => event.preventDefault()}
+        size="sm"
+        variant="outline"
+      />
+    {/if}
     {#if host === "local"}
       <p
         class="basis-full m-0 text-ink-muted text-pretty"
@@ -465,6 +604,11 @@
       }}
       onkeydown={(event) => key(event, true)}
       onkeyup={(event) => key(event, false)}
+      onmousedown={(event) => {
+        if (keyboardUp) {
+          event.preventDefault();
+        }
+      }}
       onpaste={paste}
       onpointerdown={(event) => pointer(event, "down")}
       onpointermove={(event) => pointer(event, "move")}
@@ -477,6 +621,36 @@
       role="application"
       tabindex={driving ? 0 : -1}
     ></div>
+    {#if driving}
+      <!-- The phone's keyboard types here (keyboard-sink.ts): out of sight
+           at the well's top, focused by Show keyboard. Autocorrect stays the
+           person's; capitals are theirs to type, as on a desk. -->
+      <textarea
+        bind:this={sink}
+        aria-label={browserWords.keyboardField}
+        autocapitalize="off"
+        autocomplete="off"
+        class="absolute top-0 left-0 size-px p-0 border-0 opacity-0 resize-none overflow-hidden pointer-events-none"
+        data-slot="browser-keys"
+        id={sinkId}
+        onbeforeinput={sinkBeforeInput}
+        onblur={() => {
+          sinkFocused = false;
+        }}
+        onfocus={() => {
+          sinkFocused = true;
+        }}
+        oninput={sinkInput}
+        onkeydown={(event) => sinkKey(event, true)}
+        onkeyup={(event) => sinkKey(event, false)}
+        onpaste={paste}
+        tabindex="-1"
+        value={SINK_PAD}
+        {@attach () => () => {
+          // Gone with the person's control: a focused field removed sends no blur.
+          sinkFocused = false;
+        }}></textarea>
+    {/if}
     {#if shown?.kind === "wait"}
       <p
         class="mark-line absolute inset-x-0 top-0 m-0 flex items-start gap-space-2 p-space-5 text-ink-muted type-meta animate-wait-grace-in"

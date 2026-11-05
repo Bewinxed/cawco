@@ -20,6 +20,7 @@
  */
 import { BROWSER_VIEW_MOVED } from "@cawco/core/browser";
 import { z } from "zod";
+import type { Typed } from "./keyboard-sink";
 
 /** Where the stream stands, for the well to say. */
 export type StreamState =
@@ -46,6 +47,8 @@ interface StreamInput {
   key: (event: KeyboardEvent, down: boolean) => void;
   move: (x: number, y: number) => void;
   paste: (text: string) => void;
+  /** What the phone's keyboard typed (keyboard-sink.ts): deletions, then text, a newline as Enter. */
+  type: (typed: Typed) => void;
   wheel: (x: number, y: number, event: WheelEvent) => void;
 }
 
@@ -433,6 +436,34 @@ export const nekoStream = (
         input(down ? NEKO_OP.keyDown : NEKO_OP.keyUp, [4, keysym]);
       }
     },
+    type: ({ back, text }) => {
+      const tap = (keysym: number) => {
+        input(NEKO_OP.keyDown, [4, keysym]);
+        input(NEKO_OP.keyUp, [4, keysym]);
+      };
+      const shift = KEYSYMS.Shift as number;
+      for (let n = 0; n < back; n += 1) {
+        tap(KEYSYMS.Backspace as number);
+      }
+      for (const char of text) {
+        const keysym = char === "\n" ? KEYSYMS.Enter : keysymOf(char);
+        if (keysym === undefined) {
+          continue;
+        }
+        // neko finds a keysym's key under the modifiers held now, and puts
+        // one no key has on a spare key whose second level is its capital
+        // (neko 3.2.0 server/pkg/xorg/xorg.c `XKey`, `XkbAddKeyKeysym`): a
+        // capital typed without Shift lands as its small letter.
+        const capital = char !== char.toLowerCase();
+        if (capital) {
+          input(NEKO_OP.keyDown, [4, shift]);
+        }
+        tap(keysym);
+        if (capital) {
+          input(NEKO_OP.keyUp, [4, shift]);
+        }
+      }
+    },
     paste: (text) => {
       // The person's clipboard into the browser's, then its paste keystroke.
       send("clipboard/set", { text });
@@ -613,5 +644,25 @@ export const cdpStream = (
       });
     },
     paste: (text) => send({ t: "text", text }),
+    type: ({ back, text }) => {
+      const press = (key: string) => {
+        send({ t: "key", type: "down", key, modifiers: 0 });
+        send({ t: "key", type: "up", key, modifiers: 0 });
+      };
+      for (let n = 0; n < back; n += 1) {
+        press("Backspace");
+      }
+      // Text goes in as CDP's `Input.insertText` ("inserting text that
+      // doesn't come from a key press, for example an emoji keyboard or an
+      // IME"); a newline is Enter's press, as a keyboard sends it.
+      text.split("\n").forEach((line, at) => {
+        if (at > 0) {
+          press("Enter");
+        }
+        if (line) {
+          send({ t: "text", text: line });
+        }
+      });
+    },
   };
 };

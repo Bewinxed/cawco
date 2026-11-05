@@ -19,6 +19,11 @@ export const browserWords = {
   /** The band's line for a machine with no container runtime. */
   localLine:
     "This machine shows one page at a time until a container runtime is installed.",
+  /** The band's control on a touch screen while you have control: the phone's keyboard, typing into the page. */
+  showKeyboard: "Show keyboard",
+  hideKeyboard: "Hide keyboard",
+  /** The field the phone's keyboard types into, for a screen reader. */
+  keyboardField: "Type into the browser",
   /** The head's buttons, and while they go. */
   takeOver: "Take over",
   takingOver: "Taking over…",
