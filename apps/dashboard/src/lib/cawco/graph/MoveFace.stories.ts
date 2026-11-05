@@ -13,16 +13,19 @@ import type { MoveState } from "./MoveFace.svelte";
 import MoveFace from "./MoveFace.svelte";
 import { type Clip, reshape, retimeRun, tracksOf } from "./motion";
 
-/** One thing on the stage: an element a row names and rings. */
-const thing = (): Element | null =>
-  typeof document === "undefined" ? null : document.createElement("span");
+/** One thing on the stage, by the page's id for it: what a row names and rings. */
+let things = 0;
+const thing = (): string => {
+  things += 1;
+  return `t${things}`;
+};
 
 /** The house ease-out, as the engine reports it on the stage. */
 const EASE_OUT = browser ? ease("--ease-out") : "";
 let ids = 0;
 /** A clip as `clipOf` reads one off the stage. */
 const clip = (
-  of: Element | null,
+  of: string,
   element: string,
   how: string,
   property: string,
@@ -37,7 +40,12 @@ const clip = (
     target: of,
     thing: of,
     spring: null,
-    frames: [],
+    frameCurve: null,
+    group: null,
+    iterations: 1,
+    legs: [],
+    repeat: "once",
+    values: [],
     element,
     property,
     how,

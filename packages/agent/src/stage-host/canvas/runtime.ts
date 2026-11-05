@@ -28,6 +28,7 @@ import {
   type AnimationRead,
   awaySaid,
   CANVAS_PLAN_ID,
+  type CanvasDial,
   type CanvasSpec,
   canvasSpecOf,
   FORMS,
@@ -58,7 +59,6 @@ import {
 } from "@cawco/core/stage";
 import { queriesIn, userEventIn } from "@cawco/core/stage-play";
 import { shellWords } from "@cawco/core/words/shell";
-import { Chrome } from "./chrome";
 import { bootFrames } from "./frames";
 import {
   deltaOf,
@@ -71,6 +71,7 @@ import {
   snapshot,
   valuesOf,
 } from "./measure";
+import { PageStyle } from "./page-style";
 import {
   allClass,
   emptyReach,
@@ -177,7 +178,7 @@ export interface BootOptions {
   load: (file: string, fresh?: boolean) => Promise<SectionModule>;
   /** The toolchain root, absolute: dev paths are made relative to it. */
   root: string;
-  /** CawCo's tokens (DESIGN.md), `:root` scoped by the chrome to its own. */
+  /** CawCo's tokens (DESIGN.md), `:root` scoped by the page's style to its own (page-style.ts). */
   tokens: string;
 }
 
@@ -193,7 +194,7 @@ const DECIDES: Record<Exclude<Interaction, "rest">, PseudoState[]> = {
   focus: ["focus", "focus-visible", "focus-within"],
   pressed: ["active"],
 };
-/** The class a probe's body carries while its values are read: nothing in it moves (chrome.ts PAGE_CSS). */
+/** The class a probe's body carries while its values are read: nothing in it moves (page-style.ts PAGE_CSS). */
 export const HELD = "cawco-held";
 const FOCUSABLE =
   'a[href],button,input,select,textarea,summary,[tabindex],[contenteditable="true"]';
@@ -478,7 +479,12 @@ function holdWhileAway(): void {
  */
 export interface Mode {
   /** The bodies mounted where the person sees them, each with its story: the dials reach every one. */
-  bodies: () => Iterable<{ body: HTMLElement; mounted: Mounted | undefined }>;
+  bodies: () => Iterable<{
+    body: HTMLElement;
+    mounted: Mounted | undefined;
+    /** The args its story is written with, no dial's in them: what an `arg` dial goes back to. */
+    written?: Record<string, unknown>;
+  }>;
   /** A section's module didn't load: it says why in its own place. */
   failed: (section: Section, failure: SectionFailure) => void;
   /** A section's frames as its report says them; null while it has not been read: a report leaves it out, so the stage keeps what an earlier draw saw of it. */
@@ -503,6 +509,8 @@ export interface Mode {
 
 /** What the page shares with its mode: its sections, its rig, mounting, probing, playing, reporting. */
 export interface Page {
+  /** The agent's dials as the panel set them, by name (core `StageDials`): each on every body. */
+  applyDials: (values: Record<string, unknown>) => void;
   /** The args a story mounts with: the meta's, its own, the pane's live ones, then the dials'. */
   argsOf: (section: Section, name: string) => Record<string, unknown>;
   /** A frame of no width of its own that drew at its body's floor: its failure, in words. */
@@ -513,7 +521,6 @@ export interface Page {
   ) => PageError | null;
   readonly base: string;
   readonly by: PageBy;
-  readonly chrome: Chrome;
   /** A story's CSF object (a function story is its `render`). */
   csfOf: (
     mod: Record<string, unknown>,
@@ -547,6 +554,8 @@ export interface Page {
     into: { error?: PageError }
   ) => Mounted | undefined;
   readonly options: BootOptions;
+  /** The args a story is written with: as `argsOf`, no dial's in them. */
+  ownArgsOf: (section: Section, name: string) => Record<string, unknown>;
   readonly plans: Record<string, SectionPlan>;
   /** Every move of a section played in the rig: what each fires, for the report. */
   playAll: (section: Section, sweep?: (to: string) => void) => Promise<void>;
@@ -569,8 +578,34 @@ export interface Page {
   sizeBody: (body: HTMLElement, width: number | null, fills?: boolean) => void;
   readonly spec: CanvasSpec;
   readonly state: CanvasState;
+  /** The page's own sheet: a mode's rules, its duration tokens. */
+  readonly style: PageStyle;
   readonly view: View;
   widthOf: (story: Story, slot: WidthSlot) => number | null;
+}
+
+/** The dials' values as they set the page: each `cssVar` dial's variable with its unit, each `arg` dial's arg; a dial with no value sets nothing. */
+function dialSetOf(
+  dials: readonly CanvasDial[],
+  values: Record<string, unknown>
+): { args: Record<string, unknown>; vars: Map<string, string> } {
+  const vars = new Map<string, string>();
+  const args: Record<string, unknown> = {};
+  for (const dial of dials) {
+    const value = values[dial.name];
+    if (value === undefined) {
+      continue;
+    }
+    if ("cssVar" in dial.target) {
+      vars.set(
+        dial.target.cssVar,
+        typeof value === "number" ? `${value}${dial.unit ?? ""}` : String(value)
+      );
+    } else {
+      args[dial.target.arg] = value;
+    }
+  }
+  return { vars, args };
 }
 
 export function boot(options: BootOptions): void {
@@ -695,14 +730,12 @@ export function boot(options: BootOptions): void {
     ...document.styleSheets,
     ...document.adoptedStyleSheets,
   ];
-  /** A sheet the canvas writes for itself (its page style, DialKit's, the width probe): it answers the window. */
+  /** A sheet the canvas writes for itself (its page style, the width probe): it answers the window. */
   const canvasOwned = (sheet: CSSStyleSheet) => {
     const node = sheet.ownerNode;
     return (
       node instanceof HTMLElement &&
-      ["cawcoCanvas", "cawcoDialkit", "cawcoProbe"].some(
-        (key) => key in node.dataset
-      )
+      ["cawcoCanvas", "cawcoProbe"].some((key) => key in node.dataset)
     );
   };
   const rewriteAll = () => {
@@ -954,7 +987,10 @@ export function boot(options: BootOptions): void {
     column.scheme === "page" ? pageScheme() : column.scheme;
 
   /** The args a story mounts with: the meta's, its own, the pane's live ones, then the dials'. */
-  const argsOf = (section: Section, name: string): Record<string, unknown> => {
+  const ownArgsOf = (
+    section: Section,
+    name: string
+  ): Record<string, unknown> => {
     const mod = section.mod?.module ?? {};
     const meta = (mod.default ?? {}) as Record<string, unknown>;
     const csf = csfOf(mod, name);
@@ -962,9 +998,12 @@ export function boot(options: BootOptions): void {
       ...((meta.args ?? {}) as object),
       ...((csf?.args ?? {}) as object),
       ...(overrides.get(`${section.file}|${name}`) ?? {}),
-      ...dialArgs,
     };
   };
+  const argsOf = (section: Section, name: string): Record<string, unknown> => ({
+    ...ownArgsOf(section, name),
+    ...dialArgs,
+  });
 
   /** A story's CSF object (a function story is its `render`). */
   const csfOf = (
@@ -1622,29 +1661,34 @@ export function boot(options: BootOptions): void {
 
   /* --- Dials: CSS variables on every body, or args through update -------- */
 
-  const dialVars = new Map<string, string>();
+  /**
+   * The agent's dials as the panel turned them (core `StageDials`), the
+   * whole set each time: a `cssVar` dial's value with its unit on every
+   * body, an `arg` dial's through each body's `update`; a dial the set no
+   * longer holds goes back to as written (its variable unset, its arg the
+   * story's own).
+   */
+  let dialVars = new Map<string, string>();
   let dialArgs: Record<string, unknown> = {};
   const applyDials = (values: Record<string, unknown>) => {
-    const args: Record<string, unknown> = {};
-    for (const dial of spec.dials ?? []) {
-      const value = values[dial.name];
-      if (value === undefined) {
-        continue;
-      }
-      if ("cssVar" in dial.target) {
-        dialVars.set(dial.target.cssVar, `${String(value)}${dial.unit ?? ""}`);
-      } else {
-        args[dial.target.arg] = value;
-      }
-    }
+    const { vars, args } = dialSetOf(spec.dials ?? [], values);
+    const unset = [...dialVars.keys()].filter((name) => !vars.has(name));
+    const back = Object.keys(dialArgs).filter((name) => !(name in args));
     const argsChanged = JSON.stringify(args) !== JSON.stringify(dialArgs);
+    dialVars = vars;
     dialArgs = args;
-    for (const { body, mounted } of mode?.bodies() ?? []) {
+    for (const { body, mounted, written } of mode?.bodies() ?? []) {
+      for (const name of unset) {
+        body.style.removeProperty(name);
+      }
       for (const [name, value] of dialVars) {
         body.style.setProperty(name, value);
       }
-      if (argsChanged && Object.keys(args).length > 0) {
-        mounted?.update(args);
+      if (argsChanged) {
+        mounted?.update({
+          ...Object.fromEntries(back.map((name) => [name, written?.[name]])),
+          ...args,
+        });
       }
     }
     later();
@@ -1777,20 +1821,16 @@ export function boot(options: BootOptions): void {
     later();
   });
 
-  /* --- The chrome: the page's own style, and the agent's dials ----------- */
+  /* --- The page's own style ----------------------------------------------- */
 
-  const chrome = new Chrome({
-    embedded: embed,
-    spec,
+  const style = new PageStyle({
     tokens: options.tokens,
     faces: options.faces,
-    applyDials,
   });
 
-  // The page's scheme turned (the host's theme, or the system's): every body drawn in it, and the dials, follow.
-  onPageScheme((scheme) => {
+  // The page's scheme turned (the host's theme, or the system's): every body drawn in it follows.
+  onPageScheme(() => {
     mode?.redressed();
-    chrome.scheme(scheme);
     later();
   });
 
@@ -1810,9 +1850,9 @@ export function boot(options: BootOptions): void {
     loaded: () => sections.filter((one) => one.loaded).map((one) => one.file),
   };
   const page: Page = {
+    applyDials,
     base,
     by,
-    chrome,
     files,
     options,
     plans,
@@ -1822,6 +1862,7 @@ export function boot(options: BootOptions): void {
     sections,
     spec,
     state,
+    style,
     view,
     argsOf,
     atFloor,
@@ -1835,6 +1876,7 @@ export function boot(options: BootOptions): void {
     later,
     loadSection,
     mountInto,
+    ownArgsOf,
     playAll,
     post,
     probeAll,

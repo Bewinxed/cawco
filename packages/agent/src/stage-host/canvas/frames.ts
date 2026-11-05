@@ -158,12 +158,12 @@ const headOf = (head: HTMLElement, file: string, name: string): void => {
 };
 
 export function bootFrames(page: Page): Mode {
-  const { chrome, plans, root, spec, view } = page;
+  const { style, plans, root, spec, view } = page;
   const embed = page.by === "embed";
   const card = page.by === "map";
   const params = new URLSearchParams(location.search);
   const named = new Set(params.getAll("story"));
-  chrome.style(FRAMES_CSS);
+  style.style(FRAMES_CSS);
   document.documentElement.classList.add("cawco-frames-page");
   document.documentElement.classList.toggle("cawco-embed", embed);
   const canvas = document.getElementById("cawco-canvas") as HTMLElement;
@@ -473,7 +473,7 @@ export function bootFrames(page: Page): Mode {
     return {
       blur: tokens.getPropertyValue("--skeleton-reveal-blur").trim(),
       ease: tokens.getPropertyValue("--ease-crossfade").trim(),
-      ms: chrome.duration("--dur-skeleton-reveal", 400),
+      ms: style.duration("--dur-skeleton-reveal", 400),
     };
   }
 

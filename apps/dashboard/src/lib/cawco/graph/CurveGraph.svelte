@@ -10,17 +10,40 @@
   import { graphWords as words } from "@cawco/core/words/graph";
 
   let {
-    at,
+    at = [0, 0, 1, 1],
     onbend,
+    easing = null,
   }: {
     /** The curve's four numbers: x1, y1, x2, y2. */
-    at: number[];
-    onbend: (at: number[]) => void;
+    at?: number[];
+    /** Its points bent: absent, the curve is drawn read only. */
+    onbend?: (at: number[]) => void;
+    /** A `linear(…)` easing (a spring's) drawn read only, its points evenly apart, in the bezier's place. */
+    easing?: string | null;
   } = $props();
+  const FIGURES = /-?\d*\.?\d+/gu;
+  /** A `linear(…)` easing's points, evenly apart across the box. */
+  const linearPath = $derived.by(() => {
+    const said = easing?.trim() ?? "";
+    if (!said.startsWith("linear(")) {
+      return null;
+    }
+    const values = (said.slice("linear(".length, -1).match(FIGURES) ?? []).map(
+      Number
+    );
+    return values.length < 2
+      ? null
+      : values
+          .map(
+            (p, i) =>
+              `${i === 0 ? "M" : "L"}${(W * i) / (values.length - 1)} ${yOf(p)}`
+          )
+          .join(" ");
+  });
 
   const W = 160;
   const H = 90;
-  /** Progress from a little under 0 to a little over 1, so an overshoot stands inside the box. */
+  /** Progress from a little under 0 to a little over 1, so an overshoot stands inside the box (a spring's past it is drawn past the box's edge). */
   const LOW = -0.25;
   const HIGH = 1.25;
   const yOf = (p: number) => (H * (HIGH - p)) / (HIGH - LOW);
@@ -62,7 +85,7 @@
   };
   const letGo = () => {
     if (held && dragging !== null) {
-      onbend(held.at);
+      onbend?.(held.at);
     }
     dragging = null;
   };
@@ -83,7 +106,7 @@
         (shown[point * 2 + 1] ?? 0) + dy
       );
       held = { for: at, at: next };
-      onbend(next);
+      onbend?.(next);
     }
   };
   const points = $derived([
@@ -114,20 +137,30 @@
       stroke-dasharray="2 3"
       vector-effect="non-scaling-stroke"
     />
-    <path
-      class="stroke-ink-muted"
-      d="M0 {yOf(0)} L{W * x1} {yOf(y1)} M{W} {yOf(1)} L{W * x2} {yOf(y2)}"
-      vector-effect="non-scaling-stroke"
-    />
-    <path
-      d="M0 {yOf(0)} C{W * x1} {yOf(y1)} {W * x2} {yOf(y2)} {W} {yOf(1)}"
-      stroke="currentColor"
-      stroke-linecap="round"
-      stroke-width="1.5"
-      vector-effect="non-scaling-stroke"
-    />
+    {#if linearPath}
+      <path
+        d={linearPath}
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-width="1.5"
+        vector-effect="non-scaling-stroke"
+      />
+    {:else}
+      <path
+        class="stroke-ink-muted"
+        d="M0 {yOf(0)} L{W * x1} {yOf(y1)} M{W} {yOf(1)} L{W * x2} {yOf(y2)}"
+        vector-effect="non-scaling-stroke"
+      />
+      <path
+        d="M0 {yOf(0)} C{W * x1} {yOf(y1)} {W * x2} {yOf(y2)} {W} {yOf(1)}"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-width="1.5"
+        vector-effect="non-scaling-stroke"
+      />
+    {/if}
   </svg>
-  {#each points as point, index (index)}
+  {#each onbend && !linearPath ? points : [] as point, index (index)}
     {@const which = index === 0 ? 0 : 1}
     <span
       aria-label={words.curvePoint(index + 1)}

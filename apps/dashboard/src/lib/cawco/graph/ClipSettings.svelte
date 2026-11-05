@@ -18,6 +18,13 @@
    *   it is none of these (T9: "the project's easings first and still … a
    *   spring or any curve the agent wrote").
    *
+   * - **Values**: what the clip runs between, per property, its first
+   *   frame's value and its last's, each typed (DialKit's `from` and `to`).
+   * - **Repeats**: once, round again, or back and forth to the move's end
+   *   (DialKit's `loop`).
+   *
+   * Legs dragged on the bar (ClipBar) carry their restore glyph here too.
+   *
    * A value he changed carries the restore glyph after its chip, a press
    * that puts that one value back (motion `restore`), named for what it
    * goes back to (his pin 26: an edited value marked on itself, pressed to
@@ -28,6 +35,7 @@
   import { graphWords as words } from "@cawco/core/words/graph";
   import { ease } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
@@ -53,8 +61,10 @@
     ownLengths,
     redelay,
     relength,
+    rerepeat,
     reshape,
     restore,
+    revalue,
     type Spring,
     springEasing,
     springOf,
@@ -174,7 +184,9 @@
       return curveGlyph(springEasing(springOf(0.5, 0.45)).easing);
     }
     if (choice === "written") {
-      return clip.framed ? framesGlyph(clip.frames) : curveGlyph(clip.easing);
+      return clip.framed
+        ? framesGlyph(clip.frameCurve)
+        : curveGlyph(clip.easing);
     }
     if (choice === "own") {
       return curveGlyph(clip.easing);
@@ -224,7 +236,24 @@
     ...(edits.has("curve") && {
       curve: words.resetCurve(curveName(curveOf(was))),
     }),
+    ...(edits.has("values") && { values: words.resetValues }),
+    ...(edits.has("repeat") && {
+      repeat: words.resetRepeat(words.clipRepeats[was.repeat] ?? was.repeat),
+    }),
+    ...(edits.has("legs") && { legs: words.resetLegs }),
   });
+
+  // --- Values and repeats ----------------------------------------------------
+  const LEADING_DASHES = /^-+/u;
+  const JOINERS = /[-_]+/gu;
+  /** What the row's clips run between, per property: its first clip's. */
+  const values = $derived(first.values);
+  /** A property's name in words: its own where the words have one, else said plainly. */
+  const propertyName = (property: string) =>
+    words.properties[property] ??
+    property.replace(LEADING_DASHES, "").replace(JOINERS, " ");
+  const REPEATS = ["once", "repeat", "mirror"] as const;
+  let repeatList = $state<HTMLElement>();
 
   let lengthList = $state<HTMLElement>();
   let curveList = $state<HTMLElement>();
@@ -245,6 +274,8 @@
   const delayOpen = opener("start");
   const lengthOpen = opener("length");
   const curveOpen = opener("curve");
+  const valuesOpen = opener("values");
+  const repeatOpen = opener("repeat");
 </script>
 
 {#snippet glyph(path: string | null)}
@@ -465,10 +496,103 @@
                 onbend: (at) => onretime(reshape(track, cubic(at), null)),
               }
             : null}
+          springDrawn={first.spring ? first.easing : null}
           value={curve}
         />
       </Popover.Content>
     </Popover.Root>
     {@render restoreOf("curve")}
   </span>
+
+  {#if values.length > 0}
+    <!-- Values: what it runs between, each end typed. -->
+    <span class="inline-flex items-center gap-space-1">
+      <Popover.Root bind:open={valuesOpen.open}>
+        {@render chip(
+          words.values,
+          values.map((one) => `${one.from} → ${one.to}`).join(", "),
+          "values",
+          null
+        )}
+        <Popover.Content align="start" pad="inset" width="wide">
+          <div
+            class="grid min-w-0 grid-cols-(--cols) items-center gap-x-space-2 gap-y-space-2"
+            style:--cols="minmax(0, auto) minmax(0, 1fr) auto minmax(0, 1fr)"
+          >
+            {#each values as one (one.property)}
+              {@const said = propertyName(one.property)}
+              <span class="min-w-0 truncate type-label text-ink-row"
+                >{said}</span
+              >
+              <Input
+                aria-label={words.valueFrom(said)}
+                onchange={(event: Event) =>
+                  onretime(
+                    revalue(
+                      track,
+                      one.property,
+                      (event.currentTarget as HTMLInputElement).value,
+                      one.to
+                    )
+                  )}
+                value={one.from}
+              />
+              <span aria-hidden="true" class="type-meta text-ink-muted">→</span>
+              <Input
+                aria-label={words.valueTo(said)}
+                onchange={(event: Event) =>
+                  onretime(
+                    revalue(
+                      track,
+                      one.property,
+                      one.from,
+                      (event.currentTarget as HTMLInputElement).value
+                    )
+                  )}
+                value={one.to}
+              />
+            {/each}
+          </div>
+        </Popover.Content>
+      </Popover.Root>
+      {@render restoreOf("values")}
+    </span>
+  {/if}
+
+  <!-- Repeats: once, round again, or back and forth. -->
+  <span class="inline-flex items-center gap-space-1">
+    <Popover.Root bind:open={repeatOpen.open}>
+      {@render chip(
+        words.clipRepeat,
+        words.clipRepeats[first.repeat] ?? first.repeat,
+        "repeat",
+        null
+      )}
+      <Popover.Content
+        align="start"
+        gap="none"
+        onOpenAutoFocus={toChosen(() => repeatList)}
+        width="narrow"
+      >
+        <ChoiceList
+          bind:ref={repeatList}
+          label={words.clipRepeat}
+          onpick={(next) => {
+            const repeat = REPEATS.find((one) => one === next);
+            if (repeat) {
+              onretime(rerepeat(track, repeat));
+            }
+            open = null;
+          }}
+          options={REPEATS.map((one) => ({
+            value: one,
+            name: words.clipRepeats[one] ?? one,
+          }))}
+          value={first.repeat}
+        />
+      </Popover.Content>
+    </Popover.Root>
+    {@render restoreOf("repeat")}
+  </span>
+  {@render restoreOf("legs")}
 </section>

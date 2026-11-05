@@ -59,6 +59,8 @@ export {
 } from "~icons/solar/bolt-bold-duotone";
 export { default as IconBook2 } from "~icons/solar/book-2-bold-duotone";
 export { default as IconBook } from "~icons/solar/book-bold-duotone";
+/** Keep: the values or the timing he set kept as a version of their own (the design graph's versions). */
+export { default as IconKeep } from "~icons/solar/bookmark-bold-duotone";
 export { default as IconBox } from "~icons/solar/box-bold-duotone";
 /** A release's Fixed section (ReleaseNotes). */
 export { default as IconBug } from "~icons/solar/bug-bold-duotone";
@@ -191,6 +193,8 @@ export { default as IconMaximize } from "~icons/solar/maximize-bold-duotone";
 export { default as IconMore } from "~icons/solar/menu-dots-bold-duotone";
 export { default as IconMic } from "~icons/solar/microphone-bold-duotone";
 export { default as IconZoomIn } from "~icons/solar/minimalistic-magnifer-zoom-in-bold-duotone";
+/** Fit: a zoomed timeline put back to its whole move (the design graph's Animation face). */
+export { default as IconZoomOut } from "~icons/solar/minimalistic-magnifer-zoom-out-bold-duotone";
 export { default as IconMinimize } from "~icons/solar/minimize-bold-duotone";
 /**
  * Minus, Solar's bare linear cut: a checkbox's mixed state, zoom out, and the
@@ -285,6 +289,8 @@ export {
   default as IconUndock,
 } from "~icons/solar/sidebar-minimalistic-bold-duotone";
 export { default as IconSidebar } from "~icons/solar/sidebar-minimalistic-line-duotone";
+/** Replay: a move played again from its start, wherever its playhead stands (the design graph's Animation face). */
+export { default as IconReplay } from "~icons/solar/skip-previous-bold-duotone";
 export { default as IconToolGeneric } from "~icons/solar/sledgehammer-bold-duotone";
 export { default as IconPhone } from "~icons/solar/smartphone-bold-duotone";
 /*

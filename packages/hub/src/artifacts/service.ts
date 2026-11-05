@@ -3891,8 +3891,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * panel's head stands none for it (the owner's pick, "Only the page's own
    * Send").
    */
-  const stampMeta = (row: ArtifactRow, hash: string | null) => {
+  const stampMeta = (row: ArtifactRow, given: string | null) => {
     const ownSend = row.kind === "page" && choicesAsked(row).length > 0;
+    const hash = given ?? componentHash(row);
     docs.transact(row.id, "hub", (doc) => {
       const meta = doc.getMap("meta");
       meta.set("ownSend", ownSend);
@@ -3908,6 +3909,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
     });
   };
+
+  /**
+   * A component artifact's page hash: its canvas address's (core
+   * `canvasPath`: its states files and its spec, dials and all), so the
+   * person's values the panel writes into its doc (his dials, his tuned
+   * timing) carry the page they were made on, as a decision page's picks
+   * carry its program's, and a value made before the agent changed its
+   * dials or files reads as an earlier revision's. None for any other kind.
+   */
+  const componentHash = (row: ArtifactRow): string | null =>
+    row.kind === "component" && "port" in row.source && row.source.path
+      ? pageHash(row.source.path)
+      : null;
 
   /** A new ask in the doc, as a revision is: every open view's head morphs to it, and a Send before it is answered. */
   const askNow = (id: string, ask: string) => {

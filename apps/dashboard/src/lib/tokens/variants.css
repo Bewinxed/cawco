@@ -482,6 +482,7 @@
 @custom-variant slot-lead-switch (&[data-slot="lead-switch"]);
 @custom-variant slot-leaf (&[data-slot="leaf"]);
 @custom-variant slot-ledger (&[data-slot="ledger"]);
+@custom-variant slot-leg-end (&[data-slot="leg-end"]);
 @custom-variant slot-letters (&[data-slot="letters"]);
 @custom-variant slot-lift (&[data-slot="lift"]);
 @custom-variant slot-list (&[data-slot="list"]);
@@ -558,6 +559,8 @@
 @custom-variant slot-row (&[data-slot="row"]);
 @custom-variant slot-row-ask (&[data-slot="row-ask"]);
 @custom-variant slot-row-fault (&[data-slot="row-fault"]);
+@custom-variant slot-ruler-lane (&[data-slot="ruler-lane"]);
+@custom-variant slot-run-bar (&[data-slot="run-bar"]);
 @custom-variant slot-run-entry (&[data-slot="run-entry"]);
 @custom-variant slot-run-filter (&[data-slot="run-filter"]);
 @custom-variant slot-runs-ledger (&[data-slot="runs-ledger"]);

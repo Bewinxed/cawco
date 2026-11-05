@@ -9,8 +9,10 @@
    * Over the list, the chosen curve drawn (`bend`), its two control points
    * dragged or moved with the arrow keys, as Jitter's easing popover draws
    * its preset (his pick, animation-face-questions#curve-draw: "The list
-   * with a curve to drag"); a spring and a curve kept in a transition's
-   * frames have none.
+   * with a curve to drag"); a curve kept in a transition's frames has
+   * none. A spring is drawn there instead, read only (`springDrawn`): its
+   * response from rest to rest, overshoot and all (DialKit's spring
+   * visualisation).
    */
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import { graphWords as words } from "@cawco/core/words/graph";
@@ -24,6 +26,7 @@
     onpick,
     spring,
     bend = null,
+    springDrawn = null,
     ref = $bindable(),
   }: {
     options: { value: string; name: string; glyph: string | null }[];
@@ -37,6 +40,8 @@
     } | null;
     /** The chosen curve's four numbers to drag, when he may draw his own. */
     bend?: { at: number[]; onbend: (at: number[]) => void } | null;
+    /** The spring's own easing (`linear(…)`), drawn read only while Spring is picked. */
+    springDrawn?: string | null;
     ref?: HTMLElement;
   } = $props();
 
@@ -54,6 +59,10 @@
 {#if bend}
   <div class="px-space-3 pt-space-2 pb-space-3">
     <CurveGraph at={bend.at} onbend={bend.onbend} />
+  </div>
+{:else if springDrawn}
+  <div class="px-space-3 pt-space-2 pb-space-3">
+    <CurveGraph easing={springDrawn} />
   </div>
 {/if}
 <ChoiceList bind:ref label={words.curve} {onpick} {options} {value} />

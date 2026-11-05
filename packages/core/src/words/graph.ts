@@ -109,6 +109,17 @@ export const graphWords = {
   pause: "Pause",
   /** Play goes round again from its start each time the move ends. */
   repeat: "Repeat",
+  /** Plays the move again from its start, wherever the playhead stands. */
+  replay: "Play from the start",
+  /** The mark on the ruler a repeat goes round again from, while Repeat is on. */
+  repeatFrom: (at: Figure) => `Repeat from ${at}\u00a0ms`,
+  /** The zoomed lanes put back to the whole move. */
+  fit: "Show the whole move",
+  /** The strip under the ruler while the lanes are zoomed: the part of the move they show, dragged to move along it. */
+  overview: "Part of the move shown",
+  /** A press on the lanes' empty part scrubs, as the ruler does; with Shift, a press on a bar does too. */
+  laneScrub:
+    "Press anywhere on the lanes to move the playhead; Shift and press on a bar to move it over the bar.",
   /** The playhead's time over the move's length, tabular figures; a narrow corner breaks it after the slash, never between a figure and its unit. */
   playhead: (at: Figure, of: Figure) => `${at}\u00a0/ ${of}\u00a0ms`,
   scrub: "Time",
@@ -177,10 +188,30 @@ export const graphWords = {
 
   /** A row of the move, one per thing that moves, named as a person says it: "Form failure unfolds". */
   clipName: (element: string, how: string) => `${element} ${how}`,
-  /** A clip's three settings, each a chip under its selected row. */
+  /** A clip's settings, each a chip under its selected row. */
   length: "Length",
   delay: "Delay",
   curve: "Curve",
+  /** What a clip runs between, per property: its first frame's value and its last's. */
+  values: "Values",
+  valueFrom: (property: string) => `${property} at the start`,
+  valueTo: (property: string) => `${property} at the end`,
+  resetValues: "Reset values to as written",
+  /** How a clip runs on past its first time through (DialKit's loop). */
+  clipRepeat: "Repeats",
+  clipRepeats: {
+    once: "Once",
+    repeat: "Repeat",
+    mirror: "Back and forth",
+  } as Record<string, string>,
+  resetRepeat: (to: string) => `Reset repeats to ${to}`,
+  /** A clip of several legs (A to B to C): where one ends and the next begins, for a reader. */
+  legEnds: (clip: string, at: number, of: number) =>
+    `${clip}, end of leg ${at} of ${of}`,
+  resetLegs: "Reset its legs as written",
+  /** The agent's group of rows (`data-cawco-group`), folded or shown. */
+  groupFold: (group: string, open: boolean) =>
+    open ? `Hide ${group}` : `Show ${group}`,
   /** A length typed by hand, off the design system's durations: his, as the curve he bends is "Your curve". */
   ownLength: "Your length",
   /** The delay's steppers. */
@@ -206,6 +237,11 @@ export const graphWords = {
   yours: "Yours",
   /** How many animations his version changes, beside Yours. */
   changedCount: (n: Figure) => `${n} changed`,
+  /** Yours kept as a version of its own, named by its place after As written. */
+  keep: "Keep as a version",
+  versionN: (n: Figure) => `Version ${n}`,
+  /** Past three kept versions, the rest in a menu. */
+  moreVersions: "More versions",
 
   /** A row with several animations, opened into one row each. */
   showClips: "Show its animations",

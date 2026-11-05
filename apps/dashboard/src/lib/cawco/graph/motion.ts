@@ -1,11 +1,19 @@
 /**
  * A move's clips (spec, The move): every animation the engine ran on the
  * stage while a story's `play` moved the live component, as the Animation
- * face draws and tunes them. Each clip is named in words: what moves, how,
- * how long with its token, on which curve. A clip whose length or curve no
- * token names is ad hoc.
+ * face draws and tunes them. The page reads each one where it runs (core
+ * stage-graph.ts `ClipRead`: its element and frames stay on the page) and
+ * the panel names it in words: what moves, how, how long with its token,
+ * on which curve. A clip whose length or curve no token names is ad hoc.
  */
-import { type ClipKind, clipKindOf } from "@cawco/core/stage-graph";
+import {
+  type ClipKind,
+  type ClipRead,
+  type ClipRepeat,
+  type ClipValue,
+  clipKindOf,
+  type Tuning as StageTuning,
+} from "@cawco/core/stage-graph";
 import { graphWords as words } from "@cawco/core/words/graph";
 import { dur, ease } from "#lib/cawco/motion/curves.svelte.js";
 
@@ -38,24 +46,34 @@ export interface Clip {
   easing: string;
   /** What moves, in words: the thing a person names (`thing`), as it stands once the move has ended. */
   element: string;
+  /** A curve kept in its frames, as its progress (offset, share), when it moves one plain number. */
+  frameCurve: readonly (readonly [number, number])[] | null;
   /** Whether its curve is drawn into its frames. */
   framed: boolean;
-  /** Its frames, as the engine ran them: what a replay draws. */
-  frames: Keyframe[];
+  /** The agent's name for the group its thing stands in (`data-cawco-group`); null in none. */
+  group: string | null;
   /** How it moves, in words. */
   how: string;
   id: string;
+  /** How many times the engine ran it once through; 0 for a loop. */
+  iterations: number;
+  /** Where its legs meet, as offsets between its first frame and its last; none for a clip of one leg. */
+  legs: number[];
   property: string;
+  /** How it runs on past its first time: his pick, once until he picks. */
+  repeat: ClipRepeat;
   /** The spring it runs on, when the person drew one. */
   spring: Spring | null;
   /** Since the move began, ms. */
   start: number;
-  /** The element it moves, as the engine ran it. */
-  target: Element | null;
-  /** What a person names for it: the control it is part of, else the element itself. One row of the move each. */
-  thing: Element | null;
+  /** The page's id for the element it animates: two clips of one element share it. */
+  target: string;
+  /** The page's id for what a person names for it (the control it is part of, else the element itself): one row of the move each. */
+  thing: string | null;
   /** Its length's token, when one names it. */
   token: string | null;
+  /** What it animates between, per property: its first frame's value and its last's, as he typed them. */
+  values: ClipValue[];
   /** The clip as the engine ran it, when the person tuned it. */
   was: Clip | null;
 }
@@ -145,57 +163,74 @@ const curveWords = (easing: string): string => {
   return token ? (words.curves[token] ?? token) : words.agentsCurve;
 };
 
-const MOTION_KEYS = new Set([
-  "offset",
-  "computedOffset",
-  "easing",
-  "composite",
-]);
+/** A clip as the panel names it, from the page's read: its words, its tokens, untuned. */
+export function clipOf(read: ClipRead): Clip {
+  const properties = read.property.split(",").map((one) => one.trim());
+  /** The property that says most of how it moves, in the words' order. */
+  const first =
+    Object.keys(words.how).find((one) => properties.includes(one)) ??
+    properties[0] ??
+    "";
+  const token = tokenOf(read.duration);
+  return {
+    ...read,
+    frameCurve: read.frameCurve,
+    how: words.how[first] ?? words.changes,
+    // A curve drawn into its frames has no name of its own: its row says its length alone.
+    curve: read.framed ? "" : curveWords(read.easing),
+    token,
+    adHoc:
+      token === null || (!read.framed && curveTokenOf(read.easing) === null),
+    repeat: "once",
+    spring: null,
+    was: null,
+  };
+}
 
 /** The move's length: its last clip's end. */
 export const lengthOf = (clips: readonly Clip[]): number =>
   Math.max(0, ...clips.map((clip) => clip.start + clip.delay + clip.duration));
 
-/** The clip run with the person's tuning; the clip as the engine ran it kept as `was`. */
-function tune(clip: Clip, tuning: Tuning): Clip {
+/** Whether `clip` stands as `was` in every value he may change. */
+const untouched = (clip: Clip, was: Clip): boolean =>
+  clip.delay === was.delay &&
+  clip.duration === was.duration &&
+  clip.easing === was.easing &&
+  clip.framed === was.framed &&
+  clip.spring === was.spring &&
+  clip.repeat === was.repeat &&
+  JSON.stringify(clip.values) === JSON.stringify(was.values) &&
+  JSON.stringify(clip.legs) === JSON.stringify(was.legs);
+
+/** `clip` with `next` set: the engine's own again where nothing differs from it, else tuned with the clip as the engine ran it kept as `was`. */
+function changed(clip: Clip, next: Partial<Clip>): Clip {
   const was = clip.was ?? clip;
-  // Brought back to the timing the engine ran: no change, and nothing to send.
-  if (
-    tuning.delay === was.delay &&
-    tuning.duration === was.duration &&
-    tuning.easing === was.easing &&
-    !tuning.shaped
-  ) {
+  const made = { ...clip, ...next };
+  if (untouched(made, was)) {
     return was;
   }
-  const token = tokenOf(tuning.duration);
-  // A curve chosen for a clip whose curve lived in its frames: it runs from its first frame to its last on that curve.
-  const unframe = clip.framed && tuning.shaped;
-  const frames = unframe ? endsOf(clip.frames) : clip.frames;
-  const framed = clip.framed && !unframe;
-  const easing = framed ? clip.easing : tuning.easing;
+  const token = tokenOf(made.duration);
   return {
-    ...clip,
-    delay: tuning.delay,
-    duration: tuning.duration,
-    easing,
-    frames,
-    framed,
-    spring: framed ? null : tuning.spring,
-    curve: framed ? "" : curveWords(easing),
+    ...made,
+    curve: made.framed ? "" : curveWords(made.easing),
     token,
-    adHoc: token === null || (!framed && curveTokenOf(easing) === null),
+    adHoc:
+      token === null || (!made.framed && curveTokenOf(made.easing) === null),
     was,
   };
 }
 
-/** A run of frames as its first and its last, their timing keys dropped. */
-function endsOf(frames: readonly Keyframe[]): Keyframe[] {
-  const bare = (frame: Keyframe | undefined): Keyframe =>
-    Object.fromEntries(
-      Object.entries(frame ?? {}).filter(([key]) => !MOTION_KEYS.has(key))
-    );
-  return [bare(frames[0]), bare(frames.at(-1))];
+/** The clip run with the person's tuning; the clip as the engine ran it kept as `was`. */
+function tune(clip: Clip, tuning: Tuning): Clip {
+  // A curve chosen for a clip whose curve lived in its frames: it runs from its first frame to its last on that curve.
+  const framed = clip.framed && !tuning.shaped;
+  return changed(clip, {
+    delay: tuning.delay,
+    duration: tuning.duration,
+    easing: framed ? clip.easing : tuning.easing,
+    framed,
+    spring: framed ? null : tuning.spring,
+  });
 }
 
 /** The clip put back as the engine ran it. */
@@ -213,6 +248,8 @@ export interface Track {
   clips: Clip[];
   /** Its last clip's end, ms. */
   ends: number;
+  /** The agent's group it stands in, by its first clip; null in none. */
+  group: string | null;
   how: string;
   /** Its first clip's id. */
   id: string;
@@ -227,7 +264,8 @@ export interface Track {
   setOff: number;
   /** It runs on a spring: its true end is where it settles. */
   sprung: boolean;
-  thing: Element | null;
+  /** The page's id for what it names on the stage, which a rested row rings. */
+  thing: string | null;
 }
 
 const beginOf = (clip: Clip) => clip.start + clip.delay;
@@ -337,6 +375,7 @@ export function tracksOf(
         id: first.id,
         clips: sorted,
         thing: first.thing,
+        group: first.group,
         name: first.element,
         how: howOf(sorted),
         kind: kindOf(sorted),
@@ -659,27 +698,35 @@ export function springSettling(ms: number, bounce: number, mass = 1): Spring {
   return { ...springOf(ms / Math.max(1, settles), bounce), mass };
 }
 
-/** A value of a row's timing he may change, and put back alone: when it begins, how long it runs, its curve. */
-export type Timing = "start" | "length" | "curve";
+/** A value of a row's timing he may change, and put back alone: when it begins, how long it runs, its curve, what it runs between, where its legs meet, how it repeats. */
+export type Timing =
+  "start" | "length" | "curve" | "values" | "legs" | "repeat";
 
 /** Whether two clips run on one curve: one easing, both drawn in their frames or neither, one spring. */
 const sameCurve = (a: Clip, b: Clip): boolean =>
   a.easing === b.easing && a.framed === b.framed && a.spring === b.spring;
+
+const same = (a: unknown, b: unknown) =>
+  JSON.stringify(a) === JSON.stringify(b);
+
+/** Whether `clip` differs from `was` in each value he may change. */
+const DIFFERS: Record<Timing, (clip: Clip, was: Clip) => boolean> = {
+  start: (clip, was) => clip.delay !== was.delay,
+  length: (clip, was) => clip.duration !== was.duration,
+  curve: (clip, was) => !sameCurve(clip, was),
+  values: (clip, was) => !same(clip.values, was.values),
+  legs: (clip, was) => !same(clip.legs, was.legs),
+  repeat: (clip, was) => clip.repeat !== was.repeat,
+};
 
 /** The values of the row he changed, read off each clip against the clip as the engine ran it. */
 export function editsOf(track: Track): Set<Timing> {
   const edits = new Set<Timing>();
   for (const clip of track.clips) {
     const { was } = clip;
-    if (was) {
-      if (clip.delay !== was.delay) {
-        edits.add("start");
-      }
-      if (clip.duration !== was.duration) {
-        edits.add("length");
-      }
-      if (!sameCurve(clip, was)) {
-        edits.add("curve");
+    for (const [value, differs] of Object.entries(DIFFERS)) {
+      if (was && differs(clip, was)) {
+        edits.add(value as Timing);
       }
     }
   }
@@ -703,26 +750,212 @@ export function restore(track: Track, value: Timing): Clip[] {
       value === "curve" ||
       (sprung && value === "length") ||
       sameCurve(clip, was);
-    const delay = value === "start" ? was.delay : clip.delay;
-    const duration =
-      value === "length" || (sprung && value === "curve")
-        ? was.duration
-        : clip.duration;
-    if (curveBack && delay === was.delay && duration === was.duration) {
-      return was;
-    }
     // The curve put back is the engine's: its easing, its frames, no spring.
-    const base = curveBack ? was : clip;
-    const token = tokenOf(duration);
-    return {
-      ...base,
-      delay,
-      duration,
-      token,
-      adHoc:
-        token === null || (!base.framed && curveTokenOf(base.easing) === null),
-      was,
-    };
+    const curve = curveBack
+      ? { easing: was.easing, framed: was.framed, spring: was.spring }
+      : {};
+    return changed(clip, {
+      ...curve,
+      delay: value === "start" ? was.delay : clip.delay,
+      duration:
+        value === "length" || (sprung && value === "curve")
+          ? was.duration
+          : clip.duration,
+      ...(value === "values" && { values: was.values }),
+      ...(value === "legs" && { legs: was.legs }),
+      ...(value === "repeat" && { repeat: was.repeat }),
+    });
+  });
+}
+
+/** Every clip of the track that animates `property` run between `from` and `to`: its first frame's value and its last's, as he typed them. */
+export const revalue = (
+  track: Track,
+  property: string,
+  from: string,
+  to: string
+): Clip[] =>
+  track.clips.map((clip) =>
+    clip.values.some((one) => one.property === property)
+      ? changed(clip, {
+          values: clip.values.map((one) =>
+            one.property === property ? { property, from, to } : one
+          ),
+        })
+      : clip
+  );
+
+/** Every clip of the track run on past its first time as `repeat` says. */
+export const rerepeat = (track: Track, repeat: ClipRepeat): Clip[] =>
+  track.clips.map((clip) => changed(clip, { repeat }));
+
+/** One clip with its legs meeting at `legs`, offsets between its first frame and its last. */
+export const releg = (clip: Clip, legs: number[]): Clip =>
+  changed(clip, { legs });
+
+/** The clips he tuned, as the stage page plays them (core stage-graph `Tuning`): each by its id. */
+export const tuningsOf = (clips: readonly Clip[]): StageTuning[] =>
+  clips.flatMap((clip) => {
+    const { was } = clip;
+    if (!was) {
+      return [];
+    }
+    return [
+      {
+        id: clip.id,
+        delay: clip.delay,
+        duration: clip.duration,
+        easing: clip.easing,
+        shaped: was.framed && !clip.framed,
+        repeat: clip.repeat,
+        legs: same(clip.legs, was.legs) ? null : clip.legs,
+        values: clip.values.filter(
+          (one) =>
+            !was.values.some(
+              (ran) =>
+                ran.property === one.property &&
+                ran.from === one.from &&
+                ran.to === one.to
+            )
+        ),
+      },
+    ];
+  });
+
+/**
+ * One timing as the component canvas's `tuned` record says it (the
+ * artifact's doc, which `artifact_read` answers): the agent writes it into
+ * the CSS or the motion call. `repeat`, `legs` and `values` stand only
+ * where he changed them.
+ */
+export interface TunedRecord {
+  animation: string;
+  delay: number;
+  duration: number;
+  easing: string;
+  /** Where its legs meet, as offsets between its first frame and its last. */
+  legs?: number[];
+  move: string;
+  /** Its length or its curve is none of the design system's tokens: the agent's note, never shown on the face. */
+  offTokens: boolean;
+  repeat?: ClipRepeat;
+  /** What each property runs between, as he typed it. */
+  values?: ClipValue[];
+}
+
+/** The clips the person tuned, as the canvas's `tuned` record: the move, the animation by its element and property, its begin from the move's start, its length and its curve. */
+export const tunedRecord = (move: string, clips: readonly Clip[]) =>
+  clips.flatMap((clip): TunedRecord[] => {
+    const { was } = clip;
+    if (!was) {
+      return [];
+    }
+    return [
+      {
+        move,
+        animation: `${clip.element} ${clip.property}`,
+        delay: Math.round(clip.start + clip.delay),
+        duration: Math.round(clip.duration),
+        easing: clip.easing,
+        offTokens: clip.adHoc,
+        ...(clip.repeat === was.repeat ? {} : { repeat: clip.repeat }),
+        ...(same(clip.legs, was.legs) ? {} : { legs: clip.legs }),
+        ...(same(clip.values, was.values) ? {} : { values: clip.values }),
+      },
+    ];
+  });
+
+/** Each clip's identity across reads of one move: what moves, what it animates, and which of those it is. */
+const identities = (clips: readonly Clip[]): Map<Clip, string> => {
+  const seen = new Map<string, number>();
+  const named = new Map<Clip, string>();
+  for (const clip of clips) {
+    const base = `${clip.element}\u0000${clip.property}`;
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    named.set(clip, `${base}\u0000${n}`);
+  }
+  return named;
+};
+
+/** The tuned clips of a move by their identity, to put back on its next read. */
+export const tuningOf = (clips: readonly Clip[]): Map<string, Clip> => {
+  const named = identities(clips);
+  return new Map(
+    clips.flatMap((clip) =>
+      clip.was ? [[named.get(clip) as string, clip] as const] : []
+    )
+  );
+};
+
+/**
+ * A fresh read of a move with what he tuned on an earlier read put back:
+ * each tuned animation's values over the clip as the engine ran it this
+ * time. Choosing another move and back kept nothing.
+ */
+export function withTuning(
+  clips: readonly Clip[],
+  tuning: ReadonlyMap<string, Clip>
+): Clip[] {
+  if (tuning.size === 0) {
+    return [...clips];
+  }
+  const named = identities(clips);
+  return clips.map((clip) => {
+    const tuned = tuning.get(named.get(clip) as string);
+    return tuned
+      ? changed(clip, {
+          delay: tuned.delay,
+          duration: tuned.duration,
+          easing: tuned.easing,
+          framed: tuned.framed,
+          spring: tuned.spring,
+          repeat: tuned.repeat,
+          legs: tuned.legs.length === clip.legs.length ? tuned.legs : clip.legs,
+          values: tuned.values,
+        })
+      : clip;
+  });
+}
+
+/**
+ * A move's clips with what the artifact keeps of his tuning (its doc's
+ * `tuned`, read back on open) put back: each record of this move on the
+ * clip of its animation, in order where one thing animates a property more
+ * than once. DialKit's `persist`.
+ */
+export function withTuned(
+  move: string,
+  clips: readonly Clip[],
+  records: readonly TunedRecord[]
+): Clip[] {
+  const left = records.filter((one) => one.move === move);
+  if (left.length === 0) {
+    return [...clips];
+  }
+  return clips.map((clip) => {
+    const at = left.findIndex(
+      (one) => one.animation === `${clip.element} ${clip.property}`
+    );
+    const record = left[at];
+    if (!record) {
+      return clip;
+    }
+    left.splice(at, 1);
+    return changed(clip, {
+      delay: Math.max(0, record.delay - clip.start),
+      duration: Math.max(1, record.duration),
+      easing:
+        clip.framed && record.easing === clip.easing
+          ? clip.easing
+          : record.easing,
+      framed: clip.framed && record.easing === clip.easing,
+      ...(record.repeat ? { repeat: record.repeat } : {}),
+      ...(record.legs && record.legs.length === clip.legs.length
+        ? { legs: record.legs }
+        : {}),
+      ...(record.values ? { values: record.values } : {}),
+    });
   });
 }
 
@@ -758,55 +991,22 @@ export function curveGlyph(easing: string): string | null {
   return `M2 22 C${x(x1)} ${y(y1)} ${x(x2)} ${y(y2)} 22 2`;
 }
 
-/** A frame's value that is one plain number, with or without its unit. */
-const PLAIN_FIGURE = /^(-?\d*\.?\d+)[a-z%]*$/u;
-
 /**
  * A curve kept in a clip's frames (a Svelte transition's), drawn as its
- * progress: the first property whose frames are all one plain number,
- * each frame's value as the share of the way from the first to the last,
- * at its offset. Null when no property moves as one number (the Curve chip
- * then names the agent's curve with no picture).
+ * progress from the points the page read (`frameCurve`): each frame's
+ * offset and its share of the way. Null when no property moves as one
+ * number (the Curve chip then names the agent's curve with no picture).
  */
-export function framesGlyph(frames: readonly Keyframe[]): string | null {
-  const [first] = frames;
-  const last = frames.at(-1);
-  if (!(first && last) || frames.length < 2) {
+export function framesGlyph(
+  curve: readonly (readonly [number, number])[] | null
+): string | null {
+  if (!curve || curve.length < 2) {
     return null;
   }
-  const figureIn = (frame: Keyframe, name: string): number | null => {
-    const raw = frame[name];
-    const said = typeof raw === "number" ? String(raw) : raw;
-    const plain =
-      typeof said === "string" ? said.trim().match(PLAIN_FIGURE) : null;
-    return plain ? Number(plain[1]) : null;
-  };
-  const key = Object.keys(first).find((one) => {
-    if (MOTION_KEYS.has(one)) {
-      return false;
-    }
-    const from = figureIn(first, one);
-    const to = figureIn(last, one);
-    return (
-      from !== null &&
-      to !== null &&
-      from !== to &&
-      frames.every((frame) => figureIn(frame, one) !== null)
-    );
-  });
-  if (!key) {
-    return null;
-  }
-  const from = figureIn(first, key) as number;
-  const to = figureIn(last, key) as number;
-  return frames
-    .map((frame, at) => {
-      const offset =
-        typeof frame.computedOffset === "number"
-          ? frame.computedOffset
-          : at / (frames.length - 1);
-      const share = ((figureIn(frame, key) as number) - from) / (to - from);
-      return `${at === 0 ? "M" : "L"}${(2 + 20 * offset).toFixed(1)} ${(22 - 20 * share).toFixed(1)}`;
-    })
+  return curve
+    .map(
+      ([offset, share], at) =>
+        `${at === 0 ? "M" : "L"}${(2 + 20 * offset).toFixed(1)} ${(22 - 20 * share).toFixed(1)}`
+    )
     .join(" ");
 }

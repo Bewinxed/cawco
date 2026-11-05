@@ -8,9 +8,11 @@
    * The component lives in the project's toolchain, on the stage's origin,
    * in the one frame the stage's panel holds (StagePane); the graph says
    * what to stand at by messages (StageLink, core stage-graph.ts) and the
-   * page answers. Beside the stage one room of two faces on one switch:
-   * the states list with its steps, and the map of the whole set
-   * (WholeSet), where a press on a card keeps its state. Compare, a switch
+   * page answers. Beside the stage one room of faces on one switch: the
+   * states list with its steps, the map of the whole set (WholeSet), where a
+   * press on a card keeps its state, the Animation face (MoveFace), the move
+   * into the kept state played, scrubbed and tuned on the page's own
+   * replays, and the agent's dials once it has any. Compare, a switch
    * that stays on, compares the kept state with the one before it
    * (`previousOf`), and a press on another state compares with that one
    * instead: the page draws it hidden under the kept one, reads what
@@ -76,6 +78,7 @@
     IconMonitor,
     IconMoon,
     IconPhone,
+    IconPlay,
     IconRoom,
     IconStructure,
     IconSun,
@@ -93,7 +96,20 @@
   import { figureOf, pageLang } from "./figures";
   import Journey from "./Journey.svelte";
   import { keepUnder, keptUnder } from "./kept";
+  import MoveFace, { type MoveState } from "./MoveFace.svelte";
   import { pathOf, previousOf, type Review, reviewOf } from "./model";
+  import {
+    type Clip,
+    clipOf,
+    lengthOf,
+    type TunedRecord,
+    tunedRecord,
+    tuningOf,
+    tuningsOf,
+    untune,
+    withTuned,
+    withTuning,
+  } from "./motion";
   import StagePane from "./StagePane.svelte";
   import Stepper from "./Stepper.svelte";
   import type { StageLink } from "./stage-link.svelte";
@@ -118,6 +134,8 @@
     dialsSent = null,
     changedMark = "ink",
     ondials,
+    keptTuned = [],
+    ontuned,
   }: {
     /** The line to the stage page: what it said, and what the graph asks of it. */
     link: StageLink;
@@ -164,7 +182,7 @@
     /** How a number dial is drawn (the owner's pick, tsk-193 and tsk-198). */
     numberForm?: "pill" | "field" | "slider";
     /** The room's face the graph opens on (the ask's `face`); the states when it names none or one the room lacks. */
-    startFace?: "map" | "dials";
+    startFace?: "map" | "move" | "dials";
     /** His dial values as the artifact keeps them (its doc's `dials`), by name: they stand again on open. */
     keptDials?: DialValues;
     /** His dial values went to the agent since he last turned one (the doc's `sentAt`, `sentBy`); null while they haven't. */
@@ -173,6 +191,10 @@
     changedMark?: "ink" | "glyph";
     /** His dial values changed: the artifact keeps them (its doc's `dials`, which `artifact_read` answers). */
     ondials?: (values: DialValues) => void;
+    /** His tuning of every move as the artifact keeps it (its doc's `tuned`): put back on each move's first read. */
+    keptTuned?: readonly TunedRecord[];
+    /** His tuning changed: the artifact keeps it (its doc's `tuned`, which `artifact_read` answers), every move's at once. */
+    ontuned?: (records: TunedRecord[]) => void;
   } = $props();
 
   /** The page's own ids, for a label's `for`. */
@@ -249,11 +271,6 @@
     return best;
   };
   /**
-   * The room's faces, in its switch's order: the States face and the Map
-   * until the Animation face stands on the page. The room is named by the
-   * faces it has.
-   */
-  /**
    * The agent's dials (its canvas spec's `dials`), once the page has read
    * each one's value as written off the drawing: none stands before.
    */
@@ -267,11 +284,13 @@
   const FACES = $derived([
     { value: "states", label: words.statesFace, icon: IconListRows },
     { value: "map", label: words.wholeSet, icon: IconStructure },
+    { value: "move", label: words.moveFace, icon: IconPlay },
     ...(dials.length > 0 && dialsAt === "face"
       ? [{ value: "dials", label: words.dialsFace, icon: IconDial }]
       : []),
   ] as const);
-  type Face = "states" | "map" | "dials";
+  type Face = "states" | "map" | "move" | "dials";
+  /** The room is named by the faces it has, in its switch's order. */
   const roomName = $derived(words.room(FACES.map((one) => one.label)));
   /** The face the room shows: the states until he picks another. */
   let face = $state<Face>(untrack(() => startFace) ?? "states");
@@ -281,10 +300,12 @@
   let dialsUndo = $state<DialValues | null>(null);
   /** The dials as set on the drawing: his over as written, or as written alone. */
   const dialsSet = $derived(dialVersion === "written" ? {} : dialValues);
-  // The drawing takes every turn: the whole set, each time it changes.
+  // The drawing takes every turn: the whole set, each time it changes, and
+  // again on a new page, which holds none of them.
   $effect(() => {
     const set = $state.snapshot(dialsSet);
-    if (dials.length > 0) {
+    const { loads } = link;
+    if (dials.length > 0 && loads > 0) {
       untrack(() => link.turn(set));
     }
   });
@@ -511,9 +532,15 @@
    * waits for its rest.
    */
   let arriving = $state(true);
-  /** The ask the stage answers next, and the state it stands at (by this page load). */
+  /** The ask the stage answers next, and the state it stands at (by this page load), by its ref and its state's id. */
   let asking = 0;
   let stood: StateRef | null = null;
+  let stoodAt: string | null = null;
+  /** A move chosen by name (the Animation face's title, an arrow on the map): its from state, stood at first; null while none waits. */
+  let chosenFrom: { id: string; ref: StateRef } | null = null;
+  /** Bumped to reach the kept state again: Try again after a play threw, a move chosen into the state kept. */
+  let reachAgain = $state(0);
+  let againSeen = 0;
   /** The page load the stage stands at a state on: a new page holds no drawing. */
   let loadSeen = 0;
   /** The reach pressed in place from the state that stood: what it changed is brought into view once it lands. */
@@ -534,6 +561,36 @@
       }
     });
   });
+  /**
+   * Where a reach to `pick` starts: from nothing on a new page; from the
+   * from state of a move he chose by name, played where the states file
+   * plays it from there; from the from state the states file plays a move
+   * into it from; else from the state that stood.
+   */
+  const startOf = (on: Review, pick: Pick, fresh: boolean) => {
+    const into = pick.variant === null ? on.states[pick.state] : undefined;
+    const chosen = fresh ? null : chosenFrom;
+    chosenFrom = null;
+    if (chosen) {
+      return {
+        fromId: chosen.id,
+        from: chosen.ref,
+        play: !!(into?.play && into.from === chosen.id),
+      };
+    }
+    if (into?.play && into.from) {
+      return {
+        fromId: into.from,
+        from: { file: on.file, story: into.from } satisfies StateRef,
+        play: true,
+      };
+    }
+    return {
+      fromId: fresh ? null : stoodAt,
+      from: fresh ? null : stood,
+      play: false,
+    };
+  };
   // Each kept state is reached on the one live instance: set in place from
   // the state that stood, or mounted afresh on a new page. A width he picks
   // that the state has a story for reaches that story. A state the states
@@ -543,6 +600,7 @@
     const on = review;
     const pick = kept;
     const { loads } = link;
+    const again = reachAgain;
     const to = on && pick ? refOf(on, pick, width) : null;
     untrack(() => {
       // Every way a state comes to be kept (a row's press, a step, the
@@ -556,20 +614,22 @@
         return;
       }
       const fresh = loads !== loadSeen;
-      if (!fresh && JSON.stringify(to) === JSON.stringify(stood)) {
+      if (
+        !fresh &&
+        again === againSeen &&
+        JSON.stringify(to) === JSON.stringify(stood)
+      ) {
         return;
       }
       loadSeen = loads;
-      const into = pick.variant === null ? on.states[pick.state] : undefined;
-      const played = into?.play && into.from ? into.from : null;
-      let from = fresh ? null : stood;
-      if (played) {
-        from = { file: on.file, story: played } satisfies StateRef;
-      }
-      pressed = !(fresh || played);
+      againSeen = again;
+      const { fromId, from, play } = startOf(on, pick, fresh);
+      pressed = !(fresh || play);
       arriving = true;
-      asking = link.reach(to, from, { play: played !== null, still });
+      asking = link.reach(to, from, { play, still });
       stood = to;
+      stoodAt = pick.state;
+      readMove(on, fromId, pick.state);
     });
   });
   // The reach landed (or its mount threw): the stage is at rest; a press's
@@ -585,6 +645,261 @@
       if (reached?.ask === asking && !reached.superseded && pressed) {
         pressed = false;
         link.reveal({ move: true });
+      }
+      if (reached) {
+        heardMove(reached);
+      }
+    });
+  });
+
+  // --- The move into the kept state ------------------------------------------
+
+  /** The move on the Animation face, as its states' ids (`from->to`); null with none. */
+  let movePair = $state<string | null>(null);
+  let move = $state<MoveState>({ kind: "none", state: "" });
+  /** The move's playhead, ms: run from the page's clock (`cawco:stage-time`), set by a scrub. */
+  let playhead = $state(0);
+  let playing = $state(false);
+  /** Play goes round again each time the move ends, from `loopFrom`. */
+  let repeat = $state(false);
+  let loopFrom = $state(0);
+  /** Which timing the face shows and Play plays: his, or the agent's as written (two whole versions, the owner's pick). */
+  let version = $state<"yours" | "written">("yours");
+  /**
+   * What he tuned on every move, by the move's states (`from->to`): put
+   * back on each new read of that move, and every one of them sent to the
+   * agent. Choosing another move and back lost his edits, and the record
+   * held the last move's alone.
+   */
+  const tunings = new Map<string, { name: string; clips: Clip[] }>();
+  /** The move the reach under way reads: its ask, its states' ids and names. */
+  let moveAsked: {
+    ask: number;
+    from: string;
+    key: string | null;
+    to: string;
+  } | null = null;
+  /** The clips before Reset all, while nothing has changed since: Undo reset puts them back (the house answer, undo over confirm). */
+  let beforeReset = $state<Clip[] | null>(null);
+  /** The thing a row of the move rests on, by the page's id for it; null while none. */
+  let lit = $state<string | null>(null);
+
+  /** A state's name, by its id; its id where the component has none of it. */
+  const nameIn = (on: Review, state: string) => on.states[state]?.name ?? state;
+  /** The reach just asked moves the drawing from `fromId` (null: from nothing) to `toId`: the face reads it. */
+  function readMove(on: Review, fromId: string | null, toId: string) {
+    cancelAnimationFrame(clock);
+    playing = false;
+    playhead = 0;
+    const from = fromId ? nameIn(on, fromId) : "";
+    const to = nameIn(on, toId);
+    movePair = fromId ? `${fromId}->${toId}` : null;
+    moveAsked = { ask: asking, key: movePair, from, to };
+    move = fromId ? { kind: "reading", from, to } : { kind: "none", state: to };
+  }
+
+  /** The page's answer to the reach the face reads: its clips, his tuning of that move put back. */
+  function heardMove(reached: NonNullable<typeof link.reached>) {
+    const asked = moveAsked;
+    if (!asked || reached.ask !== asked.ask || reached.superseded) {
+      return;
+    }
+    moveAsked = null;
+    if (reached.failed && asked.key) {
+      move = {
+        kind: "failed",
+        from: asked.from,
+        to: asked.to,
+        why: reached.failed.message,
+      };
+      return;
+    }
+    if (!(asked.key && reached.move)) {
+      move = { kind: "none", state: asked.to };
+      return;
+    }
+    const name = words.move(asked.from, asked.to);
+    const read = reached.move.clips.map(clipOf);
+    const tuned = tunings.get(asked.key);
+    // What he tuned on this move before, put back on its fresh read; on its first read, what the artifact keeps.
+    const clips = tuned
+      ? withTuning(read, tuningOf(tuned.clips))
+      : withTuned(name, read, keptTuned);
+    if (!tuned && clips.some((clip) => clip.was)) {
+      tunings.set(asked.key, { name, clips });
+    }
+    beforeReset = null;
+    move = { kind: "ready", from: asked.from, to: asked.to, clips };
+    // The move played as the stage arrived: its playhead rests on its end (his pick, animation-face-questions#playhead-rest).
+    playhead = lengthOf(clips);
+  }
+
+  /** The animation as Play plays it: his timing, or the agent's as written. */
+  const clipsNow = (): Clip[] => {
+    if (move.kind !== "ready") {
+      return [];
+    }
+    return version === "written" ? move.clips.map(untune) : move.clips;
+  };
+  /** His timing as the page plays it: every clip he tuned. */
+  const tuningNow = () => (move.kind === "ready" ? tuningsOf(move.clips) : []);
+
+  // The playhead runs from each word of the page's clock: the page runs the
+  // animations and says the time as a play starts, wraps, ends or pauses;
+  // between two words the readout runs on this page's frames.
+  let clock = 0;
+  $effect(() => {
+    const said = link.time;
+    untrack(() => {
+      cancelAnimationFrame(clock);
+      if (!said) {
+        return;
+      }
+      ({ playing, t: playhead } = said);
+      if (!said.playing) {
+        return;
+      }
+      const step = () => {
+        playhead = Math.min(
+          said.length,
+          said.t + performance.now() - said.heard
+        );
+        if (playhead < said.length) {
+          clock = requestAnimationFrame(step);
+        }
+      };
+      clock = requestAnimationFrame(step);
+    });
+  });
+
+  /** The move played from `from` ms (from where the playhead stands, or 0 from its end), in sight of the stage. */
+  const play = (from?: number) => {
+    const clips = clipsNow();
+    if (clips.length === 0) {
+      return;
+    }
+    const length = lengthOf(clips);
+    const at = from ?? (playhead >= length ? 0 : playhead);
+    // The move plays in sight: on a phone the thing it moves stood under the drawer.
+    link.reveal({ move: true });
+    link.play({
+      from: at,
+      repeat,
+      loopFrom: Math.min(loopFrom, length),
+      still,
+      tuning: tuningNow(),
+      version,
+    });
+  };
+  /** Pause: the move held on the frame it stands at, the stage with it. */
+  const pause = () => link.pause();
+  /** A scrub, during a play too: the move held on that frame where he lets go (T3). */
+  const scrub = (t: number) => {
+    cancelAnimationFrame(clock);
+    playing = false;
+    playhead = t;
+    link.seek(t, tuningNow(), version);
+  };
+  /** A scrub let go: on the move's end the drawing is let go, the kept state as it stands. */
+  const scrubbed = (t: number) => link.letGo(t);
+  /**
+   * A move whose play threw, played again (its Try again): its from state
+   * reached anew and the move played from there, as it played on arrival.
+   */
+  const retry = () => {
+    reachAgain += 1;
+  };
+  /**
+   * Every move he tuned goes to the artifact as the component canvas's
+   * `tuned` record, the tuned clips of every move, 300 ms after the last
+   * change: written into its doc, which `artifact_read` answers. A move he
+   * tuned in an earlier visit and not this one keeps its records.
+   */
+  const SEND_AFTER_MS = 300;
+  let sending: ReturnType<typeof setTimeout> | undefined;
+  const sendTuned = () => {
+    clearTimeout(sending);
+    sending = setTimeout(() => {
+      const moves = [...tunings.values()];
+      ontuned?.([
+        ...keptTuned.filter(
+          (one) => !moves.some((tuned) => tuned.name === one.move)
+        ),
+        ...moves.flatMap((one) => tunedRecord(one.name, one.clips)),
+      ]);
+    }, SEND_AFTER_MS);
+  };
+  /**
+   * The clips he tuned put in the move. A press or a drag let go plays it
+   * at once from where the changed row now begins: he nudges a length or
+   * a curve and feels the difference before he writes a remark. A key's
+   * nudge plays nothing (T9: stillness after a keyboard nudge): a held
+   * frame is drawn again on the new timing, the rest stays.
+   */
+  const retime = (changed: readonly Clip[], replay = true) => {
+    if (move.kind !== "ready" || changed.length === 0) {
+      return;
+    }
+    const by = new Map(changed.map((clip) => [clip.id, clip]));
+    beforeReset = null;
+    move = {
+      ...move,
+      clips: move.clips.map((clip) => by.get(clip.id) ?? clip),
+    };
+    version = "yours";
+    if (movePair) {
+      tunings.set(movePair, {
+        name: words.move(move.from, move.to),
+        clips: move.clips,
+      });
+    }
+    sendTuned();
+    if (replay) {
+      play(Math.min(...changed.map((clip) => clip.start + clip.delay)));
+    } else {
+      link.retime(tuningNow(), null);
+    }
+  };
+  const resetAll = (ids: string[]) => {
+    if (move.kind !== "ready") {
+      return;
+    }
+    const before = move.clips;
+    retime(move.clips.filter((clip) => ids.includes(clip.id)).map(untune));
+    beforeReset = before;
+  };
+  const undoReset = () => {
+    const before = beforeReset;
+    if (before) {
+      retime(before);
+    }
+  };
+  /** One version or the other on the face: Play plays it, from its start. */
+  const showVersion = (next: "yours" | "written") => {
+    version = next;
+    play(0);
+  };
+  /** Every move the states file names, for the Animation face's title menu. */
+  const moveChoices = $derived(
+    review
+      ? review.moves
+          .filter((one) => one.from !== one.to)
+          .map((one) => ({
+            key: `${one.from}->${one.to}`,
+            from: one.from,
+            to: one.to,
+            name: words.move(nameIn(review, one.from), nameIn(review, one.to)),
+          }))
+      : []
+  );
+  // The ring on the thing a rested row names, on the Animation face alone.
+  let ringSaid: string | null = null;
+  $effect(() => {
+    const thing = shownFace === "move" && roomShown ? lit : null;
+    untrack(() => {
+      if (thing !== ringSaid) {
+        ringSaid = thing;
+        link.ring(thing, playhead);
       }
     });
   });
@@ -832,11 +1147,28 @@
     choose(state, variant);
   };
   /**
-   * A move named by its arrow on the map (or its line in the map's list):
-   * the Animation face opens on it once that face stands on the page; until
-   * then its to state is kept, so the stage stands where the arrow leads.
+   * A move chosen by name (the Animation face's title menu, an arrow on the
+   * map, its line in the map's list): the Animation face opens on it, the
+   * stage stood at its from state at once, its own motion landed, then
+   * brought to its to state, so the move read is that one, whatever state
+   * stood before.
    */
-  const chooseMove = (_from: string, to: string) => choose(to, null);
+  const chooseMove = (fromId: string, toId: string) => {
+    face = "move";
+    if (!review) {
+      return;
+    }
+    const ref = refOf(review, { state: fromId, variant: null }, width);
+    link.reach(ref, null, { play: false, still: true });
+    stood = ref;
+    stoodAt = fromId;
+    chosenFrom = { id: fromId, ref };
+    if (kept?.state === toId && kept.variant === null) {
+      reachAgain += 1;
+    } else {
+      choose(toId, null);
+    }
+  };
   /** The stop the drawer stood at as the pane's sheet put it away; null while it stands. */
   let stopAway: number | null = null;
   // Put away under the pane's sheet, the drawer comes back at the stop it
@@ -1013,9 +1345,68 @@
   />
 {/snippet}
 
+{#snippet moveFace(peek: boolean)}
+  <MoveFace
+    choices={moveChoices}
+    chosen={movePair}
+    {lang}
+    {loopFrom}
+    {move}
+    onchoose={chooseMove}
+    onfocusthing={(thing) => {
+      if (thing) {
+        link.reveal({ thing });
+      }
+    }}
+    onlight={(thing) => {
+      lit = thing;
+    }}
+    onloopfrom={(at) => {
+      loopFrom = at;
+    }}
+    onpause={pause}
+    onplay={() => play()}
+    onrepeat={(next) => {
+      repeat = next;
+    }}
+    onreplay={() => play(0)}
+    onreset={(ids) => {
+      const all =
+        move.kind === "ready" &&
+        move.clips
+          .filter((clip) => clip.was)
+          .every((clip) => ids.includes(clip.id));
+      if (all) {
+        resetAll(ids);
+      } else {
+        retime(
+          (move.kind === "ready" ? move.clips : [])
+            .filter((clip) => ids.includes(clip.id))
+            .map(untune)
+        );
+      }
+    }}
+    onretime={retime}
+    onretry={retry}
+    onseek={scrub}
+    onseekend={scrubbed}
+    onundo={undoReset}
+    onversion={showVersion}
+    {peek}
+    {playhead}
+    {playing}
+    {repeat}
+    {still}
+    undoable={beforeReset !== null}
+    {version}
+  />
+{/snippet}
+
 {#snippet roomFace(stepperHere: boolean)}
   {#if shownFace === "dials"}
     {@render dialsBody()}
+  {:else if shownFace === "move" && review && kept}
+    {@render moveFace(false)}
   {:else if review && kept}
     {#if single}
       <p class="m-0 max-w-c-measure type-body text-ink-muted text-pretty">
@@ -1052,11 +1443,18 @@
   <Tabs
     class="min-w-0 flex-1"
     onValueChange={(next: string) => {
-      face = next === "map" || next === "dials" ? next : "states";
+      face =
+        next === "map" || next === "move" || next === "dials" ? next : "states";
       // In the drawer at its head stop a face of its own body (the map, the
       // dials) shows nothing there: picked, it rises to the half stop, the
       // drawing still above it.
-      if (!desk && atHead && face !== "states" && SNAPS.length > 1) {
+      if (
+        !desk &&
+        atHead &&
+        face !== "states" &&
+        face !== "move" &&
+        SNAPS.length > 1
+      ) {
         // A task later: the press is also vaul's release of the drawer (`choose`).
         setTimeout(() => {
           stopAt = 1;
@@ -1692,7 +2090,10 @@
               {#if !single && shownFace === "states"}
                 {@render stepper()}
               {/if}
-              {#if single || !atHead}
+              {#if shownFace === "move" && atHead && review && kept}
+                <!-- At the head stop the Animation face is its transport, its time and the move, on one line over the stage. -->
+                {@render moveFace(true)}
+              {:else if single || !atHead}
                 {@render roomFace(false)}
               {/if}
             </div>

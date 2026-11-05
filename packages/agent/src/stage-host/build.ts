@@ -104,16 +104,11 @@ const svelteShims = async (): Promise<string> =>
 
 const CANVAS = new URL("./canvas/runtime.ts", import.meta.url).pathname;
 const REPO = new URL("../../../../", import.meta.url).pathname;
-/** CawCo's tokens as the dashboard builds them (`bun run tokens`), for the canvas's own chrome. */
+/** CawCo's tokens as the dashboard builds them (`bun run tokens`), for the canvas page's own style. */
 const TOKENS = join(REPO, "apps/dashboard/src/lib/tokens/tokens.css");
-/** DialKit's vanilla build, vendored once for the decision pages and reused here for the canvas's dials. */
-const DIALKIT = join(
-  REPO,
-  "packages/hub/skills/decision-page/kit/vendor/dialkit"
-);
 
 /**
- * The house faces the canvas's chrome is set in (DESIGN.md's type), as every
+ * The house faces the canvas page's own style is set in (DESIGN.md's type), as every
  * surface serves them (core house-faces.ts): a rule per woff2 piece, pointed
  * at `faces/<file>` beside the canvas page (the host serves them there), and
  * each piece's bytes in base64.
@@ -148,11 +143,9 @@ async function canvasRuntime(): Promise<string> {
 
 /** The host, bundled: its text. */
 export async function buildStageHost(): Promise<string> {
-  const [runtime, tokens, dialkitJs, dialkitCss, faces] = await Promise.all([
+  const [runtime, tokens, faces] = await Promise.all([
     canvasRuntime(),
     readFile(TOKENS, "utf8"),
-    readFile(join(DIALKIT, "browser.global.js"), "utf8"),
-    readFile(join(DIALKIT, "styles.css"), "utf8"),
     canvasFaces(),
   ]);
   const result = await bundled("The stage host", {
@@ -167,8 +160,6 @@ export async function buildStageHost(): Promise<string> {
       __SVELTE_SHIMS__: JSON.stringify(await svelteShims()),
       __CANVAS_RUNTIME__: JSON.stringify(runtime),
       __CANVAS_TOKENS__: JSON.stringify(tokens),
-      __DIALKIT_JS__: JSON.stringify(dialkitJs),
-      __DIALKIT_CSS__: JSON.stringify(dialkitCss),
       __CANVAS_FACES__: JSON.stringify(faces.css),
       __CANVAS_FACE_FILES__: JSON.stringify(faces.files),
     },

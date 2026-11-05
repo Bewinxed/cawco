@@ -58,6 +58,24 @@
    *
    * Resting on a row, or focusing in it, rings the thing it names on the
    * stage (DesignGraph `lit`); nothing else on the stage changes.
+   *
+   * What DialKit's timeline gave (parity.md, the surface brief's "DialKit's
+   * other features"), on the same rows and ruler:
+   * - **Replay** after Play, always from the move's start.
+   * - **Zoom and pan**: a pinch or Ctrl-wheel on the lanes zooms round the
+   *   pointer, a sideways wheel or Shift-wheel pans; while zoomed, a strip
+   *   under the ruler draws the part shown, dragged to move along the
+   *   move, and Fit in the transport puts the whole move back.
+   * - **Scrub anywhere**: a press on an empty part of a lane scrubs as the
+   *   ruler does; Shift and a press on a bar scrub over it.
+   * - **Repeat from a time**: while Repeat is on, a mark on the ruler the
+   *   move goes round again from, at 0 until dragged.
+   * - **The agent's groups**: rows whose things stand in one of the
+   *   agent's groups (`data-cawco-group`) under the house section head,
+   *   its chevron folding them.
+   * - **Legs and a clip's own repeat** on the bars (ClipBar), **values**
+   *   and **repeats** in the settings (ClipSettings).
+   * - Escape closes the open row first; the room's own Escape is next.
    */
   import type { ClipKind } from "@cawco/core/stage-graph";
   import { graphWords as words } from "@cawco/core/words/graph";
@@ -76,7 +94,9 @@
     IconPause,
     IconPlay,
     IconRepeat,
+    IconReplay,
     IconReset,
+    IconZoomOut,
   } from "#lib/icons.js";
   import { browser } from "$app/env";
   import ChoiceList, { toChosen } from "./ChoiceList.svelte";
@@ -89,7 +109,9 @@
     lengthOf,
     type Part,
     partsOf,
+    RUN_STEP,
     type Run,
+    releg,
     retimeRun,
     type Track,
     tracksOf,
@@ -105,7 +127,10 @@
     version,
     onplay,
     onpause,
+    onreplay,
     onrepeat,
+    loopFrom = 0,
+    onloopfrom,
     onseek,
     onseekend,
     onretime,
@@ -134,7 +159,13 @@
     version: "yours" | "written";
     onplay: () => void;
     onpause: () => void;
+    /** Play from the move's start, wherever the playhead stands. */
+    onreplay: () => void;
     onrepeat: (on: boolean) => void;
+    /** Where a repeat goes round again from, ms. */
+    loopFrom?: number;
+    /** The repeat's mark dragged to `at` ms. */
+    onloopfrom: (at: number) => void;
     /** A scrub: the move held at `t` ms. */
     onseek: (t: number) => void;
     /** The scrub let go at `t` ms (0 or the move's end when let go near either). */
@@ -145,8 +176,8 @@
     onreset: (ids: string[]) => void;
     /** One version or the other: it plays. */
     onversion: (version: "yours" | "written") => void;
-    /** The thing a row names, rested on (null: none). */
-    onlight: (thing: Element | null) => void;
+    /** The thing a row names, rested on, by the page's id for it (null: none). */
+    onlight: (thing: string | null) => void;
     /** Every move the states file names, by its states' ids. */
     choices: { from: string; key: string; name: string; to: string }[];
     /** The move on the face, `from->to`; null with none. */
@@ -154,7 +185,7 @@
     /** A move picked from the title's menu: played from its from state. */
     onchoose: (from: string, to: string) => void;
     /** A row took the focus (a key, or a press on it): the thing it names, to bring into view on the stage. */
-    onfocusthing: (thing: Element | null) => void;
+    onfocusthing: (thing: string | null) => void;
     /** The phone drawer at its head stop: Play, its time and the move's name, one line. */
     peek?: boolean;
     /** A move whose play threw, played again from its from state. */
@@ -207,12 +238,11 @@
   });
   const keptScale = $derived(kept.scale);
   const span = $derived(Math.max(reach, keptScale));
-  /**
-   * The ruler's step: 100 ms, else the least of 200, 500, 1000, 2000,
-   * 5000… whose marks stand `--space-2` apart on the lane. A mark every
-   * 100 ms drew 18,000 of them for a move of 30 minutes.
-   */
-  const step = $derived.by(() => {
+  /** How far the lanes are zoomed in (1: the whole move), and where the part shown begins, ms. */
+  let zoom = $state(1);
+  let viewStart = $state(0);
+  /** The step of a ruler `across` ms wide: 100 ms, else the least of 200, 500, 1000, 2000, 5000… whose marks stand `--space-2` apart on the lane. A mark every 100 ms drew 18,000 of them for a move of 30 minutes. */
+  const stepFor = (across: number) => {
     const apart = browser ? numberOf("--space-2") : 1;
     const most = Math.max(
       1,
@@ -221,21 +251,40 @@
     const ladder = [1, 2, 5].map((one) => one * FINEST);
     let at = 0;
     let found = FINEST;
-    while (Number.isFinite(span) && Math.ceil(span / found) > most) {
+    while (Number.isFinite(across) && Math.ceil(across / found) > most) {
       at += 1;
       found = (ladder[at % 3] as number) * 10 ** Math.floor(at / 3);
     }
     return found;
-  });
+  };
+  const wholeStep = $derived(stepFor(span));
   /** The lane's end: the ruler's next mark past its reach. */
-  const scale = $derived(Math.max(step, Math.ceil(span / step) * step));
+  const scale = $derived(
+    Math.max(wholeStep, Math.ceil(span / wholeStep) * wholeStep)
+  );
   $effect(() => {
     if (kept.scale < scale) {
       kept = { move: chosen, scale };
     }
   });
+  /** The most the lanes zoom in: a tenth of a second across, or eight times, whichever is more (DialKit's floor). */
+  const zoomMost = $derived(Math.max(8, scale / (10 * RUN_STEP)));
+  /** The part of the move the lanes show, ms: the whole of it unzoomed. */
+  const viewSpan = $derived(scale / Math.min(zoom, zoomMost));
+  const viewFrom = $derived(
+    Math.min(Math.max(0, viewStart), Math.max(0, scale - viewSpan))
+  );
+  const viewTo = $derived(viewFrom + viewSpan);
+  const zoomed = $derived(viewSpan < scale - 0.5);
+  /** The ruler's step for the part shown. */
+  const step = $derived(stepFor(viewSpan));
   const marks = $derived(
-    Array.from({ length: Math.floor(scale / step) + 1 }, (_, at) => at * step)
+    Array.from(
+      {
+        length: Math.floor(viewTo / step) - Math.ceil(viewFrom / step) + 1,
+      },
+      (_, at) => (Math.ceil(viewFrom / step) + at) * step
+    )
   );
   /** The lane's inset, px (`px-space-2`): a figure centred on an end mark may reach into it, no further. */
   const INSET = browser ? numberOf("--space-2") : 0;
@@ -248,7 +297,7 @@
   );
   /** A figure on every mark, every second, every fourth… so each centred figure stands `--space-3` clear of the next. */
   const figureEvery = $derived.by(() => {
-    const apart = lane > 0 ? (lane * step) / scale : 0;
+    const apart = lane > 0 ? (lane * step) / viewSpan : 0;
     return apart <= 0
       ? 1
       : Math.max(
@@ -267,7 +316,63 @@
       )
     )
   );
-  const pct = (t: number) => `${(t / scale) * 100}%`;
+  /** Where `t` ms stands across the lanes, as a share of their width: the part shown, zoomed or whole. */
+  const pct = (t: number) => `${((t - viewFrom) / viewSpan) * 100}%`;
+  /** How wide `ms` stands across the lanes. */
+  const len = (ms: number) => `${(ms / viewSpan) * 100}%`;
+  /** A pointer's moment on a lane, ms, from where it stands across `box`. */
+  const momentAt = (event: PointerEvent, box: DOMRect) => {
+    const across = (event.clientX - box.left) / Math.max(1, box.width);
+    const share =
+      getComputedStyle(event.currentTarget as Element).direction === "rtl"
+        ? 1 - across
+        : across;
+    return Math.min(length, Math.max(0, viewFrom + share * viewSpan));
+  };
+  /** The lanes zoomed by `by` round `at` ms, held between whole and the most. */
+  const zoomBy = (by: number, at: number) => {
+    const next = Math.min(zoomMost, Math.max(1, zoom * by));
+    const share = (at - viewFrom) / viewSpan;
+    zoom = next;
+    viewStart = at - share * (scale / next);
+  };
+  /** The part shown moved along the move by `ms`. */
+  const panBy = (ms: number) => {
+    viewStart = viewFrom + ms;
+  };
+  /** The whole move on the lanes again. */
+  const fit = () => {
+    zoom = 1;
+    viewStart = 0;
+  };
+  /**
+   * The wheel on the lanes: a pinch (which a browser says as a Ctrl-wheel)
+   * or a Ctrl- or ⌘-wheel zooms round the pointer; a sideways wheel or a
+   * Shift-wheel pans. A plain wheel scrolls the rows as it did.
+   */
+  const wheel = (event: WheelEvent) => {
+    const box = (event.currentTarget as HTMLElement).querySelector<HTMLElement>(
+      "[data-slot=ruler-lane]"
+    );
+    if (!box) {
+      return;
+    }
+    const rect = box.getBoundingClientRect();
+    const across = (event.clientX - rect.left) / Math.max(1, rect.width);
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      zoomBy(Math.exp(-event.deltaY / 200), viewFrom + across * viewSpan);
+      return;
+    }
+    const sideways = event.shiftKey ? event.deltaY : event.deltaX;
+    if (
+      zoomed &&
+      Math.abs(sideways) > Math.abs(event.shiftKey ? 0 : event.deltaY)
+    ) {
+      event.preventDefault();
+      panBy((sideways / Math.max(1, rect.width)) * viewSpan);
+    }
+  };
   /** The playhead as the ruler's handle holds it, on its 1 ms steps. */
   const handle = $derived(Math.round(Math.min(playhead, length)));
   /** A key's step of the playhead, ms; with Shift, a ruler's mark. */
@@ -344,10 +449,12 @@
     if (chosen !== selectedIn) {
       selectedIn = chosen;
       selected = null;
+      zoom = 1;
+      viewStart = 0;
     }
   });
   /** The selected line's thing, rung on the stage while it is selected. */
-  const keptLit = (): Element | null => picked?.track.thing ?? null;
+  const keptLit = (): string | null => picked?.track.thing ?? null;
   /** Rest and focus on a row light its thing; leaving gives the ring back to the selected row's. */
   const lights = (track: Track) => ({
     onpointerenter: () => onlight(track.thing),
@@ -371,20 +478,195 @@
   }
   /** The row open on the face: the selected line's row, a row itself or one of its animations. */
   const openRow = $derived(selected ? selected.split("/")[0] : null);
-  /** The timeline's lines, in order: each row, and under the open one its animations by run and property, in the order the engine ran them, so retiming one never moves it. */
-  const lines = $derived(
-    tracks.flatMap((track): Line[] => {
-      const own: Line = { key: track.id, track, part: null };
-      const parts = partsOf(track);
-      if (!(openRow === track.id && parts.length > 1)) {
-        return [own];
+  /** The agent's groups he folded, by name: their rows stand put away under their head. */
+  let folded = $state<string[]>([]);
+  /** The agent's group whose head stands before a row: the first row of each group, in the rows' order. */
+  const headOf = $derived.by(() => {
+    const seen = new Set<string>();
+    const heads = new Map<string, string>();
+    for (const track of tracks) {
+      if (track.group && !seen.has(track.group)) {
+        seen.add(track.group);
+        heads.set(track.id, track.group);
       }
+    }
+    return heads;
+  });
+  /** A row's lines: itself, and while open its animations by run and property, in the order the engine ran them, so retiming one never moves it. */
+  const linesOf = (track: Track): Line[] => {
+    const own: Line = { key: track.id, track, part: null };
+    const parts = partsOf(track);
+    if (!(openRow === track.id && parts.length > 1)) {
+      return [own];
+    }
+    return [
+      own,
+      ...parts.map((part) => ({ key: part.key, track: part.track, part })),
+    ];
+  };
+  const isFolded = (track: Track) =>
+    track.group !== null && folded.includes(track.group);
+  /** The timeline's lines, in order, a folded group's put away. */
+  const lines = $derived(
+    tracks.flatMap((track) => (isFolded(track) ? [] : linesOf(track)))
+  );
+  /** What the timeline draws, in order: each group's head before its first row, then every line it shows. */
+  const entries = $derived(
+    tracks.flatMap((track) => {
+      const group = headOf.get(track.id);
+      const head = group
+        ? [{ kind: "head" as const, key: `group:${group}`, group }]
+        : [];
       return [
-        own,
-        ...parts.map((part) => ({ key: part.key, track: part.track, part })),
+        ...head,
+        ...(isFolded(track)
+          ? []
+          : linesOf(track).map((line) => ({
+              kind: "line" as const,
+              key: line.key,
+              line,
+            }))),
       ];
     })
   );
+  const foldGroup = (group: string) => {
+    folded = folded.includes(group)
+      ? folded.filter((one) => one !== group)
+      : [...folded, group];
+  };
+
+  /**
+   * A press on an empty part of a lane scrubs as the ruler does, and with
+   * Shift a press on a bar does too: the playhead follows the pointer and
+   * the move is held where it is let go, an end within half a mark landing
+   * on that end's state.
+   */
+  const laneScrub = (event: PointerEvent) => {
+    const onBar = (event.target as Element | null)?.closest(
+      "[data-slot=run-bar], [data-run-end], [data-slot=leg-end]"
+    );
+    if (event.button !== 0 || (onBar && !event.shiftKey)) {
+      return;
+    }
+    // Ahead of the bar's own drag (interact.js listens on the bar).
+    event.stopPropagation();
+    event.preventDefault();
+    const node = event.currentTarget as HTMLElement;
+    const box = node.getBoundingClientRect();
+    node.setPointerCapture(event.pointerId);
+    scrubbing = true;
+    let at = momentAt(event, box);
+    onseek(at);
+    const follow = (next: PointerEvent) => {
+      at = momentAt(next, box);
+      onseek(at);
+    };
+    const up = () => {
+      node.removeEventListener("pointermove", follow);
+      node.removeEventListener("pointerup", up);
+      node.removeEventListener("pointercancel", up);
+      letGo(at);
+    };
+    node.addEventListener("pointermove", follow);
+    node.addEventListener("pointerup", up);
+    node.addEventListener("pointercancel", up);
+  };
+
+  /** A drag along `node` (the overview strip, the repeat's mark): `to` with each moment, from where the pointer stands across the lanes. */
+  const dragAlong =
+    (to: (t: number) => void, across: () => HTMLElement | null) =>
+    (event: PointerEvent) => {
+      const box = across()?.getBoundingClientRect();
+      if (event.button !== 0 || !box) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const node = event.currentTarget as HTMLElement;
+      node.setPointerCapture(event.pointerId);
+      to(momentAt(event, box));
+      const follow = (next: PointerEvent) => to(momentAt(next, box));
+      const up = () => {
+        node.removeEventListener("pointermove", follow);
+        node.removeEventListener("pointerup", up);
+        node.removeEventListener("pointercancel", up);
+      };
+      node.addEventListener("pointermove", follow);
+      node.addEventListener("pointerup", up);
+      node.addEventListener("pointercancel", up);
+    };
+  /** The repeat's mark at `t`, on the ruler's 10 ms steps, never past the move's end. */
+  const setLoopFrom = (t: number) =>
+    onloopfrom(
+      Math.min(
+        Math.max(0, length - RUN_STEP),
+        Math.max(0, Math.round(t / RUN_STEP) * RUN_STEP)
+      )
+    );
+  /** The repeat mark's keys: the arrows 10 ms, Shift a mark, Home and End. */
+  const loopKey = (event: KeyboardEvent) => {
+    const big = event.shiftKey ? step : RUN_STEP;
+    const by: Record<string, number> = {
+      ArrowRight: big,
+      ArrowUp: big,
+      ArrowLeft: -big,
+      ArrowDown: -big,
+      Home: -length,
+      End: length,
+    };
+    const shift = by[event.key];
+    if (shift !== undefined) {
+      event.preventDefault();
+      setLoopFrom(loopFrom + shift);
+    }
+  };
+  /**
+   * The overview strip: a press or a drag on it centres the part shown on
+   * that moment of the whole move. It reads the strip's own width as the
+   * whole move, so the drag is its own.
+   */
+  const overviewTo = (t: number) => {
+    viewStart = (t / Math.max(1, length)) * scale - viewSpan / 2;
+  };
+  let overview = $state<HTMLElement | null>(null);
+  /** The overview's own moment: across the strip, the whole lane. */
+  const overviewDrag = (event: PointerEvent) => {
+    const box = overview?.getBoundingClientRect();
+    if (event.button !== 0 || !box) {
+      return;
+    }
+    event.preventDefault();
+    const node = event.currentTarget as HTMLElement;
+    node.setPointerCapture(event.pointerId);
+    const at = (next: PointerEvent) =>
+      overviewTo(
+        Math.min(1, Math.max(0, (next.clientX - box.left) / box.width)) * length
+      );
+    at(event);
+    const up = () => {
+      node.removeEventListener("pointermove", at);
+      node.removeEventListener("pointerup", up);
+    };
+    node.addEventListener("pointermove", at);
+    node.addEventListener("pointerup", up);
+  };
+  let rulerLane = $state<HTMLElement | null>(null);
+  /** Escape closes the open row first (parity question 4); the room's own Escape comes after, once none is open. */
+  const closeRow = (event: KeyboardEvent) => {
+    if (
+      event.key === "Escape" &&
+      selected !== null &&
+      !event.defaultPrevented
+    ) {
+      const field = (event.target as HTMLElement | null)?.closest(
+        "input, textarea, select, [contenteditable='true']"
+      );
+      if (!field) {
+        event.preventDefault();
+        selected = null;
+      }
+    }
+  };
   /**
    * One press on a row does one thing: it opens the row or closes it, its
    * chevron turning. An open row shows its settings under it and, where its
@@ -535,6 +817,21 @@
         </button>
       {/snippet}
     </Tip>
+    <Tip label={words.replay}>
+      {#snippet children(tip)}
+        <button
+          {...tip}
+          type="button"
+          data-box
+          aria-label={words.replay}
+          class={bare}
+          data-slot="replay"
+          onclick={onreplay}
+        >
+          <IconReplay aria-hidden="true" class="size-icon-md" />
+        </button>
+      {/snippet}
+    </Tip>
     <Tip label={words.repeat}>
       {#snippet children(tip)}
         <Toggle
@@ -549,6 +846,23 @@
         </Toggle>
       {/snippet}
     </Tip>
+    {#if zoomed}
+      <Tip label={words.fit}>
+        {#snippet children(tip)}
+          <button
+            {...tip}
+            type="button"
+            data-box
+            aria-label={words.fit}
+            class={bare}
+            data-slot="fit"
+            onclick={fit}
+          >
+            <IconZoomOut aria-hidden="true" class="size-icon-md" />
+          </button>
+        {/snippet}
+      </Tip>
+    {/if}
     <!-- As wide as its widest reading, so nothing beside it moves while
          it counts (the move's name on a phone shifted at each figure). -->
     <span
@@ -634,9 +948,34 @@
         ]}
         data-slot="run-bar"
         style:--from={pct(run.from)}
-        style:--wide={pct(run.to - run.from)}
+        style:--wide={len(run.to - run.from)}
       ></span>
     {/each}
+  </div>
+{/snippet}
+
+{#snippet overviewStrip()}
+  <!-- While zoomed: the whole move, the part the lanes show drawn in it and
+       the playhead's place; a press or a drag on it moves the part shown. -->
+  <div
+    bind:this={overview}
+    aria-label={words.overview}
+    class="relative h-space-2 w-full cursor-ew-resize touch-none rounded-pill bg-surface-fill"
+    data-slot="overview"
+    onpointerdown={overviewDrag}
+    role="presentation"
+  >
+    <span
+      aria-hidden="true"
+      class="absolute inset-y-0 start-(--from) w-(--wide) rounded-pill border border-border-control bg-surface-raised"
+      style:--from="{(viewFrom / scale) * 100}%"
+      style:--wide="{(viewSpan / scale) * 100}%"
+    ></span>
+    <span
+      aria-hidden="true"
+      class="absolute inset-y-0 start-(--at) w-px bg-ink-strong"
+      style:--at="{(Math.min(playhead, length) / scale) * 100}%"
+    ></span>
   </div>
 {/snippet}
 
@@ -646,6 +985,10 @@
   <div
     data-slot="move"
     class="@container/move flex min-h-0 min-w-0 flex-1 flex-col gap-space-3"
+    {@attach (node: HTMLElement) => {
+      node.addEventListener("keydown", closeRow);
+      return () => node.removeEventListener("keydown", closeRow);
+    }}
   >
     {#if peek}
       <!-- The drawer at its head stop: Play, the time and the move on one
@@ -657,6 +1000,9 @@
             >{words.move(move.from, move.to)}</span
           >
         </div>
+        {#if zoomed}
+          {@render overviewStrip()}
+        {/if}
       {:else}
         <p class="m-0 min-w-0 truncate type-label text-ink-muted">
           {peekLine}
@@ -765,6 +1111,11 @@
             data-slot="timeline"
             class="grid min-w-0 grid-cols-(--cols) gap-x-space-3 @max-timeline/move:grid-cols-1"
             style:--cols="minmax(var(--c-graph-move-name-w), 38%) minmax(0, 1fr)"
+            {@attach (node: HTMLElement) => {
+              // Not passive: a pinch or a Ctrl-wheel zooms the lanes, never the page.
+              node.addEventListener("wheel", wheel, { passive: false });
+              return () => node.removeEventListener("wheel", wheel);
+            }}
           >
             <div
               class="sticky top-0 z-2 col-span-full grid min-h-c-btn-h grid-cols-subgrid bg-surface-raised"
@@ -773,13 +1124,13 @@
                 {@render transport()}
               </div>
               <div
-                class="relative flex min-w-0 items-end px-space-2"
+                class="relative flex min-w-0 flex-col justify-end gap-space-1 px-space-2"
                 data-slot="ruler"
               >
                 <Slider.Root
                   class="relative block h-space-7 w-full cursor-ew-resize touch-none select-none coarse:h-c-btn-h-lg"
-                  max={scale}
-                  min={0}
+                  max={Math.max(viewTo, viewFrom + 1)}
+                  min={viewFrom}
                   onValueChange={(next: number) =>
                     onseek(Math.min(next, length))}
                   onValueCommit={(next: number) =>
@@ -790,14 +1141,16 @@
                   step={1}
                   thumbPositioning="exact"
                   type="single"
-                  value={handle}
+                  value={Math.min(viewTo, Math.max(viewFrom, handle))}
                 >
                   <div
                     bind:this={ruler}
-                    class="absolute inset-0 type-code leading-none num"
+                    class="absolute inset-0 overflow-x-clip type-code leading-none num"
                     aria-hidden="true"
+                    data-slot="ruler-lane"
                     {@attach frameSize((node: HTMLElement) => {
                       lane = node.clientWidth;
+                      rulerLane = node;
                     })}
                   >
                     {#each marks as mark (mark)}
@@ -817,149 +1170,219 @@
                   <!-- The playhead's flag: a pill standing on the ruler's
                      foot, its line running down the rows; under a finger
                      its area stays inside the ruler, never over a bar. -->
+                  <!-- Hidden while it stands outside the part the lanes show (zoomed). -->
                   <Slider.Thumb
                     aria-label={words.scrub}
                     aria-valuetext={words.playhead(
                       figure(handle),
                       figure(Math.round(length))
                     )}
-                    class="pointer-hit bottom-0 block h-space-4 w-space-2 cursor-ew-resize rounded-pill bg-ink-strong shadow-xs focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2 coarse:w-space-3"
+                    class={[
+                      "pointer-hit bottom-0 block h-space-4 w-space-2 cursor-ew-resize rounded-pill bg-ink-strong shadow-xs focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2 coarse:w-space-3",
+                      (handle < viewFrom || handle > viewTo) && "invisible",
+                    ]}
                     data-slot="playhead-head"
                     index={0}
                     onkeydown={rulerKey}
                   />
+                  {#if repeat && loopFrom >= viewFrom && loopFrom <= viewTo}
+                    <!-- Where a repeat goes round again from: at 0 until dragged. -->
+                    <span
+                      aria-label={words.repeatFrom(figure(loopFrom))}
+                      aria-valuemax={Math.round(length)}
+                      aria-valuemin={0}
+                      aria-valuenow={Math.round(loopFrom)}
+                      class="pointer-hit touch-hit absolute top-0 start-(--at) z-1 block h-space-3 w-space-1 -translate-x-1/2 cursor-ew-resize touch-none rounded-pill bg-ink-muted focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2 rtl:translate-x-1/2"
+                      data-slot="repeat-from"
+                      onkeydown={loopKey}
+                      onpointerdown={dragAlong(setLoopFrom, () => rulerLane)}
+                      role="slider"
+                      style:--at={pct(loopFrom)}
+                      tabindex="0"
+                    ></span>
+                  {/if}
                 </Slider.Root>
+                {#if zoomed}
+                  {@render overviewStrip()}
+                {/if}
               </div>
             </div>
 
-            {#each lines as line (line.key)}
-              {@const track = line.track}
-              {@const name = lineName(line)}
-              {@const open = !written && isOpen(line)}
-              {@const chosen = picked?.key === line.key}
-              {@const edited = !written && editsOf(track).size > 0}
-              <!-- A row: one thing that moves, or under it one animation; one
-                 comment target named by its words, as a person says it. -->
-              <div
-                data-slot="clip"
-                data-selected={chosen || undefined}
-                class={[
-                  "col-span-full grid min-w-0 grid-cols-subgrid border-t border-border-hairline",
-                ]}
-                {...lights(track)}
-              >
+            {#each entries as entry (entry.key)}
+              {#if entry.kind === "head"}
+                {@const open = !folded.includes(entry.group)}
+                <!-- The agent's group: the house section head over its rows, its chevron folding them. -->
                 <div
-                  class={[
-                    "flex min-h-c-btn-h-lg min-w-0 items-center",
-                    line.part && "ps-c-btn-h-xs",
-                  ]}
+                  class="col-span-full flex min-h-c-btn-h min-w-0 items-center border-t border-border-hairline"
+                  data-slot="clip-group"
                 >
-                  {#if written}
-                    <!-- As written: the agent's timing, read only. The row
-                         stands as words alone, no chevron and no press. -->
+                  <button
+                    aria-expanded={open}
+                    aria-label={words.groupFold(entry.group, open)}
+                    class="mark-line pointer-hit touch-hit flex h-c-btn-h-sm min-w-0 items-center rounded-sm pe-space-2 type-meta text-ink-muted transition-control can-hover:hover:bg-surface-hover"
+                    onclick={() => foldGroup(entry.group)}
+                    type="button"
+                  >
                     <span
-                      class="flex h-c-btn-h-sm min-w-0 flex-1 cursor-default items-center ps-c-btn-h-xs pe-space-1 type-label"
-                      title={name}
+                      class="grid w-c-btn-h-xs flex-none place-items-center"
+                      data-box
                     >
-                      {@render rowWords(line, "read")}
+                      <IconChevronRight
+                        aria-hidden="true"
+                        class={[
+                          "size-icon-sm transition-transform duration-(--dur-control) ease-out rtl:-scale-x-100",
+                          open && "rotate-90 rtl:-rotate-90",
+                        ]}
+                      />
                     </span>
-                  {:else}
-                    <!-- The row's one press: it opens or closes the row, its
-                         chevron turning; what opens is under it. -->
-                    <button
-                      type="button"
-                      aria-expanded={open}
-                      aria-label={name}
-                      class="pointer-hit touch-hit flex h-c-btn-h-sm min-w-0 flex-1 items-center rounded-sm pe-space-1 text-start type-label transition-control data-chosen:bg-selected-bg can-hover:not-data-chosen:hover:bg-surface-hover"
-                      data-chosen={chosen || undefined}
-                      onclick={() => press(line)}
-                      title={name}
+                    <span
+                      class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                      >{entry.group}</span
                     >
+                  </button>
+                </div>
+              {:else}
+                {@const line = entry.line}
+                {@const track = line.track}
+                {@const name = lineName(line)}
+                {@const open = !written && isOpen(line)}
+                {@const chosen = picked?.key === line.key}
+                {@const edited = !written && editsOf(track).size > 0}
+                <!-- A row: one thing that moves, or under it one animation; one
+                 comment target named by its words, as a person says it. -->
+                <div
+                  data-slot="clip"
+                  data-selected={chosen || undefined}
+                  class={[
+                    "col-span-full grid min-w-0 grid-cols-subgrid border-t border-border-hairline",
+                  ]}
+                  {...lights(track)}
+                >
+                  <div
+                    class={[
+                      "flex min-h-c-btn-h-lg min-w-0 items-center",
+                      line.part && "ps-c-btn-h-xs",
+                    ]}
+                  >
+                    {#if written}
+                      <!-- As written: the agent's timing, read only. The row
+                         stands as words alone, no chevron and no press. -->
                       <span
-                        class="grid w-c-btn-h-xs flex-none place-items-center"
-                        data-box
+                        class="flex h-c-btn-h-sm min-w-0 flex-1 cursor-default items-center ps-c-btn-h-xs pe-space-1 type-label"
+                        title={name}
                       >
-                        <IconChevronRight
-                          aria-hidden="true"
-                          class={[
-                            "size-icon-sm transition-transform duration-(--dur-control) ease-out rtl:-scale-x-100",
-                            open && "rotate-90 rtl:-rotate-90",
-                            chosen ? "text-selected-ink" : "text-ink-muted",
-                          ]}
-                        />
+                        {@render rowWords(line, "read")}
                       </span>
-                      {@render rowWords(line, chosen ? "open" : "rest")}
-                    </button>
-                  {/if}
-                  {#if edited}
-                    <!-- A changed row: its restore glyph at the name's end,
+                    {:else}
+                      <!-- The row's one press: it opens or closes the row, its
+                         chevron turning; what opens is under it. -->
+                      <button
+                        type="button"
+                        aria-expanded={open}
+                        aria-label={name}
+                        class="pointer-hit touch-hit flex h-c-btn-h-sm min-w-0 flex-1 items-center rounded-sm pe-space-1 text-start type-label transition-control data-chosen:bg-selected-bg can-hover:not-data-chosen:hover:bg-surface-hover"
+                        data-chosen={chosen || undefined}
+                        onclick={() => press(line)}
+                        title={name}
+                      >
+                        <span
+                          class="grid w-c-btn-h-xs flex-none place-items-center"
+                          data-box
+                        >
+                          <IconChevronRight
+                            aria-hidden="true"
+                            class={[
+                              "size-icon-sm transition-transform duration-(--dur-control) ease-out rtl:-scale-x-100",
+                              open && "rotate-90 rtl:-rotate-90",
+                              chosen ? "text-selected-ink" : "text-ink-muted",
+                            ]}
+                          />
+                        </span>
+                        {@render rowWords(line, chosen ? "open" : "rest")}
+                      </button>
+                    {/if}
+                    {#if edited}
+                      <!-- A changed row: its restore glyph at the name's end,
                          inside the name's own column, so the lanes never
                          move as it comes and goes. -->
-                    {@const said = words.resetRow(name)}
-                    <Tip label={said}>
-                      {#snippet children(tip)}
-                        <Button
-                          {...tip}
-                          aria-label={said}
-                          data-edited
-                          icon={IconReset}
-                          onclick={() =>
-                            onreset(
-                              track.clips
-                                .filter((clip) => clip.was)
-                                .map((clip) => clip.id)
-                            )}
-                          press="pressable"
-                          size="icon-xs"
-                          variant="ghost"
+                      {@const said = words.resetRow(name)}
+                      <Tip label={said}>
+                        {#snippet children(tip)}
+                          <Button
+                            {...tip}
+                            aria-label={said}
+                            data-edited
+                            icon={IconReset}
+                            onclick={() =>
+                              onreset(
+                                track.clips
+                                  .filter((clip) => clip.was)
+                                  .map((clip) => clip.id)
+                              )}
+                            press="pressable"
+                            size="icon-xs"
+                            variant="ghost"
+                          />
+                        {/snippet}
+                      </Tip>
+                    {/if}
+                  </div>
+                  <div
+                    class="relative flex min-w-0 items-center px-space-2 @max-timeline/move:min-h-c-btn-h"
+                    data-slot="lane"
+                  >
+                    <!-- A press on its empty part scrubs, as the ruler does; with Shift, a press on a bar too. -->
+                    <div
+                      class={[
+                        "relative flex size-full min-w-0 cursor-ew-resize items-center",
+                        zoomed && "overflow-x-clip",
+                      ]}
+                      onpointerdowncapture={laneScrub}
+                      role="presentation"
+                      title={words.laneScrub}
+                    >
+                      {@render back()}
+                      {#if written}
+                        {@render writtenLane(track)}
+                      {:else}
+                        <ClipBar
+                          edges={edgesBesides}
+                          {lang}
+                          {name}
+                          onlegs={(clip, legs, replay) =>
+                            onretime([releg(clip, legs)], replay)}
+                          onretime={(run, from, to, replay) =>
+                            onretime(retimeRun(run, from, to), replay)}
+                          view={{ from: viewFrom, to: viewTo }}
+                          onselect={() => {
+                            if (!open) {
+                              press(line);
+                            }
+                          }}
+                          {scale}
+                          selected={chosen}
+                          {track}
                         />
-                      {/snippet}
-                    </Tip>
-                  {/if}
-                </div>
-                <div
-                  class="relative flex min-w-0 items-center px-space-2 @max-timeline/move:min-h-c-btn-h"
-                  data-slot="lane"
-                >
-                  <div class="relative flex size-full min-w-0 items-center">
-                    {@render back()}
-                    {#if written}
-                      {@render writtenLane(track)}
-                    {:else}
-                      <ClipBar
-                        edges={edgesBesides}
+                      {/if}
+                      {@render playheadLine()}
+                    </div>
+                  </div>
+                  {#if chosen}
+                    <div
+                      class="col-span-full min-w-0 ps-c-btn-h-xs pt-space-2 pb-space-3"
+                      in:unfold
+                      out:unfold
+                    >
+                      <ClipSettings
                         {lang}
                         {name}
-                        onretime={(run, from, to, replay) =>
-                          onretime(retimeRun(run, from, to), replay)}
-                        onselect={() => {
-                          if (!open) {
-                            press(line);
-                          }
-                        }}
-                        {scale}
-                        selected={chosen}
+                        onretime={(next) => onretime(next)}
                         {track}
                       />
-                    {/if}
-                    {@render playheadLine()}
-                  </div>
+                    </div>
+                  {/if}
                 </div>
-                {#if chosen}
-                  <div
-                    class="col-span-full min-w-0 ps-c-btn-h-xs pt-space-2 pb-space-3"
-                    in:unfold
-                    out:unfold
-                  >
-                    <ClipSettings
-                      {lang}
-                      {name}
-                      onretime={(next) => onretime(next)}
-                      {track}
-                    />
-                  </div>
-                {/if}
-              </div>
+              {/if}
             {/each}
           </div>
           <!-- What the bars' colours say: each kind on the face, its

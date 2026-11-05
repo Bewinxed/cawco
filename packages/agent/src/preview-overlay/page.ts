@@ -42,15 +42,31 @@ import { paneKeyOf, shellShortcutOf } from "@cawco/core/shell-shortcuts";
 import { interactionOf } from "@cawco/core/stage";
 import {
   STAGE_COMPARE,
+  STAGE_DIALS,
+  STAGE_DIALS_WRITTEN,
   STAGE_DIFFERENCES,
   STAGE_FAULT,
   STAGE_LAID,
+  STAGE_LET_GO,
+  STAGE_PAUSE,
+  STAGE_PLAY,
   STAGE_REACH,
   STAGE_REACHED,
+  STAGE_RETIME,
   STAGE_REVEAL,
+  STAGE_RING,
+  STAGE_SEEK,
+  STAGE_TIME,
   stageCompareOf,
+  stageDialsOf,
+  stageLetGoOf,
+  stagePauseOf,
+  stagePlayOf,
   stageReachOf,
+  stageRetimeOf,
   stageRevealOf,
+  stageRingOf,
+  stageSeekOf,
 } from "@cawco/core/stage-graph";
 import {
   type Anchorable,
@@ -3291,6 +3307,33 @@ async function personWrite(
 }
 
 /** What each of the host's messages does, by its type. */
+/**
+ * The Animation face's asks of a component's stage (core stage-graph.ts),
+ * each read by its own reader and handed the page as a window event of its
+ * own name, as a reach is.
+ */
+function stageAsks(): Record<string, (message: HostMessage) => void> {
+  const readers: Record<string, (value: unknown) => object | null> = {
+    [STAGE_PLAY]: stagePlayOf,
+    [STAGE_PAUSE]: stagePauseOf,
+    [STAGE_SEEK]: stageSeekOf,
+    [STAGE_LET_GO]: stageLetGoOf,
+    [STAGE_RETIME]: stageRetimeOf,
+    [STAGE_RING]: stageRingOf,
+  };
+  return Object.fromEntries(
+    Object.entries(readers).map(([type, read]) => [
+      type,
+      (message: HostMessage) => {
+        const said = read(message);
+        if (said) {
+          dispatchEvent(new CustomEvent(type, { detail: said }));
+        }
+      },
+    ])
+  );
+}
+
 const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
   {
     "cawco:hello": (message) => {
@@ -3385,6 +3428,15 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       const compare = stageCompareOf(message);
       if (compare) {
         dispatchEvent(new CustomEvent(STAGE_COMPARE, { detail: compare }));
+      }
+    },
+    // The Animation face: the move played, paused, scrubbed, let go, retimed; a row's thing ringed.
+    ...stageAsks(),
+    // The agent's dials as the graph turned them, the whole set.
+    [STAGE_DIALS]: (message) => {
+      const dials = stageDialsOf(message);
+      if (dials) {
+        dispatchEvent(new CustomEvent(STAGE_DIALS, { detail: dials }));
       }
     },
     "cawco:theme": (message) => takeTheme(message.theme),
@@ -3594,14 +3646,16 @@ window.addEventListener("cawco:sheet", (event) => {
 /*
  * A component artifact's stage (stage-host canvas stage.ts) answers the
  * design graph in the pane: a reach landed, the drawing laid out, the
- * component threw as it mounted, what differs from the state compared with
- * (core stage-graph.ts).
+ * component threw as it mounted, what differs from the state compared with,
+ * the move's clock, the agent's dials as written (core stage-graph.ts).
  */
 for (const type of [
   STAGE_REACHED,
   STAGE_LAID,
   STAGE_FAULT,
   STAGE_DIFFERENCES,
+  STAGE_TIME,
+  STAGE_DIALS_WRITTEN,
 ]) {
   window.addEventListener(type, (event) => {
     post(type, (event as CustomEvent<object>).detail ?? {});

@@ -1,28 +1,38 @@
 /**
  * The design graph's line to its stage page (core stage-graph.ts), the
  * page that holds the component on its stage's origin inside the panel's
- * frame: what the graph posts it (a reach, Compare, a reveal, the view),
- * and what it last said (its sheets, how its drawing is laid out, the reach
- * that landed, a fault, what differs, a press), held as state the graph
- * reads. One per component artifact's pane (PreviewPane), which hears the
+ * frame: what the graph posts it (a reach, Compare, a reveal, the view, the
+ * move's play, pause, scrub and timing, a row's ring, the dials), and what
+ * it last said (its sheets, how its drawing is laid out, the reach that
+ * landed, a fault, what differs, the move's clock, the dials as written, a
+ * press), held as state the graph reads. One per component artifact's pane (PreviewPane), which hears the
  * page and hands each word here.
  */
 import type { SheetOnPage } from "@cawco/core/stage";
 import {
   STAGE_COMPARE,
   STAGE_DIALS,
+  STAGE_LET_GO,
+  STAGE_PAUSE,
+  STAGE_PLAY,
   STAGE_REACH,
+  STAGE_RETIME,
   STAGE_REVEAL,
+  STAGE_RING,
+  STAGE_SEEK,
   type StageCompare,
   type StageDials,
   type StageDifferences,
   type StageFault,
   type StageLaid,
+  type StagePlay,
   type StageReach,
   type StageReached,
   type StageReveal,
+  type StageTime,
   type StateRef,
   storyOf,
+  type Tuning,
 } from "@cawco/core/stage-graph";
 import { untrack } from "svelte";
 import type { SheetInspector } from "#lib/cawco/preview/sheet-inspector.svelte.js";
@@ -60,11 +70,12 @@ export class StageLink {
   differences = $state<StageDifferences | null>(null);
   /**
    * Each of the agent's dials' value as written, read off the drawing by
-   * the page, by name; null until the page has read them. The Dials face
-   * stands once it has (slice 4 has the page say them; until then the
-   * stage page's own DialKit panel turns them).
+   * the page (`cawco:stage-dials-written`), by name; null until the page
+   * has read them. The Dials face stands once it has.
    */
   dialsWritten = $state<StageDials["values"] | null>(null);
+  /** The move's clock as the page last said it (`cawco:stage-time`), and when it came on this page's clock; null while no play has been said. */
+  time = $state<(StageTime & { heard: number }) | null>(null);
   readonly #post: (message: object) => void;
   #ask = 0;
 
@@ -135,6 +146,46 @@ export class StageLink {
     this.#post(message);
   }
 
+  /** The move the page last read, played from `from` ms as `tuning` times it (`written`: as the agent wrote it); round again from `loopFrom` on `repeat`. */
+  play(asking: Omit<StagePlay, "ask">): void {
+    this.#ask += 1;
+    this.#post({ type: STAGE_PLAY, ask: this.#ask, ...asking });
+  }
+
+  /** Every replay paused where it stands. */
+  pause(): void {
+    this.#ask += 1;
+    this.#post({ type: STAGE_PAUSE, ask: this.#ask });
+  }
+
+  /** The move stood at `t` ms and held there, as `tuning` times it: a scrub's frame. */
+  seek(t: number, tuning: Tuning[], version: "yours" | "written"): void {
+    this.#ask += 1;
+    this.#post({ type: STAGE_SEEK, ask: this.#ask, t, tuning, version });
+  }
+
+  /** A scrub let go at `t`: on the move's end the drawing is let go, the kept state as it stands. */
+  letGo(t: number): void {
+    this.#ask += 1;
+    this.#post({ type: STAGE_LET_GO, ask: this.#ask, t });
+  }
+
+  /** The move's timing changed: a hold drawn again on it, or (`replayFrom`) played from there once. */
+  retime(tuning: Tuning[], replayFrom: number | null): void {
+    this.#ask += 1;
+    this.#post({ type: STAGE_RETIME, ask: this.#ask, tuning, replayFrom });
+  }
+
+  /** The thing a rested row names ringed on the stage (null: none), at `at` ms into the move. */
+  ring(thing: string | null, at: number): void {
+    this.#post({ type: STAGE_RING, thing, at });
+  }
+
+  /** The move's clock said: held with the moment it came, so the readout runs from it. */
+  heardTime(said: StageTime): void {
+    this.time = { ...said, heard: performance.now() };
+  }
+
   /** A region of the drawing brought into the stage's view: what the last reach changed, or a difference's ring. */
   reveal(what: StageReveal["what"]): void {
     this.#post({ type: STAGE_REVEAL, what });
@@ -166,6 +217,7 @@ export class StageLink {
     // The new page compares with nothing until the graph asks it again.
     this.comparing = null;
     this.differences = null;
+    this.time = null;
     this.loads += 1;
   }
 

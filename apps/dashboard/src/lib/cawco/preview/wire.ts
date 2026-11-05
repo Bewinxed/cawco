@@ -22,10 +22,12 @@ import {
   type Story,
 } from "@cawco/core/stage";
 import {
+  STAGE_DIALS_WRITTEN,
   STAGE_DIFFERENCES,
   STAGE_FAULT,
   STAGE_LAID,
   STAGE_REACHED,
+  STAGE_TIME,
 } from "@cawco/core/stage-graph";
 
 const ERROR_MAX = 300;
@@ -479,6 +481,8 @@ const PAGE_MESSAGES = [
   STAGE_LAID,
   STAGE_FAULT,
   STAGE_DIFFERENCES,
+  STAGE_TIME,
+  STAGE_DIALS_WRITTEN,
 ] as const;
 
 /** A message the pane answers by its `type`; each field besides is checked by what reads it. */

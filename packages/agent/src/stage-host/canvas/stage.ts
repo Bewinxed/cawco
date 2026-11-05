@@ -36,11 +36,16 @@
  * it through the component's own handler) it is mounted anew.
  *
  * A reach to a state its states file plays a move into (`play`, from the
- * story's `from`) plays that move on the drawing from its from state, and
- * docks the move's timeline across the page's floor (DialKit's, chrome.ts
- * `openMove`), where the person tunes it and the artifact keeps it as
- * `tuned`; the agent's dials stand at the page's top. Both stay until the
- * design graph's own controls take them.
+ * story's `from`) plays that move on the drawing from its from state; the
+ * reach answers every animation it set off as a clip, and the drawing rests
+ * on the state reached. The panel's Animation face plays, scrubs and
+ * tunes that move by messages (`cawco:stage-play`, `-pause`, `-seek`,
+ * `-let-go`, `-retime`), each on the page's own replays (replays.ts), the
+ * page its clock (`cawco:stage-time`); a row rested on rings its thing
+ * (`cawco:stage-ring`). The agent's dials are the panel's too: the page
+ * says each one's value as written off the drawing once it first mounts
+ * (`cawco:stage-dials-written`) and sets every value the panel turns
+ * (`cawco:stage-dials`) on it.
  *
  * Every states file's report is read in the rig, a section at a time: each
  * story mounted off screen as the person's drawing would be, read, then
@@ -52,6 +57,7 @@
 import { readWithin } from "@cawco/core/bounded";
 import {
   type AnimationRead,
+  type CanvasDial,
   FORMS,
   type FramePictureRead,
   type FrameRender,
@@ -65,25 +71,32 @@ import {
   type ClipRead,
   clipKindOf,
   cutRecords,
+  type DialSet,
   type DifferenceRead,
   type DrawingBox,
   STAGE_COMPARE,
+  STAGE_DIALS,
+  STAGE_DIALS_WRITTEN,
   STAGE_DIFFERENCES,
   STAGE_FAULT,
   STAGE_LAID,
   STAGE_REACH,
   STAGE_REACHED,
   STAGE_REVEAL,
+  STAGE_TIME,
   type StageCompare,
+  type StageDialsWritten,
   type StageDifferences,
   type StageFault,
   type StageLaid,
   type StageReach,
   type StageReached,
   type StageReveal,
+  type StageTime,
   type StateRef,
   shownName,
   stageCompareOf,
+  stageDialsOf,
   stageReachOf,
   stageRevealOf,
   storyOf,
@@ -94,6 +107,16 @@ import { differences } from "./diff";
 import { drew, firstWords, partsOf, readAnimation } from "./measure";
 import { nameOf, thingOf } from "./names";
 import { allClass } from "./pseudo";
+import {
+  answerMoves,
+  frameCurveOf,
+  framedOf,
+  type Held,
+  interpolated,
+  legsOf,
+  Replays,
+  valuesOf,
+} from "./replays";
 import {
   type Column,
   detailsOf,
@@ -176,6 +199,8 @@ interface Taken {
   animation: Animation;
   /** Ms after the press it was first seen at. */
   first: number;
+  /** How many times it runs; 0 for a loop. */
+  iterations: number;
   keyframes: Keyframe[];
   /** What it animates, read as it was first seen (`propertyOf`). */
   property: string;
@@ -264,8 +289,82 @@ const tokenPx = (name: string): number =>
     getComputedStyle(document.documentElement).getPropertyValue(name)
   ) || 0;
 
+/**
+ * A dial's value as written, from what the drawing holds for it: a
+ * number's figure (a plain number, or one in the dial's own unit), a
+ * toggle's state, a colour's or an option's words; null where it holds
+ * none the dial can show.
+ */
+function dialValueOf(
+  kind: string,
+  raw: unknown,
+  unit: string | undefined
+): DialSet | null {
+  if (typeof raw === "boolean") {
+    return kind === "toggle" || kind === "action" ? raw : String(raw);
+  }
+  if (typeof raw === "number") {
+    return Number.isFinite(raw) ? raw : null;
+  }
+  if (typeof raw !== "string" || raw === "") {
+    return kind === "action" ? 0 : null;
+  }
+  if (kind === "number" || kind === "action") {
+    return figureOf(raw, unit);
+  }
+  return kind === "toggle" ? raw === "true" || raw === "1" : raw;
+}
+
+/** A plain number, or one in `unit`, read from its words; null for any other. */
+function figureOf(raw: string, unit: string | undefined): number | null {
+  const said = (
+    unit && raw.endsWith(unit) ? raw.slice(0, -unit.length) : raw
+  ).trim();
+  const figure = Number(said);
+  return said !== "" && Number.isFinite(figure) ? figure : null;
+}
+
+/**
+ * Each dial's value as written on `body`: a `cssVar` dial's as the body
+ * computes it with no dial set on it (each set one lifted for the read and
+ * put back), an `arg` dial's as `own`, the story's args, hold it.
+ */
+function writtenOf(
+  dials: readonly CanvasDial[],
+  body: HTMLElement,
+  own: Record<string, unknown>
+): Record<string, DialSet> {
+  const lifted = new Map<string, string>();
+  for (const dial of dials) {
+    const now =
+      "cssVar" in dial.target
+        ? body.style.getPropertyValue(dial.target.cssVar)
+        : "";
+    if ("cssVar" in dial.target && now) {
+      lifted.set(dial.target.cssVar, now);
+      body.style.removeProperty(dial.target.cssVar);
+    }
+  }
+  const style = getComputedStyle(body);
+  const values: Record<string, DialSet> = {};
+  for (const dial of dials) {
+    const raw =
+      "cssVar" in dial.target
+        ? style.getPropertyValue(dial.target.cssVar).trim()
+        : own[dial.target.arg];
+    const value = dialValueOf(dial.kind, raw, dial.unit);
+    if (value !== null) {
+      values[dial.name] = value;
+    }
+  }
+  for (const [name, value] of lifted) {
+    body.style.setProperty(name, value);
+  }
+  return values;
+}
+
 export function bootStage(page: Page): Mode {
-  const { chrome, rig, root, sections, state, view } = page;
+  const { rig, root, sections, state, view } = page;
   /**
    * A panel frames the page and says what it stands at; a page on its own
    * (the stage's render, the canvas opened in its own tab) stands at its
@@ -285,7 +384,11 @@ export function bootStage(page: Page): Mode {
   const rings = document.createElement("div");
   rings.className = "cawco-stage-rings";
   rings.setAttribute("aria-hidden", "true");
-  frame.append(drawing, rings);
+  /** The ring on the thing a row of the move names, in the rings' layer. */
+  const litRing = document.createElement("span");
+  litRing.className = "cawco-lit-ring";
+  litRing.hidden = true;
+  frame.append(drawing, rings, litRing);
   /** Compare side by side: each drawing named over its own column. */
   const names = document.createElement("div");
   names.className = "cawco-stage-names";
@@ -306,6 +409,13 @@ export function bootStage(page: Page): Mode {
   canvas.append(waiting, names, frame);
 
   let live: Live | null = null;
+  /** The move the last reach read, replayed as the Animation face plays, scrubs and tunes it; the page its clock. */
+  const replays = new Replays(
+    (time) => tell<StageTime>(STAGE_TIME, time),
+    () => ringLit()
+  );
+  /** The thing the face's row rests on, by the clips' id for it; null while none. */
+  let lit: string | null = null;
   /** The panel's last Compare ask, while it compares; null while it doesn't. */
   let comparing: StageCompare | null = null;
   /** The state compared with, drawn hidden under the drawing; null until it mounts. */
@@ -552,7 +662,7 @@ export function bootStage(page: Page): Mode {
 
   /** `target` mounted in the drawing, at rest. */
   async function mount(target: Target): Promise<void> {
-    chrome.closeMove();
+    replays.load([]);
     holdHeight(true);
     live?.mounted?.unmount();
     drawing.replaceChildren();
@@ -590,7 +700,7 @@ export function bootStage(page: Page): Mode {
       dressAgainst(against);
     }
     laid();
-    chrome.dials(() => drawing);
+    tellDials(target);
   }
 
   /** `next` set on the live instance, replacing its args whole: a key the next state lacks falls to the component's default. */
@@ -693,7 +803,7 @@ export function bootStage(page: Page): Mode {
   async function act(
     run: () => Promise<void>,
     still: boolean
-  ): Promise<{ clips: ClipRead[]; taken: Taken[] }> {
+  ): Promise<{ clips: ClipRead[]; held: Held[] }> {
     const had = document.activeElement;
     // Where he left the page's scroll: a play's press focuses a control,
     // which scrolls it into view; the scroll is held there while it runs.
@@ -722,11 +832,16 @@ export function bootStage(page: Page): Mode {
       const effect = animation.effect as KeyframeEffect | null;
       if ((Number(effect?.getComputedTiming().duration) || 0) > 0) {
         // Its frames and timing as the engine has them when first seen: a transition's engine drops its effect once it ends.
+        const keyframes = effect?.getKeyframes() ?? [];
+        // An authored clip's custom property interpolates as it runs, so a mockup binds to its live value.
+        interpolated(keyframes);
+        const iterations = Number(effect?.getComputedTiming().iterations ?? 1);
         taken.push({
           animation,
           first,
           target: effect?.target ?? null,
-          keyframes: effect?.getKeyframes() ?? [],
+          keyframes,
+          iterations: Number.isFinite(iterations) ? iterations : 0,
           property: propertyOf(animation),
           read: readAnimation(animation, t0Timeline),
         });
@@ -785,7 +900,15 @@ export function bootStage(page: Page): Mode {
       giveBack(had);
       scroller.scrollTo({ ...left, behavior: "instant" });
     }
-    return { clips: clipsOf(taken, starts), taken };
+    const clips = clipsOf(taken, starts);
+    return {
+      clips,
+      held: clips.map((read, at) => ({
+        read,
+        keyframes: taken[at]?.keyframes ?? [],
+        target: taken[at]?.target ?? null,
+      })),
+    };
   }
 
   /** The clips a reach read, each placed from where the move's first animation was set off, its thing named as it stands now. */
@@ -796,6 +919,7 @@ export function bootStage(page: Page): Mode {
       ...taken.map((one) => starts.get(one.animation) ?? one.first)
     );
     // Each read as it was first seen: an animation's engine may drop its effect once it ends (a transition's), or cancel it (a Svelte outro).
+    const targets = new Map<Element, string>();
     return taken.map((one, at) => {
       const { easing } = one.read;
       const { property } = one;
@@ -806,6 +930,12 @@ export function bootStage(page: Page): Mode {
         ids.set(thing, id);
         moved.set(id, thing);
       }
+      let targetId = `e${at}`;
+      if (one.target) {
+        targetId = targets.get(one.target) ?? `e${targets.size}`;
+        targets.set(one.target, targetId);
+      }
+      const inFrames = framedOf(easing, one.keyframes);
       return {
         id: String(at),
         element: thing?.isConnected ? nameOf(thing) : words.element,
@@ -814,9 +944,17 @@ export function bootStage(page: Page): Mode {
         delay: Math.round(one.read.delay),
         duration: Math.round(one.read.duration),
         easing,
-        framed: easing === "linear" && one.keyframes.length > 2,
+        framed: inFrames,
+        frameCurve: inFrames ? frameCurveOf(one.keyframes) : null,
+        group:
+          one.target?.closest<HTMLElement>("[data-cawco-group]")?.dataset
+            .cawcoGroup || null,
+        iterations: one.iterations,
+        legs: legsOf(one.keyframes, inFrames),
+        target: targetId,
         thing: id,
         kind: clipKindOf(property.split(",")),
+        values: valuesOf(one.keyframes),
       };
     });
   }
@@ -860,8 +998,8 @@ export function bootStage(page: Page): Mode {
       answer(refusal(target.refused));
       return;
     }
-    // Whatever timeline stood was the last move's.
-    chrome.closeMove();
+    // Whatever replays stood were the last move's.
+    replays.load([]);
     const play = playOf(asking, target);
     const stood = await standFor(asking, target, play);
     if (stood === "opened") {
@@ -976,9 +1114,10 @@ export function bootStage(page: Page): Mode {
         await landed(target);
       }
       laid();
-      if (play) {
-        await timeline(target, from, read.taken);
-      }
+      // The move the face plays and scrubs: each clip on its own element as
+      // the reach read it. No replay is made yet, so the drawing rests on
+      // the state reached, never at its move's first frame.
+      replays.load(read.held);
       return {
         move: {
           from: from?.story ?? "",
@@ -997,46 +1136,6 @@ export function bootStage(page: Page): Mode {
         failed: { message: said.message, stack: said.stack ?? said.message },
       };
     }
-  }
-
-  /**
-   * A move played on the drawing, held for its timeline (DialKit's, chrome.ts
-   * `openMove`, until the design graph's Animation face takes it): each
-   * animation it fired made again, paused, on its own element with its own
-   * frames, so the timeline's playhead seeks what the engine ran and its
-   * tuned timing previews live. An outro's element is gone once the move
-   * ends, so its clip is tuned without a preview.
-   */
-  async function timeline(
-    target: Target,
-    from: StateRef | null,
-    taken: Taken[]
-  ): Promise<void> {
-    const replays = taken.map((one) => {
-      if (!(one.target?.isConnected && one.keyframes.length > 0)) {
-        return { animation: null, read: one.read };
-      }
-      const animation = one.target.animate(one.keyframes, {
-        duration: one.read.duration,
-        delay: one.read.start + one.read.delay,
-        easing: one.read.easing,
-        fill: "both",
-      });
-      animation.pause();
-      animation.currentTime = 0;
-      return { animation, read: one.read };
-    });
-    await chrome.openMove(
-      {
-        move: {
-          from: from?.story ?? "",
-          to: target.ref.story,
-          animations: taken.map((one) => one.read),
-        },
-        replays,
-      },
-      `${target.section.file}|${target.ref.story}`
-    );
   }
 
   /** `to`'s story's `play` on the live instance: its args and `update` the instance's own. */
@@ -1273,9 +1372,15 @@ export function bootStage(page: Page): Mode {
 
   /** The region the last reach changed, in the frame's own px; null when nothing it moved still stands. */
   function movedBox(): DrawingBox | null {
-    const els = [...moved.values()].filter(
-      (el) => el.isConnected && drawing.contains(el)
+    return boxOf(
+      ...[...moved.values()].filter(
+        (el) => el.isConnected && drawing.contains(el)
+      )
     );
+  }
+
+  /** The box round `els` in the frame's own px; null for none. */
+  function boxOf(...els: Element[]): DrawingBox | null {
     if (els.length === 0) {
       return null;
     }
@@ -1301,6 +1406,15 @@ export function bootStage(page: Page): Mode {
    * the kept one's place for one that went where the two don't stand side
    * by side, as its line's press asks (DesignGraph `showDifference`).
    */
+  /** One thing the last reach moved brought into view, with room for its ring. */
+  function revealThing(id: string): void {
+    const thing = moved.get(id);
+    const box = thing?.isConnected ? boxOf(thing) : null;
+    if (box) {
+      showBox(box, true);
+    }
+  }
+
   function reveal({ what }: StageReveal): void {
     if ("difference" in what) {
       const one = found[what.difference];
@@ -1315,6 +1429,10 @@ export function bootStage(page: Page): Mode {
       };
       arrange();
       showBox(ringBox(one), true);
+      return;
+    }
+    if ("thing" in what) {
+      revealThing(what.thing);
       return;
     }
     const [first] = ringed();
@@ -1336,6 +1454,79 @@ export function bootStage(page: Page): Mode {
     }
     showBox(box, false);
   }
+
+  /* --- The move's replays, as the Animation face asks ------------------- */
+
+  /**
+   * The ring on the thing a rested row names, its box as it stands now:
+   * the replays hold it at the playhead's moment, so it is read again on
+   * each frame of a play or a scrub.
+   */
+  function ringLit(): void {
+    const thing = lit ? moved.get(lit) : undefined;
+    const box =
+      thing?.isConnected && drawing.contains(thing) && !frame.hidden
+        ? boxOf(thing)
+        : null;
+    litRing.hidden = !box;
+    if (box) {
+      litRing.style.setProperty("--ring-x", `${box.x}px`);
+      litRing.style.setProperty("--ring-y", `${box.y}px`);
+      litRing.style.setProperty("--ring-w", `${box.w}px`);
+      litRing.style.setProperty("--ring-h", `${box.h}px`);
+    }
+  }
+
+  /** Reduced motion's Play: the end state fades in where it stands (DESIGN.md, The Reduced Motion Rule). */
+  function fadeIn(): void {
+    drawing.animate([{ opacity: 0 }, { opacity: 1 }], {
+      duration: page.style.duration("--dur-fade", 200),
+      easing: "linear",
+    });
+  }
+
+  answerMoves(replays, {
+    fadeIn,
+    light: (thing) => {
+      lit = thing;
+      ringLit();
+    },
+    said: (time) => tell<StageTime>(STAGE_TIME, time),
+  });
+
+  /* --- The agent's dials, turned in the panel --------------------------- */
+
+  /** The dials' values as written, as last told the panel: each said once it changes. */
+  let writtenSaid = "";
+  /**
+   * Each of the agent's dials as written, read off the drawing as it
+   * mounts and told the panel, which draws the dials once it has them: a
+   * `cssVar` dial's value as the drawing computes it with no dial set on
+   * it, an `arg` dial's as the story's own args hold it.
+   */
+  function tellDials(target: Target): void {
+    const dials = page.spec.dials ?? [];
+    if (dials.length === 0) {
+      return;
+    }
+    const values = writtenOf(
+      dials,
+      drawing,
+      page.ownArgsOf(target.section, target.story.name)
+    );
+    const said = JSON.stringify(values);
+    if (said !== writtenSaid) {
+      writtenSaid = said;
+      tell<StageDialsWritten>(STAGE_DIALS_WRITTEN, { values });
+    }
+  }
+
+  addEventListener(STAGE_DIALS, (event) => {
+    const asking = stageDialsOf((event as CustomEvent<unknown>).detail);
+    if (asking) {
+      page.applyDials(asking.values);
+    }
+  });
 
   /* --- Compare: the state compared with, drawn hidden under the drawing ---- */
 
@@ -1944,8 +2135,24 @@ export function bootStage(page: Page): Mode {
   return {
     // The state compared with too: a dial turned on the drawing turns on it, so only the states differ.
     bodies: () => [
-      ...(live ? [{ body: drawing, mounted: live.mounted }] : []),
-      ...(against ? [{ body: against.body, mounted: against.mounted }] : []),
+      ...(live
+        ? [
+            {
+              body: drawing,
+              mounted: live.mounted,
+              written: page.ownArgsOf(live.section, live.story.name),
+            },
+          ]
+        : []),
+      ...(against
+        ? [
+            {
+              body: against.body,
+              mounted: against.mounted,
+              written: page.ownArgsOf(against.section, against.story.name),
+            },
+          ]
+        : []),
     ],
     framesOf: (section) =>
       reads.get(section)?.map((one) => {

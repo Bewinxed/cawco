@@ -44,14 +44,18 @@
     type StageErrorKind,
   } from "@cawco/core/stage";
   import {
+    STAGE_DIALS_WRITTEN,
     STAGE_DIFFERENCES,
     STAGE_FAULT,
     STAGE_LAID,
     STAGE_REACHED,
+    STAGE_TIME,
+    stageDialsWrittenOf,
     stageDifferencesOf,
     stageFaultOf,
     stageLaidOf,
     stageReachedOf,
+    stageTimeOf,
   } from "@cawco/core/stage-graph";
   import { artifactWords } from "@cawco/core/words/artifacts";
   import { browserWords } from "@cawco/core/words/browser";
@@ -136,6 +140,7 @@
   import { frameObserver, frameSize } from "../frame-observer";
   import { besideLine, inspectorBesideLine } from "../graph/beside";
   import DesignGraph from "../graph/DesignGraph.svelte";
+  import type { TunedRecord } from "../graph/motion";
   import { inspectKept, StageLink } from "../graph/stage-link.svelte";
   import { resolveSessionTitle } from "../links";
   import {
@@ -1089,6 +1094,11 @@
     return kept && typeof kept === "object" && !Array.isArray(kept)
       ? (kept as Record<string, number | string | boolean>)
       : {};
+  });
+  /** His tuning of every move as the artifact's doc keeps it (`tuned`): the design graph puts it back on each move's first read. */
+  const keptTuned = $derived.by((): TunedRecord[] => {
+    const kept = view?.choices.tuned?.value;
+    return Array.isArray(kept) ? (kept as TunedRecord[]) : [];
   });
   let doc: ArtifactDoc | null = null;
   /**
@@ -3497,6 +3507,22 @@
         }
         break;
       }
+      case STAGE_TIME: {
+        // The move's clock: the Animation face's playhead runs from it.
+        const said = stageTimeOf(message);
+        if (said && link) {
+          link.heardTime(said);
+        }
+        break;
+      }
+      case STAGE_DIALS_WRITTEN: {
+        // The agent's dials as written, read off the drawing: the Dials face stands on them.
+        const said = stageDialsWrittenOf(message);
+        if (said && link) {
+          link.dialsWritten = said.values;
+        }
+        break;
+      }
     }
   }
   /**
@@ -4675,10 +4701,18 @@
           {dialsSent}
           {keptDials}
           memory={`cawco-graph-kept:${artifact.id}`}
+          {keptTuned}
           ondials={(values) => {
             // His dial values are the artifact's: its doc's `dials`, which
             // the panel's Send counts and artifact_read answers.
             const refused = doc?.keep("dials", values);
+            if (refused) {
+              failure = { message: refused, again: null };
+            }
+          }}
+          ontuned={(records) => {
+            // His tuning of every move is the artifact's: its doc's `tuned`, which artifact_read answers.
+            const refused = doc?.keep("tuned", records);
             if (refused) {
               failure = { message: refused, again: null };
             }
