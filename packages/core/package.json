@@ -107,6 +107,7 @@
     "./words/turns": "./src/words/turns.ts",
     "./turn-cuts": "./src/turn-cuts.ts",
     "./words/cuts": "./src/words/cuts.ts",
+    "./words/peek": "./src/words/peek.ts",
     "./words/relaunch": "./src/words/relaunch.ts",
     "./words/region-fault": "./src/words/region-fault.ts",
     "./words/notices": "./src/words/notices.ts",

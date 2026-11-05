@@ -17,8 +17,8 @@
    */
   import { causeLine, type Install } from "@cawco/core/install";
   import { connectWords } from "@cawco/core/words/connect";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { IconClose } from "#lib/icons.js";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import { IconClose, IconStop } from "#lib/icons.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import { failureWords } from "../hub-read";
@@ -124,42 +124,43 @@
     "motion-reduce:translate-none motion-reduce:data-[state=closed]:opacity-0",
   ]}
 >
+  <!-- One row with no ground (DESIGN.md, The Title Bars Follow Liquid Glass
+       Rule): the install's name, then Stop install and Close, each a bare
+       symbol in a glass group of its own. Where it stands is the output's
+       first line, in its content. -->
   <header
-    class="mark-line flex flex-none items-center gap-space-2 border-b border-b-border-hairline ps-space-5 pe-space-3 py-space-3"
+    data-slot="bar"
+    class="flex h-c-top-bar-h flex-none items-center gap-space-2 ps-space-5 pe-space-2"
   >
-    <div class="flex min-w-0 flex-1 flex-col" data-box>
-      <h2
-        class="m-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
-      >
-        {titleOf(install)}
-      </h2>
-      <p
-        class="m-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted"
-        aria-live="polite"
-      >
-        {step}
-      </p>
-    </div>
-    {#if install.state === "running"}
-      <Button
-        data-box
-        label={connectWords.stopInstall}
-        onclick={askStop}
-        size="sm"
-        variant="destructive"
-      />
-    {/if}
-    <button
-      data-box
-      type="button"
-      aria-label={connectWords.closeOutput}
-      title={connectWords.closeOutput}
-      class="pressable touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-md text-ink-muted transition-control hover:bg-surface-hover hover:text-ink-strong"
-      onclick={() => connect.closeOutput()}
+    <h2
+      class="m-0 min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
     >
-      <IconClose aria-hidden="true" class="size-icon-md" />
-    </button>
+      {titleOf(install)}
+    </h2>
+    {#if install.state === "running"}
+      <BarGlass form="group">
+        <BarItem
+          icon={IconStop}
+          label={connectWords.stopInstall}
+          onclick={askStop}
+        />
+      </BarGlass>
+    {/if}
+    <BarGlass form="group">
+      <BarItem
+        icon={IconClose}
+        label={connectWords.closeOutput}
+        onclick={() => connect.closeOutput()}
+      />
+    </BarGlass>
   </header>
+  <p
+    data-slot="step"
+    class="m-0 flex-none overflow-clip text-ellipsis whitespace-nowrap px-space-5 pb-space-2 type-meta text-ink-muted"
+    aria-live="polite"
+  >
+    {step}
+  </p>
   <AskHere
     asker={asks}
     at="stop-output"

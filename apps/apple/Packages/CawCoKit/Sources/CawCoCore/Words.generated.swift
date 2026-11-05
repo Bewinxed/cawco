@@ -1010,6 +1010,17 @@ public enum Words {
 
         /// A sign-in's button while one is under way: a fresh sign-in in a new tab, the one under way dropped at the hub.
         public static let signInAgain = "Sign in again"
+
+        /// Back, the chevron alone, named by where it goes (DESIGN.md, The Title Bars Follow Liquid Glass Rule).
+        public static func backTo(place: String) -> String {
+            "Back to \(place)"
+        }
+
+        /// Close, the close symbol alone: a sheet's, a card's, a column's.
+        public static let close = "Close"
+
+        /// Dives into a session from where it is glanced at: the peek, its card.
+        public static let openSession = "Open session"
     }
 
     public enum Transcript {

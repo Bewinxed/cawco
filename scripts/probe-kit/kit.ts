@@ -83,6 +83,8 @@ const FONTS_CONF = join(import.meta.dir, "fonts.conf");
 /** Every viewport a spec opens. `touch` is a finger: touch events, a mobile viewport. */
 export const VIEWS = {
   desk: { width: 1440, height: 900, touch: false },
+  /** The owner's widest desk window. */
+  desk2529: { width: 2529, height: 1400, touch: false },
   tablet: { width: 1024, height: 1366, touch: true },
   /** An iPad mini's portrait: the journeys' tablet. */
   tabletPortrait: { width: 768, height: 1024, touch: true },

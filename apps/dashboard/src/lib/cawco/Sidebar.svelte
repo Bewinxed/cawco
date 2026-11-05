@@ -951,7 +951,7 @@
         <!-- The phone's sheet names itself by this row, so its Close is the
              row's last control (Sheet `titleHidden`), Start session's twin:
              the same box and glyph size, the row's gap between them. -->
-        <Sheet.Close size="row" />
+        <Sheet.Close />
       {/if}
     </div>
   </Sidebar.Header>

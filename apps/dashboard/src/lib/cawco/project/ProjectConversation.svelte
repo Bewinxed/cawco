@@ -13,15 +13,17 @@
    *   seat on the page is the one live Caw (DESIGN.md, The Flock Rule). A starter puts its words in the
    *   composer; nothing is sent. The first words start a conversation
    *   (conversation.ts), and the panel shows it.
-   * - Its head is Caw's face, his name over the conversation's status word,
-   *   New conversation and the way to open it as a tab. His name opens the
+   * - It carries no title (DESIGN.md, The Title Bars Follow Liquid Glass
+   *   Rule: a column opened by its name): Session details, New conversation
+   *   and Open as tab float over the conversation as one glass group, and
+   *   the phone sheet's Close as one of its own. Session details opens the
    *   session's card (SessionDetails); on the conversation the project's
    *   events reach, its harness and model are the project's (ModelSection).
    * - Its two tabs (decision page `onboarding-design`, card `artifact-open`):
    *   Assistant, the conversation; Preview, what the conversation shows (a
    *   preview, a canvas, a component, a page: PreviewPane, the same pane a
    *   session's split holds). The switch stands at the bar's top right
-   *   while there is something to show, in his head and in the preview's own
+   *   while there is something to show, in his bar and in the preview's own
    *   bar (`switchAt`; leading the bar is the other option on the card); Caw showing something brings it to
    *   the front, and the panel widens as Preview opens (the page's grid reads
    *   `lead.tab`, CawFloat). On Preview the pane's own head is the panel's one
@@ -33,8 +35,10 @@
    */
   import { HARNESSES, type HarnessKind } from "@cawco/core/harness";
   import { CAW_NO_MACHINE } from "@cawco/core/project-conversation";
+  import { commonWords } from "@cawco/core/words/common";
   import { cawPanelWords } from "@cawco/core/words/onboarding";
   import { conversationWords } from "@cawco/core/words/project-conversation";
+  import { transcriptWords } from "@cawco/core/words/transcript";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import {
@@ -42,7 +46,6 @@
     type PendingPermission,
     type SendExtras,
   } from "#lib/cawco/client.svelte.js";
-  import CawFace from "#lib/cawco/home/CawFace.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { rowHref } from "#lib/cawco/links.js";
   import { crossIn } from "#lib/cawco/motion/curves.svelte.js";
@@ -59,12 +62,16 @@
   import FootFade from "#lib/cawco/transcript/FootFade.svelte";
   import TranscriptSkeleton from "#lib/cawco/transcript/TranscriptSkeleton.svelte";
   import SessionDetails from "#lib/cawco/workspace/SessionDetails.svelte";
-  import { sessionStatusOf } from "#lib/cawco/workspace/session-status.js";
   import {
     Alert,
     AlertAction,
     AlertDescription,
   } from "#lib/components/ui/alert/index.js";
+  import {
+    BarFloat,
+    BarGlass,
+    BarItem,
+  } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -75,8 +82,13 @@
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconChatAdd, IconClose, IconMoveTab, IconPlus } from "#lib/icons.js";
+  import {
+    IconChatAdd,
+    IconClose,
+    IconListRows,
+    IconMoveTab,
+    IconPlus,
+  } from "#lib/icons.js";
   import { barGlass } from "../bar-glass.svelte";
   import type { CawLead } from "./caw-lead.svelte";
   import { startConversation } from "./conversation";
@@ -97,8 +109,8 @@
     projectId: string;
     projectName: string;
     /**
-     * In the phone's bottom sheet (CawFloat): his head is the sheet's one
-     * header, so it carries the sheet's Close at its trailing edge.
+     * In the phone's bottom sheet (CawFloat): the panel's bar is the sheet's
+     * one bar, so it carries the sheet's Close at its trailing edge.
      */
     sheet?: boolean;
     /** How far he has got setting the project up, while he drafts it in this conversation (SetupWell); null otherwise. */
@@ -197,29 +209,8 @@
     };
   });
 
-  // --- what his line says -------------------------------------------------------
-
+  /** Caw is off: the hero says he acts only when you write to him. */
   const off = $derived(lead.on === false);
-  /**
-   * Past the project's cap with nothing more pressing, the cap's line, as
-   * his head's line says it; with a conversation on show, its status word;
-   * else, off and at rest, that only your words wake him, or what he is.
-   */
-  const said = $derived.by(() => {
-    if (lead.capSays) {
-      return lead.capSays;
-    }
-    if (startingHere) {
-      return conversationWords.status.starting;
-    }
-    if (shown) {
-      return sessionStatusOf(shown).label;
-    }
-    if (off && lead.status === "sleeping") {
-      return "Answers when you write";
-    }
-    return lead.sentence;
-  });
 
   // --- the session's card ---------------------------------------------------------
 
@@ -385,131 +376,91 @@
   </div>
 {/snippet}
 
+<!-- The panel's bar (DESIGN.md, The Title Bars Follow Liquid Glass Rule): no
+     title, since his seat opened it by his name, and no ground; its actions
+     float over the content in the top bar's glass, the session's in one
+     group and the sheet's Close in one of its own after it (HIG, Toolbars:
+     "Group navigation controls and critical actions like Done, Close, or Save
+     in dedicated, familiar, and visually distinct sections"). What the head
+     used to say goes: his status is his face in the seat, and off is the
+     hero's line. The conversation or the hero runs to the panel's top and
+     clears the bar at rest; scrolled, it blurs and fades under it. On
+     Preview the pane's own bar is the panel's one bar. -->
 <div
-  class="flex h-full min-h-0 flex-auto flex-col"
+  class="relative flex h-full min-h-0 flex-auto flex-col timeline-scope-transcript-head"
   data-caw-panel
   data-caw-tab={onPreview ? "preview" : "assistant"}
+  style:--bar-room={shown || sheet ? "var(--c-top-bar-h)" : undefined}
 >
-  <div
-    data-slot="head"
-    class="flex min-h-c-btn-h-sm flex-none items-center gap-space-2 border-b border-b-border-hairline pt-space-2 pr-space-2 pb-space-2 pl-space-4"
-    data-caw-head
-    hidden={onPreview}
-  >
-    {#if previewOpen && switchAt === "start"}
-      <!-- Leading: where the preview's own bar holds a surface's switch
-           (SideSurface, as a session's Plan | Preview), so it stays put as
-           the tabs change. -->
-      {@render switcher()}
-    {/if}
-    <CawFace size={18} status={lead.status} />
-    <div class="flex min-w-0 flex-auto flex-col items-start">
-      {#if shown}
-        <button
-          data-slot="name"
-          aria-expanded={cardOpen}
-          aria-haspopup="dialog"
-          class="select-none press-tint type-label -mx-space-1 rounded-xs border-none border-current bg-transparent px-space-1 font-medium text-ink-strong transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
-          onclick={cardPress}
-          onpointerenter={(event) => {
-            cardAnchor = event.currentTarget;
-            cardRest(event);
-          }}
-          onpointerleave={cardLeave}
-          type="button"
-          bind:this={cardAnchor}
-        >
-          Caw{#if off}<span
-              data-slot="off-word"
-              class="font-normal text-ink-muted">{" · off"}</span
-            >{/if}
-        </button>
-      {:else}
-        <span
-          data-slot="name"
-          class="type-label -mx-space-1 rounded-xs border-none border-current bg-transparent px-space-1 font-medium text-ink-strong"
-          >Caw{#if off}<span
-              data-slot="off-word"
-              class="font-normal text-ink-muted">{" · off"}</span
-            >{/if}</span
-        >
-      {/if}
-      <span class="type-meta max-w-full truncate text-ink-muted" data-caw-line
-        >{said}</span
-      >
-    </div>
-    <div class="flex flex-none items-center gap-space-1">
-      {#if shown}
-        <Tip label={conversationWords.newConversation}>
-          {#snippet children(tip)}
-            <Button
-              {...tip}
-              aria-label={conversationWords.newConversation}
-              press="pressable"
-              icon={IconPlus}
-              onclick={newConversation}
-              size="icon-sm"
-              variant="ghost"
+  {#if (shown || sheet) && !onPreview}
+    <BarFloat tint="bg-surface-recess">
+      {#snippet leading()}
+        {#if previewOpen && switchAt === "start"}
+          <!-- Leading: where the preview's own bar holds a surface's switch
+               (SideSurface, as a session's Plan | Preview), so it stays put
+               as the tabs change. -->
+          <div class="contents" data-slot="tools">{@render switcher()}</div>
+        {/if}
+      {/snippet}
+      {#snippet trailing()}
+        {#if shown}
+          <BarGlass form="group">
+            <BarItem
+              aria-expanded={cardOpen}
+              aria-haspopup="dialog"
+              icon={IconListRows}
+              label={transcriptWords.sessionDetails}
+              onclick={cardPress}
+              onpointerenter={(event: PointerEvent) => {
+                cardAnchor = event.currentTarget as HTMLElement;
+                cardRest(event);
+              }}
+              onpointerleave={cardLeave}
+              bind:ref={cardAnchor}
             />
-          {/snippet}
-        </Tip>
-        <Tip label={conversationWords.openAsTab}>
-          {#snippet children(tip)}
-            <Button
-              {...tip}
-              aria-label={conversationWords.openAsTab}
-              press="pressable"
+            <BarItem
+              icon={IconPlus}
+              label={conversationWords.newConversation}
+              onclick={newConversation}
+            />
+            <BarItem
               href={rowHref(shown ?? "")}
               icon={IconMoveTab}
-              size="icon-sm"
-              variant="ghost"
+              label={conversationWords.openAsTab}
             />
-          {/snippet}
-        </Tip>
-      {/if}
-      {#if previewOpen && switchAt === "end"}
-        <!-- At the bar's end, top right, as the preview's bar holds it
-             before its Close. -->
-        {@render switcher()}
-      {/if}
-      {#if sheet}
-        <!-- The sheet's Close, the ghost his head's other actions are. -->
-        <Drawer.Close>
-          {#snippet child({ props })}
-            <Button
-              {...props}
-              aria-label="Close"
-              press="pressable"
-              icon={IconClose}
-              size="icon-sm"
-              title="Close"
-              variant="ghost"
-            />
-          {/snippet}
-        </Drawer.Close>
-      {:else}
-        <!-- Docked beside the board: its own Close, as the sheet's, the
-             focus back on his seat without the ring (CawFloat's Escape). -->
-        <Tip label={conversationWords.hidePanel}>
-          {#snippet children(tip)}
-            <Button
-              {...tip}
-              aria-label={conversationWords.hidePanel}
+          </BarGlass>
+        {/if}
+        {#if previewOpen && switchAt === "end"}
+          <!-- At the bar's end, top right, as the preview's bar holds it
+               before its Close. -->
+          <div class="contents" data-slot="tools">{@render switcher()}</div>
+        {/if}
+        {#if sheet}
+          <BarGlass form="group">
+            <Drawer.Close>
+              {#snippet child({ props })}
+                <BarItem icon={IconClose} label={commonWords.close} {props} />
+              {/snippet}
+            </Drawer.Close>
+          </BarGlass>
+        {:else}
+          <!-- Docked beside the board: its own Close, as the sheet's, the
+               focus back on his seat without the ring (CawFloat's Escape). -->
+          <BarGlass form="group">
+            <BarItem
               data-caw-close
-              press="pressable"
               icon={IconClose}
+              label={conversationWords.hidePanel}
               onclick={() => {
                 lead.open = false;
                 lead.anchor?.focus({ focusVisible: false } as FocusOptions);
               }}
-              size="icon-sm"
-              variant="ghost"
             />
-          {/snippet}
-        </Tip>
-      {/if}
-    </div>
-  </div>
+          </BarGlass>
+        {/if}
+      {/snippet}
+    </BarFloat>
+  {/if}
   <div data-slot="well" class="relative flex min-h-0 flex-auto flex-col">
     {#if startingHere}
       <!-- His start, on the transcript's own columns where his conversation
@@ -519,7 +470,7 @@
       <div
         data-slot="caw-starting"
         data-tx-columns
-        class="tx-columns flex min-h-0 flex-auto flex-col overflow-y-auto ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5"
+        class="tx-columns flex min-h-0 flex-auto flex-col overflow-y-auto scroll-timeline-transcript-head ps-space-7 pe-space-6 pt-(--bar-room,0px) max-desk:ps-space-5 max-desk:pe-space-5"
         in:crossIn
       >
         {#if setup}
@@ -550,7 +501,7 @@
             browsing={null}
             browsingCwd=""
             browsingHarness={undefined}
-            docked={{ draft: lead.draft }}
+            docked={{ draft: lead.draft, headRoom: "var(--c-top-bar-h)" }}
             focused={!onPreview}
             afterRows={setup ? setupTail : undefined}
             afterRowsAtWork={setup !== null && !handedOver(setup)}
@@ -598,9 +549,11 @@
              room's top, its inline padding the composer's own column, so its
              glyph, the title, the line and the starters share the composer's start
              edge (--space-3 where the composer goes edge to edge, under
-             900px). It clears the composer as a transcript does. -->
+             900px). It clears the composer as a transcript does, and the
+             panel's bar where one floats over it; its scroll is the bar's
+             scroll edge (BarFloat). -->
           <div
-            class="isolate flex min-h-0 flex-auto flex-col overflow-y-auto px-(--hero-px) pb-(--composer-clearance) max-desk:px-space-3"
+            class="isolate flex min-h-0 flex-auto flex-col overflow-y-auto scroll-timeline-transcript-head px-(--hero-px) pt-(--bar-room,0px) pb-(--composer-clearance) max-desk:px-space-3"
             data-slot="conversation-hero"
             style:--hero-px="calc((100% - var(--c-composer-w)) / 2)"
             in:crossIn

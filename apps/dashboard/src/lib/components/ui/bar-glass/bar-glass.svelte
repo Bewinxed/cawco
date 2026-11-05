@@ -109,13 +109,16 @@
 
 <!-- The glass is drawn by a layer under the items (`before:`), never by the
      group itself: a backdrop filter on the group would make it the box
-     Caw's fixed drawer is laid out in. `--flare` is how far its leading
+     Caw's fixed drawer is laid out in. The layer stands under every item
+     (`before:-z-1` in the group's own stacking context, `isolate`): a kit
+     button on a fine pointer is not positioned, and an absolute layer drawn
+     before it painted over it, leaving its glyph at a tenth of its ink. `--flare` is how far its leading
      foot flares into the card (HangCard reads it). Caw, the phone group's
      one item, is the glass's whole box there. -->
 <div
   data-slot="tools"
   class={[
-    "group/tools relative flex items-center gap-c-bar-group-pad h-c-btn-h p-c-bar-group-pad rounded-pill hit-gap-x-c-bar-group-pad coarse:gap-space-5 coarse:hit-gap-x-space-5 before:absolute before:inset-0 before:rounded-inherit before:border before:border-border-hairline before:bg-material-panel before:shadow-tile before:glass-backdrop before:pointer-events-none contrast-more:before:border-border-contrast contrast-more:before:bg-surface-raised contrast-more:before:backdrop-filter-none reduced-transparency:before:border-border-contrast reduced-transparency:before:bg-surface-raised reduced-transparency:before:backdrop-filter-none",
+    "group/tools relative isolate flex items-center gap-c-bar-group-pad h-c-btn-h p-c-bar-group-pad rounded-pill hit-gap-x-c-bar-group-pad coarse:gap-space-5 coarse:hit-gap-x-space-5 before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-hairline before:bg-material-panel before:shadow-tile before:glass-backdrop before:pointer-events-none contrast-more:before:border-border-contrast contrast-more:before:bg-surface-raised contrast-more:before:backdrop-filter-none reduced-transparency:before:border-border-contrast reduced-transparency:before:bg-surface-raised reduced-transparency:before:backdrop-filter-none",
     form === "title" && "before:hidden",
     form === "bar" &&
       "@max-desk/shell:self-start @max-desk/shell:h-c-bar-caw-glass-phone @max-desk/shell:mt-(--tools-top) @max-desk/shell:p-0 @max-desk/shell:rounded-s-(--tools-round) @max-desk/shell:rounded-e-none @max-desk/shell:caw-neck-(--tools-neck) @max-desk/shell:**:data-bar-item:rounded-e-none @max-desk/shell:**:data-bar-item:w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:min-w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:h-c-bar-caw-glass-phone",

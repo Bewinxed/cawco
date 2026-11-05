@@ -61,10 +61,12 @@
 </script>
 
 <script lang="ts">
+  import { commonWords } from "@cawco/core/words/common";
   import type { ComponentProps, Snippet } from "svelte";
   import { Drawer as DrawerPrimitive } from "vaul-svelte";
   import { mirror } from "#lib/cawco/page-marks.js";
   import { visible } from "#lib/cawco/visible-viewport.svelte.js";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconClose } from "#lib/icons.js";
@@ -100,8 +102,8 @@
     DrawerContentLooks & {
       /**
        * The sheet's name. The kit draws the recipe's one header with it
-       * (DESIGN.md, Drawer: the grabber, then the title in the title role
-       * and Close at the trailing edge, the seam under it), so no sheet
+       * (DESIGN.md, Drawer: the grabber, then Close and the title in the
+       * title role), so no sheet
        * stands without a name or a way to put it away. A hosted sheet's
        * host draws its head and its Close; the name is read out only. A
        * name that changes morphs in place (MorphText, DESIGN.md, The Steady
@@ -109,14 +111,14 @@
        */
       title: string;
       /** The name read out but not drawn, on a sheet whose content names
-          itself on screen; Close still stands at the header's trailing edge. */
+          itself on screen; Close still leads the header. */
       titleHidden?: boolean;
-      /** The content draws the sheet's one header itself, right under the
-          grabber, with the kit's Close (`Drawer.Close` in the head's `close`
-          look) at its trailing edge: the kit reads the name out only. */
+      /** The content draws the sheet's one bar itself, right under the
+          grabber, with its Close leading it (a BarItem in a glass group of
+          its own, as the kit's header draws it): the kit reads the name out
+          only. */
       ownHead?: boolean;
-      /** The sheet's own controls in its header, after the title and before
-          Close. */
+      /** The sheet's own controls in its header, at its trailing edge. */
       actions?: Snippet;
       portalProps?: WithoutChildrenOrChild<ComponentProps<typeof DrawerPortal>>;
       /**
@@ -300,21 +302,28 @@
     >
   {:else}
     <div class={head.head()} data-slot="drawer-header">
+      <!-- Close leads, before the title, a bare symbol in a glass group of
+           its own (DESIGN.md, Sheet; HIG, Sheets: a single-view sheet's
+           Cancel on the leading edge of its top toolbar; Toolbars: "Group …
+           critical actions like Done, Close, or Save in dedicated …
+           sections"). -->
+      <BarGlass form="group">
+        <DrawerPrimitive.Close>
+          {#snippet child({ props })}
+            <BarItem icon={IconClose} label={commonWords.close} {props} />
+          {/snippet}
+        </DrawerPrimitive.Close>
+      </BarGlass>
       <DrawerPrimitive.Title
-        class={cn(head.title(), titleHidden && "sr-only")}
+        class={cn(head.title(), "me-auto", titleHidden && "sr-only")}
         data-slot="drawer-title"
         ><MorphText text={title} wrap /></DrawerPrimitive.Title
       >
-      <div class="ms-auto flex flex-none items-center gap-space-2">
-        {@render actions?.()}
-        <DrawerPrimitive.Close
-          aria-label="Close"
-          class={head.close()}
-          title="Close"
-        >
-          <IconClose aria-hidden="true" />
-        </DrawerPrimitive.Close>
-      </div>
+      {#if actions}
+        <div class="flex flex-none items-center gap-space-2">
+          {@render actions()}
+        </div>
+      {/if}
     </div>
   {/if}
   <!-- vaul takes pointer capture on every press in the sheet, which leaves

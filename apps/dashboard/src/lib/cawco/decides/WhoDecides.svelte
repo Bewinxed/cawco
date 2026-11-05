@@ -142,14 +142,11 @@
           class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-5 gap-y-space-3 max-phone:grid-cols-1"
           style:--head-cols="minmax(0, 1fr) auto"
         >
-          <header class="flex min-w-0 flex-col gap-space-1">
-            <h1
-              class="m-0 type-title tracking-title text-balance text-ink-strong"
-            >
-              {section.label}
-            </h1>
-            <p class="m-0 text-pretty">{section.purpose}</p>
-          </header>
+          <!-- No head of its own: the rail, or the phone's bar, names the
+               section (DESIGN.md, Layout); its purpose opens the page. -->
+          <p class="m-0 min-w-0 text-pretty" data-slot="lead">
+            {section.purpose}
+          </p>
           <KindsOfChoice {named} {who} />
         </div>
         {@render roster()}

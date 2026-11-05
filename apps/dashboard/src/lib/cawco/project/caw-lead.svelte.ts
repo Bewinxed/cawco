@@ -581,20 +581,6 @@ export class CawLead {
       : null
   );
 
-  /**
-   * The cap's line while it is what he has to say: past the cap, with
-   * nothing more pressing (the hub away, his board unread, an ask of yours,
-   * a turn under way). His head's line and his panel's both say it.
-   */
-  readonly capSays = $derived.by((): string | null => {
-    const pressing =
-      this.status === "reconnecting" ||
-      this.status === "loading" ||
-      this.status === "needs-you" ||
-      this.status === "working";
-    return pressing ? null : this.capLine;
-  });
-
   /** What Caw is doing, in a few words; null when he is at rest. */
   readonly #said = $derived.by((): string | null => {
     switch (this.status) {

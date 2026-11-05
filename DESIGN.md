@@ -769,8 +769,8 @@ The one way to ask before doing (`AskHere.svelte`, `ask-here.svelte.ts`). The qu
 ### Dialog, sheet and drawer
 For the rare holds The Open Page Rule allows; no confirmation is a dialog.
 - **Dialog:** a recess tray (18px, 6px padding) holding a raised body (12px) over the scrim, Close a ghost icon in its corner. It enters over `--dur-panel` on ease-out, rising `--pop-rise`, and leaves over `--dur-exit`.
-- **Sheet:** a raised edge panel with the drawer shadow, sliding its whole size on the drawer curve. A finger drags it 1:1 and lets go past 30% or on a flick, settling on the spring; a mouse has Close and Escape.
-- **Drawer (vaul):** every bottom sheet: full-bleed, 12px top corners, a 100×6 grabber, one header (title and Close, 44px under a finger), as tall as its content up to 85vh.
+- **Sheet:** a raised edge panel with the drawer shadow and Close leading its header, sliding its whole size on the drawer curve. A finger drags it 1:1, released past 30% or on a flick onto the spring; a mouse uses Close or Escape.
+- **Drawer (vaul):** every bottom sheet: full-bleed, 12px top corners, a 100×6 grabber, one header (Close, then the title; 44px under a finger), content-tall up to 85vh.
 
 **The Hold-To-Select Rule.** A press that starts in a text field is never captured by a drawer or gesture round it, so iOS hold-to-select and Paste reach the field. A held press on a context-menu trigger suppresses the platform callout.
 

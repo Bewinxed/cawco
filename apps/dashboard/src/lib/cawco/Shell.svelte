@@ -4,6 +4,7 @@
     type ShellShortcut,
     shellShortcutOf,
   } from "@cawco/core/shell-shortcuts";
+  import { configureWords } from "@cawco/core/words/configure";
   import { shellWords } from "@cawco/core/words/shell";
   import { sidebarWords } from "@cawco/core/words/sidebar";
   /**
@@ -29,7 +30,7 @@
   import { pageIn, pageOut, route } from "#lib/cawco/motion/route.svelte.js";
   import { keepPrefs } from "#lib/cawco/prefs.js";
   import { gridView } from "#lib/cawco/workspace/grid-view.svelte.js";
-  import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { provideHangLayer } from "#lib/components/ui/hang-card/hang-layer.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import * as Sheet from "#lib/components/ui/sheet/index.js";
@@ -44,6 +45,7 @@
   import { page } from "$app/state";
   import { barGlass, type GlassCard as GlassFace } from "./bar-glass.svelte";
   import { cawco } from "./client.svelte";
+  import { SECTIONS } from "./config/sections";
   import ConnectWindow from "./connect/ConnectWindow.svelte";
   import { connect } from "./connect/installs.svelte";
   import { continuing } from "./continue.svelte";
@@ -1005,6 +1007,11 @@
    * What the bar names: the page's own name where it has one (a
    * conversation's title, a project's name), else its section.
    */
+  /** The Configure section the page is in, named in a phone's bar beside Back. */
+  const configSection = $derived(
+    SECTIONS.find((one) => one.slug === page.url.pathname.split("/")[2])
+      ?.label ?? null
+  );
   const crumb = $derived.by(() => {
     // A path nothing answers is not a section: the bar says what happened.
     if (routeError) {
@@ -1026,8 +1033,12 @@
           return "New project";
         }
         return (id ? cawco.project(id)?.name : undefined) ?? "Project";
+      // Configure's rail names Configure and the section chosen in it: the
+      // bar repeats neither (DESIGN.md, The Title Bars Follow Liquid Glass
+      // Rule); on a phone, where the rail is a page of its own, the bar
+      // leads Back to it with the section's name (configSection).
       case "config":
-        return "Configure";
+        return "";
       case "usage":
         return "Usage";
       // The MCP server sign-in's return (its page: "Finishing sign-in").
@@ -1196,14 +1207,18 @@
            is the wide bar's alone (`desk:` with `not-coarse:` or
            `not-portrait:`); anywhere else the bar draws no ground of its
            own, no fill and no hairline (DESIGN.md, No bar ground): the
-           field it stands on is its ground. -->
+           field it stands on is its ground. Hosting them, its trailing
+           glass stands in from the screen's edge (`--shelf-end`) as far as
+           the first tab stands in from its pane's, so the shelf holds one
+           inset at both ends. -->
       <header
         data-slot="top"
         data-full={full || undefined}
         data-floating={floating || undefined}
         data-hosting={hosting || undefined}
-        class="group/top peer/top h-c-top-bar-h shrink-0 flex data-full:hidden items-center gap-space-2 py-0 ps-0 pe-(--top-end) coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-c-top-bar-h max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:shelf-hairline"
+        class="group/top peer/top h-c-top-bar-h shrink-0 flex data-full:hidden items-center gap-space-2 py-0 ps-0 pe-(--top-end) desk:not-coarse:data-hosting:pe-(--shelf-end) desk:not-portrait:data-hosting:pe-(--shelf-end) coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-c-top-bar-h max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:shelf-hairline"
         style:--top-end="calc(var(--space-6) + env(safe-area-inset-right, 0px))"
+        style:--shelf-end="calc(var(--space-3) + var(--top-inset-end))"
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
         style:--top-inset-end={"calc(var(--c-bar-phone-edge) + env(safe-area-inset-right, 0px))"}
       >
@@ -1292,15 +1307,25 @@
                are its own row, and the board needs no name over it. -->
           {:else if narrow && page.url.pathname.startsWith("/config/")}
             <!-- Inside a section on a phone the rail is its own page, so the bar
-               leads back to it. -->
-            <a
-              data-slot="crumb"
-              class="mark-line pressable inline-flex items-center gap-space-row min-h-c-btn-h-lg ps-space-1 pe-space-2 rounded-sm type-label text-ink-strong no-underline"
-              href="/config"
-              in:riseIn
-              out:crossOut
-              ><IconChevronLeft class="size-icon-md" /><span>Configure</span></a
-            >
+               leads back to it: Back, the chevron alone in its glass group,
+               named by where it goes (DESIGN.md, The Title Bars Follow
+               Liquid Glass Rule: "Back and Close are symbols"). -->
+            <div data-slot="crumb" class="flex min-w-0" in:riseIn out:crossOut>
+              <BarGlass form="group">
+                <BarItem
+                  href="/config"
+                  icon={IconChevronLeft}
+                  label={configureWords.backTo(configureWords.title)}
+                />
+              </BarGlass>
+              {#if configSection}
+                <span
+                  data-slot="title"
+                  class="ms-space-2 min-w-0 self-center truncate type-label text-ink-strong"
+                  >{configSection}</span
+                >
+              {/if}
+            </div>
           {:else}
             <!-- Padding, not margin: the crumb leaving is pinned where its
                  border box stands (crossOut), and a margin would carry it

@@ -480,6 +480,7 @@
             pending={connecting}
             pendingLabel="Opening OpenRouter…"
             size="sm"
+            variant="outline"
           />
         {/if}
       {/snippet}

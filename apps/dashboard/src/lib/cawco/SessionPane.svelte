@@ -22,7 +22,11 @@
    * of a group: it draws its own composer on the panel's draft, follows its
    * stream while the panel shows it, and stands nothing beside it. A
    * project's conversation is Caw's (session-status.ts `cawOf`, or docked):
-   * its agent is named Caw and his face marks its turns.
+   * its agent is named Caw and his face marks its turns. The panel's bar
+   * floats over its top (BarFloat): the transcript clears it at rest
+   * (Transcript `headRoom`) and the bar draws the scroll edge under it, so
+   * the pane draws none of its own and leaves its scroll timeline to the
+   * panel.
    */
   import { type Snippet, untrack } from "svelte";
   import {
@@ -35,6 +39,7 @@
   import { track } from "#lib/cawco/track.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconAlert, IconChat, IconLaptop } from "#lib/icons.js";
   import { browser } from "$app/env";
   import { page } from "$app/state";
@@ -103,7 +108,6 @@
   import { connectSignIns } from "./transcript/connect-sign-ins.svelte";
   import FootFade from "./transcript/FootFade.svelte";
   import { followSends } from "./transcript/follow-sends.svelte";
-  import HeadFade from "./transcript/HeadFade.svelte";
   import { keepDraft } from "./transcript/keep-draft.svelte";
   import ProjectOffer from "./transcript/ProjectOffer.svelte";
   import { parkedAsks } from "./transcript/present";
@@ -158,9 +162,10 @@
     /**
      * Drawn in a project's panel (ProjectConversation), not as a tab: its
      * composer writes on the panel's `draft`, so half-written words outlive
-     * the panel being put away.
+     * the panel being put away. `headRoom`: how far the panel's floating
+     * bar stands over the transcript's top, a CSS length.
      */
-    docked?: { draft: ComposerDraft };
+    docked?: { draft: ComposerDraft; headRoom?: string };
     /** What stands at the transcript's end, after its last row (a project's setup element, SetupWell). */
     afterRows?: Snippet;
     /** What stands after the rows says the agent is at work: the bare working line stands down (Transcript). */
@@ -1350,7 +1355,10 @@
        the surface a swipe carries, not the thing that carries it. -->
     <div
       data-slot="transcript-slide"
-      class="relative isolate flex min-h-0 flex-auto flex-col overflow-hidden timeline-scope-transcript-head"
+      class={[
+        "relative isolate flex min-h-0 flex-auto flex-col overflow-hidden",
+        !docked && "timeline-scope-transcript-head",
+      ]}
     >
       <!-- A named state, not an empty pane: what happened, in one line,
                and the one thing that can be done about it. -->
@@ -1387,6 +1395,7 @@
               {agentName}
               {firstScreen}
               {focused}
+              headRoom={docked?.headRoom}
               latestInset={reserved ? "var(--space-2)" : undefined}
               onshown={(drawn) => {
                 shown = drawn;
@@ -1399,7 +1408,9 @@
             />
           </RegionBoundary>
         </div>
-        <HeadFade />
+        {#if !docked}
+          <HeadFade />
+        {/if}
       {/if}
       <!-- The skeleton stands in for rows still on their way and hands its
            place to them in its reveal (motion/curves `reveal`) once they are

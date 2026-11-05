@@ -38,4 +38,10 @@ export const commonWords = {
    * tab, the one under way dropped at the hub.
    */
   signInAgain: "Sign in again",
+  /** Back, the chevron alone, named by where it goes (DESIGN.md, The Title Bars Follow Liquid Glass Rule). */
+  backTo: (place: string) => `Back to ${place}`,
+  /** Close, the close symbol alone: a sheet's, a card's, a column's. */
+  close: "Close",
+  /** Dives into a session from where it is glanced at: the peek, its card. */
+  openSession: "Open session",
 };

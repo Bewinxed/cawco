@@ -175,12 +175,6 @@ const INLINE_STYLES = {
     "animation-delay",
     "min-inline-size",
   ],
-  // `-webkit-backdrop-filter`, in the spelling the rule takes an entry in.
-  "src/lib/cawco/transcript/HeadFade.svelte": [
-    "WebkitBackdropFilter",
-    "backdrop-filter",
-    "mask-image",
-  ],
   "src/lib/cawco/transcript/Prompt.svelte": ["block-size", "translate"],
   "src/lib/cawco/transcript/RecallWheel.svelte": [
     "bottom",
@@ -222,6 +216,12 @@ const INLINE_STYLES = {
   ],
   "src/lib/components/ui/machine-row/machine-row.svelte": ["color"],
   "src/lib/components/ui/progress/progress.svelte": ["transform"],
+  // `-webkit-backdrop-filter`, in the spelling the rule takes an entry in.
+  "src/lib/components/ui/scroll-edge/head-fade.svelte": [
+    "WebkitBackdropFilter",
+    "backdrop-filter",
+    "mask-image",
+  ],
   "src/lib/components/ui/section-header/section-header.svelte": ["color"],
   "src/routes/(app)/motion/delegate-tray/+page.svelte": ["width"],
   // A decision page's media measure their own box while mounted: Preview's

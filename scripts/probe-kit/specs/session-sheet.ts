@@ -949,6 +949,16 @@ const HEAD_ORDER = [
   "reload",
   "expand",
 ];
+/**
+ * The head's controls as drawn (side/SideSurface, The Title Bars Follow
+ * Liquid Glass Rule): the mode in the centre, the bare symbols in one glass
+ * group in head order, then Send apart, Close in a group of its own.
+ */
+const DRAWN_ORDER = [
+  "mode",
+  ...HEAD_ORDER.filter((key) => key !== "mode" && key !== "send"),
+  "send",
+];
 const SCALE = /^matrix\(([\d.]+), 0, 0, ([\d.]+),/u;
 
 /** The head as drawn: its width (what the words key on), its room inside its padding and the name's own width (what side/head.ts `standing` reads), each control's key, whether it stands, its form, whether its word is drawn, its name; then whether More and Close stand, More before Close. */
@@ -960,8 +970,7 @@ const headOf = (page: Page) =>
     const style = head ? getComputedStyle(head) : null;
     const lead = head?.querySelector(":scope > [data-slot=identity] > *");
     const items = [
-      ...(head?.querySelectorAll<HTMLElement>(":scope > [data-head-item]") ??
-        []),
+      ...(head?.querySelectorAll<HTMLElement>("[data-head-item]") ?? []),
     ].map((one) => {
       const control = one.querySelector("[aria-label], button");
       const word = one.querySelector(
@@ -978,12 +987,8 @@ const headOf = (page: Page) =>
           "",
       };
     });
-    const more = head?.querySelector<HTMLElement>(
-      ':scope > [data-slot="more"]'
-    );
-    const close = head?.querySelector<HTMLElement>(
-      ':scope > [data-slot="close"]'
-    );
+    const more = head?.querySelector<HTMLElement>('[data-slot="more"]');
+    const close = head?.querySelector<HTMLElement>('[data-slot="close"]');
     return {
       width: head?.clientWidth ?? null,
       room:
@@ -999,7 +1004,7 @@ const headOf = (page: Page) =>
         !!(more && close) &&
         more.getBoundingClientRect().right <=
           close.getBoundingClientRect().left + 0.5,
-      closeLast: head?.lastElementChild === close,
+      closeLast: !!close && !!head?.lastElementChild?.contains(close),
     };
   }, PANE);
 
@@ -1202,11 +1207,11 @@ async function panelLegs(
               (worded || one.form === "compact")
             : one.form === "whole")
       ) &&
-      keys.every((key) => HEAD_ORDER.includes(key)) &&
+      keys.every((key) => DRAWN_ORDER.includes(key)) &&
       keys.every(
         (key, at) =>
           at === 0 ||
-          HEAD_ORDER.indexOf(key) > HEAD_ORDER.indexOf(keys[at - 1] ?? "")
+          DRAWN_ORDER.indexOf(key) > DRAWN_ORDER.indexOf(keys[at - 1] ?? "")
       ) &&
       !wide.more &&
       wide.closeLast,

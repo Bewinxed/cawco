@@ -24,15 +24,17 @@
 </script>
 
 <script lang="ts">
+  import { commonWords } from "@cawco/core/words/common";
   import { Dialog as SheetPrimitive } from "bits-ui";
   import type { ComponentProps, Snippet } from "svelte";
   import { dragToDismiss } from "#lib/cawco/motion/drag.svelte.js";
   import { mirror } from "#lib/cawco/page-marks.js";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { sheetHeadVariants } from "#lib/components/ui/drawer/sheet-head.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
+  import { IconClose } from "#lib/icons.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import { closer } from "./sheet.svelte";
-  import SheetClose from "./sheet-close.svelte";
   import SheetFrame from "./sheet-frame.svelte";
   import SheetOverlay from "./sheet-overlay.svelte";
   import SheetPortal from "./sheet-portal.svelte";
@@ -60,8 +62,8 @@
       side?: Side;
       /**
        * The sheet's name. The kit draws the sheets' one header with it
-       * (DESIGN.md, Drawer: the title in the title role and Close at the
-       * trailing edge), so no sheet stands without a name or a Close. A
+       * (DESIGN.md, Sheet: Close leading, then the title in the title
+       * role), so no sheet stands without a name or a Close. A
        * name that changes morphs in place (MorphText, DESIGN.md, The Steady
        * Swap Rule).
        */
@@ -147,10 +149,28 @@
           >
         {:else}
           <div class={cn(head.head(), "px-4 pt-4")} data-slot="sheet-header">
-            <SheetPrimitive.Title class={head.title()} data-slot="sheet-title"
+            <!-- Close leads, before the title, a bare symbol in a glass
+                 group of its own (DESIGN.md, Sheet; HIG, Sheets: a
+                 single-view sheet's Cancel on the leading edge). -->
+            <div class="flex flex-none">
+              <BarGlass form="group">
+                <SheetPrimitive.Close>
+                  {#snippet child({ props })}
+                    <BarItem
+                      data-slot="sheet-close"
+                      icon={IconClose}
+                      label={commonWords.close}
+                      {props}
+                    />
+                  {/snippet}
+                </SheetPrimitive.Close>
+              </BarGlass>
+            </div>
+            <SheetPrimitive.Title
+              class={cn(head.title(), "me-auto")}
+              data-slot="sheet-title"
               ><MorphText text={title} wrap /></SheetPrimitive.Title
             >
-            <SheetClose class="ms-auto" />
           </div>
         {/if}
         {@render children?.()}

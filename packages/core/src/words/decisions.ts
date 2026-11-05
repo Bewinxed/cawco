@@ -155,7 +155,7 @@ export const decisionsWords = {
   clearSearch: "Clear the search",
   noMatch: (query: string) => `No decisions for “${query}”`,
   /** ‹ back from an opened page, said for the screen reader and in its tooltip. */
-  back: "Back to Decisions",
+  back: commonWords.backTo("Decisions"),
   /** The empty tab, with Caw able to start: his starters under him. */
   empty: "Your decision pages will appear here",
   emptyCaw:
