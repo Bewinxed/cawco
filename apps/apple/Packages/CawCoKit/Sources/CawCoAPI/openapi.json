@@ -17737,6 +17737,53 @@
                       "quiet",
                       "both"
                     ]
+                  },
+                  "icon": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "inbox",
+                      "idea",
+                      "search",
+                      "pen",
+                      "chat",
+                      "eye",
+                      "clock",
+                      "hourglass",
+                      "calendar",
+                      "send",
+                      "rocket",
+                      "code",
+                      "palette",
+                      "graph",
+                      "user",
+                      "globe",
+                      "book",
+                      "pin",
+                      "bolt",
+                      "list",
+                      "lab",
+                      "map",
+                      "phone",
+                      "money",
+                      "done",
+                      "archive",
+                      "trash"
+                    ]
+                  },
+                  "color": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "cyan",
+                      "amber",
+                      "orange",
+                      "green"
+                    ]
                   }
                 }
               }
@@ -32636,9 +32683,17 @@
           "cawMode": {
             "$ref": "#/components/schemas/AreaViewCawMode"
           },
+          "color": {
+            "$ref": "#/components/schemas/AreaViewColor",
+            "description": "Its colour; null: the Areas section's hue."
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "icon": {
+            "$ref": "#/components/schemas/AreaViewIcon",
+            "description": "Its glyph; null: the area's folder."
           },
           "id": {
             "type": "string"
@@ -42175,14 +42230,14 @@
         "type": "object",
         "properties": {
           "color": {
-            "$ref": "#/components/schemas/StageColor",
+            "$ref": "#/components/schemas/AreaViewColor",
             "description": "Its mark's colour (stages.md `color:`); none: the muted ink."
           },
           "hooks": {
             "$ref": "#/components/schemas/StageHooks"
           },
           "icon": {
-            "$ref": "#/components/schemas/StageIcon",
+            "$ref": "#/components/schemas/AreaViewIcon",
             "description": "Its mark's glyph (stages.md `icon:`); none: no mark but its kind's."
           },
           "kind": {
@@ -48908,6 +48963,14 @@
           },
           "onCap": {
             "$ref": "#/components/schemas/OnCap"
+          },
+          "color": {
+            "$ref": "#/components/schemas/AreaViewColor",
+            "description": "Its colour; null: the Areas section's hue."
+          },
+          "icon": {
+            "$ref": "#/components/schemas/AreaViewIcon",
+            "description": "Its glyph; null: the area's folder."
           }
         },
         "required": [
@@ -66624,6 +66687,47 @@
           "plan"
         ]
       },
+      "AreaViewColor": {
+        "type": "string",
+        "enum": [
+          "amber",
+          "cyan",
+          "green",
+          "orange"
+        ]
+      },
+      "AreaViewIcon": {
+        "type": "string",
+        "enum": [
+          "archive",
+          "bolt",
+          "book",
+          "calendar",
+          "chat",
+          "clock",
+          "code",
+          "done",
+          "eye",
+          "globe",
+          "graph",
+          "hourglass",
+          "idea",
+          "inbox",
+          "lab",
+          "list",
+          "map",
+          "money",
+          "palette",
+          "pen",
+          "phone",
+          "pin",
+          "rocket",
+          "search",
+          "send",
+          "trash",
+          "user"
+        ]
+      },
       "ArtifactReadSentBy": {
         "type": "string",
         "enum": [
@@ -67353,47 +67457,6 @@
           "failed",
           "running",
           "stopped"
-        ]
-      },
-      "StageColor": {
-        "type": "string",
-        "enum": [
-          "amber",
-          "cyan",
-          "green",
-          "orange"
-        ]
-      },
-      "StageIcon": {
-        "type": "string",
-        "enum": [
-          "archive",
-          "bolt",
-          "book",
-          "calendar",
-          "chat",
-          "clock",
-          "code",
-          "done",
-          "eye",
-          "globe",
-          "graph",
-          "hourglass",
-          "idea",
-          "inbox",
-          "lab",
-          "list",
-          "map",
-          "money",
-          "palette",
-          "pen",
-          "phone",
-          "pin",
-          "rocket",
-          "search",
-          "send",
-          "trash",
-          "user"
         ]
       },
       "StageHooksBy": {

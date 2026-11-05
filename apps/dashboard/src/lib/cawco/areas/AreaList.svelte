@@ -2,10 +2,9 @@
   /**
    * Configure › Areas: every area in its order, each a row that opens its
    * page. A row reads down fixed columns: the switch that folds its projects,
-   * its tile (its look, and the handle that orders it), its name with the
-   * projects in it, one glyph per setting it may carry (set: the
-   * setting's glyph; left to the fleet: a dot, the word in its tooltip),
-   * and how many projects are in it. The handle drags the row into a new
+   * its tile (its look, and the handle that orders it), its name with what
+   * it sets named in words under it (its page shows each value), and how
+   * many projects are in it. The handle drags the row into a new
    * place, or the up and down arrows move it (motion/hand-order); the order
    * is saved as the row lands, and a refusal puts it back with the hub's
    * words above the list.
@@ -17,6 +16,15 @@
    * the tile (the tile is the look's, so the switch stands beside it). Open
    * until folded; the fold is kept as a project's is (folderPrefs). An area
    * with no projects has no switch; its line says so.
+   *
+   * Projects move here too, one way (`moveProject`, the hub's move Project
+   * details calls): each area's list ends in Add project, a pick of every
+   * project elsewhere, and so does the group at the foot for the projects
+   * in no area, which takes one out of its area. What the hub says of the
+   * move (what the project takes from the area now, what falls back to the
+   * fleet's) stands under the project where it landed; a refusal stands
+   * under it where it stayed, with Try again. Carrying a project by hand
+   * waits for the dashboard's one drag.
    *
    * New area unfolds a name field at the list's foot; the area the hub
    * makes lands there, marked. Delete asks under its row (AskHere), naming
@@ -33,7 +41,6 @@
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
-  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import {
     IconChevronRightDuotone as ChevronIcon,
     IconCheck,
@@ -44,7 +51,7 @@
   } from "#lib/icons.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
-  import { cawco } from "../client.svelte";
+  import { cawco, type ProjectRow } from "../client.svelte";
   import SectionFrame from "../config/SectionFrame.svelte";
   import { sectionOf } from "../config/sections";
   import { configStore } from "../config/store.svelte";
@@ -69,10 +76,12 @@
     createArea,
     deleteArea,
     orderAreas,
+    placeProject,
+    readAreas,
   } from "./areas";
   import { deleteQuestion } from "./fallback";
   import { areaMark, lookPatch } from "./mark";
-  import { areaSettings } from "./summary";
+  import { areaSets } from "./summary";
 
   const store = configStore();
   const section = sectionOf("areas");
@@ -88,9 +97,14 @@
 
   /** The line to an area's projects leaves its tile and ends at each project's mark. */
   const TILE = '[data-slot="handle"]';
-  const NEST: BranchOptions = { glyph: "[data-tree-mark]", parent: TILE };
+  /** A row's glyph: a project's mark, or Add project's plus in the same slot (as the sidebar's LEAD). */
+  const LEAD = '[data-tree-mark], [data-slot="sidebar-row-lead"]';
+  const NEST: BranchOptions = { glyph: LEAD, parent: TILE };
   const foldsOpen = (area: AreaView) =>
     area.projects.length > 0 && !folderPrefs.collapsed(area.id);
+  /** Its list stands under it: open, or holding only Add project. */
+  const listed = (area: AreaView) =>
+    area.projects.length === 0 || foldsOpen(area);
   const foldId = (area: AreaView) => `area-projects-${area.id}`;
 
   /** The order the hand has put the rows in, until the hub's list agrees. */
@@ -203,6 +217,66 @@
       (id) => cawco.projects.find((one) => one.id === id) ?? []
     );
 
+  /* ── Moving projects ─────────────────────────────────────────── */
+
+  /** The foot's place: the projects in no area. */
+  const NONE = "none";
+  /** What the hub said of each project moved here, under it where it landed. */
+  let movedSaid = $state<Record<string, string[]>>({});
+  /** A move the hub refused, under the project where it stayed; `to` null when its area is gone, so trying again is no way on. */
+  let moveFault = $state<Record<string, { reason: string; to: string | null }>>(
+    {}
+  );
+  /** The project whose move the hub is answering. */
+  let moving = $state<string | null>(null);
+
+  const placed = $derived(new Set(areas.flatMap((area) => area.projects)));
+  const inNoArea = $derived(
+    cawco.projects.filter((project) => !placed.has(project.id))
+  );
+  const areaNamed = (id: string) =>
+    areas.find((area) => area.id === id)?.name ?? null;
+  /** What Add project offers a place: the projects in no area, then those in the areas, in their order, less its own. */
+  const addable = (place: string): ProjectRow[] => [
+    ...(place === NONE ? [] : inNoArea),
+    ...shown.filter((one) => one.id !== place).flatMap(projectsIn),
+  ];
+
+  async function moveProject(projectId: string, to: string): Promise<void> {
+    if (moving) {
+      return;
+    }
+    moving = projectId;
+    const { [projectId]: _was, ...faults } = moveFault;
+    moveFault = faults;
+    try {
+      const { said: told } = await placeProject(
+        projectId,
+        to === NONE ? null : to
+      );
+      movedSaid = { ...movedSaid, [projectId]: told };
+      store.areas.value = (await readAreas()).areas;
+    } catch (error) {
+      // The list as the hub has it now: an area deleted elsewhere while
+      // this page stood is gone from it, and named as gone.
+      const areaName = to === NONE ? null : areaNamed(to);
+      const now = await readAreas().catch(() => null);
+      const gone = now !== null && !now.areas.some((one) => one.id === to);
+      if (now) {
+        store.areas.value = now.areas;
+      }
+      moveFault = {
+        ...moveFault,
+        [projectId]:
+          gone && areaName !== null
+            ? { reason: words.areaGone(areaName), to: null }
+            : { reason: failureWords(error), to },
+      };
+    } finally {
+      moving = null;
+    }
+  }
+
   function askDelete(area: AreaView): void {
     asker.ask(
       deleteQuestion(area.id, area.name, projectsIn(area), async () => {
@@ -212,13 +286,116 @@
     );
   }
 
-  const settingsOf = (area: AreaView) =>
-    areaSettings(area, store.areaFacts.of(area.id));
-  const projectNames = (area: AreaView) =>
-    projectsIn(area)
-      .map((one) => one.name)
-      .join(", ");
+  const setsOf = (area: AreaView) =>
+    areaSets(area, store.areaFacts.of(area.id));
 </script>
+
+{#snippet saidLines(lines: readonly string[])}
+  {#each lines as line (line)}
+    <p class="mark-line flex items-start gap-space-2 type-meta text-ink-muted">
+      <span class="mark-cell"><IconCheck class="size-icon-sm flex-none" /></span
+      >
+      <span>{line}</span>
+    </p>
+  {/each}
+{/snippet}
+
+{#snippet addRow(place: string, label: string)}
+  <!-- Add project: the sidebar's "start one" row, a pick of every project
+       standing anywhere else, moved here by the hub's move. -->
+  <Sidebar.MenuSubItem data-flip>
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger disabled={cawco.hub !== "connected"}>
+        {#snippet child({ props })}
+          <Sidebar.MenuSubButton
+            {...props}
+            aria-label={label}
+            data-add-project
+            data-branch-item
+            row="compact-touch"
+            tone="muted"
+          >
+            {#snippet child({ props: row })}
+              <button {...row} class="{row.class} mark-line" type="button">
+                <span
+                  data-slot="sidebar-row-lead"
+                  class="inline-flex size-space-5 shrink-0 items-center justify-center"
+                  data-box><IconPlus class="size-icon-sm" /></span
+                >
+                <span>{words.addProject}</span>
+              </button>
+            {/snippet}
+          </Sidebar.MenuSubButton>
+        {/snippet}
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="start" width="wide">
+        {#each addable(place) as project (project.id)}
+          <DropdownMenu.Item
+            data-add-pick={project.id}
+            onSelect={() => moveProject(project.id, place)}
+          >
+            <span class="flex min-w-0 flex-col" data-box>
+              <span class="truncate">{project.name}</span>
+              <span class="truncate type-meta text-ink-muted"
+                >{words.isIn(
+                  project.areaId === null ? null : areaNamed(project.areaId)
+                )}</span
+              >
+            </span>
+          </DropdownMenu.Item>
+        {:else}
+          <p class="px-space-3 py-space-2 type-meta text-ink-muted">
+            {words.addNone}
+          </p>
+        {/each}
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+  </Sidebar.MenuSubItem>
+{/snippet}
+
+{#snippet projectRow(project: ProjectRow)}
+  <!-- A project: its mark and name, a link to its page. Under it, what the
+       hub said of its move, or why it refused one. -->
+  <Sidebar.MenuSubItem data-flip data-project={project.id}>
+    <Sidebar.MenuSubButton
+      aria-busy={moving === project.id || undefined}
+      data-branch-item
+      data-project-link={project.id}
+      href="/project/{project.id}"
+      row="compact-touch"
+    >
+      <span
+        data-slot="sidebar-row-lead"
+        class="inline-flex size-space-5 shrink-0 items-center justify-center"
+        data-box
+      >
+        <TreeMark fill="var(--mark-{markHue(folderOf(project))})">
+          {#snippet face()}
+            <IconFolder aria-hidden="true" class="size-icon-sm" />
+          {/snippet}
+        </TreeMark>
+      </span>
+      <span>{project.name}</span>
+    </Sidebar.MenuSubButton>
+    {#if movedSaid[project.id]?.length}
+      <div
+        data-slot="moved"
+        class="flex flex-col gap-space-row ps-(--row-compact-gap) pb-space-1"
+        role="status"
+      >
+        {@render saidLines(movedSaid[project.id])}
+      </div>
+    {/if}
+    <RowFault
+      again={moveFault[project.id]?.to
+        ? () => moveProject(project.id, moveFault[project.id].to ?? NONE)
+        : undefined}
+      data-move-fault
+      indent="var(--row-compact-gap)"
+      reason={moveFault[project.id]?.reason ?? null}
+    />
+  </Sidebar.MenuSubItem>
+{/snippet}
 
 <SectionFrame
   problem={store.areas.error}
@@ -245,16 +422,7 @@
       in:unfold
       out:unfold
     >
-      {#each said as line (line)}
-        <p
-          class="mark-line flex items-start gap-space-2 type-meta text-ink-muted"
-        >
-          <span class="mark-cell"
-            ><IconCheck class="size-icon-sm flex-none" /></span
-          >
-          <span>{line}</span>
-        </p>
-      {/each}
+      {@render saidLines(said)}
     </div>
   {/if}
 
@@ -302,8 +470,6 @@
       >
         {#each shown as area, index (area.id)}
           {@const mark = areaMark(area, section.hue)}
-          {@const settings = settingsOf(area)}
-          {@const names = projectNames(area)}
           {@const open = foldsOpen(area)}
           <li
             data-slot="item"
@@ -317,7 +483,7 @@
             <div
               data-slot="row"
               class="group/row relative grid min-h-c-row-h-two grid-cols-(--area-cols) items-center gap-x-space-3 gap-y-space-row rounded-sm px-space-2 py-space-2 transition-control has-link-active:bg-surface-fill max-phone:grid-cols-(--area-cols-phone)"
-              style:--area-cols={"auto var(--c-mark) minmax(0, 1fr) auto var(--c-area-count-w) auto"}
+              style:--area-cols={"auto var(--c-mark) minmax(0, 1fr) var(--c-area-count-w) auto"}
               style:--area-cols-phone="auto var(--c-mark) minmax(0, 1fr) auto"
             >
               <!-- The switch that folds its projects: the sidebar's chevron,
@@ -437,70 +603,22 @@
                   data-link
                   href="/config/areas/{area.id}">{area.name}</a
                 >
-                <!-- Its projects' names while they are folded away; out,
-                     they stand under it and the line has nothing to add. -->
-                {#if !open}
-                  <span
-                    data-slot="meta"
-                    class="truncate type-meta text-ink-muted"
-                    title={names || undefined}
-                    >{names || words.projects(0)}</span
-                  >
-                {/if}
+                <!-- What it sets, named in words: the list says which
+                     settings each area carries at a glance; its page shows
+                     each one's value. -->
+                <span
+                  data-slot="sets"
+                  class="type-meta text-pretty text-ink-muted"
+                  >{words.sets(setsOf(area))}</span
+                >
               </span>
 
-              <!-- What it sets, one cell per setting in one order: the
-                   setting's glyph where it sets one, a dot where it leaves
-                   it to the fleet. Then how many projects are in it. -->
+              <!-- How many projects are in it, "No projects" at none. -->
               <span
-                class="contents max-phone:col-start-3 max-phone:row-start-2 max-phone:flex max-phone:items-center max-phone:gap-space-3"
+                data-slot="count"
+                class="num w-c-area-count-w type-meta whitespace-nowrap text-ink-muted max-phone:col-start-3 max-phone:row-start-2 max-phone:w-auto"
+                >{words.projects(area.projects.length)}</span
               >
-                <ul
-                  data-slot="sets"
-                  class="relative z-1 m-0 flex list-none items-center gap-space-2 p-0"
-                  aria-label={settings.some((one) => one.value)
-                    ? undefined
-                    : words.setsNothing}
-                >
-                  {#each settings as setting (setting.key)}
-                    <Tooltip.Root>
-                      <Tooltip.Trigger>
-                        {#snippet child({ props })}
-                          <li
-                            {...props}
-                            class="inline-flex size-icon-md items-center justify-center text-ink-muted"
-                            data-set={setting.value !== null || undefined}
-                            aria-label={setting.value
-                              ? words.sets(setting.key, setting.value)
-                              : words.leaves(setting.key)}
-                          >
-                            {#if setting.value}
-                              <setting.icon class="size-icon-md" />
-                            {:else}
-                              <span
-                                class="size-space-1 rounded-pill bg-border-control"
-                              ></span>
-                            {/if}
-                          </li>
-                        {/snippet}
-                      </Tooltip.Trigger>
-                      <Tooltip.Content
-                        >{setting.value
-                          ? words.sets(setting.key, setting.value)
-                          : words.leaves(setting.key)}</Tooltip.Content
-                      >
-                    </Tooltip.Root>
-                  {/each}
-                </ul>
-                <!-- The Earned Count Rule: no count at 0; its meta line says so. -->
-                <span
-                  data-slot="count"
-                  class="num w-c-area-count-w type-meta whitespace-nowrap text-ink-muted max-phone:w-auto"
-                  >{area.projects.length > 0
-                    ? words.projects(area.projects.length)
-                    : ""}</span
-                >
-              </span>
 
               <Button
                 aria-label={words.deleteArea(area.name)}
@@ -522,8 +640,11 @@
             />
             <!-- Its projects, as the sidebar hangs a project's sessions:
                  the rail from the tile, each project's mark on its arm,
-                 the whole opening and folding with the sidebar's motion. -->
-            {#if open}
+                 the whole opening and folding with the sidebar's motion.
+                 Add project ends it, as the sidebar's "start one" row ends
+                 a project with no sessions; an area with none shows that
+                 row alone. -->
+            {#if listed(area)}
               <ul
                 aria-label={words.projectsIn(area.name)}
                 class="kit-nest m-0 flex min-w-0 list-none flex-col gap-(--tree-gap) pt-0 pe-0 pb-space-1 ps-(--nest-pad)"
@@ -533,40 +654,48 @@
                 id={foldId(area)}
                 in:branch={NEST}
                 out:branch={NEST}
-                {@attach nestFrom(TILE, "[data-tree-mark]")}
+                {@attach nestFrom(TILE, LEAD)}
               >
                 {#each projectsIn(area) as project (project.id)}
-                  <Sidebar.MenuSubItem data-flip>
-                    <Sidebar.MenuSubButton
-                      data-branch-item
-                      href="/project/{project.id}"
-                      row="compact-touch"
-                    >
-                      <span
-                        data-slot="sidebar-row-lead"
-                        class="inline-flex size-space-5 shrink-0 items-center justify-center"
-                        data-box
-                      >
-                        <TreeMark
-                          fill="var(--mark-{markHue(folderOf(project))})"
-                        >
-                          {#snippet face()}
-                            <IconFolder
-                              aria-hidden="true"
-                              class="size-icon-sm"
-                            />
-                          {/snippet}
-                        </TreeMark>
-                      </span>
-                      <span>{project.name}</span>
-                    </Sidebar.MenuSubButton>
-                  </Sidebar.MenuSubItem>
+                  {@render projectRow(project)}
                 {/each}
+                {@render addRow(area.id, words.addProjectTo(area.name))}
               </ul>
             {/if}
           </li>
         {/each}
       </ol>
+
+      <!-- The projects in no area, at the foot: where a project carried out
+           of every area lands, and where those never put in one stand. -->
+      <section
+        aria-labelledby="area-none-head"
+        class="mt-space-4 flex flex-col gap-space-1 px-space-2 py-space-2"
+        data-slot="no-area"
+      >
+        <h3
+          id="area-none-head"
+          class="flex items-baseline gap-space-2 type-label text-ink-strong"
+        >
+          {words.noArea}
+          <span class="num type-meta text-ink-muted"
+            >{words.projects(inNoArea.length)}</span
+          >
+        </h3>
+        {#if inNoArea.length === 0}
+          <p class="type-meta text-ink-muted">{words.noAreaEmpty}</p>
+        {/if}
+        <ul
+          aria-label={words.noArea}
+          class="m-0 flex min-w-0 list-none flex-col gap-(--tree-gap) p-0"
+          {@attach reflow()}
+        >
+          {#each inNoArea as project (project.id)}
+            {@render projectRow(project)}
+          {/each}
+          {@render addRow(NONE, words.takeOut)}
+        </ul>
+      </section>
     </div>
   {/if}
 

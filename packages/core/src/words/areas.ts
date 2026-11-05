@@ -68,6 +68,11 @@ export const areaWords = {
       ? `It takes the area ${area}'s ${named}.`
       : `It falls back to the fleet's ${named}.`;
   },
+  /** A project moved that takes nothing new and loses nothing: said so, so a move is never answered with silence. */
+  takesNothing: (area: string | null) =>
+    area
+      ? `It takes nothing from ${area}, which sets nothing it doesn't already set itself.`
+      : "Nothing falls back: it took nothing from its area.",
   /** A delete that ungrouped no project and left nothing to fall back. */
   deletedAlone: (name: string) => `${name} is deleted; no project was in it.`,
   deleted: (name: string, count: number) =>
@@ -142,6 +147,14 @@ export const AREA_SETTING_LABELS = {
   types: "Delegate types",
 } as const;
 export type AreaSettingLabel = keyof typeof AREA_SETTING_LABELS;
+/** The same settings mid-sentence. */
+const SET_NAMES: Record<AreaSettingLabel, string> = {
+  account: "an account",
+  budget: "a budget",
+  cawMode: "Caw's permission mode",
+  decides: "Who decides",
+  types: "delegate types",
+};
 
 const counted = (n: number, one: string, many: string): string =>
   n === 1 ? `1 ${one}` : `${n} ${many}`;
@@ -165,12 +178,26 @@ export const areasScreenWords = {
   listLabel: "Areas, in order",
   projects: (n: number) =>
     n === 0 ? "No projects" : counted(n, "project", "projects"),
-  /** The glyph strip's words for a setting the area sets, and one it leaves to the fleet. */
-  sets: (setting: AreaSettingLabel, value: string) =>
-    `${AREA_SETTING_LABELS[setting]}: ${value}`,
-  leaves: (setting: AreaSettingLabel) =>
-    `${AREA_SETTING_LABELS[setting]}: the fleet's`,
-  setsNothing: "Sets nothing: its projects take the fleet's settings",
+  /** A row's line under its name: what the area sets, named in words, in one fixed order. */
+  sets: (settings: readonly AreaSettingLabel[]) =>
+    settings.length === 0
+      ? "Sets nothing: its projects take the fleet's settings"
+      : `Sets ${andList(settings.map((one) => SET_NAMES[one]))}`,
+
+  // ── Moving projects ──
+  /** The foot's group: the projects in no area, a place a project is moved to as well. */
+  noArea: "In no area",
+  noAreaEmpty: "Every project is in an area.",
+  addProject: "Add project",
+  addProjectTo: (name: string) => `Add a project to ${name}`,
+  /** The no-area group's Add project, for a screen reader. */
+  takeOut: "Take a project out of its area",
+  /** A pick's second line: where the project is now. */
+  isIn: (area: string | null) => (area ? `In ${area}` : "In no area"),
+  addNone: "Every project is in this area already.",
+  /** A move refused because its area was deleted elsewhere while the page stood. */
+  areaGone: (name: string) =>
+    `${name} was deleted before the move reached it, so the project stays where it was.`,
   /** The switch that opens and folds the projects under an area, as a project's mark does its sessions in the sidebar. */
   fold: (name: string, open: boolean) =>
     `${open ? "Hide" : "Show"} ${name}'s projects`,
