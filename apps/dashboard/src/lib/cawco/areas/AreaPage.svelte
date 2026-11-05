@@ -191,7 +191,8 @@
     SPEND_ON_CAP.find((each) => each.value === (onCapNow ?? fleetOnCap))?.means
   );
 
-  let amount = $state("");
+  /** The amount typed: a number input binds a number, or "" while empty. */
+  let amount = $state<number | string>("");
   let period = $state<CapPeriod>("month");
   $effect(() => {
     const usd = area?.capUsd ?? null;
@@ -206,7 +207,7 @@
     }
   });
   function keepBudget(): void {
-    const typed = amount.trim();
+    const typed = String(amount).trim();
     if (typed === "") {
       return;
     }
@@ -362,7 +363,6 @@
               <AccountPick
                 disabled={asked.account !== undefined || area === undefined}
                 id="{uid}-account"
-                measure="cap-md"
                 onpick={(next) =>
                   write(
                     "account",
@@ -428,7 +428,6 @@
                 class="w-full"
                 disabled={asked.cawMode !== undefined || area === undefined}
                 id="{uid}-mode"
-                measure="cap-md"
                 bind:value={
                   () => modeNow ?? "",
                   (next) =>
@@ -488,6 +487,9 @@
                   keepBudget();
                 }}
               >
+                <span aria-hidden="true" class="type-label text-ink-muted"
+                  >{words.budgetAmount}</span
+                >
                 <Input
                   aria-invalid={faults.cap ? "true" : undefined}
                   field="number"
@@ -496,7 +498,6 @@
                   inputmode="decimal"
                   min="0"
                   onblur={keepBudget}
-                  placeholder={words.budgetAmount}
                   step="any"
                   type="number"
                   bind:value={amount}
@@ -555,7 +556,6 @@
                 class="w-full"
                 disabled={asked.onCap !== undefined || area === undefined}
                 id="{uid}-on-cap"
-                measure="cap-md"
                 bind:value={
                   () => onCapNow ?? "",
                   (next) =>

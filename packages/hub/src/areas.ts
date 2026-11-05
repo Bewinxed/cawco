@@ -199,7 +199,13 @@ export const createAreas = ({
 
   /** An area's settings write, checked; what the row takes. A field left out stays as it is. */
   const settingsChange = (ask: AreaSettingsAsk): AreaSettingsChange => {
-    if (ask.account && !db.accounts.get(ask.account)) {
+    // Any id but null names an account, the empty one included: a name the
+    // hub keeps none of is refused here, never left to the foreign key.
+    if (
+      ask.account !== undefined &&
+      ask.account !== null &&
+      !db.accounts.get(ask.account)
+    ) {
       throw new AreaRefusal(400, areaWords.noAccount(ask.account));
     }
     const asked: AreaSettingsChange = {
@@ -275,16 +281,18 @@ export const createAreas = ({
     changed();
     const now = db.project(projectId) ?? before;
     const is = await sourcesOf(now);
-    const said = (Object.keys(is) as AreaSettingName[]).flatMap((setting) =>
-      is[setting] === "area" || was[setting] === "area"
-        ? [
-            areaWords.takes(
-              setting,
-              is[setting] === "area" ? (area?.name ?? null) : null
-            ),
-          ]
-        : []
+    // What it takes from the area it is in now, then what falls back to
+    // the fleet's from the one it left: a sentence each, the settings named
+    // together.
+    const settings = Object.keys(is) as AreaSettingName[];
+    const taken = settings.filter((setting) => is[setting] === "area");
+    const fell = settings.filter(
+      (setting) => was[setting] === "area" && is[setting] !== "area"
     );
+    const said = [
+      ...(taken.length > 0 ? [areaWords.takes(taken, area?.name ?? null)] : []),
+      ...(fell.length > 0 ? [areaWords.takes(fell, null)] : []),
+    ];
     const moved =
       now.inEffect.account.value === before.inEffect.account.value
         ? undefined

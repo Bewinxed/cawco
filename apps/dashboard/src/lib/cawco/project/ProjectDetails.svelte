@@ -64,6 +64,7 @@
     type TrackerTarget,
     type TrackerView,
   } from "@cawco/core/trackers";
+  import { areaWords, projectAreaWords } from "@cawco/core/words/areas";
   import { lfsWords } from "@cawco/core/words/lfs";
   import { projectWords } from "@cawco/core/words/project";
   import { projectAccountWords } from "@cawco/core/words/project-account";
@@ -74,6 +75,11 @@
     accountNamed,
     signedOutEverywhere,
   } from "#lib/cawco/accounts/model.svelte.js";
+  import {
+    type AreaView,
+    placeProject,
+    readAreas,
+  } from "#lib/cawco/areas/areas.js";
   import {
     addProjectPlace,
     cawco,
@@ -168,6 +174,63 @@
     setLands(next);
   }
 
+  /* ── Area ───────────────────────────────────────────────────────── */
+
+  /** The areas to pick from, in their order; null until read. */
+  let areas = $state<AreaView[] | null>(null);
+  let areasFault = $state<string | null>(null);
+  /** The area asked while the hub answers; undefined: none asked. */
+  let areaAsked = $state<string | null | undefined>(undefined);
+  let areaFault = $state<string | null>(null);
+  /** What the last move took or fell back to, in the hub's words. */
+  let areaSaid = $state<string[]>([]);
+  let areaTried: string | null = null;
+  const areaNow = $derived(
+    areaAsked === undefined ? project.areaId : areaAsked
+  );
+  const areaName = $derived(
+    areas?.find((each) => each.id === project.areaId)?.name ?? null
+  );
+
+  function readAreaChoices(): void {
+    areasFault = null;
+    readAreas().then(
+      ({ areas: read }) => {
+        areas = read;
+      },
+      (error: unknown) => {
+        areasFault = failureWords(error);
+      }
+    );
+  }
+
+  // An area made or put in since the read: read the choices again.
+  $effect(() => {
+    if (
+      project.areaId &&
+      areas !== null &&
+      !areas.some((each) => each.id === project.areaId)
+    ) {
+      readAreaChoices();
+    }
+  });
+
+  async function setArea(next: string | null): Promise<void> {
+    if (areaAsked !== undefined || next === project.areaId) {
+      return;
+    }
+    areaTried = next;
+    areaAsked = next;
+    areaFault = null;
+    try {
+      areaSaid = (await placeProject(project.id, next)).said;
+    } catch (error) {
+      areaFault = failureWords(error);
+    } finally {
+      areaAsked = undefined;
+    }
+  }
+
   /* ── Account ────────────────────────────────────────────────────── */
 
   /** The account asked while the hub answers; undefined: none asked. */
@@ -179,9 +242,16 @@
   const accountName = $derived(
     project.account === null ? null : accountNamed(project.account)
   );
-  /** Set, and signed in on no machine: nothing of the project starts. */
+  /** The account its area names, while it names none of its own. */
+  const areaAccount = $derived(
+    project.inEffect.account.from === "area" && project.inEffect.account.value
+      ? accountNamed(project.inEffect.account.value)
+      : null
+  );
+  /** The account in effect, set, and signed in on no machine: nothing of the project starts. */
   const accountSignedOut = $derived(
-    project.account !== null && signedOutEverywhere(project.account)
+    project.inEffect.account.value !== null &&
+      signedOutEverywhere(project.inEffect.account.value)
   );
 
   /** Try again: the last account asked, once more. */
@@ -328,6 +398,7 @@
   );
 
   onMount(() => {
+    readAreaChoices();
     readTracker(project.id).then(
       (read) => {
         tracker = read;
@@ -1520,6 +1591,64 @@
       </div>
     </div>
 
+    <!-- Area: the group whose settings it takes wherever it sets none. -->
+    <div
+      data-slot="row"
+      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      data-detail="area"
+    >
+      <p
+        data-slot="project-details-label"
+        class="type-label pt-space-1 text-ink-muted"
+      >
+        {projectAreaWords.label}
+      </p>
+      <div
+        data-slot="value"
+        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+      >
+        {#if areas !== null && (areas.length > 0 || project.areaId)}
+          <NativeSelect.Root
+            aria-label={projectAreaWords.select}
+            class="w-full"
+            data-area-select
+            disabled={areaAsked !== undefined}
+            bind:value={() => areaNow ?? "", (next) => setArea(next || null)}
+          >
+            <NativeSelect.Option value=""
+              >{projectAreaWords.none}</NativeSelect.Option
+            >
+            {#each areas as each (each.id)}
+              <NativeSelect.Option value={each.id}
+                >{each.name}</NativeSelect.Option
+              >
+            {/each}
+          </NativeSelect.Root>
+          <p data-slot="note" class="type-meta text-ink-muted">
+            {areaName ? projectAreaWords.in(areaName) : projectAreaWords.out}
+          </p>
+          {#each areaSaid as line (line)}
+            <p data-slot="note" class="type-meta text-ink-muted" data-area-said>
+              {line}
+            </p>
+          {/each}
+        {:else if areas !== null}
+          <p class="type-label text-ink-strong">
+            {projectAreaWords.noneYet}
+            <a class="text-link-ink" href="/config/areas"
+              >{projectAreaWords.make}</a
+            >
+          </p>
+        {/if}
+        <RowFault again={readAreaChoices} reason={areasFault} />
+        <RowFault
+          again={() => setArea(areaTried)}
+          data-area-fault
+          reason={areaFault}
+        />
+      </div>
+    </div>
+
     <!-- Account: where its sessions start, with that account's connectors. -->
     <div
       data-slot="row"
@@ -1541,21 +1670,27 @@
           data-account-select
           disabled={accountAsked !== undefined}
           onpick={setAccount}
-          routing={projectAccountWords.routing}
+          routing={areaAccount && areaName
+            ? projectAreaWords.areaAccount(areaAccount, areaName)
+            : projectAccountWords.routing}
           value={accountNow}
         />
         <p data-slot="note" class="type-meta text-ink-muted">
-          {accountName
-            ? projectAccountWords.set(accountName)
-            : projectAccountWords.routed}
+          {#if accountName}
+            {projectAccountWords.set(accountName)}
+          {:else if areaAccount && areaName}
+            {areaWords.why(areaAccount, areaName)}
+          {:else}
+            {projectAccountWords.routed}
+          {/if}
         </p>
-        {#if accountSignedOut && accountName}
+        {#if accountSignedOut && (accountName ?? areaAccount)}
           <p
             data-slot="note"
             class="type-meta text-ink-muted"
             data-account-signed-out
           >
-            {projectAccountWords.signedOut(accountName)}
+            {projectAccountWords.signedOut(accountName ?? areaAccount ?? "")}
           </p>
         {/if}
         <RowFault

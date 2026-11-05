@@ -64,7 +64,7 @@
   let list = $state<HTMLElement | null>(null);
   const hand = new HandOrder();
   let orderFault = $state<string | null>(null);
-  let orderTried: string[] | null = null;
+  let orderTried = $state<string[] | null>(null);
 
   async function keepOrder(ids: string[]): Promise<void> {
     orderTried = ids;
@@ -267,7 +267,13 @@
                 style:--hue={section.hue}
                 type="button"
               >
-                <IconToolFiles class="size-icon-md flex-none" />
+                <IconToolFiles
+                  class="size-icon-md flex-none transition-opacity duration-(--dur-control) ease-out can-hover:group-hover/row:opacity-0"
+                />
+                <span
+                  aria-hidden="true"
+                  class="absolute inset-0 m-auto h-space-4 w-c-drag-dots-w opacity-0 drag-dots transition-opacity duration-(--dur-control) ease-out can-hover:group-hover/row:opacity-100"
+                ></span>
               </button>
 
               <span class="flex min-w-0 flex-col gap-space-row">
@@ -302,7 +308,7 @@
                         {#snippet child({ props })}
                           <li
                             {...props}
-                            class="inline-flex size-icon-md items-center justify-center text-ink-strong"
+                            class="inline-flex size-icon-md items-center justify-center text-ink-muted"
                             data-set={setting.value !== null || undefined}
                             aria-label={setting.value
                               ? words.sets(setting.key, setting.value)
@@ -312,7 +318,7 @@
                               <setting.icon class="size-icon-md" />
                             {:else}
                               <span
-                                class="size-space-1 rounded-pill bg-border-control-strong"
+                                class="size-space-1 rounded-pill bg-border-control"
                               ></span>
                             {/if}
                           </li>
@@ -326,10 +332,13 @@
                     </Tooltip.Root>
                   {/each}
                 </ul>
+                <!-- The Earned Count Rule: no count at 0; its meta line says so. -->
                 <span
                   data-slot="count"
                   class="num w-c-area-count-w type-meta text-ink-muted max-phone:w-auto"
-                  >{words.projects(area.projects.length)}</span
+                  >{area.projects.length > 0
+                    ? words.projects(area.projects.length)
+                    : ""}</span
                 >
               </span>
 

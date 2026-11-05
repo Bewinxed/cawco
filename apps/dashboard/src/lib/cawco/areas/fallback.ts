@@ -22,13 +22,23 @@ const ROW: readonly [keyof ProjectRow["inEffect"], AreaSettingName][] = [
   ["cawMode", "cawMode"],
 ];
 
-const fallBackLines = (projects: readonly ProjectRow[]): string[] =>
-  ROW.flatMap(([field, name]) => {
+const fallBackLines = (projects: readonly ProjectRow[]): string[] => {
+  // The settings by how many projects fall back on each, so the same
+  // projects' settings are said once: "3 projects fall back to the fleet's
+  // budget and rule at the budget".
+  const byCount = new Map<number, AreaSettingName[]>();
+  for (const [field, name] of ROW) {
     const count = projects.filter(
       (project) => project.inEffect[field].from === "area"
     ).length;
-    return count > 0 ? [areaWords.fallBack(count, name)] : [];
-  });
+    if (count > 0) {
+      byCount.set(count, [...(byCount.get(count) ?? []), name]);
+    }
+  }
+  return [...byCount].map(([count, names]) =>
+    areaWords.fallBackAll(count, names)
+  );
+};
 
 /**
  * Deleting an area, asked where it was asked (AskHere): the projects that

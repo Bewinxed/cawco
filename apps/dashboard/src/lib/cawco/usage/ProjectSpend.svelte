@@ -4,6 +4,7 @@
     OnCap,
     ProjectSpend,
   } from "@cawco/core/project-conversation";
+  import { areaWords } from "@cawco/core/words/areas";
   import {
     cawco,
     projectSpend,
@@ -154,19 +155,29 @@
     return share > 90 ? ("bad" as const) : ("caution" as const);
   });
   /**
-   * What reaching it does, in a word: the fleet's default, or the project's
-   * own choice. Only with a budget: without one nothing is reached.
+   * What reaching it does, in a word, and where the budget and that rule
+   * came from when not the project's own (its area, the fleet). Only with a
+   * budget: without one nothing is reached.
    */
   const onCapLine = $derived.by(() => {
     if (!cap) {
       return "";
     }
-    return cap.onCapFrom === "fleet"
-      ? "Fleet default"
-      : ON_CAP_LABEL[cap.onCap];
+    const rule =
+      cap.onCapFrom === "fleet" ? "Fleet default" : ON_CAP_LABEL[cap.onCap];
+    return cap.from === "area" || cap.onCapFrom === "area"
+      ? `${rule} · ${areaWords.source("area", null)}`
+      : rule;
   });
 
-  const fleetDefault = $derived(spend ? ON_CAP_LABEL[spend.fleetOnCap] : "");
+  /** What leaving the rule empty takes: its area's while one sets it, else the fleet's. */
+  const fallBackOnCap = $derived(
+    cap?.onCapFrom === "area"
+      ? `${areaWords.source("area", null)} · ${ON_CAP_LABEL[cap.onCap]}`
+      : `Fleet default · ${spend ? ON_CAP_LABEL[spend.fleetOnCap] : ""}`
+  );
+  /** The budget is the project's own: Remove clears it; one its area sets stays. */
+  const ownCap = $derived(cap?.from === "project");
 
   let capOpen = $state(false);
   let capAmount = $state("");
@@ -177,8 +188,10 @@
   let capRefused = $state<string | null>(null);
   $effect(() => {
     if (capOpen) {
-      capAmount = cap ? String(cap.usd) : "";
-      capPeriod = cap?.period ?? "month";
+      // An area's budget is shown on the tile, never copied into the
+      // project's own by opening this form.
+      capAmount = ownCap && cap ? String(cap.usd) : "";
+      capPeriod = ownCap && cap ? cap.period : "month";
       capOnCap = cap?.onCapFrom === "project" ? cap.onCap : "";
       capRefused = null;
     }
@@ -284,9 +297,9 @@
                        whole for a reader that hears it on its own. -->
                   <Button
                     {...props}
-                    aria-label={cap ? "Change budget" : "Set budget"}
+                    aria-label={ownCap ? "Change budget" : "Set budget"}
                     size="sm"
-                    variant="outline">{cap ? "Change" : "Set"}</Button
+                    variant="outline">{ownCap ? "Change" : "Set"}</Button
                   >
                 {/snippet}
               </Popover.Trigger>
@@ -305,7 +318,9 @@
                 >
                   <p data-slot="note" class="type-meta text-ink-muted">
                     What {projectName} may spend, its Caw and its attempts together.
-                    Leave it empty for no limit.
+                    {cap?.from === "area"
+                      ? `Leave it empty to keep its area's ${usd(cap.usd)} a ${cap.period}.`
+                      : "Leave it empty for no limit."}
                   </p>
                   <label
                     data-slot="project-spend-field"
@@ -345,7 +360,7 @@
                       bind:value={capOnCap}
                     >
                       <NativeSelectOption value=""
-                        >Fleet default · {fleetDefault}</NativeSelectOption
+                        >{fallBackOnCap}</NativeSelectOption
                       >
                       <NativeSelectOption value="pause"
                         >{ON_CAP_LABEL.pause}</NativeSelectOption
@@ -369,7 +384,7 @@
                     </p>
                   {/if}
                   <div class="flex justify-end gap-space-2">
-                    {#if cap}
+                    {#if ownCap}
                       <Button
                         label="Remove"
                         onclick={() => saveCap(true)}

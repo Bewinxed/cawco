@@ -101,3 +101,18 @@ export const deleteAreaFile = (id: string, path: string): Promise<unknown> =>
     { method: "DELETE" },
     `delete ${path}`
   );
+
+/** `GET /api/areas`: every area in its order, for a pick of one. */
+export const readAreas = (): Promise<{ areas: AreaView[] }> =>
+  hubCall("/api/areas", {}, "read the areas");
+
+/** Puts a project in an area, or in none (null): what it takes or falls back to, in sentences. */
+export const placeProject = (
+  projectId: string,
+  areaId: string | null
+): Promise<{ areaId: string | null; said: string[] }> =>
+  hubCall(
+    `/api/projects/${encodeURIComponent(projectId)}/area`,
+    { method: "PUT", ...jsonBody({ areaId }) },
+    areaId ? "put the project in the area" : "take the project out of its area"
+  );

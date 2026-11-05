@@ -6,6 +6,7 @@
  * written into it (scripts/words-swift.ts).
  */
 import type { SettingSource } from "../areas";
+import { andList } from "./helpers";
 
 /** The settings an area carries that a project falls back from, by the name a note gives each. */
 const AREA_SETTING_NAMES = {
@@ -60,11 +61,16 @@ export const areaWords = {
   /** "4 projects fall back to the fleet's account". */
   fallBack: (count: number, setting: AreaSettingName) =>
     `${projects(count)} back to the fleet's ${AREA_SETTING_NAMES[setting]}`,
-  /** A project moved: what it takes from its new area, or falls back to. */
-  takes: (setting: AreaSettingName, area: string | null) =>
-    area
-      ? `It takes the area ${area}'s ${AREA_SETTING_NAMES[setting]}`
-      : `It falls back to the fleet's ${AREA_SETTING_NAMES[setting]}`,
+  /** Several settings the same projects fall back on, in one sentence: "3 projects fall back to the fleet's budget and rule at the budget". */
+  fallBackAll: (count: number, settings: readonly AreaSettingName[]) =>
+    `${projects(count)} back to the fleet's ${andList(settings.map((one) => AREA_SETTING_NAMES[one]))}`,
+  /** A project moved: the settings it takes from its new area, or falls back to the fleet's, in one sentence. */
+  takes: (settings: readonly AreaSettingName[], area: string | null) => {
+    const named = andList(settings.map((one) => AREA_SETTING_NAMES[one]));
+    return area
+      ? `It takes the area ${area}'s ${named}.`
+      : `It falls back to the fleet's ${named}.`;
+  },
   /** A delete that ungrouped no project and left nothing to fall back. */
   deletedAlone: (name: string) => `${name} is deleted; no project was in it.`,
   deleted: (name: string, count: number) =>
@@ -111,6 +117,23 @@ export const areaWords = {
 
   /** A memory scope's area, among the projects it names. */
   scopeArea: (name: string) => `the ${name} area`,
+};
+
+/** A project's Area row in Project details (project/ProjectDetails.svelte). */
+export const projectAreaWords = {
+  label: "Area",
+  /** The select's name for a screen reader. */
+  select: "The area this project sits in",
+  none: "No area",
+  /** Under the row. */
+  in: (name: string) =>
+    `It takes ${name}'s settings wherever it sets none of its own.`,
+  out: "It takes the fleet's settings wherever it sets none of its own.",
+  noneYet: "No areas yet.",
+  make: "Make one in Configure › Areas",
+  /** The account select's first choice while its area names an account. */
+  areaAccount: (account: string, area: string) =>
+    `${area}'s account (${account})`,
 };
 
 /** The settings an area's row and page draw, each by what the person reads. */
@@ -195,7 +218,8 @@ export const areasScreenWords = {
   accountSignedOut: (name: string) =>
     `${name} isn't signed in on any machine, so a project that takes it can't start a session until it is.`,
   budgetLabel: "Budget",
-  budgetAmount: "Dollars",
+  /** The budget field's unit, before it. */
+  budgetAmount: "$",
   budgetPer: { day: "A day", month: "A month" },
   budgetNone:
     "No budget: its projects spend without one unless they set their own.",
