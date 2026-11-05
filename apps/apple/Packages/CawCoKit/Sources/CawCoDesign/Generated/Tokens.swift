@@ -1477,6 +1477,12 @@ public enum Motion {
     /// How far Caw shrinks as he fades out, from any drawing, over --dur-fade on ease-out, and the size a Caw whose status has no drawn enter fades in from, over --dur-pop. Material 3, Easing and duration: exit transitions are faster than enters, 200ms.
     public static let leaveScale: Double = 0.97
     public static let popScale: Double = 0.92
+    /// How much bigger a thing picked up by a drag (a stage, a card, a block, a row, a tab) stands as it lifts off its place, over --dur-pick-up with shadow-overlay under it; it settles back to 1 as it lands (drag/lift.ts).
+    public static let dragLiftScale: Double = 1.03
+    /// The most a thing in the air leans, in degrees, as the hand carries it sideways: it leans into the travel and springs upright when the hand slows (drag/lift.ts).
+    public static let dragTiltMax: Double = 3
+    /// Degrees of lean per px/ms the hand carries a thing sideways, up to --drag-tilt-max (drag/lift.ts).
+    public static let dragTiltGain: Double = 2.5
     /// How far each card of a session mark's deck shows below the one in front (SessionMark).
     public static let deckStep: Double = 1.25
     /// How much smaller each deck card is than the one in front: card i is the tile scaled by 1 - 0.11 x i.

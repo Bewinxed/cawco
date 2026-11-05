@@ -2104,13 +2104,25 @@
    kAffectsImportantProperty). A colour change, so it runs under every motion
    preference. The kit Toggle's on step, `surface-pressed`. By day, muted ink
    on it is 3.93:1 and a selected row's coral ink 4.12:1, so those inks go
-   strong for as long as it is held (8.90:1); night keeps its inks. */
+   strong for as long as it is held (8.90:1); night keeps its inks. A thing
+   a drag has lifted (drag/) is in the hand, not pressed: the tint lets go
+   as it lifts. */
 @utility press-tint {
-  &:is(:active, [data-pressed], #\#):not(:disabled, [aria-disabled="true"]) {
+  &:is(:active, [data-pressed], #\#):not(
+      :disabled,
+      [aria-disabled="true"],
+      [data-dnd-dragging],
+      [data-dnd-dragging] *
+    ) {
     background-color: var(--surface-pressed);
   }
   @variant light {
-    &:is(:active, [data-pressed]):not(:disabled, [aria-disabled="true"]) {
+    &:is(:active, [data-pressed]):not(
+        :disabled,
+        [aria-disabled="true"],
+        [data-dnd-dragging],
+        [data-dnd-dragging] *
+      ) {
       --ink-muted: var(--ink-strong);
       --text-muted: var(--ink-strong);
       --ink-subtle: var(--ink-strong);

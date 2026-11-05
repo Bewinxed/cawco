@@ -35,14 +35,26 @@ export interface Sample {
 }
 
 /**
+ * The spring's stiffness and damping, from its perceptual duration
+ * (--dur-settle) and its bounce, for a mass of 1: what `integrate` steps,
+ * and what a value that follows a moving target frame by frame steps (a
+ * thing in the air leaning into the hand's travel, drag/lift.ts).
+ */
+export function springForces(): { damping: number; stiffness: number } {
+  /** The perceptual duration, in seconds. */
+  const settle = dur("--dur-settle") / 1000;
+  return {
+    stiffness: ((2 * Math.PI) / settle) ** 2,
+    damping: (4 * Math.PI * (1 - BOUNCE)) / settle,
+  };
+}
+
+/**
  * The settle from `x0` px away from rest, moving at `v0` px/s, to rest at 0.
  * Always at least two points, the last exactly at rest.
  */
 export function integrate(x0: number, v0: number): Sample[] {
-  /** The perceptual duration, in seconds. */
-  const settle = dur("--dur-settle") / 1000;
-  const stiffness = ((2 * Math.PI) / settle) ** 2;
-  const damping = (4 * Math.PI * (1 - BOUNCE)) / settle;
+  const { stiffness, damping } = springForces();
   const out: Sample[] = [{ t: 0, x: x0, v: v0 }];
   let x = x0;
   let v = v0;

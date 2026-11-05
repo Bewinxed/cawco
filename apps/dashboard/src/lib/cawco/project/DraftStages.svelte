@@ -19,11 +19,16 @@
    *
    * Each column carries `data-share="stage:<name>"`, so on Set up the
    * board's column of the same stage lands from it (motion/share): one
-   * object, never two.
+   * object, never two. A column is dragged to another place among them
+   * (drag/DragProvider): it lifts off the grid under the hand, the others
+   * make room as it passes, and the order is kept at the drop.
    */
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import { setupPageWords } from "@cawco/core/words/onboarding";
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
+  import DragProvider from "#lib/cawco/drag/DragProvider.svelte";
+  import { LiveOrder } from "#lib/cawco/drag/live-order.svelte.js";
+  import Sortable from "#lib/cawco/drag/Sortable.svelte";
   import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import DraftColumn from "#lib/cawco/project/DraftColumn.svelte";
   import {
@@ -65,6 +70,42 @@
   /** Every row past a phone: one height, at least a whole stage's. */
   const ROWS = "minmax(var(--c-draft-col-h), 1fr)";
   let grid = $state<HTMLElement>();
+
+  /**
+   * Each stage's own key, so its column goes with it when it moves: a
+   * stage's name changes as it is typed, so the keys are the draft's own,
+   * moved and removed with the stages here, and grown for the stages Caw
+   * writes meanwhile.
+   */
+  let made = 0;
+  const fresh = () => {
+    made += 1;
+    return `stage-${made}`;
+  };
+  let keys = $state<string[]>(untrack(() => stages.map(fresh)));
+  $effect.pre(() => {
+    const count = stages.length;
+    untrack(() => {
+      if (keys.length < count) {
+        keys = [...keys, ...Array.from({ length: count - keys.length }, fresh)];
+      } else if (keys.length > count) {
+        keys = keys.slice(0, count);
+      }
+    });
+  });
+  /** The stages in a new order, their keys with them. */
+  function reorder(from: number, to: number) {
+    keys = moved(keys, from, to);
+    onstages(moved(stages, from, to));
+  }
+  /** A stage removed, its key with it. */
+  function removeStage(at: number) {
+    keys = keys.filter((_, index) => index !== at);
+    onstages(stages.filter((_, index) => index !== at));
+  }
+  /** The columns as they stand while one is in the air: the others make room as it passes. */
+  const order = new LiveOrder();
+  const shown = $derived(order.shown(keys));
 
   /** A new stage stands before the first closed one (done, dropped): in view, its name taking the caret. */
   async function add() {
@@ -116,36 +157,56 @@
      (`c-draft-col-h`, the skeleton's), so a stage takes a skeleton's place
      and a short stage stands beside a tall one without the grid moving; on
      a phone each card is as tall as its words. -->
-<div
-  bind:this={grid}
-  class="grid grid-cols-(--cols) auto-rows-(--rows) gap-space-3 pb-space-3 max-phone:auto-rows-auto max-phone:items-start"
-  data-slot="board"
-  style:--cols={COLS}
-  style:--rows={ROWS}
+<DragProvider
+  onDragEnd={(event) => {
+    const move = order.end(keys, event);
+    if (move) {
+      reorder(move.from, move.to);
+    }
+  }}
+  onDragOver={(event) => order.over(event)}
+  onDragStart={() => order.start(keys)}
 >
-  {#each stages as stage, at (at)}
-    <DraftColumn
-      {at}
-      of={stages.length}
-      onchange={(patch) => onstages(patched(stages, at, patch))}
-      onmove={(by) => onstages(moved(stages, at, at + by))}
-      onremove={() => onstages(stages.filter((_, index) => index !== at))}
-      {delegates}
-      {stage}
-    />
-  {/each}
-  {#each Array.from({ length: coming }, (_, index) => index) as index (index)}
-    <Skeleton height="draft-column" radius="card" />
-  {/each}
-  {#if adds}
-    <button
-      class="select-none press-tint mark-line flex min-h-c-draft-col-h max-phone:min-h-c-btn-h items-center justify-center gap-space-2 rounded-lg border-none bg-transparent text-ink-muted inset-ring inset-ring-border-control hover:bg-surface-hover"
-      data-slot="add-stage"
-      onclick={add}
-      type="button"
-    >
-      <IconPlus aria-hidden="true" class="size-icon-md" />
-      <span class="type-label">{setupPageWords.addStage}</span>
-    </button>
-  {/if}
-</div>
+  <div
+    bind:this={grid}
+    class="grid grid-cols-(--cols) auto-rows-(--rows) gap-space-3 pb-space-3 max-phone:auto-rows-auto max-phone:items-start"
+    data-slot="board"
+    style:--cols={COLS}
+    style:--rows={ROWS}
+  >
+    {#each shown as key, index (key)}
+      {@const at = keys.indexOf(key)}
+      {@const stage = stages[at]}
+      {#if stage}
+        <Sortable id={key} {index} label={stage.name} of={stages.length}>
+          {#snippet children(thing)}
+            <DraftColumn
+              {at}
+              of={stages.length}
+              onchange={(patch) => onstages(patched(stages, at, patch))}
+              onmove={(by) => reorder(at, at + by)}
+              onremove={() => removeStage(at)}
+              {delegates}
+              {stage}
+              {thing}
+            />
+          {/snippet}
+        </Sortable>
+      {/if}
+    {/each}
+    {#each Array.from({ length: coming }, (_, index) => index) as index (index)}
+      <Skeleton height="draft-column" radius="card" />
+    {/each}
+    {#if adds}
+      <button
+        class="select-none press-tint mark-line flex min-h-c-draft-col-h max-phone:min-h-c-btn-h items-center justify-center gap-space-2 rounded-lg border-none bg-transparent text-ink-muted inset-ring inset-ring-border-control hover:bg-surface-hover"
+        data-slot="add-stage"
+        onclick={add}
+        type="button"
+      >
+        <IconPlus aria-hidden="true" class="size-icon-md" />
+        <span class="type-label">{setupPageWords.addStage}</span>
+      </button>
+    {/if}
+  </div>
+</DragProvider>

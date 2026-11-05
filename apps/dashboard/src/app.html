@@ -15,10 +15,14 @@
       Tailwind's preflight took every toast's padding and border. Tailwind's
       `properties` (its `@property` fallbacks) comes first; app.css says what
       each of the others holds. A built sheet naming a layer left out here
-      fails the build (vite.config.ts `vendorComponentSheets`).
+      fails the build (vite.config.ts `vendorComponentSheets`). `dnd-kit`
+      is dnd kit's, injected as a drag starts (drag/): its reset of the
+      popover a thing in the air is lifted into stands under everything, so
+      every house rule on the thing it carries still holds
+      (dndkit.com/extend/plugins/feedback, "CSS Cascade Layer").
     -->
     <style>
-      @layer properties, theme, base, vendor, components, utilities, overrides;
+      @layer dnd-kit, properties, theme, base, vendor, components, utilities, overrides;
     </style>
     <!--
       The viewport, made before the body is parsed. A virtual keyboard

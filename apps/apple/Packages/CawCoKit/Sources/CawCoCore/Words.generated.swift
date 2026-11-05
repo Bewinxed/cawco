@@ -3115,6 +3115,52 @@ public enum Words {
         }
     }
 
+    public enum Drag {
+        // packages/core/src/words/drag.ts `dragWords`
+        /// Read once for anything that can be picked up.
+        public static let instructions = "Press Space to pick it up. Move it with the arrow keys, Space to put it down, Escape to put it back."
+
+        /// A handle the keys take a thing by, where the thing is not itself a control.
+        public static func handle(name: String) -> String {
+            "Move \(name)"
+        }
+
+        /// What a card that is a link and moves is called (its role, said in place of "link").
+        public static let movableLink = "movable link"
+
+        public static func pickedUp(name: String) -> String {
+            "Picked up \(name)."
+        }
+
+        /// It stands at a new place among the others.
+        public static func movedTo(name: String, place: Int, of: Int) -> String {
+            "\(name) is at \(place) of \(of)."
+        }
+
+        /// It is over somewhere it can land.
+        public static func over(name: String, `where`: String) -> String {
+            "\(name) is over \(`where`)."
+        }
+
+        /// Over nothing that takes it.
+        public static func overNothing(name: String) -> String {
+            "\(name) is over nothing that takes it."
+        }
+
+        public static func droppedAt(name: String, place: Int, of: Int) -> String {
+            "Put \(name) down at \(place) of \(of)."
+        }
+
+        public static func droppedIn(name: String, `where`: String) -> String {
+            "Put \(name) down in \(`where`)."
+        }
+
+        /// Let go where nothing takes it, or Escape: it goes back.
+        public static func putBack(name: String) -> String {
+            "\(name) went back where it was."
+        }
+    }
+
     public enum Connections {
         // packages/core/src/words/connections.ts `connectionsWords`
         public static let list = "Connections"

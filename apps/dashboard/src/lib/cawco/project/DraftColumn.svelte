@@ -13,8 +13,10 @@
    * setup page's bridge until the person sets it up.
    */
   import type { StageKind } from "@cawco/core/views";
+  import { dragWords } from "@cawco/core/words/drag";
   import { setupPageWords, setupWords } from "@cawco/core/words/onboarding";
   import { tick } from "svelte";
+  import type { SortableThing } from "#lib/cawco/drag/Sortable.svelte";
   import StageKindItems from "#lib/cawco/project/StageKindItems.svelte";
   import StageLookItems from "#lib/cawco/project/StageLookItems.svelte";
   import type { SetupDelegate, Stage } from "#lib/cawco/project/setup-stage.js";
@@ -36,7 +38,10 @@
     onmove,
     onremove,
     delegates = [],
+    thing,
   }: {
+    /** It as a thing the draft's columns move among (DraftStages, drag/Sortable). */
+    thing: SortableThing;
     stage: Stage;
     /** Its place, from 0, among `of` stages: the ends take no move past them. */
     at: number;
@@ -101,13 +106,26 @@
   }
 </script>
 
+<!-- The column is the thing a drag carries (drag/DragProvider): a press
+     that travels lifts it, a held press on a phone; its controls keep their
+     presses. In the air it is the column itself under the hand, its place
+     held open among the others. Its grip, at its top, is where the keys
+     take it: Space picks it up, the arrows carry it. -->
 <section
   aria-label={setupWords.draftStage(stage.name)}
-  class="group/col flex flex-col gap-space-1 rounded-lg bg-surface-band p-space-1 inset-ring inset-ring-border-hairline"
+  class="group/col relative flex cursor-grab touch-callout-none flex-col gap-space-1 rounded-lg bg-surface-band p-space-1 inset-ring inset-ring-border-hairline select-none data-dnd-dragging:bg-surface-raised"
   data-kind={stage.kind}
   data-share="stage:{stage.name}"
   data-slot="draft-column"
+  {@attach thing.attach}
 >
+  <button
+    aria-label={dragWords.handle(stage.name)}
+    class="absolute inset-x-0 top-0 mx-auto h-c-drag-dots-w w-space-6 cursor-grab rounded-pill border-none bg-transparent p-0 opacity-0 drag-dots transition-opacity duration-(--dur-control) ease-out touch-hit focus-visible:opacity-100 focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring group-hover/col:opacity-100 group-focus-within/col:opacity-100"
+    data-slot="grip"
+    type="button"
+    {@attach thing.attachHandle}
+  ></button>
   <header class="flex flex-col gap-0 ps-space-2 pe-0 pt-space-1 pb-space-1">
     <!-- mark-line: the name is a field, a box of its own; the glyph and More stand centred on it as boxes. -->
     <span class="flex min-h-c-btn-h-sm items-center gap-space-2">

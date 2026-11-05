@@ -195,6 +195,11 @@ const ENUMS: { members: Member[]; swift: string }[] = [
     ],
   },
   {
+    // What a drag says to a screen reader: picking up, moving, putting down.
+    swift: "Drag",
+    members: [{ file: "words/drag.ts", export: "dragWords", as: "" }],
+  },
+  {
     swift: "Connections",
     members: [
       { file: "words/connections.ts", export: "connectionsWords", as: "" },

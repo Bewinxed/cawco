@@ -4,9 +4,11 @@
    *
    * - **Head:** the 16px glyph in ink-muted, the title in label, what the
    *   block counts (`meta`), then at the trailing edge the block's own
-   *   action and its ⋯. The head is the drag handle (block-dnd): a mouse or
-   *   pen drags it, a phone lifts it after a held press; it tints on press.
-   *   44px tall under a coarse pointer.
+   *   action and its ⋯. The head is where the block is taken
+   *   (drag/DragProvider): a mouse or pen drags it, a phone lifts it after a
+   *   held press; it tints on press. Its glyph is where the keys take it
+   *   (Space picks it up, the arrows carry it). 44px tall under a coarse
+   *   pointer.
    * - **The ⋯** (the kit menu): Move up, Move down; Narrow or Wide, which on
    *   one column still sets the desk's ("On wider screens"); Hide; and for a
    *   custom view, Show as a tab.
@@ -14,16 +16,18 @@
    *   draws its own surfaces); a list stands at most --c-block-body-max tall
    *   on a desk and scrolls inside; the board fills the page's height.
    *
-   * While a block is in the air its own box stays as a slot (surface-recess,
-   * a dashed control edge), and the block the pointer is nearest draws the
-   * drop indicator on the edge the drop would take: a brand-solid line
-   * across that edge in the gap, its dot at the leading end. A width change
-   * tweens the box (`morph`, while `resizing`).
+   * While a block is in the air its head rides under the hand (the page's
+   * DragOverlay) and its own box stays as its slot (surface-recess, a
+   * dashed control edge), moving among the others as they make room for
+   * it, so the page shows where it will land. A width change tweens the box
+   * (`morph`, while `resizing`).
    */
   import type { BlockWidth } from "@cawco/core/blocks";
   import { blocksWords as words } from "@cawco/core/words/blocks";
   import { commonWords } from "@cawco/core/words/common";
+  import { dragWords } from "@cawco/core/words/drag";
   import type { Component, Snippet } from "svelte";
+  import type { SortableThing } from "#lib/cawco/drag/Sortable.svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
@@ -33,11 +37,6 @@
     IconMore,
     IconWindow,
   } from "#lib/icons.js";
-  import {
-    type BlockDragState,
-    dragHead,
-    dropOnBlock,
-  } from "./block-dnd.svelte";
 
   export type BlockBody = "natural" | "capped" | "fill";
 
@@ -60,7 +59,7 @@
     card,
     body,
     resizing,
-    drag,
+    thing,
     onmove,
     onwidth,
     onhide,
@@ -93,14 +92,14 @@
     body: BlockBody;
     /** Its width is changing: its box tweens to the new one. */
     resizing: boolean;
-    drag: BlockDragState;
+    /** It as a thing the page's blocks move among (BlockPage, drag/Sortable). */
+    thing: SortableThing;
     onmove: (step: -1 | 1) => void;
     onwidth: (width: BlockWidth) => void;
     onhide: () => void;
     ontab: () => void;
   } = $props();
 
-  const over = $derived(drag.over?.block === id ? drag.over.edge : null);
   const headId = $derived(`block-${page}-${id.replace(":", "-")}`);
 </script>
 
@@ -112,13 +111,13 @@
   class="group/block relative flex min-w-0 flex-col gap-space-2 data-dragging:rounded-lg data-dragging:bg-surface-recess data-dragging:-outline-offset-1 data-dragging:outline-1 data-dragging:outline-border-control data-dragging:outline-dashed"
   data-block={id}
   data-body={body}
-  data-dragging={drag.dragging === id ? "" : undefined}
+  data-dragging={thing.isDragSource ? "" : undefined}
   data-flip
   data-span={span}
   style:grid-column="span {span}"
   style:--fill-h-coarse={"calc(var(--block-fill) - var(--c-btn-h-lg) - var(--space-2))"}
   style:--fill-h-fine={"calc(var(--block-fill) - var(--c-btn-h-sm) - var(--space-2))"}
-  {@attach dropOnBlock(drag, () => ({ block: id, columns, page }))}
+  {@attach thing.attach}
   {@attach resizing &&
     morph({ width: true, on: ["data-wide", "data-narrow", "data-span"] })}
 >
@@ -126,14 +125,16 @@
        twice (its head and body hidden). -->
   <header
     data-slot="block-head"
-    class="mark-line press-tint flex min-h-c-btn-h-sm min-w-0 cursor-grab items-center gap-space-2 rounded-md px-space-1 select-none touch-callout-none group-data-dragging/block:invisible coarse:min-h-c-btn-h-lg data-block-preview:bg-surface-raised data-block-preview:px-space-3 data-block-preview:shadow-overlay"
-    {@attach dragHead(drag, () => ({ block: id, page }))}
+    class="mark-line press-tint flex min-h-c-btn-h-sm min-w-0 cursor-grab items-center gap-space-2 rounded-md px-space-1 select-none touch-callout-none group-data-dragging/block:invisible coarse:min-h-c-btn-h-lg"
+    data-drag-grab
   >
-    <span
+    <button
       data-slot="glyph"
-      aria-hidden="true"
-      class="grid flex-none place-items-center text-ink-muted *:size-icon-md"
-      data-box><Glyph /></span
+      aria-label={dragWords.handle(title)}
+      class="grid flex-none cursor-grab place-items-center rounded-xs border-none bg-transparent p-0 text-ink-muted *:size-icon-md focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring"
+      data-box
+      type="button"
+      {@attach thing.attachHandle}><Glyph aria-hidden="true" /></button
     >
     <h2
       data-slot="title"
@@ -222,17 +223,4 @@
   >
     {@render children()}
   </div>
-  <!-- The drop indicator: across the target's edge, in the gap between
-       blocks. -->
-  {#if over}
-    <span
-      data-slot="drop"
-      aria-hidden="true"
-      class="pointer-events-none absolute z-2 rounded-hair bg-brand-solid before:absolute before:size-c-block-drop-dot before:rounded-pill before:bg-brand-solid edge-bottom:inset-x-0 edge-bottom:bottom-(--drop-off) edge-bottom:h-c-block-drop-line edge-bottom:before:start-(--dot-out) edge-bottom:before:top-(--dot-mid) edge-left:inset-y-0 edge-left:start-(--drop-off) edge-left:w-c-block-drop-line edge-left:before:start-(--dot-mid) edge-left:before:top-(--dot-out) edge-right:inset-y-0 edge-right:end-(--drop-off) edge-right:w-c-block-drop-line edge-right:before:start-(--dot-mid) edge-right:before:top-(--dot-out) edge-top:inset-x-0 edge-top:top-(--drop-off) edge-top:h-c-block-drop-line edge-top:before:start-(--dot-out) edge-top:before:top-(--dot-mid)"
-      data-edge={over}
-      style:--drop-off={"calc(var(--space-group) / -2 - var(--c-block-drop-line) / 2)"}
-      style:--dot-mid={"calc((var(--c-block-drop-line) - var(--c-block-drop-dot)) / 2)"}
-      style:--dot-out={"calc(var(--c-block-drop-dot) / -2)"}
-    ></span>
-  {/if}
 </section>
