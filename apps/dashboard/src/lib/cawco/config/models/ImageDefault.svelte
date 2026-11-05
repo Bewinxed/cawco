@@ -34,6 +34,7 @@
     OptionGroupItem,
   } from "#lib/components/ui/option-group/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconChevronRight,
     IconImage,
@@ -97,6 +98,16 @@
       model: picked === models[0] ? null : picked,
     });
   }
+
+  /** A machine's state in a word: its glyph's name and tooltip. */
+  const stateOf = (machine: MachineImageReadiness): string => {
+    if (machine.lack === null) {
+      return words.ready;
+    }
+    return machine.lack.kind === "agy-installing"
+      ? words.installing
+      : words.notReady;
+  };
 
   const fixHref = (fix: NonNullable<ReturnType<typeof words.fix>>) =>
     fix.kind === "page"
@@ -239,14 +250,20 @@
           <!-- One row per machine: its OS mark in the lead column, its name
              over where the chosen provider stands there, and the way to put
              a lack right at the trailing edge, at every width. -->
+          <!-- One row per machine, down fixed columns: its OS mark in the
+               lead column; its name, and under it what it lacks with the way
+               to put it right; and at the trailing edge its state as a glyph
+               alone (the word is its name and tooltip), at one x on every
+               row. A ready machine is one quiet line. -->
           <ul
             aria-labelledby="images-machines"
             class="m-0 flex min-w-0 list-none flex-col p-0"
           >
             {#each chosen as machine (machine.machineId)}
               {@const fix = machine.lack ? words.fix(machine.lack) : null}
+              {@const state = stateOf(machine)}
               <li
-                class="flex min-h-c-row-h-two items-center gap-x-space-3 border-b border-border-hairline py-space-1 last:border-b-0"
+                class="flex min-h-c-row-h items-center gap-x-space-3 border-b border-border-hairline py-space-1 last:border-b-0"
                 data-lack={machine.lack?.kind}
               >
                 <span
@@ -265,39 +282,59 @@
                       >
                     {/if}
                   </span>
-                  <span
-                    class="mark-line flex min-w-0 items-center gap-space-1 type-meta"
-                  >
-                    {#if machine.lack === null}
-                      <IconTick
-                        class="size-icon-sm flex-none text-status-done-glyph"
-                      />
-                      <span class="text-ink-muted">{words.ready}</span>
-                    {:else if machine.lack.kind === "agy-installing"}
-                      <LiveDot data-pulse size="row" tone="muted" />
-                      <span class="text-ink-muted"
-                        >{words.lack(machine.lack)}</span
+                  {#if machine.lack}
+                    <span
+                      class="flex min-w-0 flex-wrap items-baseline gap-x-space-2"
+                    >
+                      <span
+                        class="min-w-0 type-meta text-pretty"
+                        class:text-ink-muted={machine.lack.kind ===
+                          "agy-installing"}
+                        class:text-ink-strong={machine.lack.kind !==
+                          "agy-installing"}>{words.lack(machine.lack)}</span
                       >
-                    {:else}
-                      <IconWarningTriangle
-                        aria-hidden="true"
-                        class="size-icon-sm flex-none text-status-attn-glyph"
-                      />
-                      <span class="min-w-0 text-ink-strong text-pretty"
-                        >{words.lack(machine.lack)}</span
-                      >
-                    {/if}
-                  </span>
+                      {#if fix}
+                        <a
+                          class="mark-line touch-hit pointer-hit inline-flex items-center gap-space-row type-meta whitespace-nowrap text-link-ink no-underline transition-[opacity] duration-(--dur-control) ease-out hover:text-link-hover active:opacity-72"
+                          href={fixHref(fix)}
+                        >
+                          <span>{fix.label}</span>
+                          <IconChevronRight
+                            aria-hidden="true"
+                            class="size-icon-sm"
+                            data-box
+                          />
+                        </a>
+                      {/if}
+                    </span>
+                  {/if}
                 </span>
-                {#if fix}
-                  <a
-                    class="mark-line touch-hit pointer-hit inline-flex flex-none items-center gap-space-row type-meta whitespace-nowrap text-link-ink no-underline transition-[opacity] duration-(--dur-control) ease-out hover:text-link-hover active:opacity-72"
-                    href={fixHref(fix)}
-                  >
-                    <span>{fix.label}</span>
-                    <IconChevronRight aria-hidden="true" class="size-icon-sm" />
-                  </a>
-                {/if}
+                <Tip label={state} tap>
+                  {#snippet children(tip)}
+                    <span
+                      {...tip}
+                      aria-label={state}
+                      class="mark-line grid w-c-row-lead flex-none place-items-center"
+                      data-slot="state"
+                      role="img"
+                    >
+                      {#if machine.lack === null}
+                        <IconTick
+                          class="size-icon-md text-status-done-glyph"
+                          data-box
+                        />
+                      {:else if machine.lack.kind === "agy-installing"}
+                        <LiveDot data-box data-pulse size="row" tone="muted" />
+                      {:else}
+                        <IconWarningTriangle
+                          aria-hidden="true"
+                          class="size-icon-md text-status-attn-glyph"
+                          data-box
+                        />
+                      {/if}
+                    </span>
+                  {/snippet}
+                </Tip>
               </li>
             {/each}
           </ul>

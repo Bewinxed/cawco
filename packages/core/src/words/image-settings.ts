@@ -56,7 +56,10 @@ export const imageSettingsWords = {
     "No machine has joined yet. Each machine's readiness for the chosen provider shows here once one does.",
   /** The chosen provider's machines, headed. */
   machinesHead: "Machines",
+  /** A machine's state, as its glyph is named. */
   ready: "Ready",
+  notReady: "Not ready",
+  installing: "Installing",
   offline: "offline",
   model: "Model",
   /** The provider's own default model, marked among its models. */
