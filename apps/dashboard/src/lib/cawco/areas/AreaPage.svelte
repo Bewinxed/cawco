@@ -97,11 +97,27 @@
   let said = $state<Partial<Record<Field, string[]>>>({});
   const tried: Partial<Record<Field, AreaChange>> = {};
 
+  /**
+   * Writes one field. A field already being written is left to that write,
+   * and the change just refused is not sent again by a blur or a second
+   * Enter; Try again (`retry`) sends it on purpose.
+   */
   async function write(
     field: Field,
     change: AreaChange,
-    attempt: string
+    attempt: string,
+    retry = false
   ): Promise<void> {
+    if (asked[field] !== undefined) {
+      return;
+    }
+    if (
+      !retry &&
+      faults[field] !== undefined &&
+      JSON.stringify(tried[field]) === JSON.stringify(change)
+    ) {
+      return;
+    }
     tried[field] = change;
     asked[field] = change;
     delete faults[field];
@@ -120,7 +136,7 @@
 
   const again = (field: Field, attempt: string) => () => {
     const change = tried[field];
-    return change ? write(field, change, attempt) : undefined;
+    return change ? write(field, change, attempt, true) : undefined;
   };
 
   /* ── Name ───────────────────────────────────────────────────────── */
@@ -765,7 +781,8 @@
             data-delete-area
             disabled={cawco.hub !== "connected" || area === undefined}
             icon={IconTrash}
-            label={area ? words.deleteArea(area.name) : words.deleteConfirm}
+            aria-label={area ? words.deleteArea(area.name) : undefined}
+            label={words.deleteConfirm}
             onclick={askDelete}
             variant="destructive"
           />

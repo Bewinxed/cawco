@@ -265,7 +265,7 @@ export const areasScreenWords = {
     onCap: "rule at the budget",
   },
   noProjects:
-    "A project joins an area from its own setup, or when you ask its Caw to put it here.",
+    "Put a project in it from the project's Project details, or ask its Caw to.",
   gone: "That area is gone",
   /** The scope pickers of Rules and Memory files. */
   scopeChip: "Area",
