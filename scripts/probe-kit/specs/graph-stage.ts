@@ -21,6 +21,12 @@
  *    its least.
  * 5. At 390 the room is the drawer at its head stop (its steps, no list)
  *    and the stage stands whole above it.
+ * 5b. The drawer's stops are measured inside the surface it stands in,
+ *    never the window: at each stop its grabber's press steps it on, the
+ *    drawer stands that stop's height over the surface's foot (its head
+ *    `c-graph-drawer-head`; whole up to the bar's foot) and no lower, its
+ *    grabber takes a press where it is drawn, and past its head a state
+ *    row in it takes one; the stage ends at its top.
  * 6. `artifact_read({ png: true, state: { story: "Two" } })` answers a
  *    picture of Two's drawing at 1:1 through the daemon's render on the
  *    stage (`by=stage`): 1280 px wide, a desk's form, for a card of no
@@ -318,7 +324,131 @@ async function phoneLegs(
     JSON.stringify(stood)
   );
   await checks.at(page, "390, the drawer at its head");
+  await drawerStops(kit, page);
   await page.close();
+}
+
+/** Whether a finger reaches what `of` names: on the screen, and the element drawn at its middle its own. */
+const reachable = (page: Page, of: string) =>
+  page.evaluate((selector) => {
+    const el = document.querySelector(selector);
+    const box = el?.getBoundingClientRect();
+    if (!(el && box) || box.bottom > innerHeight || box.top < 0) {
+      return false;
+    }
+    const top = document.elementFromPoint(
+      box.left + box.width / 2,
+      box.top + Math.min(box.height / 2, 10)
+    );
+    return !!top && (top === el || el.contains(top));
+  }, of);
+
+/** Leg 5b: the drawer at each of its stops, measured on the surface it stands in. */
+async function drawerStops(kit: Kit, page: Page): Promise<void> {
+  const DRAWER = `${GRAPH} [data-slot="drawer-content"]`;
+  const read = () =>
+    page.evaluate(
+      ([graph, drawer]) => {
+        const root = document.querySelector(graph);
+        const sheet = document.querySelector(drawer);
+        const stage = root?.querySelector('[data-slot="stage"]');
+        const bar = root?.querySelector('[data-slot="graph-bar"]');
+        const head = Number.parseFloat(
+          getComputedStyle(document.documentElement).getPropertyValue(
+            "--c-graph-drawer-head"
+          )
+        );
+        const box = (el: Element | null | undefined) =>
+          el ? el.getBoundingClientRect() : null;
+        const surface = box(root);
+        return {
+          head,
+          foot: surface ? Math.round(surface.bottom) : null,
+          barFoot: box(bar)?.bottom ?? null,
+          top: box(sheet)?.top ?? null,
+          stageFoot: box(stage)?.bottom ?? null,
+          screen: innerHeight,
+        };
+      },
+      [GRAPH, DRAWER] as const
+    );
+  type Read = Awaited<ReturnType<typeof read>>;
+  /** The height a stop stands over the surface's foot: the head's token, whole up to the bar's foot; half is read, not named. */
+  const heightOf = (stop: string, at: Read): number | null => {
+    if (stop === "head") {
+      return at.head;
+    }
+    if (stop === "whole" && at.foot !== null && at.barFoot !== null) {
+      return at.foot - at.barFoot;
+    }
+    return null;
+  };
+  type Stop = Read & {
+    grabber: boolean;
+    height: number | null;
+    row: boolean | null;
+    shows: number;
+    stop: string;
+  };
+  /** The stop stands its height over the surface's foot, on the screen, the stage ending at its top; its grabber and (past the head) a state row take a press. */
+  const ok = (one: Stop) =>
+    one.shows > 0 &&
+    (one.height === null || Math.abs(one.shows - one.height) <= 2) &&
+    one.foot !== null &&
+    one.foot <= one.screen + 1 &&
+    one.stageFoot !== null &&
+    one.top !== null &&
+    one.stageFoot <= one.top + 4 &&
+    one.grabber &&
+    one.row !== false;
+  /** Whether a press on a state row in the drawer keeps another state. */
+  const rowTakes = async (): Promise<boolean> => {
+    const kept = `${DRAWER} [data-state-id] button[aria-current="true"]`;
+    const before = await page
+      .locator(kept)
+      .first()
+      .textContent()
+      .catch(() => null);
+    const pressed = await page
+      .locator(`${DRAWER} [data-state-id] button:not([aria-current])`)
+      .first()
+      .click({ timeout: 5000 })
+      .then(
+        () => true,
+        () => false
+      );
+    await page.waitForTimeout(800);
+    const after = await page
+      .locator(kept)
+      .first()
+      .textContent()
+      .catch(() => null);
+    return pressed && after !== before;
+  };
+  const stops: Stop[] = [];
+  for (const stop of ["head", "half", "whole"]) {
+    const at = await read();
+    const one: Stop = {
+      ...at,
+      stop,
+      shows:
+        at.foot !== null && at.top !== null ? Math.round(at.foot - at.top) : 0,
+      height: heightOf(stop, at),
+      grabber: await reachable(page, `${DRAWER} [data-slot="drawer-grabber"]`),
+      row: stop === "head" ? null : await rowTakes(),
+    };
+    stops.push(one);
+    if (!ok(one)) {
+      break;
+    }
+    await page.locator(`${DRAWER} [data-slot="drawer-grabber"]`).click();
+    await page.waitForTimeout(900);
+  }
+  kit.check(
+    "5b: at 390 each of the drawer's stops stands its height over the surface's foot (head, half, whole up to the bar), its grabber and a state row take a press, the stage ends at its top",
+    stops.length === 3 && stops.every(ok),
+    JSON.stringify(stops)
+  );
 }
 
 /** The width and height a png's header says. */

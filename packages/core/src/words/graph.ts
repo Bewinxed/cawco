@@ -26,11 +26,15 @@ export const graphWords = {
   position: (at: Figure, of: Figure) => `${at} of ${of}`,
   previous: "Previous state",
   next: "Next state",
-  /** The room's one close, its own; and the bar's symbol that brings it back while it is put away. */
-  closeRoom: "Close panel",
-  openRoom: "Open panel",
-  /** The phone drawer's grabber: a press steps it to its next stop. */
-  nextStop: "Resize panel",
+  /**
+   * The room's own controls, each naming the room as its title does (`room`,
+   * its faces' names: "the states"), never a "panel": its one Close; the
+   * bar's symbol that brings it back while it is put away; the drawer's
+   * grabber, a press stepping it to its next stop.
+   */
+  closeRoom: (room: string) => `Close the ${room.toLowerCase()}`,
+  openRoom: (room: string) => `Show the ${room.toLowerCase()}`,
+  nextStop: (room: string) => `Resize the ${room.toLowerCase()}`,
   /** The component in front, when the ask names several: the switch's name. */
   components: "Component",
   /** A state the states file tags as a failure: its glyph's name and tooltip in the whole set. */

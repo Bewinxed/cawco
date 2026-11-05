@@ -86,13 +86,13 @@
     IconChat,
     IconChevronLeft,
     IconChevronRight,
-    IconComment,
     IconExternal,
     IconEyeClosed,
     IconGlobe,
     IconInteract,
     IconLock,
     IconPen,
+    IconPin,
     IconPlus,
     IconRefresh,
     IconSend,
@@ -131,6 +131,7 @@
   import EmptyAsk from "../EmptyAsk.svelte";
   import { artifactReached } from "../files/reached";
   import { frameObserver, frameSize } from "../frame-observer";
+  import { besideLine } from "../graph/beside";
   import DesignGraph from "../graph/DesignGraph.svelte";
   import { inspectKept, StageLink } from "../graph/stage-link.svelte";
   import { resolveSessionTitle } from "../links";
@@ -1510,6 +1511,34 @@
           (entry) => !view?.sentAt || entry.at > view.sentAt
         ).length
       : 0
+  );
+  /** The well's width, px: where the design graph's room stands beside its stage (graph/beside.ts). */
+  let wellW = $state(0);
+  $effect(() => {
+    const node = well;
+    if (!node) {
+      return;
+    }
+    const read = () => {
+      wellW = node.clientWidth;
+    };
+    read();
+    const watch = frameObserver(read);
+    watch.observe(node);
+    return () => watch.disconnect();
+  });
+  /**
+   * The inspector stands in the design graph's room, under its states,
+   * where the room stands beside the stage (a desk's wide pane): the states
+   * and the props stand together, and the stage keeps its width. Elsewhere
+   * it is the pane's own panel or sheet.
+   */
+  const inspectorInRoom = $derived(
+    isSheet &&
+      inspecting &&
+      inspectorLayout === "panel" &&
+      wellW > 0 &&
+      wellW >= besideLine()
   );
   /** The pane's own width, px: the rail's room is the pane's, not the window's. */
   let paneW = $state(0);
@@ -3665,7 +3694,7 @@
   /** The mode's glyph and word, for its one-button form. */
   const MODE_GLYPHS = {
     interact: IconInteract,
-    comment: IconComment,
+    comment: IconPin,
     draw: IconPen,
   } as const satisfies Record<PreviewMode, unknown>;
   const MODE_WORDS: Record<PreviewMode, string> = {
@@ -4012,6 +4041,16 @@
   {/if}
 {/snippet}
 
+{#snippet roomInspector()}
+  {#if inspector}
+    <SheetInspector
+      {inspector}
+      layout="room"
+      onclose={() => showInspector(false)}
+    />
+  {/if}
+{/snippet}
+
 {#snippet inspectBar()}
   <!-- A sheet's inspector: its stories' props as controls, beside the page or over its foot. -->
   <Toggle
@@ -4025,10 +4064,12 @@
   </Toggle>
 {/snippet}
 {#snippet inspectMenu()}
+  <!-- Its glyph as the bar's, so its words start where More's other entries' do. -->
   <DropdownMenu.CheckboxItem
     checked={inspectOpen}
     onCheckedChange={(open) => showInspector(open)}
-    >{artifactWords.inspect}</DropdownMenu.CheckboxItem
+    ><IconTuning /><span>{artifactWords.inspect}</span
+    ></DropdownMenu.CheckboxItem
   >
 {/snippet}
 
@@ -4054,7 +4095,7 @@
         <TabItem
           aria-keyshortcuts="C"
           glyphOnly
-          icon={IconComment}
+          icon={IconPin}
           label="Comment"
           title="Comment (C): a click pins a comment"
           value="comment"
@@ -4084,7 +4125,7 @@
         ></DropdownMenu.RadioItem
       >
       <DropdownMenu.RadioItem value="comment"
-        ><IconComment /><span>Comment</span><DropdownMenu.Shortcut
+        ><IconPin /><span>Comment</span><DropdownMenu.Shortcut
           >C</DropdownMenu.Shortcut
         ></DropdownMenu.RadioItem
       >
@@ -4496,7 +4537,9 @@
     {#if isSheet && artifact && link && sheetCanvas}
       <div
         data-slot="graph-host"
-        data-panel-inspector={(inspecting && inspectorLayout === "panel") ||
+        data-panel-inspector={(inspecting &&
+          inspectorLayout === "panel" &&
+          !inspectorInRoom) ||
           undefined}
         class="absolute inset-0 data-panel-inspector:w-(--frame-w)"
         style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
@@ -4505,6 +4548,7 @@
           ask={artifact.ask ?? ""}
           files={sheetCanvas.files}
           frame={frameTags}
+          inspector={inspectorInRoom ? roomInspector : undefined}
           {link}
           onroom={() => showInspector(false)}
           paneSheet={inspecting && inspectorLayout === "sheet"}
@@ -4743,7 +4787,7 @@
       </EmptyState>
     </div>
   {/if}
-  {#if inspector && inspecting && !unreached}
+  {#if inspector && inspecting && !unreached && !inspectorInRoom}
     <SheetInspector
       {inspector}
       layout={inspectorLayout}

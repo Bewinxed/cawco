@@ -14,7 +14,8 @@ The owner's picks for the session's artifact panel (a page, a preview, a canvas,
 - The panel stands on the conversation's own background with no separator line: only its shadow parts it from the transcript, and the split's drag edge shows its grip on hover or focus alone (pin on title-bars-close, 2026-11-03).
 - The head is one row (The Title Bars Follow Liquid Glass Rule). The artifact's ask is the name menu's first row and its tooltip, never a line under the name.
 - On a phone the drawer covers the composer while it is open, the Comments sheet over it too: the composer under it is inert and comes back as it was when the drawer closes. An ask raised on the composer is the one thing the drawer makes way for.
-- Three modes, kept per session: Interact (the page takes every press), Comment and Draw. Comments float over the page; they never take its room.
+- Three modes, kept per session: Interact (the page takes every press), Comment and Draw. Comments float over the page; they never take its room. Comment's glyph is the pin (a press pins a comment), never a bubble: the Comments toggle beside it is the bubble. Every More entry carries its glyph, Inspect's the tuning one, so their words start on one line.
+- On a phone a dialog that opens or closes inside the drawer (the design graph's states, a confirm) leaves the drawer at its stop: the drawer is put back where it stood when bits-ui rewrites its style.
 - A component canvas's head says the canvas's description in words, never its path or URL, and never repeats its title; a section waiting to draw says so, and a section that failed says why in place.
 
 ## The One Target Rule

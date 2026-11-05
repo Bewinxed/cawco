@@ -109,6 +109,9 @@ const READ_AGAIN_MS = 300;
 const ROW_GAP = 24;
 /** The page's gutter round the drawing (the panel's stage head's inset). */
 const GUTTER = "--space-4";
+/** What a reader sees of a drawing besides its words: its controls and its pictures (stage.ts `inkOf`). */
+const INKED =
+  "button, input, select, textarea, img, svg, canvas, video, [role=switch], [role=checkbox], [role=button]";
 /** What a drawing's controls say they stand at (open, pressed, checked, chosen), in order: what its words alone don't show. */
 const STATED = [
   "aria-expanded",
@@ -484,6 +487,7 @@ export function bootStage(page: Page): Mode {
     await restOf(drawing);
     holdHeight(false);
     laid();
+    inkInView();
     chrome.dials(() => drawing);
   }
 
@@ -784,11 +788,25 @@ export function bootStage(page: Page): Mode {
     !!live && !fault && live.section === section && sameRef(live.ref, ref);
 
   /**
+   * Whether the live instance can be set to `target` in place: the same
+   * component, laid out at the same width. A state drawn by a component of
+   * its own (a story's `component`) or at another width is another
+   * drawing: its args set on the live instance first painted the old
+   * component with the new args at the old width ("Turn Caw off", unchecked,
+   * at 334), then the fresh drawing replaced it at 402.
+   */
+  const settableTo = (target: Target): boolean =>
+    !!live &&
+    live.story.component === target.story.component &&
+    roomWidth(live.story) === roomWidth(target.story);
+
+  /**
    * Where the drawing stands before a reach acts: a move's from state for
    * a played move (mounted afresh unless it stands there); for a first
-   * reach, one on another states file, one from nothing or one after a
-   * fault, `to` itself, mounted afresh, and nothing more is done
-   * (`opened`).
+   * reach, one on another states file, one from nothing, one after a
+   * fault, or one the live instance can't be set to in place (another
+   * component, another width), `to` itself, mounted afresh, and nothing
+   * more is done (`opened`).
    */
   async function standFor(
     asking: StageReach,
@@ -810,7 +828,8 @@ export function bootStage(page: Page): Mode {
       !live ||
       live.section !== target.section ||
       asking.from === null ||
-      fault
+      fault ||
+      !settableTo(target)
     ) {
       await open(target);
       return "opened";
@@ -974,6 +993,72 @@ export function bootStage(page: Page): Mode {
     ground();
     mark(live);
     laid();
+    inkInView();
+  }
+
+  /**
+   * What the drawing shows a reader, its words and its controls (a text
+   * run, a field, a button, a picture), as one box on the page; null when
+   * it shows none. A box the component draws round them (a full-width
+   * backdrop, a frame the width of the screen) is no part of it.
+   */
+  function inkOf(drawn: HTMLElement): { left: number; right: number } | null {
+    let left = Number.POSITIVE_INFINITY;
+    let right = Number.NEGATIVE_INFINITY;
+    // A box of a pixel or less is no ink: a reader-only label (`sr-only`'s 1px box at its parent's start) pulled the
+    // box to the frame's far edge.
+    const take = (box: DOMRect) => {
+      if (box.width > 1 && box.height > 1) {
+        left = Math.min(left, box.left);
+        right = Math.max(right, box.right);
+      }
+    };
+    const seen = (el: Element | null) =>
+      !!el?.checkVisibility({
+        opacityProperty: true,
+        visibilityProperty: true,
+      });
+    const range = document.createRange();
+    for (const el of [drawn, ...drawn.querySelectorAll("*")]) {
+      if (!seen(el)) {
+        continue;
+      }
+      if (el.matches(INKED)) {
+        take(el.getBoundingClientRect());
+      }
+      for (const child of el.childNodes) {
+        if (child.nodeType === Node.TEXT_NODE && child.textContent?.trim()) {
+          range.selectNodeContents(child);
+          take(range.getBoundingClientRect());
+        }
+      }
+    }
+    return left <= right ? { left, right } : null;
+  }
+
+  /**
+   * The drawing's words and controls brought into the page's view across:
+   * a component laid out wider than the stage (picked at 1440 in a 700px
+   * stage) whose popover stands at the frame's far edge opened on a blank
+   * stage, the page scrolled to the frame's start. Where they stand in view
+   * already, his scroll is kept; where they fit, they stand in the middle
+   * of the view, else from its start.
+   */
+  function inkInView(): void {
+    const ink = live && !frame.hidden ? inkOf(drawing) : null;
+    // The window's own width: what the drawing reads as `innerWidth` is the frame's (viewport.ts).
+    const across = windowRoom();
+    if (!ink || (ink.left >= 0 && ink.right <= across)) {
+      return;
+    }
+    const scroller = document.scrollingElement ?? document.documentElement;
+    const width = ink.right - ink.left;
+    const margin = Math.max(tokenPx(GUTTER), (across - width) / 2);
+    scroller.scrollTo({
+      left: Math.max(0, scroller.scrollLeft + ink.left - margin),
+      top: scroller.scrollTop,
+      behavior: "instant",
+    });
   }
 
   /** The region the last reach changed, brought into the page's view with room for a ring round it (DESIGN.md, The One Ring Rule). */

@@ -468,6 +468,43 @@
       snap = kept;
     }
   }
+  /** The sheet stands at its snap at once, its transition held off for the step: as vaul would place it there. */
+  function placeAtSnap(): void {
+    if (!(drawer && host && snap !== null)) {
+      return;
+    }
+    const { height } = host.getBoundingClientRect();
+    const visibleHeight =
+      typeof snap === "number" ? height * snap : Number.parseFloat(snap);
+    const ease = drawer.style.transition;
+    drawer.style.transition = "none";
+    drawer.style.transform = `translate3d(0, ${height - visibleHeight}px, 0)`;
+    drawer.getBoundingClientRect();
+    drawer.style.transition = ease;
+  }
+  /**
+   * vaul holds the sheet at its snap by a transform written on its node,
+   * and bits-ui writes the node's `style` attribute whole whenever a dialog
+   * opens or closes inside the sheet (its `--bits-dialog-nested-count`):
+   * the design graph's in-place drawer closing as the inspector opened
+   * dropped the transform, and the sheet fell to vaul's first stop while
+   * its snap still said full, its card as tall as the full stop, so the
+   * inspector's Save stood under the screen's foot. A transform lost that
+   * way is put back at the snap the sheet stands at.
+   */
+  $effect(() => {
+    const node = drawer;
+    if (!(node && open)) {
+      return;
+    }
+    const held = new MutationObserver(() => {
+      if (!node.style.transform) {
+        placeAtSnap();
+      }
+    });
+    held.observe(node, { attributeFilter: ["style"] });
+    return () => held.disconnect();
+  });
   /** The stops the sheet has now, lowest first, each with its snap point. */
   function stopsNow(
     tabbed: boolean,
@@ -501,23 +538,14 @@
         if (movedForAsk()) {
           return;
         }
-        if (drawer && host && snap !== null) {
-          const { height } = host.getBoundingClientRect();
-          const visibleHeight =
-            typeof snap === "number" ? height * snap : Number.parseFloat(snap);
-          // Vaul snapshots its initial pixel offsets; geometry changes refresh
-          // the current position without changing the user's chosen snap.
-          // The sheet steps with the composer it stands on, as a kit sheet
-          // steps with the keyboard (app.css): the composer takes its
-          // keyboard-up place at the tap, and vaul's half-second ease, run
-          // through the stall WebKit's keyboard puts on the page, painted
-          // its first frame 40 to 80px along.
-          const ease = drawer.style.transition;
-          drawer.style.transition = "none";
-          drawer.style.transform = `translate3d(0, ${height - visibleHeight}px, 0)`;
-          drawer.getBoundingClientRect();
-          drawer.style.transition = ease;
-        }
+        // Vaul snapshots its initial pixel offsets; geometry changes refresh
+        // the current position without changing the user's chosen snap.
+        // The sheet steps with the composer it stands on, as a kit sheet
+        // steps with the keyboard (app.css): the composer takes its
+        // keyboard-up place at the tap, and vaul's half-second ease, run
+        // through the stall WebKit's keyboard puts on the page, painted
+        // its first frame 40 to 80px along.
+        placeAtSnap();
       });
     }
   });

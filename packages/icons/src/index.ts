@@ -66,15 +66,11 @@ export { default as IconBug } from "~icons/solar/bug-bold-duotone";
 export { default as IconCalendar } from "~icons/solar/calendar-bold-duotone";
 export { default as IconUsage } from "~icons/solar/chart-2-bold-duotone";
 /**
- * Comment: the artifact panel's mode and the radial menu's sector (the artifact panel's surface brief,
- * Artifact panel, canvas and ink); a task review's Transcript chip, the
- * attempt's session read in place. Solar's bare round bubble: its dots and
- * lines cuts draw marks inside the bubble.
+ * A task review's Transcript chip, the attempt's session read in place.
+ * Solar's bare round bubble: its dots and lines cuts draw marks inside the
+ * bubble.
  */
-export {
-  default as IconComment,
-  default as IconTranscript,
-} from "~icons/solar/chat-round-bold-duotone";
+export { default as IconTranscript } from "~icons/solar/chat-round-bold-duotone";
 export { default as IconChat } from "~icons/solar/chat-square-bold-duotone";
 export { default as IconSuccess } from "~icons/solar/check-bold-duotone";
 /**
@@ -228,6 +224,12 @@ export {
   default as IconPenLine,
   default as IconToolWrite,
 } from "~icons/solar/pen-bold-duotone";
+/**
+ * Comment, the artifact panel's mode (a click pins a comment), and a pin
+ * placed elsewhere (PinCard). Not a bubble: the panel's Comments, beside
+ * the mode, is the square bubble (`IconChat`), and two bubbles stood side
+ * by side.
+ */
 export { default as IconPin } from "~icons/solar/pin-bold-duotone";
 export {
   default as IconSend,

@@ -81,6 +81,7 @@
     style,
     portalProps,
     hosted = false,
+    contained = false,
     modal = true,
     pad,
     height,
@@ -126,6 +127,16 @@
        * holder that keeps it mounted while closed hides it (`closed`).
        */
       hosted?: boolean;
+      /**
+       * The sheet stands in a surface of its own, drawn in place there (its
+       * portal off), its root's `container` the box it stands in: it fills
+       * that box, so vaul's stops, measured on the container, are heights
+       * over the surface's foot wherever the surface stands (a panel's well
+       * on a desk, a phone's sheet at any of its stops). The kit does not
+       * place it on the screen's visible area, and it keeps no safe area
+       * clear: the surface's foot is not the screen's.
+       */
+      contained?: boolean;
       /** As its root's `modal`: false, the page under it stays live, to a screen reader too. */
       modal?: boolean;
       /**
@@ -198,7 +209,7 @@
    */
   $effect(() => {
     const node = ref;
-    if (!node || hosted) {
+    if (!node || hosted || contained) {
       return;
     }
     const placed = visible.height > 0;
@@ -227,9 +238,11 @@
       drawerContentVariants({ pad, height, width, closed, look }),
       hosted &&
         "absolute inset-0 z-1 m-0 h-full max-h-none w-full p-0 outline-off before:hidden data-[vaul-drawer-direction=bottom]:pb-0",
+      contained &&
+        "absolute inset-x-0 top-0 h-full max-h-none data-[vaul-drawer-direction=bottom]:pb-0",
       className
     )}
-    data-placed={hosted ? undefined : ""}
+    data-placed={hosted || contained ? undefined : ""}
     data-safe-bottom
     data-slot="drawer-content"
     {restoreScrollDelay}

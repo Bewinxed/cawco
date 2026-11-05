@@ -57,7 +57,9 @@
   aria-label={name}
   class="flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile"
 >
-  <header
+  <!-- Its head, the room's alike: a panel's raised head on the graph's
+       page, under the graph's bar, the one bar; its seam the room's. -->
+  <div
     data-slot="stage-head"
     class="flex min-w-0 flex-none flex-col border-b border-border-hairline px-space-4"
   >
@@ -81,7 +83,7 @@
         {words.stale}
       </p>
     {/if}
-  </header>
+  </div>
   <!-- The field: the frame holding the stage page fills it; the page is
        its own scroller, its own page and gutter round the drawing. -->
   <div

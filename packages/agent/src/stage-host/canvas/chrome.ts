@@ -171,9 +171,11 @@ html.cawco-stage-page .cawco-canvas { display: flex; flex-direction: column; ali
   box-sizing: border-box; inline-size: max-content; min-inline-size: 100%; min-block-size: 100dvh; padding: var(--space-4);
   padding-block-end: calc(var(--space-4) + var(--cawco-floor, 0px)); }
 /* The drawing laid out at its width (a container its rules answer), shown at its own: no paper stands beside a component held
-   to its measure. Its height held while the next drawing mounts, so the page's scroll stays where it stood. */
+   to its measure. Its height held while the next drawing mounts, so the page's scroll stays where it stood. What spills
+   past its sides is cut, but no nearer than a popover's shadow reaches (DESIGN.md, Shadows: the overlay's 48px blur): cut at
+   the gutter, a popover's shadow stood as a grey box beside it, its hard sides running down past its foot. */
 .cawco-stage-frame { position: relative; inline-size: var(--frame-w); min-block-size: var(--held-h, 0px); overflow-x: clip;
-  overflow-clip-margin: var(--space-4); }
+  overflow-clip-margin: calc(2 * var(--space-8)); }
 .cawco-stage-frame[hidden] { display: none; }
 /* The state just set in place, drawn afresh and hidden, read against the live instance (stage.ts landed) and gone. */
 .cawco-stage-fresh { position: absolute; inset-block-start: 0; inset-inline-start: 0; visibility: hidden; pointer-events: none; }

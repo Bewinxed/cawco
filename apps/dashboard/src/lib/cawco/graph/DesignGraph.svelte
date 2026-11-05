@@ -68,6 +68,7 @@
     IconTablet,
   } from "#lib/icons.js";
   import { browser } from "$app/env";
+  import { besideLine, DIVIDER } from "./beside";
   import { figureOf, pageLang } from "./figures";
   import Journey from "./Journey.svelte";
   import { pathOf, type Review, reviewOf } from "./model";
@@ -85,6 +86,7 @@
     frame,
     paneSheet = false,
     onroom,
+    inspector,
   }: {
     /** The line to the stage page: what it said, and what the graph asks of it. */
     link: StageLink;
@@ -108,6 +110,14 @@
     paneSheet?: boolean;
     /** He brought the room back while the pane's sheet stands: the pane puts its sheet away. */
     onroom?: () => void;
+    /**
+     * The pane's inspector, while it stands open where the room stands
+     * beside the stage (a desk, beside.ts): drawn in the room under the
+     * states, so the states and the props stand together and the stage
+     * keeps its width. The room's column stays while it does, the states
+     * put away or not.
+     */
+    inspector?: Snippet;
   } = $props();
 
   /** The page's own ids, for a label's `for`. */
@@ -209,33 +219,9 @@
   let reduce = $state(false);
   const still = $derived(reduce || !motionOk.current);
   let surface = $state(0);
-  /**
-   * The divider's width (the kit handle's `w-px`): paneforge shares what is
-   * left of the group beside it between the panes, so every share is of
-   * that (as side/Split.svelte reads it).
-   */
-  const DIVIDER = 1;
-  /** The px the two least shares, each rounded up to a hundredth, may add between them on the widest surface: under one. */
-  const ROUNDING = 1;
-  /**
-   * The room stands beside the stage only where the surface holds both
-   * whole: the stage at its least (`c-graph-stage-min`), the room at its
-   * least (`c-graph-room-w`), each pane's inset beside the split's
-   * divider, the divider and the page's gutters. Under that (1058px today)
-   * the room is the drawer, measured on the panel's own width, so a pane
-   * under it gets the drawer on a desk too.
-   */
-  const besideLine = $derived(
-    browser
-      ? numberOf("--c-graph-stage-min") +
-          numberOf("--c-graph-room-w") +
-          2 * numberOf("--space-2") +
-          2 * numberOf("--space-6") +
-          DIVIDER +
-          ROUNDING
-      : 0
-  );
-  const desk = $derived(surface === 0 || surface >= besideLine);
+  /** The room stands beside the stage only where the surface holds both whole (beside.ts); under that the room is the drawer, measured on the panel's own width, so a pane under it gets the drawer on a desk too. */
+  const line = $derived(browser ? besideLine() : 0);
+  const desk = $derived(surface === 0 || surface >= line);
   /** The room stands where he sees it: beside the stage on a desk, its drawer elsewhere. */
   const roomShown = $derived(desk ? roomOpen : drawerShown);
   /**
@@ -417,12 +403,7 @@
       }
     };
     window.addEventListener("keydown", key);
-    const resized = () => {
-      windowHeight = window.innerHeight;
-    };
-    window.addEventListener("resize", resized);
     return () => {
-      window.removeEventListener("resize", resized);
       window.removeEventListener("keydown", key);
     };
   });
@@ -508,50 +489,72 @@
       event.preventDefault();
     }
   };
-  /** A root token's value as the page computes it. */
-  const rootValue = (name: string): string =>
-    typeof document === "undefined"
-      ? ""
-      : getComputedStyle(document.documentElement).getPropertyValue(name);
-  let windowHeight = $state(
-    typeof window === "undefined" ? 844 : window.innerHeight
-  );
+  /** The drawer's layer: the box it stands in, as tall as the surface, and the bar's foot in it. */
+  let roomLayer = $state<HTMLElement | null>(null);
+  let layerHeight = $state(0);
+  let barFoot = $state(0);
+  let drawerNode = $state<HTMLElement | null>(null);
+  /** vaul reads a px snap point with parseInt: every one whole. */
+  const pxOf = (height: number) => `${Math.round(height)}px`;
   /**
-   * The drawer's stops, as vaul takes them: shares of the window's height
-   * for a sheet as tall as its cap (`--c-sheet-max-h`, a share of the
-   * window), so a stop showing `px` of it is that share less what the cap
-   * leaves above the sheet. Its head (the steps), half, and whole.
+   * The drawer's stops, as vaul takes them: heights shown over the
+   * surface's foot, measured on the surface the drawer stands in (its
+   * root's `container`), never the window. The surface stands where its
+   * panel puts it: under the panel's head on a desk, in a phone's sheet at
+   * whichever of the sheet's stops; measured on the window, every stop
+   * stood lower by the surface's top, and at 390 the drawer stood wholly
+   * under the screen's foot. Its head (the steps), half the surface, and
+   * whole: up to the bar's foot. A stop no taller than the one under it
+   * goes (a surface too short for three).
    */
-  const capShare = $derived(
-    Number.parseFloat(rootValue("--c-sheet-max-h")) / 100 || 1
-  );
-  const shareOf = (px: number) =>
-    Math.min(1, px / windowHeight + (1 - capShare));
-  const head = $derived(
-    shareOf(browser ? numberOf("--c-graph-drawer-head") : 0)
-  );
-  const SNAPS = $derived([head, shareOf(windowHeight / 2), 1]);
-  let snap = $state<number | string | null>(null);
-  /** The drawer stands at its head stop: the steps, no list. */
-  const atHead = $derived(snap === null || snap === head);
-  $effect(() => {
-    if (snap === null) {
-      snap = head;
-    }
+  const SNAPS = $derived.by(() => {
+    const room = Math.max(0, layerHeight - barFoot);
+    const heights = [
+      Math.min(browser ? numberOf("--c-graph-drawer-head") : 0, room),
+      layerHeight / 2,
+      room,
+    ].map(Math.round);
+    return heights
+      .filter(
+        (height, place) => height > 0 && height > (heights[place - 1] ?? 0)
+      )
+      .map(pxOf);
   });
-  /** How much of the window the drawer stands over at a stop (a share as vaul takes it), px: the stage ends at its top. */
-  const coverOf = (share: number) =>
-    Math.max(0, (share - (1 - capShare)) * windowHeight);
-  const cover = $derived(
-    typeof snap === "number" ? coverOf(snap) : coverOf(head)
-  );
+  /** The stop the drawer stands at, by its place among the stops: the head first. */
+  let stopAt = $state(0);
+  const snap = $derived(SNAPS[Math.min(stopAt, SNAPS.length - 1)] ?? null);
+  /** The drawer stands at its head stop: the steps, no list. */
+  const atHead = $derived(stopAt === 0);
+  /** How much of the surface the drawer stands over at its stop, px: the stage ends at its top. */
+  const cover = $derived(snap ? Number.parseFloat(snap) : 0);
   /** The grabber steps the drawer to its next stop, and from the last back to its head (HIG, Sheets: a tap on the grabber cycles its detents). */
   const nextStop = () => {
-    const here = typeof snap === "number" ? SNAPS.indexOf(snap) : -1;
-    snap = SNAPS[(here + 1) % SNAPS.length] ?? head;
+    stopAt = SNAPS.length > 0 ? (stopAt + 1) % SNAPS.length : 0;
   };
+  // vaul places the drawer at a stop as the stop changes; the surface
+  // taking another height (a phone's sheet moving between its stops, a
+  // pane resized) moves every stop's offset under it, so the drawer is
+  // placed again at the stop it stands at, at once.
+  let laidHeight = 0;
+  $effect(() => {
+    const height = layerHeight;
+    const shown = cover;
+    const node = drawerNode;
+    untrack(() => {
+      if (!(node && drawerShown && height > 0) || height === laidHeight) {
+        laidHeight = height;
+        return;
+      }
+      laidHeight = height;
+      const ease = node.style.transition;
+      node.style.transition = "none";
+      node.style.transform = `translate3d(0, ${height - shown}px, 0)`;
+      node.getBoundingClientRect();
+      node.style.transition = ease;
+    });
+  });
   /** The stop the drawer stood at as the pane's sheet put it away; null while it stands. */
-  let stopAway: number | string | null = null;
+  let stopAway: number | null = null;
   // Put away under the pane's sheet, the drawer comes back at the stop it
   // stood at: vaul opens it at its first stop, so it is stepped there once
   // it stands again.
@@ -559,22 +562,22 @@
     const away = paneSheet && roomOpen;
     untrack(() => {
       if (away) {
-        stopAway ??= snap;
+        stopAway ??= stopAt;
         return;
       }
       const back = stopAway;
       stopAway = null;
-      if (back === null || back === head || !drawerShown) {
+      if (back === null || back === 0 || !drawerShown) {
         return;
       }
-      snap = head;
+      stopAt = 0;
       requestAnimationFrame(() => {
-        snap = back;
+        stopAt = back;
       });
     });
   });
   /** The drawer's stop the stage was last brought to; null until the drawer stands at its first. */
-  let stopShown: number | string | null = null;
+  let stopShown: string | null = null;
   // At each stop he moves the drawer to, what the last press changed stays
   // in view above it. The stop the drawer opens at moves nothing (the stage
   // opens at its drawing's top), and nor does a press: only the stop
@@ -627,8 +630,8 @@
   };
   let menuTrigger = $state<HTMLElement | null>(null);
   let viewTrigger = $state<HTMLElement | null>(null);
-  /** The room stands beside the stage on a desk. */
-  const beside = $derived(desk && roomOpen);
+  /** The room stands beside the stage on a desk: the states, the inspector, or both. */
+  const beside = $derived(desk && (roomOpen || !!inspector));
   const laidOut = $derived(!beside || stageNeed > 0 || graceOver);
 
   /**
@@ -723,10 +726,14 @@
   {/if}
 {/snippet}
 
-{#snippet faceName()}
-  <!-- The room's one face: its Solar duotone glyph before its name. -->
+{#snippet faceName(heading: boolean)}
+  <!-- The room's one face: its Solar duotone glyph before its name. In
+       the drawer the sheet's own title is the heading a reader hears (the
+       kit's, read out only), so the name drawn here is not a second one. -->
   {@const [face] = FACES}
-  <h2
+  <svelte:element
+    this={heading ? "h2" : "p"}
+    aria-hidden={heading ? undefined : "true"}
     class="mark-line m-0 flex min-w-0 flex-1 items-center gap-space-2 type-label text-ink-strong"
   >
     <face.icon
@@ -737,7 +744,7 @@
     <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
       >{face.label}</span
     >
-  </h2>
+  </svelte:element>
 {/snippet}
 
 {#snippet stepper()}
@@ -777,6 +784,9 @@
   >
     <!-- The bar: one row, no ground of its own. -->
     <header
+      {@attach frameSize((node: HTMLElement) => {
+        barFoot = node.offsetTop + node.offsetHeight;
+      })}
       data-slot="graph-bar"
       class="flex h-c-top-bar-h min-w-0 flex-none items-center gap-space-3 px-space-6 max-desk:px-space-5"
     >
@@ -892,91 +902,106 @@
             >
               <!-- One pattern for every setting: its name leading, its
                    control trailing, on one grid, so the three read down
-                   two columns (Jitter's inspector rows). -->
+                   two columns (Jitter's inspector rows). On a phone the
+                   card has no room for both columns: each control stands
+                   under its name, at its own width, never past the card's
+                   edge. -->
               <div
-                class="grid min-w-0 grid-cols-(--cols) items-center justify-between gap-x-space-5 gap-y-space-3 p-space-4"
+                class="grid min-w-0 grid-cols-(--cols) items-center justify-between gap-x-space-5 gap-y-space-3 p-space-4 max-phone:grid-cols-1 max-phone:gap-y-space-4"
                 style:--cols="auto auto"
               >
-                <span class="type-label text-ink-row">{words.width}</span>
-                <!-- Each width once: his own is the listed width it
-                     equals, marked his own, and stands apart only when
-                     none is. The names are the items' own; no tooltip
-                     opens over the card. -->
-                <ToggleGroup.Root
-                  aria-label={words.width}
-                  class="justify-self-end"
-                  onValueChange={pickWidth}
-                  type="single"
-                  value={widthValue}
+                <div
+                  class="contents max-phone:grid max-phone:min-w-0 max-phone:gap-space-2"
                 >
-                  {#if !ownListed}
-                    {@render widthItem(
-                      "own",
-                      words.ownWidth(figure(ownWidth)),
-                      ownWidth,
-                      true,
-                      IconMaximize
-                    )}
-                  {/if}
-                  {#each WIDTHS as one (one.value)}
-                    {@const own = one.value === ownWidth}
-                    {@render widthItem(
-                      String(one.value),
-                      own
-                        ? words.ownListed(one.name, figure(one.value))
-                        : words.widthOf(one.name, figure(one.value)),
-                      one.value,
-                      own,
-                      one.icon
-                    )}
-                  {/each}
-                </ToggleGroup.Root>
-                <span class="type-label text-ink-row">{words.scheme}</span>
-                <ToggleGroup.Root
-                  aria-label={words.scheme}
-                  class="justify-self-end"
-                  onValueChange={(next: string) => {
-                    if (next) {
-                      scheme = next === "dark" ? "dark" : "light";
-                    }
-                  }}
-                  type="single"
-                  value={scheme}
+                  <span class="type-label text-ink-row">{words.width}</span>
+                  <!-- Each width once: his own is the listed width it
+                       equals, marked his own, and stands apart only when
+                       none is. The names are the items' own; no tooltip
+                       opens over the card. -->
+                  <ToggleGroup.Root
+                    aria-label={words.width}
+                    class="justify-self-end max-phone:justify-self-start"
+                    onValueChange={pickWidth}
+                    type="single"
+                    value={widthValue}
+                  >
+                    {#if !ownListed}
+                      {@render widthItem(
+                        "own",
+                        words.ownWidth(figure(ownWidth)),
+                        ownWidth,
+                        true,
+                        IconMaximize
+                      )}
+                    {/if}
+                    {#each WIDTHS as one (one.value)}
+                      {@const own = one.value === ownWidth}
+                      {@render widthItem(
+                        String(one.value),
+                        own
+                          ? words.ownListed(one.name, figure(one.value))
+                          : words.widthOf(one.name, figure(one.value)),
+                        one.value,
+                        own,
+                        one.icon
+                      )}
+                    {/each}
+                  </ToggleGroup.Root>
+                </div>
+                <div
+                  class="contents max-phone:grid max-phone:min-w-0 max-phone:gap-space-2"
                 >
-                  <ToggleGroup.Item aria-label={words.light} value="light">
-                    <IconSun aria-hidden="true" class="size-icon-md" />
-                  </ToggleGroup.Item>
-                  <ToggleGroup.Item aria-label={words.dark} value="dark">
-                    <IconMoon aria-hidden="true" class="size-icon-md" />
-                  </ToggleGroup.Item>
-                </ToggleGroup.Root>
-                <label class="type-label text-ink-row" for="{uid}-reduce"
-                  >{words.reduceMotion}</label
+                  <span class="type-label text-ink-row">{words.scheme}</span>
+                  <ToggleGroup.Root
+                    aria-label={words.scheme}
+                    class="justify-self-end max-phone:justify-self-start"
+                    onValueChange={(next: string) => {
+                      if (next) {
+                        scheme = next === "dark" ? "dark" : "light";
+                      }
+                    }}
+                    type="single"
+                    value={scheme}
+                  >
+                    <ToggleGroup.Item aria-label={words.light} value="light">
+                      <IconSun aria-hidden="true" class="size-icon-md" />
+                    </ToggleGroup.Item>
+                    <ToggleGroup.Item aria-label={words.dark} value="dark">
+                      <IconMoon aria-hidden="true" class="size-icon-md" />
+                    </ToggleGroup.Item>
+                  </ToggleGroup.Root>
+                </div>
+                <div
+                  class="contents max-phone:flex max-phone:min-w-0 max-phone:items-center max-phone:justify-between max-phone:gap-space-3"
                 >
-                <Switch
-                  bind:checked={reduce}
-                  class="justify-self-end"
-                  id="{uid}-reduce"
-                />
+                  <label class="type-label text-ink-row" for="{uid}-reduce"
+                    >{words.reduceMotion}</label
+                  >
+                  <Switch
+                    bind:checked={reduce}
+                    class="justify-self-end"
+                    id="{uid}-reduce"
+                  />
+                </div>
               </div>
             </HangCard>
           </Popover.Root>
           {#if !roomShown}
-            <Tip label={words.openRoom}>
+            <Tip label={words.openRoom(roomName)}>
               {#snippet children(tip)}
                 <button
                   data-bar-item
                   {...mergeProps(tip, {
                     onclick: () => {
                       roomOpen = true;
-                      snap = head;
+                      stopAt = 0;
                       // The one asked for last stands: the pane's sheet goes as the drawer rises.
                       if (paneSheet) {
                         onroom?.();
                       }
                     },
                   })}
-                  aria-label={words.openRoom}
+                  aria-label={words.openRoom(roomName)}
                   class="select-none touch-hit press-tint"
                   type="button"
                 >
@@ -1071,36 +1096,39 @@
                  panels do (the sheet recipe's motion, `sheetSlide`). -->
             <aside
               data-slot="graph-room"
-              aria-label={roomName}
+              aria-label={roomOpen ? roomName : undefined}
               in:sheetSlide|global={{ axis: "X", leaving: false }}
               out:sheetSlide|global={{ axis: "X", leaving: true }}
               class="relative my-(--border-width) ms-space-2 me-(--border-width) flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile"
             >
-              <!-- Its head on the stage's head line: its face, its Close. -->
-              <div
-                class="flex min-h-c-top-bar-h min-w-0 flex-none items-center gap-space-2 border-b border-border-hairline ps-space-4 pe-space-2"
-              >
-                {@render faceName()}
-                <Tip label={words.closeRoom}>
-                  {#snippet children(tip)}
-                    <button
-                      {...mergeProps(tip, {
-                        onclick: () => {
-                          roomOpen = false;
-                        },
-                      })}
-                      type="button"
-                      aria-label={words.closeRoom}
-                      class="pointer-hit touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-pill text-ink-muted transition-control can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
-                    >
-                      <IconClose aria-hidden="true" class="size-icon-md" />
-                    </button>
-                  {/snippet}
-                </Tip>
-              </div>
-              <div class="flex min-h-0 min-w-0 flex-1 flex-col p-space-4">
-                {@render statesFace(true)}
-              </div>
+              {#if roomOpen}
+                <!-- Its head on the stage's head line: its face, its Close. -->
+                <div
+                  class="flex min-h-c-top-bar-h min-w-0 flex-none items-center gap-space-2 border-b border-border-hairline ps-space-4 pe-space-2"
+                >
+                  {@render faceName(true)}
+                  <Tip label={words.closeRoom(roomName)}>
+                    {#snippet children(tip)}
+                      <button
+                        {...mergeProps(tip, {
+                          onclick: () => {
+                            roomOpen = false;
+                          },
+                        })}
+                        type="button"
+                        aria-label={words.closeRoom(roomName)}
+                        class="pointer-hit touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-pill text-ink-muted transition-control can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
+                      >
+                        <IconClose aria-hidden="true" class="size-icon-md" />
+                      </button>
+                    {/snippet}
+                  </Tip>
+                </div>
+                <div class="flex min-h-0 min-w-0 flex-1 flex-col p-space-4">
+                  {@render statesFace(true)}
+                </div>
+              {/if}
+              {@render inspector?.()}
             </aside>
           </Resizable.Pane>
         {/if}
@@ -1111,72 +1139,91 @@
       <!-- Under the beside line: the room is the kit's bottom drawer, its
          stops head (the steps), half and whole; the page above it stays
          live and ends at its top. Its grabber steps between the stops; its
-         Close is its own, 44px to a finger. Drawn in place, the surface its
-         containing block (`contain: layout`), so it stands on the
-         surface's foot wherever the surface stands. -->
-      <Drawer.Root
-        bind:activeSnapPoint={snap}
-        bind:open={
-          () => drawerShown,
-          (next: boolean) => {
-            // Put away under the pane's sheet, the drawer keeps his choice for when it goes.
-            if (!paneSheet) {
-              roomOpen = next;
+         Close is its own, 44px to a finger. Drawn in place, in a layer as
+         big as the surface (its root's `container`, the kit's `contained`
+         sheet), so its stops are heights over the surface's own foot and
+         it is clipped there, wherever the surface stands. -->
+      <div
+        data-slot="room-layer"
+        class="pointer-events-none absolute inset-0 overflow-clip"
+        bind:this={roomLayer}
+        {@attach frameSize((node: HTMLElement) => {
+          layerHeight = node.clientHeight;
+        })}
+      >
+        <Drawer.Root
+          bind:activeSnapPoint={
+            () => snap,
+            (next: number | string | null) => {
+              const at = SNAPS.indexOf(String(next));
+              if (at >= 0) {
+                stopAt = at;
+              }
             }
           }
-        }
-        dismissible={false}
-        modal={false}
-        shouldScaleBackground={false}
-        snapPoints={SNAPS}
-      >
-        <Drawer.Content
-          grabber={{ label: words.nextStop, onpress: nextStop }}
-          height="cap"
+          bind:open={
+            () => drawerShown,
+            (next: boolean) => {
+              // Put away under the pane's sheet, the drawer keeps his choice for when it goes.
+              if (!paneSheet) {
+                roomOpen = next;
+              }
+            }
+          }
+          container={roomLayer}
+          dismissible={false}
           modal={false}
-          onOpenAutoFocus={(event: Event) => event.preventDefault()}
-          portalProps={{ disabled: true }}
-          onmousedown={keepFocusOnPage}
-          trapFocus={false}
-          ownHead
-          title={roomName}
+          shouldScaleBackground={false}
+          snapPoints={SNAPS}
         >
-          <div
-            class="flex min-h-0 flex-auto flex-col gap-space-3 px-space-4 pb-(--snap-drop)"
-            style:--snap-drop="calc((1 - {typeof snap === 'number' ? snap : 0})
-            * 100dvh)"
+          <Drawer.Content
+            bind:ref={drawerNode}
+            contained
+            grabber={{ label: words.nextStop(roomName), onpress: nextStop }}
+            modal={false}
+            onOpenAutoFocus={(event: Event) => event.preventDefault()}
+            portalProps={{ disabled: true }}
+            onmousedown={keepFocusOnPage}
+            trapFocus={false}
+            ownHead
+            title={roomName}
           >
-            <div class="flex min-w-0 items-center gap-space-2">
-              {@render faceName()}
-              <!-- The drawer's one Close, the ghost the kit's sheet heads
-                   draw. It puts the room away itself: vaul's Close asks
-                   the dialog to close, and a root that is not
-                   `dismissible` refuses every such ask; the drawer is not
-                   dismissible so that a drag past its head stop never
-                   closes it. -->
-              <Button
-                aria-label={words.closeRoom}
-                icon={IconClose}
-                onclick={() => {
-                  roomOpen = false;
-                }}
-                press="pressable"
-                size="icon-sm"
-                title={words.closeRoom}
-                variant="ghost"
-              />
+            <div
+              class="flex min-h-0 flex-auto flex-col gap-space-3 px-space-4 pb-(--snap-drop)"
+              style:--snap-drop="{Math.max(0, layerHeight - cover)}px"
+            >
+              <div class="flex min-w-0 items-center gap-space-2">
+                {@render faceName(false)}
+                <!-- The drawer's one Close, the ghost the kit's sheet heads
+                     draw. It puts the room away itself: vaul's Close asks
+                     the dialog to close, and a root that is not
+                     `dismissible` refuses every such ask; the drawer is not
+                     dismissible so that a drag past its head stop never
+                     closes it. -->
+                <Button
+                  aria-label={words.closeRoom(roomName)}
+                  icon={IconClose}
+                  onclick={() => {
+                    roomOpen = false;
+                  }}
+                  press="pressable"
+                  size="icon-sm"
+                  title={words.closeRoom(roomName)}
+                  variant="ghost"
+                />
+              </div>
+              <!-- At the head stop the drawer holds its head alone, the steps:
+                   the list drawn into its sliver ran past the screen's foot. -->
+              {#if !single}
+                {@render stepper()}
+              {/if}
+              {#if single || !atHead}
+                {@render statesFace(false)}
+              {/if}
             </div>
-            <!-- At the head stop the drawer holds its head alone, the steps:
-                 the list drawn into its sliver ran past the screen's foot. -->
-            {#if !single}
-              {@render stepper()}
-            {/if}
-            {#if single || !atHead}
-              {@render statesFace(false)}
-            {/if}
-          </div>
-        </Drawer.Content>
-      </Drawer.Root>
+          </Drawer.Content>
+        </Drawer.Root>
+      </div>
     {/if}
   </div>
 </TooltipProvider>

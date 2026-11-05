@@ -18,6 +18,7 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
   import type { PropMeta } from "@cawco/core/stage";
+  import { storyWords } from "@cawco/core/stage-graph";
   /**
    * A sheet's inspector (live components spec §5): the chosen story's
    * props as controls, from the stage's docgen. An enum is the variant
@@ -48,8 +49,8 @@
     IconArrowDown,
     IconArrowUp,
     IconClose,
-    IconComment,
     IconCopy,
+    IconPin,
     IconPlus,
     IconReset,
     IconTrash,
@@ -70,8 +71,13 @@
     onclose,
   }: {
     inspector: SheetInspector;
-    /** A right panel beside the page (a desk's pane), or a sheet over the page's foot (a phone's). */
-    layout: "panel" | "sheet";
+    /**
+     * A right panel beside the page (a desk's pane), a sheet over the
+     * page's foot (a phone's), or a part of the design graph's room, under
+     * its states where the room stands beside the stage (DesignGraph), so
+     * the states and the props stand together.
+     */
+    layout: "panel" | "sheet" | "room";
     onclose: () => void;
   } = $props();
 
@@ -80,6 +86,28 @@
   const sheet = $derived(inspector.sheet);
   const story = $derived(inspector.story);
   const component = $derived(inspector.component);
+  /**
+   * A story by the name the design graph's states list gives it (its CSF
+   * `name`, else its export in words: "Turning off title desk"), so one
+   * state has one name on the panel; its export stays its value.
+   */
+  const shownName = (one: { display: string | null; name: string }) =>
+    one.display ?? storyWords(one.name);
+  /**
+   * Whether any prop of the story has a control here: none (a story whose
+   * args come from shared code, every prop set in its file) draws no Save
+   * or Discard, which would have nothing to keep.
+   */
+  const editable = $derived(
+    !!component &&
+      !inspector.readOnly &&
+      component.props.some(
+        (prop) =>
+          inspector.code(prop) === null &&
+          controlOf(prop) !== "code" &&
+          controlOf(prop) !== "slot"
+      )
+  );
   const fileName = $derived(
     sheet?.file.split("/").at(-1) ?? words.theStoryFile
   );
@@ -126,7 +154,7 @@
     detach(
       asks.ask({
         at: "remove-story",
-        title: words.removeTitle(name),
+        title: words.removeTitle(story ? shownName(story) : name),
         body: words.removeBody(fileName),
         confirmLabel: words.removeConfirm,
         pendingLabel: words.removing,
@@ -155,6 +183,16 @@
    * its outro would find frozen (scripts/outro-reads-check.ts).
    */
   const axis = () => (layout === "panel" ? "X" : "Y");
+  /** In the room it is a part of the room's surface, not a surface of its own. */
+  const tag = () => (layout === "room" ? "section" : "aside");
+  /** Where it stands, by its layout: the panel's right edge, the page's foot, or under the room's states. */
+  const PLACES = {
+    panel:
+      "absolute inset-y-0 end-0 z-2 w-c-sheet-inspector-w max-w-full border-s border-s-border-hairline bg-surface-raised",
+    sheet:
+      "absolute inset-x-0 bottom-(--keyboard-lift,0px) z-2 max-h-over-keyboard-60 border-t border-t-border-hairline rounded-ss-lg rounded-se-lg bg-surface-raised shadow-drawer",
+    room: "relative min-h-0 flex-1 border-t border-t-border-hairline",
+  } as const;
   /** The props as the person reaches for them: variants first, then switches, then fields, read-only ones last; the file's order within each. */
   const ordered = (props: PropMeta[]) =>
     props
@@ -180,16 +218,19 @@
     value === undefined || value === null ? "" : String(value);
 </script>
 
-<aside
+<svelte:element
+  this={tag()}
   data-sheet={layout === "sheet" || undefined}
   aria-label="Inspector"
-  class="absolute inset-y-0 end-0 z-2 flex flex-col w-c-sheet-inspector-w max-w-full border-s border-s-border-hairline bg-surface-raised data-sheet:top-auto data-sheet:bottom-(--keyboard-lift,0px) data-sheet:inset-x-0 data-sheet:w-auto data-sheet:max-h-over-keyboard-60 data-sheet:border-s-none data-sheet:border-t data-sheet:border-t-border-hairline data-sheet:rounded-ss-lg data-sheet:rounded-se-lg data-sheet:shadow-drawer"
+  class={["flex flex-col", PLACES[layout]]}
   data-inspector={layout}
   style:--foot-pb="calc(var(--space-2) + env(safe-area-inset-bottom, 0px))"
   in:sheetSlide={{ axis: axis(), leaving: false }}
   out:sheetSlide={{ axis: axis(), leaving: true }}
 >
-  <header
+  <!-- In the room it is a part's head, as the room's states head is, not a bar of its own. -->
+  <svelte:element
+    this={layout === "room" ? "div" : "header"}
     data-slot="head"
     class="flex flex-none items-center gap-space-2 min-h-c-sheet-inspector-head-h ps-space-4 pe-space-2 border-b border-b-border-hairline"
   >
@@ -205,7 +246,7 @@
       title={words.closeInspector}
       variant="ghost"
     />
-  </header>
+  </svelte:element>
 
   <div
     class="grid content-box-start gap-space-3 flex-1 min-h-0 overflow-auto px-space-4 py-space-3"
@@ -230,10 +271,13 @@
     {:else}
       <!-- What the skeleton stood for, in its reveal. -->
       <div class="grid content-box-start gap-space-3" in:reveal>
-        <div class="flex items-center gap-space-2">
+        <!-- The story on a row of its own, as wide as the inspector, its
+             name cut with an ellipsis where it is longer still; its own
+             actions under it. -->
+        <div class="grid min-w-0 gap-space-2">
           <label class="sr-only" for={`${id}-story`}>{words.story}</label>
           <NativeSelect
-            class="flex-1"
+            class="w-full"
             id={`${id}-story`}
             measure="shrink"
             onchange={(event) =>
@@ -244,11 +288,11 @@
           >
             {#each sheet.stories as one (one.name)}
               <NativeSelectOption value={one.name}>
-                {words.storyOption(one.name, inspector.dirtyOf(one.name))}
+                {words.storyOption(shownName(one), inspector.dirtyOf(one.name))}
               </NativeSelectOption>
             {/each}
           </NativeSelect>
-          <div class="flex gap-space-1">
+          <div class="-ms-space-2 flex gap-space-1">
             <Button
               aria-label={words.duplicateStory}
               disabled={!!inspector.writing}
@@ -428,7 +472,7 @@
                     class="mark-line flex items-center gap-space-2 m-0 text-ink-muted type-meta"
                     id={fieldId(prop)}
                   >
-                    <IconComment class="shrink-0 size-icon-md" />
+                    <IconPin class="shrink-0 size-icon-md" />
                     <span>{words.slot}</span>
                   </p>
                 {:else}
@@ -443,11 +487,14 @@
                           ? JSON.stringify(value)
                           : prop.type.raw)}</code
                     >
-                    <span class="m-0 text-ink-muted type-meta"
-                      >{inspector.code(prop) === null
-                        ? words.setInFile
-                        : words.codeInFile}</span
-                    >
+                    <!-- A read-only story says why once, above its props. -->
+                    {#if !inspector.readOnly}
+                      <span class="m-0 text-ink-muted type-meta"
+                        >{inspector.code(prop) === null
+                          ? words.setInFile
+                          : words.codeInFile}</span
+                      >
+                    {/if}
                   </p>
                 {/if}
                 {#if typeSaid(prop, control)}
@@ -490,7 +537,7 @@
         <label class="text-ink-strong type-label" for={`${id}-name`}>
           {naming === "add"
             ? words.newStoryName
-            : words.nameCopy(story?.name ?? words.theStory)}
+            : words.nameCopy(story ? shownName(story) : words.theStory)}
         </label>
         <Input
           aria-invalid={nameProblem ? "true" : undefined}
@@ -536,23 +583,28 @@
           variant="ghost"
         />
         <span class="flex-1"></span>
-        <Button
-          disabled={!inspector.dirty || !!inspector.writing}
-          label={words.discard}
-          onclick={() => inspector.discard()}
-          size="sm"
-          variant="ghost"
-        />
-        <Button
-          disabled={!inspector.dirty || inspector.writing === "op"}
-          label={words.save}
-          onclick={() => inspector.save()}
-          pending={inspector.writing === "save"}
-          pendingLabel={words.saving}
-          size="sm"
-          title={words.saveTitle(story?.name ?? words.theStory, fileName)}
-        />
+        {#if editable || inspector.dirty}
+          <Button
+            disabled={!inspector.dirty || !!inspector.writing}
+            label={words.discard}
+            onclick={() => inspector.discard()}
+            size="sm"
+            variant="ghost"
+          />
+          <Button
+            disabled={!inspector.dirty || inspector.writing === "op"}
+            label={words.save}
+            onclick={() => inspector.save()}
+            pending={inspector.writing === "save"}
+            pendingLabel={words.saving}
+            size="sm"
+            title={words.saveTitle(
+              story ? shownName(story) : words.theStory,
+              fileName
+            )}
+          />
+        {/if}
       </div>
     {/if}
   </footer>
-</aside>
+</svelte:element>
