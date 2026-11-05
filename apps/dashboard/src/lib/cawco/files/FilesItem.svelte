@@ -3,7 +3,7 @@
    * Files, the item the top bar's glass group leads with (the top bar's surface brief, Top
    * bar's trailing edge): the folder as the group's bar symbol in its
    * muted ink and, once there is anything, the number beside it as the
-   * machines show theirs (Shell's item-with-a-number recipe, `data-counted`): the
+   * machines show theirs (BarItem's `count`): the
    * number in the label role, `--space-2` past the folder, never on its
    * ink, so the folder keeps its shape (owner: "the count is bigger than
    * the icon … can't u put it as part of the integrated icon group?").
@@ -12,8 +12,7 @@
    * as a half-ink square. A press shows Files in the glass's one card
    * (GlassCard), or shuts it.
    */
-  import { mergeProps } from "bits-ui";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { IconFiles } from "#lib/icons.js";
   import { barGlass } from "../bar-glass.svelte";
 
@@ -25,28 +24,19 @@
   } = $props();
 
   /* The number only above 0 (DESIGN.md, The Earned Count Rule). */
-  const counted = $derived(count !== null && count > 0);
-  const label = $derived(counted ? `Files, ${count}` : "Files");
+  const label = $derived(
+    count !== null && count > 0 ? `Files, ${count}` : "Files"
+  );
 </script>
 
-<Tip label="Files">
-  {#snippet children(tip)}
-    <button
-      data-bar-item
-      data-glass-opens="files"
-      {...mergeProps(tip, { onclick: () => barGlass.toggle("files") })}
-      aria-expanded={barGlass.open === "files"}
-      aria-haspopup="dialog"
-      aria-label={label}
-      class="select-none mark-line touch-hit press-tint"
-      data-counted={counted || undefined}
-      data-files-control
-      type="button"
-    >
-      <IconFiles data-slot="bar-symbol" aria-hidden="true" data-files-glyph />
-      {#if counted}
-        <span data-slot="num" class="num" data-files-count>{count}</span>
-      {/if}
-    </button>
-  {/snippet}
-</Tip>
+<BarItem
+  aria-haspopup="dialog"
+  {count}
+  data-files-control
+  data-glass-opens="files"
+  expanded={barGlass.open === "files"}
+  icon={IconFiles}
+  {label}
+  onclick={() => barGlass.toggle("files")}
+  tip="Files"
+/>

@@ -69,6 +69,7 @@ const RECIPE_CALL =
  * the values that do (`true`: any value).
  */
 const LOOKS: Record<string, Record<string, readonly string[] | true>> = {
+  BarItem: { form: ["title"] },
   "Collapsible.Trigger": { look: ["head", "note", "fold"] },
   "Dialog.Title": { lead: ["glyph"] },
   "DropdownMenu.Trigger": {

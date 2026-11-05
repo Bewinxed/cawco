@@ -18,6 +18,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { BAR_ITEM } from "../../../apps/dashboard/src/lib/components/ui/bar-glass/marks";
 import { cawPanelWords } from "../../../packages/core/src/words/onboarding";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
 import { type Kit, open, type Spec, type View } from "../kit";
@@ -159,14 +160,14 @@ const run = async (kit: Kit) => {
   const desk = await kit.page("desk");
   await openPanel(desk, PANEL);
   await desk.waitForTimeout(1500);
-  const items = desk.locator(`${PANEL} [data-slot="bar"] [data-bar-item]`);
+  const items = desk.locator(`${PANEL} [data-slot="bar"] ${BAR_ITEM}`);
   const n = await items.count();
   // Docked beside the board, its Close (Hide panel) stands in a glass of
   // its own after the session's three.
   const closeAlone = await desk
     .locator(`${PANEL} [data-slot="bar"] [data-slot="tools"]`)
     .filter({ has: desk.locator("[data-caw-close]") })
-    .locator("[data-bar-item]")
+    .locator(BAR_ITEM)
     .count();
   kit.check(
     "Caw's column: its bar holds Session details, New conversation and Open as tab as bare items, and its Close in a glass of its own",
@@ -296,7 +297,7 @@ const run = async (kit: Kit) => {
   await surface(
     "configure back",
     `${base}/config/models`,
-    '[data-slot="crumb"] [data-bar-item]',
+    `[data-slot="crumb"] ${BAR_ITEM}`,
     WIDTHS.filter(({ view }) => view === "phone"),
     undefined,
     '[data-slot="top"]'
@@ -353,22 +354,26 @@ const run = async (kit: Kit) => {
       .waitFor({ timeout: 20_000 });
     // The shown artifact's mark echoes three loops (7.2s), then stills.
     await page.waitForTimeout(7500);
-    const edge = await page.evaluate((panel) => {
-      const bar = [
-        ...document.querySelectorAll<HTMLElement>(`${panel} [data-slot="bar"]`),
-      ].find((one) => one.getClientRects().length > 0);
-      const ink = [
-        ...(bar?.querySelectorAll<HTMLElement>(
-          '[data-bar-item], [role="tab"]'
-        ) ?? []),
-      ].map((one) => one.getBoundingClientRect());
-      return {
-        right: Math.max(...ink.map((one) => one.right)),
-        left: Math.min(...ink.map((one) => one.left)),
-        count: ink.length,
-        width: window.innerWidth,
-      };
-    }, PANEL);
+    const edge = await page.evaluate(
+      ({ panel, item }) => {
+        const bar = [
+          ...document.querySelectorAll<HTMLElement>(
+            `${panel} [data-slot="bar"]`
+          ),
+        ].find((one) => one.getClientRects().length > 0);
+        const ink = [
+          ...(bar?.querySelectorAll<HTMLElement>(`${item}, [role="tab"]`) ??
+            []),
+        ].map((one) => one.getBoundingClientRect());
+        return {
+          right: Math.max(...ink.map((one) => one.right)),
+          left: Math.min(...ink.map((one) => one.left)),
+          count: ink.length,
+          width: window.innerWidth,
+        };
+      },
+      { panel: PANEL, item: BAR_ITEM }
+    );
     kit.check(
       `Caw's column ${edge.width}: its fullest bar (${edge.count} items and tabs) stands on the screen`,
       edge.count >= 5 && edge.left >= 0 && edge.right <= edge.width,
@@ -431,17 +436,20 @@ const run = async (kit: Kit) => {
         const header = tab.locator(`[data-slot="${kind}-header"]`);
         await header.waitFor({ timeout: 10_000 });
         await tab.waitForTimeout(600);
-        const order = await header.evaluate((node, of) => {
-          const shut = node.querySelector("[data-bar-item]");
-          const title = node.querySelector(`[data-slot="${of}-title"]`);
-          return shut && title
-            ? {
-                close: shut.getBoundingClientRect().left,
-                title: title.getBoundingClientRect().left,
-                name: shut.getAttribute("aria-label"),
-              }
-            : null;
-        }, kind);
+        const order = await header.evaluate(
+          (node, { of, item }) => {
+            const shut = node.querySelector(item);
+            const title = node.querySelector(`[data-slot="${of}-title"]`);
+            return shut && title
+              ? {
+                  close: shut.getBoundingClientRect().left,
+                  title: title.getBoundingClientRect().left,
+                  name: shut.getAttribute("aria-label"),
+                }
+              : null;
+          },
+          { of: kind, item: BAR_ITEM }
+        );
         kit.check(
           `kit ${kind} ${tab.viewportSize()?.width}: Close leads its header, before the title`,
           !!order && order.close < order.title && order.name === "Close",

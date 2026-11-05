@@ -35,7 +35,6 @@
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import * as Sheet from "#lib/components/ui/sheet/index.js";
   import { setSidebar } from "#lib/components/ui/sidebar/context.svelte.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { DRAWER_QUERY, NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { IconChevronLeft, IconSearch, IconSidebar } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
@@ -1376,32 +1375,26 @@
               <FilesItem count={filesCounted} />
             {/if}
             <!-- Drawn on every screen and hidden on the phone's glass by its
-                 own class and the bar group's (`[data-machines]`), both on
-                 the shell container's desk line (`@max-desk/shell`), so the
-                 first client render keeps the bar the server drew. -->
-            <Tip keys="⌘K" label={shellWords.jumpToSession}>
-              {#snippet children(tip)}
-                <button
-                  data-bar-item
-                  data-glass-opens="jump"
-                  {...tip}
-                  aria-expanded={barGlass.open === "jump"}
-                  aria-haspopup="dialog"
-                  aria-label={shellWords.jumpToSession}
-                  class="select-none touch-hit press-tint @max-desk/shell:hidden"
-                  data-share="jump"
-                  onclick={() => {
-                    barGlass.toggle("jump");
-                  }}
-                  type="button"
-                >
-                  <IconSearch
-                    aria-hidden="true"
-                    class="size-icon-md text-ink-muted"
-                  />
-                </button>
-              {/snippet}
-            </Tip>
+                 layout (`desk`: the shell container's desk line,
+                 `@max-desk/shell`), as Machines is, so the first client
+                 render keeps the bar the server drew. -->
+            <BarItem
+              aria-haspopup="dialog"
+              data-glass-opens="jump"
+              data-share="jump"
+              expanded={barGlass.open === "jump"}
+              keys="⌘K"
+              label={shellWords.jumpToSession}
+              layout="desk"
+              onclick={() => {
+                barGlass.toggle("jump");
+              }}
+            >
+              <IconSearch
+                aria-hidden="true"
+                class="size-icon-md text-ink-muted"
+              />
+            </BarItem>
             <MachinesButton />
           </BarGlass>
           <!-- No always-on hub dot: a green light that is green 99% of the time

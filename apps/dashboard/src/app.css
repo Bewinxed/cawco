@@ -944,60 +944,6 @@
   }
 }
 
-/* ---- The bar's glass group (Shell's `tools`, and a head's group: BarGlass
-   `form="group"`): its items (FilesItem, MachinesButton, Jump:
-   `[data-bar-item]`), an item's count (`data-slot="num"`) and its symbol
-   (`data-slot="bar-symbol"`). A project's head sets its place as a bare item
-   of the same recipe, outside its group (ProjectHead). An item's own
-   utilities (a symbol's tone tint) outrank these by layer. */
-@layer components {
-  :is([data-slot="tools"], [data-slot="project-head"]) [data-bar-item] {
-    position: relative;
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    justify-content: center;
-    min-inline-size: var(--c-bar-item);
-    block-size: var(--c-bar-item);
-    border: 0;
-    border-radius: var(--radius-pill);
-    background: none;
-    color: var(--ink-strong);
-    transition: var(--transition-control);
-    @media (hover: hover) and (pointer: fine) {
-      &:hover {
-        background: var(--surface-hover);
-      }
-    }
-    &[data-counted] {
-      --mark-inset: calc((var(--c-bar-item) - var(--c-bar-symbol)) / 2);
-      gap: var(--space-2);
-      padding-inline: var(--mark-inset)
-        calc(var(--mark-inset) + var(--c-bar-symbol) / 12);
-    }
-    [data-slot="num"] {
-      font: var(--type-label);
-      font-variant-numeric: tabular-nums;
-      white-space: nowrap;
-    }
-  }
-  :is([data-slot="tools"], [data-slot="project-head"])
-    [data-slot="bar-symbol"] {
-    inline-size: var(--c-bar-symbol);
-    block-size: var(--c-bar-symbol);
-    color: var(--ink-muted);
-  }
-  /* The phone's glass holds Caw alone: under the shell container's desk line
-     (Shell's `@container/shell`, BarGlass `@max-desk/shell`), not the
-     window's, so a phone frame on a desk page draws the phone's group. A
-     container query takes no var(): 900px is --container-desk. */
-  @container shell (width < --theme(--container-desk)) {
-    [data-slot="tools"] [data-machines] {
-      display: none;
-    }
-  }
-}
-
 /* ---- Glyphs other components draw: the session hover card's head mark and
    tone (CawFace, Sprite and the status icons), and a delegate tail's
    streamed words, which render their own markdown. */

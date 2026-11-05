@@ -4,6 +4,7 @@
 // by its path from apps/dashboard, as the ESLint config named it.
 import path from "node:path";
 import { defineRule } from "golar/unstable";
+import { barItemsOutsideKit } from "./bar-item.mjs";
 import { classJoins } from "./class-join.mjs";
 import { clipWithMove } from "./clip-move.mjs";
 import { followsProps } from "./follows-props.mjs";
@@ -28,6 +29,8 @@ import {
 import { variantOrder } from "./variant-order.mjs";
 
 const KIT = "src/lib/components/ui/";
+/** The bar's glass and its item: the one place the bar item's mark is written (house/bar-item-in-kit). */
+const BAR_GLASS = "src/lib/components/ui/bar-glass/";
 /** The motion helpers that write the curves out (house/no-raw-motion). */
 const MOTION_HELPERS = new Set([
   "src/lib/cawco/motion/curves.svelte.ts",
@@ -268,6 +271,8 @@ function optionsFor(rule, file) {
       return { allow: ["nodrag", "nopan"] };
     case "house/no-raw-duration-read":
       return file === "src/lib/cawco/motion/curves.svelte.ts" ? null : {};
+    case "house/bar-item-in-kit":
+      return file.startsWith(BAR_GLASS) ? null : {};
     case "house/no-raw-motion":
       // The token build's own output reads nothing; the helpers that hold
       // the curves as functions of t (DESIGN.md, The House Helper Rule) may
@@ -316,6 +321,7 @@ const FIND = {
   "house/no-raw-class-values": rawClassValues,
   "house/no-raw-motion": rawMotion,
   "house/follows-props": followsProps,
+  "house/bar-item-in-kit": barItemsOutsideKit,
   "design/no-unknown-classes": unknownClasses,
   "design/no-arbitrary-values": arbitraryValues,
   "design/no-restyle": restyle,

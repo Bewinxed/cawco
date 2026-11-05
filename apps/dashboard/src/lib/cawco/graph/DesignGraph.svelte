@@ -50,7 +50,11 @@
     numberOf,
     sheetSlide,
   } from "#lib/cawco/motion/curves.svelte.js";
-  import { BarGlass, BarMenu } from "#lib/components/ui/bar-glass/index.js";
+  import {
+    BarGlass,
+    BarItem,
+    BarMenu,
+  } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
@@ -1558,16 +1562,15 @@
                 <DropdownMenu.Trigger>
                   {#snippet child({ props })}
                     <!-- Its name is what it shows, the switch said before it
-                         (WCAG 2.5.3, Label in Name). -->
-                    <button
-                      {...props}
-                      bind:this={menuTrigger}
-                      class="select-none touch-hit press-tint mark-line max-w-full gap-space-1 ps-space-2 pe-space-1"
-                      data-bar-item
-                      data-box
-                      type="button"
+                         (WCAG 2.5.3, Label in Name); the title says itself,
+                         with no tooltip. -->
+                    <BarItem
+                      form="title"
+                      label={`${words.components}: ${frontName}`}
+                      {props}
+                      tip={false}
+                      bind:ref={menuTrigger}
                     >
-                      <span class="sr-only">{words.components}:</span>
                       <span
                         class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
                         >{frontName}</span
@@ -1576,7 +1579,7 @@
                         aria-hidden="true"
                         class="size-icon-sm flex-none text-ink-muted"
                       />
-                    </button>
+                    </BarItem>
                   {/snippet}
                 </DropdownMenu.Trigger>
                 <!-- Hung flush from the title's ground, which stands a padding
@@ -1637,54 +1640,32 @@
              away. The room's one close is its own. -->
         <BarGlass form="group" joined={viewJoined || dialsJoined}>
           {#if !single}
-            <Tip label={words.compare}>
-              {#snippet children(tip)}
-                <button
-                  data-bar-item
-                  {...mergeProps(tip, {
-                    onclick: () => setComparing(!comparing),
-                  })}
-                  aria-label={words.compare}
-                  aria-pressed={comparing}
-                  class="select-none touch-hit press-tint aria-pressed:bg-selected-bg aria-pressed:text-selected-ink"
-                  type="button"
-                >
-                  <IconCompare data-slot="bar-symbol" aria-hidden="true" />
-                </button>
-              {/snippet}
-            </Tip>
+            <BarItem
+              icon={IconCompare}
+              label={words.compare}
+              onclick={() => setComparing(!comparing)}
+              pressed={comparing}
+            />
           {/if}
           {#if dialsAt === "glass" && dials.length > 0}
             <!-- The agent's dials, hung from the glass as the view is. -->
             <Popover.Root bind:open={dialsOpen}>
-              <Tip
-                disabled={dialsOpen}
-                label={dialsChanged > 0
-                  ? words.dials.glassChanged(figure(dialsChanged))
-                  : words.dialsFace}
-              >
-                {#snippet children(tip)}
-                  <Popover.Trigger>
-                    {#snippet child({ props })}
-                      <!-- Closed with values changed, the glyph wears the
-                           selected wash and says how many, as Compare on does. -->
-                      <button
-                        data-bar-item
-                        {...mergeProps(tip, props)}
-                        aria-label={dialsChanged > 0
-                          ? words.dials.glassChanged(figure(dialsChanged))
-                          : words.dialsFace}
-                        bind:this={dialsTrigger}
-                        class="select-none touch-hit press-tint data-changed:bg-selected-bg data-changed:text-selected-ink"
-                        data-changed={dialsChanged > 0 || undefined}
-                        type="button"
-                      >
-                        <IconDial data-slot="bar-symbol" aria-hidden="true" />
-                      </button>
-                    {/snippet}
-                  </Popover.Trigger>
+              <Popover.Trigger>
+                {#snippet child({ props })}
+                  <!-- Closed with values changed, the glyph wears the
+                       selected wash and says how many, as Compare on does. -->
+                  <BarItem
+                    icon={IconDial}
+                    label={dialsChanged > 0
+                      ? words.dials.glassChanged(figure(dialsChanged))
+                      : words.dialsFace}
+                    marked={dialsChanged > 0}
+                    {props}
+                    tipOff={dialsOpen}
+                    bind:ref={dialsTrigger}
+                  />
                 {/snippet}
-              </Tip>
+              </Popover.Trigger>
               <HangCard
                 align="end"
                 anchor={glass}
@@ -1712,31 +1693,24 @@
                  card's Escape for itself. Nor as the card hands the focus
                  back on its close; it shows again once the focus or the
                  pointer leaves the control. -->
-            <Tip disabled={viewOpen || viewQuiet} label={words.stageView}>
-              {#snippet children(tip)}
-                <Popover.Trigger>
-                  {#snippet child({ props })}
-                    <button
-                      data-bar-item
-                      {...mergeProps(tip, props, {
-                        onblur: () => {
-                          viewQuiet = false;
-                        },
-                        onpointerleave: () => {
-                          viewQuiet = false;
-                        },
-                      })}
-                      bind:this={viewTrigger}
-                      aria-label={words.stageView}
-                      class="select-none touch-hit press-tint"
-                      type="button"
-                    >
-                      <IconEye data-slot="bar-symbol" aria-hidden="true" />
-                    </button>
-                  {/snippet}
-                </Popover.Trigger>
+            <Popover.Trigger>
+              {#snippet child({ props })}
+                <BarItem
+                  icon={IconEye}
+                  label={words.stageView}
+                  props={mergeProps(props, {
+                    onblur: () => {
+                      viewQuiet = false;
+                    },
+                    onpointerleave: () => {
+                      viewQuiet = false;
+                    },
+                  })}
+                  tipOff={viewOpen || viewQuiet}
+                  bind:ref={viewTrigger}
+                />
               {/snippet}
-            </Tip>
+            </Popover.Trigger>
             <!-- The view, hung from the glass as the app's glass hangs its
                  cards: it comes down out of the glass and goes back up. -->
             <HangCard
@@ -1859,28 +1833,18 @@
             </HangCard>
           </Popover.Root>
           {#if !roomShown}
-            <Tip label={words.openRoom(roomName)}>
-              {#snippet children(tip)}
-                <button
-                  data-bar-item
-                  {...mergeProps(tip, {
-                    onclick: () => {
-                      roomOpen = true;
-                      stopAt = 0;
-                      // The one asked for last stands: the pane's sheet goes as the drawer rises.
-                      if (paneSheet) {
-                        onroom?.();
-                      }
-                    },
-                  })}
-                  aria-label={words.openRoom(roomName)}
-                  class="select-none touch-hit press-tint"
-                  type="button"
-                >
-                  <IconRoom data-slot="bar-symbol" aria-hidden="true" />
-                </button>
-              {/snippet}
-            </Tip>
+            <BarItem
+              icon={IconRoom}
+              label={words.openRoom(roomName)}
+              onclick={() => {
+                roomOpen = true;
+                stopAt = 0;
+                // The one asked for last stands: the pane's sheet goes as the drawer rises.
+                if (paneSheet) {
+                  onroom?.();
+                }
+              }}
+            />
           {/if}
         </BarGlass>
       </div>

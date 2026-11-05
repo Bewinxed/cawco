@@ -9,7 +9,7 @@
 <script lang="ts">
   /**
    * The machines, one click away in the wide bar's glass group rather than
-   * always on screen: an item of the group (Shell's `[data-bar-item]`), its glyph
+   * always on screen: a BarItem of the group, its glyph
    * and the number of machines. The number is said once. Machines in
    * trouble (down, behind the hub, a stuck sync) tint the glyph in the
    * status hue, fail when any is down and attention otherwise; which ones
@@ -23,8 +23,7 @@
    * turns the glyph to attention until the person acts on it (connect/).
    */
   import { machineLabel } from "@cawco/core/machine-names";
-  import { mergeProps } from "bits-ui";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { IconServer } from "#lib/icons.js";
   import { page } from "$app/state";
   import { barGlass } from "./bar-glass.svelte";
@@ -99,30 +98,19 @@
 </script>
 
 <!-- Its tip stands down while the machines card hangs under it: the card says
-     it all, and a tip left over the card's first rows covered them. -->
-<Tip disabled={barGlass.open === "machines"} label={tip}>
-  {#snippet children(tipProps)}
-    <button
-      data-machines
-      data-bar-item
-      data-glass-opens="machines"
-      {...mergeProps(tipProps, { onclick: () => barGlass.toggle("machines") })}
-      aria-expanded={barGlass.open === "machines"}
-      aria-haspopup="dialog"
-      aria-label={label}
-      class="select-none group mark-line touch-hit press-tint"
-      data-counted={count > 0 || undefined}
-      data-tone={tone}
-      type="button"
-    >
-      <IconServer
-        data-slot="bar-symbol"
-        aria-hidden="true"
-        class="group-tone-attn:text-status-attn-glyph group-tone-fail:text-status-fail-glyph"
-      />
-      {#if count > 0}
-        <span data-slot="num" class="num">{count}</span>
-      {/if}
-    </button>
-  {/snippet}
-</Tip>
+     it all, and a tip left over the card's first rows covered them. Gone
+     from the phone's glass, which holds Caw alone. -->
+<BarItem
+  aria-haspopup="dialog"
+  {count}
+  data-glass-opens="machines"
+  data-machines
+  expanded={barGlass.open === "machines"}
+  icon={IconServer}
+  {label}
+  layout="desk"
+  onclick={() => barGlass.toggle("machines")}
+  {tip}
+  tipOff={barGlass.open === "machines"}
+  {tone}
+/>

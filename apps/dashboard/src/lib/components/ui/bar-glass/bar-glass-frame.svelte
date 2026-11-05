@@ -14,6 +14,7 @@
   import type { Snippet } from "svelte";
   import { IconSearch, IconServer } from "#lib/icons.js";
   import BarGlass from "./bar-glass.svelte";
+  import BarItem from "./bar-item.svelte";
 
   let {
     width,
@@ -46,35 +47,18 @@
     <div class="ms-auto flex min-w-0 items-center @max-desk/shell:self-stretch">
       <BarGlass {joined}>
         {#snippet head()}
-          <button
-            data-bar-item
-            aria-label="Caw"
-            class="select-none touch-hit press-tint"
-            type="button"
-          >
+          <BarItem label="Caw" tip={false}>
             <span
               data-slot="bar-symbol"
               aria-hidden="true"
               class="block rounded-pill bg-ink-muted"
             ></span>
-          </button>
+          </BarItem>
         {/snippet}
-        <button
-          data-bar-item
-          aria-label="Jump to session"
-          class="select-none touch-hit press-tint @max-desk/shell:hidden"
-          type="button"
-        >
+        <BarItem label="Jump to session" layout="desk" tip={false}>
           <IconSearch aria-hidden="true" class="size-icon-md text-ink-muted" />
-        </button>
-        <button
-          data-bar-item
-          aria-label="Machines"
-          class="select-none touch-hit press-tint @max-desk/shell:hidden"
-          type="button"
-        >
-          <IconServer data-slot="bar-symbol" aria-hidden="true" />
-        </button>
+        </BarItem>
+        <BarItem icon={IconServer} label="Machines" layout="desk" tip={false} />
       </BarGlass>
     </div>
   </div>

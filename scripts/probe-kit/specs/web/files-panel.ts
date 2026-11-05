@@ -647,15 +647,19 @@ const desk = async (
   await control.waitFor();
   await until(
     "the Files count",
-    () => page.locator("[data-files-count]").count(),
+    () => page.locator('[data-files-control] [data-slot="num"]').count(),
     (n) => n > 0,
     60_000
   );
   // 1. The control in the group, and its count no larger than its folder.
   const bar = await page.evaluate(() => {
     const item = document.querySelector("[data-files-control]");
-    const glyph = document.querySelector("[data-files-glyph]");
-    const count = document.querySelector("[data-files-count]");
+    const glyph = document.querySelector(
+      '[data-files-control] [data-slot="bar-symbol"]'
+    );
+    const count = document.querySelector(
+      '[data-files-control] [data-slot="num"]'
+    );
     const rect = (el: Element | null) => {
       const r = el?.getBoundingClientRect();
       return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
@@ -1109,7 +1113,9 @@ const reviewLegs = async (
       ?.textContent?.replace(/\s+/gu, " ")
       .trim(),
     cards: document.querySelectorAll("[data-files-card]").length,
-    count: document.querySelector("[data-files-count]")?.textContent ?? null,
+    count:
+      document.querySelector('[data-files-control] [data-slot="num"]')
+        ?.textContent ?? null,
   }));
   // Its Try again by its accessible name: a kit Button's text holds its pending words too.
   const refusedRetry = await refused
@@ -1834,7 +1840,9 @@ const roundThree = async (
     }
   });
   // The page's own reads answered: the bar counts once both lists are in.
-  await quiet.locator("[data-files-count]").waitFor({ timeout: 60_000 });
+  await quiet
+    .locator('[data-files-control] [data-slot="num"]')
+    .waitFor({ timeout: 60_000 });
   await atRest(quiet);
   const before = reads;
   const sent = await fleet.send(ids.many, "A word with nothing attached");

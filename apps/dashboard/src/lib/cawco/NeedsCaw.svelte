@@ -67,10 +67,9 @@
    * you, longest wait first, then the Notices; choosing a row closes it and
    * opens what the row is.
    */
-  import { mergeProps } from "bits-ui";
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { page } from "$app/state";
   import { barGlass } from "./bar-glass.svelte";
   import { frameObserver } from "./frame-observer";
@@ -681,74 +680,65 @@
   </svg>
 {/snippet}
 
-<Tip label={tipText}>
-  {#snippet children(tip)}
-    <!-- An item of the bar's group (Shell's bar-item recipe, on
-         [data-bar-item], draws its box, hover and focus); a circle whatever
-         the strips' boxes: the beat's reaches past it. On the phone's glass
-         its focus ring is drawn over its own box (`focus-inset`), as the
-         sidebar toggle's is, and a finger's 44px area runs from the glass's
-         leading edge across the bar's phone margin to the screen's edge, as
-         the toggle's starts at the other. -->
-    <button
-      data-bar-item
-      data-glass-opens="caw"
-      {...mergeProps(tip, {
-        onclick: choose,
-        onpointerdown: press,
-        onpointerenter: pointerOn,
-        onpointerleave: pointerOff,
-      })}
-      aria-expanded={barGlass.open === "caw"}
-      aria-haspopup="dialog"
-      aria-label={label}
-      class="select-none touch-hit press-tint relative grid w-c-bar-item flex-none place-items-center p-0 tap-highlight-none @max-desk/shell:focus-inset @max-desk/shell:coarse:after:start-0 @max-desk/shell:coarse:after:end-auto @max-desk/shell:coarse:after:top-(--caw-hit-top) @max-desk/shell:coarse:after:bottom-auto @max-desk/shell:coarse:after:size-c-btn-h-lg"
-      data-needs-caw
-      style:--caw-hit-top={"calc((var(--c-bar-caw-glass-phone) - var(--c-btn-h-lg)) / 2)"}
-      type="button"
-    >
-      <!-- His head: his face and the clip playing over it in one cell,
+<!-- An item of the bar's group in Caw's head's form (BarItem `head`: a
+     circle whatever the strips' boxes, the beat's reach past it; on the
+     phone's glass its ring over its own box and a finger's area out to the
+     screen's edge). -->
+<BarItem
+  aria-haspopup="dialog"
+  data-glass-opens="caw"
+  data-needs-caw
+  expanded={barGlass.open === "caw"}
+  form="head"
+  {label}
+  onclick={choose}
+  props={{
+    onpointerdown: press,
+    onpointerenter: pointerOn,
+    onpointerleave: pointerOff,
+  }}
+  tip={tipText}
+>
+  <!-- His head: his face and the clip playing over it in one cell,
            squashed once under a press (DESIGN.md, The Press Rule) with
            motion allowed, on his own layer from the start: made by his first
            press's squash, it was work in the frame that press was waiting
            on. -->
-      <span
-        class="pointer-events-none grid place-items-center motion-safe:will-change-transform motion-safe:transition-[transform] motion-safe:duration-(--dur-toggle) motion-safe:ease-out motion-safe:data-pressed:transform-(--mug-squash)"
-        data-pressed={pressed || undefined}
-        style:--mug-squash="scale(var(--press-scale))"
-      >
-        <!-- His head's optical centre at the centre, not his box
+  <span
+    class="pointer-events-none grid place-items-center motion-safe:will-change-transform motion-safe:transition-[transform] motion-safe:duration-(--dur-toggle) motion-safe:ease-out motion-safe:data-pressed:transform-(--mug-squash)"
+    data-pressed={pressed || undefined}
+    style:--mug-squash="scale(var(--press-scale))"
+  >
+    <!-- His head's optical centre at the centre, not his box
              (CAW_HEAD_CENTRE): moved in layout, not by a transform, so his
              picture stays on whole pixels. A clip's first frame is drawn
              over him: it stands in for his face, which is drawn and ready
              under it for the frame the clip lands. -->
-        <span
-          data-needs-caw-covered={covering || undefined}
-          class="group/face relative col-start-1 row-start-1 start-(--face-x) top-(--face-y) grid size-c-bar-symbol data-needs-caw-covered:invisible @max-desk/shell:size-c-bar-caw-head-phone"
-          data-caw-phase={phase}
-          {@attach faceSide}
-          style:--bleed="{CAW_STILL_BLEED}px"
-          style:--dx={0.5 - CAW_HEAD_CENTRE.x}
-          style:--dy={0.5 - CAW_HEAD_CENTRE.y}
-          style:--face-x="calc(var(--dx) * var(--side))"
-          style:--face-y="calc(var(--dy) * var(--side))"
-          style:--side="{head}px"
-        >
-          <CawFace size={head} status={face} />
-          <!-- The clip, on his face's own canvas box: his box and its
+    <span
+      data-needs-caw-covered={covering || undefined}
+      class="group/face relative col-start-1 row-start-1 start-(--face-x) top-(--face-y) grid size-c-bar-symbol data-needs-caw-covered:invisible @max-desk/shell:size-c-bar-caw-head-phone"
+      data-caw-phase={phase}
+      {@attach faceSide}
+      style:--bleed="{CAW_STILL_BLEED}px"
+      style:--dx={0.5 - CAW_HEAD_CENTRE.x}
+      style:--dy={0.5 - CAW_HEAD_CENTRE.y}
+      style:--face-x="calc(var(--dx) * var(--side))"
+      style:--face-y="calc(var(--dy) * var(--side))"
+      style:--side="{head}px"
+    >
+      <CawFace size={head} status={face} />
+      <!-- The clip, on his face's own canvas box: his box and its
                bleed. Shown only while a clip's frame is drawn on it: between
                clips it holds the last one's. -->
-          <canvas
-            aria-hidden="true"
-            class="invisible absolute inset-(--clip-inset) size-(--clip-side) group-data-needs-caw-covered/face:visible"
-            style:--clip-inset="calc(var(--bleed) * -1)"
-            style:--clip-side="calc(var(--side) + 2 * var(--bleed))"
-            bind:this={clipCanvas}
-          ></canvas>
-        </span>
-      </span>
-      {@render rim(false)}
-      {@render rim(true)}
-    </button>
-  {/snippet}
-</Tip>
+      <canvas
+        aria-hidden="true"
+        class="invisible absolute inset-(--clip-inset) size-(--clip-side) group-data-needs-caw-covered/face:visible"
+        style:--clip-inset="calc(var(--bleed) * -1)"
+        style:--clip-side="calc(var(--side) + 2 * var(--bleed))"
+        bind:this={clipCanvas}
+      ></canvas>
+    </span>
+  </span>
+  {@render rim(false)}
+  {@render rim(true)}
+</BarItem>

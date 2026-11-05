@@ -200,7 +200,7 @@ const run = async (kit: Kit) => {
     "the bar's Files count",
     () =>
       page
-        .locator("[data-files-count]")
+        .locator('[data-files-control] [data-slot="num"]')
         .first()
         .textContent()
         .catch(() => null),

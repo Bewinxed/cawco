@@ -1,72 +1,194 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /**
+   * A bar item's recipe, every state on its own box so hover, pressed,
+   * selected and focus share one contour: a capsule the bar's item tall
+   * (`--c-bar-item`), at least as wide, concentric in the glass round it
+   * (BarGlass: 36 less its 4px pad, the pill's 18 less 4). Bare until the
+   * pointer rests on it (the hover only where a fine pointer can rest),
+   * pressed in the kit's press tint, selected in the selected wash. Its
+   * symbol (`data-slot="bar-symbol"`) is the bar's symbol size in the muted
+   * ink; a count (`data-slot="num"`) stands beside it at the label size in
+   * tabular figures, the item's ends then a symbol's inset in, the trailing
+   * one a twelfth of the symbol more for the figures' side bearing.
+   */
+  const barItemVariants = tv({
+    base: "group/bar-item relative inline-flex h-c-bar-item min-w-c-bar-item flex-none select-none items-center justify-center rounded-pill border-0 bg-transparent text-ink-strong transition-control touch-hit press-tint hover:not-data-lit:bg-surface-hover data-lit:bg-selected-bg data-lit:text-selected-ink data-counted:gap-space-2 data-counted:ps-(--mark-inset) data-counted:pe-(--mark-end) *:data-[slot=bar-symbol]:size-c-bar-symbol *:data-[slot=bar-symbol]:flex-none *:data-[slot=num]:type-label *:data-[slot=num]:whitespace-nowrap *:data-[slot=num]:tabular-nums",
+    variants: {
+      /** What it holds: a symbol, or a title's words and chevron (a bar's title as a control), or Caw's head. */
+      form: {
+        symbol: "",
+        /* Its words at the label's inset, the chevron closer. */
+        title: "mark-line max-w-full gap-space-1 ps-space-2 pe-space-1",
+        /* His head in one cell, a circle a symbol's box wide whatever the
+           strips' boxes (the beat's reach past it); on the phone's glass his
+           ring over his own box, as the sidebar toggle's is, and a finger's
+           44px area from the glass's leading edge across the bar's margin to
+           the screen's edge, as the toggle's starts at the other. */
+        head: "grid w-c-bar-item place-items-center p-0 tap-highlight-none @max-desk/shell:focus-inset @max-desk/shell:coarse:after:start-0 @max-desk/shell:coarse:after:end-auto @max-desk/shell:coarse:after:top-(--caw-hit-top) @max-desk/shell:coarse:after:bottom-auto @max-desk/shell:coarse:after:size-c-btn-h-lg",
+      },
+      /** Its symbol's ink, said of what it stands for. */
+      tone: {
+        muted: "*:data-[slot=bar-symbol]:text-ink-muted",
+        attn: "*:data-[slot=bar-symbol]:text-status-attn-glyph",
+        fail: "*:data-[slot=bar-symbol]:text-status-fail-glyph",
+      },
+      /** Drawn only from the phone breakpoint up (`wide`), or only on the desk's glass, gone from the phone's (`desk`: the shell container's desk line). */
+      layout: {
+        all: "",
+        wide: "max-phone:hidden",
+        desk: "@max-desk/shell:hidden",
+      },
+    },
+    compoundVariants: [
+      // Selected, its symbol takes the selected ink with its wash.
+      {
+        tone: "muted",
+        class: "data-lit:*:data-[slot=bar-symbol]:text-selected-ink",
+      },
+    ],
+    defaultVariants: { form: "symbol", tone: "muted", layout: "all" },
+  });
+
+  type BarItemLooks = VariantProps<typeof barItemVariants>;
+</script>
+
 <script lang="ts">
   /**
-   * One item of a bar's glass group (BarGlass): a bare symbol with no border
-   * or fill of its own until hovered or pressed, named for the screen reader
-   * and in its tooltip (DESIGN.md, The Title Bars Follow Liquid Glass Rule:
-   * "Its items are bare symbols … each named for the screen reader and in its
-   * tooltip"). Its recipe is the group's (app.css, `[data-bar-item]`); it
-   * stands inside a BarGlass. A link with `href`, else a button; `props` are
-   * a primitive's trigger props (a menu's, a sheet's Close), merged in.
+   * One item of a bar's glass group (BarGlass), and the only one: a bare
+   * symbol with no border or fill of its own until hovered, pressed or
+   * selected, named for the screen reader and in its tooltip (DESIGN.md,
+   * The Title Bars Follow Liquid Glass Rule). It draws its own states, so
+   * no caller writes a fill: `pressed` (a toggle that is on, the selected
+   * wash), `marked` (the same wash for a control that holds changed values
+   * without being a toggle), `expanded` (what it opens stands), `count`
+   * (its number, shown above 0), `tone` (its symbol's ink). It stands in a
+   * BarGlass, or bare in a head beside one (a project's place). A link
+   * with `href`, else a button; `props` are a primitive's trigger props (a
+   * menu's, a popover's, a sheet's Close), merged in. Its symbol is `icon`,
+   * or what `children` draws in its place (a machine's mark, Caw's head, a
+   * title's words).
    */
   import { mergeProps } from "bits-ui";
-  import type { Component } from "svelte";
+  import type { Component, Snippet } from "svelte";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
 
   let {
     label,
     icon: Icon,
+    children,
     href,
     onclick,
     keys,
+    tip,
+    tipOff = false,
+    pressed,
+    marked = false,
+    expanded,
+    count,
+    form,
+    tone,
+    layout,
     props = {},
     ref = $bindable(null),
     ...rest
-  }: {
+  }: BarItemLooks & {
     /** Its name, for the screen reader and in its tooltip. */
     label: string;
     /** Its symbol. */
-    icon: Component<Record<string, unknown>>;
+    icon?: Component<Record<string, unknown>>;
+    /** What it draws in its symbol's place. */
+    children?: Snippet;
     /** Where it goes, as a link. */
     href?: string;
     onclick?: (event: MouseEvent) => void;
     /** Its shortcut, as the tooltip draws it. */
     keys?: string;
+    /** Its tooltip's words where they say more than its name; `false`: no tooltip (a title, which says itself). */
+    tip?: string | false;
+    /** Its tooltip stands down (what it opened hangs under it and says it all). */
+    tipOff?: boolean;
+    /** A toggle: on (`aria-pressed`), drawn in the selected wash. */
+    pressed?: boolean;
+    /** It holds changed values: the selected wash, without being a toggle. */
+    marked?: boolean;
+    /** What it opens stands (`aria-expanded`). */
+    expanded?: boolean;
+    /** Its number, beside its symbol above 0 (DESIGN.md, The Earned Count Rule). */
+    count?: number | null;
     /** A primitive's trigger props, merged in. */
     props?: Record<string, unknown>;
     ref?: HTMLElement | null;
     [attribute: `data-${string}`]: unknown;
     [aria: `aria-${string}`]: unknown;
+    onpointerdown?: (event: PointerEvent) => void;
     onpointerenter?: (event: PointerEvent) => void;
     onpointerleave?: (event: PointerEvent) => void;
+    onblur?: (event: FocusEvent) => void;
   } = $props();
+
+  /** A counted item's ends: a symbol's inset in, the trailing one a twelfth of the symbol more for the figures' side bearing. */
+  const MARK_INSET = "calc((var(--c-bar-item) - var(--c-bar-symbol)) / 2)";
+  const MARK_END = `calc(${MARK_INSET} + var(--c-bar-symbol) / 12)`;
+  /** Caw's head on the phone's glass: its finger's area centred on the glass's height. */
+  const CAW_HIT_TOP =
+    "calc((var(--c-bar-caw-glass-phone) - var(--c-btn-h-lg)) / 2)";
+
+  const counted = $derived(count !== undefined && count !== null && count > 0);
+  const lit = $derived(Boolean(pressed) || marked);
+  /** Its own states, said only where it has them: a trigger's own `aria-expanded` (in `props`) stands where it says none. */
+  const own = $derived(
+    Object.fromEntries(
+      Object.entries({
+        "aria-pressed": pressed,
+        "aria-expanded": expanded,
+        "data-lit": lit || undefined,
+        "data-counted": counted || undefined,
+        "data-tone": tone && tone !== "muted" ? tone : undefined,
+      }).filter(([, value]) => value !== undefined)
+    )
+  );
+  const look = $derived(barItemVariants({ form, tone, layout }));
 </script>
 
-<Tip {keys} {label}>
-  {#snippet children(tip)}
-    {#if href}
-      <a
-        aria-label={label}
-        data-bar-item
-        data-box
-        {...mergeProps(tip, props, rest)}
-        class="select-none touch-hit press-tint"
-        {href}
-        bind:this={ref}
-      >
-        <Icon data-slot="bar-symbol" />
-      </a>
-    {:else}
-      <button
-        data-bar-item
-        data-box
-        {...mergeProps(tip, props, rest, { onclick })}
-        aria-label={label}
-        class="select-none touch-hit press-tint"
-        type="button"
-        bind:this={ref}
-      >
-        <Icon data-slot="bar-symbol" aria-hidden="true" />
-      </button>
-    {/if}
-  {/snippet}
-</Tip>
+{#snippet body()}
+  {#if children}
+    {@render children()}
+  {:else if Icon}
+    <Icon data-slot="bar-symbol" aria-hidden="true" />
+  {/if}
+  {#if counted}
+    <span data-slot="num" class="num">{count}</span>
+  {/if}
+{/snippet}
+
+{#snippet item(tipProps: Record<string, unknown>)}
+  <svelte:element
+    this={href ? "a" : "button"}
+    data-bar-item
+    data-box
+    {...mergeProps(tipProps, props, rest, own, { onclick })}
+    aria-label={label}
+    class={look}
+    {href}
+    style:--mark-inset={MARK_INSET}
+    style:--mark-end={MARK_END}
+    style:--caw-hit-top={form === "head" ? CAW_HIT_TOP : undefined}
+    type={href ? undefined : "button"}
+    bind:this={ref}
+  >
+    {@render body()}
+  </svelte:element>
+{/snippet}
+
+{#if tip === false}
+  {@render item({})}
+{:else}
+  <Tip disabled={tipOff} {keys} label={tip ?? label}>
+    {#snippet children(tipProps)}
+      {@render item(tipProps)}
+    {/snippet}
+  </Tip>
+{/if}
