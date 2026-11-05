@@ -43,11 +43,11 @@
     "words:check": "bun scripts/words-swift.ts --check"
   },
   "overrides": {
-    "@golar/darwin-arm64": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.5/golar-darwin-arm64-0.1.11-cawco.5.tgz",
-    "@golar/linux-x64": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.5/golar-linux-x64-0.1.11-cawco.5.tgz",
-    "@golar/svelte": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.5/golar-svelte-0.1.11-cawco.5.tgz",
+    "@golar/darwin-arm64": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-darwin-arm64-0.1.11-cawco.6.tgz",
+    "@golar/linux-x64": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-linux-x64-0.1.11-cawco.6.tgz",
+    "@golar/svelte": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-svelte-0.1.11-cawco.6.tgz",
     "@types/bun": "^1.4.3",
-    "golar": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.5/golar-0.1.11-cawco.5.tgz",
+    "golar": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-0.1.11-cawco.6.tgz",
     "oniguruma-to-es": "^4.3.6",
     "vite": "^8.3.5"
   },
@@ -58,7 +58,7 @@
     "@earendil-works/pi-codemode": "1.4.0",
     "@earendil-works/pi-coding-agent": "1.4.0",
     "@earendil-works/pi-tui": "1.4.0",
-    "@golar/svelte": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.5/golar-svelte-0.1.11-cawco.5.tgz",
+    "@golar/svelte": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-svelte-0.1.11-cawco.6.tgz",
     "@terrazzo/parser": "^2.10.0",
     "@types/bun": "^1.4.3",
     "@types/multicast-dns": "^7.2.4",
@@ -69,7 +69,7 @@
     "buffer": "^6.0.3",
     "colorjs.io": "^0.7.1",
     "events": "^3.3.0",
-    "golar": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.5/golar-0.1.11-cawco.5.tgz",
+    "golar": "https://github.com/Bewinxed/golar/releases/download/v0.1.11-cawco.6/golar-0.1.11-cawco.6.tgz",
     "jscpd": "5.4.2",
     "knip": "6.43.0",
     "multicast-dns": "7.2.5",
