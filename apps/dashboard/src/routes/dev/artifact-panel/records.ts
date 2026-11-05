@@ -3,9 +3,8 @@
  * comment_read and artifact_list on 2026-11-05, cut to the fields the panel
  * draws. The pins are the owner's five on the decision page title-bars-close,
  * each thread as it stands (long replies cut at
- * a sentence). The artifacts are the session's, newest first, each titled by
- * its ask: the title its agent will write is being added to the tools, and
- * the ask is what the agent wrote in words until it is.
+ * a sentence). The artifacts are the session's, newest first, each with
+ * the title the hub gave it (a decision page's own program title).
  */
 
 import type { Pin, ThreadEntry } from "@cawco/core/comments";
@@ -185,13 +184,14 @@ export const PINS: Pin[] = [
 const artifact = (
   id: string,
   name: string,
+  title: string,
   ask: string,
   createdAt: string,
   waiting = false
-): ArtifactSummary & { title: string } => ({
+): ArtifactSummary => ({
   id,
   name,
-  title: ask,
+  title,
   ask,
   kind: "page",
   does: "pick",
@@ -210,6 +210,7 @@ export const ARTIFACTS = [
   artifact(
     "109f7c53-44db-47c7-bc7f-7805647dd14a",
     "title-bars-close",
+    "Where Close stands in the glass bars",
     "Pick where Close stands where Apple's guidelines and DESIGN.md disagree",
     "2026-11-03T11:48:16.691Z",
     true
@@ -217,6 +218,7 @@ export const ARTIFACTS = [
   artifact(
     "11ac93d3-eadf-4258-b030-796990595807",
     "graph-cutover-questions",
+    "Three answers before the design graph lands in the panel",
     "Answer three questions before the design graph replaces the component canvas",
     "2026-11-04T19:15:26.372Z",
     true
@@ -224,13 +226,33 @@ export const ARTIFACTS = [
   artifact(
     "669f4274-b781-4432-87fb-118b1fc00830",
     "filing-nudge",
+    "Filing before a full context is compacted",
     "Pick how a session files and compacts when its context fills",
     "2026-11-04T08:10:00.000Z"
   ),
   artifact(
     "422bef6c-0670-46f4-a38d-dcc088d5708f",
     "preview-lifetime",
+    "How previews live",
     "Pick what a handed-up preview shows and what happens when its workspace is gone",
     "2026-11-04T07:30:00.000Z"
   ),
 ];
+
+/**
+ * A long list: 150 comments, the five real ones over and over, each its own
+ * number and a minute older than the one before it, so the rail's order,
+ * its counts and its scroll are read at a size a busy page reaches.
+ */
+export const LONG: Pin[] = Array.from({ length: 150 }, (_, at) => {
+  const like = PINS[at % PINS.length] as Pin;
+  const when = new Date(Date.parse(like.at) - at * 60_000).toISOString();
+  return {
+    ...like,
+    id: `${like.id}-${at + 1}`,
+    number: at + 1,
+    at: when,
+    sentAt: when,
+    anchor: { ...like.anchor, selector: `#pin-${at + 1}` },
+  };
+});

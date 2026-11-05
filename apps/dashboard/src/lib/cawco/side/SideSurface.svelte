@@ -16,9 +16,10 @@
    * A pane that gives its controls as `items` has them stand by the head's
    * priority rule (head.ts): the name keeps its width up to 120px, Close
    * stands last, the controls that fit stand as a priority prefix at their
-   * narrowest, the rest going in head order into one More, and forms widen
-   * after (the mode's segments, then on a 640px pane the words) where the
-   * room left holds them.
+   * narrowest, the rest going in head order into one More, then the name
+   * takes the rest of its own width (two lines' worth on a phone), and
+   * forms widen after (the mode's segments, then on a 640px pane the words)
+   * where the room left holds them.
    *
    * Expanded over the whole split, the card meets its edges: no inset,
    * corner or shadow, and the well's sides go, so a page is drawn at the
@@ -72,7 +73,6 @@
     well = $bindable(),
     section = $bindable(),
     beside,
-    above,
     children,
   }: {
     /** What the card is, read out. */
@@ -129,12 +129,6 @@
      * its width.
      */
     beside?: Snippet;
-    /**
-     * What stands between the head and the well, in its own room: the
-     * preview's Changed since you looked bar. It never stands over the
-     * well's content, which starts under it.
-     */
-    above?: Snippet;
     /** The well's content. */
     children: Snippet;
   } = $props();
@@ -318,6 +312,37 @@
     return Math.ceil(Math.min(own, NAME_KEEPS + pad));
   }
 
+  /**
+   * What the name wants past what it keeps: its lead's words whole on one
+   * line, or, where it wraps to two lines (a phone's head: its lead's
+   * `-webkit-line-clamp` is 2), seven tenths of that (two lines break at words, never at the half), with the chevron and insets round them; less
+   * {@link nameWidth}. Read with its words held to one line for the read.
+   */
+  function nameWants(name: HTMLElement, keeps: number): number {
+    const lead =
+      name.querySelector<HTMLElement>('[data-slot="name-lead"]') ??
+      (name.firstElementChild as HTMLElement | null);
+    if (!lead) {
+      return 0;
+    }
+    const twoLines = getComputedStyle(lead).webkitLineClamp === "2";
+    // What stands round the words in the title control (its chevron, its
+    // insets), as drawn now.
+    const control = lead.closest("button") ?? lead;
+    const around = laidOut(control) - laidOut(lead);
+    const was = lead.style.whiteSpace;
+    lead.style.whiteSpace = "nowrap";
+    const whole = laidOut(lead) + runsPast(lead);
+    lead.style.whiteSpace = was;
+    const style = getComputedStyle(name);
+    const pad =
+      (Number.parseFloat(style.paddingInlineStart) || 0) +
+      (Number.parseFloat(style.paddingInlineEnd) || 0);
+    // Two lines break at words, never at the half: 70% of one line holds them.
+    const wants = (twoLines ? whole * 0.7 : whole) + around + pad;
+    return Math.max(0, Math.ceil(wants) - keeps);
+  }
+
   /** The name's margins (they take its ring room back): what it adds to the head beside its box. */
   function nameMargins(name: HTMLElement): number {
     const style = getComputedStyle(name);
@@ -374,7 +399,8 @@
           : {}),
       })),
       // The pane's width: the card's, the head's box inside it.
-      head.clientWidth >= WORDS_FROM
+      head.clientWidth >= WORDS_FROM,
+      nameWants(identity, keeps)
     );
     return () => {
       name();
@@ -672,7 +698,6 @@
       {@render closeGlass()}
     {/if}
   </header>
-  {@render above?.()}
   {#if recessed}
     <!-- The content's ground: a well inside its edge (surface-well,
          border-well: the recess and hairline by day, deeper with a clear
