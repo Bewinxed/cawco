@@ -92,37 +92,51 @@
 </script>
 
 {#snippet lead()}
-  <DropdownMenu.Root>
-    <DropdownMenu.Trigger>
-      {#snippet child({ props })}
-        <button
-          {...props}
-          aria-label={`On ${chain[chosen]}: change what this comment is about`}
-          class={[chipVariants({ variant: "setting" }), "max-w-full"]}
-          data-slot="target-chip"
-          type="button"
-          ><IconLayers /><span
-            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-            data-slot="chip-label">{chain[chosen]}</span
-          ><IconChevronDown data-slot="chevron" /></button
+  {#if chain.length === 1}
+    <!-- One target and nowhere to walk it out to (the whole page): its chip
+         says what the comment is about, with no menu of one item. -->
+    <span
+      class={[chipVariants({ variant: "setting" }), "max-w-full"]}
+      data-slot="target-chip"
+      ><IconLayers /><span
+        class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+        data-slot="chip-label">{chain[0]}</span
+      ></span
+    >
+  {:else}
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger>
+        {#snippet child({ props })}
+          <button
+            {...props}
+            aria-label={`On ${chain[chosen]}: change what this comment is about`}
+            class={[chipVariants({ variant: "setting" }), "max-w-full"]}
+            data-slot="target-chip"
+            type="button"
+            ><IconLayers /><span
+              class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+              data-slot="chip-label">{chain[chosen]}</span
+            ><IconChevronDown data-slot="chevron" /></button
+          >
+        {/snippet}
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="start" side="bottom">
+        <DropdownMenu.RadioGroup
+          onValueChange={(next) => onchoose?.(Number(next))}
+          value={String(chosen)}
         >
-      {/snippet}
-    </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="start" side="bottom">
-      <DropdownMenu.RadioGroup
-        onValueChange={(next) => onchoose?.(Number(next))}
-        value={String(chosen)}
-      >
-        {#each chain as one, at (at)}
-          <DropdownMenu.RadioItem value={String(at)}>
-            <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-              >{one}</span
-            >
-          </DropdownMenu.RadioItem>
-        {/each}
-      </DropdownMenu.RadioGroup>
-    </DropdownMenu.Content>
-  </DropdownMenu.Root>
+          {#each chain as one, at (at)}
+            <DropdownMenu.RadioItem value={String(at)}>
+              <span
+                class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                >{one}</span
+              >
+            </DropdownMenu.RadioItem>
+          {/each}
+        </DropdownMenu.RadioGroup>
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+  {/if}
 {/snippet}
 
 <div

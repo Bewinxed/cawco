@@ -460,6 +460,7 @@ const PAGE_MESSAGES = [
   "cawco:pin-chain",
   "cawco:peek",
   "cawco:change-stops",
+  "cawco:page-foot",
   "cawco:change-pressed",
   "cawco:reply-result",
   "cawco:resolve-result",

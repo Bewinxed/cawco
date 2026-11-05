@@ -185,7 +185,10 @@
   function askRemove(artifact: { id: string; title: string }) {
     asks.ask({
       at: "remove",
-      title: artifactWords.removeArtifactAsk(artifact.title),
+      title:
+        artifact.id === shown.id
+          ? artifactWords.removeShownAsk
+          : artifactWords.removeArtifactAsk(artifact.title),
       body: artifactWords.removeArtifactBody,
       confirmLabel: artifactWords.remove,
       destructive: true,
@@ -421,7 +424,7 @@
         variant="destructive"
       >
         <IconTrash />
-        <span>{artifactWords.removeNamed(shown.title)}</span>
+        <span>{artifactWords.removeShown}</span>
       </DropdownMenu.Item>
       <AskHere
         asker={asks}
