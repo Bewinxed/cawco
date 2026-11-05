@@ -48,7 +48,7 @@ const held = new SvelteMap<string, HeldMarks>();
 const read = new SvelteMap<string, HeldMarks>();
 /** Artifacts whose pins the hub was asked for and has answered, or refused: what a pin's chip can know of them, it knows. */
 const pinsAnswered = new SvelteSet<string>();
-/** Ids asked of the hub and not answered yet: never asked twice at once. */
+/** Pins asked of the hub and not answered yet: never asked twice at once. */
 const asking = new Set<string>();
 
 /** The pane holding artifact `id` says what it is, so a chip never asks the hub for it. */
@@ -110,19 +110,22 @@ function askPins(id: string, instanceId: string): void {
     });
 }
 
+/** Each read of the hub asked and not answered yet, by id: a press waits on the one a draw began. */
+const reading = new Map<string, Promise<void>>();
+
 /** Asks the hub what artifact `id` is, once it answers; the browser asks ({@link askPins}). */
-function ask(id: string): void {
-  if (!browser || asking.has(id)) {
-    return;
+function ask(id: string): Promise<void> {
+  const already = reading.get(id);
+  if (!browser || already) {
+    return already ?? Promise.resolve();
   }
-  asking.add(id);
-  findArtifact(id)
-    .then((found) => {
+  const found = findArtifact(id)
+    .then((one) => {
       answered.set(id, {
-        instanceId: found.instanceId,
-        kind: found.kind,
-        name: found.name,
-        ...(found.project ? { project: found.project } : {}),
+        instanceId: one.instanceId,
+        kind: one.kind,
+        name: one.name,
+        ...(one.project ? { project: one.project } : {}),
       });
     })
     .catch((error: unknown) => {
@@ -135,8 +138,26 @@ function ask(id: string): void {
       console.error(`[cawco] reading artifact ${id} failed: ${why}`);
     })
     .finally(() => {
-      asking.delete(id);
+      reading.delete(id);
     });
+  reading.set(id, found);
+  return found;
+}
+
+/**
+ * What artifact `id` is, once the hub has answered: a press made before
+ * the chip's own read came back waits for it, so the first press lands
+ * (null: the hub holds none by that id, or could not be read).
+ */
+export async function artifactNamedNow(
+  id: string
+): Promise<NamedArtifact | null> {
+  const known = answered.get(id);
+  if (known !== undefined) {
+    return known;
+  }
+  await ask(id);
+  return answered.get(id) ?? null;
 }
 
 /**

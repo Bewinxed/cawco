@@ -54,6 +54,7 @@
     IconWorking,
   } from "#lib/icons.js";
   import { formatDistanceToNow, formatTimestamp } from "#lib/utils/time.js";
+  import { artifactNamed } from "../artifact-names.svelte";
   import { cawco } from "../client.svelte";
   import { rowHref } from "../links";
   import { afterSkeleton, reveal, revealOut } from "../motion/curves.svelte";
@@ -84,6 +85,7 @@
   import type { MarkStatus } from "../TreeMark.svelte";
   import { openBeside } from "./beside.svelte";
   import { resultStamp } from "./review-stamp";
+  import { setSheetCards } from "./sheet-cards";
   import TaskActivity from "./TaskActivity.svelte";
   import TaskExternalLinks from "./TaskExternalLinks.svelte";
   import TaskFields from "./TaskFields.svelte";
@@ -107,7 +109,10 @@
     page = false,
     backLabel = "Back",
     switcher,
+    pageOf = () => null,
   }: {
+    /** A decision page of the project's, by its artifact: its name in Decisions; null when the project lists none by it. */
+    pageOf?: (artifactId: string) => string | null;
     projectId: string;
     /** The task on show. */
     taskId: string;
@@ -132,6 +137,22 @@
   } = $props();
 
   let task = $state<TaskView | null>(null);
+  // The cards the sheet names go to their page in Decisions, picked as the
+  // hub says of the task's waits (sheet-cards.ts). A page the project's
+  // list hasn't read yet is named by the artifact the dashboard holds.
+  setSheetCards(() => (artifactId, card) => {
+    const name = pageOf(artifactId) ?? artifactNamed(artifactId)?.name;
+    if (!name) {
+      return null;
+    }
+    const wait = task?.waits.find(
+      (one) => one.kind === "card" && one.target === `${artifactId}#${card}`
+    );
+    return {
+      href: `/project/${encodeURIComponent(projectId)}?view=decisions&page=${encodeURIComponent(name)}#${encodeURIComponent(card)}`,
+      picked: wait ? wait.settled : null,
+    };
+  });
   /** Its file's commits, for the activity; null while they are read. */
   let history = $state<TaskHistoryEvent[] | null>(null);
   let historyProblem = $state<string | null>(null);

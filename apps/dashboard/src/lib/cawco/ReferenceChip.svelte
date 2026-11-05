@@ -11,7 +11,7 @@
    * drawn whole.
    */
   import type { Component, Snippet } from "svelte";
-  import type { HTMLButtonAttributes } from "svelte/elements";
+  import type { HTMLAttributes, HTMLButtonAttributes } from "svelte/elements";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
   import type { OpenAt } from "./artifact-names.svelte";
   import RowFault from "./RowFault.svelte";
@@ -28,9 +28,16 @@
     tone = "text-ink-muted",
     mark,
     onpress,
+    href,
     ref = $bindable(),
     ...rest
   }: Omit<HTMLButtonAttributes, "onclick"> & {
+    /**
+     * Where it goes, where the surface it stands on has its own way to the
+     * place (a task's sheet: the card in Decisions, sheet-cards.ts): a link,
+     * on the first press, with nothing to refuse.
+     */
+    href?: string;
     /** The artifact it opens; nothing happens on a press while it is unknown. */
     artifact: string | undefined;
     at: OpenAt;
@@ -61,16 +68,7 @@
   }
 </script>
 
-<button
-  class={chipVariants({ variant: "inline" })}
-  onclick={() => {
-    onpress?.();
-    return press();
-  }}
-  type="button"
-  {...rest}
-  bind:this={ref}
->
+{#snippet face()}
   {#if mark}
     {@render mark()}
   {:else if Glyph}
@@ -84,12 +82,34 @@
     </span>
   {/if}
   <span data-slot="label">{words}</span>
-</button>
-<!-- A press the hub refused, said beside the chip in the sentence it
-     stands in, with Try again. -->
-<RowFault
-  again={press}
-  class="inline-block max-w-full align-baseline"
-  data-reference-refused
-  reason={refusals.reason(refKey)}
-/>
+{/snippet}
+
+{#if href}
+  <a
+    {...rest as HTMLAttributes<HTMLAnchorElement>}
+    class={chipVariants({ variant: "inline" })}
+    {href}
+    onclick={() => onpress?.()}>{@render face()}</a
+  >
+{:else}
+  <button
+    class={chipVariants({ variant: "inline" })}
+    onclick={() => {
+      onpress?.();
+      return press();
+    }}
+    type="button"
+    {...rest}
+    bind:this={ref}
+  >
+    {@render face()}
+  </button>
+  <!-- A press the hub refused, said beside the chip in the sentence it
+       stands in, with Try again. -->
+  <RowFault
+    again={press}
+    class="inline-block max-w-full align-baseline"
+    data-reference-refused
+    reason={refusals.reason(refKey)}
+  />
+{/if}

@@ -178,16 +178,18 @@ export const setupPageAt = (projectId: string, card: string | null): string =>
 /**
  * Where a project's setup page lands, by every route that shows it (Caw's
  * `artifact_create` and `artifact_show`, the person's show: a chip, a card
- * chip, Files, a link; Needs you): while the project is not set up, its
- * board, which draws the draft; once it is, its Decisions tab at the page,
- * at `card` when one is named. It never opens in a panel.
+ * chip, Files, a link; Needs you): its Decisions tab at the page, at
+ * `card` when one is named; while the project is not set up and no card is
+ * named, its board, which draws the draft. A card stands only on the page,
+ * so a card named lands there whether it is set up or not (the dashboard's
+ * half: setup-progress.ts `setupLandsOnBoard`). It never opens in a panel.
  */
 export const setupLanding = (
   projectId: string,
   setUp: boolean,
   card: string | null
 ): string =>
-  setUp
+  setUp || card
     ? setupPageAt(projectId, card)
     : `/project/${encodeURIComponent(projectId)}`;
 

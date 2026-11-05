@@ -7,15 +7,21 @@
  * once its page is ready (artifact-names.svelte.ts `askOpen`). In an
  * artifact's own tab, a chip of another artifact opens that artifact's own
  * tab at the place (`?pin=<n>`, `?card=<id>`, `?change=<anchor>`), as a
- * pin's Copy link does; a project's setup page, which no panel or tab
- * opens, lands where the hub's show says (core `setupLanding`).
+ * pin's Copy link does. A project's setup page, which no panel or tab
+ * opens, goes to its project's page at the page and the card (core
+ * `setupPageAt`), which draws it where it stands: in Decisions at the card,
+ * or the board's draft while the project is not set up and no card is
+ * named (setup-progress.ts `setupLandsOnBoard`, core `setupLanding`). A
+ * press made before the chip knew what it names waits for the hub's word,
+ * so the first press lands.
  */
-import { SETUP_PAGE } from "@cawco/core/artifact-needs";
+import { SETUP_PAGE, setupPageAt } from "@cawco/core/artifact-needs";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import { showArtifact } from "./artifact-api";
 import {
   artifactNamed,
+  artifactNamedNow,
   askOpen,
   type NamedArtifact,
   type OpenAt,
@@ -65,17 +71,19 @@ export async function openReference(
   at: OpenAt,
   here?: string
 ): Promise<string | null> {
-  const named = artifactNamed(id);
+  const named = await artifactNamedNow(id);
   if (!named) {
+    return "It was not opened: the hub holds nothing by that link now.";
+  }
+  // A project's setup page opens in no panel and no tab of its own: its
+  // project's page draws it, from wherever the chip stands. Through the
+  // hub's show it was refused for any session but the page's own (a newer
+  // conversation's chip), and from the project's own page went nowhere.
+  if (isSetupPage(named) && named.project) {
+    await goto(setupPageAt(named.project, cardOf(at)));
     return null;
   }
-  // A project's setup page has no tab of its own to open: it lands where
-  // the hub's show says, as from anywhere else (core `setupLanding`).
-  if (
-    page.route.id === "/artifact/[id]" &&
-    page.params.id !== id &&
-    !isSetupPage(named)
-  ) {
+  if (page.route.id === "/artifact/[id]" && page.params.id !== id) {
     await goto(ownTab(id, at));
     return null;
   }
@@ -88,8 +96,10 @@ export async function openReference(
     return null;
   }
   try {
-    await showArtifact(session, id, cardOf(at));
-    revealPreview(session);
+    const where = await showArtifact(session, id, cardOf(at));
+    if (where === "panel") {
+      revealPreview(session);
+    }
     return null;
   } catch (error) {
     return `${named.name} was not opened: ${failureClause(error)}. The panel stays as it was.`;
@@ -121,8 +131,11 @@ export async function openArtifactIn(
     return null;
   }
   try {
-    await showArtifact(instanceId, id, cardOf(at));
-    revealPreview(instanceId);
+    const where = await showArtifact(instanceId, id, cardOf(at));
+    // A page drew it (a project's setup page): no panel to bring forward.
+    if (where === "panel") {
+      revealPreview(instanceId);
+    }
     refusals.delete(key);
     return null;
   } catch (error) {

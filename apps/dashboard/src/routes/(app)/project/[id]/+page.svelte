@@ -597,6 +597,10 @@
     page?: string | null;
   }
 
+  /** A decision page of this project's, by its artifact: its name in Decisions (a task's sheet goes there for a card it waits on). */
+  const pageOf = (artifactId: string): string | null =>
+    decisions.list?.pages.find((one) => one.artifactId === artifactId)?.name ??
+    null;
   /**
    * The view and the open task or file in the URL, so a link opens the
    * same. A task opened puts the file away; with none, the file open stays.
@@ -2333,6 +2337,7 @@
             onmove={(id, stage) => move(id, stage)}
             onopen={openOne}
             page
+            {pageOf}
             {projectId}
             {stages}
             taskId={openTask}
@@ -2525,6 +2530,7 @@
       onclose={closeTask}
       onmove={(id, stage) => move(id, stage)}
       onopen={openOne}
+      {pageOf}
       {projectId}
       {stages}
       taskId={sideHeld.task}

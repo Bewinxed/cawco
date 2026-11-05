@@ -123,13 +123,13 @@ export class ArtifactRefused extends Error {
  * its delegation tree's sessions'); the panel follows its frame. A
  * project's setup page opens in no panel: the hub answers where it lands,
  * at `card` when a card chip named one (core `setupLanding`), and the
- * person goes there.
+ * person goes there. Answers where it opened: a panel, or a page.
  */
 export async function showArtifact(
   instanceId: string,
   id: string,
   card: string | null = null
-): Promise<void> {
+): Promise<"panel" | "page"> {
   const response = await fetch(`${artifactsPath(instanceId, id)}/show`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -146,7 +146,9 @@ export async function showArtifact(
   } | null;
   if (typeof shown?.href === "string") {
     await goto(shown.href);
+    return "page";
   }
+  return "panel";
 }
 
 /**
