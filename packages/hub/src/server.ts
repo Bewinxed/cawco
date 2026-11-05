@@ -10529,18 +10529,25 @@ export const createServer = (
     return db.atLimit.hold(instanceId) !== undefined;
   };
 
-  /** What a session held at its account's limit was kept goes, in order, once nothing holds it ({@link heldAtLimit}). */
+  /**
+   * What a session held at its account's limit was kept goes, in order, once
+   * nothing holds it ({@link heldAtLimit}): the sessions whose owed sends
+   * are held for the limit or the compaction after a move, as each hold was
+   * last written ({@link keepHold}), each released whole so the sends behind
+   * them go too. A send kept for anything else (its session at rest, its
+   * machine away) is not the limit's to release, and each look at every
+   * session's limit runs this: once it scanned every owed send of every
+   * machine, two hundred and more kept for sessions at rest on obelisk,
+   * and held the hub's loop seconds at each look (probe-kit hub-live-copy).
+   */
   const releaseLimitHeld = (): void => {
-    const owed = new Set(
-      db
-        .listAgents()
-        .flatMap((machine) =>
-          db
-            .owedSends({ machineId: machine.machineId })
-            .map((send) => send.instanceId)
-        )
-    );
-    for (const instanceId of owed) {
+    // {@link holdOf}'s words for a send {@link heldAtLimit} keeps.
+    for (const instanceId of db.owedSessionsHeld([
+      "limit",
+      "signin",
+      "compacting",
+      "filing",
+    ] satisfies readonly SendHold[])) {
       releaseOwed({ instanceId });
     }
   };
@@ -14635,6 +14642,9 @@ export const createServer = (
       notifications.clear([artifactCollapseId(id)], "settled");
     },
   });
+  // The lane holds its read until something it is read from moves: an
+  // artifact's row is one of them, whoever writes it.
+  db.onArtifactsWritten(() => artifactLane.moved());
   /**
    * The sessions waiting on the person now (core `waitingOnYou`): an ask
    * parked under it for the person (not one routed to its parent), or an

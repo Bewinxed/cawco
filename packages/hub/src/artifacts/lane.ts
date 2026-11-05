@@ -6,6 +6,16 @@
  * `GET /api/artifact-needs`). A move anything it is read from makes (a doc's
  * update, a row, a plan, a turn, a session ending, an acknowledgement) asks
  * for one read a short quiet after it, so a burst of them is one frame.
+ *
+ * The lane is read once per move, never once per question: whoever asks
+ * between moves gets the read it holds, and one asking while a move waits
+ * for its quiet reads it at once. Its read is every waiting artifact's
+ * sessions, work items and refusals, hundreds of milliseconds on a live
+ * hub, and its askers ask per session (at-limit's `waitedOn` once per held
+ * and running session in every look, find's state per keystroke): read per
+ * question, it held obelisk's hub 5 to 15 s at a time on every nightly from
+ * 6801 on, and 6809's trial never saw the 60 s answered it needs
+ * (probe-kit hub-live-copy, on a copy of that hub's database).
  */
 import {
   type ArtifactNeedsFrame,
@@ -31,6 +41,8 @@ export const createArtifactLane = (deps: ArtifactLaneDeps) => {
   let current: ArtifactNeedsRead = { needs: [], notices: [] };
   let said: string | null = null;
   let timer: HubTimer | undefined;
+  /** Whether {@link current} is the lane as it stands: nothing it is read from moved since it was read. */
+  let held = false;
 
   /** Reads the lane; tells every screen, and the push, what changed. */
   const settle = (): ArtifactNeedsRead => {
@@ -45,6 +57,7 @@ export const createArtifactLane = (deps: ArtifactLaneDeps) => {
       );
       return current;
     }
+    held = true;
     const words = JSON.stringify(read);
     if (words === said) {
       return current;
@@ -65,15 +78,16 @@ export const createArtifactLane = (deps: ArtifactLaneDeps) => {
   return {
     /** Something the lane is read from moved: read again once it is quiet. */
     moved(): void {
+      held = false;
       timer ??= deps.lifetime.after(MOVED_QUIET_MS, settle);
     },
-    /** The lane as it stands now, read at once. */
+    /** The lane as it stands now: the read it holds, or read at once when something moved since. */
     now(): ArtifactNeedsRead {
-      return settle();
+      return held ? current : settle();
     },
     /** The frame every screen holds now: the `/api/pending` envelope carries it whole. */
     frame(): ArtifactNeedsFrame {
-      return { kind: "artifact.needs", ...settle() };
+      return { kind: "artifact.needs", ...(held ? current : settle()) };
     },
   };
 };

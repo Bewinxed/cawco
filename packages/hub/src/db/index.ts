@@ -128,6 +128,7 @@ import { Context, Effect, Layer } from "effect";
 import { bundledSkills, starterSkills } from "../bundled-skills";
 import { DB_PATH } from "../config";
 import { type DelegateTypesShape, makeDelegateTypes } from "../delegate-types";
+import type { SendHold } from "../delegation-actions";
 import { pluginVersion, skillName, skillVersion } from "../fleet-versions";
 import { hubId } from "../hub-id";
 import { sessionLabel } from "../labels";
@@ -1563,6 +1564,13 @@ export interface DbShape {
    */
   readonly onArtifactsGone: (listener: (gone: GoneArtifact[]) => void) => void;
   /**
+   * `listener` hears that an artifact row was made, changed or deleted,
+   * as the write happens: every write of the table is one of these
+   * (`artifactsDb` create and update, `dropArtifacts`). Needs you's lane
+   * reads again on it (artifacts/lane.ts `moved`).
+   */
+  readonly onArtifactsWritten: (listener: () => void) => void;
+  /**
    * `listener` hears the hashes of the credentials the hub revokes, once
    * the write that revoked them is done and they no longer resolve: a
    * session's end confirmed, a session gone, a credential replaced.
@@ -1644,6 +1652,12 @@ export interface DbShape {
   readonly owedSends: (
     of: { instanceId: string } | { machineId: string }
   ) => SentMessageRow[];
+  /**
+   * The sessions with a send owed to their machine whose hold is one of
+   * `holds`, or none written yet (its keeping never said why): the ids
+   * alone, by the pending sends' index, no send read whole.
+   */
+  readonly owedSessionsHeld: (holds: readonly SendHold[]) => string[];
   /** What a machine is owed, in the order it was asked for. */
   readonly owedSpawns: (
     machineId: string
@@ -3811,6 +3825,14 @@ const make = async (path: string): Promise<DbShape> => {
       : undefined;
   };
 
+  /** Who hears of an artifact row written ({@link DbShape.onArtifactsWritten}). */
+  const writtenListeners = new Set<() => void>();
+  const artifactsWritten = (): void => {
+    for (const listener of writtenListeners) {
+      listener();
+    }
+  };
+
   /** Who hears of the artifacts that went ({@link DbShape.onArtifactsGone}). */
   const goneListeners = new Set<(gone: GoneArtifact[]) => void>();
   /** Artifacts a write deleted, not yet told: each one's preview origin by its id. */
@@ -3866,6 +3888,7 @@ const make = async (path: string): Promise<DbShape> => {
     if (gone.length === 0) {
       return;
     }
+    artifactsWritten();
     if (!goneNoted) {
       goneNoted = new Map();
       queueMicrotask(tellGone);
@@ -5540,6 +5563,9 @@ const make = async (path: string): Promise<DbShape> => {
     },
     onArtifactsGone: (listener) => {
       goneListeners.add(listener);
+    },
+    onArtifactsWritten: (listener) => {
+      writtenListeners.add(listener);
     },
     onSourceMoved: (listener) => {
       movedListeners.add(listener);
@@ -9453,6 +9479,22 @@ const make = async (path: string): Promise<DbShape> => {
         )
         .orderBy(asc(sentMessages.acceptedAt))
         .all(),
+    owedSessionsHeld: (holds) =>
+      db
+        .selectDistinct({ instanceId: sentMessages.instanceId })
+        .from(sentMessages)
+        .where(
+          and(
+            eq(sentMessages.state, "pending"),
+            isNotNull(sentMessages.owed),
+            or(
+              isNull(sentMessages.hold),
+              inArray(sentMessages.hold, [...holds])
+            )
+          )
+        )
+        .all()
+        .map((row) => row.instanceId),
     // By the sessions' ids, so SQLite finds each one's pending sends by its
     // index (`sent_messages_state`): joined to its sessions, it read every
     // send the hub ever kept, at each register (hub-restart-load).
@@ -10422,7 +10464,7 @@ const make = async (path: string): Promise<DbShape> => {
     trackers: trackersDb(db),
     taskLinks: taskLinksOf,
     hubAuth: hubAuthDb(db),
-    artifacts: artifactsDb(db, dropArtifacts, sourceMoved),
+    artifacts: artifactsDb(db, dropArtifacts, sourceMoved, artifactsWritten),
     find: findDb(db),
     findSettings: {
       hideSecrets: () =>

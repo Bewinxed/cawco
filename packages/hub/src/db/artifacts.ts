@@ -342,7 +342,9 @@ export const artifactsDb = (
   /** {@link dropArtifactRows}, its ids told once the write is done (db index.ts `dropArtifacts`). */
   drop: (tx: Deleter, where: SQL | undefined) => void,
   /** A source moved by {@link ArtifactsDb.resource}, told once the write is done (db index.ts `onSourceMoved`). */
-  moved: (move: SourceMoved) => void
+  moved: (move: SourceMoved) => void,
+  /** A row made or changed by {@link ArtifactsDb.create} or {@link ArtifactsDb.update} (db index.ts `onArtifactsWritten`). */
+  written: () => void
 ): ArtifactsDb => ({
   componentsOn: (machineId) =>
     db
@@ -424,20 +426,21 @@ export const artifactsDb = (
         .run();
     });
   },
-  create: ({ source, ...row }) =>
-    artifactOf(
-      db
-        .insert(artifacts)
-        .values({
-          ...row,
-          ...sourceColumnsOf(source),
-          // Minted here, never copied: a held version's row is made from its
-          // artifact's whole, and its origin is its own.
-          origin: crypto.randomUUID(),
-        })
-        .returning()
-        .get()
-    ),
+  create: ({ source, ...row }) => {
+    const made = db
+      .insert(artifacts)
+      .values({
+        ...row,
+        ...sourceColumnsOf(source),
+        // Minted here, never copied: a held version's row is made from its
+        // artifact's whole, and its origin is its own.
+        origin: crypto.randomUUID(),
+      })
+      .returning()
+      .get();
+    written();
+    return artifactOf(made);
+  },
   get: (id) => {
     const row = db.select().from(artifacts).where(eq(artifacts.id, id)).get();
     return row && artifactOf(row);
@@ -678,6 +681,9 @@ export const artifactsDb = (
       .where(eq(artifacts.id, id))
       .returning()
       .get();
+    if (row) {
+      written();
+    }
     return row && artifactOf(row);
   },
   updates: (id) =>

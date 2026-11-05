@@ -938,9 +938,11 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     // A held session burns nothing: the look at the holds answers it.
     const held = new Set(db.atLimit.holds().map((one) => one.instanceId));
     const byAccount = new Map<string, LimitRow[]>();
-    for (const row of db.listInstances()) {
+    // The machine's live rows alone, by the status index: every listed
+    // session read whole, thousands asleep among them, at each pass of every
+    // pair, held the hub's loop (probe-kit hub-live-copy).
+    for (const row of db.liveInstancesOn(machineId)) {
       if (
-        row.machineId === machineId &&
         row.status === "running" &&
         row.forkedFrom === null &&
         row.accountId &&
@@ -1117,7 +1119,12 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     if (cause) {
       notify(cause, machineId, running, heldOutcomes(holdsBefore, tokens));
     }
-    ports.changed();
+    // A pass that moved nothing changed nothing: each look at a hold says its
+    // own (at-limit.ts `act`). Every look runs a pass per pair, and each
+    // change publishes the board and reads Needs you again.
+    if (running.length > 0) {
+      ports.changed();
+    }
   };
 
   /** Passes running now, by provider and machine, with the trigger that came meanwhile (undefined: none). */
