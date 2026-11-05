@@ -78,7 +78,9 @@
   /** What else the page asks, each in words; a card with no words of its own is left to the page. */
   const also = $derived(
     cards.flatMap((id) => {
-      const part = setupWords.alsoAsks[id];
+      const part = Object.hasOwn(setupWords.alsoAsks, id)
+        ? setupWords.alsoAsks[id as keyof typeof setupWords.alsoAsks]
+        : undefined;
       return part ? [part] : [];
     })
   );

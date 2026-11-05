@@ -137,14 +137,18 @@ export const setupWords = {
   firstTask: (stage: string) =>
     `Add the first task to ${stage}, or tell Caw what to work on.`,
   /**
-   * Over the draft while his setup page holds cards beyond the draft (the
-   * project-setup skill's `routines`, `what-moves`): what else it
-   * asks, each part named, and the way to the page where they are answered.
+   * Over the draft while his setup page holds cards beside the draft (the
+   * project-setup skill's `area`, `account`, `routines`, `what-moves`): what
+   * else it asks, each part named, and the way to the page where they are
+   * answered. One entry per card the hub lists beside the Setup (hub
+   * setup.ts `BESIDE_CARDS`, typed by these keys).
    */
   alsoAsks: {
+    area: "its area",
+    account: "the account it runs on",
     routines: "its routines",
     "what-moves": "where its tasks move",
-  } as Record<string, string>,
+  },
   alsoOnPage: (parts: string[]) =>
     `The setup page also asks ${parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : parts[0]}.`,
   openPage: "Open the setup page",

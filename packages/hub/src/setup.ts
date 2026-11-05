@@ -29,6 +29,7 @@ import {
 } from "@cawco/core";
 import { SETUP_PAGE } from "@cawco/core/artifact-needs";
 import type { SetupDrawn } from "@cawco/core/decisions";
+import type { setupWords } from "@cawco/core/words/onboarding";
 import { templateStages } from "./stages";
 import { templateTypes } from "./template-types";
 
@@ -42,11 +43,26 @@ const NO_AREA = "none";
 const OWN_SHAPE = "own";
 
 /**
- * The setup page's cards by id, and what the hub does with each when the
- * person sends the page; a card the hub applies nothing of is Caw's to write
- * after Send.
+ * The cards beside the Setup on the page, by id, and what the hub does with
+ * each when the person sends it. Keyed by the words the board names each by
+ * over the draft (core onboarding.ts `setupWords.alsoAsks`): a card with no
+ * words there, or words with no card here, does not compile.
  */
-export const SETUP_CARDS = [
+const BESIDE_CARDS: Record<keyof typeof setupWords.alsoAsks, string> = {
+  account:
+    'Sets the account the project\'s sessions start on (its conversation, its routines\' runs, its delegates, unless one names its own) to the account id kept under "account", one of Accounts above; "routing" leaves them to the fleet\'s routing. Its connectors are the ones those sessions get.',
+  area: `Puts the project in the area whose id is kept under "area", one of Areas above, or in none with "${NO_AREA}": it takes that area's account, budget, Who decides, delegate types and connections wherever it sets none of its own.`,
+  routines: "Nothing: you make each routine kept.",
+  "what-moves": "Nothing: you move each task to the stage picked for it.",
+};
+
+/**
+ * The setup page's cards by id, and what the hub does with each when the
+ * person sends the page: the Setup's own parts, then the cards beside it
+ * ({@link BESIDE_CARDS}); a card the hub applies nothing of is Caw's to
+ * write after Send.
+ */
+export const SETUP_CARDS: readonly { id: string; send: string }[] = [
   {
     id: "name",
     send: 'Renames the project to the text kept under "name" (the Setup\'s title, as the person left it).',
@@ -67,23 +83,8 @@ export const SETUP_CARDS = [
     id: "delegates",
     send: 'Nothing: you write delegates/<type>.md for each type id kept under "delegates" (the ones the person did not remove).',
   },
-  {
-    id: "account",
-    send: 'Sets the account the project\'s sessions start on (its conversation, its routines\' runs, its delegates, unless one names its own) to the account id kept under "account", one of Accounts above; "routing" leaves them to the fleet\'s routing. Its connectors are the ones those sessions get.',
-  },
-  {
-    id: "area",
-    send: `Puts the project in the area whose id is kept under "area", one of Areas above, or in none with "${NO_AREA}": it takes that area's account, budget, Who decides, delegate types and connections wherever it sets none of its own.`,
-  },
-  {
-    id: "routines",
-    send: "Nothing: you make each routine kept.",
-  },
-  {
-    id: "what-moves",
-    send: "Nothing: you move each task to the stage picked for it.",
-  },
-] as const;
+  ...Object.entries(BESIDE_CARDS).map(([id, send]) => ({ id, send })),
+];
 
 /**
  * The answered parts of a setup the person can ask Caw to put to them again
