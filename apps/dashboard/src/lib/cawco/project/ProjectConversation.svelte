@@ -487,6 +487,26 @@
             />
           {/snippet}
         </Drawer.Close>
+      {:else}
+        <!-- Docked beside the board: its own Close, as the sheet's, the
+             focus back on his seat without the ring (CawFloat's Escape). -->
+        <Tip label={conversationWords.hidePanel}>
+          {#snippet children(tip)}
+            <Button
+              {...tip}
+              aria-label={conversationWords.hidePanel}
+              data-caw-close
+              press="pressable"
+              icon={IconClose}
+              onclick={() => {
+                lead.open = false;
+                lead.anchor?.focus({ focusVisible: false } as FocusOptions);
+              }}
+              size="icon-sm"
+              variant="ghost"
+            />
+          {/snippet}
+        </Tip>
       {/if}
     </div>
   </div>

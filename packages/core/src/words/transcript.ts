@@ -7,7 +7,18 @@
 export const transcriptWords = {
   /** A tab's details card, and the tabs of a pane's group. */
   sessionDetails: "Session details",
-  openSessions: "Open sessions in this group",
+  /**
+   * The tab strip's name: its tabs are chats and projects alike. In a split
+   * each strip says its group's number, the one Move to group names.
+   */
+  openTabs: (group: number, groups: number): string =>
+    groups > 1 ? `Open tabs, group ${group}` : "Open tabs",
+  /** A tab's menu: its place in the workspace's groups, for a chat's tab and a project's alike. */
+  splitRight: "Split right",
+  splitDown: "Split down",
+  moveToGroup: (group: number): string => `Move to group ${group}`,
+  closeTab: "Close",
+  closeOthers: "Close others",
   /** The transcript's landmark, as a screen reader names it. */
   transcript: "Session transcript",
   /** The composer's send. */

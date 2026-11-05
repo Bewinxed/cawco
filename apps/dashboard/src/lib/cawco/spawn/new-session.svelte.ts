@@ -24,6 +24,7 @@ import {
   type SendExtras,
 } from "../client.svelte";
 import { readJson, writeJson } from "../storage";
+import { projectOfTab, tabOfPath } from "../workspace/tabs";
 
 export interface SpawnPrefill {
   cwd?: string;
@@ -111,7 +112,12 @@ $effect.root(() => {
 
 /** The project whose page is open, when one is. */
 function projectHere(): string | undefined {
-  return page.route.id === "/(app)/project/[id]" ? page.params.id : undefined;
+  // The project's tab in front, by the address shown: the workspace moves
+  // between its tabs shallowly, so the route is whichever was entered.
+  return (
+    projectOfTab(tabOfPath((page.shallow?.url ?? page.url).pathname)) ??
+    undefined
+  );
 }
 
 /**

@@ -43,6 +43,7 @@
   import { settling, slot } from "./dock.svelte";
   import { fullSize } from "./full-size.svelte";
   import { createSwipe } from "./gesture.svelte";
+  import { layoutPolicy } from "./layout-policy.svelte";
   import PaneTabs from "./PaneTabs.svelte";
   import { type ProjectSeed, takeProjectSeed } from "./project-seed";
   import { projectOfTab } from "./tabs";
@@ -150,11 +151,20 @@
   /** Whether the reader's keyboard belongs to this group. */
   const isFocusedLeaf = $derived(workspace.focusedLeafId === leaf.id);
   /**
+   * This group's chosen tab is the one seen: every group's on a grid; on a
+   * deck, which draws one group at a time and keeps the others mounted,
+   * the focused group's alone (ProjectPage `front`).
+   */
+  const seen = $derived(isFocusedLeaf || !layoutPolicy.deck);
+  /**
    * The focus rail marks which group the keyboard is in, so it shows only
    * when there is another group to tell it from. With one group (a phone's
-   * deck, an unsplit desk) it would be a line down the edge saying nothing.
+   * deck, an unsplit desk) it would be a line down the edge saying nothing;
+   * in Full size this group alone is drawn, so neither has it.
    */
-  const railShown = $derived(isFocusedLeaf && workspace.leaves.length > 1);
+  const railShown = $derived(
+    isFocusedLeaf && workspace.leaves.length > 1 && !fullSize.on
+  );
 
   /* ── Slots ─────────────────────────────────────────────────────────
      The showing tab first, then every other open tab in the background,
@@ -515,7 +525,11 @@
             {@const projectId = projectOfTab(paneId) ?? ""}
             <div class="flex min-h-0 min-w-0 flex-1 flex-col">
               <RegionBoundary face="page" part="page">
-                <ProjectPage {projectId} seed={seedFor(projectId)} />
+                <ProjectPage
+                  front={isActive && seen}
+                  {projectId}
+                  seed={seedFor(projectId)}
+                />
               </RegionBoundary>
             </div>
           {/if}

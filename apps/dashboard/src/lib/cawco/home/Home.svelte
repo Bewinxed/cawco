@@ -35,10 +35,17 @@
 
   let {
     variant,
+    wide = false,
     markedElsewhere,
   }: {
     /** `page` is the phone's home; `rail` is the wide screen's sidebar. */
     variant: "page" | "rail";
+    /**
+     * The page on a desk, beside the rail (SessionSurface, Fleet pressed with
+     * tabs open): the rail's usage strip and Start session stand there
+     * already, so the page holds the groups alone, at the reading measure.
+     */
+    wide?: boolean;
     /** In the rail: the open conversation's row is the project tree's to mark. */
     markedElsewhere?: (id: string) => boolean;
   } = $props();
@@ -155,6 +162,7 @@
     class={[
       "flex flex-col gap-space-2 data-bare:p-0",
       variant === "page" && "px-space-5 pt-space-5 pb-space-3",
+      wide && "w-full max-w-c-measure",
       variant === "rail" && "px-space-3 pt-space-2 pb-space-1",
     ]}
     data-bare={bare || machinesThere !== null || undefined}
@@ -162,7 +170,7 @@
     <!-- The line every other line on this screen is believed by; live and
          read, it says nothing and takes no room. -->
     <StatusLine />
-    {#if variant === "page" && home.limitsShown}
+    {#if variant === "page" && !wide && home.limitsShown}
       <!-- The phone has no rail: the rail's usage strip stands here (owner
            pick i), on the home's own ground, while a machine is online
            (home `limitsShown`). -->
@@ -181,6 +189,7 @@
     class={[
       "flex flex-col",
       variant === "page" && "gap-space-5 px-space-5 pt-space-2 pb-space-7",
+      wide && "w-full max-w-c-measure",
       variant === "rail" && "gap-space-3 px-space-2 pt-space-1 pb-space-2",
     ]}
   >
@@ -254,7 +263,7 @@
     {/if}
   </div>
 
-  {#if variant === "page" && !noFleet && !machineless}
+  {#if variant === "page" && !wide && !noFleet && !machineless}
     <!-- The phone's thumb reaches the bottom; Start session lives there,
          while a machine is online to start one on. -->
     <div

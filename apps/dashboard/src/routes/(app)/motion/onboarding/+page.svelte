@@ -537,6 +537,7 @@
       <CawFloat
         asksElsewhere={(request) =>
           asksOnBoard && request.toolName === "AskUserQuestion"}
+        front
         {lead}
         projectId={PROJECT}
         projectName={name}

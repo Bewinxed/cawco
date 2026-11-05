@@ -105,6 +105,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { BrowserContext, Page } from "playwright-core";
 import { HUB_TAKE_MEASURE } from "../../../packages/core/src/stream";
+import { transcriptWords } from "../../../packages/core/src/words/transcript";
 import { LIVE_ASLEEP, LIVE_ROWS, scaleFleet } from "../fleet-scale";
 import { type MainThread, OWN_PASS, traceMain } from "../frames";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -220,7 +221,8 @@ const HIDDEN_MS = 60_000;
 /** How long the rest is read for. */
 const IDLE_MS = 60_000;
 const TRANSCRIPT = '[aria-label="Session transcript"]';
-const TAB_STRIP = '[role=tablist][aria-label="Open sessions in this group"]';
+/** The strip's name, prefix-matched: a split's strips add their group's number. */
+const TAB_STRIP = `[role=tablist][aria-label^="${transcriptWords.openTabs(1, 1)}"]`;
 const LEGS = ["scroll", "canvas", "switch", "idle", "nav", "memory"] as const;
 type Leg = (typeof LEGS)[number];
 

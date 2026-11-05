@@ -100,6 +100,25 @@
   );
 
   /**
+   * A wide screen asked for the board: the reader went to Fleet (or walked
+   * back to `/session`) while tabs stood open. The sidebar is a desk's home,
+   * but a Fleet press that the groups filled straight back did nothing
+   * (cold review 60401c37), so the board is drawn here as a phone draws it,
+   * the groups put away behind it, until a tab comes to the front. Only a
+   * press: a desk that opens on `/session` still lands on what it had open.
+   */
+  let deskBoard = $state(false);
+  $effect(() => {
+    if (workspace.activeTab !== null) {
+      untrack(() => {
+        deskBoard = false;
+      });
+    }
+  });
+  /** The board is this surface's page: always on a phone, on a desk when asked. */
+  const boardPage = $derived(homePage || deskBoard);
+
+  /**
    * Whether the conversations are a deck (one group, paged) or a grid: the
    * phone always, a tablet held upright as the `ipad` choice says.
    */
@@ -147,7 +166,7 @@
      never cut off mid-entrance. After that what lands is not kept waiting:
      he fades out over it. Ready with nothing to open is no wait: it
      is where to start, and shows at once. */
-  const detailEmpty = $derived(!homePage && workspace.activeTab === null);
+  const detailEmpty = $derived(!boardPage && workspace.activeTab === null);
   const nothingToOpen = $derived(fleetHome.ready && !fleetHome.landing);
   const waiting = $derived(detailEmpty && !atRest);
   /** The wait outlasted its grace and Caw stands in for it. */
@@ -225,7 +244,7 @@
   };
 
   /** The home page is in front: a narrow screen with no conversation open. */
-  const onBoard = $derived(homePage && workspace.activeTab === null);
+  const onBoard = $derived(boardPage && workspace.activeTab === null);
 
   /**
    * What the app put in front on its own (`land`, `fillGroups`), not the
@@ -240,7 +259,7 @@
      most recently active one. Replaced in the history rather than pushed,
      so Back never walks into a conversation the app picked. */
   $effect(() => {
-    if (!(browser && shown && workspace.restored) || homePage) {
+    if (!(browser && shown && workspace.restored) || boardPage) {
       return;
     }
     if (workspace.leaves.some((leaf) => !leaf.active && leaf.tabs.length > 0)) {
@@ -377,6 +396,9 @@
     const opened = to?.url.pathname.split("/")[2];
     if (type !== "enter" && opened) {
       picked.delete(opened);
+    }
+    if (type !== "enter" && to && tabOfPath(to.url.pathname) === null) {
+      deskBoard = !homePage;
     }
     workspace.followUrl(location.href);
   });
@@ -616,8 +638,9 @@
     inert={!onBoard}
     bind:this={boardEl}
   >
-    {#if homePage}
-      <Home variant="page" />
+    <!-- A desk's board stays drawn while the groups push in over it. -->
+    {#if boardPage || !boardHidden}
+      <Home variant="page" wide={!homePage} />
     {/if}
   </div>
 
