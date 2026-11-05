@@ -1551,7 +1551,7 @@ ssh_preview() {
     || { echo "ASSERTION FAILED: the process of session $id on $name carries no credential: ${vars[*]%%=*}"; return 1; }
   # tool answer: words (only that it answered, and what it said, for the log)
   as_added "$c" "$user" env "${vars[@]}" "$home/.local/bin/cawco" tool artifact_create \
-    "{\"kind\":\"preview\",\"does\":\"try\",\"ask\":\"Try the page and say whether it answers\",\"name\":\"sshadd-preview\",\"port\":$SSH_PREVIEW_PORT}" \
+    "{\"kind\":\"preview\",\"does\":\"try\",\"title\":\"Added machine preview\",\"ask\":\"Try the page and say whether it answers\",\"name\":\"sshadd-preview\",\"port\":$SSH_PREVIEW_PORT}" \
     > "$rigdir/ssh-preview-$name.open" 2>&1 \
     || { echo "ASSERTION FAILED: the session's artifact_create on $name failed: $(cat "$rigdir/ssh-preview-$name.open")"; return 1; }
   echo "the session's artifact_create answered: $(cat "$rigdir/ssh-preview-$name.open")"
@@ -2577,7 +2577,7 @@ ws_served_pid() { as_user "$joinerc" pgrep -o -f "^socat TCP-LISTEN:$WS_SERVED_P
 # shell through the workspace's tool door (`cawco tool`, packages/cli/src/tools.ts), naming what serves the port. Its
 # answer is kept in $rigdir/ws-preview-open: its record (`--record`, the hub's record as one line of JSON, core
 # tool-answer.ts), whose id closes it. The hub's preview port for it is read as the dashboard learns it.
-ws_preview_open() { ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_create --record '{\"kind\":\"preview\",\"does\":\"try\",\"ask\":\"Try the served page and say whether it answers\",\"name\":\"proof-served\",\"port\":$WS_SERVED_PORT,\"serve\":{\"command\":\"socat TCP-LISTEN:\$PORT,fork,reuseaddr EXEC:\$TMPDIR/served.sh\"}}'" > "$rigdir/ws-preview-open"; cat "$rigdir/ws-preview-open"; }
+ws_preview_open() { ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_create --record '{\"kind\":\"preview\",\"does\":\"try\",\"title\":\"Workspace served page\",\"ask\":\"Try the served page and say whether it answers\",\"name\":\"proof-served\",\"port\":$WS_SERVED_PORT,\"serve\":{\"command\":\"socat TCP-LISTEN:\$PORT,fork,reuseaddr EXEC:\$TMPDIR/served.sh\"}}'" > "$rigdir/ws-preview-open"; cat "$rigdir/ws-preview-open"; }
 # The preview's artifact id, from the record its create answered.
 ws_preview_artifact() {
   local id

@@ -652,6 +652,7 @@ const gated: Gated[] = [
   bun("scripts/probe-creates-check.ts", [
     "scripts/probe-kit/",
     "scripts/scratch-fleet.ts",
+    "scripts/binary/",
   ]),
   bun("scripts/design-rules.ts", DASH, "--check"),
   bun("scripts/design-budget-check.ts", ["DESIGN.md"]),

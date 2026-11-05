@@ -21,6 +21,13 @@
  * read where it is written). A leg that proves the refusal writes
  * `title: undefined`, which JSON leaves out.
  *
+ * The release pipeline's shell proofs (scripts/binary/*.sh) call the tool as
+ * a session does, `cawco tool artifact_create … '<json>'`: each such command,
+ * its continued lines joined, must name a `"title"` key. Two of
+ * prove-stage2.sh's (the sshadd rig's preview and the workspace rigs'
+ * `ws_preview_open`) went without one and failed the ship of 7f23cb06e at
+ * stage 2 with "title is required".
+ *
  *   bun scripts/probe-creates-check.ts
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -150,6 +157,43 @@ export const untitledCreates = (file: string, text: string): string[] => {
   });
 };
 
+const SHELL_CREATE = /\btool\s+artifact_create\b/u;
+const SHELL_TITLE = /\\?"title\\?"\s*:/u;
+const SHELL_COMMENT = /^\s*#/u;
+
+/** The lines in a shell `file` whose `cawco tool artifact_create` command names no title key. */
+export const untitledShellCreates = (file: string, text: string): string[] => {
+  const lines = text.split("\n");
+  const refused: string[] = [];
+  lines.forEach((line, at) => {
+    if (!SHELL_CREATE.test(line) || SHELL_COMMENT.test(line)) {
+      return;
+    }
+    let command = line;
+    for (let next = at; lines[next]?.trimEnd().endsWith("\\"); next += 1) {
+      command += `\n${lines[next + 1] ?? ""}`;
+    }
+    if (!SHELL_TITLE.test(command)) {
+      refused.push(`${relative(ROOT, file)}:${at + 1}`);
+    }
+  });
+  return refused;
+};
+
+/** Planted shell creates after a comment: the first two calls (lines 2 and 4) name no title, the last two do. */
+const PLANTED_SHELL = `# a comment naming tool artifact_create is no call
+cawco tool artifact_create \\
+  "{\\"kind\\":\\"preview\\",\\"does\\":\\"try\\",\\"name\\":\\"a\\"}"
+f() { cawco tool artifact_create --record '{"kind":"preview","does":"try","name":"b"}'; }
+cawco tool artifact_create \\
+  "{\\"kind\\":\\"preview\\",\\"title\\":\\"Titled\\",\\"name\\":\\"c\\"}"
+g() { cawco tool artifact_create --record '{\\"title\\":\\"Titled\\",\\"name\\":\\"d\\"}'; }`;
+
+const shellFilesUnder = (dir: string): string[] =>
+  readdirSync(dir)
+    .filter((name) => name.endsWith(".sh"))
+    .map((name) => join(dir, name));
+
 /** Planted mistakes, one of each form, and a titled create beside them: the check finds the first three and nothing else. */
 const PLANTED = `const CREATE = "mcp__cawco__artifact_create";
 await calls.call(fleet, session, CREATE, { kind: "page", name: "a", ask: "x" });
@@ -166,13 +210,28 @@ if (import.meta.main) {
     );
     process.exit(1);
   }
+  const plantedShell = untitledShellCreates(
+    join(ROOT, "planted.sh"),
+    PLANTED_SHELL
+  );
+  if (plantedShell.join() !== "planted.sh:2,planted.sh:4") {
+    console.error(
+      `probe-creates: the planted shell mistakes read as ${plantedShell.join(", ") || "none"}, not lines 2 and 4`
+    );
+    process.exit(1);
+  }
+  const shells = shellFilesUnder(join(ROOT, "scripts/binary"));
   const files = [
     ...filesUnder(join(ROOT, "scripts/probe-kit")),
     join(ROOT, "scripts/scratch-fleet.ts"),
+    ...shells,
   ];
-  const refused = files.flatMap((file) =>
-    untitledCreates(file, readFileSync(file, "utf8"))
-  );
+  const refused = files.flatMap((file) => {
+    const text = readFileSync(file, "utf8");
+    return file.endsWith(".sh")
+      ? untitledShellCreates(file, text)
+      : untitledCreates(file, text);
+  });
   if (refused.length > 0) {
     console.error(
       `probe-creates: ${refused.length} artifact_create input(s) name no title, which the tool requires (write the title; a leg proving the refusal writes \`title: undefined\`):`
