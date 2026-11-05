@@ -64,6 +64,7 @@ import type { Page } from "playwright-core";
 import { setupPageAt } from "../../../packages/core/src/artifact-needs";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
+import { hubFailureWords } from "../../../packages/core/src/words/hub-failure";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolAnswer, toolReply } from "../../tool-calls";
@@ -583,7 +584,9 @@ const routinesCardAt = async (page: Page) => {
  * answers that the Decisions tab draws it; a card chip's show (`card`, as
  * reference-open.svelte.ts `openReference` sends it) lands at that card,
  * and so does its Needs-you row, at its first card not picked (`routines`,
- * its one card since f1342594ee dropped `place`). Then that
+ * its one card since f1342594ee dropped `place`). The show's body in its
+ * shape before 5646cadda, `{ card }`, is refused with a 422 naming `card`
+ * (r487: the hub dropped it and answered the page's top). Then that
  * landing at 1440 and 390: the Decisions tab draws the page with the card
  * in view.
  */
@@ -618,6 +621,25 @@ const setupAtCard = async (kit: Kit, fleet: KitFleet) => {
       href: error instanceof Error ? error.message : String(error),
     }));
   const atCard = setupPageAt(office.id, "routines");
+  // The shape before 5646cadda, `{ card }`: refused with a 422 naming the
+  // field (hub unknown-fields.ts), never answered as a show of the page's
+  // top, as r487 was.
+  const oldShape = await fleet
+    .api(`/api/instances/${office.session}/artifacts/${id}/show`, {
+      card: "routines",
+    })
+    .then(
+      (answer) => `answered ${JSON.stringify(answer)}`,
+      (error: unknown) =>
+        error instanceof Error ? error.message : String(error)
+    );
+  kit.check(
+    "9: the show refuses the card in the old shape with a 422 naming `card`, and takes it as `at: { card }`",
+    oldShape.includes(": 422 ") &&
+      oldShape.endsWith(hubFailureWords.unknownFields("body", ["card"])) &&
+      shown.href === atCard,
+    JSON.stringify({ oldShape, shown })
+  );
   const needs = await fleet.api<{
     needs: { artifactId: string; href: string }[];
   }>("/api/artifact-needs");

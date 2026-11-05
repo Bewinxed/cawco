@@ -572,6 +572,7 @@ import { artifactWords } from "@cawco/core/words/artifacts";
 import { containerWords } from "@cawco/core/words/containers";
 import { contextWords } from "@cawco/core/words/context";
 import { turnCutWords } from "@cawco/core/words/cuts";
+import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { leakWords } from "@cawco/core/words/leaks";
 import { machineReadWords } from "@cawco/core/words/machine-reads";
@@ -1072,6 +1073,7 @@ import {
 import { createTreeStops } from "./tree-stops";
 import { turnState } from "./turn-state";
 import { turnUsageOf } from "./turn-usage";
+import { unknownFieldsOf } from "./unknown-fields";
 import { unwatchedMode } from "./unwatched-mode";
 import { TOOL_RELEASES } from "./upstreams";
 import { UsageCounter } from "./usage-count";
@@ -32342,7 +32344,28 @@ export const createServer = (
   }
 
   return Object.assign(
-    new Elysia()
+    // Every body, query and params schema closed (Elysia's
+    // `nonAdditionalProperties`): a field a route doesn't take is refused,
+    // never dropped. Normalizing dropped it, so a caller on an old shape
+    // (setup-send's `{ card }` once the show took `{ at: { card } }`,
+    // 5646cadda) was answered as if it had sent nothing. No route declares
+    // a response schema, so none is held to one.
+    new Elysia({ normalize: false })
+      // A request with a field its route doesn't take: a 422 naming each
+      // (unknown-fields.ts), before any plugin's or route's own error
+      // words, which would say only that the shape was wrong.
+      .onError("global", ({ error }) => {
+        const unknown = unknownFieldsOf(error);
+        return unknown
+          ? new Response(
+              hubFailureWords.unknownFields(unknown.on, unknown.fields),
+              {
+                status: 422,
+                headers: { "content-type": "text/plain; charset=utf-8" },
+              }
+            )
+          : undefined;
+      })
       // Every answer the hub sends, its text compressed for the client that
       // asked (core compress-answer.ts): the phone and the machines reach
       // the hub here, and the dashboard's server asks it for none. A

@@ -2896,16 +2896,22 @@ export const accountRemoval = (
 export const deleteAccount = (id: string): Promise<{ ok: true }> =>
   accountsWrite(`/api/accounts/${encodeURIComponent(id)}`, "DELETE");
 
-/** Sets how a provider's new sessions choose among its accounts. */
+/**
+ * Sets how a provider's new sessions choose among its accounts: the fields
+ * the hub's route takes. `atLimit.delegateWork` is the hub's to send (core
+ * `AtLimit`) and no route takes it, so the routing read back goes without it.
+ */
 export const putRouting = (
   provider: AccountProvider,
   routing: Omit<ProviderRouting, "provider">
-): Promise<ProviderRouting> =>
-  accountsWrite(
+): Promise<ProviderRouting> => {
+  const { delegateWork: _sentOnly, ...atLimit } = routing.atLimit;
+  return accountsWrite(
     `/api/accounts/routing/${encodeURIComponent(provider)}`,
     "PUT",
-    routing
+    { yours: routing.yours, delegates: routing.delegates, atLimit }
   );
+};
 
 const signinUrl = (id: string, machineId: string) =>
   `/api/accounts/${encodeURIComponent(id)}/machines/${encodeURIComponent(machineId)}/signin`;

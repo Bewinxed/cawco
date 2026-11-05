@@ -19,6 +19,14 @@ export const hubFailureWords = {
    */
   unreadRequest: "The hub couldn't read the request this page sent",
   /**
+   * The hub's 422 for a request carrying fields its route doesn't take
+   * (hub unknown-fields.ts): each named by its dotted path, `on` the part
+   * of the request it came in (body, query). Never dropped quietly: a
+   * caller on an old shape hears which field.
+   */
+  unknownFields: (on: string, fields: string[]) =>
+    `The request's ${on} has ${fields.map((one) => `\`${one}\``).join(", ")}, which this route doesn't take.`,
+  /**
    * A request that got no answer: what happened, why, and the way back. The
    * browser's own words ("Failed to fetch") are never the what-happened.
    */

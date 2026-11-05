@@ -50,11 +50,28 @@ export interface ProjectTypes {
   types: ProjectDelegateType[];
 }
 
-/** Create and edit are the same route on the hub — `PUT` upserts by name. */
+/**
+ * Create and edit are the same route on the hub — `PUT` upserts by name. Its
+ * body is the fields the route takes: the name rides the path, and
+ * `cawcoTodos` and `role` are the hub's to send (core `DelegateType`).
+ */
 export const saveDelegateType = (draft: DelegateType): Promise<DelegateType> =>
   hubCall<DelegateType>(
     `/api/delegate-types/${encodeURIComponent(draft.name)}`,
-    { method: "PUT", ...jsonBody(draft) },
+    {
+      method: "PUT",
+      ...jsonBody({
+        description: draft.description,
+        harness: draft.harness,
+        model: draft.model,
+        effort: draft.effort,
+        skills: draft.skills,
+        denyTools: draft.denyTools,
+        mayStart: draft.mayStart,
+        account: draft.account,
+        connections: draft.connections,
+      }),
+    },
     `save ${draft.name || "the delegate type"}`
   );
 
