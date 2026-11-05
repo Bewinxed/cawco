@@ -225,7 +225,10 @@ const ancestorsOf = async (page: Page, url: string): Promise<string[]> => {
     { timeout: DRAWN_MS }
   );
   await open(page, url, FRAME);
-  const policy = (await answer).headers()["content-security-policy"] ?? "";
+  // headerValue's `null` is a missing header; `headers()` types its index as
+  // `string`, though a missing one reads `undefined`.
+  const policy =
+    (await (await answer).headerValue("content-security-policy")) ?? "";
   return (
     policy
       .split(";")

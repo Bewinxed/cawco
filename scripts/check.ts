@@ -645,7 +645,17 @@ const gated: Gated[] = [
     "package.json",
   ]),
   run("packages/hub", "migrations:check", []),
-  run("packages/hub", "stored-shapes:check", [...PKG, "apps/dashboard/src/"]),
+  // The types it reads come through packages/hub/tsconfig.json, which
+  // extends tsconfig.base.json, which extends tsconfig.paths.json, and from
+  // the installed packages (TypeScript, @types/node, the MCP SDK, zod),
+  // which bun.lock pins.
+  run("packages/hub", "stored-shapes:check", [
+    ...PKG,
+    "apps/dashboard/src/",
+    "tsconfig.base.json",
+    "tsconfig.paths.json",
+    "bun.lock",
+  ]),
   run("packages/hub", "stored-writes:check", [
     "packages/core/src/stored-json.ts",
     "packages/core/src/stored-types.ts",

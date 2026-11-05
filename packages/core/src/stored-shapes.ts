@@ -791,7 +791,7 @@ const SignalsShape = declared(
     "SIGINFO",
   ]),
   "Signals",
-  "../../.cawco/workspace-cache/bun/links/@types+node@26.6.4-26253d8c712013fe/node_modules/@types/node/process.d.ts"
+  "@types/node/process.d.ts"
 );
 
 const SessiondProcInfoShape = declared(

@@ -47,6 +47,7 @@ const HUB_SRC = join(HUB, "src/");
 const CORE_SRC = join(ROOT, "packages/core/src/");
 const SDK =
   /node_modules\/@modelcontextprotocol\/sdk\/dist\/esm\/(.+)\.d\.ts$/u;
+const NODE_MODULES = "/node_modules/";
 const check = process.argv.includes("--check");
 const JS = /\.js$/u;
 const TS_FILE = /\.ts$/u;
@@ -353,6 +354,12 @@ const specifierOf = (file: string, out: string): string => {
   const sdk = SDK.exec(file);
   if (sdk) {
     return `@modelcontextprotocol/sdk/${sdk[1]}.js`;
+  }
+  if (file.includes(NODE_MODULES)) {
+    // A path to it would run through the install cache ({@link declaredInOf}).
+    throw new Error(
+      `stored-shapes: ${file} is a package's file, which a generated file can import only by a specifier written here, as the MCP SDK's are`
+    );
   }
   if (file.startsWith(CORE_SRC) && out !== CORE_OUT) {
     const sub = `./${file.slice(CORE_SRC.length).replace(TS_FILE, "")}`;
@@ -781,11 +788,24 @@ interface Made {
 const made = new Map<string, Made[]>(OUTS.map((out) => [out, []]));
 /** Records each machine-side schema's declared type (core stored-types.ts `declared`), which a refused write names. */
 const DECLARED = join(CORE_SRC, "stored-types.ts");
-/** Where a declaration is, as a refused write names it: its path from the repository's root, or the MCP SDK's module. */
+/**
+ * Where a declaration is, as a refused write names it: the MCP SDK's module,
+ * a package's file by its path within node_modules, or its path from the
+ * repository's root. A package's file is never named from the root: Bun's
+ * isolated linker keeps it in the install cache, whose place beside the
+ * checkout differs on each machine and workspace
+ * (`../../.cawco/workspace-cache/bun/links/@types+node@…/node_modules/@types/node/process.d.ts`).
+ */
 const declaredInOf = (declaration: Declaration): string => {
   const file = declaration.getSourceFile().fileName;
   const sdk = SDK.exec(file);
-  return sdk ? `@modelcontextprotocol/sdk/${sdk[1]}` : relative(ROOT, file);
+  if (sdk) {
+    return `@modelcontextprotocol/sdk/${sdk[1]}`;
+  }
+  const inPackage = file.lastIndexOf(NODE_MODULES);
+  return inPackage === -1
+    ? relative(ROOT, file)
+    : file.slice(inPackage + NODE_MODULES.length);
 };
 const proved = new Map<string, string[]>(OUTS.map((out) => [out, []]));
 const coreNames = new Set(
