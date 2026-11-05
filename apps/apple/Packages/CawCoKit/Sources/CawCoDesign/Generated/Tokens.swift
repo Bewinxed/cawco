@@ -728,10 +728,6 @@ public enum Size {
     public static let cBlockView: Double = 248
     /// The tallest a list block's card stands on a desk before its rows scroll inside it, so forty routines never push the blocks after them out of view. A phone's page is its one scroller, and there a card stands at its rows' height.
     public static let cBlockBodyMax: Double = 480
-    /// The drop indicator a dragged block's place is shown by: a brand-solid line across the target block's edge, in the gap between blocks.
-    public static let cBlockDropLine: Double = 2
-    /// The dot at the drop indicator's leading end, brand-solid.
-    public static let cBlockDropDot: Double = 6
     /// The delegate tray's row: a chip, and the step down to the pill.
     public static let cTrayChip: Double = 28
     /// `cTrayChip` under a coarse pointer (touch).

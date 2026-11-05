@@ -84,6 +84,7 @@
   import { ACTIVITY_LABEL, FAILED_LABEL, UNKNOWN_LABEL } from "../activity";
   import { cawco, isFailed, isStale } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
+  import Sortable from "../drag/Sortable.svelte";
   import { frameSize } from "../frame-observer";
   import type { HubRead } from "../hub-read";
   import { conversationHref } from "../links";
@@ -94,7 +95,7 @@
   import { newSession } from "../spawn/new-session.svelte";
   import TreeMark from "../TreeMark.svelte";
   import { workingSet } from "../working-set.svelte";
-  import { dropHint, tabDropTarget } from "./dnd.svelte";
+  import { coarse, stripTabs } from "./dnd.svelte";
   import { cardWidthIn, placeUnder } from "./hang-place";
   import { layoutPolicy } from "./layout-policy.svelte";
   import SessionDetails from "./SessionDetails.svelte";
@@ -106,7 +107,6 @@
     type StatusTone,
     sessionStatusOf,
   } from "./session-status";
-  import { noNativeDrag, pressTab, swallowClick } from "./tab-drag.svelte";
   import { projectHref, projectOfTab } from "./tabs";
   import { warm } from "./warm.svelte";
   import { contextOf, type LeafNode, workspace } from "./workspace.svelte";
@@ -233,7 +233,8 @@
   const arrivals = new Map<string, number>();
   let present = new Set<string>();
   const tabs = $derived.by(() => {
-    const ids = leaf.tabs;
+    // As they stand while a tab is in the air (dnd.svelte `stripTabs`).
+    const ids = stripTabs(leaf.id, leaf.tabs);
     // The strip's first word of a new order, before its each block lays it
     // out (`noteOrder`).
     untrack(() => noteOrder([...ids]));
@@ -848,7 +849,7 @@
   // the page out anyway, rather than here, where reading them would lay it
   // out a second time inside the change — pane and all.
   $effect(() => {
-    const next = [...leaf.tabs];
+    const next = [...stripTabs(leaf.id, leaf.tabs)];
     untrack(() => {
       const pending = flip;
       if (!pending) {
@@ -1167,6 +1168,16 @@
     y: number;
   }
 
+  /** The click a pull's release would send the tab is not one. */
+  function swallowClick(node: HTMLElement): void {
+    const swallow = (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    node.addEventListener("click", swallow, { capture: true, once: true });
+    setTimeout(() => node.removeEventListener("click", swallow, true), 400);
+  }
+
   /** A press's travel so far: too short to say, a pull down, or not one. */
   function pullVerdict(dx: number, dy: number): "wait" | "pull" | "not" {
     if (Math.hypot(dx, dy) < PULL_SLOP) {
@@ -1388,98 +1399,101 @@
       {@const cardHere = cardJoined && detailId === tab.id}
       {@const menuHere = menuHung === tab.id}
       {@const restZ = untrack(() => restAt(i))}
-      <!-- The caret marks where a drop would land, drawn on the side the
-           pointer is nearest. Graphite, like every structural mark here:
-           the one loud colour belongs to a session asking for something. -->
-      <!-- Hovering the whole tab (its buttons too) times the details card;
+      <!-- Carried by the pointer (workspace/dnd): the tab itself lifts out
+           of the strip, and the strip's tabs make room as it passes, slid
+           on the strip's own clock (`slide`), never dnd kit's. -->
+      <Sortable
+        accept="tab"
+        data={{
+          kind: "tab",
+          leafId: leaf.id,
+          sessionId: tab.id,
+          tabs: leaf.tabs,
+        }}
+        disabled={coarse()}
+        group={leaf.id}
+        id={tab.id}
+        index={i}
+        label={tab.label}
+        of={tabs.length}
+        slides={false}
+        type="tab"
+      >
+        {#snippet children(thing)}
+          <!-- Hovering the whole tab (its buttons too) times the details card;
            the keyboard reaches the same card from the tab's link. -->
-      <!-- As wide as its title, its pad and its controls, up to the cap; only
+          <!-- As wide as its title, its pad and its controls, up to the cap; only
            a title past the cap ends in an ellipsis, and a strip that will
            not fit scrolls (TabsList) rather than squeezing its tabs. A
            finger's sideways drag is the strip's scroll; a downward one is
-           the tab's (`pullMenu`), never the page's. Where a drop would land:
-           a 2px rule in the gap, on the near side; the tab that draws it
-           stands over the strip while it does, so no neighbour's shape
-           covers the rule. -->
-      <!-- svelte-ignore a11y_no_static_element_interactions: a press here drags the tab or pulls its menu; the keyboard reaches the tab by its link -->
-      <div
-        data-slot="tab"
-        data-needs={tab.activity === "blocked" || undefined}
-        data-drop-before={dropHint.tabIndexIn(leaf.id) === i || undefined}
-        data-drop-after={(dropHint.tabIndexIn(leaf.id) === i + 1 &&
-          i === tabs.length - 1) ||
-          undefined}
-        class="group/tab pane-tab-pads pane-tab-rims pane-tab-needs relative flex max-w-c-tab-max-w min-w-0 flex-none touch-pan-x data-drop-after:z-(--drop-z) data-drop-before:z-(--drop-z) motion-safe:reordering:not-data-following:transition-[translate] motion-safe:reordering:not-data-following:duration-(--dur-panel) motion-safe:reordering:not-data-following:ease-drawer data-drop-before:before:absolute data-drop-before:before:inset-y-space-row data-drop-before:before:-start-space-row data-drop-before:before:z-4 data-drop-before:before:w-space-row data-drop-before:before:rounded-pill data-drop-before:before:bg-ink-strong data-drop-after:after:absolute data-drop-after:after:inset-y-space-row data-drop-after:after:-end-space-row data-drop-after:after:z-4 data-drop-after:after:w-space-row data-drop-after:after:rounded-pill data-drop-after:after:bg-ink-strong"
-        style:--drop-z="calc(var(--stack-top) + 1)"
-        data-chosen={chosen ? "" : undefined}
-        data-flush={hungFlush(cardHere, menuHere)}
-        data-hung={cardHere || menuHere ? "" : undefined}
-        data-tone={tab.tone}
-        oncontextmenucapture={anchorMenu}
-        onpointerdown={(event) => {
-          pressedTab(chosen);
-          if (!chosen) {
-            warm.reach(leaf.id, tab.id);
-          }
-          pullMenu(tab.id, event);
-          pressTab(event, {
-            leafId: leaf.id,
-            sessionId: tab.id,
-            onlift: () => {
-              clearTimeout(timer);
-              closeDetails();
-            },
-          });
-        }}
-        onpointerenter={(event) => {
-          // A tab that came under a pointer at rest was not pointed at:
-          // nothing to warm and no card to open. Clicking a tab and then
-          // splitting (`mod+\`) slid its neighbour under the pointer and
-          // opened that neighbour's card; a scroll of the strip carried
-          // tab after tab under it and warmed each one's conversation.
-          if (movedTo?.x === event.clientX && movedTo.y === event.clientY) {
-            return;
-          }
-          rebuildScheduler.prepare(tab.id);
-          if (!chosen) {
-            warm.reach(leaf.id, tab.id);
-          }
-          hoverTab(tab.id, event);
-        }}
-        onpointerleave={() => {
-          warm.leave(leaf.id, tab.id);
-          leaveDetails();
-        }}
-        style:--lone-end={Number(i === tabs.length - 1)}
-        style:--lone-start={Number(i === 0)}
-        style:--rim-full={RIM_STRENGTH[tab.tone].full}
-        style:--rim-ink="var(--tone)"
-        style:--rim-rest={RIM_STRENGTH[tab.tone].rest}
-        style:--sheet={cardHere || menuHere
-          ? "var(--surface-recess)"
-          : undefined}
-        style:--tab-fill={cardHere || menuHere
-          ? "var(--surface-recess)"
-          : undefined}
-        style:--tab-hover={cardHere || menuHere
-          ? "var(--surface-recess)"
-          : undefined}
-        style:--tone={RIM_INK[tab.tone]}
-        style:--z-rest={restZ}
-        use:tabDropTarget={{ leafId: leaf.id, index: i, sessionId: tab.id }}
-        out:leavingTab={tab.id}
-        {@attach attachmentsOf(tab.id).enter}
-        {@attach attachmentsOf(tab.id).land}
-        {@attach noNativeDrag}
-      >
-        <!-- Its shadow on the tab behind it, first so its own card covers
+           the tab's (`pullMenu`), never the page's. -->
+          <!-- svelte-ignore a11y_no_static_element_interactions: a press here drags the tab or pulls its menu; the keyboard reaches the tab by its link -->
+          <div
+            data-slot="tab"
+            data-needs={tab.activity === "blocked" || undefined}
+            class="group/tab pane-tab-pads pane-tab-rims pane-tab-needs relative flex max-w-c-tab-max-w min-w-0 flex-none touch-pan-x"
+            data-chosen={chosen ? "" : undefined}
+            data-flush={hungFlush(cardHere, menuHere)}
+            data-hung={cardHere || menuHere ? "" : undefined}
+            data-tone={tab.tone}
+            oncontextmenucapture={anchorMenu}
+            onpointerdown={(event) => {
+              pressedTab(chosen);
+              if (!chosen) {
+                warm.reach(leaf.id, tab.id);
+              }
+              pullMenu(tab.id, event);
+            }}
+            onpointerenter={(event) => {
+              // A tab that came under a pointer at rest was not pointed at:
+              // nothing to warm and no card to open. Clicking a tab and then
+              // splitting (`mod+\`) slid its neighbour under the pointer and
+              // opened that neighbour's card; a scroll of the strip carried
+              // tab after tab under it and warmed each one's conversation.
+              if (movedTo?.x === event.clientX && movedTo.y === event.clientY) {
+                return;
+              }
+              rebuildScheduler.prepare(tab.id);
+              if (!chosen) {
+                warm.reach(leaf.id, tab.id);
+              }
+              hoverTab(tab.id, event);
+            }}
+            onpointerleave={() => {
+              warm.leave(leaf.id, tab.id);
+              leaveDetails();
+            }}
+            style:--lone-end={Number(i === tabs.length - 1)}
+            style:--lone-start={Number(i === 0)}
+            style:--rim-full={RIM_STRENGTH[tab.tone].full}
+            style:--rim-ink="var(--tone)"
+            style:--rim-rest={RIM_STRENGTH[tab.tone].rest}
+            style:--sheet={cardHere || menuHere
+              ? "var(--surface-recess)"
+              : undefined}
+            style:--tab-fill={cardHere || menuHere
+              ? "var(--surface-recess)"
+              : undefined}
+            style:--tab-hover={cardHere || menuHere
+              ? "var(--surface-recess)"
+              : undefined}
+            style:--tone={RIM_INK[tab.tone]}
+            style:--z-rest={restZ}
+            out:leavingTab={tab.id}
+            role="presentation"
+            tabindex="-1"
+            {@attach attachmentsOf(tab.id).enter}
+            {@attach attachmentsOf(tab.id).land}
+            {@attach thing.attach}
+          >
+            <!-- Its shadow on the tab behind it, first so its own card covers
              what casts it. Where two tabs overlap, the one in front casts
              its edge on the one behind (`shadow-tab-start`,
              `shadow-tab-end`, in `tab-shade`), so each reads as its own
              folder, rimmed or not. Only sideways: not from the strip's first
              tab's leading side or its last tab's trailing side
              (`--lone-start`/`--lone-end`) unless it is lifted
-             (`data-lifted`), standing over the strip, and nothing above a
+             (`data-dnd-dragging`), standing over the strip, and nothing above a
              tab's top or below the shelf's line. The chosen tab's cast (`data-chosen`)
              comes and goes with the choice, on its clock. The edge is cast
              by boxes of their own under the tab's shape, in its stack: the
@@ -1491,201 +1505,207 @@
              mask, so the shade's box is the box the tab's shape is drawn on,
              one flare wider each side, the casting boxes set back in by the
              flare). -->
-        <span
-          data-slot="shade"
-          aria-hidden="true"
-          class="pointer-events-none absolute inset-x-(--shade-x) inset-y-0 z-0 mask-(--shade-mask)"
-          style:--shade-mask={"linear-gradient(to bottom, var(--mask-opaque) calc(100% - 2 * var(--flare)), transparent calc(100% - var(--flare)))"}
-          style:--shade-x="calc(-1 * var(--flare))"
-          style:--cast-start="calc(var(--flare) + var(--slope-start))"
-          style:--cast-end="calc(var(--flare) + var(--slope-end))"
-          style:--cast-r="var(--radius) var(--radius) 0 0"
-          ><span
-            class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-surface-recess-deep opacity-(--cast-op) shadow-tab-start group-data-chosen/tab:shadow-tab-start-chosen group-data-lifted/tab:opacity-100 motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
-            style:--cast-op="calc(1 - var(--lone-start, 0))"
-          ></span><span
-            class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-surface-recess-deep opacity-(--cast-op) shadow-tab-end group-data-chosen/tab:shadow-tab-end-chosen group-data-lifted/tab:opacity-100 motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
-            style:--cast-op="calc(1 - var(--lone-end, 0))"
-          ></span></span
-        >
-        <!-- The tab's options: a finger's hanging menu and a mouse's both. -->
-        {#snippet options()}
-          <!-- A conversation's own; a project's tab moves, splits and
+            <span
+              data-slot="shade"
+              aria-hidden="true"
+              class="pointer-events-none absolute inset-x-(--shade-x) inset-y-0 z-0 mask-(--shade-mask)"
+              style:--shade-mask={"linear-gradient(to bottom, var(--mask-opaque) calc(100% - 2 * var(--flare)), transparent calc(100% - var(--flare)))"}
+              style:--shade-x="calc(-1 * var(--flare))"
+              style:--cast-start="calc(var(--flare) + var(--slope-start))"
+              style:--cast-end="calc(var(--flare) + var(--slope-end))"
+              style:--cast-r="var(--radius) var(--radius) 0 0"
+              ><span
+                class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-surface-recess-deep opacity-(--cast-op) shadow-tab-start group-data-chosen/tab:shadow-tab-start-chosen group-data-dnd-dragging/tab:opacity-100 motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
+                style:--cast-op="calc(1 - var(--lone-start, 0))"
+              ></span><span
+                class="absolute inset-y-0 start-(--cast-start) end-(--cast-end) rounded-(--cast-r) bg-surface-recess-deep opacity-(--cast-op) shadow-tab-end group-data-chosen/tab:shadow-tab-end-chosen group-data-dnd-dragging/tab:opacity-100 motion-safe:transition-[box-shadow] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease)"
+                style:--cast-op="calc(1 - var(--lone-end, 0))"
+              ></span></span
+            >
+            <!-- The tab's options: a finger's hanging menu and a mouse's both. -->
+            {#snippet options()}
+              <!-- A conversation's own; a project's tab moves, splits and
                closes as one does. -->
-          {#if !tab.projectId}
-            <ContextMenu.Item
-              onSelect={() => {
-                const anchor = anchorOf(tab.id);
-                if (anchor) {
-                  showDetails(tab.id, anchor, true);
-                }
-              }}
-            >
-              <IconInfo />
-              <span>{transcriptWords.sessionDetails}</span>
-            </ContextMenu.Item>
-            <ContextMenu.Item
-              onSelect={() =>
-                continueInNewSession(continueSourceOf(tab.id, tab.label))}
-            >
-              <IconArrowRight />
-              <span>Continue in new session…</span>
-            </ContextMenu.Item>
-          {/if}
-          {@const row = cawco.rowOf(tab.id)}
-          {#if row}
-            <AccountSubmenu instance={row} />
-          {/if}
-          <!-- Every gesture has a command that does the same thing. Splitting
+              {#if !tab.projectId}
+                <ContextMenu.Item
+                  onSelect={() => {
+                    const anchor = anchorOf(tab.id);
+                    if (anchor) {
+                      showDetails(tab.id, anchor, true);
+                    }
+                  }}
+                >
+                  <IconInfo />
+                  <span>{transcriptWords.sessionDetails}</span>
+                </ContextMenu.Item>
+                <ContextMenu.Item
+                  onSelect={() =>
+                    continueInNewSession(continueSourceOf(tab.id, tab.label))}
+                >
+                  <IconArrowRight />
+                  <span>Continue in new session…</span>
+                </ContextMenu.Item>
+              {/if}
+              {@const row = cawco.rowOf(tab.id)}
+              {#if row}
+                <AccountSubmenu instance={row} />
+              {/if}
+              <!-- Every gesture has a command that does the same thing. Splitting
                  and moving are reachable from here before drag-and-drop exists,
                  and stay reachable for anyone not using a pointer. -->
-          {#if splits}
-            <ContextMenu.Item
-              onSelect={() => workspace.split(leaf.id, "right", tab.id)}
-            >
-              <IconSplitRight />
-              <span>{transcriptWords.splitRight}</span>
-            </ContextMenu.Item>
-            <ContextMenu.Item
-              onSelect={() => workspace.split(leaf.id, "bottom", tab.id)}
-            >
-              <IconSplitDown />
-              <span>{transcriptWords.splitDown}</span>
-            </ContextMenu.Item>
-          {/if}
-          {#if otherLeaves.length > 0}
-            <ContextMenu.Separator />
-            {#each otherLeaves as other (other.id)}
-              <ContextMenu.Item
-                onSelect={() => workspace.move(tab.id, other.id)}
-              >
-                <IconMoveTab />
-                <span
-                  >{transcriptWords.moveToGroup(
-                    workspace.leaves.findIndex((one) => one.id === other.id) + 1
-                  )}</span
+              {#if splits}
+                <ContextMenu.Item
+                  onSelect={() => workspace.split(leaf.id, "right", tab.id)}
                 >
+                  <IconSplitRight />
+                  <span>{transcriptWords.splitRight}</span>
+                </ContextMenu.Item>
+                <ContextMenu.Item
+                  onSelect={() => workspace.split(leaf.id, "bottom", tab.id)}
+                >
+                  <IconSplitDown />
+                  <span>{transcriptWords.splitDown}</span>
+                </ContextMenu.Item>
+              {/if}
+              {#if otherLeaves.length > 0}
+                <ContextMenu.Separator />
+                {#each otherLeaves as other (other.id)}
+                  <ContextMenu.Item
+                    onSelect={() => workspace.move(tab.id, other.id)}
+                  >
+                    <IconMoveTab />
+                    <span
+                      >{transcriptWords.moveToGroup(
+                        workspace.leaves.findIndex(
+                          (one) => one.id === other.id
+                        ) + 1
+                      )}</span
+                    >
+                  </ContextMenu.Item>
+                {/each}
+              {/if}
+              <ContextMenu.Separator />
+              <ContextMenu.Item onSelect={() => workspace.close(tab.id)}>
+                <IconCloseTab />
+                <span>{transcriptWords.closeTab}</span>
               </ContextMenu.Item>
-            {/each}
-          {/if}
-          <ContextMenu.Separator />
-          <ContextMenu.Item onSelect={() => workspace.close(tab.id)}>
-            <IconCloseTab />
-            <span>{transcriptWords.closeTab}</span>
-          </ContextMenu.Item>
-          <ContextMenu.Item
-            disabled={leaf.tabs.length < 2}
-            onSelect={() => {
-              for (const id of [...leaf.tabs]) {
-                if (id !== tab.id) {
-                  workspace.close(id);
-                }
+              <ContextMenu.Item
+                disabled={leaf.tabs.length < 2}
+                onSelect={() => {
+                  for (const id of [...leaf.tabs]) {
+                    if (id !== tab.id) {
+                      workspace.close(id);
+                    }
+                  }
+                }}
+              >
+                <IconCloseOthers />
+                <span>{transcriptWords.closeOthers}</span>
+              </ContextMenu.Item>
+              <ContextMenu.Separator />
+              <ContextMenu.CopyItem
+                text={new URL(tab.href, location.origin).href}
+                what="Link"
+              >
+                {commonWords.copyLink}
+              </ContextMenu.CopyItem>
+            {/snippet}
+            <ContextMenu.Root
+              bind:open={
+                () => menuFor === tab.id, (open) => setMenu(tab.id, open)
               }
-            }}
-          >
-            <IconCloseOthers />
-            <span>{transcriptWords.closeOthers}</span>
-          </ContextMenu.Item>
-          <ContextMenu.Separator />
-          <ContextMenu.CopyItem
-            text={new URL(tab.href, location.origin).href}
-            what="Link"
-          >
-            {commonWords.copyLink}
-          </ContextMenu.CopyItem>
-        {/snippet}
-        <ContextMenu.Root
-          bind:open={() => menuFor === tab.id, (open) => setMenu(tab.id, open)}
-        >
-          <!-- No tabindex of its own: the box is `display: contents` and
+            >
+              <!-- No tabindex of its own: the box is `display: contents` and
                never takes focus, and one made it a focusable child of the
                tablist that is not a tab (axe, aria-required-children). -->
-          <ContextMenu.Trigger box="none" tabindex={null}>
-            <TabItem
-              aria-expanded={menuFor === tab.id}
-              aria-haspopup="menu"
-              aria-keyshortcuts="Delete Shift+F10"
-              aria-label={tab.projectId
-                ? `${tab.label}, ${tab.statusLabel}`
-                : `${tab.label}, ${tab.statusLabel}${chosen ? " — open session details" : ""}`}
-              data-session-tab={tab.id}
-              flush={hungFlush(cardHere, menuHere)}
-              hung={cardHere || menuHere}
-              href={tab.href}
-              label={tab.label}
-              onauxclick={(event) => middleClose(tab.id, event)}
-              onblur={() => {
-                warm.leave(leaf.id, tab.id);
-                warm.besides([]);
-              }}
-              onclick={(event) => clickTab(tab.id, event)}
-              onfocus={(event) => {
-                // The pane is laid out while the focus rests on its tab.
-                if (!chosen) {
-                  warm.reach(leaf.id, tab.id);
-                }
-                // The keyboard's focus: the tabs the next arrow key lands on
-                // are reached for now, ahead of the key that chooses one
-                // (warm.svelte.ts). A pressed tab is focused too, and its
-                // pointer reached for it by hovering: its neighbours stay held.
-                warm.besides(
-                  (event.currentTarget as HTMLElement).matches(":focus-visible")
-                    ? besideOf(tab.id)
-                    : []
-                );
-              }}
-              onkeydown={(event) => {
-                // A key on a tab the focus already rests on makes it the
-                // keyboard's focus with no focus event (a pressed tab, a
-                // focus a script set): its neighbours are reached for from here.
-                warm.besides(besideOf(tab.id));
-                if (event.key === "ArrowDown" || event.key === " ") {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  const anchor = anchorOf(tab.id);
-                  if (anchor) {
-                    showDetails(tab.id, anchor, true);
-                  }
-                } else if (event.key === "Delete") {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  closeByKey(tab.id);
-                } else {
-                  menuByKey(tab.id, event);
-                }
-              }}
-              onmousedown={middleDown}
-              onpointerdown={() => rebuildScheduler.prepare(tab.id)}
-              value={tab.id}
-            >
-              {#snippet lead()}
-                <!-- The status glyph, on the desk beside the rim: the
+              <ContextMenu.Trigger box="none" tabindex={null}>
+                <TabItem
+                  aria-expanded={menuFor === tab.id}
+                  aria-haspopup="menu"
+                  aria-keyshortcuts="Delete Shift+F10"
+                  aria-label={tab.projectId
+                    ? `${tab.label}, ${tab.statusLabel}`
+                    : `${tab.label}, ${tab.statusLabel}${chosen ? " — open session details" : ""}`}
+                  data-session-tab={tab.id}
+                  flush={hungFlush(cardHere, menuHere)}
+                  hung={cardHere || menuHere}
+                  href={tab.href}
+                  label={tab.label}
+                  onauxclick={(event) => middleClose(tab.id, event)}
+                  onblur={() => {
+                    warm.leave(leaf.id, tab.id);
+                    warm.besides([]);
+                  }}
+                  onclick={(event) => clickTab(tab.id, event)}
+                  onfocus={(event) => {
+                    // The pane is laid out while the focus rests on its tab.
+                    if (!chosen) {
+                      warm.reach(leaf.id, tab.id);
+                    }
+                    // The keyboard's focus: the tabs the next arrow key lands on
+                    // are reached for now, ahead of the key that chooses one
+                    // (warm.svelte.ts). A pressed tab is focused too, and its
+                    // pointer reached for it by hovering: its neighbours stay held.
+                    warm.besides(
+                      (event.currentTarget as HTMLElement).matches(
+                        ":focus-visible"
+                      )
+                        ? besideOf(tab.id)
+                        : []
+                    );
+                  }}
+                  onkeydown={(event) => {
+                    // A key on a tab the focus already rests on makes it the
+                    // keyboard's focus with no focus event (a pressed tab, a
+                    // focus a script set): its neighbours are reached for from here.
+                    warm.besides(besideOf(tab.id));
+                    if (event.key === "ArrowDown" || event.key === " ") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      const anchor = anchorOf(tab.id);
+                      if (anchor) {
+                        showDetails(tab.id, anchor, true);
+                      }
+                    } else if (event.key === "Delete") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      closeByKey(tab.id);
+                    } else {
+                      menuByKey(tab.id, event);
+                    }
+                  }}
+                  onmousedown={middleDown}
+                  onpointerdown={() => rebuildScheduler.prepare(tab.id)}
+                  value={tab.id}
+                >
+                  {#snippet lead()}
+                    <!-- The status glyph, on the desk beside the rim: the
                      phone's row draws none (owner: "why does it still have
                      the icon if the rim is there"; "desktop has icons
                      mobile not"); the tab's label says the status in words
                      either way. -->
-                {#if tab.projectId}
-                  <!-- A project's tab leads with its mark as the rail draws
+                    {#if tab.projectId}
+                      <!-- A project's tab leads with its mark as the rail draws
                        it, on every width: it has no status rim to say it. -->
-                  {@const project = cawco.project(tab.projectId)}
-                  <TreeMark
-                    faceAlways
-                    fill="var(--mark-{markHue(
-                      project ? folderOf(project) : tab.projectId
-                    )})"
-                  >
-                    {#snippet face()}
-                      <IconFolder aria-hidden="true" class="size-icon-sm" />
-                    {/snippet}
-                  </TreeMark>
-                {:else}
-                  <span class="max-desk:hidden">
-                    <SessionStatus compact sessionId={tab.id} />
-                  </span>
-                {/if}
-              {/snippet}
-              {#snippet trail()}
-                <!-- Every tab keeps the details slot, so choosing one never
+                      {@const project = cawco.project(tab.projectId)}
+                      <TreeMark
+                        faceAlways
+                        fill="var(--mark-{markHue(
+                          project ? folderOf(project) : tab.projectId
+                        )})"
+                      >
+                        {#snippet face()}
+                          <IconFolder aria-hidden="true" class="size-icon-sm" />
+                        {/snippet}
+                      </TreeMark>
+                    {:else}
+                      <span class="max-desk:hidden">
+                        <SessionStatus compact sessionId={tab.id} />
+                      </span>
+                    {/if}
+                  {/snippet}
+                  {#snippet trail()}
+                    <!-- Every tab keeps the details slot, so choosing one never
                      changes its width; the chevron shows on the chosen tab
                      only. The empty slot on another tab is part of that
                      tab, and a click there chooses it. A phone draws no
@@ -1693,7 +1713,7 @@
                      pointer's alone, as the close is: a tablist holds tabs
                      (axe, aria-required-children), and the tab itself opens
                      its details (ArrowDown or Space, and its name says so). -->
-                <!-- The trailing controls sit 4px after the title and 4px
+                    <!-- The trailing controls sit 4px after the title and 4px
                        apart, on every pointer (owner: "a lot of wasted space
                        until the x button"); where the chevron stands beside
                        the close, their hit areas meet between them. Its 12px
@@ -1703,106 +1723,108 @@
                        no chevron: a long press opens the tab's menu (Session
                        details first), and a tap on the chosen tab its
                        details. -->
-                {#if !tab.projectId}
-                  <span
-                    class="group/tdetails flex flex-none data-idle:scale-(--pop-scale) data-idle:opacity-0 max-desk:hidden motion-safe:transition-[opacity,scale] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease) motion-safe:in-data-ride:transition-off motion-reduce:in-data-ride:transition-off"
-                    data-idle={!chosen || undefined}
-                    data-open={chosen && detailsOpen && detailId === tab.id
-                      ? ""
-                      : undefined}
-                  >
-                    <Button
-                      data-slot="tdetails"
-                      aria-hidden="true"
-                      onclick={(event) => {
-                        if (chosen) {
-                          clickTab(tab.id, event);
-                        } else {
-                          workspace.activate(tab.id, leaf.id);
-                        }
-                      }}
-                      size="icon-xs"
-                      tabindex={-1}
-                      tone="muted"
-                      variant="ghost"
-                    >
-                      <IconChevronDown
-                        class="group-data-open/tdetails:rotate-180 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out"
-                      />
-                    </Button>
-                  </span>
-                {/if}
-                <!-- A mouse's close. A finger's is in the tab's options,
+                    {#if !tab.projectId}
+                      <span
+                        class="group/tdetails flex flex-none data-idle:scale-(--pop-scale) data-idle:opacity-0 max-desk:hidden motion-safe:transition-[opacity,scale] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease) motion-safe:in-data-ride:transition-off motion-reduce:in-data-ride:transition-off"
+                        data-idle={!chosen || undefined}
+                        data-open={chosen && detailsOpen && detailId === tab.id
+                          ? ""
+                          : undefined}
+                      >
+                        <Button
+                          data-slot="tdetails"
+                          aria-hidden="true"
+                          onclick={(event) => {
+                            if (chosen) {
+                              clickTab(tab.id, event);
+                            } else {
+                              workspace.activate(tab.id, leaf.id);
+                            }
+                          }}
+                          size="icon-xs"
+                          tabindex={-1}
+                          tone="muted"
+                          variant="ghost"
+                        >
+                          <IconChevronDown
+                            class="group-data-open/tdetails:rotate-180 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out"
+                          />
+                        </Button>
+                      </span>
+                    {/if}
+                    <!-- A mouse's close. A finger's is in the tab's options,
                      held or pulled down from the tab, and the phone's row
                      draws none. The keyboard's and a screen reader's is the
                      tab's own Delete (`closeByKey`), so this one is not in
                      the tablist's tree. -->
-                <!-- The kit's xs icon button, a row's step from the title's
+                    <!-- The kit's xs icon button, a row's step from the title's
                      end; at 24px it is the fine pointer's floor itself (The
                      24 Pointer Rule). A finger closes a tab from its options
                      (owner: "remove the x make it close on hold menu then
                      close"). -->
-                <span
-                  class="ms-space-row flex flex-none max-desk:hidden coarse:hidden"
-                >
-                  <Button
-                    data-slot="tclose"
-                    aria-hidden="true"
-                    onauxclick={(event) => middleClose(tab.id, event)}
-                    onclick={() => {
-                      closeDetails();
-                      workspace.close(tab.id);
-                    }}
-                    onmousedown={middleDown}
-                    size="icon-xs"
-                    tabindex={-1}
-                    tone="quiet"
-                    variant="ghost"
-                  >
-                    <IconClose />
-                  </Button>
-                </span>
-              {/snippet}
-            </TabItem>
-          </ContextMenu.Trigger>
-          <!-- It hangs from the tab as one shape with it (HangCard `tab`,
+                    <span
+                      class="ms-space-row flex flex-none max-desk:hidden coarse:hidden"
+                    >
+                      <Button
+                        data-slot="tclose"
+                        aria-hidden="true"
+                        onauxclick={(event) => middleClose(tab.id, event)}
+                        onclick={() => {
+                          closeDetails();
+                          workspace.close(tab.id);
+                        }}
+                        onmousedown={middleDown}
+                        size="icon-xs"
+                        tabindex={-1}
+                        tone="quiet"
+                        variant="ghost"
+                      >
+                        <IconClose />
+                      </Button>
+                    </span>
+                  {/snippet}
+                </TabItem>
+              </ContextMenu.Trigger>
+              <!-- It hangs from the tab as one shape with it (HangCard `tab`,
                motion/hang-shape), however it was opened (the chevron, a
                right click, a long press, a pull), at every width: grown
                out of the tab's foot and folded back into it (owner: "why
                aren't these the blended/merged menu that morphs out of the
                tab?"). -->
-          <HangCard
-            align="start"
-            anchor={menuFor === tab.id ? anchorOf(tab.id) : null}
-            as={ContextMenu.Content}
-            collisionPadding={12}
-            data-tab-menu
-            folded={takeMenuFolded}
-            held={() => menuHeld}
-            onneck={(neck) => {
-              menuFlush = neck.flush;
-            }}
-            side="bottom"
-            sideOffset={0}
-            class="min-w-(--menu-min)"
-            style="--menu-min: max(var(--c-tab-menu-min), {menuMin}px)"
-            surface="recess"
-            tab
-            bind:joined={
-              () => menuHung === tab.id,
-              (shown) => {
-                if (shown) {
-                  menuHung = tab.id;
-                } else if (menuHung === tab.id) {
-                  menuHung = null;
+              <HangCard
+                align="start"
+                anchor={menuFor === tab.id ? anchorOf(tab.id) : null}
+                as={ContextMenu.Content}
+                collisionPadding={12}
+                data-tab-menu
+                folded={takeMenuFolded}
+                held={() => menuHeld}
+                onneck={(neck) => {
+                  menuFlush = neck.flush;
+                }}
+                side="bottom"
+                sideOffset={0}
+                class="min-w-(--menu-min)"
+                style="--menu-min: max(var(--c-tab-menu-min), {menuMin}px)"
+                surface="recess"
+                tab
+                bind:joined={
+                  () => menuHung === tab.id,
+                  (shown) => {
+                    if (shown) {
+                      menuHung = tab.id;
+                    } else if (menuHung === tab.id) {
+                      menuHung = null;
+                    }
+                  }
                 }
-              }
-            }
-          >
-            {@render options()}
-          </HangCard>
-        </ContextMenu.Root>
-      </div>
+              >
+                {@render options()}
+              </HangCard>
+            </ContextMenu.Root>
+          </div>
+        {/snippet}
+      </Sortable>
     {/each}
   </TabsList>
   <!-- The New Session form in the front tab's place: after the tabs,

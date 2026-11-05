@@ -387,8 +387,6 @@ export type TokenSize =
   | "size.c-block-ledger"
   | "size.c-block-view"
   | "size.c-block-body-max"
-  | "size.c-block-drop-line"
-  | "size.c-block-drop-dot"
   | "size.c-tray-chip"
   | "size.c-inline-chip-line"
   | "size.c-inline-chip-pad"

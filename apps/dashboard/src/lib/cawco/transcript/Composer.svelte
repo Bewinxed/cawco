@@ -115,10 +115,10 @@
   import type { SendExtras } from "../client.svelte";
   import { cleanDetail } from "../command-detail";
   import { felt } from "../feel.svelte";
+  import { carriesFiles } from "../file-drops";
   import MentionField from "../find/MentionField.svelte";
   import { readAs } from "../find/mention.svelte";
   import { newId } from "../id";
-  import { carriesFiles } from "../internal-drag";
   import { minimizedAsks } from "../minimized-asks.svelte";
   import { skillsOf } from "../skill-chips";
   import {

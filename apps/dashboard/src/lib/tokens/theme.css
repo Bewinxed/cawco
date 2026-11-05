@@ -401,8 +401,6 @@
   --spacing-c-block-ledger: var(--c-block-ledger);
   --spacing-c-block-view: var(--c-block-view);
   --spacing-c-block-body-max: var(--c-block-body-max);
-  --spacing-c-block-drop-line: var(--c-block-drop-line);
-  --spacing-c-block-drop-dot: var(--c-block-drop-dot);
   /* Switches with its context: no literal maps to it. */
   --spacing-c-tray-chip: var(--c-tray-chip);
   --spacing-c-inline-chip-line: var(--c-inline-chip-line);
