@@ -74,6 +74,9 @@
   const TOUCH_HOLD = 250;
   const TOUCH_SLOP = 5;
   const TRAVEL = 5;
+  /** What a press inside a thing belongs to, never the drag. */
+  const CONTROLS =
+    "button, input, textarea, select, [contenteditable=''], [contenteditable='true'], [role='button'], [role='menuitem'], [role='checkbox'], [role='switch'], [role='slider']";
 
   let {
     children,
@@ -81,8 +84,15 @@
     onDragOver,
     onDragMove,
     onDragEnd,
+    fliesHome,
   }: {
     children: Snippet;
+    /**
+     * Whether, let go now, the thing flies to its place on dnd kit's drop
+     * (asked as it moves): not where its owner flies it itself (a tab
+     * landing in another pane, motion/share).
+     */
+    fliesHome?: () => boolean;
     onDragStart?: (event: DragStart) => void;
     onDragOver?: (event: DragOver) => void;
     onDragMove?: (event: DragMove) => void;
@@ -103,16 +113,19 @@
     return of && isSortable(sortable) ? { at: sortable.index + 1, of } : null;
   };
 
+  /** The drop's flight: the house's slide. */
+  const houseDrop = () => ({
+    duration: dur("--dur-panel"),
+    easing: ease("--ease-drawer"),
+  });
+
   /** dnd kit's plugins with the house's drop and its words: read on the client, as the provider starts. */
   const plugins = (defaults: typeof defaultPreset.plugins) => [
     ...defaults.filter(
       (plugin) => plugin !== Feedback && plugin !== Accessibility
     ),
     Feedback.configure({
-      dropAnimation: {
-        duration: dur("--dur-panel"),
-        easing: ease("--ease-drawer"),
-      },
+      dropAnimation: houseDrop(),
       keyboardTransition: {
         duration: dur("--dur-panel"),
         easing: ease("--ease-drawer"),
@@ -159,10 +172,25 @@
    * thing the pointer's. A mouse or pen takes it once the press has
    * travelled, handle or not, so a click on a card that is a link still
    * opens it; a finger once it has rested (dnd kit's touch default). The
-   * keys pick it up with Space alone: Enter keeps following a link.
+   * keys pick it up with Space alone: Enter keeps following a link. A
+   * press on a control inside the thing (a button, a field, a menu's item)
+   * is that control's; a link inside it (a tab's) carries it once the
+   * press travels, and is followed by a click that does not.
    */
   const sensors = [
     PointerSensor.configure({
+      preventActivation: (event, source) => {
+        const { target } = event;
+        if (!(target instanceof Element) || source.handle?.contains(target)) {
+          return false;
+        }
+        const control = target.closest(CONTROLS);
+        return (
+          control !== null &&
+          control !== source.element &&
+          (source.element?.contains(control) ?? false)
+        );
+      },
       activatorElements: (source) => [
         (source.data as DragData | undefined)?.takenBy === "grab"
           ? (source.element?.querySelector("[data-drag-grab]") ?? undefined)
@@ -228,6 +256,14 @@
     onDragStart?.(event);
   }
   function move(event: DragMove) {
+    if (fliesHome) {
+      const feedback = manager.plugins.find(
+        (plugin): plugin is Feedback => plugin instanceof Feedback
+      );
+      if (feedback) {
+        feedback.dropAnimation = fliesHome() ? houseDrop() : null;
+      }
+    }
     if (held) {
       held.move(event.operation.position.current.x);
       // A card carried into another column is drawn again there, and dnd

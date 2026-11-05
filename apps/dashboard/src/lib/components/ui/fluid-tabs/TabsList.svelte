@@ -218,8 +218,8 @@
      tab a hang stands drawn out of (`data-hung`, a card or a menu one
      silhouette with it, motion/hang-shape) stands over every tab too, both
      its feet drawn, so its outline is whole where its hang meets it. A
-     tab lifted by a drag (`data-lifted`, workspace/tab-drag) stands over
-     every tab, both its feet drawn. */
+     tab lifted by a drag (`data-dnd-dragging`, dnd kit's, workspace/dnd)
+     stands over every tab, both its feet drawn. */
   /** The item a tab is laid out as: the tab, or the host's box round it. */
   function laidOf(item: HTMLElement, track: HTMLElement): HTMLElement {
     let laid = item;
@@ -230,7 +230,7 @@
   }
   /** The come-forward's clock: one run on the track. */
   const FORWARD = "tab-come-forward";
-  /** The item a drag has lifted, laid out (`data-lifted`), if one is. */
+  /** The item a drag has lifted, laid out (`data-dnd-dragging`), if one is. */
   let lifted = $state<HTMLElement | null>(null);
   /** The item a hang stands drawn out of (`data-hung`), if one does. */
   let hung = $state<HTMLElement | null>(null);
@@ -739,21 +739,21 @@
     shown = next;
     held = new Set(items);
   }
-  /** A drag's lift (`data-lifted` on a tab's box), heard as it comes and goes. */
+  /** A drag's lift (`data-dnd-dragging` on a tab's box), heard as it comes and goes. */
   $effect(() => {
     const track = node;
     if (!track) {
       return;
     }
     const read = () => {
-      lifted = track.querySelector<HTMLElement>(":scope > [data-lifted]");
+      lifted = track.querySelector<HTMLElement>(":scope > [data-dnd-dragging]");
       hung = track.querySelector<HTMLElement>(":scope > [data-hung]");
     };
     const watch = new MutationObserver(read);
     watch.observe(track, {
       subtree: true,
       attributes: true,
-      attributeFilter: ["data-lifted", "data-hung"],
+      attributeFilter: ["data-dnd-dragging", "data-hung"],
     });
     return () => watch.disconnect();
   });

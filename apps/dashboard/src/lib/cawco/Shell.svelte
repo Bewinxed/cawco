@@ -49,6 +49,7 @@
   import { connect } from "./connect/installs.svelte";
   import { continuing } from "./continue.svelte";
   import EdgePull from "./EdgePull.svelte";
+  import { guardFileDrops } from "./file-drops";
   import FilesItem from "./files/FilesItem.svelte";
   import FilesSheet from "./files/FilesSheet.svelte";
   import { files, filesCount, followFiles } from "./files/files.svelte";
@@ -58,7 +59,6 @@
   import { deviceRatio } from "./home/device-ratio.svelte";
   import { sessionName } from "./home/home-state.svelte";
   import { peekBeside } from "./home/peek.svelte";
-  import { guardDrops } from "./internal-drag";
   import MachinesButton from "./MachinesButton.svelte";
   import { hangShadow } from "./motion/hung-shadow";
   import NeedsCaw from "./NeedsCaw.svelte";
@@ -75,6 +75,7 @@
   import { fullSize } from "./workspace/full-size.svelte";
   import PaneTabs from "./workspace/PaneTabs.svelte";
   import { projectOfTab, tabOfPath } from "./workspace/tabs";
+  import WorkspaceDrag from "./workspace/WorkspaceDrag.svelte";
   import { type WorkspaceV1, workspace } from "./workspace/workspace.svelte";
 
   // The sidebar primitives (SidebarMenuButton etc.) call `useSidebar()` which
@@ -720,9 +721,8 @@
   const routeError = $derived(
     page.error && !page.error.region ? page.error : null
   );
-  // A row or card dragged inside the page never types into a field, and a
-  // file let go off a composer never opens in the tab (internal-drag.ts).
-  onMount(guardDrops);
+  // A file let go off a composer never opens in the tab (file-drops.ts).
+  onMount(guardFileDrops);
 
   /* ── The bar's slot ──────────────────────────────────────────────────
      The hosted tabs, a page's strip, the crumb and Configure's back link
@@ -1080,7 +1080,10 @@
      snap away from on hydration. -->
 <!-- The tooltip provider and the lightbox, shared with an artifact's own tab. -->
 <Overlays>
-  <!-- As tall as the visible area reaches, so the composer and a page's
+  <!-- A tab or a session's row is carried between the rail and the
+       workspace's groups on one drag (workspace/WorkspaceDrag). -->
+  <WorkspaceDrag>
+    <!-- As tall as the visible area reaches, so the composer and a page's
        footer stand on a keyboard (cawco/visible-viewport `floor`). As wide
        as the window, it is the `shell` container the bar's glass takes its
        form from (BarGlass `@max-desk/shell`): the bar beside a docked rail
@@ -1089,102 +1092,102 @@
        until the release a frame after mount; `data-first-render` from that
        release on, the page drawing its own answers (what the probe kit's
        page-ready waits for). -->
-  <div
-    data-slot="shell"
-    data-first-paint={firstRender.held || undefined}
-    data-first-render={!firstRender.held || undefined}
-    class="@container/shell flex h-dvh w-full bg-surface-recess overflow-hidden"
-    style="--sidebar-width: var(--rail-w, {railWidth === null
-      ? 'var(--c-sidebar-w)'
-      : `${railWidth}px`})"
-    style:height={floor.bottom > 0 ? `${floor.bottom}px` : null}
-  >
-    <!-- The rail holds the screen's leading edge, so it keeps a landscape
+    <div
+      data-slot="shell"
+      data-first-paint={firstRender.held || undefined}
+      data-first-render={!firstRender.held || undefined}
+      class="@container/shell flex h-dvh w-full bg-surface-recess overflow-hidden"
+      style="--sidebar-width: var(--rail-w, {railWidth === null
+        ? 'var(--c-sidebar-w)'
+        : `${railWidth}px`})"
+      style:height={floor.bottom > 0 ? `${floor.bottom}px` : null}
+    >
+      <!-- The rail holds the screen's leading edge, so it keeps a landscape
          notch's inset clear inside its own width, in the sidebar's ground:
          its outer edge stays where a drag puts it (`startDrag`). -->
-    <aside
-      data-slot="rail"
-      data-full={full || undefined}
-      class="hidden desk:flex data-full:hidden relative w-(--sidebar-width) grow-0 shrink-0 basis-(--sidebar-width) min-w-0 ps-(--rail-inset) bg-(--sidebar) border-e border-e-border-hairline"
-      style:--rail-inset="env(safe-area-inset-left, 0px)"
-    >
-      {#if railed}
-        <RegionBoundary face="line" part="sidebar">
-          <Sidebar {narrow} scroller={keepScroll} />
-        </RegionBoundary>
-      {/if}
-      <!-- Drawn a grip's width on the rail's edge; under a fine pointer it
+      <aside
+        data-slot="rail"
+        data-full={full || undefined}
+        class="hidden desk:flex data-full:hidden relative w-(--sidebar-width) grow-0 shrink-0 basis-(--sidebar-width) min-w-0 ps-(--rail-inset) bg-(--sidebar) border-e border-e-border-hairline"
+        style:--rail-inset="env(safe-area-inset-left, 0px)"
+      >
+        {#if railed}
+          <RegionBoundary face="line" part="sidebar">
+            <Sidebar {narrow} scroller={keepScroll} />
+          </RegionBoundary>
+        {/if}
+        <!-- Drawn a grip's width on the rail's edge; under a fine pointer it
            takes presses up to its midpoint stops (DESIGN.md, The 24 Pointer
            Rule): 2px past either side, short of the rail rows' edge 8px in
            and of a stroke begun 6px into the page beside it (ink 8), which
            draws and does not resize. -->
-      <div
-        aria-label="Resize sidebar"
-        aria-orientation="vertical"
-        aria-valuemax={RAIL_MAX}
-        aria-valuemin={RAIL_MIN}
-        aria-valuenow={railWidth}
-        class="pointer-hit hit-gap-x-space-1 absolute inset-y-0 end-0 w-c-side-grip-w translate-x-1/2 cursor-col-resize touch-none select-none z-5 hover:bg-border-control"
-        onkeydown={resizeKey}
-        onpointerdown={startDrag}
-        role="slider"
-        tabindex="0"
-      ></div>
-    </aside>
+        <div
+          aria-label="Resize sidebar"
+          aria-orientation="vertical"
+          aria-valuemax={RAIL_MAX}
+          aria-valuemin={RAIL_MIN}
+          aria-valuenow={railWidth}
+          class="pointer-hit hit-gap-x-space-1 absolute inset-y-0 end-0 w-c-side-grip-w translate-x-1/2 cursor-col-resize touch-none select-none z-5 hover:bg-border-control"
+          onkeydown={resizeKey}
+          onpointerdown={startDrag}
+          role="slider"
+          tabindex="0"
+        ></div>
+      </aside>
 
-    <!-- Open only under the drawer's line: widened past it while open, the
+      <!-- Open only under the drawer's line: widened past it while open, the
          sheet's scrim stood over the whole wide screen with nothing in it.
          Narrowed again, it is open as it was left. -->
-    <Sheet.Root
-      bind:open={
-        () => railOpen && !railed,
-        (open) => {
-          railOpen = open;
+      <Sheet.Root
+        bind:open={
+          () => railOpen && !railed,
+          (open) => {
+            railOpen = open;
+          }
         }
-      }
-    >
-      <!-- Closed by its search field, the focus stays in the Jump palette
+      >
+        <!-- Closed by its search field, the focus stays in the Jump palette
            it opened, which hangs from the bar's glass. Its brand row names
            it on screen, so no header row stands and the row draws the kit's
            Close as its last control, after Start session (Sidebar). -->
-      <Sheet.Content
-        data-rail-sheet
-        class="w-c-rail-sheet-w"
-        narrow
-        pad="none"
-        onCloseAutoFocus={(event) => {
-          if (barGlass.open === "jump") {
-            event.preventDefault();
-          }
-        }}
-        side="left"
-        title="Navigation"
-        titleHidden
-      >
-        {#if !railed}
-          <RegionBoundary face="line" part="sidebar">
-            <Sidebar
-              {narrow}
-              onfiles={openFilesSheet}
-              onsearch={() => fromSheet("jump")}
-              sheet
-            />
-          </RegionBoundary>
-        {/if}
-      </Sheet.Content>
-    </Sheet.Root>
+        <Sheet.Content
+          data-rail-sheet
+          class="w-c-rail-sheet-w"
+          narrow
+          pad="none"
+          onCloseAutoFocus={(event) => {
+            if (barGlass.open === "jump") {
+              event.preventDefault();
+            }
+          }}
+          side="left"
+          title="Navigation"
+          titleHidden
+        >
+          {#if !railed}
+            <RegionBoundary face="line" part="sidebar">
+              <Sidebar
+                {narrow}
+                onfiles={openFilesSheet}
+                onsearch={() => fromSheet("jump")}
+                sheet
+              />
+            </RegionBoundary>
+          {/if}
+        </Sheet.Content>
+      </Sheet.Root>
 
-    <!-- While the peek stands open beside the page (a fine pointer's sheet
+      <!-- While the peek stands open beside the page (a fine pointer's sheet
          from the right, peek.svelte.ts `peekBeside`) the page, its bar
          included, ends where the sheet begins: what it holds (the glass
          group, a docked card) stays whole and usable beside the sheet
          (the peek's surface brief, Peek), never cut under it. -->
-    <div
-      data-slot="shell-main"
-      class="relative flex-auto min-w-0 flex flex-col overflow-hidden data-peek-beside:pe-c-peek-sheet-w"
-      data-peek-beside={peekBeside() || undefined}
-    >
-      <!-- The bar: the comp's height (`--c-top-bar-h`, so what floats under
+      <div
+        data-slot="shell-main"
+        class="relative flex-auto min-w-0 flex flex-col overflow-hidden data-peek-beside:pe-c-peek-sheet-w"
+        data-peek-beside={peekBeside() || undefined}
+      >
+        <!-- The bar: the comp's height (`--c-top-bar-h`, so what floats under
            it lands under it); hosted folder tabs stand on its floor. The
            right inset is the content's right pad, so the cluster's edge
            stands over the page's; the left inset is the crumb's own, so the
@@ -1215,18 +1218,18 @@
            fluid-tabs Tabs.svelte), its foot running out to the edge as the
            join of the glass does, so the shelf holds one inset at both
            ends. -->
-      <header
-        data-slot="top"
-        data-full={full || undefined}
-        data-floating={floating || undefined}
-        data-hosting={hosting || undefined}
-        class="group/top peer/top h-c-top-bar-h shrink-0 flex data-full:hidden items-center gap-space-2 py-0 ps-0 pe-(--top-end) desk:not-coarse:data-hosting:pe-(--shelf-end) desk:not-portrait:data-hosting:pe-(--shelf-end) coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-c-top-bar-h max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:shelf-hairline"
-        style:--top-end="calc(var(--space-6) + env(safe-area-inset-right, 0px))"
-        style:--shelf-end={"calc(var(--radius-sm) + env(safe-area-inset-right, 0px))"}
-        style:--top-inset-start="env(safe-area-inset-left, 0px)"
-        style:--top-inset-end={"calc(var(--c-bar-phone-edge) + env(safe-area-inset-right, 0px))"}
-      >
-        <!-- The sidebar toggle; at the 900px line the rail returns and it
+        <header
+          data-slot="top"
+          data-full={full || undefined}
+          data-floating={floating || undefined}
+          data-hosting={hosting || undefined}
+          class="group/top peer/top h-c-top-bar-h shrink-0 flex data-full:hidden items-center gap-space-2 py-0 ps-0 pe-(--top-end) desk:not-coarse:data-hosting:pe-(--shelf-end) desk:not-portrait:data-hosting:pe-(--shelf-end) coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-c-top-bar-h max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:shelf-hairline"
+          style:--top-end={"calc(var(--space-6) + env(safe-area-inset-right, 0px))"}
+          style:--shelf-end={"calc(var(--radius-sm) + env(safe-area-inset-right, 0px))"}
+          style:--top-inset-start="env(safe-area-inset-left, 0px)"
+          style:--top-inset-end={"calc(var(--c-bar-phone-edge) + env(safe-area-inset-right, 0px))"}
+        >
+          <!-- The sidebar toggle; at the 900px line the rail returns and it
              retires (`desk:hidden`). On the phone's row it is a bare
              glyph (owner, variant B): its leading edge c-bar-phone-edge from
              the screen's, its centre on the tabs' centre line, which stand
@@ -1237,20 +1240,22 @@
              its drop from the box's own centre), never the box moved, so the
              box stays inside its bar. Tactile press: it dips under the finger, with
              less motion not at all. -->
-        <button
-          data-slot="burger"
-          aria-label={sidebarWords.openNavigation}
-          class="select-none desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--dur-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-0 max-desk:ps-c-bar-phone-edge max-desk:justify-items-start max-desk:focus-inset max-desk:pt-(--burger-drop) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto"
-          onclick={() => {
-            railOpen = true;
-          }}
-          style:--burger-drop={"calc(2 * (var(--c-top-bar-h) - var(--c-tab-row-h) / 2 - var(--c-btn-h-lg) / 2))"}
-          type="button"
-          bind:this={burger}
-        >
-          <IconSidebar class="size-icon-lg max-desk:size-c-bar-toggle-glyph" />
-        </button>
-        <!-- The one "where am I" label, now visible at every width — the brand
+          <button
+            data-slot="burger"
+            aria-label={sidebarWords.openNavigation}
+            class="select-none desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--dur-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-0 max-desk:ps-c-bar-phone-edge max-desk:justify-items-start max-desk:focus-inset max-desk:pt-(--burger-drop) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto"
+            onclick={() => {
+              railOpen = true;
+            }}
+            style:--burger-drop={"calc(2 * (var(--c-top-bar-h) - var(--c-tab-row-h) / 2 - var(--c-btn-h-lg) / 2))"}
+            type="button"
+            bind:this={burger}
+          >
+            <IconSidebar
+              class="size-icon-lg max-desk:size-c-bar-toggle-glyph"
+            />
+          </button>
+          <!-- The one "where am I" label, now visible at every width — the brand
            lives in the rail, and the crumb is what the top bar owes a reader
            who arrived by URL. One slot for the bar's left-hand content,
            positioned so the one leaving can be lifted out of the row where
@@ -1258,119 +1263,124 @@
            crumb just sits at its start. A long name ends in an ellipsis,
            and on the narrow bar stands at least 16px clear of the first
            control: the bar's gap and the slot's own end inset (7 + 11). -->
-        <div
-          data-slot="slot"
-          class="relative flex grow shrink basis-0 items-center self-stretch min-w-0 max-desk:pe-space-3 coarse:portrait:pe-space-3 max-desk:group-data-floating/top:invisible"
-        >
-          {#if barLeaves.length > 0}
-            <!-- Nothing inside reaches the strip's own size or what is
+          <div
+            data-slot="slot"
+            class="relative flex grow shrink basis-0 items-center self-stretch min-w-0 max-desk:pe-space-3 coarse:portrait:pe-space-3 max-desk:group-data-floating/top:invisible"
+          >
+            {#if barLeaves.length > 0}
+              <!-- Nothing inside reaches the strip's own size or what is
                  around it: the columns are placed by script from the
                  groups' boxes, so they must not be able to feed back into
                  the boxes that script observes. Leaving, it keeps its box
                  but gives up the row; gone, it is not drawn. -->
-            <div
-              data-slot="slot-tabs"
-              class="contain-layout contain-size relative grow shrink basis-0 self-stretch min-w-0 data-shell-lifted:absolute data-shell-lifted:inset-0 data-shell-away:invisible max-desk:group-data-hosting/top:hidden coarse:portrait:group-data-hosting/top:hidden"
-              {@attach barTabs(() => hosting)}
-              {@attach followPanes}
-            >
-              {#each barLeaves as leaf, i (leaf.id)}
-                <!-- Each group's tabs, standing over the group they belong
+              <div
+                data-slot="slot-tabs"
+                class="contain-layout contain-size relative grow shrink basis-0 self-stretch min-w-0 data-shell-lifted:absolute data-shell-lifted:inset-0 data-shell-away:invisible max-desk:group-data-hosting/top:hidden coarse:portrait:group-data-hosting/top:hidden"
+                {@attach barTabs(() => hosting)}
+                {@attach followPanes}
+              >
+                {#each barLeaves as leaf, i (leaf.id)}
+                  <!-- Each group's tabs, standing over the group they belong
                    to: its box follows the group's (followPanes: left and
                    width, --col-x and --col-w). The divider between two
                    groups goes on up through the bar as the line between
                    their columns, where the grid's own stands (the 1px
                    between the groups): the column's shadow, outside its
                    box. -->
-                <div
-                  data-slot="col"
-                  class="group/col absolute inset-y-0 start-(--col-start) w-(--col-size) flex min-w-0 overflow-hidden data-seam:shadow-(--seam-line)"
-                  data-col={leaf.id}
-                  data-focused={(groupsApart &&
-                    workspace.focusedLeafId === leaf.id) ||
-                    undefined}
-                  data-seam={i > 0 || undefined}
-                  style:--col-start="var(--col-x, 0px)"
-                  style:--col-size="var(--col-w, 100%)"
-                  style:--seam-line="-1px 0 0 var(--border-hairline)"
-                >
-                  <!-- The group the keyboard belongs to, as the group says
+                  <div
+                    data-slot="col"
+                    class="group/col absolute inset-y-0 start-(--col-start) w-(--col-size) flex min-w-0 overflow-hidden data-seam:shadow-(--seam-line)"
+                    data-col={leaf.id}
+                    data-focused={(groupsApart &&
+                      workspace.focusedLeafId === leaf.id) ||
+                      undefined}
+                    data-seam={i > 0 || undefined}
+                    style:--col-start="var(--col-x, 0px)"
+                    style:--col-size="var(--col-w, 100%)"
+                    style:--seam-line="-1px 0 0 var(--border-hairline)"
+                  >
+                    <!-- The group the keyboard belongs to, as the group says
                        it: a hairline rail down the leading edge, where
                        there are groups to tell apart (one alone drew a
                        stray line at the start of the shelf). -->
-                  <span
-                    aria-hidden="true"
-                    class="absolute inset-y-0 start-0 w-space-row bg-ink-muted opacity-0 z-2 pointer-events-none group-data-focused/col:opacity-50 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out"
-                  ></span>
-                  <RegionBoundary face="strip" part="tabs">
-                    <PaneTabs hosted {leaf} />
-                  </RegionBoundary>
-                </div>
-              {/each}
-            </div>
-          {/if}
-          {#if hosting || (!railed && onSession)}
-            <!-- The tabs above have the slot; on a phone the workspace's tabs
+                    <span
+                      aria-hidden="true"
+                      class="absolute inset-y-0 start-0 w-space-row bg-ink-muted opacity-0 z-2 pointer-events-none group-data-focused/col:opacity-50 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out"
+                    ></span>
+                    <RegionBoundary face="strip" part="tabs">
+                      <PaneTabs hosted {leaf} />
+                    </RegionBoundary>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+            {#if hosting || (!railed && onSession)}
+              <!-- The tabs above have the slot; on a phone the workspace's tabs
                are its own row, and the board needs no name over it. -->
-          {:else if narrow && page.url.pathname.startsWith("/config/")}
-            <!-- Inside a section on a phone the rail is its own page, so the bar
+            {:else if narrow && page.url.pathname.startsWith("/config/")}
+              <!-- Inside a section on a phone the rail is its own page, so the bar
                leads back to it: Back, the chevron alone in its glass group,
                named by where it goes (DESIGN.md, The Title Bars Follow
                Liquid Glass Rule: "Back and Close are symbols"). -->
-            <div data-slot="crumb" class="flex min-w-0" in:riseIn out:crossOut>
-              <BarGlass form="group">
-                <BarItem
-                  href="/config"
-                  icon={IconChevronLeft}
-                  label={configureWords.backTo(configureWords.title)}
-                />
-              </BarGlass>
-              {#if configSection}
-                <span
-                  data-slot="title"
-                  class="ms-space-2 min-w-0 self-center truncate type-label text-ink-strong"
-                  >{configSection}</span
-                >
-              {/if}
-            </div>
-          {:else}
-            <!-- Padding, not margin: the crumb leaving is pinned where its
+              <div
+                data-slot="crumb"
+                class="flex min-w-0"
+                in:riseIn
+                out:crossOut
+              >
+                <BarGlass form="group">
+                  <BarItem
+                    href="/config"
+                    icon={IconChevronLeft}
+                    label={configureWords.backTo(configureWords.title)}
+                  />
+                </BarGlass>
+                {#if configSection}
+                  <span
+                    data-slot="title"
+                    class="ms-space-2 min-w-0 self-center truncate type-label text-ink-strong"
+                    >{configSection}</span
+                  >
+                {/if}
+              </div>
+            {:else}
+              <!-- Padding, not margin: the crumb leaving is pinned where its
                  border box stands (crossOut), and a margin would carry it
                  along. A long name (a session's, a project's) ends in an
                  ellipsis and keeps clear of the cluster beside it: the bar's
                  own gap plus --space-3 of margin, outside the box its text
                  is clipped to, past the 16px a name needs from a control. -->
-            <span
-              data-slot="crumb"
-              class="min-w-0 truncate ps-space-7 me-space-3 max-desk:ps-0 coarse:portrait:ps-0"
-              in:riseIn
-              out:crossOut
-            >
-              <MorphText text={crumb} />
-            </span>
-          {/if}
-        </div>
+              <span
+                data-slot="crumb"
+                class="min-w-0 truncate ps-space-7 me-space-3 max-desk:ps-0 coarse:portrait:ps-0"
+                in:riseIn
+                out:crossOut
+              >
+                <MorphText text={crumb} />
+              </span>
+            {/if}
+          </div>
 
-        <!-- The trailing edge, one glass group (Apple HIG, Toolbars): on a
+          <!-- The trailing edge, one glass group (Apple HIG, Toolbars): on a
              conversation Files first, then Jump, the machines, then Caw's
              head last, at the edge. A phone keeps Files, Jump and the
              machines in its sidebar, so its group holds Caw alone; over a
              conversation's tab row the floating bar passes touches through,
              and the glass takes its own back, as the toggle does. -->
-        <div
-          data-slot="right"
-          class="relative ms-auto flex min-w-0 items-center group-data-hosting/top:flex-none group-data-hosting/top:ps-space-3 max-desk:self-stretch max-desk:group-data-hosting/top:flex-initial max-desk:group-data-hosting/top:ps-0 coarse:portrait:group-data-hosting/top:flex-initial coarse:portrait:group-data-hosting/top:ps-0 max-desk:group-data-floating/top:*:pointer-events-auto"
-        >
-          <!-- The glass (kit BarGlass), as one shape with the card hanging
+          <div
+            data-slot="right"
+            class="relative ms-auto flex min-w-0 items-center group-data-hosting/top:flex-none group-data-hosting/top:ps-space-3 max-desk:self-stretch max-desk:group-data-hosting/top:flex-initial max-desk:group-data-hosting/top:ps-0 coarse:portrait:group-data-hosting/top:flex-initial coarse:portrait:group-data-hosting/top:ps-0 max-desk:group-data-floating/top:*:pointer-events-auto"
+          >
+            <!-- The glass (kit BarGlass), as one shape with the card hanging
                from it while one does (bar-glass: Caw's panel, the machines,
                Jump, Files). -->
-          <BarGlass joined={barGlass.joined}>
-            {#snippet head()}
-              <!-- Caw's head: what needs you, and its drawer. -->
-              <NeedsCaw />
-            {/snippet}
-            {#if railed && files.session}
-              <!-- Files, the conversation on screen's artifacts and
+            <BarGlass joined={barGlass.joined}>
+              {#snippet head()}
+                <!-- Caw's head: what needs you, and its drawer. -->
+                <NeedsCaw />
+              {/snippet}
+              {#if railed && files.session}
+                <!-- Files, the conversation on screen's artifacts and
                    attachments, leads the group. -->
               <FilesItem count={filesCounted} />
             {/if}
@@ -1401,38 +1411,38 @@
              says nothing. Connection health is the band below (HubBand), which
              is shown only when the hub is NOT connected. The theme toggle
              lives in the rail's footer with the account row. -->
-        </div>
-      </header>
-      {#if !railed}
-        <!-- The screen's left edge, where a finger pulls the sidebar out,
+          </div>
+        </header>
+        {#if !railed}
+          <!-- The screen's left edge, where a finger pulls the sidebar out,
              and its right edge, where one pulls Files out of a
              conversation, the same gesture mirrored. -->
-        <EdgePull
-          onpull={() => {
-            railOpen = true;
-          }}
-          side="left"
-        />
-        {#if files.session}
           <EdgePull
             onpull={() => {
-              files.sheet = true;
+              railOpen = true;
             }}
-            side="right"
+            side="left"
           />
+          {#if files.session}
+            <EdgePull
+              onpull={() => {
+                files.sheet = true;
+              }}
+              side="right"
+            />
+          {/if}
         {/if}
-      {/if}
 
-      <!-- The one place the hub connection is spoken of (HubBand): a row
+        <!-- The one place the hub connection is spoken of (HubBand): a row
            under the bar (over it under the drawer's line) that moves the
            page down, never over it. -->
-      <HubBand />
+        <HubBand />
 
-      <!-- The old thumb bar is gone, so this region reclaims its height. On a
+        <!-- The old thumb bar is gone, so this region reclaims its height. On a
          session route the composer owns its own bottom inset; everywhere else
          the scroll region pads the home-indicator safe area itself so the last
          row is never tucked under it. -->
-      <!-- A page sliding in sideways must not open a horizontal scrollbar
+        <!-- A page sliding in sideways must not open a horizontal scrollbar
            for the length of its travel; wide content scrolls in its own box.
            Clear of a landscape notch's inset on the trailing side (and on a
            phone the leading one too); the rail holds the leading one where
@@ -1443,61 +1453,61 @@
            the floating bar the session's tab row is the screen's top row:
            the insets beside it are its shelf, the rest the shell's ground
            the transcript stands on. -->
-      <main
-        data-slot="shell-content"
-        data-floating={floating || undefined}
-        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto pe-(--content-end) max-desk:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom) max-desk:data-floating:bg-linear-to-b max-desk:data-floating:from-surface-shelf max-desk:data-floating:to-surface-shelf max-desk:data-floating:bg-top max-desk:data-floating:bg-size-(--shelf-band-size) max-desk:data-floating:bg-no-repeat"
-        data-safe={!onSession || undefined}
-        data-safe-bottom
-        id="main-content"
-        bind:this={content}
-        style:--content-end="env(safe-area-inset-right, 0px)"
-        style:--content-start="env(safe-area-inset-left, 0px)"
-        style:--shelf-band-size="100% var(--c-top-bar-h)"
-      >
-        <!-- The page is keyed on its route, so a navigation swaps one page for
+        <main
+          data-slot="shell-content"
+          data-floating={floating || undefined}
+          class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto pe-(--content-end) max-desk:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom) max-desk:data-floating:bg-linear-to-b max-desk:data-floating:from-surface-shelf max-desk:data-floating:to-surface-shelf max-desk:data-floating:bg-top max-desk:data-floating:bg-size-(--shelf-band-size) max-desk:data-floating:bg-no-repeat"
+          data-safe={!onSession || undefined}
+          data-safe-bottom
+          id="main-content"
+          bind:this={content}
+          style:--content-end="env(safe-area-inset-right, 0px)"
+          style:--content-start="env(safe-area-inset-left, 0px)"
+          style:--shelf-band-size="100% var(--c-top-bar-h)"
+        >
+          <!-- The page is keyed on its route, so a navigation swaps one page for
            the next through their own transitions (motion/route.svelte.ts):
            both stand in this one grid cell while they overlap. Every
            conversation is one key, and so is Configure, which keys its own
            pane so its rail holds still. A page taller than the screen
            overflows the cell into the content's scroll exactly as it did as
            a flex child of the content. -->
-        <div
-          data-slot="swap"
-          class="grid grid-rows-1 grid-cols-1 flex-auto min-h-0"
-        >
-          {#key pageKey}
-            <div
-              class="row-start-1 col-start-1 flex flex-col min-w-0 min-h-0 data-parked:invisible"
-              in:pageIn
-              out:pageOut
-            >
-              <RegionBoundary face="page" part="page"
-                >{@render children()}</RegionBoundary
+          <div
+            data-slot="swap"
+            class="grid grid-rows-1 grid-cols-1 flex-auto min-h-0"
+          >
+            {#key pageKey}
+              <div
+                class="row-start-1 col-start-1 flex flex-col min-w-0 min-h-0 data-parked:invisible"
+                in:pageIn
+                out:pageOut
               >
-            </div>
-          {/key}
-          <!-- After the keyed page, so it is drawn over the empty one a
+                <RegionBoundary face="page" part="page"
+                  >{@render children()}</RegionBoundary
+                >
+              </div>
+            {/key}
+            <!-- After the keyed page, so it is drawn over the empty one a
              `/session` route renders. Under another spoke it is parked
              (`data-parked`): laid out, so its virtualisers keep their
              measurements and its scroll offsets stand, but not drawn. -->
-          {#if surfaceMounted}
-            <div
-              class="row-start-1 col-start-1 flex flex-col min-w-0 min-h-0 data-parked:invisible"
-              in:pageIn
-              {@attach park(() => onSession)}
-            >
-              <RegionBoundary face="page" part="workspace">
-                <SessionSurface shown={onSession} />
-              </RegionBoundary>
-            </div>
-          {/if}
-        </div>
-      </main>
+            {#if surfaceMounted}
+              <div
+                class="row-start-1 col-start-1 flex flex-col min-w-0 min-h-0 data-parked:invisible"
+                in:pageIn
+                {@attach park(() => onSession)}
+              >
+                <RegionBoundary face="page" part="workspace">
+                  <SessionSurface shown={onSession} />
+                </RegionBoundary>
+              </div>
+            {/if}
+          </div>
+        </main>
+      </div>
     </div>
-  </div>
 
-  <!-- The hanging cards' layer (hang-layer): the glass's one card (Caw's
+    <!-- The hanging cards' layer (hang-layer): the glass's one card (Caw's
        panel, the machines, Jump or Files; bar-glass), drawn in it, and the
        session card, portaled into it from its tab (PaneTabs). They take
        their form from a `shell` container as the glass does (HangCard
@@ -1507,12 +1517,13 @@
        or a sheet on the page's own layers would stand over a card there;
        here they stand on the floating layer as portaled cards did, at the
        window's origin, so their place is the window's. -->
-  <div
-    class="@container/shell hang-layer-screen fixed inset-x-0 top-0 z-(--layer-float)"
-    data-hang-layer={hangLayerOf.id}
-  >
-    <GlassCard />
-  </div>
+    <div
+      class="@container/shell hang-layer-screen fixed inset-x-0 top-0 z-(--layer-float)"
+      data-hang-layer={hangLayerOf.id}
+    >
+      <GlassCard />
+    </div>
+  </WorkspaceDrag>
   {#if !railed}
     <!-- Files on a phone: the house bottom drawer. -->
     <FilesSheet />

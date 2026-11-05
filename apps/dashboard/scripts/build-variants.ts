@@ -258,10 +258,6 @@ const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that
    (Tailwind's \`marker:\` is ::marker). */
 @custom-variant details-marker (&::-webkit-details-marker);
 
-/* A tab in a strip while one of its tabs is dragged to a new place
-   (tab-drag.svelte.ts sets \`data-reordering\` on the track). */
-@custom-variant reordering (:where([data-slot="ff-tabs-list"][data-reordering]) > &);
-
 /* Inside the session details card while it glides to another tab (PaneTabs
    sets \`data-morph\` on the card). */
 @custom-variant details-gliding (&:where([data-session-details-popover][data-morph] *));
