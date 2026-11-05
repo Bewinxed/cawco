@@ -1075,6 +1075,7 @@ const run = async (kit: Kit) => {
       name: "graph-compare",
       file: [ROUTINE],
       does: "judge",
+      title: "Routine form compared",
       ask: ROUTINE_ASK,
     }
   );
