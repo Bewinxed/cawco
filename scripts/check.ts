@@ -654,6 +654,14 @@ const gated: Gated[] = [
     "scripts/scratch-fleet.ts",
     "scripts/binary/",
   ]),
+  // Every probe's decision page, built as the hub builds it.
+  bun("scripts/probe-programs-check.ts", [
+    "scripts/probe-kit/",
+    "scripts/scratch-fleet.ts",
+    "packages/hub/src/decision-program.ts",
+    "packages/core/src/",
+    "bun.lock",
+  ]),
   bun("scripts/design-rules.ts", DASH, "--check"),
   bun("scripts/design-budget-check.ts", ["DESIGN.md"]),
   bun("scripts/surface-briefs-check.ts", ["apps/dashboard/"]),

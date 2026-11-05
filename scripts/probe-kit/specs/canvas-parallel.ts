@@ -64,8 +64,30 @@ const CANVASES = [
 ] as const;
 const idFor = (name: string) => idOf(`par-${name}`);
 
-/** A page of one card whose options each show one of `names`' canvases. */
+/** The Preview of `name`'s canvas, as `p<at>`. */
+const previewOf = (name: string, at: number): string => {
+  const story = CANVASES.find((one) => one[0] === name)?.[2] ?? "";
+  return `p${at} = Preview("${idFor(name)}", "${name}", ["${story}"])`;
+};
+
+/**
+ * A page of one card whose options each show one of `names`' canvases; a
+ * canvas alone is the card's own picture, a verdict on it, as the hub's
+ * decision takes 2 to 5 options.
+ */
 const program = (title: string, names: readonly string[]): string =>
+  names.length === 1
+    ? [
+        `root = Decisions("${title}", [card])`,
+        `card = Decision("card", "Does this read right?", [yes, no], "The card shows a canvas.", [p0], [], false, null, "look")`,
+        `yes = Option("yes", "Yes", "It reads right.", true, [], "Nothing.")`,
+        `no = Option("no", "No", "It reads wrong.", false, [], "Another pass.")`,
+        previewOf(names[0] ?? "", 0),
+      ].join("\n")
+    : manyProgram(title, names);
+
+/** A page of one card whose options each show one of `names`' canvases. */
+const manyProgram = (title: string, names: readonly string[]): string =>
   [
     `root = Decisions("${title}", [card])`,
     `card = Decision("card", "Which of these reads right?", [${names.map((_, at) => `o${at}`).join(", ")}], "Each option shows a canvas.", [], [], false, null, "look")`,
@@ -73,10 +95,7 @@ const program = (title: string, names: readonly string[]): string =>
       (_name, at) =>
         `o${at} = Option("o${at}", "Option ${at + 1}", "This canvas.", ${at === 0}, [p${at}], "Another canvas.")`
     ),
-    ...names.map((name, at) => {
-      const story = CANVASES.find((one) => one[0] === name)?.[2] ?? "";
-      return `p${at} = Preview("${idFor(name)}", "${name}", ["${story}"])`;
-    }),
+    ...names.map(previewOf),
   ].join("\n");
 
 const FIVE = "five";
@@ -433,6 +452,15 @@ const run = async (kit: Kit) => {
   } finally {
     await stage.stop();
   }
+};
+
+/** The decision pages this spec writes, as it builds them, read by scripts/probe-programs-check.ts against the hub's build. */
+export const probePrograms = (): string[] => {
+  const names = CANVASES.map(([name]) => name);
+  return [
+    program("Five canvases", names),
+    program(`One canvas: ${names[0]}`, names.slice(0, 1)),
+  ];
 };
 
 const spec: Spec = {

@@ -184,6 +184,9 @@ const run = async (kit: Kit) => {
   }
 };
 
+/** The decision page this spec writes, read by scripts/probe-programs-check.ts against the hub's build. */
+export const probePrograms = (): string[] => [PROGRAM];
+
 const spec: Spec = {
   group: "Previews, pages and comments",
   name: "embed-reload",

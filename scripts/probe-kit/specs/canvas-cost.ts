@@ -2863,7 +2863,7 @@ const DECISION_HOLD_MS = 350;
 /** Options to a card on the leg's page. */
 const PER_CARD = 3;
 
-/** The leg's program: `picks` as Previews, `PER_CARD` options to a card, each its one Preview. */
+/** The leg's program: `picks` as Previews, `PER_CARD` options to a card, each its one Preview; a card left one pick is a verdict on it (the hub's decision takes 2 to 5 options), its Preview the card's own. */
 function decisionProgram(
   picks: { file: string; story: string }[],
   idOf: (file: string) => string
@@ -2874,8 +2874,20 @@ function decisionProgram(
   ];
   for (let card = 0; card < cards; card += 1) {
     const mine = picks.slice(card * PER_CARD, (card + 1) * PER_CARD);
+    const [lone] = mine;
+    if (mine.length === 1 && lone) {
+      const n = card * PER_CARD;
+      lines.push(
+        `c${card} = Decision("c${card}", "Does this read right, ${card + 1} of ${cards}?", [c${card}yes, c${card}no], "The card shows a canvas.", [p${n}], [], false, null, "look")`,
+        `c${card}yes = Option("c${card}yes", "Yes", "It reads right.", true, [], "Nothing.")`,
+        `c${card}no = Option("c${card}no", "No", "It reads wrong.", false, [], "Another pass.")`,
+        `p${n} = Preview("${idOf(lone.file)}", "${lone.story}", ["${lone.story}"])`
+      );
+      continue;
+    }
+    const options = mine.map((_, at) => `c${card}o${at}`);
     lines.push(
-      `c${card} = Decision("c${card}", "Which reads right, ${card + 1} of ${cards}?", [${mine.map((_, at) => `c${card}o${at}`).join(", ")}], "Each option shows a canvas.", [], [], false, null, "look")`
+      `c${card} = Decision("c${card}", "Which reads right, ${card + 1} of ${cards}?", [${options.join(", ")}], "Each option shows a canvas.", [], [], false, null, "look")`
     );
     mine.forEach((pick, at) => {
       const n = card * PER_CARD + at;
@@ -4344,6 +4356,19 @@ const run = async (kit: Kit) => {
     }
     rmSync(loopDir, { recursive: true, force: true });
   }
+};
+
+/** The decision pages this spec's legs write, as they build them, read by scripts/probe-programs-check.ts against the hub's build. */
+export const probePrograms = (): string[] => {
+  const picks = Array.from({ length: 4 }, (_, at) => ({
+    file: `src/lib/probe/Probe${at}.stories.ts`,
+    story: `Story${at}`,
+    id: `probe-canvas-${at}`,
+  }));
+  return [
+    decisionProgram(picks, (file) => `probe-${file.length}`),
+    memoryProgram(picks),
+  ];
 };
 
 const spec: Spec = {
