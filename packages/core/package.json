@@ -93,6 +93,7 @@
     "./words/decides": "./src/words/decides.ts",
     "./words/routines": "./src/words/routines.ts",
     "./words/graph": "./src/words/graph.ts",
+    "./words/story-read": "./src/words/story-read.ts",
     "./words/leaks": "./src/words/leaks.ts",
     "./words/tools": "./src/words/tools.ts",
     "./words/harness": "./src/words/harness.ts",

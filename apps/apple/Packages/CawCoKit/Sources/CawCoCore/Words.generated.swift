@@ -1917,7 +1917,7 @@ public enum Words {
         public static let saving = "Saving…"
 
         public static func saveTitle(story: String, file: String) -> String {
-            "Write \(story)'s args into \(file)"
+            "Write \(story)'s props into \(file)"
         }
     }
 

@@ -200,6 +200,7 @@ import {
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
 import { shellWords } from "../../../packages/core/src/words/shell";
+import { storyReadWords } from "../../../packages/core/src/words/story-read";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import { buttonNames, type Kit, open, ROOT, type Spec } from "../kit";
@@ -729,10 +730,10 @@ async function builtStories(
   const spread = await write("17f", "Spread");
   const after = await readFile(mixedPath, "utf8");
   kit.check(
-    "17: an args write to the imported story is refused, args not readable here, with its name and why; one to the spread story as shared code; the file unchanged",
-    imported.includes("Imported: args not readable here") &&
+    "17: an args write to the imported story is refused, its props unread, with its name and why; one to the spread story as shared code; the file unchanged",
+    imported.includes(storyReadWords.unread("Imported", "").split(":")[0]) &&
       imported.includes("./fixture.js") &&
-      spread.includes("code other stories may share") &&
+      spread.includes(storyReadWords.propsFrom("Spread", "").split(":")[0]) &&
       after === before,
     `imported: ${short(imported).slice(0, 250)}; spread: ${short(spread).slice(0, 250)}; file ${after === before ? "unchanged" : "changed"}`
   );

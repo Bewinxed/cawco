@@ -151,5 +151,5 @@ export const artifactWords = {
   save: "Save",
   saving: "Saving…",
   saveTitle: (story: string, file: string) =>
-    `Write ${story}'s args into ${file}`,
+    `Write ${story}'s props into ${file}`,
 };

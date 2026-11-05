@@ -9,6 +9,7 @@
  * well the size of a desk's pane (a phone's for Phone), as the pane does.
  */
 import type { SheetOnPage } from "@cawco/core/stage";
+import { storyReadWords } from "@cawco/core/words/story-read";
 import Card from "#lib/components/ui/card/card.svelte";
 import Inspector from "./SheetInspector.svelte";
 import { SheetInspector } from "./sheet-inspector.svelte";
@@ -215,8 +216,7 @@ export const SharedArgs = {
   args: {
     inspector: readOnlyLive({
       read: true,
-      reason:
-        'Live is built by `tile("Running", 3)`, code other stories may share, so its args are edited in the file.',
+      reason: storyReadWords.builtBy("Live", '`tile("Running", 3)`'),
     }),
   },
   decorators: desk,
@@ -227,8 +227,10 @@ export const NotReadable = {
   args: {
     inspector: readOnlyLive({
       read: false,
-      reason:
-        "Live: args not readable here: tile is imported from ./fixtures, which this reader doesn't open.",
+      reason: storyReadWords.unread(
+        "Live",
+        storyReadWords.imported("tile", "./fixtures")
+      ),
     }),
   },
   decorators: desk,

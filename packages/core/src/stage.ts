@@ -880,9 +880,9 @@ export interface Story {
    * when it can. `read` false: the story file builds it with code the
    * reader can't follow (an imported helper, a computed value), so
    * `component` and `args` say nothing of it, though it mounts all the same;
-   * `reason` says "args not readable here" and why. `read` true: its
+   * `reason` says its props can't be read and why. `read` true: its
    * component and args were read through a spread or a local helper,
-   * shared code that is edited in the file.
+   * shared code a pin changes. Its words are core words/story-read.ts.
    */
   readOnly: { read: boolean; reason: string } | null;
   /** The list arg its record sets are cut from (`parameters.records`); null when it names none. */

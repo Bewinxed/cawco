@@ -1179,7 +1179,10 @@
           <Drawer.Content
             bind:ref={drawerNode}
             contained
-            grabber={{ label: words.nextStop(roomName), onpress: nextStop }}
+            grabber={{
+              label: words.nextStop(roomName, stopAt < SNAPS.length - 1),
+              onpress: nextStop,
+            }}
             modal={false}
             onOpenAutoFocus={(event: Event) => event.preventDefault()}
             portalProps={{ disabled: true }}

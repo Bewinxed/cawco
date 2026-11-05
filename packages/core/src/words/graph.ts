@@ -14,11 +14,10 @@ import { andList } from "./helpers";
 export type Figure = string & { readonly figure: true };
 
 export const graphWords = {
-  /** The room's faces, its switch's segments, and the switch's name for a screen reader. */
+  /** The room's faces, its switch's segments. */
   statesFace: "States",
   wholeSet: "Map",
   moveFace: "Animation",
-  faces: "Panel view",
   /** The panel's own name, whichever face it shows, from the faces it has: the room's aside and the phone drawer's title ("States, map and animation"). */
   room: (faces: readonly string[]) =>
     andList(faces.map((face, at) => (at === 0 ? face : face.toLowerCase()))),
@@ -29,12 +28,18 @@ export const graphWords = {
   /**
    * The room's own controls, each naming the room as its title does (`room`,
    * its faces' names: "the states"), never a "panel": its one Close; the
-   * bar's symbol that brings it back while it is put away; the drawer's
-   * grabber, a press stepping it to its next stop.
+   * bar's symbol that brings it back while it is put away.
    */
   closeRoom: (room: string) => `Close the ${room.toLowerCase()}`,
   openRoom: (room: string) => `Show the ${room.toLowerCase()}`,
-  nextStop: (room: string) => `Resize the ${room.toLowerCase()}`,
+  /**
+   * The phone drawer's grabber, named for what its press does at the stop
+   * the drawer stands at (`more`: below its last stop, so the press raises
+   * it; at its last, the press takes it back to its head), as a sheet's
+   * grabber tells VoiceOver expand or collapse.
+   */
+  nextStop: (room: string, more: boolean) =>
+    `Show ${more ? "more" : "less"} of the ${room.toLowerCase()}`,
   /** The component in front, when the ask names several: the switch's name. */
   components: "Component",
   /** A state the states file tags as a failure: its glyph's name and tooltip in the whole set. */
@@ -175,8 +180,8 @@ export const graphWords = {
   length: "Length",
   delay: "Delay",
   curve: "Curve",
-  /** A length typed by hand, off the design system's durations. */
-  ownLength: "Own length",
+  /** A length typed by hand, off the design system's durations: his, as the curve he bends is "Your curve". */
+  ownLength: "Your length",
   /** The delay's steppers. */
   earlier: "Earlier",
   later: "Later",
@@ -229,9 +234,8 @@ export const graphWords = {
     "border-color": "Edge colour",
     "box-shadow": "Shadow",
   } as Record<string, string>,
-  /** The As written view, under its rows: the agent's timing stands read only. */
-  readOnly:
-    "The agent's timing as written, read only. Switch to Yours to change it.",
+  /** The As written view, under its rows: its rows take no press, and the way on is Yours. */
+  readOnly: "Switch to Yours to change the timing.",
   /** A row under a row that moves several parts of its thing at once (a morphed text's letters): how many. */
   partsCount: (n: number) => `${n} parts`,
   /** A drawn curve's two handles, for a reader. */
@@ -282,8 +286,6 @@ export const graphWords = {
   /** The component failed to mount: what happened, why, what to do, what next. */
   mountFailed: (name: string, state: string) =>
     `${name} didn't load at ${state}.`,
-  showDetails: "Show details",
-  hideDetails: "Hide details",
   tryAgain: "Try again",
   /** The hub's link down: the stage keeps its last drawing. */
   stale: "Not live: the hub can't be reached. This is the last view it sent.",

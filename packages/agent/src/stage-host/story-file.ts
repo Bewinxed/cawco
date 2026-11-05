@@ -24,6 +24,8 @@ import {
   type Story,
   type StoryOp,
 } from "@cawco/core/stage";
+import { storyWords } from "@cawco/core/stage-graph";
+import { storyReadWords as reasons } from "@cawco/core/words/story-read";
 
 /** A node of Babel's syntax tree, as far as a story file is read. */
 interface Node {
@@ -252,12 +254,14 @@ interface Reading {
   text: string;
 }
 
+/** A node's own code, as the reason lines set it: in backticks. */
+const codeOf = (reading: Reading, node: Node): string =>
+  `\`${sourceOf(reading.text, node)}\``;
+
 /** Why name `name` leads nowhere this file says: it is imported, or not declared here. */
 const elsewhere = (reading: Reading, name: string): string => {
   const source = reading.imports.get(name);
-  return source
-    ? `${name} is imported from ${source}, which this reader doesn't open`
-    : `${name} isn't declared at the top of this file`;
+  return source ? reasons.imported(name, source) : reasons.undeclared(name);
 };
 
 /**
@@ -276,11 +280,11 @@ function flatten(
   const { node, env } = deref(at);
   const expr = bare(node);
   if (!expr) {
-    return { why: "it has no value" };
+    return { why: reasons.noValue };
   }
   if (depth > MAX_DEPTH) {
     return {
-      why: `\`${sourceOf(reading.text, expr)}\` goes deeper than the reader follows`,
+      why: reasons.tooDeep(codeOf(reading, expr)),
     };
   }
   switch (expr.type) {
@@ -297,7 +301,7 @@ function flatten(
       const key = expr.computed ? null : identifier(child(expr, "property"));
       const object = child(expr, "object");
       if (!(key && object)) {
-        return { why: `\`${sourceOf(reading.text, expr)}\` is computed` };
+        return { why: reasons.computed(codeOf(reading, expr)) };
       }
       const flat = flatten(reading, { node: object, env }, via, depth + 1);
       if ("why" in flat) {
@@ -311,13 +315,13 @@ function flatten(
             via,
             depth + 1
           )
-        : { why: `\`${sourceOf(reading.text, expr)}\` names no key it has` };
+        : { why: reasons.noSuchKey(codeOf(reading, expr)) };
     }
     case "CallExpression":
       return flattenCall(reading, expr, env, via, depth);
     default:
       return {
-        why: `\`${sourceOf(reading.text, expr)}\` is computed, not an object this file writes`,
+        why: reasons.notAnObject(codeOf(reading, expr)),
       };
   }
 }
@@ -347,7 +351,7 @@ function flattenObject(
     const key = keyOf(property);
     if (key === null) {
       return {
-        why: `\`${sourceOf(reading.text, property)}\` has a computed key`,
+        why: reasons.computedKey(codeOf(reading, property)),
       };
     }
     // A method (`render() {…}`) is code under its key.
@@ -369,7 +373,7 @@ function flattenCall(
   const said = sourceOf(reading.text, call);
   const name = identifier(child(call, "callee"));
   if (!name) {
-    return { why: `\`${said}\` calls no function by name` };
+    return { why: reasons.noNamedCall(`\`${said}\``) };
   }
   const fn = bare(reading.scope.get(name) ?? null);
   if (!fn) {
@@ -380,11 +384,11 @@ function flattenCall(
     fn.type === "ArrowFunctionExpression" ||
     fn.type === "FunctionExpression"
   )) {
-    return { why: `${name} is no function this file declares` };
+    return { why: reasons.notAFunction(name) };
   }
   const inner = bindings(call, fn, env);
-  if (typeof inner === "string") {
-    return { why: inner.replace("$fn", name) };
+  if (typeof inner === "function") {
+    return { why: inner(name) };
   }
   const body = child(fn, "body");
   if (body && body.type !== "BlockStatement") {
@@ -393,22 +397,26 @@ function flattenCall(
   const returned = returnedBy(children(body ?? { type: "" }, "body"), inner);
   return returned
     ? flatten(reading, { node: returned, env: inner }, via, depth + 1)
-    : { why: `${name} does more than return an object` };
+    : { why: reasons.doesMore(name) };
 }
 
-/** Function `fn`'s parameters bound to `call`'s arguments (read in `env`), a default read in the function's own; or why not, `$fn` standing for its name. */
-function bindings(call: Node, fn: Node, env: Env): Env | string {
+/** Function `fn`'s parameters bound to `call`'s arguments (read in `env`), a default read in the function's own; or why not, said of the function's name. */
+function bindings(
+  call: Node,
+  fn: Node,
+  env: Env
+): Env | ((name: string) => string) {
   const inner: Env = new Map();
   const given = children(call, "arguments");
   for (const [at, param] of children(fn, "params").entries()) {
     const arg = given[at];
     if (arg?.type === "SpreadElement") {
-      return "`$fn(…)` spreads its arguments";
+      return reasons.spreadsArguments;
     }
     const left =
       param.type === "AssignmentPattern" ? child(param, "left") : param;
     if (left?.type !== "Identifier") {
-      return "$fn takes its arguments as a pattern";
+      return reasons.patternArguments;
     }
     const fallback =
       param.type === "AssignmentPattern" ? child(param, "right") : null;
@@ -758,12 +766,12 @@ function constOf(
       return { why: elsewhere(reading, name) };
     }
     return depth > MAX_DEPTH
-      ? { why: `${name} goes deeper than the reader follows` }
+      ? { why: reasons.tooDeep(name) }
       : constOf(reading, { node: declared, env: NO_ENV }, depth + 1);
   }
   return (
     literal(found.node, found.env) ?? {
-      why: `\`${sourceOf(reading.text, found.node)}\` is computed, not a value this file writes`,
+      why: reasons.notAValue(codeOf(reading, found.node)),
     }
   );
 }
@@ -920,6 +928,10 @@ function valueAt(reading: Reading, at: Bound | null, key: string): unknown {
   return "why" in read ? undefined : read.value;
 }
 
+/** The name a story is shown by: its CSF `name`, else its export in words ("Turning off title desk"), as the states list and the inspector say it. */
+const shownName = (reading: Reading, story: Export): string =>
+  shownBy(reading, story).display ?? storyWords(story.name);
+
 /**
  * What the design graph reads of a story besides its frame: the name it is
  * shown by (CSF `name`), the list arg its record sets are cut from
@@ -970,7 +982,7 @@ const unread = (
   component: null,
   readOnly: {
     read: false,
-    reason: `${name}: args not readable here: ${reason}.`,
+    reason: reasons.unread(name, reason),
   },
 });
 
@@ -985,17 +997,15 @@ function storyRead(
   reading: Reading,
   story: Export
 ): Pick<Story, "args" | "code" | "component" | "readOnly"> {
-  const { name, init } = story;
+  const { init } = story;
+  // The story as the inspector and the states list name it, so one state has one name on the panel.
+  const name = shownName(reading, story);
   if (
     !init ||
     init.type === "ArrowFunctionExpression" ||
     init.type === "FunctionExpression"
   ) {
-    return unread(
-      name,
-      "it is a function (CSF 2), not a story object; make it `export const " +
-        `${name} = { args: {…} }\``
-    );
+    return unread(name, reasons.aFunction);
   }
   const flat = flatten(reading, { node: init, env: NO_ENV });
   if ("why" in flat) {
@@ -1020,35 +1030,35 @@ function storyRead(
   return {
     ...read,
     component,
-    readOnly: writeBlock(reading, story, argsEntry),
+    readOnly: writeBlock(reading, story, argsEntry, name),
   };
 }
 
-/** Why the inspector can't write readable story `story`'s args, whose last `args` key is `argsEntry`; null when it can. */
+/** Why the inspector can't write readable story `story`'s args, whose last `args` key is `argsEntry`, said of it as `name`; null when it can. */
 function writeBlock(
   reading: Reading,
   story: Export,
-  argsEntry: Entry | undefined
+  argsEntry: Entry | undefined,
+  name: string
 ): Story["readOnly"] {
-  const { name, init, object } = story;
-  const said = (node: Node) => `\`${sourceOf(reading.text, node)}\``;
+  const { init, object } = story;
   if (!object) {
     return {
       read: true,
-      reason: `${name} is built by ${said(init ?? story.place)}, code other stories may share, so its args are edited in the file.`,
+      reason: reasons.builtBy(name, codeOf(reading, init ?? story.place)),
     };
   }
   if (argsEntry?.via) {
     return {
       read: true,
-      reason: `${name}'s args come from ${said(argsEntry.via)}, code other stories may share, so they are edited in the file.`,
+      reason: reasons.propsFrom(name, codeOf(reading, argsEntry.via)),
     };
   }
   const value = bare(argsEntry?.value ?? null);
   if (value && value.type !== "ObjectExpression") {
     return {
       read: true,
-      reason: `${name}'s args are ${said(value)}, no object literal, so they are edited in the file.`,
+      reason: reasons.propsAre(name, codeOf(reading, value)),
     };
   }
   return null;
@@ -1247,9 +1257,7 @@ function storyNamed(
     );
   }
   if (!story.object) {
-    throw new StoryRefusal(
-      `${name} in ${file} is a function (CSF 2) or no object literal, so its args can't be written: make it \`export const ${name} = { args: {…} }\`.`
-    );
+    throw new StoryRefusal(reasons.notWritable(name, file));
   }
   return story as Export & { object: Node };
 }
