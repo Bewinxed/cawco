@@ -957,6 +957,44 @@ export interface PropMeta {
 }
 
 /**
+ * The element's pass-through props a component names in its own props
+ * (`class?: string` beside `HTMLAttributes`, React's `className`): they
+ * restyle it from outside and make none of its states. An inspector lists
+ * one only where the story sets it (the owner, 2026-11-05). `id`, `aria-*`
+ * and `data-*` stay out: one only the element's types declare is already
+ * dropped by docgen, and one the component names itself carries a meaning
+ * of its own (ToolChips' `id` prefixes its popovers' ids, NsPopover's
+ * `aria-label` names it, StickyFoot's `data-slot` is its parent's hook).
+ */
+const PASS_THROUGH_PROPS: ReadonlySet<string> = new Set([
+  "class",
+  "className",
+  "style",
+]);
+
+/**
+ * The props an inspector lists for a story: every one, a pass-through one
+ * ({@link PASS_THROUGH_PROPS}) only where `sets(name)` says the story's
+ * drawing takes it, so nothing that changes the drawing is hidden.
+ */
+export const inspectedProps = (
+  props: PropMeta[],
+  sets: (name: string) => boolean
+): PropMeta[] =>
+  props.filter((prop) => !PASS_THROUGH_PROPS.has(prop.name) || sets(prop.name));
+
+/** Whether a story's file sets prop `name` for it: in its own args, literal or code, or in the meta's. */
+export const fileSets = (
+  name: string,
+  story: Pick<Story, "args" | "code">,
+  meta: Pick<SheetMeta, "args" | "code">
+): boolean =>
+  name in story.args ||
+  name in story.code ||
+  name in meta.args ||
+  name in meta.code;
+
+/**
  * A component's props as the stage read them. `types` says how: `checked`
  * by the TypeScript checker or a docgen of its own, `jsdoc` from JSDoc
  * and PropTypes alone (the project has no TypeScript), `unknown` when

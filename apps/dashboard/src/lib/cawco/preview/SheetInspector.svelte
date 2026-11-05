@@ -102,7 +102,7 @@
   const editable = $derived(
     !!component &&
       !inspector.readOnly &&
-      component.props.some(
+      inspector.props.some(
         (prop) =>
           inspector.code(prop) === null &&
           controlOf(prop) !== "code" &&
@@ -353,7 +353,7 @@
             <p class="m-0 text-ink-muted type-meta">{component.note}</p>
           {/if}
           <ul class="grid gap-space-4 m-0 p-0 list-none">
-            {#each ordered(component.props) as prop (prop.name)}
+            {#each ordered(inspector.props) as prop (prop.name)}
               {@const control =
                 inspector.code(prop) === null && !inspector.readOnly
                   ? controlOf(prop)

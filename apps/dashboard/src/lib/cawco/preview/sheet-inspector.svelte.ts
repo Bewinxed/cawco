@@ -9,12 +9,14 @@
  * story buttons add one from the current controls, duplicate, remove and
  * move one. Everything inside a component stays a pin.
  */
-import type {
-  ComponentDoc,
-  PropMeta,
-  SheetOnPage,
-  Story,
-  StoryOp,
+import {
+  type ComponentDoc,
+  fileSets,
+  inspectedProps,
+  type PropMeta,
+  type SheetOnPage,
+  type Story,
+  type StoryOp,
 } from "@cawco/core/stage";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import type { SheetChange } from "../artifact-api";
@@ -127,6 +129,24 @@ export class SheetInspector {
     }
     const file = this.story?.component ?? this.sheet?.meta.component;
     return this.sheet?.components.find((one) => one.file === file) ?? null;
+  }
+
+  /**
+   * The component's props the controls list for the chosen story: a
+   * pass-through one (`class`, `style`; core `PASS_THROUGH_PROPS`) only
+   * where its file sets it or the person changed or reset it here, so a
+   * story that draws with one shows why.
+   */
+  get props(): PropMeta[] {
+    const { chosen: name, story, sheet } = this;
+    return inspectedProps(
+      this.component?.props ?? [],
+      (prop) =>
+        !!(name && story && sheet) &&
+        (fileSets(prop, story, sheet.meta) ||
+          prop in (this.edits[name] ?? {}) ||
+          (this.drops[name] ?? []).includes(prop))
+    );
   }
 
   /** Whether story `name` holds values or drops not saved. */
@@ -285,7 +305,7 @@ export class SheetInspector {
 
   /** The chosen story's args as they stand on screen, each literal one: what Add story writes. */
   current(): Record<string, unknown> {
-    const props = this.component?.props ?? [];
+    const { props } = this;
     const out: Record<string, unknown> = {};
     for (const prop of props) {
       const value = this.value(prop);
