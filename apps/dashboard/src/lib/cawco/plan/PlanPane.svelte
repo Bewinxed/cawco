@@ -71,7 +71,7 @@
   import { popOut } from "../motion/pop.svelte";
   import { send } from "../project-tasks";
   import { planAsked, takePlan } from "../reference-things.svelte";
-  import { composerLayer } from "../transcript/composer-layer.svelte";
+  import { composerLayerOf } from "../transcript/composer-layer.svelte";
   import PlanTree from "./PlanTree.svelte";
 
   let {
@@ -137,19 +137,21 @@
   }
 
   /**
-   * It holds the composer's layer while it is open: the tray's shelf
+   * It holds its pane's composer layer while it is open: the tray's shelf
    * opening over the same row takes it, and the plan shuts.
    */
   const layerOwner = Symbol("plan");
+  const layer = $derived(composerLayerOf(instanceId));
   $effect.pre(() => {
-    untrack(() => composerLayer.take(layerOwner));
+    const held = layer;
+    untrack(() => held.take(layerOwner));
+    return () => held.drop(layerOwner);
   });
   $effect(() => {
-    if (!composerLayer.holds(layerOwner)) {
+    if (!layer.holds(layerOwner)) {
       untrack(onclose);
     }
   });
-  $effect(() => () => composerLayer.drop(layerOwner));
 
   let section = $state<HTMLElement>();
   let body = $state<HTMLElement>();
