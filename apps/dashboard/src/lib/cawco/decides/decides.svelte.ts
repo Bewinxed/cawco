@@ -29,8 +29,8 @@ import {
   type FleetOffer,
   type MemberRecord,
   readFleet,
-  readProject,
   readRecord,
+  readTable,
   readTypes,
   readWaiting,
   removeKind,
@@ -38,8 +38,9 @@ import {
   renameKind,
   saveMember,
   setPicture,
+  type TableAt,
   writeFleetRoutes,
-  writeProjectRoutes,
+  writeTableRoutes,
 } from "./decides-client";
 import {
   KIND_STEPS,
@@ -97,7 +98,12 @@ export interface Fault {
 }
 
 export class WhoDecides {
+  /** The project whose page this is; null on the fleet's page and an area's. */
   readonly projectId: string | null;
+  /** Whose own table the page writes: a project's, an area's, or none (the fleet's page). */
+  readonly at: TableAt | null;
+  /** The key a closed draft is parked by: the project's id, the area's `area:<id>`, or null for the fleet. */
+  readonly parkKey: string | null;
   read = $state<Read>({ state: "reading" });
   /** The kind whose hand-over list is open. */
   handing = $state<string | null>(null);
@@ -131,10 +137,12 @@ export class WhoDecides {
   /** The kind a removed kind's choices go to, picked in its question. */
   moveTo = $state<string | null>(null);
 
-  constructor(projectId: string | null) {
-    this.projectId = projectId;
-    this.parked = readParked(projectId);
-    this.kindAdd = readParkedKind(projectId);
+  constructor(at: TableAt | null) {
+    this.at = at;
+    this.projectId = at && "project" in at ? at.project : null;
+    this.parkKey = at && ("project" in at ? at.project : `area:${at.area}`);
+    this.parked = readParked(this.parkKey);
+    this.kindAdd = readParkedKind(this.parkKey);
   }
 
   async load(): Promise<void> {
@@ -171,14 +179,15 @@ export class WhoDecides {
   readonly problems = $derived(
     this.read.state === "read" ? (this.read.table?.problems ?? []) : []
   );
-  /** The kinds the project set itself, in the kinds' order; none on the fleet's page. */
+  /** The kinds this page's table set itself (a project's, or an area's), in the kinds' order; none on the fleet's page. */
   readonly own = $derived(
     this.read.state === "read" && this.read.table
       ? this.kinds
           .filter(
             (kind) =>
               this.read.state === "read" &&
-              this.read.table?.from[kind.id] === "project"
+              this.read.table?.from[kind.id] ===
+                (this.at && "area" in this.at ? "area" : "project")
           )
           .map((kind) => kind.id)
       : []
@@ -296,7 +305,7 @@ export class WhoDecides {
     if (read.state !== "read") {
       return;
     }
-    if (this.projectId === null) {
+    if (this.at === null) {
       const fleet = await writeFleetRoutes({
         ...read.fleet.routes,
         ...(Object.fromEntries(
@@ -305,11 +314,7 @@ export class WhoDecides {
       });
       this.#replace({ fleet: { ...read.fleet, ...fleet } });
     } else {
-      const { decides } = await writeProjectRoutes(
-        this.projectId,
-        routes,
-        message
-      );
+      const { decides } = await writeTableRoutes(this.at, routes, message);
       this.#replace({ table: decides });
     }
   }
@@ -325,9 +330,7 @@ export class WhoDecides {
   async #refresh(): Promise<void> {
     const [fleet, table, catalog] = await Promise.all([
       readFleet(),
-      this.projectId === null
-        ? null
-        : readProject(this.projectId).then((read) => read.decides),
+      this.at === null ? null : readTable(this.at).then((read) => read.decides),
       readTypes(),
     ]);
     this.read = { state: "read", fleet, table, types: catalog.types };
@@ -382,9 +385,7 @@ export class WhoDecides {
     this.handing = null;
     return this.#write({
       [kind]:
-        this.projectId !== null && this.fleetRoutes[kind] === member
-          ? null
-          : member,
+        this.at !== null && this.fleetRoutes[kind] === member ? null : member,
     });
   };
 
@@ -426,13 +427,13 @@ export class WhoDecides {
     this.parked = setup.changed
       ? { ...rest, [setup.key]: setup.parked() }
       : rest;
-    writeParked(this.projectId, this.parked);
+    writeParked(this.parkKey, this.parked);
   }
 
   #unpark(key: string): void {
     const { [key]: _was, ...rest } = this.parked;
     this.parked = rest;
-    writeParked(this.projectId, this.parked);
+    writeParked(this.parkKey, this.parked);
   }
 
   /** The draft `member` holds as the hub has it. */
@@ -587,14 +588,10 @@ export class WhoDecides {
       const wanted = kinds.includes(kind.id);
       if (wanted && !held) {
         routes[kind.id] =
-          this.projectId !== null && this.fleetRoutes[kind.id] === id
-            ? null
-            : id;
+          this.at !== null && this.fleetRoutes[kind.id] === id ? null : id;
       } else if (held && !wanted) {
         routes[kind.id] =
-          this.projectId !== null && this.fleetRoutes[kind.id] !== id
-            ? null
-            : "you";
+          this.at !== null && this.fleetRoutes[kind.id] !== id ? null : "you";
       }
     }
     return routes;
@@ -761,7 +758,7 @@ export class WhoDecides {
   showKinds = (open: boolean): void => {
     this.kindsOpen = open;
     if (!open) {
-      writeParkedKind(this.projectId, this.kindAdd);
+      writeParkedKind(this.parkKey, this.kindAdd);
       if (this.kindAdd && !this.kindAdd.changed) {
         this.kindAdd = null;
       }
@@ -781,7 +778,7 @@ export class WhoDecides {
   /** Cancel: the one discard. */
   cancelKind = (): void => {
     this.kindAdd = null;
-    writeParkedKind(this.projectId, null);
+    writeParkedKind(this.parkKey, null);
   };
 
   /** What keeps `add` from being added, by step, the hub's refusal at the step it names. */
@@ -861,7 +858,7 @@ export class WhoDecides {
       if (this.kindAdd === add) {
         this.kindAdd = null;
       }
-      writeParkedKind(this.projectId, null);
+      writeParkedKind(this.parkKey, null);
       await this.#refresh();
     } catch (error) {
       const reason = failureWords(error);

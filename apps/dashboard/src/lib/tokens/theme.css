@@ -394,6 +394,8 @@
   --spacing-c-section-head-h: var(--c-section-head-h);
   --spacing-c-row-inset: var(--c-row-inset);
   --spacing-c-row-h: var(--c-row-h);
+  --spacing-c-area-count-w: var(--c-area-count-w);
+  --spacing-c-area-page-side-w: var(--c-area-page-side-w);
   --spacing-c-routine-time-w: var(--c-routine-time-w);
   --spacing-c-grid-4: var(--c-grid-4);
   --spacing-c-grid-2: var(--c-grid-2);

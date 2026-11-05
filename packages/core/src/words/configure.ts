@@ -28,6 +28,7 @@ export const CONFIG_GROUPS = [
 export type ConfigGroup = (typeof CONFIG_GROUPS)[number];
 
 export type ConfigSlug =
+  | "areas"
   | "rules"
   | "hooks"
   | "delegate-types"
@@ -179,6 +180,17 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     badge: "fleet-faults",
     icon: "book-bold-duotone",
     hue: "hue-blue-600",
+  },
+  {
+    slug: "areas",
+    group: "Hub",
+    label: "Areas",
+    purpose:
+      "Groups of projects, each with settings its projects take where they set none",
+    counted: true,
+    badge: "fleet-faults",
+    icon: "folder-with-files-bold-duotone",
+    hue: "hue-blue-500",
   },
   {
     slug: "accounts",

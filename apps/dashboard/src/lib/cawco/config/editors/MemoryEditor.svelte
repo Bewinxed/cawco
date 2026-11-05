@@ -8,6 +8,7 @@
     scopeKey,
   } from "@cawco/core/fleet";
   import { machineLabel } from "@cawco/core/machine-names";
+  import { areasScreenWords } from "@cawco/core/words/areas";
   import { memoryWords as words } from "@cawco/core/words/memory";
   import { untrack } from "svelte";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
@@ -259,6 +260,24 @@
       .map((project) => ({ value: project.id, label: project.name }))
       .sort((a, b) => a.label.localeCompare(b.label)),
   ]);
+  const areaOptions = $derived([
+    { value: "", label: words.none },
+    ...(store.areas.value ?? []).map((area) => ({
+      value: area.id,
+      label: area.name,
+    })),
+  ]);
+  /** An area picked toggles in or out; "None" clears them all. */
+  const pickArea = (next: string) => {
+    const { areaIds: had = [], ...rest } = scope;
+    let areaIds: string[] = [];
+    if (next) {
+      areaIds = had.includes(next)
+        ? had.filter((id) => id !== next)
+        : [...had, next];
+    }
+    scope = areaIds.length > 0 ? { ...rest, areaIds } : rest;
+  };
   const pickRole = (next: string) => {
     const { role: _role, ...rest } = scope;
     scope = isMemoryRole(next) ? { ...rest, role: next } : rest;
@@ -439,6 +458,14 @@
           options={projectOptions}
           picked={scope.projectIds ?? []}
         />
+        {#if (store.areas.value ?? []).length > 0 || scope.areaIds}
+          <PickerChip
+            label={areasScreenWords.scopeChips}
+            onpick={pickArea}
+            options={areaOptions}
+            picked={scope.areaIds ?? []}
+          />
+        {/if}
       {/if}
     </div>
     <h1
@@ -451,7 +478,11 @@
       <p
         class="relative flex flex-wrap gap-x-space-3 gap-y-space-1 type-meta text-ink-muted"
       >
-        <span>{words.loadedInto(loadedInto(scope, cawco.projects))}</span>
+        <span
+          >{words.loadedInto(
+            loadedInto(scope, cawco.projects, store.areas.value ?? [])
+          )}</span
+        >
       </p>
     {/if}
     <p

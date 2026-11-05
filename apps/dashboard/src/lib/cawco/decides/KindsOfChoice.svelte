@@ -68,7 +68,7 @@
   $effect(() => {
     const kept = add?.parked();
     if (kept) {
-      untrack(() => writeParkedKind(who.projectId, add));
+      untrack(() => writeParkedKind(who.parkKey, add));
     }
   });
 

@@ -11,7 +11,7 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { readProject } from "./decides-client";
+  import { readTable } from "./decides-client";
 
   let { projectId }: { projectId: string } = $props();
 
@@ -24,7 +24,7 @@
   async function load(id: string): Promise<void> {
     read = { state: "reading" };
     try {
-      const { decides } = await readProject(id);
+      const { decides } = await readTable({ project: id });
       read = {
         state: "read",
         own: Object.values(decides.from).filter((from) => from === "project")

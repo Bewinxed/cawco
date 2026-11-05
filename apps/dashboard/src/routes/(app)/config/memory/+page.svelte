@@ -164,9 +164,11 @@
         href={fileHref(doc.path)}
         hue={HUE}
         icon={IconBook}
-        meta="{loadedInto(doc.scope, cawco.projects)} · {facts(doc)}{drafted(
-          doc.path
-        )}"
+        meta="{loadedInto(
+          doc.scope,
+          cawco.projects,
+          store.areas.value ?? []
+        )} · {facts(doc)}{drafted(doc.path)}"
         mono
         name={docLabel(doc.path, doc.scope)}
       >

@@ -9,6 +9,7 @@
     RuleWatch,
   } from "@cawco/core/rules";
   import { ruleProblem, ruleSentence } from "@cawco/core/rules";
+  import { areasScreenWords } from "@cawco/core/words/areas";
   import { commonWords } from "@cawco/core/words/common";
   import { rulesWords } from "@cawco/core/words/rules";
   import { onMount, untrack } from "svelte";
@@ -163,7 +164,7 @@
 
   /** "Every" is stored as the key being absent. */
   function narrow(
-    key: "machineId" | "projectId" | "harness" | "model",
+    key: "machineId" | "projectId" | "areaId" | "harness" | "model",
     value: string
   ) {
     if (value === "") {
@@ -442,6 +443,20 @@
         ]}
         value={draft.scope.projectId ?? ""}
       />
+      {#if (store.areas.value ?? []).length > 0 || draft.scope.areaId}
+        <PickerChip
+          label={areasScreenWords.scopeChip}
+          onpick={(next) => narrow("areaId", next)}
+          options={[
+            { value: "", label: areasScreenWords.everyArea },
+            ...(store.areas.value ?? []).map((area) => ({
+              value: area.id,
+              label: area.name,
+            })),
+          ]}
+          value={draft.scope.areaId ?? ""}
+        />
+      {/if}
       <PickerChip
         label="Harness"
         onpick={(next) => narrow("harness", next)}

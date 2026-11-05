@@ -48,6 +48,7 @@ import {
   SESSION_ROLES,
   type SessionRole,
 } from "@cawco/core";
+import { areaWords } from "@cawco/core/words/areas";
 import { Elysia } from "elysia";
 import type { DelegateTypesShape } from "./delegate-types";
 import { areaFolder, FOLDER_FILE_LIMIT, projectRoot } from "./project-folder";
@@ -368,6 +369,8 @@ const readFolderTypes = (
 
 /** The catalog, resolver and route surface over the fleet's types and each project's. */
 export interface ProjectDelegateTypes {
+  /** An area's own types, each marked where it replaces a fleet type, with what kept files out. */
+  readonly areaCatalog: (areaId: string) => DelegateCatalog;
   /** The project's types, its area's they leave unshadowed, then the fleet's either leaves, with what kept files out. */
   readonly catalog: (projectId: string | null | undefined) => DelegateCatalog;
   /** One name, as a session of that project resolves it: its project's type first. */
@@ -419,7 +422,18 @@ export const makeProjectDelegateTypes = (
   };
   const typesFor = (projectId: string | null | undefined): CatalogType[] =>
     catalog(projectId).types;
+  const areaCatalog = (areaId: string): DelegateCatalog => {
+    const own = readFolderTypes(areaFolder(areaId), "area");
+    const fleetNames = new Set(fleet.list().map((type) => type.name));
+    return {
+      types: own.types.map((type) =>
+        fleetNames.has(type.name) ? { ...type, shadows: true } : type
+      ),
+      problems: own.problems,
+    };
+  };
   return {
+    areaCatalog,
     catalog,
     typesFor,
     resolveTypeFor: (projectId, name) =>
@@ -433,11 +447,21 @@ export const makeProjectDelegateTypes = (
  */
 export const projectDelegateTypesRoutes = (
   types: ProjectDelegateTypes,
-  projectExists: (id: string) => boolean
+  projectExists: (id: string) => boolean,
+  areaExists: (id: string) => boolean
 ) =>
-  new Elysia().get("/api/projects/:id/delegate-types", ({ params, status }) => {
-    if (!projectExists(params.id)) {
-      return status(404, `The hub keeps no project ${params.id}.`);
-    }
-    return types.catalog(params.id);
-  });
+  new Elysia()
+    .get("/api/projects/:id/delegate-types", ({ params, status }) => {
+      if (!projectExists(params.id)) {
+        return status(404, `The hub keeps no project ${params.id}.`);
+      }
+      return types.catalog(params.id);
+    })
+    // An area's own types (core areas.ts), read from its folder's
+    // `delegates/` as a project's are, and the files that made none.
+    .get("/api/areas/:id/delegate-types", ({ params, status }) => {
+      if (!areaExists(params.id)) {
+        return status(404, areaWords.noArea(params.id));
+      }
+      return types.areaCatalog(params.id);
+    });

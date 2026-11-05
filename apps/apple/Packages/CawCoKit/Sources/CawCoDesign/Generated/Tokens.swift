@@ -714,6 +714,10 @@ public enum Size {
     public static let cRowInset: Double = 10
     /// A routines-page row's pitch: the whole row is its own 44px opener on every pointer.
     public static let cRowH: Double = 44
+    /// Configure › Areas' project-count column: "12 projects" or "No projects" in meta, tabular. Fixed, so every area row's count starts on one edge whatever it says.
+    public static let cAreaCountW: Double = 104
+    /// An area's page on a desk: the column of the projects in it, beside its settings. Wide enough for a project's name and the line saying what it sets itself; the settings column takes the rest.
+    public static let cAreaPageSideW: Double = 288
     /// The routines ledger's Last run and Next run columns, one width for both: a 12px status glyph and "23h ago", or "Tomorrow 13:30", in meta with the ledger row's 11px either side. Fixed, so every row's times start on one edge whatever they say.
     public static let cRoutineTimeW: Double = 144
     /// The page width from which a project page's blocks stand on four columns (a 1440 window with the rail: a 1166px page, 278px columns).

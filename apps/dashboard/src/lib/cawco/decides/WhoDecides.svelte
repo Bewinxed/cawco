@@ -39,11 +39,29 @@
   import KindsOfChoice from "./KindsOfChoice.svelte";
   import WhoRoster from "./WhoRoster.svelte";
 
-  let { projectId }: { projectId: string | null } = $props();
+  let {
+    projectId,
+    area = null,
+  }: {
+    projectId: string | null;
+    /**
+     * An area's page (core areas.ts), in Configure: its own table over the
+     * fleet's, laid out as a project's, its bar leading back to the area.
+     * Null while it is not an area's.
+     */
+    area?: { id: string; name: string } | null;
+  } = $props();
 
   const section = sectionOf("decides");
 
-  const who = new WhoDecides(untrack(() => projectId));
+  const who = new WhoDecides(
+    untrack(() => {
+      if (area) {
+        return { area: area.id };
+      }
+      return projectId === null ? null : { project: projectId };
+    })
+  );
   $effect(() => {
     untrack(() => who.load());
   });
@@ -78,19 +96,27 @@
       ? undefined
       : cawco.projects.find((one) => one.id === projectId)
   );
-  /** The project's name as the page says it; empty until the hub's list has it, while the page waits. */
-  const name = $derived(project?.name ?? "");
+  /** The project's or area's name as the page says it; empty until the hub's list has it, while the page waits. */
+  const name = $derived(area?.name ?? project?.name ?? "");
   /** Read, and on a project's page its name known. */
   const ready = $derived(
-    who.read.state === "read" && (projectId === null || project !== undefined)
+    who.read.state === "read" &&
+      (area ? area.name !== "" : projectId === null || project !== undefined)
   );
   const facts = (member: Member) => who.facts(member, project);
   /** Projects' names by their ids, for what waits under a kind. */
   const named = (ids: string[]) =>
     ids.map((id) => cawco.projects.find((one) => one.id === id)?.name ?? id);
-  const projectHref = $derived(
-    projectId === null ? "" : `/project/${encodeURIComponent(projectId)}`
-  );
+  const projectHref = $derived.by(() => {
+    if (area) {
+      return `/config/areas/${encodeURIComponent(area.id)}`;
+    }
+    return projectId === null
+      ? ""
+      : `/project/${encodeURIComponent(projectId)}`;
+  });
+  /** A page with a table of its own: a project's, or an area's. */
+  const scoped = $derived(area !== null || projectId !== null);
 </script>
 
 {#snippet roster()}
@@ -111,25 +137,22 @@
         {decidesWords.fileProblems(who.problems.join(" "))}
       </p>
     {/if}
-    <WhoRoster
-      {facts}
-      project={projectId === null ? null : name}
-      settings
-      {who}
-    />
+    <WhoRoster {facts} project={scoped ? name : null} settings {who} />
   {/if}
 {/snippet}
 
 <svelte:head>
-  {#if projectId === null}
+  {#if !scoped}
     <title>{configureWords.documentTitle(section.label)}</title>
+  {:else if area}
+    <title>{configureWords.documentTitle(decidesWords.title(name))}</title>
   {:else if project}
     <title>{decidesWords.title(name)} · CawCo</title>
   {/if}
 </svelte:head>
 
 <Tooltip.Provider>
-  {#if projectId === null}
+  {#if !scoped}
     <!-- Configure's section, its cards straight on the recessed ground: the
          section template's raised body would hold them card in card. -->
     <div
@@ -171,8 +194,17 @@
               >
             </li>
             <li aria-hidden="true" class="text-ink-muted">/</li>
+            {#if area}
+              <li class="min-w-0">
+                <a
+                  class="text-ink-muted wrap-anywhere can-hover:hover:text-ink-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+                  href="/config/areas">{sectionOf("areas").label}</a
+                >
+              </li>
+              <li aria-hidden="true" class="text-ink-muted">/</li>
+            {/if}
             <li class="min-w-0">
-              {#if project}
+              {#if name}
                 <a
                   class="text-ink-strong wrap-anywhere can-hover:hover:text-brand-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
                   href={projectHref}>{name}</a
@@ -182,17 +214,19 @@
               {/if}
             </li>
           </ol>
-          <a
-            class="flex-none text-link-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
-            href="{projectHref}?view=decisions">{decidesWords.decisions}</a
-          >
+          {#if !area}
+            <a
+              class="flex-none text-link-ink underline-offset-2 can-hover:hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring focus-visible:outline-solid rounded-xs"
+              href="{projectHref}?view=decisions">{decidesWords.decisions}</a
+            >
+          {/if}
         </nav>
         <div
           class="grid min-w-0 grid-cols-(--head-cols) items-start gap-x-space-5 gap-y-space-3 max-phone:grid-cols-1"
           style:--head-cols="minmax(0, 1fr) auto"
         >
           <header class="flex min-w-0 flex-col gap-space-2">
-            {#if project}
+            {#if name}
               <h1
                 class="m-0 type-title text-balance text-ink-strong wrap-anywhere"
               >

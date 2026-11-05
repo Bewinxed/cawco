@@ -3629,6 +3629,9 @@ function handleFrame(frame: FramePayload): void {
 
   if (frame.kind === "projects.changed") {
     rereadProjects();
+    for (const listener of projectsChangedListeners) {
+      listener();
+    }
     return;
   }
 
@@ -7334,6 +7337,18 @@ const fleetFetchListeners = new Set<FleetFetchListener>();
 export function onFleetFetch(listener: FleetFetchListener): () => void {
   fleetFetchListeners.add(listener);
   return () => fleetFetchListeners.delete(listener);
+}
+
+const projectsChangedListeners = new Set<() => void>();
+
+/**
+ * Hears each `projects.changed` frame: a project or an area changed at the
+ * hub (an area's every change says it, hub areas.ts `changed`). Returns the
+ * unsubscribe.
+ */
+export function onProjectsChanged(listener: () => void): () => void {
+  projectsChangedListeners.add(listener);
+  return () => projectsChangedListeners.delete(listener);
 }
 
 const projectStopListeners = new Set<(frame: ProjectStopFrame) => void>();

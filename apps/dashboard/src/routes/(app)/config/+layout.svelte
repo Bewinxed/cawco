@@ -6,7 +6,11 @@
    * beside each entry are the rows the section shows.
    */
   import { onMount } from "svelte";
-  import { cawco, onFleetFetch } from "#lib/cawco/client.svelte.js";
+  import {
+    cawco,
+    onFleetFetch,
+    onProjectsChanged,
+  } from "#lib/cawco/client.svelte.js";
   import ConfigRail from "#lib/cawco/config/ConfigRail.svelte";
   import {
     LAST_KEY,
@@ -54,8 +58,16 @@
     if (cawco.status === "connected" && dropped) {
       dropped = false;
       detach(store.fleet.load(), "load");
+      // An area change said while it was down was never heard either.
+      detach(store.areas.load(), "load areas");
     }
   });
+
+  // Every area change reaches the dashboards as `projects.changed` (hub
+  // areas.ts `changed`): the areas are read again on it.
+  onMount(() =>
+    onProjectsChanged(() => detach(store.areas.load(), "load areas"))
+  );
 
   const slug = $derived(
     SECTIONS.find((section) => section.slug === page.url.pathname.split("/")[2])

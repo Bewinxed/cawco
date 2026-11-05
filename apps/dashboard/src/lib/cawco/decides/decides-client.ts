@@ -38,13 +38,21 @@ export interface ProjectDecides {
   file: string;
 }
 
-const project = (id: string) =>
-  `/api/projects/${encodeURIComponent(id)}/decides`;
+/**
+ * Whose decides.md a table is: a project's (over its area's and the
+ * fleet's), or an area's (over the fleet's; core areas.ts).
+ */
+export type TableAt = { project: string } | { area: string };
+
+const tablePath = (at: TableAt) =>
+  "project" in at
+    ? `/api/projects/${encodeURIComponent(at.project)}/decides`
+    : `/api/areas/${encodeURIComponent(at.area)}/decides`;
 
 export const readFleet = (): Promise<FleetOffer> => send("/api/decides");
 
-export const readProject = (id: string): Promise<ProjectDecides> =>
-  send(project(id));
+export const readTable = (at: TableAt): Promise<ProjectDecides> =>
+  send(tablePath(at));
 
 /** The fleet's delegate types: what an agent member runs on. */
 export const readTypes = (): Promise<{ types: DelegateType[] }> =>
@@ -56,13 +64,13 @@ export const writeFleetRoutes = (
 ): Promise<FleetDecides> =>
   send("/api/decides/routes", json("PUT", { routes }));
 
-/** Sets `routes` over the project's own (null: back to the fleet's), as one commit saying `message`. */
-export const writeProjectRoutes = (
-  id: string,
+/** Sets `routes` over the table's own lines (null: back to the level below), as one commit saying `message`. */
+export const writeTableRoutes = (
+  at: TableAt,
   routes: Record<string, string | null>,
   message: string
 ): Promise<ProjectDecides> =>
-  send(project(id), json("PUT", { routes, message }));
+  send(tablePath(at), json("PUT", { routes, message }));
 
 /** An agent member's Runs on and Knows: its fleet delegate type. */
 export interface AgentBody {

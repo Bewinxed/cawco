@@ -22,6 +22,7 @@ import {
   IconRules,
   IconSubagent,
   IconTerminal,
+  IconToolFiles,
   IconToolMcp,
 } from "#lib/icons.js";
 
@@ -66,6 +67,7 @@ const GLYPHS: Record<string, Component> = {
   "global-bold-duotone": IconGlobe,
   "scale-bold-duotone": IconJev,
   "download-bold-duotone": IconDownload,
+  "folder-with-files-bold-duotone": IconToolFiles,
 };
 
 const glyphOf = (icon: string): Component => {

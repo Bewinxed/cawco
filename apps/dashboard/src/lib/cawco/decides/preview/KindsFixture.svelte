@@ -95,7 +95,7 @@
   };
 
   const who = new WhoDecides(
-    untrack(() => (project === null ? null : "cawco-dev"))
+    untrack(() => (project === null ? null : { project: "cawco-dev" }))
   );
   untrack(() => {
     const table: DecidesTable | null =

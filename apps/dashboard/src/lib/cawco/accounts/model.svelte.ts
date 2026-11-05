@@ -59,6 +59,23 @@ export const nameOf = (
   return accountNameAmong(account, cawco.accounts?.accounts ?? []);
 };
 
+/** Every account, each by the name it shows everywhere: what a pick of one lists. */
+export const accountChoices = (): { id: string; name: string }[] => {
+  const all = cawco.accounts?.accounts ?? [];
+  return all.map((one) => ({ id: one.id, name: accountNameAmong(one, all) }));
+};
+
+/** Account `id` by the name it shows everywhere; its id while the accounts are unread. */
+export const accountNamed = (id: string): string =>
+  accountChoices().find((one) => one.id === id)?.name ?? id;
+
+/** Whether account `id` is signed in on no machine, once the accounts are read. */
+export const signedOutEverywhere = (id: string): boolean =>
+  cawco.accounts !== null &&
+  !cawco.accounts.signins.some(
+    (one) => one.accountId === id && one.state === "signed-in"
+  );
+
 // ── Providers ───────────────────────────────────────────────────────────
 
 /** The picker's rows, as the hub serves them; empty until read. */

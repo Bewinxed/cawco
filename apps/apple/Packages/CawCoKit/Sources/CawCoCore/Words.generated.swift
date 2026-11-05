@@ -124,6 +124,7 @@ public enum Words {
             Section(slug: "connections", group: "Tools", label: "Connections", purpose: "Outside services the hub signs in to, one row per account", counted: false, badge: "fleet-faults", icon: "link-bold-duotone", hue: "hue-blue-500"),
             Section(slug: "skills", group: "Tools", label: "Skills & plugins", purpose: "Skills, plugins and marketplaces", counted: true, badge: "fleet-faults", icon: "bolt-bold-duotone", hue: "hue-amber-500"),
             Section(slug: "memory", group: "Memory", label: "Memory files", purpose: "CLAUDE.md and the model documents", counted: true, badge: "fleet-faults", icon: "book-bold-duotone", hue: "hue-blue-600"),
+            Section(slug: "areas", group: "Hub", label: "Areas", purpose: "Groups of projects, each with settings its projects take where they set none", counted: true, badge: "fleet-faults", icon: "folder-with-files-bold-duotone", hue: "hue-blue-500"),
             Section(slug: "accounts", group: "Hub", label: "Accounts", purpose: nil, counted: true, badge: "account-faults", icon: "users-group-rounded-bold-duotone", hue: "hue-cyan-500"),
             Section(slug: "models", group: "Hub", label: "Models CawCo uses", purpose: "Jev's route (OpenRouter or a TypeSafe key), fleet watch, and the default image provider", counted: false, badge: "fleet-faults", icon: "cpu-bold-duotone", hue: "hue-orange-500"),
             Section(slug: "spend", group: "Hub", label: "Spend", purpose: "Project budgets", counted: false, badge: "fleet-faults", icon: "dollar-bold-duotone", hue: "hue-amber-500"),

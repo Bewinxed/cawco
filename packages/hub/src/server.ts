@@ -32489,8 +32489,10 @@ export const createServer = (
             db.trash.put({ kind: "delegateType", key: name }, Date.now()),
           (id) => db.accounts.get(id) !== undefined
         ),
-        projectDelegateTypesRoutes(projectTypes, (id) =>
-          db.listProjects().some((project) => project.id === id)
+        projectDelegateTypesRoutes(
+          projectTypes,
+          (id) => db.listProjects().some((project) => project.id === id),
+          (id) => db.areas.get(id) !== undefined
         ),
         browserRoutes(browsers),
         browserStreamRoutes(browserStream),

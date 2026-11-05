@@ -49,11 +49,7 @@
    * (RowFault). Every value is the project as the hub last said it, which
    * `projects.changed` brings to every open dashboard.
    */
-  import {
-    accountNameAmong,
-    PROJECT_AT_LIMIT,
-    type ProjectAtLimit,
-  } from "@cawco/core/accounts";
+  import type { ProjectAtLimit } from "@cawco/core/accounts";
   import { type ConnectionView, readsGitHubApi } from "@cawco/core/connections";
   import { LANDS_MODES, type LandsMode } from "@cawco/core/injected";
   import { machineLabel } from "@cawco/core/machine-names";
@@ -72,6 +68,12 @@
   import { projectWords } from "@cawco/core/words/project";
   import { projectAccountWords } from "@cawco/core/words/project-account";
   import { onMount, type Snippet } from "svelte";
+  import AccountPick from "#lib/cawco/accounts/AccountPick.svelte";
+  import AtLimitPick from "#lib/cawco/accounts/AtLimitPick.svelte";
+  import {
+    accountNamed,
+    signedOutEverywhere,
+  } from "#lib/cawco/accounts/model.svelte.js";
   import {
     addProjectPlace,
     cawco,
@@ -168,11 +170,6 @@
 
   /* ── Account ────────────────────────────────────────────────────── */
 
-  /** The fleet's accounts, each by the name it shows everywhere. */
-  const accountChoices = $derived.by(() => {
-    const all = cawco.accounts?.accounts ?? [];
-    return all.map((one) => ({ id: one.id, name: accountNameAmong(one, all) }));
-  });
   /** The account asked while the hub answers; undefined: none asked. */
   let accountAsked = $state<string | null | undefined>(undefined);
   let accountFault = $state<string | null>(null);
@@ -180,16 +177,11 @@
     accountAsked === undefined ? project.account : accountAsked
   );
   const accountName = $derived(
-    accountChoices.find((one) => one.id === project.account)?.name ??
-      project.account
+    project.account === null ? null : accountNamed(project.account)
   );
   /** Set, and signed in on no machine: nothing of the project starts. */
   const accountSignedOut = $derived(
-    project.account !== null &&
-      cawco.accounts !== null &&
-      !cawco.accounts.signins.some(
-        (one) => one.accountId === project.account && one.state === "signed-in"
-      )
+    project.account !== null && signedOutEverywhere(project.account)
   );
 
   /** Try again: the last account asked, once more. */
@@ -1544,24 +1536,14 @@
         data-slot="value"
         class="flex min-w-0 flex-col gap-space-1 pt-space-1"
       >
-        <NativeSelect.Root
+        <AccountPick
           aria-label={projectAccountWords.select}
-          class="w-full"
           data-account-select
           disabled={accountAsked !== undefined}
-          bind:value={
-            () => accountNow ?? "", (next) => setAccount(next || null)
-          }
-        >
-          <NativeSelect.Option value=""
-            >{projectAccountWords.routing}</NativeSelect.Option
-          >
-          {#each accountChoices as each (each.id)}
-            <NativeSelect.Option value={each.id}
-              >{each.name}</NativeSelect.Option
-            >
-          {/each}
-        </NativeSelect.Root>
+          onpick={setAccount}
+          routing={projectAccountWords.routing}
+          value={accountNow}
+        />
         <p data-slot="note" class="type-meta text-ink-muted">
           {accountName
             ? projectAccountWords.set(accountName)
@@ -1602,29 +1584,12 @@
           data-slot="value"
           class="flex min-w-0 flex-col gap-space-1 pt-space-1"
         >
-          <ToggleGroup.Root
-            aria-labelledby="{uid}-at-limit"
-            class="max-w-full self-start"
-            data-pending={atLimitAsked === null ? undefined : ""}
-            type="single"
-            bind:value={
-              () => atLimit,
-              (next) => {
-                if (next) {
-                  setAtLimit(next as ProjectAtLimit);
-                }
-              }
-            }
-          >
-            {#each PROJECT_AT_LIMIT as way (way)}
-              <ToggleGroup.Item value={way}
-                >{projectAccountWords.atLimit[way]}</ToggleGroup.Item
-              >
-            {/each}
-          </ToggleGroup.Root>
-          <p data-slot="note" class="type-meta text-ink-muted">
-            {projectAccountWords.atLimit.says[atLimit]}
-          </p>
+          <AtLimitPick
+            labelledby="{uid}-at-limit"
+            onpick={setAtLimit}
+            pending={atLimitAsked !== null}
+            value={atLimit}
+          />
           <RowFault
             again={() => (atLimitTried ? setAtLimit(atLimitTried) : undefined)}
             data-at-limit-fault

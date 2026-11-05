@@ -92,6 +92,7 @@
   import type { ConnectionView } from "@cawco/core/connections";
   import { detach } from "@cawco/core/detach";
   import type { Deleted } from "@cawco/core/fleet";
+  import { areaWords } from "@cawco/core/words/areas";
   import { configureWords } from "@cawco/core/words/configure";
   import { connectionsWords as words } from "@cawco/core/words/connections";
   import { onMount } from "svelte";
@@ -105,6 +106,7 @@
     type RowNote,
   } from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { configStore } from "#lib/cawco/config/store.svelte.js";
   import { offerUndo } from "#lib/cawco/config/undo.js";
   import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
@@ -130,6 +132,7 @@
   } from "#lib/icons.js";
 
   const section = sectionOf("connections");
+  const store = configStore();
 
   /** A field that opens on a press takes the next keystroke. */
   const focusOnOpen = (node: HTMLElement) => {
@@ -277,12 +280,18 @@
     return undefined;
   }
 
-  /** Up to two of the projects that may use it, then "+N". */
+  /** Up to two of the areas and projects that may use it, then "+N". */
   const shownOf = (row: ConnectionView) => {
-    const names = row.projects.flatMap((id) => {
-      const project = cawco.projects.find((each) => each.id === id);
-      return project ? [project.name] : [];
-    });
+    const names = [
+      ...row.areas.flatMap((id) => {
+        const area = store.areas.value?.find((each) => each.id === id);
+        return area ? [areaWords.scopeArea(area.name)] : [];
+      }),
+      ...row.projects.flatMap((id) => {
+        const project = cawco.projects.find((each) => each.id === id);
+        return project ? [project.name] : [];
+      }),
+    ];
     return { chips: names.slice(0, 2), more: names.length - 2 };
   };
 
@@ -707,15 +716,22 @@
         [at]?.querySelector<HTMLElement>('[data-slot="controls"]') ?? null;
     choosing = row;
   }
-  async function toggle(row: ConnectionView, project: string, on: boolean) {
-    const projects = on
-      ? [...new Set([...row.projects, project])]
-      : row.projects.filter((each) => each !== project);
+  /** Lets a project, or every project in an area, use the connection or not. */
+  async function toggle(
+    row: ConnectionView,
+    which: "projects" | "areas",
+    id: string,
+    on: boolean
+  ) {
+    const had = row[which];
+    const ids = on
+      ? [...new Set([...had, id])]
+      : had.filter((each) => each !== id);
     delete problems[row.name];
     try {
       const next = await send<ConnectionView>(
         path(row.name),
-        json("PATCH", { projects })
+        json("PATCH", { [which]: ids })
       );
       rows = rows.map((each) => (each.name === next.name ? next : each));
       choosing = next;
@@ -1322,6 +1338,26 @@
         {words.projectsFor(labelOf(row))}
       </p>
       <ul class="flex flex-col">
+        {#each store.areas.value ?? [] as area (area.id)}
+          <li data-area-choice={area.id}>
+            <label
+              class={menuItemVariants({
+                class:
+                  "type-label flex w-full items-center gap-space-2 px-space-2 text-ink-strong",
+              })}
+              data-menu-item
+            >
+              <Checkbox
+                data-box
+                bind:checked={
+                  () => row.areas.includes(area.id),
+                  (on) => toggle(row, "areas", area.id, on)
+                }
+              />
+              <span>{areaWords.scopeArea(area.name)}</span>
+            </label>
+          </li>
+        {/each}
         {#each cawco.projects as project (project.id)}
           <li>
             <label
@@ -1335,7 +1371,7 @@
                 data-box
                 bind:checked={
                   () => row.projects.includes(project.id),
-                  (on) => toggle(row, project.id, on)
+                  (on) => toggle(row, "projects", project.id, on)
                 }
               />
               <span>{project.name}</span>

@@ -38,6 +38,8 @@ export function countOf(store: ConfigStore, slug: SectionSlug): number | null {
     }
     case "accounts":
       return cawco.accounts?.accounts.length ?? null;
+    case "areas":
+      return store.areas.value?.length ?? null;
     case "browsers":
     case "connections":
     case "decides":

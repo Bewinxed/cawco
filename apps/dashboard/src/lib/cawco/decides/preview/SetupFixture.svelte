@@ -66,7 +66,9 @@
   drawPopoversInPlace();
 
   const projectId = untrack(() => (project === null ? null : "cawco-dev"));
-  const who = new WhoDecides(projectId);
+  const who = new WhoDecides(
+    projectId === null ? null : { project: projectId }
+  );
   const table = untrack((): DecidesTable | null =>
     project === null
       ? null

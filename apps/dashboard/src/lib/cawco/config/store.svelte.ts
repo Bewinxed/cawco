@@ -10,6 +10,8 @@ import type { ToolPolicy, ToolSpec } from "@cawco/core/tools";
 import { getContext, setContext } from "svelte";
 import { failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
 import { dur } from "#lib/cawco/motion/curves.svelte.js";
+import type { AreaView } from "../areas/areas";
+import { AreaFacts } from "../areas/facts.svelte";
 import type { ProjectRow } from "../client.svelte";
 import type {
   DelegateTypesPayload,
@@ -127,6 +129,13 @@ export class ConfigStore {
       );
     }
   );
+  /** What each area's folder sets: its Who decides and its delegate types. */
+  readonly areaFacts = new AreaFacts();
+  /** The areas, in their order, each with the projects in it (Configure › Areas). */
+  readonly areas = new Slot("the areas", async (): Promise<AreaView[]> => {
+    const payload = await read<{ areas: AreaView[] }>("/api/areas");
+    return payload.areas;
+  });
   readonly fleet = new Slot(
     "the fleet's setup",
     async (): Promise<FleetState> => {
@@ -227,6 +236,7 @@ export class ConfigStore {
       this.projectTypes.load(),
       this.fleet.load(),
       this.tools.load(),
+      this.areas.load(),
     ]);
   }
 

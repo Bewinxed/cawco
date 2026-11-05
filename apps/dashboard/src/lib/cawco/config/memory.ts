@@ -20,16 +20,18 @@ export const docLabel = (
   scope: MemoryScope | undefined
 ): string => (scoped(scope) ? path : fileLabel(path));
 
-/** A document's scope, as {@link scopeWords} says it, projects by their names. */
+/** A document's scope, as {@link scopeWords} says it, projects and areas by their names. */
 export const loadedInto = (
   scope: MemoryScope | undefined,
-  projects: readonly { id: string; name: string }[]
+  projects: readonly { id: string; name: string }[],
+  areas: readonly { id: string; name: string }[] = []
 ): string =>
   scopeWords(
     scope,
     (id) =>
       projects.find((project) => project.id === id)?.name ??
-      "a project that is gone"
+      "a project that is gone",
+    (id) => areas.find((area) => area.id === id)?.name ?? id
   );
 
 export const fileHref = (path: string): string => `/config/memory/${path}`;

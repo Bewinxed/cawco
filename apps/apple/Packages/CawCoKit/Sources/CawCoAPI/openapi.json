@@ -955,6 +955,43 @@
         }
       }
     },
+    "/api/areas/{id}/delegate-types": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiAreasByIdDelegateTypes",
+        "responses": {
+          "200": {
+            "description": "getApiAreasByIdDelegateTypes 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DelegateCatalog"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiAreasByIdDelegateTypes 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/browsers": {
       "get": {
         "operationId": "getApiBrowsers",

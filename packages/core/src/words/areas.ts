@@ -112,3 +112,140 @@ export const areaWords = {
   /** A memory scope's area, among the projects it names. */
   scopeArea: (name: string) => `the ${name} area`,
 };
+
+/** The settings an area's row and page draw, each by what the person reads. */
+export const AREA_SETTING_LABELS = {
+  account: "Account",
+  budget: "Budget",
+  cawMode: "Caw's permission mode",
+  decides: "Who decides",
+  types: "Delegate types",
+} as const;
+export type AreaSettingLabel = keyof typeof AREA_SETTING_LABELS;
+
+const counted = (n: number, one: string, many: string): string =>
+  n === 1 ? `1 ${one}` : `${n} ${many}`;
+
+/**
+ * Configure › Areas (dashboard config/areas): its list, an area's page,
+ * and the questions they ask. The app draws no area, so these are not
+ * written into it.
+ */
+export const areasScreenWords = {
+  // ── The list ──
+  newArea: "New area",
+  nameLabel: "Area name",
+  namePlaceholder: "Area name",
+  create: "Create area",
+  creating: "Creating…",
+  cancel: "Cancel",
+  emptyTitle: "Group projects into areas",
+  emptyBody:
+    "An area carries an account, a budget, Who decides and delegate types. Each project in it takes them where it sets none.",
+  listLabel: "Areas, in order",
+  projects: (n: number) =>
+    n === 0 ? "No projects" : counted(n, "project", "projects"),
+  /** The glyph strip's words for a setting the area sets, and one it leaves to the fleet. */
+  sets: (setting: AreaSettingLabel, value: string) =>
+    `${AREA_SETTING_LABELS[setting]}: ${value}`,
+  leaves: (setting: AreaSettingLabel) =>
+    `${AREA_SETTING_LABELS[setting]}: the fleet's`,
+  setsNothing: "Sets nothing: its projects take the fleet's settings",
+  /** The order handle, for a screen reader. */
+  place: (name: string, at: number, of: number) =>
+    `${name}, ${at} of ${of}. Drag, or press the up and down arrows, to move it`,
+  draggable: "draggable",
+  deleteArea: (name: string) => `Delete ${name}…`,
+
+  // ── Deleting ──
+  deleteTitle: (name: string) => `Delete ${name}?`,
+  deleteProjects: (names: readonly string[]) =>
+    names.length === 0
+      ? "No project is in it."
+      : `${names.length === 1 ? `${names[0]} is` : `${names.slice(0, -1).join(", ")} and ${names.at(-1)} are`} in no area after it goes.`,
+  /** What falls back, counted from each project's settings in effect now. */
+  deleteFallsBack: (lines: readonly string[]) => `${lines.join(". ")}.`,
+  deleteFolder:
+    "Its Who decides and delegate types are deleted with it, and so are the rules scoped to it.",
+  deleteConfirm: "Delete area",
+  deleting: "Deleting…",
+
+  // ── An area's page ──
+  backTo: "Back to Areas",
+  renameLabel: "The area's name",
+  takers: (n: number) =>
+    n === 0
+      ? "No project is in it yet."
+      : `${counted(n, "project takes", "projects take")} its settings where ${n === 1 ? "it sets" : "they set"} none.`,
+  groups: {
+    sessions: "Sessions",
+    spend: "Spend",
+    agents: "Agents",
+    scoped: "Scoped to it",
+    projects: "Projects in it",
+  },
+  /** A select's first option: what the projects take while the area sets nothing. */
+  fleets: (value: string | null) =>
+    value ? `The fleet's: ${value}` : "The fleet's",
+  routing: "The fleet's routing",
+  accountSet: (name: string) =>
+    `Its projects' sessions start on ${name}, with its connectors, unless a project or a start names its own.`,
+  accountRouted:
+    "Its projects' sessions start where the fleet's routing places them.",
+  accountSignedOut: (name: string) =>
+    `${name} isn't signed in on any machine, so a project that takes it can't start a session until it is.`,
+  budgetLabel: "Budget",
+  budgetAmount: "Dollars",
+  budgetPer: { day: "A day", month: "A month" },
+  budgetNone:
+    "No budget: its projects spend without one unless they set their own.",
+  budgetSet: (usd: string, period: "day" | "month") =>
+    `Each project in it may spend ${usd} ${period === "day" ? "a day" : "a month"} unless it sets its own.`,
+  clearBudget: "Clear budget",
+  onCapLabel: "At the budget",
+  cawModeLabel: "Caw's permission mode",
+  cawModeFleet:
+    "Each project's conversation starts in the mode last chosen for its harness.",
+  decidesFleet: "Every kind follows the fleet's Who decides.",
+  decidesOwn: (n: number) =>
+    `${counted(n, "kind is", "kinds are")} handed over here; the rest follow the fleet's.`,
+  setDecides: "Set Who decides",
+  typesNone: "None of its own: its projects take the fleet's delegate types.",
+  typesOwn: (n: number) =>
+    `${counted(n, "type", "types")} of its own, over the fleet's of the same name.`,
+  newType: "New delegate type",
+  typeName: "Type name",
+  typeNameHint: "Lowercase letters, digits and dashes.",
+  edit: "Edit",
+  editType: (name: string) => `Edit ${name}`,
+  saveType: "Save delegate type",
+  deleteType: "Delete delegate type",
+  scopedNone: (what: string) => `No ${what} scoped to it.`,
+  scopedOpen: (what: string) => `Open ${what}`,
+  scopedLabels: {
+    rules: "Rules",
+    memory: "Memory files",
+    connections: "Connections",
+  },
+  scopedKinds: {
+    rules: "rules",
+    memory: "memory files",
+    connections: "connections",
+  },
+  projectTakesAll: "Takes every setting from its area",
+  projectSetsOwn: (names: readonly string[]) =>
+    `Sets its own ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`}`,
+  projectSettingNames: {
+    account: "account",
+    cawMode: "permission mode",
+    cap: "budget",
+    onCap: "rule at the budget",
+  },
+  noProjects:
+    "A project joins an area from its own setup, or when you ask its Caw to put it here.",
+  gone: "That area is gone",
+  /** The scope pickers of Rules and Memory files. */
+  scopeChip: "Area",
+  scopeChips: "Areas",
+  everyArea: "Every area",
+};

@@ -4427,6 +4427,22 @@
       },
       "$description": "A routines-page row's pitch: the whole row is its own 44px opener on every pointer."
     },
+    "c-area-count-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6.5,
+        "unit": "rem"
+      },
+      "$description": "Configure › Areas' project-count column: \"12 projects\" or \"No projects\" in meta, tabular. Fixed, so every area row's count starts on one edge whatever it says."
+    },
+    "c-area-page-side-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 18,
+        "unit": "rem"
+      },
+      "$description": "An area's page on a desk: the column of the projects in it, beside its settings. Wide enough for a project's name and the line saying what it sets itself; the settings column takes the rest."
+    },
     "c-routine-time-w": {
       "$type": "dimension",
       "$value": {
