@@ -347,9 +347,16 @@ export const createAreas = ({
         deleted.projects.length > 0
           ? areaWords.deleted(area.name, deleted.projects.length)
           : areaWords.deletedAlone(area.name),
-        ...[...counts].map(([setting, count]) =>
-          areaWords.fallBack(count, setting)
-        ),
+        // The settings the same number of projects fall back on, said once.
+        ...Map.groupBy([...counts], ([, count]) => count)
+          .entries()
+          .map(
+            ([count, settings]) =>
+              `${areaWords.fallBackAll(
+                count,
+                settings.map(([setting]) => setting)
+              )}.`
+          ),
         ...(deleted.rules > 0 ? [areaWords.rulesGone(deleted.rules)] : []),
         ...fleetRowsWords(deleted.fleetRows),
         ...(docs.length > 0 ? [areaWords.docsTrashed(docs.length)] : []),

@@ -58,9 +58,6 @@ export const areaWords = {
   scopeNoArea: (id: string) => `There is no area ${id}.`,
 
   // ── What a delete or a move falls back to ──
-  /** "4 projects fall back to the fleet's account". */
-  fallBack: (count: number, setting: AreaSettingName) =>
-    `${projects(count)} back to the fleet's ${AREA_SETTING_NAMES[setting]}`,
   /** Several settings the same projects fall back on, in one sentence: "3 projects fall back to the fleet's budget and rule at the budget". */
   fallBackAll: (count: number, settings: readonly AreaSettingName[]) =>
     `${projects(count)} back to the fleet's ${andList(settings.map((one) => AREA_SETTING_NAMES[one]))}`,
@@ -240,6 +237,8 @@ export const areasScreenWords = {
   newType: "New delegate type",
   typeName: "Type name",
   typeNameHint: "Lowercase letters, digits and dashes.",
+  /** The new type's file, for a screen reader: its frontmatter and brief. */
+  typeFile: "The type's file",
   edit: "Edit",
   editType: (name: string) => `Edit ${name}`,
   saveType: "Save delegate type",

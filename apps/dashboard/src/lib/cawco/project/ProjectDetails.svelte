@@ -1624,14 +1624,24 @@
               >
             {/each}
           </NativeSelect.Root>
-          <p data-slot="note" class="type-meta text-ink-muted">
-            {areaName ? projectAreaWords.in(areaName) : projectAreaWords.out}
-          </p>
-          {#each areaSaid as line (line)}
-            <p data-slot="note" class="type-meta text-ink-muted" data-area-said>
-              {line}
+          <!-- Right after a move the hub's own words say what it took or
+               fell back to; otherwise the row says where its settings come from. -->
+          {#if areaSaid.length > 0}
+            {#each areaSaid as line (line)}
+              <p
+                data-slot="note"
+                class="type-meta text-ink-muted"
+                data-area-said
+                role="status"
+              >
+                {line}
+              </p>
+            {/each}
+          {:else}
+            <p data-slot="note" class="type-meta text-ink-muted">
+              {areaName ? projectAreaWords.in(areaName) : projectAreaWords.out}
             </p>
-          {/each}
+          {/if}
         {:else if areas !== null}
           <p class="type-label text-ink-strong">
             {projectAreaWords.noneYet}

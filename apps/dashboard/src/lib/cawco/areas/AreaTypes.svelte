@@ -131,6 +131,7 @@
           >{words.typeName}</label
         >
         <Input
+          aria-describedby="{uid}-name-hint"
           aria-invalid={nameProblem ? "true" : undefined}
           autocomplete="off"
           bind:ref={nameField}
@@ -142,12 +143,13 @@
         <p
           class="type-meta text-ink-muted"
           class:text-status-fail-ink={nameProblem}
+          id="{uid}-name-hint"
         >
           {words.typeNameHint}
         </p>
       {/if}
       <Textarea
-        aria-label={open.path ?? words.typeName}
+        aria-label={open.path ?? words.typeFile}
         face="mono"
         spellcheck="false"
         bind:value={open.content}
