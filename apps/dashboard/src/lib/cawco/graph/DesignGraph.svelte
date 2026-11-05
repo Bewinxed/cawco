@@ -107,7 +107,7 @@
     inspector,
     memory,
     dialsAt = "face",
-    numberForm = "field",
+    numberForm = "pill",
     startFace,
     keptDials = {},
     ondials,
@@ -155,7 +155,7 @@
      */
     dialsAt?: "face" | "glass";
     /** How a number dial is drawn (the owner's pick, tsk-193 and tsk-198). */
-    numberForm?: "field" | "slider";
+    numberForm?: "pill" | "field" | "slider";
     /** The room's face the graph opens on (the ask's `face`); the states when it names none or one the room lacks. */
     startFace?: "map" | "dials";
     /** His dial values as the artifact keeps them (its doc's `dials`), by name: they stand again on open. */
@@ -297,14 +297,11 @@
     untrack(() => dialsAt === "glass" && startFace === "dials")
   );
   let dialsJoined = $state(false);
-  // A face the room no longer has (the dials gone) gives way to the states.
-  $effect(() => {
-    if (!FACES.some((one) => one.value === face)) {
-      untrack(() => {
-        face = "states";
-      });
-    }
-  });
+  let dialsTrigger = $state<HTMLElement | null>(null);
+  /** The face the room shows: his, while the room has it (the dials come once the page has read them); else the states. */
+  const shownFace = $derived<Face>(
+    FACES.some((one) => one.value === face) ? face : "states"
+  );
   /** The kept state of each component, by its states file. */
   let keptOf = $state<Record<string, Pick>>({});
   /** The state he kept on the component in front, while its states file still has it; else where the component opens. */
@@ -737,6 +734,18 @@
   });
   /** The stop the drawer stands at, by its place among the stops: the head first. */
   let stopAt = $state(0);
+  // Opened on a face of its own body (the map, the dials), the drawer stands
+  // at its half stop: vaul opens it at its first, so it is stepped there once
+  // it stands.
+  onMount(() => {
+    if (startFace && dialsAt === "face") {
+      requestAnimationFrame(() => {
+        if (!desk && SNAPS.length > 1) {
+          stopAt = 1;
+        }
+      });
+    }
+  });
   const snap = $derived(SNAPS[Math.min(stopAt, SNAPS.length - 1)] ?? null);
   /** The drawer stands at its head stop: the steps, no list. */
   const atHead = $derived(stopAt === 0);
@@ -973,14 +982,14 @@
 {/snippet}
 
 {#snippet roomFace(stepperHere: boolean)}
-  {#if face === "dials" && dials.length > 0}
+  {#if shownFace === "dials"}
     {@render dialsBody()}
   {:else if review && kept}
     {#if single}
       <p class="m-0 max-w-c-measure type-body text-ink-muted text-pretty">
         {words.oneState}
       </p>
-    {:else if face === "map"}
+    {:else if shownFace === "map"}
       <WholeSet
         against={againstState ? against : null}
         kept={kept.state}
@@ -1012,9 +1021,18 @@
     class="min-w-0 flex-1"
     onValueChange={(next: string) => {
       face = next === "map" || next === "dials" ? next : "states";
+      // In the drawer at its head stop a face of its own body (the map, the
+      // dials) shows nothing there: picked, it rises to the half stop, the
+      // drawing still above it.
+      if (!desk && atHead && face !== "states" && SNAPS.length > 1) {
+        // A task later: the press is also vaul's release of the drawer (`choose`).
+        setTimeout(() => {
+          stopAt = 1;
+        });
+      }
     }}
     size="compact"
-    value={face}
+    value={shownFace}
   >
     <TabsList aria-label={roomName}>
       {#each FACES as one (one.value)}
@@ -1180,6 +1198,7 @@
                         data-bar-item
                         {...mergeProps(tip, props)}
                         aria-label={words.dialsFace}
+                        bind:this={dialsTrigger}
                         class="select-none touch-hit press-tint"
                         type="button"
                       >
@@ -1195,6 +1214,10 @@
                 aria-label={words.dialsFace}
                 bind:joined={dialsJoined}
                 customAnchor={glass}
+                onCloseAutoFocus={(event: Event) =>
+                  quietFocus(event, dialsTrigger)}
+                onOpenAutoFocus={(event: Event) =>
+                  quietFocus(event, dialsTrigger)}
                 frame="settings"
                 side="bottom"
                 sideOffset={0}
@@ -1516,7 +1539,7 @@
                 <div
                   class={[
                     "flex min-h-0 min-w-0 flex-1 flex-col",
-                    face === "map" && !single ? "" : "p-space-4",
+                    shownFace === "map" && !single ? "" : "p-space-4",
                   ]}
                 >
                   {@render roomFace(true)}
@@ -1612,7 +1635,7 @@
               <!-- At the head stop the drawer holds its head alone, the faces
                    and the States face's steps: a face's body drawn into its
                    sliver ran past the screen's foot. -->
-              {#if !single && face === "states"}
+              {#if !single && shownFace === "states"}
                 {@render stepper()}
               {/if}
               {#if single || !atHead}

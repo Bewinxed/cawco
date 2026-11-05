@@ -31,24 +31,35 @@ export default {
   },
 };
 
-/** One of each kind as written: the number dial a field, its fill to its value. */
+/** One of each kind as written: the number dial a pill, its knob carrying its figure. */
 export const AsWritten = { parameters: { viewport: 400 } };
 
 /** Two turned: the radius dragged to 4 px and the colour picked; each changed value in the edit's ink with its way back, and the head's two versions, Copy values and Reset all. */
 export const Turned = {
-  args: { values: { radius: 4, action: "#1f7a6d" } },
+  args: { values: { radius: 4, ink: "#1f5f7a" } },
   parameters: { viewport: 400 },
+};
+
+/** The same, the number dial a field, its figure at its end and its fill to its value. */
+export const TurnedField = {
+  args: { values: { radius: 4, ink: "#1f5f7a" }, numberForm: "field" },
+  parameters: { viewport: 400 },
+};
+
+export const TurnedFieldPhone = {
+  args: { values: { radius: 4, ink: "#1f5f7a" }, numberForm: "field" },
+  parameters: { viewport: 390 },
 };
 
 /** The same, the number dial a slider with its figure beside it. */
 export const TurnedSlider = {
-  args: { values: { radius: 4, action: "#1f7a6d" }, numberForm: "slider" },
+  args: { values: { radius: 4, ink: "#1f5f7a" }, numberForm: "slider" },
   parameters: { viewport: 400 },
 };
 
 /** As written shown while two are turned: the agent's values, read only. */
 export const AsWrittenShown = {
-  args: { values: { radius: 4, action: "#1f7a6d" }, version: "written" },
+  args: { values: { radius: 4, ink: "#1f5f7a" }, version: "written" },
   parameters: { viewport: 400 },
 };
 
@@ -66,12 +77,12 @@ export const UnderHeadings = {
 
 /** In the phone's drawer: each name over its control. */
 export const TurnedPhone = {
-  args: { values: { radius: 4, action: "#1f7a6d" } },
+  args: { values: { radius: 4, ink: "#1f5f7a" } },
   parameters: { viewport: 390 },
 };
 
 export const TurnedSliderPhone = {
-  args: { values: { radius: 4, action: "#1f7a6d" }, numberForm: "slider" },
+  args: { values: { radius: 4, ink: "#1f5f7a" }, numberForm: "slider" },
   parameters: { viewport: 390 },
 };
 

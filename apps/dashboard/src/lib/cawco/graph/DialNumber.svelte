@@ -13,6 +13,11 @@
    *   caret to type a figure (Enter or leaving it keeps it, Escape puts the
    *   figure back). bits-ui has no number field: the drag is the field's
    *   own, on the platform's text input, a spinbutton to a reader.
+   * - **pill**: the house Effort chip's track, his pick for the step
+   *   slider (design-graph-spec, "Pill": the knob shows the value, like the
+   *   effort control): a fill from the leading edge whose end is a knob
+   *   carrying the figure and its unit; a drag across the track moves the
+   *   knob, a press without a drag types into it.
    * - **slider**: bits-ui's Slider (as the Curve chip's Bounce), its figure
    *   in a number field beside it, typed the same way.
    *
@@ -41,7 +46,7 @@
     range: DialRange;
     /** Changed from as written: the figure in the edit's ink. */
     changed: boolean;
-    form: "field" | "slider";
+    form: "pill" | "field" | "slider";
     lang: string | undefined;
     /** Its name, said to a reader. */
     label: string;
@@ -56,8 +61,8 @@
   const shown = $derived(typing ?? figureOf(value, lang));
   const share = $derived(shareOf(value, range));
   /** A typed figure, in the page's language or with a point: its number; null when it is none. */
-  const parsed = (typed: string): number | null => {
-    const said = typed.replace(/\s/gu, "").replace(",", ".");
+  const parsed = (text: string): number | null => {
+    const said = text.replace(/\s/gu, "").replace(",", ".");
     const next = Number(said);
     return said !== "" && Number.isFinite(next) ? next : null;
   };
@@ -139,6 +144,12 @@
       onchange(next);
     }
   };
+  /** Until it holds the caret, a press on the figure is the field's (a drag or a press), never the caret's. */
+  const hold = (event: MouseEvent) => {
+    if (!focused) {
+      event.preventDefault();
+    }
+  };
   const up = (event: PointerEvent) => {
     if (!pressAt || pressAt.id !== event.pointerId) {
       return;
@@ -152,44 +163,95 @@
       field?.select();
     }
   };
+  /** The figure's field, typed in place in every form: a press selects it, Enter or leaving keeps it, Escape puts it back. */
+  const typed = $derived({
+    autocomplete: "off" as const,
+    inputmode: "decimal" as const,
+    spellcheck: false,
+    value: shown,
+    onblur: () => {
+      focused = false;
+      keep();
+    },
+    onfocus: () => {
+      focused = true;
+    },
+    oninput: (event: Event) => {
+      typing = (event.currentTarget as HTMLInputElement).value;
+    },
+    onkeydown: stepKey,
+  });
+  /** The track's own drag, on the field's or the pill's frame. */
+  const drag = {
+    onmousedown: hold,
+    onpointercancel: up,
+    onpointerdown: down,
+    onpointermove: move,
+    onpointerup: up,
+  };
 </script>
 
-{#snippet figureField(drag: boolean)}
+{#snippet figureField(spin: boolean)}
   <InputGroup.Input
     aria-label={label}
-    aria-valuemax={drag ? range.max : undefined}
-    aria-valuemin={drag ? range.min : undefined}
-    aria-valuenow={drag ? value : undefined}
+    aria-valuemax={spin ? range.max : undefined}
+    aria-valuemin={spin ? range.min : undefined}
+    aria-valuenow={spin ? value : undefined}
     aria-valuetext={drag
       ? `${figureOf(value, lang)}${dial.unit ?? ""}`
       : undefined}
-    autocomplete="off"
     bind:ref={field}
     field="figure"
-    inputmode="decimal"
-    onblur={() => {
-      focused = false;
-      keep();
-    }}
-    onfocus={() => {
-      focused = true;
-    }}
-    oninput={(event: Event) => {
-      typing = (event.currentTarget as HTMLInputElement).value;
-    }}
-    onkeydown={stepKey}
-    role={drag ? "spinbutton" : undefined}
-    spellcheck={false}
+    {...typed}
+    role={spin ? "spinbutton" : undefined}
     text="label"
     tone={changed ? "edited" : undefined}
-    value={shown}
   />
   <InputGroup.Addon align="inline-end" look="unit">
     {dial.unit ?? ""}
   </InputGroup.Addon>
 {/snippet}
 
-{#if form === "field"}
+{#if form === "pill"}
+  <!-- The track (the Effort chip's): its fill runs to the knob, the knob
+       carries the figure; the figure is typed in the knob. -->
+  <div
+    class="relative h-c-input-h min-w-0 cursor-ew-resize touch-none rounded-md border border-border-control bg-surface-raised select-none"
+    data-dial-field
+    data-dragging={dragging || undefined}
+    {...drag}
+  >
+    <div class="pointer-events-none absolute inset-0 overflow-clip rounded-md">
+      <div
+        class="absolute inset-y-0 start-0 flex w-(--fill) items-center justify-end rounded-md bg-surface-recess-deep p-space-row"
+        style:--fill="calc(var(--c-number-field-w) + {share} * (100% - var(--c-number-field-w)))"
+      >
+        <span
+          class="flex h-full min-w-c-number-field-w items-center justify-center gap-space-1 rounded-sm bg-surface-lift px-space-2 shadow-knob"
+        >
+          <input
+            aria-label={label}
+            aria-valuemax={range.max}
+            aria-valuemin={range.min}
+            aria-valuenow={value}
+            aria-valuetext="{figureOf(value, lang)}{dial.unit ?? ''}"
+            bind:this={field}
+            class={[
+              "min-w-space-4 bg-transparent text-center type-label num outline-none",
+              changed ? "text-selected-ink" : "text-ink-strong",
+            ]}
+            role="spinbutton"
+            size={Math.max(2, shown.length)}
+            {...typed}
+          />
+          {#if dial.unit}
+            <span class="type-meta text-ink-muted">{dial.unit}</span>
+          {/if}
+        </span>
+      </div>
+    </div>
+  </div>
+{:else if form === "field"}
   <!-- The field: its fill to the value, its figure and unit at its end. A
        press anywhere on it is the field's own (`down`, `up`), so the
        figure takes the caret only from a press without a drag. -->
@@ -199,16 +261,7 @@
     onclick={() => {
       // A press focuses the field itself (`up`); a drag's click focuses nothing.
     }}
-    onmousedown={(event: MouseEvent) => {
-      // Until it holds the caret, a press on the figure is the field's (a drag or a press), never the caret's.
-      if (!focused) {
-        event.preventDefault();
-      }
-    }}
-    onpointercancel={up}
-    onpointerdown={down}
-    onpointermove={move}
-    onpointerup={up}
+    {...drag}
     {share}
   >
     {@render figureField(true)}

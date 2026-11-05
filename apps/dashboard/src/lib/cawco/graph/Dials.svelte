@@ -55,7 +55,7 @@
     values,
     version = "yours",
     undoable = false,
-    numberForm = "field",
+    numberForm = "pill",
     component,
     lang,
     onchange,
@@ -73,7 +73,7 @@
     /** Reset all was just pressed, and nothing has changed since: Undo reset stands. */
     undoable?: boolean;
     /** How a number dial is drawn (the owner's pick, tsk-193 and tsk-198). */
-    numberForm?: "field" | "slider";
+    numberForm?: "pill" | "field" | "slider";
     /** The component's name, for what Copy writes. */
     component: string;
     lang: string | undefined;
@@ -128,8 +128,8 @@
   /** The graph's one grid: the move's names' column, the control, the restore glyph's column. */
   const COLUMNS =
     "minmax(var(--c-graph-move-name-w), 38%) minmax(0, 1fr) var(--c-btn-h-xs)";
-  /** Narrow: the name over its control, the control and its restore glyph on one line. */
-  const NARROW_COLUMNS = "minmax(0, 1fr) var(--c-btn-h-xs)";
+  /** Narrow: a name over its control (across the first two columns), a toggle's name and switch on one line, the restore glyph's column last. */
+  const NARROW_COLUMNS = "minmax(0, 1fr) auto var(--c-btn-h-xs)";
   /** Presses of each action so far, by name: what its arg is set to. */
   let presses = $state<Record<string, number>>({});
 </script>
@@ -225,7 +225,7 @@
               {#if dial.kind === "action"}
                 <!-- An action: its name is its button's, across the row. -->
                 <Button
-                  class="col-span-2 justify-self-start @max-timeline/dials:col-span-full"
+                  class="col-span-2 justify-self-start"
                   disabled={asWritten}
                   onclick={() => {
                     const next = (presses[dial.name] ?? 0) + 1;
@@ -237,14 +237,22 @@
                 >
                 <span></span>
               {:else}
+                <!-- Narrow, a name stands over its control; a toggle's
+                     switch stays beside its name, as the view card's do. -->
                 <label
-                  class="min-w-0 type-label text-ink-row text-pretty wrap-anywhere @max-timeline/dials:col-span-full"
+                  class={[
+                    "min-w-0 type-label text-ink-row text-pretty wrap-anywhere",
+                    dial.kind !== "toggle" &&
+                      "@max-timeline/dials:col-span-full",
+                  ]}
                   for={id}>{nameOf(dial)}</label
                 >
                 <div
                   class={[
                     "flex min-w-0 items-center",
-                    dial.kind === "toggle" && "justify-end",
+                    dial.kind === "toggle"
+                      ? "justify-end"
+                      : "@max-timeline/dials:col-span-2",
                     asWritten && "pointer-events-none",
                   ]}
                   data-dial={dial.name}

@@ -19,6 +19,7 @@
     type StageReach,
   } from "@cawco/core/stage-graph";
   import { onMount, untrack } from "svelte";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import RoutineForm from "#lib/cawco/routines/RoutineForm.svelte";
   import DesignGraph from "../DesignGraph.svelte";
   import {
@@ -34,7 +35,7 @@
     dials = [],
     turned = {},
     dialsAt = "face",
-    numberForm = "field",
+    numberForm = "pill",
     face,
   }: {
     /** The agent's dials, as its canvas spec writes them. */
@@ -42,7 +43,7 @@
     /** Dials already turned as the page opens, by name. */
     turned?: DialValues;
     dialsAt?: "face" | "glass";
-    numberForm?: "field" | "slider";
+    numberForm?: "pill" | "field" | "slider";
     /** The room's face it opens on. */
     face?: "dials";
   } = $props();
@@ -87,26 +88,38 @@
   const { default: meta, ...exports } = written as {
     default: { args: Record<string, unknown>; title: string };
   } & Record<string, Written>;
-  const stories: Story[] = Object.entries(exports).map(([name, one], at) => ({
-    name,
-    display: one.name ?? null,
-    label: NOTES[name] ?? null,
-    line: at + 1,
-    column: 0,
-    args: one.args ?? {},
-    code: {},
-    component: null,
-    form:
-      one.parameters?.viewport === undefined
-        ? null
-        : { name: "custom", width: one.parameters.viewport },
-    formUnread: null,
-    from: one.from ?? null,
-    play: !!one.play,
-    readOnly: null,
-    records: null,
-    tags: one.tags ?? [],
-  }));
+  /** The file's own text: its exports in its order (a module's exports come back sorted by name). */
+  const [source = ""] = Object.values(
+    import.meta.glob<string>("../../routines/RoutineForm.stories.ts", {
+      eager: true,
+      import: "default",
+      query: "?raw",
+    })
+  );
+  const lineOf = (name: string) =>
+    source.slice(0, source.indexOf(`export const ${name} `)).split("\n").length;
+  const stories: Story[] = Object.entries(exports)
+    .sort(([a], [b]) => lineOf(a) - lineOf(b))
+    .map(([name, one]) => ({
+      name,
+      display: one.name ?? null,
+      label: NOTES[name] ?? null,
+      line: lineOf(name),
+      column: 0,
+      args: one.args ?? {},
+      code: {},
+      component: null,
+      form:
+        one.parameters?.viewport === undefined
+          ? null
+          : { name: "custom", width: one.parameters.viewport },
+      formUnread: null,
+      from: one.from ?? null,
+      play: !!one.play,
+      readOnly: null,
+      records: null,
+      tags: one.tags ?? [],
+    }));
   const sheet: SheetOnPage = {
     file: FILE,
     components: [],
@@ -163,20 +176,24 @@
 
   let drawing = $state<HTMLElement | null>(null);
   let page = $state<HTMLElement | null>(null);
+  /** The stand-in page's width, px, and its gutter. */
+  let room = $state(0);
+  let gutter = $state(0);
+  /** A width wider than the page scaled to fit it, as the stage page draws one. */
+  const fit = $derived(room > 0 ? Math.min(1, (room - gutter) / width) : 1);
   // The drawing laid out: the room the stage's split gives it, as the page says it.
   $effect(() => {
     const at = width;
+    const scale = fit;
     const node = page;
     if (!node) {
       return;
     }
     untrack(() => {
-      const gutter =
-        2 * Number.parseFloat(getComputedStyle(node).paddingInlineStart);
       link.laid = {
         fit: null,
         need: at + gutter,
-        scale: 1,
+        scale,
         tall: node.scrollHeight,
       };
     });
@@ -231,12 +248,16 @@
   <div
     bind:this={page}
     class="h-full min-h-0 overflow-auto bg-surface-page p-space-5"
+    {@attach frameSize((node: HTMLElement) => {
+      room = node.clientWidth;
+      gutter = 2 * Number.parseFloat(getComputedStyle(node).paddingInlineStart);
+    })}
   >
     <div
       bind:this={drawing}
-      class="w-(--drawing) max-w-none"
+      class="w-(--drawing) max-w-none origin-top-left scale-(--fit)"
       data-cawco-story={standing}
-      style="--drawing: {width}px; {varsSet}"
+      style="--drawing: {width}px; --fit: {fit}; {varsSet}"
     >
       {#key standing}
         <RoutineForm
