@@ -303,6 +303,7 @@ const run = async (kit: Kit) => {
     does: "judge",
     ask: "Judge the glass bars page",
     name: "glass-page",
+    title: "Glass bars page",
     html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Glass bars</title></head><body><h1 id="head">Glass bars</h1><p id="one">Every bar floats its controls in glass.</p></body></html>',
   });
   const SESSION = `${base}/session/${talk}`;
@@ -328,6 +329,7 @@ const run = async (kit: Kit) => {
       does: "judge",
       ask: "Judge the fullest bar",
       name: "fullest-bar",
+      title: "Fullest bar",
       html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Fullest bar</title></head><body><h1>Fullest bar</h1></body></html>',
     }
   );
