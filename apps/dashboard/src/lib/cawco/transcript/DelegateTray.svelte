@@ -94,10 +94,7 @@
     parentId,
     held = false,
   }: {
-    /**
-     * The session whose delegates the tray shows: its own, and as its
-     * project's conversation the ones it co-parents.
-     */
+    /** The session whose delegates the tray shows: only those it made. */
     parentId: string;
     /** A swipe is carrying the conversation: the chips wait. */
     held?: boolean;

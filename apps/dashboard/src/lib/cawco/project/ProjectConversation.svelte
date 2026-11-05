@@ -50,6 +50,7 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { rowHref } from "#lib/cawco/links.js";
   import { crossIn } from "#lib/cawco/motion/curves.svelte.js";
+  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
   import {
     type ProjectStarter,
@@ -710,11 +711,20 @@
 
 {#snippet atWorkTail()}
   {#if atWork}
-    <CawAtWork
-      {doing}
-      label={conversationWords.atWork}
-      status={heldOnYou ? "needs-you" : "working"}
-    />
+    <!-- He folds shut as he goes (motion/fold `unfold`, out only): at the
+         end, the reply that streamed in above him glides down into his
+         place as the browser keeps the view at the end, instead of every
+         row dropping his 120px in one frame. He arrives with the sent
+         message, in the same frame the pin lifts the rows for it. The box
+         is its own formatting context (`flow-root`), so his top margin is
+         inside the height the fold closes, at rest as in flight. -->
+    <div class="flow-root" out:unfold>
+      <CawAtWork
+        {doing}
+        label={conversationWords.atWork}
+        status={heldOnYou ? "needs-you" : "working"}
+      />
+    </div>
   {/if}
 {/snippet}
 

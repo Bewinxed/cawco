@@ -268,7 +268,6 @@
       id: `wi-tray-${i}`,
       instanceId: `ds-tray-${i}`,
       parentInstanceId: ID,
-      conversationInstanceId: null,
       machinePaused: null,
       stalled: null,
       title: work.title,

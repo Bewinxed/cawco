@@ -9599,18 +9599,15 @@ export const cawco = {
       state.delegateHeard[instanceId] ?? []
     ),
   /**
-   * What a session's tray lists, oldest first: the work items it delegated
-   * (and as its project's conversation the ones it co-parents), and the sessions it
-   * started that run none ({@link startedBy}).
+   * What a session's tray lists, oldest first: the work items it delegated,
+   * and the sessions it started that run none ({@link startedBy}). Only what
+   * it made: a project's conversation does not list its project's other
+   * work (hub work-items.ts `trayOf`).
    */
   trayOf: (instanceId: string): TrayChild[] =>
     [
       ...Object.values(state.workItems)
-        .filter(
-          (item) =>
-            item.parentInstanceId === instanceId ||
-            item.conversationInstanceId === instanceId
-        )
+        .filter((item) => item.parentInstanceId === instanceId)
         .map(itemChild),
       ...(startedBy.get(instanceId) ?? []).map(sessionChild),
     ].sort((a, b) => a.createdAt - b.createdAt),

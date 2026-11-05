@@ -2548,15 +2548,10 @@ export interface DbShape {
   readonly trash: TrashDb;
   /**
    * What a session's delegate tray can still show, oldest first: of the
-   * items it delegated and the items of the projects in `ledProjectIds` (it
-   * is their conversation), the live and undismissed failed ones, and any other that
-   * ended at or after `endedSince`.
+   * items it delegated, the live and undismissed failed ones, and any other
+   * that ended at or after `endedSince`.
    */
-  readonly trayItemsOf: (
-    sessionId: string,
-    ledProjectIds: string[],
-    endedSince: Date
-  ) => WorkItemRow[];
+  readonly trayItemsOf: (sessionId: string, endedSince: Date) => WorkItemRow[];
   /** The stops that walk a delegation tree, a row per session until it ended (tree-stops.ts). */
   readonly treeStops: TreeStopsDb;
   /** Every turn the hub cut, and why (turn-cuts.ts). */
@@ -10027,18 +10022,13 @@ const make = async (path: string): Promise<DbShape> => {
         .from(workItems)
         .where(sql`json_extract(${workItems.landed}, '$.gate.tree') = ${tree}`)
         .all(),
-    trayItemsOf: (sessionId, ledProjectIds, endedSince) =>
+    trayItemsOf: (sessionId, endedSince) =>
       db
         .select()
         .from(workItems)
         .where(
           and(
-            ledProjectIds.length > 0
-              ? or(
-                  eq(workItems.parentInstanceId, sessionId),
-                  inArray(workItems.projectId, ledProjectIds)
-                )
-              : eq(workItems.parentInstanceId, sessionId),
+            eq(workItems.parentInstanceId, sessionId),
             isNull(workItems.dismissedAt),
             or(
               inArray(workItems.state, ["starting", "running", "failed"]),

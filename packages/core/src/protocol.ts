@@ -1257,12 +1257,6 @@ export interface WorkItemSummary {
    * decode it under this key.
    */
   checkQueue: { words: string; since: number } | null;
-  /**
-   * Its project's conversation, a co-parent of the item, whose tray lists it
-   * beside its parent's; null when the project has none, or the
-   * conversation is its parent or its own session.
-   */
-  conversationInstanceId: string | null;
   createdAt: number;
   dismissedAt: number | null;
   /** Why the reader dismissed it, in their words; null unless dismissed with a reason. */

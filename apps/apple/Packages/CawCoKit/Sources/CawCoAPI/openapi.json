@@ -56536,13 +56536,6 @@
               "words"
             ]
           },
-          "conversationInstanceId": {
-            "description": "Its project's conversation, a co-parent of the item, whose tray lists it\nbeside its parent's; null when the project has none, or the\nconversation is its parent or its own session.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
           "createdAt": {
             "type": "number"
           },
@@ -56658,7 +56651,6 @@
           }
         },
         "required": [
-          "conversationInstanceId",
           "createdAt",
           "dismissReason",
           "dismissedAt",

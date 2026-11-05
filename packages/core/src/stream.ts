@@ -255,12 +255,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    `artifactTitle`, where its slug `name` (`artifactName`) stood. A page
  *    built for 50 reads a `name` the hub no longer sends, so it reloads
  *    first.
+ * 52: a session's delegate tray holds only what it made: a work item no
+ *    longer carries `conversationInstanceId`, its project's conversation
+ *    as a co-parent whose tray listed it. A page built for 51 reads a
+ *    `conversationInstanceId` the hub no longer sends, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 51;
+export const WIRE_PROTOCOL = 52;
 
 /**
  * What a session's stream carries: the changes each frame made to its

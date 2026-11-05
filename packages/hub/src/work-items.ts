@@ -2896,17 +2896,10 @@ export const createWorkItems = ({
     return workspace ? machinePaused(workspace.machineId) : undefined;
   };
 
-  /**
-   * An item as its parent's delegate tray reads it, and its conversation's: the project's conversation
-   * named when it co-parents the item from another session.
-   */
+  /** An item as its parent's delegate tray reads it. */
   const summaryOf = (item: WorkItemRow): WorkItemSummary => ({
     id: item.id,
     parentInstanceId: item.parentInstanceId,
-    conversationInstanceId: isHubParent(item.parentInstanceId)
-      ? null
-      : (projectLead(item.projectId, item.instanceId, item.parentInstanceId)
-          ?.id ?? null),
     instanceId: item.instanceId,
     title: item.title,
     state: item.state,
@@ -2970,11 +2963,6 @@ export const createWorkItems = ({
     return {
       id: queued.id,
       parentInstanceId: queued.parentInstanceId,
-      conversationInstanceId:
-        projectLead(
-          request.task?.projectId ?? parent?.projectId ?? null,
-          queued.parentInstanceId
-        )?.id ?? null,
       instanceId: request.queuedAs.instanceId,
       title: queued.title,
       state: "starting",
@@ -3878,9 +3866,17 @@ export const createWorkItems = ({
       .filter((row) => !db.workItem(row.id))
       .filter(
         (row) =>
-          row.parentInstanceId === caller ||
-          queuedSummaryOf(row).conversationInstanceId === caller
+          row.parentInstanceId === caller || queuedLead(row)?.id === caller
       );
+  /** The conversation of a queued delegate's project, unless it queued it. */
+  const queuedLead = (queued: QueuedWorkItemRow): InstanceRow | undefined => {
+    const request = queued.request as QueuedRequest;
+    const [parent] = db.getInstancesByIds([queued.parentInstanceId]);
+    return projectLead(
+      request.task?.projectId ?? parent?.projectId ?? null,
+      queued.parentInstanceId
+    );
+  };
 
   /** The one workspace `needle` names; refused when it names none or several. */
   const namedWorkspace = (needle: string): WorkspaceRow => {
@@ -10854,13 +10850,6 @@ export const createWorkItems = ({
     },
 
     /**
-     * What a session's delegate tray shows when it opens: the items it
-     * delegated and, as its projects' conversation, the ones it co-parents from
-     * another session — live work, failures nobody has dismissed yet, what
-     * finished within the tray's hold — and the delegations of either kind
-     * still queued for owned files.
-     */
-    /**
      * What the landing gate passed on `tree`, a git tree's name: each step's
      * command that passed on it, over every item that landed it (WorkLanding
      * `gate`). Empty when none did. A release asks it of its commit's tree
@@ -10876,25 +10865,27 @@ export const createWorkItems = ({
       ),
     ],
 
+    /**
+     * What a session's delegate tray shows when it opens: the items it
+     * delegated, and only those — live work, failures nobody has dismissed
+     * yet, what finished within the tray's hold — and its delegations still
+     * queued for owned files. A project's conversation co-parents its
+     * project's items (it may reopen them, hand them files, withdraw their
+     * queue), but its tray holds what it made: read as the project's, a new
+     * Caw conversation opened under "+8 · 101 failed" made by the
+     * conversations before it and every other session in the project.
+     */
     trayOf: (sessionId: string): WorkItemSummary[] => {
-      const led = db
-        .listProjects()
-        .filter((project) => project.conversationInstanceId === sessionId)
-        .map((project) => project.id);
       const items = db
-        .trayItemsOf(sessionId, led, new Date(Date.now() - TRAY_HOLD_MS))
+        .trayItemsOf(sessionId, new Date(Date.now() - TRAY_HOLD_MS))
         .filter((item) => item.instanceId !== sessionId)
         .map(summaryOf);
       const queued = db
         .queuedWorkItems()
         // One that has filed its item is that item, just before it leaves the queue.
         .filter((row) => !db.workItem(row.id))
-        .map((row) => queuedSummaryOf(row))
-        .filter(
-          (summary) =>
-            summary.parentInstanceId === sessionId ||
-            summary.conversationInstanceId === sessionId
-        );
+        .filter((row) => row.parentInstanceId === sessionId)
+        .map((row) => queuedSummaryOf(row));
       return [...items, ...queued].sort((a, b) => a.createdAt - b.createdAt);
     },
 
