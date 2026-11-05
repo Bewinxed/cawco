@@ -1270,6 +1270,8 @@ export const PROJECT_SETTING_KINDS = [
   "set_review_limit",
   "set_budget",
   "set_events",
+  "set_hears_tasks",
+  "set_attempts_hear_comments",
   "set_account",
   "set_account_at_limit",
   "set_area",
@@ -1302,6 +1304,10 @@ export type ProjectSettingChange =
   | { budget: SettingsBudget | null; kind: "set_budget" }
   /** Whether the project's events reach its conversation, as its switch flips it (hub caw.ts `configure`). */
   | { events: boolean; kind: "set_events" }
+  /** Whether the conversation reads what the person writes on its tasks (hub task-input.ts). */
+  | { hearsTasks: boolean; kind: "set_hears_tasks" }
+  /** Whether the person's comment on a task reaches its attempt (hub jev-tasks.ts). */
+  | { attemptsHearComments: boolean; kind: "set_attempts_hear_comments" }
   /**
    * The account the project's sessions start on (hub project-edit.ts
    * `account`), by id, with its name as the change was checked; null: the
@@ -1373,6 +1379,12 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
       return projectSettingsWords.budget(change.budget);
     case "set_events":
       return projectSettingsWords.eventsOn(change.events);
+    case "set_hears_tasks":
+      return projectSettingsWords.hearsTasks(change.hearsTasks);
+    case "set_attempts_hear_comments":
+      return projectSettingsWords.attemptsHearComments(
+        change.attemptsHearComments
+      );
     case "set_account":
       return projectAccountWords.change(change.name);
     case "set_account_at_limit":

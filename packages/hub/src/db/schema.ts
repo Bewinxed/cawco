@@ -503,6 +503,23 @@ export const projects = sqliteTable("projects", {
    * means nothing for the project wakes a model.
    */
   eventsOn: integer("events_on", { mode: "boolean" }).notNull().default(false),
+  /**
+   * Whether the project's conversation reads what the person writes on its
+   * tasks (task-input.ts): a comment, a to-do or a task they add, gathered
+   * over a quiet spell and read as one. Their words, so it reaches the
+   * conversation whether its events are on or off.
+   */
+  hearsTasks: integer("hears_tasks", { mode: "boolean" })
+    .notNull()
+    .default(true),
+  /**
+   * Whether the person's comment on a task reaches its attempt (jev-tasks.ts
+   * Attach or fresh): a live attempt reads it; an ended one's session takes
+   * it, goes on compressed with it, or a fresh attempt starts.
+   */
+  attemptsHearComments: integer("attempts_hear_comments", { mode: "boolean" })
+    .notNull()
+    .default(true),
   /** The harness Caw runs on. */
   cawHarness: text("caw_harness")
     .$type<HarnessKind>()

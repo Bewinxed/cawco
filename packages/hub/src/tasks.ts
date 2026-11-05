@@ -230,10 +230,20 @@ export interface TaskActor {
    * its own changes are never sent back to the tracker they came from.
    */
   tracker?: IssueTracker;
+  /**
+   * The change is the person's own writing on the task (a comment, a to-do
+   * or a task they added): the project's conversation reads it
+   * (task-input.ts). Only {@link YOU_WRITING} carries it, so nothing an
+   * agent, Caw or the hub writes wakes anyone.
+   */
+  words?: true;
 }
 
 /** The operator, at the dashboard. */
 export const YOU_ACTOR: TaskActor = { mover: "you", author: YOU };
+
+/** The operator writing on a task at the board or the phone: a comment, a to-do or a task they add. */
+export const YOU_WRITING: TaskActor = { ...YOU_ACTOR, words: true };
 
 /** A routine of the hub's moving a task on (waits.ts), and why; the stages' moves bind it as `routine`. */
 export const routineActor = (routineId: string, reason: string): TaskActor => ({
@@ -319,8 +329,10 @@ export type TaskEvent =
       stage: string;
     }
   | {
-      /** A comment added to the task, by whom: the hub hands yours to its live attempt (server.ts). */
+      /** A comment added to the task, by whom: yours reaches its attempt (jev-tasks.ts) and its project's conversation (task-input.ts). */
       comment?: { actor: TaskActor; text: string };
+      /** To-dos added to the task, by whom, each as written. */
+      todos?: { actor: TaskActor; added: string[] };
       /** The one task that changed, when one did (its to-dos ticked); absent: any of them. */
       id?: string;
       kind: "changed";
@@ -4392,7 +4404,8 @@ export const createTasks = (store: TaskStore) => {
      * Adds a comment to a task: one entry at the end of its `## Comments`,
      * headed with who wrote it and when, as one commit (its history shows it
      * as `commented`). Entries are only ever added. Listeners hear it with
-     * its words: yours reach the task's live attempt (server.ts). `id`, the
+     * its words: yours reach the task's attempt (jev-tasks.ts) and the
+     * project's conversation (task-input.ts). `id`, the
      * one its device chose, makes it one comment however often it is sent:
      * one already written is answered with the task as it stands, nothing
      * added and nobody told again. `via`: a comment written on an outside
@@ -4564,9 +4577,20 @@ export const createTasks = (store: TaskStore) => {
       changes: TodoChanges,
       actor: TaskActor
     ): Promise<TaskView> {
+      const added = (changes.add ?? []).map(({ text }) => text.trim());
       return change(projectId, ref, actor, (doc) =>
         applyTodos(doc, changes)
-      ).then((task) => told({ kind: "changed", projectId, id: task.id }, task));
+      ).then((task) =>
+        told(
+          {
+            kind: "changed",
+            projectId,
+            id: task.id,
+            ...(added.length > 0 ? { todos: { actor, added } } : {}),
+          },
+          task
+        )
+      );
     },
 
     /** The project's stages, moves, views and hooks, or what keeps stages.md from reading. */
@@ -4935,7 +4959,7 @@ export const taskRoutes = (tasks: Tasks) =>
       },
       async ({ params, body }) => {
         try {
-          return await tasks.create(params.id, body, YOU_ACTOR);
+          return await tasks.create(params.id, body, YOU_WRITING);
         } catch (error) {
           return refused(error);
         }
@@ -5034,7 +5058,7 @@ export const taskRoutes = (tasks: Tasks) =>
             params.id,
             params.taskId,
             body.text,
-            YOU_ACTOR,
+            YOU_WRITING,
             body.id
           );
         } catch (error) {
@@ -5134,7 +5158,7 @@ export const taskRoutes = (tasks: Tasks) =>
             params.id,
             params.taskId,
             { add: [body] },
-            YOU_ACTOR
+            YOU_WRITING
           );
         } catch (error) {
           return refused(error);

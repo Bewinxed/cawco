@@ -1031,6 +1031,7 @@ import {
 } from "./tailnet-https";
 import { createTaskApproval } from "./task-approval";
 import { TaskDoc } from "./task-file";
+import { createTaskInput } from "./task-input";
 import {
   BUDGET,
   createTasks,
@@ -26718,6 +26719,9 @@ export const createServer = (
   tasks.listen(dispatcher.taskChanged);
   tasks.listen(push.taskChanged);
   tasks.listen(caw.taskChanged);
+  // What the person writes on a task, to the project's conversation
+  // (task-input.ts), gathered over a quiet spell and read as one.
+  tasks.listen(createTaskInput({ caw, db, tasks }).taskChanged);
   // Every dashboard showing the project reads its tasks again, whoever moved
   // them; one showing the task the change names reads it again too.
   tasks.listen((event) =>
@@ -27827,8 +27831,13 @@ export const createServer = (
     ask: (actor, input, toolUseId) =>
       hubAsks.ask(actor, PROJECT_SETTINGS, input, toolUseId),
     // His switch's own path: off, what he started finishes, his turn among them.
-    caw: (projectId, on) =>
-      caw.configure(projectId, on ? { on } : { on, initiated: { stop: [] } }),
+    caw: (projectId, change) =>
+      caw.configure(
+        projectId,
+        "on" in change && !change.on
+          ? { ...change, initiated: { stop: [] } }
+          : change
+      ),
     connections,
     db,
     dispatch: dispatcher,

@@ -53,6 +53,10 @@ export const noticeWords = {
   donePicking: (title: string) => `Told you're done picking on “${title}”`,
   /** A decided page's Make tasks, asked of the session that holds it. */
   makeTasks: (title: string) => `Asked to make tasks from “${title}”`,
+  /** A task the person added at the board, told to the project's conversation (hub task-input.ts). */
+  taskAdded: (task: string) => `Told Caw you added ${task}`,
+  /** To-dos the person added to a task, told to the project's conversation (hub task-input.ts). */
+  todosAdded: (task: string) => `Told Caw your to-dos on ${task}`,
   /** The person's approval of a task, told to the session that filed it (hub task-approval.ts). */
   approved: (title: string) => `Told you approved “${title}”`,
   /** The person's Retry on failed work, from the tray (hub server.ts `retryFromTray`). */

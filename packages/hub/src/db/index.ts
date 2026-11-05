@@ -2317,6 +2317,8 @@ export interface DbShape {
         | "cawMode"
         | "cawModel"
         | "conversationInstanceId"
+        | "hearsTasks"
+        | "attemptsHearComments"
       >
     >
   ) => void;

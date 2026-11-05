@@ -244,6 +244,7 @@ export const EVENT_SKILLS = {
   "github-event": "project-github-event",
   "inbound-event": "project-inbound-event",
   "person-request": "project-person-request",
+  "task-input": "project-task-input",
   "fleet-watch": "project-fleet-watch",
   connection: "project-connection",
   decision: "project-decision",
@@ -1080,6 +1081,8 @@ export const createCaw = ({
     const project = projectOf(projectId);
     return {
       on: project.eventsOn,
+      hearsTasks: project.hearsTasks,
+      attemptsHearComments: project.attemptsHearComments,
       harness: project.cawHarness,
       model: project.cawModel,
       mode: project.cawMode,
@@ -1382,11 +1385,17 @@ export const createCaw = ({
      * refused without it. A move ends the conversation it had. A harness of its own takes
      * its own default model unless the change names one. Turned on, the
      * inbound events that waited for it go to the conversation.
+     * `hearsTasks` and `attemptsHearComments` are the switches of the
+     * person's writing on tasks: whether the conversation reads it
+     * (task-input.ts), and whether a comment reaches the task's attempt
+     * (jev-tasks.ts).
      */
     configure(
       projectId: string,
       change: {
+        attemptsHearComments?: boolean;
         harness?: string;
+        hearsTasks?: boolean;
         initiated?: CawInitiated;
         mode?: OfferedMode | null;
         model?: string | null;
@@ -1406,15 +1415,26 @@ export const createCaw = ({
         retire(project);
       }
       const mode = change.mode === undefined ? project.cawMode : change.mode;
+      const hearsTasks = change.hearsTasks ?? project.hearsTasks;
+      const attemptsHearComments =
+        change.attemptsHearComments ?? project.attemptsHearComments;
       db.setProjectCaw(projectId, {
         eventsOn: on,
         cawModel: model,
         cawMode: mode,
+        hearsTasks,
+        attemptsHearComments,
         ...(harness ? { cawHarness: harness } : {}),
       });
       // Every dashboard's switch says where it stands now, not only the one
       // that flipped it.
-      if (on !== project.eventsOn || moved || mode !== project.cawMode) {
+      if (
+        on !== project.eventsOn ||
+        moved ||
+        mode !== project.cawMode ||
+        hearsTasks !== project.hearsTasks ||
+        attemptsHearComments !== project.attemptsHearComments
+      ) {
         projectsChanged();
       }
       if (on && !project.eventsOn) {
@@ -1806,6 +1826,10 @@ export const cawRoutes = (caw: Caw) =>
           model: t.Optional(t.Nullable(t.String())),
           // The mode the hub starts its conversation in; null: the fleet's.
           mode: t.Optional(t.Nullable(MODE)),
+          // Whether it reads what the person writes on its tasks (task-input.ts).
+          hearsTasks: t.Optional(t.Boolean()),
+          // Whether the person's comment on a task reaches its attempt (jev-tasks.ts).
+          attemptsHearComments: t.Optional(t.Boolean()),
         }),
       },
       ({ params, body }) => {

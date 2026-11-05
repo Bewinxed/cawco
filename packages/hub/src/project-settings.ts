@@ -43,6 +43,10 @@
  * - `set_events`: whether the project's events reach its conversation,
  *   through the switch the person flips (caw.ts `configure`,
  *   `PATCH /api/projects/:id/caw`). Off lets what it started finish.
+ * - `set_hears_tasks`, `set_attempts_hear_comments`: whether the
+ *   conversation reads what the person writes on tasks (task-input.ts), and
+ *   whether their comment reaches the task's attempt (jev-tasks.ts), through
+ *   the same `configure`.
  * - `set_account`: the account the project's sessions start on when a start
  *   names none (an account's id, nickname or email; null for the fleet's
  *   routing), checked and written as the person's own edit is
@@ -157,6 +161,8 @@ const ASKED_CHANGE = z.object({
   review_limit: z.number().int().optional(),
   budget: budgetParameter("Per attempt; null: no limit.").nullable().optional(),
   events: z.boolean().optional(),
+  hears_tasks: z.boolean().optional(),
+  attempts_hear_comments: z.boolean().optional(),
   account: z
     .string()
     .nullable()
@@ -216,6 +222,13 @@ const askedOf = (change: ProjectSettingChange): AskedChange => {
       return { kind: change.kind, budget: change.budget };
     case "set_events":
       return { kind: change.kind, events: change.events };
+    case "set_hears_tasks":
+      return { kind: change.kind, hears_tasks: change.hearsTasks };
+    case "set_attempts_hear_comments":
+      return {
+        kind: change.kind,
+        attempts_hear_comments: change.attemptsHearComments,
+      };
     case "set_account":
       return { kind: change.kind, account: change.account };
     case "set_account_at_limit":
@@ -331,8 +344,17 @@ export interface ProjectSettingsDeps {
     input: Record<string, unknown>,
     toolUseId: string | undefined
   ) => Promise<string | undefined>;
-  /** Turns the project's Caw on or off, as his switch does (caw.ts `configure`). */
-  readonly caw: (projectId: string, on: boolean) => unknown;
+  /**
+   * Turns the project's Caw on or off, or one switch of the person's writing
+   * on tasks, as his switches do (caw.ts `configure`).
+   */
+  readonly caw: (
+    projectId: string,
+    change:
+      | { on: boolean }
+      | { hearsTasks: boolean }
+      | { attemptsHearComments: boolean }
+  ) => unknown;
   readonly connections: Pick<Connections, "get" | "list" | "update">;
   readonly db: Pick<
     DbShape,
@@ -475,6 +497,29 @@ export const createProjectSettings = ({
     return { kind: "set_events", events: on };
   };
 
+  /** One switch of the person's writing on tasks, refused when it is that already. */
+  const writingSet = (
+    project: ProjectRow,
+    asked: AskedChange & {
+      kind: "set_hears_tasks" | "set_attempts_hear_comments";
+    }
+  ): ProjectSettingChange => {
+    const { needs, already } = projectSettingsWords;
+    if (asked.kind === "set_hears_tasks") {
+      const on = asked.hears_tasks ?? refuse(needs.hearsTasks);
+      if (on === project.hearsTasks) {
+        refuse(already.hearsTasks(on));
+      }
+      return { kind: asked.kind, hearsTasks: on };
+    }
+    const on =
+      asked.attempts_hear_comments ?? refuse(needs.attemptsHearComments);
+    if (on === project.attemptsHearComments) {
+      refuse(already.attemptsHearComments(on));
+    }
+    return { kind: asked.kind, attemptsHearComments: on };
+  };
+
   /** An account by its name among the fleet's; null: none. */
   const accountName = (id: string | null): string | null => {
     const all = accounts();
@@ -588,6 +633,9 @@ export const createProjectSettings = ({
         return dispatchSet(project, { ...asked, kind: asked.kind });
       case "set_events":
         return eventsSet(project, asked);
+      case "set_hears_tasks":
+      case "set_attempts_hear_comments":
+        return writingSet(project, { ...asked, kind: asked.kind });
       case "set_account":
         return accountSet(project, asked);
       case "set_account_at_limit":
@@ -668,7 +716,13 @@ export const createProjectSettings = ({
         await dispatch.configure(project.id, dispatchColumns(change));
         break;
       case "set_events":
-        caw(project.id, change.events);
+        caw(project.id, { on: change.events });
+        break;
+      case "set_hears_tasks":
+        caw(project.id, { hearsTasks: change.hearsTasks });
+        break;
+      case "set_attempts_hear_comments":
+        caw(project.id, { attemptsHearComments: change.attemptsHearComments });
         break;
       case "set_account": {
         const { conversation } = await edit(project.id, {
@@ -789,6 +843,8 @@ export const createProjectSettings = ({
       ),
       types: folder.types.map((one) => `${one.name} (${from(one.from)})`),
       events: project.eventsOn,
+      hearsTasks: project.hearsTasks,
+      attemptsHearComments: project.attemptsHearComments,
       dispatch: now.dispatch,
       maxAttempts: now.maxAttempts,
       reviewLimit: now.reviewLimit,

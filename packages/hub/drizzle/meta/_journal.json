@@ -2563,6 +2563,13 @@
       "when": 1793864632975,
       "tag": "0373_fleet_row_projects",
       "breakpoints": true
+    },
+    {
+      "idx": 374,
+      "version": "6",
+      "when": 1793868025314,
+      "tag": "0374_task_input_switches",
+      "breakpoints": true
     }
   ]
 }

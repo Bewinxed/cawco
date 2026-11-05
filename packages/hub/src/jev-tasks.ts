@@ -19,7 +19,9 @@
  *   Jev on: Jev says whether that session's history matters, and its cache
  *   decides attach or continue. Off, with no caller: idle and on the same
  *   task stands in for "its history matters", so attach when warm, continue
- *   when cold, else fresh. A live attempt simply reads your comment.
+ *   when cold, else fresh. A live attempt simply reads your comment. The
+ *   project's `attemptsHearComments` switch off, your comment reaches no
+ *   attempt.
  * - **Phone requests** (choice + fill): a sentence from the phone about the
  *   project. Jev on: Jev picks the action and fills it (the task, the
  *   stage). Off: the project's conversation reads the sentence. The push's own buttons are
@@ -54,6 +56,7 @@ import {
   type Tasks,
   type TaskView,
   YOU_ACTOR,
+  YOU_WRITING,
 } from "./tasks";
 import { isLive } from "./work-items";
 
@@ -82,6 +85,7 @@ export interface JevTasksDeps {
     | "getInstancesByIds"
     | "getJevSettings"
     | "getOpenRouterConnection"
+    | "project"
     | "projectAttempts"
   >;
   readonly dispatcher: Pick<Dispatcher, "retryFor" | "startFor">;
@@ -522,7 +526,11 @@ export const createJevTasks = ({
     return placed === "fresh" ? undefined : { to: placed, row };
   };
 
-  /** What runs after a change to a project's tasks: Duplicates and Triage on filing, Attach or fresh on your comment. */
+  /**
+   * What runs after a change to a project's tasks: Duplicates and Triage on
+   * filing, Attach or fresh on your comment while the project's
+   * `attemptsHearComments` switch is on.
+   */
   const taskChanged = (event: TaskEvent): void => {
     if (event.kind === "created") {
       const bySession = event.actor.mover === "session";
@@ -550,7 +558,8 @@ export const createJevTasks = ({
     if (
       event.kind === "changed" &&
       event.id &&
-      event.comment?.actor.mover === "you"
+      event.comment?.actor.mover === "you" &&
+      db.project(event.projectId)?.attemptsHearComments
     ) {
       const { id, projectId } = event;
       const { text } = event.comment;
@@ -687,7 +696,7 @@ export const createJevTasks = ({
         projectId,
         named(about, "comment"),
         sentence,
-        YOU_ACTOR
+        YOU_WRITING
       );
       return {
         decidedBy: "jev",

@@ -44,6 +44,8 @@ export interface SettingsRead {
   accountFrom: string;
   /** The area it sits in, by name; null: none. */
   area: string | null;
+  /** The person's comment on a task reaches its attempt. */
+  attemptsHearComments: boolean;
   budget: SettingsBudget | null;
   /** What it may spend in a period, in effect. */
   cap: SettingRead;
@@ -58,6 +60,8 @@ export interface SettingsRead {
   events: boolean;
   /** The tasks dispatch would start next, in order. */
   frontier: string[];
+  /** The conversation reads what the person writes on tasks. */
+  hearsTasks: boolean;
   lands: string;
   /** Its links, one per repository, like github.com/owner/name. */
   links: string[];
@@ -83,6 +87,8 @@ export const projectSettingsWords = {
     [
       `${now.name}'s settings, each with the change that sets it:`,
       `- Events reach the project's conversation: ${onOff(now.events)} (set_events)`,
+      `- The conversation reads what the person writes on tasks: ${onOff(now.hearsTasks)} (set_hears_tasks)`,
+      `- The person's comment on a task reaches its attempt: ${onOff(now.attemptsHearComments)} (set_attempts_hear_comments)`,
       `- Start attempts at ready tasks on their own: ${onOff(now.dispatch)} (set_dispatch)`,
       `- Attempts at once: at most ${now.maxAttempts} (set_max_attempts)`,
       `- Dispatch pauses at ${now.reviewLimit} tasks waiting for review (set_review_limit)`,
@@ -127,6 +133,14 @@ export const projectSettingsWords = {
     on
       ? "Turn events on: routines and events reach the project's conversation"
       : "Turn events off: what the conversation started finishes, and only the person's words reach it",
+  hearsTasks: (on: boolean): string =>
+    on
+      ? "Have the project's conversation read your comments, to-dos and new tasks, and fold them into the task"
+      : "Stop the project's conversation reading your comments, to-dos and new tasks",
+  attemptsHearComments: (on: boolean): string =>
+    on
+      ? "Send your comment on a task to its attempt"
+      : "Keep your comments on a task from its attempt",
 
   /** Refusals, each naming the field and how to fix it. */
   already: {
@@ -139,6 +153,10 @@ export const projectSettingsWords = {
     budget: "Each attempt may spend that already.",
     events: (on: boolean) =>
       `Events are ${onOff(on)} for this project already.`,
+    hearsTasks: (on: boolean) =>
+      `The conversation reading what you write on tasks is ${onOff(on)} for this project already.`,
+    attemptsHearComments: (on: boolean) =>
+      `Comments reaching their task's attempt is ${onOff(on)} for this project already.`,
     runsOn: (to: string | null) =>
       `This project's attempts run on ${to ?? "any machine"} already.`,
   },
@@ -149,6 +167,9 @@ export const projectSettingsWords = {
     budget:
       "set_budget names budget: usd, turns or minutes, or null for no limit.",
     events: "set_events says on (events: true) or off (false).",
+    hearsTasks: "set_hears_tasks says on (hears_tasks: true) or off (false).",
+    attemptsHearComments:
+      "set_attempts_hear_comments says on (attempts_hear_comments: true) or off (false).",
   },
   /** A grant of a connection the hub has none of: what it can grant instead. */
   noConnection: (name: string, grantable: string[]): string =>

@@ -12697,6 +12697,12 @@
                       "bypassPermissions",
                       "fullSend"
                     ]
+                  },
+                  "hearsTasks": {
+                    "type": "boolean"
+                  },
+                  "attemptsHearComments": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -34282,6 +34288,9 @@
                 "string"
               ]
             },
+            "attemptsHearComments": {
+              "type": "boolean"
+            },
             "budget": {
               "$ref": "#/components/schemas/WorkBudget"
             },
@@ -34323,6 +34332,9 @@
               "type": "boolean"
             },
             "eventsOn": {
+              "type": "boolean"
+            },
+            "hearsTasks": {
               "type": "boolean"
             },
             "id": {
@@ -34462,6 +34474,7 @@
             "accountAtLimit",
             "appleGate",
             "areaId",
+            "attemptsHearComments",
             "capUsd",
             "cawHarness",
             "cawModel",
@@ -34469,6 +34482,7 @@
             "createdAt",
             "dispatch",
             "eventsOn",
+            "hearsTasks",
             "id",
             "inEffect",
             "lands",
@@ -34515,6 +34529,9 @@
               "string"
             ]
           },
+          "attemptsHearComments": {
+            "type": "boolean"
+          },
           "budget": {
             "$ref": "#/components/schemas/WorkBudget"
           },
@@ -34556,6 +34573,9 @@
             "type": "boolean"
           },
           "eventsOn": {
+            "type": "boolean"
+          },
+          "hearsTasks": {
             "type": "boolean"
           },
           "id": {
@@ -34741,6 +34761,7 @@
           "accountAtLimit",
           "appleGate",
           "areaId",
+          "attemptsHearComments",
           "capUsd",
           "cawHarness",
           "cawModel",
@@ -34748,6 +34769,7 @@
           "createdAt",
           "dispatch",
           "eventsOn",
+          "hearsTasks",
           "id",
           "inEffect",
           "lands",
@@ -34820,6 +34842,9 @@
               "string"
             ]
           },
+          "attemptsHearComments": {
+            "type": "boolean"
+          },
           "budget": {
             "$ref": "#/components/schemas/WorkBudget"
           },
@@ -34861,6 +34886,9 @@
             "type": "boolean"
           },
           "eventsOn": {
+            "type": "boolean"
+          },
+          "hearsTasks": {
             "type": "boolean"
           },
           "id": {
@@ -35000,6 +35028,7 @@
           "accountAtLimit",
           "appleGate",
           "areaId",
+          "attemptsHearComments",
           "capUsd",
           "cawHarness",
           "cawModel",
@@ -35007,6 +35036,7 @@
           "createdAt",
           "dispatch",
           "eventsOn",
+          "hearsTasks",
           "id",
           "inEffect",
           "lands",
@@ -35069,6 +35099,9 @@
               "string"
             ]
           },
+          "attemptsHearComments": {
+            "type": "boolean"
+          },
           "budget": {
             "$ref": "#/components/schemas/WorkBudget"
           },
@@ -35107,6 +35140,9 @@
             "type": "boolean"
           },
           "eventsOn": {
+            "type": "boolean"
+          },
+          "hearsTasks": {
             "type": "boolean"
           },
           "id": {
@@ -35292,6 +35328,7 @@
           "accountAtLimit",
           "appleGate",
           "areaId",
+          "attemptsHearComments",
           "capUsd",
           "cawHarness",
           "cawModel",
@@ -35299,6 +35336,7 @@
           "createdAt",
           "dispatch",
           "eventsOn",
+          "hearsTasks",
           "id",
           "inEffect",
           "lands",
@@ -35346,6 +35384,9 @@
               "string"
             ]
           },
+          "attemptsHearComments": {
+            "type": "boolean"
+          },
           "budget": {
             "$ref": "#/components/schemas/WorkBudget"
           },
@@ -35384,6 +35425,9 @@
             "type": "boolean"
           },
           "eventsOn": {
+            "type": "boolean"
+          },
+          "hearsTasks": {
             "type": "boolean"
           },
           "id": {
@@ -35523,6 +35567,7 @@
           "accountAtLimit",
           "appleGate",
           "areaId",
+          "attemptsHearComments",
           "capUsd",
           "cawHarness",
           "cawModel",
@@ -35530,6 +35575,7 @@
           "createdAt",
           "dispatch",
           "eventsOn",
+          "hearsTasks",
           "id",
           "inEffect",
           "lands",
@@ -46306,8 +46352,16 @@
         "description": "A project's conversation, as `GET`/`PATCH /api/projects/:id/caw` answer it.",
         "type": "object",
         "properties": {
+          "attemptsHearComments": {
+            "description": "Whether the person's comment on a task reaches its attempt, live or ended (hub jev-tasks.ts).",
+            "type": "boolean"
+          },
           "harness": {
             "$ref": "#/components/schemas/HarnessKind"
+          },
+          "hearsTasks": {
+            "description": "Whether the conversation reads what the person writes on the project's\ntasks: a comment, a to-do or a task they add (hub task-input.ts). On or\noff, like the rest of their words.",
+            "type": "boolean"
           },
           "instanceId": {
             "description": "The conversation's session, once the hub has started one.",
@@ -46354,7 +46408,9 @@
           }
         },
         "required": [
+          "attemptsHearComments",
           "harness",
+          "hearsTasks",
           "instanceId",
           "model",
           "on",

@@ -21,7 +21,15 @@ export const CAW_NO_MACHINE =
 
 /** A project's conversation, as `GET`/`PATCH /api/projects/:id/caw` answer it. */
 export interface ProjectConversationView {
+  /** Whether the person's comment on a task reaches its attempt, live or ended (hub jev-tasks.ts). */
+  attemptsHearComments: boolean;
   harness: HarnessKind;
+  /**
+   * Whether the conversation reads what the person writes on the project's
+   * tasks: a comment, a to-do or a task they add (hub task-input.ts). On or
+   * off, like the rest of their words.
+   */
+  hearsTasks: boolean;
   /** The conversation's session, once the hub has started one. */
   instanceId: string | null;
   /**
