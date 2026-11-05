@@ -50,6 +50,9 @@ export const artifactToolWords = {
   othersArtifact: (what: string, session: string) =>
     `${what} is session ${session}'s: your delegation tree reads it, and only that session changes it.`,
   noArtifact: (id: string) => `This session has no artifact ${id}.`,
+  /** The person's show of `name` from a session that doesn't hold it (hub artifacts/service.ts `show`): the answer's address takes them to the session that does. */
+  inItsSession: (name: string) =>
+    `${name} is in its own session's panel, which opens beside this one.`,
   /** An `artifact_list` cursor that no page of it gave. */
   notListCursor: (cursor: string) =>
     `"${cursor}" is not a cursor artifact_list gave. Pass a page's next_cursor for the page after it, or none for the newest page.`,

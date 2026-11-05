@@ -1,10 +1,13 @@
 /**
  * A press on an artifact's chip, a pin's or a decision card's (core
  * references.ts): the artifact comes to the front of the panel of the
- * session whose conversation the chip stands in, else of its own session's
- * (the hub's show, which every view of that panel follows, the phone's
- * sheet too), and the pane holding it opens it at the place the chip names
- * once its page is ready (artifact-names.svelte.ts `askOpen`). In an
+ * session whose conversation the chip stands in when that session holds it
+ * (its own, one it made, or its delegation tree's), else of its own
+ * session's, which opens as a tab beside the one on screen (on a phone in
+ * its place, Back returning): the hub's show answers which (hub
+ * artifacts/service.ts `show`), every view of that panel follows it, the
+ * phone's sheet too, and the pane holding it opens it at the place the chip
+ * names once its page is ready (artifact-names.svelte.ts `askOpen`). In an
  * artifact's own tab, a chip of another artifact opens that artifact's own
  * tab at the place (`?pin=<n>`, `?card=<id>`, `?change=<anchor>`), as a
  * pin's Copy link does. A project's setup page, which no panel or tab
@@ -59,9 +62,10 @@ const ownTab = (id: string, at: OpenAt): string => {
 /**
  * Artifact `id` opened in the panel at `at`: the panel of `here`, the
  * session whose conversation the chip was pressed in (session-here.ts),
- * where there is one, so it opens on the session on screen (the hub shows
- * one there that session owns, made, or its delegation tree holds); else
- * the panel of the session it belongs to. Answers the hub's refusal in the
+ * where there is one and it holds the artifact (owns it, made it, or its
+ * delegation tree does), so it opens on the session on screen; else the
+ * panel of the session it belongs to, which the hub's answer opens as a
+ * tab beside the one on screen (`showArtifact`). Answers the hub's refusal in the
  * error formula, for the chip that was pressed to say beside itself with
  * Try again (never a toast: DESIGN.md, The Work Outlives Its Surface Rule),
  * or null once it opened.
@@ -96,7 +100,7 @@ export async function openReference(
     return null;
   }
   try {
-    const where = await showArtifact(session, id, cardOf(at));
+    const where = await showArtifact(session, id, at);
     if (where === "panel") {
       revealPreview(session);
     }
@@ -131,7 +135,7 @@ export async function openArtifactIn(
     return null;
   }
   try {
-    const where = await showArtifact(instanceId, id, cardOf(at));
+    const where = await showArtifact(instanceId, id, at);
     // A page drew it (a project's setup page): no panel to bring forward.
     if (where === "panel") {
       revealPreview(instanceId);

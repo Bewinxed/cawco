@@ -48,6 +48,12 @@ export const ARTIFACT_REASONS = [
 /** Where the panel opens an artifact: its first pending stop. */
 export type ArtifactStop = { card: string } | { pin: number } | { top: true };
 
+/**
+ * Where a press opens an artifact (a chip's place, an address's `?stop=`):
+ * a pending stop, or a spot an update changed (its anchor).
+ */
+export type ArtifactPlace = ArtifactStop | { change: string };
+
 /** One artifact waiting on the person: a Needs-you item. */
 export interface ArtifactNeed {
   artifactId: string;
@@ -156,7 +162,7 @@ export const notNowId = (id: string, raisedAt: number): string =>
 export const artifactStopHref = (
   view: string,
   id: string,
-  stop: ArtifactStop
+  stop: ArtifactPlace
 ): string => {
   const base = `/session/${encodeURIComponent(view)}?artifact=${encodeURIComponent(id)}`;
   if ("pin" in stop) {
@@ -164,6 +170,9 @@ export const artifactStopHref = (
   }
   if ("card" in stop) {
     return `${base}&stop=card:${encodeURIComponent(stop.card)}`;
+  }
+  if ("change" in stop) {
+    return `${base}&stop=change:${encodeURIComponent(stop.change)}`;
   }
   return base;
 };
@@ -202,7 +211,7 @@ export const needLinkOf = (href: string): string =>
   href.startsWith("/session/") ? (href.split("?")[0] ?? href) : href;
 
 /** A `stop` query value read back; the top when it names none. */
-export const artifactStopOf = (value: string | null): ArtifactStop => {
+export const artifactStopOf = (value: string | null): ArtifactPlace => {
   if (value?.startsWith("pin:")) {
     const pin = Number(value.slice(4));
     if (Number.isInteger(pin) && pin > 0) {
@@ -211,6 +220,9 @@ export const artifactStopOf = (value: string | null): ArtifactStop => {
   }
   if (value?.startsWith("card:") && value.length > 5) {
     return { card: value.slice(5) };
+  }
+  if (value?.startsWith("change:") && value.length > 7) {
+    return { change: value.slice(7) };
   }
   return { top: true };
 };

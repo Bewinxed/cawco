@@ -791,15 +791,28 @@ export const artifactRoutes = (artifacts: Artifacts) =>
     )
     // Whether a view has it on screen within 10 s, or why not; 503 when its
     // server could not start. The person's show unless by=agent (artifact_show).
-    // A project's setup page opens in no panel: the answer's href is where it lands.
+    // The answer's href is where the person goes instead: a project's setup
+    // page's landing, or, for the person's show of one this session's panel
+    // does not hold, the session that holds it.
     .post(
       "/api/instances/:id/artifacts/:artifact/show",
       {
         query: handQuery,
-        // A decision card it opens at: a project's setup page lands there (core `setupLanding`).
+        // The place the person's press opens it at (core `ArtifactPlace`): a
+        // pin, a decision card, a changed spot. A project's setup page lands
+        // at the card (core `setupLanding`); one another session holds opens
+        // there at the place (core `artifactStopHref`).
         body: t.Optional(
           t.Object({
-            card: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
+            at: t.Optional(
+              t.Union([
+                t.Object({ pin: t.Integer({ minimum: 1 }) }),
+                t.Object({ card: t.String({ minLength: 1, maxLength: 200 }) }),
+                t.Object({
+                  change: t.String({ minLength: 1, maxLength: 200 }),
+                }),
+              ])
+            ),
           })
         ),
       },
@@ -809,7 +822,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             params.id,
             params.artifact,
             query.by ?? "person",
-            body?.card ?? null
+            body?.at ?? { top: true }
           );
         } catch (error) {
           return refused(error);

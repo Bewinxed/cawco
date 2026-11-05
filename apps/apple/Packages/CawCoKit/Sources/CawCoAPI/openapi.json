@@ -8797,10 +8797,47 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "card": {
-                    "minLength": 1,
-                    "maxLength": 200,
-                    "type": "string"
+                  "at": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "pin": {
+                            "minimum": 1,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "pin"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "card": {
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "card"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "change": {
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "change"
+                        ]
+                      }
+                    ]
                   }
                 }
               }

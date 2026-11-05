@@ -20,6 +20,14 @@
  * (d) In the parent's conversation, the chip of the page its delegate
  *     handed it: the parent's panel, the conversation on screen the
  *     parent's.
+ * (e) In the parent's conversation, the chip of a page another session
+ *     holds, of no tree of the parent's (the owner's press of nightly
+ *     6809's `title-bars-close`, refused "This session has no artifact …
+ *     (404)"): the first press opens that session as a tab beside the
+ *     parent's, the page in front of its panel, the parent's tab still in
+ *     the group.
+ * (f) The same press on a phone: that session in place of the parent's,
+ *     the page in its panel, and Back returns to the parent's.
  *
  *   bun scripts/probe-kit/run.ts artifact-open-here
  */
@@ -242,7 +250,100 @@ const run = async (kit: Kit) => {
     d.seen === "Handed" && d.at === `/session/${parent}`,
     JSON.stringify(d)
   );
+
+  // (e) A page of another tree, pressed in the parent's conversation.
+  const stranger = await fleet.spawn("claude", "Stranger", src, inProject);
+  const theirs = await create(stranger, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge the stranger's page",
+    name: "stranger-page",
+    html: pageOf("Stranger"),
+  });
+  links = `[stranger-page](cawco:artifact/${theirs.id})`;
+  await fleet.send(parent, `${LINKS}: name the stranger's page.`);
+  const theirChip = top.locator(`[data-artifact-chip="${theirs.id}"]`).first();
+  await theirChip.waitFor({ timeout: 120_000 });
+  // Only the panel the press opens draws a page: the parent's, open since (d), closed.
+  await close(parent);
+  await close(stranger);
+  await theirChip.click();
+  const e = {
+    seen: await until(
+      "Stranger in the panel on screen",
+      () => shown(top),
+      (text) => text === "Stranger",
+      30_000
+    ).catch(() => shown(top)),
+    at: new URL(top.url()).pathname,
+    refused: await top.locator("[data-reference-refused]").count(),
+    tabs: await top.evaluate(
+      () =>
+        (
+          JSON.parse(localStorage.getItem("cawco-workspace") ?? "{}") as {
+            root?: { tabs?: string[] };
+          }
+        ).root?.tabs ?? []
+    ),
+  };
+  check(
+    "(e) in the parent's conversation, the chip of another tree's page opens on the first press: its own session as a tab beside the parent's, the page in front of its panel",
+    e.seen === "Stranger" &&
+      e.at === `/session/${stranger}` &&
+      e.refused === 0 &&
+      e.tabs.indexOf(stranger) === e.tabs.indexOf(parent) + 1,
+    JSON.stringify(e)
+  );
   await top.close();
+
+  // (f) The same press on a phone: in place, and Back.
+  const phone = await kit.page("phone");
+  await phone.addInitScript(
+    ([tab]) => {
+      localStorage.setItem(
+        "cawco-workspace",
+        JSON.stringify({
+          v: 1,
+          root: { t: "l", id: "pone", tabs: [tab], active: tab, opened: null },
+          focusedLeaf: "pone",
+        })
+      );
+    },
+    [parent] as const
+  );
+  await open(phone, `${base}/session/${parent}`, '[data-slot="pane"]');
+  const phoneChip = phone
+    .locator(`[data-artifact-chip="${theirs.id}"]`)
+    .first();
+  await phoneChip.waitFor({ timeout: 60_000 });
+  await close(parent);
+  await close(stranger);
+  await phoneChip.click();
+  const f = {
+    seen: await until(
+      "Stranger in the panel on the phone",
+      () => shown(phone),
+      (text) => text === "Stranger",
+      30_000
+    ).catch(() => shown(phone)),
+    at: new URL(phone.url()).pathname,
+    back: "",
+  };
+  await phone.goBack();
+  f.back = await until(
+    "the parent's conversation again",
+    () => Promise.resolve(new URL(phone.url()).pathname),
+    (path) => path === `/session/${parent}`,
+    15_000
+  ).catch(() => new URL(phone.url()).pathname);
+  check(
+    "(f) on a phone, the chip of another tree's page opens its session in place with the page in its panel, and Back returns to the parent's conversation",
+    f.seen === "Stranger" &&
+      f.at === `/session/${stranger}` &&
+      f.back === `/session/${parent}`,
+    JSON.stringify(f)
+  );
+  await phone.close();
 };
 
 const spec: Spec = {

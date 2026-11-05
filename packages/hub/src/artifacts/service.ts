@@ -24,6 +24,7 @@ import {
   type ArtifactKind,
   type ArtifactNeedsRead,
   type ArtifactPending,
+  type ArtifactPlace,
   type ArtifactPromotion,
   type ArtifactSummary,
   type ArtifactThumbnail,
@@ -33,6 +34,7 @@ import {
   artifactErrorsNotice,
   artifactLink,
   artifactSavesNotice,
+  artifactStopHref,
   artifactToolWords,
   type ChoiceEntry,
   changeLink,
@@ -2537,6 +2539,42 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
   };
+
+  /**
+   * Artifact `id` for the person's show from session `instance`'s view:
+   * any a session of the fleet holds, or one `instance` sees ({@link sees})
+   * that none holds; refused as not there otherwise. Where it opens is
+   * the show's ({@link Artifacts.show}).
+   */
+  const showable = (instance: InstanceRow, asked: string): ArtifactRow => {
+    const row = db.get(whole(instance, asked));
+    if (row && (row.instanceId !== null || sees(instance, row))) {
+      return row;
+    }
+    throw new ArtifactRefusal(404, artifactToolWords.noArtifact(asked));
+  };
+
+  /**
+   * Where the person's show of `row` (`found`, or the version it is held
+   * for) from session `instance`'s view goes instead of that panel: the
+   * panel of the session holding it, at `at` (core `artifactStopHref`),
+   * when `instance` does not see it ({@link sees}); null when it opens here,
+   * or is a project's setup page, which lands where its show says
+   * ({@link landingOf}).
+   */
+  const inItsSession = (
+    instance: InstanceRow,
+    found: ArtifactRow,
+    row: ArtifactRow,
+    at: ArtifactPlace
+  ): { opened: false; why: string; href: string } | null =>
+    row.instanceId === null || sees(instance, found) || boardOf(row)
+      ? null
+      : {
+          opened: false,
+          why: artifactToolWords.inItsSession(row.name),
+          href: artifactStopHref(row.instanceId, row.id, at),
+        };
 
   /**
    * Whether `instance` may show and read `row` without changing it: its
@@ -8372,26 +8410,38 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * Brings an artifact to the front of session `instanceId`'s panel and
-     * waits for a view to have it on screen ({@link Opened}); a refusal when
-     * its server could not be started. The session shows its own, one it
-     * made, or another session's of its delegation tree ({@link viewable}),
-     * at the agent's call or the person's. Another session's opens in the caller's panel as it stands, never the
-     * owner's, and nothing of it changes. The owner's show of one with a held
-     * next version (or of that version, by its id) opens the next version
-     * ({@link promote}); the person's shows what the panel has.
+     * Brings an artifact to the front of session `instanceId`'s panel, at
+     * `at`, and waits for a view to have it on screen ({@link Opened}); a
+     * refusal when its server could not be started. The agent's show
+     * (`artifact_show`) is of its own, one it made, or another session's of
+     * its delegation tree ({@link viewable}), and opens in its own panel as
+     * it stands, never the owner's, nothing of it changing. The person's is
+     * of any artifact of the fleet a session holds: one this panel sees
+     * ({@link sees}) opens here as the agent's does; any other opens in the
+     * panel of the session that holds it, which the answer's `href` takes
+     * the person to (core `artifactStopHref`: that session as a tab beside
+     * the one on screen, the artifact at `at`), so their press is never
+     * refused for the session they pressed it in. The owner's show of one
+     * with a held next version (or of that version, by its id) opens the
+     * next version ({@link promote}); the person's shows what the panel has.
      */
     show: async (
       instanceId: string,
       id: string,
       by: PanelHand,
-      card: string | null = null
+      at: ArtifactPlace = { top: true }
     ): Promise<Shown> => {
       const instance = sessionOf(instanceId);
-      const found = viewable(instance, id);
+      const found =
+        by === "person" ? showable(instance, id) : viewable(instance, id);
       let row = found.heldFor === null ? found : db.get(found.heldFor);
       if (!row) {
         throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
+      }
+      const link = artifactLink(row.id, row.name);
+      const there = inItsSession(instance, found, row, at);
+      if (there) {
+        return { ...there, link };
       }
       const next =
         by === "agent" && row.instanceId === instance.id
@@ -8400,7 +8450,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (next) {
         row = await promote(row, next);
       }
-      const shown = await show(row, instance.id, card);
+      const shown = await show(row, instance.id, "card" in at ? at.card : null);
       if (!shown.started) {
         throw new ArtifactRefusal(503, shown.why);
       }
@@ -8409,7 +8459,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         askedNow(instance, row.id);
       }
       // Its link: what the agent names it by, and its tool row draws.
-      return { ...openedOf(shown), link: artifactLink(row.id, row.name) };
+      return { ...openedOf(shown), link };
     },
 
     /**

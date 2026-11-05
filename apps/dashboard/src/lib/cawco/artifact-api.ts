@@ -5,6 +5,7 @@
  * reaches them without loading the fleet.
  */
 
+import type { ArtifactPlace } from "@cawco/core/artifact-needs";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type {
   ArtifactHit,
@@ -119,21 +120,25 @@ export class ArtifactRefused extends Error {
 }
 
 /**
- * Brings an artifact to the front of a session's panel (its own, or one of
- * its delegation tree's sessions'); the panel follows its frame. A
- * project's setup page opens in no panel: the hub answers where it lands,
- * at `card` when a card chip named one (core `setupLanding`), and the
- * person goes there. Answers where it opened: a panel, or a page.
+ * Brings an artifact to the front of a session's panel, at `at`; the panel
+ * follows its frame. The hub answers where the person goes instead (hub
+ * artifacts/service.ts `show`), and they go there: a project's setup page
+ * to where it lands (core `setupLanding`), and an artifact the session's
+ * panel does not hold (not its own, made by it, or of its delegation tree)
+ * to the session that holds it, opened as a tab beside the one on screen
+ * with the artifact in front of its panel at `at` (core
+ * `artifactStopHref`, workspace.svelte.ts `followUrl`). Answers where it
+ * opened: this panel, or a page.
  */
 export async function showArtifact(
   instanceId: string,
   id: string,
-  card: string | null = null
+  at: ArtifactPlace = { top: true }
 ): Promise<"panel" | "page"> {
   const response = await fetch(`${artifactsPath(instanceId, id)}/show`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(card ? { card } : {}),
+    body: JSON.stringify("top" in at ? {} : { at }),
   });
   if (!response.ok) {
     throw new ArtifactRefused(

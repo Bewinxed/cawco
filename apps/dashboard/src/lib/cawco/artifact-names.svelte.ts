@@ -18,6 +18,7 @@
  * press made before the page is ready still lands.
  */
 import type { ArtifactKind } from "@cawco/core/artifact-kinds";
+import type { ArtifactPlace } from "@cawco/core/artifact-needs";
 import type { ChoiceEntry } from "@cawco/core/choices";
 import type { Pin } from "@cawco/core/comments";
 import { pinReference } from "@cawco/core/references";
@@ -214,9 +215,8 @@ export function artifactMarksKnown(id: string): boolean {
   return artifactMarks(id) !== null || pinsAnswered.has(id);
 }
 
-/** Where a press opens an artifact: at a pin's thread, at a decision card, at a spot an update changed (its anchor), or at its top. */
-export type OpenAt =
-  { pin: number } | { card: string } | { change: string } | { top: true };
+/** Where a press opens an artifact: core `ArtifactPlace`, which its address (`?stop=`) and the hub's show carry too. */
+export type OpenAt = ArtifactPlace;
 
 /** The open each artifact's pane is asked for; a second press asks again with a new object. */
 const asked = new SvelteMap<string, OpenAt>();
