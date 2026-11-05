@@ -1073,9 +1073,11 @@ async function compareWide(kit: Kit, base: string, id: string): Promise<void> {
     300_000
   );
   await page.setViewportSize(WIDE);
+  // The room is named by its faces: States, Map and, since slice 4, Animation.
   const roomName = graphWords.room([
     graphWords.statesFace,
     graphWords.wholeSet,
+    graphWords.moveFace,
   ]);
   await page
     .locator(
