@@ -29,7 +29,7 @@
   import { artifactWords } from "@cawco/core/words/artifacts";
   import type { Component } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import { SvelteSet } from "svelte/reactivity";
+  import { MediaQuery, SvelteSet } from "svelte/reactivity";
   import { BarGlass, BarMenu } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
@@ -84,6 +84,8 @@
     browser: IconGlobe,
   };
 
+  /** Under the phone line the title takes two lines, centred as a box: its optical trim's padding would show a third. */
+  const phone = new MediaQuery("(width < 640px)");
   let open = $state(false);
   let listed = $state<ArtifactSummary[] | null>(null);
   /** Until the list is read, the one the panel shows, with no age or promote to say. */
@@ -257,15 +259,19 @@
           {...props}
           data-artifact-trigger
           aria-describedby={line ? lineId : undefined}
-          class="select-none touch-hit press-tint mark-line max-w-full gap-space-1 ps-space-2 pe-space-1"
+          class="select-none touch-hit press-tint mark-line max-w-full gap-space-1 ps-space-2 pe-space-1 max-phone:h-auto max-phone:min-h-c-bar-item max-phone:rounded-lg"
           data-artifact={shown.id}
           data-bar-item
           data-box
           title={line || undefined}
           type="button"
         >
+          <!-- On a phone two lines, clamped in the bar's row, so a title of
+               ordinary length reads whole at 390 (the artifact panel's
+               surface brief, The title); one line, cut at its end, on a desk. -->
           <span
-            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong type-row"
+            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-start text-ink-strong type-row max-phone:line-clamp-2 max-phone:whitespace-normal max-phone:text-pretty"
+            data-box={phone.current || undefined}
             data-slot="name-lead">{shown.title}</span
           >
           <IconChevronDown

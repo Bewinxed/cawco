@@ -36,6 +36,7 @@
     ref?: HTMLElement | null;
     [attribute: `data-${string}`]: unknown;
     [aria: `aria-${string}`]: unknown;
+    onkeydown?: (event: KeyboardEvent) => void;
     onpointerenter?: (event: PointerEvent) => void;
     onpointerleave?: (event: PointerEvent) => void;
   } = $props();

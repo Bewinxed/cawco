@@ -360,6 +360,7 @@
 @custom-variant slot-att-btn (&[data-slot="att-btn"]);
 @custom-variant slot-atts (&[data-slot="atts"]);
 @custom-variant slot-badge (&[data-slot="badge"]);
+@custom-variant slot-bar (&[data-slot="bar"]);
 @custom-variant slot-bar-fill (&[data-slot="bar-fill"]);
 @custom-variant slot-beat (&[data-slot="beat"]);
 @custom-variant slot-block (&[data-slot="block"]);

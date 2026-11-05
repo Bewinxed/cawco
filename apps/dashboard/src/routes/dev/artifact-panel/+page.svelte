@@ -15,16 +15,28 @@
    * whole room), `resolved`, `none` (no comments at all), `check` (To check
    * holds two while Open is in front), `list` (the rail's title menu open),
    * `search` (searching "HIG", with hits), `miss` (searching, none),
-   * `artifacts` (the title's menu open), `thread` (comment 4 opened).
+   * `artifacts` (the title's menu open), `thread` (comment 4 opened; on a
+   * phone in the Comments sheet, Back leading), `changes` (Changed since you
+   * looked over the page's foot), `long` (150 comments), `compose` (a
+   * comment on the whole page being written), `more` (the head's More open,
+   * where the head has one), `view` (the canvas view's menu open), `mode`
+   * (the mode's one-button form open, where the head draws it).
    */
   import type { Pin } from "@cawco/core/comments";
   import { commentWords } from "@cawco/core/words/comments";
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import ArtifactMenu from "#lib/cawco/preview/ArtifactMenu.svelte";
+  import CanvasView from "#lib/cawco/preview/CanvasView.svelte";
+  import ChangesTag from "#lib/cawco/preview/ChangesTag.svelte";
+  import CommentComposer from "#lib/cawco/preview/CommentComposer.svelte";
   import CommentRail from "#lib/cawco/preview/CommentRail.svelte";
+  import { CanvasViewState } from "#lib/cawco/preview/canvas-view.svelte.js";
   import type { RailSort } from "#lib/cawco/preview/comment-rows.js";
+  import ModeButton from "#lib/cawco/preview/ModeButton.svelte";
   import PinCard from "#lib/cawco/preview/PinCard.svelte";
+  import PinFloat from "#lib/cawco/preview/PinFloat.svelte";
   import ThreadSheet from "#lib/cawco/preview/ThreadSheet.svelte";
   import { setSideExpand } from "#lib/cawco/side/expand.js";
   import { HEAD_PRIORITY, type HeadItem } from "#lib/cawco/side/head.js";
@@ -49,7 +61,7 @@
   import { page } from "$app/state";
   import pageDesk from "./page-desk.webp";
   import pagePhone from "./page-phone.webp";
-  import { ARTIFACTS, PINS } from "./records";
+  import { ARTIFACTS, LONG, PINS } from "./records";
 
   const INSTANCE = "bench-artifact-panel";
   const asked = page.url.searchParams.get("state") ?? "rail";
@@ -67,6 +79,9 @@
   const pins: Pin[] = $derived.by(() => {
     if (asked === "none") {
       return [];
+    }
+    if (asked === "long") {
+      return LONG;
     }
     if (asked === "resolved") {
       return PINS.map((one, at) =>
@@ -87,7 +102,23 @@
   const draft = new ComposerDraft();
   const openCount = $derived(pins.filter((one) => !one.resolvedAt).length);
   const checked = asked === "check" ? [PINS[3]?.id, PINS[4]?.id] : [];
-  let mode = $state("interact");
+  let mode = $state<"interact" | "comment" | "draw">("interact");
+  const MODE_GLYPHS = {
+    interact: IconInteract,
+    comment: IconPin,
+    draw: IconPen,
+  };
+  const MODE_WORDS = { interact: "Interact", comment: "Comment", draw: "Draw" };
+  /** A canvas's view (Map, Verify), standing for a component artifact's in the head. */
+  const view = new CanvasViewState(INSTANCE);
+  /** Changed since you looked: five stops, the tour not started. */
+  let tourAt = $state<number | null>(null);
+  /** A comment on the whole page being written. */
+  let composing = $state(asked === "compose");
+  let well = $state({ w: 0, h: 0 });
+  const measureWell = frameSize<HTMLElement>((node) => {
+    well = { w: node.clientWidth, h: node.clientHeight };
+  });
 
   setSideExpand({
     available: true,
@@ -105,6 +136,12 @@
     requestAnimationFrame(() => {
       if (asked === "list") {
         press('[data-slot="list"]');
+      } else if (asked === "more") {
+        press('[data-slot="more"]');
+      } else if (asked === "view") {
+        press('[aria-label="Canvas view"]');
+      } else if (asked === "mode") {
+        press('[aria-label^="Mode:"]');
       } else if (asked === "artifacts") {
         press("[data-artifact-trigger]");
       } else if (asked === "full") {
@@ -125,12 +162,14 @@
   });
   // The bench names no fleet: the panel's own words stand for the session's.
   const agent = "The session";
+  /** The stops Changed since you looked steps through. */
+  const CHANGES = 5;
 </script>
 
 {#snippet modeBar()}
   <Tabs
     onValueChange={(next) => {
-      mode = next;
+      mode = next as typeof mode;
     }}
     value={mode}
     values={["interact", "comment", "draw"]}
@@ -148,7 +187,36 @@
   </Tabs>
 {/snippet}
 {#snippet modeMenu()}
-  <DropdownMenu.Item><IconInteract /><span>Interact</span></DropdownMenu.Item>
+  <DropdownMenu.RadioGroup
+    onValueChange={(next) => {
+      mode = next as typeof mode;
+    }}
+    value={mode}
+  >
+    <DropdownMenu.RadioItem value="interact"
+      ><IconInteract /><span>Interact</span></DropdownMenu.RadioItem
+    >
+    <DropdownMenu.RadioItem value="comment"
+      ><IconPin /><span>Comment</span></DropdownMenu.RadioItem
+    >
+    <DropdownMenu.RadioItem value="draw"
+      ><IconPen /><span>Draw</span></DropdownMenu.RadioItem
+    >
+  </DropdownMenu.RadioGroup>
+{/snippet}
+<!-- The mode's one-button form, as PreviewPane draws it. -->
+{#snippet modeCompact()}
+  <ModeButton
+    glyph={MODE_GLYPHS[mode]}
+    menu={modeMenu}
+    word={MODE_WORDS[mode]}
+  />
+{/snippet}
+{#snippet viewBar()}
+  <CanvasView onverify={() => undefined} {view} />
+{/snippet}
+{#snippet viewMenu()}
+  <CanvasView as="sub" onverify={() => undefined} {view} />
 {/snippet}
 {#snippet commentsBar()}
   <!-- The rail's toggle as PreviewPane draws it: its bubble, and the count while shut. -->
@@ -201,8 +269,7 @@
     shown={{
       id: shown?.id ?? "",
       kind: "page",
-      name: shown?.name ?? "",
-      title: shown?.title,
+      title: shown?.title ?? "",
     }}
   />
 {/snippet}
@@ -228,7 +295,10 @@
     onopen={(id) => {
       openPin = id;
     }}
-    onpage={() => undefined}
+    onpage={() => {
+      openPin = null;
+      composing = true;
+    }}
     onresolve={() => undefined}
     onretry={() => undefined}
     onretrypin={() => undefined}
@@ -249,14 +319,25 @@
   {/if}
 {/snippet}
 
-{#snippet card(one: Pin)}
+{#snippet card(one: Pin, pushed = false)}
   <PinCard
     agentName={agent}
+    back={pushed
+      ? {
+          to: commentWords.comments,
+          onback: () => {
+            openPin = null;
+          },
+        }
+      : undefined}
     {draft}
     link={`#comment-${one.number}`}
     name={one.title ?? ""}
     onclose={() => {
       openPin = null;
+      if (pushed) {
+        listOpen = false;
+      }
     }}
     ondelete={() => Promise.resolve()}
     onfind={() => undefined}
@@ -282,6 +363,7 @@
           key: "mode",
           priority: HEAD_PRIORITY.mode,
           bar: modeBar,
+          compact: modeCompact,
           menu: modeMenu,
           group: true,
           place: "centre",
@@ -309,6 +391,17 @@
           bar: openBar,
           menu: openMenu,
         },
+        ...(asked === "view"
+          ? [
+              {
+                key: "view",
+                priority: HEAD_PRIORITY.view,
+                bar: viewBar,
+                menu: viewMenu,
+                group: true,
+              },
+            ]
+          : []),
       ] satisfies HeadItem[]}
       label="Preview"
       mode="interact"
@@ -323,18 +416,64 @@
         alt={shown?.title}
         class="size-full object-cover object-top"
         src={phone.current ? pagePhone : pageDesk}
+        {@attach measureWell}
       />
+      {#if asked === "changes"}
+        <ChangesTag
+          at={tourAt}
+          onstep={(by) => {
+            tourAt =
+              tourAt === null
+                ? 0
+                : (((tourAt + by) % CHANGES) + CHANGES) % CHANGES;
+          }}
+          total={CHANGES}
+        />
+      {/if}
+      {#if composing}
+        <!-- A comment on the whole page, as PreviewPane opens it from the rail's +: the composer at the page's top, the foot sheet on a phone. -->
+        <div class="contents">
+          <PinFloat
+            bare
+            box={null}
+            label={commentWords.comment}
+            mark={{ x: 12, y: 12, w: 24, h: 24 }}
+            room={well}
+            sheet={phone.current}
+            slot="pin-composer"
+          >
+            <CommentComposer
+              action="Comment"
+              chain={[commentWords.wholePage]}
+              {draft}
+              focus
+              onsubmit={() => {
+                composing = false;
+              }}
+              placeholder={commentWords.composeHint}
+            />
+          </PinFloat>
+        </div>
+      {/if}
       {#if phone.current}
+        <!-- The Comments sheet: its list, or a thread opened from it in the same sheet, Back leading. -->
         <ThreadSheet
-          label={commentWords.comments}
+          label={thread ? `Comment ${thread.number}` : commentWords.comments}
           onclose={() => {
+            openPin = null;
             listOpen = false;
           }}
-          open={listOpen && !thread}
+          open={listOpen && !composing}
         >
-          {@render railOf("sheet")}
+          {#if thread}
+            {#key thread.id}
+              {@render card(thread, true)}
+            {/key}
+          {:else}
+            {@render railOf("sheet")}
+          {/if}
         </ThreadSheet>
-        {#if thread}
+        {#if thread && !listOpen}
           <ThreadSheet
             label={`Comment ${thread.number}`}
             onclose={() => {

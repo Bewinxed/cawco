@@ -9095,18 +9095,16 @@ const barLook = async (
 };
 
 interface BarLook {
-  above: boolean;
   at: string;
+  atFoot: boolean;
   bar: unknown;
   firstOverlaps: number;
   overflows: number;
-  overlaps: number;
 }
 
 const NO_LOOK = {
-  above: false,
+  atFoot: false,
   firstOverlaps: -1,
-  overlaps: -1,
   overflows: -1,
 } as const;
 
@@ -9143,23 +9141,28 @@ const barLookIn = async (
     bar.x + bar.width <= pane.x + pane.width + 0.5;
   return {
     at,
-    above: !!(bar && outer) && bar.y + bar.height <= outer.y + 0.5,
+    // Over the page at the well's foot: inside the frame's box, its foot
+    // within 32px of the frame's.
+    atFoot:
+      !!(bar && outer) &&
+      bar.y >= outer.y - 0.5 &&
+      bar.y + bar.height <= outer.y + outer.height + 0.5 &&
+      outer.y + outer.height - (bar.y + bar.height) <= 32,
     firstOverlaps: boxed
       ? texts.filter((one) => one.first && meets(one, boxed)).length
       : -1,
-    overlaps: boxed ? texts.filter((one) => meets(one, boxed)).length : -1,
     overflows: inPane && !cut ? 0 : 1,
     bar: boxed as unknown,
   };
 };
 
 /**
- * Changed since you looked never stands over the page it describes: its bar
- * takes its own room between the head and the well. At 390, 680 and 1440,
- * scrolled to the page's top and to its middle, the bar ends above the
- * page's frame, no text box of the page (the first block's named) meets it,
- * and it overflows neither the pane nor its own box: the overlap and
- * overflow sweeps total 0.
+ * Changed since you looked floats over the page at the well's foot, one
+ * glass capsule, so the head stays one row and the page keeps its height
+ * (the artifact panel's surface brief, Changed since you looked). At 390,
+ * 680 and 1440, scrolled to the page's top and to its middle, the tag
+ * stands inside the frame's box at its foot, never on the page's first
+ * block at the top, and overflows neither the pane nor its own box.
  */
 const changesBarSweep = async (on: On, id: string) => {
   const was = on.page.viewportSize();
@@ -9183,23 +9186,19 @@ const changesBarSweep = async (on: On, id: string) => {
       }
     })
     .catch(() => undefined);
-  const overlapTotal = looks.reduce(
-    (n, one) => n + Math.max(0, one.overlaps),
-    0
-  );
   const overflowTotal = looks.reduce(
     (n, one) => n + Math.max(0, one.overflows),
     0
   );
   on.kit.check(
-    "changed: the Changed since you looked bar takes its own room between the head and the well: at 390, 680 and 1440, scrolled to the top and to mid-page, it ends above the page's frame and meets no text box of the page, its first block's included; the overlap and overflow sweeps total 0",
+    "changed: the Changed since you looked tag floats over the page at the well's foot: at 390, 680 and 1440, scrolled to the top and to mid-page, it stands inside the page's frame at its foot, meets none of the page's first block at the top, and the overflow sweep totals 0",
     looks.length === SWEEP_WIDTHS.length * 2 &&
       looks.every(
-        (one) => one.above && one.firstOverlaps === 0 && one.overlaps === 0
+        (one) =>
+          one.atFoot && (!one.at.endsWith("top") || one.firstOverlaps === 0)
       ) &&
-      overlapTotal === 0 &&
       overflowTotal === 0,
-    `overlap total ${overlapTotal}; overflow total ${overflowTotal}; ${JSON.stringify(looks)}`
+    `overflow total ${overflowTotal}; ${JSON.stringify(looks)}`
   );
   return back;
 };
