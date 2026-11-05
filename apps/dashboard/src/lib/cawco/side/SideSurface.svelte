@@ -58,7 +58,6 @@
     title,
     titleControl,
     titleCode = false,
-    titleAway = false,
     subtitle,
     subtitleId,
     subtitleCode = false,
@@ -93,14 +92,6 @@
     titleControl?: Snippet;
     /** The title is a path or an identifier (a folder file's path), set as code. */
     titleCode?: boolean;
-    /**
-     * The page under the head says this title itself, in view: the title
-     * control draws without its words (ArtifactMenu `titleAway`), and the
-     * name holds the room it last measured, so nothing in the head moves as
-     * the words come and go (HIG, Toolbars, iOS: a large title "transitions to
-     * a standard title as people begin scrolling").
-     */
-    titleAway?: boolean;
     /** What describes it (an artifact's ask, a task's id): never a line in the bar (DESIGN.md, The Title Bars Follow Liquid Glass Rule: "Facts about the surface … are content, never a second line in the bar"); the title's tooltip and its description, and a title control says it in its own menu. */
     subtitle?: string;
     /** The description's id, for the control it describes. */
@@ -199,8 +190,6 @@
   let shown = $state<Map<string, Standing> | null>(null);
   /** The name's own width, up to {@link NAME_KEEPS}: it gives up no more of it to the controls. */
   let nameKeeps = $state(0);
-  /** What the name wanted past that as its words last stood ({@link nameWants}): held with it while they are away. */
-  let nameWanted = 0;
   /** Each control's width as last drawn in the head, whole (`key`) and in its narrowest form (`key:compact`), and More's, its glyph alone (`more`) and saying a count (`more:counted`): what a control in More would take back. */
   const widths = new Map<string, number>();
   const stands = (key: string) => shown === null || shown.has(key);
@@ -408,9 +397,7 @@
       return null;
     }
     zoom = zoomOf(head);
-    // Measured with its words drawn; held while they are away.
-    const held = titleAway && nameKeeps > 0;
-    const keeps = held ? nameKeeps : nameWidth(identity);
+    const keeps = nameWidth(identity);
     const name = () => {
       nameKeeps = keeps;
     };
@@ -419,9 +406,6 @@
     }
     const { gap, room } = roomOf(head);
     const { kept } = drawnWidths(head, identity);
-    if (!held) {
-      nameWanted = nameWants(identity, keeps);
-    }
     // More and a form not drawn yet are a bar item, its symbol alone, until
     // they stand to be read.
     const glyph =
@@ -446,7 +430,7 @@
       })),
       // The pane's width: the card's, the head's box inside it.
       head.clientWidth >= WORDS_FROM,
-      nameWanted
+      nameWants(identity, keeps)
     );
     return () => {
       name();
@@ -590,7 +574,7 @@
   data-recessed={recessed || undefined}
   data-float={float || undefined}
   aria-label={label}
-  class="group/card @container data-float:relative data-float:overflow-hidden data-float:rounded-(--c-float-panel-r) data-float:p-0 flex h-full min-h-0 min-w-0 flex-col rounded-lg concentric-in r-outer-lg r-inset-space-2 bg-surface-raised px-space-2 pt-0 pb-space-2 shadow-drawer data-side-surface-expanded:rounded-none data-side-surface-expanded:px-0 data-side-surface-expanded:pt-space-3 data-side-surface-expanded:pb-0 data-side-surface-expanded:shadow-none data-side-surface-expanded:not-data-recessed:px-(--expanded-inset) in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
+  class="group/card @container data-float:relative data-float:overflow-hidden data-float:not-data-side-surface-expanded:rounded-(--c-float-panel-r) data-float:p-0 flex h-full min-h-0 min-w-0 flex-col rounded-lg concentric-in r-outer-lg r-inset-space-2 bg-surface-raised px-space-2 pt-0 pb-space-2 shadow-drawer data-side-surface-expanded:rounded-none not-data-float:data-side-surface-expanded:px-0 not-data-float:data-side-surface-expanded:pt-space-3 not-data-float:data-side-surface-expanded:pb-0 data-side-surface-expanded:shadow-none not-data-float:data-side-surface-expanded:not-data-recessed:px-(--expanded-inset) in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
   style:--expanded-inset="calc(var(--space-3) + var(--space-2))"
   style:--card-max="calc(100% - var(--sheet-hidden, 0px))"
   bind:this={section}
@@ -750,7 +734,7 @@
     <div
       aria-hidden="true"
       data-slot="scroll-edge"
-      class="pointer-events-none absolute inset-x-0 top-0 z-1 h-[calc(var(--c-head-room)+var(--space-4))] bg-linear-to-b from-material-panel to-transparent glass-backdrop mask-b-from-40% reduced-transparency:backdrop-filter-none contrast-more:backdrop-filter-none"
+      class="pointer-events-none absolute inset-x-0 top-0 z-1 h-c-scroll-edge-h bg-linear-to-b from-material-panel to-transparent glass-backdrop mask-b-from-40% reduced-transparency:backdrop-filter-none contrast-more:backdrop-filter-none"
     ></div>
   {/if}
   {#if recessed}
@@ -762,7 +746,7 @@
          edge easing in and out except while the split slides, and points a
          crosshair. -->
     <div
-      class="relative flex min-h-0 flex-1 gap-space-2 group-data-float/card:gap-0 group-data-float/card:bg-surface-well has-[>[data-rail-float=beside]]:*:data-side-well:me-[calc(var(--c-comments-w)+var(--space-2)*2)]"
+      class="relative flex min-h-0 flex-1 gap-space-2 group-data-float/card:gap-0 group-data-float/card:bg-surface-well has-[>[data-rail-float=beside]]:*:data-side-well:me-c-rail-float-room"
       data-slot="well-row"
     >
       <div

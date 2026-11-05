@@ -4234,6 +4234,45 @@
         }
       }
     },
+    "c-float-inner-r": {
+      "$type": "dimension",
+      "$value": {
+        "value": 18,
+        "unit": "px"
+      },
+      "$description": "A part floating space-2 inside a c-float-panel-r panel (the Comments rail's glass, the phone's inset half sheet): the panel's corner less that inset, the glass capsules' own radius, so it is concentric with the panel and with the capsules beside it.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({size.c-float-panel-r} - {space.space-2})"
+        }
+      }
+    },
+    "c-scroll-edge-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 64,
+        "unit": "px"
+      },
+      "$description": "The scroll edge effect under a floating head: the head's room and a fade a step deep under it, where what scrolls beneath the glass blurs and washes toward the panel's ground.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({size.c-head-room} + {space.space-4})"
+        }
+      }
+    },
+    "c-rail-float-room": {
+      "$type": "dimension",
+      "$value": {
+        "value": 334,
+        "unit": "px"
+      },
+      "$description": "What a page beside the floating Comments rail leaves it: the rail's width and its inset on both sides, the page's ground running on beneath the glass.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({size.c-comments-w} + 2 * {space.space-2})"
+        }
+      }
+    },
     "c-float-panel-r": {
       "$type": "dimension",
       "$value": {

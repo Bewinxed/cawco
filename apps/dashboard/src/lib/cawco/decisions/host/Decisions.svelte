@@ -296,11 +296,15 @@
       class="mx-auto flex w-full min-w-0 max-w-(--column-w) flex-col gap-space-5 overflow-x-clip px-(--page-in) pt-(--page-in) pb-space-5"
       data-slot="page-column"
     >
-      <!-- The page's title, marked (`data-page-title`): while it is in view
-           the panel's head leaves its own title out (the overlay's
-           `cawco:page-title`), so it is never read twice. -->
+      <!-- The page's title: under a panel's head, which names the page by
+           this same title (the overlay's `data-cawco-headed`), it is left
+           out, so it is never read twice; a setup page keeps its own, which
+           is the project's name renamed in place. -->
       <header
-        class="mark-line type-title flex min-w-0 items-start gap-space-3 py-space-2"
+        class={[
+          "mark-line type-title flex min-w-0 items-start gap-space-3 py-space-2",
+          !setupPage && "[:root[data-cawco-headed]_&]:hidden",
+        ]}
         data-slot="page-head"
       >
         <span class="mark-cell">
@@ -313,13 +317,12 @@
         </span>
         {#if setupPage}
           <!-- A setup page's title is the project's name, renamed in place. -->
-          <h1 class="m-0 flex min-w-0 flex-auto" data-box data-page-title>
+          <h1 class="m-0 flex min-w-0 flex-auto" data-box>
             <SetupTitle drafted={String(props.title ?? "")} />
           </h1>
         {:else}
           <h1
             class="type-title mark-text min-w-0 text-balance text-ink-strong wrap-anywhere"
-            data-page-title
           >
             {String(props.title ?? "")}
           </h1>

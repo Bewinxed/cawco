@@ -201,7 +201,7 @@
            opaque appearance"). -->
       <div
         bind:this={surface}
-        class="relative flex h-(--sheet-shown) min-h-0 flex-col pt-space-3 rounded-t-lg border-t border-border-hairline bg-surface-raised shadow-drawer motion-safe:transition-[margin,border-radius,background-color] motion-safe:duration-(--dur-panel) motion-safe:ease-drawer data-inset:mx-space-2 data-inset:rounded-(--c-float-panel-r) data-inset:border data-inset:bg-material-panel data-inset:glass-backdrop reduced-transparency:data-inset:bg-surface-raised reduced-transparency:data-inset:backdrop-filter-none"
+        class="relative flex h-(--sheet-shown) min-h-0 flex-col pt-space-3 rounded-t-lg border-t border-border-hairline bg-surface-raised shadow-drawer motion-safe:transition-[margin,border-radius,background-color] motion-safe:duration-(--dur-panel) motion-safe:ease-drawer data-inset:mx-space-2 data-inset:rounded-(--c-float-inner-r) data-inset:border data-inset:bg-material-panel data-inset:glass-backdrop reduced-transparency:data-inset:bg-surface-raised reduced-transparency:data-inset:backdrop-filter-none"
         data-inset={stop === 0 || undefined}
         data-slot="thread-sheet"
         style:--sheet-shown="calc(100% - {below}px - {stop === 0

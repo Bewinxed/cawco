@@ -2107,98 +2107,6 @@ addEventListener("scroll", tellPageFoot, { passive: true, capture: true });
 addEventListener("resize", tellPageFoot);
 addEventListener("load", tellPageFoot);
 
-/**
- * Whether the page's own title stands where it can be read: its element
- * marked `data-page-title` (a decision page's `h1`), else the page's first
- * heading when its words are the artifact's title as the host named it
- * (`cawco:hello`), case and spacing aside (a page an agent wrote, its `h1`
- * its title); in the viewport past
- * every scroller clipping it and clear of the host's chrome (`cawco:covered`,
- * a phone's Comments sheet at its whole room). Told to the host
- * (`cawco:page-title`) as it changes: the host's head leaves its own title out
- * while this one stands, so the words are never read twice, and says it once
- * this has scrolled out. A page with no such element is told false from its
- * first word, and its head keeps its title always: one whose first heading
- * says something else too.
- */
-const PAGE_TITLE = "[data-page-title]";
-const HEADINGS = "h1, h2, h3, h4, h5, h6, [role='heading']";
-/** The artifact's title, as the host named it in its hello. */
-let shownTitle = "";
-/** Words as a title compares them: case and runs of spacing aside. */
-const titleWords = (text: string | null | undefined): string =>
-  (text ?? "").replace(/\s+/gu, " ").trim().toLowerCase();
-/** The page's own title: its marked element, else its first heading when that says the artifact's title. */
-function pageTitleNow(): Element | null {
-  const marked = document.querySelector(PAGE_TITLE);
-  if (marked) {
-    return marked;
-  }
-  const first = document.querySelector(HEADINGS);
-  const wants = titleWords(shownTitle);
-  return first && wants && titleWords(first.textContent) === wants
-    ? first
-    : null;
-}
-let pageTitle: Element | null = null;
-let pageTitleSeen = false;
-let pageTitleUnder: Box[] = [];
-let pageTitleTold: boolean | null = null;
-let pageTitleAsked = false;
-function tellPageTitle() {
-  if (pageTitleAsked) {
-    return;
-  }
-  pageTitleAsked = true;
-  requestAnimationFrame(() => {
-    pageTitleAsked = false;
-    const el = pageTitleNow();
-    if (el !== pageTitle) {
-      if (pageTitle) {
-        pageTitleSight.unobserve(pageTitle);
-      }
-      pageTitle = el;
-      pageTitleSeen = false;
-      if (el) {
-        // Answers in its own time, with this called again.
-        pageTitleSight.observe(el);
-      }
-    }
-    const box = el?.getBoundingClientRect();
-    const covered =
-      !!box &&
-      pageTitleUnder.some(
-        (one) =>
-          box.left < one.x + one.w &&
-          one.x < box.right &&
-          box.top < one.y + one.h &&
-          one.y < box.bottom
-      );
-    const inView = pageTitleSeen && !covered;
-    if (inView !== pageTitleTold) {
-      pageTitleTold = inView;
-      post("cawco:page-title", { inView });
-    }
-  });
-}
-const pageTitleSight = new IntersectionObserver((entries) => {
-  const last = entries.at(-1);
-  if (last) {
-    pageTitleSeen = last.isIntersecting;
-    tellPageTitle();
-  }
-});
-// The title comes with the page's own render, and a page may replace it.
-new MutationObserver((records) => {
-  if (records.some((record) => !ownNode(record.target))) {
-    tellPageTitle();
-  }
-}).observe(document.documentElement, {
-  characterData: true,
-  childList: true,
-  subtree: true,
-});
-
 /** The count of the page's changes as they stand now, `doc` watched from here on: changes not yet delivered (a write this very task) taken first. */
 function changesNow(doc: Document): number {
   if (!readDocs.has(doc)) {
@@ -3445,13 +3353,13 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       ready();
       pageFootTold = -1;
       tellPageFoot();
-      pageTitleTold = null;
-      shownTitle =
-        typeof (message as { artifact?: { title?: unknown } }).artifact
-          ?.title === "string"
-          ? (message as { artifact: { title: string } }).artifact.title
-          : "";
-      tellPageTitle();
+      // A host whose head names the page by its title (the artifact
+      // panel's): the page's own copy of it may stand aside (a decision
+      // page's title, under `:root[data-cawco-headed]`).
+      document.documentElement.toggleAttribute(
+        "data-cawco-headed",
+        (message as { headed?: unknown }).headed === true
+      );
       // The host names the artifact this page is, and where its doc is synced.
       const hello = message as {
         artifact: Parameters<typeof artifact.join>[0];
@@ -3680,12 +3588,7 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     },
     // What the host's chrome covers of the page (its Comments list, a
     // phone's card): a pin it opens is brought out from under it.
-    "cawco:covered": (message) => {
-      const boxes = coveredOf(message.boxes);
-      pins.cover(boxes);
-      pageTitleUnder = boxes;
-      tellPageTitle();
-    },
+    "cawco:covered": (message) => pins.cover(coveredOf(message.boxes)),
     // What the host's chrome floats over the page's foot (Changed since you
     // looked), px: the page scrolls that much further, so its last line
     // comes clear of it.

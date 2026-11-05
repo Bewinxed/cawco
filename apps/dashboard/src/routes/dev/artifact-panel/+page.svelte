@@ -24,13 +24,16 @@
    * (comment 4's Delete pressed: its question under the card's bar),
    * `remove` (the artifacts menu's Remove pressed: its question in the menu),
    * `found` (Resolved in front, searching "HIG": the hits in every list),
-   * `scrolled` (the page's own title scrolled out of view: the head says it),
+   * `scrolled` (the page scrolled to its foot, its top under the head's glass),
    * `held` (three comments held to send together: Send 3 in the rail's bar,
    * each row Unsent, the head's bubble ringed), `note` (Send all pressed: its
    * note under the bar), `hold` (a comment being written: Hold beside send).
-   * The picture stands for a decision page: in every other state its title
-   * is in view, so the head leaves its own out (`cawco:page-title`), except
-   * where the picture is scrolled (`changes`) or a sheet covers it (`full`).
+   * The picture stands for a decision page as the panel shows it: its own
+   * title left out under the head, which names it (overlay
+   * `data-cawco-headed`), its top starting the head's room down
+   * (`c-head-room`) and scrolling under the glass. `?rail=` places the
+   * desk's Comments (over, beside, hung) and `?line=1` sets the title over
+   * its description: the structures on the owner's decision page.
    */
   import { type Pin, pinHeld } from "@cawco/core/comments";
   import { commentWords } from "@cawco/core/words/comments";
@@ -93,9 +96,7 @@
    * bubble, as tall as its comments.
    */
   const railAt = (page.url.searchParams.get("rail") ?? "beside") as
-    | "over"
-    | "beside"
-    | "hung";
+    "over" | "beside" | "hung";
   /** The title over its description in the bar (`?line=1`), a window's subtitle. */
   const described = page.url.searchParams.get("line") === "1";
   const phone = new MediaQuery("(width < 640px)");
@@ -360,7 +361,7 @@
         trapFocus={false}
       >
         <div
-          class="flex max-h-[calc(var(--bits-popover-content-available-height)-var(--space-2))] min-h-0 w-c-comments-w"
+          class="flex max-h-(--bits-popover-content-available-height) min-h-0 w-c-comments-w"
           data-rail-float="hung"
         >
           {@render railOf("beside")}
@@ -406,7 +407,7 @@
   <ArtifactMenu
     held={ARTIFACTS.map((one) => one.id)}
     instanceId={INSTANCE}
-    described={described}
+    {described}
     line={shown?.ask ?? ""}
     lineId="bench-line"
     onrefused={() => undefined}
@@ -485,7 +486,7 @@
 {#snippet railBeside()}
   {#if listOpen && !phone.current && railAt !== "hung"}
     <div
-      class="absolute end-space-2 top-c-head-room bottom-space-2 z-1 flex min-h-0 overflow-hidden rounded-[calc(var(--c-btn-h)/2)] border border-border-hairline bg-material-panel shadow-overlay glass-backdrop reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"
+      class="absolute end-space-2 top-c-head-room bottom-space-2 z-1 flex min-h-0 overflow-hidden rounded-(--c-float-inner-r) border border-border-hairline bg-material-panel shadow-overlay glass-backdrop reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"
       data-rail-float={railAt}
     >
       {@render railOf("beside")}

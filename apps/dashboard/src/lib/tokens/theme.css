@@ -374,6 +374,9 @@
   --spacing-c-bar-symbol: var(--c-bar-symbol);
   --spacing-c-count-badge-h: var(--c-count-badge-h);
   --spacing-c-head-room: var(--c-head-room);
+  --spacing-c-float-inner-r: var(--c-float-inner-r);
+  --spacing-c-scroll-edge-h: var(--c-scroll-edge-h);
+  --spacing-c-rail-float-room: var(--c-rail-float-room);
   --spacing-c-float-panel-r: var(--c-float-panel-r);
   --spacing-c-bar-caw-glass-phone: var(--c-bar-caw-glass-phone);
   --spacing-c-bar-caw-head-phone: var(--c-bar-caw-head-phone);

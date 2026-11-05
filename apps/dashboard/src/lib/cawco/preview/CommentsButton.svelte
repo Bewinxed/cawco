@@ -85,6 +85,7 @@
       data-slot="comments"
       type="button"
     >
+      <!-- mark-line: the badge is a mark on the symbol's corner, not words set beside it -->
       <span class="relative grid" data-box>
         <IconChat aria-hidden="true" data-slot="bar-symbol" />
         {#if badge}
@@ -92,7 +93,7 @@
                the glass's ground so it reads apart from the symbol. -->
           <span
             aria-hidden="true"
-            class="absolute start-[calc(100%-var(--space-2))] -top-space-2 grid h-c-count-badge-h min-w-c-count-badge-h place-items-center rounded-pill px-space-1 type-meta num leading-none ring-(length:--status-dot-cut) ring-material-panel data-[badge=count]:bg-ink-solid data-[badge=count]:text-on-ink data-[badge=check]:bg-status-attn-bg data-[badge=check]:text-status-attn-ink data-[badge=held]:border data-[badge=held]:border-ink-muted data-[badge=held]:bg-surface-raised data-[badge=held]:text-ink-strong"
+            class="absolute -end-space-2 -top-space-2 grid h-c-count-badge-h min-w-c-count-badge-h place-items-center rounded-pill px-space-1 type-meta num leading-none ring-(length:--status-dot-cut) ring-material-panel data-[badge=count]:bg-ink-solid data-[badge=count]:text-on-ink data-[badge=check]:bg-status-attn-bg data-[badge=check]:text-status-attn-ink data-[badge=held]:border data-[badge=held]:border-ink-muted data-[badge=held]:bg-surface-raised data-[badge=held]:text-ink-strong"
             data-badge={badge}
             data-slot="badge">{count > 0 ? count : held}</span
           >

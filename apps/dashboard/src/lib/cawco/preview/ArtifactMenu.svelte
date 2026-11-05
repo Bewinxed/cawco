@@ -11,13 +11,11 @@
    * needs-you dot, the status's own glyph ink (The Glyph, Word, Hue Rule);
    * choosing one shows it.
    * Its line (the ask, or "Sent to <session>") is the menu's first row, and
-   * the control's tooltip and description; never a line under the title.
-   * While the page says this title itself, in view (`titleAway`, the page's
-   * `cawco:page-title`), the words go from the bar and the control is the
-   * artifact's kind glyph and the chevron, so the title is never read twice
-   * and the menu stands where it stood (HIG, Toolbars, Titles: "If titling a
-   * toolbar seems redundant, you can leave the title area empty"); they come
-   * back once the page's own has scrolled out of view.
+   * the control's tooltip and description; `described`, it also stands
+   * under the title in the bar, a window's subtitle. The title is never
+   * hidden (the owner, 2026-11-05: the head names the artifact by the title
+   * its agent wrote); a page that says the same title leaves its own out
+   * under the panel's head (overlay `data-cawco-headed`).
    * The row on show is marked (the selection wash, and its words at full
    * ink). No row carries a Remove at rest: the menu's last item removes the
    * one on show, and Delete or Backspace on a highlighted row asks for that
@@ -54,6 +52,7 @@
   import AskHere from "../AskHere.svelte";
   import { listArtifacts, removeArtifact, showArtifact } from "../artifact-api";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
+  import { frameSize } from "../frame-observer";
   import { failureClause } from "../hub-read";
   import { reveal } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
@@ -66,7 +65,6 @@
     line,
     lineId,
     shown,
-    titleAway = false,
     described = false,
     onrefused,
   }: {
@@ -83,8 +81,6 @@
     held: string[] | undefined;
     /** The artifact the panel shows. */
     shown: { id: string; kind: ArtifactKind; title: string };
-    /** The page says this title itself, in view: the bar draws its glyph, the words only for a screen reader. */
-    titleAway?: boolean;
     /** The line stands under the title in the bar, a window's subtitle (macOS: a toolbar's title over its subtitle), each one line cut at its end. */
     described?: boolean;
     /** A chosen artifact the hub would not show: the words, and which it was. */
@@ -104,7 +100,22 @@
 
   /** Under the phone line the title takes two lines, centred as a box: its optical trim's padding would show a third. */
   const phone = new MediaQuery("(width < 640px)");
-  const KindGlyph = $derived(GLYPHS[shown.kind]);
+  /** The phone's two lines cut the title: its chevron stands beside the box, since one inline after the last word is cut with it. */
+  let clamped = $state(false);
+  const measureClamp = frameSize<HTMLElement>((node) => {
+    // Held once cut, until another title: the chevron leaving the words
+    // could uncut them, and drawn inline again it would cut them again.
+    if (node.scrollHeight > node.clientHeight + 1) {
+      clamped = true;
+    }
+  });
+  $effect(() => {
+    if (shown.title) {
+      untrack(() => {
+        clamped = false;
+      });
+    }
+  });
   let open = $state(false);
   let listed = $state<ArtifactSummary[] | null>(null);
   /** Until the list is read, the one the panel shows, with no age or promote to say. */
@@ -309,41 +320,51 @@
                  cut at its end, the chevron beside the title. -->
             <span
               class="flex min-w-0 flex-col items-start text-start"
+              data-box
               data-slot="name-lead"
               in:reveal
             >
               <span
-                class="max-w-full overflow-clip text-ellipsis whitespace-nowrap text-ink-strong type-row"
-                data-slot="name-words">{shown.title}</span
+                class="mark-line flex max-w-full items-center gap-space-1"
+                data-box
               >
+                <span
+                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong type-row"
+                  data-slot="name-words">{shown.title}</span
+                >
+                <IconChevronDown
+                  aria-hidden="true"
+                  class="size-icon-sm flex-none text-ink-muted"
+                />
+              </span>
               <span
                 class="max-w-full overflow-clip text-ellipsis whitespace-nowrap text-ink-muted type-meta"
                 data-slot="name-line">{line}</span
               >
             </span>
-          {:else if titleAway}
-            <KindGlyph aria-hidden="true" data-slot="bar-symbol" />
-            <span class="sr-only" data-slot="name-words">{shown.title}</span>
           {:else}
             <!-- On a phone two lines, clamped in the bar's row, so a title of
                  ordinary length reads whole at 390 (the artifact panel's
                  surface brief, The title), its chevron inline after its last
                  word (a wrapped box is as wide as its room, so a chevron after
-                 the box stood far from the words); one line, cut at its end,
-                 and the chevron after it on a desk. -->
+                 the box stood far from the words), or beside the box where
+                 the two lines cut the title, which cuts an inline one with
+                 it; one line, cut at its end, and the chevron after it on a
+                 desk. -->
             <span
               class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-start text-ink-strong type-row max-phone:line-clamp-2 max-phone:whitespace-normal max-phone:text-pretty mark-line"
               data-box={phone.current || undefined}
               data-slot="name-lead"
               in:reveal
+              {@attach measureClamp}
               ><span data-slot="name-words">{shown.title}</span
-              >{#if phone.current}&nbsp;<IconChevronDown
+              >{#if phone.current && !clamped}&nbsp;<IconChevronDown
                   aria-hidden="true"
                   class="inline size-icon-sm align-middle text-ink-muted"
                 />{/if}</span
             >
           {/if}
-          {#if titleAway || !phone.current || (described && line)}
+          {#if !(described && line) && (!phone.current || clamped)}
             <IconChevronDown
               aria-hidden="true"
               class="size-icon-sm flex-none text-ink-muted"

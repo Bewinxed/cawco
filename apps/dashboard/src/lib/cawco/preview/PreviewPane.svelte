@@ -1822,13 +1822,15 @@
       {
         type: "cawco:hello",
         theme: theme.resolved,
+        // The head names the page by its title: a page that says it too (a
+        // decision page's own title) leaves it out (overlay `data-cawco-headed`).
+        headed: !inset,
         ...(artifact
           ? {
               artifact: {
                 id: artifact.id,
                 kind: artifact.kind,
                 name: artifact.name,
-                // The page's own first heading, when it says this, is its title (overlay `cawco:page-title`).
                 title: artifact.title,
               },
               sync: artifactSyncPath(artifact.id),
@@ -1962,9 +1964,6 @@
   let changesTag = $state<HTMLFieldSetElement>();
   /** How tall the page's own foot bar stands over its viewport's foot, px (`cawco:page-foot`): the tag stands above it. */
   let pageFoot = $state(0);
-  /** The artifact whose page says its own title, in view (`cawco:page-title`): the head's title stands aside while that artifact is on show. */
-  let pageSaysTitle = $state<string | null>(null);
-  const titleAway = $derived(!!artifact && pageSaysTitle === artifact.id);
   /** A whole-page comment asked from the rail beside the page: its composer hangs from the rail's glass, not over the page. */
   const pageHung = $derived(
     composingPage && !!composing && listOpen && !railSheet
@@ -3368,10 +3367,6 @@
             ? Math.max(0, message.px)
             : 0;
         break;
-      // The page's own title, in view or not: the head leaves its title out while it is.
-      case "cawco:page-title":
-        pageSaysTitle = message.inView === true ? (artifact?.id ?? null) : null;
-        break;
       case "cawco:change-pressed":
         changePressed(message.anchor);
         break;
@@ -4383,7 +4378,6 @@
         });
       }}
       shown={artifact}
-      {titleAway}
     />
   {/if}
 {/snippet}
@@ -4517,7 +4511,6 @@
     {switcher}
     {switcherAt}
     titleControl={artifact ? artifactTitle : undefined}
-    {titleAway}
     beside={railBeside}
     bind:section
     bind:well

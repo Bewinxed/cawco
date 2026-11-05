@@ -319,6 +319,7 @@
 @custom-variant phase-done (&[data-phase="done"]);
 @custom-variant phase-failed (&[data-phase="failed"]);
 @custom-variant phase-stopped (&[data-phase="stopped"]);
+@custom-variant rail-float-beside (&[data-rail-float="beside"]);
 @custom-variant removed-true (&[data-removed="true"]);
 @custom-variant role-display (&[data-role="display"]);
 @custom-variant role-heading (&[data-role="heading"]);

@@ -49,6 +49,7 @@
 {/snippet}
 
 {#snippet comments()}
+  <!-- mark-line: the badge is a mark on the symbol's corner, not words set beside it -->
   <button
     aria-label="Comments, 5 open"
     class="select-none press-tint"
@@ -61,7 +62,7 @@
       {@render glyph("comments")}
       <span
         aria-hidden="true"
-        class="absolute start-[calc(100%-var(--space-2))] -top-space-2 grid h-c-count-badge-h min-w-c-count-badge-h place-items-center rounded-pill bg-ink-solid px-space-1 text-on-ink type-meta num leading-none ring-(length:--status-dot-cut) ring-material-panel"
+        class="absolute -end-space-2 -top-space-2 grid h-c-count-badge-h min-w-c-count-badge-h place-items-center rounded-pill bg-ink-solid px-space-1 text-on-ink type-meta num leading-none ring-(length:--status-dot-cut) ring-material-panel"
         >5</span
       >
     </span>
@@ -70,13 +71,15 @@
 
 {#snippet title(phone: boolean)}
   <button
-    class="flex min-w-0 items-center gap-space-1 rounded-lg ps-space-2 pe-space-1 text-start"
+    class="mark-line flex min-w-0 items-center gap-space-1 rounded-lg ps-space-2 pe-space-1 text-start"
     type="button"
   >
     <span
       class={[
         "min-w-0 text-ink-strong type-row",
-        phone ? "line-clamp-2" : "truncate",
+        phone
+          ? "line-clamp-2"
+          : "overflow-clip text-ellipsis whitespace-nowrap",
       ]}>{TITLE}</span
     >
     <svg
@@ -84,8 +87,7 @@
       class="size-icon-sm flex-none text-ink-muted"
       fill="none"
       viewBox="0 0 {box} {box}"
-      xmlns="http://www.w3.org/2000/svg"
-      >{@html GLYPH_SETS[face].chevron}</svg
+      xmlns="http://www.w3.org/2000/svg">{@html GLYPH_SETS[face].chevron}</svg
     >
   </button>
 {/snippet}
@@ -138,15 +140,19 @@
          Comments sheet's (a phone). -->
     <div
       class={[
-        "absolute end-space-2 z-1 flex w-c-comments-w max-w-[calc(100%-var(--space-2)*2)] items-center gap-space-1 rounded-[calc(var(--c-btn-h)/2)] border border-border-hairline bg-material-panel p-space-2 shadow-overlay glass-backdrop",
-        phone.current ? "bottom-space-2" : "top-c-head-room",
+        "absolute end-space-2 z-1 flex w-c-comments-w items-center gap-space-1 rounded-(--c-float-inner-r) border border-border-hairline bg-material-panel p-space-2 shadow-overlay glass-backdrop",
+        phone.current
+          ? "start-space-2 bottom-space-2 w-auto"
+          : "top-c-head-room",
       ]}
     >
       {#if phone.current}
-        <BarGlass form="group">{@render item("close", "Close Comments")}</BarGlass>
+        <BarGlass form="group"
+          >{@render item("close", "Close Comments")}</BarGlass
+        >
       {/if}
       <button
-        class="flex min-w-0 flex-1 items-center gap-space-2 ps-space-2 text-start"
+        class="mark-line flex min-w-0 flex-1 items-center gap-space-2 ps-space-2 text-start"
         type="button"
       >
         <span class="text-ink-strong type-label">Open</span>
