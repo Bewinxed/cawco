@@ -21,6 +21,14 @@
  * - (b) The session with no notes is sent nothing and stays asleep.
  * - (c) The person's next message to the session with notes carries no
  *   second recap.
+ * - (d) The hub restarts while the person is away, and they come back once
+ *   it is up: the session's new notes are recapped once (the live return,
+ *   their away stretch kept through the restart).
+ * - (e) The hub stops while the person is away, and they come back before
+ *   it is up (the facts it kept read here as it starts, their away stretch
+ *   still open): the session's new notes are recapped once, with no message
+ *   from them. (Fails on main: the start reads them here, no return is
+ *   ever seen, and nothing is sent.)
  *
  *   bun scripts/probe-kit/run.ts back-recap
  */
@@ -33,6 +41,9 @@ import type { Kit, KitFleet, Spec } from "../kit";
 
 /** The line of news the session kept while the person was away. */
 const NEWS = "PROBE-BACK-NEWS: the build landed on main";
+/** The news kept while the person was away across each restart, (d) and (e). */
+const NEWS_D = "PROBE-BACK-NEWS-D: the probe kit ran green";
+const NEWS_E = "PROBE-BACK-NEWS-E: the nightly shipped";
 /** The person's message after their return. */
 const AFTER = "PROBE-BACK-AFTER";
 /** Each session's first message, before the person goes away. */
@@ -80,6 +91,73 @@ const input = (fleet: KitFleet) =>
       idleMs: 0,
     }),
   });
+
+/** The person goes away and `id`'s plan keeps `line` as its news from then. */
+const awayWithNews = async (
+  fleet: KitFleet,
+  id: string,
+  section: string,
+  line: string
+): Promise<string> => {
+  await appearAway(fleet, true);
+  const state = await until(
+    "the person away",
+    () => person(fleet),
+    (one) => one === "away",
+    30_000
+  ).catch(() => "not away");
+  fleet.write(
+    "INSERT OR REPLACE INTO session_plans (instance_id, steps, spec, spec_at, updated_at) VALUES (?, '[]', ?, ?, ?)",
+    id,
+    `${awayNotesHeading(section)}\n- ${line}\n\n## Goal\nShip it.`,
+    Date.now(),
+    Date.now()
+  );
+  return state;
+};
+
+/** Stops the hub as a nightly does, runs `whileDown`, and starts it again; answers once its agent is back. */
+const restartHub = async (
+  fleet: KitFleet,
+  whileDown: () => void = () => undefined
+): Promise<void> => {
+  await fleet.stop("hub");
+  whileDown();
+  fleet.launch("hub");
+  await fleet.hubUp();
+  await fleet.agentUp();
+};
+
+/** The session's turns since `since` that are the hub's word that the person is back, carrying `line`. */
+const recapTurns = (fleet: KitFleet, since: number, line: string): number =>
+  turnsSince(fleet, since).filter(
+    (one) =>
+      one.last.includes(BACK_MESSAGE) &&
+      one.last.includes(NOTES_SAID) &&
+      one.last.includes(line)
+  ).length;
+
+/** Waits for `id`'s recap turn carrying `line` since `since`, and for that turn to end; answers how many there were. */
+const recapOf = async (
+  fleet: KitFleet,
+  id: string,
+  since: number,
+  line: string
+): Promise<{ recapped: number; ended: unknown }> => {
+  const recapped = await until(
+    "the session with news starts its recap turn",
+    () => recapTurns(fleet, since, line),
+    (n) => n > 0,
+    120_000
+  ).catch(() => 0);
+  const ended = await until(
+    "its recap turn ended",
+    () => fleet.instance(id)?.turn_open_at,
+    (open) => open === null,
+    120_000
+  ).catch(() => "open");
+  return { recapped, ended };
+};
 
 const asleep = async (fleet: KitFleet, id: string): Promise<string> => {
   await fleet.control(id, "sleep");
@@ -230,6 +308,71 @@ const run = async (kit: Kit): Promise<void> => {
       !after.last.includes(NOTES_SAID) &&
       !after.last.includes(NEWS),
     after ? after.last.slice(0, 600) : "no request with his message"
+  );
+  await until(
+    "his message's turn ended",
+    () => fleet.instance(news)?.turn_open_at,
+    (open) => open === null,
+    120_000
+  ).catch(() => "open");
+
+  // (d) A restart while he is away; he comes back once the hub is up.
+  const awayD = await awayWithNews(fleet, news, "13:00", NEWS_D);
+  await restartHub(fleet);
+  const stillAway = await person(fleet);
+  const backD = Date.now();
+  await input(fleet);
+  await appearAway(fleet, false);
+  const d = await recapOf(fleet, news, backD, NEWS_D);
+  kit.check(
+    "(d) the hub restarted while the person was away, and they came back once it was up: the session's news is recapped once",
+    awayD === "away" &&
+      stillAway === "away" &&
+      d.recapped === 1 &&
+      d.ended === null &&
+      backSends(fleet, news) === 2,
+    JSON.stringify({
+      awayD,
+      stillAway,
+      ...d,
+      backSends: backSends(fleet, news),
+    })
+  );
+
+  // (e) He comes back while the hub is down: the facts it kept read here
+  // as it starts, his away stretch still open.
+  const awayE = await awayWithNews(fleet, news, "14:00", NEWS_E);
+  const backE = Date.now();
+  await restartHub(fleet, () => {
+    const now = Date.now();
+    fleet.write(
+      "UPDATE presence_settings SET appear_away = 0, appear_away_at = NULL"
+    );
+    fleet.write(
+      "UPDATE presence_clients SET input_at = ?, at = ?, said_at = ? WHERE client_id = 'probe-back-tab'",
+      now,
+      now,
+      now
+    );
+  });
+  const e = await recapOf(fleet, news, backE, NEWS_E);
+  // Two sweeps more: a return is read once.
+  await Bun.sleep(25_000);
+  kit.check(
+    "(e) the person came back while the hub was down: as it starts, the session's news is recapped once, with no message from them",
+    awayE === "away" &&
+      e.recapped === 1 &&
+      e.ended === null &&
+      recapTurns(fleet, backE, NEWS_E) === 1 &&
+      backSends(fleet, news) === 3 &&
+      (await person(fleet)) === "here",
+    JSON.stringify({
+      awayE,
+      ...e,
+      turns: recapTurns(fleet, backE, NEWS_E),
+      backSends: backSends(fleet, news),
+      person: await person(fleet),
+    })
   );
 };
 

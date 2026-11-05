@@ -38,8 +38,9 @@
  * so a restart reads the person back as they were; never a history. Each
  * change goes to every dashboard (`person`), to the push outlet (push.ts
  * holds a phone push while the person is at a desk) and to the hand of
- * each send (server.ts, the presence line, and the recap on the person's
- * first message to a session after a real return).
+ * each send (server.ts, the presence line), and to the hub's word to each
+ * session holding news after a real return (server.ts `tellBack`): a start
+ * with an away stretch still open reads that return on its first roll.
  *
  * **Clears.** A notification is over when its ask settles, its session is
  * looked at (`/api/seen` `look`), or a device acted on, opened or dismissed
@@ -801,8 +802,37 @@ export const createNotifications = ({
     db.presence.setStretch(next);
   };
 
+  /**
+   * THE PERSON AS LAST TOLD, READ BACK AT A START. While an away stretch is
+   * open, the hub last told everyone they were away, whatever the facts it
+   * kept read now (a device's word kept as the hub went down, ahead of the
+   * roll that would have ended the stretch). So it starts with them away
+   * since the stretch opened, and the first roll after the start (a beat,
+   * the sweep) reads their return through `turned` and the person's
+   * listeners: the one path every return takes (server.ts `tellBack`), the
+   * listeners being on by then.
+   */
+  const asLastTold = (person: Rolled): Rolled =>
+    person.state === "here" &&
+    stretch.awaySince !== null &&
+    stretch.backAt === null
+      ? {
+          ...person,
+          state: "away",
+          manual: false,
+          on: null,
+          chats: [],
+          since: stretch.awaySince.getTime(),
+          inUse: null,
+          why: presenceLogWords.openStretch(
+            stretch.awaySince.toISOString(),
+            person.why
+          ),
+        }
+      : person;
+
   /** The person as last told, and the view the dashboards were last sent. */
-  let told: Rolled = rolled();
+  let told: Rolled = asLastTold(rolled());
   let toldView = JSON.stringify(viewOf(told, Date.now()));
   console.log(presenceLogWords.atStart(stateOf(told), told.why));
   // Away now with no stretch open (the first start, or the clock ran out

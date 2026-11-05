@@ -14,6 +14,9 @@ export const presenceLogWords = {
   /** The person as the hub reads them at its start, before any device beats again. */
   atStart: (state: string, why: string) =>
     `[presence] the person at the hub's start: ${state}: ${why}`,
+  /** Why the hub starts with them away when its kept facts read here: their away stretch is still open, so the first roll reads their return. */
+  openStretch: (since: string, facts: string) =>
+    `their away stretch since ${since} is still open (the kept facts read: ${facts}), so the first roll after the start reads their return`,
   /** Here, on a chat, by its id. */
   hereOn: (chat: string) => `here, on ${chat}`,
   /** Here, on no chat: a blurred or hidden tab, another app, another machine. */
