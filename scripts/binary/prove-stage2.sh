@@ -2568,6 +2568,8 @@ ws_exec_as_session() {
 # started it in. Its answer script lies in the workspace's scratch dir, written once by a command (ws_served_script);
 # socat's EXEC runs it with no shell, so the command has no quote and no space in its address.
 WS_SERVED_PORT=5198
+# The preview's title: the hub names it by this to the person, the archive's refusal among them (bff305589).
+WS_SERVED_TITLE='Workspace served page'
 WS_SERVED_ANSWER='printf '"'"'HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nserved %s\n'"'"' "$(readlink /proc/self/ns/pid)"'
 ws_served_script() { ws_exec "printf '%s\n' '#!/bin/sh' $(printf %q "$WS_SERVED_ANSWER") > \"\$TMPDIR/served.sh\" && chmod +x \"\$TMPDIR/served.sh\""; }
 # The served listener's own process: the socat whose argv carries the expanded port (its executor's and its shell's
@@ -2577,7 +2579,7 @@ ws_served_pid() { as_user "$joinerc" pgrep -o -f "^socat TCP-LISTEN:$WS_SERVED_P
 # shell through the workspace's tool door (`cawco tool`, packages/cli/src/tools.ts), naming what serves the port. Its
 # answer is kept in $rigdir/ws-preview-open: its record (`--record`, the hub's record as one line of JSON, core
 # tool-answer.ts), whose id closes it. The hub's preview port for it is read as the dashboard learns it.
-ws_preview_open() { ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_create --record '{\"kind\":\"preview\",\"does\":\"try\",\"title\":\"Workspace served page\",\"ask\":\"Try the served page and say whether it answers\",\"name\":\"proof-served\",\"port\":$WS_SERVED_PORT,\"serve\":{\"command\":\"socat TCP-LISTEN:\$PORT,fork,reuseaddr EXEC:\$TMPDIR/served.sh\"}}'" > "$rigdir/ws-preview-open"; cat "$rigdir/ws-preview-open"; }
+ws_preview_open() { ws_exec_as_session "/home/cawco/.local/bin/cawco tool artifact_create --record '{\"kind\":\"preview\",\"does\":\"try\",\"title\":\"$WS_SERVED_TITLE\",\"ask\":\"Try the served page and say whether it answers\",\"name\":\"proof-served\",\"port\":$WS_SERVED_PORT,\"serve\":{\"command\":\"socat TCP-LISTEN:\$PORT,fork,reuseaddr EXEC:\$TMPDIR/served.sh\"}}'" > "$rigdir/ws-preview-open"; cat "$rigdir/ws-preview-open"; }
 # The preview's artifact id, from the record its create answered.
 ws_preview_artifact() {
   local id
@@ -3085,12 +3087,13 @@ workspace_archive_ends_all() {
   [[ "$answer" == *"HTTP 200" ]]
   wait_until 60 '[[ "$(ws_item | json "d => [\"starting\", \"running\"].includes(d.state) ? \"live\" : \"ended\"")" == ended ]]' || { echo "the work item is still $(ws_item_says)"; return 1; }
   echo "the work item before the archive: $(ws_item_says)"
-  # Its preview proof-served is a try the person hasn't sent, so it still waits on him: his archive is refused unless
-  # he confirmed it knowing that (work-items.ts archive, `anyway`: the dashboard's confirm), naming what still waits,
-  # 409, and nothing ends. Confirmed, it goes.
+  # Its preview is a try the person hasn't sent, so it still waits on him: his archive is refused unless he confirmed
+  # it knowing that (work-items.ts archive, `anyway`: the dashboard's confirm), naming what still waits as a link
+  # labelled by its title (core references.ts artifactLink; never its slug, which the person is shown nowhere), 409,
+  # and nothing ends. Confirmed, it goes.
   answer=$(ws_post "/api/workspaces/$id/archive" '{"discard":true}')
   echo "the hub answered the archive unconfirmed: $answer"
-  [[ "$answer" == *"proof-served"*"HTTP 409" ]]
+  [[ "$answer" == *"[$WS_SERVED_TITLE](cawco:artifact/$(ws_preview_artifact))"*"HTTP 409" ]]
   as_user "$joinerc" kill -0 "$inner"
   answer=$(ws_post "/api/workspaces/$id/archive" '{"discard":true,"anyway":true}')
   echo "the hub answered the archive confirmed: $answer"
@@ -3108,7 +3111,7 @@ workspace_archive_ends_all() {
   wait_until 60 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)"'
 }
 export -f ws_state ws_json ws_gen ws_decisions ws_decisions_said ws_kept_listening ws_exec ws_session_env ws_exec_as_session ws_place ws_same_sandbox ns_of ws_listener_start ws_listener_pid ws_exec_reach ws_listener_why ws_served_script ws_served_pid ws_preview_open ws_preview_artifact ws_preview_close ws_preview_port ws_port_enter ws_port_pass ws_preview_says ws_port_locked ws_preview_mode ws_preview_host ws_session_host ws_preview_locked ws_preview_by_host ws_preview_enter ws_tree ws_ancestry ws_descends ws_post json_string ws_item ws_item_says ws_item_live ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered ws_hook_calls_clean ws_hook_calls_after ws_judge_answers_after_update workspace_opens workspace_across_update workspace_updated_serving workspace_archive_ends_all
-export WS_LISTENER_PORT WS_SERVED_PORT WS_SERVED_ANSWER
+export WS_LISTENER_PORT WS_SERVED_PORT WS_SERVED_ANSWER WS_SERVED_TITLE
 rig_workspace() {
   # Check names are written out in full: the rig's check list (rig_checks) reads them from
   # this text, so a name held in a variable is listed as its own literal "$name" and never run.
