@@ -146,6 +146,7 @@
     running: RUNNING,
     spendUsd: 3.42,
     starting: false,
+    startingId: null,
   });
 
   const said = (
