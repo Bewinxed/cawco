@@ -11,6 +11,9 @@
  * (ToolMatrix.svelte, harness-block.svelte.ts). The app draws none of it,
  * so it is not written into it (scripts/words-swift.ts).
  */
+/** Where a tool sign-in's refusal turns to quoting the tool's own screen. */
+const SIGNIN_SCREEN = "Its screen said:";
+
 export const toolWords = {
   /**
    * An update that left the copy older than the release it was after: the
@@ -141,9 +144,11 @@ export const toolWords = {
   /** A sign-in asked of a tool not on the machine. */
   signinNotInstalled: (name: string) =>
     `${name} isn't installed on this machine. Install it in Configure › Command-line tools, then sign in.`,
+  /** Where a sign-in's refusal turns to the tool's own screen: the row shows the sentence before it, the popover the whole. */
+  signinScreen: SIGNIN_SCREEN,
   /** The tool's sign-in printed no link it may be signed in at, or ended first: what its screen said. */
   signinNoLink: (name: string, said: string) =>
-    `${name}'s sign-in showed no sign-in link, so it was stopped. ${said ? `Its screen said: ${said}` : "Its screen said nothing."}`,
+    `${name}'s sign-in showed no sign-in link, so it was stopped. ${said ? `${SIGNIN_SCREEN} ${said}` : "Its screen said nothing."}`,
   /** A code sent with no sign-in waiting for it. */
   signinNotWaiting: (name: string) =>
     `No ${name} sign-in is waiting for a code on this machine: it ended or was never started. Start the sign-in again.`,
@@ -154,5 +159,35 @@ export const toolWords = {
     `${name} didn't finish signing in within ${seconds} s of the code, so the sign-in was stopped. Start it again.`,
   /** The sign-in ended without signing in: its exit and what its screen said, the code never shown. */
   signinFailed: (name: string, code: number, said: string) =>
-    `${name}'s sign-in ended without signing in (exit ${code}). Start it again for a new link.${said ? ` Its screen said: ${said}` : ""}`,
+    `${name}'s sign-in ended without signing in (exit ${code}). Start it again for a new link.${said ? ` ${SIGNIN_SCREEN} ${said}` : ""}`,
+
+  // ── A tool's own sign-in, on its ledger (ToolMatrix, tool-signin.svelte.ts) ─
+  /** The column's head. */
+  signinHead: "Sign-in",
+  /** The ledger head's count, after "n/m installed", only above 0. */
+  signedInCount: (count: number) => `${count} signed in`,
+  signedIn: "Signed in",
+  signedOut: "Not signed in",
+  signinUnknown: "Unknown",
+  /** The Unknown badge's popover head over the tool's own words, and its name. */
+  signinUnknownHead: (name: string, machine: string) =>
+    `${name} on ${machine} didn't say whether it is signed in`,
+  /** The tool's read left no words. */
+  signinUnknownSilent: "Its screen said nothing.",
+  signIn: "Sign in",
+  /** A sign-in under way, its popover put away: one press opens it again as it was. */
+  pasteCode: "Paste code",
+  /** What the cell says while its sign-in waits, the popover put away. */
+  signinWaiting: "Waiting for the pasted code",
+  /** The cell's button's name: "Sign in Antigravity CLI on obelisk". */
+  signInOn: (verb: string, name: string, machine: string) =>
+    `${verb} ${name} on ${machine}`,
+  /** The popover's head. */
+  signinTitle: (name: string, machine: string) => `${name} on ${machine}`,
+  /** The link lapsed before a code came: the machine stopped waiting. */
+  signinExpired: (name: string) =>
+    `The sign-in link expired after 10 minutes, so ${name} stopped waiting for a code. Open a new sign-in link.`,
+  /** The machine took the code and the tool still reads signed out; that link is spent. */
+  signinRefused: (name: string) =>
+    `That code didn't sign ${name} in. Open a new sign-in link for a new code.`,
 } as const;

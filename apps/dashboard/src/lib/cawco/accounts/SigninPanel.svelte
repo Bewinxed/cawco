@@ -3,7 +3,8 @@
    * The sign-in popover's content: the link to Claude Code's own login on the
    * machine, the field the code it shows is pasted into, and what came of it.
    * A refusal from the hub stands under the field in its own words, the field
-   * marked invalid; signed in, it says as whom.
+   * marked invalid; signed in, it says as whom, or `got` in its place
+   * where the sign-in names nobody (a tool's own: ToolMatrix).
    */
   import { accountsWords } from "@cawco/core/words/accounts";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
@@ -11,19 +12,22 @@
   import { Input } from "#lib/components/ui/input/index.js";
   import { IconArrowUpRight, IconWarningTriangle } from "#lib/icons.js";
   import Check from "./Check.svelte";
-  import type { SigninFlow } from "./signin.svelte";
+  import type { PasteSignin } from "./signin.svelte";
 
   let {
     flow,
     machine,
     online,
-    expected,
+    expected = null,
+    got,
   }: {
-    flow: SigninFlow;
+    flow: PasteSignin;
     machine: string;
     online: boolean;
     /** The email the account already is, for a sign-in as somebody else. */
-    expected: string | null;
+    expected?: string | null;
+    /** What the signed-in line says, for a sign-in that is no one's account. */
+    got?: string;
   } = $props();
 
   const words = accountsWords.signin;
@@ -107,12 +111,16 @@
       role="status"
     >
       <Check />
-      <span
-        >{words.signedInAs}
-        <b class="font-medium text-ink-strong"
-          >{flow.email ?? expected ?? words.theAccount}</b
-        ></span
-      >
+      {#if got}
+        <span>{got}</span>
+      {:else}
+        <span
+          >{words.signedInAs}
+          <b class="font-medium text-ink-strong"
+            >{flow.email ?? expected ?? words.theAccount}</b
+          ></span
+        >
+      {/if}
     </p>
   {:else if flow.phase === "mismatch"}
     <p
@@ -124,7 +132,7 @@
       <span class="mark-cell"
         ><IconWarningTriangle class="size-icon-md flex-none" /></span
       >
-      <span>{words.mismatch(machine, flow.email, expected)}</span>
+      <span>{words.mismatch(machine, flow.email ?? null, expected)}</span>
     </p>
   {/if}
 </div>

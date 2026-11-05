@@ -567,6 +567,8 @@ export type TokenSize =
   | "size.c-ledger-count-w"
   | "size.c-ledger-usd-w"
   | "size.c-matrix-col-w"
+  | "size.c-ledger-text-inset"
+  | "size.c-signin-col-w"
   | "size.c-ledger-title-min"
   | "size.c-side-grip-w"
   | "size.c-side-surface-min"
