@@ -21,6 +21,13 @@
  * (c) put away with Not now (`parked`): `caw` waits on nothing.
  * (d) a canvas to judge never opened, and a question parked under another
  *     session: both sessions wait on you; a session with neither does not.
+ * (e) a delegate whose ask is routed to its parent (`routedTo: "parent"`)
+ *     waits on that agent, not on you, until the parent hands it up (the
+ *     hub's `unroute` takes the routing off); the dashboard's `activityOf`
+ *     reads it as working, and blocked once the ask is the person's.
+ *
+ * Main fails (e) too: every ask parked made its session need you, its
+ * parent's or not.
  *
  * Main fails: `waitingOnYou` is not there (the spec does not load), and
  * every mark read the asks alone. (a)'s need is there on main: Needs you listed the cards;
@@ -28,6 +35,7 @@
  *
  *   bun scripts/probe-kit/run.ts waiting-on-you
  */
+import { activityOf } from "../../../apps/dashboard/src/lib/cawco/activity";
 import { waitingOnYou } from "../../../packages/core/src/activity";
 import type { ArtifactNeed } from "../../../packages/core/src/artifact-needs";
 import {
@@ -41,6 +49,7 @@ import type { Kit, Spec } from "../kit";
 const CAW = "caw-session";
 const OTHER = "other-session";
 const QUIET = "quiet-session";
+const DELEGATE = "delegate-session";
 const PAGE = "page-decisions";
 const CANVAS = "canvas-header";
 
@@ -163,6 +172,31 @@ export default {
         !both.has(QUIET) &&
         both.size === 2,
       `need: ${JSON.stringify(canvas?.pending)}; waiting: ${said(both)}`
+    );
+
+    const routed = waitingOnYou({
+      asks: [{ instanceId: DELEGATE, routedTo: "parent" }],
+      artifacts: [],
+    });
+    const handedUp = waitingOnYou({
+      asks: [{ instanceId: DELEGATE }],
+      artifacts: [],
+    });
+    const parentsAsk = activityOf({
+      pending: [{ routedTo: "parent" }],
+      busy: false,
+    });
+    const personsAsk = activityOf({
+      pending: [{ routedTo: "parent" }, {}],
+      busy: false,
+    });
+    check(
+      "e: an ask routed to the delegate's parent: it waits on nothing of yours and reads as working; handed up to you, it waits on you and reads as blocked",
+      routed.size === 0 &&
+        handedUp.has(DELEGATE) &&
+        parentsAsk === "working" &&
+        personsAsk === "blocked",
+      `routed: ${said(routed)}; handed up: ${said(handedUp)}; activity, routed: ${parentsAsk}; with one of yours: ${personsAsk}`
     );
     return Promise.resolve();
   },

@@ -14533,12 +14533,18 @@ export const createServer = (
   });
   /**
    * The sessions waiting on the person now (core `waitingOnYou`): an ask
-   * parked under it, or an artifact of it in Needs you. Find's state, fleet
-   * watch's stall sweep and an account's admission read it, as every
-   * screen's mark does.
+   * parked under it for the person (not one routed to its parent), or an
+   * artifact of it in Needs you. Find's state, fleet watch's stall sweep and
+   * an account's admission read it, as every screen's mark does.
    */
   const waitingNow = (): Set<string> =>
-    waitingOnYou({ asks: pending.list(), artifacts: artifactLane.now().needs });
+    waitingOnYou({
+      asks: pending.list().map((envelope) => ({
+        instanceId: envelope.instanceId,
+        routedTo: peek(envelope.payload, "routedTo"),
+      })),
+      artifacts: artifactLane.now().needs,
+    });
   /**
    * A page's picks or pins moved: once the burst is over, each project whose
    * tasks wait on a card or pin of it looks again (tasks.ts `waitsMoved`:
@@ -26423,7 +26429,11 @@ export const createServer = (
   // Fleet watch (fleet-watch.ts): code detectors, Jev as the gate, one
   // triage run per episode whose word goes to the session's steward.
   watch = createFleetWatch({
-    asking: (instanceId) => waitingNow().has(instanceId),
+    // Waiting on someone is no stall: on the person (an ask, a card), or
+    // on its parent agent (an ask routed there).
+    asking: (instanceId) =>
+      waitingNow().has(instanceId) ||
+      pending.list().some((ask) => ask.instanceId === instanceId),
     db,
     end: (instanceId) =>
       endSession(instanceId, "stop", {

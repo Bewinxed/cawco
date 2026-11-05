@@ -7,16 +7,22 @@ import type { Activity } from "@cawco/core/activity";
 import { commonWords } from "@cawco/core/words/common";
 
 /**
- * Blocked wins over working: a session with a parked permission is not making
- * progress, whatever its turn state says.
+ * Blocked wins over working: a session with a permission parked for the
+ * person is not making progress, whatever its turn state says. One routed
+ * to its parent (`routedTo: "parent"`) waits on that agent, not on the
+ * person: the session is at work until its parent answers (core
+ * `waitingOnYou`).
  */
 export function activityOf(session: {
-  pending: readonly unknown[];
+  pending: readonly { routedTo?: string }[];
   busy: boolean;
   subagents?: Record<string, { status: string }>;
 }): Activity {
-  if (session.pending.length > 0) {
+  if (session.pending.some((request) => request.routedTo !== "parent")) {
     return "blocked";
+  }
+  if (session.pending.length > 0) {
+    return "working";
   }
   // A background subagent outlives the turn that spawned it: the main loop goes
   // quiet and `busy` drops, while the work the session was asked for carries on

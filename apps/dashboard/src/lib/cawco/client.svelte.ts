@@ -9120,14 +9120,18 @@ const artifactNeedsOpen = $derived(
 
 /**
  * The sessions waiting on the person (core `waitingOnYou`): an ask parked
- * under it, or an artifact of it in Needs you. The set it gave before while
+ * under it for the person (not one routed to its parent), or an artifact
+ * of it in Needs you. The set it gave before while
  * it holds the same sessions, so a frame that moved an ask's words wakes no
  * row's activity.
  */
 const waiting = $derived.by((): ReadonlySet<string> => {
   const now = waitingOnYou({
-    asks: Object.values(state.sessions).filter(
-      (target) => target.pending.length > 0
+    asks: Object.values(state.sessions).flatMap((target) =>
+      target.pending.map((request) => ({
+        instanceId: target.instanceId,
+        routedTo: request.routedTo,
+      }))
     ),
     artifacts: artifactNeedsOpen,
   });
@@ -9157,7 +9161,15 @@ function activityNow(instanceId: string): Activity {
     return "working";
   }
   const pulse = pulseOf(instanceId);
-  if (pulse?.activity === "blocked" && !(target && isSubscribed(instanceId))) {
+  // The daemon's blocked counts every ask of its session, one routed to
+  // its parent too. With the session's asks here, none of them the
+  // person's (`waiting` above), it is at work on its parent's answer; with
+  // none here yet, the pulse heard an ask first.
+  const pulseSays: Activity | undefined =
+    pulse?.activity === "blocked" && target && target.pending.length > 0
+      ? "working"
+      : pulse?.activity;
+  if (pulseSays === "blocked" && !(target && isSubscribed(instanceId))) {
     return "blocked";
   }
   if ((row?.runningDelegates ?? 0) > 0) {
@@ -9169,8 +9181,8 @@ function activityNow(instanceId: string): Activity {
   if (target && isSubscribed(instanceId)) {
     return activityOf(target);
   }
-  if (pulse) {
-    return pulse.activity;
+  if (pulseSays) {
+    return pulseSays;
   }
   return target ? activityOf(target) : "idle";
 }
@@ -9752,7 +9764,8 @@ export const cawco = {
   get blocked(): BlockedRequest[] {
     return blocked;
   },
-  get blockedCount(): number {
-    return blocked.length;
+  /** How many sessions wait on the person (core `waitingOnYou`): asks for them, cards and canvases in Needs you. */
+  get waitingCount(): number {
+    return waiting.size;
   },
 };

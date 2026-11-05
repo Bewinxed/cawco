@@ -719,8 +719,9 @@
     row.cwd.split("/").filter(Boolean).pop() ||
     row.id.slice(0, 8);
 
+  /** The sessions waiting on you (core `waitingOnYou`), in the attention tone; else the ones running. */
   const fleetCount = $derived(
-    cawco.blockedCount || cawco.runningInstances.length
+    cawco.waitingCount || cawco.runningInstances.length
   );
   /** A project row's link in the rail: its end's tray hands the focus back to it. */
   const railLinkId = (projectId: string) => `rail-project-${projectId}`;
@@ -1016,7 +1017,7 @@
                    the kit's active and hover inks are for a plain count, and
                    on the live fill the active one reads 3.3:1. -->
               <Sidebar.MenuBadge
-                data-blocked={cawco.blockedCount > 0 || undefined}
+                data-blocked={cawco.waitingCount > 0 || undefined}
                 data-flip="pop box"
                 tone="live"
               >

@@ -16,8 +16,10 @@ export type Activity = (typeof ACTIVITIES)[number];
  * an account's admission), and such a session is `blocked` whatever its
  * turn is doing. Something of a session waits on the person while:
  *
- * - an ask is parked under it: a permission, a question `ask` put, a post
- *   held for the person;
+ * - an ask is parked under it for the person: a permission, a question
+ *   `ask` put, a post held for them. One routed to the session's parent
+ *   (`routedTo: "parent"`) waits on that agent, not on the person, until
+ *   the parent hands it up (the hub's `unroute` takes the routing off);
  * - an artifact it holds is in Needs you (artifact-needs.ts): a decision
  *   page with a card not picked, a canvas to judge never opened, picks
  *   written and not sent, a pin whose reply asks. One put away with Not now
@@ -27,11 +29,11 @@ export type Activity = (typeof ACTIVITIES)[number];
  */
 export const waitingOnYou = (sources: {
   artifacts: Iterable<Pick<ArtifactNeed, "instanceId" | "parked">>;
-  asks: Iterable<{ instanceId?: string | null }>;
+  asks: Iterable<{ instanceId?: string | null; routedTo?: unknown }>;
 }): Set<string> => {
   const waiting = new Set<string>();
   for (const ask of sources.asks) {
-    if (ask.instanceId) {
+    if (ask.instanceId && ask.routedTo !== "parent") {
       waiting.add(ask.instanceId);
     }
   }
