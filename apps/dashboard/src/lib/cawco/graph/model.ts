@@ -84,6 +84,12 @@ interface Move {
   to: string;
 }
 
+/** Whether a state is reached and left in its machine (`holesOf`). */
+interface Holes {
+  leaves: boolean;
+  reaches: boolean;
+}
+
 export interface Review {
   /** The states file, from the toolchain root: what every state the panel names is named in. */
   file: string;
@@ -289,6 +295,17 @@ export function reviewOf(
     order,
     machines: [...machines].map(([machine, path]) => ({ name: machine, path })),
     moves: movesOf(sheet.file, states, order, spec.edges ?? []),
+  };
+}
+
+/** Whether `state` has holes in its machine (the map's marks): not a start with no move in, not an end with no move out. */
+export function holesOf(review: Review, state: string): Holes {
+  const machine = review.machines.find((one) => one.path.includes(state));
+  const start = machine?.path[0] === state;
+  const end = machine?.path.at(-1) === state;
+  return {
+    reaches: start || review.moves.some((move) => move.to === state),
+    leaves: end || review.moves.some((move) => move.from === state),
   };
 }
 

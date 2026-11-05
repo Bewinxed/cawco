@@ -76,29 +76,10 @@ const UNMOUNT_MARGIN = 3;
 const WORLD_INSET = { x: 24, y: 16 };
 /** The fitted world's least zoom. */
 const ZOOM_MIN = 0.1;
-/** `file:Story`: the colon before the story's name. */
-const LAST_COLON = /:(?=[^:]+$)/u;
 /** The space between an ARIA id reference list's ids. */
 const WHITESPACE = /\s+/u;
-/**
- * The edges' gutter, on DESIGN.md's spacing ladder: a lane's first stands
- * 18px out from the frames, each next one 7px further, its corners turn on
- * a 7px radius, the labels stand 7px clear of the lanes, a line (16px, the
- * meta role's) apart where two would meet.
- */
-const EDGE_OUT = 18;
-const EDGE_LANE = 7;
-const EDGE_TURN = 7;
-const EDGE_LABEL_GAP = 7;
-const EDGE_LABEL_LINE = 16;
-/**
- * How far clear of a frame's side an edge starts and its arrow's tip ends,
- * px: the move's 2px stroke and its arrow (the marker's tip 1.6px past the
- * path's end) never stand on the frame.
- */
-const EDGE_CLEAR = 4;
 
-/** The frames grid's own rules: the world, its sections, frames and edges; a Preview's frames in the page's flow. */
+/** The frames grid's own rules: the world, its sections and frames; a Preview's frames in the page's flow. */
 const FRAMES_CSS = `
 /* The page is the well the frames stand in (surface-well): each frame's own page reads raised on it. */
 html.cawco-frames-page, html.cawco-frames-page body { margin: 0; block-size: 100%; overflow: hidden; background: var(--surface-well); }
@@ -107,7 +88,7 @@ html.cawco-frames-page, html.cawco-frames-page body { margin: 0; block-size: 100
    width answers its own body's. */
 .cawco-canvas { container: cawco-width / inline-size; }
 .cawco-world { position: absolute; inset-block-start: 0; inset-inline-start: 0; transform-origin: 0 0; display: flex; flex-direction: column;
-  gap: var(--space-8); padding-block-end: 160px; will-change: transform; --cawco-gutter: 0px; padding-inline-start: var(--cawco-gutter); }
+  gap: var(--space-8); padding-block-end: 160px; will-change: transform; }
 .cawco-section { display: flex; flex-direction: column; gap: var(--space-3); min-block-size: 120px; }
 .cawco-section[data-cawco-asleep] .cawco-grid { display: none; }
 /* A section's head: its name in plain words in the title role, its file in small print under it, and while it is on its way
@@ -131,13 +112,6 @@ html.cawco-frames-page, html.cawco-frames-page body { margin: 0; block-size: 100
 .cawco-frame-label[data-cawco-unnamed] .cawco-frame-words { font: var(--type-meta); color: var(--ink-muted); }
 .cawco-frame-status { font: var(--type-meta); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
 .cawco-frame-status[data-state="failed"] { color: var(--status-fail-ink); }
-.cawco-edges { position: absolute; inset: 0; inline-size: 1px; block-size: 1px; overflow: visible; pointer-events: none; z-index: 1; }
-.cawco-edge { fill: none; stroke: var(--ink-muted); stroke-width: 1.5; }
-.cawco-edge-move { stroke: var(--brand-solid); stroke-width: 2; }
-.cawco-edge-group { stroke-dasharray: 3 4; }
-.cawco-edges marker path { fill: context-stroke; }
-.cawco-edge-label { font: var(--type-meta); fill: var(--ink-muted); paint-order: stroke; stroke: var(--surface-well); stroke-width: 4px; }
-.cawco-edge-label[data-cawco-move] { fill: var(--brand-ink); }
 /* A decision page's Preview (by=embed): its frames alone, one under another in the page's own flow, each at its own
    size from the embed's start, never scaled; the page holding it makes its frame as tall and as wide as its widest story
    (CANVAS_EMBED_SIZE, sayShape) and scrolls it sideways where its room is narrower, and a wheel or a finger on it scrolls
@@ -150,7 +124,7 @@ html.cawco-embed .cawco-canvas { position: static; inset: auto; overflow: visibl
 html.cawco-embed .cawco-world { position: static; inline-size: 100%; gap: var(--space-3); padding: 0; will-change: auto; }
 html.cawco-embed .cawco-section { min-block-size: 0; gap: var(--space-3); }
 html.cawco-embed .cawco-section[data-cawco-none] { display: none; }
-html.cawco-embed :is(.cawco-section-head, .cawco-colhead, .cawco-frame-label, .cawco-frame-status, .cawco-edges, .cawco-stand-in > .cawco-frame-words) { display: none; }
+html.cawco-embed :is(.cawco-section-head, .cawco-colhead, .cawco-frame-label, .cawco-frame-status, .cawco-stand-in > .cawco-frame-words) { display: none; }
 html.cawco-embed .cawco-grid { display: flex; flex-direction: column; align-items: start; gap: var(--space-3); }
 html.cawco-embed .cawco-frame { gap: 0; min-inline-size: 0; }
 html.cawco-embed .cawco-stand-in-body { max-inline-size: 100%; }
@@ -195,9 +169,6 @@ export function bootFrames(page: Page): Mode {
   const canvas = document.getElementById("cawco-canvas") as HTMLElement;
   const world = document.createElement("div");
   world.className = "cawco-world";
-  const edges = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  edges.classList.add("cawco-edges", "cawco-ui");
-  world.append(edges);
   canvas.append(world);
 
   const sections: Framed[] = page.sections.map((section) => {
@@ -858,7 +829,6 @@ export function bootFrames(page: Page): Mode {
         await page.probeAll(section);
       }
       await page.playAll(section);
-      drawEdges();
     })();
     return section.settling;
   }
@@ -1368,166 +1338,7 @@ export function bootFrames(page: Page): Mode {
     place();
   };
 
-  /* --- Edges: moves always, the agent's own when it sent them ---------- */
-
-  /** The rest frame (first column) of a story, named `Story` or `file:Story`. */
-  const restFrame = (name: string, file?: string): HTMLElement | null => {
-    const [inFile, story] =
-      name.includes(":") && !file
-        ? (name.split(LAST_COLON) as [string, string])
-        : [file, name];
-    for (const section of sections) {
-      if (inFile && section.file !== inFile) {
-        continue;
-      }
-      for (const frame of section.frames.values()) {
-        if (frame.story.name === story && frame.column.interaction === "rest") {
-          return frame.el;
-        }
-      }
-    }
-    return null;
-  };
-
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: gathers the three kinds of edge and draws each from one frame's box side to the other's in one pass
-  function drawEdges(): void {
-    const lines: {
-      from: HTMLElement;
-      to: HTMLElement;
-      label: string;
-      kind: "move" | "edge" | "group";
-    }[] = [];
-    for (const section of sections) {
-      for (const story of section.mod?.SHEET.stories ?? []) {
-        if (!(story.play && story.from)) {
-          continue;
-        }
-        const from = restFrame(story.from, section.file);
-        const to = restFrame(story.name, section.file);
-        if (from && to) {
-          const fired = section.moves.find((one) => one.to === story.name);
-          lines.push({
-            from,
-            to,
-            kind: "move",
-            // The arrow is the edge's own marker: the words name the two ends.
-            label: fired
-              ? `${story.from} to ${story.name} · ${fired.animations.length} animation${fired.animations.length === 1 ? "" : "s"}`
-              : `${story.from} to ${story.name}`,
-          });
-        }
-      }
-    }
-    for (const edge of spec.edges ?? []) {
-      const from = restFrame(edge.from);
-      const to = restFrame(edge.to);
-      if (from && to) {
-        lines.push({ from, to, kind: "edge", label: edge.label ?? "" });
-      }
-    }
-    for (const [child, parent] of Object.entries(spec.group ?? {})) {
-      const from = restFrame(parent);
-      const to = restFrame(child);
-      if (from && to) {
-        lines.push({ from, to, kind: "group", label: "" });
-      }
-    }
-    // An end not drawn has no box: no edge is drawn to it.
-    const drawn = lines.filter((line) =>
-      [line.from, line.to].every((el) => {
-        const box = el.getBoundingClientRect();
-        return box.width > 0 && box.height > 0;
-      })
-    );
-    // None to draw and none drawn: nothing is written, so nothing in the world repaints.
-    if (drawn.length === 0 && edges.childElementCount === 1) {
-      return;
-    }
-    edges.replaceChildren();
-    edges.innerHTML = `<defs><marker id="cawco-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker></defs>`;
-    // Every edge joins two stories' rest frames, and a rest frame stands in
-    // its section's first column: so every edge runs in the world's left
-    // gutter, out of its frame's left side, along a lane of its own and into
-    // the other's, crossing no frame whatever the grid; its label stands in
-    // the gutter too, left of every lane. The labels' widths set the gutter.
-    const svg = "http://www.w3.org/2000/svg";
-    const texts = drawn.map((line) => {
-      if (!line.label) {
-        return null;
-      }
-      const text = document.createElementNS(svg, "text");
-      text.classList.add("cawco-edge-label");
-      text.setAttribute("text-anchor", "end");
-      text.textContent = line.label;
-      if (line.kind === "move") {
-        text.dataset.cawcoMove = "";
-      }
-      edges.append(text);
-      return text;
-    });
-    const widest = Math.max(
-      0,
-      ...texts.map((text) => text?.getComputedTextLength() ?? 0)
-    );
-    const lanesWide =
-      drawn.length > 0 ? EDGE_OUT + EDGE_LANE * (drawn.length - 1) : 0;
-    const gutter =
-      drawn.length > 0
-        ? Math.ceil(lanesWide + (widest > 0 ? EDGE_LABEL_GAP * 2 + widest : 0))
-        : 0;
-    world.style.setProperty("--cawco-gutter", `${gutter}px`);
-    const origin = world.getBoundingClientRect();
-    const local = (rect: DOMRect) => ({
-      x: (rect.x - origin.x) / zoom.z,
-      y: (rect.y - origin.y) / zoom.z,
-      w: rect.width / zoom.z,
-      h: rect.height / zoom.z,
-    });
-    const labelsEnd = gutter - lanesWide - EDGE_LABEL_GAP;
-    let below = Number.NEGATIVE_INFINITY;
-    const placed = drawn
-      .map((line, lane) => {
-        const a = local(line.from.getBoundingClientRect());
-        const b = local(line.to.getBoundingClientRect());
-        return { line, lane, a, b, words: texts[lane] ?? null };
-      })
-      .sort((one, two) => (one.a.y + one.b.y) / 2 - (two.a.y + two.b.y) / 2);
-    for (const { line, lane, a, b, words } of placed) {
-      const x = gutter - EDGE_OUT - EDGE_LANE * lane;
-      const fromY = a.y + a.h / 2;
-      const toY = b.y + b.h / 2;
-      const turn = Math.min(EDGE_TURN, Math.abs(toY - fromY) / 2);
-      const down = toY >= fromY ? 1 : -1;
-      const path = document.createElementNS(svg, "path");
-      path.setAttribute(
-        "d",
-        [
-          `M${a.x - EDGE_CLEAR} ${fromY}`,
-          `H${x + turn}`,
-          `Q${x} ${fromY} ${x} ${fromY + down * turn}`,
-          `V${toY - down * turn}`,
-          `Q${x} ${toY} ${x + turn} ${toY}`,
-          `H${b.x - EDGE_CLEAR}`,
-        ].join(" ")
-      );
-      path.classList.add("cawco-edge", `cawco-edge-${line.kind}`);
-      if (line.kind !== "group") {
-        path.setAttribute("marker-end", "url(#cawco-arrow)");
-      }
-      edges.append(path);
-      if (words) {
-        // At its lane's middle, below the label above it where two would meet.
-        const y = Math.max((fromY + toY) / 2 + 4, below + EDGE_LABEL_LINE);
-        below = y;
-        words.setAttribute("x", String(labelsEnd));
-        words.setAttribute("y", String(y));
-      }
-    }
-  }
-
-  window.addEventListener("resize", () => drawEdges());
   new ResizeObserver(() => {
-    drawEdges();
     page.later();
     sayShape();
   }).observe(world);
@@ -1578,7 +1389,6 @@ export function bootFrames(page: Page): Mode {
     failed,
     reported: (report) => {
       statuses(report);
-      drawEdges();
       if (card) {
         fit();
       }

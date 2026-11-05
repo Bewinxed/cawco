@@ -42,6 +42,23 @@
  * 10. At 390 a state picked at the drawer's last stop takes the drawer down
  *    to its head, so the state picked is seen.
  *
+ * The graph-map leg (the build spec's slice 2, the Map face), on a second
+ * artifact of the card's states file made with `group` and `edges`:
+ *
+ * map 1. On the room's Map face at 1440 the map draws one region per
+ *    heading `group` names (Quiet, Loud) and one arrow per edge and per
+ *    `from` (Two → Three, which Three's `from` plays, solid; Three → One,
+ *    the agent's edge, dashed: RouteEdge's `data-played`).
+ * map 2. It fits at a readable zoom: Svelte Flow's fit with the house's
+ *    `FIT`, never past its `maxZoom` nor under the zoom the cards' notes
+ *    draw at 10px, every card inside the map's pane.
+ * map 3. A press on Two's card keeps it: the drawing stands at Two.
+ * map 4. A press on an arrow (the act "Calm down", Three → One) keeps its
+ *    to state until the Animation face stands: the drawing stands at One.
+ * map 5. At 390 the Map face is a list: each state its card, no Svelte
+ *    Flow map.
+ * map 6. The rendered checks on the Map face at 1440×900 and 390×844.
+ *
  * The stage's boundary is made of user namespaces: like a spec that
  * delegates, it runs outside every workspace boundary (README "A spec that
  * delegates runs on the host").
@@ -66,6 +83,12 @@ const STORY = "src/Card.stories.js";
 const BADGE = "src/Badge.stories.js";
 /** The ask the canvas is made with: it names the state the graph opens on. */
 const ASK = "Judge the card at Two";
+/** The map's canvas: the card's states under two headings, and one move the agent names (the graph-map leg). */
+const MAP_ASK = "Judge the card's map at One";
+const MAP_GROUP = { One: "Quiet", Two: "Quiet", Three: "Loud" };
+const MAP_EDGES = [{ from: "Three", to: "One", label: "Calm down" }];
+/** Two's card's name, alone: not Two → Three. */
+const TWO_ALONE = /^\s*Two\s*$/u;
 
 /** The project in the session's folder: plain Vite and Svelte, installed only in its stage clone. */
 const PROJECT: Record<string, string> = {
@@ -100,8 +123,14 @@ export const One = { args: {} };
 /** The card with its second title. */
 export const Two = { args: { title: "Second" } };
 
-/** The card raised. */
-export const Three = { args: { title: "Third", tone: "loud" } };
+/** The card raised, from its second title. */
+export const Three = {
+  args: { title: "Third", tone: "loud" },
+  from: "Two",
+  play: async ({ update }) => {
+    await update({ title: "Third", tone: "loud" });
+  },
+};
 `,
   "src/Badge.svelte": `<script>
   let { label } = $props();
@@ -539,6 +568,166 @@ async function inspectorInPanel(kit: Kit, page: Page): Promise<void> {
   );
 }
 
+/** The room's Map face, and its list at a phone's width. */
+const MAP = `${GRAPH} [data-slot="whole-set"]`;
+const MAP_LIST = `${GRAPH} [data-slot="whole-list"]`;
+
+/** The room's face named `name`, pressed on its switch inside `within` (the room beside the stage, or the drawer). */
+const showFace = (page: Page, within: string, name: string) =>
+  page
+    .locator(`${GRAPH} ${within} [role="tab"]`, { hasText: name })
+    .first()
+    .click();
+
+/** The graph-map leg at 1440: legs map 1 to 4, and the Map face's rendered checks. */
+async function mapDesk(
+  kit: Kit,
+  base: string,
+  id: string,
+  checks: RenderedChecks
+): Promise<void> {
+  const { frame, page } = await graphPage(kit, base, id, "desk");
+  await showFace(page, '[data-slot="graph-room"]', "Map");
+  await page.waitForSelector(`${MAP} .svelte-flow__edge path[data-played]`, {
+    timeout: 30_000,
+  });
+  // The cards measured, the set laid out by them and fitted again.
+  await page.waitForTimeout(1500);
+  const drawn = await page.evaluate((map) => {
+    const pane = document.querySelector(map);
+    const viewport = pane?.querySelector<HTMLElement>(".svelte-flow__viewport");
+    const root = getComputedStyle(document.documentElement);
+    const rem = Number.parseFloat(root.fontSize);
+    const zoom = viewport
+      ? new DOMMatrixReadOnly(getComputedStyle(viewport).transform).a
+      : 0;
+    const box = pane?.getBoundingClientRect();
+    const cards = [
+      ...(pane?.querySelectorAll('[data-slot="whole-state"]') ?? []),
+    ].map((card) => card.getBoundingClientRect());
+    return {
+      regions: [
+        ...(pane?.querySelectorAll('[data-slot="machine"] h3') ?? []),
+      ].map((head) => head.textContent?.trim() ?? ""),
+      arrows: [
+        ...(pane?.querySelectorAll(".svelte-flow__edge path[data-played]") ??
+          []),
+      ].map((path) => ({
+        played: path.getAttribute("data-played"),
+        dashed: path.hasAttribute("stroke-dasharray"),
+        name:
+          path.closest(".svelte-flow__edge")?.getAttribute("aria-label") ?? "",
+      })),
+      zoom,
+      readable:
+        10 / (Number.parseFloat(root.getPropertyValue("--text-meta")) * rem),
+      cards: cards.length,
+      inside:
+        !!box &&
+        cards.every(
+          (card) =>
+            card.left >= box.left - 1 &&
+            card.right <= box.right + 1 &&
+            card.top >= box.top - 1 &&
+            card.bottom <= box.bottom + 1
+        ),
+    };
+  }, MAP);
+  const solid = drawn.arrows.filter((one) => one.played === "played");
+  const dashed = drawn.arrows.filter((one) => one.played === "named");
+  kit.check(
+    "map 1: the Map face draws one region per heading (Quiet, Loud) and one arrow per edge and per from: Two → Three solid, Three → One dashed",
+    drawn.regions.length === 2 &&
+      drawn.regions.includes("Quiet") &&
+      drawn.regions.includes("Loud") &&
+      drawn.arrows.length === 2 &&
+      solid.length === 1 &&
+      !solid[0]?.dashed &&
+      solid[0]?.name.startsWith("Two → Three") === true &&
+      dashed.length === 1 &&
+      dashed[0]?.dashed === true &&
+      dashed[0]?.name.startsWith("Three → One") === true,
+    JSON.stringify(drawn)
+  );
+  kit.check(
+    "map 2: the map fits at a readable zoom: no larger than the fit's 1, no smaller than its notes' 10px, every card inside its pane",
+    drawn.cards === 3 &&
+      drawn.zoom <= 1 + 0.001 &&
+      drawn.zoom >= drawn.readable - 0.001 &&
+      drawn.inside,
+    JSON.stringify(drawn)
+  );
+  await checks.at(page, "1440, the Map face");
+
+  // map 3. A press on Two's card.
+  await page
+    .locator(`${MAP} [data-slot="whole-state"] button`, { hasText: TWO_ALONE })
+    .first()
+    .click();
+  const atTwo = await until(
+    "the drawing at Two",
+    () => drawnStory(frame),
+    (story) => story === "Two",
+    30_000
+  ).catch(() => drawnStory(frame));
+  kit.check(
+    "map 3: a press on Two's card on the map keeps it: the drawing stands at Two",
+    atTwo === "Two",
+    String(atTwo)
+  );
+  await page.waitForSelector(`${GRAPH}:not([data-arriving])`);
+
+  // map 4. A press on the agent's arrow, by its act.
+  await page
+    .locator(`${MAP} .svelte-flow__edge-label button`, {
+      hasText: "Calm down",
+    })
+    .first()
+    .click();
+  const atOne = await until(
+    "the drawing at One",
+    () => drawnStory(frame),
+    (story) => story === "One",
+    30_000
+  ).catch(() => drawnStory(frame));
+  kit.check(
+    "map 4: a press on the arrow Three → One keeps its to state until the Animation face stands: the drawing stands at One",
+    atOne === "One",
+    String(atOne)
+  );
+  await page.close();
+}
+
+/** The graph-map leg at 390: leg map 5, and the Map face's rendered checks there. */
+async function mapPhone(
+  kit: Kit,
+  base: string,
+  id: string,
+  checks: RenderedChecks
+): Promise<void> {
+  const { page } = await graphPage(kit, base, id, "phone");
+  const DRAWER = '[data-slot="drawer-content"]';
+  await showFace(page, DRAWER, "Map");
+  // Past its head stop the drawer draws its face's body.
+  await page.locator(`${GRAPH} ${DRAWER} [data-slot="drawer-grabber"]`).click();
+  await page.waitForTimeout(900);
+  const shown = await page.evaluate(
+    ([list, graph]) => ({
+      cards: document.querySelectorAll(`${list} [data-slot="whole-state"]`)
+        .length,
+      flow: !!document.querySelector(`${graph} .svelte-flow`),
+    }),
+    [MAP_LIST, GRAPH] as const
+  );
+  kit.check(
+    "map 5: at 390 the Map face is a list, each state its card, and no map that pans and zooms",
+    shown.cards === 3 && !shown.flow,
+    JSON.stringify(shown)
+  );
+  await checks.at(page, "390, the Map face's list");
+  await page.close();
+}
+
 /** The width and height a png's header says. */
 const pngSize = (png: Buffer) => ({
   w: png.readUInt32BE(16),
@@ -614,6 +803,27 @@ const run = async (kit: Kit) => {
   });
   await deskLegs(kit, base, id, checks);
   await phoneLegs(kit, base, id, checks);
+
+  // The graph-map leg: a canvas of the card's states with groups and edges.
+  const mapped = await call("map", "mcp__cawco__artifact_create", {
+    kind: "component",
+    name: "graph-map",
+    file: [STORY],
+    does: "judge",
+    ask: MAP_ASK,
+    group: MAP_GROUP,
+    edges: MAP_EDGES,
+  });
+  const mapId = mapped.match(ID)?.[1];
+  kit.check(
+    "map 0: artifact_create with group and edges answers an id",
+    !!mapId,
+    short(mapped)
+  );
+  if (mapId) {
+    await mapDesk(kit, base, mapId, checks);
+    await mapPhone(kit, base, mapId, checks);
+  }
   checks.report();
 
   // 6. A picture of a state, through the daemon's render on the stage.

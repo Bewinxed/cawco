@@ -8,9 +8,11 @@
    * The component lives in the project's toolchain, on the stage's origin,
    * in the one frame the stage's panel holds (StagePane); the graph says
    * what to stand at by messages (StageLink, core stage-graph.ts) and the
-   * page answers. Beside the stage one room, the states list with its
-   * steps. Several components under one ask: one in front, the others
-   * behind its name's menu.
+   * page answers. Beside the stage one room of two faces on one switch:
+   * the states list with its steps, and the map of the whole set
+   * (WholeSet), where a press on a card keeps its state. Several
+   * components under one ask: one in front, the others behind its name's
+   * menu.
    *
    * One bar of one row (DESIGN.md, The Title Bars Follow Liquid Glass
    * Rule): leading the component's name (its menu when there are several),
@@ -46,6 +48,11 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import {
+    TabItem,
+    Tabs,
+    TabsList,
+  } from "#lib/components/ui/fluid-tabs/index.js";
   import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
@@ -64,6 +71,7 @@
     IconMoon,
     IconPhone,
     IconRoom,
+    IconStructure,
     IconSun,
     IconTablet,
   } from "#lib/icons.js";
@@ -76,6 +84,7 @@
   import StagePane from "./StagePane.svelte";
   import Stepper from "./Stepper.svelte";
   import type { StageLink } from "./stage-link.svelte";
+  import WholeSet from "./WholeSet.svelte";
 
   let {
     link,
@@ -202,14 +211,18 @@
     return best;
   };
   /**
-   * The room's faces, in its switch's order: the States face alone until
-   * the Map and Animation faces stand on the page. The room is named by
-   * the faces it has.
+   * The room's faces, in its switch's order: the States face and the Map
+   * until the Animation face stands on the page. The room is named by the
+   * faces it has.
    */
   const FACES = [
     { value: "states", label: words.statesFace, icon: IconListRows },
+    { value: "map", label: words.wholeSet, icon: IconStructure },
   ] as const;
+  type Face = (typeof FACES)[number]["value"];
   const roomName = words.room(FACES.map((one) => one.label));
+  /** The face the room shows: the states until he picks another. */
+  let face = $state<Face>("states");
   /** The kept state of each component, by its states file. */
   let keptOf = $state<Record<string, Pick>>({});
   /** The state he kept on the component in front, while its states file still has it; else where the component opens. */
@@ -264,6 +277,10 @@
   let actual = $state(false);
   const still = $derived(reduce || !motionOk.current);
   let surface = $state(0);
+  /** DESIGN.md's phone breakpoint (Breakpoints: "640px (phone: …)"), px: in a pane under it the map is a list (DESIGN.md, Map mode). */
+  const PHONE_LINE = 640;
+  /** The pane is a phone's width: the Map face is a list. */
+  const narrow = $derived(surface > 0 && surface < PHONE_LINE);
   /** The room stands beside the stage only where the surface holds both whole (beside.ts); under that the room is the drawer, measured on the panel's own width, so a pane under it gets the drawer on a desk too. */
   const line = $derived(browser ? besideLine() : 0);
   const desk = $derived(surface === 0 || surface >= line);
@@ -617,6 +634,12 @@
       });
     }
   };
+  /**
+   * A move named by its arrow on the map (or its line in the map's list):
+   * the Animation face opens on it once that face stands on the page; until
+   * then its to state is kept, so the stage stands where the arrow leads.
+   */
+  const chooseMove = (_from: string, to: string) => choose(to, null);
   /** The stop the drawer stood at as the pane's sheet put it away; null while it stands. */
   let stopAway: number | null = null;
   // Put away under the pane's sheet, the drawer comes back at the stop it
@@ -769,12 +792,21 @@
   });
 </script>
 
-{#snippet statesFace(stepperHere: boolean)}
+{#snippet roomFace(stepperHere: boolean)}
   {#if review && kept}
     {#if single}
       <p class="m-0 max-w-c-measure type-body text-ink-muted text-pretty">
         {words.oneState}
       </p>
+    {:else if face === "map"}
+      <WholeSet
+        against={null}
+        kept={kept.state}
+        {narrow}
+        onmove={chooseMove}
+        onpress={choose}
+        {review}
+      />
     {:else}
       <Journey
         against={null}
@@ -790,25 +822,24 @@
   {/if}
 {/snippet}
 
-{#snippet faceName(heading: boolean)}
-  <!-- The room's one face: its Solar duotone glyph before its name. In
-       the drawer the sheet's own title is the heading a reader hears (the
-       kit's, read out only), so the name drawn here is not a second one. -->
-  {@const [face] = FACES}
-  <svelte:element
-    this={heading ? "h2" : "p"}
-    aria-hidden={heading ? undefined : "true"}
-    class="mark-line m-0 flex min-w-0 flex-1 items-center gap-space-2 type-label text-ink-strong"
+{#snippet faces()}
+  <!-- The room's faces on one switch (fluid-tabs), each its Solar duotone
+       glyph before its name at the tabs' own icon size and ink; the switch
+       is named as the room is, by its faces. -->
+  <Tabs
+    class="min-w-0 flex-1"
+    onValueChange={(next: string) => {
+      face = next === "map" ? "map" : "states";
+    }}
+    size="compact"
+    value={face}
   >
-    <face.icon
-      aria-hidden="true"
-      class="size-icon-md flex-none text-ink-muted"
-      data-box
-    />
-    <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-      >{face.label}</span
-    >
-  </svelte:element>
+    <TabsList aria-label={roomName}>
+      {#each FACES as one (one.value)}
+        <TabItem icon={one.icon} label={one.label} value={one.value} />
+      {/each}
+    </TabsList>
+  </Tabs>
 {/snippet}
 
 {#snippet stepper()}
@@ -1199,11 +1230,11 @@
               class="relative my-(--border-width) ms-space-2 me-(--border-width) flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-lg border border-border-hairline bg-surface-raised shadow-tile"
             >
               {#if roomOpen}
-                <!-- Its head on the stage's head line: its face, its Close. -->
+                <!-- Its head on the stage's head line: its faces, its Close. -->
                 <div
                   class="flex min-h-c-top-bar-h min-w-0 flex-none items-center gap-space-2 border-b border-border-hairline ps-space-4 pe-space-2"
                 >
-                  {@render faceName(true)}
+                  {@render faces()}
                   <Tip label={words.closeRoom(roomName)}>
                     {#snippet children(tip)}
                       <button
@@ -1221,8 +1252,15 @@
                     {/snippet}
                   </Tip>
                 </div>
-                <div class="flex min-h-0 min-w-0 flex-1 flex-col p-space-4">
-                  {@render statesFace(true)}
+                <!-- The map takes the room's whole body, its own surface to
+                     its edges; the states stand at the room's inset. -->
+                <div
+                  class={[
+                    "flex min-h-0 min-w-0 flex-1 flex-col",
+                    face === "map" && !single ? "" : "p-space-4",
+                  ]}
+                >
+                  {@render roomFace(true)}
                 </div>
               {/if}
               {@render inspector?.()}
@@ -1293,7 +1331,7 @@
               style:--snap-drop="{Math.max(0, layerHeight - cover)}px"
             >
               <div class="flex min-w-0 items-center gap-space-2">
-                {@render faceName(false)}
+                {@render faces()}
                 <!-- The drawer's one Close, the ghost the kit's sheet heads
                      draw. It puts the room away itself: vaul's Close asks
                      the dialog to close, and a root that is not
@@ -1312,13 +1350,14 @@
                   variant="ghost"
                 />
               </div>
-              <!-- At the head stop the drawer holds its head alone, the steps:
-                   the list drawn into its sliver ran past the screen's foot. -->
-              {#if !single}
+              <!-- At the head stop the drawer holds its head alone, the faces
+                   and the States face's steps: a face's body drawn into its
+                   sliver ran past the screen's foot. -->
+              {#if !single && face === "states"}
                 {@render stepper()}
               {/if}
               {#if single || !atHead}
-                {@render statesFace(false)}
+                {@render roomFace(false)}
               {/if}
             </div>
           </Drawer.Content>
