@@ -406,6 +406,7 @@
 @custom-variant slot-crumb (&[data-slot="crumb"]);
 @custom-variant slot-ctrls (&[data-slot="ctrls"]);
 @custom-variant slot-cwd (&[data-slot="cwd"]);
+@custom-variant slot-delete (&[data-slot="delete"]);
 @custom-variant slot-desktop (&[data-slot="desktop"]);
 @custom-variant slot-details-body (&[data-slot="details-body"]);
 @custom-variant slot-details-measure (&[data-slot="details-measure"]);

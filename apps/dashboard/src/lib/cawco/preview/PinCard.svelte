@@ -421,6 +421,17 @@
      of their first line, on its baseline (a row's meta on its words' line,
      The Row Dress Rule), the words wrapping in their own column as prose
      does. -->
+<!-- The pin's pill, while the page's own is out of view. -->
+{#snippet headPill()}
+  <span class="mark-cell" data-slot="head-pill">
+    <PinMark
+      gone={!!pin.movedAt}
+      number={pin.number}
+      state={markState(pin)}
+      tail="bottom-start"
+    />
+  </span>
+{/snippet}
 {#snippet later(text: string, at: string, who: string, you: boolean)}
   <div class="flex items-baseline" data-slot="later">
     <div class="min-w-0 flex-1">
@@ -434,7 +445,7 @@
 <!-- No head band (the artifact panel's surface brief, A thread beside its
      pin; The Title Bars Follow Liquid Glass Rule): the bar is one row of
      floating groups with no ground, Back leading where the card opened from
-     the Comments list, and trailing Resolve or Reopen, Delete comment and
+     the Comments list, then the pin's pill, and trailing Resolve or Reopen, Delete comment and
      Copy link (or More, where it holds more than one thing) as one glass
      group and Close in its own (HIG, Toolbars: "Group navigation controls
      and critical actions like Done, Close, or Save in dedicated, familiar,
@@ -451,7 +462,7 @@
       class="flex h-c-top-bar-h items-center justify-between gap-space-2"
       data-slot="bar"
     >
-      <div class="flex min-w-0 items-center">
+      <div class="flex min-w-0 items-center gap-space-2">
         {#if back}
           <!-- Opened from the list in the same sheet: Back leads, the
                chevron alone, named by where it goes (HIG, Sheets: "Display
@@ -465,6 +476,11 @@
               onclick={back.onback}
             />
           </BarGlass>
+        {/if}
+        {#if !marked}
+          <!-- The pin's pill leads the bar, what the card is (as a sheet's
+               title leads after Back), while the page's own is out of view. -->
+          {@render headPill()}
         {/if}
       </div>
       <div class="flex flex-none items-center gap-space-2">
@@ -537,15 +553,8 @@
          under its bar (HIG, Navigation bars), never squeezed beside the
          groups. -->
   <div data-slot="head" class="flex shrink-0 items-start gap-space-2">
-    {#if !marked}
-      <span class="mark-cell" data-slot="head-pill">
-        <PinMark
-          gone={!!pin.movedAt}
-          number={pin.number}
-          state={markState(pin)}
-          tail="bottom-start"
-        />
-      </span>
+    {#if peek && !marked}
+      {@render headPill()}
     {/if}
     <div class="flex min-w-0 flex-1 flex-col gap-space-row">
       <!-- Two lines at most, clamped in an inner span (The Truncate Inside Rule): WebKit clamps no button. -->
