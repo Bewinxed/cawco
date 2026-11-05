@@ -110,6 +110,7 @@ export const SentBack = {
   },
 };
 
+/** Sent back, on a desk: tsk-218 in ready, the move the newest change. */
 export const SentBackDesk = {
   args: { task: sentBack },
   parameters: DESK,
@@ -126,6 +127,7 @@ export const DropAsked = {
   parameters: PHONE,
 };
 
+/** Drop asked on a desk, under the head across the page. */
 export const DropAskedDesk = {
   args: {
     task: beforeDrop,

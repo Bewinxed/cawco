@@ -85,7 +85,6 @@ export const yourMoveFirstWords = {
     heading: "Since you looked",
     nothing: "Nothing since you last looked.",
     showAll: "Show all history",
-    hideAll: "Hide the full history",
   },
   work: {
     heading: "The work",

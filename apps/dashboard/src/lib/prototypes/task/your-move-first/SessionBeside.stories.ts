@@ -60,11 +60,13 @@ export const WorkingSessionBeside = {
 /** On a phone the session opens in the task's place, Back returning to it. */
 export const SessionInPlace = { parameters: PHONE };
 
+/** In its place on a phone, the transcript still being read. */
 export const SessionInPlaceLoading = {
   args: { sessionLoad: "loading" },
   parameters: PHONE,
 };
 
+/** In its place on a phone, the session stopped answering. */
 export const SessionInPlaceStoppedAnswering = {
   args: { sessionLoad: "error" },
   parameters: PHONE,

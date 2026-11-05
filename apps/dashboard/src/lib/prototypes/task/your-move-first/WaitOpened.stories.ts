@@ -71,6 +71,7 @@ export const WaitMissing = {
   parameters: PHONE,
 };
 
+/** The wait's task not found, on a desk: the row says so, with Re-point and Remove. */
 export const WaitMissingDesk = {
   args: { layer: "none", missingWait: TASK_WAIT },
   parameters: DESK,

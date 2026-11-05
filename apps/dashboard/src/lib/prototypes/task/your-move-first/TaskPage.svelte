@@ -36,6 +36,7 @@
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import AskHere from "./AskHere.svelte";
   import BriefFold from "./BriefFold.svelte";
+  import FoldGroup from "./FoldGroup.svelte";
   import type { Looking, TaskRead, WaitRead } from "./fixtures/types";
   import Group from "./Group.svelte";
   import Ledger from "./Ledger.svelte";
@@ -262,21 +263,13 @@
 {/snippet}
 
 {#snippet historyGroup()}
-  <Group heading={words.history.heading} id={`${uid}-history`}>
-    {#snippet trailing()}
-      <button
-        aria-expanded={historyOpen}
-        class="press-tint rounded-xs type-label text-link-ink hover:underline"
-        type="button"
-        onclick={() => {
-          historyOpen = !historyOpen;
-        }}>{historyOpen ? words.since.hideAll : words.since.showAll}</button
-      >
-    {/snippet}
-    {#if historyOpen}
-      <Ledger now={looking.now} rows={history} />
-    {/if}
-  </Group>
+  <FoldGroup
+    heading={words.history.heading}
+    id={`${uid}-history`}
+    bind:open={historyOpen}
+  >
+    <Ledger now={looking.now} rows={history} />
+  </FoldGroup>
 {/snippet}
 
 {#snippet dropTile()}

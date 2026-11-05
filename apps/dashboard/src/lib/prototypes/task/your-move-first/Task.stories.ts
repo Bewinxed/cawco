@@ -61,6 +61,7 @@ export const PassingOn = {
   },
 };
 
+/** Pass on pending on a phone: the pair holds its place, the press spinning. */
 export const PassingOnPhone = {
   args: { pending: "passOn" },
   parameters: PHONE,
@@ -78,6 +79,7 @@ export const PassOnUnanswered = {
   },
 };
 
+/** The hub didn't answer, on a phone: the reason under the pair. */
 export const PassOnUnansweredPhone = {
   args: { refusal: unanswered("review") },
   parameters: PHONE,
@@ -93,6 +95,7 @@ export const PassedOn = {
   },
 };
 
+/** Passed on, on a phone: done on top, the move the newest change. */
 export const PassedOnPhone = { args: { task: passedOn }, parameters: PHONE };
 
 /** tsk-142's session asks a permission: its words, how long ago, Approve and Deny at the ends. */
@@ -101,6 +104,7 @@ export const Asking = {
   parameters: DESK,
 };
 
+/** The ask on a phone: Approve and Deny at the row's two ends, under the thumb. */
 export const AskingPhone = {
   args: { task: asking, looking: workingLook },
   parameters: PHONE,
@@ -137,6 +141,7 @@ export const Working = {
   parameters: DESK,
 };
 
+/** Working on a phone: the quiet line, then what changed since you looked. */
 export const WorkingPhone = {
   args: { task: working, looking: workingLook },
   parameters: PHONE,
@@ -148,6 +153,7 @@ export const Stopped = {
   parameters: DESK,
 };
 
+/** Stopped on a phone: how it ended and Retry, first under the head. */
 export const StoppedPhone = {
   args: { task: stopped, looking: stoppedLook },
   parameters: PHONE,
@@ -170,6 +176,7 @@ export const Waiting = {
   parameters: DESK,
 };
 
+/** Waiting on a phone: the quiet line opens the waits below. */
 export const WaitingPhone = {
   args: { task: waiting, looking: waitingLook },
   parameters: PHONE,
@@ -181,6 +188,7 @@ export const Ready = {
   parameters: DESK,
 };
 
+/** Ready on a phone, never attempted. */
 export const ReadyPhone = {
   args: { task: ready, looking: readyLook },
   parameters: PHONE,
@@ -196,6 +204,7 @@ export const BriefOpen = {
   },
 };
 
+/** Brief & how it runs unfolded on a desk, in the right column. */
 export const BriefOpenDesk = {
   args: { task: ready, looking: readyLook, briefOpen: true },
   parameters: DESK,
@@ -207,6 +216,7 @@ export const Done = {
   parameters: DESK,
 };
 
+/** Done on a phone: the long title truncated in the head, whole in its tooltip and the brief. */
 export const DonePhone = {
   args: { task: done, looking: doneLook },
   parameters: PHONE,
@@ -218,6 +228,7 @@ export const Dropped = {
   parameters: DESK,
 };
 
+/** Dropped on a phone: why, by whom, Reopen. */
 export const DroppedPhone = {
   args: { task: dropped, looking: droppedLook },
   parameters: PHONE,
@@ -236,6 +247,7 @@ export const HistoryOpen = {
 /** Before the first read: the skeleton at the page's real layout. */
 export const Loading = { args: { task: null }, parameters: DESK };
 
+/** Before the first read, on a phone. */
 export const LoadingPhone = { args: { task: null }, parameters: PHONE };
 
 /** The hub isn't answering: the last read stays, marked with when it was made. */
@@ -245,6 +257,7 @@ export const Stale = {
   parameters: DESK,
 };
 
+/** The hub isn't answering, on a phone: the last read, marked. */
 export const StalePhone = {
   args: { stale: reviewLook.now - 6 * MINUTE_MS },
   parameters: PHONE,
