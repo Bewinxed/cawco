@@ -1094,6 +1094,7 @@ import { createWorkspaceRetire } from "./workspace-retire";
  * clearing it. The row's own check is `harnessConfigProblem`.
  */
 interface HarnessConfigBody {
+  areaId?: string | null;
   enabled?: boolean;
   module?: string | null;
   package?: string | null;
@@ -1106,6 +1107,7 @@ const HARNESS_CONFIG_BODY = t.Object({
   module: t.Optional(t.Nullable(t.String())),
   package: t.Optional(t.Nullable(t.String())),
   projectId: t.Optional(t.Nullable(t.String())),
+  areaId: t.Optional(t.Nullable(t.String())),
 });
 
 /** What an artifact's name keeps of a Diagram's statement name: lowercase letters, digits and dashes. */
@@ -4018,16 +4020,23 @@ export const createServer = (
         undefined,
         actor.id
       ).then(tookOf, (): FleetMcpTook => ({ kind: "unanswered" })),
-    // A project's own server reaches that project's sessions alone.
-    servers: (actor) =>
-      db
+    // A project's own server reaches that project's sessions alone, an
+    // area's the sessions of the projects in it.
+    servers: (actor) => {
+      const areaId = actor.projectId
+        ? db.project(actor.projectId)?.areaId
+        : undefined;
+      return db
         .fleetConfig()
         .mcp.filter(
           (row) =>
             row.auth?.mode === "oauth" &&
-            (!row.projectId || row.projectId === actor.projectId)
+            (row.projectId
+              ? row.projectId === actor.projectId
+              : !row.areaId || row.areaId === areaId)
         )
-        .map((row) => row.name),
+        .map((row) => row.name);
+    },
     // Not kept across a restart: the call that waits on it ends with the hub.
     park: (envelope) => parkForPerson(envelope),
     settle: (requestId) => {
@@ -11318,6 +11327,7 @@ export const createServer = (
       contentHash?: string;
       enabled?: boolean;
       projectId?: string | null;
+      areaId?: string | null;
       source: string;
     },
     refuse: (code: 400 | 409, said: string) => Refused
@@ -11353,6 +11363,7 @@ export const createServer = (
       source: body.source,
       enabled: body.enabled,
       projectId: body.projectId,
+      areaId: body.areaId,
       hash: read.hash,
       bytes: read.files.reduce(
         (total, file) =>
@@ -21445,7 +21456,11 @@ export const createServer = (
             .flatMap(({ id, error }) => (error ? [[id, error] as const] : []))
         : []
     );
-    const places = db.listProjects().flatMap((project) => project.places);
+    const listed = db.listProjects();
+    const places = listed.flatMap((project) => project.places);
+    const areaOfProject = new Map(
+      listed.map((project) => [project.id, project.areaId])
+    );
     // A server scoped to platforms reaches only a machine of one of them,
     // by whichever of its reports came first (core `machinePlatform`: its
     // capabilities, else its register's `os`); any other is not sent it, so
@@ -21489,7 +21504,8 @@ export const createServer = (
               ...db.projectsWorkedOn(machineId),
             ]),
             places,
-            machineId
+            machineId,
+            (projectId) => areaOfProject.get(projectId) ?? null
           ),
         },
         hubHttpUrl()
@@ -22672,12 +22688,72 @@ export const createServer = (
   };
 
   /** Why a fleet row cannot be bound to `projectId`, or nothing when it can (null and left out always can). */
-  const boundProblem = (
-    projectId: string | null | undefined
-  ): string | undefined =>
-    projectId && !db.project(projectId)
-      ? `There is no project ${projectId} on this hub.`
+  /**
+   * A fleet row merged over what is stored, with the binding the write
+   * asked: a project asked lets go of a stored area, an area asked of a
+   * stored project, and neither asked keeps what was stored.
+   */
+  const boundAsAsked = (
+    merged: Record<string, unknown>,
+    asked: { areaId?: string | null; projectId?: string | null }
+  ): Record<string, unknown> => {
+    const { projectId, areaId, ...rest } = merged;
+    if (asked.areaId) {
+      return { ...rest, areaId };
+    }
+    if (asked.projectId) {
+      return { ...rest, projectId };
+    }
+    return {
+      ...rest,
+      ...(projectId === undefined ? {} : { projectId }),
+      ...(areaId === undefined ? {} : { areaId }),
+    };
+  };
+
+  /**
+   * A hook as a partial write leaves it: each given field over what is
+   * stored, `null` clearing one, its binding as asked ({@link boundAsAsked}).
+   */
+  const hookDraftOf = (
+    current: FleetHook | undefined,
+    patch: Record<string, unknown> & {
+      areaId?: string | null;
+      projectId?: string | null;
+    }
+  ): HookDraft => {
+    const merged: Record<string, unknown> = {};
+    if (current) {
+      const { id: _id, hash: _hash, ...stored } = current;
+      Object.assign(merged, stored);
+    }
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null) {
+        delete merged[key];
+      } else if (value !== undefined) {
+        merged[key] = value;
+      }
+    }
+    return boundAsAsked(merged, patch) as unknown as HookDraft;
+  };
+
+  const boundProblem = ({
+    projectId,
+    areaId,
+  }: {
+    areaId?: string | null;
+    projectId?: string | null;
+  }): string | undefined => {
+    if (projectId && areaId) {
+      return areaWords.boundTwice;
+    }
+    if (projectId && !db.project(projectId)) {
+      return `There is no project ${projectId} on this hub.`;
+    }
+    return areaId && !db.areas.get(areaId)
+      ? areaWords.scopeNoArea(areaId)
       : undefined;
+  };
 
   /**
    * Why a fleet row cannot be shared, or nothing when it can: a shared server
@@ -22687,7 +22763,8 @@ export const createServer = (
   const sharedProblem = (
     name: string,
     config: Record<string, unknown>,
-    projectId: string | null | undefined,
+    /** The project or area it is bound to; none for every machine's. */
+    bound: string | null | undefined,
     shared: boolean
   ): string | undefined => {
     if (!shared) {
@@ -22701,8 +22778,8 @@ export const createServer = (
     if (name === CHROME_DEVTOOLS) {
       return "chrome-devtools reaches each session's own browser door, so it cannot be shared.";
     }
-    return projectId
-      ? "A project's server runs in each of its places, so it cannot be shared. Share it as a fleet server, or keep it per session."
+    return bound
+      ? "A project's or an area's server runs in each of its places, so it cannot be shared. Share it as a fleet server, or keep it per session."
       : undefined;
   };
 
@@ -31621,8 +31698,15 @@ export const createServer = (
         merged[key] = value;
       }
     }
-    merged.scope = merged.projectId ? "project" : undefined;
-    const row = merged as unknown as FleetHarnessConfig;
+    const placed = boundAsAsked(merged, body);
+    placed.scope = placed.projectId || placed.areaId ? "project" : undefined;
+    const unplaced = boundProblem(
+      placed as { areaId?: string; projectId?: string }
+    );
+    if (unplaced) {
+      return status(400, unplaced);
+    }
+    const row = placed as unknown as FleetHarnessConfig;
     const problem = harnessConfigProblem(row);
     if (problem) {
       return status(400, problem);
@@ -31900,7 +31984,9 @@ export const createServer = (
           skills: () =>
             db
               .listSkills()
-              .filter((skill) => skill.enabled && !skill.projectId)
+              .filter(
+                (skill) => skill.enabled && !skill.projectId && !skill.areaId
+              )
               .map((skill) => ({ id: skill.name, note: skill.source })),
           spend: (instances, since) => db.decides.spend(instances, since),
           cawRecord: (projectId, since) => ({
@@ -33867,6 +33953,8 @@ export const createServer = (
              * delegate workspaces. Null: every machine. Left out: as it was.
              */
             projectId: t.Optional(t.Union([t.String(), t.Null()])),
+            /** Every project in one area instead, as read now. Null: none. Left out: as it was. */
+            areaId: t.Optional(t.Union([t.String(), t.Null()])),
             /**
              * The machine platforms it runs on (`machine_capabilities.platform`):
              * any other machine is never sent it. Null or empty: every
@@ -33889,13 +33977,14 @@ export const createServer = (
         async ({ params, body, status }) => {
           const problem =
             mcpProblem(params.name, body.config) ??
-            boundProblem(body.projectId) ??
+            boundProblem(body) ??
             sharedProblem(
               params.name,
               body.config,
-              body.projectId === undefined
-                ? db.getMcpServer(params.name)?.projectId
-                : body.projectId,
+              body.projectId === undefined && body.areaId === undefined
+                ? (db.getMcpServer(params.name)?.projectId ??
+                    db.getMcpServer(params.name)?.areaId)
+                : (body.projectId ?? body.areaId),
               body.shared ?? db.getMcpServer(params.name)?.shared ?? false
             );
           if (problem) {
@@ -33907,6 +33996,7 @@ export const createServer = (
             config: body.config as unknown as FleetMcpConfig,
             enabled: body.enabled,
             projectId: body.projectId,
+            areaId: body.areaId,
             platforms: body.platforms,
             shared: body.shared,
           });
@@ -34069,15 +34159,22 @@ export const createServer = (
         async ({ params, status }) => {
           const back = db.trash.take(params.id, Date.now());
           if (!back.ok) {
-            return back.why === "taken"
-              ? status(
+            switch (back.why) {
+              case "taken":
+                return status(
                   409,
                   "Something of the same name was made while it waited, and that one stays."
-                )
-              : status(
+                );
+              case "unbound":
+                return status(409, areaWords.undoUnbound);
+              case "gone":
+                return status(
                   404,
                   "It can no longer be brought back: its undo has run out."
                 );
+              default:
+                throw unreachable(back);
+            }
           }
           return { kind: back.kind, row: await returned(back.kind, back.key) };
         }
@@ -34465,13 +34562,15 @@ export const createServer = (
              * delegate workspaces. Null: every machine. Left out: as it was.
              */
             projectId: t.Optional(t.Union([t.String(), t.Null()])),
+            /** Every project in one area instead, as read now. Null: none. Left out: as it was. */
+            areaId: t.Optional(t.Union([t.String(), t.Null()])),
           }),
         },
         async ({ params, body, set, status }) => {
           if (!SKILL_NAME.test(params.name)) {
             return status(400, `${params.name} is not a usable skill name`);
           }
-          const unbindable = boundProblem(body.projectId);
+          const unbindable = boundProblem(body);
           if (unbindable) {
             return status(400, unbindable);
           }
@@ -34507,6 +34606,7 @@ export const createServer = (
               source: `machine:${body.fromMachine}`,
               enabled: body.enabled,
               projectId: body.projectId,
+              areaId: body.areaId,
               hash: hashFiles(files),
               bytes: files.reduce(
                 (total, file) =>
@@ -34540,6 +34640,7 @@ export const createServer = (
             source: body.source,
             enabled: body.enabled,
             projectId: body.projectId,
+            areaId: body.areaId,
           });
           // A fetch that found the files the fleet has tells the machines
           // here instead: the row's switch or placement may have moved.
@@ -35260,6 +35361,7 @@ export const createServer = (
             script: t.Optional(t.Nullable(t.String())),
             scope: t.Optional(t.Nullable(t.String())),
             projectId: t.Optional(t.Nullable(t.String())),
+            areaId: t.Optional(t.Nullable(t.String())),
             expectedHash: t.Optional(t.String()),
           }),
         },
@@ -35277,23 +35379,14 @@ export const createServer = (
             return status(409, current);
           }
 
-          const merged: Record<string, unknown> = {};
-          if (current) {
-            const { id: _id, hash: _hash, ...stored } = current;
-            Object.assign(merged, stored);
-          }
-          for (const [key, value] of Object.entries(patch)) {
-            if (value === null) {
-              delete merged[key];
-            } else if (value !== undefined) {
-              merged[key] = value;
-            }
-          }
-          const draft = merged as unknown as HookDraft;
+          const draft = hookDraftOf(current, patch);
           if (typeof draft.enabled !== "boolean") {
             return status(400, "Say whether the hook is enabled.");
           }
-          const [first] = Object.values(hookProblem(draft));
+          const [first] = [
+            boundProblem(draft),
+            ...Object.values(hookProblem(draft)),
+          ].filter(Boolean);
           if (first) {
             return status(400, first);
           }

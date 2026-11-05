@@ -9,7 +9,7 @@
  *   sessions do at that account's limit, its Caw permission mode, its
  *   budget and what reaching it does. Null clears one.
  * - Its folder on the hub (`areas/<id>/`, project-folder.ts `areaFolder`)
- *   holds its `decides.md`, `delegates/` and `skills/`, read and written
+ *   holds its `decides.md` and `delegates/`, read and written
  *   through the project folder's own module and guards.
  * - Deleting an area ungroups its projects and deletes nothing of them; the
  *   scopes naming it (memory documents, connections, rules) go with it, and
@@ -35,7 +35,7 @@ import {
 import { type AreaSettingName, areaWords } from "@cawco/core/words/areas";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, ProjectRow } from "./db";
-import type { AreaSettingsChange } from "./db/areas";
+import type { AreaDeleted, AreaSettingsChange } from "./db/areas";
 import {
   areaFolder,
   deleteFolderFile,
@@ -138,6 +138,20 @@ const ROW_SETTINGS = [
 
 /** Where each setting a note names came from for one project. */
 type Sources = Record<AreaSettingName, SettingSource>;
+
+/** The fleet rows a delete took, in a sentence; none when it took none. */
+const fleetRowsWords = (rows: AreaDeleted["fleetRows"]): string[] => {
+  const kinds = (Object.keys(rows) as (keyof typeof rows)[]).filter(
+    (kind) => rows[kind] > 0
+  );
+  return kinds.length > 0
+    ? [
+        areaWords.fleetRowsGone(
+          kinds.map((kind) => areaWords.fleetRow[kind](rows[kind])).join(", ")
+        ),
+      ]
+    : [];
+};
 
 export const createAreas = ({
   accountMoved,
@@ -329,6 +343,7 @@ export const createAreas = ({
           areaWords.fallBack(count, setting)
         ),
         ...(deleted.rules > 0 ? [areaWords.rulesGone(deleted.rules)] : []),
+        ...fleetRowsWords(deleted.fleetRows),
         ...(docs.length > 0 ? [areaWords.docsTrashed(docs.length)] : []),
       ],
     };
@@ -441,7 +456,7 @@ export const createAreas = ({
             return { areaId: project.areaId, inEffect: project.inEffect, said };
           })
       )
-      // The area's folder: its decides.md, delegates/ and skills/, kept as
+      // The area's folder: its decides.md and delegates/, kept as
       // a project's folder is, every write a commit through the same guards.
       .get(
         "/api/areas/:id/folder",

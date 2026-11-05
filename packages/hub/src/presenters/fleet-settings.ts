@@ -49,8 +49,18 @@ const removedWords = (what: string, deleted: Deleted): string =>
   `Removed ${what}. The dashboard can bring it back for ${lasted(deleted.restorableForMs)}.`;
 
 /** Where a placed row lives: every machine, or one project's places. */
-const placeWords = (row: { projectId?: string; scope?: string }): string =>
-  row.projectId ? `project ${row.projectId.slice(0, 8)} only` : "every machine";
+const placeWords = (row: {
+  areaId?: string;
+  projectId?: string;
+  scope?: string;
+}): string => {
+  if (row.projectId) {
+    return `project ${row.projectId.slice(0, 8)} only`;
+  }
+  return row.areaId
+    ? `area ${row.areaId.slice(0, 8)}'s projects only`
+    : "every machine";
+};
 
 /** A fetched row's version, and whether a newer one waits. */
 const versionWords = (row: {

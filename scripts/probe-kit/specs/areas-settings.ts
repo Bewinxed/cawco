@@ -6,7 +6,8 @@
  * - a. One area with an account (moving at its limit), a monthly budget
  *   that pauses, a Caw mode, a decides.md handing Scope to the advisor and
  *   a delegate type in its folder; a memory document, a connection and a
- *   rule scoped to it. Two projects in it, the second with an account of
+ *   rule scoped to it; a skill, an MCP server, a hook and a harness
+ *   setting bound to it. Two projects in it, the second with an account of
  *   its own.
  * - b. Every reader answers each project the area's value with source
  *   `area`, and the second project its own account with source `project`:
@@ -16,18 +17,24 @@
  *   (`GET …/decides`), the delegate type catalog (`GET …/delegate-types`),
  *   the memory document a session there launches with (core
  *   `sessionTakes`), the connection its sessions are granted
- *   (`namesForProject`) and the rule's scope (core `ruleInScope`). A
- *   project outside the area takes none of them.
+ *   (`namesForProject`), the rule's scope (core `ruleInScope`), and the
+ *   fleet rows a machine holding the project is sent as that project's
+ *   (project-placements.ts `projectRowsFor`), none of them every machine's
+ *   (`unbound`). A project outside the area takes none of them.
  * - c. Moved out (`PUT /api/projects/:id/area` null), the first project
  *   falls back to the fleet's on every reader, and the move says so; put
  *   back, it takes them again.
  * - d. Forgotten and restored, the first project is in its area still.
  * - e. The area deleted: both projects are in none, nothing of them is
  *   deleted, the answer says what falls back ("1 project falls back to the
- *   fleet's account", the second keeping its own), the memory document
- *   scoped to it alone goes to the trash rather than reaching every
- *   project, and every reader answers the fleet's, the second project its
- *   own account.
+ *   fleet's account", the second keeping its own) and what went with it
+ *   (its rule, the fleet rows bound to it, the memory document scoped to it
+ *   alone, rather than that one reaching every project), and every reader
+ *   answers the fleet's, the second project its own account.
+ * - f. Undo never widens: a memory document scoped to the area alone, and a
+ *   hook bound to it, each deleted while the area stood, are refused their
+ *   Undo once the area went, in core's words, and stay gone; so is a
+ *   document scoped to a project alone once that project is forgotten.
  *
  *   bun scripts/probe-kit/run.ts areas-settings
  */
@@ -60,6 +67,8 @@ interface Made {
   area: string;
   connection: string;
   first: string;
+  /** The hook bound to the area, by its id. */
+  hook: string;
   outside: string;
   rule: string;
   second: string;
@@ -83,6 +92,14 @@ interface Read {
   memory: boolean;
   onCap: Sourced;
   placed: { accountId: string | null; why: string };
+  /** The fleet rows bound to the area that a machine holding the project is sent as its own, and whether any reaches every machine. */
+  rows: {
+    everyMachine: boolean;
+    hook: boolean;
+    mcp: boolean;
+    settings: boolean;
+    skill: boolean;
+  };
   rule: boolean;
   running: string[] | null;
   type: string | null;
@@ -94,6 +111,9 @@ const idOf = (answer: Answer): string =>
 const SCOPE_KIND = "scope";
 const TYPE = "probe-client-writer";
 const DOC = "probe-area-voice.md";
+const SKILL = "probe-area-skill";
+const MCP = "probe-area-server";
+const SETTINGS = "probe-area-settings";
 
 /** The area, its settings and folder, two projects in it, one outside, and its scoped rows. */
 const made = async (rig: Rig): Promise<Made> => {
@@ -180,9 +200,52 @@ const made = async (rig: Rig): Promise<Made> => {
     repeat: true,
     scope: { areaId: area },
   });
-  const all = [created, set, decides, type, own, ...placed, doc, granted, rule];
+  // The fleet rows bound to it: a skill and a server as their fetch and
+  // probe would store them (no source or server is reached here), a hook
+  // and a harness setting through their routes.
+  db.putSkill({
+    name: SKILL,
+    source: "probe:area",
+    areaId: area,
+    files: [
+      {
+        path: "SKILL.md",
+        contentBase64: Buffer.from(
+          "---\nname: probe-area-skill\ndescription: The client's voice.\n---\n"
+        ).toString("base64"),
+        executable: false,
+      },
+    ],
+  });
+  db.putMcpServer({ name: MCP, config: { command: "true" }, areaId: area });
+  const hook = crypto.randomUUID();
+  const hooked = await call("PUT", `/api/fleet/hooks/${hook}`, {
+    name: "Probe area hook",
+    enabled: true,
+    event: "Stop",
+    handler: { type: "command", command: "true" },
+    scope: "project",
+    areaId: area,
+  });
+  const settings = await call("PUT", `/api/fleet/claude-settings/${SETTINGS}`, {
+    settings: { cleanupPeriodDays: 30 },
+    areaId: area,
+  });
+  const all = [
+    created,
+    set,
+    decides,
+    type,
+    own,
+    ...placed,
+    doc,
+    granted,
+    rule,
+    hooked,
+    settings,
+  ];
   kit.check(
-    "a. made: an area with an account, a budget, a Caw mode, a decides.md and a delegate type; two projects in it, one with its own account; a document, a connection and a rule scoped to it",
+    "a. made: an area with an account, a budget, a Caw mode, a decides.md and a delegate type; two projects in it, one with its own account; a document, a connection and a rule scoped to it; a skill, a server, a hook and a harness setting bound to it",
     all.every((one) => one.status === 200) && !!(first && second && outside),
     JSON.stringify(all.map((one) => `${one.status} ${one.text.slice(0, 160)}`))
   );
@@ -192,6 +255,7 @@ const made = async (rig: Rig): Promise<Made> => {
     area,
     connection,
     first: first ?? "",
+    hook,
     outside: outside ?? "",
     rule: idOf(rule),
     second: second ?? "",
@@ -252,6 +316,22 @@ const read = async (rig: Rig, m: Made, projectId: string): Promise<Read> => {
     await call("GET", `/api/projects/${projectId}/delegate-types`)
   ).json as { types: { name: string; source: string }[] };
   const doc = db.listFleetMemoryDocs().find((one) => one.path === DOC);
+  // What a machine holding the project is sent of it, and of every machine.
+  const { projectRowsFor, unbound } =
+    await import("../../../packages/hub/src/project-placements");
+  const config = db.fleetConfig();
+  const sent = projectRowsFor(
+    config,
+    new Set([projectId]),
+    [],
+    MACHINE,
+    (id) => db.project(id)?.areaId ?? null
+  )[projectId];
+  const its = <T extends { projectId?: string }>(
+    rows: readonly T[] | undefined,
+    named: (row: T) => boolean
+  ): boolean =>
+    (rows ?? []).some((row) => named(row) && row.projectId === projectId);
   const rule = db.getRule(m.rule);
   const facts = { projectId, areaId: project.areaId };
   return {
@@ -278,6 +358,17 @@ const read = async (rig: Rig, m: Made, projectId: string): Promise<Read> => {
       from: decides.from[SCOPE_KIND] ?? "",
     },
     type: types.find((one) => one.name === TYPE)?.source ?? null,
+    rows: {
+      skill: its(sent?.skills, (row) => row.name === SKILL),
+      mcp: its(sent?.mcp, (row) => row.name === MCP),
+      hook: its(sent?.hooks, (row) => row.id === m.hook),
+      settings: its(sent?.harnessConfig, (row) => row.name === SETTINGS),
+      everyMachine:
+        unbound(config.skills).some((row) => row.name === SKILL) ||
+        unbound(config.mcp).some((row) => row.name === MCP) ||
+        unbound(config.hooks).some((row) => row.id === m.hook) ||
+        unbound(config.harnessConfig).some((row) => row.name === SETTINGS),
+    },
     memory: sessionTakes(doc?.scope, {
       ...facts,
       role: "leaf",
@@ -335,7 +426,14 @@ const inArea = (got: Read, m: Made, own: string | null): boolean => {
     got.type === "area" &&
     got.memory &&
     got.connection &&
-    got.rule
+    got.rule &&
+    same(got.rows, {
+      skill: true,
+      mcp: true,
+      hook: true,
+      settings: true,
+      everyMachine: false,
+    })
   );
 };
 
@@ -356,7 +454,14 @@ const onFleet = (got: Read, own: string | null): boolean =>
   got.type === null &&
   !got.memory &&
   !got.connection &&
-  !got.rule;
+  !got.rule &&
+  same(got.rows, {
+    skill: false,
+    mcp: false,
+    hook: false,
+    settings: false,
+    everyMachine: false,
+  });
 
 const readersLeg = async (rig: Rig, m: Made): Promise<void> => {
   const first = await read(rig, m, m.first);
@@ -435,6 +540,97 @@ const forgetLeg = async (rig: Rig, m: Made): Promise<void> => {
   );
 };
 
+/** What each Undo of `f` answers, and whether what it names is back. */
+interface Undone {
+  back: boolean;
+  status: number;
+  text: string;
+}
+
+/** Undo trash entry `id`, and whether `back` finds what it named after. */
+const undo = async (
+  rig: Rig,
+  id: number,
+  back: () => boolean
+): Promise<Undone> => {
+  const answer = await rig.call("POST", `/api/trash/${id}/restore`);
+  return { status: answer.status, text: answer.text, back: back() };
+};
+
+/** The trash entry a delete's answer names for its Undo. */
+const restoreOf = (answer: Answer): number =>
+  (answer.json as { restore?: number } | undefined)?.restore ?? -1;
+
+/** f, before the area goes: a document scoped to it alone, one to the outside project alone and its hook, each deleted. */
+const trashLeg = async (
+  rig: Rig,
+  m: Made
+): Promise<{ areaDoc: number; hook: number; projectDoc: number }> => {
+  const { call } = rig;
+  const docs = {
+    "probe-area-only.md": { role: "leaf", areaIds: [m.area] },
+    "probe-project-only.md": { role: "leaf", projectIds: [m.outside] },
+  };
+  const trashed: number[] = [];
+  for (const [path, scope] of Object.entries(docs)) {
+    await call("PUT", "/api/fleet/memory/docs", {
+      path,
+      content: "Only where it is scoped.",
+      scope,
+    });
+    trashed.push(
+      restoreOf(await call("DELETE", "/api/fleet/memory/docs", { path }))
+    );
+  }
+  const hook = restoreOf(await call("DELETE", `/api/fleet/hooks/${m.hook}`));
+  const [areaDoc = -1, projectDoc = -1] = trashed;
+  rig.kit.check(
+    "f. a document scoped to the area alone, one to a project alone and the area's hook are in the trash",
+    areaDoc > 0 && projectDoc > 0 && hook > 0,
+    JSON.stringify({ areaDoc, projectDoc, hook })
+  );
+  return { areaDoc, hook, projectDoc };
+};
+
+/** f, once the area went: each Undo refused in core's words, and nothing comes back; the project's document once its project is forgotten. */
+const undoLeg = async (
+  rig: Rig,
+  m: Made,
+  trashed: Awaited<ReturnType<typeof trashLeg>>
+): Promise<void> => {
+  const { areaWords } = await import("../../../packages/core/src/words/areas");
+  const docThere = (path: string) => () =>
+    rig.db.listFleetMemoryDocs().some((one) => one.path === path);
+  const refused = (one: Undone) =>
+    one.status === 409 && one.text === areaWords.undoUnbound && !one.back;
+  const areaDoc = await undo(
+    rig,
+    trashed.areaDoc,
+    docThere("probe-area-only.md")
+  );
+  const hook = await undo(
+    rig,
+    trashed.hook,
+    () => rig.db.getFleetHook(m.hook) !== undefined
+  );
+  rig.kit.check(
+    "f. the area gone, its document's and its hook's Undo are refused, and neither comes back to reach every project",
+    refused(areaDoc) && refused(hook),
+    JSON.stringify({ areaDoc, hook })
+  );
+  const forgot = await rig.call("DELETE", `/api/projects/${m.outside}`);
+  const projectDoc = await undo(
+    rig,
+    trashed.projectDoc,
+    docThere("probe-project-only.md")
+  );
+  rig.kit.check(
+    "f. its project forgotten, a document scoped to that project alone is refused its Undo, and stays gone",
+    forgot.status === 200 && refused(projectDoc),
+    JSON.stringify({ forgot: forgot.status, projectDoc })
+  );
+};
+
 const deleteLeg = async (rig: Rig, m: Made): Promise<void> => {
   const deleted = await rig.call("DELETE", `/api/areas/${m.area}`);
   const answer = deleted.json as
@@ -459,7 +655,10 @@ const deleteLeg = async (rig: Rig, m: Made): Promise<void> => {
       said.includes("2 projects fall back to the fleet's budget") &&
       said.includes("2 projects fall back to the fleet's Who decides") &&
       said.includes("1 rule scoped to it went with it.") &&
-      said.includes("1 memory document scoped to it alone went to the trash."),
+      said.includes(
+        "1 skill, 1 MCP server, 1 harness setting bound to it went with it."
+      ) &&
+      said.includes("1 memory document scoped to it alone went with it."),
     JSON.stringify({ status: deleted.status, text: deleted.text })
   );
   rig.kit.check(
@@ -510,7 +709,9 @@ export default {
       await readersLeg(rig, m);
       await moveLeg(rig, m);
       await forgetLeg(rig, m);
+      const trashed = await trashLeg(rig, m);
       await deleteLeg(rig, m);
+      await undoLeg(rig, m, trashed);
     } finally {
       await rm(scratch, { recursive: true, force: true });
     }

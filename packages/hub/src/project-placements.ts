@@ -13,6 +13,12 @@
  * (core `FleetSyncReport.placed`); the hub keeps one state per row per
  * machine, the worst of its places, naming the place ({@link foldPlaced}).
  *
+ * A row bound to an area (core `FleetPlacement.areaId`) is one of each
+ * project in that area as read now: sent under each such project as its own
+ * row, its `projectId` that project's ({@link projectRowsFor}). A row's key
+ * (a skill's or server's name, a hook's id) is the fleet's one, so a
+ * project's own row and its area's never share one.
+ *
  * The hub folder is a place too, but it is the hub's own git folder of
  * tasks, not a working tree a session runs in, so nothing is placed there.
  */
@@ -35,23 +41,32 @@ export interface PlacementPlace {
   projectId: string;
 }
 
-/** Whether a row is bound to a project rather than to every machine. */
+/** Whether a row is bound to a project or an area rather than to every machine. */
 const projectBound = (row: FleetPlacement): boolean =>
-  !!row.projectId && !!row.scope && row.scope !== "user";
+  !!(row.projectId || row.areaId) && !!row.scope && row.scope !== "user";
 
 /** The rows that are every machine's: the ones bound to no project. */
 export const unbound = <T extends FleetPlacement>(
   rows: readonly T[] | undefined
 ): T[] => (rows ?? []).filter((row) => !projectBound(row));
 
-/** The rows of `projectId` among `rows`. */
+/**
+ * The rows of `projectId` among `rows`: its own, then its area's (`areaId`),
+ * each of those as the project's own row.
+ */
 const boundTo = <T extends FleetPlacement>(
   rows: readonly T[] | undefined,
-  projectId: string
-): T[] =>
-  (rows ?? []).filter(
-    (row) => projectBound(row) && row.projectId === projectId
-  );
+  projectId: string,
+  areaId: string | null
+): T[] => {
+  const bound = (rows ?? []).filter(projectBound);
+  return [
+    ...bound.filter((row) => row.projectId === projectId),
+    ...bound
+      .filter((row) => !!areaId && row.areaId === areaId)
+      .map(({ areaId: _area, ...row }) => ({ ...row, projectId }) as T),
+  ];
+};
 
 /**
  * The rows one machine is sent of each project it holds (`held`): each
@@ -66,17 +81,22 @@ export const projectRowsFor = (
   >,
   held: ReadonlySet<string>,
   places: readonly PlacementPlace[],
-  machineId: string
+  machineId: string,
+  /** The area a project sits in now; null: none. */
+  areaOf: (projectId: string) => string | null
 ): Record<string, FleetProjectRows> => {
   const projects: Record<string, FleetProjectRows> = {};
   for (const projectId of held) {
+    const areaId = areaOf(projectId);
     const rows: FleetProjectRows = {
       ...noProjectRows(),
-      skills: boundTo(config.skills, projectId),
-      mcp: boundTo(config.mcp, projectId),
-      memory: boundTo(config.placedMemory, projectId),
-      hooks: boundTo(config.hooks, projectId),
-      harnessConfig: boundTo(config.harnessConfig, projectId),
+      skills: boundTo(config.skills, projectId, areaId),
+      mcp: boundTo(config.mcp, projectId, areaId),
+      // Placed documents are expanded to projects as the fleet's config is
+      // read (db `placedMemory`): none carries an area.
+      memory: boundTo(config.placedMemory, projectId, null),
+      hooks: boundTo(config.hooks, projectId, areaId),
+      harnessConfig: boundTo(config.harnessConfig, projectId, areaId),
     };
     if (
       rows.skills.length +

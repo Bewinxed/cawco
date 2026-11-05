@@ -273,13 +273,57 @@ const projectIdOf = async <T extends string | null | undefined>(
 ): Promise<T | string> =>
   asked ? ((await projectIdsOf([asked]))[0] ?? asked) : asked;
 
-/** The memory scope `scope` names, its projects by whole id. */
+/** The whole ids of the areas `asked` names, each by id, handle or name. */
+const areaIdsOf = async (asked: readonly string[]): Promise<string[]> => {
+  if (asked.length === 0) {
+    return [];
+  }
+  const { areas } = (await api("GET", "/api/areas")) as { areas: Listed[] };
+  return asked.map((one) => listedNamed(one, areas, "area").id);
+};
+
+/** {@link areaIdsOf} for one area field: null, undefined and blank go on as given. */
+const areaIdOf = async <T extends string | null | undefined>(
+  asked: T
+): Promise<T | string> =>
+  asked ? ((await areaIdsOf([asked]))[0] ?? asked) : asked;
+
+/** A fleet row's `areaId` parameter: bound to every project in an area instead of one. */
+const areaIdParameter = z
+  .string()
+  .nullable()
+  .optional()
+  .describe(
+    "Every project in one area instead (its id or name), as the area holds them when read. null: none."
+  );
+
+/**
+ * A fleet row's binding as its route takes it: its project or its area by
+ * whole id, each left out when not given.
+ */
+const bindingAsked = async (asked: {
+  areaId?: string | null;
+  projectId?: string | null;
+}): Promise<{ areaId?: string | null; projectId?: string | null }> => ({
+  ...(asked.projectId === undefined
+    ? {}
+    : { projectId: await projectIdOf(asked.projectId) }),
+  ...(asked.areaId === undefined
+    ? {}
+    : { areaId: await areaIdOf(asked.areaId) }),
+});
+
+/** The memory scope `scope` names, its projects and areas by whole id. */
 const scopeWithProjects = async (
   scope: MemoryScope | undefined
 ): Promise<MemoryScope | undefined> =>
-  scope?.projectIds
-    ? { ...scope, projectIds: await projectIdsOf(scope.projectIds) }
-    : scope;
+  scope && {
+    ...scope,
+    ...(scope.projectIds
+      ? { projectIds: await projectIdsOf(scope.projectIds) }
+      : {}),
+    ...(scope.areaIds ? { areaIds: await areaIdsOf(scope.areaIds) } : {}),
+  };
 
 /**
  * Whether a document's scope has every field `filter` gives: the same role,
@@ -300,7 +344,8 @@ const scopeHas = (
     (filter.model === undefined || filter.model === scope?.model) &&
     (filter.briefer === undefined || filter.briefer === scope?.briefer) &&
     lists(filter.delegateTypes, scope?.delegateTypes) &&
-    lists(filter.projectIds, scope?.projectIds)
+    lists(filter.projectIds, scope?.projectIds) &&
+    lists(filter.areaIds, scope?.areaIds)
   );
 };
 
@@ -390,6 +435,7 @@ const harnessConfigPlacement = {
     .describe(
       "One project's only: its sessions in every checkout and workspace of it. null: every machine."
     ),
+  areaId: areaIdParameter,
 };
 
 /** A plugin's or extension's code: one module, or one npm package. */
@@ -419,8 +465,10 @@ const harnessConfigHandler =
     package: pkg,
     enabled,
     projectId,
+    areaId,
   }: {
     action: string;
+    areaId?: string | null;
     enabled?: boolean;
     module?: string;
     name?: string;
@@ -442,9 +490,7 @@ const harnessConfigHandler =
       ...fieldsGiven({ settings, enabled }),
       ...(module === undefined ? {} : { module, package: null }),
       ...(pkg === undefined ? {} : { package: pkg, module: null }),
-      ...(projectId === undefined
-        ? {}
-        : { projectId: await projectIdOf(projectId) }),
+      ...(await bindingAsked({ projectId, areaId })),
     });
   };
 
@@ -694,6 +740,7 @@ export function adminTools() {
           .describe(
             "Install for one project only: it lands in every checkout and workspace of it. null: every machine."
           ),
+        areaId: areaIdParameter,
         contentHash: z
           .string()
           .optional()
@@ -701,7 +748,7 @@ export function adminTools() {
             "Leave out: the hub sets it for a folder install, pinning the files the person approves."
           ),
       },
-      async ({ action, name, source, projectId, contentHash }) => {
+      async ({ action, name, source, projectId, areaId, contentHash }) => {
         if (action === "list") {
           const fleet = (await api("GET", "/api/fleet")) as {
             skills?: unknown[];
@@ -738,9 +785,7 @@ export function adminTools() {
               source,
               ...(contentHash === undefined ? {} : { contentHash }),
               enabled: true,
-              ...(projectId === undefined
-                ? {}
-                : { projectId: await projectIdOf(projectId) }),
+              ...(await bindingAsked({ projectId, areaId })),
             })) as FleetSkillMeta
         );
       },
@@ -854,6 +899,7 @@ export function adminTools() {
           .describe(
             "One project's only: placed in its every checkout and workspace. null: every machine."
           ),
+        areaId: areaIdParameter,
         platforms: z
           .array(z.enum(MCP_PLATFORMS))
           .nullable()
@@ -870,6 +916,7 @@ export function adminTools() {
         config,
         enabled,
         projectId,
+        areaId,
         platforms,
         shared,
       }) => {
@@ -895,9 +942,7 @@ export function adminTools() {
         return await api("PUT", `/api/fleet/mcp/${encodeURIComponent(name)}`, {
           config,
           ...(enabled === undefined ? {} : { enabled }),
-          ...(projectId === undefined
-            ? {}
-            : { projectId: await projectIdOf(projectId) }),
+          ...(await bindingAsked({ projectId, areaId })),
           ...(platforms === undefined ? {} : { platforms }),
           ...(shared === undefined ? {} : { shared }),
         });
@@ -1118,6 +1163,7 @@ export function adminTools() {
           .describe(
             "One project's only: every session in its checkouts and workspaces runs it. null: every machine."
           ),
+        areaId: areaIdParameter,
       },
       async (args) => {
         const { action } = args;
@@ -1149,17 +1195,16 @@ export function adminTools() {
         // Only the fields given: the hub merges an update over the stored hook
         // and validates the result, so `update {id, enabled: false}` touches
         // nothing else. A create is validated the same way, from nothing.
-        const { action: _action, id: _id, projectId, ...fields } = args;
-        // A project's hook is bound by its scope as the hub stores it; null
-        // makes it every machine's again.
+        const { action: _action, id: _id, projectId, areaId, ...fields } = args;
+        // A project's or an area's hook is bound by its scope as the hub
+        // stores it; null for both makes it every machine's again.
+        const bound = await bindingAsked({ projectId, areaId });
         const given = {
           ...fields,
-          ...(projectId === undefined
+          ...bound,
+          ...(projectId === undefined && areaId === undefined
             ? {}
-            : {
-                scope: projectId ? "project" : null,
-                projectId: await projectIdOf(projectId),
-              }),
+            : { scope: bound.projectId || bound.areaId ? "project" : null }),
         };
         const body =
           action === "create"
@@ -1346,6 +1391,13 @@ export function adminTools() {
             delegateTypes: z.array(z.string()).min(1).optional(),
             model: z.string().min(1).optional(),
             projectIds: z.array(z.string()).min(1).optional(),
+            areaIds: z
+              .array(z.string())
+              .min(1)
+              .optional()
+              .describe(
+                "Areas, by id or name: every project in each, as read when a session launches."
+              ),
             briefer: z.literal(true).optional(),
           })
           .optional()

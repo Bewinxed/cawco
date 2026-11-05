@@ -17,7 +17,8 @@ const seen = (row: FleetMcpServer): Seen => ({
   live: row.enabled && row.auth?.state !== "failed",
   shape: JSON.stringify([
     row.config,
-    (row as { projectId?: string }).projectId ?? null,
+    row.projectId ?? null,
+    row.areaId ?? null,
     row.platforms ?? null,
     row.shared ?? false,
     row.auth?.mode ?? null,

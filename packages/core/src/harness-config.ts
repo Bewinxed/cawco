@@ -9,7 +9,7 @@
  * launch (agent fleet-harness-set.ts), never through a file written into a
  * checkout, and none of the person's own `claude`, `opencode` or `pi`.
  */
-import type { FleetPlacement } from "./fleet";
+import { type FleetPlacement, placementProblem } from "./fleet";
 import { unhandled } from "./unhandled";
 
 /** The three kinds, by the name the machine's report and the hub's rows use. */
@@ -138,8 +138,9 @@ export const harnessConfigProblem = (
   if (typeof row.enabled !== "boolean") {
     return "Say whether it is enabled.";
   }
-  if (row.scope && row.scope !== "user" && !row.projectId) {
-    return "A project's row needs its project.";
+  const unplaced = placementProblem(row, "A row");
+  if (unplaced) {
+    return unplaced;
   }
   const label = harnessConfigLabel(row.kind);
   if (row.kind === "claudeSettings") {

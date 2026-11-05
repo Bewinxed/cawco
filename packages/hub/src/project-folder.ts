@@ -7,7 +7,7 @@
  * AGENTS.md   you own it; agents propose
  * tasks/      one file per task
  * stages.md   stages, kinds, moves, views
- * views/  delegates/  routines/  skills/  knowledge/
+ * views/  delegates/  routines/  knowledge/
  * memory/  assets/  design/  decisions/
  * ```
  *
@@ -58,7 +58,7 @@ const PROJECTS_DIR = hubProjectsDir();
  * Where every area's folder lives (core areas.ts): `areas/` beside
  * `projects/`. An area's folder is kept by this module as a project's is,
  * under its key `area:<id>` ({@link areaFolder}): its `decides.md`,
- * `delegates/` and `skills/`, read by the project's own loaders, every
+ * `delegates/`, read by the project's own loaders, every
  * change a commit.
  */
 const AREAS_DIR = hubAreasDir();

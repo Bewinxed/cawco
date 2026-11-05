@@ -1,7 +1,15 @@
 import type { Area, OwnSettings } from "@cawco/core";
 import { asc, count, eq, max } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { areas, projects, rules } from "./schema";
+import {
+  areas,
+  fleetHarnessConfig,
+  fleetHooks,
+  mcpServers,
+  projects,
+  rules,
+  skills,
+} from "./schema";
 
 /** An area as the hub keeps it: core `Area`, its columns one for one. */
 export type AreaRow = typeof areas.$inferSelect & Area;
@@ -9,8 +17,14 @@ export type AreaRow = typeof areas.$inferSelect & Area;
 /** What an area's settings write changes: any of its own settings, null clearing one. */
 export type AreaSettingsChange = Partial<OwnSettings>;
 
-/** What a delete took: the projects it ungrouped, and how many rules scoped to it went with it. */
+/**
+ * What a delete took: the projects it ungrouped, and how many rules and
+ * fleet rows (skills, MCP servers, hooks, harness settings) bound to it went
+ * with it.
+ */
 export interface AreaDeleted {
+  /** The fleet rows bound to it, by kind. */
+  fleetRows: { hooks: number; mcp: number; settings: number; skills: number };
   projects: string[];
   rules: number;
 }
@@ -24,8 +38,8 @@ export interface AreasDb {
   readonly create: (id: string, name: string) => AreaRow;
   /**
    * Deletes an area: its projects ungrouped (`ON DELETE SET NULL`), the
-   * memory, connection and rule scopes naming it gone with it. Undefined:
-   * there was no such area.
+   * memory, connection and rule scopes naming it and the fleet rows bound to
+   * it gone with it. Undefined: there was no such area.
    */
   readonly delete: (id: string) => AreaDeleted | undefined;
   readonly get: (id: string) => AreaRow | undefined;
@@ -82,8 +96,26 @@ export const areasDb = (db: BunSQLiteDatabase): AreasDb => {
             .from(rules)
             .where(eq(rules.scopeAreaId, id))
             .get()?.n ?? 0;
+        const bound = (
+          table:
+            | typeof skills
+            | typeof mcpServers
+            | typeof fleetHooks
+            | typeof fleetHarnessConfig
+        ) =>
+          tx
+            .select({ n: count() })
+            .from(table)
+            .where(eq(table.areaId, id))
+            .get()?.n ?? 0;
+        const fleetRows = {
+          skills: bound(skills),
+          mcp: bound(mcpServers),
+          hooks: bound(fleetHooks),
+          settings: bound(fleetHarnessConfig),
+        };
         tx.delete(areas).where(eq(areas.id, id)).run();
-        return { projects: ungrouped, rules: scoped };
+        return { projects: ungrouped, rules: scoped, fleetRows };
       }),
     get,
     list: () =>

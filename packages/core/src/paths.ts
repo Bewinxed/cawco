@@ -1023,8 +1023,8 @@ export const hubProjectsDir = (): string =>
 
 /**
  * Where the hub keeps every area's folder (core areas.ts): `areas/` beside
- * its database, each `areas/<id>/` holding the area's `decides.md`,
- * `delegates/` and `skills/`. Only on the hub's machine does it exist.
+ * its database, each `areas/<id>/` holding the area's `decides.md` and
+ * `delegates/`. Only on the hub's machine does it exist.
  */
 export const hubAreasDir = (): string => join(dirname(hubDbPath()), "areas");
 

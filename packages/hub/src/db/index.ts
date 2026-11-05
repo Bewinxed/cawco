@@ -18,6 +18,7 @@ import type {
   FleetMarketplace,
   FleetMcpConfig,
   FleetMcpServer,
+  FleetPlacement,
   FleetPlugin,
   FleetRefresh,
   FleetScope,
@@ -1910,6 +1911,8 @@ export interface DbShape {
     config: FleetMcpServer["config"];
     enabled?: boolean;
     projectId?: string | null;
+    /** As `projectId`, bound to every project in that area instead. */
+    areaId?: string | null;
     platforms?: McpPlatform[] | null;
     shared?: boolean;
   }) => FleetMcpServer;
@@ -1971,6 +1974,8 @@ export interface DbShape {
     enabled?: boolean;
     /** As {@link putMcpServer}'s: bound to a project, null for every machine, left out kept. */
     projectId?: string | null;
+    /** As {@link putMcpServer}'s: bound to every project in that area instead. */
+    areaId?: string | null;
     hash?: string;
     bytes?: number;
     error?: string;
@@ -2430,6 +2435,7 @@ export interface DbShape {
     source: string;
     enabled?: boolean;
     projectId?: string | null;
+    areaId?: string | null;
   }) => FleetSkillMeta;
   /** A project's starters as last written, and what was done with them (project-starters.ts). */
   readonly starters: StartersDb;
@@ -2841,9 +2847,7 @@ const skillMeta = (
 ): FleetSkillMeta => ({
   name: row.name,
   source: row.source,
-  ...(row.projectId
-    ? { projectId: row.projectId, scope: row.scope ?? "project" }
-    : {}),
+  ...bindingOf(row, "project"),
   ...fetched(row),
 });
 
@@ -2936,18 +2940,51 @@ const noteColumns = ({ lastRefresh, checked }: SourceNote) => ({
     : {}),
 });
 
+/** What a write asks of a fleet row's binding: a project, an area, null for every machine, left out as it was. */
+interface BindingAsk {
+  areaId?: string | null;
+  projectId?: string | null;
+}
+
+/** A fleet row's binding as its columns keep it. */
+interface BindingColumns {
+  areaId: string | null;
+  projectId: string | null;
+  scope: FleetScope | null;
+}
+
 /**
- * A fleet row's placement after a write: `asked` binds it to that project
- * (under `scope`), null makes it every machine's, and left out keeps what it
- * was (`stored`).
+ * A fleet row's placement after a write: a project or an area asked binds
+ * it there (under `scope`) and lets go of the other, null for both makes it
+ * every machine's, and neither asked keeps what it was (`stored`).
  */
 const placementOf = (
-  asked: string | null | undefined,
-  stored: string | null | undefined,
+  asked: BindingAsk,
+  stored: Partial<Pick<BindingColumns, "areaId" | "projectId">> | undefined,
   scope: FleetScope
-): { projectId: string | null; scope: FleetScope | null } => {
-  const bound = asked === undefined ? (stored ?? null) : asked;
-  return { projectId: bound, scope: bound ? scope : null };
+): BindingColumns => {
+  const kept = asked.projectId === undefined && asked.areaId === undefined;
+  const projectId = (kept ? stored?.projectId : asked.projectId) ?? null;
+  const areaId = (kept ? stored?.areaId : asked.areaId) ?? null;
+  return { projectId, areaId, scope: projectId || areaId ? scope : null };
+};
+
+/**
+ * A fleet row's binding as the wire carries it (core `FleetPlacement`): its
+ * project or its area under its scope (`fallback` when none is stored), or
+ * nothing for every machine's.
+ */
+const bindingOf = (
+  row: BindingColumns,
+  fallback: FleetScope
+): Pick<FleetPlacement, "areaId" | "projectId" | "scope"> => {
+  if (row.projectId) {
+    return { projectId: row.projectId, scope: row.scope ?? fallback };
+  }
+  if (row.areaId) {
+    return { areaId: row.areaId, scope: row.scope ?? fallback };
+  }
+  return {};
 };
 
 /** A subagent row as everything outside the hub reads it. */
@@ -2977,6 +3014,7 @@ const hookOf = (row: {
   hash: string;
   scope: FleetScope | null;
   projectId: string | null;
+  areaId: string | null;
 }): FleetHook => ({
   id: row.id,
   name: row.name,
@@ -2988,6 +3026,7 @@ const hookOf = (row: {
   hash: row.hash,
   ...(row.scope ? { scope: row.scope } : {}),
   ...(row.projectId ? { projectId: row.projectId } : {}),
+  ...(row.areaId ? { areaId: row.areaId } : {}),
 });
 
 /** A stored harness config row in the shape both ends of the fleet share; none for settings the hub's key does not open. */
@@ -3004,9 +3043,7 @@ const harnessConfigOf = (
           ...(row.settings ? { settings: row.settings } : {}),
           ...(row.module ? { module: row.module } : {}),
           ...(row.package ? { package: row.package } : {}),
-          ...(row.projectId
-            ? { projectId: row.projectId, scope: row.scope ?? "project" }
-            : {}),
+          ...bindingOf(row, "project"),
         },
       ];
 
@@ -6755,13 +6792,15 @@ const make = async (path: string): Promise<DbShape> => {
               authMode,
               authError,
               projectId,
+              areaId,
+              scope,
               platforms,
               shared,
             }) => ({
               name,
               config,
               enabled,
-              ...(projectId ? { projectId, scope: "local" as const } : {}),
+              ...bindingOf({ projectId, areaId, scope }, "local"),
               ...(platforms ? { platforms } : {}),
               ...(shared ? { shared } : {}),
               auth: mcpAuthOf(name, authMode, authError),
@@ -6784,11 +6823,13 @@ const make = async (path: string): Promise<DbShape> => {
               name: skills.name,
               hash: skills.hash,
               projectId: skills.projectId,
+              areaId: skills.areaId,
+              scope: skills.scope,
             })
             .from(skills)
             .where(eq(skills.enabled, true))
             .all()
-            .flatMap(({ name, hash, projectId }) => {
+            .flatMap(({ name, hash, projectId, areaId, scope }) => {
               const files = hash
                 ? keptFiles(
                     `skill:${name}`,
@@ -6807,9 +6848,7 @@ const make = async (path: string): Promise<DbShape> => {
                       name,
                       hash,
                       files,
-                      ...(projectId
-                        ? { projectId, scope: "project" as const }
-                        : {}),
+                      ...bindingOf({ projectId, areaId, scope }, "project"),
                     },
                   ]
                 : [];
@@ -6935,7 +6974,15 @@ const make = async (path: string): Promise<DbShape> => {
         deniedTools: deniedToolNames(),
       };
     },
-    putMcpServer: ({ name, config, enabled, projectId, platforms, shared }) => {
+    putMcpServer: ({
+      name,
+      config,
+      enabled,
+      projectId,
+      areaId,
+      platforms,
+      shared,
+    }) => {
       const previous = db
         .select()
         .from(mcpServers)
@@ -6946,8 +6993,7 @@ const make = async (path: string): Promise<DbShape> => {
       if (changed) {
         db.delete(fleetMcpOauth).where(eq(fleetMcpOauth.name, name)).run();
       }
-      const placement = placementOf(projectId, previous?.projectId, "local");
-      const bound = placement.projectId;
+      const placement = placementOf({ projectId, areaId }, previous, "local");
       const asked = platforms?.length ? platforms : null;
       const runsOn =
         platforms === undefined ? (previous?.platforms ?? null) : asked;
@@ -6984,7 +7030,7 @@ const make = async (path: string): Promise<DbShape> => {
         name,
         config,
         enabled: enabled ?? true,
-        ...(bound ? { projectId: bound, scope: "local" as const } : {}),
+        ...bindingOf(placement, "local"),
         ...(runsOn ? { platforms: runsOn } : {}),
         ...(one ? { shared: one } : {}),
       };
@@ -7190,6 +7236,7 @@ const make = async (path: string): Promise<DbShape> => {
           error: skills.error,
           scope: skills.scope,
           projectId: skills.projectId,
+          areaId: skills.areaId,
           version: skills.version,
           lastRefresh: skills.lastRefresh,
           latestHash: skills.latestHash,
@@ -7218,6 +7265,7 @@ const make = async (path: string): Promise<DbShape> => {
       error,
       files,
       projectId,
+      areaId,
     }) => {
       const stored = db
         .select()
@@ -7259,7 +7307,7 @@ const make = async (path: string): Promise<DbShape> => {
       // What a source held and what its last fetch came to are that source's:
       // a row given another source has read neither from it yet.
       const carried = sourceColumnsOf(stored, source);
-      const placement = placementOf(projectId, stored?.projectId, "project");
+      const placement = placementOf({ projectId, areaId }, stored, "project");
       db.insert(skills)
         .values({ ...row, version, ...placement })
         .onConflictDoUpdate({
@@ -7296,13 +7344,13 @@ const make = async (path: string): Promise<DbShape> => {
       db.update(skills).set({ enabled }).where(eq(skills.name, name)).run();
       return skillMeta({ ...stored, enabled });
     },
-    stageSkill: ({ name, source, enabled, projectId }) => {
+    stageSkill: ({ name, source, enabled, projectId, areaId }) => {
       const stored = db
         .select()
         .from(skills)
         .where(eq(skills.name, name))
         .get();
-      const placement = placementOf(projectId, stored?.projectId, "project");
+      const placement = placementOf({ projectId, areaId }, stored, "project");
       if (!stored) {
         const row = {
           name,
@@ -7410,8 +7458,11 @@ const make = async (path: string): Promise<DbShape> => {
         settings: row.settings ?? null,
         module: row.module ?? null,
         package: row.package ?? null,
-        scope: row.projectId ? (row.scope ?? "project") : null,
-        projectId: row.projectId ?? null,
+        ...placementOf(
+          { projectId: row.projectId ?? null, areaId: row.areaId ?? null },
+          undefined,
+          row.scope ?? "project"
+        ),
         updatedAt: new Date(),
       };
       db.insert(fleetHarnessConfig)
@@ -7425,6 +7476,7 @@ const make = async (path: string): Promise<DbShape> => {
             package: values.package,
             scope: values.scope,
             projectId: values.projectId,
+            areaId: values.areaId,
             updatedAt: values.updatedAt,
           },
         })
@@ -7454,6 +7506,7 @@ const make = async (path: string): Promise<DbShape> => {
         hash: hashHookMaterial(hook),
         scope: hook.scope ?? null,
         projectId: hook.projectId ?? null,
+        areaId: hook.areaId ?? null,
         updatedAt: new Date(),
       };
       db.insert(fleetHooks)
@@ -7473,6 +7526,7 @@ const make = async (path: string): Promise<DbShape> => {
             hash: values.hash,
             scope: values.scope,
             projectId: values.projectId,
+            areaId: values.areaId,
             updatedAt: values.updatedAt,
           },
         })
@@ -7541,6 +7595,7 @@ const make = async (path: string): Promise<DbShape> => {
         ...(row.script ? { script: row.script } : {}),
         ...(row.scope ? { scope: row.scope } : {}),
         ...(row.projectId ? { projectId: row.projectId } : {}),
+        ...(row.areaId ? { areaId: row.areaId } : {}),
       };
     },
     getFleetMemory,

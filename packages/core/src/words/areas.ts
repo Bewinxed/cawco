@@ -44,6 +44,15 @@ export const areaWords = {
     "A budget has both an amount and a period (day or month), or neither.",
   capAmount: "The budget is a number of dollars above 0.",
   noAccount: (id: string) => `The hub keeps no account ${id}.`,
+  /** A fleet row asked to bind to a project and an area at once. */
+  boundTwice:
+    "A row is bound to one project or one area, not both: name projectId or areaId.",
+  /**
+   * An Undo refused because the project or area that bound the item went
+   * while it waited (hub db/trash.ts `unbound`).
+   */
+  undoUnbound:
+    "It can't come back as it was: the project or area it was bound to went while it waited, and without it, it would reach every project. Make it again, bound where it belongs.",
   /** A scope naming an area the hub has none of. */
   scopeNoArea: (id: string) => `There is no area ${id}.`,
 
@@ -60,9 +69,19 @@ export const areaWords = {
   deletedAlone: (name: string) => `${name} is deleted; no project was in it.`,
   deleted: (name: string, count: number) =>
     `${name} is deleted; ${count === 1 ? "its 1 project is" : `its ${count} projects are`} in no area now.`,
-  /** The memory documents scoped to an area alone go to the trash with it. */
+  /** The memory documents scoped to an area alone go with it: none reaches every project. */
   docsTrashed: (count: number) =>
-    `${count === 1 ? "1 memory document" : `${count} memory documents`} scoped to it alone went to the trash.`,
+    `${count === 1 ? "1 memory document" : `${count} memory documents`} scoped to it alone went with it.`,
+  /** A count of one kind of fleet row, as `fleetRowsGone` lists them. */
+  fleetRow: {
+    skills: (n: number) => (n === 1 ? "1 skill" : `${n} skills`),
+    mcp: (n: number) => (n === 1 ? "1 MCP server" : `${n} MCP servers`),
+    hooks: (n: number) => (n === 1 ? "1 hook" : `${n} hooks`),
+    settings: (n: number) =>
+      n === 1 ? "1 harness setting" : `${n} harness settings`,
+  },
+  /** The fleet rows bound to an area go with it, by kind (`2 skills, 1 hook`). */
+  fleetRowsGone: (rows: string) => `${rows} bound to it went with it.`,
   /** The rules scoped to an area go with it. */
   rulesGone: (count: number) =>
     `${count === 1 ? "1 rule" : `${count} rules`} scoped to it went with it.`,

@@ -59,7 +59,29 @@ type Untrashed =
   /** Its window passed, its project went, or it was never trashed. */
   | { ok: false; why: "gone" }
   /** Something of the same key was made while it waited; that one stays. */
-  | { ok: false; why: "taken" };
+  | { ok: false; why: "taken" }
+  /**
+   * The project or area that bound it went while it waited, so it cannot
+   * come back as it was: back without that binding it would reach every
+   * project, and nothing comes back wider than it went.
+   */
+  | { ok: false; why: "unbound" };
+
+/**
+ * The tables whose rows narrow an item to some projects (a memory
+ * document's projects and areas): an item that had some and gets none back
+ * would come back reaching every project, so it does not come back.
+ */
+const NARROWING = new Set([
+  "fleet_memory_doc_projects",
+  "fleet_memory_doc_areas",
+]);
+
+/** The refusal a restore is rolled back with when what bound the item went. */
+class Unbound extends Error {}
+
+/** SQLite's code for a key naming a row that is not there. */
+const FOREIGN_KEY = new Set(["SQLITE_CONSTRAINT_FOREIGNKEY"]);
 
 export interface TrashDb {
   /**
@@ -73,7 +95,9 @@ export interface TrashDb {
    * Puts an item trashed at `at` − {@link UNDO_MS} or later back, every
    * column as it was. A row that hangs off it and can no longer stand (the
    * session or project it named went meanwhile) stays gone, as a cascade
-   * would have taken it.
+   * would have taken it; but an item whose binding went (its own row names
+   * a project or area gone since, or it was narrowed to some and none is
+   * left) does not come back at all (`unbound`): it never widens.
    */
   readonly take: (id: number, at: number) => Untrashed;
 }
@@ -214,16 +238,62 @@ const TAKEN = new Set([
 ]);
 
 /**
- * Whether `error` is a key taken. Drizzle wraps the driver's error ("Failed
- * to run the query …"), so its code is looked for down the cause chain.
+ * Whether `error` carries one of `codes`. Drizzle wraps the driver's error
+ * ("Failed to run the query …"), so its code is looked for down the cause
+ * chain.
  */
-const taken = (error: unknown): boolean => {
+const coded = (error: unknown, codes: ReadonlySet<string>): boolean => {
   for (let at: unknown = error; at instanceof Error; at = at.cause) {
-    if (TAKEN.has((at as Error & { code?: string }).code ?? "")) {
+    if (codes.has((at as Error & { code?: string }).code ?? "")) {
       return true;
     }
   }
   return false;
+};
+
+/** Whether `error` is a key taken: the item's name or id is in use again. */
+const taken = (error: unknown): boolean => coded(error, TAKEN);
+
+/**
+ * The item's own rows back, whole or not at all: one naming a project or
+ * area gone since is its binding gone (`Unbound`).
+ */
+const putOwnBack = (tx: Tx, own: TrashedRows): void => {
+  for (const row of own.rows) {
+    try {
+      tx.transaction((inner) => insert(inner, own.table, row));
+    } catch (error) {
+      if (coded(error, FOREIGN_KEY)) {
+        throw new Unbound(own.table, { cause: error });
+      }
+      throw error;
+    }
+  }
+};
+
+/**
+ * What hangs off the item back, each row that can still stand; a row naming
+ * something gone since stays gone with it. An item narrowed to some
+ * projects that gets none of them back is unbound (`Unbound`).
+ */
+const putHangingBack = (tx: Tx, hanging: readonly TrashedRows[]): void => {
+  let narrowed = 0;
+  let narrowedBack = 0;
+  for (const each of hanging) {
+    const narrows = NARROWING.has(each.table);
+    for (const row of each.rows) {
+      narrowed += narrows ? 1 : 0;
+      try {
+        tx.transaction((inner) => insert(inner, each.table, row));
+        narrowedBack += narrows ? 1 : 0;
+      } catch {
+        // What it named went while it waited: it stays gone with it.
+      }
+    }
+  }
+  if (narrowed > 0 && narrowedBack === 0) {
+    throw new Unbound("every project it was narrowed to went");
+  }
 };
 
 export const trashDb = (db: BunSQLiteDatabase): TrashDb => ({
@@ -285,23 +355,17 @@ export const trashDb = (db: BunSQLiteDatabase): TrashDb => ({
           return { ok: false, why: "gone" };
         }
         const [own, ...hanging] = entry.rows;
-        // The item itself goes back whole or not at all.
-        for (const row of own?.rows ?? []) {
-          insert(tx, own.table, row);
+        if (own) {
+          putOwnBack(tx, own);
         }
-        for (const each of hanging) {
-          for (const row of each.rows) {
-            try {
-              tx.transaction((inner) => insert(inner, each.table, row));
-            } catch {
-              // What it named went while it waited: it stays gone with it.
-            }
-          }
-        }
+        putHangingBack(tx, hanging);
         tx.delete(configTrash).where(eq(configTrash.id, id)).run();
         return { ok: true, kind: entry.kind, key: entry.key };
       });
     } catch (error) {
+      if (error instanceof Unbound) {
+        return { ok: false, why: "unbound" };
+      }
       if (taken(error)) {
         return { ok: false, why: "taken" };
       }

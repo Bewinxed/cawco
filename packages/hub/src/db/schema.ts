@@ -170,6 +170,13 @@ const projectKey = () =>
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" });
 
+/**
+ * A fleet row's area (core `FleetPlacement.areaId`): bound to every project
+ * in it as read now, in place of one project; the row goes with its area.
+ */
+const fleetRowArea = () =>
+  text("area_id").references(() => areas.id, { onDelete: "cascade" });
+
 /** A row that goes with its area: deleted when the area is. */
 const areaKey = () =>
   text("area_id")
@@ -429,8 +436,9 @@ export const sshMachines = sqliteTable(
  * project may sit in, carrying the settings the fleet carries. Each setting
  * column mirrors the project's own, null for none: a project in the area
  * takes the area's where it sets none itself, the fleet's where the area
- * sets none too (core `settingsInEffect`). Its `decides.md`, `delegates/`
- * and `skills/` live in its folder on the hub (`areas/<id>/`). It has no
+ * sets none too (core `settingsInEffect`). Its `decides.md` and `delegates/`
+ * live in its folder on the hub (`areas/<id>/`); its skills, MCP servers,
+ * hooks and harness settings are fleet rows bound to it (`area_id`). It has no
  * places, board, conversation or routines; deleting it ungroups its
  * projects (`projects.area_id` set null) and deletes nothing of them.
  */
@@ -2027,6 +2035,8 @@ export const mcpServers = sqliteTable("mcp_servers", {
    */
   scope: text("scope").$type<FleetScope>(),
   projectId: text("project_id"),
+  /** Bound to every project in one area instead (`fleetRowArea`). */
+  areaId: fleetRowArea(),
   /**
    * The machine platforms it runs on (`FleetMcpServer.platforms`): a machine
    * of any other is never sent it. Null: every machine.
@@ -2199,6 +2209,8 @@ export const skills = sqliteTable(
      */
     scope: text("scope").$type<FleetScope>(),
     projectId: text("project_id"),
+    /** Bound to every project in one area instead (`fleetRowArea`). */
+    areaId: fleetRowArea(),
     createdAt: stampedNow("created_at"),
   },
   // Every column the fleet's listing reads (db/index.ts `listSkills`), so it
@@ -3190,6 +3202,8 @@ const hookColumns = () => ({
   hash: text("hash").notNull(),
   scope: text("scope").$type<FleetScope>(),
   projectId: text("project_id"),
+  /** Bound to every project in one area instead (core `FleetPlacement.areaId`). */
+  areaId: text("area_id"),
 });
 
 /**
@@ -3214,6 +3228,8 @@ export const fleetHooks = sqliteTable("fleet_hooks", {
   /** A disabled hook stays here and is registered nowhere. */
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   ...hookColumns(),
+  /** Bound to every project in one area instead (`fleetRowArea`). */
+  areaId: fleetRowArea(),
   createdAt: stampedNow("created_at"),
   updatedAt: stampedNow("updated_at"),
 });
@@ -3241,6 +3257,8 @@ export const fleetHarnessConfig = sqliteTable("fleet_harness_config", {
   package: text("package"),
   scope: text("scope").$type<FleetScope>(),
   projectId: text("project_id"),
+  /** Bound to every project in one area instead (`fleetRowArea`). */
+  areaId: fleetRowArea(),
   createdAt: stampedNow("created_at"),
   updatedAt: stampedNow("updated_at"),
 });

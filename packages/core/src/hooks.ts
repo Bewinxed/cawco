@@ -15,7 +15,7 @@
  */
 
 import { USER_LAYER_SHELL, userLayerLabel } from "./claude-dirs";
-import type { FleetPlacement } from "./fleet";
+import { type FleetPlacement, placementProblem } from "./fleet";
 import type { HarnessKind } from "./harness";
 
 /** Every lifecycle point a hook can attach to. */
@@ -959,9 +959,9 @@ export function hookProblem(draft: HookDraftForm): Record<string, string> {
     }
   }
 
-  if (draft.scope && draft.scope !== "user" && !draft.projectId) {
-    wrong.scope =
-      "A project-bound hook needs a project. Choose one, or make it fleet-wide.";
+  const unplaced = placementProblem(draft, "A hook");
+  if (unplaced) {
+    wrong.scope = unplaced;
   }
 
   return wrong;

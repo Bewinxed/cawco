@@ -2549,6 +2549,13 @@
       "when": 1793858723278,
       "tag": "0371_areas",
       "breakpoints": true
+    },
+    {
+      "idx": 372,
+      "version": "6",
+      "when": 1793862114126,
+      "tag": "0372_area_fleet_rows",
+      "breakpoints": true
     }
   ]
 }
