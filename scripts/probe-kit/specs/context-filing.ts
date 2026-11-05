@@ -32,6 +32,11 @@
  * session waits files nothing then: its filing goes once that next turn
  * ends, a turn of its own, never joined into the waiting message's.
  *
+ * (o) A 200K claude-haiku-4-5 session, whose window Claude Code resolves to
+ * source "auto" unless one is set, files at 137,000, and past 167,000
+ * Claude Code compacts it on its own before its next request, which
+ * carries the Open items section: CawCo hands every session a window.
+ *
  * (f) On a 1M Claude session, it files at about 937,000 (Claude Code
  * compacts it at 967,000): not at 930,000, at 937,000. (n) Then a turn at
  * 970,000, past that point, and the next message: Claude Code compacts it
@@ -69,6 +74,7 @@
  */
 import {
   claudeCompactsAt,
+  claudeEnvWindow,
   opencodeCompactsAt,
   piCompactsAt,
 } from "../../../packages/agent/src/harnesses/compaction-points";
@@ -114,6 +120,8 @@ const FOCUS_TAIL = COMPACT_FOCUS.slice(
 );
 /** A model whose window Claude Code knows as 1M natively. */
 const CLAUDE_1M = "claude-sonnet-5";
+/** A model whose 200K window Claude Code resolves to source "auto" when no window is set (tsk-231). */
+const CLAUDE_200K = "claude-haiku-4-5";
 /** The scratch fleet's pi and OpenCode models' windows (scratch-fleet.ts `furnish`). */
 const MOCK_WINDOW = 100_000;
 
@@ -209,13 +217,36 @@ const rules = (kit: Kit) => {
     !fileDue({ compactsAt, reported: compactsAt, room: 0 })
   );
   check(
-    "Claude Code compacts a 1M window at 967,000 and a 200K one at 167,000",
-    claudeCompactsAt({ contextWindow: 1_000_000, maxOutputTokens: 128_000 }) ===
-      967_000 &&
-      claudeCompactsAt({ contextWindow: 200_000, maxOutputTokens: 64_000 }) ===
-        167_000 &&
-      claudeCompactsAt({ contextWindow: 200_000, maxOutputTokens: 8000 }) ===
-        179_000
+    "Claude Code handed a 1,000,000 window compacts a 1M model at 967,000 and a 200K one at 167,000",
+    claudeCompactsAt(
+      { contextWindow: 1_000_000, maxOutputTokens: 128_000 },
+      1_000_000
+    ) === 967_000 &&
+      claudeCompactsAt(
+        { contextWindow: 200_000, maxOutputTokens: 64_000 },
+        1_000_000
+      ) === 167_000 &&
+      claudeCompactsAt(
+        { contextWindow: 200_000, maxOutputTokens: 8000 },
+        1_000_000
+      ) === 179_000
+  );
+  check(
+    "Claude Code handed a 150,000 window compacts a 200K model at 117,000",
+    claudeCompactsAt(
+      { contextWindow: 200_000, maxOutputTokens: 64_000 },
+      150_000
+    ) === 117_000
+  );
+  check(
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW reads as Claude Code reads it: k and m, held to 100,000–1,000,000, none when not a count",
+    claudeEnvWindow("150000") === 150_000 &&
+      claudeEnvWindow("150k") === 150_000 &&
+      claudeEnvWindow("1m") === 1_000_000 &&
+      claudeEnvWindow("50000") === 100_000 &&
+      claudeEnvWindow("2m") === 1_000_000 &&
+      claudeEnvWindow("auto") === undefined &&
+      claudeEnvWindow(undefined) === undefined
   );
   check(
     "pi compacts at its window less its reserve, never with compaction off",
@@ -698,6 +729,69 @@ const midTurn = async (kit: Kit, fleet: KitFleet, read: Reads) => {
   );
 };
 
+/**
+ * (o) A 200K claude-haiku-4-5 session driven past its point: CawCo hands it
+ * a window (claude.ts `SESSION_DEFAULTS`), so Claude Code enforces
+ * its threshold. It files at 137,000, and Claude Code compacts it on its own
+ * before the request that would carry 170,000.
+ */
+const haikuPast = async (kit: Kit, fleet: KitFleet, read: Reads) => {
+  const { check } = kit;
+  const { lines, rise } = read;
+  const id = await fleet.spawn("claude", "Filing haiku past", undefined, {
+    model: CLAUDE_200K,
+  });
+  await read.turn(id, "hello");
+  await read.turn(id, "at", 137_000);
+  const started = await read.filingAfter(id, 0);
+  check(
+    "(o) a claude-haiku-4-5 session files at 137,000, Claude Code compacting it at 167,000",
+    started?.said.fill?.compactsAt === 167_000 &&
+      started?.said.fill?.tokens === 137_000,
+    JSON.stringify({ lines: lines(id) })
+  );
+  await until(
+    "(o) its filing ended",
+    () => read.filings(id)[0]?.said.stage,
+    (stage) => stage === "filed",
+    120_000
+  ).catch(() => undefined);
+  await read.turn(id, "past the point", 170_000);
+  const asked = fleet.seen.length;
+  await fleet.send(id, "after the haiku point");
+  const own = await until(
+    "(o) Claude Code's own compaction's line",
+    () => lines(id).find((line) => line.said.kind === "compacted"),
+    Boolean,
+    180_000
+  ).catch(() => undefined);
+  check(
+    "(o) Claude Code compacts a claude-haiku-4-5 session past 167,000 on its own, its filing first",
+    own?.said.trigger === "auto" &&
+      own.said.harness === "claude" &&
+      own.said.filed === "filed" &&
+      own.said.tokens !== null &&
+      own.said.tokens !== undefined &&
+      own.said.tokens >= 170_000 &&
+      !rise(id),
+    JSON.stringify({ lines: lines(id), rise: rise(id) })
+  );
+  const next = await until(
+    "(o) the request after Claude Code's own compaction",
+    () =>
+      fleet.seen
+        .slice(asked)
+        .find((one) => one.last.includes("after the haiku point")),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  check(
+    "(o) its compact boundary comes before the request that would carry 170,000: that request carries the Open items section",
+    !!next?.body.includes(OPEN_ITEMS),
+    next ? next.body.slice(0, 2000) : "(no request)"
+  );
+};
+
 /** (f) A 1M Claude session, compacted by Claude Code at 967,000. */
 const claude1m = async (kit: Kit, fleet: KitFleet, read: Reads) => {
   const { check } = kit;
@@ -1108,6 +1202,7 @@ const run = async (kit: Kit) => {
   const read = reads(fleet);
   await claude200k(kit, fleet, read);
   await midTurn(kit, fleet, read);
+  await haikuPast(kit, fleet, read);
   await claude1m(kit, fleet, read);
   await moveCompaction(kit, fleet, read);
   for (const harness of ["pi", "opencode"] as const) {

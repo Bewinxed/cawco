@@ -276,7 +276,7 @@ import {
   type SDKSessionMessage,
   withHarnessNote,
 } from "./claude-transcript";
-import { claudeCompactsAt } from "./compaction-points";
+import { claudeCompactsAt, claudeEnvWindow } from "./compaction-points";
 import { tailLines } from "./transcript-tail";
 
 /**
@@ -1567,6 +1567,23 @@ const scratchDirectory = (boundary: HarnessContext["boundary"]) =>
 const SESSION_SETTINGS = { totalTokensReminder: "off" } as const;
 
 /**
+ * Flag settings every session launches with under the fleet's Claude Code
+ * settings, which a fleet `claudeSettings` row overrides.
+ *
+ * `autoCompactWindow`: Claude Code compacts a session at its threshold only
+ * when its window is set ("Type: number of tokens, from 100000 to 1000000.
+ * Claude Code caps the value at your model's context window",
+ * https://code.claude.com/docs/en/settings-reference#autocompactwindow). On
+ * a window of source "auto", none set, it skips the threshold
+ * (`if(J$()&&!DEe(n,r)&&!S)return!1`, `function DEe(e,n){return
+ * xb(e,n).source!=="auto"}`, 2.1.318), and a 200K claude-haiku-4-5 at
+ * 170,000 tokens was not compacted (tsk-231). Set, every model's window is
+ * its context window, and it compacts where the hub files short of
+ * ({@link claudeCompactsAt}).
+ */
+const SESSION_DEFAULTS = { autoCompactWindow: 1_000_000 } as const;
+
+/**
  * Flag settings a fenced session (a memory curator or fleet-watch triage
  * run, {@link SpawnPayload.fence}) launches with besides: no claude.ai
  * account connectors. `strictMcpConfig` keeps every other MCP source out
@@ -1627,7 +1644,8 @@ const placedHookEntries = (
 
 /**
  * {@link claudeBoundaryOptions} with {@link SESSION_SETTINGS} in its
- * `settings` over the fleet's Claude Code settings (`fleetSettings`), the
+ * `settings` over the fleet's Claude Code settings (`fleetSettings`), those
+ * over {@link SESSION_DEFAULTS}, the
  * project's hooks placed at the session's folder (`placed`,
  * fleet-harness-set.ts) joined to the boundary's, and a fenced session's
  * {@link FENCE_SETTINGS} over them. The boundary's `PreToolUse` entry comes last of that event's. The
@@ -1656,8 +1674,10 @@ const sessionSettingsOptions = (
   return {
     ...bounded,
     settings: {
-      // The fleet's and the folder's project's settings, under every key
-      // CawCo sets itself ({@link launchedSettings}).
+      // The fleet's and the folder's project's settings, over CawCo's
+      // defaults and under every key CawCo sets itself ({@link
+      // launchedSettings}).
+      ...SESSION_DEFAULTS,
       ...fleetSettings,
       ...SESSION_SETTINGS,
       ...("settings" in bounded ? bounded.settings : {}),
@@ -1665,6 +1685,13 @@ const sessionSettingsOptions = (
       ...(fence ? FENCE_SETTINGS : {}),
     },
   };
+};
+
+/** The `autoCompactWindow` of a session's flag settings ({@link SESSION_DEFAULTS}), when it is a count. */
+const settingsWindow = (settings: unknown): number | undefined => {
+  const window = (settings as { autoCompactWindow?: unknown } | undefined)
+    ?.autoCompactWindow;
+  return typeof window === "number" ? window : undefined;
 };
 
 /**
@@ -2040,7 +2067,8 @@ const launchedSettings = (
  * What a session launched in `cwd` on `model` (none: Claude Code's default)
  * is started with that decides its `/` menu: its flag settings, the fleet's
  * and the folder's project's Claude Code settings ({@link launchedSettings})
- * under CawCo's own ({@link SESSION_SETTINGS}), as {@link
+ * over {@link SESSION_DEFAULTS} and under CawCo's own ({@link
+ * SESSION_SETTINGS}), as {@link
  * sessionSettingsOptions} merges them; its CLI flags ({@link
  * sessionExtraArgs}); and its model, which says the efforts `/effort` takes.
  * Its boundary and its placed hooks are left out: they decide what a command
@@ -2050,6 +2078,7 @@ const folderLaunch = async (cwd: string, model: string | undefined) => {
   const set = await readFleetHarnessSet();
   return {
     settings: {
+      ...SESSION_DEFAULTS,
       ...(set ? launchedSettings(set, await placeSetAt(cwd)) : {}),
       ...SESSION_SETTINGS,
     },
@@ -2279,6 +2308,15 @@ class ClaudeSession implements HarnessSession {
    */
   #answeredBy: string | undefined;
   #startedOn: string | undefined;
+  /**
+   * The auto-compact window its CLI was handed, which caps its model's
+   * ({@link claudeCompactsAt}): `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in its env,
+   * which Claude Code reads over its settings, else its flag settings'
+   * `autoCompactWindow` as launched and as each {@link #takeFleetSettings}
+   * applied them. Undefined when a fleet row set one that is not a count.
+   */
+  readonly #envWindow: number | undefined;
+  #settingsWindow: number | undefined;
   /** The permission mode: the one it started (or was adopted) with, each `setPermissionMode`, and the CLI's own word. */
   readonly #mode: SessionMode;
   /** The MCP servers it was launched with that are not the fleet's (CawCo's, a caller's): the CLI's own to keep, never changed by a fleet change. */
@@ -2397,6 +2435,8 @@ class ClaudeSession implements HarnessSession {
       launch
     );
     this.#flagSettings = handed;
+    this.#envWindow = claudeEnvWindow(env.CLAUDE_CODE_AUTO_COMPACT_WINDOW);
+    this.#settingsWindow = settingsWindow(launchedOptions.settings);
     const handle = query({
       prompt: input,
       options: {
@@ -2917,12 +2957,17 @@ class ClaudeSession implements HarnessSession {
             neutral.lastRequestAt = this.#lastRequestAt;
           }
           // Where Claude Code compacts it on its own: its model's window and
-          // output, as this turn's usage of the model that answered it says.
+          // output, as this turn's usage of the model that answered it says,
+          // the window capped at the one it was handed.
           const usage = message.modelUsage as
             Record<string, ModelUsage | undefined> | undefined;
           const served =
             usage?.[this.#answeredBy ?? ""] ?? usage?.[this.#startedOn ?? ""];
-          const compactsAt = served ? claudeCompactsAt(served) : undefined;
+          const window = this.#envWindow ?? this.#settingsWindow;
+          const compactsAt =
+            served && window !== undefined
+              ? claudeCompactsAt(served, window)
+              : undefined;
           if (neutral.type === "result" && compactsAt !== undefined) {
             neutral.compactsAt = compactsAt;
           }
@@ -3944,6 +3989,7 @@ class ClaudeSession implements HarnessSession {
       patch as Parameters<Query["applyFlagSettings"]>[0]
     );
     this.#flagSettings = next;
+    this.#settingsWindow = settingsWindow(next);
     return { applied: Object.keys(patch) };
   }
 

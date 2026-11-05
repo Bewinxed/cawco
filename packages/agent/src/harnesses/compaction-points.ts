@@ -13,35 +13,74 @@
  * less the output it reserves, less 13,000: `var r9r=20000`, `function
  * Rne(e,n){let r=Math.min(e.maxOutputTokens,r9r),…,{window:h}=xb(e,s);return
  * h-r}`, `function Nee(e,n){let r=e-13000,…return r}`, and `if(r.enabled&&
- * e>=y)return{level:"compact",…}` with `y` that `Nee(Rne(…))`. Its window is
- * the model's context window unless the person set another
- * (`autoCompactWindow`, `CLAUDE_CODE_AUTO_COMPACT_WINDOW`), which this does
- * not read: 1M → 967,000, 200K → 167,000.
+ * e>=y)return{level:"compact",…}` with `y` that `Nee(Rne(…))`.
  *
- * That point is where it compacts a native 1M model (claude-sonnet-5 on the
- * scratch fleet compacts on its own past 967,000). A model whose window
- * Claude Code resolves to `source:"auto"` (a 200K claude-haiku-4-5) skips
- * it, `if(J$()&&!DEe(n,r)&&!S)return!1` with `function DEe(e,n){return
- * xb(e,n).source!=="auto"}`, and compacts only at the model's context limit
- * ("If you don't set an auto-compact window, Claude Code compacts when the
- * conversation reaches the model's context limit",
- * https://code.claude.com/docs/en/model-config#default-auto-compact-thresholds):
- * there this point is up to 33,000 short of where it compacts, so the hub
- * files that much earlier than its room. Which source a session's window
- * has, the SDK's types do not say.
+ * `configured` is the auto-compact window the session was handed: CawCo
+ * sets `autoCompactWindow` on every session (claude.ts `SESSION_DEFAULTS`,
+ * a fleet row's own over it), and `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in its
+ * env wins over that. The window is then the model's context window capped
+ * at it, its source "settings" (or "env"), in `xb`'s order:
+ * `let h=vtn(i.CLAUDE_CODE_AUTO_COMPACT_WINDOW);if(h!==void 0)return{window:
+ * Math.min(s,h),configured:h,source:"env"}`, then
+ * `if(y!==void 0&&y!=="auto")return{window:Math.min(s,y),configured:y,source:
+ * "settings"}`. A window of either source is one Claude Code enforces on
+ * every model: it skips the threshold only on a window of source "auto"
+ * (`if(J$()&&!DEe(n,r)&&!S)return!1` with `function DEe(e,n){return
+ * xb(e,n).source!=="auto"}`). A 1M window handed 1,000,000 compacts at
+ * 967,000, a 200K one at 167,000.
  */
 const CLAUDE_OUTPUT_RESERVE_CAP = 20_000;
 const CLAUDE_AUTO_COMPACT_MARGIN = 13_000;
 
-export const claudeCompactsAt = (model: {
-  contextWindow: number;
-  maxOutputTokens: number;
-}): number | undefined =>
+export const claudeCompactsAt = (
+  model: { contextWindow: number; maxOutputTokens: number },
+  configured: number
+): number | undefined =>
   model.contextWindow > 0
-    ? model.contextWindow -
+    ? Math.min(model.contextWindow, configured) -
       Math.min(model.maxOutputTokens, CLAUDE_OUTPUT_RESERVE_CAP) -
       CLAUDE_AUTO_COMPACT_MARGIN
     : undefined;
+
+/** The least and most auto-compact window Claude Code takes (`cI=1e5`, `FN=1e6`). */
+const CLAUDE_WINDOW_MIN = 100_000;
+const CLAUDE_WINDOW_MAX = 1_000_000;
+/** What a `k` or an `m` at the end of a window's count multiplies it by. */
+const CLAUDE_WINDOW_SUFFIX: Partial<Record<string, number>> = {
+  k: 1000,
+  m: 1_000_000,
+};
+
+/**
+ * The window `CLAUDE_CODE_AUTO_COMPACT_WINDOW` sets, as Claude Code 2.1.318
+ * reads it: a count with an optional `k` or `m`, held to 100,000–1,000,000,
+ * none when it is not a count (`function vtn(e){…let n=p9e(e);switch(n.kind)
+ * {case"in_range":return n.tokens;case"below_minimum":return cI;case
+ * "above_maximum":return FN;case"unusable":return}}`, `p9e` being `Jwe(e,
+ * {bareThousands:!1})`: `let r=e.trim(),s=r.slice(-1).toLowerCase(),h=s==="m"
+ * ?1e6:s==="k"?1000:void 0,y=h===void 0?Bf(r):parseFloat(r)*h,…
+ * if(Number.isNaN(w)||w<1)return{kind:"unusable"}`).
+ */
+export const claudeEnvWindow = (
+  value: string | undefined
+): number | undefined => {
+  if (value === undefined) {
+    return;
+  }
+  const trimmed = value.trim();
+  const scale = CLAUDE_WINDOW_SUFFIX[trimmed.slice(-1).toLowerCase()];
+  const tokens =
+    scale === undefined
+      ? Number.parseInt(trimmed, 10)
+      : Number.parseFloat(trimmed) * scale;
+  if (Number.isNaN(tokens) || tokens < 1) {
+    return;
+  }
+  return Math.min(
+    CLAUDE_WINDOW_MAX,
+    Math.max(CLAUDE_WINDOW_MIN, Math.round(tokens))
+  );
+};
 
 /**
  * pi 1.4.0 compacts once a session's context passes its model's window less
