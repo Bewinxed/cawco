@@ -150,7 +150,6 @@ import {
   type ArtifactSessionFrame,
   ASK_USER_QUESTION,
   ATTACHMENTS_HOME,
-  type AwayWait,
   accountMoveSentence,
   accountNameAmong,
   accountProvidersOf,
@@ -167,6 +166,7 @@ import {
   attachedFileName,
   attachedPictureLine,
   awayNotesOf,
+  awayWaitsOf,
   BACK_MESSAGE,
   BOUNDARY_RELAUNCH,
   byPerson,
@@ -354,7 +354,6 @@ import {
   PLAN_ORIGIN,
   type PlacementPreview,
   type PlacementStrategy,
-  type PlanWaits,
   PREVIEW_FOLDERS,
   PREVIEW_WEIGHT,
   PROJECT_NOTE,
@@ -416,7 +415,6 @@ import {
   sessionMayStart,
   startRefused,
   startsAny,
-  stepNamesArtifact,
   strategiesFor,
   TARGET_HEADROOM_TOKENS,
   TOOL_CATALOG,
@@ -10027,42 +10025,6 @@ export const createServer = (
     return true;
   };
 
-  /**
-   * What waits on the person, read from the plan as it stands: each page an
-   * open step's `waitsOn` names, on that step, then each page the plan waits
-   * on whole that no step names, on the plan; each page by its chip, never a
-   * copy of its state.
-   */
-  const waitingOn = (
-    session: string,
-    plan: PlanWaits | undefined
-  ): AwayWait[] => {
-    const steps = plan?.steps ?? [];
-    const onSteps = steps.flatMap((step) => {
-      const pageId =
-        step.status === "completed" || !step.waitsOn
-          ? undefined
-          : waitArtifact(step.waitsOn);
-      const page = pageId ? db.artifacts.get(pageId) : undefined;
-      return page
-        ? [
-            {
-              session,
-              step: { id: step.id, content: step.content },
-              artifact: { id: page.id, title: page.title },
-            },
-          ]
-        : [];
-    });
-    const onPlan = (plan?.pageWaits ?? []).flatMap((pageId) => {
-      const page = db.artifacts.get(pageId);
-      return page && !steps.some((step) => stepNamesArtifact(step, pageId))
-        ? [{ session, artifact: { id: page.id, title: page.title } }]
-        : [];
-    });
-    return [...onSteps, ...onPlan];
-  };
-
   /** HH:MM on the hub's clock, as the presence line and the notes' heading say a time. */
   const clockOf = (at: number): string =>
     new Intl.DateTimeFormat("en-GB", {
@@ -10078,7 +10040,8 @@ export const createServer = (
    * The recap a session's "back" send carries ({@link tellBack}), read as it
    * is first handed (a held session's when it next runs): the notes the
    * session kept in its plan while the person was away (`awayNotesOf`) and
-   * what waits on them there, with the hub's own away-since. Once per return
+   * what of the session's waits on them now, exactly as Needs you lists it
+   * (core `awayWaitsOf`), with the hub's own away-since. Once per return
    * (notifications.ts `takeRecap`, kept on the hub through a restart), and
    * never notes the person has seen (`session_plans.away_seen`: opened in
    * the plan, or recapped before). Recapped, they are seen: the plan ring's
@@ -10102,7 +10065,11 @@ export const createServer = (
       return undefined;
     }
     detach(plans.seeAway(instanceId), "away notes recapped are seen");
-    const waiting = waitingOn(instanceId, plan);
+    const waiting = awayWaitsOf(
+      instanceId,
+      plan?.steps ?? [],
+      artifactLane.now().needs
+    );
     const said: PresenceSaid = {
       kind: "on",
       recap: {

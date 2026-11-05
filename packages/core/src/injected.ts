@@ -18,9 +18,11 @@
  * read. Messages stored before the tag were given it once, by the hub's
  * migration over its stored sends (hub db/tag-markers.ts).
  */
+import { type ArtifactNeed, unparked } from "./artifact-needs";
 import { INPUTS_DIR } from "./harness";
 import type { ArtifactKind, CarryRestored } from "./index";
 import { NO_REPLY_TOOL } from "./no-reply";
+import { type PlanStep, stepNamesArtifact } from "./plan";
 import { artifactLink, stepLink } from "./references";
 import { unhandled } from "./unhandled";
 import { workWords } from "./words/work";
@@ -477,7 +479,7 @@ export type PresenceSaid = {
         section: string;
         /** When the person went away, HH:MM on the hub's clock, as the hub knows it. */
         since: string;
-        /** The plan's open steps waiting on the person's pick on a page, read from the plan as it stands. */
+        /** What of the session's waits on the person now, as Needs you lists it ({@link awayWaitsOf}). */
         waiting?: readonly AwayWait[];
       };
     }
@@ -486,9 +488,9 @@ export type PresenceSaid = {
 );
 
 /**
- * A page a plan waits on the person on (core plan.ts `PlanWaits`), by its
- * chip: on the open step whose `waitsOn` names it, or on the plan itself
- * when no step does (`SessionPlan.needs`).
+ * An artifact of the session's that waits on the person, by its chip: on
+ * the open step whose `waitsOn` names a card or pin of it, or alone when no
+ * step does ({@link awayWaitsOf}).
  */
 export interface AwayWait {
   /** The page's artifact id and title: its `cawco:artifact` chip. */
@@ -498,6 +500,32 @@ export interface AwayWait {
   /** The step that names it, by id and words; absent when no step does. */
   step?: { content: string; id: string };
 }
+
+/**
+ * What the recap names as waiting on the person: exactly the session's
+ * items in Needs you (artifact-needs.ts `unparked`, which the hub's
+ * artifacts/needs.ts reads from questions.ts: an open question, a canvas to
+ * judge not opened, a pin asking), in its order, so a page whose every
+ * question is answered, taken or withdrawn is never named. Each goes on the
+ * open step whose `waitsOn` names a card or pin of it (plan.ts
+ * `stepNamesArtifact`), else alone. A page the plan still holds a wait on
+ * (`PlanWaits.pageWaits`) waits on no one by that alone.
+ */
+export const awayWaitsOf = (
+  session: string,
+  steps: readonly PlanStep[],
+  needs: readonly ArtifactNeed[]
+): AwayWait[] =>
+  unparked(needs)
+    .filter((need) => need.instanceId === session)
+    .map((need) => {
+      const step = steps.find((one) => stepNamesArtifact(one, need.artifactId));
+      return {
+        session,
+        artifact: { id: need.artifactId, title: need.title },
+        ...(step ? { step: { id: step.id, content: step.content } } : {}),
+      };
+    });
 
 /** A wait as the recap names it: the step's chip, labelled by its words, then its page's chip; the page alone when no step names it. */
 export const waitLine = ({ artifact, session, step }: AwayWait): string =>
@@ -549,7 +577,7 @@ const whereTheyAre = (said: PresenceSaid): string => {
   switch (said.kind) {
     case "on":
       return said.recap
-        ? `[CawCo presence] The person has just come back; they were away since ${said.recap.since}. Your plan's notes from while they were away:\n\n${said.recap.notes}${said.recap.waiting?.length ? `\n\nWhat waits on them in your plan now:\n${said.recap.waiting.map(waitLine).join("\n")}\nName each by its link as written here.` : ""}\n\nThis turn's reply is your recap of those notes, short: what was done, what was decided, and what waits on them. It reaches them, so do not end it on ${NO_REPLY_TOOL}. Then fold that section into the rest of your plan's spec with todo_write.`
+        ? `[CawCo presence] The person has just come back; they were away since ${said.recap.since}. Your plan's notes from while they were away:\n\n${said.recap.notes}${said.recap.waiting?.length ? `\n\nWhat of yours waits on them now, as Needs you lists it:\n${said.recap.waiting.map(waitLine).join("\n")}\nName each by its link as written here.` : ""}\n\nThis turn's reply is your recap of those notes, short: what was done, what was decided, and what waits on them. It reaches them, so do not end it on ${NO_REPLY_TOOL}. Then fold that section into the rest of your plan's spec with todo_write.`
         : "[CawCo presence] The person is on this chat now: talk to them normally.";
     case "elsewhere":
       return `[CawCo presence] The person is at their desk but not on this chat. A turn that delivers work they asked for ends on its report, which reaches them; every other turn ends on ${NO_REPLY_TOOL} as its last call, and a question or a choice reaches them by ask or a decision card. Keep your plan current with todo_write.`;
