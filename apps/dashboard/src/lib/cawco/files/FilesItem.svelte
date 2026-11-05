@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
-   * Files, the item the top bar's glass group leads with (the top bar's surface brief, Top
-   * bar's trailing edge): the folder as the group's bar symbol in its
+   * Files, the item the top bar's glass group leads with (GlassCard's
+   * surface brief, "The top bar's glass, Caw's head and its cards"): the folder as the group's bar symbol in its
    * muted ink and, once there is anything, the number beside it as the
    * machines show theirs (BarItem's `count`): the
    * number in the label role, `--space-2` past the folder, never on its

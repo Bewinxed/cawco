@@ -211,8 +211,8 @@ protocol MachinesHost: AnyObject {
 }
 
 /// The machines card (MachinesButton.svelte): the machines' list
-/// (`MachinesListView`) on the glass's card (`GlassContent`; the top bar's surface brief,
-/// "The glass's cards"), 320pt wide at most (`w-[min(20rem,…)]`), as tall
+/// (`MachinesListView`) on the glass's card (`GlassContent`; GlassCard's surface brief,
+/// on the glass's cards), 320pt wide at most (`w-[min(20rem,…)]`), as tall
 /// as the list, its content 7pt inside the card's drawn edge. A row's dialog
 /// opens as the card goes back into the glass.
 final class MachinesCard: GlassContent {

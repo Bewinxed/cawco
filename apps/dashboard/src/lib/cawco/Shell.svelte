@@ -332,7 +332,7 @@
       case "new-session":
         newSession();
         return true;
-      // ⌘K opens and closes Jump (the top bar's surface brief, "The glass's cards").
+      // ⌘K opens and closes Jump (GlassCard's surface brief, on the glass's cards).
       case "jump":
         barGlass.toggle("jump");
         return true;

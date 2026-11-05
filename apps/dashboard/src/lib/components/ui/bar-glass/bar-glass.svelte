@@ -17,7 +17,9 @@
 
 <script lang="ts">
   /**
-   * The top bar's glass (the top bar's surface brief, Top bar's trailing edge): one group on
+   * The top bar's glass (GlassCard's surface brief, "The top bar's glass,
+   * Caw's head and its cards"; its phone form, that brief's "The phone's
+   * glass", the owner's pick in decisions/caw-phone-shape): one group on
    * the bar's control height, a capsule of the panel's glass holding the
    * bar's borderless items concentric inside it, Caw's head last at the
    * edge. Under the desk line it is Caw's own glass, standing the bar's

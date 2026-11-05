@@ -17,10 +17,11 @@
    * Caw's 48px seat, every control centred on it.
    *
    * Leading, the name, renamed where it stands, on one line that ends in an
-   * ellipsis; then the place, a bare item of the top bar's recipe (the top bar's surface brief,
-   * Top bar's trailing edge): the primary checkout's machine as its OS mark,
-   * or the folder while the project's one place is its folder on the hub,
-   * named in its tooltip ("A place shown as a place … A path is never
+   * ellipsis; then the place, a bare BarItem as the top bar's glass holds
+   * (GlassCard's surface brief, "The top bar's glass, Caw's head and its
+   * cards"): the primary checkout's machine as its OS mark, or the folder
+   * while the project's one place is its folder on the hub, named in its
+   * tooltip (DESIGN.md, "A place shown as a place. … a path is never
    * printed in a bar"). A press unfolds the project's details under the head
    * (ProjectDetails), and again folds them. Caw's words are not in the head:
    * his seat's face, his panel and Needs you carry them.

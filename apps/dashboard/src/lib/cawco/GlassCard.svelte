@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * The glass's one card (the top bar's surface brief, "The glass's cards"): a HangCard on the
+   * The glass's one card (GlassCard's surface brief, on the glass's cards): a HangCard on the
    * top bar's glass that shows whichever of Caw's panel, the machines and
    * the Jump palette is open (bar-glass `open`). It hangs right-aligned under
    * the glass, flush with its trailing flank, comes down out of the glass as

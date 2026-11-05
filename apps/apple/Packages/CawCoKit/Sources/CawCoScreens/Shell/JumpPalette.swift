@@ -259,7 +259,7 @@ enum JumpOpener {
 }
 
 /// The palette (JumpPalette.svelte): one of the glass's cards (`GlassCard`;
-/// the top bar's surface brief, "The glass's cards"), 672pt wide at most (`min(42rem, …)`),
+/// GlassCard's surface brief, on the glass's cards), 672pt wide at most (`min(42rem, …)`),
 /// 82% of the window tall at most, its search line, the groups and the key
 /// hints on the card's own surface inside its one frame, each divided by the
 /// hairline. Non-modal: no scrim, its field takes the focus as it opens, a
