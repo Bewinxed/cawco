@@ -18,6 +18,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { cawPanelWords } from "../../../packages/core/src/words/onboarding";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
 import { type Kit, open, type Spec, type View } from "../kit";
 import { RenderedChecks } from "../rendered-checks";
@@ -325,10 +326,17 @@ const run = async (kit: Kit) => {
   );
   await fleet.api(`/api/instances/${busy}/artifacts/${shown.id}/show`, {});
   await each("caw preview shown", async (page) => {
+    // Showing brings Preview to the front, where the pane's own bar is the
+    // panel's; Assistant is pressed back for the column's bar.
+    const tabs = page.locator(`${PANEL} [data-slot="caw-tabs"]`).first();
+    await tabs.waitFor({ timeout: 60_000 });
+    if ((await page.locator(`${PANEL}[data-caw-tab="preview"]`).count()) > 0) {
+      await tabs.getByRole("tab", { name: cawPanelWords.assistant }).click();
+    }
     await page
       .locator(`${PANEL} [data-slot="bar"] [role="tablist"]`)
       .first()
-      .waitFor({ timeout: 60_000 });
+      .waitFor({ timeout: 20_000 });
     await page.waitForTimeout(800);
     const edge = await page.evaluate((panel) => {
       const bar = [
