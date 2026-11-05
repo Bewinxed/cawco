@@ -1,4 +1,10 @@
 <script lang="ts">
+  import {
+    artifactName,
+    deliverableKind,
+    type ResultArtifact,
+  } from "@cawco/core/deliverables";
+  import { parseReference } from "@cawco/core/references";
   /**
    * A task's review: a message from the session that worked it, then what
    * that session presented. Three fixed bands and the decision; only the
@@ -11,7 +17,8 @@
    * 2. The stage: the artifact the session presented (`task_result`'s
    *    primary artifact), drawn whole by the artifact panel's own renderer
    *    (PreviewPane, inset). Nothing presented: its words whole, with what to
-   *    check as a list. The app never draws a file's format here.
+   *    check as a list, or the task's own where no session handed in a
+   *    result. The app never draws a file's format here.
    * 3. The decision, pinned: the note field ("What should change"), always
    *    there, then Approve → the next stage the moves allow you, Comment,
    *    which leaves the note on the task and moves nothing, and Send back →
@@ -22,19 +29,23 @@
    *
    * The result band is never empty. No session handed in a result (its
    * work landed from another session, or it waits on a decision), it says
-   * what is under review instead: the commits its words say landed and its
-   * description. In review, it names the cards it waits on you to answer.
+   * what is under review instead: the commits its words say landed, and the
+   * stage draws its description whole, formatted, with the cards, tasks and
+   * files it names as chips and links (described.ts). While a card it waits
+   * on is not picked, the band leads with them (TaskPicks: each question
+   * whole and its Pick) and the decision band stands down (no note, no
+   * Approve, no Send back): the work has not run. Every card
+   * it waited on that is picked since is named by its chip.
    *
    * Two columns once the review is wide enough (the pane expanded, the
    * task's own page): the words beside the stage, unclamped.
    */
-  import {
-    artifactName,
-    deliverableKind,
-    type ResultArtifact,
-  } from "@cawco/core/deliverables";
+  import { waitsOnPick } from "@cawco/core/task-views";
   import { commonWords } from "@cawco/core/words/common";
-  import { taskReviewWords as words } from "@cawco/core/words/task-review";
+  import {
+    taskNeedsWords as needsWords,
+    taskReviewWords as words,
+  } from "@cawco/core/words/task-review";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -48,15 +59,14 @@
   } from "#lib/icons.js";
   import { artifactNamed } from "../artifact-names.svelte";
   import { cawco } from "../client.svelte";
+  import DecisionReference from "../DecisionReference.svelte";
   import { failureWords as message } from "../hub-read";
   import { idForWords, type SentWords } from "../id";
   import { rowHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
-  import { plainMarkdown } from "../plain-markdown";
   import {
     addComment,
     approveTarget,
-    decisionWait,
     folderFileHref,
     folderRawHref,
     landedOf,
@@ -67,14 +77,16 @@
     type StagesView,
     stageLabel,
     type TaskView,
+    type TaskWait,
   } from "../project-tasks";
   import RowFault from "../RowFault.svelte";
-  import { referenceOf } from "../references";
   import SessionMark from "../SessionMark.svelte";
   import { sessionPlace, sessionTitle } from "../session-names.svelte";
   import { sessionStatus } from "../session-status";
   import { openBeside } from "./beside.svelte";
+  import { describedMarkdown } from "./described";
   import Presented, { isPresented } from "./stage/Presented.svelte";
+  import TaskPicks from "./TaskPicks.svelte";
 
   let {
     projectId,
@@ -117,21 +129,36 @@
   const unreported = $derived(!(ended || result));
   /** The commits its words say landed. */
   const landed = $derived(unreported ? landedOf(task) : []);
-  /** The decisions it waits on you to answer, while it is in review. */
-  const asked = $derived(
-    task.kind === "you" ? task.waits.filter(decisionWait) : []
+  /** The decision cards it waits on you to pick. */
+  const asked = $derived(task.waits.filter(waitsOnPick));
+  /** The decision cards it waited on, picked since: what it was held on. */
+  const waited = $derived(
+    task.waits.filter((wait) => wait.kind === "card" && wait.settled)
   );
-  const described = $derived(unreported ? task.description.trim() : "");
-  const summary = $derived(result?.summary || plainMarkdown(described));
+  /**
+   * Its own words, where no session handed in a result: markdown, with the
+   * cards, tasks and files they name drawn as the transcript draws them
+   * (described.ts).
+   */
+  const described = $derived(
+    unreported
+      ? describedMarkdown(task.description.trim(), {
+          projectId,
+          waits: task.waits,
+        })
+      : ""
+  );
+  const summary = $derived(result?.summary ?? "");
   /** Its words whole (markdown): the stage's, or the wide review's column. */
   const whole = $derived(
     ended ? (newest?.result?.summary ?? "") : review?.whole || described
   );
   const check = $derived(result?.check ?? []);
   /**
-   * Nothing presented: a session's words are the stage. A task's own words stay in the result band, as a summary does.
+   * Nothing presented: the words are the stage, a session's or, where none
+   * handed in a result, the task's own, drawn whole and formatted.
    */
-  const wordsStage = $derived(!(presented || unreported) && whole.length > 0);
+  const wordsStage = $derived(!presented && whole.length > 0);
 
   const row = $derived(
     from ? cawco.instanceIndex.byId.get(from.instanceId) : undefined
@@ -169,7 +196,12 @@
 
   // --- band 3: the decision ------------------------------------------------------
 
-  const deciding = $derived(task.kind === "you");
+  /**
+   * Its stage is yours to move it on, and no pick holds it: a task held on
+   * a card has not run, so there is nothing to approve, send back or note
+   * yet; the picks lead the band instead.
+   */
+  const deciding = $derived(task.kind === "you" && asked.length === 0);
   const approveTo = $derived(approveTarget(stages, task.stage));
   /** Where Send back puts it and who takes it up there: the hub's rule. */
   const back = $derived(deciding ? task.sendBack : null);
@@ -316,7 +348,8 @@
       wordsLine ||
       attached.length > 0 ||
       landed.length > 0 ||
-      asked.length > 0
+      asked.length > 0 ||
+      waited.length > 0
   );
 </script>
 
@@ -338,6 +371,28 @@
       >{nameOf(one)}</span
     >
   </a>
+{/snippet}
+
+{#snippet cardWaits(waits: TaskWait[])}
+  <!-- The cards it waited on, picked since, each by the transcript's chip,
+       which opens the card. A long question ends inside its chip, never
+       past the card's edge at 320 wide. -->
+  <div
+    data-slot="waited"
+    class="flex flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-body text-ink-muted"
+  >
+    <span class="flex-none type-label">{needsWords.waited}</span>
+    {#each waits as wait (wait.target)}
+      {@const named = parseReference(wait.href)}
+      <span class="min-w-0 max-w-full wrap-anywhere">
+        {#if named?.kind === "decision"}
+          <DecisionReference id={named.id} label={wait.label} />
+        {:else}
+          {wait.label}
+        {/if}
+      </span>
+    {/each}
+  </div>
 {/snippet}
 
 {#snippet checkList()}
@@ -372,6 +427,11 @@
     class="row-(--area) col-(--area) flex flex-col gap-space-2 py-space-3 px-(--pane-inline) @task-frame/task-frame:min-h-0 @task-frame/task-frame:overflow-y-auto @task-frame/task-frame:overscroll-contain @task-frame/task-frame:border-e @task-frame/task-frame:border-e-border-hairline"
     data-band="result"
   >
+    <!-- A pick of yours holds it: the one thing to do here leads, and
+         Approve waits until it is made. -->
+    {#if asked.length > 0}
+      <TaskPicks picks={asked} />
+    {/if}
     {#if from}
       <div
         data-slot="session"
@@ -431,29 +491,8 @@
         {/each}
       </p>
     {/if}
-    {#if asked.length > 0}
-      <div
-        data-slot="asked"
-        class="flex flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-body text-ink-strong"
-      >
-        <span class="flex-none type-label">{words.waitsOnAnswer}</span>
-        <!-- A long question wraps or ends inside its chip, never past the
-             card's edge at 320 wide. -->
-        {#each asked as wait (wait.target)}
-          {@const drawn = referenceOf(wait.href)}
-          <span class="min-w-0 max-w-full wrap-anywhere">
-            {#if drawn.draw === "element"}
-              <drawn.element
-                id={drawn.id}
-                kind={drawn.kind}
-                label={wait.label}
-              />
-            {:else}
-              {wait.label}
-            {/if}
-          </span>
-        {/each}
-      </div>
+    {#if waited.length > 0}
+      {@render cardWaits(waited)}
     {/if}
     {#if wordsLine}
       <div
@@ -509,7 +548,7 @@
     {/if}
     {#if !banded}
       <p data-slot="nothing" class="m-0 type-body text-ink-muted text-pretty">
-        {words.nothingToReview}
+        {wordsStage ? words.noSession : words.nothingToReview}
       </p>
     {/if}
   </div>
@@ -537,7 +576,7 @@
         {:else if from}
           Nothing handed in.
         {:else}
-          No session has worked on it.
+          {words.noSession}
         {/if}
       </p>
     {/if}

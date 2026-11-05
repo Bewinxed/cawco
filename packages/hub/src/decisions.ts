@@ -47,6 +47,7 @@ import {
   ENDED_STATUSES,
   type InstanceRow,
 } from "@cawco/core";
+import { SETUP_PAGE } from "@cawco/core/artifact-needs";
 import { SEND_WRITES_MAX } from "@cawco/core/comments";
 import {
   type AfterLinks,
@@ -71,6 +72,7 @@ import {
 import { AFTER_REF } from "@cawco/core/decisions-library";
 import { pageHash } from "@cawco/core/preview-proxy";
 import { noticeWords } from "@cawco/core/words/notices";
+import { setupPageWords } from "@cawco/core/words/onboarding";
 import { Elysia, status, t } from "elysia";
 import type { PageHearer } from "./artifacts/service";
 import type { PersonsSend } from "./caw";
@@ -1111,6 +1113,15 @@ export const createDecisions = (deps: DecisionsDeps) => {
         }
       }
       const words = text?.trim() || undefined;
+      // The setup page is sent to set the project up from every card on
+      // it: one not picked leaves Caw nothing to write it from, and a Send
+      // would mark the page decided while the project stays not set up.
+      if (!words && name === SETUP_PAGE && read.picked < read.cards) {
+        throw new DecisionRefusal(
+          409,
+          setupPageWords.cardsFirst(read.cards - read.picked)
+        );
+      }
       const to = heardBy(read);
       const page = `They wrote it on the decision page “${read.title}” (decisions/${name}/).`;
       if (words) {

@@ -13,8 +13,14 @@
    *   seat on the page is the one live Caw (DESIGN.md, The Flock Rule). A starter puts its words in the
    *   composer; nothing is sent. The first words start a conversation
    *   (conversation.ts), and the panel shows it.
-   * - Its head is Caw's face, his name over the conversation's status word,
-   *   New conversation and the way to open it as a tab. His name opens the
+   * - Its head is Caw's face, his name over the conversation's status word
+   *   and which conversation it is (its title; "gets the project's events"
+   *   on the one they reach: every conversation is Caw, so the line tells
+   *   them apart), then Events on/off, New conversation and the way to open
+   *   it as a tab. Events on/off says whether the project's events reach a
+   *   conversation and, pressed, unfolds his settings under the head
+   *   (CawPanel: what he is doing, the project's switch, its off tray), so
+   *   he is turned on or off where he is talked to. His name opens the
    *   session's card (SessionDetails); on the conversation the project's
    *   events reach, its harness and model are the project's (ModelSection).
    * - Its two tabs (decision page `onboarding-design`, card `artifact-open`):
@@ -46,6 +52,7 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { rowHref } from "#lib/cawco/links.js";
   import { crossIn } from "#lib/cawco/motion/curves.svelte.js";
+  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
   import {
     type ProjectStarter,
@@ -54,6 +61,8 @@
   } from "#lib/cawco/project-tasks.js";
   import RegionBoundary from "#lib/cawco/RegionBoundary.svelte";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
+  import { sessionTitle } from "#lib/cawco/session-names.svelte.js";
+  import { cawPanelOffAt } from "#lib/cawco/stop-work.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import FootFade from "#lib/cawco/transcript/FootFade.svelte";
@@ -83,6 +92,7 @@
     IconPlus,
   } from "#lib/icons.js";
   import { barGlass } from "../bar-glass.svelte";
+  import CawPanel from "./CawPanel.svelte";
   import type { CawLead } from "./caw-lead.svelte";
   import { startConversation } from "./conversation";
   import SetupWell from "./SetupWell.svelte";
@@ -205,6 +215,24 @@
   // --- what his line says -------------------------------------------------------
 
   const off = $derived(lead.on === false);
+  /** His settings unfolded under the head (Events on/off pressed). */
+  let eventsOpen = $state(false);
+  /**
+   * Which conversation is on show, after its status word: the one the
+   * project's events reach, said so; another, by its title (each is Caw,
+   * so the title is what tells them apart); none while its title is his
+   * name.
+   */
+  const which = $derived.by(() => {
+    if (!shown) {
+      return null;
+    }
+    if (!off && shown === lead.project?.conversationInstanceId) {
+      return conversationWords.getsEvents;
+    }
+    const title = sessionTitle(shown);
+    return title && title !== "Caw" ? title : null;
+  });
   /**
    * Past the project's cap with nothing more pressing, the cap's line, as
    * his head's line says it; with a conversation on show, its status word;
@@ -424,26 +452,38 @@
           type="button"
           bind:this={cardAnchor}
         >
-          Caw{#if off}<span
-              data-slot="off-word"
-              class="font-normal text-ink-muted">{" · off"}</span
-            >{/if}
+          Caw
         </button>
       {:else}
         <span
           data-slot="name"
           class="type-label -mx-space-1 rounded-xs border-none border-current bg-transparent px-space-1 font-medium text-ink-strong"
-          >Caw{#if off}<span
-              data-slot="off-word"
-              class="font-normal text-ink-muted">{" · off"}</span
-            >{/if}</span
+          >Caw</span
         >
       {/if}
       <span class="type-meta max-w-full truncate text-ink-muted" data-caw-line
-        >{said}</span
+        >{which ? `${said} · ${which}` : said}</span
       >
     </div>
     <div class="flex flex-none items-center gap-space-1">
+      {#if lead.on !== null}
+        <!-- Whether the project's events reach him, as it stands; pressed,
+             his switch unfolds under the head. -->
+        <Button
+          aria-controls="caw-events-{projectId}"
+          aria-expanded={eventsOpen}
+          data-caw-events={off ? "off" : "on"}
+          label={off
+            ? conversationWords.events.off
+            : conversationWords.events.on}
+          onclick={() => {
+            eventsOpen = !eventsOpen;
+          }}
+          press="pressable"
+          size="sm"
+          variant="ghost"
+        />
+      {/if}
       {#if shown}
         <Tip label={conversationWords.newConversation}>
           {#snippet children(tip)}
@@ -495,6 +535,26 @@
       {/if}
     </div>
   </div>
+  {#if eventsOpen && !onPreview}
+    <!-- His settings, unfolded under his head: what he is doing, the
+         project's switch, and its off tray when turning him off leaves work
+         running (CawLeadSwitch). -->
+    <div
+      class="flex-none border-b border-b-border-hairline px-space-4 pt-space-2 pb-space-3"
+      data-slot="caw-events"
+      id="caw-events-{projectId}"
+      in:unfold
+      out:unfold
+    >
+      <CawPanel
+        {lead}
+        place={cawPanelOffAt(projectId)}
+        {projectId}
+        {projectName}
+        sheet
+      />
+    </div>
+  {/if}
   <div data-slot="well" class="relative flex min-h-0 flex-auto flex-col">
     {#if startingHere}
       <!-- His start, on the transcript's own columns where his conversation

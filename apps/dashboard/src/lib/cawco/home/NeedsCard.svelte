@@ -73,6 +73,7 @@
   import { mcpWords } from "@cawco/core/words/mcp";
   import { pairingWords } from "@cawco/core/words/pairing";
   import { presenceWords } from "@cawco/core/words/presence";
+  import { projectWords } from "@cawco/core/words/project";
   import { tailnetWords } from "@cawco/core/words/tailnet";
   import type { Component } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
@@ -224,8 +225,8 @@
         return contactWords.lostLine(item.name, item.minutes, item.hub);
       case "task":
         return item.reason === "review"
-          ? `Review the draft: it waits on you in ${item.stage}`
-          : "Its session failed: read why, then try again";
+          ? projectWords.needsReview(item.stage)
+          : projectWords.needsPick(item.reason.pick);
       case "action":
         if (item.action.state === "unknown") {
           return `This may or may not have happened. Check ${item.action.service}.`;
@@ -754,11 +755,7 @@
       {:else if item.kind === "machine"}
         <IconServer aria-hidden="true" class="size-icon-md" />
       {:else if item.kind === "task"}
-        {#if item.reason === "failed"}
-          <IconError aria-hidden="true" class="size-icon-md" />
-        {:else}
-          <IconNeedsYou aria-hidden="true" class="size-icon-md" />
-        {/if}
+        <IconNeedsYou aria-hidden="true" class="size-icon-md" />
       {:else if item.kind === "action"}
         {#if item.action.state === "unknown"}
           <IconWarningTriangle aria-hidden="true" class="size-icon-md" />

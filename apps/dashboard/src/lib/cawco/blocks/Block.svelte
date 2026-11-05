@@ -24,6 +24,7 @@
   import { blocksWords as words } from "@cawco/core/words/blocks";
   import { commonWords } from "@cawco/core/words/common";
   import type { Component, Snippet } from "svelte";
+  import DropLine from "#lib/cawco/DropLine.svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
@@ -100,7 +101,7 @@
     ontab: () => void;
   } = $props();
 
-  const over = $derived(drag.over?.block === id ? drag.over.edge : null);
+  const over = $derived(drag.over?.key === id ? drag.over.edge : null);
   const headId = $derived(`block-${page}-${id.replace(":", "-")}`);
 </script>
 
@@ -225,14 +226,6 @@
   <!-- The drop indicator: across the target's edge, in the gap between
        blocks. -->
   {#if over}
-    <span
-      data-slot="drop"
-      aria-hidden="true"
-      class="pointer-events-none absolute z-2 rounded-hair bg-brand-solid before:absolute before:size-c-block-drop-dot before:rounded-pill before:bg-brand-solid edge-bottom:inset-x-0 edge-bottom:bottom-(--drop-off) edge-bottom:h-c-block-drop-line edge-bottom:before:start-(--dot-out) edge-bottom:before:top-(--dot-mid) edge-left:inset-y-0 edge-left:start-(--drop-off) edge-left:w-c-block-drop-line edge-left:before:start-(--dot-mid) edge-left:before:top-(--dot-out) edge-right:inset-y-0 edge-right:end-(--drop-off) edge-right:w-c-block-drop-line edge-right:before:start-(--dot-mid) edge-right:before:top-(--dot-out) edge-top:inset-x-0 edge-top:top-(--drop-off) edge-top:h-c-block-drop-line edge-top:before:start-(--dot-out) edge-top:before:top-(--dot-mid)"
-      data-edge={over}
-      style:--drop-off={"calc(var(--space-group) / -2 - var(--c-block-drop-line) / 2)"}
-      style:--dot-mid={"calc((var(--c-block-drop-line) - var(--c-block-drop-dot)) / 2)"}
-      style:--dot-out={"calc(var(--c-block-drop-dot) / -2)"}
-    ></span>
+    <DropLine edge={over} gap="var(--space-group)" />
   {/if}
 </section>

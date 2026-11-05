@@ -37,15 +37,18 @@ export interface SetupProgress {
  * is not set up (decision page `onboarding-first-minutes`, `draft-where`:
  * "the page no longer opens in his Preview"), so asked for in Decisions,
  * by its row, a link, Needs you or his showing it, it lands on the board
- * his draft is drawn on. A link naming one of its cards (`#routines`, the
- * board's way to what else it asks) opens it at that card, which stands
- * only there.
+ * his draft is drawn on. Its cards beside the draft stand only on the
+ * page: a link naming one (`#routines`, the board's way to what else it
+ * asks, a card's chip) opens it at that card, and while any of them waits
+ * on a pick (`cardsOpen`) its row opens the page, where they are answered
+ * (core artifact-needs.ts `setupLanding`, the hub's half).
  */
 export const setupLandsOnBoard = (
   notSetUp: boolean,
   page: string | null,
-  card: string | null
-): boolean => notSetUp && page === SETUP_PAGE && !card;
+  card: string | null,
+  cardsOpen: boolean
+): boolean => notSetUp && page === SETUP_PAGE && !card && !cardsOpen;
 
 /** A CawCo tool by its bare name, under any harness's naming of it (`mcp__cawco__…`, `cawco_…`). */
 const calls = (message: Message, bare: string): boolean => {

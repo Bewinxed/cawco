@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { waitsOnPick } from "@cawco/core/task-views";
   import { externalItemWords } from "@cawco/core/words/external-items";
   import { projectWords } from "@cawco/core/words/project";
   import { land, waiting } from "#lib/cawco/motion/share.svelte.js";
@@ -43,7 +44,10 @@
     onopen,
     date = null,
     movable = true,
+    current = false,
   }: {
+    /** It is the task open in the sheet beside the board. */
+    current?: boolean;
     task: TaskSummary;
     href: string;
     /** The date the task's file sets it for, said short ("Thu 09:30"). */
@@ -66,8 +70,12 @@
     project ? actionsOf(project(), task.id).length > 0 : false
   );
   const retry = $derived(isRetry(task));
-  /** What it still waits on, its own and its whole's, as the hub settles it: a task by its id, anything else by its name. */
-  const waitsOn = $derived(flags.waiting);
+  /** A decision card it waits on that is not picked yet: a pick of yours holds it. */
+  const pick = $derived(task.waits.find(waitsOnPick) ?? null);
+  /** What it still waits on, its own and its whole's, as the hub settles it: a task by its id, anything else by its name; a card of yours is said on the line above. */
+  const waitsOn = $derived(
+    flags.waiting.filter((wait) => !(pick && waitsOnPick(wait)))
+  );
   const key = $derived(`task:${task.id}`);
   /** A card arriving by a move flies in; it is not uncovered as a new row. */
   const flying = $derived(waiting(key));
@@ -89,8 +97,9 @@
 </script>
 
 <a
+  aria-current={current ? "true" : undefined}
   data-task-card
-  class="press-tint focus-inset flex flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-tile transition-[background-color,opacity] duration-(--dur-control) ease-out data-dragging:opacity-40 not-group-data-picked/task:hover:bg-surface-hover not-data-dragging:group-data-moving/task:opacity-60 group-data-picked/task:bg-selected-bg"
+  class="press-tint focus-inset flex flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-tile transition-[background-color,opacity] duration-(--dur-control) ease-out data-dragging:opacity-40 not-group-data-picked/task:not-aria-current:hover:bg-surface-hover aria-current:bg-selected-bg not-data-dragging:group-data-moving/task:opacity-60 group-data-picked/task:bg-selected-bg"
   data-flip-enter={flying ? "own" : undefined}
   data-share={key}
   data-task={task.id}
@@ -143,7 +152,7 @@
     class="line-clamp-2 type-label wrap-anywhere text-ink-row"
     >{task.title}</span
   >
-  {#if flags.live || task.kind === "you" || asks || approves || date}
+  {#if flags.live || task.kind === "you" || asks || approves || pick || date}
     <span
       class="mark-line inline-flex items-center gap-space-2 type-meta text-ink-muted group-data-picked/task:text-selected-ink"
     >
@@ -161,6 +170,18 @@
         {:else}
           <span>{task.type ?? "attempt"} working</span>
         {/if}
+      {:else if pick}
+        <!-- Held on a pick of yours: its card is on a decision page, and the
+             task starts once it is picked. -->
+        <IconNeedsYou
+          aria-hidden="true"
+          class="size-icon-sm flex-none text-status-attn-glyph"
+        />
+        <span class="flex-none">{projectWords.waitsOnPick}</span>
+        <span
+          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
+          title={pick.label}>{pick.label}</span
+        >
       {:else if task.kind === "you"}
         <!-- The design's ◆: the house's needs-you glyph, still. -->
         <IconNeedsYou

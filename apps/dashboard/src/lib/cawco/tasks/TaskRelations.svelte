@@ -10,7 +10,9 @@
    * GitHub link. Unblocks and Parts are other tasks' links, read off the
    * hub's flags, so they are opened, not unlinked, here.
    */
+  import { parseReference } from "@cawco/core/references";
   import Choice from "#lib/cawco/config/Choice.svelte";
+  import DecisionReference from "#lib/cawco/DecisionReference.svelte";
   import type {
     TaskLinks,
     TaskSummary,
@@ -39,6 +41,11 @@
   } = $props();
 
   const byId = $derived(new Map(tasks.map((each) => [each.id, each])));
+  /** A card wait's reference id (`<artifact>/<card>`); null for any other wait. */
+  const cardIdOf = (wait: TaskWait): string | null => {
+    const named = wait.kind === "card" ? parseReference(wait.href) : null;
+    return named?.kind === "decision" ? named.id : null;
+  };
 
   type LinkKind = "waitsOn" | "partOf" | "duplicateOf";
   let open = $state(false);
@@ -115,6 +122,7 @@
         : () => onlink({ waitsOn: [one.target], remove: true })
     )}
   {:else}
+    {@const card = cardIdOf(one)}
     {@const drawn = one.href.startsWith("cawco:")
       ? referenceOf(one.href)
       : null}
@@ -122,7 +130,11 @@
       class="flex items-center gap-space-1 min-h-c-btn-h-sm min-w-0 px-space-2 pe-space-1 rounded-sm bg-surface-recess"
     >
       <span class="flex-auto min-w-0 overflow-clip text-ellipsis type-label">
-        {#if drawn?.draw === "element"}
+        {#if card}
+          <!-- A card's chip: on the sheet, a link to it in Decisions from
+               the first press (sheet-cards.ts). -->
+          <DecisionReference id={card} label={one.label} />
+        {:else if drawn?.draw === "element"}
           <drawn.element id={drawn.id} kind={drawn.kind} label={one.label} />
         {:else if one.href.startsWith("http")}
           <a

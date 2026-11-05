@@ -5,7 +5,9 @@
  * (`decisions.changed`, `tasks.changed`), on a reconnect and when the tab
  * comes back. Only the newest read's answer is kept.
  */
-import type { DecisionsList } from "@cawco/core/decisions";
+
+import { SETUP_PAGE } from "@cawco/core/artifact-needs";
+import type { DecisionPageSummary, DecisionsList } from "@cawco/core/decisions";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import { listDecisions } from "./decisions-api";
 
@@ -19,13 +21,6 @@ export class ProjectDecisions {
 
   constructor(project: () => string) {
     this.#project = project;
-  }
-
-  /** Pages still waiting for picks: the tab's trail. */
-  get waiting(): number {
-    return (
-      this.list?.pages.filter((page) => page.state === "picking").length ?? 0
-    );
   }
 
   async read(): Promise<void> {
@@ -48,3 +43,21 @@ export class ProjectDecisions {
     }
   }
 }
+
+/**
+ * The decision pages waiting on the person's picks, as Needs you counts
+ * them (JOURNEY.md, Needs you is a mark: "a decision page with picks not
+ * made or not sent"). While the project is not set up the setup page counts
+ * only while a card on it is not picked: the draft in the board's place is
+ * that page's Setup, and Set up waits on those cards (hub decisions.ts
+ * `send`), which stand only on the page.
+ */
+export const pagesWaitingOf = (
+  pages: readonly DecisionPageSummary[],
+  notSetUp: boolean
+): DecisionPageSummary[] =>
+  pages.filter(
+    (one) =>
+      one.state === "picking" &&
+      !(notSetUp && one.name === SETUP_PAGE && one.picked >= one.cards)
+  );

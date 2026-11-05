@@ -2883,6 +2883,19 @@ public enum Words {
         /// The panel head's action: the conversation on show, as a tab.
         public static let openAsTab = "Open as a tab"
 
+        /// The panel head's control: whether the project's events reach a conversation, said as it stands; pressed, its switch unfolds under the head.
+        public enum Events {
+            public static let on = "Events on"
+
+            public static let off = "Events off"
+
+            /// Each word by the key it stands under, for a lookup by data value.
+            public static let byKey: [String: String] = ["on": on, "off": off]
+        }
+
+        /// The panel head's line, after the status word: the conversation on show is the one the project's events reach.
+        public static let getsEvents = "gets the project's events"
+
         /// A new conversation with nowhere to run: the project has no checkout on a machine yet.
         public static let noCheckout = "This project has no checkout on a machine yet, so a conversation can't start. Add one in Project details, then try again."
 

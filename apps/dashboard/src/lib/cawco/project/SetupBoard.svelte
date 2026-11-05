@@ -24,8 +24,7 @@
   import type { SetupDelegate, Stage } from "#lib/cawco/project/setup-stage.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import Prompt from "#lib/cawco/transcript/Prompt.svelte";
-  import { buttonVariants } from "#lib/components/ui/button/index.js";
-  import { IconColumns } from "#lib/icons.js";
+  import { IconColumns, IconNeedsYou } from "#lib/icons.js";
   import SetupDraft from "./SetupDraft.svelte";
 
   let {
@@ -33,6 +32,8 @@
     aim,
     stages,
     delegates,
+    proposed,
+    ondelegates,
     coming,
     asks,
     cards = [],
@@ -41,6 +42,7 @@
     sending,
     problem,
     stale = false,
+    reading = false,
     onaskagain,
     onaim,
     onstages,
@@ -51,11 +53,15 @@
     aim: string;
     stages: Stage[];
     delegates: SetupDelegate[];
+    /** Every type he proposed, those removed included. */
+    proposed?: SetupDelegate[];
+    /** Keeps the types by id. */
+    ondelegates?: (ids: string[]) => void;
     /** Stages he has still to write. */
     coming: number;
     /** His open questions on the setup, oldest first. */
     asks: BlockedRequest[];
-    /** The ids of the setup page's cards beside the draft (`account`, `routines`, `what-moves`). */
+    /** The ids of the setup page's cards beside the draft not picked yet (`area`, `account`, `routines`, `what-moves`, any other). */
     cards?: string[];
     /** The setup page in the project's Decisions at the first of those cards, where they are answered (a link naming no card lands on this board). */
     pageHref?: string | null;
@@ -64,6 +70,8 @@
     sending: boolean;
     /** Why the draft could not be read, kept or sent; null when it was. */
     problem: string | null;
+    /** The draft is still being read: it stands as its skeleton. */
+    reading?: boolean;
     /** The setup page is one the board can't draw (setup-draft.svelte.ts `stale`). */
     stale?: boolean;
     /** Asks Caw to set the project up again, where the page can't be drawn; none while he can't start. */
@@ -75,7 +83,7 @@
     onsetup: () => void;
   } = $props();
 
-  /** What else the page asks, each in words; a card with no words of its own is left to the page. */
+  /** What else the page asks, each card still open: in words where it has its own, the rest counted. */
   const also = $derived(
     cards.flatMap((id) => {
       const part = Object.hasOwn(setupWords.alsoAsks, id)
@@ -83,6 +91,9 @@
         : undefined;
       return part ? [part] : [];
     })
+  );
+  const alsoMore = $derived(
+    cards.filter((id) => !Object.hasOwn(setupWords.alsoAsks, id)).length
   );
   const blocks = (one: BlockedRequest): boolean =>
     (one.request.input as { blocks?: unknown }).blocks === true;
@@ -148,12 +159,17 @@
     {name}
     {onaim}
     onanswer={answerCaw}
+    {ondelegates}
     {onsetup}
     {onstages}
-    questions={(onBoard && asks.length > 0) || (also.length > 0 && pageHref)
+    {proposed}
+    {reading}
+    questions={(onBoard && asks.length > 0) || (cards.length > 0 && pageHref)
       ? overDraft
       : undefined}
     {sending}
+    cardsOpen={cards.length}
+    {pageHref}
     {stages}
     waiting={asks.filter(blocks).length}
   />
@@ -169,18 +185,27 @@
   {/if}
 </div>
 
-<!-- Over the draft's stages: what else his page asks, with the way to it,
-     then on a desk his questions. -->
+<!-- Over the draft's stages: what else his page asks (the bar's Open the
+     setup page is the way to it), then on a desk his questions. -->
 {#snippet overDraft()}
-  {#if also.length > 0 && pageHref}
+  {#if cards.length > 0 && pageHref}
+    <!-- They wait on the person: the Needs-you mark before the words
+         (JOURNEY.md, Needs you is a mark), hung in the gutter so the words
+         start on the draft's one text edge (the bar's, the aim's: a field's
+         text, `space-3` in), the mark centred on the first line however the
+         words wrap. -->
+    <!-- mark-line: the mark hangs on the first line's box, outside the run of words. -->
     <p
-      class="mark-line m-0 flex max-w-c-measure flex-wrap items-center gap-x-space-3 gap-y-space-1 type-body text-ink-muted"
+      class="relative m-0 max-w-c-measure ps-space-3 type-body text-ink-muted"
       data-slot="setup-also"
+      style:--hang="calc(100% - var(--space-3) + var(--space-2))"
     >
-      <span>{setupWords.alsoOnPage(also)}</span>
-      <a class={buttonVariants({ variant: "link", size: "sm" })} href={pageHref}
-        >{setupWords.openPage}</a
+      <span
+        aria-hidden="true"
+        class="absolute end-(--hang) top-0 grid h-lh place-items-center"
+        ><IconNeedsYou class="size-icon-md text-status-attn-glyph" /></span
       >
+      <span>{setupWords.alsoOnPage(also, alsoMore)}</span>
     </p>
   {/if}
   {#if onBoard && asks.length > 0}

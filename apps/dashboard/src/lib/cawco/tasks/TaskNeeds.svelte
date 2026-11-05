@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { waitsOnPick } from "@cawco/core/task-views";
   import { commonWords } from "@cawco/core/words/common";
   /**
    * What a task needs from you, first, each reason with the way to act on it
@@ -11,7 +12,10 @@
    *   or whose outcome is unknown says so, and Remove puts it away;
    * - its newest session failed or was stopped: which, when, and Try again,
    *   a new session (`ended`; the task's own pane carries it in its review);
-   * - it waits on something not settled yet (a task, a card, a pin, a pull
+   * - it waits on a decision card not picked yet: a pick is yours (JOURNEY.md,
+   *   Act on what waits), so it wears the Needs-you mark, each card by its
+   *   chip, which opens the card where it is picked;
+   * - it waits on anything else not settled yet (a task, a pin, a pull
    *   request, a run, a session; the hub's one resolver says): not yours to
    *   do, so it reads quiet, a task with Open, which shows it here in its
    *   place, anything else by its chip, a flagged one as "Blocked: …";
@@ -47,6 +51,7 @@
   import RowFault from "../RowFault.svelte";
   import { referenceOf } from "../references";
   import { actionsOf, asksOf } from "./needs.svelte";
+  import TaskPicks from "./TaskPicks.svelte";
 
   let {
     projectId,
@@ -84,7 +89,12 @@
       !task.liveAttempt
   );
   const lastAttempt = $derived(task.attempts[0]);
-  const blockers = $derived(task.waits.filter((wait) => !wait.settled));
+  /** The cards it waits on that are not picked yet: yours. */
+  const picks = $derived(task.waits.filter(waitsOnPick));
+  /** Everything else it waits on that is not settled: not yours. */
+  const blockers = $derived(
+    task.waits.filter((wait) => !(wait.settled || waitsOnPick(wait)))
+  );
   const builtOn = $derived(task.builtOn);
 
   // --- a done task built on a card that moved ------------------------------------
@@ -157,7 +167,7 @@
   const titleOf = (id: string) => tasks.find((each) => each.id === id)?.title;
 </script>
 
-{#if asks.length > 0 || actions.length > 0 || failed || blockers.length > 0 || builtOn.length > 0}
+{#if asks.length > 0 || actions.length > 0 || failed || picks.length > 0 || blockers.length > 0 || builtOn.length > 0}
   <div data-slot="task-needs-needs-stack" class="flex flex-col gap-space-3">
     {#each asks as blocked (blocked.request.requestId)}
       <section
@@ -333,6 +343,10 @@
           />
         </div>
       </section>
+    {/if}
+
+    {#if picks.length > 0}
+      <TaskPicks {picks} />
     {/if}
 
     {#if blockers.length > 0}

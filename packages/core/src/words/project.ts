@@ -35,6 +35,13 @@ export const projectWords = {
   cawSettings: "Caw settings…",
   /** A task card whose attempt the hub couldn't start. */
   cantStart: "Can't start",
+  /** A task card held on a decision card the person has not picked yet. */
+  waitsOnPick: "waits on your pick:",
+  /** Caw's Needs you: a task held on a card not picked, the card's question after. */
+  needsPick: (question: string): string => `Waits on your pick: ${question}`,
+  /** Caw's Needs you: a task in a stage of kind `you`. */
+  needsReview: (stage: string): string =>
+    `Review the draft: it waits on you in ${stage}`,
   /** Project details' row of the checks the hub runs before it merges work (gate.md). */
   mergeChecks: "Merge checks",
   /** That row for a project whose gate.md names no check. */

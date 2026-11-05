@@ -115,10 +115,12 @@ function setupIn(
 export class SetupDraftSource {
   /** What he drafted, as his program says; null until it is read. */
   drafted = $state<SetupDrafted | null>(null);
-  /** The ids of the page's cards beside the draft (`account`, `routines`, `what-moves`). */
+  /** The ids of the page's cards beside the draft (`area`, `account`, `routines`, `what-moves`, and any other Caw asks there). */
   cards = $state<string[]>([]);
   /** What the person kept over it on the page, by key. */
   kept = $state<Record<string, unknown>>({});
+  /** The page's cards picked, by id: a card absent here still waits on the person. */
+  picked = $state<ReadonlySet<string>>(new Set());
   /** Why the draft could not be read or kept, in the hub's words; null when it was. */
   problem = $state<string | null>(null);
   /**
@@ -128,6 +130,8 @@ export class SetupDraftSource {
   stale = $state(false);
   /** Set up is on its way. */
   sending = $state(false);
+  /** The page's program has been read once since its page was joined: until then the board can't say what the draft holds. */
+  read = $state(false);
 
   #doc: ArtifactDoc | null = null;
   #joined: string | null = null;
@@ -164,16 +168,20 @@ export class SetupDraftSource {
     }
     if (this.#joined !== page.artifactId) {
       this.leave();
+      this.read = false;
       this.#joined = page.artifactId;
       this.#doc = joinArtifact(
         page.writer.instanceId,
         page.artifactId,
         (view) => {
+          const choices = Object.entries(view.choices);
           this.kept = Object.fromEntries(
-            Object.entries(view.choices).map(([key, entry]) => [
-              key,
-              entry.value,
-            ])
+            choices.map(([key, entry]) => [key, entry.value])
+          );
+          this.picked = new Set(
+            choices
+              .filter(([, entry]) => entry.options.length > 0)
+              .map(([key]) => key)
           );
         },
         () => undefined,
@@ -199,6 +207,7 @@ export class SetupDraftSource {
         this.cards = read?.cards ?? [];
         this.stale = read === null;
         this.problem = null;
+        this.read = true;
       }
     } catch (error) {
       if (ticket === this.#read) {

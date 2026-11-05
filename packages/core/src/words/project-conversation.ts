@@ -15,6 +15,14 @@ export const conversationWords = {
   },
   /** The panel head's action: the conversation on show, as a tab. */
   openAsTab: "Open as a tab",
+  /**
+   * The panel head's control: whether the project's events reach a
+   * conversation, said as it stands; pressed, its switch unfolds under the
+   * head.
+   */
+  events: { on: "Events on", off: "Events off" },
+  /** The panel head's line, after the status word: the conversation on show is the one the project's events reach. */
+  getsEvents: "gets the project's events",
   /** A new conversation with nowhere to run: the project has no checkout on a machine yet. */
   noCheckout:
     "This project has no checkout on a machine yet, so a conversation can't start. Add one in Project details, then try again.",

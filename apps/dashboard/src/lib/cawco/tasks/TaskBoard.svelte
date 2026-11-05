@@ -20,6 +20,10 @@
    * form it was typed in. Its card is brought into view in its column and
    * marked new for a moment (`fresh`), and brought into view again when the
    * hub's echo redraws the board.
+   *
+   * The task open in the sheet beside it (`current`) is marked, and its card
+   * is brought into the board's view as it opens: the sheet narrows the
+   * board, and its column may stand past the new edge.
    */
   import { bringIntoStrip, bringIntoView } from "@cawco/core/bring-into-view";
   import type { StageKind } from "@cawco/core/views";
@@ -51,7 +55,10 @@
     archived = [],
     picked,
     onpick,
+    current = null,
   }: {
+    /** The task open in the sheet beside the board: its card is marked. */
+    current?: string | null;
     /** Whether a task is picked for a bulk change (task-select). */
     picked?: (id: string) => boolean;
     /** Ticks or unticks one; `range`, with Shift: the board's cards in order. */
@@ -130,6 +137,15 @@
     }
   });
   $effect(() => () => clearTimeout(unmark));
+  // The open task's card, once the sheet beside has narrowed the board.
+  $effect(() => {
+    const id = current;
+    if (!(id && board)) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => reveal(id));
+    return () => cancelAnimationFrame(frame);
+  });
   const byStage = $derived.by(() => {
     const columns = new Map<string, TaskSummary[]>();
     for (const task of tasks) {
@@ -184,6 +200,7 @@
       ((id, on, range) => onpick(id, on, range ? order : undefined))}
     {onopen}
     over={boardDrag.over === name && name !== boardDrag.from}
+    {current}
     {picked}
     {picking}
     {refused}
@@ -206,6 +223,7 @@
   data-rail-open={railed && railOpen ? "" : undefined}
 >
   <div
+    bind:this={board}
     data-slot="board"
     bind:this={board}
     class={[

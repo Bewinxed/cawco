@@ -29,6 +29,7 @@
   import type { SetupDelegate, Stage } from "#lib/cawco/project/setup-stage.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconNeedsYou, IconSend } from "#lib/icons.js";
 
   let {
@@ -39,22 +40,37 @@
     waiting = 0,
     asking = 0,
     sending = false,
+    cardsOpen = 0,
+    pageHref = null,
     onaim,
     onstages,
     onanswer,
     onsetup,
     delegates = [],
+    proposed,
+    ondelegates,
     questions,
     asksInView = false,
+    reading = false,
   }: {
+    /**
+     * The draft is still being read (the page's list, or its program): the
+     * bar and the stages stand as skeletons in their places, never as an
+     * empty project (The Claim Of Nothing Rule).
+     */
+    reading?: boolean;
     /**
      * His questions stand in view on the board, each with its own Answer:
      * the bar says what waits and offers nothing of its own, since Answer
      * Caw would only point at what is already in view.
      */
     asksInView?: boolean;
-    /** The delegate types the setup proposes: who may do a stage's work. */
+    /** The delegate types the setup keeps: who may do a stage's work. */
     delegates?: SetupDelegate[];
+    /** Every type he proposed, those removed included. */
+    proposed?: SetupDelegate[];
+    /** Keeps the types by id. */
+    ondelegates?: (ids: string[]) => void;
     /** His open questions where the board draws them (a desk): above the stages. */
     questions?: Snippet;
     /** The project's name, as Caw named it. */
@@ -70,6 +86,10 @@
     asking?: number;
     /** Set up is on its way to the hub. */
     sending?: boolean;
+    /** The setup page's cards not picked yet: Set up waits on them. */
+    cardsOpen?: number;
+    /** The setup page at the first of them, where they are picked. */
+    pageHref?: string | null;
     onaim: (next: string) => void;
     onstages: (next: Stage[]) => void;
     /** Opens his questions where they are asked (his panel's composer). */
@@ -78,6 +98,8 @@
   } = $props();
 
   const drafting = $derived(coming > 0 || waiting > 0);
+  /** Set up waits on the setup page's cards, and there is a way to them. */
+  const cardsFirst = $derived(cardsOpen > 0 && pageHref !== null);
   /**
    * What the draft bar says: held on an answer, being written, written with
    * his questions still open, or whole. Set up stands only in the last: an
@@ -95,86 +117,110 @@
 </script>
 
 <div class="flex h-full min-h-0 flex-col gap-space-4" data-slot="setup-draft">
-  <div
-    class="flex flex-wrap items-center gap-x-space-4 gap-y-space-2 rounded-lg bg-surface-band px-space-3 py-space-2 inset-ring inset-ring-border-hairline"
-    data-slot="draft-bar"
-    data-state={barState}
-  >
-    <div aria-live="polite" class="min-w-0 shrink grow basis-c-draft-line">
-      {#if waiting > 0}
-        <p class="mark-line m-0 flex items-center gap-space-2">
-          <IconNeedsYou
-            aria-hidden="true"
-            class="size-icon-md flex-none text-status-attn-glyph"
-          />
-          <span class="type-label text-ink-strong"
-            >{setupWords.waitingOn(waiting)}</span
-          >
-        </p>
-        <p class="m-0 type-meta text-ink-muted">{setupWords.waitingWhy}</p>
-      {:else if drafting}
-        <p class="mark-line m-0 flex items-center gap-space-2">
-          <LiveDot />
-          <span class="type-label text-ink-strong"
-            >{setupWords.draftingHow(name)}</span
-          >
-        </p>
-        {#if asking > 0}
+  {#if reading}
+    <Skeleton height="row" radius="card" />
+  {:else}
+    <div
+      class="flex flex-wrap items-center gap-x-space-4 gap-y-space-2 rounded-lg bg-surface-band px-space-3 py-space-2 inset-ring inset-ring-border-hairline"
+      data-slot="draft-bar"
+      data-state={barState}
+    >
+      <div aria-live="polite" class="min-w-0 shrink grow basis-c-draft-line">
+        {#if waiting > 0}
+          <p class="mark-line m-0 flex items-center gap-space-2">
+            <IconNeedsYou
+              aria-hidden="true"
+              class="size-icon-md flex-none text-status-attn-glyph"
+            />
+            <span class="type-label text-ink-strong"
+              >{setupWords.waitingOn(waiting)}</span
+            >
+          </p>
+          <p class="m-0 type-meta text-ink-muted">{setupWords.waitingWhy}</p>
+        {:else if drafting}
+          <p class="mark-line m-0 flex items-center gap-space-2">
+            <LiveDot />
+            <span class="type-label text-ink-strong"
+              >{setupWords.draftingHow(name)}</span
+            >
+          </p>
+          {#if asking > 0}
+            <p class="m-0 type-meta text-ink-muted">
+              {setupWords.asksOpen(asking)}
+            </p>
+          {/if}
+        {:else}
+          <p class="m-0 type-label text-ink-strong">
+            {setupWords.draftedHow(name)}
+          </p>
           <p class="m-0 type-meta text-ink-muted">
-            {setupWords.asksOpen(asking)}
+            {#if asking > 0}
+              {setupWords.asksBefore(asking)}
+            {:else if cardsFirst}
+              {setupWords.cardsBefore(cardsOpen)}
+            {:else}
+              {setupWords.draftHint}
+            {/if}
           </p>
         {/if}
-      {:else}
-        <p class="m-0 type-label text-ink-strong">
-          {setupWords.draftedHow(name)}
-        </p>
-        <p class="m-0 type-meta text-ink-muted">
-          {asking > 0 ? setupWords.asksBefore(asking) : setupWords.draftHint}
-        </p>
-      {/if}
-    </div>
-    {#if asking > 0 && !asksInView}
-      <Button
-        label={setupWords.answer}
-        onclick={onanswer}
-        size="sm"
-        variant={barState === "drafting" ? "outline" : "default"}
-      />
-    {:else if !drafting}
-      <!-- Its own glyph, so the pending spinner takes the glyph's slot and
+      </div>
+      {#if asking > 0 && !asksInView}
+        <Button
+          label={setupWords.answer}
+          onclick={onanswer}
+          size="sm"
+          variant={barState === "drafting" ? "outline" : "default"}
+        />
+      {:else if !drafting && cardsFirst}
+        <!-- Set up waits on the setup page's cards (hub decisions.ts
+             refuses a Send with one not picked): the way to them. -->
+        <Button
+          href={pageHref ?? undefined}
+          label={setupWords.openPage}
+          size="sm"
+          variant="default"
+        />
+      {:else if !drafting}
+        <!-- Its own glyph, so the pending spinner takes the glyph's slot and
            the label morphs to its pending words in place (the kit's
            Pending recipe); with none, the spinner stood over an empty
            slab (cold review a89636bb). -->
-      <Button
-        icon={IconSend}
-        label={setupPageWords.send(name)}
-        onclick={onsetup}
-        pending={sending}
-        pendingLabel={setupPageWords.sending}
-        size="sm"
-        variant="default"
-      />
-    {/if}
-  </div>
+        <Button
+          icon={IconSend}
+          label={setupPageWords.send(name)}
+          onclick={onsetup}
+          pending={sending}
+          pendingLabel={setupPageWords.sending}
+          size="sm"
+          variant="default"
+        />
+      {/if}
+    </div>
+  {/if}
 
   <!-- The bar holds still over the draft; what it is for and the stages
        scroll under it, in a scroller that reaches the page's edges (its
-       pads the page's, `--draft-bleed-start` and `-end`), so its
+       pads the page's, `--draft-bleed-start` and `-end`, its gutter held
+       so a stage added past the fold never narrows the grid), so its
        scrollbar stands clear of the cards, a field's hover never meets its
        edge, and what passes under the bar fades under the house edge. -->
   <div
-    class="kit-edge-fade-block -ms-(--draft-bleed-start) -me-(--draft-bleed-end) flex min-h-0 flex-auto flex-col gap-space-4 overflow-y-auto ps-(--draft-bleed-start) pe-(--draft-bleed-end) pb-space-6"
+    class="kit-edge-fade-block -ms-(--draft-bleed-start) -me-(--draft-bleed-end) flex min-h-0 flex-auto flex-col gap-space-4 overflow-y-auto scrollbar-gutter-stable ps-(--draft-bleed-start) pe-(--draft-bleed-end) pb-space-6"
     data-slot="draft-scroll"
   >
     {@render questions?.()}
+    <!-- Being read: no stage, aim or type is known yet, so only the
+         stages' skeletons stand, a desk's two rows of them. -->
     <DraftStages
-      adds={!drafting}
-      {aim}
-      {coming}
+      adds={!(drafting || reading)}
+      aim={reading ? "" : aim}
+      coming={reading ? 6 : coming}
       {delegates}
       {onaim}
+      ondelegates={reading ? undefined : ondelegates}
       {onstages}
-      {stages}
+      {proposed}
+      stages={reading ? [] : stages}
     />
   </div>
 </div>
