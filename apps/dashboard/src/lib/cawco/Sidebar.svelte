@@ -160,10 +160,12 @@
   /**
    * A project's row, pressed with the workspace in front, opens its tab
    * where it is, as it was left (workspace `openProject`); a press with a
-   * key held, or from another spoke, follows its link.
+   * key held, from another spoke, or in the phone's sheet (which goes as
+   * its link is followed) follows its link.
    */
   function openProjectTab(event: MouseEvent, projectId: string) {
     if (
+      sheet ||
       !onWorkspace ||
       event.button !== 0 ||
       event.metaKey ||
@@ -1025,9 +1027,10 @@
         <Sidebar.Menu aria-label="Places" gap="tight">
           <Sidebar.MenuItem>
             <!-- The board is the place while it is on screen; with a
-                 conversation open, its row is the one selection. -->
+                 conversation or a project open, its row is the one
+                 selection. -->
             <Sidebar.MenuButton
-              isActive={path.startsWith("/session") && activeSession === null}
+              isActive={onWorkspace && workspace.activeTab === null}
               row="nav"
             >
               {#snippet child({ props })}
