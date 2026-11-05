@@ -336,7 +336,7 @@
 
 <header
   data-slot="project-head"
-  class="@container/head flex-none pt-space-6 pe-space-6 pb-space-4 ps-space-7 max-desk:pt-space-5 max-desk:pe-space-5 max-desk:pb-space-3 max-desk:ps-space-5"
+  class="@container/head flex-none pt-space-6 pe-space-6 pb-space-4 ps-space-7 @max-phone/project:pt-space-5 @max-phone/project:pe-space-5 @max-phone/project:pb-space-3 @max-phone/project:ps-space-5"
 >
   <!-- The row inside the head's gutters, which its widths read: the name
        and the place leading, Caw and the capsule trailing; under head-row
@@ -675,7 +675,7 @@
      words: a rename. -->
 <div
   data-slot="head-faults"
-  class="ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5"
+  class="ps-space-7 pe-space-6 @max-phone/project:ps-space-5 @max-phone/project:pe-space-5"
 >
   <RowFault again={commitName} reason={renameFault} />
 </div>
@@ -728,6 +728,6 @@
     at={endAt}
     opener={() => more}
     projectId={project.id}
-    class="tray-indent-space-7 max-w-128 max-desk:tray-indent-space-5"
+    class="tray-indent-space-7 max-w-128 @max-phone/project:tray-indent-space-5"
   />
 </div>

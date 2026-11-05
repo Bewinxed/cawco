@@ -63,6 +63,7 @@
   import DecisionsView from "#lib/cawco/decisions/DecisionsView.svelte";
   import { ProjectDecisions } from "#lib/cawco/decisions/decisions.svelte.js";
   import { firstRender } from "#lib/cawco/first-render.svelte.js";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import {
     failureClause,
     failureSentence,
@@ -163,6 +164,7 @@
     viewsOf,
     viewTool,
   } from "#lib/cawco/views-api.js";
+  import { PHONE_BREAKPOINT } from "#lib/cawco/workspace/layout-policy.svelte.js";
   import {
     projectHref,
     projectTab,
@@ -1607,11 +1609,16 @@
   );
   /** Something stands after the tabs: the hairline marks where it starts. */
   const trailing = $derived(
-    needsYou.length > 0 ||
-      strippedNewTask ||
-      canTalk ||
-      (filterHere && (wide || narrowed > 0))
+    needsYou.length > 0 || strippedNewTask || canTalk || filterHere
   );
+  /**
+   * The page's room: 640px or wider (`--container-phone`, read off the
+   * strip, which spans the page; 0 on a phone, where it is not drawn), where
+   * the filter stands whole and the pane's gutters are the desk's, as its
+   * `@max-phone/project` classes say. A split's pane folds as a phone's
+   * page does; the window says nothing.
+   */
+  let roomy = $state(true);
   // --- before setup -------------------------------------------------------------
 
   /** The setup page, once Caw has opened it (the project-setup skill's `decisions/setup/`). */
@@ -1852,10 +1859,13 @@
 <!-- The view strip: the views, then what acts on them, the page's own row
      under its head (the top bar holds the workspace's tabs). `roomy`: a wide
      screen, where the filter stands whole. -->
-{#snippet strip(roomy: boolean)}
+{#snippet strip()}
   <div
     data-slot="strip"
-    class="flex min-w-0 items-center gap-space-3 pt-0 pe-space-6 pb-space-4 ps-space-7 max-desk:px-space-5"
+    class="flex min-w-0 items-center gap-space-3 pt-0 pe-space-6 pb-space-4 ps-space-7 @max-phone/project:px-space-5"
+    {@attach frameSize((node: HTMLElement) => {
+      roomy = node.clientWidth >= PHONE_BREAKPOINT;
+    })}
   >
     <ViewTabs
       {current}
@@ -1881,10 +1891,9 @@
          bare symbols … each named for the screen reader and in its
          tooltip"), so the views keep the room. -->
     <div data-form="compact" class="flex flex-none items-center gap-space-2">
-      <!-- Filter, on the views of the tasks: whole in the bar; on a phone,
-           where the row has no room for it, its glyph and count stand while
-           a filter does, and the head's ⋯ opens it. -->
-      {#if filterHere && (roomy || narrowed > 0)}
+      <!-- Filter, on the views of the tasks: whole while the page is 640px
+           or wider, its glyph and count in a narrower pane. -->
+      {#if filterHere}
         <TaskFilterPopover
           compact={!roomy}
           {filter}
@@ -2434,7 +2443,7 @@
             {#if lead.problem}
               <Alert
                 data-id-page-notice
-                class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                class="me-space-6 mb-space-3 ms-space-7 w-auto @max-phone/project:mx-space-5"
                 variant="warning"
               >
                 <AlertDescription>{lead.problem}</AlertDescription>
@@ -2443,7 +2452,7 @@
             {#if stages && stages.problems.length > 0}
               <Alert
                 data-id-page-notice
-                class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                class="me-space-6 mb-space-3 ms-space-7 w-auto @max-phone/project:mx-space-5"
                 variant="warning"
               >
                 <AlertDescription>{unreadStages}</AlertDescription>
@@ -2452,7 +2461,7 @@
             {#if list && list.problems.length > 0}
               <Alert
                 data-id-page-notice
-                class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                class="me-space-6 mb-space-3 ms-space-7 w-auto @max-phone/project:mx-space-5"
                 variant="warning"
               >
                 <AlertDescription>{list.problems.join(" ")}</AlertDescription>
@@ -2463,7 +2472,7 @@
                  once, here, with its Retry. -->
               <Alert
                 data-id-page-notice
-                class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                class="me-space-6 mb-space-3 ms-space-7 w-auto @max-phone/project:mx-space-5"
                 variant="warning"
               >
                 <AlertDescription>{unread}</AlertDescription>
@@ -2482,7 +2491,7 @@
 
             <!-- Under the head from 640px; a phone's views are its bar's. -->
             <div class="contents max-phone:hidden">
-              {@render strip(wide)}
+              {@render strip()}
             </div>
 
             {#if phone}
@@ -2591,17 +2600,13 @@
     data-slot="pane"
     aria-busy={cawco.hub === "unreachable" || awaiting || reading}
     class={[
-      "group flex min-h-0 max-w-full flex-auto flex-col overflow-y-auto pt-0 pe-space-6 ps-space-7 max-desk:px-space-5 view-board:overflow-hidden view-canvas:overflow-hidden view-decisions-page:overflow-hidden max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:basis-0 max-phone:view-canvas:min-h-(--pane-min) max-phone:view-canvas:overflow-visible max-phone:view-decisions-page:basis-0 max-phone:view-decisions-page:min-h-(--pane-min) max-phone:view-decisions-page:overflow-visible",
+      "group flex min-h-0 max-w-full flex-auto flex-col overflow-y-auto pt-0 pe-space-6 ps-space-7 @max-phone/project:px-space-5 view-board:overflow-hidden view-canvas:overflow-hidden view-decisions-page:overflow-hidden max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:basis-0 max-phone:view-canvas:min-h-(--pane-min) max-phone:view-canvas:overflow-visible max-phone:view-decisions-page:basis-0 max-phone:view-decisions-page:min-h-(--pane-min) max-phone:view-decisions-page:overflow-visible",
       fadeOn === "pane" && "kit-edge-fade-block",
       paneFoot,
     ]}
     data-view={reading ? "board" : paneView}
-    style:--draft-bleed-end={sheetQuery.current
-      ? "var(--space-5)"
-      : "var(--space-6)"}
-    style:--draft-bleed-start={sheetQuery.current
-      ? "var(--space-5)"
-      : "var(--space-7)"}
+    style:--draft-bleed-end={roomy ? "var(--space-6)" : "var(--space-5)"}
+    style:--draft-bleed-start={roomy ? "var(--space-7)" : "var(--space-5)"}
     style:--pane-min={docked ? "calc(50cqb + var(--c-sheet-max-h))" : "50cqb"}
   >
     {#if reading}

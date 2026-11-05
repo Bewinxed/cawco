@@ -308,6 +308,7 @@
 @custom-variant marked-off (&[data-marked="off"]);
 @custom-variant mode-page (&[data-mode="page"]);
 @custom-variant mounted-false (&[data-mounted="false"]);
+@custom-variant option-one-row (&[data-option="one-row"]);
 @custom-variant outcome-failed (&[data-outcome="failed"]);
 @custom-variant pad-large (&[data-pad="large"]);
 @custom-variant pad-medium (&[data-pad="medium"]);
@@ -454,6 +455,7 @@
 @custom-variant slot-grown-halo (&[data-slot="grown-halo"]);
 @custom-variant slot-handover (&[data-slot="handover"]);
 @custom-variant slot-head (&[data-slot="head"]);
+@custom-variant slot-head-row (&[data-slot="head-row"]);
 @custom-variant slot-heading (&[data-slot="heading"]);
 @custom-variant slot-highlight-ghost (&[data-slot="highlight-ghost"]);
 @custom-variant slot-hint (&[data-slot="hint"]);
@@ -556,6 +558,7 @@
 @custom-variant slot-runs-ledger (&[data-slot="runs-ledger"]);
 @custom-variant slot-said (&[data-slot="said"]);
 @custom-variant slot-search (&[data-slot="search"]);
+@custom-variant slot-seat (&[data-slot="seat"]);
 @custom-variant slot-section (&[data-slot="section"]);
 @custom-variant slot-section-row-label (&[data-slot="section-row-label"]);
 @custom-variant slot-segment (&[data-slot="segment"]);
