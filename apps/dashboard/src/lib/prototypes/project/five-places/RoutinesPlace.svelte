@@ -22,6 +22,7 @@
     IconTrash,
   } from "#lib/icons.js";
   import type { Read } from "./derive";
+  import { paneSlide } from "./motion";
   import type { ApprovedAction, ProjectRecords, Routine } from "./records";
   import StatusGlyph from "./StatusGlyph.svelte";
 
@@ -245,6 +246,8 @@
     {#if open}
       <!-- The routine opens beside the list; under 900 it rises from the foot. -->
       <aside
+        in:paneSlide={{ leaving: false }}
+        out:paneSlide={{ leaving: true }}
         aria-label={`${words.routinePane}: ${open.name}`}
         class="absolute inset-x-0 bottom-0 z-1 flex max-h-5/6 flex-col gap-space-4 overflow-y-auto rounded-t-lg bg-surface-raised p-space-5 shadow-drawer @desk/five:static @desk/five:max-h-none @desk/five:w-2/5 @desk/five:flex-none @desk/five:rounded-lg @desk/five:shadow-tile"
       >

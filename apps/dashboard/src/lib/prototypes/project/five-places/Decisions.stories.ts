@@ -28,10 +28,17 @@ export const PageOpen = {
   play: press("button", /^Pick where Close stands/u),
 };
 
-/** Arriving from the needs-you line's "5 decisions" on Tasks. */
-export const FromTheLine = {
-  args: { height: 920, place: "tasks" },
+/** The start of the answer: Tasks, where the needs-you line counts 5 decisions. */
+export const LineOnTasks = {
+  args: { height: 920, place: "tasks", group: "waits" },
   parameters: { viewport: 1440 },
+};
+
+/** "5 decisions" pressed in the line: Decisions opens with Waits on you first. */
+export const FromTheLine = {
+  args: { height: 920, place: "decisions", group: "waits" },
+  parameters: { viewport: 1440 },
+  from: "LineOnTasks",
   play: press("button", /^5 decisions$/u),
 };
 

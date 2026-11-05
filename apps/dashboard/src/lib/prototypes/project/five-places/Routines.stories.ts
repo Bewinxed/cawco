@@ -36,10 +36,17 @@ export const Approved = {
   play: press("button", /^Approve$/u),
 };
 
-/** Arriving from the needs-you line's "1 action" on Tasks. */
-export const FromTheLine = {
-  args: { height: 920, place: "tasks" },
+/** The start of the answer: Tasks, where the needs-you line counts 1 action. */
+export const LineOnTasks = {
+  args: { height: 920, place: "tasks", filter: "needs" },
   parameters: { viewport: 1440 },
+};
+
+/** "1 action" pressed in the line: Routines opens with the reply waiting in Proposed. */
+export const FromTheLine = {
+  args: { height: 920, place: "routines", filter: "needs" },
+  parameters: { viewport: 1440 },
+  from: "LineOnTasks",
   play: press("button", /^1 action$/u),
 };
 
