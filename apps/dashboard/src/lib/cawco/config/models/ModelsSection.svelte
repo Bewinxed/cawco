@@ -10,7 +10,10 @@
     type ImageMachine,
     imageReadiness,
   } from "@cawco/core/image-readiness";
-  import { imageSettingsWords } from "@cawco/core/words/image-settings";
+  import {
+    type ImageFix,
+    imageSettingsWords,
+  } from "@cawco/core/words/image-settings";
   import { onMount } from "svelte";
   import { blur } from "svelte/transition";
   import Field from "#lib/cawco/config/Field.svelte";
@@ -284,9 +287,17 @@
   let image = $state<ImageSettings | null>(null);
   /** The choice on screen: the hub's, or the one being saved. */
   let imageShown = $state<ImageSettings>(DEFAULT_IMAGE_SETTINGS);
-  let imagePhase = $state<"idle" | "saving" | "saved">("idle");
-  let imageError = $state<string | null>(null);
+  let imagePhase = $state<"idle" | "saving" | "saved" | "failed">("idle");
+  /** Why the image settings couldn't be read. */
+  let imageUnread = $state<string | null>(null);
+  /** Why the last save didn't hold, and where that is put right. */
+  let imageFault = $state<{ words: string; fix?: ImageFix } | null>(null);
+  /** A pick made while a save was on its way: saved once that one settles. */
+  let imageNext: ImageSettings | null = null;
   const readiness = $derived(imageReadiness(orderMachines(machines), accounts));
+
+  const sameImage = (a: ImageSettings, b: ImageSettings) =>
+    a.provider === b.provider && a.model === b.model;
 
   async function readImage() {
     try {
@@ -297,19 +308,42 @@
       image = (await response.json()) as ImageSettings;
       imageShown = image;
     } catch (error) {
-      imageError = imageSettingsWords.unread(failureClause(error));
+      imageUnread = imageSettingsWords.unread(failureClause(error));
     }
   }
 
-  /** A pick saves at once; a refusal puts the hub's choice back, in its words. */
-  async function chooseImage(next: ImageSettings) {
-    if (!image || imagePhase === "saving") {
+  /**
+   * A pick saves at once. One made while a save is on its way is shown at
+   * once and saved when that one settles: the latest pick is the one that
+   * holds, so no press is lost.
+   */
+  function chooseImage(next: ImageSettings) {
+    if (!image) {
       return;
     }
-    const held = image;
     imageShown = next;
+    if (imagePhase === "saving") {
+      imageNext = next;
+      return;
+    }
+    detach(saveImage(next), "saveImage");
+  }
+
+  /**
+   * Saves one pick. A 400 for a provider or model this dashboard offers
+   * means the hub is older than it (the hub checks against its own list):
+   * said as that, with the way to update the hub. Anything else is said in
+   * the hub's words, or why the save never reached it. A failed save puts
+   * the hub's choice back.
+   */
+  async function saveImage(next: ImageSettings) {
+    const held = image;
+    if (!held) {
+      return;
+    }
     imagePhase = "saving";
-    imageError = null;
+    imageFault = null;
+    let fault: { words: string; fix?: ImageFix } | null = null;
     try {
       const response = await fetch("/api/image-settings", {
         method: "PUT",
@@ -318,22 +352,40 @@
       });
       if (response.ok) {
         image = (await response.json()) as ImageSettings;
-        imageShown = image;
-        imagePhase = "saved";
-        return;
+      } else if (response.status === 400) {
+        fault = {
+          words:
+            next.provider !== held.provider || !next.model
+              ? imageSettingsWords.hubLacksProvider(
+                  next.provider,
+                  held.provider
+                )
+              : imageSettingsWords.hubLacksModel(next.model, held.provider),
+          fix: imageSettingsWords.updateHub,
+        };
+      } else {
+        fault = {
+          words: imageSettingsWords.refused(
+            await hubSaid(response),
+            held.provider
+          ),
+        };
       }
-      imageError = imageSettingsWords.refused(
-        await hubSaid(response),
-        held.provider
-      );
     } catch (error) {
-      imageError = imageSettingsWords.unsent(
-        failureWords(error),
-        held.provider
-      );
+      fault = {
+        words: imageSettingsWords.unsent(failureWords(error), held.provider),
+      };
     }
-    imageShown = held;
-    imagePhase = "idle";
+    const later = imageNext;
+    imageNext = null;
+    const settled = image ?? held;
+    if (later && !sameImage(later, settled)) {
+      await saveImage(later);
+      return;
+    }
+    imageShown = settled;
+    imageFault = fault;
+    imagePhase = fault ? "failed" : "saved";
   }
 
   /**
@@ -420,7 +472,7 @@
 <SectionFrame
   problem={ready
     ? null
-    : (openrouterError ?? jevError ?? watchError ?? imageError)}
+    : (openrouterError ?? jevError ?? watchError ?? imageUnread)}
   {ready}
   {section}
 >
@@ -668,7 +720,7 @@
   </div>
 
   <ImageDefault
-    fault={imageError}
+    fault={imageFault}
     hue={HUE}
     onchoose={chooseImage}
     phase={imagePhase}
