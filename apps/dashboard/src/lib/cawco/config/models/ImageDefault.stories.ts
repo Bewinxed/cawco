@@ -7,6 +7,7 @@
  */
 import { imageReadiness } from "@cawco/core/image-readiness";
 import { imageSettingsWords } from "@cawco/core/words/image-settings";
+import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
 import ImageDefault from "./ImageDefault.svelte";
 import {
   ACCOUNTS,
@@ -31,6 +32,8 @@ export default {
     onchoose: none,
   },
   parameters: { viewport: 1100 },
+  // The app's one tooltip provider (Overlays), which each machine row's state tip reads: without it a story threw as it mounted (Saved: "Context \"Tooltip.Provider\" not found").
+  decorators: [() => ({ Component: TooltipProvider, props: {} })],
 };
 
 /** Nothing set: calls go to ChatGPT, which uwucloud and niftybot.art can't run. */

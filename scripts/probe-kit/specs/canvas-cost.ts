@@ -77,6 +77,10 @@ import {
 } from "../../../packages/agent/src/stage-host/build";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { signalGroup, spawnedPid } from "../../../packages/core/src/signal";
+import {
+  CANVAS_EMBED_FAILED,
+  CANVAS_EMBED_SEEN,
+} from "../../../packages/core/src/stage";
 import { until } from "../../scratch-fleet";
 import { scratchCertificate } from "../cloudflare-front";
 import {
@@ -1429,14 +1433,24 @@ async function framesWithNoInspector(
       async (ms: number) => {
         const h = (
           window as unknown as {
-            __holder: { said: number; settledAt: number | null; start: number };
+            __holder: {
+              failed: string[];
+              said: number;
+              settledAt: number | null;
+              start: number;
+            };
           }
         ).__holder;
         const t0 = Date.now();
-        while (h.settledAt === null && Date.now() - t0 < ms) {
+        while (
+          h.settledAt === null &&
+          h.failed.length === 0 &&
+          Date.now() - t0 < ms
+        ) {
           await new Promise((done) => setTimeout(done, 250));
         }
         return {
+          failed: h.failed,
           said: h.said,
           settledMs:
             h.settledAt === null ? null : Math.round(h.settledAt - h.start),
@@ -1445,6 +1459,11 @@ async function framesWithNoInspector(
       [urls.length * DRAW_MS],
       urls.length * DRAW_MS + 10_000
     );
+    if (settled.failed.length > 0) {
+      throw new Error(
+        `webkit: a frame can't draw: ${settled.failed.join("; ")}`
+      );
+    }
     // A last second for what the last frame's drawing set off.
     await Bun.sleep(1000);
     const drawnMb = browser.memory();
@@ -1663,7 +1682,7 @@ async function frameLeg(
 
 /* --- A page of one frame ----------------------------------------------------- */
 
-/** The page holding frames, every one asked for at once, each told to fetch its whole graph as it tells it. */
+/** The page holding frames, every one asked for at once, each told to fetch its whole graph as it tells it, and that its box stands in view once it has loaded; a frame that can't draw is kept with why (`failed`), which ends the wait. */
 const HOLDER = (urls: string[]) =>
   `<!doctype html><meta charset="utf-8">\n${HOLDER_STYLE}\n${HOLDER_BODY(urls)}`;
 const HOLDER_STYLE =
@@ -1672,12 +1691,17 @@ const HOLDER_BODY = (urls: string[]) => `<main id="list"></main>
 <script>
 const urls = ${JSON.stringify(urls)};
 const list = document.getElementById("list");
-const h = window.__holder = { start: performance.now(), intervals: [], said: 0, settledAt: null };
+const h = window.__holder = { start: performance.now(), intervals: [], said: 0, settledAt: null, failed: [] };
 let last = null;
 // Its cadence read until every frame said its shape, and its loop ended there: a page that asks for every frame makes the browser draw each one, and the idle after is the frames' own.
 const tick = (t) => { if (h.settledAt !== null) return; if (last !== null) h.intervals.push(t - last); last = t; requestAnimationFrame(tick); };
 requestAnimationFrame(tick);
 const frames = urls.map((url) => { const c = document.createElement("div"); c.className = "card"; const f = document.createElement("iframe"); f.src = url; c.append(f); list.append(c); return f; });
+// Its box stood in view once its frame loaded: told, as a decision page's Preview tells it (core CANVAS_EMBED_SEEN), or a story that never stops animating never says its shape.
+const inView = new Set();
+const tellSeen = (f) => { if (f.dataset.loaded && inView.has(f) && !f.dataset.seen) { f.dataset.seen = "1"; f.contentWindow.postMessage({ type: ${JSON.stringify(CANVAS_EMBED_SEEN)} }, "*"); } };
+const seen = new IntersectionObserver((entries) => { for (const e of entries) { if (e.isIntersecting) { inView.add(e.target); tellSeen(e.target); } } });
+for (const f of frames) { seen.observe(f); f.addEventListener("load", () => { f.dataset.loaded = "1"; tellSeen(f); }); }
 addEventListener("message", (e) => {
   const f = frames.find((one) => one.contentWindow === e.source);
   if (!f) return;
@@ -1687,6 +1711,8 @@ addEventListener("message", (e) => {
     f.style.blockSize = e.data.height + "px";
     if (h.said === urls.length && h.settledAt === null) h.settledAt = performance.now();
   }
+  // A frame that can't draw says why in place of its shape (core CANVAS_EMBED_FAILED): it will never say one, so the wait ends on it.
+  if (type === ${JSON.stringify(CANVAS_EMBED_FAILED)}) h.failed.push(String(e.data.why));
   // Its graph told (core CANVAS_EMBED_GRAPH): its whole graph its own share, nothing more to wait on, as a page with this one frame fetching gives it.
   if (type === "cawco:embed-graph") { e.source.postMessage({ type: "cawco:embed-go", urls: e.data.urls }, "*"); e.source.postMessage({ type: "cawco:embed-ready", urls: [] }, "*"); }
 });
@@ -1788,12 +1814,27 @@ async function sharedLeg(
       const t0 = Date.now();
       await page.goto(`http://127.0.0.1:${holder.port}/`);
       await page.waitForFunction(
-        () =>
-          (window as unknown as { __holder: { settledAt: number | null } })
-            .__holder.settledAt !== null,
+        () => {
+          const h = (
+            window as unknown as {
+              __holder: { failed: string[]; settledAt: number | null };
+            }
+          ).__holder;
+          return h.settledAt !== null || h.failed.length > 0;
+        },
         undefined,
         { timeout: EMBEDS * 30_000, polling: 250 }
       );
+      const failed = (await page.evaluate(
+        () =>
+          (window as unknown as { __holder: { failed: string[] } }).__holder
+            .failed
+      )) as string[];
+      if (failed.length > 0) {
+        throw new Error(
+          `${engine}: the shared frame can't draw: ${failed.join("; ")}`
+        );
+      }
       const settledMs = Date.now() - t0;
       // A last second for what the last frame's drawing set off.
       await Bun.sleep(1000);
