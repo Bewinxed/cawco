@@ -121,16 +121,19 @@ export class ArtifactRefused extends Error {
 /**
  * Brings an artifact to the front of a session's panel (its own, or one of
  * its delegation tree's sessions'); the panel follows its frame. A
- * project's setup page opens in no panel: the hub names the project whose
- * board draws it (hub artifacts/service.ts `boardOf`), and the person goes
- * to that board.
+ * project's setup page opens in no panel: the hub answers where it lands,
+ * at `card` when a card chip named one (core `setupLanding`), and the
+ * person goes there.
  */
 export async function showArtifact(
   instanceId: string,
-  id: string
+  id: string,
+  card: string | null = null
 ): Promise<void> {
   const response = await fetch(`${artifactsPath(instanceId, id)}/show`, {
     method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(card ? { card } : {}),
   });
   if (!response.ok) {
     throw new ArtifactRefused(
@@ -139,10 +142,10 @@ export async function showArtifact(
     );
   }
   const shown = (await response.json().catch(() => null)) as {
-    board?: unknown;
+    href?: unknown;
   } | null;
-  if (typeof shown?.board === "string") {
-    await goto(`/project/${encodeURIComponent(shown.board)}`);
+  if (typeof shown?.href === "string") {
+    await goto(shown.href);
   }
 }
 

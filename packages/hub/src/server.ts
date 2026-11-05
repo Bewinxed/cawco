@@ -1034,6 +1034,7 @@ import {
   BUDGET,
   createTasks,
   hubActor,
+  isSetUp,
   LANDS,
   sessionActor,
   type TaskStore,
@@ -15091,6 +15092,7 @@ export const createServer = (
       notifications.clear([artifactCollapseId(id)], "look");
     },
     waits: (instanceId) => plans.waits(instanceId),
+    setUp: (projectId) => isSetUp(projectId, db.project(projectId)),
     waitOn: (instanceId, artifactId) => plans.waitOn(instanceId, artifactId),
     clearArtifactWait: (instanceId, artifactId) =>
       plans.clearArtifactWait(instanceId, artifactId),

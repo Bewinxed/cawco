@@ -59,6 +59,7 @@ import {
   notNowId,
   type PlanWaits,
   planWaitsOnArtifact,
+  setupLanding,
 } from "@cawco/core";
 import { unhandled } from "@cawco/core/unhandled";
 import type { ArtifactRow } from "../db/artifacts";
@@ -115,6 +116,8 @@ export interface ArtifactSessions {
   harness: HarnessKind | null;
   /** The holder's machine; null when the hub holds no session. */
   machineId: string | null;
+  /** A project's setup page: its project is set up (hub tasks.ts `isSetUp`), which says where it lands (core `setupLanding`); false for any other artifact. */
+  setUp: boolean;
   /** The writer's plan: the page waits and steps a wait on it stands on. */
   waits: PlanWaits;
 }
@@ -246,12 +249,16 @@ const stopOf = (
 
 /**
  * Where its item opens: the session that holds it, at `stop`; a project's
- * setup page, the project's page, whose board draws it and where no panel
- * opens it (service `boardOf`).
+ * setup page, which no panel opens (service `boardOf`), where it lands
+ * (core `setupLanding`), at `stop`'s card when it names one.
  */
-const hrefOf = (row: ArtifactRow, stop: ArtifactStop): string =>
+const hrefOf = (
+  row: ArtifactRow,
+  stop: ArtifactStop,
+  setUp: boolean
+): string =>
   row.projectId !== null && isSetupPage(row)
-    ? `/project/${encodeURIComponent(row.projectId)}`
+    ? setupLanding(row.projectId, setUp, "card" in stop ? stop.card : null)
     : artifactStopHref(row.instanceId as string, row.id, stop);
 
 /** Its pending state as its own list reads it (Files, the panel's menu): null when it asks nothing now. */
@@ -294,7 +301,7 @@ export const needOf = (
     pending,
     raisedAt,
     stop,
-    href: hrefOf(row, stop),
+    href: hrefOf(row, stop, sessions.setUp),
     notNow: notNowId(row.id, raisedAt),
     parked: false,
     unsent: facts.unsent,
@@ -373,6 +380,6 @@ export const noticeOf = (
     at,
     parts,
     stop,
-    href: row.instanceId === null ? null : hrefOf(row, stop),
+    href: row.instanceId === null ? null : hrefOf(row, stop, sessions.setUp),
   };
 };

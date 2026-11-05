@@ -13,6 +13,7 @@
   import type { ArtifactKind } from "@cawco/core/artifact-kinds";
   import {
     type ArtifactNeedNotice,
+    needLinkOf,
     noticePartWords,
   } from "@cawco/core/artifact-needs";
   import { detach } from "@cawco/core/detach";
@@ -96,7 +97,7 @@
       data-slot="name"
       data-artifact-notice={notice.artifactId}
       class="select-none pe-(--x-room) min-w-0 rounded-xs type-label wrap-anywhere text-ink-row no-underline focus-inset hover:text-ink-strong"
-      href={notice.href.split("?")[0]}
+      href={needLinkOf(notice.href)}
       onclick={opened}>{words}</a
     >
   {:else}

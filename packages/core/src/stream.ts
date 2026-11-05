@@ -238,12 +238,17 @@ import type { TailnetServing } from "./tailnet-https";
  *    `asked` path when its format's extension replaced the asked one), where
  *    `billing: "chatgpt_subscription"` stood. A page built for 47 reads a
  *    `billing` the hub no longer sends, so it reloads first.
+ * 49: the person's show of a project's setup page answers where it lands
+ *    (`href`: its board while the project is not set up, its Decisions tab
+ *    at the page, at the card the show names, once it is), where the
+ *    project whose board draws it (`board`) stood. A page built for 48
+ *    reads a `board` the hub no longer sends, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 48;
+export const WIRE_PROTOCOL = 49;
 
 /**
  * What a session's stream carries: the changes each frame made to its

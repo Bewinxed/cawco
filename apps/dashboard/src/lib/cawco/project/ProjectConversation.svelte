@@ -161,7 +161,7 @@
   /**
    * The conversation on show has something to show: Preview stands beside
    * Assistant. (A project's setup page is never in it: the hub opens it in
-   * no panel, its board draws it; hub artifacts/service.ts `boardOf`.)
+   * no panel, the project's page draws it; core `setupLanding`.)
    */
   const previewOpen = $derived(
     shown !== null && cawco.previews[shown]?.state === "open"

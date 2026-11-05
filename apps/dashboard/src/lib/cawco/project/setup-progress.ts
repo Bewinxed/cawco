@@ -6,6 +6,7 @@
  * order, ticked from what has happened (decision page `onboarding-design`,
  * card `the-wait`, "Caw at work in his panel, the fixed steps under him").
  */
+import { SETUP_PAGE } from "@cawco/core/artifact-needs";
 import { setupWords } from "@cawco/core/words/onboarding";
 import type { Message } from "../types";
 
@@ -29,9 +30,6 @@ export interface SetupProgress {
   phase: SetupPhase;
   steps: SetupStep[];
 }
-
-/** The page the setup skill writes and opens: `decisions/setup/` (hub setup.ts `SETUP_PAGE`). */
-export const SETUP_PAGE = "setup";
 
 /**
  * Whether decision page `page`, asked for at `card`, lands on the board

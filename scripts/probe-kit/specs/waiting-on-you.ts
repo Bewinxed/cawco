@@ -91,6 +91,7 @@ const sessionsOf = (waitsOn: string): ArtifactSessions => ({
   ended: false,
   harness: "claude",
   machineId: "machine-1",
+  setUp: false,
   waits: { pageWaits: [waitsOn], steps: [] },
 });
 

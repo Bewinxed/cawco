@@ -78,9 +78,7 @@
   /** Asks again: Retry on the page's failure reads where it is served afresh. */
   let tries = $state(0);
 
-  const place = $derived(
-    `/__cawco/page/${artifactId}/${card ? `#${encodeURIComponent(card)}` : ""}`
-  );
+  const place = $derived(`/__cawco/page/${artifactId}/`);
 
   /** Turned away: the browser enters its previews, then the frame loads again. */
   async function enter(at: string) {
@@ -176,6 +174,23 @@
       inset: { bottom: insetBottom },
     });
   }
+
+  // The card the address names (`#<card>`) is brought into view and outlined
+  // for a moment once the page is ready, and again when the address names
+  // another, as a card chip does in the panel (PreviewPane `showCard`).
+  $effect(() => {
+    const target = card;
+    if (!(connected && target)) {
+      return;
+    }
+    untrack(() =>
+      post({
+        type: "cawco:show-element",
+        selector: `#decision-${CSS.escape(target)}`,
+        outline: "flash",
+      })
+    );
+  });
 
   // The dashboard's theme turning tells the page; so does the composer's height.
   $effect(() => {

@@ -168,6 +168,37 @@ export const artifactStopHref = (
   return base;
 };
 
+/** A project's setup page's name: its decision page `decisions/setup/` (hub setup.ts `isSetupPage`). */
+export const SETUP_PAGE = "setup";
+
+/** Project `projectId`'s setup page in its Decisions tab, at `card` when one is named (`#<card>`). */
+export const setupPageAt = (projectId: string, card: string | null): string =>
+  `/project/${encodeURIComponent(projectId)}?view=decisions&page=${SETUP_PAGE}${card ? `#${encodeURIComponent(card)}` : ""}`;
+
+/**
+ * Where a project's setup page lands, by every route that shows it (Caw's
+ * `artifact_create` and `artifact_show`, the person's show: a chip, a card
+ * chip, Files, a link; Needs you): while the project is not set up, its
+ * board, which draws the draft; once it is, its Decisions tab at the page,
+ * at `card` when one is named. It never opens in a panel.
+ */
+export const setupLanding = (
+  projectId: string,
+  setUp: boolean,
+  card: string | null
+): string =>
+  setUp
+    ? setupPageAt(projectId, card)
+    : `/project/${encodeURIComponent(projectId)}`;
+
+/**
+ * The address a Needs-you row's or notice's name links to, from its `href`:
+ * a session's, without the artifact it opens (the press opens that
+ * itself); a setup page's landing (core {@link setupLanding}) whole.
+ */
+export const needLinkOf = (href: string): string =>
+  href.startsWith("/session/") ? (href.split("?")[0] ?? href) : href;
+
 /** A `stop` query value read back; the top when it names none. */
 export const artifactStopOf = (value: string | null): ArtifactStop => {
   if (value?.startsWith("pin:")) {

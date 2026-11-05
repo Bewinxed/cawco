@@ -19,6 +19,9 @@ import { failureClause } from "./hub-read";
 import { askPlan, type Thing } from "./reference-things.svelte";
 import { refusals } from "./refusals.svelte";
 
+/** The decision card `at` names, which a project's setup page lands at (core `setupLanding`). */
+const cardOf = (at: OpenAt): string | null => ("card" in at ? at.card : null);
+
 /** The address of artifact `id`'s own tab, opening at `at`. */
 const ownTab = (id: string, at: OpenAt): string => {
   const base = `/artifact/${encodeURIComponent(id)}`;
@@ -66,7 +69,7 @@ export async function openReference(
     return null;
   }
   try {
-    await showArtifact(session, id);
+    await showArtifact(session, id, cardOf(at));
     revealPreview(session);
     return null;
   } catch (error) {
@@ -99,7 +102,7 @@ export async function openArtifactIn(
     return null;
   }
   try {
-    await showArtifact(instanceId, id);
+    await showArtifact(instanceId, id, cardOf(at));
     revealPreview(instanceId);
     refusals.delete(key);
     return null;

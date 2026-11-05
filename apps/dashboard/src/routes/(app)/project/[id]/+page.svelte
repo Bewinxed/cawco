@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { SETUP_PAGE, setupPageAt } from "@cawco/core/artifact-needs";
   import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
   import {
     BLOCK_PAGE_TITLES,
@@ -92,7 +93,6 @@
   import { SetupDraftSource } from "#lib/cawco/project/setup-draft.svelte.js";
   import {
     handedOver,
-    SETUP_PAGE,
     setupLandsOnBoard,
     setupProgressOf,
   } from "#lib/cawco/project/setup-progress.js";
@@ -2156,9 +2156,7 @@
       onaim={(next) => draft.keep("aim", next)}
       onanswercaw={() => detach(lead.answerAsks(), "answer Caw")}
       onBoard={asksOnBoard}
-      pageHref={draft.cards[0]
-        ? `/project/${projectId}?view=decisions&page=${SETUP_PAGE}#${encodeURIComponent(draft.cards[0])}`
-        : null}
+      pageHref={draft.cards[0] ? setupPageAt(projectId, draft.cards[0]) : null}
       onsetup={() => detach(setUp(), "set the project up")}
       onstages={(next) => draft.keep("stages", next)}
       onaskagain={canTalk

@@ -791,15 +791,25 @@ export const artifactRoutes = (artifacts: Artifacts) =>
     )
     // Whether a view has it on screen within 10 s, or why not; 503 when its
     // server could not start. The person's show unless by=agent (artifact_show).
+    // A project's setup page opens in no panel: the answer's href is where it lands.
     .post(
       "/api/instances/:id/artifacts/:artifact/show",
-      { query: handQuery },
-      async ({ params, query }) => {
+      {
+        query: handQuery,
+        // A decision card it opens at: a project's setup page lands there (core `setupLanding`).
+        body: t.Optional(
+          t.Object({
+            card: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
+          })
+        ),
+      },
+      async ({ params, query, body }) => {
         try {
           return await artifacts.show(
             params.id,
             params.artifact,
-            query.by ?? "person"
+            query.by ?? "person",
+            body?.card ?? null
           );
         } catch (error) {
           return refused(error);

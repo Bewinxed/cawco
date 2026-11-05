@@ -56,6 +56,9 @@
  * Changes to one project's tasks are taken one at a time: two to-dos ticked
  * at once both land.
  */
+
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import {
   type AttemptResult,
   CLOSED_STAGE_KINDS,
@@ -132,6 +135,7 @@ import {
   listFolder,
   MEDIA_TYPES,
   moveFolderFile,
+  projectRoot,
   readFolderFile,
   readFolderFileAt,
   refused,
@@ -699,6 +703,20 @@ export const stagesFileOf = async (
   }
 };
 const DEFAULT_TEMPLATE: StagesTemplate = "code";
+
+/**
+ * Whether project `projectId` is set up, read at once where a read can't
+ * wait (Needs you's href, a show of its setup page: core `setupLanding`):
+ * its folder holds stages.md, or its row a template. {@link stagesOf}
+ * answers source `none` for the rest, but for a project whose task files
+ * stand in for a template, which it records at its first read.
+ */
+export const isSetUp = (
+  projectId: string,
+  project: { template: string | null } | undefined
+): boolean =>
+  Boolean(project?.template) ||
+  existsSync(join(projectRoot(projectId), STAGES_FILE));
 
 /** A project not set up yet reads as stages.md with no stages ({@link stagesOf}). */
 const NOT_SET_UP: StagesReading = {

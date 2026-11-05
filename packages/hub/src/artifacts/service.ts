@@ -55,6 +55,7 @@ import {
   type SettledBy,
   type ShownFailure,
   sessionLink,
+  setupLanding,
   unsentChoices,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
@@ -879,14 +880,14 @@ export type Opened =
   | {
       opened: false;
       why: string;
-      /** A project's setup page: the project whose board draws it, where a person's show takes them ({@link onBoard}). */
-      board?: string;
+      /** A project's setup page: where the person goes to it (core `setupLanding`), as their show takes them ({@link landingOf}). */
+      href?: string;
     };
 
 /** What `artifact_show` answers: {@link Opened}, with the artifact's link, `[name](cawco:artifact/<id>)`, which the agent names it by and its tool row draws. */
 export type Shown =
   | { link: string; opened: true }
-  | { board?: string; link: string; opened: false; why: string };
+  | { href?: string; link: string; opened: false; why: string };
 
 /**
  * What `artifact_browse` answers: the address the session's own browser
@@ -911,14 +912,13 @@ const NOT_PUT_ON_SCREEN = `A dashboard is showing this session, but none put the
 /** Why a `to: "parent"` create opened nothing: the parent opens it. */
 const HELD = artifactToolWords.handedToParent;
 
-/** Why a project's setup page opened nothing: its project's board draws it ({@link boardOf}). */
-const ON_BOARD = artifactToolWords.onBoard;
-
 /**
- * The project whose board draws artifact `row`, or null: a project's setup
- * page (setup.ts `isSetupPage`) is drawn as its board on the project's page
- * (decision page `onboarding-first-minutes`, card `draft-where`), the one
- * editor of the draft, and never in a session's panel, by any show.
+ * The project whose page draws artifact `row`, or null: a project's setup
+ * page (setup.ts `isSetupPage`) is never drawn in a session's panel, by any
+ * show. While its project is not set up it is drawn as the board (decision
+ * page `onboarding-first-minutes`, card `draft-where`), the one editor of
+ * the draft; once it is, in the project's Decisions tab (core
+ * `setupLanding`).
  */
 export const boardOf = (row: ArtifactRow): string | null =>
   row.projectId !== null && isSetupPage(row) ? row.projectId : null;
@@ -1889,6 +1889,8 @@ export interface ArtifactServiceDeps {
     workspace: string,
     serve: ServeSpec
   ) => Promise<StageState>;
+  /** Whether project `projectId` is set up (tasks.ts `isSetUp`): where its setup page lands (core `setupLanding`). */
+  setUp: (projectId: string) => boolean;
   /** The artifact a session's panel shows now, if any. */
   showing: (instanceId: string) => string | undefined;
   /**
@@ -4230,6 +4232,28 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * Where the person goes to artifact `row`, a project's setup page, at
+   * `card` when one is named (core `setupLanding`), and why no panel opened
+   * it: its project's board while the project is not set up, its Decisions
+   * tab at the page once it is. Null for any other artifact, which opens in
+   * a panel.
+   */
+  const landingOf = (
+    row: ArtifactRow,
+    card: string | null
+  ): { href: string; why: string } | null => {
+    const project = boardOf(row);
+    if (!project) {
+      return null;
+    }
+    const setUp = deps.setUp(project);
+    return {
+      href: setupLanding(project, setUp, card),
+      why: setUp ? artifactToolWords.onDecisions : artifactToolWords.onBoard,
+    };
+  };
+
+  /**
    * Publishes the artifact to session `panel`'s panel (its own session's
    * unless named) and waits for a view to have it on screen; `started` is
    * false when its server could not even be started, and nothing was
@@ -4238,14 +4262,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    */
   const show = async (
     row: ArtifactRow,
-    panel = row.instanceId
+    panel = row.instanceId,
+    card: string | null = null
   ): Promise<
     | { opened: true; started: true }
-    | { opened: false; started: boolean; why: string; board?: string }
+    | { opened: false; started: boolean; why: string; href?: string }
   > => {
-    const board = boardOf(row);
-    if (board) {
-      return { opened: false, started: true, why: ON_BOARD, board };
+    const landing = landingOf(row, card);
+    if (landing) {
+      return { opened: false, started: true, ...landing };
     }
     const published = await timedShowStep("open", row, panel, () =>
       deps.open(row, panel)
@@ -4298,8 +4323,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (shown.opened) {
       return { opened: true };
     }
-    return shown.board
-      ? { opened: false, why: shown.why, board: shown.board }
+    return shown.href
+      ? { opened: false, why: shown.why, href: shown.href }
       : { opened: false, why: shown.why };
   };
 
@@ -6649,10 +6674,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   ): ArtifactSessions => {
     const owner = holder(row);
     const writer = askOf(row, facts)?.by;
+    const project = boardOf(row);
     return {
       ended: !owner || deps.finished(owner),
       harness: owner?.harness ?? null,
       machineId: owner?.machineId ?? null,
+      setUp: project !== null && deps.setUp(project),
       waits: writer ? deps.waits(writer) : { pageWaits: [], steps: [] },
     };
   };
@@ -8357,7 +8384,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     show: async (
       instanceId: string,
       id: string,
-      by: PanelHand
+      by: PanelHand,
+      card: string | null = null
     ): Promise<Shown> => {
       const instance = sessionOf(instanceId);
       const found = viewable(instance, id);
@@ -8372,7 +8400,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (next) {
         row = await promote(row, next);
       }
-      const shown = await show(row, instance.id);
+      const shown = await show(row, instance.id, card);
       if (!shown.started) {
         throw new ArtifactRefusal(503, shown.why);
       }

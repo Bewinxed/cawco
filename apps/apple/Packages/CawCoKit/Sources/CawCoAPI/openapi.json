@@ -8790,6 +8790,23 @@
             }
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "card": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
         "operationId": "postApiInstancesByIdArtifactsByArtifactShow",
         "responses": {
           "200": {
@@ -31424,7 +31441,7 @@
           {
             "type": "object",
             "properties": {
-              "board": {
+              "href": {
                 "type": "string"
               },
               "link": {

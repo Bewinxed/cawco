@@ -57,7 +57,7 @@
    * with its dot, and comes back when it is raised again.
    */
   import type { ArtifactKind } from "@cawco/core/artifact-kinds";
-  import { reasonLine } from "@cawco/core/artifact-needs";
+  import { needLinkOf, reasonLine } from "@cawco/core/artifact-needs";
   import { detach } from "@cawco/core/detach";
   import { causeLine } from "@cawco/core/install";
   import { questionsOf } from "@cawco/core/question";
@@ -176,10 +176,10 @@
       return;
     }
     if (item.kind !== "ask") {
-      // An artifact's is its session's address; the
-      // press opens the artifact there itself (`chosen`), so a press on the
-      // address already in front opens it too.
-      return item.kind === "artifact" ? item.href.split("?")[0] : item.href;
+      // An artifact's is its session's address, a setup page's where it
+      // lands; the press opens the artifact there itself (`chosen`), so a
+      // press on the address already in front opens it too.
+      return item.kind === "artifact" ? needLinkOf(item.href) : item.href;
     }
     // An ask opens where it was made (`askView`).
     return conversationHref(askView(item), cawco.instanceIndex);

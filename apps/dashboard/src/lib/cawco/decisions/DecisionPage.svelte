@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { SETUP_PAGE } from "@cawco/core/artifact-needs";
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import type {
     DecisionPageRead,
@@ -33,7 +34,6 @@
     reveal,
     revealOut,
   } from "#lib/cawco/motion/curves.svelte.js";
-  import { SETUP_PAGE } from "#lib/cawco/project/setup-progress.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import FootFade from "#lib/cawco/transcript/FootFade.svelte";
   import { Button } from "#lib/components/ui/button/index.js";

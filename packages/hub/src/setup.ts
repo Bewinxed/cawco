@@ -20,12 +20,10 @@ import {
   type OfferedTemplate,
   type StagesTemplate,
 } from "@cawco/core";
+import { SETUP_PAGE } from "@cawco/core/artifact-needs";
 import type { SetupDrawn } from "@cawco/core/decisions";
 import { templateStages } from "./stages";
 import { templateTypes } from "./template-types";
-
-/** The decision page's name, and its folder in the project's. */
-const SETUP_PAGE = "setup";
 
 /** The `account` card's option for the fleet's routing: no account of the project's own. */
 const ROUTING = "routing";
