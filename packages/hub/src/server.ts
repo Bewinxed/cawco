@@ -181,6 +181,7 @@ import {
   CONTAINERS_ENDED,
   CONTAINERS_UNTRACKED,
   CONTEXT_LINE,
+  CONTINUATION_ORIGIN,
   CONTROL_ABANDON,
   CONTROL_ACCOUNT_LENT,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
@@ -1376,6 +1377,54 @@ const foldFormerSessions = (db: DbShape): string[] => {
     );
   }
   return folded.flatMap((one) => one.owedAgain);
+};
+
+/** The once-run repair below, by its name in `data_migrations`. */
+const SPLIT_CONTINUATIONS = "split_continuations:2026-11-05";
+
+/**
+ * Once, at start, before any machine is heard: each continuation a hub
+ * before the one-session rule's steps committed together left half done
+ * (db `splitContinuations`: its source and its new session both running,
+ * its live work moved to the new one and its conversation pointer left on
+ * the source; Private office's Caw, 2026-11-05 10:13:07) is made one
+ * session, nothing stopped but the one that folds.
+ *
+ * WHICH ONE STAYS: the one the person last wrote to since the split, as
+ * its live conversation holds what they asked last; with no word of theirs
+ * since, the new session, as the continuation meant it (it holds the
+ * summary its move went on from, and its opening went). The other is
+ * folded into it (db `foldContinued`): its delegates, items, queued starts
+ * and asks, its project's conversation pointer and its sends are the
+ * survivor's, its id a former id of it (so a report addressed to it
+ * arrives), its conversation read before the survivor's, and its process
+ * ended at its machine's next register. Nothing a process lost is owed
+ * again: what failed then stays failed.
+ */
+const repairSplitContinuations = (db: DbShape): void => {
+  if (db.dataMigrated(SPLIT_CONTINUATIONS)) {
+    return;
+  }
+  for (const { sourceId, targetId } of db.splitContinuations()) {
+    const lastWord = (id: string): number =>
+      db
+        .sendsIn(id, ["read", "pending", "failed"])
+        .filter((send) => send.body.origin?.kind === "human")
+        .at(-1)
+        ?.acceptedAt.getTime() ?? 0;
+    const [target] = db.getInstancesByIds([targetId]);
+    const since = target?.createdAt.getTime() ?? 0;
+    const toSource = lastWord(sourceId);
+    const toTarget = lastWord(targetId);
+    const survivor =
+      toSource > since && toSource > toTarget ? sourceId : targetId;
+    const former = survivor === sourceId ? targetId : sourceId;
+    const folded = db.foldContinued(former, survivor);
+    console.log(
+      `[hub] ${sourceId} and its continuation ${targetId} were two sessions where one was meant: ${former} is folded into ${survivor}, which ${survivor === sourceId ? "the person wrote to last" : "the continuation started, the person having written to neither since"}; one session from here${folded?.ending.length ? `, ${former} ended at its machine's next register` : ""}.`
+    );
+  }
+  db.markDataMigrated(SPLIT_CONTINUATIONS);
 };
 
 /**
@@ -4160,6 +4209,7 @@ export const createServer = (
   if (swept) {
     console.log(`[hub] boot sweep: ${swept} session(s) → unknown`);
   }
+  repairSplitContinuations(db);
   keepSendsAtStart(db);
 
   /**
@@ -17060,7 +17110,9 @@ export const createServer = (
     from: LabelledRow,
     uuid: string,
     /** What rides it beside its words, as a dashboard's send carries it. */
-    extras: Pick<SendPayload, "images" | "attachments"> = {}
+    extras: Pick<SendPayload, "images" | "attachments"> = {},
+    /** Who it is from, as its row says; absent, `from` as a peer. */
+    origin?: SentMessage["origin"]
   ): void => {
     deliverSend({
       verb: "send",
@@ -17077,7 +17129,7 @@ export const createServer = (
           uuid,
           message: { role: "user", content },
           parent_tool_use_id: null,
-          origin: {
+          origin: origin ?? {
             kind: "peer",
             from: from.id,
             name: sessionLabel(from).name,
@@ -18946,18 +18998,45 @@ export const createServer = (
   };
 
   /**
-   * A job fails in the words the hub got: the source was only read, and goes
-   * on as it was; one its move asked for moves as its harness's own
-   * `/compact` instead ({@link moveAfterFailedSummary}).
+   * A job fails in the words the hub got, all of it undone: the source was
+   * only read, or its steps rolled back together ({@link oneSession}), and
+   * goes on as it was, holding all it held; a new session it started is
+   * removed ({@link undoStart}). One its move asked for leaves the session
+   * where it is, held at its limit when it is stopped there
+   * ({@link summaryMoveFailed}).
    */
   const failContinuation = (row: ContinuationRow, reason: string): void => {
     moveContinuation(row.id, { stage: "failed", error: reason });
     console.warn(
       `[continuation] ${row.prepared.source.title} couldn't continue in a new session: ${reason}.`
     );
+    undoStart(row);
     if (row.askedBy.kind === "move") {
-      detach(moveAfterFailedSummary(row, reason), "move after its summary");
+      summaryMoveFailed(row, reason);
     }
+  };
+
+  /**
+   * A failed job's new session, removed: the job's steps commit with its
+   * opening's going ({@link oneSession}, {@link separateSession}), so one
+   * whose opening never went holds nothing of its source, and is ended and
+   * deleted with its row. Nothing once the opening has gone, or when it was
+   * never started.
+   */
+  const undoStart = (row: ContinuationRow): void => {
+    if (db.sendRecord(row.openingUuid)) {
+      return;
+    }
+    const [target] = db.getInstancesByIds([row.targetInstanceId]);
+    if (!target) {
+      return;
+    }
+    console.warn(
+      `[continuation] ${row.prepared.source.title}'s new session ${row.targetInstanceId.slice(0, 8)} is removed: nothing of ${row.prepared.source.title} moved to it, and it goes on where it was.`
+    );
+    lifecycle.oweEndSession(target.id, "delete");
+    forgetPending(target.id, UNREAD.stopped);
+    publishInstances(target.machineId);
   };
 
   /**
@@ -19101,14 +19180,12 @@ export const createServer = (
       return false;
     }
     const ready = moveContinuation(row.id, { openItems: open }) ?? row;
-    // The source's own work item goes on in the new session, whoever asked:
-    // its opening is the item's (its row has named the item since its
-    // start, {@link spawnTarget}, so it lists finish_item from its first turn).
-    // The source never runs again in that workspace.
-    if (source?.workItemId) {
-      workItems.continuedIn(source.workItemId, row.targetInstanceId);
-    }
-    if (source && row.askedBy.kind !== "person") {
+    if (db.instanceIdOf(prepared.source.instanceId) === row.targetInstanceId) {
+      // Folded before a restart, its opening not yet gone: the source's row
+      // may be gone with its process meanwhile.
+      sendOpening(ready, "continuation");
+      afterFold(ready);
+    } else if (source && row.askedBy.kind !== "person") {
       oneSession(ready, source);
     } else {
       separateSession(ready, source);
@@ -19117,34 +19194,81 @@ export const createServer = (
   };
 
   /**
-   * The person's own Continue: a separate session. The source of an item
-   * points onward to it ({@link retireContinued}); what the source was owed
-   * goes behind the opening ({@link releaseOne}).
+   * The source's own work item going on in the new session, whoever asked:
+   * its opening is the item's (its row has named the item since its start,
+   * {@link spawnTarget}, so it lists finish_item from its first turn). The
+   * source never runs again in that workspace.
+   */
+  const carryItem = (
+    job: ContinuationRow,
+    source: ReturnType<typeof db.getInstancesByIds>[number] | undefined
+  ): void => {
+    if (source?.workItemId) {
+      workItems.continuedIn(source.workItemId, job.targetInstanceId);
+    }
+  };
+
+  /**
+   * The person's own Continue: a separate session. Its item and its live
+   * work move to it in one transaction ({@link DbShape.atomically}); then
+   * the source of an item points onward to it ({@link retireContinued}),
+   * the opening goes, and what the source was owed goes behind it
+   * ({@link releaseOne}).
    */
   const separateSession = (
     job: ContinuationRow,
     source: ReturnType<typeof db.getInstancesByIds>[number] | undefined
   ): void => {
+    const from = job.prepared.source.instanceId;
+    const adopted = db.atomically(() => {
+      carryItem(job, source);
+      return db.adoptChildren(from, job.targetInstanceId);
+    });
     if (source?.workItemId) {
       retireContinued(source.id, job.targetInstanceId);
     }
-    adoptChildren(job.prepared.source.instanceId, job.targetInstanceId);
-    sendOpening(job);
-    releaseOwed({ instanceId: job.prepared.source.instanceId });
+    saidAdopted(from, job.targetInstanceId, adopted);
+    sendOpening(job, "peer");
+    releaseOwed({ instanceId: from });
   };
 
   /**
-   * Anything else's continuation: one session with its source
-   * ({@link foldContinued}), its line written before the opening it folds.
+   * ONE SESSION, ALL OR NOTHING. Anything else's continuation is its source
+   * going on in the new session ({@link foldContinued}), and its steps in
+   * the hub's records commit in one transaction: the source's item and live
+   * work move to it ({@link carryItem}, `adoptChildren`), its line is
+   * written between the two conversations ({@link noteContinued}), and the
+   * source is folded into it (db `foldContinued`). Only then does the
+   * opening go, under that line, and is the source's process ended. A step
+   * that throws commits none of them: the new session is removed
+   * ({@link undoStart}, by the job's failure) and the source goes on as it
+   * was, holding all it held. One the hub restarted after its commit (the
+   * source is a former id of the new session already) only sends its
+   * opening ({@link startTarget}).
    */
   const oneSession = (
     job: ContinuationRow,
     source: ReturnType<typeof db.getInstancesByIds>[number]
   ): void => {
-    adoptChildren(source.id, job.targetInstanceId);
-    noteContinued(job, source);
-    sendOpening(job);
-    foldContinued(job, source);
+    const to = job.targetInstanceId;
+    const plan = db.atLimit.compaction(source.id);
+    const committed = db.atomically(() => {
+      carryItem(job, source);
+      const adopted = db.adoptChildren(source.id, to);
+      noteContinued(job, source);
+      // What it was handed and never read goes with what it was owed.
+      for (const send of db.sendsIn(source.id, ["pending"])) {
+        if (!send.owed && send.envelope) {
+          db.holdSend(send.uuid, send.envelope);
+        }
+      }
+      dropCompaction(source.id, plan);
+      return { adopted, folded: db.foldContinued(source.id, to) };
+    });
+    saidAdopted(source.id, to, committed.adopted);
+    foldContinued(job, source, committed.folded, plan);
+    sendOpening(job, "continuation");
+    afterFold(job);
   };
 
   /** The move a summary went on as, as its continued line says what sent it. */
@@ -19221,47 +19345,53 @@ export const createServer = (
 
   /**
    * THE ONE-SESSION RULE: a continuation anything but the person's own
-   * Continue asked for (a session's `continue_session`, a task's comment)
-   * is the session going on in a fresh conversation, never a second
-   * session. Once its opening has gone, the source is folded into the new
-   * session (db `foldContinued`): its id is a former id of it, so a send,
-   * a handoff, a tab or a link that names it reaches the new one
+   * Continue asked for (a session's `continue_session`, a task's comment,
+   * a move at an account's limit) is the session going on in a fresh
+   * conversation, never a second session. The source is folded into the
+   * new session (db `foldContinued`, committed with the rest of its steps
+   * by {@link oneSession}): its id is a former id of it, so a send, a
+   * handoff, a tab or a link that names it reaches the new one
    * ({@link byIdNow}); its row goes, the new one taking its place, title
    * and start on the board; its conversation reads before the new one's,
-   * with its line between ({@link noteContinued}). Its at-limit hold, the
-   * resume at its reset, a move owed at its turn's end and its compaction
-   * go, and its process is ended, the wake-ups it scheduled inside it with
-   * it. What it was handed and never read is owed again, and goes with
-   * what it was owed, behind the opening.
+   * with its line between ({@link noteContinued}). Here, once that has
+   * committed: its at-limit hold, the resume at its reset, a move owed at
+   * its turn's end and its compaction (`plan`, read before the commit) are
+   * forgotten, and its process is ended, the wake-ups it scheduled inside it
+   * with it.
    */
   const foldContinued = (
     job: ContinuationRow,
-    source: ReturnType<typeof db.getInstancesByIds>[number]
+    source: ReturnType<typeof db.getInstancesByIds>[number],
+    folded: ReturnType<typeof db.foldContinued>,
+    plan: ReturnType<typeof db.atLimit.compaction>
   ): void => {
     const from = source.id;
     const to = job.targetInstanceId;
     atLimit.forget(from);
     owedMoves.delete(from);
-    forgetCompaction(source, to);
-    for (const send of db.sendsIn(from, ["pending"])) {
-      if (!send.owed && send.envelope) {
-        db.holdSend(send.uuid, send.envelope);
-      }
-    }
+    saidCompactionFolded(source, plan, to);
     forgetPending(from, UNREAD.stopped, false, "all");
-    const folded = db.foldContinued(from, to);
     if (folded && folded.ending.length > 0) {
       lifecycle.oweEndSession(from, "delete");
     }
     console.info(
       `[continuation] ${sessionName(source)} (${from.slice(0, 8)}) goes on as ${to.slice(0, 8)}, one session, asked by ${askerWords(job.askedBy)}: ${from.slice(0, 8)} is a former id of it from here${folded?.ending.length ? ", its process ended" : ""}.`
     );
+  };
+
+  /**
+   * A folded continuation's opening gone: it is drawn, the new session's
+   * transcript is read again with its source's conversation before it, both
+   * machines' boards are told, and what the source was owed goes to it.
+   */
+  const afterFold = (job: ContinuationRow): void => {
+    const to = job.targetInstanceId;
     const opening = db.sendRecord(job.openingUuid);
     if (opening) {
       publishSend(opening);
     }
     transcripts.reread(to);
-    publishInstances(source.machineId);
+    publishInstances(job.prepared.source.machineId);
     publishInstances(targetMachineOf(job));
     releaseOwed({ instanceId: to });
   };
@@ -19339,13 +19469,18 @@ export const createServer = (
   };
 
   /**
-   * The session a continuation started takes on the live work of the one it
+   * The session a continuation started took on the live work of the one it
    * continues, before its opening turn: its unended delegates and their
    * items, queued delegates and starts, and the asks waiting on an answer
-   * ({@link DbShape.adoptChildren}). Reports route by the moved rows.
+   * ({@link DbShape.adoptChildren}, committed with the job's other steps).
+   * Said once committed, and every board those sessions are on is told.
+   * Reports route by the moved rows.
    */
-  const adoptChildren = (from: string, to: string): void => {
-    const adopted = db.adoptChildren(from, to);
+  const saidAdopted = (
+    from: string,
+    to: string,
+    adopted: ReturnType<typeof db.adoptChildren>
+  ): void => {
     const [source, target] = [from, to].map(
       (id) => db.getInstancesByIds([id])[0]
     );
@@ -19364,9 +19499,14 @@ export const createServer = (
 
   /**
    * Hands a job's opening under the job's send uuid, once: to its new
-   * session, from the session it continues.
+   * session, from the session it continues (`peer`), or, for one that is
+   * that session going on ({@link oneSession}), as the opening of its fresh
+   * conversation under the line before it (`continuation`).
    */
-  const sendOpening = (row: ContinuationRow): void => {
+  const sendOpening = (
+    row: ContinuationRow,
+    as: "peer" | "continuation"
+  ): void => {
     if (db.sendRecord(row.openingUuid)) {
       return;
     }
@@ -19383,7 +19523,10 @@ export const createServer = (
       },
       row.openingUuid,
       // Kept on the job's record until now, so a restart in between keeps them.
-      { images: row.request.images, attachments: row.request.attachments }
+      { images: row.request.images, attachments: row.request.attachments },
+      as === "continuation"
+        ? { kind: "system", name: CONTINUATION_ORIGIN }
+        : undefined
     );
   };
 
@@ -23686,12 +23829,11 @@ export const createServer = (
             : `${title}: ${accountMoveSentence(how.move, Date.now())}`,
       };
     }
-    const said = done.move ?? how.move;
-    noteAtLimit(row, said, how.line);
+    noteAtLimit(row, how.move, how.line);
     return {
       state: "moved",
       accountId: account.id,
-      why: `${title}: ${accountMoveSentence(said, Date.now())}`,
+      why: `${title}: ${accountMoveSentence(how.move, Date.now())}`,
     };
   };
 
@@ -23954,7 +24096,7 @@ export const createServer = (
     publishInstances(stored.machineId);
     publishStalls();
     if (!("later" in done)) {
-      noteAtLimit(stored, done.move ?? how.move, how.line);
+      noteAtLimit(stored, how.move, how.line);
     }
   };
 
@@ -28845,10 +28987,14 @@ export const createServer = (
       return;
     }
     if (plan.move.kind === "moved" && plan.move.compactFirst) {
+      if (stage === "stopped") {
+        compactFirstFailed(plan, plan.move, why);
+        return;
+      }
       console.info(
         `[at-limit] ${plan.instanceId.slice(0, 8)}: ${why}. It moves to ${accountWords(plan.move.to.id)} now.`
       );
-      detach(moveCompacted(plan, plan.move, stage), "move after compaction");
+      detach(moveCompacted(plan, plan.move), "move after compaction");
       return;
     }
     sayCompaction(plan, stage);
@@ -28857,6 +29003,46 @@ export const createServer = (
       `[at-limit] ${row ? sessionName(row) : plan.instanceId}: ${why}. What was sent to it meanwhile goes now.`
     );
     releaseOwed({ instanceId: plan.instanceId });
+  };
+
+  /**
+   * A move that compacts first (core `AccountMove` `compactFirst`) whose
+   * compaction ended without compacting (`why`: refused, interrupted, or its
+   * `/compact` compacted nothing). ONE PATH: it compacts and moves, or does
+   * not move; it is never moved whole instead. Its move line gives way to
+   * one saying it wasn't moved and why, its parent is told, and it goes on
+   * where it is, with what was sent to it meanwhile; its account's limit
+   * decides again when it reaches it.
+   */
+  const compactFirstFailed = (
+    plan: LimitCompaction,
+    move: Extract<AccountMove, { kind: "moved" }>,
+    why: string
+  ): void => {
+    const [row] = db.getInstancesByIds([plan.instanceId]);
+    if (!row) {
+      return;
+    }
+    unnoteAtLimit(row, plan.lineId);
+    noteAtLimit(row, {
+      kind: "unmoved",
+      action: "move",
+      from: move.from,
+      to: move.to,
+      step: "start",
+      reason: why,
+    });
+    const [listed] = db.listedInstancesByIds([row.id]);
+    if (listed?.parentInstanceId) {
+      reportToParent(
+        listed,
+        `${sessionName(row)} wasn't moved to ${move.to.name}: ${why}. It goes on where it is.`,
+        false,
+        { notice: true }
+      );
+    }
+    publishStalls();
+    releaseOwed({ instanceId: row.id });
   };
 
   /**
@@ -29017,8 +29203,9 @@ export const createServer = (
 
   /**
    * The move a compaction ahead of it waited for (core `AccountMove`
-   * `compactFirst`), made now its compaction has ended as `stage`, compacted
-   * or stopped (then whole): its conversation carried to the account its
+   * `compactFirst`), made now its compaction has compacted it (one that
+   * didn't is not moved, {@link compactFirstFailed}): its conversation
+   * carried to the account its
    * line names and relaunched there ({@link carryTo}), its line said again
    * as it ends, and what waited goes there. One its process still keeps
    * where it is owes the move to its turn's end ({@link owedMoves}), its
@@ -29026,29 +29213,25 @@ export const createServer = (
    */
   const moveCompacted = async (
     plan: { instanceId: string; lineId: string },
-    move: Extract<AccountMove, { kind: "moved" }>,
-    stage: "compacted" | "stopped"
+    move: Extract<AccountMove, { kind: "moved" }>
   ): Promise<void> => {
     const [row] = db.getInstancesByIds([plan.instanceId]);
     if (!row) {
       return;
     }
-    // Compacted, it re-reads what its compaction left, once a reading smaller
-    // than the one the move was weighed at says so; the cost weighed then
-    // was the whole conversation's, so it is said only for a move whole.
+    // It re-reads what its compaction left, once a reading smaller than the
+    // one the move was weighed at says so; the cost weighed then was the
+    // whole conversation's, so it is not said.
     const { cost, ...rest } = move;
     const smaller =
       row.contextTokens !== null &&
       move.tokens !== null &&
       row.contextTokens < move.tokens;
-    const said: Extract<AccountMove, { kind: "moved" }> =
-      stage === "compacted"
-        ? {
-            ...rest,
-            compact: stage,
-            tokens: smaller ? row.contextTokens : move.tokens,
-          }
-        : { ...move, compact: stage };
+    const said: Extract<AccountMove, { kind: "moved" }> = {
+      ...rest,
+      compact: "compacted",
+      tokens: smaller ? row.contextTokens : move.tokens,
+    };
     const done = await carryTo(row, move.to.id, false, undefined, undefined);
     if ("kept" in done) {
       unnoteAtLimit(row, plan.lineId);
@@ -29083,21 +29266,40 @@ export const createServer = (
   };
 
   /**
-   * A compacting session folded into its continuation `to` ({@link foldContinued}):
-   * its compaction is dropped, its line with it, and nothing moves it. The
-   * continuation is its move now, and its row goes with the fold; ended as
-   * a stop instead, a compaction ahead of a move would carry the row the
-   * fold is deleting (2026-11-04: `[move after compaction] failed:
-   * SQLiteError: FOREIGN KEY constraint failed`).
+   * A compacting session folded into its continuation ({@link oneSession}):
+   * its compaction (`plan`, read before) is dropped in the fold's own
+   * transaction, its line with it, and nothing moves it. The continuation
+   * is its move now, and its row goes with the fold; ended as a stop
+   * instead, a compaction ahead of a move would carry the row the fold is
+   * deleting (2026-11-04: `[move after compaction] failed: SQLiteError:
+   * FOREIGN KEY constraint failed`). Records only: its transcript and log
+   * are told once the fold has committed ({@link saidCompactionFolded}).
    */
-  const forgetCompaction = (row: { id: string }, to: string): void => {
-    const plan = db.atLimit.compaction(row.id);
+  const dropCompaction = (
+    instanceId: string,
+    plan: ReturnType<typeof db.atLimit.compaction>
+  ): void => {
     if (!plan) {
       return;
     }
-    db.atLimit.dropCompaction(row.id);
+    db.atLimit.dropCompaction(instanceId);
     if (plan.move !== null) {
-      unnoteAtLimit(row, plan.lineId);
+      db.atLimit.dropEvent(plan.lineId);
+      db.unanchorLine(instanceId, `limit-${plan.lineId}`);
+    }
+  };
+
+  /** A folded session's compaction dropped ({@link dropCompaction}), told: its line out of its transcript, and the log. */
+  const saidCompactionFolded = (
+    row: { id: string },
+    plan: ReturnType<typeof db.atLimit.compaction>,
+    to: string
+  ): void => {
+    if (!plan) {
+      return;
+    }
+    if (plan.move !== null) {
+      transcripts.removeLine(row.id, `limit-${plan.lineId}`);
     }
     console.info(
       `[at-limit] ${row.id.slice(0, 8)}: its ${stepWords(plan.stage)} ends unfinished, as it goes on as ${to.slice(0, 8)}: that continuation is its move, and nothing moves it again.`
@@ -30776,8 +30978,9 @@ export const createServer = (
    * turn and its harness's `/compact` run where it is, and the move follows
    * once they end ({@link compactFirst}). From a summary: the same session
    * goes on in a fresh conversation on `accountId` ({@link continueAsMove});
-   * a summary that can't be written for it takes the harness's `/compact`
-   * for this move instead, its line saying why. Every mover calls this: the
+   * one that can't leaves it where it is, as does a compaction before the
+   * move that compacted nothing ({@link compactFirstFailed}): a move goes
+   * the way its plan says or not at all. Every mover calls this: the
    * at-limit controller, the rebalance, a person's move and a move owed to a
    * turn's end.
    */
@@ -30787,11 +30990,7 @@ export const createServer = (
     stopped: false | "limit" | "signin",
     asked: MoveHow | undefined,
     laterSince?: number
-  ): Promise<
-    | { kept: Kept }
-    | { ended?: MoveEnded; move?: Extract<AccountMove, { kind: "moved" }> }
-    | { later: true }
-  > => {
+  ): Promise<{ kept: Kept } | { ended?: MoveEnded } | { later: true }> => {
     doing(`the move of ${sessionName(row)} to ${accountWords(accountId)}`);
     // A move already under way as a continuation from a summary is this
     // session's move: a second one beside it (an owed move taken up, a
@@ -30806,13 +31005,20 @@ export const createServer = (
     if (!asked || asked.plan.method === "whole") {
       return carryTo(row, accountId, stopped, undefined, laterSince);
     }
-    let how = asked;
+    const how = asked;
     if (how.plan.method === "summary") {
+      // ONE PATH: a move from a summary goes on from a summary or not at
+      // all. One that can't be written leaves the session where it is, as
+      // any move no account took ({@link Kept}); nothing moves it some
+      // other way.
       const refusal = await continueAsMove(row, accountId, stopped, how);
       if (refusal === undefined) {
         return { later: true };
       }
-      how = nativeInstead(row, how, refusal);
+      console.info(
+        `[at-limit] ${sessionName(row)} can't go on from a summary as its move to ${accountWords(accountId)}: ${refusal}. It stays where it is.`
+      );
+      return { kept: { running: false, why: refusal } };
     }
     if (how.plan.method === "native" && how.plan.when === "before") {
       compactFirst(row, how);
@@ -30825,32 +31031,7 @@ export const createServer = (
       { line: how.line, move: how.move },
       laterSince
     );
-    return "kept" in done ? done : { ...done, move: how.move };
-  };
-
-  /**
-   * `how` as the native compaction a summary that could not be written for
-   * this move falls back to, at the same moment, its line saying why
-   * (`refusal`, the hub's words).
-   */
-  const nativeInstead = (
-    row: Pick<MoverRow, "harness" | "id">,
-    how: MoveHow,
-    refusal: string
-  ): MoveHow & { plan: { method: "native"; when: "before" | "after" } } => {
-    const when = how.plan.method === "whole" ? "after" : how.plan.when;
-    console.info(
-      `[at-limit] ${sessionName(row)} can't go on from a summary as its move: ${refusal}. Its own /compact runs ${when} the move instead.`
-    );
-    const plan = { method: "native" as const, when };
-    return {
-      ...how,
-      plan,
-      move: {
-        ...compactedLine(how.move, plan, row.harness),
-        summaryRefused: refusal,
-      },
-    };
+    return done;
   };
 
   /**
@@ -30951,48 +31132,32 @@ export const createServer = (
 
   /**
    * A summary its move asked for failed after its job was filed (`row`, in
-   * the failure's words): the move goes on as the harness's own `/compact`
-   * at the same moment, its line saying why; nothing when the source runs
-   * no more.
+   * the failure's words), its new session removed ({@link undoStart}): the
+   * session stays where it is, the failure said in its transcript and to
+   * its parent, and, stopped at its limit, held there as any session no
+   * account took. Nothing moves it some other way. Nothing when the source
+   * runs no more.
    */
-  const moveAfterFailedSummary = async (
-    row: ContinuationRow,
-    reason: string
-  ): Promise<void> => {
+  const summaryMoveFailed = (row: ContinuationRow, reason: string): void => {
     const asker = row.askedBy;
     const [source] = db.getInstancesByIds([row.sourceInstanceId]);
-    if (asker.kind !== "move" || asker.move.kind !== "moved" || !source) {
+    if (asker.kind !== "move" || !source) {
       return;
     }
-    const how = nativeInstead(
-      source,
-      {
-        cause: asker.stopped ? "limit" : "hand",
-        line: asker.line,
-        move: asker.move,
-        plan: { method: "summary", when: asker.stopped ? "after" : "before" },
-      },
-      reason
-    );
-    if (how.plan.when === "before") {
-      compactFirst(source, how);
-      return;
-    }
-    const done = await carryTo(
-      source,
-      asker.to,
-      asker.stopped,
-      { line: how.line, move: how.move },
-      undefined
-    );
-    if ("kept" in done) {
-      console.warn(
-        `[at-limit] ${sessionName(source)} stays on ${accountWords(source.accountId)}: its summary failed (${reason}), and moving it to ${accountWords(asker.to)} to compact it there failed too: ${done.kept.why}. Its limit decides again at the next look.`
+    const why = `it couldn't go on from a summary: ${reason}`;
+    atLimit.moveFailed(source.id, asker.to, why, asker.stopped);
+    const [listed] = db.listedInstancesByIds([source.id]);
+    if (listed?.parentInstanceId) {
+      reportToParent(
+        listed,
+        `${sessionName(source)} wasn't moved to ${accountWords(asker.to)}: ${why}. It stays where it is${asker.stopped ? ", held at its limit" : ""}.`,
+        false,
+        { notice: true }
       );
-      releaseOwed({ instanceId: source.id });
-      return;
     }
-    noteAtLimit(source, how.move, how.line);
+    if (!asker.stopped) {
+      releaseOwed({ instanceId: source.id });
+    }
   };
 
   const atLimit = createAtLimit({

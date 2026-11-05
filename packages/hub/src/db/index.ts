@@ -772,6 +772,12 @@ export interface DbShape {
   readonly asks: AsksDb;
   /** Sessions held at their account's limit, summaries kept ahead of it, and the lines it wrote. */
   readonly atLimit: AtLimitDb;
+  /**
+   * `run` in one transaction: every write it makes, through any method here
+   * (each nested one a savepoint inside it), commits together or, when it
+   * throws, none does. What it answers.
+   */
+  readonly atomically: <T>(run: () => T) => T;
   /** Records ownership before sending a create; a restart discards anything still unfiled. */
   readonly beginWorkspaceCreate: (id: string, machineId: string) => void;
   /** Each project page's arrangement of blocks (blocks.ts). */
@@ -1034,15 +1040,6 @@ export interface DbShape {
     from: string,
     to: string
   ) => FoldedSession | undefined;
-  /**
-   * Folds every former session ({@link instanceAliases}) not yet folded into
-   * the session it is now, one transaction each: what answered to it, what
-   * it ran, what it was sent and wrote, its conversation (into
-   * `conversations`, in the order the conversations started), and the sends
-   * that failed only because one of its processes went away, owed again.
-   * Its row goes, or, with a process that may still run, is ended (`delete`)
-   * so its machine stops it first. What each fold did.
-   */
   readonly foldFormerSessions: (
     /** Whether a send that failed for `reason` failed only because a process went away. */
     owedAgain: (reason: string) => boolean
@@ -2422,6 +2419,24 @@ export interface DbShape {
   readonly sleepInstance: (id: string) => boolean;
   /** What reaching a cap does where a project sets nothing; its default before any is set. */
   readonly spendOnCap: () => OnCap;
+  /**
+   * Folds every former session ({@link instanceAliases}) not yet folded into
+   * the session it is now, one transaction each: what answered to it, what
+   * it ran, what it was sent and wrote, its conversation (into
+   * `conversations`, in the order the conversations started), and the sends
+   * that failed only because one of its processes went away, owed again.
+   * Its row goes, or, with a process that may still run, is ended (`delete`)
+   * so its machine stops it first. What each fold did.
+   */
+  /**
+   * Each continuation left half done by a hub before the one-session rule's
+   * steps committed together (server.ts `oneSession`): a running session
+   * (`targetId`) that opened on a `continued` line no conversation of it
+   * names (its source was never folded into it), whose first send came from
+   * a session still running and folded into nothing (`sourceId`). Each pair
+   * is two sessions where one was meant.
+   */
+  readonly splitContinuations: () => { sourceId: string; targetId: string }[];
   /** The machines the hub added over SSH, and the connection it holds to each (ssh-tunnels.ts). */
   readonly sshMachines: SshMachinesDb;
   readonly stageSessionIdentity: (instanceId: string, hash: string) => void;
@@ -4347,7 +4362,15 @@ const make = async (path: string): Promise<DbShape> => {
       .map((member) => member.parentInstanceId)
       .find((id) => id !== null && !ids.includes(id));
     // Its conversations: the former rows' first, in the order they began,
-    // then the survivor's own.
+    // then the survivor's own. They are the survivor's alone from here: a
+    // former's own rows go now, as a former still running keeps its row
+    // until its machine ends it, and each row names the line after it
+    // (`instance_conversations_next`, unique), so a former that had gone on
+    // in a fresh conversation before held that line's row twice and failed
+    // the fold (Private office's Caw, 2026-11-05 10:13:07).
+    tx.delete(instanceConversations)
+      .where(inArray(instanceConversations.instanceId, gone))
+      .run();
     putConversations(tx, survivorId, [
       ...prior,
       ...conversationsOf(tx, survivorId),
@@ -6019,6 +6042,7 @@ const make = async (path: string): Promise<DbShape> => {
           .where(and(eq(instances.id, from), eq(instances.workItemId, itemId)))
           .run();
       }),
+    atomically: (run) => db.transaction(() => run()),
     adoptChildren: (from, to) =>
       db.transaction((tx) => {
         const items = tx
@@ -6195,6 +6219,66 @@ const make = async (path: string): Promise<DbShape> => {
           return folded ? [folded] : [];
         })
       );
+    },
+    splitContinuations: () => {
+      const live = and(
+        isNull(instances.endIntent),
+        notInArray(instances.status, ["stopped", "discarded", "error"])
+      );
+      const running = new Set(
+        db
+          .select({ id: instances.id })
+          .from(instances)
+          .where(live)
+          .all()
+          .map((row) => row.id)
+      );
+      const folded = new Set(
+        db
+          .select({ id: instanceAliases.id })
+          .from(instanceAliases)
+          .all()
+          .map((row) => row.id)
+      );
+      const lines = new Map<string, string[]>();
+      for (const event of db
+        .select({ id: limitEvents.id, instanceId: limitEvents.instanceId })
+        .from(limitEvents)
+        .where(sql`json_extract(${limitEvents.move}, '$.kind') = 'continued'`)
+        .all()) {
+        if (running.has(event.instanceId)) {
+          lines.set(event.instanceId, [
+            ...(lines.get(event.instanceId) ?? []),
+            event.id,
+          ]);
+        }
+      }
+      return [...lines].flatMap(([targetId, ids]) => {
+        const named = new Set(
+          conversationsOf(db, targetId).flatMap((one) =>
+            one.next ? [one.next] : []
+          )
+        );
+        if (ids.every((id) => named.has(id))) {
+          return [];
+        }
+        const [first] = db
+          .select({ body: sentMessages.body })
+          .from(sentMessages)
+          .where(eq(sentMessages.instanceId, targetId))
+          .orderBy(asc(sentMessages.acceptedAt))
+          .limit(1)
+          .all();
+        const origin = first?.body?.origin;
+        const sourceId =
+          origin?.kind === "peer" ? origin.fromSession : undefined;
+        return sourceId &&
+          sourceId !== targetId &&
+          running.has(sourceId) &&
+          !folded.has(sourceId)
+          ? [{ sourceId, targetId }]
+          : [];
+      });
     },
     foldContinued: (from, to) =>
       db.transaction((tx) => {

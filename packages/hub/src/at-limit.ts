@@ -952,8 +952,6 @@ export interface MoveHow {
 /** What a carry that went did: what it ended of its process's work held for later (core `MoveEnded`), when anything. */
 interface Carried {
   ended?: MoveEnded;
-  /** Its line as the move made it, when that is not the line it was asked with (a summary that could not be written). */
-  move?: Extract<AccountMove, { kind: "moved" }>;
 }
 
 /** What the hub does for the controller: the parts that reach machines. */
@@ -1814,15 +1812,14 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       return undefined;
     }
     const { ended } = done;
-    const said = done.move ?? moved;
     ports.note(
       row,
       ended && (ended.tasks.length > 0 || ended.wakeups > 0)
         ? {
-            ...said,
+            ...moved,
             ended: { tasks: ended.tasks.length, wakeups: ended.wakeups },
           }
-        : said,
+        : moved,
       line
     );
     if (refused) {
@@ -2856,6 +2853,33 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       }
       ports.changed();
       plan();
+    },
+    /**
+     * `instanceId`'s move to `accountId` failed after it was under way (a
+     * summary that could not be written or folded, server.ts
+     * `summaryMoveFailed`; `why` in the hub's words): it stays where it is,
+     * the failure said once in its transcript, and, `stopped` at its limit
+     * or on a refused sign-in, held there as any session no account took
+     * ({@link unmoved}). Nothing moves it some other way.
+     */
+    moveFailed(
+      instanceId: string,
+      accountId: string,
+      why: string,
+      stopped: false | "limit" | "signin"
+    ): void {
+      const row = rowOf(instanceId);
+      const current = row ? currentOf(row) : undefined;
+      const target = db.accounts.get(accountId);
+      if (!(row && current && target)) {
+        return;
+      }
+      unmoved(row, current, target, why, {
+        held: stopped !== false,
+        refused: stopped === "signin",
+        since: undefined,
+        waits: false,
+      });
     },
     /** Whether a refused turn of `instanceId` is this controller's to answer. */
     manages(instanceId: string): boolean {
