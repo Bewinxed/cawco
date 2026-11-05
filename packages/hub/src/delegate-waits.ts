@@ -35,14 +35,17 @@
  * however often the hub restarts. An ask handed to the parent to answer is
  * marked by its `delegate_events` row.
  *
- * A parent that could not be told as the ask parked (its row `unknown`, as
- * every live row is from a hub's start until its machine registers) is told
- * when its machine registers: the hub asks the rule again of every ask
- * still parked (server.ts, the agent's register), and the marks keep what
- * was told from going twice. `unknown` is not taken for reachable: the send
- * path holds a send for a machine only inside its reconnecting window and
- * fails it outside (server.ts `deliverToSession`, `away`), and a failed send
- * under its name would mark the wait told when nobody was.
+ * A parent read `unknown` (as every live row is from a hub's start until
+ * its machine registers) is told as any other: the send path keeps the
+ * notice durably, owed in `sent_messages`, and hands it over as the
+ * machine registers (server.ts `deliverToSession`, `away`), under the same
+ * name, so a wait or an end told meanwhile reaches it once. A machine that
+ * does not come back within its window has every send kept for it fail, by
+ * the fleet's rule for every send. And as each machine registers the hub
+ * asks the rule again of every ask still parked (server.ts, the agent's
+ * register): one a parent could not hear as it parked (an ask its parent
+ * could answer, not routed to it while it could not) is handed or told
+ * then, and the marks keep what was told from going twice.
  */
 import {
   type AskAnswer,

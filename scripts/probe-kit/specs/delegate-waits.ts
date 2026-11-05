@@ -31,14 +31,22 @@
  *     push of the first, lands, and the first has still been pushed once.
  * (g) A parent read `unknown` as the ask parks: the machine's agent is
  *     killed and the hub restarts, so every live row reads `unknown` until
- *     the agent registers. A third proposal parks then, and its parent is
- *     not told; the agent comes back and registers, and the parent is told
- *     of it, once.
+ *     the agent registers. A third proposal parks then: its note is kept for
+ *     the parent, owed, and reaches it once as the agent comes back and
+ *     registers.
+ * (h) An ask that ends while its parent reads `unknown`: agent killed and
+ *     hub restarted again, the person declines the third proposal. Its end
+ *     note is kept for the parent, owed, and reaches it once as the agent
+ *     registers.
+ * (i) A browser ask open across a hub restart: its call ends with the hub,
+ *     and the next start drops the mark push kept of it (db `ask_pushes`),
+ *     while a proposal parked again keeps its own.
  *
  *   bun scripts/probe-kit/run.ts delegate-waits
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
 import { browserAskWords } from "../../../packages/core/src/words/browser";
 import { delegateWaitWords } from "../../../packages/core/src/words/delegates";
 import { askCollapseId } from "../../../packages/hub/src/notifications";
@@ -455,7 +463,7 @@ const run = async (kit: Kit) => {
     }`
   );
 
-  await legsAfter({
+  const third = await legsAfter({
     check,
     designer,
     fleet,
@@ -467,6 +475,16 @@ const run = async (kit: Kit) => {
     waitSends,
     waitsLine,
   });
+  if (third) {
+    await legsLast({
+      check,
+      delegate,
+      fleet,
+      first: proposal.requestId,
+      parent,
+      third,
+    });
+  }
 };
 
 /** What legs (f) and (g) work with, as (e) left it. */
@@ -489,7 +507,7 @@ interface After {
   waitsLine: string;
 }
 
-/** Legs (f) and (g). */
+/** Legs (f) and (g); the third proposal, for (h). */
 const legsAfter = async ({
   check,
   designer,
@@ -501,7 +519,7 @@ const legsAfter = async ({
   phone,
   waitSends,
   waitsLine,
-}: After): Promise<void> => {
+}: After): Promise<Parked | undefined> => {
   // (f) The person's phone: the first proposal pushed once, across the
   // restart. A push of an ask goes under its collapse id, or leads a
   // burst's push carrying its request id.
@@ -570,6 +588,7 @@ const legsAfter = async ({
     second?.requestId ?? "",
   ]);
   const whileUnknown = waitSends() - beforeUnknown;
+  const owedThen = owedOf(fleet, parent, waitsLine);
   fleet.launch("agent");
   await fleet.agentUp();
   const toldAfter = await until(
@@ -590,13 +609,171 @@ const legsAfter = async ({
     120_000
   ).catch(() => 0);
   check(
-    "(g) a parent read unknown as its delegate's proposal parks is not told then, and is told once when its machine registers",
+    "(g) a parent read unknown as its delegate's proposal parks has its note kept for it, owed, and is told once when its machine registers",
     status === "unknown" &&
       !!thirdAsk &&
-      whileUnknown === 0 &&
+      whileUnknown === 1 &&
+      owedThen === 1 &&
       toldAfter === 1 &&
       woken > 0,
-    `the parent after the hub's start: ${status}; design_write: ${third.text.slice(0, 200)}; pending: ${thirdAsk?.requestId ?? "none"}; its sends of the wait while unknown: ${whileUnknown}, after the register: ${toldAfter}; woken: ${woken}`
+    `the parent after the hub's start: ${status}; design_write: ${third.text.slice(0, 200)}; pending: ${thirdAsk?.requestId ?? "none"}; its sends of the wait while unknown: ${whileUnknown} (owed: ${owedThen}), after the register: ${toldAfter}; woken: ${woken}`
+  );
+  return thirdAsk;
+};
+
+/** How many sends to `to` carry a notice titled `line`, and of them those still owed. */
+const sendsOf = (fleet: KitFleet, to: string, line: string): number =>
+  fleet.query<{ n: number }>(
+    "SELECT count(*) AS n FROM sent_messages WHERE instance_id = ? AND instr(body, ?) > 0",
+    to,
+    encodeURIComponent(line)
+  )[0]?.n ?? 0;
+const owedOf = (fleet: KitFleet, to: string, line: string): number =>
+  fleet.query<{ n: number }>(
+    "SELECT count(*) AS n FROM sent_messages WHERE instance_id = ? AND owed IS NOT NULL AND instr(body, ?) > 0",
+    to,
+    encodeURIComponent(line)
+  )[0]?.n ?? 0;
+
+/** Whether push holds its mark of ask `requestId` (db `ask_pushes`). */
+const pushMarked = (fleet: KitFleet, requestId: string): boolean =>
+  fleet.query<{ n: number }>(
+    "SELECT count(*) AS n FROM ask_pushes WHERE request_id = ?",
+    requestId
+  )[0]?.n === 1;
+
+/** Legs (h) and (i). */
+const legsLast = async ({
+  check,
+  delegate,
+  fleet,
+  first,
+  parent,
+  third,
+}: {
+  check: Kit["check"];
+  delegate: string;
+  fleet: KitFleet;
+  first: string;
+  parent: string;
+  third: Parked;
+}): Promise<void> => {
+  // (h) An end while the parent reads unknown.
+  const endedLine = delegateWaitWords.endedLine("Design delegate");
+  await until(
+    "(h) the parent awake and at rest",
+    () => fleet.instance(parent),
+    (row) => row?.status === "running" && row.turn_open_at === null,
+    120_000
+  );
+  const before = sendsOf(fleet, parent, endedLine);
+  const heardBefore = heard.length;
+  await fleet.stop("agent", "SIGKILL");
+  await fleet.stop("hub", "SIGKILL");
+  fleet.launch("hub");
+  await fleet.hubUp();
+  const status = fleet.instance(parent)?.status ?? "gone";
+  await until(
+    "(h) the third proposal parked again",
+    async () =>
+      (await fleet.api<Parked[]>("/api/pending")).some(
+        (one) => one.requestId === third.requestId
+      ),
+    Boolean,
+    60_000
+  ).catch(() => false);
+  await fleet.post({
+    type: "command",
+    commandId: crypto.randomUUID(),
+    kind: "permission.answer",
+    machineId: MACHINE,
+    sessionId: third.instanceId,
+    payload: {
+      instanceId: third.instanceId,
+      requestId: third.requestId,
+      method: RESOLVE_PERMISSION,
+      args: [third.requestId, { behavior: "deny", message: "Not this one" }],
+    },
+  });
+  const gone = await until(
+    "(h) the third proposal declined",
+    async () =>
+      !(await fleet.api<Parked[]>("/api/pending")).some(
+        (one) => one.requestId === third.requestId
+      ),
+    Boolean,
+    60_000
+  ).catch(() => false);
+  const whileUnknown = sendsOf(fleet, parent, endedLine) - before;
+  const owedThen = owedOf(fleet, parent, endedLine);
+  fleet.launch("agent");
+  await fleet.agentUp();
+  const woken = await until(
+    "(h) the parent woken with the end",
+    () =>
+      heard
+        .slice(heardBefore)
+        .filter(
+          (one) => one.last.includes(WAIT_TAG) && one.last.includes(endedLine)
+        ).length,
+    (n) => n > 0,
+    120_000
+  ).catch(() => 0);
+  const told = sendsOf(fleet, parent, endedLine) - before;
+  check(
+    "(h) an ask that ends while its parent reads unknown has its end note kept for the parent, owed, and told once when its machine registers",
+    status === "unknown" &&
+      gone &&
+      whileUnknown === 1 &&
+      owedThen === 1 &&
+      woken === 1 &&
+      told === 1,
+    `the parent after the hub's start: ${status}; declined: ${gone}; its end notes while unknown: ${whileUnknown} (owed: ${owedThen}); after the register: ${told}; woken: ${woken}`
+  );
+
+  // (i) A browser ask open across a restart leaves no push mark behind.
+  await until(
+    "(i) the parent awake",
+    () => fleet.instance(parent)?.status ?? "",
+    (now) => now === "running",
+    120_000
+  );
+  const asking = callAs(
+    fleet,
+    delegate,
+    "browser_ask",
+    { origin: ORIGIN, reason: `${REASON} again` },
+    600_000
+  ).catch(() => undefined);
+  const browserAsk = await until(
+    "(i) the second browser ask waiting on the person",
+    async () =>
+      (await fleet.api<Parked[]>("/api/pending")).find(
+        (one) => one.instanceId === delegate && one.payload.browserAsk
+      ),
+    Boolean,
+    60_000
+  ).catch(() => undefined);
+  const marked =
+    !!browserAsk?.requestId && pushMarked(fleet, browserAsk.requestId);
+  await fleet.stop("hub", "SIGKILL");
+  fleet.launch("hub");
+  await fleet.hubUp();
+  await fleet.agentUp();
+  await asking;
+  const dropped = browserAsk?.requestId
+    ? await until(
+        "(i) the browser ask's push mark dropped",
+        () => !pushMarked(fleet, browserAsk.requestId ?? ""),
+        Boolean,
+        60_000
+      ).catch(() => false)
+    : false;
+  const kept = pushMarked(fleet, first);
+  check(
+    "(i) a browser ask open across a hub restart leaves no push mark behind, while a proposal parked again keeps its own",
+    marked && dropped && kept,
+    `the browser ask: ${browserAsk?.requestId ?? "none"}; marked before the restart: ${marked}; dropped after it: ${dropped}; the first proposal's mark kept: ${kept}`
   );
 };
 

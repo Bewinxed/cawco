@@ -3636,7 +3636,12 @@ export const createServer = (
    * tells it, as each ask starts waiting and as it leaves the ledger.
    */
   const delegateWaits = createDelegateWaits({
-    parentOf: (asker) => delegateAskParent(asker),
+    // A parent read `unknown` (its machine not yet registered since a hub's
+    // start, or away within its window) hears too: the send path keeps a
+    // send for it as owed (`sent_messages`) and hands it over as its
+    // machine registers ({@link deliverToSession}, `away`). It answers
+    // nothing meanwhile, so asks are not routed to it.
+    parentOf: (asker) => delegateAskParent(asker, { unknown: true }),
     instance: (id) => db.getInstancesByIds([id])[0],
     owned: (requestId) => db.asks.get(requestId)?.asked.kind,
     handed: (requestId) => db.delegateAsk(requestId) !== undefined,
@@ -6178,7 +6183,10 @@ export const createServer = (
    * conversation to wake from, and whose own work is not finished; none
    * leaves the ask the person's.
    */
-  const delegateAskParent = (sender: InstanceRow): InstanceRow | undefined => {
+  const delegateAskParent = (
+    sender: InstanceRow,
+    { unknown = false }: { unknown?: boolean } = {}
+  ): InstanceRow | undefined => {
     const parentId = sender.parentInstanceId;
     if (!parentId || parentId === sender.id) {
       return undefined;
@@ -6189,6 +6197,7 @@ export const createServer = (
         (row) =>
           (row.status === "running" ||
             row.status === "starting" ||
+            (unknown && row.status === "unknown") ||
             (row.status === "sleeping" && row.sessionId !== null)) &&
           !workItems.refusal(row, { kind: "peer", fromSession: sender.id })
       );
@@ -26096,7 +26105,12 @@ export const createServer = (
     },
   });
   // Open proposals are the person's asks again as the hub starts.
-  offBoot.push(() => detach(projectMemory.start(), "memory proposals"));
+  // Read by the boot's sweep of the asks push took (below), which waits on it.
+  let memoryParked: Promise<void> = Promise.resolve();
+  offBoot.push(() => {
+    memoryParked = projectMemory.start();
+    detach(memoryParked, "memory proposals");
+  });
   /**
    * The control interrupt_delegate sends: the turn stops, the session keeps
    * its state. `hold`: as {@link noteInterrupt} says.
@@ -31847,6 +31861,27 @@ export const createServer = (
   // One built only to be read starts none of it. Before it listens, each
   // known machine's fleet items are hashed (fleet-sync.ts `warmHashes`), so
   // no machine's register is the one that hashes the fleet's files.
+  // Last off the boot path, once every ask the hub parks again as it starts
+  // is parked (design proposals at once, memory proposals once read): the
+  // asks push took that are parked no more ended with the hub that took
+  // them, and never settled, so their marks go here (db `askPushes`).
+  offBoot.push(() =>
+    detach(
+      memoryParked.then(() => {
+        const left = db.askPushes.keepOnly(
+          pending
+            .list()
+            .flatMap((one) => (one.requestId ? [one.requestId] : []))
+        );
+        if (left > 0) {
+          console.log(
+            `[push] ${left} ask(s) pushed before this start and parked no more: their marks dropped`
+          );
+        }
+      }),
+      "ask push marks"
+    )
+  );
   if (serves) {
     warmFleetHashes();
     for (const start of offBoot) {
@@ -37975,11 +38010,9 @@ export const createServer = (
               for (const id of peekInstances(message.payload)) {
                 resumeCutTurn(id);
               }
-              // Its sessions are reachable again, a parent read `unknown`
-              // until now among them (as every live row is from a hub's
-              // start to its machine's register): each wait their delegates
-              // hold that one was never told of is told now, each once
-              // (delegate-waits.ts).
+              // Its sessions answer again: each wait their delegates hold
+              // that a parent could not take as it parked is handed or told
+              // now, each once (delegate-waits.ts).
               for (const parked of pending.list()) {
                 delegateWaits.asked(parked);
               }
