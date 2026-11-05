@@ -113,6 +113,7 @@
   import StagePane from "./StagePane.svelte";
   import Stepper from "./Stepper.svelte";
   import type { StageLink } from "./stage-link.svelte";
+  import type { Version } from "./VersionSwitch.svelte";
   import WholeSet from "./WholeSet.svelte";
 
   let {
@@ -296,10 +297,17 @@
   let face = $state<Face>(untrack(() => startFace) ?? "states");
   /** His values of the dials, by name; As written or Yours on the face and the drawing; the values Reset all took, while nothing has changed since. */
   let dialValues = $state<DialValues>({});
-  let dialVersion = $state<"yours" | "written">("yours");
+  let dialVersion = $state<Version>("yours");
+  /** The values he kept as versions of their own, in the order he kept them. */
+  let dialsKept = $state<DialValues[]>([]);
   let dialsUndo = $state<DialValues | null>(null);
   /** The dials as set on the drawing: his over as written, or as written alone. */
-  const dialsSet = $derived(dialVersion === "written" ? {} : dialValues);
+  const dialsSet = $derived.by((): DialValues => {
+    if (typeof dialVersion === "number") {
+      return dialsKept[dialVersion] ?? dialValues;
+    }
+    return dialVersion === "written" ? {} : dialValues;
+  });
   // The drawing takes every turn: the whole set, each time it changes, and
   // again on a new page, which holds none of them.
   $effect(() => {
@@ -663,8 +671,11 @@
   /** Play goes round again each time the move ends, from `loopFrom`. */
   let repeat = $state(false);
   let loopFrom = $state(0);
-  /** Which timing the face shows and Play plays: his, or the agent's as written (two whole versions, the owner's pick). */
-  let version = $state<"yours" | "written">("yours");
+  /** Which timing the face shows and Play plays: his, the agent's as written (two whole versions, the owner's pick), or one he kept. */
+  let version = $state<Version>("yours");
+  /** The versions of each move he kept, by the move's states (`from->to`): each its clips as he kept them. */
+  let keptMoves = $state<Record<string, Clip[][]>>({});
+  const keptNow = $derived(movePair ? (keptMoves[movePair] ?? []) : []);
   /**
    * What he tuned on every move, by the move's states (`from->to`): put
    * back on each new read of that move, and every one of them sent to the
@@ -734,15 +745,26 @@
     playhead = lengthOf(clips);
   }
 
-  /** The animation as Play plays it: his timing, or the agent's as written. */
+  /** The animation as Play plays it: his timing, the agent's as written, or a version he kept. */
   const clipsNow = (): Clip[] => {
     if (move.kind !== "ready") {
       return [];
     }
+    if (typeof version === "number") {
+      return keptNow[version] ?? move.clips;
+    }
     return version === "written" ? move.clips.map(untune) : move.clips;
   };
-  /** His timing as the page plays it: every clip he tuned. */
-  const tuningNow = () => (move.kind === "ready" ? tuningsOf(move.clips) : []);
+  /** The timing as the page plays it: every clip tuned in the version shown. */
+  const tuningNow = () => tuningsOf(clipsNow());
+  /** The version the page plays: the agent's as written, else the tuning it is given. */
+  const playedVersion = () => (version === "written" ? "written" : "yours");
+  /** Yours kept as a version of its own, after those kept of this move. */
+  const keepVersion = () => {
+    if (move.kind === "ready" && movePair) {
+      keptMoves = { ...keptMoves, [movePair]: [...keptNow, move.clips] };
+    }
+  };
 
   // The playhead runs from each word of the page's clock: the page runs the
   // animations and says the time as a play starts, wraps, ends or pauses;
@@ -788,7 +810,7 @@
       loopFrom: Math.min(loopFrom, length),
       still,
       tuning: tuningNow(),
-      version,
+      version: playedVersion(),
     });
   };
   /** Pause: the move held on the frame it stands at, the stage with it. */
@@ -798,7 +820,7 @@
     cancelAnimationFrame(clock);
     playing = false;
     playhead = t;
-    link.seek(t, tuningNow(), version);
+    link.seek(t, tuningNow(), playedVersion());
   };
   /** A scrub let go: on the move's end the drawing is let go, the kept state as it stands. */
   const scrubbed = (t: number) => link.letGo(t);
@@ -874,8 +896,8 @@
       retime(before);
     }
   };
-  /** One version or the other on the face: Play plays it, from its start. */
-  const showVersion = (next: "yours" | "written") => {
+  /** A version on the face: Play plays it, from its start. */
+  const showVersion = (next: Version) => {
     version = next;
     play(0);
   };
@@ -1337,6 +1359,10 @@
     onversion={(next) => {
       dialVersion = next;
     }}
+    kept={dialsKept}
+    onkeep={() => {
+      dialsKept = [...dialsKept, dialValues];
+    }}
     sent={dialsSent}
     undoable={dialsUndo !== null}
     values={dialValues}
@@ -1349,10 +1375,12 @@
   <MoveFace
     choices={moveChoices}
     chosen={movePair}
+    kept={keptNow}
     {lang}
     {loopFrom}
     {move}
     onchoose={chooseMove}
+    onkeep={keepVersion}
     onfocusthing={(thing) => {
       if (thing) {
         link.reveal({ thing });

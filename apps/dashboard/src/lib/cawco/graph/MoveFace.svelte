@@ -117,7 +117,7 @@
     tracksOf,
     untune,
   } from "./motion";
-  import VersionSwitch from "./VersionSwitch.svelte";
+  import VersionSwitch, { type Version } from "./VersionSwitch.svelte";
 
   let {
     move,
@@ -125,6 +125,8 @@
     playing,
     repeat,
     version,
+    kept: keptVersions = [],
+    onkeep,
     onplay,
     onpause,
     onreplay,
@@ -155,8 +157,12 @@
     playing: boolean;
     /** Play goes round again each time the move ends. */
     repeat: boolean;
-    /** The timing on the face and in Play: his, or the agent's as written. */
-    version: "yours" | "written";
+    /** The timing on the face and in Play: his, the agent's as written, or one he kept. */
+    version: Version;
+    /** The versions of this move he kept, each its clips as he kept them. */
+    kept?: readonly Clip[][];
+    /** Yours kept as a version of its own. */
+    onkeep: () => void;
     onplay: () => void;
     onpause: () => void;
     /** Play from the move's start, wherever the playhead stands. */
@@ -174,8 +180,8 @@
     onretime: (clips: Clip[], replay?: boolean) => void;
     /** Clips put back as the engine ran them, by id. */
     onreset: (ids: string[]) => void;
-    /** One version or the other: it plays. */
-    onversion: (version: "yours" | "written") => void;
+    /** One version or another: it plays. */
+    onversion: (version: Version) => void;
     /** The thing a row names, rested on, by the page's id for it (null: none). */
     onlight: (thing: string | null) => void;
     /** Every move the states file names, by its states' ids. */
@@ -206,9 +212,19 @@
   const changedCount = $derived(
     tracksOf(clips).filter((track) => editsOf(track).size > 0).length
   );
-  const written = $derived(version === "written" && changedCount > 0);
-  /** The clips the face draws: his, or the agent's as written. */
-  const shown = $derived(written ? clips.map(untune) : clips);
+  /** A version not his own is on the face (As written, or one he kept): drawn and played as it is, read only. */
+  const written = $derived(
+    version !== "yours" && (changedCount > 0 || keptVersions.length > 0)
+  );
+  /** The clips the face draws: his, the agent's as written, or a version he kept. */
+  const shown = $derived.by(() => {
+    if (!written) {
+      return clips;
+    }
+    return typeof version === "number"
+      ? (keptVersions[version] ?? clips)
+      : clips.map(untune);
+  });
   const tracks = $derived(tracksOf(shown));
   const length = $derived(Math.max(1, lengthOf(shown)));
 
@@ -1033,40 +1049,44 @@
             variant="ghost">{words.undoReset}</Button
           >
         {/if}
-        {#if move.kind === "ready" && changedCount > 0}
+        {#if move.kind === "ready" && (changedCount > 0 || keptVersions.length > 0)}
           <div class="flex flex-none items-center gap-space-2">
             <VersionSwitch
               changed={changedCount}
+              kept={keptVersions.length}
               label={words.versions}
               {lang}
+              {onkeep}
               {onversion}
               {version}
             />
             <!-- Reset all: its words on a desk; on a narrow face its glyph,
                  its words in its tooltip and its name. -->
-            <Tip label={words.resetAllSaid}>
-              {#snippet children(tip)}
-                <Button
-                  {...tip}
-                  aria-label={words.resetAllSaid}
-                  data-slot="reset-all"
-                  onclick={() =>
-                    onreset(
-                      clips.filter((clip) => clip.was).map((clip) => clip.id)
-                    )}
-                  size="sm"
-                  variant="ghost"
-                >
-                  <IconReset
-                    aria-hidden="true"
-                    class="hidden size-icon-md @max-timeline/move:block"
-                  />
-                  <span class="@max-timeline/move:sr-only"
-                    >{words.resetAll}</span
+            {#if changedCount > 0}
+              <Tip label={words.resetAllSaid}>
+                {#snippet children(tip)}
+                  <Button
+                    {...tip}
+                    aria-label={words.resetAllSaid}
+                    data-slot="reset-all"
+                    onclick={() =>
+                      onreset(
+                        clips.filter((clip) => clip.was).map((clip) => clip.id)
+                      )}
+                    size="sm"
+                    variant="ghost"
                   >
-                </Button>
-              {/snippet}
-            </Tip>
+                    <IconReset
+                      aria-hidden="true"
+                      class="hidden size-icon-md @max-timeline/move:block"
+                    />
+                    <span class="@max-timeline/move:sr-only"
+                      >{words.resetAll}</span
+                    >
+                  </Button>
+                {/snippet}
+              </Tip>
+            {/if}
           </div>
         {/if}
       </header>
@@ -1406,7 +1426,7 @@
             {/each}
           </ul>
           {#if written}
-            <!-- Why the rows take no press in As written. -->
+            <!-- Why the rows take no press in a version not his own. -->
             <p class="m-0 pt-space-2 type-meta text-ink-muted text-pretty">
               {words.readOnly}
             </p>

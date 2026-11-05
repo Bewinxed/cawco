@@ -48,7 +48,7 @@
     rangeOf,
   } from "./dials";
   import { figureOf } from "./figures";
-  import VersionSwitch from "./VersionSwitch.svelte";
+  import VersionSwitch, { type Version } from "./VersionSwitch.svelte";
 
   const words = graphWords;
   /** A figure and a unit written together ("36px", "1.5rem", "250 ms"). */
@@ -64,6 +64,8 @@
     changedMark = "ink",
     sent = null,
     say = null,
+    kept = [],
+    onkeep,
     lang,
     onchange,
     onreset,
@@ -75,8 +77,12 @@
     written: DialValues;
     /** His values, by name: each dial he turned. */
     values: DialValues;
-    /** The values on the face and on the drawing: his, or the agent's as written. */
-    version?: "yours" | "written";
+    /** The values on the face and on the drawing: his, the agent's as written, or a version he kept. */
+    version?: Version;
+    /** The versions of the values he kept, each by name as he kept it. */
+    kept?: readonly DialValues[];
+    /** Yours kept as a version of its own; absent, nothing is kept. */
+    onkeep?: () => void;
     /** Reset all was just pressed, and nothing has changed since: Undo reset stands. */
     undoable?: boolean;
     /** How a number dial is drawn (the owner's pick, tsk-193 and tsk-198). */
@@ -97,14 +103,24 @@
     /** These dials back to as written; `all`: Reset all, which Undo reset takes back. */
     onreset: (names: string[], all: boolean) => void;
     onundo?: () => void;
-    onversion: (version: "yours" | "written") => void;
+    onversion: (version: Version) => void;
   } = $props();
 
   const changed = $derived(changedOf(dials, written, values));
-  const asWritten = $derived(version === "written" && changed.length > 0);
-  /** What the face shows of a dial: his value, or as written in As written. */
+  /** A version not his own on the face (As written, or one he kept): drawn as it is, read only. */
+  const asWritten = $derived(
+    version !== "yours" && (changed.length > 0 || kept.length > 0)
+  );
+  /** The values the face shows: his, a kept version's, or none over as written. */
+  const over = $derived.by((): DialValues => {
+    if (version === "yours") {
+      return values;
+    }
+    return typeof version === "number" ? (kept[version] ?? values) : {};
+  });
+  /** What the face shows of a dial: the version's value, else as written. */
   const shownOf = (dial: GraphDial): DialValue | undefined =>
-    asWritten ? written[dial.name] : (values[dial.name] ?? written[dial.name]);
+    over[dial.name] ?? written[dial.name];
   const nameOf = (dial: GraphDial) => dial.label ?? dial.name;
   /** A select's option said as a figure and its unit, where it is one ("36px": "36" "px"), so every dial writes a unit one way; else the words as they are. */
   const splitUnit = (option: string): { figure: string; unit: string } => {
@@ -173,14 +189,18 @@
 </script>
 
 {#snippet versions()}
-  {#if changed.length > 0}
+  {#if changed.length > 0 || kept.length > 0}
     <VersionSwitch
       changed={changed.length}
+      kept={kept.length}
       label={words.dials.versions}
       {lang}
+      {onkeep}
       {onversion}
       {version}
     />
+  {/if}
+  {#if changed.length > 0}
     <Button
       aria-label={words.dials.resetAllSaid}
       data-slot="reset-all"
@@ -414,7 +434,7 @@
         </section>
       {/each}
     </div>
-    {#if changed.length > 0 || undoable}
+    {#if changed.length > 0 || kept.length > 0 || undoable}
       <!-- Narrow, the versions stand at the face's foot. -->
       <div
         class="hidden min-w-0 flex-none items-center justify-between gap-space-2 border-t border-border-hairline pt-space-2 @max-timeline/dials:flex"

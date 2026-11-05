@@ -19,6 +19,7 @@
     type DialValues,
     dialsOfConfig,
   } from "../../graph/dials";
+  import type { Version } from "../../graph/VersionSwitch.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { bridge, picks } from "./page.svelte.js";
   import Well from "./Well.svelte";
@@ -62,12 +63,19 @@
       );
     }
   });
-  let version = $state<"yours" | "written">("yours");
+  let version = $state<Version>("yours");
+  /** The values he kept as versions of their own, in the order he kept them. */
+  let kept = $state<DialValues[]>([]);
   let undo = $state<DialValues | null>(null);
-  /** The values as set: his over as written, or as written alone. */
-  const set = $derived<DialValues>(
-    version === "written" ? read.written : { ...read.written, ...values }
-  );
+  /** The values as set: his over as written, a version he kept over it, or as written alone. */
+  const set = $derived.by((): DialValues => {
+    if (typeof version === "number") {
+      return { ...read.written, ...kept[version] };
+    }
+    return version === "written"
+      ? read.written
+      : { ...read.written, ...values };
+  });
   // The page's own drawing takes every set, the first too.
   $effect(() => {
     onvalues?.($state.snapshot(set));
@@ -93,6 +101,7 @@
   <div class="flex w-full min-w-0 flex-col" data-slot="dials-well">
     <GraphDials
       dials={read.dials}
+      {kept}
       lang={undefined}
       onchange={turn}
       onreset={(paths, all) => {
@@ -104,6 +113,9 @@
         );
         version = "yours";
         keep();
+      }}
+      onkeep={() => {
+        kept = [...kept, values];
       }}
       onundo={() => {
         values = undo ?? {};
