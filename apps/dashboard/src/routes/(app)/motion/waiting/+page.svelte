@@ -85,6 +85,8 @@
       instanceId: PO_SETUP_PAGE.writer?.instanceId ?? "",
       kind: "page",
       name: "setup",
+      project: PO_ID,
+      title: PO_SETUP_PAGE.title,
     })
   );
 
