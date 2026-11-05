@@ -1,7 +1,14 @@
-import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
+import {
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { homedir, hostname, platform, tmpdir } from "node:os";
 import { extname, isAbsolute, join, relative, resolve } from "node:path";
-import { toolSpec } from "@cawco/core";
+import { MAX_REFERENCE_IMAGES, toolSpec } from "@cawco/core";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { systemProgram } from "@cawco/core/workspace-needs";
@@ -39,16 +46,74 @@ const ANSWER_SCHEMA = JSON.stringify({
  */
 const PRINT_TIMEOUT = "9m";
 
-/** What agy is asked: one image through its image tool, and its saved path as the answer. */
-const promptOf = (job: ImageJob): string => {
+/**
+ * What agy is asked: one image through its own `generate_image` tool, with
+ * the references (`paths`, numbered as the job's prompt names them) as that
+ * call's `ImagePaths`, and the saved path as the answer. agy 1.5.1's main
+ * agent hands images to its built-in `image-generator` subagent ("it now
+ * hands image requests to a built-in `image-generator` subagent", agy
+ * changelog 1.2.16) and, asked to call `generate_image` itself, answered
+ * that it has none ("image generation is only exposed through the
+ * `image-generator` subagent via `invoke_subagent`", stream-json run on
+ * obelisk, 2026-11-05); that subagent "Pass[es] source or reference images
+ * via ImagePaths" and makes "at most 3 attempts per image" (its system
+ * prompt, in the agy 1.5.1 binary). So the image's brief is written once,
+ * to go word for word to whichever of them calls the tool, and holds it to
+ * one call.
+ */
+export const promptOf = (job: ImageJob, paths: string[]): string => {
   const ratio = ratioOf(job.size);
-  return [
-    "Make exactly one image with your image generation tool, then stop.",
+  const brief = [
     `The image: ${job.prompt}`,
     ...(ratio ? [`Aspect ratio: ${ratio}.`] : []),
-    "Do not edit files, run commands or make anything else. Wait until the image generation tool has saved the image, then answer with the absolute path of the saved image file.",
+    ...(paths.length
+      ? [
+          [
+            "Reference images, numbered as the image above names them:",
+            ...paths.map((path, index) => `Image ${index + 1}: ${path}`),
+          ].join("\n"),
+          `Pass them as generate_image's ImagePaths, exactly these paths in this order: ${JSON.stringify(paths)}.`,
+        ]
+      : []),
+    "Call generate_image once and do not retry, then give the absolute path of the saved image.",
+  ];
+  return [
+    "Make exactly one image with generate_image, then stop. If you have no generate_image tool of your own, hand the image to your image-generator subagent with one invoke_subagent call whose brief is the text between the two --- lines, word for word.",
+    "---",
+    ...brief,
+    "---",
+    "Do not edit files, run commands or make anything else. Wait until the image is saved, then answer with the absolute path of the saved image file.",
   ].join("\n\n");
 };
+
+/** The extension each reference type is written under, for agy to read it by. */
+const REFERENCE_EXTENSIONS: Readonly<Record<string, string>> = {
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/webp": ".webp",
+  "image/gif": ".gif",
+};
+
+/**
+ * Each reference written into the run's own folder, as
+ * `reference-<n>.<ext>` in the job's order, and its absolute path: agy's
+ * workspace is that folder, so it reads them where it works, and the bytes
+ * it reads are the ones the orchestration admitted and checked.
+ */
+const writeReferences = async (
+  cwd: string,
+  references: ImageJob["references"]
+): Promise<string[]> =>
+  await Promise.all(
+    references.map(async (reference, index) => {
+      const path = join(
+        cwd,
+        `reference-${index + 1}${REFERENCE_EXTENSIONS[reference.mime] ?? ""}`
+      );
+      await writeFile(path, reference.bytes, { mode: 0o600 });
+      return path;
+    })
+  );
 
 /** The JSON envelope print mode ends on (headless doc "JSON"): the fields read here. */
 const envelopeSchema = z.looseObject({
@@ -169,8 +234,9 @@ const tailOf = (text: string): string =>
   Bun.stripANSI(text).trim().split("\n").slice(-4).join(" / ").slice(0, 600);
 
 /**
- * One print-mode run of `bin` in a folder of its own: its prompt asks for
- * one image and its path; the image is found where agy wrote it
+ * One print-mode run of `bin` in a folder of its own, the job's references
+ * written in it ({@link writeReferences}): its prompt asks for one image and
+ * its path; the image is found where agy wrote it
  * ({@link madeImage}), whatever the run's exit, and a run that ended in an
  * error after writing it is said in a note (agy 1.5.0 on Pro ended
  * `NOT_FOUND (code 404)` after its image, measured).
@@ -183,6 +249,7 @@ const runAgy = async (
   const cwd = await mkdtemp(join(tmpdir(), "cawco-agy-image-"));
   const since = Date.now() - 1000;
   try {
+    const paths = await writeReferences(cwd, job.references);
     // Its whole process tree is ended when the orchestration stops
     // waiting: agy starts a language server of its own beside it. On Linux
     // and macOS it leads a process group of its own, signalled whole; on
@@ -193,7 +260,7 @@ const runAgy = async (
       [
         bin,
         "-p",
-        promptOf(job),
+        promptOf(job, paths),
         "--output-format",
         "json",
         "--json-schema",
@@ -313,9 +380,13 @@ async function readiness(): ReturnType<ImageProvider["readiness"]> {
   };
 }
 
-/** Gemini through this machine's Antigravity CLI: one model, no reference images, JPEG as it makes it. */
+/**
+ * Gemini through this machine's Antigravity CLI: one model, Nano Banana 2
+ * (core `IMAGE_PROVIDER_MODELS`), which takes "up to 14 reference images"
+ * as the Gemini API's does (gemini-api.ts); JPEG as it makes it.
+ */
 export const antigravity: ImageProvider = {
   id: "antigravity",
-  references: 0,
+  references: MAX_REFERENCE_IMAGES,
   readiness,
 };

@@ -24,7 +24,13 @@ import type {
   ReferenceImage,
 } from "./image-providers/provider";
 import { imageProvider } from "./image-providers/registry";
-import { admitFiles, type Kept, placeInWorkspace, writeKept } from "./inputs";
+import {
+  admitFiles,
+  type Kept,
+  placeInWorkspace,
+  unexpandedVariable,
+  writeKept,
+} from "./inputs";
 
 const requestSchema = z
   .object({
@@ -60,7 +66,9 @@ async function requireNewOutput(output: string): Promise<void> {
  * for a session `bound` to a workspace, inside its clone or its $TMPDIR, by
  * the rule every file a workspace's session asks CawCo to write answers to
  * (inputs.ts `placeInWorkspace`), refused in words elsewhere; for a session
- * in no workspace, which no boundary holds, wherever it names.
+ * in no workspace, which no boundary holds, wherever it names, but a path
+ * naming a shell variable ({@link unexpandedVariable}): no shell expands it
+ * here, and the session's own value of it is not known here.
  */
 function outputOf(cwd: string, named: string, bound: unknown): Kept {
   if (isWorkspaceRef(bound)) {
@@ -69,6 +77,10 @@ function outputOf(cwd: string, named: string, bound: unknown): Kept {
       throw new Error(imageGenerationWords.outputRefused(kept));
     }
     return kept;
+  }
+  const variable = unexpandedVariable(named);
+  if (variable) {
+    throw new Error(imageGenerationWords.outputUnexpanded(named, variable));
   }
   const output = resolve(cwd, named);
   if (extname(output).toLowerCase() !== ".png") {

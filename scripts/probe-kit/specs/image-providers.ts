@@ -19,6 +19,9 @@
  *   request reaches the mock.
  * - h. The `.jpg` a JPEG would take already there: refused in words, the
  *   file there untouched.
+ * - i. An output path naming a shell variable (`$TMPDIR/i.png`, as a
+ *   session with no TMPDIR sent it): refused before any request, no folder
+ *   named `$TMPDIR` made.
  *
  * One ChatGPT sign-in is held under a scratch HOME (`ownHome`), far from
  * expiry; `CAWCO_CHATGPT_BASE_URL` points at the mock. Nothing reaches
@@ -266,6 +269,19 @@ export default {
           (await readFile(join(out, "h.jpg"), "utf8")) === "kept" &&
           !existsSync(join(out, "h.png")),
         JSON.stringify(taken)
+      );
+
+      const unexpanded = await attempt(PNG_1X1, {
+        output_path: "$TMPDIR/i.png",
+      });
+      check(
+        "i. $TMPDIR/i.png outside a workspace: refused naming $TMPDIR, no request, no $TMPDIR folder",
+        !unexpanded.ok &&
+          unexpanded.error ===
+            imageGenerationWords.outputUnexpanded("$TMPDIR/i.png", "$TMPDIR") &&
+          asked.length === 0 &&
+          !existsSync(join(out, "$TMPDIR")),
+        JSON.stringify({ unexpanded, asked })
       );
     } finally {
       server.stop(true);

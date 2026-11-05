@@ -707,6 +707,19 @@ const writeInto = async (
 /** How a session names its scratch dir in a path it hands a tool, which no shell expands. */
 const TMPDIR_NAME = "$TMPDIR/";
 
+/** `$NAME` or `${NAME}`, as a POSIX shell names a variable. */
+const SHELL_VARIABLE = /\$(?:\{[A-Za-z_]\w*\}|[A-Za-z_]\w*)/u;
+
+/**
+ * The shell variable `path` names unexpanded (`$TMPDIR`, `${HOME}`), if
+ * any: a path a session hands a tool reaches CawCo as written, and no shell
+ * expands it there, so it is refused rather than taken as a folder of that
+ * name. `$TMPDIR/` at the start of a workspace's path is the one name
+ * CawCo gives a meaning ({@link placeInWorkspace}).
+ */
+export const unexpandedVariable = (path: string): string | undefined =>
+  SHELL_VARIABLE.exec(path)?.[0];
+
 /** A .png a session named for CawCo to write: the folder it lands under, its path there, its absolute path, that folder in words, and its path in the session's own terms. */
 export interface Kept {
   rel: string;
@@ -722,7 +735,8 @@ export interface Kept {
  * dir, and its path there; or why not, in words. Relative: from `from` (the
  * clone, or a session's working dir in it). `$TMPDIR/…` or an absolute path
  * inside the scratch dir (by either of its names, core `workspaceTmpDir`):
- * there. An absolute path inside the clone: there. THE ONE RULE for a file
+ * there. An absolute path inside the clone: there. Any other shell variable
+ * ({@link unexpandedVariable}): refused. THE ONE RULE for a file
  * a workspace's session asks CawCo to write: `artifact_read`'s `save` and
  * `generate_image`'s `output_path`.
  */
@@ -733,7 +747,14 @@ export const placeInWorkspace = (
 ): Kept | string => {
   const scratch = workspaceScratchDir(ref.id);
   const tmp = workspaceTmpDir(ref.id);
-  const asked = named.startsWith(TMPDIR_NAME)
+  const inScratch = named.startsWith(TMPDIR_NAME);
+  const variable = unexpandedVariable(
+    inScratch ? named.slice(TMPDIR_NAME.length) : named
+  );
+  if (variable) {
+    return `${named} names ${variable}, a shell variable nothing expands here; name the path it stands for, or one like $TMPDIR/outputs/<name>.png`;
+  }
+  const asked = inScratch
     ? join(tmp, named.slice(TMPDIR_NAME.length))
     : resolve(from, named);
   const place = [

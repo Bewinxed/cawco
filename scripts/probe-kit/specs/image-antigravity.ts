@@ -5,15 +5,19 @@
  *
  * - a. Signed out: refused before any image run, naming the fix and the
  *   other provider.
- * - b. Reference images: refused before anything is read or run, naming
- *   the Gemini API provider for them and the other providers.
+ * - b. Two reference images (a PNG, a JPEG): saved; each is written into
+ *   agy's own working folder as `reference-<n>` by its type, the bytes the
+ *   call named, before agy starts; the prompt numbers them as the call's
+ *   prompt names them and asks for them as generate_image's `ImagePaths` in
+ *   order; the folder is gone after the run. A reference that is no image:
+ *   refused before any image run, by the one check every provider shares.
  * - c. `model`: refused, agy has one image model.
  * - d. The image written, then `NOT_FOUND (code 404)`, exit 1 (as agy 1.5.0
  *   ended on Pro): the image is taken from agy's conversation folder, kept
  *   as the JPEG it is at the asked path's `.jpg`, and the result says the
  *   exit's words and that the plan wasn't read; the run asked print mode
  *   for JSON, the answer schema, its own timeout and the size's aspect
- *   ratio, and no skipped permissions.
+ *   ratio, no references, and no skipped permissions.
  * - e. A clean run, quality high: saved, and quality said to have no effect.
  * - f. 429 RESOURCE_EXHAUSTED: refused as a spent quota, no file.
  * - g. 500 INTERNAL (every run on Plus): refused naming the plan.
@@ -23,20 +27,116 @@
  *
  *   bun scripts/probe-kit/run.ts image-antigravity
  */
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { generateImage } from "../../../packages/agent/src/image-generation";
-import { antigravity } from "../../../packages/agent/src/image-providers/antigravity";
+import {
+  antigravity,
+  promptOf,
+} from "../../../packages/agent/src/image-providers/antigravity";
 import type { GeneratedImage } from "../../../packages/core/src/image-generation";
 import { imageGenerationWords } from "../../../packages/core/src/words/image-generation";
 import { fakeAgy } from "../fake-agy";
 import type { Kit, Spec } from "../kit";
 
+/** A 1×1 PNG. */
+const PNG_1X1 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+/** A JPEG's header to its SOF0, 64 × 48. */
+const JPEG_64X48 = "/9j/4AAQSkZJRgABAQAAAQABAAD/wAARCAAwAEADASIAAhEBAxEB/9k=";
+const sha = (base64: string): string =>
+  createHash("sha256").update(Buffer.from(base64, "base64")).digest("hex");
+
 const NOT_FOUND = "NOT_FOUND (code 404): Requested entity was not found.";
 const QUOTA =
   "RESOURCE_EXHAUSTED (code 429): You have exhausted your capacity on this model. Your quota will reset after 3s.";
 const INTERNAL = "INTERNAL (code 500): Internal error encountered.";
+
+/** The prompt of the run with references, naming each by its number. */
+const PALETTE_PROMPT =
+  "Image 1: the palette to follow. Image 2: the subject to keep.";
+
+type Attempt = (
+  input: Record<string, unknown>
+) => Promise<
+  { ok: true; image: GeneratedImage } | { ok: false; error: string }
+>;
+
+/** b: two references reach agy as files in its folder and as ImagePaths in its prompt; a reference that is no image is refused before any run. */
+const referencesRun = async (
+  kit: Kit,
+  agy: Awaited<ReturnType<typeof fakeAgy>>,
+  attempt: Attempt,
+  imageRuns: () => Promise<string[][]>
+): Promise<void> => {
+  const { check } = kit;
+  const out = join(kit.out, "images");
+  await agy.seen();
+  const references = await attempt({
+    prompt: PALETTE_PROMPT,
+    output_path: "b.png",
+    reference_images: ["ref.png", "ref.jpg"],
+  });
+  const [referenceRun] = await imageRuns();
+  const seen = await agy.seen();
+  const said = referenceRun?.[1] ?? "";
+  const [first, second] = [...seen.keys()];
+  kit.note(`b run: ${JSON.stringify(referenceRun)}`);
+  kit.note(`b seen: ${JSON.stringify([...seen])}`);
+  check(
+    "b. two references: saved at b.jpg",
+    references.ok && existsSync(join(out, "b.jpg")),
+    JSON.stringify(references)
+  );
+  check(
+    "b. each written in agy's own folder as reference-<n> by its type, the bytes named, before it ran",
+    seen.size === 2 &&
+      first?.endsWith("/reference-1.png") === true &&
+      second === join(dirname(first), "reference-2.jpg") &&
+      seen.get(first) === sha(PNG_1X1) &&
+      seen.get(second) === sha(JPEG_64X48),
+    JSON.stringify([...seen])
+  );
+  check(
+    "b. the prompt numbers them and asks for them as ImagePaths, in order, under the call's own prompt",
+    first !== undefined &&
+      second !== undefined &&
+      said ===
+        promptOf(
+          {
+            prompt: PALETTE_PROMPT,
+            model: "gemini-3.1-flash-image",
+            quality: "auto",
+            size: "auto",
+            references: [],
+          },
+          [first, second]
+        ) &&
+      said.includes(PALETTE_PROMPT) &&
+      said.includes(`Image 1: ${first}\nImage 2: ${second}`) &&
+      said.includes(JSON.stringify([first, second])),
+    said
+  );
+  check(
+    "b. agy's folder, references and all, is gone after the run",
+    first !== undefined && !existsSync(dirname(first)),
+    first ?? "no reference seen"
+  );
+
+  const notImage = await attempt({
+    output_path: "b2.png",
+    reference_images: ["notes.png"],
+  });
+  check(
+    "b. a reference that is no image: refused before any image run",
+    !notImage.ok &&
+      notImage.error === imageGenerationWords.referenceNotImage() &&
+      (await imageRuns()).length === 0,
+    JSON.stringify(notImage)
+  );
+};
 
 export default {
   group: "The hub and machines",
@@ -48,6 +148,9 @@ export default {
     const agy = await fakeAgy();
     const out = join(kit.out, "images");
     await mkdir(out, { recursive: true });
+    await writeFile(join(out, "ref.png"), Buffer.from(PNG_1X1, "base64"));
+    await writeFile(join(out, "ref.jpg"), Buffer.from(JPEG_64X48, "base64"));
+    await writeFile(join(out, "notes.png"), "text");
     /** One generation through antigravity: its result, or its error's words. */
     const attempt = async (
       input: Record<string, unknown>
@@ -93,19 +196,7 @@ export default {
     );
 
     await agy.signedIn(true);
-    const references = await attempt({
-      output_path: "b.png",
-      reference_images: ["missing.png"],
-    });
-    check(
-      "b. reference images: refused before anything is read or run, naming the Gemini API and chatgpt",
-      !references.ok &&
-        references.error ===
-          refused(imageGenerationWords.tooManyReferences("antigravity", 0)) &&
-        references.error.includes('provider "gemini-api"') &&
-        (await agy.runs()).length === 0,
-      JSON.stringify(references)
-    );
+    await referencesRun(kit, agy, attempt, imageRuns);
 
     const model = await attempt({ output_path: "c.png", model: "other" });
     check(
@@ -149,13 +240,14 @@ export default {
     );
     kit.note(`d run: ${JSON.stringify(run)}`);
     check(
-      "d. the run: print mode, JSON out, the answer schema, 9m of its own, the size's 3:2, no skipped permissions",
+      "d. the run: print mode, JSON out, the answer schema, 9m of its own, the size's 3:2, no references, no skipped permissions",
       run !== undefined &&
         run[0] === "-p" &&
         (run[1] ?? "").includes("a probe") &&
         (run[1] ?? "").includes("Aspect ratio: 3:2.") &&
         run.join(" ").includes("--output-format json") &&
         run.includes("--json-schema") &&
+        !(run[1] ?? "").includes("ImagePaths") &&
         run.join(" ").includes("--print-timeout 9m") &&
         !run.some((arg) => arg.includes("dangerously")),
       JSON.stringify(run)

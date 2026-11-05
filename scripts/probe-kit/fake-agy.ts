@@ -16,7 +16,8 @@
  *   where the mode makes one.
  *
  * Every run's arguments are appended to `~/.fake-agy-runs`, one JSON array
- * a line.
+ * a line; each `reference-*` file in its working folder as it starts, to
+ * `~/.fake-agy-seen`, its SHA-256 and path a line.
  */
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -46,6 +47,7 @@ const FAKE_JPEG = "/9j/4AAQSkZJRgABAQAAAQABAAD/wAARCAAwAEADASIAAhEBAxEB/9k=";
 const SCRIPT = String.raw`#!/usr/bin/env bash
 home="$HOME"
 printf '%s\n' "$(printf '%s\0' "$@" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().split("\0")[:-1]))')" >> "$home/.fake-agy-runs"
+for ref in "$PWD"/reference-*; do [ -f "$ref" ] && printf '%s %s\n' "$(sha256sum < "$ref" | cut -d' ' -f1)" "$ref"; done >> "$home/.fake-agy-seen"
 signed="$home/.fake-agy-signed-in"
 mode="$(cat "$home/.fake-agy-mode" 2>/dev/null || echo image)"
 id="fa4e0000-0000-4000-8000-$(date +%s%N | tail -c 13)"
@@ -102,6 +104,7 @@ export const fakeAgy = async () => {
   await writeFile(at(".fake-agy-jpeg"), FAKE_JPEG);
   await rm(at(".fake-agy-signed-in"), { force: true });
   await rm(at(".fake-agy-runs"), { force: true });
+  await rm(at(".fake-agy-seen"), { force: true });
   process.env.PATH = `${bin}:${process.env.PATH ?? ""}`;
   return {
     /** Sets what its image and usage runs do. */
@@ -120,6 +123,20 @@ export const fakeAgy = async () => {
         .split("\n")
         .filter(Boolean)
         .map((line) => JSON.parse(line) as string[]);
+    },
+    /** Each reference file in a run's working folder since the last call, by its path, its SHA-256; and forgets them. */
+    seen: async (): Promise<Map<string, string>> => {
+      const text = await readFile(at(".fake-agy-seen"), "utf8").catch(() => "");
+      await rm(at(".fake-agy-seen"), { force: true });
+      return new Map(
+        text
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => {
+            const [sha = "", ...path] = line.split(" ");
+            return [path.join(" "), sha];
+          })
+      );
     },
     /** Where agy keeps a conversation's files. */
     brain: at(".gemini/antigravity-cli/brain"),

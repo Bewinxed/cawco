@@ -95,11 +95,9 @@ export const imageGenerationWords = {
   /** `model` named that the provider does not offer. */
   unknownModel: (id: ImageProviderId, asked: string, models: string[]) =>
     `${SHORT_NAMES[id]} offers no model ${asked}; it offers ${models.join(", ")}. No image was generated.`,
-  /** More reference images than the provider takes; none taken at all when `most` is 0. */
+  /** More reference images than the provider takes. */
   tooManyReferences: (id: ImageProviderId, most: number) =>
-    most === 0
-      ? `${SHORT_NAMES[id]} takes no reference images, so nothing was uploaded and no image was generated.${id === "antigravity" ? ' Editing with references through Gemini is the Gemini API\'s: provider "gemini-api".' : ""}`
-      : `${SHORT_NAMES[id]} takes at most ${most} reference images, so nothing was uploaded and no image was generated.`,
+    `${SHORT_NAMES[id]} takes at most ${most} reference images, so nothing was uploaded and no image was generated.`,
   /** A reference the inputs' gate refused. */
   referenceRefused: (cause: string) =>
     `reference_images: ${cause}. Nothing was uploaded and no image was generated.`,
@@ -112,6 +110,9 @@ export const imageGenerationWords = {
   /** `output_path` outside a workspace, not a .png. */
   notPng: () =>
     "output_path must end in .png, for example assets/illustration.png. A provider that makes another format saves it beside that path under its own extension.",
+  /** `output_path` outside a workspace names a shell variable, which nothing expands. */
+  outputUnexpanded: (path: string, variable: string) =>
+    `output_path ${path} names ${variable}, a shell variable CawCo doesn't expand. Name the path it stands for, written out. No image was generated.`,
   /** `output_path` refused by the workspace's placing rule. */
   outputRefused: (cause: string) =>
     `output_path ${cause}. No image was generated.`,
