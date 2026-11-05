@@ -31,6 +31,12 @@ import {
   watchSilence,
 } from "@cawco/core/doc-link";
 import type { StageState, StageUnreached } from "@cawco/core/stage";
+import {
+  keepTuned,
+  TUNED_MAP,
+  type TunedRecord,
+  tunedEntryOf,
+} from "@cawco/core/tuned";
 import { commentWords } from "@cawco/core/words/comments";
 import { IndexeddbPersistence } from "y-indexeddb";
 import { readAuthMessage } from "y-protocols/auth";
@@ -85,6 +91,8 @@ export interface ArtifactView extends ArtifactChoices {
   sentBy: "hub" | "person" | null;
   /** A sheet's stage, as the hub keeps it (live components): its status and the errors in the modules the sheet imports. */
   stage: StageState | null;
+  /** A component's tuned timing, every move's records (the doc's `tuned` map, core tuned.ts). */
+  tuned: TunedRecord[];
   /** The hub's last read couldn't reach the stage (`meta.unreached`): which hop, why, since when. */
   unreached: StageUnreached | null;
 }
@@ -121,6 +129,12 @@ export interface ArtifactDoc {
    * sentence when it was not kept.
    */
   keep: (key: string, value: unknown) => string | null;
+  /**
+   * A component's tuned timing kept, every move's records (core tuned.ts
+   * `keepTuned`: the doc's `tuned` map, a move each, within its own bounds,
+   * never a choice entry's); a sentence when it was not kept.
+   */
+  keepTuned: (records: readonly TunedRecord[]) => string | null;
   /** The person's words, and what they attached, in pin `pin`'s thread; a sentence when they were not kept. */
   reply: (pin: string, said: Said) => string | null;
   /** The person resolves pin `pin`, or reopens it; a sentence when it was not. */
@@ -184,6 +198,9 @@ const viewOf = (doc: Doc): ArtifactView => {
     revisedAt: (meta.get("revisedAt") as string | undefined) ?? null,
     stage: (meta.get("stage") as StageState | undefined) ?? null,
     unreached: (meta.get("unreached") as StageUnreached | undefined) ?? null,
+    tuned:
+      (tunedEntryOf(doc.getMap(TUNED_MAP).toJSON())?.value as
+        TunedRecord[] | undefined) ?? [],
   };
 };
 
@@ -510,6 +527,14 @@ export function joinArtifact(
         return problem;
       }
       doc.getMap("state").set(key, entry);
+      return null;
+    },
+    keepTuned: (records) => {
+      const pageHash = doc.getMap("meta").get("pageHash");
+      if (typeof pageHash !== "string") {
+        return "The page has not loaded yet, so nothing was kept.";
+      }
+      keepTuned(doc, records, pageHash, new Date().toISOString());
       return null;
     },
     retry: () => {

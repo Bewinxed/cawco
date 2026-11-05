@@ -163,6 +163,7 @@ import {
 import { parseRecord, writeStateFileSync } from "@cawco/core/state-file";
 import { ArtifactThumbnailSchema } from "@cawco/core/stored-shapes";
 import { DAY_MS } from "@cawco/core/time";
+import { TUNED_MAP, tunedEntryOf } from "@cawco/core/tuned";
 import { unhandled } from "@cawco/core/unhandled";
 import { artifactWords } from "@cawco/core/words/artifacts";
 import { decidesWords } from "@cawco/core/words/decides";
@@ -1206,8 +1207,17 @@ const promotedJson = (value: unknown): string =>
 const routeOf = (id: string) => `/__cawco/artifact/${id}`;
 
 /** The doc's `state`, read as entries. */
-const stateOf = (doc: Doc): Record<string, ChoiceEntry> =>
-  doc.getMap("state").toJSON() as Record<string, ChoiceEntry>;
+/**
+ * An artifact's choices as everything reads them: its doc's `state`, and a
+ * component's tuned timing (the doc's `tuned` map, core tuned.ts) as the one
+ * `tuned` entry, so it answers the judgement and goes with a Send as a pick
+ * does.
+ */
+const stateOf = (doc: Doc): Record<string, ChoiceEntry> => {
+  const state = doc.getMap("state").toJSON() as Record<string, ChoiceEntry>;
+  const tuned = tunedEntryOf(doc.getMap(TUNED_MAP).toJSON());
+  return tuned ? { ...state, tuned } : state;
+};
 
 /** A source common practice cites: a web link. */
 const WEB_SOURCE = /^https:\/\/\S+$/u;

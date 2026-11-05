@@ -49,6 +49,7 @@ import { ARTIFACT_GONE } from "@cawco/core/doc-link";
 import { MIRRORED_MAPS } from "@cawco/core/doc-maps";
 import { inkProblem } from "@cawco/core/ink";
 import { writeStateFile } from "@cawco/core/state-file";
+import { TUNED_MAP, tunedProblem } from "@cawco/core/tuned";
 import type { ServerWebSocket } from "bun";
 import { createDecoder, readVarUint, readVarUint8Array } from "lib0/decoding";
 import {
@@ -317,16 +318,20 @@ const stateProblem = (doc: Doc, trial: Doc): string | null => {
   if (doc.getMap("meta").get("kind") === "canvas") {
     return canvasProblem(doc, trial);
   }
+  const component = doc.getMap("meta").get("kind") === "component";
   for (const name of MAPS) {
     if (!(
       name === "state" ||
       INK_MAPS.includes(name) ||
+      (component && name === TUNED_MAP) ||
       sameMap(trial.getMap(name), doc.getMap(name))
     )) {
       return `A page changes its artifact's state and ink only, not its ${name}.`;
     }
   }
-  const ink = inkMapsProblem(doc, trial);
+  const ink =
+    inkMapsProblem(doc, trial) ??
+    (component ? tunedProblem([...trial.getMap(TUNED_MAP).entries()]) : null);
   if (ink) {
     return ink;
   }

@@ -14,6 +14,7 @@
  * replaced by one snapshot.
  */
 import type { CanvasAuthor } from "@cawco/core/canvas";
+import type { ChoiceEntry } from "@cawco/core/choices";
 import {
   dropRepeatedFiles,
   honourDeletions,
@@ -21,6 +22,7 @@ import {
 } from "@cawco/core/comments";
 import { RESYNC_MS } from "@cawco/core/doc-link";
 import { MIRRORED_MAPS, mapsOf } from "@cawco/core/doc-maps";
+import { keepTuned, TUNED_MAP, type TunedRecord } from "@cawco/core/tuned";
 import {
   type AbstractType,
   applyUpdate,
@@ -45,7 +47,31 @@ export const MAPS = [
   "requests",
   // Each pin's lines of what changed for it, the hub's alone (core comments.ts `activityOf`).
   "activity",
+  // A component's tuned timing, a move each, the panel's to write (core tuned.ts).
+  TUNED_MAP,
 ] as const;
+
+/**
+ * A component's tuned timing written as a choice entry (the canvas page's
+ * old timeline wrote `state.tuned`, a list of records) moved into the doc's
+ * `tuned` map, a move each (core tuned.ts), once, as the hub's own update.
+ * Whether it moved any.
+ */
+function moveTunedOut(doc: Doc): boolean {
+  const state = doc.getMap("state");
+  const entry = state.get(TUNED_MAP) as ChoiceEntry | undefined;
+  if (!entry || doc.getMap("meta").get("kind") !== "component") {
+    return false;
+  }
+  const records = Array.isArray(entry.value)
+    ? (entry.value as TunedRecord[]).filter(
+        (one) => typeof one?.move === "string"
+      )
+    : [];
+  keepTuned(doc, records, entry.pageHash, entry.at);
+  state.delete(TUNED_MAP);
+  return true;
+}
 
 /** The doc's one top-level array: a canvas's scene, as y-excalidraw lays it out. */
 const ELEMENTS = "elements";
@@ -242,6 +268,10 @@ export const createArtifactDocs = (deps: {
     const state = doc.getMap("state") as unknown as AbstractType<
       YEvent<AbstractType<unknown>>
     >;
+    // A component's tuned timing reads as the one `tuned` entry of its state (core tuned.ts `tunedEntryOf`): a change to it is that key's.
+    const tuned = doc.getMap(TUNED_MAP) as unknown as AbstractType<
+      YEvent<AbstractType<unknown>>
+    >;
     // The elements a transaction added or changed, heard before its
     // `afterTransaction` (Yjs calls observers first).
     let touched = new Map<string, CanvasAuthor>();
@@ -252,9 +282,12 @@ export const createArtifactDocs = (deps: {
     });
     doc.on("afterTransaction", (transaction) => {
       changed = {
-        keys: [...(transaction.changed.get(state) ?? [])].filter(
-          (key): key is string => key !== null
-        ),
+        keys: [
+          ...[...(transaction.changed.get(state) ?? [])].filter(
+            (key): key is string => key !== null
+          ),
+          ...(transaction.changed.has(tuned) ? [TUNED_MAP] : []),
+        ],
         elements: touched,
       };
       touched = new Map();
@@ -271,10 +304,17 @@ export const createArtifactDocs = (deps: {
     // again the same way, so no person's write meets a doc the gate refuses.
     let whole = 0;
     let repeated = 0;
+    let tunedOut = false;
     doc.transact(() => {
       whole = splitWholePins(doc);
       repeated = dropRepeatedFiles(doc);
+      tunedOut = moveTunedOut(doc);
     }, "hub");
+    if (tunedOut) {
+      console.log(
+        `[artifacts] ${id}: its tuned timing, kept as a choice entry, is kept in its tuned map now`
+      );
+    }
     if (repeated > 0) {
       console.log(
         `[artifacts] ${id}: ${repeated} thread entries that held one file twice hold it once now`

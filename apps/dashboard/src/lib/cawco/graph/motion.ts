@@ -14,6 +14,7 @@ import {
   clipKindOf,
   type Tuning as StageTuning,
 } from "@cawco/core/stage-graph";
+import type { TunedRecord } from "@cawco/core/tuned";
 import { graphWords as words } from "@cawco/core/words/graph";
 import { dur, ease } from "#lib/cawco/motion/curves.svelte.js";
 
@@ -820,27 +821,6 @@ export const tuningsOf = (clips: readonly Clip[]): StageTuning[] =>
       },
     ];
   });
-
-/**
- * One timing as the component canvas's `tuned` record says it (the
- * artifact's doc, which `artifact_read` answers): the agent writes it into
- * the CSS or the motion call. `repeat`, `legs` and `values` stand only
- * where he changed them.
- */
-export interface TunedRecord {
-  animation: string;
-  delay: number;
-  duration: number;
-  easing: string;
-  /** Where its legs meet, as offsets between its first frame and its last. */
-  legs?: number[];
-  move: string;
-  /** Its length or its curve is none of the design system's tokens: the agent's note, never shown on the face. */
-  offTokens: boolean;
-  repeat?: ClipRepeat;
-  /** What each property runs between, as he typed it. */
-  values?: ClipValue[];
-}
 
 /** The clips the person tuned, as the canvas's `tuned` record: the move, the animation by its element and property, its begin from the move's start, its length and its curve. */
 export const tunedRecord = (move: string, clips: readonly Clip[]) =>

@@ -26,6 +26,7 @@
     "./base64": "./src/base64.ts",
     "./bounded": "./src/bounded.ts",
     "./time": "./src/time.ts",
+    "./tuned": "./src/tuned.ts",
     "./unhandled": "./src/unhandled.ts",
     "./unrecognized-keys": "./src/unrecognized-keys.ts",
     "./json-rpc": "./src/json-rpc.ts",

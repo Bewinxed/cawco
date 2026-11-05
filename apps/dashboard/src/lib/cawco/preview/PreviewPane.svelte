@@ -140,7 +140,6 @@
   import { frameObserver, frameSize } from "../frame-observer";
   import { besideLine, inspectorBesideLine } from "../graph/beside";
   import DesignGraph from "../graph/DesignGraph.svelte";
-  import type { TunedRecord } from "../graph/motion";
   import { inspectKept, StageLink } from "../graph/stage-link.svelte";
   import { resolveSessionTitle } from "../links";
   import {
@@ -1095,11 +1094,8 @@
       ? (kept as Record<string, number | string | boolean>)
       : {};
   });
-  /** His tuning of every move as the artifact's doc keeps it (`tuned`): the design graph puts it back on each move's first read. */
-  const keptTuned = $derived.by((): TunedRecord[] => {
-    const kept = view?.choices.tuned?.value;
-    return Array.isArray(kept) ? (kept as TunedRecord[]) : [];
-  });
+  /** His tuning of every move as the artifact's doc keeps it (its `tuned` map): the design graph puts it back on each move's first read. */
+  const keptTuned = $derived(view?.tuned ?? []);
   /** The design graph's room face the address names (`?face=move`, `map` or `dials`), opened on: the states when it names none. */
   const GRAPH_FACES = ["map", "move", "dials"] as const;
   const startFace =
@@ -4720,8 +4716,8 @@
             }
           }}
           ontuned={(records) => {
-            // His tuning of every move is the artifact's: its doc's `tuned`, which artifact_read answers.
-            const refused = doc?.keep("tuned", records);
+            // His tuning of every move is the artifact's: its doc's `tuned` map, which artifact_read answers.
+            const refused = doc?.keepTuned(records);
             if (refused) {
               failure = { message: refused, again: null };
             }

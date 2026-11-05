@@ -40,6 +40,7 @@
    */
   import { type CanvasSpec, STORY_FILE } from "@cawco/core/stage";
   import { type StateRef, storyWords } from "@cawco/core/stage-graph";
+  import type { TunedRecord } from "@cawco/core/tuned";
   import { graphWords as words } from "@cawco/core/words/graph";
   import { mergeProps } from "bits-ui";
   import { onMount, type Snippet, untrack } from "svelte";
@@ -106,7 +107,6 @@
     type Clip,
     clipOf,
     lengthOf,
-    type TunedRecord,
     tunedRecord,
     tuningOf,
     tuningsOf,
