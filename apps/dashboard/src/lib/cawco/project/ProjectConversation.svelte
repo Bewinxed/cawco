@@ -76,12 +76,7 @@
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import {
-    IconChatAdd,
-    IconClose,
-    IconMaximize,
-    IconPlus,
-  } from "#lib/icons.js";
+  import { IconChatAdd, IconClose, IconMoveTab, IconPlus } from "#lib/icons.js";
   import { barGlass } from "../bar-glass.svelte";
   import type { CawLead } from "./caw-lead.svelte";
   import { startConversation } from "./conversation";
@@ -465,7 +460,7 @@
               aria-label={conversationWords.openAsTab}
               press="pressable"
               href={rowHref(shown ?? "")}
-              icon={IconMaximize}
+              icon={IconMoveTab}
               size="icon-sm"
               variant="ghost"
             />
