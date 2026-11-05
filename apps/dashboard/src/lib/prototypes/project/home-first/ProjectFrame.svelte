@@ -49,6 +49,7 @@
     IconMore,
     IconSidebar,
   } from "#lib/icons.js";
+  import { paneOut } from "./motion";
 
   let {
     project,
@@ -266,6 +267,7 @@
     ]}
     aria-label={paneTitle}
     data-pane-box={form}
+    out:paneOut
   >
     <span
       aria-hidden="true"

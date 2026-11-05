@@ -91,7 +91,7 @@
   <div class="flex min-w-0 flex-col gap-space-5">
     {#if adding}
       <section
-        class="flex flex-col gap-space-3 rounded-lg bg-surface-raised p-space-4 shadow-tile"
+        class="flex flex-col gap-space-3 rounded-lg bg-surface-raised p-space-4 shadow-tile transition-[opacity,translate] duration-(--dur-pop) ease-drawer starting:-translate-y-(--pop-rise) starting:opacity-0"
       >
         <p class="m-0 type-body text-ink-muted">{words.routines.firstRun}</p>
         <div class="flex flex-wrap gap-space-2">

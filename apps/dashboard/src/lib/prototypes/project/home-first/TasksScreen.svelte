@@ -337,7 +337,12 @@
       <div class="flex flex-col gap-space-3 @min-desk/shell:hidden">
         <StagesList {archive} form="chips" {stages} {stale} />
         {#each stages.filter((stage) => stage.id === onPhone) as stage (stage.id)}
-          {@render column(stage, stage.id === stages[0]?.id)}
+          <!-- The stage handed along the strip comes a nudge from its side. -->
+          <div
+            class="transition-[opacity,translate] duration-(--dur-panel) ease-drawer starting:translate-x-(--swap-nudge) starting:opacity-0"
+          >
+            {@render column(stage, stage.id === stages[0]?.id)}
+          </div>
         {/each}
       </div>
       <div
