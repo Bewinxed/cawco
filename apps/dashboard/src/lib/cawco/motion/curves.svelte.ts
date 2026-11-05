@@ -153,8 +153,27 @@ const rootToken = (name: string): string => {
   }
   return tokens.get(name) as string;
 };
+/**
+ * A time written as a `calc()` of other tokens (--dur-pick-up, sixty percent
+ * of --dur-panel), as the browser computes it: a custom property's computed
+ * value keeps its `calc()` unworked, so it is set as a hidden probe's
+ * transition, whose computed value is a time.
+ */
+const workedTime = (value: string): string => {
+  if (!value.startsWith("calc(")) {
+    return value;
+  }
+  const probe = document.createElement("i");
+  probe.hidden = true;
+  probe.style.transitionDuration = value;
+  document.documentElement.append(probe);
+  const time = getComputedStyle(probe).transitionDuration;
+  probe.remove();
+  return time;
+};
 /** A `--dur-*` token on the root, in ms. @browser */
-export const dur = (name: `--dur-${string}`): number => msOf(rootToken(name));
+export const dur = (name: `--dur-${string}`): number =>
+  msOf(workedTime(rootToken(name)));
 
 /**
  * The delay of the `n`th of a run of things arriving in turn, as CSS for a

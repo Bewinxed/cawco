@@ -13,16 +13,13 @@
    * setup page's bridge until the person sets it up.
    */
   import type { StageKind } from "@cawco/core/views";
+  import { dragWords } from "@cawco/core/words/drag";
   import { setupPageWords, setupWords } from "@cawco/core/words/onboarding";
   import { tick } from "svelte";
-  import DropLine from "#lib/cawco/DropLine.svelte";
+  import type { SortableThing } from "#lib/cawco/drag/Sortable.svelte";
   import StageKindItems from "#lib/cawco/project/StageKindItems.svelte";
   import StageLookItems from "#lib/cawco/project/StageLookItems.svelte";
   import type { SetupDelegate, Stage } from "#lib/cawco/project/setup-stage.js";
-  import {
-    dragStage,
-    type StageDragState,
-  } from "#lib/cawco/project/stage-dnd.svelte.js";
   import { markOf } from "#lib/cawco/tasks/stage-look.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -41,16 +38,13 @@
     onmove,
     onremove,
     delegates = [],
-    drag,
-    draft,
+    thing,
     moreId,
   }: {
     /** Its More's id: a stage added back, the keys go to it. */
     moreId?: string;
-    /** The draft's drag: which stage is in the air, and where it would land. */
-    drag: StageDragState;
-    /** The draft's id: a stage drops only among its own. */
-    draft: string;
+    /** It as a thing the draft's columns move among (DraftStages, drag/Sortable). */
+    thing: SortableThing;
     stage: Stage;
     /** Its place, from 0, among `of` stages: the ends take no move past them. */
     at: number;
@@ -100,7 +94,6 @@
   let level = $state<"root" | "kind" | "worker">("root");
   /** Remove was chosen: the column is gone, and DraftStages sends the keys to its Add back. */
   let removing = false;
-  const over = $derived(drag.over?.key === String(at) ? drag.over.edge : null);
   /** Sets who does the work: a type's id, or none. */
   function work(runs: string) {
     const { runs: _gone, ...rest } = stage.hooks ?? {};
@@ -118,22 +111,28 @@
   }
 </script>
 
-<!-- The column is its own handle (stage-dnd): a press that travels lifts
-     it, a held press on a phone; its controls keep their presses. In the
-     air its box stays as its slot, its words hidden, never drawn twice. -->
+<!-- The column is the thing a drag carries (drag/DragProvider): a press
+     that travels lifts it, a held press on a phone; its controls keep their
+     presses. In the air it is the column itself under the hand, its place
+     held open among the others. Its grip, at its top, is where the keys
+     take it: Space picks it up, the arrows carry it. -->
 <section
   aria-label={setupWords.draftStage(stage.name)}
-  class="group/col relative flex cursor-grab touch-callout-none flex-col gap-space-1 rounded-lg bg-surface-band p-space-1 inset-ring inset-ring-border-hairline select-none data-dragging:bg-surface-recess data-dragging:inset-ring-0 data-dragging:-outline-offset-1 data-dragging:outline-1 data-dragging:outline-border-control data-dragging:outline-dashed"
-  data-dragging={drag.dragging === at ? "" : undefined}
+  class="group/col relative flex cursor-grab touch-callout-none flex-col gap-space-1 rounded-lg bg-surface-band p-space-1 inset-ring inset-ring-border-hairline select-none data-dnd-dragging:bg-surface-raised"
   data-kind={stage.kind}
   data-share="stage:{stage.name}"
   data-slot="draft-column"
   style:--words-x={"calc(var(--c-btn-h-sm) + var(--space-2) + var(--c-field-inline-inset))"}
-  {@attach dragStage(drag, () => ({ at, draft }))}
+  {@attach thing.attach}
 >
-  <header
-    class="flex flex-col gap-0 pe-0 pt-space-1 pb-space-1 group-data-dragging/col:invisible"
-  >
+  <button
+    aria-label={dragWords.handle(stage.name)}
+    class="absolute inset-x-0 top-0 mx-auto h-c-drag-dots-w w-space-6 cursor-grab rounded-pill border-none bg-transparent p-0 opacity-0 drag-dots transition-opacity duration-(--dur-control) ease-out touch-hit focus-visible:opacity-100 focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring group-hover/col:opacity-100 group-focus-within/col:opacity-100"
+    data-slot="grip"
+    type="button"
+    {@attach thing.attachHandle}
+  ></button>
+  <header class="flex flex-col gap-0 pe-0 pt-space-1 pb-space-1">
     <!-- mark-line: the name is a field, a box of its own; the mark and More stand centred on it as boxes. -->
     <span class="flex min-h-c-btn-h-sm items-center gap-space-2">
       {#if stage.kind === "you"}
@@ -321,13 +320,10 @@
        the meta role, under the name it describes. -->
   {#if holds}
     <p
-      class="m-0 ps-(--words-x) pe-space-2 pb-space-2 type-meta text-pretty text-ink-muted group-data-dragging/col:invisible"
+      class="m-0 ps-(--words-x) pe-space-2 pb-space-2 type-meta text-pretty text-ink-muted"
       data-slot="holds"
     >
       {holds}
     </p>
-  {/if}
-  {#if over}
-    <DropLine edge={over} gap="var(--space-3)" />
   {/if}
 </section>

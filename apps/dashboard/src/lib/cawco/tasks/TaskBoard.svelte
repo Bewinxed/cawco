@@ -5,8 +5,14 @@
    * under them. A stage of kind `you` is where tasks wait on a person: its
    * head carries the Needs-you glyph and its kind word the attn ink.
    *
-   * Cards drag between columns. While one is in the air the columns it may
-   * not go to step back, and the hub has the last word on the drop. Tasks
+   * Cards are carried between columns (drag/DragProvider): picked up, the
+   * card itself lifts under the hand; over a column it may go to, its place
+   * opens there where the hub's order will put it (the column's cards make
+   * room), and the columns it may not go to step back and take nothing. Let
+   * go in another column, the move is asked of the hub, which has the last
+   * word: the card stands there, moving, until it answers, and a refusal
+   * puts it back with the hub's sentence (the page owns that). Escape puts
+   * it back at once. Tasks
    * whose stage the project does not name stand in a last column, so a stage
    * renamed in stages.md never hides one.
    *
@@ -28,6 +34,9 @@
   import { bringIntoStrip, bringIntoView } from "@cawco/core/bring-into-view";
   import type { StageKind } from "@cawco/core/views";
   import { tick } from "svelte";
+  import DragProvider, {
+    type DragData,
+  } from "#lib/cawco/drag/DragProvider.svelte";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import {
     type Stage,
@@ -35,7 +44,6 @@
     type TaskSummary,
   } from "#lib/cawco/project-tasks.js";
   import { IconArchive } from "#lib/icons.js";
-  import { boardDrag, stageDropTarget } from "./board-dnd.svelte.js";
   import NewTaskForm from "./NewTaskForm.svelte";
   import TaskColumn from "./TaskColumn.svelte";
 
@@ -75,7 +83,8 @@
     /** The date a task's file sets it for, said short; null without one. */
     dateOf?: (id: string) => string | null;
     onopen: (id: string) => void;
-    onmove: (taskId: string, stage: string, source: HTMLElement) => void;
+    /** A card let go in another column: the drop has already flown it to its place there. */
+    onmove: (taskId: string, stage: string) => void;
     /** Adds a task; answers its id, so its card is brought into view. */
     oncreate: (title: string, stage: string) => Promise<string>;
     /** A card whose move the hub has not answered yet. */
@@ -146,9 +155,22 @@
     const frame = requestAnimationFrame(() => reveal(id));
     return () => cancelAnimationFrame(frame);
   });
+  /**
+   * The card in the air: the stage it left, and the stage whose column holds
+   * its place now (where it is let go).
+   */
+  let carried = $state<{ id: string; from: string; to: string } | null>(null);
+  /** The tasks as the board draws them: the card in the air in the column it is over. */
+  const drawn = $derived(
+    carried === null
+      ? tasks
+      : tasks.map((task) =>
+          task.id === carried?.id ? { ...task, stage: carried.to } : task
+        )
+  );
   const byStage = $derived.by(() => {
     const columns = new Map<string, TaskSummary[]>();
-    for (const task of tasks) {
+    for (const task of drawn) {
       const key = named.has(task.stage) ? task.stage : "";
       const column = columns.get(key);
       if (column) {
@@ -171,9 +193,12 @@
     picked ? tasks.some((task) => picked(task.id)) : false
   );
   /** While a card is in the air: the stages it may go to from where it was. */
-  const open = $derived(
-    boardDrag.from === null ? null : allowedFrom(boardDrag.from)
-  );
+  const open = $derived(carried === null ? null : allowedFrom(carried.from));
+  /** The stage a column or card the card is over stands in. */
+  const stageOf = (thing: { data: unknown } | null): string | null => {
+    const stage = (thing?.data as DragData | undefined)?.stage;
+    return typeof stage === "string" ? stage : null;
+  };
 </script>
 
 {#snippet column(
@@ -185,9 +210,9 @@
 )}
   <TaskColumn
     {cards}
-    closed={open !== null && name !== boardDrag.from && !open.has(name)}
+    closed={open !== null && name !== carried?.from && !open.has(name)}
     {dateOf}
-    drop={name ? stageDropTarget(() => name, onmove) : undefined}
+    stage={name || undefined}
     {fresh}
     foot={name && name === newIn ? addTask : undefined}
     {hrefOf}
@@ -199,7 +224,6 @@
     onpick={onpick &&
       ((id, on, range) => onpick(id, on, range ? order : undefined))}
     {onopen}
-    over={boardDrag.over === name && name !== boardDrag.from}
     {current}
     {picked}
     {picking}
@@ -234,18 +258,44 @@
     style:--cols="minmax(var(--c-board-col-min), var(--c-board-col-max))"
     style:--cols-phone="calc(100% - var(--space-8))"
   >
-    {#each stages as stage (stage.name)}
-      {@render column(
-        stage.name,
-        stageLabel(stage.name),
-        stage.kind,
-        byStage.get(stage.name) ?? [],
-        stage
-      )}
-    {/each}
-    {#if stray.length > 0}
-      {@render column("", "Other stages", null, stray)}
-    {/if}
+    <DragProvider
+      onDragEnd={(event) => {
+        const was = carried;
+        carried = null;
+        if (was && !event.canceled && was.to !== was.from) {
+          onmove(was.id, was.to);
+        }
+      }}
+      onDragOver={(event) => {
+        const to = stageOf(event.operation.target);
+        if (
+          carried &&
+          to !== null &&
+          to !== carried.to &&
+          (to === carried.from || open?.has(to))
+        ) {
+          carried = { ...carried, to };
+        }
+      }}
+      onDragStart={(event) => {
+        const id = String(event.operation.source?.id ?? "");
+        const from = tasks.find((task) => task.id === id)?.stage;
+        carried = from === undefined ? null : { id, from, to: from };
+      }}
+    >
+      {#each stages as stage (stage.name)}
+        {@render column(
+          stage.name,
+          stageLabel(stage.name),
+          stage.kind,
+          byStage.get(stage.name) ?? [],
+          stage
+        )}
+      {/each}
+      {#if stray.length > 0}
+        {@render column("", "Other stages", null, stray)}
+      {/if}
+    </DragProvider>
   </div>
   {#if railed}
     {#if railOpen}

@@ -175,6 +175,7 @@
     "./views": "./src/views.ts",
     "./words/artifacts": "./src/words/artifacts.ts",
     "./words/blocks": "./src/words/blocks.ts",
+    "./words/drag": "./src/words/drag.ts",
     "./words/browser": "./src/words/browser.ts",
     "./words/caw-head": "./src/words/caw-head.ts",
     "./words/caw-off": "./src/words/caw-off.ts",

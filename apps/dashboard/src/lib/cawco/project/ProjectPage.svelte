@@ -1023,10 +1023,10 @@
   }
 
   /** The card for `id` takes off from where it is drawn, to land in its new column. */
-  function lift(id: string, source?: HTMLElement) {
-    const card =
-      source ??
-      document.querySelector<HTMLElement>(`[data-share="task:${id}"]`);
+  function lift(id: string) {
+    const card = document.querySelector<HTMLElement>(
+      `[data-share="task:${id}"]`
+    );
     if (card) {
       depart(card);
     }
@@ -1041,10 +1041,9 @@
   async function move(
     id: string,
     stage: string,
-    source?: HTMLElement,
     reason?: string
   ): Promise<TaskView> {
-    lift(id, source);
+    lift(id);
     moving = { ...moving, [id]: stage };
     try {
       const task = await moveTask(projectId, id, stage, reason);
@@ -1069,10 +1068,10 @@
     {}
   );
 
-  function drop(id: string, stage: string, source?: HTMLElement) {
+  function drop(id: string, stage: string) {
     const { [id]: _, ...rest } = refusedMoves;
     refusedMoves = rest;
-    move(id, stage, source).catch((error: unknown) => {
+    move(id, stage).catch((error: unknown) => {
       refusedMoves = {
         ...refusedMoves,
         [id]: { reason: message(error), stage },
@@ -1159,9 +1158,7 @@
     bulk("Moving", pickedIds(), (id) => move(id, stage));
   const bulkDrop = (reason: string) => {
     if (dropTo) {
-      bulk("Dropping", pickedIds(), (id) =>
-        move(id, dropTo, undefined, reason)
-      );
+      bulk("Dropping", pickedIds(), (id) => move(id, dropTo, reason));
     }
   };
   const bulkLabel = (label: string) =>

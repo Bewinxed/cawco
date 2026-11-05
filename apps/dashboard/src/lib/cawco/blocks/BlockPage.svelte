@@ -48,6 +48,11 @@
    * changes tweens its box over --dur-morph on the drawer curve (`morph`).
    * Hidden blocks wait at the page's end, each shown again from there; a
    * refused write is said there in the hub's words.
+   *
+   * A block is dragged by its head (drag/DragProvider): the head rides
+   * under the hand, lifted (DragOverlay), while the block's own box, its
+   * slot, moves among the others as they make room; let go, the order is
+   * written once.
    */
   import type {
     BlockPlace,
@@ -56,8 +61,12 @@
   } from "@cawco/core/blocks";
   import { detach } from "@cawco/core/detach";
   import { blocksWords as words } from "@cawco/core/words/blocks";
+  import { DragOverlay } from "@dnd-kit/svelte";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import DragProvider from "#lib/cawco/drag/DragProvider.svelte";
+  import { LiveOrder } from "#lib/cawco/drag/live-order.svelte.js";
+  import Sortable from "#lib/cawco/drag/Sortable.svelte";
   import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
@@ -65,7 +74,6 @@
   import { IconChevronDown, IconEye, IconLayers } from "#lib/icons.js";
   import type { ProjectBlocks } from "./arrangement.svelte";
   import Block from "./Block.svelte";
-  import { BlockDragState, watchDrops } from "./block-dnd.svelte";
 
   let {
     page,
@@ -205,7 +213,22 @@
 
   // --- what the person does to a block ----------------------------------------
 
-  const drag = new BlockDragState();
+  /** The blocks as they stand while one is in the air. */
+  const order = new LiveOrder();
+  const shownIds = $derived(shown.map((place) => place.block));
+  const drawn = $derived(
+    order
+      .shown(shownIds)
+      .flatMap((block) => shown.find((place) => place.block === block) ?? [])
+  );
+  /** Let go at a new place among the shown blocks: it goes where the block it displaced stood. */
+  function dropped(from: number, to: number) {
+    const place = shown[from];
+    const onto = shown[to];
+    if (place && onto) {
+      detach(blocks.move(page, place.block, places.indexOf(onto)), "move");
+    }
+  }
   /** The block whose width is being changed: its box tweens (`morph`). */
   let resizing = $state<string | null>(null);
 
@@ -242,36 +265,66 @@
 </script>
 
 {#snippet frame(place: BlockPlace, item: BlockItem, index: number)}
-  <Block
-    action={item.action}
-    body={item.body}
-    card={item.card}
-    {columns}
-    {drag}
-    first={index === 0}
-    glyph={item.glyph}
-    hideable={item.hideable}
+  <Sortable
     id={place.block}
-    last={index === shown.length - 1}
-    meta={item.meta}
-    onhide={() => blocks.change(page, place.block, { hidden: true })}
-    onmove={(step) => move(place, step)}
-    ontab={() => {
-      if (item.view) {
-        detach(blocks.unplace(item.view), "unplace");
-      }
-    }}
-    onwidth={(width) => setWidth(place, width)}
-    {page}
-    resizing={resizing === place.block}
-    span={spanOf(place)}
-    title={item.title}
-    view={item.view ?? null}
-    width={place.width}
-    wideOnly={item.wideOnly ?? false}
+    {index}
+    label={item.title}
+    of={shown.length}
+    takenBy="grab"
   >
-    {@render item.content(place.block)}
-  </Block>
+    {#snippet children(thing)}
+      <Block
+        action={item.action}
+        body={item.body}
+        card={item.card}
+        {columns}
+        {thing}
+        first={index === 0}
+        glyph={item.glyph}
+        hideable={item.hideable}
+        id={place.block}
+        last={index === shown.length - 1}
+        meta={item.meta}
+        onhide={() => blocks.change(page, place.block, { hidden: true })}
+        onmove={(step) => move(place, step)}
+        ontab={() => {
+          if (item.view) {
+            detach(blocks.unplace(item.view), "unplace");
+          }
+        }}
+        onwidth={(width) => setWidth(place, width)}
+        {page}
+        resizing={resizing === place.block}
+        span={spanOf(place)}
+        title={item.title}
+        view={item.view ?? null}
+        width={place.width}
+        wideOnly={item.wideOnly ?? false}
+      >
+        {@render item.content(place.block)}
+      </Block>
+    {/snippet}
+  </Sortable>
+{/snippet}
+
+{#snippet face(block: string)}
+  <!-- What rides under the hand: the block's head, lifted (drag/lift). -->
+  {@const item = items[block]}
+  <div
+    class="mark-line flex min-h-c-btn-h-sm items-center gap-space-2 rounded-md bg-surface-raised px-space-3 coarse:min-h-c-btn-h-lg"
+    data-slot="block-face"
+  >
+    {#if item}
+      <span
+        aria-hidden="true"
+        class="grid flex-none place-items-center text-ink-muted *:size-icon-md"
+        data-box><item.glyph /></span
+      >
+    {/if}
+    <span class="type-label whitespace-nowrap text-ink-strong"
+      >{item?.title ?? block}</span
+    >
+  </div>
 {/snippet}
 
 {#if lone}
@@ -284,42 +337,54 @@
     data-columns={columns}
     data-page={page}
   >
-    <div
-      data-slot="blocks"
-      bind:this={grid}
-      {@attach measureGrid}
-      class="grid grid-flow-row grid-cols-(--block-cols) items-box-start gap-space-group min-w-0"
-      style:--block-fill={fill === null ? undefined : `${fill}px`}
-      style:--columns={columns}
-      style:--block-cols="repeat(var(--columns), minmax(0, 1fr))"
-      {@attach reflow()}
-      {@attach watchDrops(
-        () => ({ order: places.map((place) => place.block), page }),
-        (block, to) => blocks.move(page, block, to)
-      )}
+    <DragProvider
+      onDragEnd={(event) => {
+        const move = order.end(shownIds, event);
+        if (move) {
+          dropped(move.from, move.to);
+        }
+      }}
+      onDragOver={(event) => order.over(event)}
+      onDragStart={() => order.start(shownIds)}
     >
-      {#each shown as place, index (place.block)}
-        {@const item = items[place.block]}
-        {#if item}
-          {@render frame(place, item, index)}
-        {:else}
-          <!-- A block a newer build drew: it keeps its place. -->
-          {@render frame(
-            place,
-            {
-              title: place.block,
-              glyph: IconLayers,
-              hideable: true,
-              measure: "--c-block-view",
-              body: "natural",
-              card: true,
-              content: newer,
-            },
-            index
-          )}
-        {/if}
-      {/each}
-    </div>
+      <div
+        data-slot="blocks"
+        bind:this={grid}
+        {@attach measureGrid}
+        class="grid grid-flow-row grid-cols-(--block-cols) items-box-start gap-space-group min-w-0"
+        style:--block-fill={fill === null ? undefined : `${fill}px`}
+        style:--columns={columns}
+        style:--block-cols="repeat(var(--columns), minmax(0, 1fr))"
+        {@attach reflow()}
+      >
+        {#each drawn as place, index (place.block)}
+          {@const item = items[place.block]}
+          {#if item}
+            {@render frame(place, item, index)}
+          {:else}
+            <!-- A block a newer build drew: it keeps its place. -->
+            {@render frame(
+              place,
+              {
+                title: place.block,
+                glyph: IconLayers,
+                hideable: true,
+                measure: "--c-block-view",
+                body: "natural",
+                card: true,
+                content: newer,
+              },
+              index
+            )}
+          {/if}
+        {/each}
+      </div>
+      <DragOverlay>
+        {#snippet children(source)}
+          {@render face(String(source.id))}
+        {/snippet}
+      </DragOverlay>
+    </DragProvider>
     {#if hidden.length > 0 || refused}
       <div
         class="flex flex-wrap items-center justify-end gap-x-space-3 gap-y-space-2"
