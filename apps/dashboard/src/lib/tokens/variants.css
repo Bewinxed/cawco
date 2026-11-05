@@ -452,6 +452,7 @@
 @custom-variant slot-grid-pane (&[data-slot="grid-pane"]);
 @custom-variant slot-group (&[data-slot="group"]);
 @custom-variant slot-grown-halo (&[data-slot="grown-halo"]);
+@custom-variant slot-handle (&[data-slot="handle"]);
 @custom-variant slot-handover (&[data-slot="handover"]);
 @custom-variant slot-head (&[data-slot="head"]);
 @custom-variant slot-heading (&[data-slot="heading"]);
@@ -582,6 +583,7 @@
 @custom-variant slot-side-well (&[data-slot="side-well"]);
 @custom-variant slot-sidebar-brand-row (&[data-slot="sidebar-brand-row"]);
 @custom-variant slot-sidebar-menu-item (&[data-slot="sidebar-menu-item"]);
+@custom-variant slot-sidebar-menu-sub-button (&[data-slot="sidebar-menu-sub-button"]);
 @custom-variant slot-sidebar-row-lead (&[data-slot="sidebar-row-lead"]);
 @custom-variant slot-sidebar-settings (&[data-slot="sidebar-settings"]);
 @custom-variant slot-slot (&[data-slot="slot"]);

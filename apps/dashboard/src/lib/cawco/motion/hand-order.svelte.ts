@@ -13,8 +13,11 @@
  *               onkeydown={(e) => hand.nudge(e, id, order, onchange, list)}
  *               data-id={id}>
  *
- * The rows are the list's direct children, one step apart; the grabbed
- * control carries `data-id`, which the arrows' focus follows. A press lifts
+ * The rows are the list's direct children, in `order`'s order, each as tall
+ * as it stands (an area open on its projects is taller than one folded):
+ * the carried row takes a place once its leading edge passes the middle of
+ * the row it crosses. The grabbed control carries `data-id`, which the
+ * arrows' focus follows. A press lifts
  * the row only once it travels (`TRAVEL`): one that doesn't stays the
  * control's own press, so a handle may also be a button (an area's tile
  * opens its look), and the click a carried row ends on is swallowed.
@@ -62,12 +65,20 @@ export class HandOrder {
     }
     event.preventDefault();
     const row = event.currentTarget as HTMLElement;
+    // Every row's place as the press found it: where each stands, how tall,
+    // and the list's gap between them.
     const items = [...list.children] as HTMLElement[];
-    const step =
-      items.length > 1
-        ? items[1].offsetTop - items[0].offsetTop
-        : row.offsetHeight;
+    const tops = items.map((item) => item.offsetTop);
+    const heights = items.map((item) => item.offsetHeight);
+    const gap =
+      items.length > 1 ? Math.max(0, tops[1] - tops[0] - heights[0]) : 0;
+    const height = new Map(order.map((one, index) => [one, heights[index]]));
     const from = order.indexOf(id);
+    /** Where the held row's box would stand in `ids`. */
+    const slotTop = (ids: readonly string[]) =>
+      ids
+        .slice(0, ids.indexOf(id))
+        .reduce((top, one) => top + (height.get(one) ?? 0) + gap, tops[0]);
     let now = [...order];
     let at = from;
     const y0 = event.clientY;
@@ -82,10 +93,12 @@ export class HandOrder {
         lifted = true;
         this.held = id;
       }
-      const next = Math.max(
-        0,
-        Math.min(order.length - 1, Math.round(from + dy / step))
-      );
+      // Its leading edge (the foot going down, the head going up) against
+      // the middle of every other row: those it has passed stand before it.
+      const edge = tops[from] + dy + (dy > 0 ? heights[from] : 0);
+      const next = order.filter(
+        (one, index) => one !== id && tops[index] + heights[index] / 2 < edge
+      ).length;
       if (next !== at) {
         const ids = now.filter((one) => one !== id);
         ids.splice(next, 0, id);
@@ -93,7 +106,7 @@ export class HandOrder {
         now = ids;
         onchange(ids);
       }
-      this.carried = dy - (at - from) * step;
+      this.carried = tops[from] + dy - slotTop(now);
     };
     const drop = async () => {
       row.removeEventListener("pointermove", move);

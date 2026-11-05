@@ -1,6 +1,7 @@
 /**
  * Directory hues remain keyed by cwd, the name `identity.ts` hashes.
- * Project folds are keyed by project id: two projects can share a directory.
+ * Folds are keyed by id: a project's (two projects can share a directory),
+ * and an area's on Configure › Areas, which folds its projects the same way.
  * Both are kept across reloads.
  */
 

@@ -11,6 +11,10 @@
       row: {
         compact:
           "h-(--row-compact-h) gap-(--row-compact-gap) pr-(--row-compact-pad-end) pl-(--row-compact-gap)",
+        /** A compact row that stands a finger tall under one (an area's
+            projects on Configure › Areas, a page a phone reaches). */
+        "compact-touch":
+          "h-(--row-compact-h) gap-(--row-compact-gap) pr-(--row-compact-pad-end) pl-(--row-compact-gap) coarse:h-c-row-h",
         "compact-tall":
           "h-(--row-compact-h) gap-(--row-compact-gap) pr-(--row-compact-pad-end) pl-(--row-compact-gap) data-tall:h-(--row-tall-h) data-tall:gap-space-2 data-tall:pr-space-3 data-tall:pl-space-3",
       },

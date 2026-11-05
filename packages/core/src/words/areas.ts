@@ -171,7 +171,11 @@ export const areasScreenWords = {
   leaves: (setting: AreaSettingLabel) =>
     `${AREA_SETTING_LABELS[setting]}: the fleet's`,
   setsNothing: "Sets nothing: its projects take the fleet's settings",
-  /** The order handle, for a screen reader. */
+  /** The switch that opens and folds the projects under an area, as a project's mark does its sessions in the sidebar. */
+  fold: (name: string, open: boolean) =>
+    `${open ? "Hide" : "Show"} ${name}'s projects`,
+  /** The projects under an area, for a screen reader. */
+  projectsIn: (name: string) => `Projects in ${name}`,
   /** The tile, for a screen reader: a press opens its look, a drag or the arrows move it. */
   place: (name: string, at: number, of: number) =>
     `${name}'s look, ${at} of ${of}. Press to change it; drag, or press the up and down arrows, to move ${name}`,
