@@ -76,4 +76,6 @@ export const cawSwitchWords = {
   label: "Caw acts on his own",
   /** Under it: the one consequence a person needs before flipping it. */
   line: "He picks up what happens in the project without you writing: a task handed in, a routine's report, a pick you made. Off, he answers only when you write.",
+  /** His settings' second switch: his working loop plays, or he holds still (kept in this browser). */
+  moves: "Caw moves while he works",
 };

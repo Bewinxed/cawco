@@ -12,6 +12,12 @@ export const cawHeadWords = {
   needs: (count: number) => `Needs you, ${count}`,
   /** The same, his tooltip. */
   needsTip: (count: number) => `${count} need you`,
+  /**
+   * Something waits on the operator while a project's tab is in front: the
+   * project's Needs you is the window's one count, so his head says no
+   * figure; his panel lists them all.
+   */
+  needsAcross: "Needs you across the fleet",
   /** Nothing waits, and the fleet is read over a live hub: the one empty answer. */
   caughtUp: "All caught up",
   /** The hub is live and its fleet not read yet: nothing to count from. */

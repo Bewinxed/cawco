@@ -78,8 +78,7 @@ export const STAGE_HUES: Record<StageColor, string> = {
 /**
  * The glyph a stage with no look of its own stands with, by its kind, in
  * the muted ink: every stage keeps its mark's slot, so every name stands on
- * one edge, a stage just added among the rest. (A `you` stage draws the
- * Needs-you glyph whatever its look.)
+ * one edge, a stage just added among the rest.
  */
 const KIND_GLYPHS: Record<StageKind, StageIcon> = {
   todo: "inbox",

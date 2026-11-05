@@ -5,13 +5,13 @@
    * inside its DragProvider: each card is a thing the board carries
    * between columns and the column a place it lands (drag/Sortable,
    * drag/Droppable). A view's StageColumn and the Archived rail draw the
-   * same column with nothing to carry. A `you` column stands on the same band as the rest:
-   * its head carries the Needs-you glyph and its kind word the attn ink,
-   * so the status reads glyph, then word, then hue, and coral stays the
-   * action's (DESIGN.md, The Coral Is Where You Act Rule). A stage with a
-   * look of its own (stages.md `icon:`, `color:`) leads its name with that
-   * glyph in its section hue (stage-look.ts); a `you` stage keeps the
-   * Needs-you glyph, its status. A column lands from the stage of Caw's
+   * same column with nothing to carry. A `you` column is a stage like the
+   * rest, its head its stage's mark, name, count and kind word in the quiet
+   * ink: what waits on you is marked on each card that waits and counted
+   * once in the window, by Needs you (the owner's rule 7), never also on the
+   * column's head. A stage with a look of its own (stages.md `icon:`,
+   * `color:`) leads its name with that glyph in its section hue
+   * (stage-look.ts). A column lands from the stage of Caw's
    * setup draft it was (`data-share="stage:<name>"`, SetupDraft) when the
    * draft is set up: one object, never two (motion/share).
    */
@@ -34,7 +34,6 @@
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { IconNeedsYou } from "#lib/icons.js";
   import { markOf } from "./stage-look";
   import TaskCard from "./TaskCard.svelte";
 
@@ -196,12 +195,7 @@
   >
     <header data-slot="head" class="flex flex-col gap-0 px-space-2 py-space-1">
       <span class="mark-line flex min-h-c-btn-h-xs items-center gap-space-2">
-        {#if kind === "you"}
-          <IconNeedsYou
-            aria-hidden="true"
-            class="-me-space-1 size-icon-md flex-none text-status-attn-glyph"
-          />
-        {:else if kind}
+        {#if kind}
           {@const mark = markOf({ kind, icon, color })}
           <span
             aria-hidden="true"
@@ -231,7 +225,7 @@
       </span>
       <span
         data-slot="kind"
-        class="flex-none type-meta whitespace-nowrap text-ink-subtle group-kind-you/col:text-status-attn-ink"
+        class="flex-none type-meta whitespace-nowrap text-ink-subtle"
         >{kindWord}</span
       >
     </header>

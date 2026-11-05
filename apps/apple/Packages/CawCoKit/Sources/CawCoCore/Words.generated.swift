@@ -2877,6 +2877,9 @@ public enum Words {
             "\(count) need you"
         }
 
+        /// Something waits on the operator while a project's tab is in front: the project's Needs you is the window's one count, so his head says no figure; his panel lists them all.
+        public static let needsAcross = "Needs you across the fleet"
+
         /// Nothing waits, and the fleet is read over a live hub: the one empty answer.
         public static let caughtUp = "All caught up"
 

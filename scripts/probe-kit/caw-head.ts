@@ -21,10 +21,12 @@ const needsPattern = (count: string) =>
 
 /** What the head says with nothing to count. */
 const QUIET = [words.caughtUp, words.reading, words.waiting];
+/** What the head says while a project's tab is in front and something waits: no figure. */
+const ACROSS = [words.needsAcross];
 
 /** Every word the head says of what needs you, at the start of its label. */
 const CAW_SAYS = new RegExp(
-  `^(?:${[needsPattern("\\d+"), ...QUIET.map(literal)].join("|")})`,
+  `^(?:${[needsPattern("\\d+"), ...[...ACROSS, ...QUIET].map(literal)].join("|")})`,
   "u"
 );
 

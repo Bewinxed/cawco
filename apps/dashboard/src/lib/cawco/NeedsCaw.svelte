@@ -82,6 +82,7 @@
     cawStill,
   } from "./home/caw-still.svelte";
   import { dur, easeOut, motionOk } from "./motion/curves.svelte";
+  import { projectOfTab, tabOfPath } from "./workspace/tabs";
 
   /**
    * His head's side, px: the compacted still fills it, drawn at that size.
@@ -110,16 +111,31 @@
   };
 
   const needs = $derived(home.needs);
-  const count = $derived(needs.length);
+  /**
+   * A project's tab in front: its Needs you is the window's one count of
+   * what waits (the owner's rule 7), so his head draws no figure, no arc on
+   * his rim and no number in his name; his panel still lists every wait.
+   */
+  const projectInFront = $derived(
+    projectOfTab(tabOfPath(page.url.pathname)) !== null
+  );
+  const count = $derived(projectInFront ? 0 : needs.length);
   const noticeCount = $derived(cawNotices.count);
   const quiet = $derived(cawQuiet());
   /** "· 2 notices" after what he says, while any notice stands. */
   const noticeWords = $derived(
     noticeCount > 0 ? cawHeadWords.notices(noticeCount) : ""
   );
-  const label = $derived(
-    `${count > 0 ? cawHeadWords.needs(count) : quiet}${noticeWords}`
-  );
+  /** What he says of what waits: the count, none while a project's count stands, or his quiet word. */
+  const says = $derived.by(() => {
+    if (count > 0) {
+      return cawHeadWords.needs(count);
+    }
+    return projectInFront && needs.length > 0
+      ? cawHeadWords.needsAcross
+      : quiet;
+  });
+  const label = $derived(`${says}${noticeWords}`);
 
   /* ── The count ─────────────────────────────────────────────────────── */
   /**
@@ -136,8 +152,8 @@
    * round his item's centre: the wide group's trailing end. On the phone
    * his glass is his own, standing the bar's phone margin in from the
    * screen's trailing edge, round on its leading side and square on its
-   * trailing one (BarGlass), and the arcs run along that outline instead
-   * (`outlinePath`).
+   * trailing one (BarGlass), and the arcs run on the circle inside it,
+   * round his head (`outlinePath`).
    * Apple's NeedsCawButton draws the same arcs.
    */
   const ARC = 30;
@@ -175,80 +191,50 @@
   const arcSlots = $derived(slots(arcCount));
   const lapSlots = $derived(slots(lapCount));
   const tipText = $derived(
-    `${count > 0 ? cawHeadWords.needsTip(count) : quiet}${noticeWords}`
+    `${count > 0 ? cawHeadWords.needsTip(count) : says}${noticeWords}`
   );
 
-  /** A point on the rim, `deg` clockwise from 12 o'clock. */
-  const onRim = (deg: number) => {
+  /** A point on the circle of `radius` round his item's centre, `deg` clockwise from 12 o'clock. */
+  const onCircle = (radius: number, deg: number) => {
     const rad = (deg * Math.PI) / 180;
     const c = RING_BOX / 2;
-    return `${(c + RIM * Math.sin(rad)).toFixed(3)} ${(c - RIM * Math.cos(rad)).toFixed(3)}`;
+    return `${(c + radius * Math.sin(rad)).toFixed(3)} ${(c - radius * Math.cos(rad)).toFixed(3)}`;
   };
   /**
-   * A round cap reaches half the stroke past its path's end: this many
-   * degrees of the rim, taken off each end so the arc as seen, caps and
-   * all, is ARC° long and the gaps are ARC_GAP°.
+   * Arc `k` on the circle of `radius`, seen from k × (ARC + GAP)° clockwise
+   * for ARC°: a round cap reaches half the stroke past its path's end, so
+   * that many degrees of the circle come off each end, and the arc as seen,
+   * caps and all, is ARC° long and the gaps are ARC_GAP°.
    */
-  const CAP = ((RIM_STROKE / 2 / RIM) * 180) / Math.PI;
-  /** Arc `k`, seen from k × (ARC + GAP)° clockwise for ARC°. */
-  const arcPath = (k: number) => {
-    const from = k * (ARC + ARC_GAP) + CAP;
-    return `M ${onRim(from)} A ${RIM} ${RIM} 0 0 1 ${onRim(from + ARC - 2 * CAP)}`;
+  const arcOn = (radius: number, k: number) => {
+    const cap = ((RIM_STROKE / 2 / radius) * 180) / Math.PI;
+    const from = k * (ARC + ARC_GAP) + cap;
+    return `M ${onCircle(radius, from)} A ${radius} ${radius} 0 0 1 ${onCircle(radius, from + ARC - 2 * cap)}`;
   };
+  /** The closed circle of `radius`, in its two halves, each from its leading end clockwise. */
+  const halvesOn = (radius: number) => ({
+    high: `M ${onCircle(radius, 270)} A ${radius} ${radius} 0 0 1 ${onCircle(radius, 90)}`,
+    low: `M ${onCircle(radius, 90)} A ${radius} ${radius} 0 0 1 ${onCircle(radius, 270)}`,
+  });
+  /** Arc `k` on the wide bar's circle. */
+  const arcPath = (k: number) => arcOn(RIM, k);
 
   /*
-   * The phone's glass (`--c-bar-caw-glass-phone`): a half circle at its
-   * leading side and square at its trailing corners, centred in the rim's
-   * box. The arcs' path is that outline drawn half the stroke in:
-   * clockwise from 12 o'clock along the top edge, down the trailing edge,
-   * back along the bottom edge, then round the half circle back to 12. Each
-   * arc is ARC/360 of the outline's length and ARC_GAP/360 from the next,
-   * as on the circle.
+   * The phone's glass (`--c-bar-caw-glass-phone`) is round at its leading
+   * side and square at its trailing corners, centred in the rim's box; his
+   * head is round in it. The arcs run on the circle inside that glass, round
+   * his head as on the wide bar (owner: "lines along the rim of the
+   * circle"): along the glass's square corners the closed ring read as a
+   * thick red square round a round head (cockpit-5a8f1a75's check at 390).
    */
-  const MID = RING_BOX / 2;
   /** The phone's glass, px (`--c-bar-caw-glass-phone`). */
   const STAND_BOX = 32;
   /** Where the glass's square starts inside the circle's box: its viewBox's origin. */
   const STAND_INSET = (RING_BOX - STAND_BOX) / 2;
-  /**
-   * The outline's half height on the path: half the stroke in from one
-   * hairline of glass inside the glass's own hairline, as on the circle.
-   */
+  /** The phone's circle on the path: half the stroke in from one hairline of glass inside the glass's own hairline, as on the wide bar. */
   const STAND = STAND_BOX / 2 - 2 * GLASS_EDGE - RIM_STROKE / 2;
-  const OUTLINE_LENGTH = (4 + Math.PI) * STAND;
-  /** The point `s` px along the outline from 12 o'clock. */
-  function onOutline(s: number): [number, number] {
-    if (s < STAND) {
-      return [MID + s, MID - STAND];
-    }
-    if (s < 3 * STAND) {
-      return [MID + STAND, MID - STAND + (s - STAND)];
-    }
-    if (s < 4 * STAND) {
-      return [MID + STAND - (s - 3 * STAND), MID + STAND];
-    }
-    const rad = Math.PI + (s - 4 * STAND) / STAND;
-    return [MID + STAND * Math.sin(rad), MID - STAND * Math.cos(rad)];
-  }
-  /** Arc `k` on the outline: caps and all, ARC/360 of it long. */
-  const outlinePath = (k: number) => {
-    const from = (k * (ARC + ARC_GAP) * OUTLINE_LENGTH) / 360 + RIM_STROKE / 2;
-    const to = from + (ARC * OUTLINE_LENGTH) / 360 - RIM_STROKE;
-    const points: string[] = [];
-    for (let s = from; s < to; s += 0.5) {
-      points.push(
-        onOutline(s)
-          .map((n) => n.toFixed(2))
-          .join(" ")
-      );
-    }
-    points.push(
-      onOutline(to)
-        .map((n) => n.toFixed(2))
-        .join(" ")
-    );
-    return `M ${points.join(" L ")}`;
-  };
+  /** Arc `k` on the phone's circle. */
+  const outlinePath = (k: number) => arcOn(STAND, k);
   /*
    * While his panel hangs from his glass, the glass's lower half is no
    * outline any more: its foot is the seam into the panel, its trailing
@@ -261,31 +247,13 @@
    */
   /** The middle of arc `k`, degrees clockwise from 12 o'clock. */
   const middle = (k: number) => k * (ARC + ARC_GAP) + ARC / 2;
-  /** Whether arc `k` lies on the lower half of his circle (the wide bar's). */
+  /** Whether arc `k` lies on the lower half of his circle. */
   const roundLow = (k: number) => Math.cos((middle(k) * Math.PI) / 180) < 0;
-  /** Whether arc `k` lies on the lower half of the phone's standing outline. */
-  const standLow = (k: number) =>
-    onOutline((middle(k) * OUTLINE_LENGTH) / 360)[1] > MID;
-  /** The closed circle's halves, each from its leading end clockwise. */
-  const ROUND_HALF = {
-    high: `M ${onRim(270)} A ${RIM} ${RIM} 0 0 1 ${onRim(90)}`,
-    low: `M ${onRim(90)} A ${RIM} ${RIM} 0 0 1 ${onRim(270)}`,
-  };
-  /** The closed standing outline's halves, the same way. */
-  const STAND_HALF = {
-    high: [
-      `M ${MID - STAND} ${MID}`,
-      `A ${STAND} ${STAND} 0 0 1 ${MID} ${MID - STAND}`,
-      `L ${MID + STAND} ${MID - STAND}`,
-      `L ${MID + STAND} ${MID}`,
-    ].join(" "),
-    low: [
-      `M ${MID + STAND} ${MID}`,
-      `L ${MID + STAND} ${MID + STAND}`,
-      `L ${MID} ${MID + STAND}`,
-      `A ${STAND} ${STAND} 0 0 1 ${MID - STAND} ${MID}`,
-    ].join(" "),
-  };
+  /** The phone's arcs lie on a circle too. */
+  const standLow = roundLow;
+  /** The closed circle's halves, the wide bar's and the phone's. */
+  const ROUND_HALF = halvesOn(RIM);
+  const STAND_HALF = halvesOn(STAND);
 
   /**
    * An arc drawing itself in along its own length, and retracting the same

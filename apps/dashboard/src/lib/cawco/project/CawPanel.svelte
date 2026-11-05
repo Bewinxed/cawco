@@ -4,12 +4,16 @@
    * his panel's bar (ProjectConversation's settings), the one place it
    * stands (the owner's rule 8): what he is doing in one sentence, and the
    * switch for whether he acts on his own (the project's events reach his
-   * conversation) (CawLeadSwitch). Talking to him is his panel over the
-   * page (CawFloat).
+   * conversation) (CawLeadSwitch), and whether he moves while he works
+   * (feel.svelte.ts `cawLoop`, kept in this browser). Talking to him is his
+   * panel over the page (CawFloat).
    */
+  import { cawSwitchWords } from "@cawco/core/words/project-conversation";
   import { untrack } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
+  import { cawLoop, setCawLoop } from "#lib/cawco/feel.svelte.js";
   import CawFace from "#lib/cawco/home/CawFace.svelte";
+  import { Switch } from "#lib/components/ui/switch/index.js";
   import CawLeadSwitch from "./CawLeadSwitch.svelte";
   import type { CawLead } from "./caw-lead.svelte";
 
@@ -60,6 +64,18 @@
     <p class="type-meta text-status-attn-ink">{lead.capLine}</p>
   {/if}
   <CawLeadSwitch {lead} {place} {projectId} {projectName} />
+  <!-- How he looks while he works: his own, so it stands in his settings,
+       his one surface (the owner's rule 8), not in the rail. -->
+  <label
+    data-slot="loop-switch"
+    class="flex flex-wrap items-center gap-space-2"
+  >
+    <Switch
+      data-caw-loop-switch
+      bind:checked={() => cawLoop.on, (next) => setCawLoop(next)}
+    />
+    <span>{cawSwitchWords.moves}</span>
+  </label>
   {#if cawco.hub === "unreachable"}
     <p class="type-meta text-ink-muted">
       The hub is not answering; what shows was read before.

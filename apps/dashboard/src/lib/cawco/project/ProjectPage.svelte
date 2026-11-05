@@ -424,12 +424,18 @@
    * the person last left it here, else while the board is empty, so a
    * project just made opens on Caw (PRD §5.6; CawLead.arrive). Arriving on
    * a decision page or a draft on a phone, where his sheet would stand over
-   * it, his panel stays put away.
+   * it, or on a task or a file open beside the view (one surface stands
+   * beside it at a time, `besideWas`), his panel stays put away.
    */
   $effect(() => {
     if (list !== null && lead.project !== null) {
       const blank = empty;
-      untrack(() => lead.arrive(blank, sheetCovers()));
+      untrack(() =>
+        lead.arrive(
+          blank,
+          sheetCovers() || openTask !== null || openFile !== null
+        )
+      );
     }
   });
   /**
@@ -637,6 +643,43 @@
     untrack(() => {
       if (lead.open && pageScrollsQuery.current) {
         lead.open = false;
+      }
+    });
+  });
+  /**
+   * One surface stands beside the view at a time on a desk (the owner's
+   * rule 8: Caw is one surface, never a third column): a task or a file
+   * opened there puts his panel away, its conversation where it was and his
+   * seat one press from it; his panel opened puts the task or the file
+   * away, its card one press from it on the view. Only an opening moves the
+   * other. Under 900px a task is its own page and his panel a sheet.
+   */
+  let besideWas = {
+    task: null as string | null,
+    file: null as string | null,
+    caw: false,
+  };
+  $effect(() => {
+    const task = openTask;
+    const file = openFile;
+    const caw = lead.open;
+    untrack(() => {
+      const was = besideWas;
+      besideWas = { task, file, caw };
+      if (phone) {
+        return;
+      }
+      const opened =
+        (task !== null && task !== was.task) ||
+        (file !== null && file !== was.file);
+      if (opened && caw) {
+        lead.open = false;
+      } else if (caw && !was.caw && (task !== null || file !== null)) {
+        goto(hrefOf(null, current, {}, null), {
+          shallow: true,
+          replace: true,
+          state: {},
+        });
       }
     });
   });

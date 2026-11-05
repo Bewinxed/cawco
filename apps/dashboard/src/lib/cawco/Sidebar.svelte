@@ -23,7 +23,6 @@
   import type { Attachment } from "svelte/attachments";
   import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
   import { Button } from "#lib/components/ui/button/index.js";
-  import CawLoopSwitcher from "#lib/components/ui/CawLoopSwitcher.svelte";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
@@ -734,10 +733,12 @@
     row.cwd.split("/").filter(Boolean).pop() ||
     row.id.slice(0, 8);
 
-  /** The sessions waiting on you (core `waitingOnYou`), in the attention tone; else the ones running. */
-  const fleetCount = $derived(
-    cawco.waitingCount || cawco.runningInstances.length
-  );
+  /**
+   * The sessions running. What waits on you is counted once in the window
+   * (the owner's rule 7): by Caw's head in the top bar, or by the project's
+   * Needs you while a project's tab is in front, never here as well.
+   */
+  const fleetCount = $derived(cawco.runningInstances.length);
   /** A project row's link in the rail: its end's tray hands the focus back to it. */
   const railLinkId = (projectId: string) => `rail-project-${projectId}`;
 </script>
@@ -1031,12 +1032,9 @@
             {#if fleetCount}
               <!-- A status count keeps its status pair whatever the row does:
                    the kit's active and hover inks are for a plain count, and
-                   on the live fill the active one reads 3.3:1. -->
-              <Sidebar.MenuBadge
-                data-blocked={cawco.waitingCount > 0 || undefined}
-                data-flip="pop box"
-                tone="live"
-              >
+                   on the live fill the active one reads 3.3:1. It counts what
+                   runs; what waits is Caw's head's to count. -->
+              <Sidebar.MenuBadge data-flip="pop box" tone="live">
                 <MorphText text={String(fleetCount)} />
               </Sidebar.MenuBadge>
             {/if}
@@ -1355,7 +1353,6 @@
         </Tip>
         <ThemeSwitcher />
         <SoundSwitcher />
-        <CawLoopSwitcher />
       </div>
     </div>
   </Sidebar.Footer>
