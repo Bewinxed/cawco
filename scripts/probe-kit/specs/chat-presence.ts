@@ -306,6 +306,11 @@ const run = async (kit: Kit): Promise<void> => {
     fleet.repo,
     { projectId: project.id }
   );
+  // A project's conversation is started by words (hub caw.ts
+  // `startConversation`). One read whole with nothing in it is his start to
+  // the page (CawLead `starting`), whose panel draws "Starting…" in place of
+  // the conversation: words not the person's, so leg 15 still finds them away.
+  await background(conversation);
   await fleet.api(`/api/instances/${conversation}/artifacts`, {
     kind: "page",
     does: "pick",
