@@ -16,6 +16,7 @@ import {
   previewRoute,
 } from "@cawco/core/frames";
 import { decisionsWords } from "@cawco/core/words/decisions";
+import { previewWords } from "@cawco/core/words/preview";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { enterPreviews } from "./pass";
 
@@ -44,18 +45,11 @@ export async function pageSource(
 ): Promise<
   { origin: string; byHost: boolean; src: string } | { problem: string }
 > {
-  const answer = await fetch(`${routesOf(origin)}/preview-address`, {
-    method: "POST",
-  }).catch(() => null);
-  if (!answer?.ok) {
-    return {
-      problem: await said(
-        answer,
-        "The hub didn't say where this page is served."
-      ),
-    };
+  const asked = await originAddress(origin);
+  if ("problem" in asked) {
+    return asked;
   }
-  const route = previewRoute((await answer.json()) as PreviewAddress, location);
+  const route = previewRoute(asked.address, location);
   if (!route) {
     return { problem: decisionsWords.noAddress };
   }
@@ -79,3 +73,38 @@ export async function pageSource(
     src: `${route.origin}${wanted}`,
   };
 }
+
+/**
+ * Where the hub serves what `route` names (a `preview-address` route), its
+ * listener started when it has none; or why it can't, in the hub's own
+ * words: every preview port in use is said as the hub says it (hub
+ * preview.ts `everyPortTaken`), wherever a frame of it stands.
+ */
+async function addressAt(
+  route: string
+): Promise<{ address: PreviewAddress } | { problem: string }> {
+  const answer = await fetch(route, { method: "POST" }).catch(() => null);
+  if (!answer?.ok) {
+    return {
+      problem: await said(answer, previewWords.notOpenedLine),
+    };
+  }
+  return { address: (await answer.json()) as PreviewAddress };
+}
+
+/** Where `origin` (a project's, a session's) is served now, its listener started when it has none; or the hub's refusal. */
+export const originAddress = (
+  origin: PageOrigin
+): Promise<{ address: PreviewAddress } | { problem: string }> =>
+  addressAt(`${routesOf(origin)}/preview-address`);
+
+/**
+ * Where artifact `id` is served now (hub preview-routes.ts
+ * `/api/artifacts/:artifact/preview-address`), its origin opened when it
+ * has none; or the hub's refusal. A pane whose frame names no origin asks
+ * it (PreviewPane): the panel, an artifact's tab, a task's review.
+ */
+export const artifactAddress = (
+  id: string
+): Promise<{ address: PreviewAddress } | { problem: string }> =>
+  addressAt(`/api/artifacts/${encodeURIComponent(id)}/preview-address`);

@@ -13407,8 +13407,8 @@ export const createServer = (
   /**
    * The address a frame told to every screen carries (the board, a panel's
    * stream): its origin's, its listener started, while that origin holds a
-   * port (preview.ts `holds`: its session runs or a screen follows it, a
-   * frame of it is open, its project is kept); else the one its listener
+   * port (preview.ts `holds`: a screen follows its session, a frame of it
+   * is open, its project is kept); else the one its listener
    * still stands on, or none. A screen that follows the session, or opens
    * the artifact, takes one then ({@link frameAddress}).
    */
@@ -15968,14 +15968,15 @@ export const createServer = (
    * own port: the same name, the
    * embed's port. On a host-mode name: the embed's name, which the browser's
    * pass covers as it covers the page's (preview-access.ts), so no ticket
-   * is ever served in a page. Nothing when the hub no longer holds it or
-   * every port is taken: the page says so.
+   * is ever served in a page. Nothing when the hub no longer holds it;
+   * every port taken, the refusal in its words (`unopened`): the page
+   * says it, and its Try again serves the page again.
    */
   const embedAt = (
     pageId: string,
     artifactId: string,
     reachedAt: URL
-  ): { embed?: string } => {
+  ): { embed?: string; unopened?: string } => {
     const row = db.artifacts.get(artifactId);
     // The origin that serves the page: its embeds are framed by it.
     const owner = originKeyOf(pageId);
@@ -15991,7 +15992,7 @@ export const createServer = (
     } catch (error) {
       if (error instanceof PreviewRefusal) {
         console.warn(`[preview] ${error.message}`);
-        return {};
+        return { unopened: error.message };
       }
       throw error;
     }
@@ -16058,12 +16059,7 @@ export const createServer = (
       const [row] = db.getInstancesByIds([instanceId]);
       return !!row && !ENDED_STATUSES.has(row.status);
     },
-    sessionUsed: (instanceId) => {
-      const [row] = db.getInstancesByIds([instanceId]);
-      return (
-        !!row && (mayRun(row.status) || streams.followerCount(instanceId) > 0)
-      );
-    },
+    followed: (instanceId) => streams.followerCount(instanceId) > 0,
     // Told again without their old address, once what let them go is done:
     // a screen holding that port would load another origin there.
     letGo: (keys) => {

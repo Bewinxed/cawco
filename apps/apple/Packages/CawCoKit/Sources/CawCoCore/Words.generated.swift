@@ -1548,6 +1548,11 @@ public enum Words {
             "The browser got no page from \(machine): the connection closed before an answer, or the answer wasn't a page."
         }
 
+        /// The hub opened no origin for the frame (dashboard PreviewPane `unopened`): its refusal is the line, as the hub said it (every preview port in use, core words/preview-ports.ts); this line stands only when the hub said nothing.
+        public static let notOpenedTitle = "This preview didn't open"
+
+        public static let notOpenedLine = "The hub didn't say where this preview is served."
+
         /// The state's way back: the page loaded afresh.
         public static let tryAgain = "Try again"
 

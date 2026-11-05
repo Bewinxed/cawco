@@ -131,8 +131,9 @@ export const previewRoutes = (deps: {
       })
       // The origin an artifact is served on (a machine's preview its own,
       // whatever its session's panel shows), its listener started when it
-      // has none. No screen asks it (each frame names its origin), so the
-      // apps' document leaves it out.
+      // has none, or the refusal (every preview port in use). The
+      // dashboard's pane asks it when its frame names no origin (PreviewPane
+      // `hubSaid`); the app doesn't, so the apps' document leaves it out.
       .post(
         "/api/artifacts/:artifact/preview-address",
         hidden,

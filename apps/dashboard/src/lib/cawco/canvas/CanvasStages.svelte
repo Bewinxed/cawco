@@ -16,8 +16,10 @@
     PAGE_TOUCHED_MESSAGE,
     PREVIEW_LOCKED_MESSAGE,
   } from "@cawco/core/frames";
+  import { commonWords } from "@cawco/core/words/common";
   import { Portal } from "bits-ui";
   import { untrack } from "svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { theme } from "#lib/theme.svelte.js";
   import { previewShortcut, SHORTCUT_MESSAGE } from "../preview/wire";
   import { heardInput } from "../reload.svelte";
@@ -142,9 +144,23 @@
           bind:this={stage.frame}
         ></iframe>
       {:else if stage.unreached}
-        <p class="m-0 p-space-4 text-size-body text-data-bad" role="alert">
-          {stage.unreached}
-        </p>
+        <!-- The hub's refusal (every preview port in use, a pass not given), in its words, and Try again asks again. -->
+        <div
+          class="flex flex-wrap items-center gap-space-3 m-0 p-space-4"
+          role="alert"
+        >
+          <p
+            class="flex-1 basis-c-draft-line min-w-0 m-0 text-size-body text-data-bad text-pretty"
+          >
+            {stage.unreached}
+          </p>
+          <Button
+            label={commonWords.tryAgain}
+            onclick={() => stage.again()}
+            size="sm"
+            variant="outline"
+          />
+        </div>
       {/if}
       {#if stage.at === "composer" && stage.grab && stage.grabValue}
         {#each HANDLES as handle (handle)}

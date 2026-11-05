@@ -7,16 +7,15 @@
 
 /**
  * What keeps each port of the range (hub preview.ts `portHolders`). Any
- * port none of these keeps is taken back from the preview used least
- * recently, so this is said only when all of them are in use.
+ * port no screen shows is taken back from the preview used least
+ * recently, so this is said only when every port is shown or another
+ * program holds it.
  */
 export interface PortHolders {
   /** Ports another program on the hub's machine holds. */
   others: number;
-  /** A preview, a page or a canvas open on a screen. */
+  /** A preview, a page or a canvas open on a screen, or in a panel a screen follows. */
   screens: number;
-  /** A session that is running, or a preview such a session holds or shows. */
-  sessions: number;
 }
 
 /** "a, b and c", or "a, b or c" with `or`. */
@@ -30,14 +29,12 @@ export const previewPortWords = {
   everyPortTaken: (range: string, held: PortHolders): string => {
     const by = [
       held.screens ? `${held.screens} by previews open on a screen` : "",
-      held.sessions ? `${held.sessions} by sessions that are running` : "",
       held.others
         ? `${held.others} by other programs on the hub's machine`
         : "",
     ].filter(Boolean);
     const free = [
       held.screens ? "close a preview you aren't using" : "",
-      held.sessions ? "end a session that has a preview or a canvas" : "",
       held.others ? "stop one of those programs" : "",
     ].filter(Boolean);
     const action = listed(free, true);

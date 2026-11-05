@@ -964,6 +964,28 @@
         {/if}
       {/if}
     </div>
+  {:else if held?.unopened}
+    <!-- The hub opened no origin for it as it served the page (every preview port in use): its words, and Try again serves the page's media again in place (Host.svelte's `cawco:revision`). -->
+    <div
+      data-slot="embed-unopened"
+      class="flex flex-wrap items-center gap-space-3 w-full"
+      role="alert"
+    >
+      <p class="flex-1 min-w-0 m-0 type-meta text-data-bad wrap-anywhere">
+        {held.unopened}
+      </p>
+      <Button
+        icon={IconRefresh}
+        label={commonWords.tryAgain}
+        onclick={() => {
+          dispatchEvent(
+            new CustomEvent("cawco:revision", { cancelable: true })
+          );
+        }}
+        size="sm"
+        variant="outline"
+      />
+    </div>
   {:else}
     <!-- One line in its well where the preview would stand, never a slab of its size. -->
     <p

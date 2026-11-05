@@ -18,11 +18,11 @@
  * starting, a resize or scroll, a slot resizing, or a motion a holder runs
  * (`watch`), and for a short tail after each.
  */
-import { type PreviewAddress, previewRoute } from "@cawco/core/frames";
+import { previewRoute } from "@cawco/core/frames";
 import { SvelteMap } from "svelte/reactivity";
-import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { theme } from "#lib/theme.svelte.js";
 import { artifactSyncPath } from "../preview/artifact-doc";
+import { originAddress } from "../preview/page-source";
 import { enterPreviews, turnedAwayWords } from "../preview/pass";
 
 export type Slot = "composer" | "panel";
@@ -260,20 +260,19 @@ export class Stage {
   /** Why the hub named none, its own sentence. */
   unreached = $state<string | null>(null);
 
+  /** Try again, once the hub named no origin: asked again. */
+  again(): Promise<void> {
+    return this.#reach();
+  }
+
   async #reach(): Promise<void> {
-    const answer = await fetch(
-      `/api/instances/${encodeURIComponent(this.instanceId)}/preview-address`,
-      { method: "POST" }
-    ).catch(() => null);
-    if (!answer?.ok) {
-      this.unreached = answer
-        ? (await hubRefusal(answer)).message
-        : "The hub didn't say where this canvas stands.";
+    const asked = await originAddress({ instance: this.instanceId });
+    if ("problem" in asked) {
+      this.unreached = asked.problem;
       this.changed();
       return;
     }
-    const address = (await answer.json()) as PreviewAddress;
-    const route = previewRoute(address, location);
+    const route = previewRoute(asked.address, location);
     const origin = route?.origin ?? null;
     if (origin) {
       sessionOrigins.set(this.instanceId, { origin });

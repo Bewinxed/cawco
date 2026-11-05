@@ -396,7 +396,7 @@ const run = async (kit: Kit) => {
     rowAt: (key: string) => (key === ORIGIN ? shown : undefined),
     artifactAt: (key: string) => (key === ORIGIN ? ARTIFACT : undefined),
     originOf: (id: string) => (id === ARTIFACT ? INSTANCE : undefined),
-    sessionUsed: (id: string) => live.has(id),
+    followed: (id: string) => live.has(id),
     unreachable: () => undefined,
     ownerOf: () => undefined,
     kindOf: () => undefined,

@@ -406,6 +406,13 @@ export interface PreviewListenerDeps {
     artifactId: string
   ) => Promise<Response>;
   /**
+   * Whether a screen follows session `instanceId`'s conversation now, so
+   * its panel stands on that screen. Whether its process runs is no use of
+   * a preview port: an origin no screen shows gives its port back
+   * ({@link createPreviewListeners}' `reclaimOne`).
+   */
+  followed: (instanceId: string) => boolean;
+  /**
    * The shape a decision page's Preview heard a component canvas of page
    * `pageId`'s media say (`POST /__cawco/page/<id>/shape`, a JSON body of
    * the canvas's `artifact`, its `stories` and an `EmbedShape`), kept for
@@ -465,13 +472,6 @@ export interface PreviewListenerDeps {
   servedOn: (artifactId: string, key: string) => boolean;
   /** Whether session `instanceId` still runs: a session's ticket enters host mode's names only while it does (preview-access.ts). */
   sessionLive: (instanceId: string) => boolean;
-  /**
-   * Whether session `instanceId` uses its preview origins now: its process
-   * may run (starting, running, or not yet reported since the hub started),
-   * or a screen follows its conversation. A sleeping, failed or ended one
-   * that no screen follows does not.
-   */
-  sessionUsed: (instanceId: string) => boolean;
   socket: ReturnType<typeof artifactSocket>;
   /** Artifact `artifactId`'s stage answered its page through the relay (core `PREVIEW_SERVED_HEADER`): it is reachable. */
   stageAnswered: (artifactId: string) => void;
@@ -917,6 +917,7 @@ async function relay(
  * (`/__cawco/page/<id>/`) of the session's own; null for any other path.
  */
 async function artifactById(
+  request: Request,
   url: URL,
   instanceId: string,
   deps: PreviewListenerDeps
@@ -932,20 +933,74 @@ async function artifactById(
   if (canvas) {
     const [, artifactId, rest] = canvas;
     const embed = url.searchParams.get("embed") === "1";
-    return deps.servedOn(artifactId, instanceId) &&
+    if (
+      deps.servedOn(artifactId, instanceId) &&
       deps.kindOf(artifactId) === "canvas"
-      ? serveCanvas(artifactId, rest, deps.seed, embed)
-      : new Response("This session has no such canvas.", { status: 404 });
+    ) {
+      return serveCanvas(artifactId, rest, deps.seed, embed);
+    }
+    return (
+      movedOn(request, url, artifactId, "canvas", deps) ??
+      new Response("This session has no such canvas.", { status: 404 })
+    );
   }
   const paged = pathname.match(PAGE_PATH);
   if (paged) {
     const [, artifactId, rest] = paged;
-    return deps.servedOn(artifactId, instanceId) &&
+    if (
+      deps.servedOn(artifactId, instanceId) &&
       deps.kindOf(artifactId) === "page"
-      ? servePage(artifactId, rest, deps, url, `/__cawco/page/${artifactId}/`)
-      : new Response("This origin serves no such page.", { status: 404 });
+    ) {
+      return servePage(
+        artifactId,
+        rest,
+        deps,
+        url,
+        `/__cawco/page/${artifactId}/`
+      );
+    }
+    return (
+      movedOn(request, url, artifactId, "page", deps) ??
+      new Response("This origin serves no such page.", { status: 404 })
+    );
   }
   return null;
+}
+
+/**
+ * A browser tab at an artifact's page or canvas on an origin that no longer
+ * serves it: its address was a port the range took back while no screen
+ * showed it (createPreviewListeners' `reclaimOne`), whose next origin
+ * answers there now. Sent on to the artifact's own tab on the dashboard
+ * (`/artifact/<id>`), the one address of an artifact that stands whatever
+ * port its origin is on, on the dashboard origin this browser reached the
+ * same host by. A frame's load is no tab's (`Sec-Fetch-Dest`): a frame's
+ * origin is re-told to it (server.ts `letGo`), and no dashboard is framed.
+ * Null for an artifact the hub doesn't hold as `kind`.
+ */
+function movedOn(
+  request: Request,
+  url: URL,
+  artifactId: string,
+  kind: "canvas" | "page",
+  deps: PreviewListenerDeps
+): Response | null {
+  if (
+    request.headers.get("sec-fetch-dest") !== "document" ||
+    deps.kindOf(artifactId) !== kind
+  ) {
+    return null;
+  }
+  const dashboards = previewParents();
+  const dashboard =
+    dashboards.find((one) => new URL(one).hostname === url.hostname) ??
+    dashboards[0];
+  return dashboard
+    ? Response.redirect(
+        `${dashboard}/artifact/${encodeURIComponent(artifactId)}`,
+        302
+      )
+    : null;
 }
 
 /**
@@ -1001,7 +1056,7 @@ async function serveSession(
   if (told !== null) {
     return told;
   }
-  const byId = await artifactById(url, instanceId, deps);
+  const byId = await artifactById(request, url, instanceId, deps);
   if (byId) {
     return byId;
   }
@@ -1710,51 +1765,35 @@ export function createPreviewListeners(
   };
 
   /**
-   * The session or project that holds origin `key`'s port: a session's or a
-   * project's origin itself; an embed's, the origin of the artifact whose
-   * row points at it now (the session that holds it, after a hand-up or a
-   * held version's opening too). Undefined when none does.
+   * Whether a screen shows origin `key` through a session's panel it
+   * follows: a session's own origin while a screen follows the session; an
+   * artifact's while a followed session's panel shows that artifact. A
+   * project's origin no panel keeps: a frame of it does, or nothing. A
+   * session that runs keeps nothing: a port belongs to what a screen shows
+   * (decisions/preview-lifetime: the address follows the artifact's record,
+   * so the next show opens it on a free port and says that address). Kept
+   * for running sessions, 96 artifacts of the fleet's idle sessions held
+   * the whole range and no show could open (2026-11-05).
    */
-  const holderOf = (key: string): string | undefined => {
-    if (!isEmbed(key)) {
-      return key;
-    }
-    const artifactId = deps.artifactAt(key);
-    return artifactId === undefined ? undefined : deps.originOf(artifactId);
-  };
-
-  /**
-   * Whether a running session keeps origin `key` in use: a session's own,
-   * while the session is used (`sessionUsed`: its process may run, or a
-   * screen follows it); an artifact's, while the session that holds it is
-   * used or a used session's panel shows it. A project's origin no session
-   * keeps: a screen does, or nothing.
-   */
-  const sessionKeeps = (key: string): boolean => {
+  const panelShows = (key: string): boolean => {
     if (projectOfOrigin(key) !== null) {
       return false;
     }
     if (!isEmbed(key)) {
-      return deps.sessionUsed(key);
+      return deps.followed(key);
     }
     const artifactId = deps.artifactAt(key);
-    if (artifactId === undefined) {
-      return false;
-    }
-    const holder = holderOf(key);
     return (
-      (holder !== undefined &&
-        projectOfOrigin(holder) === null &&
-        deps.sessionUsed(holder)) ||
+      artifactId !== undefined &&
       [...previewTargets].some(
         ([instanceId, target]) =>
-          target.artifact.id === artifactId && deps.sessionUsed(instanceId)
+          target.artifact.id === artifactId && deps.followed(instanceId)
       )
     );
   };
 
-  /** Whether origin `key` is in use now: a frame of it open on a screen ({@link viewers}), or a running session keeps it ({@link sessionKeeps}). */
-  const inUse = (key: string): boolean => viewers.has(key) || sessionKeeps(key);
+  /** Whether origin `key` is in use now: a frame of it open on a screen ({@link viewers}), or a panel a screen follows shows it ({@link panelShows}). */
+  const inUse = (key: string): boolean => viewers.has(key) || panelShows(key);
 
   /**
    * Whether origin `key`'s address is told to every screen that shows it
@@ -1781,9 +1820,8 @@ export function createPreviewListeners(
   /**
    * One port taken back for origin `asking`, the range being full: from
    * the origin least recently used (`used_at`, db previews.ts
-   * `portsByUse`) of those no screen has
-   * open and no running session keeps ({@link inUse}), previews of active
-   * workspaces among them; one whose owner went first. Its listener stops,
+   * `portsByUse`) of those no screen shows ({@link inUse}), a running
+   * session's among them; one whose owner went first. Its listener stops,
    * its stored port is dropped, and what shows it is told again without that
    * address: the next ask for it opens it on a free port, and says that
    * address (`letGo`). Every other origin keeps its port, and so its
@@ -1870,9 +1908,9 @@ export function createPreviewListeners(
   };
 
   /**
-   * Every port of the range is in use, each by an origin a screen has open,
-   * one a running session keeps, or another program: said with how many
-   * each, and what frees one (core words/preview-ports.ts).
+   * Every port of the range is in use, each by an origin a screen shows or
+   * another program: said with how many each, and what frees one (core
+   * words/preview-ports.ts).
    */
   const everyPortTaken = (): PreviewRefusal =>
     new PreviewRefusal(
@@ -1880,10 +1918,10 @@ export function createPreviewListeners(
       previewPortWords.everyPortTaken(PREVIEW_PORTS_TEXT, portHolders())
     );
 
-  /** What keeps each port of the range, the barred left out ({@link inUse}): a screen, a running session, else another program on the hub's machine. */
+  /** What keeps each port of the range, the barred left out: a screen that shows its origin ({@link inUse}), else another program on the hub's machine. */
   const portHolders = (): PortHolders => {
     const keys = new Map(db.ports().map((row) => [row.port, row.key]));
-    const count = { others: 0, screens: 0, sessions: 0 };
+    const count = { others: 0, screens: 0 };
     for (
       let port = PREVIEW_PORTS.first;
       port <= PREVIEW_PORTS.last;
@@ -1893,10 +1931,8 @@ export function createPreviewListeners(
         continue;
       }
       const key = keys.get(port);
-      if (key !== undefined && viewers.has(key)) {
+      if (key !== undefined && inUse(key)) {
         count.screens += 1;
-      } else if (key !== undefined && sessionKeeps(key)) {
-        count.sessions += 1;
       } else {
         count.others += 1;
       }
@@ -2205,7 +2241,7 @@ export function createPreviewListeners(
     /** Whether origin `key` holds its port now ({@link holds}): a frame of it takes one. */
     holds,
 
-    /** Whether origin `key` is in use now ({@link inUse}): a frame of it open on a screen, or a running session keeps it. */
+    /** Whether origin `key` is in use now ({@link inUse}): a screen shows it. */
     inUse,
 
     /**

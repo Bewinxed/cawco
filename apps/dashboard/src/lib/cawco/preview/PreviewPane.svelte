@@ -15,6 +15,7 @@
   import {
     PAGE_TOUCHED_MESSAGE,
     PREVIEW_LOCKED_MESSAGE,
+    type PreviewAddress,
     type PreviewSettings,
     previewRoute,
     projectPagePlace,
@@ -202,6 +203,7 @@
   import PinFloat from "./PinFloat.svelte";
   import { markFace, markState } from "./PinMark.svelte";
   import PlacePick from "./PlacePick.svelte";
+  import { artifactAddress } from "./page-source";
   import { paneFleet } from "./pane-fleet";
   import { enterPreviews, turnedAwayWords } from "./pass";
   import SheetInspector from "./SheetInspector.svelte";
@@ -389,12 +391,68 @@
    * under the pattern's domain, else its port on this tab's host. The page
    * runs at its root as on its own server.
    */
-  // A browser is drawn here from its stream (BrowserView), never framed from an origin.
-  const route = $derived(
-    preview && preview.artifact.kind !== "browser"
-      ? previewRoute(preview, location)
+  /** The frame names an origin of its own: a port, or host mode's name. */
+  const namesOrigin = (address: { origin?: string; port?: number }): boolean =>
+    address.port !== undefined || !!address.origin;
+  /**
+   * What the hub said when this pane asked where its open frame is served,
+   * the frame naming no origin (the hub opened none for it as it told the
+   * frame: every preview port was in use): the address it opened then, or
+   * its refusal in its own words (page-source.ts `artifactAddress`), said
+   * over the well with Try again, never a cover that waits for nothing.
+   */
+  let hubSaid = $state<
+    | { id: string; address: PreviewAddress }
+    | { id: string; problem: string }
+    | null
+  >(null);
+  /** Try again's presses: each asks the hub again. */
+  let addressTries = $state(0);
+  let addressAsking = $state(false);
+  const unnamedId = $derived(
+    preview?.state === "open" &&
+      preview.artifact.kind !== "browser" &&
+      !namesOrigin(preview)
+      ? preview.artifact.id
       : null
   );
+  $effect(() => {
+    const id = unnamedId;
+    track(addressTries);
+    if (!id) {
+      hubSaid = null;
+      return;
+    }
+    let live = true;
+    addressAsking = true;
+    artifactAddress(id).then((found) => {
+      if (live) {
+        hubSaid = { id, ...found };
+        addressAsking = false;
+      }
+    });
+    return () => {
+      live = false;
+    };
+  });
+  /** The hub's refusal for this pane's frame, while it names no origin. */
+  const unopened = $derived(
+    hubSaid && "problem" in hubSaid && hubSaid.id === unnamedId
+      ? hubSaid.problem
+      : null
+  );
+  // A browser is drawn here from its stream (BrowserView), never framed from an origin.
+  const route = $derived.by(() => {
+    if (!preview || preview.artifact.kind === "browser") {
+      return null;
+    }
+    if (namesOrigin(preview)) {
+      return previewRoute(preview, location);
+    }
+    return hubSaid && "address" in hubSaid && hubSaid.id === unnamedId
+      ? previewRoute(hubSaid.address, location)
+      : null;
+  });
   const paneOrigin = $derived(route?.origin ?? "");
   /**
    * Where the reader had gone inside this show, kept per session so a reload
@@ -4526,6 +4584,35 @@
       {instanceId}
       machine={browserMachine}
     />
+  {:else if unopened}
+    <!-- The hub opened no origin for it (every preview port in use): its
+         words, and Try again asks it again. -->
+    <div
+      data-slot="down"
+      data-unopened
+      class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
+      role="alert"
+      transition:appear
+    >
+      <EmptyState icon={IconAlert} title={previewWords.notOpenedTitle}>
+        {#snippet line()}
+          {unopened}
+        {/snippet}
+        {#snippet action()}
+          <Button
+            icon={IconRefresh}
+            label={commonWords.tryAgain}
+            onclick={() => {
+              addressTries += 1;
+            }}
+            pending={addressAsking}
+            pendingLabel="Trying again…"
+            size="sm"
+            variant="outline"
+          />
+        {/snippet}
+      </EmptyState>
+    </div>
   {:else if unreached}
     <!-- This tab can't reach the preview's own origin: what failed, by its
          own cause, its fix, and where to switch how previews are reached. -->

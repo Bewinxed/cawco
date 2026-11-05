@@ -206,6 +206,7 @@ const CanvasShapesShape = z.object({
 const DecisionMediaShape = z
   .object({
     embed: z.string().optional(),
+    unopened: z.string().optional(),
     id: z.string(),
     kind: z.string(),
     revision: z.number(),
