@@ -83,6 +83,44 @@
  *    named over it.
  * compare 5. The rendered checks with Compare on at 1440×900 and 390×844.
  *
+ * The graph-move leg (the build spec's slice 4, the Animation face), on a
+ * canvas of the routine form opened at `?face=move` on Hub didn't answer,
+ * which its states file plays from Filled in:
+ *
+ * move 1. The reach answers its move's clips, each placed by its
+ *    animation's own `startTime`: two set off in one frame stand within
+ *    1 ms of each other.
+ * move 2. Play is followed by `cawco:stage-time` as it starts and as it
+ *    ends, its `length` the clips' last end.
+ * move 3. A press on the ruler at 35% of its lane holds the page's replays
+ *    there: every one of `document.getAnimations()` paused.
+ * move 4. A drag of Form failure's end writes `tuned` into the doc, and the
+ *    hub's read answers it with `offTokens`.
+ * move 5. Another move from the title's menu and back keeps the edit.
+ * move 6. Reset all empties `tuned`.
+ * move 7. The rendered checks on the Animation face at 1440×900 and
+ *    390×844 (the drawer at its whole stop).
+ * move-chips. Every row, and each animation's row under it, opened in
+ *    turn: its chips each opened and read with their list over the face,
+ *    no press ending on an error page.
+ * move-runs. "Button “Create routine” changes" stands as two runs; a drag
+ *    on run A moves it alone, an arrow on run B moves it alone.
+ *
+ * The graph-dials leg (slice 4, the graph's dials), on a canvas of a
+ * swatch made with one dial of each kind (a `cssVar` number, a colour, a
+ * select on an arg, a toggle), opened at `?face=dials`:
+ *
+ * dials 1. All four stand in the Dials face at 1440 and in the drawer at
+ *    390.
+ * dials 2. A turn of each changes the drawing: the variable's computed
+ *    value on the drawing's root, the arg's effect after `update`.
+ * dials 3. The hub's read answers each turned value under `dials`.
+ * dials 4. `artifact_update({ dials })` adds a fifth dial, which stands
+ *    without a reopen.
+ * dials 5. No element of the library the graph's dials replaced stands on
+ *    the stage page, and no script of it loads.
+ * dials 6. The rendered checks on the Dials face at 1440×900 and 390×844.
+ *
  * The stage's boundary is made of user namespaces: like a spec that
  * delegates, it runs outside every workspace boundary (README "A spec that
  * delegates runs on the host").
@@ -98,16 +136,45 @@ import {
   STAGE_LAID,
   STAGE_REACH,
   STAGE_REACHED,
+  STAGE_TIME,
 } from "../../../packages/core/src/stage-graph";
 import { graphWords } from "../../../packages/core/src/words/graph";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
-import { type Kit, open, ROOT, type Spec } from "../kit";
+import { type Kit, open, ROOT, type Spec, settle } from "../kit";
 import { RenderedChecks } from "../rendered-checks";
 
 const STORY = "src/Card.stories.js";
 /** The canvas's second states file: a component of its own (legs 9). */
 const BADGE = "src/Badge.stories.js";
+/** The dials leg's states file: a swatch every dial kind reaches. */
+const SWATCH = "src/Swatch.stories.js";
+/** One dial of each kind (the graph-dials leg). */
+const DIALS = [
+  {
+    name: "radius",
+    kind: "number",
+    min: 0,
+    max: 24,
+    unit: "px",
+    target: { cssVar: "--swatch-radius" },
+  },
+  { name: "ink", kind: "color", target: { cssVar: "--swatch-ink" } },
+  {
+    name: "tone",
+    kind: "select",
+    options: ["calm", "loud"],
+    target: { arg: "tone" },
+  },
+  { name: "framed", kind: "toggle", target: { arg: "framed" } },
+];
+/** The fifth, added by artifact_update. */
+const FIFTH = { name: "label", kind: "text", target: { arg: "label" } };
+/** The move leg's ask: the routine form at the state its states file plays from Filled in. */
+const MOVE_ASK = "Judge the routine form at Hub didn't answer";
+/** The move leg's rows: the one whose end is dragged, and the one of two runs. */
+const FAILURE_ROW = "Form failure";
+const RUNS_ROW = "Button “Create routine” changes";
 /** The ask the canvas is made with: it names the state the graph opens on. */
 const ASK = "Judge the card at Two";
 /** The map's canvas: the card's states under two headings, and one move the agent names (the graph-map leg). */
@@ -177,6 +244,24 @@ export const Three = {
 
 <span data-probe="badge">{label}</span>
 `,
+  "src/Swatch.svelte": `<script>
+  let { tone = "calm", framed = false, label = "Swatch" } = $props();
+</script>
+
+<div data-probe="swatch" data-tone={tone} data-framed={framed} class="swatch">{label}</div>
+
+<style>
+  :global(:root) { --swatch-radius: 6px; --swatch-ink: #223344; }
+  .swatch { border-radius: var(--swatch-radius); color: var(--swatch-ink); padding: 12px; border: 1px solid; }
+</style>
+`,
+  [SWATCH]: `import Swatch from "./Swatch.svelte";
+
+export default { title: "Swatch", component: Swatch, args: { tone: "calm", framed: false, label: "Swatch" } };
+
+/** The swatch at rest. */
+export const Plain = { args: {} };
+`,
   [BADGE]: `import Badge from "./Badge.svelte";
 
 export default { title: "Badge", component: Badge, args: { label: "New" } };
@@ -217,11 +302,12 @@ async function graphPage(
   id: string,
   view: "desk" | "phone",
   drawn = '[data-probe="title"]',
-  waitMs = 120_000
+  waitMs = 120_000,
+  query = ""
 ): Promise<{ frame: Frame; page: Page }> {
   const page = await kit.page(view, { theme: "light" });
   await hearAnswers(page);
-  await open(page, `${base}/artifact/${id}`, GRAPH, waitMs);
+  await open(page, `${base}/artifact/${id}${query}`, GRAPH, waitMs);
   await page.waitForSelector(`${GRAPH}:not([data-arriving])`, {
     timeout: waitMs,
   });
@@ -254,7 +340,7 @@ const drawnStory = (frame: Frame) =>
  */
 async function hearAnswers(page: Page): Promise<void> {
   await page.addInitScript(
-    ([reached, laid, differences]) => {
+    (types) => {
       if (window !== window.top) {
         return;
       }
@@ -262,12 +348,12 @@ async function hearAnswers(page: Page): Promise<void> {
       (window as unknown as { __answers: unknown[] }).__answers = heard;
       addEventListener("message", (event) => {
         const type = (event.data as { type?: unknown } | null)?.type;
-        if (type === reached || type === laid || type === differences) {
+        if (types.some((one) => one === type)) {
           heard.push(event.data);
         }
       });
     },
-    [STAGE_REACHED, STAGE_LAID, STAGE_DIFFERENCES] as const
+    [STAGE_REACHED, STAGE_LAID, STAGE_DIFFERENCES, STAGE_TIME] as const
   );
 }
 
@@ -740,8 +826,15 @@ async function mapDesk(
     30_000
   ).catch(() => drawnStory(frame));
   kit.check(
-    "map 4: a press on the arrow Three → One keeps its to state until the Animation face stands: the drawing stands at One",
-    atOne === "One",
+    "map 4: a press on the arrow Three → One opens the Animation face on that move: the drawing stands at One, the face's title names Three → One",
+    atOne === "One" &&
+      (
+        (await page
+          .locator(`${GRAPH} [data-slot="move-title"]`)
+          .first()
+          .textContent()
+          .catch(() => "")) ?? ""
+      ).includes("Three → One"),
     String(atOne)
   );
   await page.close();
@@ -1043,6 +1136,524 @@ const pngSize = (png: Buffer) => ({
   h: png.readUInt32BE(20),
 });
 
+/** A clip as the page tells it in a reach's answer. */
+interface ClipSaid {
+  delay: number;
+  duration: number;
+  element: string;
+  start: number;
+}
+/** The move's clock as the page tells it. */
+interface TimeSaid {
+  length: number;
+  playing: boolean;
+  t: number;
+  type: string;
+}
+
+/** What the hub's read of an artifact answers of the person's values: his dials and his tuned timing. */
+interface ValuesRead {
+  dials?: Record<string, unknown>;
+  tuned?: unknown[];
+}
+
+/** The Animation face's row named `row`, as a locator. */
+const rowNamed = (page: Page, row: string) =>
+  page.locator(`${GRAPH} [data-slot="clip"]`).filter({ hasText: row }).first();
+
+/** The answers the panel heard, of `type`. */
+const heardOf = async <T>(page: Page, type: string): Promise<T[]> =>
+  (
+    (await page.evaluate(
+      () => (window as unknown as { __answers: unknown[] }).__answers
+    )) as { type: string }[]
+  ).filter((one) => one.type === type) as T[];
+
+/** The graph-move leg at 1440: move 1 to 7 there, with move-chips and move-runs. */
+async function moveDesk(
+  kit: Kit,
+  base: string,
+  id: string,
+  read: () => Promise<ValuesRead>,
+  checks: RenderedChecks
+): Promise<void> {
+  const { frame, page } = await graphPage(
+    kit,
+    base,
+    id,
+    "desk",
+    '[data-slot="routine-form"]',
+    300_000,
+    "?face=move"
+  );
+  await page.waitForSelector(`${GRAPH} [data-slot="timeline"]`, {
+    timeout: 60_000,
+  });
+  // move 1. The clips, each at its own startTime.
+  const reached = await heardOf<{ move?: { clips: ClipSaid[] } | null }>(
+    page,
+    STAGE_REACHED
+  );
+  const clips = reached.findLast((one) => one.move)?.move?.clips ?? [];
+  const together = clips.some((one, at) =>
+    clips.some(
+      (other, there) => there !== at && Math.abs(other.start - one.start) <= 1
+    )
+  );
+  kit.check(
+    "move 1: the reach answers its move's clips, two set off together standing within 1 ms of each other",
+    clips.length > 1 && together,
+    JSON.stringify(clips.map((one) => [one.element, one.start]))
+  );
+  const length = Math.max(
+    ...clips.map((one) => one.start + one.delay + one.duration)
+  );
+
+  // move 2. Play: the clock said as it starts and as it ends.
+  await page.locator(`${GRAPH} [data-slot="transport"] button`).first().click();
+  const ended = await until(
+    "the play's end",
+    () => heardOf<TimeSaid>(page, STAGE_TIME),
+    (said) => said.some((one) => !one.playing),
+    30_000
+  ).catch(() => heardOf<TimeSaid>(page, STAGE_TIME));
+  const started = ended.find((one) => one.playing);
+  const end = ended.find((one) => !one.playing);
+  kit.check(
+    "move 2: Play is followed by cawco:stage-time as it starts and as it ends, its length the clips' last end",
+    !!started &&
+      !!end &&
+      Math.abs(end.length - length) <= 1 &&
+      Math.abs(end.t - length) <= 1,
+    JSON.stringify({ length, ended })
+  );
+
+  // move 3. A press on the ruler at 35%: the replays held there.
+  const ruler = await page
+    .locator(`${GRAPH} [data-slot="ruler-lane"]`)
+    .first()
+    .boundingBox();
+  if (ruler) {
+    await page.mouse.click(
+      ruler.x + ruler.width * 0.35,
+      ruler.y + ruler.height / 2
+    );
+  }
+  await page.waitForTimeout(500);
+  const held = await frame.evaluate(() =>
+    document
+      .getAnimations()
+      .filter((one) => one.timeline instanceof DocumentTimeline)
+      .map((one) => one.playState)
+  );
+  kit.check(
+    "move 3: a press on the ruler at 35% holds the page's replays there: every one paused",
+    held.length > 0 && held.every((one) => one === "paused"),
+    JSON.stringify(held)
+  );
+
+  // move 4. A drag of Form failure's end: tuned in the doc, with offTokens.
+  const failureEnd = rowNamed(page, FAILURE_ROW)
+    .locator('[data-run-end="end"]')
+    .first();
+  const grip = await failureEnd.boundingBox();
+  let tuned: unknown[] = [];
+  if (grip) {
+    const x = grip.x + grip.width / 2;
+    const y = grip.y + grip.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 40, y, { steps: 8 });
+    await page.mouse.up();
+    const let_go = Date.now();
+    tuned = await until(
+      "tuned in the doc",
+      async () => (await read()).tuned ?? [],
+      (said) => said.length > 0,
+      10_000
+    ).catch(() => []);
+    kit.note(
+      `move 4: tuned read ${Date.now() - let_go} ms after the drag let go`
+    );
+  }
+  kit.check(
+    "move 4: a drag of Form failure's end writes tuned into the doc, read back with offTokens",
+    tuned.some(
+      (one) =>
+        typeof one === "object" &&
+        one !== null &&
+        "offTokens" in one &&
+        String((one as { animation?: unknown }).animation).includes(FAILURE_ROW)
+    ),
+    JSON.stringify(tuned)
+  );
+
+  // move 5. Another move and back keeps the edit.
+  const pick = async (name: string) => {
+    await page.locator(`${GRAPH} [data-slot="move-title"]`).first().click();
+    await page
+      .locator('[role="listbox"] [role="option"]', { hasText: name })
+      .first()
+      .click();
+    await page.waitForSelector(`${GRAPH}:not([data-arriving])`, {
+      timeout: 60_000,
+    });
+    await page.waitForSelector(`${GRAPH} [data-slot="timeline"]`, {
+      timeout: 60_000,
+    });
+  };
+  await pick("Filled in → Creating");
+  await pick("Filled in → Hub didn't answer");
+  const kept = await rowNamed(page, FAILURE_ROW)
+    .locator("[data-edited]")
+    .count();
+  kit.check(
+    "move 5: another move from the title's menu and back keeps the edit: Form failure still carries its restore glyph",
+    kept > 0,
+    String(kept)
+  );
+
+  // move 6. Reset all empties tuned.
+  await page.locator(`${GRAPH} [data-slot="reset-all"]`).first().click();
+  const emptied = await until(
+    "tuned emptied",
+    async () => (await read()).tuned ?? [],
+    (said) => said.length === 0,
+    10_000
+  ).catch(() => null);
+  kit.check(
+    "move 6: Reset all empties tuned",
+    emptied !== null && emptied.length === 0,
+    JSON.stringify(emptied)
+  );
+
+  // move 7. The rendered checks on the face.
+  await checks.at(page, "1440, the Animation face");
+  await moveChips(kit, page, "1440");
+  await moveRuns(kit, page, "1440");
+  await page.close();
+}
+
+/** The graph-move leg at 390: the drawer at its whole stop, the face's rendered checks, its chips and runs. */
+async function movePhone(
+  kit: Kit,
+  base: string,
+  id: string,
+  checks: RenderedChecks
+): Promise<void> {
+  const { page } = await graphPage(
+    kit,
+    base,
+    id,
+    "phone",
+    '[data-slot="routine-form"]',
+    300_000,
+    "?face=move"
+  );
+  for (const _ of [0, 1]) {
+    await page.locator(`${GRAPH} [data-slot="drawer-grabber"]`).first().click();
+    await settle(page);
+  }
+  await page.waitForSelector(`${GRAPH} [data-slot="timeline"]`, {
+    timeout: 60_000,
+  });
+  await checks.at(page, "390, the Animation face in the drawer");
+  await moveChips(kit, page, "390");
+  await moveRuns(kit, page, "390");
+  await page.close();
+}
+
+/**
+ * move-chips: the face at rest, then every row and each animation's row
+ * under it opened in turn, each chip opened and read with its list over the
+ * face (the branch's web spec, on the panel), no press ending on an error
+ * page.
+ */
+async function moveChips(kit: Kit, page: Page, at: string): Promise<void> {
+  const checks = new RenderedChecks(kit, `move-chips ${at}`, {
+    scope: `${GRAPH} [data-slot="move"]`,
+    except: [
+      {
+        rule: "overflow",
+        selector: '[data-slot="clip"] span',
+        text: "run 1",
+        reason:
+          "an animation row's words under the open Length list, a layer that floats over the face (impeccable's text-occlusion reads the popover as a cover; the house's layer reading names it)",
+      },
+      {
+        rule: "fat-row",
+        selector: '[data-slot="clip"]',
+        reason:
+          "on a narrow face each row is two lines by design: its name over a lane the face's full width (T18; the second review kept it)",
+      },
+    ],
+  });
+  await checks.at(page, "the face at rest");
+  let opened = 0;
+  let failed = 0;
+  // A row's own press: the first child of its name cell, never a chip's.
+  const rows = page.locator(
+    `${GRAPH} [data-slot="clip"] > div:first-child > button[aria-expanded]`
+  );
+  for (let row = 0; row < (await rows.count()); row += 1) {
+    const press = rows.nth(row);
+    const name = (await press.getAttribute("aria-label")) ?? `row ${row}`;
+    if ((await press.getAttribute("aria-expanded")) !== "true") {
+      await press.click();
+      await settle(page);
+    }
+    const chips = page.locator(
+      `${GRAPH} [data-slot="clip-settings"] [data-slot="popover-trigger"]`
+    );
+    for (let chip = 0; chip < (await chips.count()); chip += 1) {
+      const trigger = chips.nth(chip);
+      const label =
+        (await trigger.getAttribute("aria-label")) ?? `chip ${chip}`;
+      await trigger.click();
+      await page
+        .waitForSelector('[data-slot="popover-content"][data-state="open"]', {
+          timeout: 5000,
+        })
+        .catch(() => undefined);
+      await settle(page);
+      opened += 1;
+      await checks.at(page, `${name}: ${label} open`);
+      await page.keyboard.press("Escape");
+      await settle(page);
+      if ((await page.locator("body").innerText()).startsWith("500")) {
+        failed += 1;
+      }
+    }
+  }
+  kit.check(
+    `move-chips ${at}: every row's settings chips open and close, none ends on an error page`,
+    opened > 0 && failed === 0,
+    `${opened} opened, ${failed} on an error page`
+  );
+  checks.report();
+}
+
+/** move-runs: the row of two runs moves one run at a time, by a drag and by an arrow. */
+async function moveRuns(kit: Kit, page: Page, at: string): Promise<void> {
+  const barsOf = () =>
+    page.evaluate((named) => {
+      const lane = [...document.querySelectorAll('[data-slot="clip"]')].find(
+        (one) => one.textContent?.includes(named)
+      );
+      return [...(lane?.querySelectorAll('[data-slot="run-bar"]') ?? [])].map(
+        (bar) => {
+          const box = bar.getBoundingClientRect();
+          return {
+            run: (bar as HTMLElement).dataset.run ?? "",
+            now: Number(bar.getAttribute("aria-valuenow")),
+            left: Math.round(box.left * 10) / 10,
+            right: Math.round(box.right * 10) / 10,
+          };
+        }
+      );
+    }, RUNS_ROW);
+  type Bar = Awaited<ReturnType<typeof barsOf>>[number];
+  const same = (one: Bar | undefined, other: Bar | undefined) =>
+    !!one &&
+    !!other &&
+    one.now === other.now &&
+    Math.abs(one.left - other.left) < 0.5 &&
+    Math.abs(one.right - other.right) < 0.5;
+  const before = await barsOf();
+  const [a, b] = before;
+  kit.check(
+    `move-runs ${at}: “${RUNS_ROW}” stands as two runs, each its own bar`,
+    before.length === 2,
+    JSON.stringify(before)
+  );
+  if (!(a && b)) {
+    return;
+  }
+  const row = rowNamed(page, RUNS_ROW);
+  const box = await row
+    .locator(`[data-slot="run-bar"][data-run="${a.run}"]`)
+    .boundingBox();
+  if (box) {
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 40, y, { steps: 8 });
+    await page.mouse.up();
+  }
+  await settle(page);
+  const dragged = await barsOf();
+  kit.check(
+    `move-runs ${at}: a drag on run A moves run A, and run B's start and end stay`,
+    dragged[0]?.now !== a.now && same(dragged[1], b),
+    `before ${JSON.stringify(before)} after ${JSON.stringify(dragged)}`
+  );
+  await row
+    .locator(`[data-slot="run-bar"][data-run="${b.run}"]`)
+    .focus({ focusVisible: true } as never);
+  await page.keyboard.press("ArrowRight");
+  await settle(page);
+  const keyed = await barsOf();
+  kit.check(
+    `move-runs ${at}: an arrow on run B moves run B, and run A stays`,
+    keyed[1]?.now !== dragged[1]?.now && same(keyed[0], dragged[0]),
+    `before ${JSON.stringify(dragged)} after ${JSON.stringify(keyed)}`
+  );
+}
+
+/** The graph-dials leg: dials 1 to 6. */
+async function dialsLegs(
+  kit: Kit,
+  base: string,
+  id: string,
+  read: () => Promise<ValuesRead>,
+  update: () => Promise<string>,
+  checks: RenderedChecks
+): Promise<void> {
+  const ROOM = `${GRAPH} [data-slot="graph-room"]`;
+  const { frame, page } = await graphPage(
+    kit,
+    base,
+    id,
+    "desk",
+    '[data-probe="swatch"]',
+    120_000,
+    "?face=dials"
+  );
+  const rows = () => page.locator(`${ROOM} [data-dial-row]`).count();
+  await page
+    .waitForSelector(`${ROOM} [data-dial-row]`, { timeout: 30_000 })
+    .catch(() => undefined);
+  kit.check(
+    "dials 1: all four dials stand in the Dials face at 1440",
+    (await rows()) === DIALS.length,
+    String(await rows())
+  );
+  await checks.at(page, "1440, the Dials face");
+  const drawn = () =>
+    frame.evaluate(() => {
+      const body = document.querySelector<HTMLElement>("[data-stage-drawing]");
+      const swatch = document.querySelector<HTMLElement>(
+        '[data-probe="swatch"]'
+      );
+      const style = body ? getComputedStyle(body) : null;
+      return {
+        radius: style?.getPropertyValue("--swatch-radius").trim() ?? "",
+        ink: style?.getPropertyValue("--swatch-ink").trim() ?? "",
+        tone: swatch?.dataset.tone ?? "",
+        framed: swatch?.dataset.framed ?? "",
+      };
+    });
+  const before = await drawn();
+  // dials 2. A turn of each.
+  const radius = page
+    .locator(`${ROOM} [data-dial="radius"] [role="spinbutton"]`)
+    .first();
+  await radius.focus();
+  for (const _ of [0, 1, 2]) {
+    await page.keyboard.press("ArrowUp");
+  }
+  const ink = page
+    .locator(`${ROOM} [data-dial="ink"] input:not([type="color"])`)
+    .first();
+  await ink.fill("#aa1122");
+  await ink.press("Enter");
+  await page
+    .locator(`${ROOM} [data-dial="tone"] [data-slot="select-trigger"]`)
+    .first()
+    .click();
+  await page.locator('[role="option"]', { hasText: "loud" }).first().click();
+  await page
+    .locator(`${ROOM} [data-dial="framed"] [data-slot="switch"]`)
+    .first()
+    .click();
+  const after = await until(
+    "the drawing turned",
+    drawn,
+    (now) => now.tone === "loud" && now.framed === "true",
+    10_000
+  ).catch(drawn);
+  kit.check(
+    "dials 2: a turn of each changes the drawing: the radius and ink variables on its root, the tone and framed args after update",
+    after.radius !== before.radius &&
+      after.ink !== before.ink &&
+      after.tone === "loud" &&
+      after.framed === "true",
+    JSON.stringify({ before, after })
+  );
+  // dials 3. The hub's read.
+  const kept = await until(
+    "the dials in the doc",
+    async () => (await read()).dials ?? {},
+    (said) => said.tone === "loud" && said.framed === true,
+    10_000
+  ).catch(async () => (await read()).dials ?? {});
+  kit.check(
+    "dials 3: the hub's read answers each turned value under dials",
+    kept.tone === "loud" &&
+      kept.framed === true &&
+      typeof kept.radius === "number" &&
+      typeof kept.ink === "string",
+    JSON.stringify(kept)
+  );
+  // dials 4. A fifth, without a reopen.
+  const updated = await update();
+  const five = await until(
+    "the fifth dial",
+    rows,
+    (n) => n === DIALS.length + 1,
+    60_000
+  ).catch(rows);
+  kit.check(
+    "dials 4: artifact_update adds a fifth dial, which stands without a reopen",
+    five === DIALS.length + 1,
+    `${five}; ${short(updated)}`
+  );
+  // dials 5. Nothing of the old dial panel's library on the stage.
+  const live = await (
+    await page.locator(FRAME).first().elementHandle()
+  )?.contentFrame();
+  const foreign = await (live ?? frame).evaluate(() => ({
+    elements: document.querySelectorAll(
+      '[class*="dialkit"], #cawco-dock-dials, #cawco-dock-timeline'
+    ).length,
+    scripts: [...document.scripts].filter((one) => one.src.includes("dialkit"))
+      .length,
+  }));
+  kit.check(
+    "dials 5: no element of the old dial panel's library stands on the stage page, and no script of it loads",
+    foreign.elements === 0 && foreign.scripts === 0,
+    JSON.stringify(foreign)
+  );
+  await page.close();
+
+  // dials 1 and 6 at 390: the drawer at its half stop holds the dials.
+  const phone = await graphPage(
+    kit,
+    base,
+    id,
+    "phone",
+    '[data-probe="swatch"]',
+    120_000,
+    "?face=dials"
+  );
+  await phone.page
+    .waitForSelector(`${GRAPH} [data-slot="drawer-content"] [data-dial-row]`, {
+      timeout: 30_000,
+    })
+    .catch(() => undefined);
+  const narrow = await phone.page
+    .locator(`${GRAPH} [data-slot="drawer-content"] [data-dial-row]`)
+    .count();
+  kit.check(
+    "dials 1: every dial stands in the drawer at 390",
+    narrow >= DIALS.length,
+    String(narrow)
+  );
+  await checks.at(phone.page, "390, the Dials face in the drawer");
+  await phone.page.close();
+}
+
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
   await Promise.all(
@@ -1162,6 +1773,60 @@ const run = async (kit: Kit) => {
     await compareDesk(kit, base, routineId, checks);
     await compareWide(kit, base, routineId);
     await comparePhone(kit, base, routineId, checks);
+  }
+
+  // The graph-move leg: the routine form opened on the Animation face at Hub didn't answer.
+  const moving = await callIn(routines)("move", "mcp__cawco__artifact_create", {
+    kind: "component",
+    name: "graph-move",
+    file: [ROUTINE],
+    does: "judge",
+    title: "Routine form's moves",
+    ask: MOVE_ASK,
+  });
+  const moveId = moving.match(ID)?.[1];
+  kit.check(
+    "move 0: artifact_create of the routine form for its moves answers an id",
+    !!moveId,
+    short(moving)
+  );
+  if (moveId) {
+    const readMove = () =>
+      fleet.api<ValuesRead>(`/api/instances/${routines}/artifacts/${moveId}`);
+    await moveDesk(kit, base, moveId, readMove, checks);
+    await movePhone(kit, base, moveId, checks);
+  }
+
+  // The graph-dials leg: a swatch with one dial of each kind.
+  const dialed = await call("dials", "mcp__cawco__artifact_create", {
+    kind: "component",
+    name: "graph-dials",
+    file: [SWATCH],
+    does: "judge",
+    title: "Swatch dials",
+    ask: "Tune the swatch",
+    dials: DIALS,
+  });
+  const dialsId = dialed.match(ID)?.[1];
+  kit.check(
+    "dials 0: artifact_create with one dial of each kind answers an id",
+    !!dialsId,
+    short(dialed)
+  );
+  if (dialsId) {
+    await dialsLegs(
+      kit,
+      base,
+      dialsId,
+      () =>
+        fleet.api<ValuesRead>(`/api/instances/${session}/artifacts/${dialsId}`),
+      () =>
+        call("dials-update", "mcp__cawco__artifact_update", {
+          id: dialsId,
+          dials: [...DIALS, FIFTH],
+        }),
+      checks
+    );
   }
   checks.report();
 

@@ -1100,6 +1100,14 @@
     const kept = view?.choices.tuned?.value;
     return Array.isArray(kept) ? (kept as TunedRecord[]) : [];
   });
+  /** The design graph's room face the address names (`?face=move`, `map` or `dials`), opened on: the states when it names none. */
+  const GRAPH_FACES = ["map", "move", "dials"] as const;
+  const startFace =
+    typeof location === "undefined"
+      ? undefined
+      : GRAPH_FACES.find(
+          (one) => one === new URL(location.href).searchParams.get("face")
+        );
   let doc: ArtifactDoc | null = null;
   /**
    * Pins the page's doc holds that the pane's doesn't yet, as the page last
@@ -4702,6 +4710,7 @@
           {keptDials}
           memory={`cawco-graph-kept:${artifact.id}`}
           {keptTuned}
+          {startFace}
           ondials={(values) => {
             // His dial values are the artifact's: its doc's `dials`, which
             // the panel's Send counts and artifact_read answers.
