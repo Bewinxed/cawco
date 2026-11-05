@@ -156,10 +156,17 @@ const run = async (kit: Kit) => {
   await desk.waitForTimeout(1500);
   const items = desk.locator(`${PANEL} [data-slot="bar"] [data-bar-item]`);
   const n = await items.count();
+  // Docked beside the board, its Close (Hide panel) stands in a glass of
+  // its own after the session's three.
+  const closeAlone = await desk
+    .locator(`${PANEL} [data-slot="bar"] [data-slot="tools"]`)
+    .filter({ has: desk.locator("[data-caw-close]") })
+    .locator("[data-bar-item]")
+    .count();
   kit.check(
-    "Caw's column: its bar holds Session details, New conversation and Open as tab as bare items",
-    n === 3,
-    `${n} item(s)`
+    "Caw's column: its bar holds Session details, New conversation and Open as tab as bare items, and its Close in a glass of its own",
+    n === 4 && closeAlone === 1,
+    `${n} item(s), ${closeAlone} in Close's glass`
   );
   for (let i = 0; i < n; i += 1) {
     const item = items.nth(i);
