@@ -25,8 +25,10 @@
  * took the ask off every screen ({@link DelegateWaits.handedBack}). Only the
  * parent's own answer goes untold, and an ask no screen was shown.
  *
- * Each word is a send under the delegate's peer origin, as its report and
- * its ask are, so it wakes a parent at rest. Each is told once: its send is
+ * Each word is the hub's, under its own origin (core `DELEGATE_WAIT_ORIGIN`),
+ * never the delegate's message: it wakes a parent at rest, and a send of it
+ * that fails tells no session it failed. Its tag names the ask, its
+ * delegate and what it asks. Each is told once: its send is
  * named by the ask and what it tells ({@link NoticeMark}), and the hub hands
  * a send it already holds a record of over once (server.ts
  * `deliverToSession`). That record is the mark, kept with the parent's
@@ -66,7 +68,8 @@ const PERSON_ONLY = [
 ] as const;
 
 /** What a notice tells of its ask, by which its send is named: each is told once. */
-export type NoticeMark = "waits" | "persons-now" | "ended" | "handed-back";
+export type NoticeMark =
+  "waits" | "persons-now" | "ended" | "handed-back" | "ended-with-hub";
 
 /** How an ask left the ledger. */
 type AskEnd = { kind: "answered"; answer?: AskAnswer } | { kind: "withdrawn" };
@@ -101,6 +104,8 @@ export interface DelegateWaitsDeps {
       mark: NoticeMark;
       parent: InstanceRow;
       requestId: string;
+      /** What the ask asks, in one line: carried on the notice's tag. */
+      what: string;
     },
     line: string,
     body: string
@@ -216,7 +221,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
       const name = deps.link(pair.asker);
       if (escalated) {
         deps.tell(
-          { ...pair, mark: "persons-now", requestId },
+          { ...pair, mark: "persons-now", requestId, what: whatOf(ask) },
           delegateWaitWords.personsNowLine(deps.title(pair.asker)),
           delegateWaitWords.personsNow(name, requestId)
         );
@@ -233,7 +238,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
         ? delegateWaitWords.browserHeld(name, browser.origin, browser.reason)
         : delegateWaitWords.held(name, whatOf(ask));
       deps.tell(
-        { ...pair, mark: "waits", requestId },
+        { ...pair, mark: "waits", requestId, what: whatOf(ask) },
         delegateWaitWords.waitsLine(deps.title(pair.asker)),
         `${said} ${delegateWaitWords.personOnly}`
       );
@@ -271,7 +276,12 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
       const taken =
         end.kind === "answered" && !answer && !!payloadOf(ask).browserAsk;
       deps.tell(
-        { ...pair, mark: "ended", requestId: ask.requestId ?? "" },
+        {
+          ...pair,
+          mark: "ended",
+          requestId: ask.requestId ?? "",
+          what: whatOf(ask),
+        },
         taken
           ? delegateWaitWords.tookOverLine(title)
           : delegateWaitWords.endedLine(title),
@@ -298,12 +308,34 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
         return;
       }
       deps.tell(
-        { ...pair, mark: "handed-back", requestId },
+        { ...pair, mark: "handed-back", requestId, what: reason },
         delegateWaitWords.endedLine(deps.title(pair.asker)),
         delegateWaitWords.ended(
           deps.link(pair.asker),
           reason,
           delegateWaitWords.handedBack(origin)
+        )
+      );
+    },
+
+    /**
+     * The ask `requestId`, which `delegate` asked and its parent was told
+     * waits on the person (`what`), ended with the hub that held it: its
+     * call was refused as that hub went, and it never settled. Its parent
+     * hears so, once, as the next hub starts (server.ts, the boot's sweep).
+     */
+    endedWithHub(delegate: string, requestId: string, what: string): void {
+      const pair = pairOf(delegate);
+      if (!pair) {
+        return;
+      }
+      deps.tell(
+        { ...pair, mark: "ended-with-hub", requestId, what },
+        delegateWaitWords.endedLine(deps.title(pair.asker)),
+        delegateWaitWords.ended(
+          deps.link(pair.asker),
+          what,
+          delegateWaitWords.endedWithHub
         )
       );
     },

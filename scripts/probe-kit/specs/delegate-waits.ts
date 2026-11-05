@@ -40,7 +40,25 @@
  *     registers.
  * (i) A browser ask open across a hub restart: its call ends with the hub,
  *     and the next start drops the mark push kept of it (db `ask_pushes`),
- *     while a proposal parked again keeps its own.
+ *     while a proposal parked again keeps its own, and its parent hears,
+ *     once, that the ask ended with a hub restart.
+ * (j) A browser ask taken over when the hub restarts: the take-over took it
+ *     off every screen, its call still waiting; the next start drops its
+ *     mark and its parent hears, once, that it ended with the restart.
+ * (l) A harness's own permission prompt from a delegate in default mode,
+ *     routed to the parent: the parent answers it, and hears no end of its
+ *     own answer; a second is left unanswered as the parent goes to rest, is
+ *     the person's now (told once), and the person's answer is told once.
+ * (n) A routed prompt withdrawn: its delegate is stopped while the prompt
+ *     waits on the parent; the parent hears once that it was withdrawn.
+ * (m) A parent that ends: the person stops it while its delegate's prompt
+ *     is routed to it. The stop ends the delegate first (tree-stops.ts), so
+ *     the prompt is withdrawn and the parent hears so once, before its own
+ *     end, and nothing after.
+ * (k) A notice that fails: the parent's machine stays away past its window
+ *     after a hub start while a fourth proposal parks, so the note kept for
+ *     the parent fails. It is the hub's word, not the delegate's: the
+ *     delegate is told nothing of it.
  *
  *   bun scripts/probe-kit/run.ts delegate-waits
  */
@@ -57,9 +75,34 @@ import { type Phone, standInPhone } from "../phone";
 
 /** Every request the mock was asked with a tool list, in order. */
 const heard: Seen[] = [];
+/** The words that make the prompting delegate (l) call Bash, which its harness asks about. */
+const PROMPT_TAG = `PROBE-WAITS-PROMPT-${crypto.randomUUID().slice(0, 8)}`;
+/** The prompting delegates' asks already made, by the words that asked them. */
+const prompted = new Set<string>();
 const respond = (request: Seen): Reply => {
   if (request.tools) {
     heard.push(request);
+  }
+  // Each `PROMPT_TAG <word>` a delegate reads makes it call Bash once,
+  // whether it starts a turn or joins one mid-way.
+  const asked = request.tools
+    ? [...request.all.matchAll(new RegExp(`${PROMPT_TAG} (\\w+)`, "gu"))]
+        .map((match) => match[0])
+        .find((words) => !prompted.has(words))
+    : undefined;
+  if (asked) {
+    prompted.add(asked);
+    return {
+      everyMs: 5,
+      words: [],
+      tool: {
+        name: "Bash",
+        input: {
+          command: "touch waits-prompt.txt",
+          description: "Touch a file",
+        },
+      },
+    };
   }
   return { everyMs: 5, words: ["ok"] };
 };
@@ -163,8 +206,15 @@ const run = async (kit: Kit) => {
    * the hub so its board reads the row these writes made (the hub hears
    * its own connection's writes alone, db `instance_changes`).
    */
-  const seeded = async (title: string, cwd: string): Promise<string> => {
-    const child = await fleet.spawn("claude", "Delegate", cwd, inProject);
+  const seeded = async (
+    title: string,
+    cwd: string,
+    extra: object = {}
+  ): Promise<string> => {
+    const child = await fleet.spawn("claude", "Delegate", cwd, {
+      ...inProject,
+      ...extra,
+    });
     const now = Date.now();
     const workspace = crypto.randomUUID();
     const item = crypto.randomUUID();
@@ -221,6 +271,8 @@ const run = async (kit: Kit) => {
     120_000
   );
   const before = heard.length;
+  const waitsSent = (): number =>
+    sendsOf(fleet, parent, delegateWaitWords.waitsLine("Waits delegate"));
   const call = callAs(
     fleet,
     delegate,
@@ -249,9 +301,9 @@ const run = async (kit: Kit) => {
     120_000
   ).catch(() => undefined);
   check(
-    "(a) a delegate whose parent ended its turn calls browser_ask: the ask waits on the person, and the parent is woken with the note that its delegate waits on the person, its origin and reason",
-    !!parked && !!waits,
-    `pending: ${parked ? `${parked.requestId} ${parked.payload.browserAsk?.key}` : "none"}; the parent's requests since: ${
+    "(a) a delegate whose parent ended its turn calls browser_ask: the ask waits on the person, and the parent is woken with the note, once, that its delegate waits on the person, its origin and reason",
+    !!parked && !!waits && waitsSent() === 1,
+    `pending: ${parked ? `${parked.requestId} ${parked.payload.browserAsk?.key}` : "none"}; the parent's sends of the wait: ${waitsSent()}; the parent's requests since: ${
       heard
         .slice(before)
         .map((one) => one.last.slice(0, 200))
@@ -283,6 +335,8 @@ const run = async (kit: Kit) => {
 
   // (c) The person takes the browser over.
   const beforeTake = heard.length;
+  const tookSent = (): number =>
+    sendsOf(fleet, parent, delegateWaitWords.tookOverLine("Waits delegate"));
   const took = await fleet
     .api<unknown>(`/api/browsers/${encodeURIComponent(key)}/takeover`, {
       requestId,
@@ -304,9 +358,9 @@ const run = async (kit: Kit) => {
     120_000
   ).catch(() => undefined);
   check(
-    "(c) the person takes the browser over: the parent hears so",
-    took === "taken" && !!taken,
-    `take-over: ${took}; the parent's requests since: ${
+    "(c) the person takes the browser over: the parent hears so, once",
+    took === "taken" && !!taken && tookSent() === 1,
+    `take-over: ${took}; the parent's sends of it: ${tookSent()}; the parent's requests since: ${
       heard
         .slice(beforeTake)
         .map((one) => one.last.slice(0, 200))
@@ -316,6 +370,8 @@ const run = async (kit: Kit) => {
 
   // (d) The person hands it back.
   const beforeBack = heard.length;
+  const backSent = (): number =>
+    sendsOf(fleet, parent, delegateWaitWords.endedLine("Waits delegate"));
   const back = await fleet
     .api<{ origin: string | null }>(
       `/api/browsers/${encodeURIComponent(key)}/handback`,
@@ -344,11 +400,12 @@ const run = async (kit: Kit) => {
     120_000
   ).catch(() => undefined);
   check(
-    "(d) the person hands the browser back: the delegate's call answers it was handed back, and the parent hears so",
+    "(d) the person hands the browser back: the delegate's call answers it was handed back, and the parent hears so, once",
     back.error === undefined &&
       answered.includes(browserAskWords.handedBack(back.origin)) &&
-      !!handed,
-    `hand-back: ${back.error ?? `on ${back.origin}`}; the call answered: ${answered.slice(0, 300)}; the parent's requests since: ${
+      !!handed &&
+      backSent() === 1,
+    `hand-back: ${back.error ?? `on ${back.origin}`}; the call answered: ${answered.slice(0, 300)}; the parent's sends of it: ${backSent()}; the parent's requests since: ${
       heard
         .slice(beforeBack)
         .map((one) => one.last.slice(0, 200))
@@ -483,6 +540,24 @@ const run = async (kit: Kit) => {
       first: proposal.requestId,
       parent,
       third,
+    });
+    const prompter = await seeded("Prompting delegate", src, {
+      permissionMode: "default",
+    });
+    await legsHub({ check, delegate, designer, fleet, key, parent, prompter });
+    // Each of (n) and (m) has a delegate of its own: (l)'s turns at rest
+    // count as quiet ones, and the third fails its item (work-items.ts
+    // `QUIET_TURNS`).
+    await legEnds({
+      check,
+      fleet,
+      parent,
+      withdrawer: await seeded("Withdrawn prompter", src, {
+        permissionMode: "default",
+      }),
+      other: await seeded("Other prompter", src, {
+        permissionMode: "default",
+      }),
     });
   }
 };
@@ -770,10 +845,412 @@ const legsLast = async ({
       ).catch(() => false)
     : false;
   const kept = pushMarked(fleet, first);
+  const endedOnce = browserAsk?.requestId
+    ? await hubEndTold(fleet, parent, browserAsk.requestId)
+    : { sends: 0, woken: 0 };
   check(
-    "(i) a browser ask open across a hub restart leaves no push mark behind, while a proposal parked again keeps its own",
-    marked && dropped && kept,
-    `the browser ask: ${browserAsk?.requestId ?? "none"}; marked before the restart: ${marked}; dropped after it: ${dropped}; the first proposal's mark kept: ${kept}`
+    "(i) a browser ask open across a hub restart leaves no push mark behind, while a proposal parked again keeps its own, and its parent hears once that it ended with the restart",
+    marked && dropped && kept && endedOnce.sends === 1 && endedOnce.woken > 0,
+    `the browser ask: ${browserAsk?.requestId ?? "none"}; marked before the restart: ${marked}; dropped after it: ${dropped}; the first proposal's mark kept: ${kept}; the parent's notes that it ended with the hub: ${endedOnce.sends}, woken: ${endedOnce.woken}`
+  );
+};
+
+/**
+ * (l) A harness's own prompt, routed to the parent: answered by the parent,
+ * no end note follows; routed again and the parent put to sleep at rest, it
+ * is the person's now, told once, and the person's answer is told once.
+ */
+const legRouted = async ({
+  check,
+  fleet,
+  parent,
+  prompter,
+}: {
+  check: Kit["check"];
+  fleet: KitFleet;
+  parent: string;
+  prompter: string;
+}): Promise<void> => {
+  const title = "Prompting delegate";
+  const ended = (): number =>
+    sendsOf(fleet, parent, delegateWaitWords.endedLine(title));
+  const personsNow = (): number =>
+    sendsOf(fleet, parent, delegateWaitWords.personsNowLine(title));
+  /** The prompter's Bash prompt routed to the parent, none of `known`. */
+  const routed = (known: readonly string[]) =>
+    until(
+      "(l) the prompt routed to the parent",
+      async () =>
+        (
+          await fleet.api<(Parked & { payload: { routedTo?: string } })[]>(
+            "/api/pending"
+          )
+        ).find(
+          (one) =>
+            one.instanceId === prompter &&
+            one.payload.routedTo === "parent" &&
+            !known.includes(one.requestId ?? "")
+        ),
+      Boolean,
+      120_000
+    ).catch(() => undefined);
+  const gone = (requestId: string) =>
+    until(
+      "(l) the prompt settled",
+      async () =>
+        !(await fleet.api<Parked[]>("/api/pending")).some(
+          (one) => one.requestId === requestId
+        ),
+      Boolean,
+      60_000
+    ).catch(() => false);
+  await until(
+    "(l) the parent awake",
+    () => fleet.instance(parent)?.status ?? "",
+    (now) => now === "running",
+    120_000
+  );
+  await fleet.send(prompter, `${PROMPT_TAG} one`);
+  const first = await routed([]);
+  const answered = first?.requestId
+    ? await callAs(fleet, parent, "answer_delegate", {
+        target: prompter,
+        requestId: first.requestId,
+      })
+    : undefined;
+  const settledOne = first?.requestId ? await gone(first.requestId) : false;
+  const endsAfterOwn = ended();
+  check(
+    "(l) a prompt routed to the parent and answered by it settles, and the parent is told no end of its own answer",
+    !!first && !answered?.refused && settledOne && endsAfterOwn === 0,
+    `routed: ${first?.requestId ?? "none"}; answer_delegate: ${answered?.text.slice(0, 200) ?? "none"}; settled: ${settledOne}; end notes: ${endsAfterOwn}`
+  );
+  await until(
+    "(l) the parent at rest",
+    () => fleet.instance(parent)?.turn_open_at ?? null,
+    (open) => open === null,
+    120_000
+  );
+  await fleet.send(prompter, `${PROMPT_TAG} two`);
+  const second = await routed([first?.requestId ?? ""]);
+  await until(
+    "(l) the parent at rest with the ask",
+    () => fleet.instance(parent)?.turn_open_at ?? null,
+    (open) => open === null,
+    120_000
+  );
+  const slept = await asleep(fleet, parent);
+  const toldNow = await until(
+    "(l) the parent told the prompt is the person's now",
+    personsNow,
+    (n) => n > 0,
+    120_000
+  ).catch(() => personsNow());
+  if (second?.requestId) {
+    await fleet.post({
+      type: "command",
+      commandId: crypto.randomUUID(),
+      kind: "permission.answer",
+      machineId: MACHINE,
+      sessionId: prompter,
+      payload: {
+        instanceId: prompter,
+        requestId: second.requestId,
+        method: RESOLVE_PERMISSION,
+        args: [second.requestId, { behavior: "allow" }],
+      },
+    });
+  }
+  const settledTwo = second?.requestId ? await gone(second.requestId) : false;
+  const endTold = await until(
+    "(l) the parent told the person's answer",
+    ended,
+    (n) => n > 0,
+    120_000
+  ).catch(() => ended());
+  check(
+    "(l) a routed prompt the parent left unanswered as it went to rest is the person's now, told once; the person approves it, and the parent is told that once",
+    !!second &&
+      slept === "sleeping" &&
+      toldNow === 1 &&
+      settledTwo &&
+      endTold === 1 &&
+      personsNow() === 1,
+    `routed: ${second?.requestId ?? "none"}; the parent: ${slept}; told it is the person's now: ${personsNow()}; settled: ${settledTwo}; end notes: ${endTold}`
+  );
+};
+
+/** The newest Bash prompt of `of` routed to its parent, none of `known`. */
+const routedOf = (fleet: KitFleet, of: string, known: readonly string[] = []) =>
+  until(
+    "a prompt routed to the parent",
+    async () =>
+      (
+        await fleet.api<(Parked & { payload: { routedTo?: string } })[]>(
+          "/api/pending"
+        )
+      ).find(
+        (one) =>
+          one.instanceId === of &&
+          one.payload.routedTo === "parent" &&
+          !known.includes(one.requestId ?? "")
+      ),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+
+/** Legs (n) and (m). */
+const legEnds = async ({
+  check,
+  fleet,
+  other,
+  parent,
+  withdrawer,
+}: {
+  check: Kit["check"];
+  fleet: KitFleet;
+  other: string;
+  parent: string;
+  withdrawer: string;
+}): Promise<void> => {
+  // (n) Withdrawn: its delegate stopped while the prompt waits.
+  const endedLine = delegateWaitWords.endedLine("Withdrawn prompter");
+  await until(
+    "(n) the parent awake",
+    () => fleet.instance(parent)?.status ?? "",
+    (now) => now === "running",
+    180_000
+  );
+  const before = sendsOf(fleet, parent, endedLine);
+  await fleet.send(withdrawer, `${PROMPT_TAG} three`);
+  const third = await routedOf(fleet, withdrawer);
+  await fleet.stopSession(withdrawer);
+  const withdrawn = await until(
+    "(n) the parent told the prompt was withdrawn",
+    () =>
+      fleet.query<{ n: number }>(
+        "SELECT count(*) AS n FROM sent_messages WHERE instance_id = ? AND instr(body, ?) > 0 AND instr(body, ?) > 0",
+        parent,
+        encodeURIComponent(endedLine),
+        delegateWaitWords.withdrawn
+      )[0]?.n ?? 0,
+    (n) => n > 0,
+    120_000
+  ).catch(() => 0);
+  check(
+    "(n) a routed prompt withdrawn as its delegate is stopped: the parent hears once that it was withdrawn",
+    !!third &&
+      withdrawn === 1 &&
+      sendsOf(fleet, parent, endedLine) - before === 1,
+    `routed: ${third?.requestId ?? "none"}; withdrawn notes: ${withdrawn}; end notes since: ${sendsOf(fleet, parent, endedLine) - before}`
+  );
+
+  // (m) The parent ended by the person's Stop, which ends its delegates
+  // first (tree-stops.ts): the waiting delegate's prompt is withdrawn, the
+  // parent hears so once before it ends, and nothing after.
+  const otherEnded = delegateWaitWords.endedLine("Other prompter");
+  await fleet.send(other, `${PROMPT_TAG} four`);
+  const routed = await routedOf(fleet, other);
+  await fleet.stopSession(parent);
+  await until(
+    "(m) the parent stopped",
+    () => fleet.instance(parent)?.status ?? "",
+    (now) => now === "stopped",
+    180_000
+  );
+  const total = (): number =>
+    fleet.query<{ n: number }>(
+      "SELECT count(*) AS n FROM sent_messages WHERE instance_id = ?",
+      parent
+    )[0]?.n ?? 0;
+  const atStop = total();
+  const told = sendsOf(fleet, parent, otherEnded);
+  const gone = routed?.requestId
+    ? !(await fleet.api<Parked[]>("/api/pending")).some(
+        (one) => one.requestId === routed.requestId
+      )
+    : false;
+  // The other's item ends with the tree: anything said to the parent after
+  // its stop would be a send to an ended session.
+  await until(
+    "(m) the other's item ended",
+    () =>
+      fleet.query<{ state: string }>(
+        "SELECT w.state FROM work_items w JOIN instances i ON i.work_item_id = w.id WHERE i.id = ?",
+        other
+      )[0]?.state ?? "",
+    (state) => ["cancelled", "done", "failed"].includes(state),
+    120_000
+  ).catch(() => "");
+  check(
+    "(m) a parent the person stops ends its waiting delegate first: the prompt is withdrawn, the parent hears so once, and nothing after its end",
+    !!routed && gone && told === 1 && total() === atStop,
+    `routed: ${routed?.requestId ?? "none"}; gone: ${gone}; the parent's notes that it ended: ${told}; its sends since its stop: ${total() - atStop}`
+  );
+};
+
+/**
+ * The parent's sends saying ask `requestId` ended with a hub restart (their
+ * tag names the ask), once one has woken it; and the requests it woke.
+ */
+const hubEndTold = async (
+  fleet: KitFleet,
+  parent: string,
+  requestId: string
+): Promise<{ sends: number; woken: number }> => {
+  const sends = (): number =>
+    fleet.query<{ n: number }>(
+      "SELECT count(*) AS n FROM sent_messages WHERE instance_id = ? AND instr(body, ?) > 0 AND instr(body, ?) > 0",
+      parent,
+      `request=${requestId}`,
+      delegateWaitWords.endedWithHub
+    )[0]?.n ?? 0;
+  const woken = (): number =>
+    heard.filter(
+      (one) =>
+        one.last.includes(`request=${requestId}`) &&
+        one.last.includes(delegateWaitWords.endedWithHub)
+    ).length;
+  await until(
+    `the parent woken with ${requestId.slice(0, 8)}'s end`,
+    woken,
+    (n) => n > 0,
+    120_000
+  ).catch(() => 0);
+  return { sends: sends(), woken: woken() };
+};
+
+/** Legs (j) and (k). */
+const legsHub = async ({
+  check,
+  delegate,
+  designer,
+  fleet,
+  key,
+  parent,
+  prompter,
+}: {
+  check: Kit["check"];
+  delegate: string;
+  designer: string;
+  fleet: KitFleet;
+  key: string;
+  parent: string;
+  prompter: string;
+}): Promise<void> => {
+  // (j) Taken over when the hub restarts.
+  await until(
+    "(j) the parent awake",
+    () => fleet.instance(parent)?.status ?? "",
+    (now) => now === "running",
+    120_000
+  );
+  const asking = callAs(
+    fleet,
+    delegate,
+    "browser_ask",
+    { origin: ORIGIN, reason: `${REASON} taken` },
+    600_000
+  ).catch(() => undefined);
+  const ask = await until(
+    "(j) the third browser ask waiting on the person",
+    async () =>
+      (await fleet.api<Parked[]>("/api/pending")).find(
+        (one) => one.instanceId === delegate && one.payload.browserAsk
+      ),
+    Boolean,
+    60_000
+  ).catch(() => undefined);
+  const requestId = ask?.requestId ?? "";
+  const took = ask
+    ? await fleet
+        .api<unknown>(`/api/browsers/${encodeURIComponent(key)}/takeover`, {
+          requestId,
+          machineId: MACHINE,
+        })
+        .then(
+          () => "taken",
+          (error: unknown) =>
+            error instanceof Error ? error.message : String(error)
+        )
+    : "no ask";
+  const markedTaken = !!ask && pushMarked(fleet, requestId);
+  await fleet.stop("hub", "SIGKILL");
+  fleet.launch("hub");
+  await fleet.hubUp();
+  await fleet.agentUp();
+  await asking;
+  const ended = ask
+    ? await hubEndTold(fleet, parent, requestId)
+    : { sends: 0, woken: 0 };
+  const dropped = ask
+    ? await until(
+        "(j) the taken ask's push mark dropped",
+        () => !pushMarked(fleet, requestId),
+        Boolean,
+        60_000
+      ).catch(() => false)
+    : false;
+  check(
+    "(j) a browser ask taken over when the hub restarts keeps its push mark through the take-over; the next start drops it, and its parent hears once that it ended with the restart",
+    took === "taken" &&
+      markedTaken &&
+      dropped &&
+      ended.sends === 1 &&
+      ended.woken > 0,
+    `take-over: ${took}; marked while taken: ${markedTaken}; dropped after the restart: ${dropped}; the parent's notes that it ended with the hub: ${ended.sends}, woken: ${ended.woken}`
+  );
+  await fleet
+    .api(`/api/browsers/${encodeURIComponent(key)}/handback`, {
+      machineId: MACHINE,
+    })
+    .catch(() => undefined);
+  await fleet.api(`/api/browsers/${encodeURIComponent(key)}/stop`, {
+    machineId: MACHINE,
+  });
+
+  await legRouted({ check, fleet, parent, prompter });
+
+  // (k) A note kept for an away parent fails: the delegate is told nothing.
+  const waitsLine = delegateWaitWords.waitsLine("Design delegate");
+  const undelivered = (): number =>
+    fleet.query<{ n: number }>(
+      "SELECT count(*) AS n FROM sent_messages WHERE instance_id = ? AND instr(body, ?) > 0",
+      designer,
+      "[cawco:undelivered"
+    )[0]?.n ?? 0;
+  const before = undelivered();
+  const failedNotes = (): number =>
+    fleet.query<{ n: number }>(
+      "SELECT count(*) AS n FROM sent_messages WHERE instance_id = ? AND state = 'failed' AND instr(body, ?) > 0",
+      parent,
+      encodeURIComponent(waitsLine)
+    )[0]?.n ?? 0;
+  const failedBefore = failedNotes();
+  await fleet.stop("agent", "SIGKILL");
+  await fleet.stop("hub", "SIGKILL");
+  fleet.launch("hub");
+  await fleet.hubUp();
+  await callAs(fleet, designer, "design_write", {
+    files: [{ path: "references/fourth.md", content: `${REASON} fourth\n` }],
+    why: "The probe's fourth change to the design system",
+  });
+  // The window a hub's start gives every machine (core handover.ts
+  // `hub-start`: an update's trial and the reconnecting window, four
+  // minutes) ends, and what was kept for the away machine fails.
+  const failed = await until(
+    "(k) the note kept for the away parent failed",
+    () => failedNotes() - failedBefore,
+    (n) => n > 0,
+    420_000
+  ).catch(() => failedNotes() - failedBefore);
+  const told = undelivered() - before;
+  fleet.launch("agent");
+  await fleet.agentUp();
+  check(
+    "(k) a note kept for a parent whose machine stays away past its window fails, and the delegate is told nothing of it: it is the hub's word, not the delegate's",
+    failed === 1 && told === 0,
+    `the parent's failed notes of the wait: ${failed}; the delegate's undelivered notices since: ${told}`
   );
 };
 

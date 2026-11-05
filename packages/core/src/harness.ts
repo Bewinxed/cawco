@@ -341,6 +341,15 @@ export const COMPACTION_ORIGIN = "compaction";
 export const WORK_ITEM_ORIGIN = "work-item";
 
 /**
+ * The `system` origin name of the hub's word to a parent while its delegate
+ * waits on the person, and of how that wait ended (hub delegate-waits.ts):
+ * the hub's word about the delegate, never the delegate's own message, so a
+ * send of it that fails tells no session it failed. It wakes a parent at
+ * rest: the far end of the work the parent set going.
+ */
+export const DELEGATE_WAIT_ORIGIN = "delegate-wait";
+
+/**
  * The `system` origin name of the hub's word on the person's acts on one of
  * the session's artifacts: their picks sent (core injected.ts
  * `artifactResponsesNotice`), which the session reads with its tools, and

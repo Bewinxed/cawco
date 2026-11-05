@@ -3973,8 +3973,10 @@ export const machineKeys = sqliteTable("machine_keys", {
 /**
  * The asks the push outlet took (push.ts `onAsk`), by request id: each ask
  * is one moment for the person's phone, however often it is parked again
- * (a design proposal as the hub starts). Gone when its ask settles, or, for
- * an ask that ended with the hub that took it, as the next hub starts.
+ * (a design proposal as the hub starts). Gone as its wait ends: its ask
+ * settles (a browser taken over is no end: its call waits on until it is
+ * handed back), or, for an ask that ended with the hub that took it, as the
+ * next hub starts.
  */
 export const askPushes = sqliteTable("ask_pushes", {
   requestId: text("request_id").primaryKey(),

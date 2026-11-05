@@ -268,6 +268,8 @@ import {
   DEFAULT_AT_LIMIT,
   DEFAULT_COMPACTION,
   DELEGATE_SUMMARIES_LIMIT,
+  DELEGATE_WAIT_ORIGIN,
+  type DelegateWaitAbout,
   delegateAskText,
   delegateWaitNotice,
   delegateWaitWords,
@@ -367,6 +369,7 @@ import {
   parseAgentFrontMatter,
   parseArtifactComments,
   parseArtifactResponses,
+  parseDelegateWaitNotice,
   pauseClock,
   permissionModeNamed,
   pictureName,
@@ -772,7 +775,7 @@ import {
   decisionRoutes,
 } from "./decisions";
 import { delegateTypesRoutes } from "./delegate-types";
-import { createDelegateWaits } from "./delegate-waits";
+import { createDelegateWaits, type NoticeMark } from "./delegate-waits";
 import type {
   DelegateResult,
   SendDelivery,
@@ -1112,6 +1115,14 @@ const HARNESS_CONFIG_BODY = t.Object({
 });
 
 /** What an artifact's name keeps of a Diagram's statement name: lowercase letters, digits and dashes. */
+/**
+ * The name of a delegate-wait notice's send (delegate-waits.ts): its ask
+ * and what it tells. The hub hands a send under a name it holds a record of
+ * over once, so each is told once, and the record is found again by it.
+ */
+const waitNoticeUuid = (requestId: string, mark: NoticeMark): string =>
+  uuidOf(`delegate-wait\u0000${requestId}\u0000${mark}`);
+
 /** `text` with `line` after its marker (core `markerTag`, its first line), when there is a line. */
 const withContext = (text: string, line: string | undefined): string => {
   if (!line) {
@@ -1765,6 +1776,8 @@ const TASK_WAITS_ORIGIN = "task-waits";
  * (`routine:<id>`, memory.ts) wake too.
  */
 const WAKES_AT_REST: ReadonlySet<string> = new Set([
+  // Its delegate's wait on the person, and its end (delegate-waits.ts).
+  DELEGATE_WAIT_ORIGIN,
   // Its open work item: the sweep's wake, a declared wait's end.
   WORK_ITEM_ORIGIN,
   // The turn its account's limit cut, carried on at the reset.
@@ -3695,14 +3708,12 @@ export const createServer = (
     handed: (requestId) => db.delegateAsk(requestId) !== undefined,
     hand: (asker, parent, ask) =>
       deliverDelegateAsk(asker, parent, clientCopy(ask)),
-    tell: ({ asker, parent, requestId, mark }, line, body) =>
-      tellParentOfWait(
-        asker,
-        parent,
-        uuidOf(`delegate-wait\u0000${requestId}\u0000${mark}`),
-        line,
-        body
-      ),
+    tell: ({ asker, parent, requestId, mark, what }, line, body) =>
+      tellParentOfWait(parent, waitNoticeUuid(requestId, mark), line, body, {
+        delegate: asker.id,
+        request: requestId,
+        what,
+      }),
     title: (row) => boardTitle(row),
     link: (row) => sessionLink(row.id, boardTitle(row)),
     answererName: (row) => sessionName(row),
@@ -4041,8 +4052,10 @@ export const createServer = (
     settle: (requestId) => {
       pending.resolve(requestId);
     },
-    handedBack: (instanceId, requestId, ask, origin) =>
-      delegateWaits.handedBack(instanceId, requestId, ask.reason, origin),
+    handedBack: (instanceId, requestId, ask, origin) => {
+      db.askPushes.drop(requestId);
+      delegateWaits.handedBack(instanceId, requestId, ask.reason, origin);
+    },
   });
   // A session's ask that the person sign the hub in to a fleet MCP server
   // (connect-asks.ts), answered by the hub's own sign-in landing.
@@ -4164,6 +4177,15 @@ export const createServer = (
     const answer =
       outcome === "answered" ? (answering?.answer ?? said?.answer) : undefined;
     push.onSettled(parked.requestId);
+    // The person's wait is over, its mark with it; but a browser taken over
+    // leaves every screen while its call waits on, until it is handed back.
+    if (!(
+      outcome === "answered" &&
+      !answer &&
+      (parked.payload as PermissionRequestFrame).browserAsk
+    )) {
+      db.askPushes.drop(parked.requestId);
+    }
     // Over on every device: its push taken down.
     notifications.clear([askCollapseId(parked.requestId)], "settled");
     // An ask that left unanswered (its session ended) never runs.
@@ -6357,18 +6379,20 @@ export const createServer = (
   };
 
   /**
-   * The hub's word to `parent` while its delegate `delegate` waits on the
-   * person, or of how its ask ended (delegate-waits.ts): a peer message from
-   * the delegate, as its ask and its report are, so it wakes a parent at
-   * rest, drawn in the parent's transcript as a note titled `line`. Under a
+   * The hub's word to `parent` while its delegate waits on the person, or of
+   * how its ask ended (delegate-waits.ts): the hub's, under its own origin
+   * (core `DELEGATE_WAIT_ORIGIN`), never the delegate's message, so it wakes
+   * a parent at rest and a send of it that fails tells no session it
+   * failed. Drawn in the parent's transcript as a note titled `line`; its
+   * tag names the ask, its delegate and what it asks (`about`). Under a
    * `uuid` already sent it goes nowhere: each is told once.
    */
   const tellParentOfWait = (
-    delegate: InstanceRow,
     parent: InstanceRow,
     uuid: string,
     line: string,
-    body: string
+    body: string,
+    about: DelegateWaitAbout
   ): void => {
     deliverSend({
       verb: "send",
@@ -6382,18 +6406,12 @@ export const createServer = (
           message: {
             role: "user",
             content: withContext(
-              delegateWaitNotice(line, body),
+              delegateWaitNotice(line, body, about),
               conversationContext(parent, line)
             ),
           },
           parent_tool_use_id: null,
-          origin: {
-            kind: "peer",
-            from: delegate.id,
-            name: sessionLabel(delegate).name,
-            fromSession: delegate.id,
-          },
-          shouldQuery: false,
+          origin: { kind: "system", name: DELEGATE_WAIT_ORIGIN, line },
         },
       },
     });
@@ -32023,14 +32041,12 @@ export const createServer = (
       callAgent(machineId, CONFIGURE_BINARY_UPDATES, [policy], 10_000),
   });
 
-  // Everything is made: a hub that serves starts its work off the boot path.
-  // One built only to be read starts none of it. Before it listens, each
-  // known machine's fleet items are hashed (fleet-sync.ts `warmHashes`), so
-  // no machine's register is the one that hashes the fleet's files.
   // Last off the boot path, once every ask the hub parks again as it starts
   // is parked (design proposals at once, memory proposals once read): the
-  // asks push took that are parked no more ended with the hub that took
-  // them, and never settled, so their marks go here (db `askPushes`).
+  // waits the person was told of whose asks are parked no more ended with
+  // the hub that held them (a browser or connect ask's call, refused as it
+  // went) and never settled. Their marks go here (db `askPushes`), and a
+  // parent told one waits hears it ended, once (delegate-waits.ts).
   offBoot.push(() =>
     detach(
       memoryParked.then(() => {
@@ -32039,15 +32055,31 @@ export const createServer = (
             .list()
             .flatMap((one) => (one.requestId ? [one.requestId] : []))
         );
-        if (left > 0) {
+        if (left.length > 0) {
           console.log(
-            `[push] ${left} ask(s) pushed before this start and parked no more: their marks dropped`
+            `[push] ${left.length} ask(s) told before this start and parked no more: their marks dropped`
           );
+        }
+        for (const requestId of left) {
+          const told = db.sendRecord(waitNoticeUuid(requestId, "waits"));
+          const about =
+            told && parseDelegateWaitNotice(userTurnText(told.body) ?? "");
+          if (about?.delegate) {
+            delegateWaits.endedWithHub(
+              about.delegate,
+              requestId,
+              about.what ?? requestId
+            );
+          }
         }
       }),
       "ask push marks"
     )
   );
+  // Everything is made: a hub that serves starts its work off the boot path.
+  // One built only to be read starts none of it. Before it listens, each
+  // known machine's fleet items are hashed (fleet-sync.ts `warmHashes`), so
+  // no machine's register is the one that hashes the fleet's files.
   if (serves) {
     warmFleetHashes();
     for (const start of offBoot) {

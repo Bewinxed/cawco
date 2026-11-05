@@ -887,24 +887,43 @@ export function parseForkNotice(
 /** The words a delegate-wait notice opens with. */
 const delegateWaitLine = (line: string): string => `[Delegate] ${line}\n\n`;
 
+/** What a delegate-wait notice is about: the ask, its delegate, what it asks. */
+export interface DelegateWaitAbout {
+  delegate: string;
+  request: string;
+  what: string;
+}
+
 /**
  * The hub's word to a parent while its delegate waits on the person
  * (packages/hub `delegate-waits.ts`): the ask the person holds, or how it
- * ended. A transcript draws it as a note titled by its line.
+ * ended. Its tag names the ask, its delegate and what it asks, so a hub
+ * that starts again finds what a parent was told of an ask that ended with
+ * the last. A transcript draws it as a note titled by its line.
  */
-export const delegateWaitNotice = (line: string, body: string): string =>
-  `${markerTag("delegate-wait", { line })}${delegateWaitLine(line)}${body}`;
+export const delegateWaitNotice = (
+  line: string,
+  body: string,
+  about: DelegateWaitAbout
+): string =>
+  `${markerTag("delegate-wait", { line, ...about })}${delegateWaitLine(line)}${body}`;
 
-/** A delegate-wait notice read back into its line and what it says. */
+/** A delegate-wait notice read back into its line, what it is about and what it says. */
 export function parseDelegateWaitNotice(
   text: string
-): { line: string; body: string } | null {
+): ({ line: string; body: string } & Partial<DelegateWaitAbout>) | null {
   const tag = tagOf(text, "delegate-wait");
   if (!tag) {
     return null;
   }
-  const { line = "" } = tag.fields;
-  return { line, body: afterLine(tag.rest, delegateWaitLine(line)) };
+  const { line = "", delegate, request, what } = tag.fields;
+  return {
+    line,
+    body: afterLine(tag.rest, delegateWaitLine(line)),
+    ...(delegate ? { delegate } : {}),
+    ...(request ? { request } : {}),
+    ...(what ? { what } : {}),
+  };
 }
 
 /** How a report's turn ended, as its tag says it. */

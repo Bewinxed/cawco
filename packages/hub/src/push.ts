@@ -1734,7 +1734,9 @@ export const createPush = ({
       asked.add(requestId);
       // Taken once, whichever hub took it: one parked again as the hub
       // starts (a design proposal, design-system.ts `start`) was pushed by
-      // the hub that first parked it.
+      // the hub that first parked it. Its mark goes as its wait ends
+      // (server.ts, as an ask settles, its browser is handed back, or the
+      // next start finds it parked no more).
       if (!db.askPushes.take(requestId, new Date())) {
         return;
       }
@@ -1834,7 +1836,6 @@ export const createPush = ({
     /** An ask left the pending list: a later ask can never reuse its id, so its mark goes. */
     onSettled(requestId: string): void {
       asked.delete(requestId);
-      db.askPushes.drop(requestId);
       answered(requestId);
     },
 

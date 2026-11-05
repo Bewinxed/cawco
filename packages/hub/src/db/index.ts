@@ -764,8 +764,8 @@ export interface DbShape {
    */
   readonly askPushes: {
     readonly drop: (requestId: string) => void;
-    /** Drops every mark but those of `parked`; answers how many went. */
-    readonly keepOnly: (parked: readonly string[]) => number;
+    /** Drops every mark but those of `parked`; answers the request ids that went. */
+    readonly keepOnly: (parked: readonly string[]) => string[];
     readonly take: (requestId: string, at: Date) => boolean;
   };
   /** What sessions asked the person, and what the hub carried out (asks.ts). */
@@ -10368,7 +10368,8 @@ const make = async (path: string): Promise<DbShape> => {
               : notInArray(askPushes.requestId, [...parked])
           )
           .returning()
-          .all().length,
+          .all()
+          .map((row) => row.requestId),
     },
     sshMachines: sshMachinesDb(db, hubId),
     memoryFacts: memoryFactsDb(db),

@@ -104,6 +104,9 @@ export const delegateWaitWords = {
     `the person handed its browser back${origin ? ` on ${origin}` : ""}, and your delegate goes on.`,
   connected: "the person signed the hub in, and your delegate goes on.",
   withdrawn: "it was withdrawn before anyone answered it.",
+  /** An ask whose call ended with the hub that held it, told as the next hub starts. */
+  endedWithHub:
+    "it ended with a hub restart, and your delegate's call was refused; nobody answered it.",
   /** Settled by the hub with no answer it can name (a move whose job ended). */
   settled: "it no longer waits on anyone.",
   /** A parent's answer_delegate to an ask only the person answers, refused. */
