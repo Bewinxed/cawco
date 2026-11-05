@@ -173,27 +173,29 @@
   const previewOpen = $derived(
     shown !== null && cawco.previews[shown]?.state === "open"
   );
-  // Caw showing something brings it to the front, as a session's split does
-  // (SideSplit); with nothing left to show the panel is his conversation.
-  let previewWas = untrack(() => previewOpen);
+  // Caw showing something brings Preview to the front, and so does a card
+  // of his pressed in the transcript: each a reveal (client `revealPreview`),
+  // said only for a show heard after the page's first read, so what stood
+  // open as the page came leaves the panel on his conversation. Counted per
+  // conversation: another one coming on show is no reveal. With nothing left
+  // to show the panel is his conversation.
+  let revealsSeen = untrack(() => ({
+    count: shown ? cawco.previewRequests[shown] : undefined,
+    id: shown,
+  }));
   $effect(() => {
-    const now = previewOpen;
-    if (now && !previewWas) {
-      lead.tab = "preview";
-    } else if (!now) {
-      lead.tab = "assistant";
-    }
-    previewWas = now;
-  });
-  // A card of his pressed in the transcript asks for its preview again
-  // (client `revealPreview`): Preview comes to the front.
-  let askedWas = untrack(() => (shown ? cawco.previewRequests[shown] : 0));
-  $effect(() => {
-    const asked = shown ? cawco.previewRequests[shown] : 0;
-    if (asked && asked !== askedWas && previewOpen) {
-      lead.tab = "preview";
-    }
-    askedWas = asked;
+    const id = shown;
+    const count = id ? cawco.previewRequests[id] : undefined;
+    const open = previewOpen;
+    untrack(() => {
+      const seen = revealsSeen;
+      revealsSeen = { count, id };
+      if (!open) {
+        lead.tab = "assistant";
+      } else if (id !== null && seen.id === id && count !== seen.count) {
+        lead.tab = "preview";
+      }
+    });
   });
   const onPreview = $derived(previewOpen && lead.tab === "preview");
 

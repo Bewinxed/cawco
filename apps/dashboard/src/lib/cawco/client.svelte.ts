@@ -3424,7 +3424,12 @@ function handleFrame(frame: FramePayload): void {
     if (!equal(previous, next)) {
       state.previews[frame.instanceId] = next;
     }
+    // A show: one opened, or moved on, after the page's first read of the
+    // fleet. What that read finds open was open before the page came, and is
+    // no show to bring forward (ProjectConversation's Preview, ProjectPage's
+    // Decisions, SideSheet's snap all follow `previewRequests`).
     if (
+      state.liveRead &&
       frame.state === "open" &&
       (previous?.state !== "open" || !sameRevision)
     ) {
@@ -6687,7 +6692,9 @@ function settleStopped(instanceId: string): void {
 
 /**
  * Asks the session's preview to be brought into view: a phone's sheet comes
- * back to its middle snap from wherever the reader left it.
+ * back to its middle snap from wherever the reader left it, Caw's panel comes
+ * to Preview. Said for a show heard after the page's first read, and for a
+ * card of it pressed; never for what was open as the page came.
  */
 export function revealPreview(instanceId: string): void {
   state.previewRequests[instanceId] =
