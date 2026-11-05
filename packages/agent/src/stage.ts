@@ -1521,9 +1521,14 @@ export async function renderStage(
     stage.boundary.id,
     stage.port
   );
-  const rendered = await renderCanvas(reached, stage.port, { ...ask, files });
+  // The render's own browser views the stage through its listener, never a preview: held awake as a viewer until it answers, or the idle sleep ends the stage under its sweep.
   used(stage, "a render");
-  return rendered;
+  const release = viewing(stage);
+  try {
+    return await renderCanvas(reached, stage.port, { ...ask, files });
+  } finally {
+    release();
+  }
 }
 
 /** How long a warm-up's ask for one canvas's Preview page may take, its graph's cold walk inside it. Ours: caw-panel's 839-module graph answered 1.5 s in, cold. */
@@ -1888,9 +1893,11 @@ export function sourceUp(source: PreviewSource): boolean {
 export function sourceViewer(source: PreviewSource): () => void {
   const key = keyOf(source);
   const stage = key ? stages.get(key) : undefined;
-  if (!stage) {
-    return () => undefined;
-  }
+  return stage ? viewing(stage) : () => undefined;
+}
+
+/** A viewer of `stage` (a socket through its preview, a render's browser): it stays awake, its idle time not counted, until the release. */
+function viewing(stage: Stage): () => void {
   stage.viewers += 1;
   stage.lastUse = Date.now();
   // What keeps a stage awake, said as it changes.
