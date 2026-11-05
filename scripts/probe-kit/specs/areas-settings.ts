@@ -495,10 +495,10 @@ const moveLeg = async (rig: Rig, m: Made): Promise<void> => {
   rig.kit.check(
     "c. moved out, the first project falls back to the fleet's on every reader, and the move says so",
     out.status === 200 &&
-      said.includes("It falls back to the fleet's account") &&
-      said.includes("It falls back to the fleet's budget") &&
-      said.includes("It falls back to the fleet's Who decides") &&
-      said.includes("It falls back to the fleet's delegate types") &&
+      // One sentence naming every setting it falls back on (areaWords.takes).
+      said.includes(
+        "It falls back to the fleet's account, permission mode for Caw, budget, rule at the budget, Who decides and delegate types."
+      ) &&
       onFleet(after, null),
     JSON.stringify({ status: out.status, said, after })
   );
@@ -510,7 +510,7 @@ const moveLeg = async (rig: Rig, m: Made): Promise<void> => {
     "c. put back, it takes the area's again",
     back.status === 200 &&
       ((back.json as { said?: string[] } | undefined)?.said ?? []).includes(
-        "It takes the account from Probe client."
+        "It takes the account, permission mode for Caw, budget, rule at the budget, Who decides and delegate types from Probe client."
       ) &&
       inArea(again, m, null),
     JSON.stringify({ status: back.status, text: back.text, again })
@@ -732,9 +732,11 @@ const deleteLeg = async (rig: Rig, m: Made): Promise<void> => {
       said.includes(
         "Probe client is deleted; its 2 projects are in no area now."
       ) &&
-      said.includes("1 project falls back to the fleet's account") &&
-      said.includes("2 projects fall back to the fleet's budget") &&
-      said.includes("2 projects fall back to the fleet's Who decides") &&
+      // The settings the same number of projects fall back on, said once (areaWords.fallBackAll).
+      said.includes("1 project falls back to the fleet's account.") &&
+      said.includes(
+        "2 projects fall back to the fleet's permission mode for Caw, budget, rule at the budget, Who decides and delegate types."
+      ) &&
       said.includes("1 rule scoped to it went with it.") &&
       said.includes(
         "1 skill, 1 MCP server, 1 harness setting bound to it went with it."
