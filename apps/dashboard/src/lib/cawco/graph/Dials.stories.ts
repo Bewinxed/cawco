@@ -35,30 +35,67 @@ export const AsWritten = { parameters: { viewport: 400 } };
 
 /** Two turned: the radius dragged to 4 px and the colour picked; each changed value in the edit's ink with its way back, and the head's two versions, Copy values and Reset all. */
 export const Turned = {
-  args: { values: { radius: 4, ink: "#1f5f7a" } },
+  args: { values: { radius: 4, fill: "#e8f1ee" } },
   parameters: { viewport: 400 },
+};
+
+/** The same, a changed value marked by its restore glyph alone in the edit's ink, its words as they are. */
+export const TurnedGlyph = {
+  args: {
+    values: { radius: 4, fill: "#e8f1ee", height: "44px" },
+    changedMark: "glyph",
+  },
+  parameters: { viewport: 400 },
+};
+
+export const TurnedGlyphPhone = {
+  args: {
+    values: { radius: 4, fill: "#e8f1ee", height: "44px" },
+    changedMark: "glyph",
+  },
+  parameters: { viewport: 390 },
+};
+
+/** Three turned, the hub having sent them to the agent by itself. */
+export const Sent = {
+  args: {
+    values: { radius: 4, fill: "#e8f1ee", height: "44px" },
+    sent: { at: "2026-11-05T14:32:00", by: "hub" },
+  },
+  parameters: { viewport: 400 },
+};
+
+/** The same, a changed value marked by its words in the edit's ink (today's tone). */
+export const TurnedInk = {
+  args: { values: { radius: 4, fill: "#e8f1ee", height: "44px" } },
+  parameters: { viewport: 400 },
+};
+
+export const TurnedInkPhone = {
+  args: { values: { radius: 4, fill: "#e8f1ee", height: "44px" } },
+  parameters: { viewport: 390 },
 };
 
 /** The same, the number dial a field, its figure at its end and its fill to its value. */
 export const TurnedField = {
-  args: { values: { radius: 4, ink: "#1f5f7a" }, numberForm: "field" },
+  args: { values: { radius: 4, fill: "#e8f1ee" }, numberForm: "field" },
   parameters: { viewport: 400 },
 };
 
 export const TurnedFieldPhone = {
-  args: { values: { radius: 4, ink: "#1f5f7a" }, numberForm: "field" },
+  args: { values: { radius: 4, fill: "#e8f1ee" }, numberForm: "field" },
   parameters: { viewport: 390 },
 };
 
 /** The same, the number dial a slider with its figure beside it. */
 export const TurnedSlider = {
-  args: { values: { radius: 4, ink: "#1f5f7a" }, numberForm: "slider" },
+  args: { values: { radius: 4, fill: "#e8f1ee" }, numberForm: "slider" },
   parameters: { viewport: 400 },
 };
 
 /** As written shown while two are turned: the agent's values, read only. */
 export const AsWrittenShown = {
-  args: { values: { radius: 4, ink: "#1f5f7a" }, version: "written" },
+  args: { values: { radius: 4, fill: "#e8f1ee" }, version: "written" },
   parameters: { viewport: 400 },
 };
 
@@ -76,12 +113,12 @@ export const UnderHeadings = {
 
 /** In the phone's drawer: each name over its control. */
 export const TurnedPhone = {
-  args: { values: { radius: 4, ink: "#1f5f7a" } },
+  args: { values: { radius: 4, fill: "#e8f1ee" } },
   parameters: { viewport: 390 },
 };
 
 export const TurnedSliderPhone = {
-  args: { values: { radius: 4, ink: "#1f5f7a" }, numberForm: "slider" },
+  args: { values: { radius: 4, fill: "#e8f1ee" }, numberForm: "slider" },
   parameters: { viewport: 390 },
 };
 

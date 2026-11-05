@@ -317,6 +317,8 @@ export const graphWords = {
     readOnly: "Switch to Yours to change the values.",
     /** The head's line otherwise: his values are the artifact's answer, and the hub sends them to the agent by itself once his changes stand quiet (hub artifacts `sendAnswered`, `COMMENTS_QUIET_MS`). */
     reachAgent: "These go to the agent 3 seconds after your last change.",
+    /** The head's line once his values went to the agent (by the hub by itself after his last change, or by his own Send: either way they went); the time in the page's language. */
+    sent: (time: string) => `Sent to the agent at ${time}.`,
     /** The dial glyph in the bar's glass while values are changed: its name says how many. */
     glassChanged: (n: Figure) => `Dials, ${n} changed`,
   },

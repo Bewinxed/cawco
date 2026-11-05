@@ -74,6 +74,8 @@
         /** A bare symbol that removes (a list's minus in edit mode, as
             Reminders' is): the destructive ink, at rest and under the pointer. */
         destructive: "text-error-11",
+        /** A changed value's own mark (the design graph's restore glyph, where his pick marks a change by its glyph alone): the edit's ink. */
+        edited: "text-selected-ink",
       },
       /** An answer to an ask: filled in the status tint, edged on the recess,
           or edged with its strong ink held (a prompt's answers). Its hover

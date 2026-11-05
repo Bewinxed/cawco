@@ -14,11 +14,11 @@
           "order-last w-full justify-start px-3 pb-3 [.border-t]:pt-3",
       },
       /**
-       * `unit`: a figure's unit after it, in the meta role (a dial's "px");
+       * `unit`: a figure's unit after it, in the figure's own role, muted (a dial's "px");
        * `swatch`: a colour's swatch leading its value, its picker over it.
        */
       look: {
-        unit: "ps-space-1 font-normal text-meta",
+        unit: "ps-space-1 font-normal text-body",
         swatch: "relative ps-space-2 pe-0",
       },
     },

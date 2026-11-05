@@ -38,6 +38,8 @@
     numberForm = "pill",
     face,
     also = [],
+    sentAt = null,
+    changedMark = "ink",
   }: {
     /** The agent's dials, as its canvas spec writes them. */
     dials?: GraphDial[];
@@ -49,6 +51,10 @@
     face?: "dials";
     /** More states files under the ask, their sheets on their way: the title is the components' menu. */
     also?: string[];
+    /** The hub sent his values by itself at this time (ISO): the head says so. */
+    sentAt?: string | null;
+    /** How a changed dial is marked (graph-dials-questions `changed-mark`). */
+    changedMark?: "ink" | "glyph";
   } = $props();
 
   const FILE = "apps/dashboard/src/lib/cawco/routines/RoutineForm.stories.ts";
@@ -136,6 +142,8 @@
   /** The story the stand-in stage stands at, and the width the view picked. */
   let standing = $state("JustOpened");
   let picked = $state<number | null>(null);
+  /** The view's Appearance: the stand-in page draws in its scheme, as the stage page does. */
+  let dark = $state(false);
   /** The dials as the graph last set them on the drawing. */
   let set = $state<DialValues>({});
   const link = new StageLink((message: object) => {
@@ -147,8 +155,11 @@
         link.reached = { ask: reach.ask, move: null, on: reach.to };
       });
     } else if (said.type === "cawco:canvas-view") {
-      const { view } = message as { view: { widths: number[] | null } };
+      const { view } = message as {
+        view: { widths: number[] | null; scheme: "light" | "dark" };
+      };
       picked = view.widths?.[0] ?? null;
+      dark = view.scheme === "dark";
     } else if (said.type === STAGE_DIALS) {
       set = (message as StageDials).values;
     }
@@ -254,7 +265,10 @@
 {#snippet frame()}
   <!-- The stand-in stage page: its gutter, the drawing at its width. -->
   <div
-    class="h-full min-h-0 overflow-auto bg-surface-page p-space-5"
+    class={[
+      "h-full min-h-0 overflow-auto bg-surface-page p-space-5",
+      dark ? "scheme-dark" : "scheme-light",
+    ]}
     {@attach frameSize((node: HTMLElement) => {
       room = node.clientWidth;
       gutter = 2 * Number.parseFloat(getComputedStyle(node).paddingInlineStart);
@@ -303,6 +317,8 @@
     {frame}
     {link}
     {numberForm}
+    {changedMark}
+    dialsSent={sentAt ? { at: sentAt, by: "hub" } : null}
     keptDials={turned}
     {spec}
     startFace={face}

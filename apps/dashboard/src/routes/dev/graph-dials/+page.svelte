@@ -3,7 +3,8 @@
    * The design graph with the dials an agent put on the routine form,
    * where the person tries them: `?at=glass` hangs them from the bar's
    * glass, `?number=field` or `?number=slider` draws a number dial in that form, `?face=dials`
-   * opens on them, `?turned` with two of them turned, `?menu` with a second component
+   * opens on them, `?turned` with two of them turned, `?sent` as the hub sent them,
+   * `?mark=glyph` with a changed value marked by its glyph alone, `?menu` with a second component
    * on its way, so the title is the components' menu.
    */
   import { ROUTINE_DIALS } from "#lib/cawco/graph/bench/fixture.js";
@@ -22,5 +23,7 @@
   dialsAt={query.get("at") === "glass" ? "glass" : "face"}
   face={query.get("face") === "dials" ? "dials" : undefined}
   numberForm={NUMBER_FORMS.find((one) => one === query.get("number")) ?? "pill"}
-  turned={query.has("turned") ? { radius: 4, ink: "#1f5f7a" } : {}}
+  changedMark={query.get("mark") === "glyph" ? "glyph" : "ink"}
+  sentAt={query.has("sent") ? new Date().toISOString() : null}
+  turned={query.has("turned") ? { radius: 4, fill: "#e8f1ee" } : {}}
 />

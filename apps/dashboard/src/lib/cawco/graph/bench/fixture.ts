@@ -1,7 +1,8 @@
 /**
  * The dials an agent puts on the routine form for its design run's pages:
  * one of each kind, each on a value the form reads (the controls' radius
- * and height, its text's colour, an arg that has every blank field say
+ * and height, its fields' fill (every field reads it; no one ink token
+ * carries all the form's text: labels read `--ink-row`, values `--ink-strong`), an arg that has every blank field say
  * what it needs).
  */
 import type { GraphDial } from "../dials";
@@ -26,9 +27,9 @@ export const ROUTINE_DIALS: GraphDial[] = [
   },
   {
     kind: "color",
-    name: "ink",
-    label: "Text colour",
-    target: { cssVar: "--ink-strong" },
+    name: "fill",
+    label: "Field colour",
+    target: { cssVar: "--surface-raised" },
   },
   {
     kind: "toggle",
@@ -48,6 +49,6 @@ export const ROUTINE_DIALS_GROUPED: GraphDial[] = ROUTINE_DIALS.map((dial) => ({
 export const ROUTINE_WRITTEN = {
   radius: 10,
   height: "36px",
-  ink: "oklch(0.262 0.015 60)",
+  fill: "oklch(0.995 0.004 85)",
   attempted: false,
 };

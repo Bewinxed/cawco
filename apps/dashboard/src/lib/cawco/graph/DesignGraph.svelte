@@ -115,6 +115,8 @@
     numberForm = "pill",
     startFace,
     keptDials = {},
+    dialsSent = null,
+    changedMark = "ink",
     ondials,
   }: {
     /** The line to the stage page: what it said, and what the graph asks of it. */
@@ -165,6 +167,10 @@
     startFace?: "map" | "dials";
     /** His dial values as the artifact keeps them (its doc's `dials`), by name: they stand again on open. */
     keptDials?: DialValues;
+    /** His dial values went to the agent since he last turned one (the doc's `sentAt`, `sentBy`); null while they haven't. */
+    dialsSent?: { at: string; by: "hub" | "person" } | null;
+    /** How a changed dial is marked (the owner's pick, graph-dials-questions `changed-mark`). */
+    changedMark?: "ink" | "glyph";
     /** His dial values changed: the artifact keeps them (its doc's `dials`, which `artifact_read` answers). */
     ondials?: (values: DialValues) => void;
   } = $props();
@@ -985,6 +991,7 @@
 
 {#snippet dialsBody()}
   <Dials
+    {changedMark}
     {dials}
     {lang}
     {numberForm}
@@ -998,6 +1005,7 @@
     onversion={(next) => {
       dialVersion = next;
     }}
+    sent={dialsSent}
     undoable={dialsUndo !== null}
     values={dialValues}
     version={dialVersion}

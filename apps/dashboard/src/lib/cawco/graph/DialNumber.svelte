@@ -146,6 +146,7 @@
     }
     // The press is the field's until it is known to be a drag or a press.
     event.preventDefault();
+    pressing = true;
     pressAt = { x: event.clientX, id: event.pointerId };
   };
   const move = (event: PointerEvent) => {
@@ -183,7 +184,12 @@
       field?.focus();
       field?.select();
     }
+    pressing = false;
   };
+  /** The pill's figure took the focus from the keyboard (no press before it): the track wears the focus ring until it goes. */
+  let keyed = $state(false);
+  /** A press is under way on the pill: the focus it gives is a pointer's. */
+  let pressing = false;
   /** The figure's field, typed in place in every form: a press selects it, Enter or leaving keeps it, Escape puts it back. */
   const typed = $derived({
     autocomplete: "off" as const,
@@ -192,10 +198,13 @@
     value: shown,
     onblur: () => {
       focused = false;
+      keyed = false;
       keep();
     },
     onfocus: () => {
       focused = true;
+      keyed = !pressing;
+      pressing = false;
     },
     oninput: (event: Event) => {
       typing = (event.currentTarget as HTMLInputElement).value;
@@ -225,7 +234,6 @@
     field="figure"
     {...typed}
     role={spin ? "spinbutton" : undefined}
-    text="label"
     tone={changed ? "edited" : undefined}
   />
   <InputGroup.Addon align="inline-end" look="unit">
@@ -236,10 +244,13 @@
 {#if form === "pill"}
   <!-- The track (the Effort chip's): its fill runs to the knob, the knob
        carries the figure; the figure is typed in the knob. -->
+  <!-- Focus come by the keyboard rings the whole track (The One Ring Rule);
+       a press that puts the caret in the knob shows the caret alone. -->
   <div
-    class="relative h-c-input-h min-w-0 cursor-ew-resize touch-none rounded-md border border-border-control bg-surface-raised select-none"
+    class="relative h-c-input-h min-w-0 cursor-ew-resize touch-none rounded-md border border-border-control bg-surface-raised select-none data-keyed:outline-(length:--focus-ring-width) data-keyed:outline-solid data-keyed:outline-focus-ring data-keyed:outline-offset-2"
     data-dial-field
     data-dragging={dragging || undefined}
+    data-keyed={keyed || undefined}
     {...drag}
   >
     <div class="pointer-events-none absolute inset-0 overflow-clip rounded-md">
@@ -268,7 +279,7 @@
             aria-valuetext="{figureOf(value, lang)}{dial.unit ?? ''}"
             bind:this={field}
             class={[
-              "min-w-space-4 bg-transparent text-center type-label num outline-none",
+              "min-w-space-4 bg-transparent text-center type-body num outline-none",
               changed ? "text-selected-ink" : "text-ink-strong",
             ]}
             role="spinbutton"
@@ -276,7 +287,7 @@
             {...typed}
           />
           {#if dial.unit}
-            <span class="type-meta text-ink-muted">{dial.unit}</span>
+            <span class="type-body text-ink-muted">{dial.unit}</span>
           {/if}
         </span>
       </div>

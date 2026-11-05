@@ -70,8 +70,6 @@
       aria-invalid={refused || undefined}
       aria-label={label}
       autocomplete="off"
-      face="mono"
-      text="label"
       onblur={keep}
       oninput={(event: Event) => {
         typing = (event.currentTarget as HTMLInputElement).value;

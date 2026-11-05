@@ -40,6 +40,20 @@
     ResizableHandleLooks & {
       withHandle?: boolean;
     } = $props();
+
+  /**
+   * The separator's orientation for a reader (WAI-ARIA, separator): the
+   * edge between side-by-side panes (a horizontal group) is a vertical line,
+   * and the one between stacked panes a horizontal one. paneforge sets none,
+   * and a separator's default is horizontal, so a reader heard the split
+   * between two columns as a horizontal line.
+   */
+  const orient = (node: HTMLElement) => {
+    node.setAttribute(
+      "aria-orientation",
+      node.dataset.direction === "vertical" ? "horizontal" : "vertical"
+    );
+  };
 </script>
 
 <PaneResizer
@@ -61,6 +75,7 @@
   data-slot="resizable-handle"
   bind:ref
   {...restProps}
+  {@attach orient}
 >
   {#if withHandle}
     <div class="h-6 w-space-1 rounded-pill bg-border z-1 flex shrink-0"></div>
