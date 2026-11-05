@@ -226,6 +226,8 @@ export interface TaskPatch {
   /** Fields a task file does not know, each set, or taken out with "". */
   fields?: Record<string, string | string[]>;
   labels?: string[];
+  /** Its place in its column's order (core `byRank`); null takes it out. */
+  rank?: string | null;
   title?: string;
 }
 
