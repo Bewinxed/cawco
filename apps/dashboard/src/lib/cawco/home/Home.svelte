@@ -36,7 +36,6 @@
   let {
     variant,
     wide = false,
-    markedElsewhere,
   }: {
     /** `page` is the phone's home; `rail` is the wide screen's sidebar. */
     variant: "page" | "rail";
@@ -46,8 +45,6 @@
      * already, so the page holds the groups alone, at the reading measure.
      */
     wide?: boolean;
-    /** In the rail: the open conversation's row is the project tree's to mark. */
-    markedElsewhere?: (id: string) => boolean;
   } = $props();
 
   const stale = $derived(!home.live);
@@ -198,7 +195,6 @@
     <StartingRows />
     {#if !noFleet}
       <WorkTabs
-        {markedElsewhere}
         onstart={() => newSession()}
         {stale}
         {variant}

@@ -106,21 +106,16 @@
     stale,
     waiting,
     onstart,
-    markedElsewhere,
     variant,
     relaying = $bindable(false),
   }: {
     /**
      * Where the tabs stand: the home page's, or the rail's. Each keeps its
-     * own open trees (open-trees).
+     * own open trees (open-trees). The rail's rows wear no mark for the
+     * conversation in front: its tab is the window's one mark of where you
+     * are (the owner's rule 1).
      */
     variant: "page" | "rail";
-    /**
-     * The open conversation's row is marked elsewhere on screen (the rail's
-     * project tree draws it): the selection is one row, so this list leaves
-     * it unmarked.
-     */
-    markedElsewhere?: (id: string) => boolean;
     /**
      * A change of the rows is in flight (`relay`): the list's heights are
      * driven here, frame by frame. The boxes around the list (this section,
@@ -540,7 +535,7 @@
   <!-- A context line is the parent of delegates listed here, not one of
        the tab's own: its state and name, quietly, and nothing else. -->
   <SessionRow
-    active={current === row.id && !markedElsewhere?.(row.id)}
+    active={variant === "page" && current === row.id}
     {context}
     done={tab === "finished"}
     fold={views[tab].foldOf(row.id)}

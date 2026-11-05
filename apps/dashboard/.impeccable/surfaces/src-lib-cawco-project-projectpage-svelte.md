@@ -13,7 +13,7 @@ Direction: inherits DESIGN.md.
 
 ## The owner's ten rules (binding)
 
-1. One "you are here" mark in the window: the workspace tab. The rail's project row wears none while its tab is in front.
+1. One "you are here" mark in the window: the workspace tab. The rail's rows (a project's, a session's in its tree, Working, Finished and Recent) wear none for the tab in front.
 2. At most one row of tabs or segments between the window's top and the content, at every width: the workspace's tab strip. The views are a menu.
 3. At most two selections from the project to a card.
 4. Each kind of thing is a destination once: each view in the views menu; Project details from the place (from More where the head is compact); Spend from More; Caw's settings in his panel's bar.
@@ -27,7 +27,7 @@ Direction: inherits DESIGN.md.
 ## Regions
 
 - **Head**, one row at every width (ProjectHead): the name (renamed where it stands) and the place (details), the views menu (ViewMenu: every view, the one on screen ticked, Caw's drafts marked) and the filter; trailing, Needs you, New task, Caw's seat (the switch of his panel), and one glass group (Spin off, Full size, More). Under 640px of its own width (a phone, a narrow split) More also holds Spin off, New task, Filter tasks…, Project details and Full size, and Needs you shows its glyph and count.
-- **Needs you**: the count of Caw's questions, the tasks that wait on you and the decision pages waiting on picks (a page a waiting task waits on is counted by the task). Pressed, the next of them opens where it stands: the task beside the board (its own page under 900px) on its review or wait, the page in Decisions, Caw's question standing up in his panel. Pressed again, the one after the thing on screen.
+- **Needs you**: the count of Caw's questions, the tasks that wait on you and the decision pages waiting on picks (a page a waiting task waits on is counted by the task). Walked oldest first across kinds, by how long each has waited (a question since it was raised, a task since its oldest reason, `waitingSince` in needs.svelte.ts; a page since it went pending on you, else its last change). Pressed, the next of them opens where it stands: the task beside the board (its own page under 900px) on its review or wait, the page in Decisions, Caw's question standing up in his panel. Pressed again, the one after the thing on screen.
 - **The view**: Board, Table, Routines, Decisions, Canvas, Calendar, Made, kept and drafted views. No view carries a count.
 - **The task**: beside the view in the split on a desk, its own page with Back under 900px.
 - **Caw's panel**: docked beside the page on a desk, a bottom sheet on a phone; its bar holds his settings (his one on/off), session details, New conversation, Open as a tab, Close. Ask Caw for a view (More) opens it with "Make a view of " in his composer; that send goes as a view request.

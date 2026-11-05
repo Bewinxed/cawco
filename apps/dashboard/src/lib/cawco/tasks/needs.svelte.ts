@@ -11,11 +11,20 @@
  * The project a card stands in is the page's (`setTaskProject`): an
  * action names its task within its project.
  */
+import { waitsOnPick } from "@cawco/core/task-views";
 import { getContext, setContext } from "svelte";
 import { cawco } from "../client.svelte";
 import type { TaskSummary, TaskView } from "../project-tasks";
 
 type Attempted = Pick<TaskSummary | TaskView, "attempts">;
+
+/** A card wait's page, by its artifact: `cawco:decision/<artifact>/<card>`. */
+export const CARD_PAGE = /^cawco:decision\/([^/#?]+)/u;
+
+/** When the artifact (a decision page) became pending on the person, as Needs you holds it; null when it is not. */
+export const pendingSince = (artifactId: string): number | null =>
+  cawco.artifactNeedsOpen.find((need) => need.artifactId === artifactId)
+    ?.raisedAt ?? null;
 
 /** The asks its attempts' sessions stand on. */
 export const asksOf = (task: Attempted) => {
@@ -46,6 +55,33 @@ export const waitsOnYou = (
   asksOf(task).length > 0 ||
   cardsOf(task).length > 0 ||
   actionsOf(projectId, task.id).length > 0;
+
+/**
+ * Since when a task has waited on you, ms epoch: the oldest of its reasons'
+ * times (an attempt's ask raised; a card or canvas of an attempt's session
+ * gone pending; an approved action filed; a card it waits on whose page
+ * went pending; a stage of kind `you`, since its newest attempt handed in),
+ * else its last change. Needs you walks the waits oldest first by it.
+ */
+export function waitingSince(
+  projectId: string,
+  task: Attempted &
+    Pick<TaskSummary, "id" | "kind" | "needsYou" | "updatedAt" | "waits">
+): number {
+  const times = [
+    ...asksOf(task).map((one) => one.request.raisedAt),
+    ...cardsOf(task).map((need) => need.raisedAt),
+    ...actionsOf(projectId, task.id).map((action) => action.createdAt),
+    ...task.waits.filter(waitsOnPick).map((wait) => {
+      const page = CARD_PAGE.exec(wait.href)?.[1];
+      return page ? pendingSince(page) : null;
+    }),
+    task.kind === "you"
+      ? (task.attempts[0]?.result?.at ?? task.attempts[0]?.endedAt)
+      : null,
+  ].filter((at): at is number => typeof at === "number");
+  return times.length > 0 ? Math.min(...times) : task.updatedAt;
+}
 
 const KEY = Symbol("task-project");
 

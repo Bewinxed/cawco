@@ -47,7 +47,16 @@
   import SessionTree from "./SessionTree.svelte";
   import { TreeView } from "./tree-view.svelte";
 
-  let { inset = false }: { inset?: boolean } = $props();
+  let {
+    inset = false,
+  }: {
+    /**
+     * In the rail: its rows wear no mark for the conversation in front,
+     * whose tab is the window's one mark of where you are (the owner's
+     * rule 1).
+     */
+    inset?: boolean;
+  } = $props();
 
   $effect(() => {
     if (!inset) {
@@ -213,7 +222,7 @@
           {@const context = view.shapeOf(row.id)?.context ?? false}
           {@const at = lastAt(row)}
           <SessionRow
-            active={current === row.id}
+            active={!inset && current === row.id}
             {context}
             fold={view.foldOf(row.id)}
             href={conversationHref(row.id, cawco.instanceIndex)}
@@ -243,7 +252,9 @@
             {:else}
               <li>
                 <SessionRow
-                  active={current !== null && current === item.info?.sessionId}
+                  active={!inset &&
+                    current !== null &&
+                    current === item.info?.sessionId}
                   href={item.href}
                   info={item.info}
                   line={item.place}

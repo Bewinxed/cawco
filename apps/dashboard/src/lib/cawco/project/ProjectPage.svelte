@@ -123,7 +123,13 @@
   import { store, stored } from "#lib/cawco/storage.js";
   import BulkBar, { type BulkRun } from "#lib/cawco/tasks/BulkBar.svelte";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
-  import { setTaskProject, waitsOnYou } from "#lib/cawco/tasks/needs.svelte.js";
+  import {
+    CARD_PAGE,
+    pendingSince,
+    setTaskProject,
+    waitingSince,
+    waitsOnYou,
+  } from "#lib/cawco/tasks/needs.svelte.js";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
   import TaskFilterPopover from "#lib/cawco/tasks/TaskFilterPopover.svelte";
   import TaskPane from "#lib/cawco/tasks/TaskPane.svelte";
@@ -846,15 +852,17 @@
    * owner's rule 7; JOURNEY.md, What waits on you): Caw's own questions,
    * each task that waits on you (needs.svelte.ts), and each decision page
    * with picks not made, but a page a waiting task already waits on (one of
-   * its cards), which the task counts. In that order: Caw is held while he
-   * asks, a task's attempt is held on its wait, a page waits for picks.
+   * its cards), which the task counts. Oldest first, whatever its kind, by
+   * how long each has waited (TOM task 2: every wait longest-first, the
+   * next one in reach): a question since it was raised, a task since its
+   * oldest reason (`waitingSince`), a page since it went pending on you
+   * (its Needs-you need), else its last change.
    */
-  type Wait =
+  type Wait = { since: number } & (
     | { kind: "ask" }
     | { kind: "task"; id: string }
-    | { kind: "page"; name: string };
-  /** A card wait's page, by its artifact: `cawco:decision/<artifact>/<card>`. */
-  const CARD_PAGE = /^cawco:decision\/([^/#?]+)/u;
+    | { kind: "page"; name: string }
+  );
   const pagesTasksWaitOn = $derived(
     new Set(
       needsYou.flatMap((task) =>
@@ -865,16 +873,31 @@
       )
     )
   );
-  const waits = $derived<Wait[]>([
-    ...lead.asks.map(() => ({ kind: "ask" }) as const),
-    ...needsYou.map((task) => ({ kind: "task", id: task.id }) as const),
-    ...pagesWaiting
-      .filter(
-        (one) =>
-          one.artifactId === null || !pagesTasksWaitOn.has(one.artifactId)
-      )
-      .map((one) => ({ kind: "page", name: one.name }) as const),
-  ]);
+  const waits = $derived<Wait[]>(
+    [
+      ...lead.asks.map((one): Wait => ({
+        kind: "ask",
+        since: one.request.raisedAt ?? Date.now(),
+      })),
+      ...needsYou.map((task): Wait => ({
+        kind: "task",
+        id: task.id,
+        since: waitingSince(projectId, task),
+      })),
+      ...pagesWaiting
+        .filter(
+          (one) =>
+            one.artifactId === null || !pagesTasksWaitOn.has(one.artifactId)
+        )
+        .map((one): Wait => ({
+          kind: "page",
+          name: one.name,
+          since:
+            (one.artifactId ? pendingSince(one.artifactId) : null) ??
+            one.updatedAt,
+        })),
+    ].sort((a, b) => a.since - b.since)
+  );
   const waitingCount = $derived(waits.length);
   /** The wait on screen now: the open task, or the open decision page. */
   const openWait = $derived(
