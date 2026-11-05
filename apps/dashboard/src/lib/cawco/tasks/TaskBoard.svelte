@@ -1,4 +1,14 @@
 <script lang="ts">
+  import { bringIntoStrip, bringIntoView } from "@cawco/core/bring-into-view";
+  import type { StageKind } from "@cawco/core/views";
+  import { tick } from "svelte";
+  import { dur } from "#lib/cawco/motion/curves.svelte.js";
+  import {
+    type Stage,
+    stageLabel,
+    type TaskSummary,
+  } from "#lib/cawco/project-tasks.js";
+  import { IconArchive } from "#lib/icons.js";
   /**
    * The board view: one column per stage, in the order stages.md names them,
    * each headed by its stage and its count, with a quiet word for its kind
@@ -21,16 +31,7 @@
    * marked new for a moment (`fresh`), and brought into view again when the
    * hub's echo redraws the board.
    */
-  import { bringIntoStrip, bringIntoView } from "@cawco/core/bring-into-view";
-  import type { StageKind } from "@cawco/core/views";
-  import { tick } from "svelte";
-  import { dur } from "#lib/cawco/motion/curves.svelte.js";
-  import {
-    type Stage,
-    stageLabel,
-    type TaskSummary,
-  } from "#lib/cawco/project-tasks.js";
-  import { IconArchive } from "#lib/icons.js";
+  import { COL_PHONE } from "./board-cols.js";
   import { boardDrag, stageDropTarget } from "./board-dnd.svelte.js";
   import NewTaskForm from "./NewTaskForm.svelte";
   import TaskColumn from "./TaskColumn.svelte";
@@ -206,8 +207,9 @@
   data-rail-open={railed && railOpen ? "" : undefined}
 >
   <!-- Under 640px of page (ProjectDock's `@container/project`, a split's
-       pane or a phone) a column takes the board's width less space-8 and
-       the columns snap; the page's scrolling stays the phone's. -->
+       pane or a phone) a column takes the board's width less space-8, the
+       next one peeking, never narrower than a desk's column or the board,
+       and the columns snap; the page's scrolling stays the phone's. -->
   <div
     data-slot="board"
     bind:this={board}
@@ -217,7 +219,7 @@
       tasks.length > 0 && "max-phone:h-auto",
     ]}
     style:--cols="minmax(var(--c-board-col-min), var(--c-board-col-max))"
-    style:--cols-phone="calc(100% - var(--space-8))"
+    style:--cols-phone={COL_PHONE}
   >
     {#each stages as stage (stage.name)}
       {@render column(

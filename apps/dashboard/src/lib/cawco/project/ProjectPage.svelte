@@ -120,6 +120,7 @@
   import Split from "#lib/cawco/side/Split.svelte";
   import { store, stored } from "#lib/cawco/storage.js";
   import BulkBar, { type BulkRun } from "#lib/cawco/tasks/BulkBar.svelte";
+  import { COL_PHONE } from "#lib/cawco/tasks/board-cols.js";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
   import { setTaskProject, waitsOnYou } from "#lib/cawco/tasks/needs.svelte.js";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
@@ -2629,7 +2630,7 @@
         aria-hidden="true"
         class="grid auto-cols-(--skeleton-col) grid-flow-col gap-space-3 overflow-hidden @max-phone/project:auto-cols-(--skeleton-col-phone)"
         style:--skeleton-col={"minmax(var(--c-board-col-min), var(--c-board-col-max))"}
-        style:--skeleton-col-phone="calc(100% - var(--space-8))"
+        style:--skeleton-col-phone={COL_PHONE}
         out:revealOut
       >
         {#each stageList.filter((stage) => stage.kind !== "dropped") as stage (stage.name)}
