@@ -15,14 +15,14 @@ import {
   t233Landed,
 } from "./fixtures";
 import { answered, type Play, press, screenArgs } from "./plays";
-import TaskRecord from "./TaskRecord.svelte";
+import TaskRecordSheet from "./TaskRecordSheet.svelte";
 
 const file = { what: "file" } as const;
 const editing = { what: "file", editing: true } as const;
 
 export default {
   title: "Task/One record/File",
-  component: TaskRecord,
+  component: TaskRecordSheet,
   args: {
     ...screenArgs,
     view: t218Filed,

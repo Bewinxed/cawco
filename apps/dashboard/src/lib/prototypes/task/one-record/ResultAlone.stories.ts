@@ -7,13 +7,13 @@
  */
 import { READ_AT, t142Review, t218Passed, t218Review } from "./fixtures";
 import { answered, type Play, press, screenArgs } from "./plays";
-import TaskRecord from "./TaskRecord.svelte";
+import TaskRecordSheet from "./TaskRecordSheet.svelte";
 
 const phone = { viewport: 390 };
 
 export default {
   title: "Task/One record/Result on its own",
-  component: TaskRecord,
+  component: TaskRecordSheet,
   args: {
     ...screenArgs,
     view: t142Review,
