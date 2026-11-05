@@ -32,6 +32,7 @@
   import { SPEND_ON_CAP } from "@cawco/core/words/spend";
   import { onMount, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import * as NativeSelect from "#lib/components/ui/native-select/index.js";
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
@@ -60,6 +61,7 @@
   import { failureWords } from "../hub-read";
   import { markHue } from "../mark";
   import { land } from "../motion/share.svelte";
+  import StageLookItems from "../project/StageLookItems.svelte";
   import { folderOf } from "../projects";
   import RowFault from "../RowFault.svelte";
   import { money } from "../usage";
@@ -67,6 +69,7 @@
   import { type AreaChange, changeArea, deleteArea } from "./areas";
   import { ownKinds } from "./facts.svelte";
   import { deleteQuestion } from "./fallback";
+  import { areaMark, lookPatch } from "./mark";
 
   let { id }: { id: string } = $props();
 
@@ -89,7 +92,8 @@
 
   /* ── Writes ─────────────────────────────────────────────────────── */
 
-  type Field = "name" | "account" | "atLimit" | "cawMode" | "cap" | "onCap";
+  type Field =
+    "name" | "look" | "account" | "atLimit" | "cawMode" | "cap" | "onCap";
   /** The value asked while the hub answers, by field. */
   let asked = $state<Partial<Record<Field, AreaChange>>>({});
   let faults = $state<Partial<Record<Field, string>>>({});
@@ -322,16 +326,49 @@
         <Button href="/config/areas" label={words.backTo} variant="outline" />
       </div>
     {:else}
+      {@const mark = areaMark(
+        {
+          icon: asked.look?.icon ?? area?.icon ?? null,
+          color: asked.look?.color ?? area?.color ?? null,
+        },
+        section.hue
+      )}
+
       <header data-slot="head" class="flex items-start gap-space-3">
-        <span
-          data-slot="tile"
-          class="mt-space-row inline-flex size-c-mark flex-none items-center justify-center rounded-sm bg-surface-raised text-(--hue) shadow-tile *:size-icon-md"
-          data-share="icon:/config/areas/{id}"
-          style:--hue={section.hue}
-          {@attach land(() => `icon:/config/areas/${id}`)}
-        >
-          <section.icon />
-        </span>
+        <!-- Its tile is its look's control, as on its row: its glyph,
+             then its colour (StageLookItems). -->
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger
+            disabled={area === undefined || cawco.hub !== "connected"}
+          >
+            {#snippet child({ props })}
+              <button
+                {...props}
+                aria-label={words.lookFor(area?.name ?? "")}
+                class="mt-space-row inline-flex size-c-mark flex-none items-center justify-center rounded-sm bg-surface-raised text-(--hue) shadow-tile touch-hit pointer-hit *:size-icon-md focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
+                data-share="icon:/config/areas/{id}"
+                data-slot="tile"
+                style:--hue={mark.hue}
+                title={words.lookFor(area?.name ?? "")}
+                type="button"
+                {@attach land(() => `icon:/config/areas/${id}`)}
+              >
+                <mark.glyph />
+              </button>
+            {/snippet}
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="start" width="tiles">
+            <StageLookItems
+              bare={section.hue}
+              onlook={(patch) =>
+                write("look", lookPatch(patch), "change the area's look")}
+              stage={{
+                icon: (asked.look?.icon ?? area?.icon) || undefined,
+                color: (asked.look?.color ?? area?.color) || undefined,
+              }}
+            />
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
         <div class="flex min-w-0 flex-auto flex-col gap-space-2">
           <form
             onsubmit={(event) => {
@@ -352,6 +389,11 @@
             again={again("name", "rename the area")}
             data-name-fault
             reason={faults.name ?? null}
+          />
+          <RowFault
+            again={again("look", "change the area's look")}
+            data-look-fault
+            reason={faults.look ?? null}
           />
           <p class="text-pretty text-ink-muted">
             {words.takers(projects.length)}

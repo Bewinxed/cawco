@@ -16,6 +16,7 @@
 import type { ProjectAtLimit } from "./accounts";
 import type { OfferedMode } from "./harness";
 import type { CapPeriod, OnCap } from "./project-conversation";
+import type { StageColor, StageIcon } from "./views";
 
 /** Where a setting in effect came from: the project's own, its area's, or the fleet's. */
 export type SettingSource = "project" | "area" | "fleet";
@@ -46,6 +47,17 @@ export interface OwnSettings {
   onCap: OnCap | null;
 }
 
+/**
+ * An area's look on its list and its page, from a stage's vocabulary (core
+ * views.ts): its own, never taken by its projects.
+ */
+export interface AreaLook {
+  /** Its colour; null: the Areas section's hue. */
+  color: StageColor | null;
+  /** Its glyph; null: the area's folder. */
+  icon: StageIcon | null;
+}
+
 /** What the fleet sets beneath every area: its Caw mode and what reaching a cap does. */
 export interface FleetSettings {
   cawMode: OfferedMode | null;
@@ -72,8 +84,8 @@ export interface SettingsInEffect {
   onCap: Sourced<OnCap>;
 }
 
-/** An area as the hub keeps it: its name, its place in the list, and its settings. */
-export interface Area extends OwnSettings {
+/** An area as the hub keeps it: its name, its place in the list, its look and its settings. */
+export interface Area extends OwnSettings, AreaLook {
   createdAt: Date;
   id: string;
   name: string;

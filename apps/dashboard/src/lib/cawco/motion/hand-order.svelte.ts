@@ -14,11 +14,28 @@
  *               data-id={id}>
  *
  * The rows are the list's direct children, one step apart; the grabbed
- * control carries `data-id`, which the arrows' focus follows.
+ * control carries `data-id`, which the arrows' focus follows. A press lifts
+ * the row only once it travels (`TRAVEL`): one that doesn't stays the
+ * control's own press, so a handle may also be a button (an area's tile
+ * opens its look), and the click a carried row ends on is swallowed.
  */
 import { tick } from "svelte";
 import { dur, ease, motionOk } from "./curves.svelte";
 import { REFLOW_REREAD } from "./rows.svelte";
+
+/** How far a press travels, in px, before it lifts the row: under it, it is a press on the control. */
+const TRAVEL = 4;
+
+/** Swallows the one click a carried row's let-go makes on its control. */
+const swallowClick = (control: HTMLElement) => {
+  const swallow = (event: MouseEvent) => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+  control.addEventListener("click", swallow, { capture: true, once: true });
+  // A let-go off the control makes no click: the guard goes with the task.
+  setTimeout(() => control.removeEventListener("click", swallow, true));
+};
 
 export class HandOrder {
   /** The row in the hand. */
@@ -55,9 +72,16 @@ export class HandOrder {
     let at = from;
     const y0 = event.clientY;
     row.setPointerCapture(event.pointerId);
-    this.held = id;
+    let lifted = false;
     const move = (ev: PointerEvent) => {
       const dy = ev.clientY - y0;
+      if (!lifted) {
+        if (Math.abs(dy) < TRAVEL) {
+          return;
+        }
+        lifted = true;
+        this.held = id;
+      }
       const next = Math.max(
         0,
         Math.min(order.length - 1, Math.round(from + dy / step))
@@ -75,6 +99,10 @@ export class HandOrder {
       row.removeEventListener("pointermove", move);
       row.removeEventListener("pointerup", drop);
       row.removeEventListener("pointercancel", drop);
+      if (!lifted) {
+        return;
+      }
+      swallowClick(row);
       const left = this.carried;
       this.held = null;
       this.carried = 0;

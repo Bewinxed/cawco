@@ -31,6 +31,10 @@ import {
   type ProjectAtLimit,
   type SettingSource,
   type SettingsInEffect,
+  STAGE_COLORS,
+  STAGE_ICONS,
+  type StageColor,
+  type StageIcon,
 } from "@cawco/core";
 import { type AreaSettingName, areaWords } from "@cawco/core/words/areas";
 import { Elysia, status, t } from "elysia";
@@ -71,6 +75,9 @@ export interface AreaSettingsAsk {
   /** Its budget: an amount above 0 and its period, or null for none. */
   cap?: { period: CapPeriod; usd: number } | null;
   cawMode?: OfferedMode | null;
+  /** Its look: a stage's colour and glyph, or null for the section's. */
+  color?: StageColor | null;
+  icon?: StageIcon | null;
   name?: string;
   onCap?: OnCap | null;
 }
@@ -213,6 +220,8 @@ export const createAreas = ({
       accountAtLimit: ask.accountAtLimit,
       cawMode: ask.cawMode,
       onCap: ask.onCap,
+      icon: ask.icon,
+      color: ask.color,
       ...capColumns(ask.cap),
     };
     return Object.fromEntries(
@@ -450,6 +459,12 @@ export const createAreas = ({
               )
             ),
             onCap: t.Optional(t.Nullable(ON_CAP)),
+            icon: t.Optional(
+              t.Nullable(t.Union(STAGE_ICONS.map((icon) => t.Literal(icon))))
+            ),
+            color: t.Optional(
+              t.Nullable(t.Union(STAGE_COLORS.map((color) => t.Literal(color))))
+            ),
           }),
         },
         ({ params, body }) =>

@@ -172,9 +172,11 @@ export const areasScreenWords = {
     `${AREA_SETTING_LABELS[setting]}: the fleet's`,
   setsNothing: "Sets nothing: its projects take the fleet's settings",
   /** The order handle, for a screen reader. */
+  /** The tile, for a screen reader: a press opens its look, a drag or the arrows move it. */
   place: (name: string, at: number, of: number) =>
-    `${name}, ${at} of ${of}. Drag, or press the up and down arrows, to move it`,
-  draggable: "draggable",
+    `${name}'s look, ${at} of ${of}. Press to change it; drag, or press the up and down arrows, to move ${name}`,
+  /** The tile's tooltip on a desk, and the page's tile. */
+  lookFor: (name: string) => `Change ${name}'s look`,
   deleteArea: (name: string) => `Delete ${name}…`,
 
   // ── Deleting ──

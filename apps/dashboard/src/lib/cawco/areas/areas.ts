@@ -10,6 +10,7 @@ import type { Area, CapAmount } from "@cawco/core/areas";
 import type { DelegateType } from "@cawco/core/delegate-types";
 import type { OfferedMode } from "@cawco/core/harness";
 import type { OnCap } from "@cawco/core/project-conversation";
+import type { StageColor, StageIcon } from "@cawco/core/views";
 import { hubCall, jsonBody } from "#lib/cawco/hub-read.js";
 
 /** An area as the API answers it: its row and the projects in it, oldest first. */
@@ -24,6 +25,9 @@ export interface AreaChange {
   accountAtLimit?: ProjectAtLimit;
   cap?: CapAmount | null;
   cawMode?: OfferedMode | null;
+  /** Its look (core `AreaLook`): null puts the section's back. */
+  color?: StageColor | null;
+  icon?: StageIcon | null;
   name?: string;
   onCap?: OnCap | null;
 }

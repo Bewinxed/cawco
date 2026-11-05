@@ -15,9 +15,11 @@
    * from each project's settings in effect; what the hub then said stands
    * above the list until the next change.
    */
+  import type { StageColor, StageIcon } from "@cawco/core/views";
   import { areasScreenWords as words } from "@cawco/core/words/areas";
   import { tick, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -33,9 +35,17 @@
   import { unfold } from "../motion/fold.svelte";
   import { HandOrder } from "../motion/hand-order.svelte";
   import { reflow } from "../motion/rows.svelte";
+  import StageLookItems from "../project/StageLookItems.svelte";
   import RowFault from "../RowFault.svelte";
-  import { type AreaView, createArea, deleteArea, orderAreas } from "./areas";
+  import {
+    type AreaView,
+    changeArea,
+    createArea,
+    deleteArea,
+    orderAreas,
+  } from "./areas";
   import { deleteQuestion } from "./fallback";
+  import { areaMark, lookPatch } from "./mark";
   import { areaSettings } from "./summary";
 
   const store = configStore();
@@ -65,6 +75,36 @@
   const hand = new HandOrder();
   let orderFault = $state<string | null>(null);
   let orderTried = $state<string[] | null>(null);
+
+  /* ── Look ─────────────────────────────────────────────────────── */
+
+  /** The area whose look is open, by id. */
+  let lookOpen = $state<string | null>(null);
+  let lookFault = $state<string | null>(null);
+  /** What a picked tile asks: a glyph, or a colour (none: undefined). */
+  interface LookAsk {
+    color?: StageColor;
+    icon?: StageIcon;
+  }
+  let lookTried: { id: string; asked: LookAsk } | null = null;
+
+  async function keepLook(id: string, asked: LookAsk): Promise<void> {
+    const patch = lookPatch(asked);
+    lookTried = { id, asked };
+    lookFault = null;
+    try {
+      const { said: _said, ...view } = await changeArea(
+        id,
+        patch,
+        "change the area's look"
+      );
+      store.areas.value = (store.areas.value ?? []).map((one) =>
+        one.id === id ? view : one
+      );
+    } catch (error) {
+      lookFault = failureWords(error);
+    }
+  }
 
   async function keepOrder(ids: string[]): Promise<void> {
     orderTried = ids;
@@ -190,6 +230,12 @@
     data-order-fault
     reason={orderFault}
   />
+  <RowFault
+    again={() =>
+      lookTried ? keepLook(lookTried.id, lookTried.asked) : undefined}
+    data-look-fault
+    reason={lookFault}
+  />
 
   {#if areas.length === 0 && !making}
     <EmptyState
@@ -217,6 +263,7 @@
         {@attach reflow()}
       >
         {#each shown as area, index (area.id)}
+          {@const mark = areaMark(area, section.hue)}
           {@const settings = settingsOf(area)}
           {@const names = projectNames(area)}
           <li
@@ -234,47 +281,88 @@
               style:--area-cols={"var(--c-mark) minmax(0, 1fr) auto var(--c-area-count-w) auto"}
               style:--area-cols-phone="var(--c-mark) minmax(0, 1fr) auto"
             >
-              <!-- The order handle: the area's tile, grabbed to drag it, or
-                   focused and moved with the arrows. -->
-              <button
-                data-slot="handle"
-                aria-label={words.place(area.name, index + 1, shown.length)}
-                aria-roledescription={words.draggable}
-                class="relative z-1 inline-flex size-c-mark cursor-grab touch-none items-center justify-center rounded-sm bg-surface-raised text-(--hue) shadow-tile select-none touch-hit pointer-hit in-data-held:cursor-grabbing focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) max-phone:row-span-2 max-phone:self-start"
-                data-id={area.id}
-                onkeydown={(event) =>
-                  hand.nudge(
-                    event,
-                    area.id,
-                    order,
-                    (ids) => {
-                      handOrder = ids;
-                    },
-                    list,
-                    keepOrder
-                  )}
-                onpointerdown={(event) =>
-                  hand.grab(
-                    event,
-                    area.id,
-                    order,
-                    (ids) => {
-                      handOrder = ids;
-                    },
-                    list,
-                    keepOrder
-                  )}
-                style:--hue={section.hue}
-                type="button"
+              <!-- The area's tile: a press opens its look (its glyph, then
+                   its colour, as a draft stage's glyph does); a press that
+                   travels lifts the row (HandOrder lifts it past TRAVEL and
+                   swallows the click it ends on); focused, the arrows move
+                   it and Enter opens the look. The menu's own press and
+                   arrow opening give way to those (their handlers run
+                   first and cancel), so the look opens on the click. -->
+              <DropdownMenu.Root
+                bind:open={
+                  () => lookOpen === area.id,
+                  (next) => {
+                    lookOpen = next ? area.id : null;
+                  }
+                }
               >
-                <IconToolFiles
-                  class="size-icon-md flex-none transition-opacity duration-(--dur-control) ease-out can-hover:group-hover/row:opacity-0"
-                />
-                <span
-                  aria-hidden="true"
-                  class="absolute inset-0 m-auto h-space-4 w-c-drag-dots-w opacity-0 drag-dots transition-opacity duration-(--dur-control) ease-out can-hover:group-hover/row:opacity-100"
-                ></span>
-              </button>
+                <DropdownMenu.Trigger
+                  disabled={cawco.hub !== "connected"}
+                  onclick={(event: MouseEvent) => {
+                    // A pointer's click (a key's is the menu's own, detail 0).
+                    if (event.detail !== 0) {
+                      lookOpen = lookOpen === area.id ? null : area.id;
+                    }
+                  }}
+                  onkeydown={(event: KeyboardEvent) =>
+                    hand.nudge(
+                      event,
+                      area.id,
+                      order,
+                      (ids) => {
+                        handOrder = ids;
+                      },
+                      list,
+                      keepOrder
+                    )}
+                  onpointerdown={(event: PointerEvent) =>
+                    hand.grab(
+                      event,
+                      area.id,
+                      order,
+                      (ids) => {
+                        handOrder = ids;
+                      },
+                      list,
+                      keepOrder
+                    )}
+                  onpointerup={(event: PointerEvent) => {
+                    // A touch's let-go is the click's, never the menu's own toggle.
+                    if (event.pointerType === "touch") {
+                      event.preventDefault();
+                    }
+                  }}
+                >
+                  {#snippet child({ props })}
+                    <button
+                      {...props}
+                      aria-label={words.place(
+                        area.name,
+                        index + 1,
+                        shown.length
+                      )}
+                      class="relative z-1 inline-flex size-c-mark cursor-grab touch-none items-center justify-center rounded-sm bg-surface-raised text-(--hue) shadow-tile select-none touch-hit pointer-hit in-data-held:cursor-grabbing focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) max-phone:row-span-2 max-phone:self-start"
+                      data-id={area.id}
+                      data-slot="handle"
+                      style={`--hue: ${mark.hue}`}
+                      title={words.lookFor(area.name)}
+                      type="button"
+                    >
+                      <mark.glyph class="size-icon-md flex-none" />
+                    </button>
+                  {/snippet}
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content align="start" width="tiles">
+                  <StageLookItems
+                    bare={section.hue}
+                    onlook={(patch) => keepLook(area.id, patch)}
+                    stage={{
+                      icon: area.icon ?? undefined,
+                      color: area.color ?? undefined,
+                    }}
+                  />
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
 
               <span class="flex min-w-0 flex-col gap-space-row">
                 <a

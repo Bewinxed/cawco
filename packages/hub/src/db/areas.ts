@@ -1,4 +1,4 @@
-import type { Area, OwnSettings } from "@cawco/core";
+import type { Area, AreaLook, OwnSettings } from "@cawco/core";
 import { asc, count, eq, max } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
@@ -14,8 +14,8 @@ import {
 /** An area as the hub keeps it: core `Area`, its columns one for one. */
 export type AreaRow = typeof areas.$inferSelect & Area;
 
-/** What an area's settings write changes: any of its own settings, null clearing one. */
-export type AreaSettingsChange = Partial<OwnSettings>;
+/** What an area's settings write changes: any of its own settings or its look, null clearing one. */
+export type AreaSettingsChange = Partial<OwnSettings & AreaLook>;
 
 /**
  * What a delete took: the projects it ungrouped, and how many rules and

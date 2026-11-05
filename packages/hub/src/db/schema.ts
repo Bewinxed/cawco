@@ -49,6 +49,8 @@ import type {
   SessionEndIntent,
   SigninState,
   SpawnPayload,
+  StageColor,
+  StageIcon,
   StagesTemplate,
   StarterGlyph,
   StarterOutcome,
@@ -473,6 +475,10 @@ export const areas = sqliteTable("areas", {
   capPeriod: text("cap_period").$type<CapPeriod>(),
   /** What reaching the cap does; null: the fleet's. */
   onCap: text("on_cap").$type<OnCap>(),
+  /** Its glyph, by the word a stage's look names it by (core views.ts); null: the area's folder. */
+  icon: text("icon").$type<StageIcon>(),
+  /** Its colour, a stage's (core views.ts); null: the Areas section's hue. */
+  color: text("color").$type<StageColor>(),
   createdAt: stampedNow("created_at"),
 });
 

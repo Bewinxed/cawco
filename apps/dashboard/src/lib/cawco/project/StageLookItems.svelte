@@ -21,14 +21,16 @@
   let {
     stage,
     onlook,
+    bare = "var(--ink-muted)",
   }: {
-    stage: Stage;
+    /** The look it stands with now: a stage's, or an area's. */
+    stage: Pick<Stage, "icon" | "color">;
     onlook: (patch: Pick<Stage, "icon" | "color">) => void;
+    /** The glyph tiles' ink with no colour picked: an area's is its section's hue. */
+    bare?: string;
   } = $props();
 
-  const hue = $derived(
-    stage.color ? STAGE_HUES[stage.color] : "var(--ink-muted)"
-  );
+  const hue = $derived(stage.color ? STAGE_HUES[stage.color] : bare);
 </script>
 
 <DropdownMenu.Label>{words.glyph}</DropdownMenu.Label>

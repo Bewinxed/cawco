@@ -16,6 +16,8 @@ typeOverrides:
     ActionState: OpenEnums.ActionState
     AgentRowAuth: OpenEnums.AgentRowAuth
     AreaViewCawMode: OpenEnums.AreaViewCawMode
+    AreaViewColor: OpenEnums.AreaViewColor
+    AreaViewIcon: OpenEnums.AreaViewIcon
     ArtifactDoes: OpenEnums.ArtifactDoes
     ArtifactKind: OpenEnums.ArtifactKind
     ArtifactReadSentBy: OpenEnums.ArtifactReadSentBy
@@ -195,9 +197,7 @@ typeOverrides:
     Sourced.T: OpenEnums.Sourced.T
     Sourced.T_1: OpenEnums.Sourced.T_1
     SshJoinJobState: OpenEnums.SshJoinJobState
-    StageColor: OpenEnums.StageColor
     StageHooksBy: OpenEnums.StageHooksBy
-    StageIcon: OpenEnums.StageIcon
     StageKind: OpenEnums.StageKind
     StageStatus: OpenEnums.StageStatus
     StageToolchain: OpenEnums.StageToolchain
