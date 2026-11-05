@@ -120,9 +120,9 @@
  * 23. Name once, its ask once, no route (owner: "ur also repeating the
  *     title of the card twice, the url should have the description there
  *     instead"; the artifact purpose spec: the ask is that line): at the desk
- *     and at 390 the line under the head's name is the canvas's ask, one line inside the panel and whole in its
- *     tooltip; the name stands once across the panel and its canvas page,
- *     and no text in either holds `/@cawco/`.
+ *     and at 390 the line under the head's title is the canvas's ask, one line inside the panel and whole in its
+ *     tooltip; the title stands once across the panel and its canvas page,
+ *     its slug in neither, and no text in either holds `/@cawco/`.
  * 24. The hub's map of that canvas (`GET …/artifacts/:id/map`, what the
  *     panel's Map reads) answers Card in the middle with its states, its
  *     states file from the toolchain root, and its frames' thumbnail from
@@ -135,7 +135,7 @@
  *     on the cover no longer than its stage is given (core `STAGE_READY_MS`):
  *     then the well says "The canvas couldn't be drawn", why ("The stage never
  *     answered within 60s."), and offers Try again and Remove. Remove is
- *     asked in place ("Remove never-drawn?", Cancel and Remove canvas);
+ *     asked in place ("Remove <its title>?", Cancel and Remove canvas);
  *     its confirm takes the canvas out of the session's artifacts.
  *
  * A delegate's sheet in its parent's panel (the person's change there, as
@@ -944,73 +944,86 @@ const scaled = (transform: string, to: number) => {
 };
 
 /**
- * The canvas's name and ask in legs 18 and 23: words no other text
- * in the panel holds. The name is short on purpose: its trigger (glyph, name,
- * chevron) stays under side/head.ts `NAME_KEEPS` (120px), the room leg 18's
- * desk claim stands on. At a 523px pane the head's room is 509px; every
- * control whole needs the name's width + 392px, so a name at the cap leaves
- * the mode 3px short (1ab897290's "probe-panel-card" did), and "pcard"'s
- * 92px leaves 25px to spare.
+ * The canvas's name, title and ask in legs 18 and 23: words no other text
+ * in the panel holds. The head names it by its title, short on purpose: its
+ * trigger (glyph, title, chevron) stays under side/head.ts `NAME_KEEPS`
+ * (120px), the room leg 18's desk claim stands on. At a 523px pane the
+ * head's room is 509px; every control whole needs the title's width +
+ * 392px, so a title at the cap leaves the mode 3px short and the head rule
+ * stands it in its one-button form (1ab897290's "probe-panel-card" did, and
+ * so did a "Probe judge artifact" title, 173px), and "Pcard"'s ~95px leaves
+ * room to spare. The slug `name` is shown nowhere (leg 23).
  */
 const PANEL_NAME = "pcard";
-/** The ask the panel's artifact is made with: the head's line under the name reads it (leg 23). */
+const PANEL_TITLE = "Pcard";
+/** The ask the panel's artifact is made with: the head's line under the title reads it (leg 23). */
 const PANEL_ASK = "Judge the card in its panel, at every width";
 
-/** Leg 23's read: the head's line under the name and where it stands, and the name and any route across the rendered text of the panel and its canvas page. */
+/** Leg 23's read: the head's line under the title and where it stands, and the title, the slug and any route across the rendered text of the panel and its canvas page. */
 async function describedOf(page: Page) {
   const outer = await page
     .locator(PANE)
     .first()
-    .evaluate((pane, name) => {
-      const card = (pane.closest('[data-slot="side-card"]') ??
-        pane) as HTMLElement;
-      const line = card.querySelector<HTMLElement>('[data-slot="subtitle"]');
-      const box = line?.getBoundingClientRect();
-      const edge = card.getBoundingClientRect();
-      // What is drawn, not what is hidden (a control in More, a band's hidden name).
-      const text = card.innerText;
-      return {
-        line: line?.textContent ?? null,
-        tooltip: line?.title ?? null,
-        inside:
-          !!box && box.left >= edge.left - 0.5 && box.right <= edge.right + 0.5,
-        oneLine:
-          !!line &&
-          !!box &&
-          box.height <=
-            Number.parseFloat(getComputedStyle(line).lineHeight) + 1,
-        names: text.split(name).length - 1,
-        route: text.includes("/@cawco/"),
-      };
-    }, PANEL_NAME);
+    .evaluate(
+      (pane, words) => {
+        const card = (pane.closest('[data-slot="side-card"]') ??
+          pane) as HTMLElement;
+        const line = card.querySelector<HTMLElement>('[data-slot="subtitle"]');
+        const box = line?.getBoundingClientRect();
+        const edge = card.getBoundingClientRect();
+        // What is drawn, not what is hidden (a control in More, a band's hidden name).
+        const text = card.innerText;
+        return {
+          line: line?.textContent ?? null,
+          tooltip: line?.title ?? null,
+          inside:
+            !!box &&
+            box.left >= edge.left - 0.5 &&
+            box.right <= edge.right + 0.5,
+          oneLine:
+            !!line &&
+            !!box &&
+            box.height <=
+              Number.parseFloat(getComputedStyle(line).lineHeight) + 1,
+          names: text.split(words.title).length - 1,
+          slugs: text.split(words.name).length - 1,
+          route: text.includes("/@cawco/"),
+        };
+      },
+      { name: PANEL_NAME, title: PANEL_TITLE }
+    );
   const frame = await (
     await page.locator(FRAME).first().elementHandle()
   )?.contentFrame();
   const inner = frame
-    ? await frame.evaluate((name) => {
-        // The chrome's shadow root has no innerText: its drawn text nodes, so
-        // the band's name, hidden in a frame (chrome.ts), counts none.
-        const root = document.getElementById("cawco-chrome")?.shadowRoot;
-        const shown: string[] = [];
-        if (root) {
-          const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-          for (let node = walk.nextNode(); node; node = walk.nextNode()) {
-            if (node.parentElement?.checkVisibility()) {
-              shown.push(node.textContent ?? "");
+    ? await frame.evaluate(
+        (words) => {
+          // The chrome's shadow root has no innerText: its drawn text nodes, so
+          // the band's name, hidden in a frame (chrome.ts), counts none.
+          const root = document.getElementById("cawco-chrome")?.shadowRoot;
+          const shown: string[] = [];
+          if (root) {
+            const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+            for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+              if (node.parentElement?.checkVisibility()) {
+                shown.push(node.textContent ?? "");
+              }
             }
           }
-        }
-        const text = `${document.body.innerText}\n${shown.join("\n")}`;
-        return {
-          names: text.split(name).length - 1,
-          route: text.includes("/@cawco/"),
-        };
-      }, PANEL_NAME)
+          const text = `${document.body.innerText}\n${shown.join("\n")}`;
+          return {
+            names: text.split(words.title).length - 1,
+            slugs: text.split(words.name).length - 1,
+            route: text.includes("/@cawco/"),
+          };
+        },
+        { name: PANEL_NAME, title: PANEL_TITLE }
+      )
     : null;
   return { ...outer, frame: inner };
 }
 
-/** What leg 23 finds wrong in one read, each as what it compared (none: it holds): the ask under the name, one line inside the panel, the name once across panel and page, no route. */
+/** What leg 23 finds wrong in one read, each as what it compared (none: it holds): the ask under the title, one line inside the panel, the title once across panel and page, the slug nowhere, no route. */
 const describedWrong = (read: Awaited<ReturnType<typeof describedOf>>) => {
   const names = read.names + (read.frame?.names ?? 0);
   return [
@@ -1025,7 +1038,10 @@ const describedWrong = (read: Awaited<ReturnType<typeof describedOf>>) => {
     read.frame ? "" : "no canvas frame to read",
     names === 1
       ? ""
-      : `name ${read.names} in the panel + ${read.frame?.names ?? "?"} in the page = ${names}, not 1`,
+      : `title ${read.names} in the panel + ${read.frame?.names ?? "?"} in the page = ${names}, not 1`,
+    read.slugs + (read.frame?.slugs ?? 0) === 0
+      ? ""
+      : `slug ${read.slugs} in the panel + ${read.frame?.slugs ?? "?"} in the page, not 0`,
     read.route || read.frame?.route ? "a route stands" : "",
   ].filter(Boolean);
 };
@@ -1044,7 +1060,7 @@ async function panelLegs(
     name: PANEL_NAME,
     file: STORY,
     does: "judge",
-    title: "Probe judge artifact",
+    title: PANEL_TITLE,
     ask: PANEL_ASK,
   });
   await desk
@@ -1187,7 +1203,7 @@ async function panelLegs(
     described[`phone-${theme}`] = await describedOf(phone);
   }
   kit.check(
-    "23: at the desk and at 390 the line under the name is the canvas's ask, one line inside the panel and whole in its tooltip; the name stands once across the panel and its page, and no text holds /@cawco/",
+    "23: at the desk and at 390 the line under the title is the canvas's ask, one line inside the panel and whole in its tooltip; the title stands once across the panel and its page, its slug nowhere, and no text holds /@cawco/",
     Object.keys(described).length === 3 &&
       Object.values(described).every(
         (read) => describedWrong(read).length === 0
@@ -1422,6 +1438,9 @@ async function treeSheetLeg(
   await desk.close();
 }
 
+/** Leg 25's canvas's title: its Remove asks by it. */
+const NEVER_DRAWN_TITLE = "Card that never draws";
+
 /** Leg 25: a canvas whose page never comes stands on the cover no longer than its stage is given. */
 async function neverDrawnLeg(
   kit: Kit,
@@ -1449,7 +1468,7 @@ async function neverDrawnLeg(
     kind: "component",
     name: "never-drawn",
     does: "judge",
-    title: "Probe judge artifact",
+    title: NEVER_DRAWN_TITLE,
     ask: "Judge the card while its page never comes",
     file: STORY,
   });
@@ -1514,9 +1533,9 @@ async function neverDrawnLeg(
     () => false
   );
   kit.check(
-    "25: its Remove is asked in place (Remove never-drawn?, Cancel, Remove canvas), nothing goes before the confirm, and the confirm removes the canvas",
+    "25: its Remove is asked in place (Remove <its title>?, Cancel, Remove canvas), nothing goes before the confirm, and the confirm removes the canvas",
     before.includes("never-drawn") &&
-      asked?.title === "Remove never-drawn?" &&
+      asked?.title === sheetWords.removeTitle(NEVER_DRAWN_TITLE) &&
       asked.buttons.includes("Cancel") &&
       asked.buttons.includes(sheetWords.removeConfirm) &&
       stillThere &&

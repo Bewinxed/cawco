@@ -11872,6 +11872,9 @@ const FORTY_WORDS = Array.from(
 /** The longest name an artifact takes (core `ARTIFACT_NAME`: 63 characters), unbroken. */
 const LONGEST_NAME =
   "a-name-that-runs-to-every-character-an-artifact-name-may-hold-x";
+/** The longest title an artifact takes (core `ARTIFACT_TITLE_LIMIT`: 80 characters): what its chip names it by. */
+const LONGEST_TITLE =
+  "The longest title an artifact may hold: eighty characters of plain words, in all";
 
 /** Each chip in the agent's message on `screen`: its box, its label's, its line's, its name and whether its label is cut. */
 const chipsRead = (screen: Page, ids: Record<string, string>) =>
@@ -11935,7 +11938,7 @@ const chipsRead = (screen: Page, ids: Record<string, string>) =>
 
 /**
  * Chip labels (2): a 40-word decision question, a 40-word session title, a
- * pin on 40 words and the longest artifact name, each named by the agent,
+ * pin on 40 words and the longest artifact title, each named by the agent,
  * at 1440 and at 390: every chip stands inside its line, its label at most
  * `c-inline-chip-max-w` (32ch, an absolute length) and cut with an
  * ellipsis, the chip held to its line's room in an auto-sized grid track
@@ -11960,7 +11963,7 @@ no = Option("no", "No", "It spills.", false, [], "A broken line.")`,
   const longPage = await on.call(CREATE, {
     kind: "page",
     does: "judge",
-    title: "Probe judge artifact",
+    title: LONGEST_TITLE,
     ask: "Judge this page: pin anything that reads wrong",
     name: LONGEST_NAME,
     html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0;font:18px/1.6 system-ui}main{padding:24px}</style></head><body><main><p id="long">${FORTY_WORDS}.</p></main></body></html>`,
@@ -12001,7 +12004,7 @@ no = Option("no", "No", "It spills.", false, [], "A broken line.")`,
   );
   await agentSays(
     on,
-    `Long names: ${cardLink}, [${LONGEST_NAME}](cawco:artifact/${pid}), [the words](cawco:pin/${pid}/1) and [this session](cawco:session/${on.session}).`
+    `Long names: ${cardLink}, [${LONGEST_TITLE}](cawco:artifact/${pid}), [the words](cawco:pin/${pid}/1) and [this session](cawco:session/${on.session}).`
   );
   const selectors = {
     card: `[data-decision-chip="${did}/long"]`,
@@ -12032,7 +12035,7 @@ no = Option("no", "No", "It spills.", false, [], "A broken line.")`,
     !read.pageSpills;
   const full = {
     card: `${FORTY_WORDS}?`,
-    artifact: LONGEST_NAME,
+    artifact: LONGEST_TITLE,
     pin: pinned ? pinName(pinned as unknown as Pin) : "∅",
     session: FORTY_WORDS,
   };
@@ -12048,7 +12051,7 @@ no = Option("no", "No", "It spills.", false, [], "A broken line.")`,
     20_000
   ).catch(() => chipsRead(on.page, selectors));
   on.kit.check(
-    "chip labels (1440): a 40-word decision question, a 40-word session title, a pin on 40 words and the longest artifact name each draw as a chip inside its line, its label at most c-inline-chip-max-w (32ch) and cut with an ellipsis, held to its line's room in an auto-sized grid track too, the card's and the artifact's mark 12px, its whole name its accessible name; nothing spills",
+    "chip labels (1440): a 40-word decision question, a 40-word session title, a pin on 40 words and the longest artifact title each draw as a chip inside its line, its label at most c-inline-chip-max-w (32ch) and cut with an ellipsis, held to its line's room in an auto-sized grid track too, the card's and the artifact's mark 12px, its whole name its accessible name; nothing spills",
     renamed === 200 && held(desk, full),
     `rename ${renamed}; ${JSON.stringify(desk)}`
   );

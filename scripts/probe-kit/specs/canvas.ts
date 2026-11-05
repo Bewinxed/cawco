@@ -2690,7 +2690,7 @@ const created = async (
   const answer = await call(CREATE, {
     kind: "canvas",
     does: "draw",
-    title: "Probe draw artifact",
+    title: "Hub and agent flow",
     ask: "Draw on this canvas",
     name: "flow",
     mermaid: "flowchart LR; A[Hub] --> B[Agent]",
@@ -2734,7 +2734,8 @@ const created = async (
     "1: the panel's menu lists the canvas with its glyph (Solar's pen)",
     (await row.count()) === 1 &&
       glyph &&
-      (await row.locator('[data-slot="row-name"]').textContent()) === "flow",
+      (await row.locator('[data-slot="row-name"]').textContent()) ===
+        "Hub and agent flow",
     `glyph ${glyph}`
   );
   await page.keyboard.press("Escape");
