@@ -449,18 +449,20 @@
 {#snippet switcher()}
   <!-- Whole at every width: the bar's title gives way before its words. -->
   <div class="flex-none" data-slot="caw-tabs">
-    <Tabs
-      onValueChange={(next) => {
-        lead.tab = next === "preview" ? "preview" : "assistant";
-      }}
-      size="compact"
-      value={onPreview ? "preview" : "assistant"}
-    >
-      <TabsList aria-label={cawPanelWords.tabs}>
-        <TabItem label={cawPanelWords.assistant} value="assistant" />
-        <TabItem label={cawPanelWords.preview} value="preview" />
-      </TabsList>
-    </Tabs>
+    <BarGlass form="group">
+      <Tabs
+        onValueChange={(next) => {
+          lead.tab = next === "preview" ? "preview" : "assistant";
+        }}
+        size="bar"
+        value={onPreview ? "preview" : "assistant"}
+      >
+        <TabsList aria-label={cawPanelWords.tabs}>
+          <TabItem label={cawPanelWords.assistant} value="assistant" />
+          <TabItem label={cawPanelWords.preview} value="preview" />
+        </TabsList>
+      </Tabs>
+    </BarGlass>
   </div>
 {/snippet}
 

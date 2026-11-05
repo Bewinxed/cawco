@@ -657,7 +657,10 @@
   class="flex flex-col min-h-0 w-c-comments-w max-w-full bg-surface-raised data-[layout=beside]:h-full data-[layout=sheet]:flex-1 data-[layout=sheet]:w-full"
 >
   <!-- One row: Close leading on the sheet, the title menu, the glass;
-       searching, the field and its Close. -->
+       searching, the field and its Close. The title names a part of the
+       panel, so it stands a step under the panel's own (the head's Row, 16px):
+       Label, 13px at 500, as HIG Typography sets macOS's Headline (13) for a
+       pane's heading, at every width. -->
   <header
     data-slot="head"
     data-searching={searching || undefined}
@@ -740,12 +743,12 @@
                   type="button"
                 >
                   <span
-                    class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong type-row"
+                    class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong type-label"
                     data-slot="title">{inFront?.name}</span
                   >
                   {#if inFront && counted(inFront.count) !== null}
                     <span
-                      class="flex-none text-ink-muted type-row num"
+                      class="flex-none text-ink-muted type-label num"
                       data-slot="count">{counted(inFront.count)}</span
                     >
                   {/if}

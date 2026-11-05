@@ -23,7 +23,11 @@
    * (the mode's one-button form open, where the head draws it), `delete`
    * (comment 4's Delete pressed: its question under the card's bar),
    * `remove` (the artifacts menu's Remove pressed: its question in the menu),
-   * `found` (Resolved in front, searching "HIG": the hits in every list).
+   * `found` (Resolved in front, searching "HIG": the hits in every list),
+   * `scrolled` (the page's own title scrolled out of view: the head says it).
+   * The picture stands for a decision page: in every other state its title
+   * is in view, so the head leaves its own out (`cawco:page-title`), except
+   * where the picture is scrolled (`changes`) or a sheet covers it (`full`).
    */
   import type { Pin } from "@cawco/core/comments";
   import { commentWords } from "@cawco/core/words/comments";
@@ -47,7 +51,7 @@
   import { HEAD_PRIORITY, type HeadItem } from "#lib/cawco/side/head.js";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
-  import { BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
     TabItem,
@@ -73,6 +77,12 @@
   const SHOW_PATH = /\/artifacts\/([^/]+)\/show$/u;
   const asked = page.url.searchParams.get("state") ?? "rail";
   const phone = new MediaQuery("(width < 640px)");
+  /** The picture stands scrolled to its foot. */
+  const scrolled = asked === "scrolled" || asked === "changes";
+  /** The page's own title in view, as its overlay would tell it. */
+  const titleAway = $derived(
+    !(scrolled || (asked === "full" && phone.current))
+  );
 
   /** The artifact on show: the newest, until the menu shows another. */
   let shownId = $state(ARTIFACTS[0]?.id ?? "");
@@ -110,7 +120,9 @@
     }
     return PINS;
   });
-  let listOpen = $state(asked !== "rest" && asked !== "changes");
+  let listOpen = $state(
+    asked !== "rest" && asked !== "changes" && asked !== "scrolled"
+  );
   let filter = $state<"check" | "open" | "resolved">(
     asked === "resolved" || asked === "found" ? "resolved" : "open"
   );
@@ -222,24 +234,27 @@
 </script>
 
 {#snippet modeBar()}
-  <Tabs
-    onValueChange={(next) => {
-      mode = next as typeof mode;
-    }}
-    value={mode}
-    values={["interact", "comment", "draw"]}
-  >
-    <TabsList aria-label="Preview mode">
-      <TabItem
-        glyphOnly
-        icon={IconInteract}
-        label="Interact"
-        value="interact"
-      />
-      <TabItem glyphOnly icon={IconPin} label="Comment" value="comment" />
-      <TabItem glyphOnly icon={IconPen} label="Draw" value="draw" />
-    </TabsList>
-  </Tabs>
+  <BarGlass form="group">
+    <Tabs
+      onValueChange={(next) => {
+        mode = next as typeof mode;
+      }}
+      size="bar"
+      value={mode}
+      values={["interact", "comment", "draw"]}
+    >
+      <TabsList aria-label="Preview mode">
+        <TabItem
+          glyphOnly
+          icon={IconInteract}
+          label="Interact"
+          value="interact"
+        />
+        <TabItem glyphOnly icon={IconPin} label="Comment" value="comment" />
+        <TabItem glyphOnly icon={IconPen} label="Draw" value="draw" />
+      </TabsList>
+    </Tabs>
+  </BarGlass>
 {/snippet}
 {#snippet modeMenu()}
   <DropdownMenu.RadioGroup
@@ -318,6 +333,7 @@
       kind: "page",
       title: shown?.title ?? "",
     }}
+    {titleAway}
   />
 {/snippet}
 
@@ -475,12 +491,13 @@
       subtitle={shown?.ask}
       subtitleId="bench-line"
       titleControl={title}
+      {titleAway}
     >
       <img
         alt={shown?.title}
         class={[
           "size-full object-cover",
-          asked === "changes" ? "object-bottom" : "object-top",
+          scrolled ? "object-bottom" : "object-top",
         ]}
         src={phone.current ? pagePhone : pageDesk}
         {@attach measureWell}

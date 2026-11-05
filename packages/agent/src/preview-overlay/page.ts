@@ -2107,6 +2107,72 @@ addEventListener("scroll", tellPageFoot, { passive: true, capture: true });
 addEventListener("resize", tellPageFoot);
 addEventListener("load", tellPageFoot);
 
+/**
+ * Whether the page's own title stands where it can be read: its element
+ * marked `data-page-title` (a decision page's `h1`), in the viewport past
+ * every scroller clipping it and clear of the host's chrome (`cawco:covered`,
+ * a phone's Comments sheet at its whole room). Told to the host
+ * (`cawco:page-title`) as it changes: the host's head leaves its own title out
+ * while this one stands, so the words are never read twice, and says it once
+ * this has scrolled out. A page with no such element is told false from its
+ * first word, and its head keeps its title always.
+ */
+const PAGE_TITLE = "[data-page-title]";
+let pageTitle: Element | null = null;
+let pageTitleSeen = false;
+let pageTitleUnder: Box[] = [];
+let pageTitleTold: boolean | null = null;
+let pageTitleAsked = false;
+function tellPageTitle() {
+  if (pageTitleAsked) {
+    return;
+  }
+  pageTitleAsked = true;
+  requestAnimationFrame(() => {
+    pageTitleAsked = false;
+    const el = document.querySelector(PAGE_TITLE);
+    if (el !== pageTitle) {
+      if (pageTitle) {
+        pageTitleSight.unobserve(pageTitle);
+      }
+      pageTitle = el;
+      pageTitleSeen = false;
+      if (el) {
+        // Answers in its own time, with this called again.
+        pageTitleSight.observe(el);
+      }
+    }
+    const box = el?.getBoundingClientRect();
+    const covered =
+      !!box &&
+      pageTitleUnder.some(
+        (one) =>
+          box.left < one.x + one.w &&
+          one.x < box.right &&
+          box.top < one.y + one.h &&
+          one.y < box.bottom
+      );
+    const inView = pageTitleSeen && !covered;
+    if (inView !== pageTitleTold) {
+      pageTitleTold = inView;
+      post("cawco:page-title", { inView });
+    }
+  });
+}
+const pageTitleSight = new IntersectionObserver((entries) => {
+  const last = entries.at(-1);
+  if (last) {
+    pageTitleSeen = last.isIntersecting;
+    tellPageTitle();
+  }
+});
+// The title comes with the page's own render, and a page may replace it.
+new MutationObserver((records) => {
+  if (records.some((record) => !ownNode(record.target))) {
+    tellPageTitle();
+  }
+}).observe(document.documentElement, { childList: true, subtree: true });
+
 /** The count of the page's changes as they stand now, `doc` watched from here on: changes not yet delivered (a write this very task) taken first. */
 function changesNow(doc: Document): number {
   if (!readDocs.has(doc)) {
@@ -3351,6 +3417,8 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       ready();
       pageFootTold = -1;
       tellPageFoot();
+      pageTitleTold = null;
+      tellPageTitle();
       // The host names the artifact this page is, and where its doc is synced.
       const hello = message as {
         artifact: Parameters<typeof artifact.join>[0];
@@ -3578,7 +3646,12 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     },
     // What the host's chrome covers of the page (its Comments list, a
     // phone's card): a pin it opens is brought out from under it.
-    "cawco:covered": (message) => pins.cover(coveredOf(message.boxes)),
+    "cawco:covered": (message) => {
+      const boxes = coveredOf(message.boxes);
+      pins.cover(boxes);
+      pageTitleUnder = boxes;
+      tellPageTitle();
+    },
     // What the host's chrome floats over the page's foot (Changed since you
     // looked), px: the page scrolls that much further, so its last line
     // comes clear of it.

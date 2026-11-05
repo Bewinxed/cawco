@@ -49,6 +49,13 @@
         default: "",
         compact:
           "[--item:var(--c-btn-h-xs)] [--pad:var(--space-row)] [--px:var(--c-segment-pad-x)] [--radius:var(--radius-xs)] coarse:[--item:var(--c-tab-item)]",
+        // In a bar (DESIGN.md, The Title Bars Follow Liquid Glass Rule): the
+        // BarGlass round it is the track, a capsule, and the chosen segment a
+        // capsule concentric in it (Adopting Liquid Glass, Controls: "many
+        // controls adopt rounder forms", "rounded shapes that are concentric
+        // to their containers"), a bar item's height at every pointer, in
+        // the fill a pressed bar item wears (the head's Comments, open).
+        bar: "bg-transparent [--gap:var(--c-bar-group-pad)] [--item:var(--c-bar-item)] [--pad:0px] [--radius:var(--radius-pill)] [--sheet:var(--surface-pressed)] coarse:[--item:var(--c-bar-item)] [&>[data-slot=segment]]:shadow-none",
       },
       variant: {
         segmented: "",
