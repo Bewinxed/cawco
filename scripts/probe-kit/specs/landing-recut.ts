@@ -17,10 +17,15 @@
  *   try, the declared install, `bun run lint:changed` and `bun run
  *   typecheck` passing;
  * - its workspace retires, its clone gone;
- * - its parent hands off to it: the clone is cut again at the same path, the
- *   same session commits a second file and calls finish_item once, and that
- *   finish passes the declared gate on its first try, no "Not landed"
- *   answer in the reopened turn.
+ * - its parent hands off to it with an input (`{ text, name }`): the clone
+ *   is cut again at the same path, the input is in its `$TMPDIR/inputs/`
+ *   when the session reads the message (its first command there prints the
+ *   file), the same session commits a second file and calls finish_item
+ *   once, and that finish passes the declared gate on its first try, no
+ *   "Not landed" answer in the reopened turn. Why: on 2026-11-05 a handoff's
+ *   input to a retired delegate was written into a clone that retired again
+ *   before the message went, and the session read the message with no
+ *   inputs folder (hub work-items.ts `goOnIn`).
  *
  * Then S, with a bun.lock: its delegate adds a dependency to package.json
  * and leaves bun.lock as it was. The declared frozen install refuses it:
@@ -109,8 +114,14 @@ const BUN_REFUSAL = "error: lockfile had changes, but lockfile is frozen";
 const again = (tag: Tag) => `PROBE-RECUT-AGAIN-${tag}`;
 /** How finish_item answers a failed gate (work-items.ts `gateFailedText`). */
 const NOT_LANDED = "Not landed: the merge checks ran on";
-/** How the hub says a handoff waits for a clone cut again (delegation-actions.ts). */
-const RECUTTING = "cutting its clone again";
+/** How the hub says a handoff's clone was, or is being, cut again (delegation-actions.ts `HOLD_WORDS.recut`, `CUT_FOR_INPUTS`). */
+const RECUTTING = "its clone again at the same path";
+/** The input the parent's handoff to a retired delegate carries: its name, and what only the file holds. */
+const AGAIN_INPUT = "again-input.md";
+const RUN = crypto.randomUUID().slice(0, 8);
+const againToken = (tag: Tag) => `PROBE-RECUT-INPUT-${tag}-${RUN}`;
+/** What the reopened session's first command prints before the file's words. */
+const INPUT_READ = (tag: Tag) => `INPUT-READ-${tag}:`;
 /** How long a workspace takes to settle once its item ends: its session's sleep, then its machine's archive. */
 const SETTLE_MS = 120_000;
 const COMMIT =
@@ -191,8 +202,8 @@ const respond = (request: Seen): Reply => {
   if (step.finish && request.all.includes(again(tag))) {
     if (!request.all.includes(`DONE-AGAIN-${tag}`)) {
       return tool("Bash", {
-        command: commitCommand(`again_${tag}`, `DONE-AGAIN-${tag}`),
-        description: "Commit again",
+        command: `echo ${INPUT_READ(tag)}$(cat "$TMPDIR/inputs/${AGAIN_INPUT}" 2>&1) && ${commitCommand(`again_${tag}`, `DONE-AGAIN-${tag}`)}`,
+        description: "Read the input, then commit again",
       });
     }
     return finishing(
@@ -464,19 +475,18 @@ const leg = async (
   );
 
   const message = `${again(tag)}: commit one more file, then finish.`;
-  let handed = await callAsParent(parent, "handoff", {
+  const handoff = {
     target: started.instanceId,
     message,
-  });
+    inputs: [{ text: againToken(tag), name: AGAIN_INPUT }],
+  };
+  let handed = await callAsParent(parent, "handoff", handoff);
   // A cold target is refused once with the cost considerations; the repeat goes.
   if (!handed.text.includes(RECUTTING)) {
-    handed = await callAsParent(parent, "handoff", {
-      target: started.instanceId,
-      message,
-    });
+    handed = await callAsParent(parent, "handoff", handoff);
   }
   check(
-    `${label}: the handoff waits while its clone is cut again`,
+    `${label}: the handoff with an input says its clone is cut again`,
     handed.status === 200 && handed.text.includes(RECUTTING),
     `${handed.status} ${handed.text.slice(0, 800)}`
   );
@@ -492,6 +502,17 @@ const leg = async (
     row: itemOf(started.workItemId),
     refused: notLanded(again(tag)),
   }));
+  const read = fleet.seen.find(
+    (one) => one.afterTool && one.all.includes(INPUT_READ(tag))
+  )?.all;
+  const printed = read
+    ? read.slice(read.lastIndexOf(INPUT_READ(tag))).slice(0, 300)
+    : "";
+  check(
+    `${label}: the handoff's input is in the clone cut again's $TMPDIR/inputs/ when its session reads the message`,
+    printed.startsWith(`${INPUT_READ(tag)}${againToken(tag)}`),
+    printed || "the reopened session ran no command"
+  );
   const result = second.row?.result ?? "";
   check(
     `${label}: the follow-up's finish_item passes the declared gate on its first try in the clone cut again, and lands`,

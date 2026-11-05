@@ -906,6 +906,18 @@ export interface QueuedDelegate {
   title: string;
 }
 
+/**
+ * What a handoff's inputs did before its message went
+ * ({@link WorkItems.handOff}): each input's name and where it came from, the
+ * folder they landed in as the receiver names it, and whether the
+ * receiver's retired workspace was cut again for them.
+ */
+export interface HandoffInputs {
+  cut: boolean;
+  folder: string;
+  inputs: { from: string; name: string }[];
+}
+
 export interface WorkItemStart {
   item: WorkItemRow;
   text: string;
@@ -4870,6 +4882,18 @@ export const createWorkItems = ({
     }
   };
 
+  /** Workspaces whose turn now runs work going on in them ({@link goOnIn}): its own send waits on no settle. */
+  const goingOn = new Set<string>();
+
+  /**
+   * Whether workspace `id`'s turn may be retiring it: a step runs or waits
+   * there (its settle among them), and the step running is not work going
+   * on in it ({@link goOnIn}), which retires nothing. A send to its session
+   * meanwhile waits for that turn ({@link retiredFor}).
+   */
+  const turnMayRetire = (id: string): boolean =>
+    workspaceTurns.has(id) && !goingOn.has(id);
+
   /** A settle queued in its workspace's turn and not yet begun: every caller meanwhile shares it. */
   const settleQueued = new Map<string, Promise<Settled>>();
 
@@ -5309,6 +5333,39 @@ export const createWorkItems = ({
   };
 
   /**
+   * THE ONE WAY WORK GOES ON IN A FINISHED ITEM'S WORKSPACE from outside
+   * it (a handoff's inputs and its message, {@link WorkItems.handOff}; a
+   * follow-up's inputs and its item, {@link startFollowUp}): in the
+   * workspace's turn ({@link inWorkspaceTurn}), after any settle queued
+   * before it; cut again first when it retired ({@link recut}); then `work`
+   * on it as it stands then (undefined when there is no such row), in the
+   * same step. So no settle retires it between the cut, what is written into
+   * its scratch dir, and what holds it after: a send on its way to its
+   * session ({@link sessionsHold}), or an item filed live. A send `work`
+   * makes waits on no settle ({@link turnMayRetire}). `cut` says whether it
+   * was cut again here. Why: on 2026-11-05 a handoff's input was written
+   * into a clone cut again outside its turn, with nothing holding it until
+   * the handoff's message went as a second step; the message found the
+   * workspace retired again and cut it again, and its session read the
+   * message with no `$TMPDIR/inputs/`.
+   */
+  const goOnIn = <T>(
+    id: string,
+    work: (workspace: WorkspaceRow | undefined, cut: boolean) => Promise<T>
+  ): Promise<T> =>
+    inWorkspaceTurn(id, async () => {
+      const [now] = db.workspacesNamed(id);
+      const cut = now !== undefined && recuttable(now);
+      const workspace = now && cut ? await recut(now) : now;
+      goingOn.add(id);
+      try {
+        return await work(workspace, cut);
+      } finally {
+        goingOn.delete(id);
+      }
+    });
+
+  /**
    * Whether a send from `origin` to session `instanceId` reopens a finished
    * item whose workspace retired ({@link recuttable}), or is in a turn that
    * may be retiring it (its settle, run as its session fell asleep): from
@@ -5325,7 +5382,7 @@ export const createWorkItems = ({
     const [workspace] = db.workspacesNamed(item.workspaceId);
     return (
       workspace !== undefined &&
-      (recuttable(workspace) || workspaceTurns.has(workspace.id)) &&
+      (recuttable(workspace) || turnMayRetire(workspace.id)) &&
       db.workItemsIn(workspace.id)[0]?.id === item.id
     );
   };
@@ -6743,16 +6800,18 @@ export const createWorkItems = ({
       : request;
 
   /**
-   * The follow-up in the workspace `needle` names. A retired one is cut
-   * again at its own path first ({@link recut}). Its boundary is up and,
-   * when it continues a session, its inputs are written for that session
-   * before the claim, which files the item in the same step as its
-   * one-writer check; the inputs land only in a workspace the claim would
-   * take, and the claim is made again as the item is filed. A workspace
-   * whose last session never started gets a new session, its inputs
-   * written for it once it stands, as every new delegate's are.
+   * The follow-up in the workspace `needle` names, going on there in one
+   * step of its turn ({@link goOnIn}): a retired one cut again at its own
+   * path first ({@link recut}), so no settle retires it before its item is
+   * filed. Its boundary is up and, when it continues a session, its inputs
+   * are written for that session before the claim, which files the item in
+   * the same step as its one-writer check; the inputs land only in a
+   * workspace the claim would take, and the claim is made again as the item
+   * is filed. A workspace whose last session never started gets a new
+   * session, its item filed in that step and its inputs written for it
+   * once it stands, as every new delegate's are.
    */
-  const startFollowUp = async (
+  const startFollowUp = (
     needle: string,
     request: WorkItemRequest,
     parent: Parent,
@@ -6760,21 +6819,26 @@ export const createWorkItems = ({
   ): Promise<WorkItemStart> => {
     const named = namedWorkspace(needle);
     notPaused(named.machineId);
-    if (recuttable(named)) {
-      await recut(named);
-    }
-    await boundaryUp(needle);
-    const { workspace, previous } = claim(needle);
-    const [resumed] = previous
-      ? db.getInstancesByIds([previous.instanceId])
-      : [];
-    if (resumed?.sessionId && inputs.files.length > 0) {
-      await handIn(workspace, inputs, resumed);
-    }
-    const followed = followUp(needle, request, parent, inputs);
-    return "item" in followed
-      ? followed
-      : spawnIn(followed, settingsOf(request, parent), parent, request, inputs);
+    return goOnIn(named.id, async () => {
+      await boundaryUp(needle);
+      const { workspace, previous } = claim(needle);
+      const [resumed] = previous
+        ? db.getInstancesByIds([previous.instanceId])
+        : [];
+      if (resumed?.sessionId && inputs.files.length > 0) {
+        await handIn(workspace, inputs, resumed);
+      }
+      const followed = followUp(needle, request, parent, inputs);
+      return "item" in followed
+        ? followed
+        : spawnIn(
+            followed,
+            settingsOf(request, parent),
+            parent,
+            request,
+            inputs
+          );
+    });
   };
 
   /**
@@ -9877,7 +9941,7 @@ export const createWorkItems = ({
         !(
           item &&
           workspace &&
-          (recuttable(workspace) || workspaceTurns.has(workspace.id))
+          (recuttable(workspace) || turnMayRetire(workspace.id))
         ) ||
         recutWaits.has(instanceId)
       ) {
@@ -10362,25 +10426,27 @@ export const createWorkItems = ({
     },
 
     /**
-     * A handoff's inputs (core handed-input.ts), sent where handoff's own
-     * relations reach ({@link inputsGo}), written before the handoff that
-     * names them goes: into the `$TMPDIR/inputs/` of the workspace a
-     * receiver's work item runs in (a host-scope one's scratch dir, agent
-     * host-scratch.ts; a retired one cut again first, {@link recut}), or,
-     * for a session with no work item, its own inputs folder on its machine
-     * (core `InputsPlace`). Refused, too, for a workspace whose work was
-     * discarded and an input that may not go ({@link readInputs}). Answers
-     * each input's name and where it came from, and the folder they landed
-     * in as the receiver names it.
+     * A handoff with inputs (core handed-input.ts), sent where handoff's own
+     * relations reach ({@link inputsGo}): the inputs written, then
+     * `sendLanded` called with what landed, which hands the message that names them to
+     * the send path and answers what became of it. For a receiver whose
+     * work item runs in a workspace, both go in one step of its turn
+     * ({@link goOnIn}): a retired one cut again first ({@link recut}), the
+     * inputs written into its `$TMPDIR/inputs/` (a host-scope one's scratch
+     * dir, agent host-scratch.ts), and the message sent there, so it holds
+     * the workspace ({@link sessionsHold}) before any settle can retire it
+     * and its scratch dir with the inputs. For a session with no work item,
+     * its own inputs folder on its machine (core `InputsPlace`). Refused,
+     * with nothing sent, for an input that may not go or cannot be read
+     * ({@link readInputs}), one its machine cannot write, and a workspace
+     * whose work was discarded.
      */
-    async handInputs(
+    async handOff<T>(
       instanceId: string,
       from: string,
-      entries: unknown[]
-    ): Promise<{
-      folder: string;
-      inputs: { from: string; name: string }[];
-    }> {
+      entries: unknown[],
+      sendLanded: (landed: HandoffInputs) => T
+    ): Promise<T> {
       const [row] = db.getInstancesByIds([instanceId]);
       const [caller] = db.getInstancesByIds([from]);
       if (!row) {
@@ -10399,8 +10465,10 @@ export const createWorkItems = ({
       // Read before a retired workspace is cut again: an input that may not
       // go refuses the handoff before anything is cut.
       const inputs = await readInputs(entries, caller);
-      const named = (list: Inputs) =>
-        list.files.map(({ name, from: read }) => ({ name, from: read }));
+      const named = inputs.files.map(({ name, from: read }) => ({
+        name,
+        from: read,
+      }));
       if (!item) {
         const folder = await handInto(
           row.machineId,
@@ -10414,18 +10482,22 @@ export const createWorkItems = ({
             `${sessionLink(row.id, boardTitle(row))} runs on ${machineName(row.machineId)}, whose agent keeps no inputs folder for a session with no work item: update it, or hand off without inputs.`
           );
         }
-        return { folder, inputs: named(inputs) };
+        return sendLanded({ folder, inputs: named, cut: false });
       }
-      const [held] = db.workspacesNamed(item.workspaceId);
-      const workspace = held && recuttable(held) ? await recut(held) : held;
-      if (!workspace || workspace.state === "archived") {
-        throw new WorkItemRefusal(
-          409,
-          `${item.title} (${handle(item.id)}) is in workspace ${handle(item.workspaceId)}, which is ${workspace?.state ?? "gone"}: nowhere to put inputs.`
-        );
-      }
-      await handIn(workspace, inputs, row);
-      return { folder: `$TMPDIR/${INPUTS_DIR}/`, inputs: named(inputs) };
+      return await goOnIn(item.workspaceId, async (workspace, cut) => {
+        if (!workspace || workspace.state === "archived") {
+          throw new WorkItemRefusal(
+            409,
+            `${item.title} (${handle(item.id)}) is in workspace ${handle(item.workspaceId)}, which is ${workspace?.state ?? "gone"}: nowhere to put inputs.`
+          );
+        }
+        await handIn(workspace, inputs, row);
+        return sendLanded({
+          folder: `$TMPDIR/${INPUTS_DIR}/`,
+          inputs: named,
+          cut,
+        });
+      });
     },
 
     /** {@link sessionFailed}: a restart cut its turn and nothing can resume it. */

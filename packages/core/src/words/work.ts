@@ -42,7 +42,7 @@ export const workWords = {
     `Files sent with this message are in ${folder}: `,
   /**
    * A handoff's inputs refused for whom they would go to (hub work-items.ts
-   * `handInputs`): files go only where handoff's own relations reach.
+   * `handOff`): files go only where handoff's own relations reach.
    */
   inputsNotTheirs: (receiver: string) =>
     `Inputs go only to your parent, a session you delegated or started, or your project's conversation; ${receiver} is none of them. Hand off without inputs.`,

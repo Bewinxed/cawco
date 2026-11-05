@@ -238,7 +238,7 @@ const handoffShape = () => ({
  * `inputs` of delegate and handoff (core handed-input.ts): a path to a file
  * or a folder on the caller's machine, or what the hub holds by name,
  * landing in the receiver's inputs folder (its `$TMPDIR/inputs/`, or a
- * session with no work item's own, work-items.ts `handInputs`), a folder
+ * session with no work item's own, work-items.ts `handOff`), a folder
  * and an item's assets as their trees. Listed open and small
  * ({@link handedInputsListed}); the hub checks each entry strictly
  * (work-items.ts `readInputs`).

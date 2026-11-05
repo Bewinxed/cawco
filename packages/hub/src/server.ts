@@ -28287,6 +28287,18 @@ export const createServer = (
       }
       return Promise.resolve(sessionSend(envelope, requester));
     },
+    // A handoff with inputs: written and sent in one step of the
+    // receiver's workspace's turn (work-items.ts `handOff`).
+    handOff: (target, inputs, compose, actor) => {
+      const [requester] = db.getInstancesByIds([actor.id]);
+      if (!requester) {
+        throw new WorkItemRefusal(400, "Unknown calling CawCo instanceId");
+      }
+      return workItems.handOff(target, requester.id, inputs, (landed) => ({
+        ...sessionSend(compose(landed), requester),
+        ...(landed.cut ? { cut: true as const } : {}),
+      }));
+    },
     // A session's start_session: the caller's own machine unless it named
     // one, refused to a leaf (one that may not start any type), held until
     // in place.
@@ -36564,47 +36576,6 @@ export const createServer = (
             return status(
               error instanceof WorkItemRefusal ? error.status : 502,
               message
-            );
-          }
-        }
-      )
-      // A `handoff`'s inputs: copied into its target item's `$TMPDIR/inputs/`
-      // before the handoff goes, by the item's parent or its project's conversation.
-      .post(
-        "/api/work-items/inputs",
-        {
-          ...hidden,
-          body: t.Object({
-            from: t.String({ minLength: 1 }),
-            instanceId: t.String({ minLength: 1 }),
-            inputs: t.Array(t.Unknown(), { minItems: 1 }),
-          }),
-        },
-        async ({ body, request, status, server }) => {
-          server?.timeout(request, 0);
-          // A session's own credential, or none: the gate let through only
-          // a session, the person, or the hub acting for a session's tool.
-          const authorization = bearerOf(request);
-          const identity = identities.resolve(authorization);
-          if (authorization !== null && !identity) {
-            return status(401, "Invalid session credential");
-          }
-          if (identity && identity.instanceId !== body.from) {
-            return status(
-              403,
-              "Session credential does not belong to the inputs' sender"
-            );
-          }
-          try {
-            return await workItems.handInputs(
-              body.instanceId,
-              body.from,
-              body.inputs
-            );
-          } catch (error) {
-            return status(
-              error instanceof WorkItemRefusal ? error.status : 502,
-              error instanceof Error ? error.message : String(error)
             );
           }
         }

@@ -58,7 +58,11 @@ import { hubHttpUrl, selfFetch } from "./hub-self";
 import { cacheWarmNow, type KeepAliveRow } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import { handle as idHandle } from "./presenters/words";
-import { resolveSpawnType, type Unlanded } from "./work-items";
+import {
+  type HandoffInputs,
+  resolveSpawnType,
+  type Unlanded,
+} from "./work-items";
 
 // Every call this module makes is the hub calling its own routes, as itself
 // (hub-self.ts): `selfFetch` refuses any other origin.
@@ -648,6 +652,11 @@ export type SendHold =
 export interface SendDelivery {
   /** The session was mid-turn when the send reached it. */
   busy: boolean;
+  /**
+   * Its workspace had retired, and was cut again in the step that wrote the
+   * send's inputs and sent it (work-items.ts `handOff`).
+   */
+  cut?: true;
   /** Queued at the hub, and why; absent when the session has it. */
   hold?: SendHold;
   /** With `hold: "paused"`: "Omars-MacBook-Pro is paused until 00:57". */
@@ -691,8 +700,15 @@ const HOLD_WORDS: Record<Exclude<SendHold, "paused">, string> = {
   filing: contextWords.held,
 };
 
+/** What `handoff` answers when its inputs' workspace was cut again before the message went ({@link SendDelivery.cut}). */
+const CUT_FOR_INPUTS =
+  "Its workspace had retired once its work was over, so the hub cut its clone again at the same path, at the commit its clone was on when it retired, its own commits with it, and wrote the inputs there before the message went.";
+
 /** What the hub did with a hand-off, as its sender is told. */
 const deliveryWords = (delivery: SendDelivery): string => {
+  if (delivery.cut) {
+    return `${CUT_FOR_INPUTS} ${deliveryWords({ ...delivery, cut: undefined })}`;
+  }
   if (delivery.hold === "paused") {
     return `${delivery.pause ?? "Its machine is paused"}, so the message is queued at the hub and goes to the session when the pause ends.`;
   }
@@ -746,6 +762,17 @@ export interface HandoffDeps {
    * `formerIds`). A target named by one reaches its session.
    */
   readonly formerIds: () => Record<string, string>;
+  /**
+   * A send with inputs (core handed-input.ts) to session `target`, through
+   * the hub's one step that writes them and sends (work-items.ts
+   * `handOff`): `compose` makes the send once the hub knows where they
+   * landed. Refused, nothing sent, when an input cannot go or be written.
+   */
+  readonly handOff: (
+    target: string,
+    inputs: unknown[],
+    compose: (landed: HandoffInputs) => Envelope<SendPayload>
+  ) => Promise<SendDelivery>;
   /**
    * The harness the tools are listed for and called from: what a tool's
    * words say can differ by it (delegation-tools.ts `NO_REPLY_WORDS`).
@@ -1168,37 +1195,6 @@ const hubText = async (response: Response): Promise<string> => {
   return ((await response.json()) as { text: string }).text;
 };
 
-/**
- * A handoff's inputs, through the hub (work-items.ts `handInputs`): paths
- * admitted on `from`'s machine and what the hub holds by name, written into
- * `target`'s inputs folder on its machine. Answers each one's name and
- * where it came from, and that folder as `target` names it; the hub's
- * refusal is thrown in its words.
- */
-async function handInputs(
-  authorization: string | undefined,
-  from: string,
-  target: string,
-  inputs: unknown[]
-): Promise<{ folder: string; inputs: { from: string; name: string }[] }> {
-  const response = await postToHub(
-    "/api/work-items/inputs",
-    { from, instanceId: target, inputs },
-    authorization,
-    {
-      // Up to 64 MiB copied on one machine, or read on one and written on another.
-      timeout: false,
-    }
-  );
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  return (await response.json()) as {
-    folder: string;
-    inputs: { from: string; name: string }[];
-  };
-}
-
 const coldRefusals = new Map<string, string>();
 
 /** The cold check waits for Jev's answer when the hub asks it: its 20 s, and the hub's own read. */
@@ -1555,6 +1551,7 @@ export const handoffActions = ({
   formerIds,
   cwd,
   deliver,
+  handOff,
   emit,
   spawn,
   authorization,
@@ -1838,26 +1835,23 @@ export const handoffActions = ({
       const whose =
         peer.row.id === own?.parentInstanceId ? ", your parent session" : "";
       const from = senderName(own, cwd);
-      // In its $TMPDIR before the message that names them reaches it.
-      const landed = inputs?.length
-        ? await handInputs(authorization, instanceId, peer.row.id, inputs)
-        : undefined;
-      const body = withInputsLine(
-        `${handoffMarker(from, instanceId)}${message}`,
-        landed?.inputs ?? [],
-        landed?.folder
-      );
-      const payload = peerSend(peer.row.id, instanceId, from, body, {
-        shouldQuery: false,
-      });
-      // Delivered now, so the answer says what the hub did with it, not what
-      // the roster suggested before it went.
-      const delivery = await deliver({
+      const said = `${handoffMarker(from, instanceId)}${message}`;
+      const envelopeOf = (body: string): Envelope<SendPayload> => ({
         verb: "send",
         machineId: peer.row.machineId,
         instanceId: peer.row.id,
-        payload,
+        payload: peerSend(peer.row.id, instanceId, from, body, {
+          shouldQuery: false,
+        }),
       });
+      // Delivered now, so the answer says what the hub did with it, not what
+      // the roster suggested before it went. Inputs are in its $TMPDIR, in
+      // the same step, before the message that names them goes.
+      const delivery = inputs?.length
+        ? await handOff(peer.row.id, inputs, (landed) =>
+            envelopeOf(withInputsLine(said, landed.inputs, landed.folder))
+          )
+        : await deliver(envelopeOf(said));
       const continues = continuesWords(followed);
       const handed = `Handed to ${sessionLink(peer.row.id, peer.title)}, ${peer.label}${continues} (${peer.dir} on ${peer.host}${whose}).`;
       return `${handed} ${deliveryWords(delivery)}`;

@@ -7,15 +7,15 @@
  * so it runs inside one too.
  *
  * - f1. A leaf that may start nothing lists `inputs` on its handoff.
- * - f2. Inputs from it to a session it has no relation to are refused in
- *   the inputs' words (the hub's inputs route, as its handoff calls it), and
- *   nothing lands there.
+ * - f2. Its parent's handoff with inputs to a session it has no relation to
+ *   is refused in the inputs' words: nothing lands there, and the message
+ *   reaches no one.
  * - f3. Its handoff with inputs to its parent lands the file in the parent's
  *   own inputs folder on the parent's machine (`~/.cawco/tmp/s-<id8>/inputs/`
  *   under the first machine's HOME; the file was under the second's), and
  *   the message that reaches the parent names that folder and the file.
- * - f4. Inputs past the count limit are refused in the limit's words,
- *   naming the limit.
+ * - f4. Its parent's handoff to it with inputs past the count limit is
+ *   refused in the limit's words, naming the limit.
  *
  *   bun scripts/probe-kit/run.ts handoff-sends
  */
@@ -24,6 +24,11 @@ import { join } from "node:path";
 import { INPUTS_COUNT_LIMIT } from "../../../packages/core/src/harness";
 import { workWords } from "../../../packages/core/src/index";
 import { listRoleTools } from "../../../packages/hub/src/role-budgets";
+import {
+  type ToolSession,
+  type ToolWords,
+  toolWords,
+} from "../../lib/tool-call";
 import {
   ACCOUNT,
   MACHINE,
@@ -99,6 +104,24 @@ const respond = (request: Seen): Reply => {
     default:
       return text("Done.");
   }
+};
+
+/** Whether a tool's answer carries `said`. */
+const carries = (said: string) => (answer: ToolWords) =>
+  answer.text.includes(said);
+
+/**
+ * The parent's handoff, which the hub must refuse: called again once when
+ * its first answer is not the refusal looked for (a cold target is refused
+ * once with the cost considerations, and the repeat goes on to the inputs).
+ */
+const refusedHandoff = async (
+  session: ToolSession,
+  expected: (answer: ToolWords) => boolean,
+  args: Record<string, unknown>
+): Promise<ToolWords> => {
+  const first = await toolWords(session, "handoff", args);
+  return expected(first) ? first : await toolWords(session, "handoff", args);
 };
 
 interface Started {
@@ -184,24 +207,25 @@ const spec: Spec = {
       FILE
     );
     const refusedWords = workWords.inputsNotTheirs("X").split(";")[0] ?? "";
-    const toStranger = await fleet
-      .api("/api/work-items/inputs", {
-        from: started.instanceId,
-        instanceId: plan.stranger,
-        inputs: [plan.file],
-      })
-      .then(
-        () => "accepted",
-        (error: unknown) =>
-          error instanceof Error ? error.message : String(error)
-      );
+    const asParent = {
+      base: fleet.base,
+      id: plan.parent,
+      credential: await fleet.sessionCredential(plan.parent),
+    };
+    const STRANGER_NOTE = `PROBE-SENDS-STRANGER-${crypto.randomUUID()}`;
+    const toStranger = await refusedHandoff(asParent, carries(refusedWords), {
+      target: plan.stranger,
+      message: STRANGER_NOTE,
+      inputs: [{ text: TOKEN, name: FILE }],
+    });
     const strangerGot = await readFile(strangerFolder, "utf8").catch(() => "");
     check(
-      "f2: inputs from it to a session it has no relation to are refused in the inputs' words, and nothing lands there",
-      toStranger.includes("403") &&
-        toStranger.includes(refusedWords) &&
-        strangerGot === "",
-      toStranger.slice(0, 400)
+      "f2: a handoff with inputs to a session the sender has no relation to is refused in the inputs' words; nothing lands there and the message reaches no one",
+      toStranger.refused &&
+        toStranger.text.includes(refusedWords) &&
+        strangerGot === "" &&
+        !fleet.seen.some((one) => one.all.includes(STRANGER_NOTE)),
+      `${toStranger.status} ${toStranger.text.slice(0, 400)}`
     );
 
     const folder = `${join(home, ".cawco", "tmp", `s-${plan.parent.slice(0, 8)}`, "inputs")}/`;
@@ -226,23 +250,19 @@ const spec: Spec = {
       { length: INPUTS_COUNT_LIMIT + 1 },
       (_, at) => `/nowhere/${at}`
     );
-    const over = await fleet
-      .api("/api/work-items/inputs", {
-        from: started.instanceId,
-        instanceId: plan.parent,
-        inputs: many,
-      })
-      .then(
-        () => "accepted",
-        (error: unknown) =>
-          error instanceof Error ? error.message : String(error)
-      );
+    const limitWords = workWords.inputsLimits.entries(
+      many.length,
+      INPUTS_COUNT_LIMIT
+    );
+    const over = await refusedHandoff(asParent, carries(limitWords), {
+      target: started.instanceId,
+      message: "PROBE-SENDS-OVER: too many.",
+      inputs: many,
+    });
     check(
-      "f4: inputs past the count limit are refused in the limit's words, naming it",
-      over.includes(
-        workWords.inputsLimits.entries(many.length, INPUTS_COUNT_LIMIT)
-      ),
-      over.slice(0, 400)
+      "f4: a handoff with inputs past the count limit is refused in the limit's words, naming it",
+      over.refused && over.text.includes(limitWords),
+      `${over.status} ${over.text.slice(0, 400)}`
     );
   },
 };

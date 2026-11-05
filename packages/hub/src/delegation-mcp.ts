@@ -256,6 +256,13 @@ export function createDelegationMcp(options: {
     envelope: Envelope<SendPayload>,
     actor: InstanceRow
   ) => Promise<SendDelivery>;
+  /** A session's send with inputs, written and sent in one step (delegation-actions `handOff`). */
+  handOff: (
+    target: string,
+    inputs: unknown[],
+    compose: Parameters<HandoffDeps["handOff"]>[2],
+    actor: InstanceRow
+  ) => Promise<SendDelivery>;
   credentialActor: (authorization: string | null) => InstanceRow | undefined;
   /** Whether `token` is a session credential the hub holds (by its hash). */
   knownCredential: (token: string) => boolean;
@@ -483,6 +490,9 @@ export function createDelegationMcp(options: {
         lands: landsOf(actor),
         workItem: !actor || !!actor.workItemId,
         deliver: () => {
+          throw new Error("Discovery cannot execute tools");
+        },
+        handOff: () => {
           throw new Error("Discovery cannot execute tools");
         },
         emit: () => {
@@ -789,6 +799,9 @@ export function createDelegationMcp(options: {
         deliver: () => {
           throw new Error("Reading the catalog sends nothing");
         },
+        handOff: () => {
+          throw new Error("Reading the catalog sends nothing");
+        },
         emit: () => {
           throw new Error("Reading the catalog emits nothing");
         },
@@ -1055,6 +1068,8 @@ export function createDelegationMcp(options: {
       shownRefusal: (tool, paths) => options.shownRefusal?.(actor, tool, paths),
       instancesByShortId: options.instancesByShortId,
       deliver: (envelope) => options.deliver(envelope, actor),
+      handOff: (target, inputs, compose) =>
+        options.handOff(target, inputs, compose, actor),
       emit: (envelope) => emitted.push(envelope),
       spawn: (envelope) => options.spawn(envelope, actor),
       started: startedBy(actor, name, cut),
@@ -1208,6 +1223,9 @@ export function createDelegationMcp(options: {
         harness: harnessOf(bound),
         mayStart: bound?.mayStart ?? undefined,
         deliver: () => {
+          throw new Error("Instructions send nothing");
+        },
+        handOff: () => {
           throw new Error("Instructions send nothing");
         },
         emit: () => undefined,

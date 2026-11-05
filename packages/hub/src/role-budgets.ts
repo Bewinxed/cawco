@@ -179,6 +179,7 @@ const standUp = (): { roles: RoleTools[]; unrouted: string[] } => {
     callKeys: { once: (_actor, _name, _key, run) => run() },
     spawn: () => Promise.reject(new Error("A budget read starts nothing")),
     deliver: () => Promise.reject(new Error("measuring")),
+    handOff: () => Promise.reject(new Error("measuring")),
     credentialActor: () => undefined,
     knownCredential: () => false,
     toolListing: () => undefined,
