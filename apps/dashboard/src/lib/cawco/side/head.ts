@@ -95,7 +95,10 @@ interface Sized {
  * holds; then forms widen in priority order, each only where the room left holds the
  * difference: a one-button form its whole form first, then, with `words`
  * (a pane {@link WORDS_FROM}px or wider), a control's words. `gap` is the
- * head's own between any two.
+ * head's own between what always stands; `itemGap` the glass's between its
+ * controls and More (under a finger the glass spaces its symbols wider than
+ * the head its groups: taken at the head's, the controls stood 10px each
+ * wider than measured and the name lost that room).
  */
 export function standing(
   room: number,
@@ -104,19 +107,20 @@ export function standing(
   more: { counted: number; glyph: number },
   items: Sized[],
   words: boolean,
-  nameWants = 0
+  nameWants = 0,
+  itemGap = gap
 ): Map<string, Standing> {
   const base = kept.reduce((sum, width) => sum + width + gap, -gap);
   const narrowest = (one: Sized) =>
     Math.min(one.width, one.compact ?? one.width);
   const ranked = [...items].sort((a, b) => a.priority - b.priority);
-  const all = ranked.reduce((sum, one) => sum + gap + narrowest(one), 0);
+  const all = ranked.reduce((sum, one) => sum + itemGap + narrowest(one), 0);
   const whole = base + all <= room;
   /** More's room beside the controls from `from` on, which go in it. */
   const moreOf = (from: number) =>
     whole
       ? 0
-      : gap +
+      : itemGap +
         (ranked.slice(from).some((one) => one.counted)
           ? more.counted
           : more.glyph);
@@ -134,10 +138,10 @@ export function standing(
     if (one.priority > NAME_AFTER) {
       name(at);
     }
-    if (gap + narrowest(one) + moreOf(at + 1) > left) {
+    if (itemGap + narrowest(one) + moreOf(at + 1) > left) {
       break;
     }
-    left -= gap + narrowest(one);
+    left -= itemGap + narrowest(one);
     shown.set(one.key, narrowest(one) < one.width ? "compact" : "whole");
   }
   name(shown.size);

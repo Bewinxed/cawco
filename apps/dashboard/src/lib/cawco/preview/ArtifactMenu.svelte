@@ -54,7 +54,7 @@
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import { frameSize } from "../frame-observer";
   import { failureClause } from "../hub-read";
-  import { reveal } from "../motion/curves.svelte";
+  import { numberOf, reveal } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import RowFault from "../RowFault.svelte";
   import { refusals } from "../refusals.svelte";
@@ -102,11 +102,21 @@
   const phone = new MediaQuery("(width < 640px)");
   /** The phone's two lines cut the title: its chevron stands beside the box, since one inline after the last word is cut with it. */
   let clamped = $state(false);
+  /** The box's width when the two lines first cut the title. */
+  let clampedAt = 0;
   const measureClamp = frameSize<HTMLElement>((node) => {
-    // Held once cut, until another title: the chevron leaving the words
-    // could uncut them, and drawn inline again it would cut them again.
-    if (node.scrollHeight > node.clientHeight + 1) {
+    // Held once cut until the box grows past the chevron's room: the chevron
+    // leaving the words could uncut them, and drawn inline again it would
+    // cut them again; the head's fit widening the box (a control gone to
+    // More) tries the words inline again.
+    const width = node.clientWidth;
+    if (clamped) {
+      if (width > clampedAt + numberOf("--icon-sm") + numberOf("--space-1")) {
+        clamped = false;
+      }
+    } else if (node.scrollHeight > node.clientHeight + 1) {
       clamped = true;
+      clampedAt = width;
     }
   });
   $effect(() => {

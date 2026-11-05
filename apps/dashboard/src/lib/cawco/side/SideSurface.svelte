@@ -430,7 +430,8 @@
       })),
       // The pane's width: the card's, the head's box inside it.
       head.clientWidth >= WORDS_FROM,
-      nameWants(identity, keeps)
+      nameWants(identity, keeps),
+      glass ? Number.parseFloat(getComputedStyle(glass).columnGap) || gap : gap
     );
     return () => {
       name();
