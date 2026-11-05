@@ -6,6 +6,7 @@
   import { toolWords } from "@cawco/core/words/tools";
   import Check from "#lib/cawco/accounts/Check.svelte";
   import SigninPanel from "#lib/cawco/accounts/SigninPanel.svelte";
+  import HarnessLogo, { hasMark } from "#lib/cawco/HarnessLogo.svelte";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
@@ -701,6 +702,10 @@
             class="flex flex-wrap items-center justify-between gap-x-space-4 gap-y-space-2"
           >
             <span class="mark-line flex min-w-0 items-center gap-space-2">
+              <!-- The CLI's own mark, as harness marks stand beside their names. -->
+              {#if hasMark(spec.id)}
+                <HarnessLogo data-box harness={spec.id} />
+              {/if}
               <h2 id="tool-{spec.id}" class="type-label text-ink-strong">
                 {spec.name}
               </h2>
