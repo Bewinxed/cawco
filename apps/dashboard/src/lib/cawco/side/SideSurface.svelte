@@ -250,21 +250,25 @@
   /**
    * The head's controls as one row: a glass group's items stand in the row
    * where the group does (its own gap is the head's), and its inline
-   * padding is room the row keeps. What a glass draws out of the flow (its
-   * join, as wide as the glass) takes no room: counted, it widened as the
-   * controls stood, so they went to More, the glass narrowed and they stood
-   * again, every frame (the probe's Caw preview at 680, never still).
+   * padding (`pads`) is room the row gives up, beside the gaps its items
+   * already stand apart by. A glass is no member of the row with a gap of
+   * its own: counted as one, each group took a gap more than it is laid out
+   * with, and a head with room for every control stood the mode compact
+   * (session-sheet leg 18: 505px of controls whole in a 509px head, read
+   * as 513). What a glass draws out of the flow (its join, as wide as the
+   * glass) takes no room: counted, it widened as the controls stood, so
+   * they went to More, the glass narrowed and they stood again, every frame
+   * (the probe's Caw preview at 680, never still).
    */
-  function rowOf(el: HTMLElement): { row: Element[]; pads: number[] } {
+  function rowOf(el: HTMLElement): { row: Element[]; pads: number } {
     const row: Element[] = [];
-    const pads: number[] = [];
+    let pads = 0;
     for (const child of el.children) {
       if ((child as HTMLElement).dataset.slot === "tools") {
         const style = getComputedStyle(child);
-        pads.push(
+        pads +=
           (Number.parseFloat(style.paddingInlineStart) || 0) +
-            (Number.parseFloat(style.paddingInlineEnd) || 0)
-        );
+          (Number.parseFloat(style.paddingInlineEnd) || 0);
         row.push(
           ...[...child.children].filter(
             (one) => !OUT_OF_FLOW.has(getComputedStyle(one).position)
@@ -277,10 +281,10 @@
     return { row, pads };
   }
 
-  /** What always stands (the switch, Close) as drawn; each control's width, and More's, kept while it stands. */
+  /** What always stands (the switch, Close) as drawn, and the room its glasses' padding takes; each control's width, and More's, kept while it stands. */
   function drawnWidths(el: HTMLElement, name: HTMLElement) {
     const { row, pads } = rowOf(el);
-    const kept: number[] = [...pads];
+    const kept: number[] = [];
     for (const child of row) {
       const one = child as HTMLElement;
       const width = laidOut(one);
@@ -306,7 +310,7 @@
         kept.push(width);
       }
     }
-    return { kept };
+    return { kept, pads };
   }
 
   /**
@@ -353,13 +357,13 @@
       return name;
     }
     const { gap, room } = roomOf(head);
-    const { kept } = drawnWidths(head, identity);
+    const { kept, pads } = drawnWidths(head, identity);
     // More and a form not drawn yet are Close's recipe, its glyph alone,
     // until they stand to be read.
     const glyph = kept.at(-1) ?? 0;
     const moreGlyph = widths.get("more") ?? glyph;
     const next = standing(
-      room,
+      room - pads,
       gap,
       [...kept, keeps + nameMargins(identity)],
       { glyph: moreGlyph, counted: widths.get("more:counted") ?? moreGlyph },

@@ -855,17 +855,21 @@ async function compareDesk(
     kind: string;
     line: string;
     show: string | null;
+    /** Where it stood, read only for a ring out of view: what settles why (the scroll short, or the frame changed under it). */
+    why?: unknown;
   }[] = [];
   const lines = said?.found ?? [];
-  for (const [at, one] of lines.entries()) {
-    await page
-      .locator(`${GRAPH} [data-slot="stage-head"] [data-slot="difference"]`)
-      .nth(at)
-      .click();
-    await page.waitForTimeout(900);
-    const read = await frame.evaluate((index) => {
+  /** The stage's frame's height in the panel, px. */
+  const frameHeight = () =>
+    page
+      .locator(FRAME)
+      .first()
+      .evaluate((el) => Math.round(el.getBoundingClientRect().height));
+  /** The ring for line `index` against the frame's own view, and the page's scroll. */
+  const ringRead = (index: number) =>
+    frame.evaluate((at) => {
       const ring = document.querySelector(
-        `.cawco-change-ring[data-at="${index}"]`
+        `.cawco-change-ring[data-at="${at}"]`
       );
       const box = ring?.getBoundingClientRect();
       const compares = (
@@ -878,6 +882,7 @@ async function compareDesk(
         Element.prototype,
         "clientWidth"
       )?.get?.call(root) as number;
+      const scroller = document.scrollingElement ?? root;
       return {
         inView:
           !!box &&
@@ -889,9 +894,65 @@ async function compareDesk(
           ".cawco-stage-frame.cawco-stage-flipped"
         ),
         show: compares?.at(-1)?.show ?? null,
+        ring: box
+          ? {
+              top: Math.round(box.top),
+              bottom: Math.round(box.bottom),
+              left: Math.round(box.left),
+              right: Math.round(box.right),
+            }
+          : null,
+        rings: document.querySelectorAll(".cawco-change-ring").length,
+        view: {
+          across,
+          high: root.clientHeight,
+          // Not answered by the page (viewport.ts answers widths alone).
+          innerHeight: window.innerHeight,
+        },
+        scroll: {
+          top: Math.round(scroller.scrollTop),
+          left: Math.round(scroller.scrollLeft),
+          topMost: scroller.scrollHeight - scroller.clientHeight,
+          leftMost: scroller.scrollWidth - scroller.clientWidth,
+        },
       };
-    }, at);
-    pressed.push({ ...read, kind: one.kind, line: one.line });
+    }, index);
+  for (const [at, one] of lines.entries()) {
+    const before = await frameHeight();
+    await page
+      .locator(`${GRAPH} [data-slot="stage-head"] [data-slot="difference"]`)
+      .nth(at)
+      .click();
+    await page.waitForTimeout(900);
+    const read = await ringRead(at);
+    const { inView, flipped, show } = read;
+    if (!inView) {
+      // Out of view: read again once any scroll has had time to end, with
+      // the frame's height at the press and now, and the lines the panel
+      // lists now, so the run says whether the reveal stopped short (its
+      // scroll still, short of the ring, the frame as tall as it was) or
+      // the frame changed under it.
+      await page.waitForTimeout(1500);
+      pressed.push({
+        inView,
+        flipped,
+        show,
+        kind: one.kind,
+        line: one.line,
+        why: {
+          at900: read,
+          at2400: await ringRead(at),
+          frame: { pressed: before, now: await frameHeight() },
+          listed: await page
+            .locator(
+              `${GRAPH} [data-slot="stage-head"] [data-slot="difference"]`
+            )
+            .allTextContents(),
+        },
+      });
+      continue;
+    }
+    pressed.push({ inView, flipped, show, kind: one.kind, line: one.line });
   }
   kit.check(
     "compare 2: each line's press brings its ring into view, inside the stage's frame",

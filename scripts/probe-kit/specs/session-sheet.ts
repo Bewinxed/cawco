@@ -128,9 +128,11 @@
  *     and at 390: measured once the drawing holds still, never mid-move.
  * 23. Name once, its ask once, no route (owner: "ur also repeating the
  *     title of the card twice, the url should have the description there
- *     instead"; the artifact purpose spec: the ask is that line): at the desk
- *     and at 390 the line under the head's title is the canvas's ask, one line inside the panel and whole in its
- *     tooltip; the title stands once across the panel and its canvas page,
+ *     instead"; the artifact purpose spec: the ask is that line; since
+ *     ec7bfa29b the head holds one row, the ask never a line under the
+ *     name): at the desk and at 390 the canvas's ask is the name's tooltip,
+ *     the description it is read out with and its menu's first row, and no
+ *     drawn text of the head holds it; the title stands once across the panel and its canvas page,
  *     its slug in neither, and no text in either holds `/@cawco/`.
  * 24. The hub's map of that canvas (`GET …/artifacts/:id/map`, what the
  *     panel's Map reads) answers Card in the middle with its states, its
@@ -1070,18 +1072,27 @@ const scaled = (transform: string, to: number) => {
  * in the panel holds. The head names it by its title, short on purpose: its
  * trigger (glyph, title, chevron) stays under side/head.ts `NAME_KEEPS`
  * (120px), the room leg 18's desk claim stands on. At a 523px pane the
- * head's room is 509px; every control whole needs the title's width +
- * 392px, so a title at the cap leaves the mode 3px short and the head rule
- * stands it in its one-button form (1ab897290's "probe-panel-card" did, and
- * so did a "Probe judge artifact" title, 173px), and "Pcard"'s ~95px leaves
- * room to spare. The slug `name` is shown nowhere (leg 23).
+ * head's room is 509px; every control whole needs the name's box + 414px
+ * (the mode 116; seven controls in one glass, its 8px of padding; Close in
+ * a glass of its own; the gaps between), so "Pcard"'s 91px box stands them
+ * all with 4px to spare, and a title at the cap leaves the mode short and
+ * the head rule stands it in its one-button form. The slug `name` is shown
+ * nowhere (leg 23).
  */
 const PANEL_NAME = "pcard";
 const PANEL_TITLE = "Pcard";
-/** The ask the panel's artifact is made with: the head's line under the title reads it (leg 23). */
+/** The ask the panel's artifact is made with: the name's tooltip, its description and its menu's first row (leg 23). */
 const PANEL_ASK = "Judge the card in its panel, at every width";
 
-/** Leg 23's read: the head's line under the title and where it stands, and the title, the slug and any route across the rendered text of the panel and its canvas page. */
+/**
+ * Leg 23's read: where the ask stands (the name's tooltip, the description
+ * it is read out with, its menu's first row, and any drawn text of the head
+ * holding it), and the title, the slug and any route across the rendered
+ * text of the panel and its canvas page. The ask is never a line under the
+ * name (ec7bfa29b, DESIGN.md's The Title Bars Follow Liquid Glass Rule:
+ * "One bar, one row"; side/SideSurface draws it as the name control's
+ * description only, ArtifactMenu as its title and its menu's first row).
+ */
 async function describedOf(page: Page) {
   const outer = await page
     .locator(PANE)
@@ -1090,32 +1101,59 @@ async function describedOf(page: Page) {
       (pane, words) => {
         const card = (pane.closest('[data-slot="side-card"]') ??
           pane) as HTMLElement;
-        // The ask is the name's tooltip (side/SideSurface): the name's
-        // control is what says it, never a line under it.
-        const line = card.querySelector<HTMLElement>("[data-artifact-trigger]");
-        const box = line?.getBoundingClientRect();
-        const edge = card.getBoundingClientRect();
+        const head = card.querySelector<HTMLElement>('[data-slot="side-head"]');
+        const name = card.querySelector<HTMLElement>("[data-artifact-trigger]");
+        const describedBy = name?.getAttribute("aria-describedby");
+        const description = describedBy
+          ? document.getElementById(describedBy)
+          : null;
+        // The head's text as drawn: a node whose box is more than the 1px a
+        // read-out-only description (sr-only) keeps.
+        const inked: string[] = [];
+        if (head) {
+          const walk = document.createTreeWalker(head, NodeFilter.SHOW_TEXT);
+          for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+            const box = node.parentElement?.getBoundingClientRect();
+            if (
+              node.parentElement?.checkVisibility() &&
+              box &&
+              box.width > 1 &&
+              box.height > 1
+            ) {
+              inked.push(node.textContent ?? "");
+            }
+          }
+        }
         // What is drawn, not what is hidden (a control in More, a band's hidden name).
         const text = card.innerText;
         return {
-          line: line?.title ?? null,
-          tooltip: line?.title ?? null,
-          inside:
-            !!box &&
-            box.left >= edge.left - 0.5 &&
-            box.right <= edge.right + 0.5,
-          oneLine:
-            !!line &&
-            !!box &&
-            box.height <=
-              Number.parseFloat(getComputedStyle(line).lineHeight) + 1,
+          tooltip: name?.title ?? null,
+          description: description?.textContent?.trim() ?? null,
+          drawnInHead: inked.join("").includes(words.ask),
           names: text.split(words.title).length - 1,
           slugs: text.split(words.name).length - 1,
           route: text.includes("/@cawco/"),
         };
       },
-      { name: PANEL_NAME, title: PANEL_TITLE }
+      { name: PANEL_NAME, title: PANEL_TITLE, ask: PANEL_ASK }
     );
+  // The name's menu, its first row before the canvases it lists, then shut.
+  await page.locator(`${PANE} [data-artifact-trigger]`).first().click();
+  const list = page.locator("[data-artifact-list]").first();
+  await list.waitFor({ timeout: 10_000 });
+  const menu = await list.evaluate((content) => {
+    const line = content.querySelector('[data-slot="menu-line"]');
+    // In document order, the line before every canvas the menu lists.
+    const [first] = content.querySelectorAll(
+      '[data-slot="menu-line"], [data-artifact-row]'
+    );
+    return {
+      line: line?.textContent?.trim() ?? null,
+      first: !!line && first === line,
+    };
+  });
+  await page.keyboard.press("Escape");
+  await list.waitFor({ state: "hidden", timeout: 10_000 });
   const frame = await (
     await page.locator(FRAME).first().elementHandle()
   )?.contentFrame();
@@ -1144,21 +1182,22 @@ async function describedOf(page: Page) {
         { name: PANEL_NAME, title: PANEL_TITLE }
       )
     : null;
-  return { ...outer, frame: inner };
+  return { ...outer, menu, frame: inner };
 }
 
-/** What leg 23 finds wrong in one read, each as what it compared (none: it holds): the ask under the title, one line inside the panel, the title once across panel and page, the slug nowhere, no route. */
+/** What leg 23 finds wrong in one read, each as what it compared (none: it holds): the ask as the name's tooltip, description and menu's first row and drawn nowhere in the head, the title once across panel and page, the slug nowhere, no route. */
 const describedWrong = (read: Awaited<ReturnType<typeof describedOf>>) => {
   const names = read.names + (read.frame?.names ?? 0);
+  const is = (what: string, got: string | null) =>
+    got === PANEL_ASK
+      ? ""
+      : `${what} ${JSON.stringify(got)} is not ${JSON.stringify(PANEL_ASK)}`;
   return [
-    read.line === PANEL_ASK
-      ? ""
-      : `line ${JSON.stringify(read.line)} is not ${JSON.stringify(PANEL_ASK)}`,
-    read.tooltip === PANEL_ASK
-      ? ""
-      : `tooltip ${JSON.stringify(read.tooltip)} is not ${JSON.stringify(PANEL_ASK)}`,
-    read.inside ? "" : "line outside the panel",
-    read.oneLine ? "" : "line on more than one line",
+    is("tooltip", read.tooltip),
+    is("description", read.description),
+    is("menu's line", read.menu.line),
+    read.menu.first ? "" : "menu's line not its first row",
+    read.drawnInHead ? "the ask drawn in the head" : "",
     read.frame ? "" : "no canvas frame to read",
     names === 1
       ? ""
@@ -1327,7 +1366,7 @@ async function panelLegs(
     described[`phone-${theme}`] = await describedOf(phone);
   }
   kit.check(
-    "23: at the desk and at 390 the line under the title is the canvas's ask, one line inside the panel and whole in its tooltip; the title stands once across the panel and its page, its slug nowhere, and no text holds /@cawco/",
+    "23: at the desk and at 390 the canvas's ask is the name's tooltip, the description it is read out with and its menu's first row, never drawn in the head; the title stands once across the panel and its page, its slug nowhere, and no text holds /@cawco/",
     Object.keys(described).length === 3 &&
       Object.values(described).every(
         (read) => describedWrong(read).length === 0
