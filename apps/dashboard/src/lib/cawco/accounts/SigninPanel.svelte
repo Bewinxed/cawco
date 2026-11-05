@@ -3,7 +3,10 @@
    * The sign-in popover's content: the link to Claude Code's own login on the
    * machine, the field the code it shows is pasted into, and what came of it.
    * A refusal from the hub stands under the field in its own words, the field
-   * marked invalid; signed in, it says as whom, or `got` in its place
+   * marked invalid; a refusal that spent the link (no link to paste from)
+   * stands under the link instead, the field left as it was. The act
+   * that is next is the coral one: the link before there is one, Done
+   * after. Signed in, it says as whom, or `got` in its place
    * where the sign-in names nobody (a tool's own: ToolMatrix).
    */
   import { accountsWords } from "@cawco/core/words/accounts";
@@ -34,6 +37,20 @@
   const codeId = $props.id();
 </script>
 
+<!-- The daemon's sentence, then the CLI's screen lines, each its own line. -->
+{#snippet problem(text: string)}
+  <p
+    data-slot="error"
+    class="type-meta flex items-start gap-space-2 text-status-fail-ink whitespace-pre-line wrap-anywhere"
+    data-signin-problem
+    id="{codeId}-problem"
+    role="alert"
+    in:appear
+  >
+    {text}
+  </p>
+{/snippet}
+
 <div data-slot="panel" class="flex flex-col gap-space-3">
   {#if !online}
     <p class="type-meta text-ink-muted">{words.offline(machine)}</p>
@@ -58,11 +75,18 @@
         pending={flow.phase === "opening"}
         pendingLabel={words.opening}
         size="sm"
-        variant="outline"
+        variant={flow.phase === "idle" || flow.phase === "opening"
+          ? undefined
+          : "outline"}
       />
     {/if}
     <span class="type-meta text-ink-muted">{words.thenPaste}</span>
   </div>
+  {#if flow.problem && flow.url === null}
+    <!-- No link to paste a code from: the refusal stands under the way on,
+         a new link, and the field stays as it was. -->
+    {@render problem(flow.problem)}
+  {/if}
   <form
     data-slot="row"
     class="flex min-w-0 items-center gap-space-2"
@@ -72,8 +96,10 @@
     }}
   >
     <Input
-      aria-describedby={flow.problem ? `${codeId}-problem` : undefined}
-      aria-invalid={flow.problem ? "true" : undefined}
+      aria-describedby={flow.problem && flow.url
+        ? `${codeId}-problem`
+        : undefined}
+      aria-invalid={flow.problem && flow.url ? "true" : undefined}
       aria-label={words.codeLabel}
       autocomplete="off"
       autofocus={flow.url !== null && flow.phase === "ready"}
@@ -85,25 +111,16 @@
     />
     <Button
       disabled={flow.url === null || flow.code.trim() === ""}
-      failed={flow.problem !== null}
+      failed={flow.problem !== null && flow.url !== null}
       label={words.done}
       pending={flow.phase === "checking"}
       pendingLabel={words.checking}
       type="submit"
+      variant={flow.url === null ? "outline" : undefined}
     />
   </form>
-  {#if flow.problem}
-    <!-- The daemon's sentence, then the CLI's screen lines, each its own line. -->
-    <p
-      data-slot="error"
-      class="type-meta flex items-start gap-space-2 text-status-fail-ink whitespace-pre-line wrap-anywhere"
-      data-signin-problem
-      id="{codeId}-problem"
-      role="alert"
-      in:appear
-    >
-      {flow.problem}
-    </p>
+  {#if flow.problem && flow.url !== null}
+    {@render problem(flow.problem)}
   {:else if flow.phase === "signed-in"}
     <p
       data-slot="got"

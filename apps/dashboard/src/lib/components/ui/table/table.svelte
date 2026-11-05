@@ -93,6 +93,14 @@
     /** A column on its end edge: a figure's, and a row's trailing action. */
     edge: { end: "text-end" },
     /**
+     * Where a cell's content stands in a row taller than its own: on the
+     * row's first line, for a ledger whose cells can wrap under their
+     * first line (a refusal under a row's state), so every cell's first
+     * line shares one centre line. Its content's first line stands the row
+     * pitch tall (`min-h-c-ledger-row-h`) to keep that line centred.
+     */
+    settle: { top: "align-top" },
+    /**
      * Where a column folds away, by its own table's width
      * (`@container/table`), so a ledger fits its place and never scrolls
      * sideways.

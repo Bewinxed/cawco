@@ -66,6 +66,7 @@
   type TableCellRule = VariantProps<typeof tableCellVariants>["rule"];
   type TableCellEdge = VariantProps<typeof tableCellVariants>["edge"];
   type TableCellFold = VariantProps<typeof tableCellVariants>["fold"];
+  type TableCellSettle = VariantProps<typeof tableCellVariants>["settle"];
 </script>
 
 <script lang="ts">
@@ -80,6 +81,7 @@
     rule,
     edge,
     fold,
+    settle,
     children,
     ...restProps
   }: WithElementRef<HTMLTdAttributes> & {
@@ -87,6 +89,7 @@
     rule?: TableCellRule;
     edge?: TableCellEdge;
     fold?: TableCellFold;
+    settle?: TableCellSettle;
   } = $props();
 
   const table = getTableContext();
@@ -99,7 +102,7 @@
      stays folded where the card makes its cells blocks. -->
 <td
   class={cn(
-    tableCellVariants({ variant, rule, edge }),
+    tableCellVariants({ variant, rule, edge, settle }),
     card,
     fold && tableColumn.fold[fold],
     className
