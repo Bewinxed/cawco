@@ -35,6 +35,7 @@
   import { track } from "#lib/cawco/track.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import HeadFade from "#lib/components/ui/scroll-edge/head-fade.svelte";
   import { IconAlert, IconChat, IconLaptop } from "#lib/icons.js";
   import { browser } from "$app/env";
   import { page } from "$app/state";
@@ -103,7 +104,6 @@
   import { connectSignIns } from "./transcript/connect-sign-ins.svelte";
   import FootFade from "./transcript/FootFade.svelte";
   import { followSends } from "./transcript/follow-sends.svelte";
-  import HeadFade from "./transcript/HeadFade.svelte";
   import { keepDraft } from "./transcript/keep-draft.svelte";
   import ProjectOffer from "./transcript/ProjectOffer.svelte";
   import { parkedAsks } from "./transcript/present";
@@ -160,7 +160,7 @@
      * composer writes on the panel's `draft`, so half-written words outlive
      * the panel being put away.
      */
-    docked?: { draft: ComposerDraft };
+    docked?: { draft: ComposerDraft; headRoom?: string };
     /** What stands at the transcript's end, after its last row (a project's setup element, SetupWell). */
     afterRows?: Snippet;
     /** What stands after the rows says the agent is at work: the bare working line stands down (Transcript). */
@@ -1350,7 +1350,10 @@
        the surface a swipe carries, not the thing that carries it. -->
     <div
       data-slot="transcript-slide"
-      class="relative isolate flex min-h-0 flex-auto flex-col overflow-hidden timeline-scope-transcript-head"
+      class={[
+        "relative isolate flex min-h-0 flex-auto flex-col overflow-hidden",
+        !docked && "timeline-scope-transcript-head",
+      ]}
     >
       <!-- A named state, not an empty pane: what happened, in one line,
                and the one thing that can be done about it. -->
@@ -1387,6 +1390,7 @@
               {agentName}
               {firstScreen}
               {focused}
+              headRoom={docked?.headRoom}
               latestInset={reserved ? "var(--space-2)" : undefined}
               onshown={(drawn) => {
                 shown = drawn;
@@ -1399,7 +1403,9 @@
             />
           </RegionBoundary>
         </div>
-        <HeadFade />
+        {#if !docked}
+          <HeadFade />
+        {/if}
       {/if}
       <!-- The skeleton stands in for rows still on their way and hands its
            place to them in its reveal (motion/curves `reveal`) once they are

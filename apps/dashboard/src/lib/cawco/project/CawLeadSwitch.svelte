@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { cawSwitchWords } from "@cawco/core/words/project-conversation";
   /**
-   * Whether the project's events reach a conversation, the project's own
+   * Whether Caw acts on his own in the project (the project's events reach
+   * his conversation; said as Caw is, `cawSwitchWords`), the project's own
    * switch (fable-lead-switch.md §1): one component wherever it stands,
-   * CawPanel (⋯ › Caw settings…, and Events on/off in his panel's head)
+   * CawPanel (⋯ › Caw settings…, and Caw is on / off in his panel's bar)
    * and the head's details tray
    * (ProjectDetails), so its ways off come with it. Off, no event starts or
    * reaches a conversation.
@@ -29,7 +31,7 @@
     lead,
     projectId,
     projectName,
-    label = "Events reach a conversation",
+    label = cawSwitchWords.label,
     place,
   }: {
     /** Where its off tray stands (stop-work places); the project's settings' own when left out. */
@@ -84,6 +86,8 @@
   />
   <span>{label}</span>
 </label>
+<!-- What on means, the one thing to know before flipping it. -->
+<p class="m-0 type-meta text-pretty text-ink-muted">{cawSwitchWords.line}</p>
 {#if offJob}
   {#if offJob.at === at}
     <CawOffTray job={offJob} />

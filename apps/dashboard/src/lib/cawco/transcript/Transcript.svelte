@@ -142,6 +142,7 @@
     firstScreen = false,
     parkedHeight = 0,
     latestInset,
+    headRoom,
     afterRows,
     afterRowsAtWork = false,
 
@@ -196,6 +197,12 @@
     parkedHeight?: number;
     /** Where the way back to the tail rests, up from the scroller's foot, when the pane says (a docked conversation's). */
     latestInset?: string;
+    /**
+     * How far a bar floating over the transcript's top stands into it, a CSS
+     * length (a docked conversation's panel bar): the first row clears it at
+     * rest and scrolls under it.
+     */
+    headRoom?: string;
   } = $props();
 
   setContext("cawco:machine", () => session.machineId);
@@ -4871,6 +4878,9 @@
     <p
       data-slot="transcript-empty"
       class="mark-line isolate flex items-center gap-space-2 text-size-meta font-normal text-ink-muted py-space-5"
+      style:padding-top={headRoom
+        ? `calc(var(--space-5) + ${headRoom})`
+        : undefined}
     >
       <LiveDot /><span>Loading transcript…</span>
     </p>
@@ -4878,7 +4888,11 @@
     <!-- Only once the read has said the conversation is empty, fading in
          where it stands. The two keys that do anything from the composer
          below. Left-aligned: this surface is a ledger. -->
-    <div class="isolate" in:crossIn>
+    <div
+      class="isolate pt-(--head-room,0px)"
+      style:--head-room={headRoom}
+      in:crossIn
+    >
       <!-- Its one action starts the work (DESIGN.md, The Empty Starts Work
            Rule, a session's own case): its own agent asked, in this
            session's composer, unsent; with no composer standing, the New
@@ -4909,7 +4923,11 @@
        of the rows held; a page is asked for a viewport before that. -->
   <!-- The failed line's button stands off the first row by the line's own
        block padding. -->
-  <div class="isolate has-data-retry:pb-space-5" {@attach keepPlace}>
+  <div
+    class="isolate pt-(--head-room,0px) has-data-retry:pb-space-5"
+    style:--head-room={headRoom}
+    {@attach keepPlace}
+  >
     {#if renderedRows.length > 0 && session.olderFault}
       <p
         data-slot="transcript-empty"

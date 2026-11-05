@@ -13,14 +13,15 @@
    *   seat on the page is the one live Caw (DESIGN.md, The Flock Rule). A starter puts its words in the
    *   composer; nothing is sent. The first words start a conversation
    *   (conversation.ts), and the panel shows it.
-   * - Its head is Caw's face, his name over the conversation's status word
-   *   and which conversation it is (its title; "gets the project's events"
-   *   on the one they reach: every conversation is Caw, so the line tells
-   *   them apart), then Events on/off, New conversation and the way to open
-   *   it as a tab. Events on/off says whether the project's events reach a
-   *   conversation and, pressed, unfolds his settings under the head
-   *   (CawPanel: what he is doing, the project's switch, its off tray), so
-   *   he is turned on or off where he is talked to. His name opens the
+   * - Its bar (BarFloat; DESIGN.md, The Title Bars Follow Liquid Glass
+   *   Rule) is one row with no ground over the conversation and no title
+   *   (his seat opened it by his name; each of his conversations is named by
+   *   what it is about where they are listed), in one glass group whether
+   *   he is on (Caw is off said in words, the state no
+   *   symbol says), Session details, New conversation and Open as a tab, and
+   *   the phone sheet's Close in a group of its own. Caw is on/off opens his
+   *   settings (CawPanel: what he is doing, his switch, its off tray), so he
+   *   is turned on or off where he is talked to. Session details opens the
    *   session's card (SessionDetails); on the conversation the project's
    *   events reach, its harness and model are the project's (ModelSection).
    * - Its two tabs (decision page `onboarding-design`, card `artifact-open`):
@@ -39,8 +40,13 @@
    */
   import { HARNESSES, type HarnessKind } from "@cawco/core/harness";
   import { CAW_NO_MACHINE } from "@cawco/core/project-conversation";
+  import { commonWords } from "@cawco/core/words/common";
   import { cawPanelWords } from "@cawco/core/words/onboarding";
-  import { conversationWords } from "@cawco/core/words/project-conversation";
+  import {
+    cawSwitchWords,
+    conversationWords,
+  } from "@cawco/core/words/project-conversation";
+  import { transcriptWords } from "@cawco/core/words/transcript";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import {
@@ -48,11 +54,9 @@
     type PendingPermission,
     type SendExtras,
   } from "#lib/cawco/client.svelte.js";
-  import CawFace from "#lib/cawco/home/CawFace.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { rowHref } from "#lib/cawco/links.js";
   import { crossIn } from "#lib/cawco/motion/curves.svelte.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
   import {
     type ProjectStarter,
@@ -68,14 +72,19 @@
   import FootFade from "#lib/cawco/transcript/FootFade.svelte";
   import TranscriptSkeleton from "#lib/cawco/transcript/TranscriptSkeleton.svelte";
   import SessionDetails from "#lib/cawco/workspace/SessionDetails.svelte";
-  import { sessionStatusOf } from "#lib/cawco/workspace/session-status.js";
   import {
     Alert,
     AlertAction,
     AlertDescription,
   } from "#lib/components/ui/alert/index.js";
+  import {
+    BarFloat,
+    BarGlass,
+    BarItem,
+  } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import {
     TabItem,
@@ -88,9 +97,13 @@
   import {
     IconChatAdd,
     IconClose,
+    IconInfo,
     IconMaximize,
+    IconMore,
     IconPlus,
+    IconSettings,
   } from "#lib/icons.js";
+  import { goto } from "$app/navigation";
   import { barGlass } from "../bar-glass.svelte";
   import CawPanel from "./CawPanel.svelte";
   import type { CawLead } from "./caw-lead.svelte";
@@ -212,47 +225,14 @@
     };
   });
 
-  // --- what his line says -------------------------------------------------------
+  // --- his bar -------------------------------------------------------------------
 
   const off = $derived(lead.on === false);
-  /** His settings unfolded under the head (Events on/off pressed). */
-  let eventsOpen = $state(false);
-  /**
-   * Which conversation is on show, after its status word: the one the
-   * project's events reach, said so; another, by its title (each is Caw,
-   * so the title is what tells them apart); none while its title is his
-   * name.
-   */
-  const which = $derived.by(() => {
-    if (!shown) {
-      return null;
-    }
-    if (!off && shown === lead.project?.conversationInstanceId) {
-      return conversationWords.getsEvents;
-    }
-    const title = sessionTitle(shown);
-    return title && title !== "Caw" ? title : null;
-  });
-  /**
-   * Past the project's cap with nothing more pressing, the cap's line, as
-   * his head's line says it; with a conversation on show, its status word;
-   * else, off and at rest, that only your words wake him, or what he is.
-   */
-  const said = $derived.by(() => {
-    if (lead.capSays) {
-      return lead.capSays;
-    }
-    if (startingHere) {
-      return conversationWords.status.starting;
-    }
-    if (shown) {
-      return sessionStatusOf(shown).label;
-    }
-    if (off && lead.status === "sleeping") {
-      return "Answers when you write";
-    }
-    return lead.sentence;
-  });
+  /** His settings stand open from the bar (Caw is on / Caw is off pressed). */
+  let settingsOpen = $state(false);
+  let settingsAnchor = $state<HTMLElement | null>(null);
+  /** The sheet's More, which Session details opens from on a phone. */
+  let moreAnchor = $state<HTMLElement | null>(null);
 
   // --- the session's card ---------------------------------------------------------
 
@@ -401,8 +381,9 @@
 <!-- Assistant and Preview: the switch in whichever bar heads the panel,
      his on Assistant, the preview's own on Preview (`switchAt`). -->
 {#snippet switcher()}
-  <!-- Whole at every width: the bar's title gives way before its words. -->
-  <div class="flex-none" data-slot="caw-tabs">
+  <!-- Whole at every width. Over the floating bar, whose row takes no
+       press, it takes its own (BarFloat lets only its groups through). -->
+  <div class="pointer-events-auto flex-none" data-slot="caw-tabs">
     <Tabs
       onValueChange={(next) => {
         lead.tab = next === "preview" ? "preview" : "assistant";
@@ -419,132 +400,153 @@
 {/snippet}
 
 <div
-  class="flex h-full min-h-0 flex-auto flex-col"
+  class="relative flex h-full min-h-0 flex-auto flex-col timeline-scope-transcript-head"
   data-caw-panel
   data-caw-tab={onPreview ? "preview" : "assistant"}
 >
-  <div
-    data-slot="head"
-    class="flex min-h-c-btn-h-sm flex-none items-center gap-space-2 border-b border-b-border-hairline pt-space-2 pr-space-2 pb-space-2 pl-space-4"
-    data-caw-head
-    hidden={onPreview}
-  >
-    {#if previewOpen && switchAt === "start"}
-      <!-- Leading: where the preview's own bar holds a surface's switch
-           (SideSurface, as a session's Plan | Preview), so it stays put as
-           the tabs change. -->
-      {@render switcher()}
-    {/if}
-    <CawFace size={18} status={lead.status} />
-    <div class="flex min-w-0 flex-auto flex-col items-start">
-      {#if shown}
-        <button
-          data-slot="name"
-          aria-expanded={cardOpen}
-          aria-haspopup="dialog"
-          class="select-none press-tint type-label -mx-space-1 rounded-xs border-none border-current bg-transparent px-space-1 font-medium text-ink-strong transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
-          onclick={cardPress}
-          onpointerenter={(event) => {
-            cardAnchor = event.currentTarget;
-            cardRest(event);
-          }}
-          onpointerleave={cardLeave}
-          type="button"
-          bind:this={cardAnchor}
-        >
-          Caw
-        </button>
-      {:else}
-        <span
-          data-slot="name"
-          class="type-label -mx-space-1 rounded-xs border-none border-current bg-transparent px-space-1 font-medium text-ink-strong"
-          >Caw</span
-        >
-      {/if}
-      <span class="type-meta max-w-full truncate text-ink-muted" data-caw-line
-        >{which ? `${said} · ${which}` : said}</span
-      >
-    </div>
-    <div class="flex flex-none items-center gap-space-1">
-      {#if lead.on !== null}
-        <!-- Whether the project's events reach him, as it stands; pressed,
-             his switch unfolds under the head. -->
-        <Button
-          aria-controls="caw-events-{projectId}"
-          aria-expanded={eventsOpen}
-          data-caw-events={off ? "off" : "on"}
-          label={off
-            ? conversationWords.events.off
-            : conversationWords.events.on}
-          onclick={() => {
-            eventsOpen = !eventsOpen;
-          }}
-          press="pressable"
-          size="sm"
-          variant="ghost"
-        />
-      {/if}
-      {#if shown}
-        <Tip label={conversationWords.newConversation}>
-          {#snippet children(tip)}
-            <Button
-              {...tip}
-              aria-label={conversationWords.newConversation}
-              press="pressable"
+  <!-- The panel's bar (DESIGN.md, The Title Bars Follow Liquid Glass Rule):
+       one row with no ground, floating over the conversation, which runs to
+       the panel's top, clears the bar at rest and blurs and fades under it
+       from the first scroll (BarFloat). It has no title: his seat opened it
+       by his name, and the conversation is named where his conversations
+       are listed (the rail, its tab, Session details) by what it is about.
+       His controls float in the top bar's glass: whether he is on (words only while he is off, the
+       state no symbol says), Session details, New conversation and Open as
+       a tab in one group, the sheet's Close in one of its own (HIG,
+       Toolbars). On Preview the preview's own bar is the panel's one. -->
+  {#if !onPreview}
+    <BarFloat tint="bg-surface-recess">
+      {#snippet leading()}
+        {#if previewOpen && (switchAt === "start" || sheet)}
+          <!-- Leading: where the preview's own bar holds a surface's switch
+               (SideSurface, as a session's Plan | Preview), so it stays put
+               as the tabs change; on a phone's sheet always, where the
+               trailing half holds his group and Close. -->
+          {@render switcher()}
+        {/if}
+      {/snippet}
+      {#snippet trailing()}
+        {#if previewOpen && switchAt === "end" && !sheet}
+          {@render switcher()}
+        {/if}
+        <BarGlass form="group">
+          {#if lead.on !== null}
+            <!-- Whether he is on, his settings pressed open: his switch and,
+                 turning him off with work running, what it stops. -->
+            <Tip label={off ? cawSwitchWords.off : cawSwitchWords.on}>
+              {#snippet children(tip)}
+                <button
+                  {...tip}
+                  aria-expanded={settingsOpen}
+                  aria-haspopup="dialog"
+                  aria-label={off ? cawSwitchWords.off : cawSwitchWords.on}
+                  class="mark-line select-none touch-hit press-tint"
+                  data-bar-item
+                  data-box
+                  data-caw-on={off ? "off" : "on"}
+                  data-counted={off ? "" : undefined}
+                  onclick={() => {
+                    settingsOpen = !settingsOpen;
+                  }}
+                  type="button"
+                  bind:this={settingsAnchor}
+                >
+                  <IconSettings aria-hidden="true" data-slot="bar-symbol" />
+                  {#if off}
+                    <span data-slot="num">{cawSwitchWords.off}</span>
+                  {/if}
+                </button>
+              {/snippet}
+            </Tip>
+          {/if}
+          {#if shown && sheet}
+            <!-- A phone's sheet has room for one group and Close beside
+                 Assistant | Preview: Session details and Open as a tab go
+                 under More. -->
+            <BarItem
               icon={IconPlus}
+              label={conversationWords.newConversation}
               onclick={newConversation}
-              size="icon-sm"
-              variant="ghost"
             />
-          {/snippet}
-        </Tip>
-        <Tip label={conversationWords.openAsTab}>
-          {#snippet children(tip)}
-            <Button
-              {...tip}
-              aria-label={conversationWords.openAsTab}
-              press="pressable"
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger>
+                {#snippet child({ props })}
+                  <BarItem
+                    icon={IconMore}
+                    label={commonWords.moreFor(conversationWords.conversation)}
+                    {props}
+                    bind:ref={moreAnchor}
+                  />
+                {/snippet}
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content align="end" width="regular">
+                <DropdownMenu.Item
+                  onSelect={() => {
+                    cardAnchor = moreAnchor;
+                    cardPress();
+                  }}
+                >
+                  <IconInfo />
+                  <span>{transcriptWords.sessionDetails}</span>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item onSelect={() => goto(rowHref(shown ?? ""))}>
+                  <IconMaximize />
+                  <span>{conversationWords.openAsTab}</span>
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
+          {:else if shown}
+            <BarItem
+              aria-expanded={cardOpen}
+              aria-haspopup="dialog"
+              icon={IconInfo}
+              label={transcriptWords.sessionDetails}
+              onclick={cardPress}
+              onpointerenter={(event: PointerEvent) => {
+                cardAnchor = event.currentTarget as HTMLElement;
+                cardRest(event);
+              }}
+              onpointerleave={cardLeave}
+              bind:ref={cardAnchor}
+            />
+            <BarItem
+              icon={IconPlus}
+              label={conversationWords.newConversation}
+              onclick={newConversation}
+            />
+            <BarItem
               href={rowHref(shown ?? "")}
               icon={IconMaximize}
-              size="icon-sm"
-              variant="ghost"
+              label={conversationWords.openAsTab}
             />
-          {/snippet}
-        </Tip>
-      {/if}
-      {#if previewOpen && switchAt === "end"}
-        <!-- At the bar's end, top right, as the preview's bar holds it
-             before its Close. -->
-        {@render switcher()}
-      {/if}
-      {#if sheet}
-        <!-- The sheet's Close, the ghost his head's other actions are. -->
-        <Drawer.Close>
-          {#snippet child({ props })}
-            <Button
-              {...props}
-              aria-label="Close"
-              press="pressable"
-              icon={IconClose}
-              size="icon-sm"
-              title="Close"
-              variant="ghost"
-            />
-          {/snippet}
-        </Drawer.Close>
-      {/if}
-    </div>
-  </div>
-  {#if eventsOpen && !onPreview}
-    <!-- His settings, unfolded under his head: what he is doing, the
-         project's switch, and its off tray when turning him off leaves work
-         running (CawLeadSwitch). -->
-    <div
-      class="flex-none border-b border-b-border-hairline px-space-4 pt-space-2 pb-space-3"
-      data-slot="caw-events"
-      id="caw-events-{projectId}"
-      in:unfold
-      out:unfold
+          {/if}
+        </BarGlass>
+        {#if sheet}
+          <BarGlass form="group">
+            <Drawer.Close>
+              {#snippet child({ props })}
+                <BarItem icon={IconClose} label="Close" {props} />
+              {/snippet}
+            </Drawer.Close>
+          </BarGlass>
+        {/if}
+      {/snippet}
+    </BarFloat>
+  {/if}
+  <!-- His settings, from the bar: what he is doing, his switch, and its off
+       tray when turning him off leaves work running (CawLeadSwitch). -->
+  <Popover.Root bind:open={settingsOpen}>
+    <Popover.Content
+      align="end"
+      aria-label={cawSwitchWords.settings}
+      class="w-(--settings-w)"
+      collisionPadding={12}
+      customAnchor={settingsAnchor}
+      data-caw-settings
+      pad="inset"
+      side="bottom"
+      sideOffset={4}
+      style="--settings-w: min(var(--c-panel-w), calc(100vw - var(--space-5)))"
     >
       <CawPanel
         {lead}
@@ -553,8 +555,8 @@
         {projectName}
         sheet
       />
-    </div>
-  {/if}
+    </Popover.Content>
+  </Popover.Root>
   <div data-slot="well" class="relative flex min-h-0 flex-auto flex-col">
     {#if startingHere}
       <!-- His start, on the transcript's own columns where his conversation
@@ -564,7 +566,7 @@
       <div
         data-slot="caw-starting"
         data-tx-columns
-        class="tx-columns flex min-h-0 flex-auto flex-col overflow-y-auto ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5"
+        class="tx-columns flex min-h-0 flex-auto flex-col overflow-y-auto scroll-timeline-transcript-head ps-space-7 pe-space-6 pt-c-top-bar-h max-desk:ps-space-5 max-desk:pe-space-5"
         in:crossIn
       >
         {#if setup}
@@ -595,7 +597,7 @@
             browsing={null}
             browsingCwd=""
             browsingHarness={undefined}
-            docked={{ draft: lead.draft }}
+            docked={{ draft: lead.draft, headRoom: "var(--c-top-bar-h)" }}
             focused={!onPreview}
             afterRows={setup ? setupTail : undefined}
             afterRowsAtWork={setup !== null && !handedOver(setup)}
@@ -645,7 +647,7 @@
              edge (--space-3 where the composer goes edge to edge, under
              900px). It clears the composer as a transcript does. -->
           <div
-            class="isolate flex min-h-0 flex-auto flex-col overflow-y-auto px-(--hero-px) pb-(--composer-clearance) max-desk:px-space-3"
+            class="isolate flex min-h-0 flex-auto flex-col overflow-y-auto scroll-timeline-transcript-head px-(--hero-px) pt-c-top-bar-h pb-(--composer-clearance) max-desk:px-space-3"
             data-slot="conversation-hero"
             style:--hero-px="calc((100% - var(--c-composer-w)) / 2)"
             in:crossIn
@@ -654,9 +656,6 @@
               actionWidth="fill"
               axis
               icon={IconChatAdd}
-              line={off
-                ? "Caw is off, so he acts only when you write to him."
-                : undefined}
               title="What’s next for {projectName}?"
             >
               {#snippet action()}
@@ -777,7 +776,7 @@
         {kept}
         onclose={cardClose}
         sessionId={shown}
-        title="Caw · {projectName}"
+        title={sessionTitle(shown) ?? projectName}
       />
     </Popover.Content>
   </Popover.Root>

@@ -71,6 +71,7 @@ import {
   type WorkspaceRef,
 } from "@cawco/core";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
+import { deriveTitleFromFirstMessage } from "@cawco/core/title";
 import { unhandled } from "@cawco/core/unhandled";
 import { areaWords } from "@cawco/core/words/areas";
 import { noticeWords } from "@cawco/core/words/notices";
@@ -399,6 +400,20 @@ const saidOf = (
             : PROJECT_ORIGIN,
         },
       };
+    default:
+      return unhandled("project event", event);
+  }
+};
+
+/** What `event` is about, in the words a person reads of it: a conversation it starts is named by them ({@link Start}). */
+const aboutOf = (event: ProjectEvent): string => {
+  switch (event.by) {
+    case "you":
+      return event.words;
+    case "act":
+      return event.origin.line ?? event.text;
+    case "event":
+      return event.text;
     default:
       return unhandled("project event", event);
   }
@@ -751,6 +766,13 @@ export const createCaw = ({
 
   /** What starts the conversation: how it routes, its first send once its row is there, and how. */
   interface Start {
+    /**
+     * What the conversation is about, in the words that started it: its
+     * name, as a conversation the person starts is named by their first
+     * words. There is one Caw, and every conversation is his, so none is
+     * named Caw.
+     */
+    about: string;
     by: Origin;
     first: (session: InstanceRow) => Said;
     mode?: OfferedMode;
@@ -780,7 +802,7 @@ export const createCaw = ({
         ...(start.mode ? { permissionMode: start.mode } : {}),
         ...(start.skills?.length ? { skills: [...start.skills] } : {}),
         projectId: project.id,
-        title: "Caw",
+        title: deriveTitleFromFirstMessage(start.about),
         requestId: crypto.randomUUID(),
       });
     } catch (error) {
@@ -902,6 +924,7 @@ export const createCaw = ({
     try {
       conversation = await conversationFor(projectId, {
         by: routeOf(event),
+        about: aboutOf(event),
         first: said,
         ...(skills ? { skills } : {}),
         ...(mode ? { mode } : {}),
@@ -1261,14 +1284,16 @@ export const createCaw = ({
     ): Promise<InstanceRow | undefined> => {
       const project = projectOf(projectId);
       const mode = modeFor(project, undefined);
+      const trigger = `${by === "you" ? "the person" : "the hub"} started an attempt at one of its tasks`;
       return (
         await conversationFor(projectId, {
           by,
+          about: `${trigger[0]?.toUpperCase() ?? ""}${trigger.slice(1)}`,
           first: (session) =>
             saidOf(project, session.cwd, {
               by: "event",
               kind: "delegate-report",
-              trigger: `${by === "you" ? "the person" : "the hub"} started an attempt at one of its tasks`,
+              trigger,
               text: "Its report comes to you when it ends.",
             }),
           ...(mode ? { mode } : {}),

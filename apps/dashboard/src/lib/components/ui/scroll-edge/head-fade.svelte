@@ -9,6 +9,13 @@
   the transcript's own layer, so the transcript's overlays stand above it and
   only its rows pass under.
 
+  A floating bar draws the same edge under its glass groups (BarFloat): its
+  band is the bar's height (`band`) and its colour the ground the surface's
+  content stands on (`tint`), so what scrolls under the bar blurs and fades
+  into that ground (DESIGN.md, The Title Bars Follow Liquid Glass Rule: "the
+  content blurs and fades under the bar … in from the first scroll and absent
+  at rest").
+
   The blur is the app's progressive blur (progressive-blur.ts): its layers,
   their blurs and their slices are drawn from there. The colour is one layer
   over them, the tab's sheet through `--head-tint-ramp`: none at the band's
@@ -27,12 +34,23 @@
 -->
 <script lang="ts">
   import { layerBlur, layerMask, PROGRESSIVE_BLUR } from "./progressive-blur";
+
+  let {
+    band,
+    tint = "bg-tab-sheet",
+  }: {
+    /** The band's height, a CSS length: `--c-head-fade` under a tab strip, a bar's height under a floating bar. */
+    band?: string;
+    /** The ground the rows dissolve into, a background class: the chosen tab's sheet by default. */
+    tint?: string;
+  } = $props();
 </script>
 
 <div
   data-slot="head-fade"
   aria-hidden="true"
-  class="absolute inset-x-0 top-0 z-1 h-c-head-fade pointer-events-none"
+  class="absolute inset-x-0 top-0 z-1 h-(--band) pointer-events-none"
+  style:--band={band ?? "var(--c-head-fade)"}
 >
   <!-- Each layer clear while nothing is under it: at rest, and whenever the
        transcript does not scroll (its timeline is inactive). -->
@@ -49,6 +67,9 @@
   <!-- The chosen tab's sheet, over the blur, on the ramp. -->
   <div
     data-slot="layer"
-    class="absolute inset-0 opacity-0 bg-tab-sheet mask-(--head-tint-ramp) head-fade-scrub"
+    class={[
+      "absolute inset-0 opacity-0 mask-(--head-tint-ramp) head-fade-scrub",
+      tint,
+    ]}
   ></div>
 </div>
