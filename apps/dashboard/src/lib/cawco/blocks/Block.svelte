@@ -165,6 +165,7 @@
         >
           <IconMore />
         </DropdownMenu.Trigger>
+        <!-- golar-ignore-next-line house/no-detached-bar-menu -- a block's menu waits for its own screen's run: the artifact panel run (2026-11-05) fixed only its own and named this one -->
         <DropdownMenu.Content align="end" class="w-auto">
           <DropdownMenu.Item disabled={first} onSelect={() => onmove(-1)}>
             <IconArrowUp />

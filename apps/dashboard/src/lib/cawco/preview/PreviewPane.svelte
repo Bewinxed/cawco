@@ -68,6 +68,11 @@
     ThreadEntrySchema,
   } from "#lib/cawco/stored-shapes.js";
   import { track } from "#lib/cawco/track.js";
+  import {
+    BarGlass,
+    BarItem,
+    BarMenu,
+  } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
@@ -81,7 +86,7 @@
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { Toggle } from "#lib/components/ui/toggle/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconAlert,
     IconArchive,
@@ -150,7 +155,6 @@
     motionOk,
     revealOn,
     rise,
-    sheetSlide,
   } from "../motion/curves.svelte";
   import { landKey } from "../motion/keyed.svelte";
   import { settleAway } from "../motion/rest.js";
@@ -1299,8 +1303,6 @@
       ? artifactWords.sentTo(ownerName)
       : (artifact?.ask ?? "")
   );
-  /** Whether the head has room for its line under the name (SideSurface's rule); else the menu says it first. */
-  let lineStands = $state(true);
   /*
    * A sheet's stage (live components): the project's own dev toolchain
    * (Vite, Astro or Nuxt), which the
@@ -3506,6 +3508,17 @@
    * Undock fly that same iframe between the composer and here.
    */
   const isCanvas = $derived(artifact?.kind === "canvas");
+  /** The rail's bottom sheet stands up (ThreadSheet `open`). */
+  const railSheetOpen = $derived(
+    listOpen && railPlaced && !isCanvas && railSheet && !railAway
+  );
+  /** The rail's bottom sheet is drawn: from its open until it has slid down (ThreadSheet `onclosed`). */
+  let railSheetDrawn = $state(false);
+  $effect(() => {
+    if (railSheetOpen) {
+      railSheetDrawn = true;
+    }
+  });
   /*
    * A browser (Projects spec §5.11, "The view") is its stream in the well
    * (BrowserView), its head's own control Take over, or Hand back while the
@@ -3755,6 +3768,7 @@
         priority: HEAD_PRIORITY.control,
         bar: controlBar,
         menu: controlMenu,
+        place: "prominent",
       });
     }
     // A decision page's one Send is its own, at its foot (its doc's
@@ -3765,6 +3779,7 @@
         priority: HEAD_PRIORITY.send,
         bar: sendBar,
         menu: sendMenu,
+        place: "prominent",
         words: true,
       });
     }
@@ -3820,6 +3835,7 @@
         compact: modeCompact,
         menu: modeMenu,
         group: true,
+        place: "centre",
       });
       all.push({
         key: "comments",
@@ -3827,7 +3843,6 @@
         bar: commentsBar,
         menu: commentsMenu,
         count: { glyph: IconChat, n: listOpen ? 0 : openCount, of: "Comments" },
-        words: true,
       });
     }
     all.push({
@@ -3937,7 +3952,9 @@
 {/snippet}
 
 <!-- The head's controls, each as the head draws it and as More's entries
-     (SideSurface `items`, by the head's priority rule). -->
+     (SideSurface `items`, by the head's priority rule): the bare symbols of
+     its glass, the mode in its centre, and Send (or a browser's Take over)
+     the one prominent action after the glass, on the coral. -->
 {#snippet sendBar()}
   <!-- What of the page the session hasn't heard, picks and comments alike: one press sends it all. -->
   <Button
@@ -3945,9 +3962,7 @@
     aria-label={`${commentWords.send}, ${unsentCount} unsent`}
     onclick={() => sendAll("panel-head")}
     pending={sending}
-    size="sm"
     title="Send what the session hasn't heard"
-    variant="ghost"
   >
     <PendingContent icon={IconSend} pending={sending} />
     <span data-slot="send-label" class="in-form-compact:hidden"
@@ -3976,7 +3991,6 @@
     onclick={browserControl}
     pending={browserActing}
     pendingLabel={holding ? browserWords.handingBack : browserWords.takingOver}
-    size="sm"
     variant={holding ? "outline" : "default"}
   />
 {/snippet}
@@ -3993,14 +4007,15 @@
 {/snippet}
 
 {#snippet createBar()}
-  <Button
-    aria-label="New canvas"
+  <BarItem
+    aria-busy={making || undefined}
     icon={IconPlus}
-    onclick={newCanvas}
-    pending={making}
-    size="icon-sm"
-    title="New canvas"
-    variant="ghost"
+    label="New canvas"
+    onclick={() => {
+      if (!making) {
+        newCanvas();
+      }
+    }}
   />
 {/snippet}
 {#snippet createMenu()}
@@ -4013,18 +4028,17 @@
 {/snippet}
 
 {#snippet undockBar()}
-  <Button
+  <BarItem
     data-slot="other"
-    aria-label="Undock"
-    dimmed={mode !== "interact" && !isCanvas}
-    disabled={!stage}
-    onclick={() => giveBack(false)}
-    size="icon-sm"
-    title="Undock"
-    variant="ghost"
-  >
-    <IconUndock />
-  </Button>
+    aria-disabled={!stage || undefined}
+    icon={IconUndock}
+    label="Undock"
+    onclick={() => {
+      if (stage) {
+        giveBack(false);
+      }
+    }}
+  />
 {/snippet}
 {#snippet undockMenu()}
   <DropdownMenu.Item disabled={!stage} onSelect={() => giveBack(false)}>
@@ -4035,17 +4049,13 @@
 {#snippet openBar()}
   {#if artifact}
     <!-- The same artifact, its doc and its tools, in a tab of its own. -->
-    <Button
+    <BarItem
       data-slot="other"
-      aria-label="Open in new tab"
-      dimmed={mode !== "interact" && !isCanvas}
       href={`/artifact/${encodeURIComponent(artifact.id)}`}
-      rel="noopener"
-      size="icon-sm"
-      target="_blank"
-      title="Open in new tab"
-      variant="ghost"><IconExternal /></Button
-    >
+      icon={IconExternal}
+      label="Open in new tab"
+      props={{ rel: "noopener", target: "_blank" }}
+    />
   {/if}
 {/snippet}
 {#snippet openMenu()}
@@ -4088,15 +4098,22 @@
 
 {#snippet inspectBar()}
   <!-- A sheet's inspector: its stories' props as controls, beside the page or over its foot. -->
-  <Toggle
-    aria-label={artifactWords.inspect}
-    onPressedChange={(open) => showInspector(open)}
-    pressed={inspectOpen}
-    size="sm"
-    title={artifactWords.inspectTitle}
-  >
-    <IconTuning />
-  </Toggle>
+  <Tip label={artifactWords.inspectTitle}>
+    {#snippet children(tip)}
+      <button
+        {...tip}
+        aria-label={artifactWords.inspect}
+        aria-pressed={inspectOpen}
+        class="select-none touch-hit press-tint aria-pressed:bg-surface-pressed"
+        data-bar-item
+        data-box
+        onclick={() => showInspector(!inspectOpen)}
+        type="button"
+      >
+        <IconTuning aria-hidden="true" data-slot="bar-symbol" />
+      </button>
+    {/snippet}
+  </Tip>
 {/snippet}
 {#snippet inspectMenu()}
   <!-- Its glyph as the bar's, so its words start where More's other entries' do. -->
@@ -4114,7 +4131,6 @@
   <div data-slot="modes">
     <Tabs
       onValueChange={(next) => setMode(previewMode(next) ?? "interact")}
-      size="compact"
       value={mode}
       values={["interact", "comment", "draw"]}
     >
@@ -4177,49 +4193,71 @@
      segments: the chosen mode's glyph, opening the three. -->
 {#snippet modeCompact()}
   {@const Glyph = MODE_GLYPHS[mode]}
-  <DropdownMenu.Root>
-    <DropdownMenu.Trigger
-      aria-label={`Mode: ${MODE_WORDS[mode]}`}
-      size="icon-sm"
-      title={`Mode: ${MODE_WORDS[mode]} (V, C, D)`}
-      variant="ghost"
-    >
-      <Glyph />
-    </DropdownMenu.Trigger>
-    <DropdownMenu.Content align="end" width="compact">
-      {@render modeMenu()}
-    </DropdownMenu.Content>
-  </DropdownMenu.Root>
+  <BarGlass form="group">
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger>
+        {#snippet child({ props })}
+          <Tip keys="V, C, D" label={`Mode: ${MODE_WORDS[mode]}`}>
+            {#snippet children(tip)}
+              <button
+                {...tip}
+                {...props}
+                aria-label={`Mode: ${MODE_WORDS[mode]}`}
+                class="select-none touch-hit press-tint"
+                data-bar-item
+                data-box
+                type="button"
+              >
+                <Glyph aria-hidden="true" data-slot="bar-symbol" />
+              </button>
+            {/snippet}
+          </Tip>
+        {/snippet}
+      </DropdownMenu.Trigger>
+      <BarMenu label="Mode" width="compact">
+        {@render modeMenu()}
+      </BarMenu>
+    </DropdownMenu.Root>
+  </BarGlass>
 {/snippet}
 
 {#snippet commentsBar()}
-  <!-- The Comments rail's toggle; the count is the open comments', drawn only while the rail is shut. -->
-  <Button
-    data-slot="comments"
-    aria-expanded={listOpen}
-    aria-label={`Comments${openCount > 0 ? `, ${openCount} open` : ""}${pinsShown ? "" : ", pins hidden"}${linkDown ? `, ${NOT_REACHING}` : ""}`}
-    data-link-down={linkDown ? "" : undefined}
-    expanded="pressed"
-    onclick={() => showList(!listOpen)}
-    size="sm"
-    title={commentsTitle}
-    variant="ghost"
-  >
-    <IconChat /><span class="in-form-compact:hidden" data-slot="comments-label"
-      >Comments</span
-    >
-    {#if openCount > 0 && !listOpen}
-      <span data-slot="count" class="min-w-c-count-digit">{openCount}</span>
-    {/if}
-    {#if !pinsShown}
-      <!-- ⇧C hid the pins: said where the person looks for them. -->
-      <IconEyeClosed />
-    {/if}
-    {#if linkDown}
-      <!-- The comments aren't reaching the agent: said where the person looks for them, why in the panel. -->
-      <IconWarningTriangle class="text-data-bad" />
-    {/if}
-  </Button>
+  <!-- The Comments rail's toggle: its bubble, and the open comments' count while the rail is shut (The Earned Count Rule); a bare symbol of the glass, pressed while the rail stands. -->
+  <Tip label={commentsTitle}>
+    {#snippet children(tip)}
+      <button
+        {...tip}
+        data-slot="comments"
+        aria-expanded={listOpen}
+        aria-label={`Comments${openCount > 0 ? `, ${openCount} open` : ""}${pinsShown ? "" : ", pins hidden"}${linkDown ? `, ${NOT_REACHING}` : ""}`}
+        class="select-none touch-hit press-tint mark-line aria-expanded:bg-surface-pressed"
+        data-bar-item
+        data-box
+        data-counted={(openCount > 0 && !listOpen) || !pinsShown || linkDown
+          ? ""
+          : undefined}
+        data-link-down={linkDown ? "" : undefined}
+        onclick={() => showList(!listOpen)}
+        type="button"
+      >
+        <IconChat aria-hidden="true" data-slot="bar-symbol" />
+        {#if openCount > 0 && !listOpen}
+          <span data-slot="num" class="min-w-c-count-digit">{openCount}</span>
+        {/if}
+        {#if !pinsShown}
+          <!-- ⇧C hid the pins: said where the person looks for them. -->
+          <IconEyeClosed aria-hidden="true" class="size-icon-sm" />
+        {/if}
+        {#if linkDown}
+          <!-- The comments aren't reaching the agent: said where the person looks for them, why in the panel. -->
+          <IconWarningTriangle
+            aria-hidden="true"
+            class="size-icon-sm text-data-bad"
+          />
+        {/if}
+      </button>
+    {/snippet}
+  </Tip>
 {/snippet}
 {#snippet commentsMenu()}
   <DropdownMenu.Item onSelect={() => showList(!listOpen)}>
@@ -4231,17 +4269,12 @@
 {/snippet}
 
 {#snippet reloadBar()}
-  <Button
+  <BarItem
     data-slot="other"
-    aria-label="Reload"
-    dimmed={mode !== "interact" && !isCanvas}
+    icon={IconRefresh}
+    label="Reload"
     onclick={reloadPage}
-    size="icon-sm"
-    title="Reload"
-    variant="ghost"
-  >
-    <IconRefresh />
-  </Button>
+  />
 {/snippet}
 {#snippet reloadMenu()}
   <DropdownMenu.Item onSelect={reloadPage}>
@@ -4258,7 +4291,6 @@
       {instanceId}
       held={preview?.artifacts}
       line={headLine}
-      lineDropped={!lineStands}
       lineId={`${paneId}-line`}
       onrefused={(reason, chosen) => {
         refusals.set(actKey, {
@@ -4393,6 +4425,7 @@
     items={headItems}
     label="Preview"
     onclose={ownTab ? backToSession : close}
+    placement={sheet ? "sheet" : "beside"}
     subtitle={headLine}
     subtitleId={`${paneId}-line`}
     {switcher}
@@ -4401,7 +4434,6 @@
     above={changesBar}
     beside={railBeside}
     bind:section
-    bind:subtitleStands={lineStands}
     bind:well
   >
     {@render framed()}
@@ -4846,21 +4878,29 @@
   {#if picking}
     <PlacePick oncancel={cancelPick} onpick={pickedPlace} />
   {/if}
-  {#if listOpen && railPlaced && !isCanvas && railSheet && !railAway}
-    <!-- The rail as the well's foot sheet, at most 60% of it: on a phone and
-         in a pane under 640px. A layer over the page (the artifact panel's surface brief, The
-         Comments rail): the frame keeps its whole box under it, so the page
-         neither moves, resizes nor scrolls as it opens, drags or closes.
-         A keyboard's lift stands it over the keyboard, no taller than the
-         well's room above it. -->
-    <div
-      class="absolute inset-x-0 bottom-(--keyboard-lift,0px) z-2 flex max-h-over-keyboard-60"
-      data-slot="rail-sheet"
-      in:sheetSlide={{ leaving: false }}
-      out:sheetSlide={{ leaving: true }}
+  {#if railSheetDrawn}
+    <!-- The rail as the well's bottom sheet, on a phone and in a pane under
+         640px: the kit's drawer (ThreadSheet's host), its grabber and two
+         stops, half its room where it opens and the whole room (HIG, Sheets:
+         "Include a grabber in a resizable sheet"; the medium and large
+         detents), dragged below the lower one it goes, as Close does. A
+         layer over the page: the frame keeps its whole box under it, so the
+         page neither moves, resizes nor scrolls as it opens, drags or
+         closes. It stands aside while a thread, a composer or a place
+         picker stands, and comes back as it was. -->
+    <ThreadSheet
+      label={commentWords.comments}
+      onclose={() => showList(false)}
+      onclosed={() => {
+        if (!railSheetOpen) {
+          railSheetDrawn = false;
+        }
+      }}
+      onmoved={() => sayCovered?.()}
+      open={railSheetOpen}
     >
       {@render railOf("sheet")}
-    </div>
+    </ThreadSheet>
   {/if}
   <!-- What stands over the page beside a pill (the frame fills the well):
        the composer while a comment is written, the thread once it is, and
