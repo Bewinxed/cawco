@@ -14,9 +14,13 @@
    *   composer; nothing is sent. The first words start a conversation
    *   (conversation.ts), and the panel shows it.
    * - It carries no title (DESIGN.md, The Title Bars Follow Liquid Glass
-   *   Rule: a column opened by its name): Session details, New conversation
-   *   and Open as tab float over the conversation as one glass group, and
-   *   the phone sheet's Close as one of its own. Session details opens the
+   *   Rule: a column opened by its name; each of his conversations is named
+   *   by what it is about where they are listed): whether he is on (Caw is
+   *   off said in words, the state no symbol says), Session details, New
+   *   conversation and Open as tab float over the conversation as one glass
+   *   group, and the phone sheet's Close as one of its own. Caw is on/off
+   *   opens his settings (CawPanel: what he is doing, his switch, its off
+   *   tray), so he is turned on or off where he is talked to. Session details opens the
    *   session's card (SessionDetails); on the conversation the project's
    *   events reach, its harness and model are the project's (ModelSection).
    * - Its two tabs (decision page `onboarding-design`, card `artifact-open`):
@@ -37,7 +41,10 @@
   import { CAW_NO_MACHINE } from "@cawco/core/project-conversation";
   import { commonWords } from "@cawco/core/words/common";
   import { cawPanelWords } from "@cawco/core/words/onboarding";
-  import { conversationWords } from "@cawco/core/words/project-conversation";
+  import {
+    cawSwitchWords,
+    conversationWords,
+  } from "@cawco/core/words/project-conversation";
   import { transcriptWords } from "@cawco/core/words/transcript";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -59,6 +66,8 @@
   } from "#lib/cawco/project-tasks.js";
   import RegionBoundary from "#lib/cawco/RegionBoundary.svelte";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
+  import { sessionTitle } from "#lib/cawco/session-names.svelte.js";
+  import { cawPanelOffAt } from "#lib/cawco/stop-work.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import FootFade from "#lib/cawco/transcript/FootFade.svelte";
@@ -83,16 +92,19 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconChatAdd,
     IconClose,
     IconListRows,
     IconMoveTab,
     IconPlus,
+    IconSettings,
   } from "#lib/icons.js";
   import { barGlass } from "../bar-glass.svelte";
   import { dropStart } from "../spawn/parked.svelte";
   import CawAtWork from "./CawAtWork.svelte";
+  import CawPanel from "./CawPanel.svelte";
   import type { CawLead } from "./caw-lead.svelte";
   import { cawStartsOf, makeHis, startConversation } from "./conversation";
   import SetupWell from "./SetupWell.svelte";
@@ -239,8 +251,14 @@
     };
   });
 
-  /** Caw is off: the hero says he acts only when you write to him. */
+  // --- his bar -------------------------------------------------------------------
+
   const off = $derived(lead.on === false);
+  /** His settings stand open from the bar (Caw is on / Caw is off pressed). */
+  let settingsOpen = $state(false);
+  let settingsAnchor = $state<HTMLElement | null>(null);
+  /** The bar floats over the panel: there is a conversation, a sheet to close, or his switch. */
+  const barShown = $derived(Boolean(shown) || sheet || lead.on !== null);
 
   // --- the session's card ---------------------------------------------------------
 
@@ -482,17 +500,17 @@
      group and the sheet's Close in one of its own after it (HIG, Toolbars:
      "Group navigation controls and critical actions like Done, Close, or Save
      in dedicated, familiar, and visually distinct sections"). What the head
-     used to say goes: his status is his face in the seat, and off is the
-     hero's line. The conversation or the hero runs to the panel's top and
+     used to say goes: his status is his face in the seat, and off is said
+     in words on his switch, first in the group. The conversation or the hero runs to the panel's top and
      clears the bar at rest; scrolled, it blurs and fades under it. On
      Preview the pane's own bar is the panel's one bar. -->
 <div
   class="relative flex h-full min-h-0 flex-auto flex-col timeline-scope-transcript-head"
   data-caw-panel
   data-caw-tab={onPreview ? "preview" : "assistant"}
-  style:--bar-room={shown || sheet ? "var(--c-top-bar-h)" : undefined}
+  style:--bar-room={barShown ? "var(--c-top-bar-h)" : undefined}
 >
-  {#if (shown || sheet) && !onPreview}
+  {#if barShown && !onPreview}
     <BarFloat tint="bg-surface-recess">
       {#snippet leading()}
         {#if previewOpen && switchAt === "start"}
@@ -503,8 +521,38 @@
         {/if}
       {/snippet}
       {#snippet trailing()}
-        {#if shown}
+        {#if shown || lead.on !== null}
           <BarGlass form="group">
+            {#if lead.on !== null}
+              <!-- Whether he is on, his settings pressed open: his switch and,
+                   turning him off with work running, what it stops. -->
+              <Tip label={off ? cawSwitchWords.off : cawSwitchWords.on}>
+                {#snippet children(tip)}
+                  <button
+                    {...tip}
+                    aria-expanded={settingsOpen}
+                    aria-haspopup="dialog"
+                    aria-label={off ? cawSwitchWords.off : cawSwitchWords.on}
+                    class="mark-line select-none touch-hit press-tint"
+                    data-bar-item
+                    data-box
+                    data-caw-on={off ? "off" : "on"}
+                    data-counted={off ? "" : undefined}
+                    onclick={() => {
+                      settingsOpen = !settingsOpen;
+                    }}
+                    type="button"
+                    bind:this={settingsAnchor}
+                  >
+                    <IconSettings aria-hidden="true" data-slot="bar-symbol" />
+                    {#if off}
+                      <span data-slot="num">{cawSwitchWords.off}</span>
+                    {/if}
+                  </button>
+                {/snippet}
+              </Tip>
+            {/if}
+            {#if shown}
             <BarItem
               aria-expanded={cardOpen}
               aria-haspopup="dialog"
@@ -528,6 +576,7 @@
               icon={IconMoveTab}
               label={conversationWords.openAsTab}
             />
+            {/if}
           </BarGlass>
         {/if}
         {#if previewOpen && switchAt === "end"}
@@ -561,6 +610,30 @@
       {/snippet}
     </BarFloat>
   {/if}
+  <!-- His settings, from the bar: what he is doing, his switch, and its off
+       tray when turning him off leaves work running (CawLeadSwitch). -->
+  <Popover.Root bind:open={settingsOpen}>
+    <Popover.Content
+      align="end"
+      aria-label={cawSwitchWords.settings}
+      class="w-(--settings-w)"
+      collisionPadding={12}
+      customAnchor={settingsAnchor}
+      data-caw-settings
+      pad="inset"
+      side="bottom"
+      sideOffset={4}
+      style="--settings-w: min(var(--c-panel-w), calc(100vw - var(--space-5)))"
+    >
+      <CawPanel
+        {lead}
+        place={cawPanelOffAt(projectId)}
+        {projectId}
+        {projectName}
+        sheet
+      />
+    </Popover.Content>
+  </Popover.Root>
   <div data-slot="well" class="relative flex min-h-0 flex-auto flex-col">
     {#if shown}
       <!-- The conversation stays laid out under Preview, so going back to it
@@ -641,9 +714,6 @@
               actionWidth="fill"
               axis
               icon={IconChatAdd}
-              line={off
-                ? "Caw is off, so he acts only when you write to him."
-                : undefined}
               title="What’s next for {projectName}?"
             >
               {#snippet action()}
@@ -783,7 +853,7 @@
         {kept}
         onclose={cardClose}
         sessionId={shown}
-        title="Caw · {projectName}"
+        title={sessionTitle(shown) ?? projectName}
       />
     </Popover.Content>
   </Popover.Root>

@@ -9,7 +9,10 @@
    * the landing holds for --dur-hold and the section folds away. The switch
    * on and off again asks again.
    */
-  import { conversationWords } from "@cawco/core/words/project-conversation";
+  import {
+    cawSwitchWords,
+    conversationWords,
+  } from "@cawco/core/words/project-conversation";
   import { grabberVariants } from "#lib/components/ui/drawer/drawer-content.svelte";
   import { sheetHeadVariants } from "#lib/components/ui/drawer/sheet-head.js";
   import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
@@ -163,7 +166,7 @@
       </div>
       <label class="flex flex-wrap items-center gap-space-2">
         <Switch bind:checked={() => on, (next) => flip(next)} />
-        <span>Events reach a conversation</span>
+        <span>{cawSwitchWords.label}</span>
       </label>
       {#if open}
         <StopTrayPick

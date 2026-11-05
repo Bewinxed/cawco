@@ -142,6 +142,7 @@
     firstScreen = false,
     parkedHeight = 0,
     latestInset,
+    headRoom,
     afterRows,
     afterRowsAtWork = false,
     headRoom,
