@@ -131,7 +131,7 @@
   import EmptyAsk from "../EmptyAsk.svelte";
   import { artifactReached } from "../files/reached";
   import { frameObserver, frameSize } from "../frame-observer";
-  import { besideLine } from "../graph/beside";
+  import { besideLine, inspectorBesideLine } from "../graph/beside";
   import DesignGraph from "../graph/DesignGraph.svelte";
   import { inspectKept, StageLink } from "../graph/stage-link.svelte";
   import { resolveSessionTitle } from "../links";
@@ -1466,9 +1466,21 @@
       : null;
   });
   const inspecting = $derived(!!inspector && inspectOpen);
-  /** A right panel beside the page on a desk and a tablet; on a phone (the pane as the sheet over the conversation, or the artifact's own tab), a sheet over the page's foot (the spec's §5). */
+  /** A phone's screen (DESIGN.md's phone line). */
   const phone = new MediaQuery("(width < 640px)");
-  const inspectorLayout = $derived(sheet || phone.current ? "sheet" : "panel");
+  /**
+   * The inspector: a right panel beside the page where the well holds the
+   * stage at its least and the inspector (graph/beside.ts), picked from the
+   * pane's own width, never the window's alone; else a sheet over the
+   * page's foot (the spec's §5), as on a phone, in the pane's sheet over the
+   * conversation, or in a narrow pane on a desk.
+   */
+  const inspectorLayout = $derived.by((): "panel" | "sheet" => {
+    if (sheet || phone.current) {
+      return "sheet";
+    }
+    return wellW > 0 && wellW < inspectorBesideLine() ? "sheet" : "panel";
+  });
   /** A compile error's place, `file:line:column` as far as the toolchain's Vite payload names it (Astro and Nuxt run Vite inside). */
   const errorPlace = (error: {
     column: number | null;
@@ -1944,8 +1956,13 @@
    * field being typed in stands over the keyboard while the page under them
    * keeps its box (a phone's preview sheet holds its place for a field of
    * its own: SideSheet). Written on the well as `--keyboard-lift`; 0 with
-   * no keyboard, and under a pinch zoom (`floor.bottom` 0). Read as the
-   * visible area is published and as the well resizes, in the frame after.
+   * no keyboard (visible-viewport's `data-keyboard`), and under a pinch
+   * zoom (`floor.bottom` 0). Read as the visible area is published and as
+   * the well resizes, in the frame after. With no keyboard up it is 0
+   * wherever the well stands: read while a phone's sheet stood at its
+   * first stop, the well's foot below the screen, it lifted the inspector
+   * 168px off the foot once the sheet stood at full, the sheet's move
+   * resizing nothing.
    */
   $effect(() => {
     const node = well;
@@ -1955,7 +1972,7 @@
     }
     const read = () => {
       const covered =
-        bottom > 0
+        bottom > 0 && document.documentElement.hasAttribute("data-keyboard")
           ? Math.max(
               0,
               Math.round(node.getBoundingClientRect().bottom - bottom)
@@ -4550,6 +4567,7 @@
           frame={frameTags}
           inspector={inspectorInRoom ? roomInspector : undefined}
           {link}
+          memory={`cawco-graph-kept:${artifact.id}`}
           onroom={() => showInspector(false)}
           paneSheet={inspecting && inspectorLayout === "sheet"}
           spec={sheetCanvas.spec}
@@ -4603,6 +4621,9 @@
       <CanvasMap
         address={paneOrigin ? `${paneOrigin}${startAt}` : null}
         artifactId={artifact.id}
+        component={link?.front
+          ? (link.sheets[link.front]?.meta.component ?? null)
+          : null}
         {instanceId}
         ready={loaded}
         revision={preview?.revision ?? ""}

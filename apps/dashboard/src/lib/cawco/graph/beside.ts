@@ -23,3 +23,17 @@ export const besideLine = (): number =>
       2 * numberOf("--space-6") +
       DIVIDER +
       ROUNDING;
+
+/**
+ * The width a well needs for the inspector to stand beside the graph as a
+ * panel: the stage at its least, its page's gutters, and the inspector's
+ * own width. Under it the inspector is a sheet over the well's foot: beside
+ * the graph in a 523px pane it left the stage 165px, and the component,
+ * reflowed into a layout the graph made, was what the person judged.
+ */
+export const inspectorBesideLine = (): number =>
+  typeof document === "undefined"
+    ? 0
+    : numberOf("--c-graph-stage-min") +
+      2 * numberOf("--space-6") +
+      numberOf("--c-sheet-inspector-w");

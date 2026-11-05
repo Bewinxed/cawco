@@ -14,7 +14,7 @@
  * saves and compile errors go the same way once quiet {@link MARKS_QUIET_MS}.
  */
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { join, relative } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import {
   type AgentRow,
   ARTIFACT_NAME,
@@ -771,6 +771,8 @@ const cursorOf = (row: ArtifactRow): string =>
   `${row.createdAt.getTime().toString(36)}.${row.id}`;
 
 const CURSOR = /^([0-9a-z]{1,12})\.([0-9a-f-]{36})$/u;
+/** A path's parts, by either separator: a map's component that climbs out of its toolchain root (`..`) is refused. */
+const PATH_PARTS = /[\\/]/u;
 
 /**
  * The {@link LIST_PAGE} rows of `rows` (sorted {@link newestFirst}) after
@@ -7920,14 +7922,31 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * A component canvas's map for its panel: the component its states file
      * mounts, with what renders it (used in) and what it renders (made of),
      * each with its states, frames drawn, states files and frames in
-     * miniature, read on the workspace its stage runs in.
+     * miniature, read on the workspace its stage runs in. `front`: the
+     * component its design graph has in front (another states file's, from
+     * the toolchain root), which the map then centres on; a path that
+     * leaves the toolchain root is no component of it.
      */
-    mapOf: async (instanceId: string, id: string): Promise<CanvasMap> => {
+    mapOf: async (
+      instanceId: string,
+      id: string,
+      front?: string
+    ): Promise<CanvasMap> => {
       const row = viewable(sessionOf(instanceId), id);
       const sheet = sheetOf(row);
-      const component = (
+      const first = (
         docs.doc(row.id).getMap("meta").get("sheet") as SheetRead | undefined
       )?.meta.component;
+      if (
+        front &&
+        (isAbsolute(front) || front.split(PATH_PARTS).includes(".."))
+      ) {
+        throw new ArtifactRefusal(
+          400,
+          `${front} is no component of ${row.name}'s toolchain.`
+        );
+      }
+      const component = front ?? first;
       if (!(sheet && component)) {
         throw new ArtifactRefusal(
           409,

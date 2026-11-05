@@ -33,6 +33,14 @@
  *    width of its own.
  * 7. The rendered checks on the panel's design graph at 1440×900 and
  *    390×844, the bar, the room and the stage's head.
+ * 8. In the session's panel at its default width on a desk, Inspect stands
+ *    the inspector over the well's foot, a sheet, and the stage keeps its
+ *    width: picked from the window, its panel beside the graph left the
+ *    stage 165px.
+ * 9. A canvas of two states files lists both in its components' menu from
+ *    the graph's first paint, the one whose sheet is on its way as loading.
+ * 10. At 390 a state picked at the drawer's last stop takes the drawer down
+ *    to its head, so the state picked is seen.
  *
  * The stage's boundary is made of user namespaces: like a spec that
  * delegates, it runs outside every workspace boundary (README "A spec that
@@ -54,6 +62,8 @@ import { type Kit, open, type Spec } from "../kit";
 import { RenderedChecks } from "../rendered-checks";
 
 const STORY = "src/Card.stories.js";
+/** The canvas's second states file: a component of its own (legs 9). */
+const BADGE = "src/Badge.stories.js";
 /** The ask the canvas is made with: it names the state the graph opens on. */
 const ASK = "Judge the card at Two";
 
@@ -92,6 +102,19 @@ export const Two = { args: { title: "Second" } };
 
 /** The card raised. */
 export const Three = { args: { title: "Third", tone: "loud" } };
+`,
+  "src/Badge.svelte": `<script>
+  let { label } = $props();
+</script>
+
+<span data-probe="badge">{label}</span>
+`,
+  [BADGE]: `import Badge from "./Badge.svelte";
+
+export default { title: "Badge", component: Badge, args: { label: "New" } };
+
+/** The badge as it first shows. */
+export const Fresh = { args: {} };
 `,
 };
 
@@ -437,6 +460,21 @@ async function drawerStops(kit: Kit, page: Page): Promise<void> {
       grabber: await reachable(page, `${DRAWER} [data-slot="drawer-grabber"]`),
       row: stop === "head" ? null : await rowTakes(),
     };
+    if (stop === "whole") {
+      // 10. The pick there takes the drawer down to its head.
+      await page.waitForTimeout(900);
+      const after = await read();
+      kit.check(
+        "10: at 390 a state picked at the drawer's last stop takes the drawer down to its head, the state picked seen",
+        one.row === true &&
+          after.foot !== null &&
+          after.top !== null &&
+          Math.abs(after.foot - after.top - after.head) <= 2,
+        JSON.stringify({ row: one.row, after })
+      );
+      stops.push(one);
+      break;
+    }
     stops.push(one);
     if (!ok(one)) {
       break;
@@ -448,6 +486,56 @@ async function drawerStops(kit: Kit, page: Page): Promise<void> {
     "5b: at 390 each of the drawer's stops stands its height over the surface's foot (head, half, whole up to the bar), its grabber and a state row take a press, the stage ends at its top",
     stops.length === 3 && stops.every(ok),
     JSON.stringify(stops)
+  );
+}
+
+/** Leg 9: both states files stand in the components' menu from the graph's first paint. */
+async function componentsListed(kit: Kit, page: Page): Promise<void> {
+  const trigger = page
+    .locator(`${GRAPH} [data-slot="graph-bar"] button[aria-haspopup="menu"]`)
+    .first();
+  const standing = await trigger.isVisible().catch(() => false);
+  let items: string[] = [];
+  if (standing) {
+    await trigger.click();
+    items = await page
+      .locator('[role="menuitemradio"]')
+      .allTextContents()
+      .catch(() => []);
+    await page.keyboard.press("Escape");
+  }
+  kit.check(
+    "9: a canvas of two states files lists both in its components' menu from the graph's first paint",
+    standing && items.length === 2,
+    JSON.stringify({ standing, items })
+  );
+}
+
+/** Leg 8: in the session's panel at its default width, the inspector is a sheet over the well's foot and the stage keeps its width. */
+async function inspectorInPanel(kit: Kit, page: Page): Promise<void> {
+  const stageWidth = () =>
+    page.evaluate(
+      (frameAt) =>
+        document.querySelector<HTMLIFrameElement>(frameAt)?.clientWidth ?? 0,
+      FRAME
+    );
+  const before = await stageWidth();
+  const toggle = page.locator(`${PANE} button[aria-label="Inspect"]`).first();
+  if (await toggle.isVisible().catch(() => false)) {
+    await toggle.click();
+  } else {
+    await page.locator(`${PANE} [data-slot="more"]`).first().click();
+    await page.getByRole("menuitemcheckbox", { name: "Inspect" }).click();
+  }
+  await page.waitForTimeout(1200);
+  const after = await stageWidth();
+  const sheet = await page
+    .locator(`${PANE} [aria-label="Inspector"][data-sheet]`)
+    .count();
+  kit.check(
+    "8: in the session's panel at its default width Inspect stands the inspector over the well's foot as a sheet, and the stage keeps its width",
+    sheet === 1 && before > 0 && Math.abs(after - before) <= 1,
+    JSON.stringify({ sheet, before, after })
   );
 }
 
@@ -494,7 +582,7 @@ const run = async (kit: Kit) => {
   const created = await call("1", "mcp__cawco__artifact_create", {
     kind: "component",
     name: "graph-card",
-    file: STORY,
+    file: [STORY, BADGE],
     does: "judge",
     ask: ASK,
   });
@@ -506,6 +594,7 @@ const run = async (kit: Kit) => {
   await watching.waitForSelector(`${GRAPH}:not([data-arriving])`, {
     timeout: 120_000,
   });
+  await componentsListed(kit, watching);
 
   // 2. The panel's own report, read from its rig.
   const read = await call("2", "mcp__cawco__artifact_read", { id });
@@ -517,6 +606,7 @@ const run = async (kit: Kit) => {
       states.every((one) => one === "drawn"),
     short(read)
   );
+  await inspectorInPanel(kit, watching);
   await watching.close();
 
   const checks = new RenderedChecks(kit, "graph-stage", {

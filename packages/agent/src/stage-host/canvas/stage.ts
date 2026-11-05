@@ -451,8 +451,49 @@ export function bootStage(page: Page): Mode {
       on && !frame.hidden ? `${drawing.offsetHeight}px` : ""
     );
 
-  /** The component mounted afresh at `target`, at rest: its own arrivals landed. */
-  async function open(target: Target): Promise<void> {
+  /**
+   * The page's scroll held at `at` while `run` runs, and put there once it
+   * is done: a component that focuses a field or brings a row into view
+   * as it mounts scrolls the page under the stage (RoutineForm's Name
+   * label, the Long list's head stood above the stage's top).
+   */
+  async function holdScroll<T>(
+    at: { left: number; top: number },
+    run: () => Promise<T>
+  ): Promise<T> {
+    const scroller = document.scrollingElement ?? document.documentElement;
+    const pin = () => scroller.scrollTo({ ...at, behavior: "instant" });
+    addEventListener("scroll", pin);
+    try {
+      return await run();
+    } finally {
+      removeEventListener("scroll", pin);
+      pin();
+    }
+  }
+
+  /** Where the page's scroll stands now. */
+  const scrolled = () => {
+    const scroller = document.scrollingElement ?? document.documentElement;
+    return { left: scroller.scrollLeft, top: scroller.scrollTop };
+  };
+
+  /**
+   * The component mounted afresh at `target`, at rest: its own arrivals
+   * landed. A drawing opened afresh stands at its top (`top`); one
+   * mounted anew in place of the state it was (a state set in place that
+   * differed, its states file edited) keeps the page's scroll.
+   */
+  async function open(target: Target, top = true): Promise<void> {
+    await holdScroll(
+      { left: scrolled().left, top: top ? 0 : scrolled().top },
+      () => mount(target)
+    );
+    inkInView();
+  }
+
+  /** `target` mounted in the drawing, at rest. */
+  async function mount(target: Target): Promise<void> {
     chrome.closeMove();
     holdHeight(true);
     live?.mounted?.unmount();
@@ -487,7 +528,6 @@ export function bootStage(page: Page): Mode {
     await restOf(drawing);
     holdHeight(false);
     laid();
-    inkInView();
     chrome.dials(() => drawing);
   }
 
@@ -514,6 +554,11 @@ export function bootStage(page: Page): Mode {
    * stands, never seen.
    */
   async function landed(target: Target): Promise<void> {
+    await holdScroll(scrolled(), () => compared(target));
+  }
+
+  /** `target` drawn afresh, hidden, read against the live instance, and mounted anew where they differ. */
+  async function compared(target: Target): Promise<void> {
     const fresh = document.createElement("div");
     fresh.className = "cawco-frame-body cawco-stage-fresh";
     fresh.toggleAttribute("data-stage-drawing", true);
@@ -545,7 +590,7 @@ export function bootStage(page: Page): Mode {
         differences(fresh, drawing, 1).length > 0 ||
         statesOf(fresh) !== statesOf(drawing)
       ) {
-        await open(target);
+        await mount(target);
       }
     } finally {
       mounted?.unmount();
@@ -951,37 +996,70 @@ export function bootStage(page: Page): Mode {
    * per states file and width picked and only ever widened, so a reach
    * never narrows the stage under him; and told the panel when it changed.
    */
-  function laid(): void {
-    if (!live || frame.hidden) {
-      return;
-    }
-    const width = roomWidth(live.story);
+  /**
+   * The drawing's own width where it stands narrower than `width`, kept
+   * by `key` (its states file and the width picked) and only ever widened;
+   * null where it fills the width.
+   */
+  function fitAt(key: string, width: number): number | null {
     const own = drawing.firstElementChild as HTMLElement | null;
-    const key = `${live.section.file}@${view.widths?.[0] ?? "own"}`;
+    // Read at 1:1: a box on screen stands at the frame's zoom.
+    const zoomed = Number(frame.style.zoom) || 1;
     if (own) {
       const read = Math.ceil(
-        Math.max(own.getBoundingClientRect().width, own.scrollWidth)
+        Math.max(own.getBoundingClientRect().width / zoomed, own.scrollWidth)
       );
       const known = fitOf.get(key);
       if (known === undefined ? read < width - 1 : read > known) {
         fitOf.set(key, Math.min(width, read));
       }
     }
-    const fit = fitOf.get(key) ?? null;
+    return fitOf.get(key) ?? null;
+  }
+
+  function laid(): void {
+    if (!live || frame.hidden) {
+      return;
+    }
+    const width = roomWidth(live.story);
+    const key = `${live.section.file}@${view.widths?.[0] ?? "own"}`;
+    const fit = fitAt(key, width);
     const drawn = fit === null ? width : Math.min(width, fit);
     frame.style.setProperty("--frame-w", `${drawn}px`);
+    const scale = scaleOf(drawn);
+    frame.style.zoom = scale < 1 ? String(scale) : "";
     const laidOut: StageLaid = {
       need: Math.ceil(
-        drawn + 2 * tokenPx(GUTTER) + windowWidth() - windowRoom()
+        drawn * scale + 2 * tokenPx(GUTTER) + windowWidth() - windowRoom()
       ),
-      tall: Math.ceil(drawing.offsetHeight),
+      tall: Math.ceil(drawing.offsetHeight * scale),
       fit,
+      scale,
     };
     const said = JSON.stringify(laidOut);
     if (said !== laidSaid) {
       laidSaid = said;
       tell<StageLaid>(STAGE_LAID, laidOut);
     }
+  }
+
+  /**
+   * How much the drawing is scaled down to stand whole on the stage: a
+   * width he picked wider than the page's room is drawn at that width and
+   * scaled to fit it (CSS `zoom`, so the frame takes the scaled room), his
+   * view's `fit`; 1 at its own width, and with Actual size (`fit` off),
+   * where it is drawn 1:1 and the page scrolls across it. Drawn 1:1, a
+   * 1440 desk in a 461px stage stood cut at its right, a thin scrollbar
+   * the only sign.
+   */
+  function scaleOf(drawn: number): number {
+    const across = room();
+    return view.fit &&
+      view.widths?.[0] !== undefined &&
+      across > 0 &&
+      drawn > across
+      ? across / drawn
+      : 1;
   }
 
   /** The drawing laid out again at the width the page's room or his pick now gives it, in the scheme he picked: nothing remounts. */
@@ -1071,11 +1149,21 @@ export function bootStage(page: Page): Mode {
     }
     const at = frame.getBoundingClientRect();
     const boxes = els.map((el) => el.getBoundingClientRect());
-    const top = Math.min(...boxes.map((box) => box.top)) - at.top;
-    const left = Math.min(...boxes.map((box) => box.left)) - at.left;
+    const shownTop = Math.min(...boxes.map((box) => box.top));
+    const shownBottom = Math.max(...boxes.map((box) => box.bottom));
+    // Some of it stands in view already: he sees the change, and the
+    // page's scroll stays. Brought whole into view, a change taller than
+    // the stage (the Long list's rows) scrolled the component's head off.
+    if (shownBottom > 0 && shownTop < windowHeight()) {
+      return;
+    }
+    // In the frame's own px: a drawing scaled to fit stands at its zoom.
+    const zoomed = Number(frame.style.zoom) || 1;
+    const top = (shownTop - at.top) / zoomed;
+    const left = (Math.min(...boxes.map((box) => box.left)) - at.left) / zoomed;
     const marker = document.createElement("span");
     marker.setAttribute("aria-hidden", "true");
-    marker.style.cssText = `position: absolute; visibility: hidden; pointer-events: none; inset-block-start: ${top}px; inset-inline-start: ${left}px; inline-size: ${Math.max(...boxes.map((box) => box.right)) - at.left - left}px; block-size: ${Math.max(...boxes.map((box) => box.bottom)) - at.top - top}px; scroll-margin: var(${GUTTER});`;
+    marker.style.cssText = `position: absolute; visibility: hidden; pointer-events: none; inset-block-start: ${top}px; inset-inline-start: ${left}px; inline-size: ${(Math.max(...boxes.map((box) => box.right)) - at.left) / zoomed - left}px; block-size: ${(shownBottom - at.top) / zoomed - top}px; scroll-margin: var(${GUTTER});`;
     frame.append(marker);
     bringIntoView(marker, {
       behavior:
@@ -1463,7 +1551,7 @@ export function bootStage(page: Page): Mode {
         // Its states file edited: the drawing stands at its state, from the module as it reads now.
         const target = resolved(now.ref);
         if (!("refused" in target)) {
-          page.quietly(queue(() => open(target)));
+          page.quietly(queue(() => open(target, false)));
         }
       }
       standFirst(section);

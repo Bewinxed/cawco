@@ -294,18 +294,26 @@ function svelteKind(
   return { kind: "other", raw };
 }
 
-/** Where a prop's declaration stands: a Svelte element's attributes are no prop of the component's (Storybook's rule). */
-const fromSvelteElements = (symbol: TS.Symbol): boolean => {
-  const declaration =
-    symbol.valueDeclaration ??
-    (symbol as { links?: { syntheticOrigin?: TS.Symbol } }).links
-      ?.syntheticOrigin?.valueDeclaration;
-  return (
-    declaration
-      ?.getSourceFile()
-      .fileName.split(sep)
-      .join("/")
-      .includes("node_modules/svelte/elements.d.ts") ?? false
+/**
+ * A prop's declaration in the project's own code; undefined when every
+ * declaration of it stands in a package's types, an element's attribute
+ * and no prop of the component's (Storybook's rule for `svelte/elements`,
+ * react-docgen-typescript's `propFilter` for the rest). SvelteKit's
+ * `data-sveltekit-*`, added to every element, were listed in the
+ * inspector as five props of a component that takes `HTMLAttributes`.
+ * One the component names again (its `oncancel`) is its own, read by its
+ * own declaration, never as the intersection with the element's.
+ */
+const ownDeclaration = (symbol: TS.Symbol): TS.Declaration | undefined => {
+  const origin = (symbol as { links?: { syntheticOrigin?: TS.Symbol } }).links
+    ?.syntheticOrigin;
+  return [...(symbol.declarations ?? []), ...(origin?.declarations ?? [])].find(
+    (one) =>
+      !one
+        .getSourceFile()
+        .fileName.split(sep)
+        .join("/")
+        .includes("/node_modules/")
   );
 };
 
@@ -381,14 +389,17 @@ async function svelteDoc(
   const propsType = checker.getTypeOfSymbolAtLocation(propsSymbol, declaration);
   const props = propsType
     .getProperties()
-    .filter((symbol) => !fromSvelteElements(symbol))
-    .map((symbol) => {
+    .flatMap((symbol) => {
+      const own = ownDeclaration(symbol);
+      return own ? [{ symbol, own }] : [];
+    })
+    .map(({ symbol, own }) => {
       const name = symbol.getName();
-      const { kind, raw, options } = svelteKind(
-        ts,
-        checker,
-        checker.getTypeOfSymbolAtLocation(symbol, declaration)
-      );
+      const typed =
+        ts.isPropertySignature(own) && own.type
+          ? checker.getTypeFromTypeNode(own.type)
+          : checker.getTypeOfSymbolAtLocation(symbol, declaration);
+      const { kind, raw, options } = svelteKind(ts, checker, typed);
       return prop(name, kind, raw, {
         required: (symbol.flags & ts.SymbolFlags.Optional) === 0,
         defaultValue: defaults.get(name) ?? null,

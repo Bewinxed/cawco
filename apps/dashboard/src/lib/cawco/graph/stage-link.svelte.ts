@@ -21,8 +21,9 @@ import {
 import { untrack } from "svelte";
 import type { SheetInspector } from "#lib/cawco/preview/sheet-inspector.svelte.js";
 
-/** The stage's view, as the view card picks it: its scheme, the width he picked (none: its own), reduced motion. */
+/** The stage's view, as the view card picks it: its scheme, the width he picked (none: its own), reduced motion, and whether a width wider than the stage is scaled to fit it (`fit`) or drawn 1:1. */
 export interface StageView {
+  fit: boolean;
   motion: "on" | "reduce";
   scheme: "light" | "dark";
   width: number | null;
@@ -43,6 +44,8 @@ export class StageLink {
   presses = $state(0);
   /** The state the graph keeps, as the page names it: the inspector's controls follow its story. Null until the graph has a state. */
   kept = $state<StateRef | null>(null);
+  /** The states file of the component the graph has in front; null until it has one. The panel's other views (Canvas view's Map) stand on it. */
+  front = $state<string | null>(null);
   /** A story the person picked in the inspector, by its states file: the graph keeps its state, then lets it go. */
   wanted = $state<{ file: string; story: string } | null>(null);
   readonly #post: (message: object) => void;
@@ -90,6 +93,7 @@ export class StageLink {
         scheme: view.scheme,
         widths: view.width === null ? null : [view.width],
         motion: view.motion,
+        fit: view.fit,
       },
     });
   }

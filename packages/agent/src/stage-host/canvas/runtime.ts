@@ -208,6 +208,8 @@ export type WidthSlot = number | "own";
 export interface View {
   /** Every scheme and every preset width, as more columns (the frames grid's). */
   all: boolean;
+  /** The stage: a width picked wider than the page's room is scaled to fit it; off, it is drawn 1:1 and the page scrolls across it. */
+  fit: boolean;
   motion: "on" | "reduce";
   /** `page`: drawn in the page's own scheme. */
   scheme: Scheme | "both" | "page";
@@ -296,6 +298,7 @@ function viewOf(params: URLSearchParams): View {
     widths: widths.length > 0 ? widths : null,
     motion: params.get("motion") === "reduce" ? "reduce" : "on",
     all: params.get("all") === "1",
+    fit: params.get("fit") !== "0",
   };
 }
 
@@ -1685,6 +1688,7 @@ export function boot(options: BootOptions): void {
       ...("widths" in next ? { widths: next.widths ?? null } : {}),
       ...(next.motion ? { motion: next.motion } : {}),
       ...(typeof next.all === "boolean" ? { all: next.all } : {}),
+      ...(typeof next.fit === "boolean" ? { fit: next.fit } : {}),
     });
     if (view.motion !== motionWas) {
       for (const sheet of sheetsNow()) {

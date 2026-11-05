@@ -8367,6 +8367,16 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "component",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "maxLength": 1000,
+              "type": "string"
+            }
           }
         ],
         "operationId": "getApiInstancesByIdArtifactsByArtifactMap",
@@ -8377,6 +8387,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CanvasMap"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiInstancesByIdArtifactsByArtifactMap 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }

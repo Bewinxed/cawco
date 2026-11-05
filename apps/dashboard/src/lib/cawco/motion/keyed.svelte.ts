@@ -101,7 +101,14 @@ function mayType(event: KeyboardEvent): boolean {
 const typed = (event: KeyboardEvent): boolean =>
   mayType(event) && !event.defaultPrevented;
 
-/** Every beat that began at or after `from` (timeline ms) lands. */
+/**
+ * Every beat that began at or after `from` (timeline ms) lands. Only a beat
+ * on the document's clock: one driven by a scroll (the edge fades,
+ * `kit-edge-fade`, on a ScrollTimeline) counts its time in percentages, so
+ * `Number()` read NaN for its start and end, every guard passed, and a key
+ * finished it: every edge fade on the page froze at its end, the start
+ * fade drawn over the first row whatever the scroll.
+ */
 function land(from: number): void {
   const wait = dur("--dur-cascade");
   const longest = dur("--dur-hold");
@@ -109,6 +116,7 @@ function land(from: number): void {
     const timing = animation.effect?.getComputedTiming();
     const started = animation.startTime;
     if (
+      animation.timeline !== document.timeline ||
       !timing ||
       Number(timing.endTime) > longest ||
       Number(timing.delay) > wait ||

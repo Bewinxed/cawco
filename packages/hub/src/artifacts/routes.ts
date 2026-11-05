@@ -631,14 +631,28 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }
       }
     )
-    // A component canvas's map for its panel: its component, what renders it and what it renders.
-    .get("/api/instances/:id/artifacts/:artifact/map", async ({ params }) => {
-      try {
-        return await artifacts.mapOf(params.id, params.artifact);
-      } catch (error) {
-        return refused(error);
+    // A component canvas's map for its panel: its component (the one its
+    // design graph has in front, `component`, else its first states file's),
+    // what renders it and what it renders.
+    .get(
+      "/api/instances/:id/artifacts/:artifact/map",
+      {
+        query: t.Object({
+          component: t.Optional(t.String({ minLength: 1, maxLength: 1000 })),
+        }),
+      },
+      async ({ params, query }) => {
+        try {
+          return await artifacts.mapOf(
+            params.id,
+            params.artifact,
+            query.component
+          );
+        } catch (error) {
+          return refused(error);
+        }
       }
-    })
+    )
     // The panel's Verify: a design system round on a component canvas, its verdict to the canvas's session.
     .post(
       "/api/instances/:id/artifacts/:artifact/verify",

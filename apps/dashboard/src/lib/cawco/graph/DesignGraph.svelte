@@ -30,8 +30,8 @@
    * surface holds both whole the room is the kit's bottom drawer, its stops
    * head, half and whole, the stage whole above it at the head stop.
    */
-  import type { CanvasSpec } from "@cawco/core/stage";
-  import type { StateRef } from "@cawco/core/stage-graph";
+  import { type CanvasSpec, STORY_FILE } from "@cawco/core/stage";
+  import { type StateRef, storyWords } from "@cawco/core/stage-graph";
   import { graphWords as words } from "@cawco/core/words/graph";
   import { mergeProps } from "bits-ui";
   import { onMount, type Snippet, untrack } from "svelte";
@@ -71,6 +71,7 @@
   import { besideLine, DIVIDER } from "./beside";
   import { figureOf, pageLang } from "./figures";
   import Journey from "./Journey.svelte";
+  import { keepUnder, keptUnder } from "./kept";
   import { pathOf, type Review, reviewOf } from "./model";
   import StagePane from "./StagePane.svelte";
   import Stepper from "./Stepper.svelte";
@@ -87,6 +88,7 @@
     paneSheet = false,
     onroom,
     inspector,
+    memory,
   }: {
     /** The line to the stage page: what it said, and what the graph asks of it. */
     link: StageLink;
@@ -118,37 +120,61 @@
      * put away or not.
      */
     inspector?: Snippet;
+    /**
+     * The browser's key the person's picks are kept under (the artifact's):
+     * the component in front and the state kept on each stand again after a
+     * reload, for the ask they were kept under (kept.ts).
+     */
+    memory?: string;
   } = $props();
 
   /** The page's own ids, for a label's `for`. */
   const uid = $props.id();
   /** `n` as a figure in the page's language. */
   const figure = (n: number) => figureOf(n, lang);
-  /** Each states file the page has said, in the canvas's order. */
-  const reviews = $derived(
-    files.flatMap((file) => {
+  /**
+   * Each states file of the canvas, in its order, from the start: its
+   * review once the page has said its sheet, else none yet. A file whose
+   * sheet is on its way still stands in the components' menu, as loading:
+   * listed only once its sheet came, a second component stood unseen for
+   * 22 s, then the title turned into a menu under him.
+   */
+  const entries = $derived(
+    files.map((file) => {
       const sheet = link.sheets[file];
-      return sheet ? [reviewOf(sheet, spec, figure)] : [];
+      return { file, review: sheet ? reviewOf(sheet, spec, figure) : null };
     })
   );
+  /** The components whose sheets the page has said. */
+  const reviews = $derived(
+    entries.flatMap((one) => (one.review ? [one.review] : []))
+  );
+  /** A states file's name while its sheet is on its way: its file's own, in words. */
+  const loadingName = (file: string) =>
+    storyWords((file.split("/").at(-1) ?? file).replace(STORY_FILE, ""));
   /** Whether the ask names `words` (a component's or a state's name), as a person writes it. */
   const asks = (named: string) =>
     named.length > 0 && ask.toLowerCase().includes(named.toLowerCase());
-  /** The component the ask names (its longest name it holds), else the first: the one in front until he picks another. */
-  const askedFront = $derived.by(() => {
-    let best = 0;
+  /** The states file of the component the ask names (its longest name it holds), else the first: the one in front until he picks another. */
+  const askedFile = $derived.by(() => {
+    let best = files[0] ?? null;
     let longest = 0;
-    reviews.forEach((one, index) => {
+    for (const one of reviews) {
       if (asks(one.name) && one.name.length > longest) {
-        best = index;
+        best = one.file;
         longest = one.name.length;
       }
-    });
+    }
     return best;
   });
-  let front = $derived(askedFront);
-  const review = $derived<Review | undefined>(reviews[front] ?? reviews[0]);
-
+  /** The states file he brought in front; null while he has picked none. */
+  let chosenFile = $state<string | null>(null);
+  const frontFile = $derived(
+    chosenFile && files.includes(chosenFile) ? chosenFile : askedFile
+  );
+  const review = $derived<Review | undefined>(
+    entries.find((one) => one.file === frontFile)?.review ?? undefined
+  );
   /** A state and one of its variants (null: the state as written). */
   interface Pick {
     state: string;
@@ -156,7 +182,7 @@
   }
   /** Where a component opens: the state the ask names (a variant of it too; its longest name the ask holds), else its first. */
   const first = (one: Review): Pick => {
-    const said = one === reviews[askedFront];
+    const said = one.file === askedFile;
     let best: Pick = { state: one.order[0] ?? "", variant: null };
     let longest = 0;
     const consider = (named: string, pick: Pick) => {
@@ -184,27 +210,44 @@
     { value: "states", label: words.statesFace, icon: IconListRows },
   ] as const;
   const roomName = words.room(FACES.map((one) => one.label));
-  /** The kept state of each component, by its name. */
+  /** The kept state of each component, by its states file. */
   let keptOf = $state<Record<string, Pick>>({});
   /** The state he kept on the component in front, while its states file still has it; else where the component opens. */
   const kept = $derived.by<Pick | null>(() => {
     if (!review) {
       return null;
     }
-    const pick = keptOf[review.name];
+    const pick = keptOf[review.file];
     return pick && review.states[pick.state] ? pick : first(review);
   });
   // A new ask (the agent showed the canvas again, or changed its ask)
   // opens on the state it names: what he kept under the last ask goes.
+  // Under the ask they were kept for, his picks stand again after a reload.
   let askSeen: string | null = null;
   $effect(() => {
     const said = ask;
     untrack(() => {
-      if (askSeen !== null && askSeen !== said) {
+      if (askSeen === null) {
+        const held = memory ? keptUnder(memory, said) : null;
+        chosenFile = held?.front ?? null;
+        keptOf = held?.kept ?? {};
+      } else if (askSeen !== said) {
+        chosenFile = null;
         keptOf = {};
       }
       askSeen = said;
     });
+  });
+  $effect(() => {
+    const key = memory;
+    const held = { ask, front: chosenFile, kept: keptOf };
+    if (key && askSeen !== null) {
+      keepUnder(key, held);
+    }
+  });
+  // The component in front, said on the line: the panel's other views (Canvas view's Map) stand on it too.
+  $effect(() => {
+    link.front = frontFile;
   });
   let roomOpen = $state(true);
   /** The phone's drawer stands: the room open, and no sheet of the pane's own over the surface's foot. */
@@ -217,6 +260,8 @@
       : "light"
   );
   let reduce = $state(false);
+  /** Actual size: a width wider than the stage drawn 1:1, the page scrolling across it; off, it is scaled to fit the stage. */
+  let actual = $state(false);
   const still = $derived(reduce || !motionOk.current);
   let surface = $state(0);
   /** The room stands beside the stage only where the surface holds both whole (beside.ts); under that the room is the drawer, measured on the panel's own width, so a pane under it gets the drawer on a desk too. */
@@ -254,7 +299,7 @@
   /** A press on a state keeps it (a record set too). */
   const keep = (state: string, variant: string | null) => {
     if (review) {
-      keptOf = { ...keptOf, [review.name]: { state, variant } };
+      keptOf = { ...keptOf, [review.file]: { state, variant } };
     }
   };
   /** The state a story stands for: a state's own, a variant's under it, or a state's at another width (with that width). */
@@ -284,14 +329,13 @@
     const wish = link.wanted;
     const all = reviews;
     untrack(() => {
-      const at = wish ? all.findIndex((one) => one.file === wish.file) : -1;
-      const on = all[at];
+      const on = wish ? all.find((one) => one.file === wish.file) : undefined;
       const found = wish && on ? pickOf(on, wish.story) : null;
       if (!(wish && on && found)) {
         return;
       }
-      front = at;
-      keptOf = { ...keptOf, [on.name]: found.pick };
+      chosenFile = on.file;
+      keptOf = { ...keptOf, [on.file]: found.pick };
       if (found.width !== undefined) {
         ({ width } = found);
       } else if (refOf(on, found.pick, width).story !== wish.story) {
@@ -322,7 +366,12 @@
 
   // The view first, so the state reached on a new page is laid out at it.
   $effect(() => {
-    const view = { scheme, width, motion: reduce ? "reduce" : "on" } as const;
+    const view = {
+      scheme,
+      width,
+      motion: reduce ? "reduce" : "on",
+      fit: !actual,
+    } as const;
     const { loads } = link;
     untrack(() => {
       if (loads > 0) {
@@ -553,6 +602,21 @@
       node.style.transition = ease;
     });
   });
+  /**
+   * A state picked from the room: kept, and where the drawer stands at its
+   * last stop, over the whole stage, the drawer goes down to its head, so
+   * the state picked is seen (a pick there showed nothing).
+   */
+  const choose = (state: string, variant: string | null) => {
+    keep(state, variant);
+    if (!desk && SNAPS.length > 1 && stopAt === SNAPS.length - 1) {
+      // A task later: the press is also vaul's release of the drawer, and a
+      // stop asked for inside its release is dropped (the kit grabber's way).
+      setTimeout(() => {
+        stopAt = 0;
+      });
+    }
+  };
   /** The stop the drawer stood at as the pane's sheet put it away; null while it stands. */
   let stopAway: number | null = null;
   // Put away under the pane's sheet, the drawer comes back at the stop it
@@ -717,8 +781,8 @@
         kept={kept.state}
         keptVariant={kept.variant}
         {lang}
-        onpress={keep}
-        onstep={(next) => keep(next, null)}
+        onpress={choose}
+        onstep={(next) => choose(next, null)}
         {review}
         stepper={stepperHere}
       />
@@ -748,7 +812,7 @@
 {/snippet}
 
 {#snippet stepper()}
-  <Stepper {at} {lang} onstep={(next) => keep(next, null)} {path} />
+  <Stepper {at} {lang} onstep={(next) => choose(next, null)} {path} />
 {/snippet}
 
 {#snippet widthItem(
@@ -791,20 +855,23 @@
       class="flex h-c-top-bar-h min-w-0 flex-none items-center gap-space-3 px-space-6 max-desk:px-space-5"
     >
       <div class="flex min-w-0 flex-1 items-center">
-        {#if reviews.length > 1 && review}
+        {#if files.length > 1 && frontFile}
+          {@const frontName = review?.name ?? loadingName(frontFile)}
           <DropdownMenu.Root bind:open={menuOpen}>
             <DropdownMenu.Trigger>
               {#snippet child({ props })}
+                <!-- Its name is what it shows, the switch said before it
+                     (WCAG 2.5.3, Label in Name). -->
                 <button
                   {...props}
                   bind:this={menuTrigger}
-                  aria-label={words.components}
                   class="mark-line pointer-hit touch-hit -ms-space-2 inline-flex h-c-btn-h-sm min-w-0 items-center gap-space-1 rounded-md px-space-2 type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover"
                   type="button"
                 >
+                  <span class="sr-only">{words.components}:</span>
                   <span
                     class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-                    >{review.name}</span
+                    >{frontName}</span
                   >
                   <IconChevronDown
                     aria-hidden="true"
@@ -822,17 +889,24 @@
             >
               <DropdownMenu.RadioGroup
                 bind:value={
-                  () => String(front),
+                  () => frontFile,
                   (next: string) => {
-                    front = Number(next);
+                    chosenFile = next;
                   }
                 }
               >
-                {#each reviews as one, index (one.file)}
-                  <DropdownMenu.RadioItem value={String(index)}>
+                <!-- Every states file from the start; one whose sheet is on
+                     its way says so in its own place. -->
+                {#each entries as one (one.file)}
+                  <DropdownMenu.RadioItem value={one.file}>
                     <span
-                      class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap"
-                      >{one.name}</span
+                      class={[
+                        "min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap",
+                        !one.review && "text-ink-muted",
+                      ]}
+                      >{one.review
+                        ? one.review.name
+                        : words.mounting(loadingName(one.file))}</span
                     >
                   </DropdownMenu.RadioItem>
                 {/each}
@@ -983,6 +1057,20 @@
                     id="{uid}-reduce"
                   />
                 </div>
+                <!-- A width wider than the stage is scaled to fit it; this
+                     draws it 1:1 instead, the page scrolling across it. -->
+                <div
+                  class="contents max-phone:flex max-phone:min-w-0 max-phone:items-center max-phone:justify-between max-phone:gap-space-3"
+                >
+                  <label class="type-label text-ink-row" for="{uid}-actual"
+                    >{words.actualSize}</label
+                  >
+                  <Switch
+                    bind:checked={actual}
+                    class="justify-self-end"
+                    id="{uid}-actual"
+                  />
+                </div>
               </div>
             </HangCard>
           </Popover.Root>
@@ -1062,6 +1150,9 @@
               {frame}
               laid={link.laid}
               name={keptState?.name ?? ""}
+              scale={link.laid && link.laid.scale < 1
+                ? words.scaledTo(figure(Math.round(link.laid.scale * 100)))
+                : null}
               {stale}
               variant={keptVariant?.name ?? null}
             />

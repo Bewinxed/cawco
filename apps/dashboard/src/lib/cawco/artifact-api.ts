@@ -253,9 +253,15 @@ export async function writeSheet(
 /** A component canvas's map: its component, what renders it and what it renders, each with its states and frames in miniature. */
 export async function fetchCanvasMap(
   instanceId: string,
-  id: string
+  id: string,
+  component: string | null = null
 ): Promise<CanvasMap> {
-  return (await ok(await fetch(`${artifactsPath(instanceId, id)}/map`))).json();
+  const query = component
+    ? `?${new URLSearchParams({ component }).toString()}`
+    : "";
+  return (
+    await ok(await fetch(`${artifactsPath(instanceId, id)}/map${query}`))
+  ).json();
 }
 
 /** The panel's Verify: a design system round on a component canvas, its verdict to the canvas's session. Answers what the hub did, one sentence. */

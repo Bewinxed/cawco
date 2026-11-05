@@ -3351,6 +3351,7 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
             ...(view.motion === "on" || view.motion === "reduce"
               ? { motion: view.motion }
               : {}),
+            ...(typeof view.fit === "boolean" ? { fit: view.fit } : {}),
           },
         })
       );

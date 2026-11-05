@@ -98,6 +98,10 @@ import type {
   StoredFile as StoredFileType,
 } from "./draft-store";
 import type {
+  GraphKept as GraphKeptType,
+  KeptState as KeptStateType,
+} from "./graph/kept";
+import type {
   KeptPairing as KeptPairingType,
   PairingStage as PairingStageType,
 } from "./hub-auth.svelte";
@@ -264,6 +268,18 @@ const DraftRecordShape = z.object({
   updatedAt: z.number(),
 });
 export const DraftRecordSchema: z.ZodType<DraftRecordType> = DraftRecordShape;
+
+const KeptStateShape = z.object({
+  state: z.string(),
+  variant: z.string().nullable(),
+});
+
+const GraphKeptShape = z.object({
+  ask: z.string(),
+  front: z.string().nullable(),
+  kept: z.record(z.string(), KeptStateShape),
+});
+export const GraphKeptSchema: z.ZodType<GraphKeptType> = GraphKeptShape;
 
 const PairingStageShape = z.union([
   z.object({
@@ -1001,6 +1017,8 @@ prove<
     Same<z.output<typeof StoredFileShape>, StoredFileType>,
     Same<z.output<typeof PendingTextShape>, PendingTextType>,
     Same<z.output<typeof DraftRecordShape>, DraftRecordType>,
+    Same<z.output<typeof KeptStateShape>, KeptStateType>,
+    Same<z.output<typeof GraphKeptShape>, GraphKeptType>,
     Same<z.output<typeof PairingStageShape>, PairingStageType>,
     Same<z.output<typeof KeptPairingShape>, KeptPairingType>,
     Same<z.output<typeof PlanEditKindShape>, PlanEditKindType>,

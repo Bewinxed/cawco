@@ -503,7 +503,12 @@
                   </p>
                 {/if}
                 {#if prop.description}
-                  <p class="m-0 text-ink-muted type-meta">{prop.description}</p>
+                  <!-- Its doc comment as written: a backticked run is code. -->
+                  <p class="m-0 text-ink-muted type-meta">
+                    {#each prop.description.split("`") as part, at (at)}{#if at % 2 === 1}<code
+                          class="type-code wrap-anywhere">{part}</code
+                        >{:else}{part}{/if}{/each}
+                  </p>
                 {/if}
               </li>
             {:else}

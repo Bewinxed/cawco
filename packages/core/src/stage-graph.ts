@@ -174,12 +174,16 @@ export interface StageReached {
  * its width changes. `need`: the page's width for the drawing whole (its
  * width, the page's gutters and its scroller's), which the panel's split
  * gives the stage; `tall`: the drawing's height; `fit`: the drawing's own
- * width where it stands narrower than the width it was laid out at.
+ * width where it stands narrower than the width it was laid out at;
+ * `scale`: how much it is scaled down to stand whole (both as they stand
+ * scaled).
  */
 export const STAGE_LAID = "cawco:stage-laid";
 export interface StageLaid {
   fit: number | null;
   need: number;
+  /** How much the drawing is scaled down to stand whole on the stage (a width picked wider than it); 1 at 1:1. */
+  scale: number;
   tall: number;
 }
 
@@ -279,8 +283,14 @@ export function stageLaidOf(value: unknown): StageLaid | null {
   const said = isRecord(value) ? value : null;
   const need = finite(said?.need);
   const tall = finite(said?.tall);
+  const scale = finite(said?.scale);
   return said && need !== null && need >= 0 && tall !== null
-    ? { need, tall, fit: finite(said.fit) }
+    ? {
+        need,
+        tall,
+        fit: finite(said.fit),
+        scale: scale !== null && scale > 0 && scale <= 1 ? scale : 1,
+      }
     : null;
 }
 

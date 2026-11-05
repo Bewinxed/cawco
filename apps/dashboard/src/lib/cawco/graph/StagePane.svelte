@@ -21,6 +21,7 @@
 
   let {
     name,
+    scale = null,
     variant = null,
     stale = false,
     laid,
@@ -31,6 +32,8 @@
     name: string;
     /** The variant's name, when it is not the state as written. */
     variant?: string | null;
+    /** How the drawing is scaled down to stand whole, in words ("Scaled to 54%"); null at 1:1. */
+    scale?: string | null;
     /** The hub's link is down: this is the last drawing. */
     stale?: boolean;
     /** How the page laid the drawing out; null until it has. */
@@ -71,6 +74,13 @@
       </h2>
       {#if variant}
         <span class="min-w-0 truncate type-label text-ink-muted">{variant}</span
+        >
+      {/if}
+      {#if scale}
+        <!-- Not 1:1: what the person judges is scaled, and says so. -->
+        <span
+          class="ms-auto flex-none type-meta text-ink-muted num"
+          data-slot="stage-scale">{scale}</span
         >
       {/if}
     </div>

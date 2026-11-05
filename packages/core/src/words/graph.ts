@@ -282,6 +282,10 @@ export const graphWords = {
   light: "Light",
   dark: "Dark",
   reduceMotion: "Reduce motion",
+  /** The view card's switch: a width wider than the stage drawn 1:1 (Apple's Actual Size), not scaled to fit. */
+  actualSize: "Actual size",
+  /** Beside the state's name while the stage draws it scaled down to fit: how much. */
+  scaledTo: (percent: Figure) => `Scaled to ${percent}%`,
   mounting: (name: string) => `Loading ${name}…`,
   /** The component failed to mount: what happened, why, what to do, what next. */
   mountFailed: (name: string, state: string) =>

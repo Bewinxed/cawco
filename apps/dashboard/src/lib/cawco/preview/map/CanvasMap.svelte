@@ -44,6 +44,7 @@
   let {
     address,
     artifactId,
+    component = null,
     instanceId,
     ready,
     revision,
@@ -51,6 +52,8 @@
     /** The canvas page's address on the pane's origin, absolute; null until the pane has one. */
     address: string | null;
     artifactId: string;
+    /** The component the design graph has in front, from the toolchain root: the map centres on it; null, the canvas's first states file's. */
+    component?: string | null;
     instanceId: string;
     /** The pane's own page has loaded (its pass entered, in host mode): a live card may load beside it. */
     ready: boolean;
@@ -90,11 +93,11 @@
   /** The chosen card's file: the canvas's own until another is pressed. */
   let chosen = $state<string | null>(null);
   $effect(() => {
-    const ids = { instanceId, artifactId };
+    const ids = { instanceId, artifactId, component };
     track(revision, asked);
     let live = true;
     failure = null;
-    fetchCanvasMap(ids.instanceId, ids.artifactId).then(
+    fetchCanvasMap(ids.instanceId, ids.artifactId, ids.component).then(
       (read) => {
         if (!live) {
           return;
