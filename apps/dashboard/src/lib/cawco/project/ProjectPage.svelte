@@ -126,6 +126,8 @@
   import { COL_PHONE } from "#lib/cawco/tasks/board-cols.js";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
   import {
+    actionsOf,
+    asksOf,
     CARD_PAGE,
     pendingSince,
     setTaskProject,
@@ -901,13 +903,29 @@
    * how long each has waited (TOM task 2: every wait longest-first, the
    * next one in reach): a question since it was raised, a task since its
    * oldest reason (`waitingSince`), a page since it went pending on you
-   * (its Needs-you need), else its last change.
+   * (its Needs-you need), else its last change. A task that waits on
+   * nothing of yours but a card's pick stands at that card (`at`): the pick
+   * is what it waits on, so that is where it is answered.
    */
   type Wait = { since: number } & (
     | { kind: "ask" }
-    | { kind: "task"; id: string }
+    | { kind: "task"; id: string; at: { page: string; card: string } | null }
     | { kind: "page"; name: string }
   );
+  /** Where a task waiting on a card's pick alone is answered: that card on its page. */
+  const CARD_REF = /^cawco:decision\/([^/#?]+)\/([^/#?]+)/u;
+  const pickOf = (task: TaskSummary): { page: string; card: string } | null => {
+    if (
+      task.kind === "you" ||
+      asksOf(task).length > 0 ||
+      actionsOf(projectId, task.id).length > 0
+    ) {
+      return null;
+    }
+    const ref = CARD_REF.exec(task.waits.find(waitsOnPick)?.href ?? "");
+    const name = ref?.[1] ? pageOf(ref[1]) : null;
+    return name && ref?.[2] ? { page: name, card: ref[2] } : null;
+  };
   const pagesTasksWaitOn = $derived(
     new Set(
       needsYou.flatMap((task) =>
@@ -927,6 +945,7 @@
       ...needsYou.map((task): Wait => ({
         kind: "task",
         id: task.id,
+        at: pickOf(task),
         since: waitingSince(projectId, task),
       })),
       ...pagesWaiting
@@ -948,7 +967,10 @@
   const openWait = $derived(
     waits.findIndex(
       (one) =>
-        (one.kind === "task" && one.id === openTask) ||
+        (one.kind === "task" &&
+          (one.at
+            ? one.at.page === openPage && one.at.card === decisionCard
+            : one.id === openTask)) ||
         (one.kind === "page" && one.name === openPage)
     )
   );
@@ -962,7 +984,7 @@
    */
   /** Where a wait stands: a page in Decisions, a task in the view of tasks on screen or the board. */
   const viewOfWait = (wait: Wait): string => {
-    if (wait.kind === "page") {
+    if (wait.kind === "page" || (wait.kind === "task" && wait.at)) {
       return "decisions";
     }
     return TASK_VIEWS.includes(current) ? current : "board";
@@ -982,14 +1004,19 @@
       swap.swap([], order.indexOf(to) > order.indexOf(current) ? 1 : -1);
       tab = to;
     }
-    if (next.kind === "page") {
-      decisionPage = next.name;
-      decisionCard = null;
-      goto(hrefOf(null, "decisions", { page: next.name, card: null }), {
+    const atCard =
+      next.kind === "page" ? { page: next.name, card: null } : next.at;
+    if (atCard) {
+      decisionPage = atCard.page;
+      decisionCard = atCard.card;
+      goto(hrefOf(null, "decisions", atCard), {
         shallow: true,
         replace: true,
         state: {},
       });
+      return;
+    }
+    if (next.kind !== "task") {
       return;
     }
     // On a phone a task is its own page with Back to the view: the first
