@@ -181,26 +181,39 @@ const pagesOf = (remote: Remote): Promise<PageSays[]> =>
   });
 
 /**
- * The browser down to one page, the field page: every other page closed (an
- * extension the container's policy installs may open its own as it lands),
- * so the page brought to the front and the one read back are the field page.
- * Answers how many pages it closed.
+ * One step toward the browser standing on one page, the field page: a tab
+ * opened on it when none is, then every other page closed (an extension the
+ * container's policy installs may open its own as it lands), so the page
+ * brought to the front and the one read back are the field page. The field
+ * page is opened first and never closed: a browser whose last window closes
+ * quits, and its DevTools connection with it (r440: neko's Chromium, which
+ * its supervisor starts again). Answers how many pages it closed.
  */
-const fieldPageAlone = (remote: Remote): Promise<number> =>
+const towardFieldPage = (remote: Remote): Promise<number> =>
   withDevtools(remote, async (link, targets) => {
-    const [kept, ...rest] = targets.filter((one) => one.type === "page");
-    for (const extra of rest) {
-      await link.call("Target.closeTarget", { targetId: extra.targetId });
+    const pages = targets.filter((one) => one.type === "page");
+    let field = pages.find((one) => one.url === FIELD_PAGE)?.targetId;
+    if (!field) {
+      const made = await link.call("Target.createTarget", { url: FIELD_PAGE });
+      field = String(made.targetId);
     }
-    if (kept) {
-      await link.call(
-        "Page.navigate",
-        { url: FIELD_PAGE },
-        await link.attach(kept.targetId)
-      );
+    const others = pages.filter((one) => one.targetId !== field);
+    for (const other of others) {
+      await link.call("Target.closeTarget", { targetId: other.targetId });
     }
-    return rest.length;
+    return others.length;
   });
+
+/** What the browser's pages say when even that read fails: the failure, as its one page. */
+const unread = (error: unknown): PageSays[] => [
+  {
+    url: "",
+    title: `no answer: ${String(error)}`,
+    visible: "unknown",
+    focus: false,
+    field: null,
+  },
+];
 
 /** What the browser view says now. */
 const viewOf = (page: Page) =>
@@ -246,8 +259,12 @@ const pointOver = (page: Page, at: { x: number; y: number }) =>
   }, at);
 
 /** The field page's textarea (its value, whether it has the focus, the Enter presses it heard), and every page as it says. */
+/** Every page as it says, or the read's failure as its one page, so a check's detail names it. */
+const pagesNow = (remote: Remote): Promise<PageSays[]> =>
+  pagesOf(remote).catch(unread);
+
 const fieldOf = async (remote: Remote) => {
-  const pages = await pagesOf(remote);
+  const pages = await pagesNow(remote);
   return { ...(pages.find((one) => one.field)?.field ?? {}), pages };
 };
 
@@ -459,15 +476,27 @@ export async function typeIntoTakeover(
   if (record?.state !== "live") {
     return;
   }
+  // Stepped until it stands, each step on a DevTools connection of its own:
+  // one the browser closes (it quit, and its supervisor starts it again) is
+  // opened again by the next step.
   const fieldAlone = async () => {
-    const closed = await fieldPageAlone(remote);
+    let closed = 0;
+    const dropped: string[] = [];
     const pages = await until(
       "the browser's one page is the field page",
-      () => pagesOf(remote),
+      async () => {
+        try {
+          closed += await towardFieldPage(remote);
+          return await pagesOf(remote);
+        } catch (error) {
+          dropped.push(String(error));
+          throw error;
+        }
+      },
       (now) => now.length === 1 && now[0]?.title === "field",
-      30_000
-    ).catch(() => pagesOf(remote));
-    return { closed, pages };
+      90_000
+    ).catch(() => pagesNow(remote));
+    return { closed, dropped, pages };
   };
   const firstAlone = await fieldAlone();
 
@@ -485,9 +514,12 @@ export async function typeIntoTakeover(
   // landed, since the first, is closed too.
   const alone = await fieldAlone();
   kit.check(
-    `the browser stands on one page, the field page (closed ${firstAlone.closed}, then ${alone.closed} other page(s))`,
+    `the browser stands on one page, the field page (closed ${firstAlone.closed}, then ${alone.closed} other page(s); its DevTools connection lost ${firstAlone.dropped.length + alone.dropped.length} time(s))`,
     alone.pages.length === 1 && alone.pages[0]?.title === "field",
-    JSON.stringify(alone.pages)
+    JSON.stringify({
+      pages: alone.pages,
+      dropped: [...firstAlone.dropped, ...alone.dropped],
+    })
   );
 
   // 1. Take over from the session's panel: the panel opens on the browser.
