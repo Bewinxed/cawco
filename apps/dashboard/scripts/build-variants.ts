@@ -258,10 +258,6 @@ const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that
    (Tailwind's \`marker:\` is ::marker). */
 @custom-variant details-marker (&::-webkit-details-marker);
 
-/* A tab in a strip while one of its tabs is dragged to a new place
-   (tab-drag.svelte.ts sets \`data-reordering\` on the track). */
-@custom-variant reordering (:where([data-slot="ff-tabs-list"][data-reordering]) > &);
-
 /* Inside the session details card while it glides to another tab (PaneTabs
    sets \`data-morph\` on the card). */
 @custom-variant details-gliding (&:where([data-session-details-popover][data-morph] *));
@@ -279,7 +275,7 @@ const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that
 
 /** Names Tailwind or the house already give a variant, or begin a functional one. */
 const RESERVED =
-  /^(hover|can-hover|no-hover|hover-none|coarse|fine|dark|light|pressed|reduced-transparency|at-rest|hit-pressed|hover-hover|beside-ghost|unhovered|has-link-active|mark-pressed|mark-beating|unhidden|glass-item|short-window|tall-window|details-marker|reordering|details-gliding|prose-root|prose-block|prose-heading|prose-block-heading|prose-item|theme-flip|node-focus-visible|focus-within|focus-visible|placeholder-shown|read-only|in-range|out-of-range|user-valid|user-invalid|motion-safe|motion-reduce|contrast-more|contrast-less|forced-colors|inverted-colors|pointer-.*|any-pointer-.*|details-content|(group|peer|has|not|in|data|supports|max|min|nth|nth-last|nth-of-type|nth-last-of-type)-.*)$/u;
+  /^(hover|can-hover|no-hover|hover-none|coarse|fine|dark|light|pressed|reduced-transparency|at-rest|hit-pressed|hover-hover|beside-ghost|unhovered|has-link-active|mark-pressed|mark-beating|unhidden|glass-item|short-window|tall-window|details-marker|details-gliding|prose-root|prose-block|prose-heading|prose-block-heading|prose-item|theme-flip|node-focus-visible|focus-within|focus-visible|placeholder-shown|read-only|in-range|out-of-range|user-valid|user-invalid|motion-safe|motion-reduce|contrast-more|contrast-less|forced-colors|inverted-colors|pointer-.*|any-pointer-.*|details-content|(group|peer|has|not|in|data|supports|max|min|nth|nth-last|nth-of-type|nth-last-of-type)-.*)$/u;
 
 interface Pair {
   attr: string;

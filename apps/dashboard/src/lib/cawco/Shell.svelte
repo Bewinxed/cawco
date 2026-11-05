@@ -49,6 +49,7 @@
   import { connect } from "./connect/installs.svelte";
   import { continuing } from "./continue.svelte";
   import EdgePull from "./EdgePull.svelte";
+  import { guardFileDrops } from "./file-drops";
   import FilesItem from "./files/FilesItem.svelte";
   import FilesSheet from "./files/FilesSheet.svelte";
   import { files, filesCount, followFiles } from "./files/files.svelte";
@@ -58,7 +59,6 @@
   import { deviceRatio } from "./home/device-ratio.svelte";
   import { sessionName } from "./home/home-state.svelte";
   import { peekBeside } from "./home/peek.svelte";
-  import { guardDrops } from "./internal-drag";
   import MachinesButton from "./MachinesButton.svelte";
   import { hangShadow } from "./motion/hung-shadow";
   import NeedsCaw from "./NeedsCaw.svelte";
@@ -75,6 +75,7 @@
   import { fullSize } from "./workspace/full-size.svelte";
   import PaneTabs from "./workspace/PaneTabs.svelte";
   import { projectOfTab, tabOfPath } from "./workspace/tabs";
+  import WorkspaceDrag from "./workspace/WorkspaceDrag.svelte";
   import { type WorkspaceV1, workspace } from "./workspace/workspace.svelte";
 
   // The sidebar primitives (SidebarMenuButton etc.) call `useSidebar()` which
@@ -720,9 +721,8 @@
   const routeError = $derived(
     page.error && !page.error.region ? page.error : null
   );
-  // A row or card dragged inside the page never types into a field, and a
-  // file let go off a composer never opens in the tab (internal-drag.ts).
-  onMount(guardDrops);
+  // A file let go off a composer never opens in the tab (file-drops.ts).
+  onMount(guardFileDrops);
 
   /* ── The bar's slot ──────────────────────────────────────────────────
      The hosted tabs, a page's strip, the crumb and Configure's back link
@@ -1080,6 +1080,9 @@
      snap away from on hydration. -->
 <!-- The tooltip provider and the lightbox, shared with an artifact's own tab. -->
 <Overlays>
+  <!-- A tab or a session's row is carried between the rail and the
+       workspace's groups on one drag (workspace/WorkspaceDrag). -->
+  <WorkspaceDrag>
   <!-- As tall as the visible area reaches, so the composer and a page's
        footer stand on a keyboard (cawco/visible-viewport `floor`). As wide
        as the window, it is the `shell` container the bar's glass takes its
@@ -1541,4 +1544,5 @@
     open={spawning.open || continuing.source !== null}
     prefill={continuing.source ? undefined : spawning.prefill}
   />
+  </WorkspaceDrag>
 </Overlays>

@@ -1,11 +1,11 @@
 /**
  * "Open in split view", the menu's door to what dragging a session row onto
- * a pane's edge already does: `workspace.split` (dnd.svelte `paneDropTarget`).
+ * a pane's edge already does: `workspace.split` (dnd.svelte `workspaceDrag`).
  * The menu has no pointer position, so the edge is the one `mod+\` uses
  * (Shell): the new pane opens to the right of the focused group.
  *
  * Gated as the drag is: a drag is not offered under a coarse pointer
- * (`dragSession`), and `split` refuses at the layout's group limit or when
+ * (dnd.svelte `coarse`), and `split` refuses at the layout's group limit or when
  * it would split a group against its only tab.
  */
 import { tick } from "svelte";

@@ -2,8 +2,8 @@
  * Part of `bun run check`: no scoped style rule is pruned by Svelte without
  * anyone knowing. Svelte drops a rule whose selector matches no element it
  * can see in the component, and writes it into the compiled stylesheet as
- * `/* (unused) … *\/`. A rule on an attribute only script sets (tab-drag's
- * `data-lifted`), or on a class no markup carries any more, is such a rule,
+ * `/* (unused) … *\/`. A rule on an attribute only script sets (dnd kit's
+ * `data-dnd-dragging`), or on a class no markup carries any more, is such a rule,
  * and the product then never draws it. The type check reads no CSS, so it
  * does not prove no declaration was lost; this reads the compiler's own
  * output.

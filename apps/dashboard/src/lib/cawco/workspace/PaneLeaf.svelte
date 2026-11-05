@@ -39,7 +39,7 @@
     composerBindings,
     composerOf,
   } from "./composer-dock.svelte";
-  import { dropHint, paneDropTarget } from "./dnd.svelte";
+  import { dropHint } from "./dnd.svelte";
   import { settling, slot } from "./dock.svelte";
   import { fullSize } from "./full-size.svelte";
   import { createSwipe } from "./gesture.svelte";
@@ -469,7 +469,6 @@
     data-drop-leaf={leaf.id}
     bind:this={stack}
     use:swipe.action={swipeable}
-    use:paneDropTarget={leaf.id}
   >
     {#each mounted as paneId (paneId)}
       {@const isActive = paneId === viewId}

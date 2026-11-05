@@ -99,6 +99,7 @@
    * under it only while that holds (app.css, by the group under the row).
    */
   import type { NeutralSessionInfo } from "@cawco/core/harness";
+  import { dragWords } from "@cawco/core/words/drag";
   import type { Attachment } from "svelte/attachments";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -111,6 +112,7 @@
   import { STOPPING_LABEL } from "./activity";
   import { Asker, type AskHereRequest } from "./ask-here.svelte";
   import type { BoardRow } from "./client.svelte";
+  import Draggable from "./drag/Draggable.svelte";
   import { openPeek, peekable, peekTipOff } from "./home/peek.svelte";
   import { swipeToArchive } from "./home/swipe-archive";
   import LiveSessionMenu from "./LiveSessionMenu.svelte";
@@ -128,7 +130,13 @@
   } from "./session-acts.svelte";
   import { cawOf, sessionStatus, statusWord } from "./session-status";
   import AccountDot from "./usage/AccountDot.svelte";
-  import { dragSession } from "./workspace/dnd.svelte";
+  import { coarse, rowDragId } from "./workspace/dnd.svelte";
+
+  /**
+   * The row's role, said outright: dnd kit names a draggable that carries
+   * no role of its own a button, and the row stays a link.
+   */
+  const LINK = "link";
 
   let {
     instance = null,
@@ -526,27 +534,9 @@
         {@render inner()}
       </form>
     {:else}
-      <a
-        data-session-row-row
-        title={stopped}
-        {...trigger}
-        aria-busy={pending ? true : undefined}
-        aria-current={active ? "page" : undefined}
-        class={cn(
-          "press-tint focus-inset flex coarse:min-h-c-btn-h-lg min-h-space-8 min-w-0 flex-auto items-center gap-space-2 rounded-inherit py-space-1 pr-space-3 pl-space-3 text-inherit no-underline group-not-data-swiping/session-row:transition-control-slide group-data-compact/session-row:min-h-(--row-compact-h) group-data-swiping/session-row:translate-x-(--swipe-x) group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:py-0 group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-compact/session-row:pl-(--row-compact-gap)",
-          trigger.class as string | undefined
-        )}
-        data-hover-session={instance?.id}
-        data-rail-row
-        data-share="session:{sessionId}"
-        {href}
-        style:--mark-hit-max={compact
-          ? "calc((var(--row-compact-h) - var(--mark-size, var(--space-5))) / 2 + var(--tree-gap))"
-          : "calc((var(--c-btn-h-lg) - var(--c-row-mark)) / 2 + var(--tree-gap))"}
-        style:--mark-hit-gap={compact
-          ? "var(--row-compact-gap)"
-          : "var(--space-2)"}
-        use:dragSession={{
+      <Draggable
+        data={{
+          kind: "row",
           sessionId,
           ctx: () =>
             info
@@ -557,9 +547,40 @@
                 }
               : null,
         }}
+        disabled={coarse()}
+        id={rowDragId(sessionId)}
+        label={title}
+        type="session"
       >
-        {@render inner()}
-      </a>
+        {#snippet children(thing)}
+          <a
+            data-session-row-row
+            title={stopped}
+            {...trigger}
+            aria-busy={pending ? true : undefined}
+            aria-current={active ? "page" : undefined}
+            class={cn(
+              "press-tint focus-inset flex coarse:min-h-c-btn-h-lg min-h-space-8 min-w-0 flex-auto items-center gap-space-2 rounded-inherit py-space-1 pr-space-3 pl-space-3 text-inherit no-underline group-not-data-swiping/session-row:transition-control-slide group-data-compact/session-row:min-h-(--row-compact-h) group-data-swiping/session-row:translate-x-(--swipe-x) group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:py-0 group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-compact/session-row:pl-(--row-compact-gap)",
+              trigger.class as string | undefined
+            )}
+            data-hover-session={instance?.id}
+            data-rail-row
+            data-share="session:{sessionId}"
+            {href}
+            style:--mark-hit-max={compact
+              ? "calc((var(--row-compact-h) - var(--mark-size, var(--space-5))) / 2 + var(--tree-gap))"
+              : "calc((var(--c-btn-h-lg) - var(--c-row-mark)) / 2 + var(--tree-gap))"}
+            style:--mark-hit-gap={compact
+              ? "var(--row-compact-gap)"
+              : "var(--space-2)"}
+            aria-roledescription={dragWords.movableLink}
+            role={LINK}
+            {@attach thing.attach}
+          >
+            {@render inner()}
+          </a>
+        {/snippet}
+      </Draggable>
     {/if}
     {#if onarchive}
       <!-- They stand on the row's ghost, by day the hover step itself: their

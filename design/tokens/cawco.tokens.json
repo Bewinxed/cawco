@@ -4491,22 +4491,6 @@
       },
       "$description": "The tallest a list block's card stands on a desk before its rows scroll inside it, so forty routines never push the blocks after them out of view. A phone's page is its one scroller, and there a card stands at its rows' height."
     },
-    "c-block-drop-line": {
-      "$type": "dimension",
-      "$value": {
-        "value": 2,
-        "unit": "px"
-      },
-      "$description": "The drop indicator a dragged block's place is shown by: a brand-solid line across the target block's edge, in the gap between blocks."
-    },
-    "c-block-drop-dot": {
-      "$type": "dimension",
-      "$value": {
-        "value": 6,
-        "unit": "px"
-      },
-      "$description": "The dot at the drop indicator's leading end, brand-solid."
-    },
     "c-tray-chip": {
       "$type": "dimension",
       "$value": {
