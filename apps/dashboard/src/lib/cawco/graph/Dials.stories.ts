@@ -23,7 +23,6 @@ export default {
     dials: ROUTINE_DIALS,
     written: ROUTINE_WRITTEN,
     values: {},
-    component: "Routine form",
     lang: "en",
     onchange: nothing,
     onreset: nothing,

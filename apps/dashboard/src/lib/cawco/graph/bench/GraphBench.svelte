@@ -155,7 +155,8 @@
   });
 
   const story = $derived(stories.find((one) => one.name === standing));
-  const width = $derived(picked ?? story?.form?.width ?? 1440);
+  /** The story's own width, its viewport; the desk's when it names none. */
+  const own = $derived(story?.form?.width ?? 1440);
   /** The arg dials as set: the form's props over its story's. */
   const argsSet = $derived(
     Object.fromEntries(
@@ -178,27 +179,31 @@
   );
 
   let drawing = $state<HTMLElement | null>(null);
-  let page = $state<HTMLElement | null>(null);
   /** The stand-in page's width, px, and its gutter. */
   let room = $state(0);
   let gutter = $state(0);
-  /** A width wider than the page scaled to fit it, as the stage page draws one. */
-  const fit = $derived(room > 0 ? Math.min(1, (room - gutter) / width) : 1);
-  // The drawing laid out: the room the stage's split gives it, as the page says it.
+  /** The component's own measure: a component held to a measure (the form's `max-w-c-measure`) is that wide, else its story's width. */
+  let held = $state<number | null>(null);
+  const measure = $derived(Math.min(own, held ?? own));
+  /** The width the page has for the drawing. */
+  const space = $derived(room > 0 ? room - gutter : measure);
+  /**
+   * The width the drawing is laid out at: one he picked in the view card;
+   * else its own measure, or the widest width that fits the page where the
+   * measure doesn't (a fluid component lays itself out to it, at 1:1).
+   */
+  const width = $derived(picked ?? Math.min(measure, space));
+  /** A width he picked wider than the page, scaled to fit it; 1:1 otherwise. */
+  const fit = $derived(picked === null ? 1 : Math.min(1, space / picked));
+  /** The drawing's height as laid out, px, for the box its scale stands in. */
+  let tall = $state(0);
+  // The drawing laid out: its measure the stage's split gives it, as the page says it.
   $effect(() => {
-    const at = width;
+    const at = picked ?? measure;
     const scale = fit;
-    const node = page;
-    if (!node) {
-      return;
-    }
+    const height = tall;
     untrack(() => {
-      link.laid = {
-        fit: null,
-        need: at + gutter,
-        scale,
-        tall: node.scrollHeight,
-      };
+      link.laid = { fit: null, need: at + gutter, scale, tall: height };
     });
   });
 
@@ -249,29 +254,43 @@
 {#snippet frame()}
   <!-- The stand-in stage page: its gutter, the drawing at its width. -->
   <div
-    bind:this={page}
     class="h-full min-h-0 overflow-auto bg-surface-page p-space-5"
     {@attach frameSize((node: HTMLElement) => {
       room = node.clientWidth;
       gutter = 2 * Number.parseFloat(getComputedStyle(node).paddingInlineStart);
     })}
   >
+    <!-- The box the drawing stands in is its size after its scale, so a
+         scaled drawing leaves no 1:1 box behind to scroll across. -->
     <div
-      bind:this={drawing}
-      class="w-(--drawing) max-w-none origin-top-left scale-(--fit)"
-      data-cawco-story={standing}
-      style="--drawing: {width}px; --fit: {fit}; {varsSet}"
+      class="w-(--box-w) h-(--box-h) overflow-clip"
+      style="--box-w: {width * fit}px; --box-h: {tall * fit}px"
     >
-      {#key standing}
-        <RoutineForm
-          {...meta.args}
-          {...story?.args}
-          {...argsSet}
-          projectId="northwind"
-          oncreated={() => undefined}
-          oncancel={() => undefined}
-        />
-      {/key}
+      <div
+        bind:this={drawing}
+        class="w-(--drawing) max-w-none origin-top-left scale-(--fit)"
+        data-cawco-story={standing}
+        style="--drawing: {width}px; --fit: {fit}; {varsSet}"
+        {@attach frameSize((node: HTMLElement) => {
+          tall = node.offsetHeight;
+          const form = node.firstElementChild;
+          const most = form
+            ? Number.parseFloat(getComputedStyle(form).maxWidth)
+            : Number.NaN;
+          held = Number.isFinite(most) ? most : null;
+        })}
+      >
+        {#key standing}
+          <RoutineForm
+            {...meta.args}
+            {...story?.args}
+            {...argsSet}
+            projectId="northwind"
+            oncreated={() => undefined}
+            oncancel={() => undefined}
+          />
+        {/key}
+      </div>
     </div>
   </div>
 {/snippet}

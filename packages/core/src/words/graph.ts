@@ -307,18 +307,17 @@ export const graphWords = {
     /** A changed dial's restore glyph: what it goes back to. */
     reset: (dial: string, value: string) => `Reset ${dial} to ${value}`,
     resetAllSaid: "Reset all values",
-    /** Copies the values as set, with what the agent is to do with them. */
-    copy: "Copy values",
-    /** What Copy puts on the clipboard, for a chat or a file: the values, then the ask. */
-    copiedText: (component: string, values: string) =>
-      `Dial values for ${component}, as set in the design graph:\n${values}\nMake these the component's own values.`,
     /** A colour dial's swatch: the platform's picker. */
     pick: (dial: string) => `Pick ${dial}`,
     /** A colour typed that the browser reads as none: under its field until it is one (what he typed stands in the field above it). */
     notAColour: "Not a colour. Type one like #2a6df4.",
     on: "On",
     off: "Off",
-    /** The As written view, under its dials: they take no turn, and the way on is Yours. */
+    /** The head's line while As written is shown: the dials take no turn, and the way on is Yours. */
     readOnly: "Switch to Yours to change the values.",
+    /** The head's line otherwise: his values are the artifact's, and the agent reads them with his other answers when he sends. */
+    reachAgent: "The agent gets these values when you send.",
+    /** The dial glyph in the bar's glass while values are changed: its name says how many. */
+    glassChanged: (n: Figure) => `Dials, ${n} changed`,
   },
 } as const;

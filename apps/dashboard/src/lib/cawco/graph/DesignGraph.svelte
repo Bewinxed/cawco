@@ -84,7 +84,12 @@
   import { browser } from "$app/env";
   import { besideLine, DIVIDER } from "./beside";
   import Dials from "./Dials.svelte";
-  import type { DialValue, DialValues, GraphDial } from "./dials";
+  import {
+    changedOf,
+    type DialValue,
+    type DialValues,
+    type GraphDial,
+  } from "./dials";
   import { figureOf, pageLang } from "./figures";
   import Journey from "./Journey.svelte";
   import { keepUnder, keptUnder } from "./kept";
@@ -265,7 +270,7 @@
   /** The face the room shows: the states until he picks another. */
   let face = $state<Face>(untrack(() => startFace) ?? "states");
   /** His values of the dials, by name; As written or Yours on the face and the drawing; the values Reset all took, while nothing has changed since. */
-  let dialValues = $state<DialValues>(untrack(() => ({ ...keptDials })));
+  let dialValues = $state<DialValues>({});
   let dialVersion = $state<"yours" | "written">("yours");
   let dialsUndo = $state<DialValues | null>(null);
   /** The dials as set on the drawing: his over as written, or as written alone. */
@@ -282,8 +287,9 @@
     dialsUndo = null;
     ondials?.(dialValues);
   };
-  const resetDials = (names: string[]) => {
-    if (names.length > 1) {
+  /** Dials back to as written: Reset all (`all`) leaves Undo reset; a row's restore glyph doesn't. */
+  const resetDials = (names: string[], all: boolean) => {
+    if (all) {
       dialsUndo = dialValues;
     }
     dialValues = Object.fromEntries(
@@ -297,6 +303,25 @@
     untrack(() => dialsAt === "glass" && startFace === "dials")
   );
   let dialsJoined = $state(false);
+  /** How many dials he changed from as written (Yours' count). */
+  const dialsChanged = $derived(
+    changedOf(dials, link.dialsWritten ?? {}, dialValues).length
+  );
+  // His values as the artifact keeps them come with its doc, after the graph
+  // stands: taken once they come, while he has turned nothing here.
+  let keptTaken = false;
+  $effect(() => {
+    const kept = keptDials;
+    if (keptTaken || Object.keys(kept).length === 0) {
+      return;
+    }
+    untrack(() => {
+      keptTaken = true;
+      if (Object.keys(dialValues).length === 0) {
+        dialValues = { ...kept };
+      }
+    });
+  });
   let dialsTrigger = $state<HTMLElement | null>(null);
   /** The face the room shows: his, while the room has it (the dials come once the page has read them); else the states. */
   const shownFace = $derived<Face>(
@@ -960,7 +985,6 @@
 
 {#snippet dialsBody()}
   <Dials
-    component={review?.name ?? ""}
     {dials}
     {lang}
     {numberForm}
@@ -1202,16 +1226,26 @@
           {#if dialsAt === "glass" && dials.length > 0}
             <!-- The agent's dials, hung from the glass as the view is. -->
             <Popover.Root bind:open={dialsOpen}>
-              <Tip disabled={dialsOpen} label={words.dialsFace}>
+              <Tip
+                disabled={dialsOpen}
+                label={dialsChanged > 0
+                  ? words.dials.glassChanged(figure(dialsChanged))
+                  : words.dialsFace}
+              >
                 {#snippet children(tip)}
                   <Popover.Trigger>
                     {#snippet child({ props })}
+                      <!-- Closed with values changed, the glyph wears the
+                           selected wash and says how many, as Compare on does. -->
                       <button
                         data-bar-item
                         {...mergeProps(tip, props)}
-                        aria-label={words.dialsFace}
+                        aria-label={dialsChanged > 0
+                          ? words.dials.glassChanged(figure(dialsChanged))
+                          : words.dialsFace}
                         bind:this={dialsTrigger}
-                        class="select-none touch-hit press-tint"
+                        class="select-none touch-hit press-tint data-changed:bg-selected-bg data-changed:text-selected-ink"
+                        data-changed={dialsChanged > 0 || undefined}
                         type="button"
                       >
                         <IconDial data-slot="bar-symbol" aria-hidden="true" />

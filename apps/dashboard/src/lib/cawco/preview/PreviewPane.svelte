@@ -1018,6 +1018,13 @@
    * Send (the hub's artifacts/service.ts `send`).
    */
   let view = $state.raw<ArtifactView | null>(null);
+  /** His dial values as the artifact's doc keeps them (`dials`), by name: the design graph stands them again on open. */
+  const keptDials = $derived.by(() => {
+    const kept = view?.choices.dials?.value;
+    return kept && typeof kept === "object" && !Array.isArray(kept)
+      ? (kept as Record<string, number | string | boolean>)
+      : {};
+  });
   let doc: ArtifactDoc | null = null;
   /**
    * Pins the page's doc holds that the pane's doesn't yet, as the page last
@@ -4571,7 +4578,16 @@
           frame={frameTags}
           inspector={inspectorInRoom ? roomInspector : undefined}
           {link}
+          {keptDials}
           memory={`cawco-graph-kept:${artifact.id}`}
+          ondials={(values) => {
+            // His dial values are the artifact's: its doc's `dials`, which
+            // the panel's Send counts and artifact_read answers.
+            const refused = doc?.keep("dials", values);
+            if (refused) {
+              failure = { message: refused, again: null };
+            }
+          }}
           onroom={() => showInspector(false)}
           paneSheet={inspecting && inspectorLayout === "sheet"}
           spec={sheetCanvas.spec}

@@ -67,6 +67,10 @@ export function snapTo(value: number, range: DialRange): number {
   return Number((range.min + steps * range.step).toFixed(Math.min(places, 6)));
 }
 
+/** `value` held inside `range`: where a step or a drag stops (a typed figure is kept as typed). */
+export const clampTo = (value: number, range: DialRange): number =>
+  Math.min(range.max, Math.max(range.min, value));
+
 /** Where `value` stands along `range`, 0 to 1, held at the ends. */
 export const shareOf = (value: number, range: DialRange): number =>
   range.max === range.min
@@ -98,8 +102,10 @@ export const isColour = (typed: string): boolean =>
 
 /**
  * A colour as `#rrggbb` for the platform's picker, which takes no other
- * form: read through a canvas, so any colour the browser reads converts;
- * a colour it can't is black.
+ * form: painted on a one-pixel canvas and its pixel read back, so any colour
+ * the browser reads (an oklch(), a color(display-p3 …), a token's resolved
+ * value) converts, mapped into sRGB as the browser paints it; a colour it
+ * can't read is black.
  */
 const HEX6 = /^#[0-9a-f]{6}$/iu;
 
@@ -107,17 +113,20 @@ export function hexOf(colour: string): string {
   if (HEX6.test(colour)) {
     return colour.toLowerCase();
   }
-  if (typeof document === "undefined") {
+  if (typeof document === "undefined" || !isColour(colour)) {
     return "#000000";
   }
-  const paint = document.createElement("canvas").getContext("2d");
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  const paint = canvas.getContext("2d", { willReadFrequently: true });
   if (!paint) {
     return "#000000";
   }
-  paint.fillStyle = "#000000";
   paint.fillStyle = colour;
-  const said = String(paint.fillStyle);
-  return said.startsWith("#") ? said : "#000000";
+  paint.fillRect(0, 0, 1, 1);
+  const [r = 0, g = 0, b = 0] = paint.getImageData(0, 0, 1, 1).data;
+  return `#${[r, g, b].map((one) => one.toString(16).padStart(2, "0")).join("")}`;
 }
 
 /** The dials he changed from as written, by name. */
@@ -131,16 +140,3 @@ export const changedOf = (
       (dial) => dial.name in values && values[dial.name] !== written[dial.name]
     )
     .map((dial) => dial.name);
-
-/** The values as set on the drawing, his over the agent's, by name: what Copy writes and `artifact_read` answers. */
-export const valuesAsSet = (
-  dials: readonly GraphDial[],
-  written: DialValues,
-  values: DialValues
-): DialValues =>
-  Object.fromEntries(
-    dials.flatMap((dial) => {
-      const value = values[dial.name] ?? written[dial.name];
-      return value === undefined ? [] : [[dial.name, value]];
-    })
-  );

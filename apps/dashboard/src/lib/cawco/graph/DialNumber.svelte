@@ -29,7 +29,13 @@
   import { Slider } from "bits-ui";
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
-  import { type DialRange, type GraphDial, shareOf, snapTo } from "./dials";
+  import {
+    clampTo,
+    type DialRange,
+    type GraphDial,
+    shareOf,
+    snapTo,
+  } from "./dials";
   import { figureOf } from "./figures";
 
   let {
@@ -104,7 +110,8 @@
     if (event.key in to) {
       event.preventDefault();
       typing = null;
-      onchange(snapTo(to[event.key] ?? value, range));
+      // A step stops at the range's ends; a figure typed past one is kept until stepped.
+      onchange(clampTo(snapTo(to[event.key] ?? value, range), range));
     }
   };
 
@@ -128,7 +135,10 @@
     const held = form === "pill" ? knob : 0;
     const span = Math.max(1, box.width - held);
     const at = Math.min(1, Math.max(0, (x - box.left - held / 2) / span));
-    return snapTo(range.min + at * (range.max - range.min), range);
+    return clampTo(
+      snapTo(range.min + at * (range.max - range.min), range),
+      range
+    );
   };
   const down = (event: PointerEvent) => {
     if (focused || event.button !== 0) {
