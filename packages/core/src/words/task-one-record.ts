@@ -152,6 +152,11 @@ export const taskOneRecordWords = {
   /* ---- Asking in the page ------------------------------------------------ */
   cancel: "Cancel",
   sendBackAsk: (stage: string): string => `Send back to ${stage}?`,
+  /** Who takes the task up where Send back puts it, under the ask. */
+  backToAttempt: "Its session carries on with your note.",
+  backToStart: "A new session starts on it with your note.",
+  backToNobody: (stage: string): string =>
+    `It waits in ${stage} until someone starts it.`,
   note: "What should change",
   dropAsk: "Drop this task?",
   dropConsequence:

@@ -14,7 +14,6 @@
    * and which question stands open come from the screen.
    */
   import { taskOneRecordWords as words } from "@cawco/core/words/task-one-record";
-  import { taskReviewWords } from "@cawco/core/words/task-review";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import LiveDot from "#lib/components/ui/live-dot/live-dot.svelte";
@@ -128,11 +127,11 @@
   /** Who takes the task up where Send back puts it (hub stages.ts `sendBackOf`). */
   const whoTakesUp = (review: NonNullable<TaskView["review"]>): string => {
     if (review.sendBackBy === "nobody") {
-      return taskReviewWords.backToNobody(review.sendBack);
+      return words.backToNobody(review.sendBack);
     }
     return review.sendBackBy === "attempt"
-      ? taskReviewWords.backToAttempt
-      : taskReviewWords.backToStart;
+      ? words.backToAttempt
+      : words.backToStart;
   };
   const nested = $derived(
     entry.kind === "attempt"
