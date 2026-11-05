@@ -205,12 +205,15 @@
   ]}
   data-rail-open={railed && railOpen ? "" : undefined}
 >
+  <!-- Under 640px of page (ProjectDock's `@container/project`, a split's
+       pane or a phone) a column takes the board's width less space-8 and
+       the columns snap; the page's scrolling stays the phone's. -->
   <div
     data-slot="board"
     bind:this={board}
     class={[
-      "kit-edge-fade grid h-full min-h-0 min-w-0 flex-auto auto-cols-(--cols) grid-flow-col gap-space-3 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-space-3 max-phone:auto-cols-(--cols-phone)",
-      "max-phone:snap-x max-phone:snap-mandatory max-phone:group-data-rail-open:hidden",
+      "kit-edge-fade grid h-full min-h-0 min-w-0 flex-auto auto-cols-(--cols) grid-flow-col gap-space-3 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-space-3 @max-phone/project:auto-cols-(--cols-phone)",
+      "@max-phone/project:snap-x @max-phone/project:snap-mandatory @max-phone/project:group-data-rail-open:hidden",
       tasks.length > 0 && "max-phone:h-auto",
     ]}
     style:--cols="minmax(var(--c-board-col-min), var(--c-board-col-max))"
@@ -233,7 +236,7 @@
     {#if railOpen}
       <div
         data-slot="rail-open"
-        class="mb-space-3 flex min-h-0 w-(--w) flex-none flex-col gap-space-1 max-phone:w-full"
+        class="mb-space-3 flex min-h-0 w-(--w) flex-none flex-col gap-space-1 @max-phone/project:w-full"
         style:--w="min(var(--c-board-col-max), 80%)"
       >
         <TaskColumn

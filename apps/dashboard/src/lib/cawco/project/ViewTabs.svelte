@@ -9,10 +9,10 @@
    * way to the menu first only when it would not fit after them, and a view
    * picked from the menu takes its place there, the last tab before it
    * stepping into the menu. Where not even the chosen tab stands beside the
-   * ⋯ (900px with the page's actions beside it, 60px of room), every view
-   * goes into one menu, its trigger naming the view on screen as the
-   * phone's bar names it (ViewBar), or, where that name has no room either,
-   * the ⋯ alone, its name said to a screen reader.
+   * ⋯, every view goes into one menu, its trigger naming the view on screen
+   * as the phone's bar names it (ViewBar); where that name has no room
+   * whole, it ends in its ellipsis, so the strip always says which view is
+   * on screen.
    *
    * The room is the strip's own width less everything else it holds (the
    * hairline, the filter, Needs you, New task, Ask Caw: none of them sized
@@ -66,8 +66,6 @@
     more: number;
     moreCounted: number;
     pad: number;
-    /** The one menu's trigger, saying the chosen view. */
-    picker: number;
     /** What the strip leaves its views. */
     room: number;
     /** Each view's tab width, by value. */
@@ -92,8 +90,7 @@
     const counted = ruler?.querySelector<HTMLElement>(
       "[data-ruler-more-counted]"
     );
-    const named = ruler?.querySelector<HTMLElement>("[data-ruler-picker]");
-    if (!(root && strip && list && dots && named)) {
+    if (!(root && strip && list && dots)) {
       return null;
     }
     const style = getComputedStyle(strip);
@@ -128,7 +125,6 @@
       moreCounted: counted
         ? counted.getBoundingClientRect().width + before
         : more,
-      picker: named.getBoundingClientRect().width,
     };
   }
 
@@ -159,7 +155,7 @@
         sized.observe(child);
       }
       for (const tab of list.querySelectorAll(
-        '[data-slot="ff-tab"], [data-ruler-picker], [data-ruler-more-counted]'
+        '[data-slot="ff-tab"], [data-ruler-more-counted]'
       )) {
         sized.observe(tab);
       }
@@ -183,11 +179,10 @@
     kept: Set<string>;
     /**
      * Not even the chosen tab stands beside the ⋯: every view goes into one
-     * menu, its trigger naming the view on screen (`named`), or, where the
-     * name has no room either, the ⋯ alone (`dots`), its name said to a
-     * screen reader.
+     * menu, its trigger naming the view on screen, the name ending in its
+     * ellipsis where it has no room whole.
      */
-    menu: "named" | "dots" | null;
+    menu: boolean;
   }
 
   /** What a view holds that waits: Decisions' pages waiting on picks; a draft counts none. */
@@ -203,14 +198,14 @@
    * count, alone otherwise.
    */
   function place(m: Measures): Placed {
-    const { widths, gap, pad, room, picker } = m;
+    const { widths, gap, pad, room } = m;
     const width = (value: string) => widths.get(value) ?? 0;
     const whole =
       pad +
       views.reduce((sum, view) => sum + width(view.value), 0) +
       gap * Math.max(0, views.length - 1);
     if (whole <= room + EDGE) {
-      return { kept: new Set(views.map((view) => view.value)), menu: null };
+      return { kept: new Set(views.map((view) => view.value)), menu: false };
     }
     const chosen = views.find((view) => view.value === current);
     const others = views.filter((view) => view !== chosen);
@@ -224,7 +219,7 @@
       left -= width(chosen.value);
     }
     if (left < moreOf(others)) {
-      return { kept, menu: picker <= room + EDGE ? "named" : "dots" };
+      return { kept, menu: true };
     }
     for (const [at, view] of others.entries()) {
       const takes = width(view.value) + gap;
@@ -234,7 +229,7 @@
       kept.add(view.value);
       left -= takes;
     }
-    return { kept, menu: null };
+    return { kept, menu: false };
   }
 
   const placed = $derived(measures ? place(measures) : null);
@@ -243,7 +238,7 @@
   );
   const tabs = $derived(views.filter((view) => shown.has(view.value)));
   const rest = $derived(views.filter((view) => !shown.has(view.value)));
-  const menu = $derived(rest.length === 0 ? null : (placed?.menu ?? null));
+  const menu = $derived(rest.length > 0 && (placed?.menu ?? false));
   /** What waits in the views the ⋯ holds. */
   const held = $derived(rest.reduce((sum, view) => sum + countOf(view), 0));
   const moreName = $derived(
@@ -288,35 +283,26 @@
   class="relative flex min-w-0 flex-initial items-center gap-space-1"
 >
   {#if menu}
-    <!-- Every view in one menu, its trigger saying the one on screen, or
-         the ⋯ alone where its name has no room. -->
+    <!-- Every view in one menu, its trigger saying the one on screen, its
+         name ending in its ellipsis where it has no room whole (DESIGN.md,
+         The Truncate Inside Rule). -->
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
         {#snippet child({ props })}
-          {#if menu === "named"}
-            <Button
-              {...props}
-              aria-label={viewsWords.pick(currentLabel)}
-              class="flex-none"
-              data-views-picker
-              size="sm"
-              variant="ghost"
+          <Button
+            {...props}
+            aria-label={viewsWords.pick(currentLabel)}
+            class="min-w-0 max-w-full flex-initial"
+            data-views-picker
+            size="sm"
+            title={viewsWords.pick(currentLabel)}
+            variant="ghost"
+          >
+            <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+              >{currentLabel}</span
             >
-              <span>{currentLabel}</span>
-              <IconChevronDown />
-            </Button>
-          {:else}
-            <Button
-              {...props}
-              aria-label={viewsWords.pick(currentLabel)}
-              class="touch-hit flex-none"
-              data-views-picker
-              size="icon-sm"
-              variant="ghost"
-            >
-              <IconMore />
-            </Button>
-          {/if}
+            <IconChevronDown />
+          </Button>
         {/snippet}
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" class="w-auto">
@@ -403,11 +389,5 @@
         </Button>
       </span>
     {/if}
-    <span class="inline-flex w-max" data-ruler-picker>
-      <Button size="sm" variant="ghost">
-        <span>{currentLabel}</span>
-        <IconChevronDown />
-      </Button>
-    </span>
   </div>
 </div>

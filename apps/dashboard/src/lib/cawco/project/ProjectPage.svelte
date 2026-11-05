@@ -1619,6 +1619,19 @@
    * page does; the window says nothing.
    */
   let roomy = $state(true);
+  /**
+   * Under 280px of page the views row folds New task, the filter and Ask
+   * Caw for a view into the head's More (ProjectHead `rowFolded`), so the
+   * views keep the room to name the one on screen: the gutters (2 ×
+   * space-5, 36px), the hairline and its gaps (23px), those three symbols
+   * (c-btn-h-sm, 30px, two space-2 gaps: 104px) and the views' menu
+   * saying "Decisions" (about 100px) need 263px. The filter's glyph and
+   * count stay while a filter stands. On a phone the row is not drawn
+   * (its width reads 0), and the views bar's rule is the same: those rows
+   * are in More.
+   */
+  const ROW_FOLD = 280;
+  let rowFolded = $state(false);
   // --- before setup -------------------------------------------------------------
 
   /** The setup page, once Caw has opened it (the project-setup skill's `decisions/setup/`). */
@@ -1865,6 +1878,7 @@
     class="flex min-w-0 items-center gap-space-3 pt-0 pe-space-6 pb-space-4 ps-space-7 @max-phone/project:px-space-5"
     {@attach frameSize((node: HTMLElement) => {
       roomy = node.clientWidth >= PHONE_BREAKPOINT;
+      rowFolded = node.clientWidth < ROW_FOLD;
     })}
   >
     <ViewTabs
@@ -1873,16 +1887,13 @@
       onchoose={choose}
       views={barViews}
     />
-    {#if trailing}
-      <!-- Under 640px New task and Ask Caw are in the head's ⋯: the rule
-           stands only while Needs you follows it there. -->
+    {#if trailing && !(rowFolded && needsYou.length === 0 && !(filterHere && narrowed > 0))}
+      <!-- Folded, New task, the filter and Ask Caw are in the head's More:
+           the rule stands only while Needs you or a standing filter follows
+           it there. -->
       <span
-        data-wide={needsYou.length === 0 || undefined}
         aria-hidden="true"
-        class={[
-          "h-c-btn-h-sm w-px flex-none bg-border-hairline",
-          needsYou.length === 0 && "max-phone:hidden",
-        ]}
+        class="h-c-btn-h-sm w-px flex-none bg-border-hairline"
       ></span>
     {/if}
     <!-- The strip is a toolbar: its actions are bare symbols, each named in
@@ -1892,8 +1903,9 @@
          tooltip"), so the views keep the room. -->
     <div data-form="compact" class="flex flex-none items-center gap-space-2">
       <!-- Filter, on the views of the tasks: whole while the page is 640px
-           or wider, its glyph and count in a narrower pane. -->
-      {#if filterHere}
+           or wider, its glyph and count in a narrower pane, and in a folded
+           row only while a filter stands (the head's More opens it). -->
+      {#if filterHere && (!rowFolded || narrowed > 0)}
         <TaskFilterPopover
           compact={!roomy}
           {filter}
@@ -1911,7 +1923,7 @@
           }}
         />
       {/if}
-      {#if strippedNewTask}
+      {#if strippedNewTask && !rowFolded}
         <Button
           aria-label="New task"
           data-wide
@@ -1931,7 +1943,7 @@
           <span class="in-form-compact:hidden">New task</span>
         </Button>
       {/if}
-      {#if canTalk}
+      {#if canTalk && !rowFolded}
         <Button
           aria-label={viewsWords.ask}
           data-wide
@@ -2435,6 +2447,7 @@
                 choose("board");
                 adding = true;
               }}
+              {rowFolded}
               setup={setupAct}
               {project}
               seated={!standing}
@@ -2614,7 +2627,7 @@
              next project's read takes its place in the skeleton's reveal. -->
       <div
         aria-hidden="true"
-        class="grid auto-cols-(--skeleton-col) grid-flow-col gap-space-3 overflow-hidden max-phone:auto-cols-(--skeleton-col-phone)"
+        class="grid auto-cols-(--skeleton-col) grid-flow-col gap-space-3 overflow-hidden @max-phone/project:auto-cols-(--skeleton-col-phone)"
         style:--skeleton-col={"minmax(var(--c-board-col-min), var(--c-board-col-max))"}
         style:--skeleton-col-phone="calc(100% - var(--space-8))"
         out:revealOut

@@ -35,7 +35,8 @@
    * up, Change how it runs once it is: the project-setup skill's one page,
    * through Caw), Project details…, Caw's settings (CawPanel, off More: a popover on a desk, the
    * bottom sheet on touch), Spend, then Forget and Delete
-   * (and, under 640px, New task, Filter tasks… and Ask Caw for a view),
+   * (and, while the page's views row folds them, New task, Filter tasks…
+   * and Ask Caw for a view),
    * each with its glyph. Nothing in the head is on the coral: no view
    * of a project is for asking Caw (One prominent action, trailing). One tray
    * stands under the head at a time: the details or an end.
@@ -115,9 +116,16 @@
     onfilter,
     setup,
     detailsAfterChecks,
+    rowFolded = false,
   }: {
-    /** Filter the tasks, from the menu on a phone, where the strip has no room for it. */
+    /** Filter the tasks, from the menu, while the page's views row has folded it. */
     onfilter: (anchor: HTMLElement) => void;
+    /**
+     * The page's views row folded New task, the filter and Ask Caw for a
+     * view into More (ProjectPage `rowFolded`: a pane under 280px, or a
+     * phone, whose views bar has no room for them).
+     */
+    rowFolded?: boolean;
     project: ProjectRow;
     machine: Machine | null;
     lead: CawLead;
@@ -132,6 +140,7 @@
     detailsAfterChecks?: Snippet;
   } = $props();
 
+  /** A phone: Ask Caw is the views bar's "+" there (ViewBar), so More leaves it. */
   const narrow = new MediaQuery("(max-width: 639px)");
   /** Caw's settings rise as the bottom sheet on touch, as the head's other sheets do. */
   const touch = new MediaQuery(
@@ -176,7 +185,7 @@
     (folded.ask && !narrow.current) ||
       (Boolean(primary) && folded.spinOff) ||
       folded.fullSize ||
-      narrow.current
+      rowFolded
   );
   /**
    * Where the project lives, its machine and folder (place), said
@@ -591,7 +600,7 @@
                 {/if}
               </DropdownMenu.Item>
             {/if}
-            {#if narrow.current}
+            {#if rowFolded}
               <DropdownMenu.Item onSelect={onnewtask}>
                 <IconPlus />
                 <span>New task</span>
