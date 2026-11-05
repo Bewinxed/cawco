@@ -15792,7 +15792,11 @@ export const createServer = (
    * (`artifact_browse`) ({@link enteredAt}): a page or a canvas at its own
    * address on the origin that serves it, a component or a preview on an
    * embed origin of its own, entered once on that origin (host mode's name,
-   * else its own port on the host the hub's links name).
+   * else its own port on the host the hub's links name). The url stands
+   * whatever port the origin moves to: loaded on a port its origin no
+   * longer holds, its entry is sent on to where the origin stands now, and
+   * the pass it sets follows the artifact's page there (preview.ts
+   * `movedOn`), as the person's tab goes to the artifact's own tab.
    */
   const browseAt = (instance: InstanceRow, row: ArtifactRow): Browsed => {
     const { address, path, entry } = enteredAt(instance, row);

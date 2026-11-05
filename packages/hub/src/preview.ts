@@ -16,6 +16,7 @@ import {
   type PreviewFrame,
   type PreviewSettings,
   type PreviewSource,
+  previewEnterUrl,
   readEnv,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
@@ -91,7 +92,13 @@ import {
   projectOfOrigin,
 } from "./db/previews";
 import { DECISION_ASSETS } from "./decision-program";
-import { enter, lockedResponse, type PassLock, passOf } from "./preview-access";
+import {
+  enter,
+  lockedResponse,
+  type PassLock,
+  passOf,
+  sessionTicketScope,
+} from "./preview-access";
 import { FolderRefusal, folderPath } from "./project-folder";
 import { asReached, type TailnetHttpsService } from "./tailnet-https";
 
@@ -917,7 +924,6 @@ async function relay(
  * (`/__cawco/page/<id>/`) of the session's own; null for any other path.
  */
 async function artifactById(
-  request: Request,
   url: URL,
   instanceId: string,
   deps: PreviewListenerDeps
@@ -939,10 +945,7 @@ async function artifactById(
     ) {
       return serveCanvas(artifactId, rest, deps.seed, embed);
     }
-    return (
-      movedOn(request, url, artifactId, "canvas", deps) ??
-      new Response("This session has no such canvas.", { status: 404 })
-    );
+    return new Response("This session has no such canvas.", { status: 404 });
   }
   const paged = pathname.match(PAGE_PATH);
   if (paged) {
@@ -959,48 +962,9 @@ async function artifactById(
         `/__cawco/page/${artifactId}/`
       );
     }
-    return (
-      movedOn(request, url, artifactId, "page", deps) ??
-      new Response("This origin serves no such page.", { status: 404 })
-    );
+    return new Response("This origin serves no such page.", { status: 404 });
   }
   return null;
-}
-
-/**
- * A browser tab at an artifact's page or canvas on an origin that no longer
- * serves it: its address was a port the range took back while no screen
- * showed it (createPreviewListeners' `reclaimOne`), whose next origin
- * answers there now. Sent on to the artifact's own tab on the dashboard
- * (`/artifact/<id>`), the one address of an artifact that stands whatever
- * port its origin is on, on the dashboard origin this browser reached the
- * same host by. A frame's load is no tab's (`Sec-Fetch-Dest`): a frame's
- * origin is re-told to it (server.ts `letGo`), and no dashboard is framed.
- * Null for an artifact the hub doesn't hold as `kind`.
- */
-function movedOn(
-  request: Request,
-  url: URL,
-  artifactId: string,
-  kind: "canvas" | "page",
-  deps: PreviewListenerDeps
-): Response | null {
-  if (
-    request.headers.get("sec-fetch-dest") !== "document" ||
-    deps.kindOf(artifactId) !== kind
-  ) {
-    return null;
-  }
-  const dashboards = previewParents();
-  const dashboard =
-    dashboards.find((one) => new URL(one).hostname === url.hostname) ??
-    dashboards[0];
-  return dashboard
-    ? Response.redirect(
-        `${dashboard}/artifact/${encodeURIComponent(artifactId)}`,
-        302
-      )
-    : null;
 }
 
 /**
@@ -1056,7 +1020,7 @@ async function serveSession(
   if (told !== null) {
     return told;
   }
-  const byId = await artifactById(request, url, instanceId, deps);
+  const byId = await artifactById(url, instanceId, deps);
   if (byId) {
     return byId;
   }
@@ -1504,6 +1468,10 @@ export function createPreviewListeners(
       if (instanceId) {
         used(instanceId);
       }
+      const moved = movedOn(request, lock, instanceId);
+      if (moved) {
+        return moved;
+      }
       const stopped = atTheLock(request, lock, instanceId);
       if (stopped) {
         return framedBy(stopped, ancestorsOf(instanceId));
@@ -1612,6 +1580,132 @@ export function createPreviewListeners(
   };
 
   /**
+   * Where origin `key` stands now, as a browser that reached `at` reaches
+   * it: host mode's name for it when `at` was one of the names, else its
+   * port on the host `at` named. Its listener is opened when it has none;
+   * throws as {@link portFor} does.
+   */
+  const standsAt = (key: string, at: URL, lock: PassLock): string => {
+    const port = isEmbed(key)
+      ? (embeds.get(key) ?? openEmbed(key)).listener.port
+      : portOf(key);
+    if (lock.domain !== null && hostPattern) {
+      return originFor(
+        hostPattern,
+        hostPattern.key === "port" ? port : labelOf(key)
+      );
+    }
+    return `${at.protocol}//${at.hostname}:${port}`;
+  };
+
+  /**
+   * A browser at an address that went stale, its origin's port moved on
+   * ({@link reclaimOne}) to another origin or to none ({@link vacant}),
+   * sent on to where it stands now, as every outside link goes:
+   *
+   * - a tab (`Sec-Fetch-Dest: document`) at a page's or a canvas's
+   *   address on an origin that doesn't serve it: the person's pass to the
+   *   artifact's own tab on the dashboard (`/artifact/<id>`), on the
+   *   dashboard origin this browser reached the same host by; a session's
+   *   pass that opens the artifact's origin (`artifact_browse`) to that
+   *   origin where it stands now, the same path, its pass carried there
+   *   (a port's pass is set on its host, a name's on the names' domain);
+   * - an entry with a session's ticket on a port of none of its origins
+   *   (an `artifact_browse` url loaded after the port moved): the ticket,
+   *   unspent, to the entry where its first origin, the artifact's own,
+   *   stands now.
+   *
+   * A frame's load is no tab's: a frame's origin is told to it again
+   * (server.ts `letGo`), and no dashboard is framed. Null for anything
+   * else, which the lock and the origin answer as before.
+   */
+  const movedOn = (
+    request: Request,
+    lock: PassLock,
+    key: string | undefined
+  ): Response | null => {
+    const url = new URL(request.url);
+    try {
+      if (url.pathname === PREVIEW_ENTER_PATH) {
+        return staleEntry(url, lock, key);
+      }
+      return request.headers.get("sec-fetch-dest") === "document"
+        ? staleTab(request, url, lock, key)
+        : null;
+    } catch (thrown) {
+      // Its origin can't open now (its owner gone, every port in use): the
+      // lock and this origin answer it as before.
+      previewFailed(
+        HOP,
+        key ?? null,
+        `a stale address stays: ${causeOf(thrown)}`
+      );
+      return null;
+    }
+  };
+
+  /** An entry with a session's ticket on a port of none of its origins, sent on to its first origin's entry ({@link movedOn}). */
+  const staleEntry = (
+    url: URL,
+    lock: PassLock,
+    key: string | undefined
+  ): Response | null => {
+    const ticket = url.searchParams.get("ticket") ?? "";
+    const scope = sessionTicketScope(ticket);
+    const [own] = scope ?? [];
+    if (!own || (key !== undefined && scope?.includes(key))) {
+      return null;
+    }
+    const next = url.searchParams.get("next");
+    return Response.redirect(
+      previewEnterUrl(
+        standsAt(own, url, lock),
+        ticket,
+        next === null ? undefined : next
+      ),
+      302
+    );
+  };
+
+  /** A tab at a page's or a canvas's address on an origin that doesn't serve it, sent on by its pass ({@link movedOn}). */
+  const staleTab = (
+    request: Request,
+    url: URL,
+    lock: PassLock,
+    key: string | undefined
+  ): Response | null => {
+    const paged = url.pathname.match(PAGE_PATH);
+    const drawn = paged ? null : url.pathname.match(CANVAS_PATH);
+    const artifactId = (paged ?? drawn)?.[1];
+    if (
+      !artifactId ||
+      deps.kindOf(artifactId) !== (paged ? "page" : "canvas") ||
+      (key !== undefined && deps.servedOn(artifactId, key))
+    ) {
+      return null;
+    }
+    if (passOf(request, lock, undefined)) {
+      const dashboards = previewParents();
+      const dashboard =
+        dashboards.find((one) => new URL(one).hostname === url.hostname) ??
+        dashboards[0];
+      return dashboard
+        ? Response.redirect(
+            `${dashboard}/artifact/${encodeURIComponent(artifactId)}`,
+            302
+          )
+        : null;
+    }
+    const origin = deps.originOf(artifactId);
+    return origin && passOf(request, lock, origin)
+      ? Response.redirect(
+          `${standsAt(origin, url, lock)}${url.pathname}${url.search}`,
+          302
+        )
+      : null;
+  };
+
+  /**
    * Whether the hub reaches `origin`'s ping itself now, as a browser asks it
    * (core preview-reach.ts): the origin must be one of this hub's previews,
    * a port of its range or a name under host mode's domain, and only its
@@ -1714,6 +1808,57 @@ export function createPreviewListeners(
   const embeds = new Map<string, Embed>();
   /** Host mode's one listener. */
   let byHost: Listener | undefined;
+  /**
+   * Each port of the range no origin holds, held by the hub: a stale
+   * address there (a tab or an `artifact_browse` url kept from before its
+   * origin's port moved on) is answered as one on another origin's port is
+   * ({@link movedOn}), not with the browser's connection error. Let go the
+   * moment an origin takes the port ({@link takeVacant}).
+   */
+  const vacant = new Map<number, Listener>();
+
+  /** Port `port` held while no origin and no other program has it. */
+  const holdVacant = (port: number): void => {
+    if (
+      !listens ||
+      vacant.has(port) ||
+      barred(port) ||
+      db.ports().some((row) => row.port === port) ||
+      [...embeds.values()].some((embed) => embed.listener.port === port)
+    ) {
+      return;
+    }
+    try {
+      if (unheld(port)) {
+        vacant.set(
+          port,
+          listen(port, () => undefined, portLock)
+        );
+      }
+    } catch (thrown) {
+      previewFailed(HOP, null, `port ${port} wasn't held: ${causeOf(thrown)}`);
+    }
+  };
+
+  /** Every free port of the range held ({@link holdVacant}). */
+  const holdVacants = (): void => {
+    for (
+      let port = PREVIEW_PORTS.first;
+      port <= PREVIEW_PORTS.last;
+      port += 1
+    ) {
+      holdVacant(port);
+    }
+  };
+
+  /** Port `port` let go by the hub, for an origin to bind: its socket closes as `stop` is called, its connections after. */
+  const takeVacant = (port: number): void => {
+    const held = vacant.get(port);
+    if (held) {
+      vacant.delete(port);
+      detach(held.stop(), "vacant preview port let go");
+    }
+  };
 
   /**
    * Serves `instanceId` on `port`: false when another process holds it
@@ -1721,6 +1866,7 @@ export function createPreviewListeners(
    * so no other port would open either: it is thrown, in one sentence.
    */
   const serveOn = (instanceId: string, port: number): boolean => {
+    takeVacant(port);
     if (!unheld(port)) {
       return false;
     }
@@ -1940,11 +2086,15 @@ export function createPreviewListeners(
     return count;
   };
 
-  /** Origin `key`'s listener stops and its port is free again. */
+  /** Origin `key`'s listener stops and its port is free again, held by the hub until an origin takes it ({@link holdVacant}). */
   const release = (key: string): void => {
     const listener = sessions.get(key) ?? embeds.get(key)?.listener;
     if (listener) {
-      detach(listener.stop(), "preview listener stop");
+      // Its port answers a stale address of it from then on.
+      detach(
+        listener.stop().then(() => holdVacant(listener.port)),
+        "preview listener stop"
+      );
     }
     sessions.delete(key);
     embeds.delete(key);
@@ -2066,6 +2216,7 @@ export function createPreviewListeners(
    */
   const openEmbed = (key: string): Embed => {
     portFor(key, (port) => {
+      takeVacant(port);
       if (!unheld(port)) {
         return false;
       }
@@ -2159,10 +2310,12 @@ export function createPreviewListeners(
     const stopping = [
       ...sessions.values(),
       ...[...embeds.values()].map((embed) => embed.listener),
+      ...vacant.values(),
       ...(byHost ? [byHost] : []),
     ].map((listener) => listener.stop());
     sessions.clear();
     embeds.clear();
+    vacant.clear();
     byHost = undefined;
     hostPattern = undefined;
     await Promise.all(stopping);
@@ -2218,6 +2371,7 @@ export function createPreviewListeners(
         hostModeOnceFree();
       }
       bindKept();
+      holdVacants();
     },
 
     /**
@@ -2272,7 +2426,7 @@ export function createPreviewListeners(
       return addressAt(key, held.listener.port);
     },
 
-    /** The origin's owner ended (a session, a project, an artifact): its listener stops and its port is free again. */
+    /** The origin's owner ended (a session, a project, an artifact): its listener stops and its port is free again ({@link release}). */
     release,
 
     /** Whether the hub reaches a preview origin's ping itself now ({@link reachOrigin}). */
@@ -2349,6 +2503,7 @@ export function createPreviewListeners(
         // Its sessions' own ports, which clients reached outside the
         // pattern's domain load (core `previewRoute`).
         bindKept();
+        holdVacants();
         return this.settings();
       }
       await stopAll();

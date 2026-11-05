@@ -27,6 +27,15 @@
  *    document`, its pass sent): answered 302 to the page's own tab on the
  *    dashboard (`/artifact/<id>`); a frame's load of it is no tab's and
  *    stays 404.
+ * 4. A port let go by its origin and taken by none: the hub holds it, and
+ *    the same tab there is answered as on another origin's port, never the
+ *    browser's connection error.
+ * 5. An `artifact_browse` url (a session's ticket into the page's session
+ *    origin) loaded on a port that origin no longer holds: sent, its ticket
+ *    unspent, to the entry where the origin stands now, which spends it and
+ *    sets the session's pass.
+ * 6. That session's pass at the page's stale address: sent to the page
+ *    where its origin stands now, the same path.
  */
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -58,9 +67,9 @@ const run = async (kit: Kit) => {
   process.env.CAWCO_PREVIEW_PORTS = `${FIRST}-${FIRST + SIZE - 1}`;
   const { createPreviewListeners, noteParent, previewTargets } =
     await import("../../../packages/hub/src/preview");
-  const { mintTicket } =
+  const { mintSessionTicket, mintTicket } =
     await import("../../../packages/hub/src/preview-access");
-  const { PREVIEW_ENTER_PATH } =
+  const { PREVIEW_ENTER_PATH, previewEnterUrl } =
     await import("../../../packages/core/src/frames");
   type Deps = Parameters<typeof createPreviewListeners>[1];
   type Db = Parameters<typeof createPreviewListeners>[2];
@@ -103,7 +112,8 @@ const run = async (kit: Kit) => {
       letGone.push(...keys);
     },
     kindOf: (id: string) => (id === PAGE ? "page" : "preview"),
-    servedOn: () => false,
+    // The page stands on its session's origin alone.
+    servedOn: (id: string, origin: string) => id === PAGE && origin === RUNNING,
     originOf: () => RUNNING,
     ownerOf: () => RUNNING,
     sessionLive: () => true,
@@ -215,6 +225,64 @@ const run = async (kit: Kit) => {
         asTab.headers.get("location") === `${DASHBOARD}/artifact/${PAGE}` &&
         asFrame.status === 404,
       `entered ${entered.status} (${pass ? "a pass" : "no pass"}); tab ${asTab.status} → ${asTab.headers.get("location")}; frame ${asFrame.status}`
+    );
+
+    // 4. A port let go and taken by none: held, and the stale tab sent on.
+    const freed = rows.get(key(3))?.port as number;
+    listeners.release(key(3));
+    await Bun.sleep(100);
+    const vacantTab = await fetch(
+      `http://127.0.0.1:${freed}/__cawco/page/${PAGE}/`,
+      {
+        redirect: "manual",
+        headers: { cookie: pass, "sec-fetch-dest": "document" },
+      }
+    ).catch((error: unknown) => error as Error);
+    kit.check(
+      "4: a tab at a page's address on a port no origin holds is sent to the page's own tab, as on another origin's port",
+      vacantTab instanceof Response &&
+        vacantTab.status === 302 &&
+        vacantTab.headers.get("location") === `${DASHBOARD}/artifact/${PAGE}`,
+      vacantTab instanceof Response
+        ? `port ${freed}: ${vacantTab.status} → ${vacantTab.headers.get("location")}`
+        : `port ${freed}: ${vacantTab.message}`
+    );
+
+    // 5. A stale artifact_browse url: its entry sent to where the origin stands.
+    const { ticket } = mintSessionTicket(RUNNING, [RUNNING]);
+    const place = `/__cawco/page/${PAGE}/`;
+    const staleEntry = await fetch(
+      previewEnterUrl(`http://127.0.0.1:${port}`, ticket, place),
+      { redirect: "manual" }
+    );
+    const forwarded = staleEntry.headers.get("location") ?? "";
+    const runningPort = rows.get(RUNNING)?.port;
+    const spent =
+      forwarded === "" ? null : await fetch(forwarded, { redirect: "manual" });
+    const sessionPass = spent?.headers.get("set-cookie")?.split(";")[0] ?? "";
+    kit.check(
+      "5: an artifact_browse url on a port its origin let go is sent, unspent, to the entry where the origin stands now, which lets the session in",
+      staleEntry.status === 302 &&
+        runningPort !== undefined &&
+        forwarded ===
+          previewEnterUrl(`http://127.0.0.1:${runningPort}`, ticket, place) &&
+        spent?.status === 302 &&
+        spent.headers.get("location") === place &&
+        sessionPass.startsWith("cawco-preview-session-pass-"),
+      `entry on ${port}: ${staleEntry.status} → ${forwarded}; there: ${spent?.status} → ${spent?.headers.get("location")} (${sessionPass ? "a session's pass" : "no pass"})`
+    );
+
+    // 6. The session's pass at the page's stale address: sent to where it stands.
+    const sessionTab = await fetch(`http://127.0.0.1:${port}${place}?x=1`, {
+      redirect: "manual",
+      headers: { cookie: sessionPass, "sec-fetch-dest": "document" },
+    });
+    kit.check(
+      "6: a session's pass at a page's address on a port that moved on is sent to the page where its origin stands now",
+      sessionTab.status === 302 &&
+        sessionTab.headers.get("location") ===
+          `http://127.0.0.1:${runningPort}${place}?x=1`,
+      `tab on ${port}: ${sessionTab.status} → ${sessionTab.headers.get("location")}`
     );
   } finally {
     for (const one of opened) {

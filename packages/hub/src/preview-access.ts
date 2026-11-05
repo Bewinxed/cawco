@@ -245,6 +245,24 @@ export type TicketRefusal =
   /** A session's ticket whose session has ended. */
   | "ended";
 
+/**
+ * The origins a session's ticket opens, its own first (the artifact's,
+ * `mintSessionTicket`'s scope), read and not spent; null for a person's
+ * ticket or one that opens nothing now (forged, expired, spent). An entry
+ * on a port that holds none of them (the address went stale as the
+ * origin's port moved on) is sent on to where the first stands now.
+ */
+export const sessionTicketScope = (
+  ticket: string,
+  now = Date.now()
+): string[] | null => {
+  const body = opened(ticket, "session", SessionTicketBodySchema);
+  if (!body || body.e <= now || body.i < STARTED_AT || spent.has(body.n)) {
+    return null;
+  }
+  return body.s;
+};
+
 /** Spends `ticket`: who it was given to, or why it opens nothing. */
 const spendTicket = (
   ticket: string,
