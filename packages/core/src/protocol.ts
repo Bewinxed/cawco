@@ -258,6 +258,15 @@ export interface SpawnPayload {
    */
   role?: import("./delegate-types").SessionRole;
   /**
+   * A schedule this session makes that would outlive it goes to its parent:
+   * it is refused `routine_create` (hub roles.ts `makesRoutines`), so Claude
+   * Code's durable CronCreate, which writes `<cwd>/.claude/scheduled_tasks.json`
+   * and fires in whichever session next runs in that folder, is refused too,
+   * with words that send it to its parent (agent claude.ts). Set by the hub
+   * alone, from the session's row, on every spawn of it.
+   */
+  schedulesToParent?: true;
+  /**
    * A spin-off (NEW.md §1): throwaway work. `worktree` runs the session in a
    * detached git worktree of `baseCwd` (the spawn's `cwd` when absent) so the
    * experiment cannot touch the checkout the mainline session is using.

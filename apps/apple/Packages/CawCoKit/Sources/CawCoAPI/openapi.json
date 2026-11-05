@@ -37297,6 +37297,11 @@
             ],
             "type": "string"
           },
+          "schedulesToParent": {
+            "description": "A schedule this session makes that would outlive it goes to its parent:\nit is refused `routine_create` (hub roles.ts `makesRoutines`), so Claude\nCode's durable CronCreate, which writes `<cwd>/.claude/scheduled_tasks.json`\nand fires in whichever session next runs in that folder, is refused too,\nwith words that send it to its parent (agent claude.ts). Set by the hub\nalone, from the session's row, on every spawn of it.",
+            "const": true,
+            "type": "boolean"
+          },
           "scratch": {
             "description": "A spin-off (NEW.md §1): throwaway work. `worktree` runs the session in a\ndetached git worktree of `baseCwd` (the spawn's `cwd` when absent) so the\nexperiment cannot touch the checkout the mainline session is using.",
             "type": "object",

@@ -26,6 +26,7 @@ import { dirname, join } from "node:path";
 import {
   deleteSession,
   getSessionInfo,
+  type HookInput,
   listSessions,
   type McpServerConfig,
   type McpServerStatus,
@@ -124,6 +125,7 @@ import {
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { projectClaudeRelative } from "@cawco/core/claude-dirs";
 import { detach } from "@cawco/core/detach";
 import {
   accountConfigDir,
@@ -1185,6 +1187,54 @@ const STOP_HOOK_TIMEOUT_S = 5;
  */
 const OPEN_ITEMS_HOOK_TIMEOUT_S = 15;
 
+/** How long the CLI waits on the `PreToolUse` hook on CronCreate ({@link refuseDurableSchedule}), in seconds: it answers from the call alone. */
+const SCHEDULE_HOOK_TIMEOUT_S = 5;
+
+/** What a session that hands its schedules to its parent hears when it asks for a durable CronCreate. */
+const DURABLE_SCHEDULE_REFUSED = `CronCreate with durable: true is refused in this session. A durable job is written to this folder's ${projectClaudeRelative("scheduled_tasks.json")} and outlives you: once you end, it fires in whichever session next runs in this folder. A check that must run after you finish is a routine: ask the session that started you, with mcp__cawco__handoff, to make it with routine_create, naming the schedule and the prompt. A CronCreate without durable still wakes this session while it runs.`;
+
+/**
+ * Refuses a durable CronCreate to a session whose spawn says its schedules go
+ * to its parent (`SpawnPayload.schedulesToParent`). "Pass durable: true to
+ * write to .claude/scheduled_tasks.json so the job survives restarts" (the
+ * CronCreate tool's description, CLI 2.1.318), and once the session that
+ * made a job ends, the CLI runs it in whichever session holds that folder's
+ * `scheduled_tasks.lock` (report 99cf3549: a leaf's job ran in its
+ * orchestrator). A session-only one wakes this session alone, which the
+ * `Stop` hook counts ({@link scheduledWakeups}), so it runs as asked.
+ */
+// biome-ignore lint/suspicious/useAwait: the SDK's HookCallback returns a promise
+const refuseDurableSchedule = async (
+  input: HookInput
+): Promise<SyncHookJSONOutput> => {
+  const durable =
+    input.hook_event_name === "PreToolUse" &&
+    (input.tool_input as { durable?: unknown } | null)?.durable === true;
+  return durable
+    ? {
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: DURABLE_SCHEDULE_REFUSED,
+        },
+      }
+    : {};
+};
+
+/** The `PreToolUse` hook a session whose schedules go to its parent runs ({@link refuseDurableSchedule}); none for any other. */
+const scheduleHooks = (toParent: boolean) =>
+  toParent
+    ? {
+        PreToolUse: [
+          {
+            matcher: "CronCreate",
+            timeout: SCHEDULE_HOOK_TIMEOUT_S,
+            hooks: [refuseDurableSchedule],
+          },
+        ],
+      }
+    : {};
+
 /**
  * How long an attached session whose scheduled wake-ups are not known must
  * have been at rest before it counts as having none: a day and an hour. A
@@ -1857,6 +1907,8 @@ interface SessionSpec {
   permissionMode: OfferedMode | undefined;
   persistSession: boolean | undefined;
   resume: SpawnPayload["resume"];
+  /** A durable CronCreate is refused it ({@link SpawnPayload.schedulesToParent}). */
+  schedulesToParent: boolean;
   skills: string[] | undefined;
 }
 
@@ -1887,6 +1939,7 @@ const sessionSpecOf = (
     permissionMode: offeredMode(spec.permissionMode),
     persistSession: spec.persistSession,
     resume: spec.resume,
+    schedulesToParent: spec.schedulesToParent === true,
     skills: spec.skills,
   };
 };
@@ -2276,6 +2329,7 @@ class ClaudeSession implements HarnessSession {
       denyTools,
       fence,
       instructions,
+      schedulesToParent,
     } = session;
     // Before the `Query` below exists: an attach replays the asks the previous
     // host left open as soon as it does, and they are decided in this mode.
@@ -2357,6 +2411,7 @@ class ClaudeSession implements HarnessSession {
               hooks: [async () => await this.#openItemsAfterCompaction()],
             },
           ],
+          ...scheduleHooks(schedulesToParent),
         },
         // Fleet baseline (from supervisor_config.denied_tools, cached in the
         // sidecar) + delegate-type denials + any the caller itself carried.

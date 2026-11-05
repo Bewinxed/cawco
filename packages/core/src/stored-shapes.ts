@@ -2668,6 +2668,7 @@ const SpawnPayloadShape = declared(
       })
       .optional(),
     role: SessionRoleShape.optional(),
+    schedulesToParent: z.literal(true).optional(),
     scratch: z
       .object({
         worktree: z.boolean().optional(),

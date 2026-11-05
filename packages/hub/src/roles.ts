@@ -280,6 +280,15 @@ export const allows = (row: InstanceRow, name: string): boolean => {
 };
 
 /**
+ * Whether the session makes the schedules that outlive it itself, with
+ * `routine_create`. One that does not hands each to its parent, and its
+ * harness's own durable schedule is refused it too (core protocol.ts
+ * `SpawnPayload.schedulesToParent`).
+ */
+export const makesRoutines = (row: InstanceRow): boolean =>
+  allows(row, "routine_create");
+
+/**
  * Whether the session's todo_write and task_comment may name any of its
  * project's tasks, not only its own work item's: it changes tasks
  * (task_update), as a worker and an orchestrating delegate do.

@@ -986,7 +986,7 @@ import {
   relayJourneyRoutes,
 } from "./relay-journey";
 import { createRepoPublish } from "./repo-publish";
-import { talksWithPerson } from "./roles";
+import { makesRoutines, talksWithPerson } from "./roles";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
 import {
@@ -8323,6 +8323,7 @@ export const createServer = (
       account: _pick,
       accountDir: _callerDir,
       homeLoginMove: _callerMove,
+      schedulesToParent: _callerSchedules,
       ...asked
     } = payload;
     const owned = db.ownedInstance(payload.instanceId);
@@ -8356,6 +8357,9 @@ export const createServer = (
       // A fenced run (triage, a memory curator) is fenced on every spawn of
       // its row: the first, and each revive, restore and relaunch.
       ...fencedSpawn(asked, row, harness),
+      // A session refused routine_create is refused its harness's durable
+      // schedule too, on every spawn of its row (`makesRoutines`).
+      ...(makesRoutines(row) ? {} : { schedulesToParent: true as const }),
       harness,
       ...effort,
       ...(owned?.scratchWorktree
