@@ -561,6 +561,10 @@ public enum Size {
     public static let cFaultDetailsH: Double = 192
     /// The Comments rail beside the page (the artifact panel's surface brief, The Comments rail): a row's three lines beside its pill, the search field and Open and Resolved over them, and the Send bar's note at its foot.
     public static let cCommentsW: Double = 320
+    /// The One record task prototype's record column on a desk (prototypes/task/one-record): the state line, the record and Say something at their widest; past it the room goes to what stands beside.
+    public static let cOrRecordW: Double = 820
+    /// The One record task prototype's beside column on a desk at its narrowest (prototypes/task/one-record): the result, the session, the waits, the file or another task, opened from an entry or the state line; it takes the room past the record's width.
+    public static let cOrBesideW: Double = 560
     /// A pin's peek and a chip's peek at most (the artifact panel's surface brief, A pin's pill), and the app's comment card. On the web the composer and the thread beside a pin take `c-pin-card-reading-w`, never under this. Comment popovers are narrow (Figma, Vercel, Miro: 170 to 210px on 768px captures); 280px holds the thread's head beside its four controls, and a field of 178px beside Attach and the send glyph.
     public static let cPinCardW: Double = 280
     /// The overlay's line round a chosen target and the page's root in Comment mode: the content's own edge weight, never the focus ring's (the artifact panel's surface brief, The One Target Rule).
