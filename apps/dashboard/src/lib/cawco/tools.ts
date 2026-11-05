@@ -94,6 +94,15 @@ async function signinCall<T>(url: string, body?: unknown): Promise<T> {
     method: "POST",
     ...(body === undefined ? {} : jsonBody(body)),
   });
+  if (response.status === 422) {
+    // The machine's own refusal, whole: its sentence, then the tool's
+    // screen lines one per line (core words/tools `screenOf`), which the
+    // hub's one-line refusal reading would cut to the first.
+    const said = (await response.clone().text()).trim();
+    if (said && !said.startsWith("{")) {
+      throw new ToolSigninRefusal(`${said} (422)`, true);
+    }
+  }
   if (!response.ok) {
     throw new ToolSigninRefusal(
       (await hubRefusal(response)).message,

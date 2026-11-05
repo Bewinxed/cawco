@@ -80,14 +80,14 @@ const signinLinks = (one: Waiting, words: ToolSigninSpec): string[] => [
 
 const LINE_BREAKS = /\r?\n|\r/u;
 
-/** The screen's last lines from `from` on, the pasted `code` never among them. */
+/** The screen's last lines from `from` on, one per line, the pasted `code` never among them. */
 const screen = (one: Waiting, from = 0, code?: string): string => {
   const lines = Bun.stripANSI(one.output.slice(from))
     .split(LINE_BREAKS)
     .map((line) => line.trim())
     .filter(Boolean)
     .slice(-SCREEN_LINES)
-    .join(" / ");
+    .join("\n");
   return code ? lines.replaceAll(code, "(the pasted code)") : lines;
 };
 

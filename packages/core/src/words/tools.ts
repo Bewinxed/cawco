@@ -14,6 +14,17 @@
 /** Where a tool sign-in's refusal turns to quoting the tool's own screen. */
 const SIGNIN_SCREEN = "Its screen said:";
 
+/**
+ * A sign-in sentence's tail quoting the tool's screen: its lines, one per
+ * line, its exit last where it ended with one. A reader shows the sentence
+ * before {@link SIGNIN_SCREEN} on its own (ToolMatrix's cell) and the lines
+ * as lines.
+ */
+const screenOf = (said: string, code?: number): string =>
+  said
+    ? ` ${SIGNIN_SCREEN}\n${said}${code === undefined ? "" : `\n(exit ${code})`}`
+    : "";
+
 export const toolWords = {
   /**
    * An update that left the copy older than the release it was after: the
@@ -133,9 +144,9 @@ export const toolWords = {
   /** A tool's sign-in read (agent tools.ts `toolSignin`) found no copy to ask. */
   signinNoCopy: (name: string) =>
     `${name} isn't on this machine, so whether it is signed in can't be read.`,
-  /** The read ended saying neither signed in nor signed out: its exit and last lines. */
+  /** The read ended saying neither signed in nor signed out: its last lines, one per line, and its exit. */
   signinUnread: (name: string, code: number, said: string) =>
-    `${name} didn't say whether it is signed in (exit ${code})${said ? `: ${said}` : ""}`,
+    `${name} didn't say whether it is signed in.${screenOf(said, code)}`,
   /** The read did not end in time. */
   signinSilent: (name: string, seconds: number) =>
     `${name} didn't say whether it is signed in within ${seconds} s, or couldn't be started.`,
@@ -148,18 +159,18 @@ export const toolWords = {
   signinScreen: SIGNIN_SCREEN,
   /** The tool's sign-in printed no link it may be signed in at, or ended first: what its screen said. */
   signinNoLink: (name: string, said: string) =>
-    `${name}'s sign-in showed no sign-in link, so it was stopped. ${said ? `${SIGNIN_SCREEN} ${said}` : "Its screen said nothing."}`,
+    `${name}'s sign-in showed no sign-in link, so it was stopped. Sign in again.${said ? screenOf(said) : " Its screen said nothing."}`,
   /** A code sent with no sign-in waiting for it. */
   signinNotWaiting: (name: string) =>
-    `No ${name} sign-in is waiting for a code on this machine: it ended or was never started. Start the sign-in again.`,
+    `No ${name} sign-in is waiting for a code on this machine: it ended or was never started. Sign in again.`,
   /** A code that was empty. */
   signinNoCode: "Paste the code from the sign-in page.",
   /** The sign-in did not end in time after the code. */
   signinNotEnded: (name: string, seconds: number) =>
-    `${name} didn't finish signing in within ${seconds} s of the code, so the sign-in was stopped. Start it again.`,
-  /** The sign-in ended without signing in: its exit and what its screen said, the code never shown. */
+    `${name} didn't finish signing in within ${seconds} s of the code, so the sign-in was stopped. Sign in again.`,
+  /** The sign-in ended without signing in: what its screen said, the code never shown, and its exit. */
   signinFailed: (name: string, code: number, said: string) =>
-    `${name}'s sign-in ended without signing in (exit ${code}). Start it again for a new link.${said ? ` ${SIGNIN_SCREEN} ${said}` : ""}`,
+    `${name}'s sign-in ended without signing in. Sign in again for a new link.${screenOf(said, code)}`,
 
   // ── A tool's own sign-in, on its ledger (ToolMatrix, tool-signin.svelte.ts) ─
   /** The column's head. */
@@ -169,7 +180,7 @@ export const toolWords = {
   signedIn: "Signed in",
   signedOut: "Not signed in",
   signinUnknown: "Unknown",
-  /** The Unknown badge's popover head over the tool's own words, and its name. */
+  /** The Unknown trigger's name. */
   signinUnknownHead: (name: string, machine: string) =>
     `${name} on ${machine} didn't say whether it is signed in`,
   /** The tool's read left no words. */
@@ -186,8 +197,8 @@ export const toolWords = {
   signinTitle: (name: string, machine: string) => `${name} on ${machine}`,
   /** The link lapsed before a code came: the machine stopped waiting. */
   signinExpired: (name: string) =>
-    `The sign-in link expired after 10 minutes, so ${name} stopped waiting for a code. Open a new sign-in link.`,
+    `The sign-in link expired after 10 minutes, so ${name} stopped waiting for a code. Sign in again for a new link.`,
   /** The machine took the code and the tool still reads signed out; that link is spent. */
   signinRefused: (name: string) =>
-    `That code didn't sign ${name} in. Open a new sign-in link for a new code.`,
+    `That code didn't sign ${name} in. Sign in again for a new code.`,
 } as const;

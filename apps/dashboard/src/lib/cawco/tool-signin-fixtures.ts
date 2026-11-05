@@ -59,12 +59,19 @@ export const agyMissing: ToolStatus = {
 export const AGY_UNREAD = toolWords.signinUnread(
   "Antigravity CLI",
   2,
-  'Error: keyring: org.freedesktop.secrets was not provided by any .service files / failed to read stored credentials for "antigravity-cli" / run `agy` once with a desktop session to unlock the keyring'
+  [
+    "Error: keyring: org.freedesktop.secrets was not provided by any .service files",
+    'failed to read stored credentials for "antigravity-cli"',
+    "run `agy` once with a desktop session to unlock the keyring",
+  ].join("\n")
 );
 
-/** agy's screen when Google's code didn't take. */
-export const AGY_REFUSED_SCREEN =
-  "Paste the authorization code: / Error: invalid_grant: Malformed auth code. / Login failed.";
+/** agy's screen when Google's code didn't take, one line per line as the agent sends it. */
+export const AGY_REFUSED_SCREEN = [
+  "Paste the authorization code:",
+  "Error: invalid_grant: Malformed auth code.",
+  "Login failed.",
+].join("\n");
 
 export const fleetMachine = (
   machineId: string,

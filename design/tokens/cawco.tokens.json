@@ -6009,10 +6009,10 @@
     "c-signin-col-w": {
       "$type": "dimension",
       "$value": {
-        "value": 18,
+        "value": 20,
         "unit": "rem"
       },
-      "$description": "A ledger's sign-in column: its state in meta at the column's start and its one act at its end, \"Waiting for the pasted code\" beside Paste code the widest (Command-line tools, a tool with its own sign-in)."
+      "$description": "A ledger's sign-in column: its state's glyph and words in meta at the column's start and its one act at its end, \"Waiting for the pasted code\" beside an act as wide as \"Sign in again\" the widest (Command-line tools, a tool with its own sign-in)."
     },
     "c-ledger-title-min": {
       "$type": "dimension",
