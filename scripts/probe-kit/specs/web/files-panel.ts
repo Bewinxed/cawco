@@ -1226,17 +1226,18 @@ const reviewLegs = async (
     .locator('[data-files-region="attachments"] button[data-menu-item]')
     .first()
     .click();
+  // The lightbox is PhotoSwipe's root, open (Lightbox.svelte, `mainClass`
+  // cawco-pswp), loaded by its own import after the press: never "a dialog
+  // holding a picture", which Files' own card is (GlassCard's role="dialog",
+  // dd046d7f4), so a press made then landed on the page under it.
   const lightboxOpen = await comes(
     page,
-    () => !!document.querySelector(".pswp, [role='dialog'] img")
+    () => !!document.querySelector(".cawco-pswp.pswp--open")
   );
   await page.mouse.click(720, 450);
   await page.keyboard.press("Escape");
   // The lightbox put away, and whatever that started landed.
-  await comes(
-    page,
-    () => !document.querySelector(".pswp, [role='dialog'] img")
-  );
+  await comes(page, () => !document.querySelector(".cawco-pswp"));
   await atRest(page);
   const stillOpen = await page.evaluate(
     () =>
@@ -2258,7 +2259,16 @@ const slotLeg = async (
     await page.locator("[data-sidebar-files]").click();
   }
   await page.locator("[data-files-card]").first().waitFor({ timeout: 30_000 });
-  // The pictures on show, the decision pages' among them, loaded and drawn.
+  // The tall picture's card in the scroller's view, as a person scrolls to
+  // it: Chromium asks for a lazy picture only once it nears the scroller's
+  // view (at 390 the tall page stands below its fold), WebKit sooner.
+  await page
+    .locator(
+      `[data-files-card][title="${count === "one" ? titleOf("the-only-page") : titleOf(TALL)}"]`
+    )
+    .scrollIntoViewIfNeeded();
+  // Every picture the read counts, drawn: those in view, the decision pages'
+  // and a tall one (picturesShown), so the read never races their decode.
   await until(
     `${leg}: the pictures on show`,
     () =>
@@ -2293,17 +2303,45 @@ const slotLeg = async (
   await page.close();
 };
 
-/** The first cards' pictures loaded, and the decision pages pictured. */
+/**
+ * Every picture leg 33 counts, drawn: each card standing in Files' scroller
+ * whose well holds a picture has it decoded, the decision pages hold
+ * theirs, and a picture taller than 3:4 is decoded among them (the tall
+ * page's, or the one page's), the slot it must keep. A picture that fails
+ * to load stands as its glyph, which holds no `img`. Lazy pictures past the
+ * scroller's view are not asked for, so none is waited on.
+ */
 const picturesShown = (names: string[]) => {
-  const shown = [
+  const decoded = (img: HTMLImageElement | null | undefined) =>
+    !!img && img.complete && img.naturalWidth > 0;
+  const scroller = document
+    .querySelector<HTMLElement>("[data-files-cards]")
+    ?.closest<HTMLElement>("[data-files-scroll]");
+  const view = scroller?.getBoundingClientRect();
+  if (!view) {
+    return false;
+  }
+  const cards = [
     ...document.querySelectorAll<HTMLElement>("[data-files-card]"),
-  ].slice(0, 6);
-  const ready = shown.every((card) => {
-    const img = card.querySelector("img");
-    return !img || (img.complete && img.naturalWidth > 0);
+  ];
+  const inView = cards.filter((card) => {
+    const r = card.getBoundingClientRect();
+    return r.bottom > view.top && r.top < view.bottom;
+  });
+  const pictures = cards.flatMap((card) => {
+    const img = card.querySelector<HTMLImageElement>("[data-files-thumb] img");
+    return img ? [img] : [];
   });
   return (
-    ready &&
+    inView.every((card) => {
+      const img = card.querySelector<HTMLImageElement>(
+        "[data-files-thumb] img"
+      );
+      return !img || decoded(img);
+    }) &&
+    pictures.some(
+      (img) => decoded(img) && img.naturalHeight / img.naturalWidth > 4 / 3
+    ) &&
     names.every((name) => {
       const card = document.querySelector(`[data-files-card][title="${name}"]`);
       return !card || !!card.querySelector("img");
