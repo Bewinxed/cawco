@@ -7285,8 +7285,14 @@
                             "number",
                             "color",
                             "select",
-                            "toggle"
+                            "toggle",
+                            "text",
+                            "action"
                           ]
+                        },
+                        "group": {
+                          "maxLength": 80,
+                          "type": "string"
                         },
                         "min": {
                           "type": "number"

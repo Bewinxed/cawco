@@ -555,9 +555,16 @@ export interface CanvasEdge {
   to: string;
 }
 
-/** A property dial an agent declares on a canvas: a CSS variable on every frame, or an arg re-rendered through `update`. */
+/**
+ * A property dial an agent declares on a canvas: a CSS variable on every
+ * frame, or an arg re-rendered through `update`. `text` sets a line of
+ * words; `action` is a button whose press sets its arg to the count of
+ * presses so far, so a story replays on it; `group` is the heading it
+ * stands under in the design graph's Dials face.
+ */
 export interface CanvasDial {
-  kind: "number" | "color" | "select" | "toggle";
+  group?: string;
+  kind: "number" | "color" | "select" | "toggle" | "text" | "action";
   label?: string;
   max?: number;
   min?: number;
@@ -623,6 +630,8 @@ const DIAL_KINDS: readonly CanvasDial["kind"][] = [
   "color",
   "select",
   "toggle",
+  "text",
+  "action",
 ];
 
 const dialOf = (value: unknown): CanvasDial | undefined => {
@@ -642,6 +651,7 @@ const dialOf = (value: unknown): CanvasDial | undefined => {
     name,
     target: cssVar ? { cssVar } : { arg: arg ?? "" },
     ...present({
+      group: textOf(value.group),
       label: textOf(value.label),
       max: numberOf(value.max),
       min: numberOf(value.min),

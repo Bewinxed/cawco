@@ -129,9 +129,10 @@ const canvasFields = {
   dials: z
     .array(
       z.object({
-        name: z.string().min(1).max(60),
+        name: z.string().max(60),
         label: z.string().max(CANVAS_SPEC_LIMITS.label).optional(),
-        kind: z.enum(["number", "color", "select", "toggle"]),
+        kind: z.enum(["number", "color", "select", "toggle", "text", "action"]),
+        group: z.string().optional(),
         min: z.number().optional(),
         max: z.number().optional(),
         step: z.number().positive().optional(),
@@ -146,7 +147,7 @@ const canvasFields = {
     .max(CANVAS_SPEC_LIMITS.dials)
     .optional()
     .describe(
-      'The person\'s controls, like [{"name":"radius","kind":"number","max":24,"unit":"px","target":{"cssVar":"--radius"}}].'
+      'Like [{"name":"radius","kind":"number","unit":"px","target":{"cssVar":"--radius"}}].'
     ),
 };
 

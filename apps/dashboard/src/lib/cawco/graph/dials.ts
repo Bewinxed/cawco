@@ -8,17 +8,11 @@
 import type { CanvasDial } from "@cawco/core/stage";
 
 /**
- * A dial as the Dials face draws it: the agent's `CanvasDial`, and the two
- * kinds and the heading DialKit's panel had that `CanvasDial` doesn't yet
- * carry (slice 4 adds them to core stage.ts): `text`, a line of words set
- * on its arg; `action`, a button whose press sets its arg to the count of
- * presses so far (a story replays on it); `group`, the heading it stands
- * under (DialKit's folders).
+ * A dial as the Dials face draws it: the agent's `CanvasDial` (a number, a
+ * colour, a select, a toggle, a line of words, an action), under the
+ * heading it names (`group`).
  */
-export type GraphDial = Omit<CanvasDial, "kind"> & {
-  kind: CanvasDial["kind"] | "text" | "action";
-  group?: string;
-};
+export type GraphDial = CanvasDial;
 
 /** A dial's value: a number dial's figure, a colour or a select's option, a toggle's state. */
 export type DialValue = number | string | boolean;
