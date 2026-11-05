@@ -77,7 +77,7 @@
 
 <section
   aria-label={session.title}
-  class="flex min-h-0 min-w-0 flex-col gap-space-4"
+  class="flex min-h-0 min-w-0 flex-1 flex-col gap-space-4"
   data-slot="session-pane"
 >
   <header class="flex h-c-top-bar-h min-w-0 items-center gap-space-3">

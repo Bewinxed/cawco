@@ -367,8 +367,8 @@
   >
     <div
       class={[
-        "mx-auto flex w-full min-w-0 gap-space-5 pbe-space-8 ps-space-7 pe-space-6 max-desk:px-space-4",
-        sessionBeside ? "flex-row items-start" : "flex-col",
+        "mx-auto flex w-full min-w-0 gap-space-5 ps-space-7 pe-space-6 max-desk:px-space-4",
+        sessionBeside ? "h-dvh flex-row" : "flex-col pbe-space-8",
       ]}
     >
       {#if task === null}
@@ -401,14 +401,16 @@
         <div
           class={[
             "flex min-w-0 flex-col gap-space-5",
-            sessionBeside ? "w-task-frame flex-none" : "flex-1",
+            sessionBeside
+              ? "w-task-frame flex-none overflow-y-auto pbe-space-8"
+              : "flex-1",
           ]}
           in:reveal
         >
           {@render page(task, words.head.back, noop)}
         </div>
         {#if sessionBeside && sessionOf}
-          <div class="sticky top-0 min-w-0 flex-1">
+          <div class="flex min-h-0 min-w-0 flex-1 flex-col pbe-space-5">
             <SessionPane
               at={saidAt}
               load={sessionLoad}
