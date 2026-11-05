@@ -20,6 +20,11 @@ export const artifactWords = {
   /** A row's Remove, for a screen reader: its trailing glyph says it. */
   removeNamed: (title: string) => `Remove ${title}`,
   remove: "Remove",
+  /** The question a removal asks under the menu's last item. */
+  removeArtifactAsk: (title: string) => `Remove ${title}?`,
+  removeArtifactBody:
+    "It goes from this session's artifacts. This can't be undone.",
+  removingArtifact: "Removing…",
   /** A promoted row's tag: its commit, short. */
   promoted: (commit: string) => `Promoted ${commit}`,
   promotedTitle: "Promoted into the project's folder",

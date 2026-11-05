@@ -47,6 +47,7 @@
     onclosed,
     onmoved,
     surface = $bindable(),
+    short = false,
     children,
   }: {
     open: boolean;
@@ -60,11 +61,16 @@
     onmoved?: () => void;
     /** The sheet as drawn: what covers the page, for its holder to tell. */
     surface?: HTMLElement;
+    /** What it holds is a line or two (an empty list): its lower stop is low enough to hold that, never half its room standing empty. */
+    short?: boolean;
     children: Snippet;
   } = $props();
 
   /** Its stops, as shares of its room: half, where it opens (the thread's head and the reply in view), and the whole room, to read a long thread. */
-  const SHARES = [0.5, 1];
+  const HALF = [0.5, 1];
+  /** Holding a line or two: its bar and that line, and the whole room. Our call: under a third. */
+  const LOW = [0.3, 1];
+  const SHARES = $derived(short ? LOW : HALF);
   /** Its foot clears the home indicator. */
   const FOOT = "calc(var(--space-3) + env(safe-area-inset-bottom, 0px))";
 

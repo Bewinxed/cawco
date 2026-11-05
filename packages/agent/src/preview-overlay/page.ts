@@ -86,7 +86,7 @@ import {
 } from "./frames";
 import { hold, isHeld } from "./hold";
 import { heardFromHost, toHost } from "./host-origin";
-import { contentNearIn, OVERLAY_OWN, ownNode, startInk } from "./ink";
+import { contentNearIn, keepFoot, OVERLAY_OWN, ownNode, startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
 import { choiceOf, listenForPicks, optionOf } from "./pick";
 import { cropPicture } from "./picture";
@@ -3239,6 +3239,9 @@ type HostMessage = Record<string, unknown>;
 const COVERED_MOST = 4;
 
 /** The host's covered boxes, the viewport's px; each finite and sized, or left out. */
+/** The most room the host may keep under the page's foot, px: a floating bar's, never a page's. */
+const FOOT_ROOM_MOST = 200;
+
 function coveredOf(value: unknown): Box[] {
   return (Array.isArray(value) ? value.slice(0, COVERED_MOST) : []).flatMap(
     (raw) => {
@@ -3523,6 +3526,14 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     // What the host's chrome covers of the page (its Comments list, a
     // phone's card): a pin it opens is brought out from under it.
     "cawco:covered": (message) => pins.cover(coveredOf(message.boxes)),
+    // What the host's chrome floats over the page's foot (Changed since you
+    // looked), px: the page scrolls that much further, so its last line
+    // comes clear of it.
+    "cawco:foot-room": (message) => {
+      const px = typeof message.px === "number" ? message.px : 0;
+      keepFoot(Number.isFinite(px) ? Math.min(px, FOOT_ROOM_MOST) : 0);
+      pins.draw();
+    },
     // Asked as `cawco:capture`, answered as `cawco:captured`: a host in this
     // same window hears its ask and this answer, and neither is the other.
     // A picture that throws is answered too, with why: unanswered, the host

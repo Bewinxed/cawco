@@ -147,6 +147,7 @@
     easeDrawer,
     easeOut,
     motionOk,
+    numberOf,
     revealOn,
   } from "../motion/curves.svelte";
   import { landKey } from "../motion/keyed.svelte";
@@ -2038,6 +2039,40 @@
       sized.disconnect();
     };
   });
+  /**
+   * Room under the page's foot while Changed since you looked floats over it
+   * (`cawco:foot-room`, px): from the tag's top to the frame's foot and a
+   * gap, so the page scrolls that much further and its last line comes clear
+   * of the tag, as iOS insets content under a floating bottom bar; none once
+   * the tag goes.
+   */
+  $effect(() => {
+    const frame = iframe;
+    const tag = changesTag;
+    if (!(frame && connected)) {
+      return;
+    }
+    if (!tag) {
+      post({ type: "cawco:foot-room", px: 0 });
+      return;
+    }
+    const gap = numberOf("--space-2");
+    const sayNow = () => {
+      const foot = frame.getBoundingClientRect().bottom - frame.clientTop;
+      post({
+        type: "cawco:foot-room",
+        px: Math.max(
+          0,
+          Math.ceil(foot - tag.getBoundingClientRect().top + gap)
+        ),
+      });
+    };
+    const sized = frameObserver(sayNow);
+    sized.observe(tag);
+    sized.observe(frame);
+    sized.request();
+    return () => sized.disconnect();
+  });
   /** Pins the agent is working on: the last delivery carried them and its turn runs. */
   const live = $derived.by(() => {
     const stamps = pins.flatMap((pin) => [
@@ -3519,6 +3554,14 @@
   const threadPushed = $derived(
     listOpen && railPlaced && !isCanvas && railSheet && openPin !== null
   );
+  /** The list in front holds nothing: the sheet stands low, never half its room empty (ThreadSheet `short`). */
+  const railEmpty = $derived(
+    listFilter === "check"
+      ? checkCount === 0
+      : !pins.some((pin) =>
+          listFilter === "open" ? !pin.resolvedAt : !!pin.resolvedAt
+        )
+  );
   /** Back, in the sheet: the list again, the thread gone at once (no card goes back into a pill). */
   function backToList() {
     closeCard();
@@ -4218,7 +4261,7 @@
 {/snippet}
 
 {#snippet commentsBar()}
-  <!-- The Comments rail's toggle: its bubble, and the open comments' count while the rail is shut (The Earned Count Rule); a bare symbol of the glass, pressed while the rail stands. -->
+  <!-- The Comments rail's toggle: its bubble and the open comments' count (The Earned Count Rule), pressed while the rail stands; the count stays as it opens, so the button holds its width and nothing in the head moves. -->
   <Tip label={commentsTitle}>
     {#snippet children(tip)}
       <button
@@ -4229,15 +4272,13 @@
         class="select-none touch-hit press-tint mark-line aria-expanded:bg-surface-pressed"
         data-bar-item
         data-box
-        data-counted={(openCount > 0 && !listOpen) || !pinsShown || linkDown
-          ? ""
-          : undefined}
+        data-counted={openCount > 0 || !pinsShown || linkDown ? "" : undefined}
         data-link-down={linkDown ? "" : undefined}
         onclick={() => showList(!listOpen)}
         type="button"
       >
         <IconChat aria-hidden="true" data-slot="bar-symbol" />
-        {#if openCount > 0 && !listOpen}
+        {#if openCount > 0}
           <span data-slot="num" class="min-w-c-count-digit">{openCount}</span>
         {/if}
         {#if !pinsShown}
@@ -4890,6 +4931,7 @@
       }}
       onmoved={() => sayCovered?.()}
       open={railSheetOpen}
+      short={railEmpty && !threadPushed}
       bind:surface={railSurface}
     >
       {#if threadPushed && cardPin && kit && replyDraft}
