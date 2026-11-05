@@ -420,6 +420,8 @@ const MOVES: MutationObserverInit = {
 
 /** The room kept under the page's foot, px ({@link insetFoot}). */
 let footRoom = 0;
+/** The room the host keeps under the page's foot, px ({@link keepFoot}): what its chrome floats over the page's foot. */
+let keptRoom = 0;
 
 /**
  * The overlay's layers at the page's origin, each holding a mark as big as
@@ -454,7 +456,8 @@ export const fitToPage = (layer: SVGSVGElement, holds: boolean) => {
     Math.max(root.scrollWidth, document.body?.scrollWidth ?? 0)
   );
   const height = String(
-    Math.max(root.scrollHeight, document.body?.scrollHeight ?? 0) + footRoom
+    Math.max(root.scrollHeight, document.body?.scrollHeight ?? 0) +
+      Math.max(footRoom, keptRoom)
   );
   for (const one of holding) {
     one.setAttribute("width", width);
@@ -473,6 +476,20 @@ export const fitToPage = (layer: SVGSVGElement, holds: boolean) => {
 export const insetFoot = (px: number) => {
   footRoom = Math.max(0, px);
 };
+
+/**
+ * Room the host keeps under the page's foot while its chrome floats over it
+ * (`cawco:foot-room`: Changed since you looked at the well's foot), as iOS
+ * insets a scroll view under a floating bottom bar, so the page's last line
+ * scrolls clear of it; 0 when nothing floats there. The page's own layout is
+ * never touched. Takes hold at the next {@link fitToPage}.
+ */
+export const keepFoot = (px: number) => {
+  keptRoom = Math.max(0, px);
+};
+
+/** Whether the host keeps room under the page's foot: the layer then holds the page's height with no pin on it. */
+export const footKept = () => keptRoom > 0;
 
 /** A pen's pressure, or the middle one where it reports none; a mouse's and a finger's are always the middle one. */
 const pressureOf = (event: PointerEvent) =>

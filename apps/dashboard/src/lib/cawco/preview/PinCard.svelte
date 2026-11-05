@@ -2,16 +2,18 @@
   /**
    * A comment's thread, as a card beside its pin (the owner's pick; the artifact panel's surface brief,
    * A thread beside its pin). It has no head band (The Title Bars Follow
-   * Liquid Glass Rule): Resolve or Reopen, Delete comment and More (Copy
-   * link; Pin it somewhere else while its element is gone) float as one
-   * glass group at its top's trailing edge, and Close in a group of its own,
-   * over the thread, which starts at the card's top and blurs under them
-   * from the first scroll (BarFloat). Its start, said once and scrolling
-   * with it: the pin's pill, only while the page's own pill is out of view
-   * (`marked` says it stands beside it), what it stands on, two lines at
-   * most (a press scrolls the page to it and lights its element), and the
-   * element's nearest parent in meta ("on Routine form") where it names
-   * something the name doesn't; its first line keeps clear of the groups.
+   * Liquid Glass Rule): its bar is one row of floating groups, Back leading
+   * where it opened from the Comments list, and trailing Resolve or Reopen,
+   * Delete comment and Copy link (More instead, while Pin it somewhere else
+   * joins it) as one glass group, and Close in a group of its own. Under the
+   * bar its title, the card's whole width and standing put while the thread
+   * scrolls (the owner's pick: "Its title and the reply box stay put while
+   * a long reply scrolls between them"): the pin's pill, only while the
+   * page's own pill is out of view (`marked` says it stands beside it),
+   * what it stands on, two lines at most (a press scrolls the page to it
+   * and lights its element), and the element's nearest parent in meta ("on
+   * Routine form") where it names something the name doesn't. Delete's
+   * question unfolds under it, where Delete was pressed.
    * Then the line saying its element is gone, or that it stands resolved,
    * each with its way back; then, when its delivery reached no one or it
    * stands only on the page, "Not sent: why" with Try again (a comment goes
@@ -34,7 +36,7 @@
    * he reaches for it, never as the thread opens.
    *
    * It closes by its Close or Esc, or a press on another row or pin, never
-   * by a press on the page. Delete is asked in the card itself.
+   * by a press on the page. Delete is asked in the card itself, under its bar.
    *
    * As a pin's peek (`peek`: a mouse resting on its pill), the same card
    * holds what it stands on, his words and only the latest reply: no
@@ -47,9 +49,8 @@
   import { commentWords as said } from "@cawco/core/words/comments";
   import { commonWords } from "@cawco/core/words/common";
   import { type Snippet, tick, untrack } from "svelte";
-  import { frameObserver, frameSize } from "#lib/cawco/frame-observer.js";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import {
-    BarFloat,
     BarGlass,
     BarItem,
     BarMenu,
@@ -198,11 +199,7 @@
     if ((fromChip && pin.thread.length <= 2) || peek || pin.thread.length < 2) {
       holder.scrollTop = 0;
     } else {
-      // Its first line under the floating groups, never behind them.
-      const bar =
-        holder.parentElement?.querySelector<HTMLElement>('[data-slot="bar"]')
-          ?.offsetHeight ?? 0;
-      holder.scrollTop = newest ? newest.offsetTop - bar : holder.scrollHeight;
+      holder.scrollTop = newest ? newest.offsetTop : holder.scrollHeight;
     }
     placed = holder.scrollTop;
   };
@@ -227,16 +224,6 @@
   });
   let head = $state<HTMLElement | null>(null);
   let foot = $state<HTMLDivElement | null>(null);
-  /** How wide the floating groups stand: the first line of the thread's start keeps clear of them. */
-  let groupsW = $state(0);
-  const groupsSize = frameSize<HTMLElement>((node) => {
-    groupsW = node.offsetWidth;
-  });
-  /** How wide Back stands, when it leads: the first line keeps clear of it too. */
-  let leadW = $state(0);
-  const leadSize = frameSize<HTMLElement>((node) => {
-    leadW = node.offsetWidth;
-  });
   /** The thread's start (its pill, name and place) and the foot alone outgrow the card (a phone's keyboard over a short well). */
   let squeezed = $state(false);
   // When the head and the foot alone outgrow the card, the thread keeps its
@@ -444,67 +431,74 @@
     <Who grouped name={who} shown timestamp={at} {you} />
   </div>
 {/snippet}
-<!-- No head band (the artifact panel's surface brief, A thread beside its pin; The Title Bars
-     Follow Liquid Glass Rule): Resolve or Reopen, Delete comment and More
-     float as one glass group and Close in its own (HIG, Toolbars: "Group
-     navigation controls and critical actions like Done, Close, or Save in
-     dedicated, familiar, and visually distinct sections"), over the thread,
-     which starts at the card's top and blurs under them from the first
-     scroll. The peek takes no press, so it has none. -->
+<!-- No head band (the artifact panel's surface brief, A thread beside its
+     pin; The Title Bars Follow Liquid Glass Rule): the bar is one row of
+     floating groups with no ground, Back leading where the card opened from
+     the Comments list, and trailing Resolve or Reopen, Delete comment and
+     Copy link (or More, where it holds more than one thing) as one glass
+     group and Close in its own (HIG, Toolbars: "Group navigation controls
+     and critical actions like Done, Close, or Save in dedicated, familiar,
+     and visually distinct sections"). Under it the title, then Delete's
+     question where Delete was pressed, then the thread, the one part that
+     scrolls. The peek takes no press, so it has none. -->
 <div
-  class={[
-    "relative flex flex-auto flex-col min-h-0 min-w-0 timeline-scope-transcript-head data-whole:shrink-0",
-    !peek && "min-h-c-top-bar-h",
-  ]}
-  data-whole={squeezed || undefined}
-  data-slot="pin-thread"
-  style:--groups-w="{groupsW}px"
-  style:--lead-w={back ? `${leadW}px` : "0px"}
+  bind:this={head}
+  class="flex shrink-0 flex-col gap-space-2"
+  data-slot="pin-top"
 >
   {#if !peek}
-    <BarFloat tint="bg-surface-raised">
-      {#snippet leading()}
+    <div
+      class="flex h-c-top-bar-h items-center justify-between gap-space-2"
+      data-slot="bar"
+    >
+      <div class="flex min-w-0 items-center">
         {#if back}
           <!-- Opened from the list in the same sheet: Back leads, the
                chevron alone, named by where it goes (HIG, Sheets: "Display
                only one sheet at a time"; a sheet's views push and pop
                within it). -->
-          <div class="flex" {@attach leadSize}>
-            <BarGlass form="group">
-              <BarItem
-                data-slot="back"
-                icon={IconChevronLeft}
-                label={commonWords.backTo(back.to)}
-                onclick={back.onback}
-              />
-            </BarGlass>
-          </div>
-        {/if}
-      {/snippet}
-      {#snippet trailing()}
-        <div class="flex items-center gap-space-2" {@attach groupsSize}>
           <BarGlass form="group">
-            {#if pin.resolvedAt}
+            <BarItem
+              data-slot="back"
+              icon={IconChevronLeft}
+              label={commonWords.backTo(back.to)}
+              onclick={back.onback}
+            />
+          </BarGlass>
+        {/if}
+      </div>
+      <div class="flex flex-none items-center gap-space-2">
+        <BarGlass form="group">
+          {#if pin.resolvedAt}
+            <BarItem
+              icon={IconReopen}
+              label={said.reopen}
+              onclick={() => onresolve(false)}
+            />
+          {:else}
+            <BarItem
+              icon={IconSuccess}
+              label={said.resolve}
+              onclick={() => onresolve(true)}
+            />
+          {/if}
+          {#if !fromChip}
+            <!-- One press asks, under the bar where it was pressed (AskHere). -->
+            <BarItem
+              data-slot="delete"
+              icon={IconTrash}
+              label={said.deleteComment}
+              onclick={askDelete}
+            />
+            {#if moreActions.length === 1 && moreActions[0]}
+              {@const only = moreActions[0]}
+              <!-- One thing is a button of its own, never a More holding it. -->
               <BarItem
-                icon={IconReopen}
-                label={said.reopen}
-                onclick={() => onresolve(false)}
+                icon={only.icon}
+                label={only.label}
+                onclick={only.onselect}
               />
             {:else}
-              <BarItem
-                icon={IconSuccess}
-                label={said.resolve}
-                onclick={() => onresolve(true)}
-              />
-            {/if}
-            {#if !fromChip}
-              <!-- One press asks, in the card itself (the artifact panel's surface brief, A thread beside its pin). -->
-              <BarItem
-                data-slot="delete"
-                icon={IconTrash}
-                label={said.deleteComment}
-                onclick={askDelete}
-              />
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger>
                   {#snippet child({ props })}
@@ -525,179 +519,181 @@
                 </BarMenu>
               </DropdownMenu.Root>
             {/if}
-          </BarGlass>
-          <BarGlass form="group">
-            <BarItem icon={IconClose} label={said.close} onclick={onclose} />
-          </BarGlass>
-        </div>
-      {/snippet}
-    </BarFloat>
-  {/if}
-  <!-- What the comment holds, the one part that scrolls; the reply under it,
-       never a scroll away. Under the groups the bar's scroll edge parts it
-       from them; the house edge fade says there is more past either edge. -->
-  <div
-    class="kit-edge-fade-block relative flex flex-auto flex-col gap-space-2 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain scroll-timeline-transcript-head"
-    data-pin-room
-    onscroll={readAt}
-    bind:this={roomEl}
-  >
-    <!-- Its start, said once: the pill while the page's is out of view,
-         what it stands on (two lines at most; a press scrolls the page to it
-         and lights its element), and its element's nearest parent in meta
-         where it says more than the name. Its first line keeps clear of the
-         floating groups. -->
-    <div
-      bind:this={head}
-      data-slot="head"
-      class={[
-        "flex shrink-0 items-start gap-space-2",
-        !peek && "min-h-c-top-bar-h ps-(--lead-w) pe-(--groups-w) pt-space-1",
-      ]}
-    >
-      {#if !marked}
-        <span class="mark-cell" data-slot="head-pill">
-          <PinMark
-            gone={!!pin.movedAt}
-            number={pin.number}
-            state={markState(pin)}
-            tail="bottom-start"
-          />
-        </span>
-      {/if}
-      <div class="flex min-w-0 flex-1 flex-col gap-space-row">
-        <!-- Two lines at most, clamped in an inner span (The Truncate Inside Rule): WebKit clamps no button. -->
-        {#if peek}
-          <p
-            data-slot="name"
-            class="m-0 min-w-0 text-start text-ink-strong type-label"
-            title={name}
-          >
-            <span class="line-clamp-2 text-pretty wrap-anywhere">{name}</span>
-          </p>
-        {:else}
-          <button
-            data-slot="name"
-            class="min-w-0 self-start px-0 border-none bg-transparent text-start text-ink-strong type-label rounded-xs hover:text-ink-row focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
-            onclick={onfind}
-            title={name}
-            type="button"
-            ><span class="line-clamp-2 text-pretty wrap-anywhere">{name}</span
-            ></button
-          >
-        {/if}
-        {#if parent && parent !== name}
-          <p
-            data-slot="chain"
-            class="m-0 min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted type-meta"
-            title={`on ${parent}`}
-          >
-            on {parent}
-          </p>
-        {/if}
+          {/if}
+        </BarGlass>
+        <BarGlass form="group">
+          <BarItem icon={IconClose} label={said.close} onclick={onclose} />
+        </BarGlass>
       </div>
     </div>
-    {#if !peek && pin.movedAt}
-      <!-- Its element is gone: said once, and pinned anew with the next tap on the page. -->
-      <div
-        data-slot="gone"
-        class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
-      >
-        <p class="m-0 min-w-0 text-ink-muted" role="status">
-          {placing ? said.placeHere : words.pinElementGone}
-        </p>
-        <Button
-          label={placing ? "Cancel" : said.placeElsewhere}
-          onclick={() => onplace(!placing)}
-          pad="none"
-          size="sm"
-          variant="link"
+  {/if}
+  <!-- Its title, standing put while the thread scrolls under it (the
+         owner's pick on comment-card-sizing: "Its title and the reply box
+         stay put while a long reply scrolls between them"): the pill while
+         the page's is out of view, what it stands on (two lines at most; a
+         press scrolls the page to it and lights its element), and its
+         element's nearest parent in meta where it says more than the name.
+         It has the card's whole width under the bar, as a large title stands
+         under its bar (HIG, Navigation bars), never squeezed beside the
+         groups. -->
+  <div data-slot="head" class="flex shrink-0 items-start gap-space-2">
+    {#if !marked}
+      <span class="mark-cell" data-slot="head-pill">
+        <PinMark
+          gone={!!pin.movedAt}
+          number={pin.number}
+          state={markState(pin)}
+          tail="bottom-start"
         />
-      </div>
-    {:else if !peek && pin.resolvedAt}
-      <!-- Resolved, and when: Reopen is the floating group's, said once. -->
+      </span>
+    {/if}
+    <div class="flex min-w-0 flex-1 flex-col gap-space-row">
+      <!-- Two lines at most, clamped in an inner span (The Truncate Inside Rule): WebKit clamps no button. -->
+      {#if peek}
+        <p
+          data-slot="name"
+          class="m-0 min-w-0 text-start text-ink-strong type-label"
+          title={name}
+        >
+          <span class="line-clamp-2 text-pretty wrap-anywhere">{name}</span>
+        </p>
+      {:else}
+        <button
+          data-slot="name"
+          class="min-w-0 self-start px-0 border-none bg-transparent text-start text-ink-strong type-label rounded-xs hover:text-ink-row focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
+          onclick={onfind}
+          title={name}
+          type="button"
+          ><span class="line-clamp-2 text-pretty wrap-anywhere">{name}</span
+          ></button
+        >
+      {/if}
+      {#if parent && parent !== name}
+        <p
+          data-slot="chain"
+          class="m-0 min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted type-meta"
+          title={`on ${parent}`}
+        >
+          on {parent}
+        </p>
+      {/if}
+    </div>
+  </div>
+  {#if !peek}
+    <!-- Delete, asked here, under the bar where it was pressed: a question
+         of its own (AskHere), never a line of the foot's. -->
+    <AskHere asker={asks} at="delete" />
+  {/if}
+</div>
+<!-- What the comment holds, the one part that scrolls, between the title
+     and the reply; the house edge fade says there is more past either edge. -->
+<div
+  class="kit-edge-fade-block relative flex flex-auto flex-col gap-space-2 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain data-whole:shrink-0"
+  data-whole={squeezed || undefined}
+  data-pin-room
+  onscroll={readAt}
+  bind:this={roomEl}
+>
+  {#if !peek && pin.movedAt}
+    <!-- Its element is gone: said once, and pinned anew with the next tap on the page. -->
+    <div
+      data-slot="gone"
+      class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
+    >
+      <p class="m-0 min-w-0 text-ink-muted" role="status">
+        {placing ? said.placeHere : words.pinElementGone}
+      </p>
+      <Button
+        label={placing ? "Cancel" : said.placeElsewhere}
+        onclick={() => onplace(!placing)}
+        pad="none"
+        size="sm"
+        variant="link"
+      />
+    </div>
+  {:else if !peek && pin.resolvedAt}
+    <!-- Resolved, and when: Reopen is the floating group's, said once. -->
+    <p
+      data-slot="resolved"
+      class="m-0 shrink-0 min-w-0 text-ink-muted type-meta num"
+      role="status"
+    >
+      {said.resolvedAgo(resolvedAge)}
+    </p>
+  {/if}
+  {#if !peek && whyNotSent && markState(pin) === "unsent"}
+    <!-- Its delivery reached no one, or it stands only on the page: why, with Try again. -->
+    <div
+      data-slot="not-sent"
+      data-not-sent=""
+      class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
+    >
       <p
-        data-slot="resolved"
-        class="m-0 shrink-0 min-w-0 text-ink-muted type-meta num"
+        class="m-0 min-w-0 text-pretty wrap-anywhere text-status-fail-ink"
         role="status"
       >
-        {said.resolvedAgo(resolvedAge)}
+        {said.notSent(whyNotSent)}
       </p>
-    {/if}
-    {#if !peek && whyNotSent && markState(pin) === "unsent"}
-      <!-- Its delivery reached no one, or it stands only on the page: why, with Try again. -->
-      <div
-        data-slot="not-sent"
-        data-not-sent=""
-        class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
-      >
-        <p
-          class="m-0 min-w-0 text-pretty wrap-anywhere text-status-fail-ink"
-          role="status"
-        >
-          {said.notSent(whyNotSent)}
-        </p>
-        <Button
-          aria-label={said.retryComment(pin.number)}
-          data-slot="pin-retry"
-          label={said.tryAgain}
-          onclick={onretry}
-          pad="none"
-          pending={retrying}
-          size="sm"
-          variant="link"
-        />
-      </div>
-    {/if}
-    <!-- The transcript's turns: a run of one speaker's entries is one turn
+      <Button
+        aria-label={said.retryComment(pin.number)}
+        data-slot="pin-retry"
+        label={said.tryAgain}
+        onclick={onretry}
+        pad="none"
+        pending={retrying}
+        size="sm"
+        variant="link"
+      />
+    </div>
+  {/if}
+  <!-- The transcript's turns: a run of one speaker's entries is one turn
          (its later entries under the first's speaker line), the person's
          run one well. -->
-    <ol data-slot="thread" class="m-0 p-0 list-none">
-      {#each thread as entry, i (entry.id)}
-        {@const grouped = thread[i - 1]?.by === entry.by}
-        <li data-slot="entry" class="group/entry" data-by={entry.by}>
-          {#if entry.by === "person"}
-            {@const runsOn = thread[i + 1]?.by === "person"}
-            <Turn class="group-first/entry:mt-0" {grouped} {runsOn} you>
-              {#if !grouped}
-                <Who name="You" shown timestamp={entry.at} you />
-              {/if}
-              <Well {grouped} {runsOn}>
-                {#if grouped}
-                  {@render later(entry.text, entry.at, "You", true)}
-                {:else if entry.text.trim()}
-                  <MessageBody source={entry.text} wrap="pretty" />
-                {/if}
-                {@render gallery(entry.attachments)}
-              </Well>
-            </Turn>
-          {:else}
-            <Turn class="group-first/entry:mt-0" {grouped}>
+  <ol data-slot="thread" class="m-0 p-0 list-none">
+    {#each thread as entry, i (entry.id)}
+      {@const grouped = thread[i - 1]?.by === entry.by}
+      <li data-slot="entry" class="group/entry" data-by={entry.by}>
+        {#if entry.by === "person"}
+          {@const runsOn = thread[i + 1]?.by === "person"}
+          <Turn class="group-first/entry:mt-0" {grouped} {runsOn} you>
+            {#if !grouped}
+              <Who name="You" shown timestamp={entry.at} you />
+            {/if}
+            <Well {grouped} {runsOn}>
               {#if grouped}
-                {@render later(entry.text, entry.at, agentName, false)}
-              {:else}
-                <Who name={agentName} shown timestamp={entry.at} />
+                {@render later(entry.text, entry.at, "You", true)}
+              {:else if entry.text.trim()}
                 <MessageBody source={entry.text} wrap="pretty" />
               {/if}
-              {#if entry.files?.length}
-                <p class="flex flex-wrap gap-space-1 mt-space-1 mx-0 mb-0">
-                  {#each entry.files as file (file)}
-                    <code
-                      class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-code-bg type-code"
-                      >{file}</code
-                    >
-                  {/each}
-                </p>
-              {/if}
-            </Turn>
-          {/if}
-        </li>
-      {/each}
-    </ol>
-    {#if changes && !peek}
-      <div data-slot="pin-changes">{@render changes(pin)}</div>
-    {/if}
-  </div>
+              {@render gallery(entry.attachments)}
+            </Well>
+          </Turn>
+        {:else}
+          <Turn class="group-first/entry:mt-0" {grouped}>
+            {#if grouped}
+              {@render later(entry.text, entry.at, agentName, false)}
+            {:else}
+              <Who name={agentName} shown timestamp={entry.at} />
+              <MessageBody source={entry.text} wrap="pretty" />
+            {/if}
+            {#if entry.files?.length}
+              <p class="flex flex-wrap gap-space-1 mt-space-1 mx-0 mb-0">
+                {#each entry.files as file (file)}
+                  <code
+                    class="min-w-0 wrap-anywhere px-space-1 py-0 rounded-xs bg-code-bg type-code"
+                    >{file}</code
+                  >
+                {/each}
+              </p>
+            {/if}
+          </Turn>
+        {/if}
+      </li>
+    {/each}
+  </ol>
+  {#if changes && !peek}
+    <div data-slot="pin-changes">{@render changes(pin)}</div>
+  {/if}
 </div>
 {#if !peek}
   <div
@@ -755,7 +751,4 @@
       {sending}
     />
   </div>
-  <!-- Delete, asked in the card itself, under the reply: a question of its
-       own, never a line of the foot's. -->
-  <AskHere asker={asks} at="delete" />
 {/if}

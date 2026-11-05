@@ -35,8 +35,8 @@
   > & {
     /** What it holds, read out. */
     label: string;
-    /** Its width, the kit menu's (`compact`, `regular`, `wide`, `tiles`). */
-    width?: "compact" | "regular" | "wide" | "tiles";
+    /** Its width, the kit menu's (`compact`, `regular`, `wide`, `tiles`, `titles`). */
+    width?: "compact" | "regular" | "wide" | "tiles" | "titles";
     ref?: HTMLElement | null;
     children: Snippet;
   } = $props();

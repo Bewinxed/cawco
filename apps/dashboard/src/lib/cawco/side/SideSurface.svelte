@@ -572,7 +572,7 @@
     data-slot="side-head"
     data-fitted={all.length > 0 || undefined}
     data-placement={placement}
-    class="relative z-1 flex h-c-btn-h-lg flex-none items-center gap-space-1 hit-gap-x-space-1 coarse:data-fitted:gap-space-5 coarse:data-fitted:hit-gap-x-space-5"
+    class="relative z-1 flex h-c-btn-h-lg flex-none items-center gap-space-1 hit-gap-x-space-1 coarse:data-fitted:gap-space-2 coarse:data-fitted:hit-gap-x-space-2"
     bind:this={head}
   >
     {#if placement === "sheet"}

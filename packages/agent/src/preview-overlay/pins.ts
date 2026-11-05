@@ -94,7 +94,7 @@ import {
 import { absences } from "./absent";
 import { artifact, PLACED } from "./artifact";
 import { type Box, clipOf, grow, meets, pageBox, rectOf } from "./frames";
-import { fitToPage, insetFoot } from "./ink";
+import { fitToPage, footKept, insetFoot } from "./ink";
 import { motionOk } from "./motion";
 import { durationMs, type InkChrome } from "./radial";
 import {
@@ -1457,7 +1457,7 @@ export function startPins(deps: PinsDeps): Pins {
     const all = read.map((pin) => found.get(pin.id) ?? pin);
     const drawing = all.length > 0 || !!drafted;
     if (!following) {
-      fitToPage(layer, drawing);
+      fitToPage(layer, drawing || footKept());
     }
     const paint = paintFor(drawing, following);
     const [pinsAt, draftAt] = paint

@@ -1691,6 +1691,15 @@ public enum Words {
 
         public static let remove = "Remove"
 
+        /// The question a removal asks under the menu's last item.
+        public static func removeArtifactAsk(title: String) -> String {
+            "Remove \(title)?"
+        }
+
+        public static let removeArtifactBody = "It goes from this session's artifacts. This can't be undone."
+
+        public static let removingArtifact = "Removing…"
+
         /// A promoted row's tag: its commit, short.
         public static func promoted(commit: String) -> String {
             "Promoted \(commit)"

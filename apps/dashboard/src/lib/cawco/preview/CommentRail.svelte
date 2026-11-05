@@ -209,14 +209,45 @@
 
   const openPins = $derived(pins.filter((pin) => !pin.resolvedAt));
   const resolvedPins = $derived(pins.filter((pin) => !!pin.resolvedAt));
-  const shown = $derived(
-    filter === "check" && checks
-      ? checks.pins.flatMap((id) => pins.filter((pin) => pin.id === id))
-      : searched(
-          sortedPins(filter === "open" ? openPins : resolvedPins, sort),
-          asked
-        )
+  /** A comment waiting on him: an answer he hasn't read. */
+  const waitsOnYou = (pin: Pin) => unread.has(pin.id) && !live.has(pin.id);
+  /** A list in its order, what waits on him first (his job here is to find and answer it). */
+  const waitingFirst = (list: Pin[]) => [
+    ...list.filter(waitsOnYou),
+    ...list.filter((pin) => !waitsOnYou(pin)),
+  ];
+  /**
+   * A search looks in every list, never the one in front alone, and its hits
+   * stand under the name of the list each is in (Open, Resolved), so a hit
+   * is never hidden behind a list he isn't on.
+   */
+  const searchedGroups = $derived(
+    asked.trim()
+      ? [
+          {
+            value: "open" as const,
+            name: said.open,
+            pins: searched(sortedPins(openPins, sort), asked),
+          },
+          {
+            value: "resolved" as const,
+            name: said.resolved,
+            pins: searched(sortedPins(resolvedPins, sort), asked),
+          },
+        ].filter((group) => group.pins.length > 0)
+      : null
   );
+  const shown = $derived.by(() => {
+    if (searchedGroups) {
+      return searchedGroups.flatMap((group) => group.pins);
+    }
+    if (filter === "check" && checks) {
+      return checks.pins.flatMap((id) => pins.filter((pin) => pin.id === id));
+    }
+    return waitingFirst(
+      sortedPins(filter === "open" ? openPins : resolvedPins, sort)
+    );
+  });
   const failed = $derived(typeof hold === "object" ? hold.failed : null);
   /** A list's count once the pins are read, and only above 0 (The Earned Count Rule). */
   const counted = (count: number) =>
@@ -331,6 +362,29 @@
             hit: marked.some((word) => part.toLowerCase().startsWith(word)),
           }));
 
+  /**
+   * What a row's words line says: the comment's first words, or, while a
+   * search finds the comment by words further in its thread (a reply), the
+   * passage holding the first match, so every row a search shows marks
+   * what it was found by.
+   */
+  const wordsOf = (pin: Pin, first: string): string => {
+    if (marked.length === 0 || segments(first).some((part) => part.hit)) {
+      return first;
+    }
+    for (const entry of pin.thread) {
+      const at = marked
+        .map((word) => entry.text.toLowerCase().indexOf(word))
+        .filter((index) => index >= 0)
+        .reduce((a, b) => Math.min(a, b), Number.POSITIVE_INFINITY);
+      if (Number.isFinite(at)) {
+        const from = entry.text.lastIndexOf(" ", Math.max(0, at - 24));
+        return `${from > 0 ? "…" : ""}${entry.text.slice(from > 0 ? from + 1 : 0)}`;
+      }
+    }
+    return first;
+  };
+
   /** A pill's dot: the agent at work on it, else an answer unread, else none. */
   const dotOf = (pin: Pin): "live" | "unread" | null => {
     if (live.has(pin.id)) {
@@ -407,10 +461,8 @@
           number={pin.number}
           state={markState(pin)}
         />
-        {#if dotOf(pin) === "unread"}<span class="sr-only"
-            >{said.pinNewAnswer(pin.number)}</span
-          >{:else if dotOf(pin) === "live"}<span class="sr-only"
-            >{said.working}</span
+        <!-- A new answer is said in words on the row's last line. -->
+        {#if dotOf(pin) === "live"}<span class="sr-only">{said.working}</span
           >{/if}
       </span>
       <span class="flex flex-1 min-w-0 flex-col">
@@ -420,7 +472,10 @@
             class={[
               "min-w-0 truncate type-label font-medium",
               ink(washed, gone ? "text-ink-subtle" : "text-ink-row"),
-            ]}>{gone ? said.elementGone : pinName(pin)}</span
+            ]}
+            >{#each segments(gone ? said.elementGone : pinName(pin)) as part, at (at)}{#if part.hit}<mark
+                  class="bg-selection text-inherit rounded-xs">{part.text}</mark
+                >{:else}{part.text}{/if}{/each}</span
           >
           <span
             data-slot="age"
@@ -437,7 +492,7 @@
               "mt-space-row line-clamp-2 type-body text-pretty wrap-anywhere",
               ink(washed, "text-ink-strong"),
             ]}
-            >{#each segments(firstWords) as part, at (at)}{#if part.hit}<mark
+            >{#each segments(wordsOf(pin, firstWords)) as part, at (at)}{#if part.hit}<mark
                   class="bg-selection text-inherit rounded-xs">{part.text}</mark
                 >{:else}{part.text}{/if}{/each}</span
           >
@@ -504,7 +559,14 @@
               data-box
               data-speaker={back.by}><Speaker class="size-icon-sm" /></span
             ><span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-              >{back.text}</span
+              >{#if back.unread}<span
+                  class="text-status-attn-ink font-medium"
+                  data-slot="new-answer"
+                  >{said.newAnswer} ·
+                </span>{/if}{#each segments(back.text) as part, at (at)}{#if part.hit}<mark
+                    class="bg-selection text-inherit rounded-xs"
+                    >{part.text}</mark
+                  >{:else}{part.text}{/if}{/each}</span
             ></span
           >
         {/if}
@@ -639,13 +701,22 @@
                     >
                   {/if}
                   {#if waiting}
-                    <!-- The needs-you dot (DESIGN.md, Status dot): To check holds comments. -->
+                    <!-- To check holds comments while another list is in front:
+                         said in words beside the title, the needs-you dot
+                         leading them (DESIGN.md, Status dot), never the dot
+                         alone. -->
                     <span
                       aria-hidden="true"
-                      class="size-(--status-dot-size) flex-none rounded-pill bg-status-attn-glyph"
+                      class="flex flex-none items-center gap-space-1 text-ink-strong type-label mark-line"
                       data-box
                       data-slot="waiting"
-                    ></span>
+                      ><span
+                        class="size-(--status-dot-size) flex-none rounded-pill bg-status-attn-glyph"
+                        data-box
+                      ></span><span class="num"
+                        >{said.toCheckWaiting(waiting)}</span
+                      ></span
+                    >
                   {/if}
                   <IconChevronDown
                     aria-hidden="true"
@@ -781,7 +852,31 @@
         in:reveal
         {@attach keepScroll}
       >
-        {#if filter === "check" && checks}
+        {#if searchedGroups}
+          {#if searchedGroups.length > 0}
+            {#each searchedGroups as group (group.value)}
+              <!-- The list each hit is in, named over its hits. -->
+              <h3
+                class="m-0 px-space-2 pt-space-2 pb-space-1 text-ink-muted type-meta first:pt-0"
+                data-slot="hits-in"
+              >
+                {group.name} <span class="num">{group.pins.length}</span>
+              </h3>
+              <ol class="flex flex-col gap-space-row m-0 p-0 list-none">
+                {#each group.pins as pin (pin.id)}
+                  {@render boundedRow(pin)}
+                {/each}
+              </ol>
+            {/each}
+          {:else}
+            <p
+              data-slot="pin-list-empty"
+              class="m-0 px-space-2 py-space-3 text-ink-strong type-label"
+            >
+              {said.noMatch(asked.trim())}
+            </p>
+          {/if}
+        {:else if filter === "check" && checks}
           {#if checks.count > 0}
             <ol
               class="flex flex-col gap-space-row m-0 p-0 list-none"
@@ -809,13 +904,6 @@
               {@render boundedRow(pin)}
             {/each}
           </ol>
-        {:else if asked.trim()}
-          <p
-            data-slot="pin-list-empty"
-            class="m-0 px-space-2 py-space-3 text-ink-strong type-label"
-          >
-            {said.noMatch(asked.trim())}
-          </p>
         {:else if filter === "open"}
           <p
             data-slot="pin-list-empty"
