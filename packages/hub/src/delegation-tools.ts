@@ -58,6 +58,7 @@ import {
   handoffActions,
   type ItemEnd,
 } from "./delegation-actions";
+import { decodeCursor } from "./find";
 import { type Presenter, sentence, tool } from "./mcp-tool";
 import {
   type AskChanged,
@@ -90,8 +91,15 @@ import {
   delegateTypesWords,
   delegateWords,
   imageWords,
+  sessionListWords,
   startedWords,
 } from "./presenters/sessions";
+import {
+  SESSION_LIST_LIMIT,
+  SESSION_LIST_MAX,
+  SESSION_ROLES,
+  SESSION_SORTS,
+} from "./session-list";
 import {
   budgetParameter,
   groupParameter,
@@ -123,6 +131,30 @@ const sessionTitle = () =>
 
 const ISO_TIME =
   "an ISO date or datetime, like 2026-10-20 or 2026-10-20T14:00Z";
+/** A day, as `find` and `list_sessions` take `since`. */
+const DAY = /^\d{4}-\d{2}-\d{2}$/u;
+
+/** `list_sessions`'s `since`: its day's first ms in UTC, or the refusal with one call that works. */
+const dayStart = (day: string): number => {
+  const at = DAY.test(day) ? Date.parse(`${day}T00:00:00Z`) : Number.NaN;
+  if (Number.isNaN(at)) {
+    throw new Error(
+      `since is "${day}": give a day as YYYY-MM-DD. Example: {"stopped": "limit", "since": "2026-11-05"}`
+    );
+  }
+  return at;
+};
+
+/**
+ * `list_sessions`, for the question an orchestrator asks of the fleet:
+ * which sessions stopped (at a usage limit above all), whose, and in what
+ * order they were touched. Told apart from `delegate_list` (the caller's
+ * own delegates' work) and `find` (words said).
+ */
+const LIST_SESSIONS_DESCRIPTION =
+  "Sessions on every machine: state, stop reason, account, resume time, last message read, when the person last wrote, last activity; then machines online. " +
+  "For the session owning some work, or which stopped at a usage limit (stopped: limit) and whose (role: main); handoff nudges one. Not delegate_list (your delegates' work) or find (words said).";
+
 /** An ISO time opens on its date; `Date.parse` alone takes "Oct 20" too. */
 const ISO_DATE_FIRST = /^\d{4}-\d{2}-\d{2}/u;
 
@@ -288,12 +320,6 @@ const READ_ONLY = {
 /** Hub-owned tool definitions; every harness discovers this same registry. */
 
 export type { HandoffDeps } from "./delegation-actions";
-
-/**
- * The name the SDK injects this server under, and so the prefix of every tool
- * it exposes: `mcp__cawco__handoff`, `…__start_session`, `…__delegate`.
- */
-export const MCP_SERVER_NAME = "cawco";
 
 /**
  * What {@link NO_REPLY_TOOL} says on each harness. Claude Code and pi end
@@ -484,10 +510,50 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "list_sessions",
-      "The other sessions on the fleet, each with its directory and machine, then the machines online now. Use it to find a session that already owns the work; it says where each works, not what it does.",
-      {},
-      () => Promise.resolve(actions.listSessions()),
-      sentence
+      LIST_SESSIONS_DESCRIPTION,
+      {
+        role: z
+          .enum(SESSION_ROLES)
+          .optional()
+          .describe(
+            "main: the person's own; delegate: another session started it. Default all."
+          ),
+        stopped: z
+          .enum(["limit"])
+          .optional()
+          .describe(
+            "limit: its latest turn ended at a usage limit and nothing carried it on, asleep too. Default: running ones."
+          ),
+        sort: z
+          .enum(SESSION_SORTS)
+          .optional()
+          .describe(
+            "Newest first by: active (default), interacted (the person's last message) or created."
+          ),
+        since: z
+          .string()
+          .optional()
+          .describe("YYYY-MM-DD: active since; with stopped, stopped since."),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(SESSION_LIST_MAX)
+          .optional()
+          .describe(`Default ${SESSION_LIST_LIMIT}, max ${SESSION_LIST_MAX}.`),
+        cursor: z.string().optional().describe("next_cursor."),
+      },
+      ({ role, stopped, sort, since, limit, cursor }) =>
+        actions.listSessions({
+          role: role ?? "all",
+          sort: sort ?? "active",
+          limit: limit ?? SESSION_LIST_LIMIT,
+          offset: decodeCursor(cursor),
+          ...(stopped ? { stopped } : {}),
+          ...(since ? { since: dayStart(since) } : {}),
+        }),
+      sessionListWords,
+      { annotations: READ_ONLY }
     ),
     tool(
       "handoff",

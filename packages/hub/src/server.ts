@@ -1010,6 +1010,7 @@ import {
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
 import { sessionLimitRoutes } from "./session-limits";
+import { sessionReads } from "./session-list";
 import { nameSettledOnce } from "./settled-names";
 import { createSettling } from "./settling";
 import { applySetupPicks, isSetupPage } from "./setup";
@@ -11059,6 +11060,32 @@ export const createServer = (
    * not a failed turn to hand back.
    */
   const limitRefused = new Set<string>();
+  /**
+   * A turn's end, as `list_sessions` reads a session stopped at its limit
+   * (schema `limitStops`): one a usage limit ended is kept, on any harness
+   * and account, the machine's own sign-in included and whatever the
+   * at-limit controller does with it next; any other end takes that away. A
+   * turn its credential ended is no limit's.
+   */
+  const noteLimitStop = (
+    instanceId: string,
+    neutral: { atLimit?: true; is_error?: boolean }
+  ): void => {
+    const limited =
+      !credentialTurns.has(instanceId) &&
+      (limitRefused.has(instanceId) ||
+        (neutral.is_error === true && neutral.atLimit === true));
+    if (!limited) {
+      db.atLimit.dropStop(instanceId);
+      return;
+    }
+    const [row] = db.getInstancesByIds([instanceId]);
+    db.atLimit.putStop({
+      instanceId,
+      accountId: row?.accountId ?? null,
+      at: Date.now(),
+    });
+  };
   /**
    * Sessions whose turn in flight died on their account's credential and
    * whose end is the at-limit controller's to answer, not a failed turn to
@@ -28403,6 +28430,12 @@ export const createServer = (
     fleet: {
       instances: () => laws.raise(boardRows),
       machines: () => withPresence(db.listAgents()),
+      ...sessionReads(db, (rows) =>
+        withSessionPresence(rows).map((row) => {
+          const stall = stallOf(row.id);
+          return stall ? { ...row, stalled: stall } : row;
+        })
+      ),
     },
     formerIds: db.formerIds,
     ledBy: (id, leadId) => workItems.ledBy(id, leadId),
@@ -40070,6 +40103,9 @@ export const createServer = (
                   if (called.length > 0) {
                     workItems.worked(message.instanceId, called);
                   }
+                }
+                if (neutral.type === "result") {
+                  noteLimitStop(message.instanceId, neutral);
                 }
                 if (
                   neutral.type === "assistant" &&

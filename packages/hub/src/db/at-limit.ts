@@ -1,13 +1,15 @@
 import type { AccountMove } from "@cawco/core";
 import type { ContextFill, FiledRecords } from "@cawco/core/context-filing";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, ne, or } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   contextCompactions,
   contextRises,
+  instances,
   limitCompactions,
   limitEvents,
   limitHolds,
+  limitStops,
 } from "./schema";
 
 /** A session waiting out its account's limit. */
@@ -28,6 +30,16 @@ export interface LimitHold {
   staleAt: number | null;
   /** When it goes on: the earliest moment an account takes it again; null when none was named. */
   until: number | null;
+}
+
+/**
+ * A session whose latest turn a usage limit ended (schema `limitStops`):
+ * when, and the account that refused it (null: the machine's own sign-in).
+ */
+export interface LimitStop {
+  accountId: string | null;
+  at: number;
+  instanceId: string;
 }
 
 /** What every compaction plan has: its steps, by their sends, and where it stands. */
@@ -105,6 +117,8 @@ export interface AtLimitDb {
   readonly dropHold: (instanceId: string) => void;
   /** Takes `instanceId`'s rise away: its harness compacted it, so the threshold files again. */
   readonly dropRise: (instanceId: string) => void;
+  /** A turn of `instanceId` ended other than at a usage limit: its stop, if any, is over. */
+  readonly dropStop: (instanceId: string) => void;
   /** The lines written into these sessions' transcripts, oldest first. */
   readonly events: (instanceIds: string[]) => LimitEvent[];
   readonly forget: (instanceIds: string[]) => void;
@@ -131,8 +145,16 @@ export interface AtLimitDb {
   readonly putHold: (hold: Omit<LimitHold, "staleAt">) => void;
   /** Marks a session's context risen to its threshold, in place of any rise it had. */
   readonly putRise: (rise: ContextRise) => void;
+  /** A turn of `instanceId` ended at a usage limit, in place of any stop it had. */
+  readonly putStop: (stop: LimitStop) => void;
   /** The session's rise since its last compaction; undefined when none. */
   readonly rise: (instanceId: string) => ContextRise | undefined;
+  /**
+   * Every stop that stands: its session not continued in another, never a
+   * continuation's summariser, and no turn of it under way since the stop
+   * (a carry-on at the reset, on another account, or a message's turn).
+   */
+  readonly standingStops: () => LimitStop[];
   /**
    * The line of `instanceId`'s move waiting for work in flight, while it
    * waits ({@link waitsLine}): one per session, said again in its place.
@@ -305,6 +327,37 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
       .where(eq(limitCompactions.instanceId, instanceId))
       .run();
   },
+  putStop: ({ instanceId, accountId, at }) => {
+    const values = { accountId, at: new Date(at) };
+    db.insert(limitStops)
+      .values({ instanceId, ...values })
+      .onConflictDoUpdate({ target: limitStops.instanceId, set: values })
+      .run();
+  },
+  dropStop: (instanceId) => {
+    db.delete(limitStops).where(eq(limitStops.instanceId, instanceId)).run();
+  },
+  standingStops: () =>
+    db
+      .select({
+        instanceId: limitStops.instanceId,
+        accountId: limitStops.accountId,
+        at: limitStops.at,
+      })
+      .from(limitStops)
+      .innerJoin(instances, eq(instances.id, limitStops.instanceId))
+      .where(
+        and(
+          isNull(instances.continuedInto),
+          ne(instances.kind, "summariser"),
+          or(
+            isNull(instances.turnOpenAt),
+            lt(instances.turnOpenAt, limitStops.at)
+          )
+        )
+      )
+      .all()
+      .map((row) => ({ ...row, at: row.at.getTime() })),
   dropEvent: (id) => {
     db.delete(limitEvents).where(eq(limitEvents.id, id)).run();
   },
@@ -348,6 +401,9 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
       .run();
     db.delete(limitEvents)
       .where(inArray(limitEvents.instanceId, instanceIds))
+      .run();
+    db.delete(limitStops)
+      .where(inArray(limitStops.instanceId, instanceIds))
       .run();
     db.delete(contextCompactions)
       .where(inArray(contextCompactions.instanceId, instanceIds))

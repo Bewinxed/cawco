@@ -31,7 +31,6 @@ import {
   IMAGE_GENERATION_TIMEOUT_MS,
   machineCalled,
   machineLabel,
-  machineLink,
   machinesCalled,
   pauseClock,
   QUESTION_DISMISSED,
@@ -53,11 +52,23 @@ import type {
   DelegateListQuery,
   DelegatePeek,
 } from "./delegation-tree";
+import { cursorAt } from "./find";
 import { byId, handleId, isHandle, mentioned } from "./handles";
 import { hubHttpUrl, selfFetch } from "./hub-self";
 import { cacheWarmNow, type KeepAliveRow } from "./keep-alive";
 import { boardTitle, leafOf, sessionLabel } from "./labels";
 import { handle as idHandle } from "./presenters/words";
+import {
+  activeAt,
+  pageOf,
+  resumesOf,
+  type SessionFacts,
+  type SessionList,
+  type SessionListQuery,
+  type SessionListRow,
+  sessionRole,
+  stopOf,
+} from "./session-list";
 import {
   type HandoffInputs,
   resolveSpawnType,
@@ -194,7 +205,11 @@ interface Machine {
  * its own sessions' reads (2026-10-09).
  */
 export interface Fleet {
+  /** What the hub stores of these sessions past their rows (session-list.ts `sessionFacts`). */
+  facts: (rows: readonly InstanceRow[]) => Promise<Map<string, SessionFacts>>;
   instances: () => InstanceRow[];
+  /** Every session whose latest turn a usage limit ended and nothing carried on since, in any state, as the board lays its rows. */
+  limitStopped: () => InstanceRow[];
   machines: () => Machine[];
 }
 
@@ -327,6 +342,57 @@ function roster(
     .map((row) => toPeer(row, hosts));
   return { peers, asleep, own, hosts, rows };
 }
+
+/** How a session stands to the caller, when it does. */
+const relationOf = (
+  row: InstanceRow,
+  instanceId: string,
+  own: InstanceRow | undefined
+): SessionListRow["relation"] => {
+  if (row.parentInstanceId === instanceId) {
+    return row.workItemId ? "your delegate" : "you started it";
+  }
+  return own?.parentInstanceId === row.id ? "your parent session" : undefined;
+};
+
+/** One session as `list_sessions` lists it: its row, what the hub stores of it past that, and how it stands to the caller. */
+const listedRow = (
+  peer: Peer,
+  one: SessionFacts | undefined,
+  caller: {
+    instanceId: string;
+    own: InstanceRow | undefined;
+    pausedUntil: number | undefined;
+  }
+): SessionListRow => {
+  const { row } = peer;
+  const relation = relationOf(row, caller.instanceId, caller.own);
+  const created = row.createdAt ? new Date(row.createdAt).getTime() : null;
+  return {
+    id: row.id,
+    title: peer.title,
+    label: peer.label,
+    dir: peer.dir,
+    machine: peer.host,
+    harness: row.harness,
+    model: row.model ?? null,
+    role: sessionRole(row),
+    state: row.status,
+    stop: stopOf(row, one),
+    account: one?.account ?? null,
+    resumes: resumesOf(row, one),
+    lastRead: one?.lastRead ?? null,
+    personSaid: one?.personSaid ?? null,
+    interactedAt: one?.interactedAt ?? null,
+    activeAt: activeAt(row, one),
+    createdAt: Number.isFinite(created) ? created : null,
+    ...(row.kind === "scratch" ? { spinOff: true as const } : {}),
+    ...(caller.pausedUntil === undefined
+      ? {}
+      : { machinePausedUntil: caller.pausedUntil }),
+    ...(relation ? { relation } : {}),
+  };
+};
 
 /**
  * The session a target names by one of its former ids (a session the hub
@@ -984,7 +1050,8 @@ export interface HandoffActions {
   ) => Promise<string>;
   interruptDelegate: (target: string) => string;
   readonly listDelegateTypes: () => Promise<{ types: DelegateType[] }>;
-  listSessions: () => string;
+  /** The fleet's sessions as `list_sessions` asks for them (session-list.ts). */
+  listSessions: (query: SessionListQuery) => Promise<SessionList>;
   /**
    * Pauses the machine `machine` names for `minutes` (machine-pause.ts), or
    * ends its pause (`resume`). Answers what the hub did, in a sentence.
@@ -1743,62 +1810,78 @@ export const handoffActions = ({
       const types = await fetchDelegateTypes(projectId);
       return { types };
     },
-    listSessions(): string {
-      const { peers, own } = roster(fleet, instanceId);
+    async listSessions(query: SessionListQuery): Promise<SessionList> {
+      const { peers, own, hosts } = roster(fleet, instanceId);
       const machines = fleet.machines();
-      /** "paused until 00:57" for a paused machine, by id. */
-      const pauses = new Map(
+      const pausedUntil = new Map(
         machines.flatMap((machine) =>
           machine.pausedUntil
-            ? [
-                [
-                  machine.machineId,
-                  `paused until ${pauseClock(machine.pausedUntil)}`,
-                ] as const,
-              ]
+            ? [[machine.machineId, machine.pausedUntil] as const]
             : []
         )
       );
-      const paused = machines
-        .filter((machine) => pauses.has(machine.machineId))
-        .map(
-          (machine) =>
-            `${machineCalled(machine.machineId, machines)} is ${pauses.get(machine.machineId)}: nothing starts there until then, and work for it waits.`
-        );
-      const online = machines.filter((machine) => machine.status === "online");
-      const where = [
-        `Machines online (\`machine\` on delegate and start_session): ${onlineNames(machines)}.`,
-        ...(online.length > 0
+      // Stopped at a limit: any state, a sleeping session's too; else the
+      // live sessions, as the tool has always listed them.
+      const candidates =
+        query.stopped === "limit"
+          ? fleet
+              .limitStopped()
+              .filter((row) => row.id !== instanceId)
+              .map((row) => toPeer(row, hosts))
+          : peers;
+      const facts = await fleet.facts(candidates.map((peer) => peer.row));
+      const { page, total } = pageOf(
+        candidates.map((peer) => peer.row),
+        facts,
+        query
+      );
+      const peerOf = new Map(candidates.map((peer) => [peer.row.id, peer]));
+      const sessions = page.flatMap((row) => {
+        const peer = peerOf.get(row.id);
+        return peer
           ? [
-              `To name one to the person: ${online.map((machine) => machineLink(machine.machineId, machineCalled(machine.machineId, machines))).join(", ")}.`,
+              listedRow(peer, facts.get(row.id), {
+                instanceId,
+                own,
+                pausedUntil: pausedUntil.get(row.machineId),
+              }),
             ]
-          : []),
-        ...paused,
-      ].join(" ");
-      if (peers.length === 0) {
-        return `No other sessions are running.\n\n${where}`;
-      }
-      const listed = peers
-        .map((peer) => {
-          const facts = [
-            peer.host,
-            peer.row.model ?? "default model",
-            ageOf(peer.row.updatedAt),
-            ...(peer.row.kind === "scratch" ? ["spin-off"] : []),
-            ...(pauses.has(peer.row.machineId)
-              ? [pauses.get(peer.row.machineId) as string]
-              : []),
-            ...(peer.row.parentInstanceId === instanceId
-              ? [peer.row.workItemId ? "your delegate" : "you started it"]
-              : []),
-            ...(own?.parentInstanceId && own.parentInstanceId === peer.row.id
-              ? ["your parent session"]
-              : []),
-          ];
-          return `- ${sessionLink(peer.row.id, peer.title)} (${peer.label}) — ${peer.dir} · ${facts.join(" · ")}`;
-        })
-        .join("\n");
-      return `${listed}\n\n${where}`;
+          : [];
+      });
+      const end = query.offset + sessions.length;
+      return {
+        query: {
+          role: query.role,
+          sort: query.sort,
+          ...(query.stopped ? { stopped: query.stopped } : {}),
+          ...(query.since === undefined
+            ? {}
+            : { since: new Date(query.since).toISOString().slice(0, 10) }),
+        },
+        sessions,
+        total,
+        has_more: end < total,
+        next_cursor: end < total ? cursorAt(end) : null,
+        machines: {
+          online: machines
+            .filter((machine) => machine.status === "online")
+            .map((machine) => ({
+              id: machine.machineId,
+              name: machineCalled(machine.machineId, machines),
+            })),
+          paused: machines.flatMap((machine) =>
+            machine.pausedUntil
+              ? [
+                  {
+                    id: machine.machineId,
+                    name: machineCalled(machine.machineId, machines),
+                    until: machine.pausedUntil,
+                  },
+                ]
+              : []
+          ),
+        },
+      };
     },
 
     async handoff(

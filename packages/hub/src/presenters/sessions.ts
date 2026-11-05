@@ -9,6 +9,8 @@ import {
   type DelegateType,
   delegateTypesWords as delegateTypesUiWords,
   type GeneratedImage,
+  machineLink,
+  pauseClock,
   delegatePeekWords as peek,
   planLink,
   sessionLink,
@@ -24,6 +26,7 @@ import {
   type DelegatePeek,
   PAGES_READ_MOST,
 } from "../delegation-tree";
+import type { SessionList, SessionListRow } from "../session-list";
 import type { Step } from "../transcript-steps";
 import {
   excludedNamed,
@@ -329,3 +332,115 @@ export const delegateTypesWords = (catalog: {
 /** `generate_image`: where it is, how big, in what format, through what. */
 export const imageWords = (image: GeneratedImage): string =>
   imageGenerationWords.saved(image);
+
+/** A time as a session row says it: the minute in UTC, and how long ago. */
+const at = (ms: number, now: number): string =>
+  `${new Date(ms).toISOString().slice(0, 16).replace("T", " ")}Z (${ago(ms, now)})`;
+
+/** Why it stopped and when it goes on, in words; none for a session nothing stopped. */
+const stopLine = (row: SessionListRow, now: number): string | undefined => {
+  const { stop, resumes } = row;
+  if (!stop) {
+    return;
+  }
+  let goesOn = "";
+  if (resumes === "now") {
+    goesOn = "; its account has room now";
+  } else if (typeof resumes === "number") {
+    goesOn = `; can resume ${ahead(resumes, now)}`;
+  } else if (stop.kind === "limit") {
+    goesOn = "; when it can resume is unknown";
+  }
+  switch (stop.kind) {
+    case "limit":
+      return `stopped at a usage limit ${at(stop.at, now)}${stop.words ? `: ${stop.words}` : ""}${goesOn}`;
+    case "account":
+      return `stopped: ${stop.words}${goesOn}`;
+    case "error":
+      return `stopped on an error: ${quote(stop.words)}`;
+  }
+};
+
+/** One session as its lines: who and where, why it stopped, what it last read, its times. */
+const sessionRowLines = (row: SessionListRow, now: number): string[] => {
+  const head = [
+    row.machine,
+    row.model ?? "default model",
+    row.state,
+    row.role === "main" ? "main session" : "delegate",
+    row.account ?? "no account (its machine's own sign-in)",
+    ...(row.spinOff ? ["spin-off"] : []),
+    ...(row.machinePausedUntil
+      ? [`machine paused ${ahead(row.machinePausedUntil, now)}`]
+      : []),
+    ...(row.relation ? [row.relation] : []),
+  ];
+  const read = row.lastRead
+    ? `last read ${at(row.lastRead.at, now)} from ${row.lastRead.from}: ${quote(row.lastRead.words, 160)}`
+    : "has read no message yet";
+  // The person's last message, unless it is the one it last read.
+  let person = "";
+  if (row.personSaid) {
+    person = `the person last wrote ${at(row.personSaid.at, now)}: ${quote(row.personSaid.words, 160)}`;
+  } else if (row.interactedAt === null) {
+    person = "the person never wrote to it";
+  }
+  const times = [
+    row.activeAt === null ? "" : `active ${at(row.activeAt, now)}`,
+    row.createdAt === null ? "" : `created ${ago(row.createdAt, now)}`,
+  ].filter(Boolean);
+  const stopped = stopLine(row, now);
+  return [
+    `- ${sessionLink(row.id, row.title)} (${row.label}) — ${row.dir} · ${head.join(" · ")}`,
+    ...(stopped ? [`  ${stopped}`] : []),
+    `  ${read}`,
+    ...(person ? [`  ${person}`] : []),
+    ...(times.length > 0 ? [`  ${times.join(" · ")}`] : []),
+  ];
+};
+
+/** What an empty page says, by what was asked. */
+const noneWords = (asked: SessionList["query"]): string => {
+  const whose = { main: "main ", delegate: "delegate ", all: "" }[asked.role];
+  const since = asked.since ? ` since ${asked.since}` : "";
+  return asked.stopped
+    ? `No other ${whose}session's latest turn ended at a usage limit${since} with nothing carried on after it.`
+    : `No other ${whose}sessions are running${since}.`;
+};
+
+/**
+ * `list_sessions` concise: each session's lines, a steering line when cut,
+ * then the machines online and paused, as `delegate` and `start_session`
+ * take them.
+ */
+export const sessionListWords = (list: SessionList): string => {
+  const now = Date.now();
+  const { online, paused } = list.machines;
+  const sorted = {
+    active: "last active first",
+    interacted: "the person's last message first",
+    created: "newest first",
+  }[list.query.sort];
+  const shown = list.sessions.length;
+  return lines(
+    shown === 0
+      ? noneWords(list.query)
+      : [
+          `${count(list.total, "session")}, ${sorted}${list.total > shown ? `; ${shown} shown` : ""}:`,
+          ...list.sessions.flatMap((row) => sessionRowLines(row, now)),
+        ],
+    list.has_more && list.next_cursor
+      ? `More: pass cursor "${list.next_cursor}", or narrow with role, stopped or since.`
+      : "",
+    "",
+    `Machines online (\`machine\` on delegate and start_session): ${online.map((one) => one.name).join(", ") || "none"}.${
+      online.length > 0
+        ? ` To name one to the person: ${online.map((one) => machineLink(one.id, one.name)).join(", ")}.`
+        : ""
+    }`,
+    paused.map(
+      (one) =>
+        `${one.name} is paused until ${pauseClock(one.until)}: nothing starts there until then, and work for it waits.`
+    )
+  );
+};

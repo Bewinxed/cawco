@@ -82,10 +82,16 @@ import type { Tasks } from "./tasks";
  * changes it: every surface names an artifact to the person by the title
  * its agent wrote, and its slug `name` stays for tools and URLs (worker
  * 29,588, delegate 10,896 measured).
+ * 2026-11-05: list_sessions answers which sessions stopped at a usage limit,
+ * whose, and in what order they were touched, across every machine, in one
+ * call: `role`, `stopped`, `sort`, `since`, `limit` and `cursor`, and a
+ * description that tells it from delegate_list and find, in place of the
+ * hub's database and transcripts read by hand (300 tokens; worker 29,888,
+ * delegate 11,196 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 29_600,
-  delegate: 10_900,
+  worker: 29_900,
+  delegate: 11_200,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,
@@ -184,7 +190,12 @@ const standUp = (): { roles: RoleTools[]; unrouted: string[] } => {
       rows.filter((row) => row.harness === harness && row.status === "running"),
     instanceById: (id) => rows.find((row) => row.id === id),
     instancesByShortId: () => [],
-    fleet: { instances: () => rows, machines: () => [] },
+    fleet: {
+      instances: () => rows,
+      machines: () => [],
+      limitStopped: () => [],
+      facts: () => Promise.resolve(new Map()),
+    },
     formerIds: () => ({}),
     forward: () => Promise.resolve(),
     callKeys: { once: (_actor, _name, _key, run) => run() },

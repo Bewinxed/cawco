@@ -224,6 +224,7 @@ import {
   limitCompactions,
   limitEvents,
   limitHolds,
+  limitStops,
   lineAnchors,
   type MachineLineKind,
   marketplaces,
@@ -1229,6 +1230,15 @@ export interface DbShape {
   readonly landedOnTree: (tree: string) => WorkItemRow[];
   /** The work items, live or ended, whose session's `finish_item` turn has not been heard to end (`last_turn_at`). */
   readonly lastTurnWorkItems: () => WorkItemRow[];
+  /**
+   * What `id` was last sent, for `list_sessions` (session-facts.ts): the
+   * newest turn it read, and the person's newest message to it in any state
+   * (when the person last interacted with it). Null for none.
+   */
+  readonly latestSends: (id: string) => {
+    person: SentMessageRow | null;
+    read: SentMessageRow | null;
+  };
   /**
    * The directory a row was launched in, which every spawn of it uses;
    * `"unknown"` when its machine had no record of its conversation; undefined
@@ -4041,6 +4051,7 @@ const make = async (path: string): Promise<DbShape> => {
       .where(inArray(limitCompactions.instanceId, list))
       .run();
     tx.delete(limitEvents).where(inArray(limitEvents.instanceId, list)).run();
+    tx.delete(limitStops).where(inArray(limitStops.instanceId, list)).run();
     tx.delete(fleetWatchNotices)
       .where(inArray(fleetWatchNotices.instanceId, list))
       .run();
@@ -9651,6 +9662,34 @@ const make = async (path: string): Promise<DbShape> => {
         return null;
       }
       return last.state === "read" ? "read" : "pending";
+    },
+    latestSends: (id) => {
+      const [read] = db
+        .select()
+        .from(sentMessages)
+        .where(
+          and(
+            eq(sentMessages.instanceId, id),
+            eq(sentMessages.mode, "turn"),
+            isNotNull(sentMessages.readAt)
+          )
+        )
+        .orderBy(desc(sentMessages.readAt))
+        .limit(1)
+        .all();
+      const [person] = db
+        .select()
+        .from(sentMessages)
+        .where(
+          and(
+            eq(sentMessages.instanceId, id),
+            sql`json_extract(${sentMessages.body}, '$.origin.kind') = 'human'`
+          )
+        )
+        .orderBy(desc(sentMessages.acceptedAt))
+        .limit(1)
+        .all();
+      return { read: read ?? null, person: person ?? null };
     },
     handBackTurn: (id, from, at) =>
       db

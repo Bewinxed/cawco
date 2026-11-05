@@ -2764,6 +2764,23 @@ export const limitHolds = sqliteTable("limit_holds", {
 });
 
 /**
+ * Sessions whose latest turn a usage limit ended (server.ts, at the turn's
+ * `result`: Claude Code's `rate_limit` error or a `rejected` limit with no
+ * extra usage, a pi or OpenCode turn its agent marked `atLimit`), on any
+ * harness and account, the machine's own sign-in included, whatever the
+ * at-limit controller then did with it (a hold, a move, nothing). The next
+ * turn that ends any other way takes the row away; a turn under way since
+ * `at` (`instances.turnOpenAt`) has carried it on already (db at-limit.ts
+ * `standingStops`). `accountId`: the account that refused it; null for the
+ * machine's own sign-in.
+ */
+export const limitStops = sqliteTable("limit_stops", {
+  instanceId: text("instance_id").primaryKey(),
+  accountId: text("account_id"),
+  at: timestamp("at").notNull(),
+});
+
+/**
  * What a move ended with a session's process (core `MoveEnded`), from its
  * machine's answer until the session is told on its new account (server.ts
  * `tellEndedByMove`, at its next launch): a hub restart in between keeps it.
