@@ -27,6 +27,7 @@ enum AskEnd {
         case .app: name.map { "from \($0)" } ?? "from the app"
         case .session: name.map { "by \($0)" } ?? "by another session"
         case .harness: "in \(harness)"
+        case .fullSend: "by Full Send"
         case .unrecognized: nil
         }
         let said = [word, place].compactMap(\.self).joined(separator: " ")

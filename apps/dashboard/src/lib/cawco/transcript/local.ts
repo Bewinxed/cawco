@@ -100,6 +100,7 @@ export function answeredNote(
     app: answer.name ? `from ${answer.name}` : "from the app",
     session: answer.name ? `by ${answer.name}` : "by another session",
     harness: `in ${harness}`,
+    fullSend: "by Full Send",
   }[answer.via];
   return {
     id: newId(),

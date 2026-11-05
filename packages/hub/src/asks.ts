@@ -45,6 +45,11 @@
  * SEND"): its write still needs its `reason`, then runs at once, approved by
  * Full Send, with the same record an approved ask leaves in the hub's log,
  * saying Full Send approved it. Nothing is recorded, so no screen holds it.
+ * The mode is read from the session's row as the call is decided, never
+ * from a row its caller read earlier, and an approval the session had open
+ * as it entered Full Send is approved by Full Send then ({@link
+ * fullSendFiled}), so nothing of a session in Full Send waits on the
+ * person, however recently the mode was set.
  */
 import type {
   Envelope,
@@ -54,6 +59,7 @@ import type {
   SourceFacts,
   UserAnswers,
 } from "@cawco/core";
+import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import {
   ASK_ORIGIN,
   type AskedPermit,
@@ -127,6 +133,9 @@ const questionResult = (
 
 /** The mode that approves every ask for its session (core `PermissionMode`). */
 const FULL_SEND: PermissionMode = "fullSend";
+
+/** Who answers an approval its session had open as it entered Full Send. */
+const FULL_SEND_ANSWER: AnswerFrom = { via: "fullSend" };
 
 /**
  * Why a write is refused before anyone is asked: an `admin_*_write` with no
@@ -288,16 +297,24 @@ export const createAsks = (deps: AsksDeps) => {
   };
 
   /**
+   * Whether `instanceId` is in Full Send now, as its row reads at this
+   * moment: never a row a caller read before an await, which a mode filed
+   * meanwhile (a mode control's receipt, a relaunch in it) has moved past.
+   */
+  const inFullSend = (instanceId: string): boolean =>
+    deps.instance(instanceId)?.permissionMode === FULL_SEND;
+
+  /**
    * Records `name(input)` from `actor` as the person's ask, with its
    * source's facts, and answers the words its session reads.
    */
-  const record = async (
+  const record = (
     actor: InstanceRow,
     name: string,
     input: Record<string, unknown>,
+    source: SourceFacts | undefined,
     toolUseId?: string
-  ): Promise<string> => {
-    const source = await deps.sourceFacts(name, input);
+  ): string => {
     const ask: AskRecord = {
       id: newAskId(),
       instanceId: actor.id,
@@ -318,6 +335,36 @@ export const createAsks = (deps: AsksDeps) => {
       `[asks] ${actor.id} asks the person to approve ${name} (${ask.id})`
     );
     return askRecordedWords({ id: ask.id, link: askLink(ask) });
+  };
+
+  /**
+   * `name(input)` from `actor`, decided on its session's mode with no await
+   * between that read and the record: undefined when the session is in
+   * Full Send now (approved: the caller runs it), else recorded as the
+   * person's ask, answering the words its session reads. A mode filed
+   * before this step is the one read here; one filed after it finds the
+   * ask open and approves it ({@link fullSendFiled}). So an admin write of
+   * a session in Full Send never waits on the person, however recently the
+   * mode was set and whichever door the call came in by.
+   */
+  const put = async (
+    actor: InstanceRow,
+    name: string,
+    input: Record<string, unknown>,
+    toolUseId?: string
+  ): Promise<string | undefined> => {
+    const source = inFullSend(actor.id)
+      ? undefined
+      : await deps.sourceFacts(name, input);
+    if (inFullSend(actor.id)) {
+      const why =
+        typeof input.reason === "string" ? `: ${input.reason.trim()}` : "";
+      console.log(
+        `[asks] ${actor.id} runs ${name}, approved by Full Send${why}`
+      );
+      return;
+    }
+    return record(actor, name, input, source, toolUseId);
   };
 
   /**
@@ -371,16 +418,60 @@ export const createAsks = (deps: AsksDeps) => {
     const { tool, input } = asked;
     let said: string;
     try {
-      const recorded = await record(
-        asker,
-        tool,
-        await deps.bind(asker, tool, input)
-      );
-      said = `CawCo has asked the person again for what it holds now, so don't call ${tool} again for it. ${recorded}`;
+      const bound = await deps.bind(asker, tool, input);
+      const recorded = await put(asker, tool, bound);
+      said =
+        recorded === undefined
+          ? `Full Send approved it again for what it holds now and the hub ran it, so don't call ${tool} again for it. It said:\n\n${await deps.run(tool, bound, asker)}`
+          : `CawCo has asked the person again for what it holds now, so don't call ${tool} again for it. ${recorded}`;
     } catch (error) {
       said = `It can't be asked again: ${error instanceof Error ? error.message : String(error)}`;
     }
     deps.tell(ask.instanceId, said, ASK_ORIGIN);
+  };
+
+  /**
+   * An answer to the hub's own ask `id`: taken once, off every screen, then
+   * carried out. Throws when it was answered or withdrawn already; false
+   * when `id` is no ask the hub owns.
+   */
+  const take = (
+    id: string,
+    result: PermissionResult,
+    from: AnswerFrom
+  ): boolean => {
+    const asked = deps.asks.get(id)?.asked;
+    if (!asked) {
+      return false;
+    }
+    let kept: AskResult;
+    if (asked.kind === "question") {
+      kept = questionResult(asked, result);
+    } else if (result.behavior === "allow") {
+      kept = { behavior: "allow" };
+    } else {
+      kept = { behavior: "deny", message: result.message };
+    }
+    const taken = deps.asks.answer(id, {
+      at: Date.now(),
+      by: { ...from, behavior: result.behavior },
+      result: kept,
+    });
+    if (!taken) {
+      return false;
+    }
+    if (taken.kind === "closed") {
+      throw new Error(askClosedWords(taken.ask));
+    }
+    deps.settle(id, { answer: { ...from, behavior: result.behavior } });
+    // A question runs nothing, nor does a permit, whose session makes the
+    // call itself: either is told the answer.
+    if (taken.ask.asked.kind === "approve") {
+      detach(carryOut(taken.ask, taken.ask.asked), `ask ${id}`);
+    } else {
+      tellAnswered(taken.ask);
+    }
+    return true;
   };
 
   /** An open ask withdrawn by the hub, and taken off every screen; the session is not told. */
@@ -411,15 +502,7 @@ export const createAsks = (deps: AsksDeps) => {
       if (refusal) {
         throw new Error(refusal);
       }
-      if (actor.permissionMode === FULL_SEND) {
-        const why =
-          typeof input.reason === "string" ? `: ${input.reason.trim()}` : "";
-        console.log(
-          `[asks] ${actor.id} runs ${name}, approved by Full Send${why}`
-        );
-        return;
-      }
-      return await record(actor, name, input, toolUseId);
+      return await put(actor, name, input, toolUseId);
     },
 
     /**
@@ -428,38 +511,40 @@ export const createAsks = (deps: AsksDeps) => {
      * withdrawn already; false for every other ask.
      */
     answer(id: string, result: PermissionResult, from: AnswerFrom): boolean {
-      const asked = deps.asks.get(id)?.asked;
-      if (!asked) {
-        return false;
+      return take(id, result, from);
+    },
+
+    /**
+     * `instanceId`'s permission mode was filed (a mode control's receipt,
+     * its harness's own word, a start or relaunch in it): when its row reads
+     * Full Send, every approval it has open is approved by Full Send and
+     * carried out, as one it asks from now on runs at once ({@link put}). A
+     * question stays the person's, and so does a permit for one.
+     */
+    fullSendFiled(instanceId: string): void {
+      if (!inFullSend(instanceId)) {
+        return;
       }
-      let kept: AskResult;
-      if (asked.kind === "question") {
-        kept = questionResult(asked, result);
-      } else if (result.behavior === "allow") {
-        kept = { behavior: "allow" };
-      } else {
-        kept = { behavior: "deny", message: result.message };
+      for (const ask of deps.asks.openOf(instanceId)) {
+        const { asked } = ask;
+        if (
+          asked.kind === "question" ||
+          (asked.kind === "permit" && asked.tool === ASK_USER_QUESTION)
+        ) {
+          continue;
+        }
+        console.log(
+          `[asks] ${instanceId} is in Full Send: its open ${asked.tool} (${ask.id}) is approved by Full Send`
+        );
+        try {
+          take(ask.id, { behavior: "allow" }, FULL_SEND_ANSWER);
+        } catch (error) {
+          // Answered by the person in the same moment: theirs stands.
+          console.log(
+            `[asks] ${ask.id} was not approved by Full Send: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
       }
-      const taken = deps.asks.answer(id, {
-        at: Date.now(),
-        by: { ...from, behavior: result.behavior },
-        result: kept,
-      });
-      if (!taken) {
-        return false;
-      }
-      if (taken.kind === "closed") {
-        throw new Error(askClosedWords(taken.ask));
-      }
-      deps.settle(id, { answer: { ...from, behavior: result.behavior } });
-      // A question runs nothing, nor does a permit, whose session makes the
-      // call itself: either is told the answer.
-      if (taken.ask.asked.kind === "approve") {
-        detach(carryOut(taken.ask, taken.ask.asked), `ask ${id}`);
-      } else {
-        tellAnswered(taken.ask);
-      }
-      return true;
     },
 
     /**

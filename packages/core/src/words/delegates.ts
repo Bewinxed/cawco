@@ -95,6 +95,8 @@ export const delegateWaitWords = {
   /** Who answered, by where: the person on a named device, the person, another session. */
   thePersonOn: (device: string) => `the person, on ${device},`,
   thePerson: "the person",
+  /** An approval its delegate had open as it entered Full Send. */
+  fullSend: "Full Send",
   harness: "it was answered in its session's own interface.",
   tookOver:
     "the person took over its browser. Its call waits until they hand it back; you hear here when they do.",

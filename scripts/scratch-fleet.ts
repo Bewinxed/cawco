@@ -62,6 +62,7 @@ import {
   signal as signalPid,
   spawnedPid,
 } from "../packages/core/src/signal";
+import type { CommandKind } from "../packages/core/src/stream";
 import { DAY_MS } from "../packages/core/src/time";
 import { unhandled } from "../packages/core/src/unhandled";
 import { startedPath } from "../packages/core/src/workspace-needs";
@@ -2559,6 +2560,73 @@ async function standUp(
     }
   };
   /**
+   * A setting switched as the session's card switches it: the command its
+   * kind names (`set-permission-mode`, `set-model`, `set-effort`), with the
+   * control payload the dashboard's `wirePayload` builds, on the dashboard
+   * socket. Answers its last ack: `applied`, or `failed` with the reason.
+   */
+  const command = async (
+    instanceId: string,
+    kind: Extract<
+      CommandKind,
+      "set-permission-mode" | "set-model" | "set-effort"
+    >,
+    method: string,
+    args: unknown[],
+    ms = 60_000
+  ): Promise<{ stage: "applied" | "failed"; reason?: string }> => {
+    const ws = await dashboard();
+    const commandId = crypto.randomUUID();
+    const settled = Promise.withResolvers<{
+      stage: "applied" | "failed";
+      reason?: string;
+    }>();
+    const heard = (event: MessageEvent) => {
+      const message = JSON.parse(String(event.data)) as {
+        type?: string;
+        commandId?: string;
+        stage?: string;
+        reason?: string;
+      };
+      if (
+        message.type === "command.ack" &&
+        message.commandId === commandId &&
+        (message.stage === "applied" || message.stage === "failed")
+      ) {
+        settled.resolve({
+          stage: message.stage,
+          ...(message.reason ? { reason: message.reason } : {}),
+        });
+      }
+    };
+    ws.addEventListener("message", heard);
+    ws.send(
+      JSON.stringify({
+        type: "command",
+        commandId,
+        kind,
+        machineId: MACHINE,
+        sessionId: instanceId,
+        payload: { instanceId, requestId: commandId, method, args },
+      })
+    );
+    try {
+      const read = await readWithin(ms, () => settled.promise);
+      switch (read.kind) {
+        case "answered":
+          return read.value;
+        case "unanswered":
+          throw new Error(
+            `${kind}: no applied or failed ack within ${read.after} ms (${read.reason})`
+          );
+        default:
+          unhandled("read", read);
+      }
+    } finally {
+      ws.removeEventListener("message", heard);
+    }
+  };
+  /**
    * A fetch the hub runs after its request has answered (a skill, a plugin,
    * a marketplace read or link): asked with `ask`, resolved with what `pick`
    * reads off the `fleet.fetch` frame that lands it. The socket listens
@@ -3216,6 +3284,7 @@ async function standUp(
     heldProcs,
     api,
     post,
+    command,
     controlAnswer,
     fetched,
     query,

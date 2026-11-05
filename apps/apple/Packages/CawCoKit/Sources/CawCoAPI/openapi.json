@@ -64442,7 +64442,7 @@
           },
           "via": {
             "$ref": "#/components/schemas/AskAnswerVia",
-            "description": "Where it was answered: a dashboard page; the app (a client that is no\npage: the iOS and Mac app); another session; or the harness itself, in\nits own interface."
+            "description": "Where it was answered: a dashboard page; the app (a client that is no\npage: the iOS and Mac app); another session; the harness itself, in\nits own interface; or Full Send, the mode the person put its session\nin, which approves an approval the session had open as it entered it\n(hub asks.ts `fullSendFiled`)."
           }
         },
         "required": [
@@ -65855,6 +65855,7 @@
         "type": "string",
         "enum": [
           "app",
+          "fullSend",
           "harness",
           "page",
           "session"

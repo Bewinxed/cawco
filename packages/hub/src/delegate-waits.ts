@@ -128,6 +128,9 @@ const byOf = (answer: AskAnswer | undefined): string => {
   if (answer?.via === "session" && answer.name) {
     return answer.name;
   }
+  if (answer?.via === "fullSend") {
+    return delegateWaitWords.fullSend;
+  }
   return answer?.name
     ? delegateWaitWords.thePersonOn(answer.name)
     : delegateWaitWords.thePerson;

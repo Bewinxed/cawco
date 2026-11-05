@@ -128,7 +128,7 @@ export type AskedQuestion = z.infer<typeof QUESTION>;
 const ANSWER_BY = z.object({
   behavior: z.enum(["allow", "deny"]).optional(),
   name: z.string().optional(),
-  via: z.enum(["page", "app", "session", "harness"]),
+  via: z.enum(["page", "app", "session", "harness", "fullSend"]),
 }) satisfies z.ZodType<AskAnswer>;
 
 const RESULT = z.discriminatedUnion("behavior", [
@@ -277,6 +277,22 @@ export const askOutcome = (ask: AskRecord): AskOutcome => {
   return ask.carried?.failed === HUB_RESTARTED ? "cut" : "failed";
 };
 
+/**
+ * Who answered an ask, as its answer's message opens: the person, or the
+ * session that answered for them (a delegate's parent, or its project's
+ * conversation), by its title, or Full Send.
+ */
+const answeredBy = (ask: AskRecord): string => {
+  const by = ask.answer?.by;
+  if (by?.via === "fullSend") {
+    return "Full Send";
+  }
+  if (by?.via !== "session") {
+    return "The person";
+  }
+  return by.name ? `Your parent session "${by.name}"` : "Your parent session";
+};
+
 const MARKER = "ask-answered";
 
 /**
@@ -296,11 +312,11 @@ export const askAnsweredText = (ask: AskRecord): string => {
   const { tool } = asked;
   switch (outcome) {
     case "ran":
-      return `${tag}The person approved ${tool}. The hub ran it once with the arguments shown; it said:\n\n${ask.carried?.said ?? ""}`;
+      return `${tag}${answeredBy(ask)} approved ${tool}. The hub ran it once with the arguments shown; it said:\n\n${ask.carried?.said ?? ""}`;
     case "failed":
-      return `${tag}The person approved ${tool}, and it failed when the hub ran it: ${ask.carried?.failed ?? ""}`;
+      return `${tag}${answeredBy(ask)} approved ${tool}, and it failed when the hub ran it: ${ask.carried?.failed ?? ""}`;
     case "cut":
-      return `${tag}The person approved ${tool}, but ${HUB_RESTARTED}. Check whether it took effect before you ask again.`;
+      return `${tag}${answeredBy(ask)} approved ${tool}, but ${HUB_RESTARTED}. Check whether it took effect before you ask again.`;
     case "declined": {
       const reason =
         ask.answer?.result.behavior === "deny"
@@ -316,19 +332,6 @@ export const askAnsweredText = (ask: AskRecord): string => {
     default:
       return outcome satisfies never;
   }
-};
-
-/**
- * Who answered an ask, as its answer's message opens: the person, or the
- * session that answered for them (a delegate's parent, or its project's
- * conversation), by its title.
- */
-const answeredBy = (ask: AskRecord): string => {
-  const by = ask.answer?.by;
-  if (by?.via !== "session") {
-    return "The person";
-  }
-  return by.name ? `Your parent session "${by.name}"` : "Your parent session";
 };
 
 /** The longest input a permit's answer quotes; a longer one is the call in the session's own conversation. */
@@ -451,6 +454,8 @@ const answererWords = (by: AskAnswer): string => {
       return "a session";
     case "harness":
       return "the harness";
+    case "fullSend":
+      return "Full Send";
     default:
       return by.via satisfies never;
   }

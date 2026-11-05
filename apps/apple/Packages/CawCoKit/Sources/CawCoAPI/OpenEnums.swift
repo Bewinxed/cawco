@@ -507,6 +507,7 @@ public enum OpenEnums {
     /// `#/components/schemas/AskAnswerVia`.
     public enum AskAnswerVia: OpenEnum {
         case app
+        case fullSend
         case harness
         case page
         case session
@@ -516,6 +517,7 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "app": self = .app
+            case "fullSend": self = .fullSend
             case "harness": self = .harness
             case "page": self = .page
             case "session": self = .session
@@ -526,6 +528,7 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .app: "app"
+            case .fullSend: "fullSend"
             case .harness: "harness"
             case .page: "page"
             case .session: "session"
@@ -537,7 +540,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.app, .harness, .page, .session]
+        public static let allCases: [Self] = [.app, .fullSend, .harness, .page, .session]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

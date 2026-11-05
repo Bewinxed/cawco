@@ -700,10 +700,12 @@ export interface AskAnswer {
   name?: string;
   /**
    * Where it was answered: a dashboard page; the app (a client that is no
-   * page: the iOS and Mac app); another session; or the harness itself, in
-   * its own interface.
+   * page: the iOS and Mac app); another session; the harness itself, in
+   * its own interface; or Full Send, the mode the person put its session
+   * in, which approves an approval the session had open as it entered it
+   * (hub asks.ts `fullSendFiled`).
    */
-  via: "page" | "app" | "session" | "harness";
+  via: "page" | "app" | "session" | "harness" | "fullSend";
 }
 
 export interface PermissionSettledFrame {

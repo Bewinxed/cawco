@@ -8609,7 +8609,21 @@ export const createServer = (
       return false;
     }
     db.patchInstance(instanceId, patch);
+    if (patch.permissionMode) {
+      hubAsks.fullSendFiled(instanceId);
+    }
     return true;
+  };
+
+  /**
+   * A session's row opened (a start, a relaunch, a revive) in the mode its
+   * start settled ({@link settleMode}): one that opens in Full Send has the
+   * approvals it held open approved by it (asks.ts `fullSendFiled`), as a
+   * mode its harness files does ({@link noteSessionSettings}).
+   */
+  const openInstance = (row: Parameters<DbShape["openInstance"]>[0]): void => {
+    db.openInstance(row);
+    hubAsks.fullSendFiled(row.id);
   };
 
   /**
@@ -8773,7 +8787,7 @@ export const createServer = (
     if (plan.kind === "fresh") {
       noteFreshStart(row);
     }
-    db.openInstance({
+    openInstance({
       id: instanceId,
       machineId,
       // Its own launch directory (revivePayloadOf): a revive never moves it.
@@ -16806,7 +16820,7 @@ export const createServer = (
     // A start under an id that ran before: what it was handed and never read
     // its machine hands back as it replaces the process ({@link takeBack}).
     forgetPending(payload.instanceId, UNREAD.restarted, false, "all");
-    db.openInstance({
+    openInstance({
       id: payload.instanceId,
       machineId,
       cwd: payload.cwd,
@@ -16989,7 +17003,7 @@ export const createServer = (
     // A start under an id that ran before: what it was handed and never read
     // its machine hands back as it replaces the process ({@link takeBack}).
     forgetPending(payload.instanceId, UNREAD.restarted, false, "all");
-    db.openInstance({
+    openInstance({
       id: payload.instanceId,
       machineId,
       cwd: payload.cwd,
@@ -19631,7 +19645,7 @@ export const createServer = (
       return;
     }
     const { payload } = settled;
-    db.openInstance({
+    openInstance({
       id: row.id,
       machineId: row.machineId,
       cwd: payload.cwd,
@@ -31637,7 +31651,7 @@ export const createServer = (
     // as every revive hands it the row's (`revivePayloadOf`).
     const projectId = before?.projectId ?? start.projectId;
     // Brought back by the operator: nothing of the stop is left to carry.
-    db.openInstance({
+    openInstance({
       id: message.instanceId,
       machineId: message.machineId,
       cwd: payload.cwd,
