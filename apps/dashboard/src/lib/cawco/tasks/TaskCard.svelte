@@ -1,7 +1,9 @@
 <script lang="ts">
   import { waitsOnPick } from "@cawco/core/task-views";
+  import { dragWords } from "@cawco/core/words/drag";
   import { externalItemWords } from "@cawco/core/words/external-items";
   import { projectWords } from "@cawco/core/words/project";
+  import type { Attachment } from "svelte/attachments";
   import { land, waiting } from "#lib/cawco/motion/share.svelte.js";
   import { flagsOf, type TaskSummary } from "#lib/cawco/project-tasks.js";
   import { isRetry } from "#lib/cawco/tasks/retry.js";
@@ -34,7 +36,6 @@
     IconNeedsYou,
     IconWarningTriangle,
   } from "#lib/icons.js";
-  import { dragTask } from "./board-dnd.svelte.js";
   import { actionsOf, asksOf, taskProject } from "./needs.svelte";
   import TodoCount from "./TodoCount.svelte";
 
@@ -43,7 +44,7 @@
     href,
     onopen,
     date = null,
-    movable = true,
+    grip,
     current = false,
   }: {
     /** It is the task open in the sheet beside the board. */
@@ -55,10 +56,11 @@
     /** Opens it in place; left out, the card is a plain link. */
     onopen?: (id: string) => void;
     /**
-     * A drag carries it to another column (the board). Off where a drag is
-     * the surface's own (the canvas pans).
+     * On a board, where the keys take it to carry it to another column
+     * (TaskColumn's sortable handle): Space picks it up, Enter still opens
+     * it.
      */
-    movable?: boolean;
+    grip?: Attachment<HTMLElement>;
   } = $props();
 
   const flags = $derived(flagsOf(task));
@@ -99,15 +101,15 @@
 <a
   aria-current={current ? "true" : undefined}
   data-task-card
-  class="press-tint focus-inset flex flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-tile transition-[background-color,opacity] duration-(--dur-control) ease-out data-dragging:opacity-40 not-group-data-picked/task:not-aria-current:hover:bg-surface-hover aria-current:bg-selected-bg not-data-dragging:group-data-moving/task:opacity-60 group-data-picked/task:bg-selected-bg"
+  class="press-tint focus-inset flex flex-col gap-space-1 rounded-sm bg-surface-raised px-space-3 pt-space-2 pb-space-3 text-ink-strong no-underline shadow-tile transition-[background-color,opacity] duration-(--dur-control) ease-out not-group-data-picked/task:not-aria-current:hover:bg-surface-hover aria-current:bg-selected-bg group-data-moving/task:opacity-60 group-data-picked/task:bg-selected-bg"
   data-flip-enter={flying ? "own" : undefined}
   data-share={key}
   data-task={task.id}
   {href}
   onclick={open}
-  {@attach movable
-    ? dragTask(() => ({ taskId: task.id, from: task.stage }))
-    : undefined}
+  aria-roledescription={grip ? dragWords.movableLink : undefined}
+  role={grip ? "link" : undefined}
+  {@attach grip}
   {@attach land(() => key, { uniform: true })}
 >
   <span

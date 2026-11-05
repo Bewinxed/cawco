@@ -53,12 +53,7 @@
     position={ends.sideIn}
     type="target"
   />
-  <TaskCard
-    href={node.href}
-    movable={false}
-    onopen={node.onopen}
-    task={node.task}
-  />
+  <TaskCard href={node.href} onopen={node.onopen} task={node.task} />
   <Handle
     id="flow-out"
     class="pointer-events-none size-px min-h-0 min-w-0 border-current border-none bg-transparent"

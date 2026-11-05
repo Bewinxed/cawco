@@ -1,9 +1,11 @@
 <script lang="ts">
   /**
    * One stage's column: its name and count, a quiet word for its kind under
-   * them, and its cards in order. The board draws one per stage and takes
-   * drops on it (`ondrop`); a view's StageColumn draws the same column with
-   * nothing to drop. A `you` column stands on the same band as the rest:
+   * them, and its cards in order. The board draws one per stage (`stage`),
+   * inside its DragProvider: each card is a thing the board carries
+   * between columns and the column a place it lands (drag/Sortable,
+   * drag/Droppable). A view's StageColumn and the Archived rail draw the
+   * same column with nothing to carry. A `you` column stands on the same band as the rest:
    * its head carries the Needs-you glyph and its kind word the attn ink,
    * so the status reads glyph, then word, then hue, and coral stays the
    * action's (DESIGN.md, The Coral Is Where You Act Rule). A stage with a
@@ -16,8 +18,11 @@
   import type { StageColor, StageIcon, StageKind } from "@cawco/core/views";
   import { setupPageWords } from "@cawco/core/words/onboarding";
   import { type Snippet, tick } from "svelte";
-  import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
+  import Droppable, { type DropPlace } from "#lib/cawco/drag/Droppable.svelte";
+  import Sortable, {
+    type SortableThing,
+  } from "#lib/cawco/drag/Sortable.svelte";
   import {
     reflow,
     reflowsFrom,
@@ -43,8 +48,7 @@
     dateOf = () => null,
     onopen,
     closed = false,
-    over = false,
-    drop,
+    stage,
     foot,
     fresh = null,
     moving,
@@ -75,12 +79,10 @@
     hrefOf: (id: string) => string;
     dateOf?: (id: string) => string | null;
     onopen: (id: string) => void;
-    /** A card in the air may not come here: the column steps back. */
+    /** A card in the air may not come here: the column steps back, and takes nothing. */
     closed?: boolean;
-    /** A drop would land here. */
-    over?: boolean;
-    /** Makes the column a drop target. */
-    drop?: Attachment<HTMLElement>;
+    /** The stage it is on a board: its cards are carried between columns and it takes them. */
+    stage?: string;
     /** What stands under the cards: the board's new task. */
     foot?: Snippet;
     /** The card just added from the board: marked new for a moment (`row-flash`). */
@@ -128,124 +130,164 @@
   });
 </script>
 
-<section
-  data-slot="column"
-  aria-label="{label}, {count} {count === 1 ? 'task' : 'tasks'}"
-  class="group/col flex min-h-0 flex-col max-phone:snap-start gap-space-1 rounded-lg bg-surface-band p-space-1 transition-[background-color,opacity] duration-(--dur-control) ease-out data-closed:opacity-50 data-over:bg-surface-hover inset-ring inset-ring-border-hairline"
-  data-closed={closed ? "" : undefined}
-  data-kind={kind ?? "none"}
-  data-over={over ? "" : undefined}
-  data-picking={picking ? "" : undefined}
-  {@attach drop}
-  {@attach land(() => `stage:${label}`)}
->
-  <header data-slot="head" class="flex flex-col gap-0 px-space-2 py-space-1">
-    <span class="mark-line flex min-h-c-btn-h-xs items-center gap-space-2">
-      {#if kind === "you"}
-        <IconNeedsYou
-          aria-hidden="true"
-          class="-me-space-1 size-icon-md flex-none text-status-attn-glyph"
-        />
-      {:else if kind}
-        {@const mark = markOf({ kind, icon, color })}
-        <span
-          aria-hidden="true"
-          class="-me-space-1 grid flex-none place-items-center text-(--stage-hue)"
-          data-box
-          data-slot="stage-mark"
-          style:--stage-hue={mark.hue}><mark.glyph class="size-icon-md" /></span
-        >
-      {/if}
-      <h3
-        data-slot="name"
-        class="min-w-0 overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong"
-      >
-        {label}
-      </h3>
-      <!-- Drawn only above 0 (DESIGN.md, The Earned Count Rule); the
-           section's name says the number whatever it is. -->
-      {#if count > 0}
-        <span
-          data-num
-          data-slot="count"
-          class="num ms-auto type-meta text-ink-subtle"
-          ><MorphText text={String(count)} /></span
-        >
-      {/if}
-    </span>
-    <span
-      data-slot="kind"
-      class="flex-none type-meta whitespace-nowrap text-ink-subtle group-kind-you/col:text-status-attn-ink"
-      >{kindWord}</span
-    >
-  </header>
-  <ol
-    data-slot="cards"
-    class={[
-      !phone.current && "kit-edge-fade-block",
-      "m-0 flex min-h-c-btn-h-lg flex-auto list-none flex-col gap-space-1 overflow-y-auto p-0 max-phone:flex-none max-phone:overflow-visible",
-    ]}
-    bind:this={list}
-    {@attach reflow()}
+{#snippet row(task: TaskSummary, thing: SortableThing | null)}
+  {@const fault = refused?.(task.id) ?? null}
+  {@const on = picked?.(task.id) ?? false}
+  <li
+    class="group/card group/task data-pickable:relative data-new:[&>[data-task-card]]:animate-row-flash"
+    aria-busy={moving?.(task.id) || undefined}
+    data-archived={archived || undefined}
+    data-flip={thing?.isDragSource ? undefined : ""}
+    data-moving={moving?.(task.id) || undefined}
+    data-new={fresh === task.id || undefined}
+    data-pickable={onpick ? "" : undefined}
+    data-picked={on || undefined}
+    {@attach thing?.attach}
   >
-    {#each drawn as task (task.id)}
-      {@const fault = refused?.(task.id) ?? null}
-      {@const on = picked?.(task.id) ?? false}
-      <li
-        class="group/card group/task data-pickable:relative data-new:[&>[data-task-card]]:animate-row-flash"
-        aria-busy={moving?.(task.id) || undefined}
-        data-archived={archived || undefined}
-        data-flip
-        data-moving={moving?.(task.id) || undefined}
-        data-new={fresh === task.id || undefined}
-        data-pickable={onpick ? "" : undefined}
-        data-picked={on || undefined}
+    <TaskCard
+      current={task.id === current}
+      grip={thing?.attachHandle}
+      date={dateOf(task.id)}
+      href={hrefOf(task.id)}
+      {onopen}
+      {task}
+    />
+    {#if onpick}
+      <!-- The tick stands beside the card, not in it: the card is a link. -->
+      <Checkbox
+        data-task-column-pick
+        aria-label="Pick {task.id} {task.title}"
+        checked={on}
+        class="absolute end-space-3 top-(--pick-top)"
+        onclick={(event: MouseEvent) => {
+          event.preventDefault();
+          onpick(task.id, !on, event.shiftKey);
+        }}
+        reveal="card-pick"
+        style="--pick-top: calc(var(--space-2) + (var(--c-badge-h) - var(--icon-md)) / 2)"
+      />
+    {/if}
+    {#if moving?.(task.id)}
+      <span
+        data-slot="moving"
+        class="mark-line flex items-center gap-space-1 px-space-2 pt-space-1 pb-0 type-meta text-ink-muted"
+        ><Spinner aria-hidden="true" box="small" /><span>Moving…</span></span
       >
-        <TaskCard
-          current={task.id === current}
-          date={dateOf(task.id)}
-          href={hrefOf(task.id)}
-          {onopen}
-          {task}
-        />
-        {#if onpick}
-          <!-- The tick stands beside the card, not in it: the card is a link. -->
-          <Checkbox
-            data-task-column-pick
-            aria-label="Pick {task.id} {task.title}"
-            checked={on}
-            class="absolute end-space-3 top-(--pick-top)"
-            onclick={(event: MouseEvent) => {
-              event.preventDefault();
-              onpick(task.id, !on, event.shiftKey);
-            }}
-            reveal="card-pick"
-            style="--pick-top: calc(var(--space-2) + (var(--c-badge-h) - var(--icon-md)) / 2)"
+    {/if}
+    <RowFault
+      again={fault?.again}
+      end="var(--space-2)"
+      indent="var(--space-2)"
+      reason={fault?.reason}
+    />
+  </li>
+{/snippet}
+
+{#snippet column(place: DropPlace | null)}
+  <section
+    data-slot="column"
+    aria-label="{label}, {count} {count === 1 ? 'task' : 'tasks'}"
+    class="group/col flex min-h-0 flex-col max-phone:snap-start gap-space-1 rounded-lg bg-surface-band p-space-1 transition-[opacity] duration-(--dur-control) ease-out data-closed:opacity-50 inset-ring inset-ring-border-hairline"
+    data-closed={closed ? "" : undefined}
+    data-kind={kind ?? "none"}
+    data-picking={picking ? "" : undefined}
+    {@attach place?.attach}
+    {@attach land(() => `stage:${label}`)}
+  >
+    <header data-slot="head" class="flex flex-col gap-0 px-space-2 py-space-1">
+      <span class="mark-line flex min-h-c-btn-h-xs items-center gap-space-2">
+        {#if kind === "you"}
+          <IconNeedsYou
+            aria-hidden="true"
+            class="-me-space-1 size-icon-md flex-none text-status-attn-glyph"
           />
-        {/if}
-        {#if moving?.(task.id)}
+        {:else if kind}
+          {@const mark = markOf({ kind, icon, color })}
           <span
-            data-slot="moving"
-            class="mark-line flex items-center gap-space-1 px-space-2 pt-space-1 pb-0 type-meta text-ink-muted"
-            ><Spinner aria-hidden="true" box="small" /><span>Moving…</span
-            ></span
+            aria-hidden="true"
+            class="-me-space-1 grid flex-none place-items-center text-(--stage-hue)"
+            data-box
+            data-slot="stage-mark"
+            style:--stage-hue={mark.hue}
+            ><mark.glyph class="size-icon-md" /></span
           >
         {/if}
-        <RowFault
-          again={fault?.again}
-          end="var(--space-2)"
-          indent="var(--space-2)"
-          reason={fault?.reason}
-        />
-      </li>
-    {/each}
-  </ol>
-  {#if foot}
-    <!-- At the column's foot at every width: on a desk the list fills the
+        <h3
+          data-slot="name"
+          class="min-w-0 overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong"
+        >
+          {label}
+        </h3>
+        <!-- Drawn only above 0 (DESIGN.md, The Earned Count Rule); the
+           section's name says the number whatever it is. -->
+        {#if count > 0}
+          <span
+            data-num
+            data-slot="count"
+            class="num ms-auto type-meta text-ink-subtle"
+            ><MorphText text={String(count)} /></span
+          >
+        {/if}
+      </span>
+      <span
+        data-slot="kind"
+        class="flex-none type-meta whitespace-nowrap text-ink-subtle group-kind-you/col:text-status-attn-ink"
+        >{kindWord}</span
+      >
+    </header>
+    <ol
+      data-slot="cards"
+      class={[
+        !phone.current && "kit-edge-fade-block",
+        "m-0 flex min-h-c-btn-h-lg flex-auto list-none flex-col gap-space-1 overflow-y-auto p-0 max-phone:flex-none max-phone:overflow-visible",
+      ]}
+      bind:this={list}
+      {@attach reflow()}
+    >
+      {#each drawn as task, index (task.id)}
+        {#if stage !== undefined}
+          <Sortable
+            accept="task"
+            data={{ stage }}
+            group={stage}
+            id={task.id}
+            {index}
+            label={task.title}
+            of={count}
+            type="task"
+          >
+            {#snippet children(thing)}
+              {@render row(task, thing)}
+            {/snippet}
+          </Sortable>
+        {:else}
+          {@render row(task, null)}
+        {/if}
+      {/each}
+    </ol>
+    {#if foot}
+      <!-- At the column's foot at every width: on a desk the list fills the
          column above it; on a phone the list is as tall as its cards, and
          the foot still stands at the column's end, not under its head. -->
-    <div data-slot="foot" class="mt-auto flex-none *:w-full">
-      {@render foot()}
-    </div>
-  {/if}
-</section>
+      <div data-slot="foot" class="mt-auto flex-none *:w-full">
+        {@render foot()}
+      </div>
+    {/if}
+  </section>
+{/snippet}
+
+{#if stage !== undefined}
+  <Droppable
+    accept="task"
+    data={{ stage }}
+    disabled={closed}
+    id="column:{stage}"
+    {label}
+  >
+    {#snippet children(place)}
+      {@render column(place)}
+    {/snippet}
+  </Droppable>
+{:else}
+  {@render column(null)}
+{/if}

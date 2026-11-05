@@ -7594,6 +7594,21 @@
       "$type": "number",
       "$value": 0.92
     },
+    "drag-lift-scale": {
+      "$type": "number",
+      "$value": 1.03,
+      "$description": "How much bigger a thing picked up by a drag (a stage, a card, a block, a row, a tab) stands as it lifts off its place, over --dur-pick-up with shadow-overlay under it; it settles back to 1 as it lands (drag/lift.ts)."
+    },
+    "drag-tilt-max": {
+      "$type": "number",
+      "$value": 3,
+      "$description": "The most a thing in the air leans, in degrees, as the hand carries it sideways: it leans into the travel and springs upright when the hand slows (drag/lift.ts)."
+    },
+    "drag-tilt-gain": {
+      "$type": "number",
+      "$value": 2.5,
+      "$description": "Degrees of lean per px/ms the hand carries a thing sideways, up to --drag-tilt-max (drag/lift.ts)."
+    },
     "deck-step": {
       "$type": "dimension",
       "$value": {

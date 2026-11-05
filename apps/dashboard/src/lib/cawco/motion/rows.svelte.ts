@@ -1607,7 +1607,7 @@ function trackAnimation(
  * place is re-read as it now stands, so what that owner removed and added
  * is not taken for a change to animate.
  */
-export const REFLOW_REREAD = "reflow:reread";
+const REFLOW_REREAD = "reflow:reread";
 
 /**
  * The `reflow` container at `node`, if it is one, and every one around it,
