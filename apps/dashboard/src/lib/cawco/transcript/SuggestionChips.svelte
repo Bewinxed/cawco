@@ -201,9 +201,10 @@
 </script>
 
 <!-- Out of flow, standing on the composer's top edge, one line tall whatever
-     it holds: every transcript keeps this row clear at its foot (app.css
-     `--c-suggest-room`, the row and the step under it), so chips coming,
-     going or changing never move the transcript. Past its width the line
+     it holds (app.css `--c-suggest-room`, the row and the step under it): a
+     layer over the transcript's foot, which keeps no room for it, so chips
+     coming, going or changing never move the transcript (the composer's
+     surface brief, The Composer Layer Rule). Past its width the line
      scrolls sideways. The row takes no pointer of its own; what is in it
      does. -->
 <!-- The hint and a failure line are bare text over the transcript, so a row
@@ -218,8 +219,7 @@
   class="absolute inset-x-0 bottom-(--suggest-bottom) flex flex-col justify-end h-c-suggest-row pt-space-4 pointer-events-none data-filled:bg-(image:--suggest-lift)"
 >
   <!-- Drawn only with something in it: chips, the shimmer of an answer on
-       its way, or a failure. Its row is kept whether it is drawn or not
-       (app.css `--c-suggest-room`), so coming and going moves nothing. -->
+       its way, or a failure; laid out whether it is drawn or not. -->
   {#if shown.length > 0 || slow || failure}
     <fieldset
       data-slot="track"

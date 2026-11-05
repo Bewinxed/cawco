@@ -3293,9 +3293,9 @@
     </div>
   {/if}
   <!-- The row standing on the composer, outside its box: the delegate
-       tray's fixed row, and the suggestion chips standing on it (out of
-       flow). Both rows are kept clear at every transcript's foot (app.css
-       `--c-tray-row`, `--c-suggest-room`). An offer stands on top of both. -->
+       tray's fixed row, kept clear at every transcript's foot (app.css
+       `--c-tray-row`), and the suggestion chips standing on it (out of
+       flow), over the transcript's foot. An offer stands on top of both. -->
   <!-- The delegate tray's row, on the composer's width and left edge. It is
        the positioned box the suggestion chips stand on. -->
   <div

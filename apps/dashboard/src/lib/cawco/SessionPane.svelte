@@ -96,7 +96,7 @@
   import { cawOf } from "./session-status";
   import SideSplit from "./side/SideSplit.svelte";
   import { setSkills, skillsOf } from "./skill-chips";
-  import { clip, type SuggestCandidate, suggestions } from "./suggest.svelte";
+  import { clip, type SuggestCandidate } from "./suggest.svelte";
   import { besideOf, putAway, standBeside } from "./tasks/beside.svelte";
   import TaskPane from "./tasks/TaskPane.svelte";
   import Composer, { type ComposerAsk } from "./transcript/Composer.svelte";
@@ -1123,13 +1123,14 @@
 
   /**
    * The room this pane's transcript keeps clear at its foot for the
-   * composer standing over it: the composer's one-line box, the delegate
-   * tray's row on it (kept whether or not a chip is in it), and the
-   * suggestion row on that where the surface suggests (app.css
-   * `--c-composer-panel`, `--c-tray-row`, `--c-suggest-room`). Everything
-   * else the composer holds — a longer draft, attachments, a failed send's
-   * line, the ask it grows into — stands over the transcript's foot and moves no
-   * row. A conversation that cannot be written to has no composer.
+   * composer standing over it: the composer's one-line box and the delegate
+   * tray's row on it, kept whether or not a chip is in it (app.css
+   * `--c-composer-panel`, `--c-tray-row`). Everything else the composer
+   * holds — a longer draft, attachments, the suggestion chips while one is
+   * typed, a failed send's line, the ask it grows into — stands over the
+   * transcript's foot and moves no row: the suggestion row's room kept while
+   * it stood empty was a 59px blank band under the last row. A conversation
+   * that cannot be written to has no composer.
    *
    * CSS, from this conversation's own state, not a measurement: it holds
    * while the pane is off screen and is the same when it comes on screen.
@@ -1139,9 +1140,7 @@
    * 35px as a switch's glide ended, when two tabs' trays differed).
    */
   const composerRoom = $derived(
-    writable
-      ? `var(--c-composer-panel) + var(--c-tray-row)${suggestions.enabled ? " + var(--c-suggest-room)" : ""}`
-      : "0px"
+    writable ? "var(--c-composer-panel) + var(--c-tray-row)" : "0px"
   );
   /**
    * Docked, the composer has a place of its own at the pane's foot and the

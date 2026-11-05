@@ -59,7 +59,7 @@
   data-slot="tx-columns"
   data-skeleton
   aria-busy="true"
-  style:--sk-foot="max(calc(var(--space-8) * 3), var(--composer-clearance, 0px))"
+  style:--sk-foot="var(--composer-clearance, calc(var(--space-8) * 3))"
   style:--sk-line-my="calc((1lh - var(--c-skeleton-x-height)) / 2)"
   class="relative flex flex-col justify-end flex-auto min-h-0 overflow-hidden pb-(--sk-foot) ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 tx-columns"
   role="status"
