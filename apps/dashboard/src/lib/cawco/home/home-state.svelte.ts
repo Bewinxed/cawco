@@ -579,6 +579,8 @@ interface TaskItem {
 interface ArtifactItem {
   artifactId: string;
   artifactKind: ArtifactKind;
+  /** Its title, as its panel and Files name it. */
+  artifactTitle: string;
   /** Where the session runs: its mark's hue, the seed every list uses. */
   cwd: string;
   /** Opens its session with the artifact in its panel at `stop`. */
@@ -590,8 +592,6 @@ interface ArtifactItem {
   /** Its machine: the name the fleet gives it and the daemon's `platform-arch` fingerprint (OsMark). */
   machine: { name: string; os: string };
   machineId: string;
-  /** Its name, as its panel and Files name it. */
-  name: string;
   /** The notice id its Not now acknowledges. */
   notNow: string;
   /** A decision page: its Send is its own, at its foot, and the row stands none. */
@@ -1512,7 +1512,7 @@ class Home {
         machineId: need.machineId,
         cwd: row?.cwd ?? "",
         title: need.ask,
-        name: need.name,
+        artifactTitle: need.title,
         pending: need.pending,
         stop: need.stop,
         unsent: need.unsent,

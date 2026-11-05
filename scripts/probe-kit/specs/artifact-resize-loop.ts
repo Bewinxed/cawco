@@ -1504,6 +1504,7 @@ export const made = async (
       response_format: "detailed",
       kind: "page",
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge the chip wraps: pin anything that reads wrong on a narrow pane",
       name,
       html: PAGE,
@@ -2012,6 +2013,7 @@ export const runStill = async (
     {
       kind: "preview",
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge the frame scaled to the window",
       name: `still-${leg.engine}`,
       dir: folder,

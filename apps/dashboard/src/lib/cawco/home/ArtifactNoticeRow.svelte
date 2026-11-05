@@ -56,7 +56,7 @@
   };
   const Kind = $derived(GLYPHS[notice.artifactKind]);
   const words = $derived(
-    notice.parts.map((part) => noticePartWords(part, notice.name)).join(" · ")
+    notice.parts.map((part) => noticePartWords(part, notice.title)).join(" · ")
   );
   /** Its words chosen: the panel closes, and it opens in its session's panel at its stop. */
   function opened(): void {
@@ -76,7 +76,7 @@
 </script>
 
 <NoticeRow
-  dismissLabel={artifactWords.dismissNotice(notice.name)}
+  dismissLabel={artifactWords.dismissNotice(notice.title)}
   label={words}
   ondismiss={() => ondismiss(notice.parts.map((part) => part.id))}
 >

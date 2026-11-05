@@ -1145,6 +1145,7 @@ const busyDecisionChecks = async (
   const made = await callIn(decider, CREATE, {
     kind: "page",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Pick how a delegate works in any folder",
     name: BUSY_PAGE,
     program: BUSY_PROGRAM,
@@ -1383,6 +1384,7 @@ const endedWriterChecks = async (
   const made = await callIn(writer, CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: WRITER_PAGE,
     html: WRITER_HTML,
@@ -1640,6 +1642,7 @@ const run = async (kit: Kit) => {
   const made = await call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: NAME,
     html,

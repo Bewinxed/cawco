@@ -4355,7 +4355,7 @@ export const createWorkItems = ({
         409,
         refused(
           handle(workspace.id),
-          waiting.map((row) => artifactLink(row.id, row.name))
+          waiting.map((row) => artifactLink(row.id, row.title))
         )
       );
     }
@@ -10679,20 +10679,20 @@ export const createWorkItems = ({
 
     /**
      * The artifacts workspace `id` serves ({@link servedFrom}), each once by
-     * its artifact's own id and name (a held next version by the artifact
+     * its artifact's own id and title (a held next version by the artifact
      * it is held for): what holds its retirement, as `stop_delegate` names
      * it. Empty for a workspace the hub does not hold.
      */
-    serving: (id: string): { id: string; name: string }[] => {
+    serving: (id: string): { id: string; title: string }[] => {
       const [workspace] = db.workspacesNamed(id);
       if (!workspace) {
         return [];
       }
-      const named = new Map<string, string>();
+      const titled = new Map<string, string>();
       for (const row of servedFrom(workspace)) {
-        named.set(row.heldFor ?? row.id, row.name);
+        titled.set(row.heldFor ?? row.id, row.title);
       }
-      return [...named].map(([one, name]) => ({ id: one, name }));
+      return [...titled].map(([one, title]) => ({ id: one, title }));
     },
 
     /** Every held workspace, with what it holds and where ({@link HeldWork}), newest first. */
@@ -10816,14 +10816,14 @@ export const createWorkItems = ({
 
     /**
      * What workspace `needle` serves that waits on the person
-     * ({@link waitingFrom}), each by its id and name: what an archive or
+     * ({@link waitingFrom}), each by its id and title: what an archive or
      * discard of it waits on, which the person's confirm names and an
      * approval ask shows.
      */
-    waiting(needle: string): { id: string; name: string }[] {
+    waiting(needle: string): { id: string; title: string }[] {
       return waitingFrom(namedWorkspace(needle)).map((row) => ({
         id: row.id,
-        name: row.name,
+        title: row.title,
       }));
     },
 

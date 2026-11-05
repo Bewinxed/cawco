@@ -90,6 +90,15 @@ export const artifactToolWords = {
     `The server on port ${port} ${where}`,
   notListening: (subject: string) =>
     `${subject} did not answer: nothing is listening on that port.`,
+  /** A create with no title, or an empty one: the tool's refusal and the hub's. */
+  titleMissing:
+    'title is required: a few plain words, sentence case, that name it to the person, like "Title bars close". The panel head, the artifacts menu, Needs you and every chip show it.',
+  /** A title written as a slug, `name` the artifact's own slug. */
+  titleSlug: (name: string) =>
+    `The title is the person's name for it: plain words with spaces, sentence case, like "Title bars close". "${name}" is its name, which stays for tools and URLs.`,
+  /** A title with a file, a path or a word the person never uses. */
+  titleInTheirWords:
+    "The title is in the person's words: no file, path or id in it, and none of tap or poke. Name the thing as they call it.",
   /** The ask a decision page or a canvas carries is the person's. */
   askInTheirWords:
     "The ask is in the person's words: no file, path or id in it. Name the thing as they call it.",

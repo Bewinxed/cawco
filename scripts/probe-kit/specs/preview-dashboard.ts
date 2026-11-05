@@ -105,6 +105,7 @@ const run = async (kit: Kit) => {
   const accounts = await fleet.api<{ id: string }>(at, {
     kind: "preview",
     does: "try",
+    title: "Probe try artifact",
     ask: "Try the accounts list",
     name: "accounts",
     port,
@@ -113,6 +114,7 @@ const run = async (kit: Kit) => {
   const board = await fleet.api<{ id: string }>(at, {
     kind: "preview",
     does: "try",
+    title: "Probe try artifact",
     ask: "Try the board",
     name: "board",
     port,
@@ -162,6 +164,7 @@ const run = async (kit: Kit) => {
   const decision = await fleet.api<{ id: string }>(at, {
     kind: "page",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Pick the accounts view",
     name: "accounts-view",
     program: program(accounts.id),

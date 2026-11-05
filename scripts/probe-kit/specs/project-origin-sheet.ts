@@ -225,6 +225,7 @@ const run = async (kit: Kit) => {
   const sheet = await fleet.api<{ id: string }>(at, {
     kind: "component",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge the card",
     name: "pairing-card",
     file: STORY,
@@ -232,6 +233,7 @@ const run = async (kit: Kit) => {
   const page = await fleet.api<{ id: string }>(at, {
     kind: "page",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Pick how the code leaves",
     name: "pairing-behaviour",
     program: pageProgram(sheet.id),

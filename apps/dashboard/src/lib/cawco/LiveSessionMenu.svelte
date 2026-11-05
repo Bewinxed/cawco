@@ -235,7 +235,7 @@
     // anyway, his decision (the hub refuses one he didn't confirm).
     const stillWaiting =
       waiting.length > 0
-        ? [sidebarWords.archiveStillWaiting(waiting.map((one) => one.name))]
+        ? [sidebarWords.archiveStillWaiting(waiting.map((one) => one.title))]
         : [];
     const anyway = waiting.length > 0;
     if (held && !holdsNothing(held)) {

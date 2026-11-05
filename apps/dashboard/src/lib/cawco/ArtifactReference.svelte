@@ -1,8 +1,8 @@
 <script lang="ts">
   /**
-   * An artifact named in written words (`[name](cawco:artifact/<id>)`, core
+   * An artifact named in written words (`[title](cawco:artifact/<id>)`, core
    * references.ts), drawn as its chip: the inline chip (ui/chip `inline`)
-   * with its kind's glyph as its mark and its name as the dashboard holds it
+   * with its kind's glyph as its mark and its title as the dashboard holds it
    * now. Pressed, it comes to the front of the panel of the session whose
    * conversation it stands in, else of its own session's
    * (reference-open.svelte.ts).
@@ -14,7 +14,7 @@
   let { id, label = "" }: { id: string; label?: string } = $props();
 
   const named = $derived(artifactNamed(id));
-  const words = $derived(named?.name ?? label);
+  const words = $derived(named?.title ?? label);
 </script>
 
 <ReferenceChip

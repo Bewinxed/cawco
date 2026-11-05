@@ -79,8 +79,10 @@ import {
   commentRepliedWords,
   commentResolvedWords,
   designMapWords,
+  type HeadChanged,
   questionClosedWords,
   settledWords,
+  type TitleChanged,
   type Updated,
 } from "./presenters/artifacts";
 import {
@@ -321,6 +323,34 @@ const NO_REPLY_WORDS: Record<
 /** The tools themselves, separated from the server so they can be exercised directly. */
 export function handoffTools(deps: HandoffDeps) {
   const actions = handoffActions(deps);
+  /** `artifact_update`'s `ask` then `title`, each through its own route; undefined when it names neither. */
+  const headWritten = async (
+    id: string,
+    ask: string | undefined,
+    title: string | undefined
+  ): Promise<HeadChanged | undefined> => {
+    if (ask === undefined && title === undefined) {
+      return;
+    }
+    const at = `/${encodeURIComponent(id)}`;
+    const asked =
+      ask === undefined
+        ? undefined
+        : ((await actions.artifactCall("POST", `${at}/ask`, {
+            ask,
+          })) as AskChanged);
+    const titled =
+      title === undefined
+        ? undefined
+        : ((await actions.artifactCall("POST", `${at}/title`, {
+            title,
+          })) as TitleChanged);
+    return {
+      id,
+      ...(asked ? { ask: asked.ask } : {}),
+      ...(titled ? { title: titled.title } : {}),
+    };
+  };
   const all = [
     tool(
       "generate_image",
@@ -1035,7 +1065,7 @@ export function handoffTools(deps: HandoffDeps) {
       artifactUpdate.name,
       artifactUpdate.description,
       artifactUpdate.input,
-      async ({ id, statements, ask, ...change }): Promise<Updated> => {
+      async ({ id, statements, ask, title, ...change }): Promise<Updated> => {
         const at = `/${encodeURIComponent(id)}`;
         const changes = Object.values(change).some(
           (value) => value !== undefined
@@ -1045,13 +1075,8 @@ export function handoffTools(deps: HandoffDeps) {
             "statements revises a decision page alone: pass it without html, patch, elements, delete, mermaid, args or story."
           );
         }
-        // A new ask is checked and written first, so a refused one changes nothing.
-        const asked =
-          ask === undefined
-            ? undefined
-            : ((await actions.artifactCall("POST", `${at}/ask`, {
-                ask,
-              })) as AskChanged);
+        // A new ask and title are checked and written first, so a refused one changes nothing.
+        const head = await headWritten(id, ask, title);
         if (statements !== undefined) {
           return {
             change: "statements",
@@ -1060,8 +1085,8 @@ export function handoffTools(deps: HandoffDeps) {
             })) as Revised,
           };
         }
-        if (!changes && asked !== undefined) {
-          return { change: "ask", answer: asked };
+        if (!changes && head) {
+          return { change: "head", answer: head };
         }
         // A component canvas's states file and its own spec have their own route.
         const component = (

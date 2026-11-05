@@ -49,13 +49,26 @@ export interface AskChanged {
   id: string;
 }
 
+/** What `artifact_update`'s `title` answers. */
+export interface TitleChanged {
+  id: string;
+  title: string;
+}
+
+/** What `artifact_update` with only `ask` or `title` (or both) answers: the head's new words. */
+export interface HeadChanged {
+  ask?: string;
+  id: string;
+  title?: string;
+}
+
 /** What a component canvas's own change answers: a states file's write, or the canvas's new spec. */
 export type ComponentChanged =
   ComponentWritten | { id: string; revision: number; spec: CanvasSpec };
 
 /** `artifact_update`'s answer, by the change it made. */
 export type Updated =
-  | { answer: AskChanged; change: "ask" }
+  | { answer: HeadChanged; change: "head" }
   | { answer: Revised; change: "statements" }
   | { answer: ComponentChanged; change: "component" }
   | { answer: ArtifactRead; change: "page" };
@@ -96,9 +109,14 @@ const cardLinkLines = (
   ];
 };
 
-/** An artifact as an agent names it: its link, then its kind, `[pricing](cawco:artifact/<id>) (page)`. */
-const named = (artifact: { id: string; kind: string; name: string }): string =>
-  `${artifactLink(artifact.id, artifact.name)} (${artifact.kind})`;
+/** An artifact as an agent names it: its link labelled by its title, then its kind and the name its tools take, `[Pricing tiers](cawco:artifact/<id>) (page pricing)`. */
+const named = (artifact: {
+  id: string;
+  kind: string;
+  name: string;
+  title: string;
+}): string =>
+  `${artifactLink(artifact.id, artifact.title)} (${artifact.kind} ${artifact.name})`;
 
 /** Whose move an artifact is, in words. */
 const moveWords = (waitingOn: ArtifactStatus["waitingOn"]): string => {
@@ -148,7 +166,7 @@ export const artifactListWords = (list: ArtifactList): string => {
   return list.total === 0
     ? "No artifacts: artifact_create opens one in the person's panel."
     : lines(
-        `${count(list.total, "artifact")}, newest first; every artifact tool takes the name:`,
+        `${count(list.total, "artifact")}, newest first; every artifact tool takes the name after its kind:`,
         list.artifacts.map((status) => statusLine(status, now)),
         list.next_cursor &&
           `More past this page. Next page: cursor ${list.next_cursor}.`
@@ -604,8 +622,17 @@ const pageChangedWords = (
 /** `artifact_update`: what the change came to. */
 export const artifactUpdatedWords = (updated: Updated): Presented => {
   switch (updated.change) {
-    case "ask":
-      return `Its head now asks ${quote(updated.answer.ask, 200)}.`;
+    case "head":
+      return [
+        updated.answer.title === undefined
+          ? null
+          : `It is titled ${quote(updated.answer.title, 100)} now.`,
+        updated.answer.ask === undefined
+          ? null
+          : `Its head now asks ${quote(updated.answer.ask, 200)}.`,
+      ]
+        .filter((line) => line !== null)
+        .join(" ");
     case "statements":
       return revisedWords(updated.answer);
     case "component":

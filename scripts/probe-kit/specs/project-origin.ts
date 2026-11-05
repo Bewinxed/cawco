@@ -273,6 +273,7 @@ const run = async (kit: Kit) => {
     fleet.api<{ id: string }>(at(writer), {
       kind: "preview",
       does: "try",
+      title: "Probe try artifact",
       ask: "Try this page and say whether it works",
       name,
       port,
@@ -283,6 +284,7 @@ const run = async (kit: Kit) => {
   const page = await fleet.api<{ id: string }>(at(writer), {
     kind: "page",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Pick how the code leaves",
     name: "pairing-behaviour",
     program: pageProgram(site.id, other.id),

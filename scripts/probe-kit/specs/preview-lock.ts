@@ -126,6 +126,7 @@ const probe = async (kit: Kit, servedPort: number) => {
     {
       kind: "preview",
       does: "try",
+      title: "Probe try artifact",
       ask: "Try the served page",
       name: "lock-served",
       port: servedPort,

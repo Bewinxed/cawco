@@ -343,6 +343,7 @@ const leafA = (request: Seen): Reply => {
       kind: "canvas",
       name: CANVAS,
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge this sketch",
       to: "parent",
       elements: [
@@ -976,6 +977,7 @@ const refusedBefore = async (
     .api<{ id: string }>(`/api/instances/${parent}/artifacts`, {
       kind: "page",
       does: "pick",
+      title: "Probe pick artifact",
       ask: "Pick the page",
       name: `probe-short-preview-${RUN}`,
       program: `root = Decisions("Keep the page", [keep])
@@ -1469,6 +1471,7 @@ const spec: Spec = {
       await fleet.api<{ id: string }>(`/api/instances/${parent}/artifacts`, {
         kind: "page",
         does: "judge",
+        title: "Probe judge artifact",
         ask: "Judge this page",
         name: PAGE_NAME,
         html: PAGE,
@@ -1484,6 +1487,7 @@ const spec: Spec = {
       await fleet.api<{ id: string }>(`/api/instances/${parent}/artifacts`, {
         kind: "preview",
         does: "try",
+        title: "Probe try artifact",
         ask: "Try this page",
         name: PREVIEW,
         dir: served,

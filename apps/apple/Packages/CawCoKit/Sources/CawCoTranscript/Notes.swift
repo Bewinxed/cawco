@@ -203,7 +203,7 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
             case "ui.system_note" where block.string("subtype") == "artifact_responses":
                 // One of CawCo's artifact notices to the session (core
                 // ARTIFACT_NOTICES, drawn as ARTIFACT_RESPONSES): one quiet
-                // line, its lead and the artifact's name, the way to it, and
+                // line, its lead and the artifact's title, the way to it, and
                 // whether the agent has read it yet. Glyphs as SystemLine's.
                 responses = block.string("artifactId")
                 let glyph: Glyph = switch block.string("artifactKind") {
@@ -213,10 +213,10 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
                 default: .toolRead
                 }
                 set(glyph, title: "")
-                // The notice's lead before the name (core artifactLead, ARTIFACT_NOTICES): "Comments on", "Fix tray handed you".
+                // The notice's lead before the title (core artifactLead, ARTIFACT_NOTICES): "Comments on", "Fix tray handed you".
                 let lead = (block.string("artifactLead") ?? "") + " "
                 let said = NSMutableAttributedString(attributedString: words(lead, ink: Palette.inkMuted))
-                let name = NSMutableAttributedString(attributedString: words(block.string("artifactName") ?? "", ink: Palette.inkStrong))
+                let name = NSMutableAttributedString(attributedString: words(block.string("artifactTitle") ?? "", ink: Palette.inkStrong))
                 name.addAttributes([.underlineStyle: NSUnderlineStyle.single.rawValue,
                                     .underlineColor: Palette.inkStrong.withAlphaComponent(0.35)],
                                    range: NSRange(location: 0, length: name.length))

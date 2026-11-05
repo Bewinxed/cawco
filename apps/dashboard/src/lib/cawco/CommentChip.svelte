@@ -104,7 +104,7 @@
     if (!answer) {
       return standsOn;
     }
-    return page ? `Your comment on ${page.name}` : label || "Your comment";
+    return page ? `Your comment on ${page.title}` : label || "Your comment";
   });
   const unread = $derived(!answer && !!pin && newAnswer(pin));
   /** Its name, its state in words. */
@@ -419,7 +419,7 @@
     <span class="mark-line flex min-w-0 flex-1 items-center gap-space-1">
       <Glyph aria-hidden="true" class="size-icon-sm flex-none" data-box />
       <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-        >{page?.name ?? ""}</span
+        >{page?.title ?? ""}</span
       >
     </span>
     <Button

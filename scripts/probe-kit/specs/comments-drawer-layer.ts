@@ -694,6 +694,7 @@ const probe = async (kit: Kit) => {
     input: {
       kind: "page",
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge this page",
       name: "layered",
       html: PAGE,

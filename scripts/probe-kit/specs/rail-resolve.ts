@@ -266,6 +266,7 @@ const legChecks = async (kit: Kit, fleet: Fleet, leg: Leg) => {
     await fleet.call("mcp__cawco__artifact_create", {
       kind: "page",
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Comment on the paragraphs",
       name: `rail-${key}`,
       html: pageHtml(key),

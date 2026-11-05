@@ -114,7 +114,7 @@
   /**
    * One of CawCo's artifact notices to the session (core `ARTIFACT_NOTICES`,
    * drawn as `ARTIFACT_RESPONSES`): one quiet line, its lead ("Comments on")
-   * and the artifact's name, which opens it, and whether the agent has read
+   * and the artifact's title, which opens it, and whether the agent has read
    * it yet. The sentence the agent reads is never drawn.
    */
   const responses = $derived(
@@ -122,7 +122,7 @@
       message.metadata.artifactId
       ? {
           id: message.metadata.artifactId,
-          name: message.metadata.artifactName ?? "",
+          title: message.metadata.artifactTitle ?? "",
           kind: message.metadata.artifactKind ?? "page",
           lead: message.metadata.artifactLead ?? "",
         }
@@ -367,10 +367,10 @@
           data-slot="aname"
           class="select-none py-space-1 px-0 border-none border-current bg-transparent text-ink-strong underline decoration-current/35 underline-offset-2 focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) focus-visible:rounded-xs hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:duration-(--dur-control) can-hover:motion-safe:ease-out"
           onclick={openResponses}
-          title="Open {responses.name}"
+          title="Open {responses.title}"
           type="button"
         >
-          {responses.name}
+          {responses.title}
         </button></span
       >
       <span

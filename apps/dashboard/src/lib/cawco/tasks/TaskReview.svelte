@@ -286,7 +286,7 @@
       return `${artifactName(one)} · ${host(one.url)}`;
     }
     if (one.kind === "artifact" && !one.name) {
-      return artifactNamed(one.artifactId)?.name ?? "Its page";
+      return artifactNamed(one.artifactId)?.title ?? "Its page";
     }
     return artifactName(one);
   };

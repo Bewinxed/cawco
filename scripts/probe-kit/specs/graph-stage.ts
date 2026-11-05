@@ -773,6 +773,7 @@ const run = async (kit: Kit) => {
     name: "graph-card",
     file: [STORY, BADGE],
     does: "judge",
+    title: "Probe judge artifact",
     ask: ASK,
   });
   const id = created.match(ID)?.[1];
@@ -810,6 +811,7 @@ const run = async (kit: Kit) => {
     name: "graph-map",
     file: [STORY],
     does: "judge",
+    title: "Probe judge artifact",
     ask: MAP_ASK,
     group: MAP_GROUP,
     edges: MAP_EDGES,

@@ -320,6 +320,7 @@ const legA = async (legs: Legs) => {
   const made = await callIn(fleet, session, CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "hub-restart-holds",
     html: "<!doctype html><html><body><main><h1>Restart</h1><p>A page to pin.</p></main></body></html>",

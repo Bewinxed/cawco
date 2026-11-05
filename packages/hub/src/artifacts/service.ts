@@ -162,6 +162,7 @@ import { parseRecord, writeStateFileSync } from "@cawco/core/state-file";
 import { ArtifactThumbnailSchema } from "@cawco/core/stored-shapes";
 import { DAY_MS } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
+import { artifactWords } from "@cawco/core/words/artifacts";
 import { decidesWords } from "@cawco/core/words/decides";
 import { applyPatch, type Operation } from "rfc6902";
 import type { Doc, YMapEvent } from "yjs";
@@ -365,6 +366,12 @@ export interface ArtifactInput {
    */
   serve?: { command: string; cwd?: string | undefined } | undefined;
   /**
+   * What every surface names it by to the person, in plain words (core
+   * `ARTIFACT_TITLE_LIMIT`): every create names it. The person's own
+   * composer canvas (`draft`) takes the dashboard's.
+   */
+  title?: string | undefined;
+  /**
    * `parent`: a delegate hands it to its parent, readied and not opened.
    * The parent owns it (its panel, its list, the person's picks and pins on
    * it), is told once per hand-off and opens it itself with artifact_show;
@@ -508,6 +515,24 @@ const askProblem = (ask: string): string | null => {
   return null;
 };
 
+/** A title written as a slug (`title-bars-close`): words joined by dashes, no space. */
+const SLUG_TITLE = /^[a-z0-9]+(?:-[a-z0-9]+)+$/u;
+
+/** Why a title can't name it to the person: a slug, a file or path, or words the person never uses; null when it can. */
+const titleProblem = (title: string, name: string): string | null => {
+  const trimmed = title.trim();
+  if (trimmed === "") {
+    return artifactToolWords.titleMissing;
+  }
+  if (trimmed === name || SLUG_TITLE.test(trimmed)) {
+    return artifactToolWords.titleSlug(name);
+  }
+  if (ASK_BANNED.test(trimmed) || ASK_PATHLIKE.test(trimmed)) {
+    return artifactToolWords.titleInTheirWords;
+  }
+  return null;
+};
+
 /** Why this kind can't deliver what `does` promises (checks 3, 4 and 4b), before anything is built; null when it can. */
 const doesProblem = (
   input: ArtifactInput,
@@ -633,6 +658,7 @@ export interface ArtifactRead {
   /** What this update changed on the page, each by its link (`[label](cawco:change/<artifact>/<anchor>)`): what the agent names each to the person by. */
   marked?: string[];
   missing?: string[];
+  /** Its slug, what every artifact tool takes. */
   name: string;
   /** A canvas, as you read it: one line per element (core `canvasOutline`). */
   outline?: string;
@@ -664,6 +690,8 @@ export interface ArtifactRead {
   /** Every key, or with `since` only those changed after it; a canvas's is empty. */
   state: Record<string, ReadEntry>;
   /** A component canvas's stage the read couldn't reach: which hop, why, and since when; `stage` is then the doc's last word of it. */
+  /** What it is named by to the person. */
+  title: string;
   unreached?: StageUnreached;
   /** A component canvas's design system round, as `verify: true` asked it: what the ask did. */
   verify?: string;
@@ -796,6 +824,7 @@ export interface ArtifactStatus {
   madeBy?: string;
   /** That delegate's link, `[title](cawco:session/<id>)`, what the agent names it by. */
   madeByLink?: string;
+  /** Its slug, what every artifact tool takes. */
   name: string;
   /** Whether the person has had its latest revision on screen. */
   opened: boolean;
@@ -813,6 +842,8 @@ export interface ArtifactStatus {
   sessionLink?: string;
   /** Whether its session's panel shows it now. */
   shown: boolean;
+  /** What it is named by to the person. */
+  title: string;
   /** The person's changes (picks, notes, drawn elements) since the session last read it. */
   unread: number;
   updatedAt: string;
@@ -892,12 +923,13 @@ export interface Created {
   host?: string;
   id: string;
   kind: ArtifactKind;
-  /** Its link, `[name](cawco:artifact/<id>)`: what the agent names it by to the person. */
+  /** Its link, `[title](cawco:artifact/<id>)`: what the agent names it by to the person. */
   link?: string;
   /** Made again under its name: what it changed, each by its link (`[label](cawco:change/<artifact>/<anchor>)`). */
   marked?: string[];
   /** A component canvas's flow moves, each with the animations it fired. */
   moves?: ReturnType<typeof movesSaid>;
+  /** Its slug, what every artifact tool takes. */
   name: string;
   /** A canvas made with nothing to draw says so. */
   note?: string;
@@ -927,6 +959,8 @@ export interface Created {
   stage?: StageState;
   /** A draft canvas's origin on the tailnet name while the hub serves HTTPS there (core `PreviewAddress`). */
   tailnet?: PreviewAddress["tailnet"];
+  /** What it is named by to the person. */
+  title: string;
   /** A folder preview's: what it loads at most, from its folder's files. */
   weight?: FolderWeight;
   /** Why it is not on screen, one sentence; only with `opened: false`. */
@@ -950,7 +984,7 @@ export type Opened =
       href?: string;
     };
 
-/** What `artifact_show` answers: {@link Opened}, with the artifact's link, `[name](cawco:artifact/<id>)`, which the agent names it by and its tool row draws. */
+/** What `artifact_show` answers: {@link Opened}, with the artifact's link, `[title](cawco:artifact/<id>)`, which the agent names it by and its tool row draws. */
 export type Shown =
   | { link: string; opened: true }
   | { href?: string; link: string; opened: false; why: string };
@@ -1029,7 +1063,7 @@ export interface CommentRead {
     address: string;
     id: string;
     kind: ArtifactKind;
-    /** Its link, `[name](cawco:artifact/<id>)`: what the agent names it by to the person. */
+    /** Its link, `[title](cawco:artifact/<id>)`: what the agent names it by to the person. */
     link: string;
     name: string;
     /** Each with its link, `[label](cawco:pin/<artifact>/<number>)`. */
@@ -1443,8 +1477,13 @@ export type PanelHand = "person" | "agent";
 /** What `artifact_delete` and the panel's Remove answer: the artifact removed, and what the session's panel shows now, or null for nothing. */
 export interface Removed {
   /** The artifact the call named, as it was resolved before it went. */
-  removed: { id: string; kind: ArtifactKind; name: string };
-  showing: { id: string; kind: ArtifactKind; name: string } | null;
+  removed: { id: string; kind: ArtifactKind; name: string; title: string };
+  showing: {
+    id: string;
+    kind: ArtifactKind;
+    name: string;
+    title: string;
+  } | null;
 }
 
 /** A sentence's closing full stop, for one folded into another. */
@@ -2186,6 +2225,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       id: row.id,
       kind: row.kind,
       name: row.name,
+      title: row.title,
       does: row.does,
       ask: row.ask,
       sent: sentOf(row),
@@ -3267,6 +3307,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     db.update(row.id, {
       madeBy: next.madeBy,
       revision: next.revision,
+      title: next.title,
       updatedAt: new Date(),
     });
     // Its preview origin, where its address was handed out, is the
@@ -3686,7 +3727,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /** A create's answer with the artifact's link, which the agent names it by. */
   const linked = (made: Created): Created => ({
     ...made,
-    link: artifactLink(made.id, made.name),
+    link: artifactLink(made.id, made.title),
   });
 
   /** A decision page's cards' links, by id: what the agent names each by. */
@@ -3784,6 +3825,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       meta.set("name", row.name);
       meta.set("does", row.does);
       meta.set("ask", row.ask);
+      meta.set("title", row.title);
       meta.set("revision", row.revision);
       meta.set("revisedAt", new Date().toISOString());
       if (hash !== null) {
@@ -3896,6 +3938,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       id: row.id,
       kind: row.kind,
       name: row.name,
+      title: row.title,
       revision: row.revision,
       pageHash: meta.pageHash,
       sentAt: meta.sentAt,
@@ -5068,6 +5111,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       "artifact.json": promotedJson({
         kind: row.kind,
         name: row.name,
+        title: row.title,
         id: row.id,
         promotedAt: at,
         session: instance.id,
@@ -5123,6 +5167,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       id: row.id,
       kind: row.kind,
       name: row.name,
+      title: row.title,
       revision: row.revision,
       pageHash: null,
       sentAt: null,
@@ -5297,8 +5342,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     const { name } = input;
     let free = name;
+    let title = artifactWords.draftTitle;
     for (let n = 2; db.byName(instance.id, "canvas", free, true); n += 1) {
       free = `${name.slice(0, 63 - String(n).length - 1)}-${n}`;
+      title = `${artifactWords.draftTitle} ${n}`;
     }
     const now = new Date();
     const row = db.create({
@@ -5313,6 +5360,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       // The person's own canvas: nothing is asked of them on it.
       does: "draw",
       ask: "",
+      title,
       machineId: null,
       source: { page: free },
       revision: 1,
@@ -5332,6 +5380,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       id: row.id,
       kind: row.kind,
       name: row.name,
+      title: row.title,
       route: routeOf(row.id),
       opened: false,
       why: "It stands in the composer until it is docked.",
@@ -5479,6 +5528,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ...said,
       kind: row.kind,
       name: row.name,
+      title: row.title,
       route: routeOf(said.id),
       ...shown,
       outline,
@@ -5981,6 +6031,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       id: row.id,
       kind: row.kind,
       name: row.name,
+      title: row.title,
       route: routeOf(row.id),
       ...openedOf(shown),
       stage: { ...sheetState(row, opened.state), errors: [] },
@@ -6161,21 +6212,28 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (input.draft) {
       return;
     }
-    const { does, ask } = askedOf(input);
-    const problem = askProblem(ask) ?? doesProblem(input, does);
+    const { does, ask, title } = askedOf(input);
+    const problem =
+      titleProblem(title, input.name) ??
+      askProblem(ask) ??
+      doesProblem(input, does);
     if (problem) {
       throw new ArtifactRefusal(400, problem);
     }
   };
 
-  /** What a create names the person does there and its ask, as its row keeps them; refused with the tool's shape when it names neither. */
+  /** What a create names the person does there, its ask and its title, as its row keeps them; refused with the tool's shape when it names any not. */
   const askedOf = (
-    input: Pick<ArtifactInput, "does" | "ask">
-  ): { ask: string; does: ArtifactDoes } => {
-    if (input.does === undefined || input.ask === undefined) {
+    input: Pick<ArtifactInput, "does" | "ask" | "title">
+  ): { ask: string; does: ArtifactDoes; title: string } => {
+    if (
+      input.does === undefined ||
+      input.ask === undefined ||
+      input.title === undefined
+    ) {
       throw new ArtifactRefusal(422, CREATE_SHAPE);
     }
-    return { does: input.does, ask: input.ask };
+    return { does: input.does, ask: input.ask, title: input.title.trim() };
   };
 
   /** A canvas (or the composer's draft) and a sheet are each made their own way; a page or preview is null here, made by `create` itself. */
@@ -6225,7 +6283,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    */
   const placed = (
     { lands, owner, maker }: Making,
-    input: Pick<ArtifactInput, "kind" | "name" | "does" | "ask">,
+    input: Pick<ArtifactInput, "kind" | "name" | "does" | "ask" | "title">,
     at: { machineId: string | null; source: PreviewSource }
   ): Placement => {
     const now = new Date();
@@ -6333,6 +6391,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const back = db.update(row.id, {
       madeBy: was.madeBy,
       ask: was.ask,
+      title: was.title,
       does: was.does,
       revision: was.revision,
       updatedAt: was.updatedAt,
@@ -6515,14 +6574,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /**
    * An answer about a held next version, said as its artifact's: that one's
    * id, and the next version's as `held`; with the artifact's link
-   * (`[name](cawco:artifact/<id>)`), which the agent names it by.
+   * (`[title](cawco:artifact/<id>)`), which the agent names it by.
    */
   const heldAnswer = <T extends { held?: string; id: string }>(
     answer: T
   ): T & { link?: string } => {
     const row = db.get(answer.id);
     const said = row?.heldFor ? { ...answer, ...heldId(row) } : answer;
-    return row ? { ...said, link: artifactLink(said.id, row.name) } : said;
+    return row ? { ...said, link: artifactLink(said.id, row.title) } : said;
   };
 
   /**
@@ -6719,7 +6778,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     put: { asked: boolean; pinsMayAsk: boolean }
   ): Question[] =>
     questionsOf({
-      artifact: { id: row.id, name: row.name, ask: row.ask },
+      artifact: { id: row.id, name: row.name, title: row.title, ask: row.ask },
       ...put,
       cards: choicesAsked(row),
       judged: row.does === "judge",
@@ -7102,6 +7161,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       id: row.id,
       kind: row.kind,
       name: row.name,
+      title: row.title,
       does: row.does,
       ask: row.ask,
       ...(row.instanceId === null || row.instanceId === caller.id
@@ -7191,7 +7251,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             kind: row.kind,
             name: row.name,
             does: row.does,
-            link: artifactLink(row.id, row.name),
+            link: artifactLink(row.id, row.title),
           },
           session:
             row.instanceId === null || row.instanceId === instance.id
@@ -7607,7 +7667,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             {
               asked: new Set([...KIND_WORDS.artifact, ...KIND_WORDS[row.kind]]),
               fields: [
-                ...field("title", row.name),
+                ...field("title", row.title),
                 ...field("transcript", words),
               ],
             },
@@ -7842,9 +7902,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ...said,
         kind: row.kind,
         name: row.name,
+        title: row.title,
         route: routeOf(said.id),
         ...routes,
-        link: artifactLink(said.id, row.name),
+        link: artifactLink(said.id, row.title),
         ...openedOf(shown),
         ...(stage ? { stage } : {}),
         ...(weight ? { weight } : {}),
@@ -8282,6 +8343,31 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       relistOf(row);
       askedNow(sessionOf(instanceId), row.id);
       return { id: row.id, ask };
+    },
+
+    /**
+     * `artifact_update` with `title`, for any kind: checked as a create's
+     * is, then every surface that names it says the new one (the panel's
+     * frame again, the list and Needs you on their next read). A new title
+     * asks nothing, so the person's last Send stands.
+     */
+    titleUpdate: (
+      instanceId: string,
+      id: string,
+      title: string
+    ): { id: string; title: string } => {
+      const row = revisable(sessionOf(instanceId), id);
+      const problem = titleProblem(title, row.name);
+      if (problem) {
+        throw new ArtifactRefusal(400, problem);
+      }
+      const kept = title.trim();
+      db.update(row.id, { title: kept, updatedAt: new Date() });
+      docs.transact(row.id, "hub", (doc) =>
+        doc.getMap("meta").set("title", kept)
+      );
+      relistOf(row);
+      return { id: row.id, title: kept };
     },
 
     /**
@@ -8726,7 +8812,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (!row) {
         throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
       }
-      const link = artifactLink(row.id, row.name);
+      const link = artifactLink(row.id, row.title);
       const there = inItsSession(instance, found, row, at);
       if (there) {
         return { ...there, link };
@@ -8783,7 +8869,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           `${unreached}. Ask your parent with handoff for what you need of ${row.name}.`
         );
       }
-      return { ...pass, link: artifactLink(row.heldFor ?? row.id, row.name) };
+      return { ...pass, link: artifactLink(row.heldFor ?? row.id, row.title) };
     },
 
     /**
@@ -8811,7 +8897,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ): Promise<Removed> => {
       const instance = sessionOf(instanceId);
       const row = deletable(instance, id);
-      const removed = { id: row.id, kind: row.kind, name: row.name };
+      const removed = {
+        id: row.id,
+        kind: row.kind,
+        name: row.name,
+        title: row.title,
+      };
       const wasShown = deps.showing(instance.id) === row.id;
       const writerShown = row.instanceId !== instance.id && inPanel(row);
       // A project's page is its source in the project's folder: both go, the
@@ -8840,14 +8931,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         const now = shown === undefined ? undefined : db.get(shown);
         return {
           removed,
-          showing: now ? { id: now.id, kind: now.kind, name: now.name } : null,
+          showing: now
+            ? { id: now.id, kind: now.kind, name: now.name, title: now.title }
+            : null,
         };
       }
       const next = by === "person" ? nextNewest(instance) : undefined;
       if (next && (await deps.open(next)).ok) {
         return {
           removed,
-          showing: { id: next.id, kind: next.kind, name: next.name },
+          showing: {
+            id: next.id,
+            kind: next.kind,
+            name: next.name,
+            title: next.title,
+          },
         };
       }
       deps.close(instance.id);
@@ -8982,7 +9080,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
                 id: row.id,
                 kind: row.kind,
                 name: row.name,
-                link: artifactLink(row.id, row.name),
+                link: artifactLink(row.id, row.title),
                 address,
                 pins: answered,
               },

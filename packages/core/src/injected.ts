@@ -491,8 +491,8 @@ export type PresenceSaid = {
  * when no step does (`SessionPlan.needs`).
  */
 export interface AwayWait {
-  /** The page's artifact id and name: its `cawco:artifact` chip. */
-  artifact: { id: string; name: string };
+  /** The page's artifact id and title: its `cawco:artifact` chip. */
+  artifact: { id: string; title: string };
   /** The session whose plan it is: the step's `cawco:step` chip. */
   session: string;
   /** The step that names it, by id and words; absent when no step does. */
@@ -502,8 +502,8 @@ export interface AwayWait {
 /** A wait as the recap names it: the step's chip, labelled by its words, then its page's chip; the page alone when no step names it. */
 export const waitLine = ({ artifact, session, step }: AwayWait): string =>
   step
-    ? `- ${stepLink(session, step.id, step.content)} waits on ${artifactLink(artifact.id, artifact.name)}`
-    : `- ${artifactLink(artifact.id, artifact.name)}, which no step names`;
+    ? `- ${stepLink(session, step.id, step.content)} waits on ${artifactLink(artifact.id, artifact.title)}`
+    : `- ${artifactLink(artifact.id, artifact.title)}, which no step names`;
 
 /** The heading a session's away notes open with in its plan's spec: `## Since 12:18 (you were away)`. */
 export const awayNotesHeading = (since: string): string =>
@@ -632,10 +632,7 @@ export function parseUndelivered(
  * {@link import("./harness").ARTIFACT_ORIGIN}; a transcript draws it as one
  * quiet line ({@link import("./harness").ARTIFACT_RESPONSES}).
  */
-export interface ArtifactResponses {
-  id: string;
-  kind: ArtifactKind;
-  name: string;
+export interface ArtifactResponses extends ArtifactComments {
   /** The `seq` to read from: the last one the session was told of. */
   since: number;
 }
@@ -644,9 +641,10 @@ export const artifactResponsesNotice = ({
   id,
   kind,
   name,
+  title,
   since,
 }: ArtifactResponses): string =>
-  `${markerTag("artifact-responses", { id, kind, name, since })}[CawCo] The ${kind} "${name}" has new responses since ${since}. Read them with artifact_read({ id: "${id}", since: ${since} }).`;
+  `${markerTag("artifact-responses", { id, kind, name, title, since })}[CawCo] The ${kind} "${name}" has new responses since ${since}. Read them with artifact_read({ id: "${id}", since: ${since} }).`;
 
 /** An artifact's responses notice read back into what it names. */
 export function parseArtifactResponses(text: string): ArtifactResponses | null {
@@ -654,8 +652,8 @@ export function parseArtifactResponses(text: string): ArtifactResponses | null {
   if (!tag) {
     return null;
   }
-  const { id = "", kind = "", name = "", since = "" } = tag.fields;
-  return { id, kind: kind as ArtifactKind, name, since: Number(since) };
+  const { since = "" } = tag.fields;
+  return { ...namedOf(tag), since: Number(since) };
 }
 
 /**
@@ -665,12 +663,15 @@ export function parseArtifactResponses(text: string): ArtifactResponses | null {
  * number, id, anchor, source and words) and each loose stroke group, so the
  * session acts on them without reading first. Sent under the system origin
  * {@link import("./harness").ARTIFACT_ORIGIN}, like the picks' notice; a
- * transcript draws it as the same quiet line, "Comments on <name>".
+ * transcript draws it as the same quiet line, "Comments on <title>".
  */
 export interface ArtifactComments {
   id: string;
   kind: ArtifactKind;
+  /** Its slug, which the agent's sentence names it by. */
   name: string;
+  /** What its row in the transcript names it by to the person; empty on a notice sent before titles were kept. */
+  title: string;
 }
 
 /** The words a comments notice opens with, before its sections. */
@@ -681,7 +682,7 @@ export const artifactCommentsNotice = (
   artifact: ArtifactComments,
   sections: string[]
 ): string =>
-  `${markerTag("artifact-comments", { id: artifact.id, kind: artifact.kind, name: artifact.name })}${commentsLine(artifact)}${sections.join("\n\n")}`;
+  `${markerTag("artifact-comments", { id: artifact.id, kind: artifact.kind, name: artifact.name, title: artifact.title })}${commentsLine(artifact)}${sections.join("\n\n")}`;
 
 /**
  * A sheet's compile errors from its stage (live components, core
@@ -690,10 +691,10 @@ export const artifactCommentsNotice = (
  * comments notice.
  */
 export const artifactErrorsNotice = (
-  { id, kind, name }: ArtifactComments,
+  { id, kind, name, title }: ArtifactComments,
   sections: string[]
 ): string =>
-  `${markerTag("artifact-errors", { id, kind, name })}[CawCo] The ${kind} "${name}" (artifact ${id}) does not compile on its stage; the panel shows the last good render under the error. Fix each at its file:line:column; artifact_read lists the errors standing, and none once it compiles.\n\n${sections.join("\n\n")}`;
+  `${markerTag("artifact-errors", { id, kind, name, title })}[CawCo] The ${kind} "${name}" (artifact ${id}) does not compile on its stage; the panel shows the last good render under the error. Fix each at its file:line:column; artifact_read lists the errors standing, and none once it compiles.\n\n${sections.join("\n\n")}`;
 
 /**
  * What the person saved from a sheet's inspector (live components spec §5):
@@ -701,10 +702,10 @@ export const artifactErrorsNotice = (
  * session hears it on the marks' channel before it next edits that file.
  */
 export const artifactSavesNotice = (
-  { id, kind, name }: ArtifactComments,
+  { id, kind, name, title }: ArtifactComments,
   sections: string[]
 ): string =>
-  `${markerTag("artifact-saves", { id, kind, name })}[CawCo] The person changed the ${kind} "${name}" (artifact ${id}) from its inspector, and CawCo wrote it into the story file. Read the file again before you edit it.\n\n${sections.join("\n\n")}`;
+  `${markerTag("artifact-saves", { id, kind, name, title })}[CawCo] The person changed the ${kind} "${name}" (artifact ${id}) from its inspector, and CawCo wrote it into the story file. Read the file again before you edit it.\n\n${sections.join("\n\n")}`;
 
 /**
  * A delegate handed its parent an artifact (hub artifacts/service.ts
@@ -731,11 +732,12 @@ export const artifactHandedNotice = ({
   id,
   kind,
   name,
+  title,
   next,
 }: ArtifactHanded): string =>
   next === undefined
-    ? `${markerTag("artifact-handed", { from, id, kind, name })}[CawCo] ${from} handed you the ${kind} "${name}" (artifact ${id}), not opened: artifact_show opens it in your panel.`
-    : `${markerTag("artifact-handed", { from, id, kind, name, next })}[CawCo] ${from} changed the ${kind} "${name}" (artifact ${id}): your panel keeps the version you opened until artifact_show opens the new one, artifact ${next}, which decision pages, artifact_read and artifact_browse have now.`;
+    ? `${markerTag("artifact-handed", { from, id, kind, name, title })}[CawCo] ${from} handed you the ${kind} "${name}" (artifact ${id}), not opened: artifact_show opens it in your panel.`
+    : `${markerTag("artifact-handed", { from, id, kind, name, title, next })}[CawCo] ${from} changed the ${kind} "${name}" (artifact ${id}): your panel keeps the version you opened until artifact_show opens the new one, artifact ${next}, which decision pages, artifact_read and artifact_browse have now.`;
 
 /** A handed-up artifact's notice read back into who handed what, and the next version a change waits as. */
 export function parseArtifactHanded(text: string): ArtifactHanded | null {
@@ -743,8 +745,8 @@ export function parseArtifactHanded(text: string): ArtifactHanded | null {
   if (!tag) {
     return null;
   }
-  const { from = "", id = "", kind = "", name = "", next } = tag.fields;
-  return { from, id, kind: kind as ArtifactKind, name, next };
+  const { from = "", next } = tag.fields;
+  return { ...namedOf(tag), from, next };
 }
 
 /** An artifact's comments notice read back into what it names, and its sections as one text. */
@@ -759,11 +761,12 @@ export function parseArtifactComments(
   return { ...named, sections: afterLine(tag.rest, commentsLine(named)) };
 }
 
-/** What a notice's tag names: its artifact's id, kind and name. */
+/** What a notice's tag names: its artifact's id, kind, name and title. */
 const namedOf = ({ fields }: MarkerTag): ArtifactComments => ({
   id: fields.id ?? "",
   kind: (fields.kind ?? "") as ArtifactKind,
   name: fields.name ?? "",
+  title: fields.title ?? "",
 });
 
 /** What a notice of `kind` names, read off its tag. */
@@ -841,6 +844,7 @@ export function parseArtifactNotice(text: string): ArtifactNotice | null {
         id: named.id,
         kind: named.kind,
         name: named.name,
+        title: named.title,
         lead: lead(named),
       };
     }

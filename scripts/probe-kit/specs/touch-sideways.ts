@@ -197,6 +197,7 @@ const spec: Spec = {
       {
         kind: "page",
         does: "pick",
+        title: "Probe pick artifact",
         ask: "Pick the channel that carries the launch",
         name: "launch-reach",
         program: DECISION,

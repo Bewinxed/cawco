@@ -286,6 +286,7 @@ const decisionSession = async (
     {
       kind: "preview",
       does: "try",
+      title: "Probe try artifact",
       ask: "Try this page and say whether it works",
       name: "the-site",
       port,
@@ -297,6 +298,7 @@ const decisionSession = async (
     {
       kind: "page",
       does: "pick",
+      title: "Probe pick artifact",
       ask: "Pick one option on each card",
       name: "pick-host",
       program: `root = Decisions("Pick the host", [where])
@@ -708,6 +710,7 @@ const run = async (kit: Kit) => {
   await fleet.api(`/api/instances/${paged}/artifacts`, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "refused-once",
     html: pageOf("Refused once"),
@@ -768,6 +771,7 @@ const run = async (kit: Kit) => {
     {
       kind: "preview",
       does: "try",
+      title: "Probe try artifact",
       ask: "Try this page and say whether it works",
       name: "agent-away",
       port: app.port,

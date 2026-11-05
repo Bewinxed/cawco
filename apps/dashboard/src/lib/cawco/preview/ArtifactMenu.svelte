@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * The artifact panel's title control (the artifact panel's surface brief, Artifact panel, canvas and
-   * ink): the shown artifact's name as a menu button listing the session's
+   * ink): the shown artifact's title as a menu button listing the session's
    * artifacts, newest first, each promoted one tagged with its commit and
    * each waiting on the person (core artifact-needs.ts) wearing the
    * needs-you dot, the status's own glyph ink (The Glyph, Word, Hue Rule);
@@ -54,7 +54,7 @@
     onrefused,
   }: {
     instanceId: string;
-    /** The head's line under the name (the ask, or "Sent to <session>"); empty: the name alone. */
+    /** The head's line under the title (the ask, or "Sent to <session>"); empty: the title alone. */
     line: string;
     /** The head's line's element (SideSurface's subtitle), which describes this control. */
     lineId: string;
@@ -67,9 +67,12 @@
      */
     held: string[] | undefined;
     /** The artifact the panel shows. */
-    shown: { id: string; kind: ArtifactKind; name: string };
+    shown: { id: string; kind: ArtifactKind; title: string };
     /** A chosen artifact the hub would not show: the words, and which it was. */
-    onrefused: (reason: string, artifact: { id: string; name: string }) => void;
+    onrefused: (
+      reason: string,
+      artifact: { id: string; title: string }
+    ) => void;
   } = $props();
 
   const GLYPHS: Record<ArtifactKind, Component> = {
@@ -84,7 +87,7 @@
   let listed = $state<ArtifactSummary[] | null>(null);
   /** Until the list is read, the one the panel shows, with no age or promote to say. */
   const rows = $derived<
-    (Pick<ArtifactSummary, "id" | "kind" | "name"> & {
+    (Pick<ArtifactSummary, "id" | "kind" | "title"> & {
       createdAt: string | null;
       promoted: ArtifactSummary["promoted"];
       waiting: boolean;
@@ -130,7 +133,7 @@
     }
   });
 
-  function choose(artifact: { id: string; name: string }): Promise<void> {
+  function choose(artifact: { id: string; title: string }): Promise<void> {
     if (artifact.id === shown.id) {
       return Promise.resolve();
     }
@@ -138,7 +141,7 @@
       () => undefined,
       (error: unknown) =>
         onrefused(
-          `${artifact.name} was not shown: ${failureClause(error)}. ${shown.name} stays in the panel.`,
+          `${artifact.title} was not shown: ${failureClause(error)}. ${shown.title} stays in the panel.`,
           artifact
         )
     );
@@ -149,7 +152,7 @@
   /** Where a row's refused removal is said: under it, kept through a reload. */
   const removeKey = (id: string) => `artifact-remove:${instanceId}:${id}`;
 
-  function remove(artifact: { id: string; name: string }): Promise<void> {
+  function remove(artifact: { id: string; title: string }): Promise<void> {
     if (removing.has(artifact.id)) {
       return Promise.resolve();
     }
@@ -163,7 +166,7 @@
       (error: unknown) => {
         removing.delete(artifact.id);
         refusals.set(removeKey(artifact.id), {
-          reason: `${artifactWords.notRemoved(artifact.name, failureClause(error))}. It stays in the list.`,
+          reason: `${artifactWords.notRemoved(artifact.title, failureClause(error))}. It stays in the list.`,
         });
       }
     );
@@ -259,7 +262,7 @@
     <Glyph />
     <span
       class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-      data-slot="artifact-name">{shown.name}</span
+      data-slot="artifact-name">{shown.title}</span
     >
     <IconChevronDown />
   </DropdownMenu.Trigger>
@@ -317,14 +320,14 @@
             <span
               data-slot="row-name"
               class="max-w-full flex-none overflow-clip text-ellipsis whitespace-nowrap type-label"
-              id={part(artifact.id, "name")}>{artifact.name}</span
+              id={part(artifact.id, "name")}>{artifact.title}</span
             >
             {#if artifact.promoted}
               <span
                 data-slot="row-promoted"
                 class="min-w-0 flex-initial overflow-clip text-ellipsis whitespace-nowrap text-ink-muted text-size-meta num"
                 id={part(artifact.id, "promoted")}
-                title={artifactWords.promotedTitle(artifact.name)}
+                title={artifactWords.promotedTitle}
                 >{artifactWords.promoted(
                   artifact.promoted.commit.slice(0, 7)
                 )}</span
@@ -353,7 +356,7 @@
           {/if}
           <button
             data-box
-            aria-label={artifactWords.removeNamed(artifact.name)}
+            aria-label={artifactWords.removeNamed(artifact.title)}
             class="select-none grid place-items-center -me-space-1 p-space-1 border-none border-current rounded-sm bg-transparent text-ink-muted opacity-0 transition-[opacity,color] duration-(--dur-control) ease-out hover:text-error-9 coarse:opacity-100 group-data-highlighted/artifact:opacity-100"
             disabled={removing.has(artifact.id)}
             onclick={(event) => {

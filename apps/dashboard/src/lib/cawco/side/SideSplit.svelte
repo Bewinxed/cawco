@@ -151,7 +151,7 @@
       return switched ? undefined : besideOf(viewId)?.taskId;
     }
     const preview = cawco.previews[viewId];
-    return preview?.artifact?.name ?? preview?.title;
+    return preview?.artifact?.title ?? preview?.title;
   }
   /** A failed card's Close: what was on show goes, as its own Close puts it away. */
   const closeFailed = (what: Shown) =>

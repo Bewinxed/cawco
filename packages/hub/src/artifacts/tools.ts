@@ -8,7 +8,9 @@
 import {
   ARTIFACT_DOES,
   ARTIFACT_NAME,
+  ARTIFACT_TITLE_LIMIT,
   ASK_LIMIT,
+  artifactToolWords,
   MADE_ARTIFACT_KINDS,
   PREVIEW_START_PATH,
 } from "@cawco/core";
@@ -97,6 +99,16 @@ const ask = z
     'The act and its object in their words, like "Pick the head for the phone project page".'
   );
 
+/** What names it to the person on every surface; a create without one is told how to write it. */
+const title = z
+  .string({
+    error: (issue) =>
+      issue.input === undefined ? artifactToolWords.titleMissing : undefined,
+  })
+  .min(1)
+  .max(ARTIFACT_TITLE_LIMIT)
+  .describe('Like "Title bars close".');
+
 /** A component canvas's edges, groups and dials, as create and update take them. */
 const canvasFields = {
   edges: z
@@ -148,7 +160,7 @@ const mermaid = z
 export const artifactCreate = {
   name: "artifact_create",
   description:
-    "Open something in the person's panel for them to act on; `ask` heads the panel until they act. The `show` skill " +
+    "Open something in the person's panel for them to act on; `title` names it to them everywhere, `ask` heads the panel until they act. The `show` skill " +
     "chooses `does`, `ask` and the kind before you build. A pick is a page with `program` (decision-page skill). A judgement " +
     "is a component canvas: `file`, its CSF 3 states file, every story drawn live (component-canvas skill); or a " +
     "preview or page when the whole surface is judged. A try is a preview at `path`: a server on `port` (in a " +
@@ -160,6 +172,7 @@ export const artifactCreate = {
     kind: z.enum(MADE_ARTIFACT_KINDS),
     does,
     ask,
+    title,
     name: z.string().regex(ARTIFACT_NAME).describe("Like onboarding."),
     program: z.string().min(1).max(PROGRAM_MAX).optional(),
     html: z.string().min(1).max(PAGE_LIMIT).optional(),
@@ -222,7 +235,7 @@ export const artifactUpdate = {
     "`html` replaces a page, picks kept. `patch`: JSON Patch over its state by choice id, all or none, like " +
     '[{"op":"replace","path":"/hero/options","value":["b"]}]. A canvas: `elements` (added, or replacing that id), `delete` (ids), ' +
     "`mermaid`. A component: `args` sets a story's values; `story` adds, duplicates, removes or moves one; `edges`, `group`, `dials`. " +
-    "`ask` changes the head's line.",
+    "`ask` changes the head's line, `title` its name.",
   input: {
     id,
     elements,
@@ -254,6 +267,7 @@ export const artifactUpdate = {
     statements: z.string().min(1).max(PROGRAM_MAX).optional(),
     html: z.string().min(1).max(PAGE_LIMIT).optional(),
     ask: ask.optional(),
+    title: title.optional(),
     ...canvasFields,
     patch: z
       .array(

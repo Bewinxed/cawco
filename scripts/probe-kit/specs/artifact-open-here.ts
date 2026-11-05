@@ -122,6 +122,7 @@ const run = async (kit: Kit) => {
   const handed = await create(delegate, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge the handed page",
     name: "handed-page",
     html: pageOf("Handed"),
@@ -130,6 +131,7 @@ const run = async (kit: Kit) => {
   const own = await create(delegate, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge the delegate's own page",
     name: "own-page",
     html: pageOf("Own"),
@@ -265,6 +267,7 @@ const run = async (kit: Kit) => {
   const theirs = await create(stranger, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge the stranger's page",
     name: "stranger-page",
     html: pageOf("Stranger"),

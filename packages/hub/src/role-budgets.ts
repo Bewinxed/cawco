@@ -78,10 +78,14 @@ import type { Tasks } from "./tasks";
  * overlapped (worker 29,514, delegate 10,821 measured). A delegate puts
  * pages and canvases to the person as a worker does, so it lists both; its
  * budget is raised to it.
+ * 2026-11-05: artifact_create takes a required `title` and artifact_update
+ * changes it: every surface names an artifact to the person by the title
+ * its agent wrote, and its slug `name` stays for tools and URLs (worker
+ * 29,588, delegate 10,896 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 29_600,
-  delegate: 10_850,
+  delegate: 10_900,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,

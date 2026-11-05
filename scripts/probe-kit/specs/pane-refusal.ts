@@ -606,6 +606,7 @@ const legO = async (kit: Kit, fleet: KitFleet, session: string) => {
   const made = await callIn(fleet, session, CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page too: pin anything that reads wrong",
     name: "overlay-refusal",
     html: PAGE_HTML,
@@ -793,6 +794,7 @@ const legR = async (kit: Kit, fleet: KitFleet, session: string) => {
   const made = await callIn(fleet, session, CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page as well: pin anything that reads wrong",
     name: "reply-refusal",
     html: PAGE_HTML,
@@ -1011,6 +1013,7 @@ const legW = async (kit: Kit, fleet: KitFleet, session: string) => {
   const made = await callIn(fleet, session, CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this older page: pin anything that reads wrong",
     name: "whole-pins",
     html: PAGE_HTML,
@@ -1121,6 +1124,7 @@ const run = async (kit: Kit) => {
   const made = await callIn(fleet, session, CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "pane-refusal",
     html: PAGE_HTML,

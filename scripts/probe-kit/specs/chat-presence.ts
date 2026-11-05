@@ -309,6 +309,7 @@ const run = async (kit: Kit): Promise<void> => {
   await fleet.api(`/api/instances/${conversation}/artifacts`, {
     kind: "page",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Pick the colour",
     name: DECISION_PAGE,
     program: DECISION_PROGRAM,
@@ -369,6 +370,7 @@ const run = async (kit: Kit): Promise<void> => {
   await fleet.api(`/api/instances/${chat}/artifacts`, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge the page",
     name: "beside",
     html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Beside</title></head><body><h1>Beside</h1><input aria-label="Field"></body></html>',
@@ -421,6 +423,7 @@ const run = async (kit: Kit): Promise<void> => {
   const folderPreview = await fleet.api<{ id: string }>(artifacts, {
     kind: "preview",
     does: "try",
+    title: "Probe try artifact",
     ask: "Try the folder",
     name: "embedded-folder",
     dir: folder,
@@ -428,6 +431,7 @@ const run = async (kit: Kit): Promise<void> => {
   await fleet.api(artifacts, {
     kind: "page",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Pick the word",
     name: EMBED_PAGE,
     program: EMBED_PROGRAM(folderPreview.id),
@@ -490,6 +494,7 @@ const run = async (kit: Kit): Promise<void> => {
   await fleet.api(`/api/instances/${other}/artifacts`, {
     kind: "canvas",
     does: "draw",
+    title: "Probe draw artifact",
     ask: "Draw on this canvas",
     name: "touched-canvas",
   });

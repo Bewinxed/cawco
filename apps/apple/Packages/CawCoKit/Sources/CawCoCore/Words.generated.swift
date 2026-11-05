@@ -1662,9 +1662,17 @@ public enum Words {
 
     public enum Artifacts {
         // packages/core/src/words/artifacts.ts `artifactWords`
+        /// The title of the person's own canvas, opened in the composer (hub artifacts service.ts `createDraft`); a second one is "Your canvas 2".
+        public static let draftTitle = "Your canvas"
+
+        /// The title of a decision page's Diagram opened as a canvas (hub server.ts `openDiagramAsCanvas`), `page` that page's title.
+        public static func diagramTitle(page: String) -> String {
+            "\(page) diagram"
+        }
+
         /// A row's Remove, for a screen reader: its trailing glyph says it.
-        public static func removeNamed(name: String) -> String {
-            "Remove \(name)"
+        public static func removeNamed(title: String) -> String {
+            "Remove \(title)"
         }
 
         public static let remove = "Remove"
@@ -1674,12 +1682,10 @@ public enum Words {
             "Promoted \(commit)"
         }
 
-        public static func promotedTitle(name: String) -> String {
-            "Promoted into the project's folder at artifacts/\(name)/"
-        }
+        public static let promotedTitle = "Promoted into the project's folder"
 
-        public static func notRemoved(name: String, why: String) -> String {
-            "\(name) wasn't removed: \(why)"
+        public static func notRemoved(title: String, why: String) -> String {
+            "\(title) wasn't removed: \(why)"
         }
 
         /// The head's line under the name once the person's Send is in and the session has not changed it since.

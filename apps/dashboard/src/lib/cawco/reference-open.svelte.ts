@@ -143,8 +143,8 @@ export async function openArtifactIn(
     refusals.delete(key);
     return null;
   } catch (error) {
-    const name = artifactNamed(id)?.name ?? "The artifact";
-    const reason = `${name} was not opened: ${failureClause(error)}. The panel stays as it was.`;
+    const title = artifactNamed(id)?.title ?? "The artifact";
+    const reason = `${title} was not opened: ${failureClause(error)}. The panel stays as it was.`;
     refusals.set(key, { reason, asked: { instanceId, id, at } });
     return reason;
   }

@@ -9,6 +9,7 @@
 import {
   ARTIFACT_DOES,
   ARTIFACT_NAME,
+  ARTIFACT_TITLE_LIMIT,
   ASK_LIMIT,
   CHOICE_LIMITS,
   PREVIEW_START_PATH,
@@ -148,6 +149,7 @@ const storyRef = t.String({ minLength: 1, maxLength: 1100 });
 /** What the person does on an artifact, and its one line in the panel's head. */
 const doesField = t.Union(ARTIFACT_DOES.map((one) => t.Literal(one)));
 const askField = t.String({ minLength: 1, maxLength: ASK_LIMIT });
+const titleField = t.String({ minLength: 1, maxLength: ARTIFACT_TITLE_LIMIT });
 
 /** A component canvas's edges, groups and dials (core `CanvasSpec`), as create and update take them. */
 const canvasFields = {
@@ -200,7 +202,7 @@ const canvasFields = {
 const SHAPES: Record<string, string> = {
   create: CREATE_SHAPE,
   update:
-    'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a component canvas\'s states file); or edges, group, dials (the canvas itself); or ask (any kind\'s head). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
+    'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a component canvas\'s states file); or edges, group, dials (the canvas itself); or ask or title (any kind\'s head). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
   read: 'artifact_read takes id?, since?, png?, width?, save?: a .png path, detail ("summary" | "story"), story, state: a component\'s { story, interaction?: "rest" | "hover" | "focus" | "pressed", scheme?: "light" | "dark", width? } or a preview\'s or page\'s "?query" or "#hash", render. Example: { id, state: { story: "Waiting", interaction: "hover" } }; { id, state: "?__state=pairing:asking", save: "$TMPDIR/outputs/asking.png" }.',
   map: `design_map takes dir?, query?, component?, limit? (1 to ${DESIGN_MAP_LIMITS.max}), cursor?, response_format? ("concise" | "detailed"). Example: { dir: "src/lib", query: "card" }.`,
 };
@@ -388,9 +390,10 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             // Shipped apps' generated client still lists it (the wire guard): refused with the new shape.
             t.Literal("sheet"),
           ]),
-          // Every create names both but the person's own composer canvas (draft), which shipped apps make without them: refused with the tool's shape when missing (service.ts `askedOf`).
+          // Every create names all three but the person's own composer canvas (draft), which shipped apps make without them: refused with the tool's shape when missing (service.ts `askedOf`).
           does: t.Optional(doesField),
           ask: t.Optional(askField),
+          title: t.Optional(titleField),
           ...canvasFields,
           elements: t.Optional(skeletons),
           mermaid: t.Optional(mermaid),
@@ -568,6 +571,18 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       ({ params, body }) => {
         try {
           return artifacts.askUpdate(params.id, params.artifact, body.ask);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // Any kind's title (artifact_update's title): checked as a create's is, then every surface that names it says it.
+    .post(
+      "/api/instances/:id/artifacts/:artifact/title",
+      { body: t.Object({ title: titleField }), detail: { hide: true } },
+      ({ params, body }) => {
+        try {
+          return artifacts.titleUpdate(params.id, params.artifact, body.title);
         } catch (error) {
           return refused(error);
         }

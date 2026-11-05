@@ -1475,16 +1475,16 @@ const artifactsWaiting = (
   };
   return [
     ...unparked(lane.needs).map((need): WaitingItem => ({
-      ...named(need.artifactId, need.instanceId, need.name),
+      ...named(need.artifactId, need.instanceId, need.title),
       artifactKind: need.artifactKind,
       since: need.raisedAt,
       why: reasonLine(need.pending),
     })),
     ...lane.notices.map((notice): WaitingItem => ({
-      ...named(notice.artifactId, notice.instanceId, notice.name),
+      ...named(notice.artifactId, notice.instanceId, notice.title),
       artifactKind: notice.artifactKind,
       since: notice.at,
-      why: notice.parts.map((part) => partWhy(part, notice.name)).join(" · "),
+      why: notice.parts.map((part) => partWhy(part, notice.title)).join(" · "),
     })),
   ];
 };

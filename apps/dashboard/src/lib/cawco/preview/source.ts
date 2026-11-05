@@ -16,11 +16,12 @@ export const previewPlace = (source: PreviewSource): string => {
 export interface CalledArtifact {
   id: string;
   kind?: ArtifactKind;
-  name?: string;
+  /** What the row names it by: its link's label, or the record's title. */
+  title?: string;
 }
 
 const UUID = /^[0-9a-f-]{36}$/u;
-/** An artifact's link in a tool's words, `[name](cawco:artifact/<id>)` (core references.ts). */
+/** An artifact's link in a tool's words, `[title](cawco:artifact/<id>)` (core references.ts). */
 const ARTIFACT_LINK = /\[((?:[^\]\\]|\\.)*)\]\((cawco:artifact\/[^)\s]+)\)/u;
 const ESCAPED = /\\(.)/gu;
 
@@ -29,7 +30,7 @@ const linkedArtifact = (text: string): CalledArtifact | undefined => {
   const link = ARTIFACT_LINK.exec(text);
   const reference = link?.[2] ? parseReference(link[2]) : null;
   return reference && UUID.test(reference.id)
-    ? { id: reference.id, name: (link?.[1] ?? "").replace(ESCAPED, "$1") }
+    ? { id: reference.id, title: (link?.[1] ?? "").replace(ESCAPED, "$1") }
     : undefined;
 };
 
@@ -58,7 +59,7 @@ export const calledArtifact = (
       ? {
           id: answer.id,
           ...(answer.kind ? { kind: answer.kind } : {}),
-          ...(answer.name ? { name: answer.name } : {}),
+          ...(answer.title ? { title: answer.title } : {}),
         }
       : undefined;
   } catch {

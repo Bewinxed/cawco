@@ -194,6 +194,7 @@ const run = async (kit: Kit) => {
     const folder = await fleet.api<{ id: string }>(at, {
       kind: "preview",
       does: "try",
+      title: "Probe try artifact",
       ask: "Try the cold folder",
       name: `cold-folder-${engine}`,
       dir: dirs.cold,
@@ -201,6 +202,7 @@ const run = async (kit: Kit) => {
     const page = await fleet.api<{ id: string }>(at, {
       kind: "page",
       does: "pick",
+      title: "Probe pick artifact",
       ask: "Pick the word",
       name: `cold-page-${engine}`,
       program: PROGRAM,
@@ -208,6 +210,7 @@ const run = async (kit: Kit) => {
     await fleet.api<{ id: string }>(at, {
       kind: "preview",
       does: "try",
+      title: "Probe try artifact",
       ask: "Try the front folder",
       name: `front-folder-${engine}`,
       dir: dirs.front,
@@ -304,12 +307,14 @@ const run = async (kit: Kit) => {
   const canvas = await fleet.api<{ id: string }>(at, {
     kind: "canvas",
     does: "draw",
+    title: "Probe draw artifact",
     ask: "Draw on this canvas",
     name: "cold-canvas",
   });
   await fleet.api<{ id: string }>(at, {
     kind: "preview",
     does: "try",
+    title: "Probe try artifact",
     ask: "Try the front folder",
     name: "cold-canvas-front",
     dir: join(kit.out, "chromium", "front"),
@@ -337,6 +342,7 @@ const run = async (kit: Kit) => {
     const shownPage = await fleet.api<{ id: string }>(at, {
       kind: "page",
       does: "pick",
+      title: "Probe pick artifact",
       ask: "Pick the word",
       name,
       program: PROGRAM,
@@ -344,6 +350,7 @@ const run = async (kit: Kit) => {
     await fleet.api<{ id: string }>(at, {
       kind: "preview",
       does: "try",
+      title: "Probe try artifact",
       ask: "Try the front folder",
       name: `${name}-front`,
       dir: join(kit.out, "chromium", "front"),

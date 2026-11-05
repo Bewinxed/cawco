@@ -66,10 +66,10 @@ export interface BlockMetadata {
   artifactId?: string;
   /** That artifact's kind, which picks its line's glyph. */
   artifactKind?: import("./index").ArtifactKind;
-  /** The words its line says before the artifact's name, by the notice it draws (core `ARTIFACT_NOTICES`): "Comments on", "Fix tray handed you". */
+  /** The words its line says before the artifact's title, by the notice it draws (core `ARTIFACT_NOTICES`): "Comments on", "Fix tray handed you". */
   artifactLead?: string;
-  /** That artifact's name, as its line says it. */
-  artifactName?: string;
+  /** That artifact's title, as its line says it. */
+  artifactTitle?: string;
   /** A `user.delegate_ask`'s display label, e.g. `cawco#506dfafb`. */
   askLabel?: string;
   /** A `user.delegate_ask`'s hub permission requestId — what it waits on to be answered. */

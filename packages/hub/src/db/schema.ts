@@ -4513,6 +4513,8 @@ export const artifacts = sqliteTable(
       .default("judge"),
     /** The panel head's one line under its name: what the person does here, in their words. Empty on a row made before it, and on the person's own composer canvas. */
     ask: text("ask").notNull().default(""),
+    /** What every surface names it by to the person: the panel head, the artifacts menu, Needs you, chips, push text. Written by its agent in plain words (core `ARTIFACT_TITLE_LIMIT`); empty on a row made before titles were kept. `name` stays its slug for agents and URLs. */
+    title: text("title").notNull().default(""),
     /**
      * The person's own canvas, opened in the composer (artifacts service.ts
      * `createDraft`): no agent's create lands on it, so its name stands

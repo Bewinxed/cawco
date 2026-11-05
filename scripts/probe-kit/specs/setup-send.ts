@@ -199,6 +199,7 @@ const run = async (kit: Kit) => {
     kind: "page",
     name: "setup",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Set up Spring move",
     program: setupOnly("own"),
   });
@@ -316,6 +317,7 @@ const run = async (kit: Kit) => {
     kind: "page",
     name: "setup",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Set up Spring posts",
     program: setupOnly("social"),
   });
@@ -336,6 +338,7 @@ const run = async (kit: Kit) => {
     kind: "page",
     name: "setup",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Set up Spring move",
     program: setupOnly("social"),
   });
@@ -459,6 +462,7 @@ const setupInNoPanel = async (kit: Kit, fleet: KitFleet) => {
     kind: "page",
     name: "setup",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Set up Private office",
     program: OFFICE,
   });
@@ -588,6 +592,7 @@ const setupAtCard = async (kit: Kit, fleet: KitFleet) => {
     kind: "page",
     name: "setup",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Set up Private office",
     program: OFFICE,
   });

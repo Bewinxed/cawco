@@ -194,6 +194,7 @@ const workB = (request: Seen): Reply => {
     return want(request, "B", CREATE, {
       kind: "preview",
       does: "try",
+      title: "Probe try artifact",
       ask: "Try this page and say whether it works",
       name: "ended-b",
       port: PORT_B,

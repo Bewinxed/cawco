@@ -80,7 +80,7 @@ export interface Question {
 
 /** What the questions of one artifact are read from. */
 export interface QuestionsInput {
-  artifact: { ask: string; id: string; name: string };
+  artifact: { ask: string; id: string; name: string; title: string };
   /** It is put to the person: a page to pick on or a canvas to judge (needs.ts `asks`). */
   asked: boolean;
   /** Its choices: a program's cards, or an HTML page's choice ids. */
@@ -243,7 +243,7 @@ const askedOn = (input: QuestionsInput): Asked[] => {
         {
           key: "judge",
           kind: "judge",
-          link: artifactLink(artifact.id, artifact.name),
+          link: artifactLink(artifact.id, artifact.title),
           words: artifact.ask,
           why: "",
           answer: judgeAnswer(input.state),

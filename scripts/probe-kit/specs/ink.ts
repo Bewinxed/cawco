@@ -522,6 +522,7 @@ const run = async (kit: Kit) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "ink",
     html: page(false, true),
@@ -1221,6 +1222,7 @@ const canvasChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "canvas",
     does: "draw",
+    title: "Probe draw artifact",
     ask: "Draw on this canvas",
     name: "board",
     elements: [
@@ -1304,6 +1306,7 @@ const reducedChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "still",
     html: page(false, true),
@@ -1472,6 +1475,7 @@ const mapChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "test-map",
     html: TEST_MAP,

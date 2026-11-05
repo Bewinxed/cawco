@@ -79,7 +79,10 @@ const CANVAS = "canvas-header";
 
 /** The fields of a row Needs you's rules read; the rest no rule there reads. */
 const rowOf = (
-  fields: Pick<ArtifactRow, "ask" | "does" | "id" | "instanceId" | "kind">
+  fields: Pick<
+    ArtifactRow,
+    "ask" | "does" | "id" | "instanceId" | "kind" | "title"
+  >
 ): ArtifactRow =>
   ({
     name: fields.id,
@@ -124,6 +127,7 @@ const page = rowOf({
   id: PAGE,
   kind: "page",
   does: "pick",
+  title: "Probe pick artifact",
   ask: "Pick the five calls the tasks wait on",
   instanceId: CAW,
 });
@@ -180,6 +184,7 @@ export default {
         id: CANVAS,
         kind: "canvas",
         does: "judge",
+        title: "Probe judge artifact",
         ask: "Judge the header",
         instanceId: CAW,
       }),

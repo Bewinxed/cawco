@@ -229,6 +229,7 @@ const run = async (kit: Kit) => {
   const created = await call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: NAME,
     html: kitPage(),

@@ -510,6 +510,7 @@ const PreviewFrameShape = z.object({
     id: z.string(),
     kind: ArtifactKindShape,
     name: z.string(),
+    title: z.string(),
   }),
   artifacts: z.array(z.string()).optional(),
   instanceId: z.string(),
@@ -574,7 +575,7 @@ export const ArtifactSessionHeardSchema: z.ZodType<ArtifactSessionHeardType> =
 export const CalledArtifactShape = z.object({
   id: z.string(),
   kind: ArtifactKindShape.optional(),
-  name: z.string().optional(),
+  title: z.string().optional(),
 });
 
 const PinShape = z.object({ id: z.string(), kind: z.literal("project") });

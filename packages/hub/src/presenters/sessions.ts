@@ -183,7 +183,7 @@ const contextLine = (look: DelegatePeek): string => {
 const madeLines = (look: DelegatePeek): string[] => {
   const { made } = look;
   const handed = peek.handed(
-    made.handed.map((one) => artifactLink(one.id, one.name))
+    made.handed.map((one) => artifactLink(one.id, one.title))
   );
   if ("unread" in made) {
     return [peek.madeHeading, peek.madeUnread(made.unread), handed];

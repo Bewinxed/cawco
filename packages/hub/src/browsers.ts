@@ -62,6 +62,7 @@ import {
   SHIELD_WORDS,
 } from "@cawco/core/browser";
 import { DAY_MS } from "@cawco/core/time";
+import { artifactWords } from "@cawco/core/words/artifacts";
 import { Elysia, t } from "elysia";
 import type { BrowserAsks } from "./browser-tools";
 import type { ArtifactRow, ArtifactsDb } from "./db/artifacts";
@@ -213,6 +214,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       // The person takes the browser over; each browser_ask carries its own reason, so the row keeps no line of its own.
       does: "try",
       ask: "",
+      title: artifactWords.kindWord.browser,
       machineId: instance.machineId,
       source: { page: key },
       revision: 1,

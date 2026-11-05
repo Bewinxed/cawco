@@ -65,10 +65,9 @@ export interface ArtifactNeed {
   /** The session whose panel holds it. */
   instanceId: string;
   kind: "artifact";
-  /** `[name](cawco:artifact/<id>)`: how a line of words names it. */
+  /** `[title](cawco:artifact/<id>)`: how a line of words names it. */
   link: string;
   machineId: string;
-  name: string;
   /**
    * The notice id its Not now acknowledges (hub notices.ts): the item leaves
    * the lane until it is raised again, a revision or a new answer.
@@ -93,6 +92,8 @@ export interface ArtifactNeed {
   /** When it became pending, ms epoch on the hub's clock: its publish, or the agent's newest reply that asks. */
   raisedAt: number;
   stop: ArtifactStop;
+  /** What it is named by to the person (its agent's title): a row's name, a push's title. */
+  title: string;
   /** What Send sends now; 0 when nothing is written and unsent. */
   unsent: number;
 }
@@ -121,10 +122,11 @@ export interface ArtifactNeedNotice {
   href: string | null;
   instanceId: string | null;
   machineId: string | null;
-  name: string;
   parts: ArtifactNeedNoticePart[];
   project: string | null;
   stop: ArtifactStop;
+  /** What it is named by to the person (its agent's title). */
+  title: string;
 }
 
 /** The items Needs you lists: those not put away with Not now. */
@@ -264,14 +266,14 @@ export const reasonShort = (reason: ArtifactReason): string => {
 };
 
 /** What was never done, as an ended session's notice says it. */
-const neverDone = (reason: ArtifactReason, name: string): string => {
+const neverDone = (reason: ArtifactReason, title: string): string => {
   switch (reason.kind) {
     case "unopened":
-      return artifactWords.neverOpened(name);
+      return artifactWords.neverOpened(title);
     case "answers":
-      return artifactWords.neverAnswered(reason.asked - reason.answered, name);
+      return artifactWords.neverAnswered(reason.asked - reason.answered, title);
     case "answer":
-      return artifactWords.neverRead(reason.count, name);
+      return artifactWords.neverRead(reason.count, title);
     default:
       unhandled("reason", reason);
   }
@@ -280,19 +282,19 @@ const neverDone = (reason: ArtifactReason, name: string): string => {
 /** One part of a notice in words: its row's line. */
 export const noticePartWords = (
   part: ArtifactNeedNoticePart,
-  name: string
+  title: string
 ): string => {
   switch (part.kind) {
     case "changed":
-      return artifactWords.changedSince(name, part.count);
+      return artifactWords.changedSince(title, part.count);
     case "closed":
-      return artifactWords.closedAnswers(name, part.count, part.pin);
+      return artifactWords.closedAnswers(title, part.count, part.pin);
     case "ended":
       return artifactWords.ended(
         part.harness
           ? accountsWords.harnesses[part.harness]
           : artifactWords.itsSession,
-        neverDone(part.reason, name)
+        neverDone(part.reason, title)
       );
     default:
       unhandled("notice", part);

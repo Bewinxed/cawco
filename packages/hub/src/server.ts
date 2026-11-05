@@ -568,6 +568,7 @@ import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { areaWords } from "@cawco/core/words/areas";
+import { artifactWords } from "@cawco/core/words/artifacts";
 import { containerWords } from "@cawco/core/words/containers";
 import { contextWords } from "@cawco/core/words/context";
 import { turnCutWords } from "@cawco/core/words/cuts";
@@ -10034,7 +10035,7 @@ export const createServer = (
             {
               session,
               step: { id: step.id, content: step.content },
-              artifact: { id: page.id, name: page.name },
+              artifact: { id: page.id, title: page.title },
             },
           ]
         : [];
@@ -10042,7 +10043,7 @@ export const createServer = (
     const onPlan = (plan?.pageWaits ?? []).flatMap((pageId) => {
       const page = db.artifacts.get(pageId);
       return page && !steps.some((step) => stepNamesArtifact(step, pageId))
-        ? [{ session, artifact: { id: page.id, name: page.name } }]
+        ? [{ session, artifact: { id: page.id, title: page.title } }]
         : [];
     });
     return [...onSteps, ...onPlan];
@@ -14372,6 +14373,7 @@ export const createServer = (
       id: artifact.id,
       kind: artifact.kind,
       name: artifact.name,
+      title: artifact.title,
       next: next?.id,
     });
     await artifactInOrder(`${artifact.id}:handed`, () => {
@@ -14417,6 +14419,7 @@ export const createServer = (
           id: artifact.id,
           kind: artifact.kind,
           name: artifact.name,
+          title: artifact.title,
           since: earliest,
         }),
         [],
@@ -14912,7 +14915,7 @@ export const createServer = (
       workspace: asked.id,
       reason: reason.trim(),
       waiting: workWords.discardAskWaiting(
-        stillWaiting.map((one) => artifactLink(one.id, one.name))
+        stillWaiting.map((one) => artifactLink(one.id, one.title))
       ),
     });
     return recorded === undefined ? { approved: true } : { recorded };
@@ -14945,7 +14948,7 @@ export const createServer = (
     const listed = sessions
       .map(
         ({ row }) =>
-          `${artifactLink(row.id, row.name)} (${row.kind} ${idHandle(row.id)})`
+          `${artifactLink(row.id, row.title)} (${row.kind} ${idHandle(row.id)})`
       )
       .join(", ");
     const now = sessions.every(
@@ -15655,6 +15658,7 @@ export const createServer = (
         name,
         does: "draw",
         ask: "Draw over the diagram",
+        title: artifactWords.diagramTitle(page.title),
         mermaid: body.mermaid,
       });
       return Response.json({ id: made.id, name: made.name }, { status: 201 });
@@ -36874,7 +36878,7 @@ export const createServer = (
           return {
             waiting: workItems.waiting(params.id).map((one) => ({
               ...one,
-              link: artifactLink(one.id, one.name),
+              link: artifactLink(one.id, one.title),
             })),
           };
         } catch (error) {

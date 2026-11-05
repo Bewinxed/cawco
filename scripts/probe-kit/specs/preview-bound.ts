@@ -557,6 +557,7 @@ const run = async (kit: Kit) => {
   await fleet.api(`/api/instances/${heavyOne}/artifacts`, {
     kind: "preview",
     does: "try",
+    title: "Probe try artifact",
     ask: "Try this page and say whether it works",
     name: "heavy",
     dir: folder,
@@ -567,6 +568,7 @@ const run = async (kit: Kit) => {
     await fleet.api(`/api/instances/${id}/artifacts`, {
       kind: "page",
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge this page: pin anything that reads wrong",
       name,
       html: pageOf(name),
@@ -583,6 +585,7 @@ const run = async (kit: Kit) => {
   await fleet.api(`/api/instances/${fullOne}/artifacts`, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "full",
     html: fullPage(),
@@ -593,6 +596,7 @@ const run = async (kit: Kit) => {
     await fleet.api(`/api/instances/${id}/artifacts`, {
       kind: "page",
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge this page: pin anything that reads wrong",
       name,
       html,
@@ -859,6 +863,7 @@ const run = async (kit: Kit) => {
       response_format: "detailed",
       kind: "page",
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge this page: pin anything that reads wrong",
       name: "made",
       html: pageOf("Made"),
@@ -1237,6 +1242,7 @@ const run = async (kit: Kit) => {
       response_format: "detailed",
       kind: "canvas",
       does: "draw",
+      title: "Probe draw artifact",
       ask: "Draw on this canvas",
       name: "held",
     },

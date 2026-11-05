@@ -1288,7 +1288,7 @@ function repeatOfRefused(
 function stoppedHoldWords(
   workspaceId: string,
   unlanded: Unlanded | { error: string } | null,
-  serving: readonly { id: string; name: string }[]
+  serving: readonly { id: string; title: string }[]
 ): string {
   const ws = idHandle(workspaceId);
   if (!unlanded) {
@@ -1309,7 +1309,7 @@ function stoppedHoldWords(
   return serving.length > 0
     ? workWords.stopServes(
         ws,
-        serving.map((one) => artifactLink(one.id, one.name))
+        serving.map((one) => artifactLink(one.id, one.title))
       )
     : workWords.stopRetires(ws);
 }
@@ -2083,7 +2083,7 @@ export const handoffActions = ({
       );
       const said = read.ok
         ? ((await read.json()) as {
-            serving?: { id: string; name: string }[];
+            serving?: { id: string; title: string }[];
             unlanded: Unlanded | { error: string } | null;
           })
         : { unlanded: { error: await read.text() } };

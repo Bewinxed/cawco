@@ -7220,6 +7220,11 @@
                     "maxLength": 160,
                     "type": "string"
                   },
+                  "title": {
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "type": "string"
+                  },
                   "edges": {
                     "maxItems": 100,
                     "type": "array",
@@ -35919,14 +35924,14 @@
                 "link": {
                   "type": "string"
                 },
-                "name": {
+                "title": {
                   "type": "string"
                 }
               },
               "required": [
                 "id",
                 "link",
-                "name"
+                "title"
               ]
             }
           }
@@ -41914,7 +41919,7 @@
         "type": "object",
         "properties": {
           "ask": {
-            "description": "The one line the panel's head shows under its name: what the person does here, in their words. Empty on one made before asks were kept.",
+            "description": "The one line the panel's head shows under its title: what the person does here, in their words. Empty on one made before asks were kept.",
             "type": "string"
           },
           "createdAt": {
@@ -41931,6 +41936,7 @@
             "$ref": "#/components/schemas/ArtifactKind"
           },
           "name": {
+            "description": "Its slug, what the agent's tools and its URLs name it by; never shown to the person.",
             "type": "string"
           },
           "pending": {
@@ -41960,6 +41966,10 @@
             "description": "Its latest picture, served at `GET /api/artifacts/:id/thumbnail/:scheme`; null until a screen drew one.",
             "$ref": "#/components/schemas/ArtifactThumbnail"
           },
+          "title": {
+            "description": "What every surface names it by to the person, in the agent's plain words ({@link ARTIFACT_TITLE_LIMIT}). Empty on one made before titles were kept.",
+            "type": "string"
+          },
           "updatedAt": {
             "type": "string"
           },
@@ -41977,6 +41987,7 @@
           "name",
           "sent",
           "shownAt",
+          "title",
           "updatedAt",
           "waiting"
         ]
@@ -42176,7 +42187,7 @@
             "$ref": "#/components/schemas/ArtifactKind"
           },
           "link": {
-            "description": "Its link, `[name](cawco:artifact/<id>)`: what the agent names it by to the person.",
+            "description": "Its link, `[title](cawco:artifact/<id>)`: what the agent names it by to the person.",
             "type": "string"
           },
           "marked": {
@@ -42240,6 +42251,7 @@
             }
           },
           "name": {
+            "description": "Its slug, what every artifact tool takes.",
             "type": "string"
           },
           "note": {
@@ -42441,6 +42453,10 @@
             "$ref": "#/components/schemas/TailnetOrigin",
             "description": "A draft canvas's origin on the tailnet name while the hub serves HTTPS there (core `PreviewAddress`)."
           },
+          "title": {
+            "description": "What it is named by to the person.",
+            "type": "string"
+          },
           "weight": {
             "$ref": "#/components/schemas/FolderWeight",
             "description": "A folder preview's: what it loads at most, from its folder's files."
@@ -42462,7 +42478,8 @@
           "kind",
           "name",
           "opened",
-          "route"
+          "route",
+          "title"
         ]
       },
       "PageBroken": {
@@ -43122,6 +43139,7 @@
             "type": "string"
           },
           "name": {
+            "description": "Its slug, what every artifact tool takes.",
             "type": "string"
           },
           "opened": {
@@ -43172,6 +43190,10 @@
             "description": "Whether its session's panel shows it now.",
             "type": "boolean"
           },
+          "title": {
+            "description": "What it is named by to the person.",
+            "type": "string"
+          },
           "unread": {
             "description": "The person's changes (picks, notes, drawn elements) since the session last read it.",
             "type": "number"
@@ -43198,6 +43220,7 @@
           "pins",
           "sent",
           "shown",
+          "title",
           "unread",
           "updatedAt",
           "waitingOn"
@@ -43296,6 +43319,7 @@
             }
           },
           "name": {
+            "description": "Its slug, what every artifact tool takes.",
             "type": "string"
           },
           "outline": {
@@ -43380,9 +43404,13 @@
             "type": "object",
             "description": "Every key, or with `since` only those changed after it; a canvas's is empty."
           },
+          "title": {
+            "description": "What it is named by to the person.",
+            "type": "string"
+          },
           "unreached": {
             "$ref": "#/components/schemas/StageUnreached",
-            "description": "A component canvas's stage the read couldn't reach: which hop, why, and since when; `stage` is then the doc's last word of it."
+            "description": "The hub's word that a canvas's stage couldn't be reached by its last read\n(the doc's `meta.unreached`, which the panel and the agent's read both\nsay): the hop that failed, in the preview proxy's kinds; why, in the hub's\nwords; and since when, the first read that failed since one that reached\nit. A read that reaches the stage, or the daemon's next word of it, takes\nit away."
           },
           "verify": {
             "description": "A component canvas's design system round, as `verify: true` asked it: what the ask did.",
@@ -43412,7 +43440,8 @@
           "revision",
           "sentAt",
           "seq",
-          "state"
+          "state",
+          "title"
         ]
       },
       "DecisionAnswer": {
@@ -43847,12 +43876,16 @@
               },
               "name": {
                 "type": "string"
+              },
+              "title": {
+                "type": "string"
               }
             },
             "required": [
               "id",
               "kind",
-              "name"
+              "name",
+              "title"
             ]
           },
           "showing": {
@@ -43866,12 +43899,16 @@
               },
               "name": {
                 "type": "string"
+              },
+              "title": {
+                "type": "string"
               }
             },
             "required": [
               "id",
               "kind",
-              "name"
+              "name",
+              "title"
             ]
           }
         },
@@ -44395,7 +44432,7 @@
                   "$ref": "#/components/schemas/ArtifactKind"
                 },
                 "link": {
-                  "description": "Its link, `[name](cawco:artifact/<id>)`: what the agent names it by to the person.",
+                  "description": "Its link, `[title](cawco:artifact/<id>)`: what the agent names it by to the person.",
                   "type": "string"
                 },
                 "name": {
@@ -53042,11 +53079,11 @@
             "description": "That artifact's kind, which picks its line's glyph."
           },
           "artifactLead": {
-            "description": "The words its line says before the artifact's name, by the notice it draws (core `ARTIFACT_NOTICES`): \"Comments on\", \"Fix tray handed you\".",
+            "description": "The words its line says before the artifact's title, by the notice it draws (core `ARTIFACT_NOTICES`): \"Comments on\", \"Fix tray handed you\".",
             "type": "string"
           },
-          "artifactName": {
-            "description": "That artifact's name, as its line says it.",
+          "artifactTitle": {
+            "description": "That artifact's title, as its line says it.",
             "type": "string"
           },
           "askLabel": {
@@ -54504,13 +54541,10 @@
             ]
           },
           "link": {
-            "description": "`[name](cawco:artifact/<id>)`: how a line of words names it.",
+            "description": "`[title](cawco:artifact/<id>)`: how a line of words names it.",
             "type": "string"
           },
           "machineId": {
-            "type": "string"
-          },
-          "name": {
             "type": "string"
           },
           "notNow": {
@@ -54546,6 +54580,10 @@
           "stop": {
             "$ref": "#/components/schemas/ArtifactStop"
           },
+          "title": {
+            "description": "What it is named by to the person (its agent's title): a row's name, a push's title.",
+            "type": "string"
+          },
           "unsent": {
             "description": "What Send sends now; 0 when nothing is written and unsent.",
             "type": "number"
@@ -54560,7 +54598,6 @@
           "kind",
           "link",
           "machineId",
-          "name",
           "notNow",
           "ownSend",
           "parked",
@@ -54568,6 +54605,7 @@
           "project",
           "raisedAt",
           "stop",
+          "title",
           "unsent"
         ]
       },
@@ -54645,9 +54683,6 @@
               "string"
             ]
           },
-          "name": {
-            "type": "string"
-          },
           "parts": {
             "type": "array",
             "items": {
@@ -54662,6 +54697,10 @@
           },
           "stop": {
             "$ref": "#/components/schemas/ArtifactStop"
+          },
+          "title": {
+            "description": "What it is named by to the person (its agent's title).",
+            "type": "string"
           }
         },
         "required": [
@@ -54671,10 +54710,10 @@
           "href",
           "instanceId",
           "machineId",
-          "name",
           "parts",
           "project",
-          "stop"
+          "stop",
+          "title"
         ]
       },
       "ArtifactNeedNoticePart": {
@@ -60635,7 +60674,7 @@
         "type": "object",
         "properties": {
           "artifact": {
-            "description": "The artifact the session's panel shows (Projects spec §5.10), with its\nask: the head's line under its name from the first frame, while its\npage is still on its way. None on one made before asks were kept.",
+            "description": "The artifact the session's panel shows (Projects spec §5.10), with its\ntitle, the head's name, and its ask, the head's line under it, from the\nfirst frame, while its page is still on its way. `name` is its slug,\nnever shown; no ask on one made before asks were kept.",
             "type": "object",
             "properties": {
               "ask": {
@@ -60649,12 +60688,16 @@
               },
               "name": {
                 "type": "string"
+              },
+              "title": {
+                "type": "string"
               }
             },
             "required": [
               "id",
               "kind",
-              "name"
+              "name",
+              "title"
             ]
           },
           "artifacts": {

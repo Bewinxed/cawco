@@ -159,6 +159,7 @@ const page: ArtifactRow = {
   name: "title-bars-close",
   kind: "page",
   does: "pick",
+  title: "Probe pick artifact",
   ask: "Pick the title bars' Close",
   instanceId: WRITER,
   projectId: "project-1",
@@ -175,7 +176,12 @@ const questionsOfPage = (
   media = new Map<string, string>()
 ): Question[] =>
   questionsOf({
-    artifact: { id: PAGE, name: page.name, ask: page.ask },
+    artifact: {
+      id: PAGE,
+      name: page.name,
+      title: "Answered page",
+      ask: page.ask,
+    },
     asked: true,
     pinsMayAsk: true,
     cards: CARDS,
@@ -362,7 +368,12 @@ const run = ({ check }: Kit) => {
       },
       questions: stillAsked(
         questionsOf({
-          artifact: { id: delegatePage, name: "card-close-gone", ask: "Pick" },
+          artifact: {
+            id: delegatePage,
+            name: "card-close-gone",
+            title: "Card close gone",
+            ask: "Pick",
+          },
           asked: true,
           pinsMayAsk: true,
           cards: [CARDS[1] as (typeof CARDS)[number]],
@@ -440,6 +451,7 @@ const run = ({ check }: Kit) => {
     name: "move-face-work",
     kind: "preview",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge the move",
     openedRevision: null,
   } as ArtifactRow;
@@ -449,7 +461,12 @@ const run = ({ check }: Kit) => {
     judged: true,
   });
   const askingPin = questionsOf({
-    artifact: { id: CANVAS, name: "rail-one-group", ask: "" },
+    artifact: {
+      id: CANVAS,
+      name: "rail-one-group",
+      title: "Rail one group",
+      ask: "",
+    },
     asked: false,
     pinsMayAsk: true,
     cards: [],

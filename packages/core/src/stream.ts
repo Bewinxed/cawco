@@ -249,12 +249,18 @@ import type { TailnetServing } from "./tailnet-https";
  *    cards not picked (`picks`) and its writes not sent (`unsent`) stood.
  *    A page built for 49 reads reasons the hub no longer sends, so it
  *    reloads first.
+ * 51: an artifact is named to the person by the title its agent wrote:
+ *    Needs you's artifact items and notices and a workspace's waiting
+ *    artifacts carry `title`, and an artifact notice's transcript line
+ *    `artifactTitle`, where its slug `name` (`artifactName`) stood. A page
+ *    built for 50 reads a `name` the hub no longer sends, so it reloads
+ *    first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 50;
+export const WIRE_PROTOCOL = 51;
 
 /**
  * What a session's stream carries: the changes each frame made to its

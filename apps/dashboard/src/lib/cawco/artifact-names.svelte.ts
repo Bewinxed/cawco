@@ -2,7 +2,7 @@
  * The artifacts a written word names (`[label](cawco:artifact/<id>)`,
  * `cawco:pin/<artifact>/<number>`, `cawco:decision/<artifact>/<card>`, core
  * references.ts), as the chips that draw them read them: which session's
- * panel holds the artifact, its kind and name, and its pins and picks.
+ * panel holds the artifact, its kind, name and title, and its pins and picks.
  *
  * An artifact a pane holds (PreviewPane, {@link holdArtifact}) is read from
  * the doc that pane joins, live. Any other is asked of the hub once
@@ -30,9 +30,12 @@ import { ArtifactRefused, findArtifact } from "./artifact-api";
 export interface NamedArtifact {
   instanceId: string;
   kind: ArtifactKind;
+  /** Its slug, which a Decisions address names a project's page by. */
   name: string;
   /** Its project, for a project's page (core `ArtifactSummary.project`): a setup page's lands by core `setupLanding`. */
   project?: string;
+  /** What its chip names it by. */
+  title: string;
 }
 
 /** What a chip reads of an artifact's doc: its pins and picks. */
@@ -58,6 +61,7 @@ export function noteArtifact(id: string, named: NamedArtifact): void {
   if (
     !was ||
     was.name !== named.name ||
+    was.title !== named.title ||
     was.kind !== named.kind ||
     was.instanceId !== named.instanceId
   ) {
@@ -126,6 +130,7 @@ function ask(id: string): Promise<void> {
         instanceId: one.instanceId,
         kind: one.kind,
         name: one.name,
+        title: one.title,
         ...(one.project ? { project: one.project } : {}),
       });
     })

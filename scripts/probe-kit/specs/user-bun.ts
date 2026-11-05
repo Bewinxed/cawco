@@ -490,6 +490,7 @@ const run = async (kit: Kit) => {
       name: "cards",
       file: STORY,
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge the card in each of its states",
     },
     session
@@ -572,6 +573,7 @@ const run = async (kit: Kit) => {
       name: "npm-cards",
       file: STORY,
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge the card in each of its states",
     },
     npmSession

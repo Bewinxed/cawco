@@ -120,6 +120,7 @@ const want = (request: Seen, tag: Tag, name: string, input: object): Reply => {
 const handUp = (tag: Tag): object => ({
   kind: "preview",
   does: "try",
+  title: "Probe try artifact",
   ask: "Try this page and say whether it reads right",
   name: PAGES[tag].name,
   port: PAGES[tag].port,

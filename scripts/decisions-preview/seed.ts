@@ -735,6 +735,7 @@ const publish = async (
       kind: "page",
       name: page.name,
       does: "pick",
+      title: "Probe pick artifact",
       ask: page.ask,
       program: pageProgram(page, pictures),
     }

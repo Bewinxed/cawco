@@ -1864,11 +1864,11 @@ function artifactNoticeBlock(
     content: "",
     metadata: {
       subtype: ARTIFACT_RESPONSES,
-      noteTitle: `${notice.lead} ${notice.name}`,
+      noteTitle: `${notice.lead} ${notice.title}`,
       artifactId: notice.id,
       artifactKind: notice.kind,
       artifactLead: notice.lead,
-      artifactName: notice.name,
+      artifactTitle: notice.title,
       ...(images ? { images } : {}),
       ...(attachments ? { attachments } : {}),
     },

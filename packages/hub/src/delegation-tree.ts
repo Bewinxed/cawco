@@ -112,10 +112,10 @@ export type PeekContext =
 /** What its workspace holds so far, or why it could not be read. */
 export type PeekMade =
   | (Omit<Unlanded, "live" | "workspaceId"> & {
-      /** The artifacts it handed its parent (`to: "parent"`), by name. */
-      handed: { id: string; name: string }[];
+      /** The artifacts it handed its parent (`to: "parent"`), by title. */
+      handed: { id: string; title: string }[];
     })
-  | { handed: { id: string; name: string }[]; unread: string };
+  | { handed: { id: string; title: string }[]; unread: string };
 
 /** `delegate_list` with a `target`: one delegate in full. */
 export interface DelegatePeek {
@@ -535,11 +535,11 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
   };
 
   /** The artifacts `instanceId` made that stand in its parent's panel: handed up with `to: "parent"`. */
-  const handedUp = (item: WorkItemRow): { id: string; name: string }[] =>
+  const handedUp = (item: WorkItemRow): { id: string; title: string }[] =>
     db.artifacts
       .ofInstance(item.parentInstanceId)
       .filter((artifact) => artifact.madeBy === item.instanceId)
-      .map((artifact) => ({ id: artifact.id, name: artifact.name }));
+      .map((artifact) => ({ id: artifact.id, title: artifact.title }));
 
   /** What the session's workspace holds so far, or the machine's words on why it could not be read. */
   const madeOf = async (item: WorkItemRow): Promise<PeekMade> => {

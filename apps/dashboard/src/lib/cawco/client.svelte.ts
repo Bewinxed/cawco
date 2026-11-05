@@ -7437,13 +7437,13 @@ export async function workspaceHeld(
 
 /**
  * What a workspace serves that still waits on the person, each by its id
- * and name (`GET /api/workspaces/:id/waiting`): what its archive's confirm
+ * and title (`GET /api/workspaces/:id/waiting`): what its archive's confirm
  * names, as confirming archives it anyway. None when the read fails: the
  * hub refuses an archive it wasn't told was confirmed, in its own words.
  */
 export async function workspaceWaiting(
   workspaceId: string
-): Promise<{ id: string; name: string }[]> {
+): Promise<{ id: string; title: string }[]> {
   const response = await fetch(
     `/api/workspaces/${encodeURIComponent(workspaceId)}/waiting`
   ).catch(() => null);
@@ -7451,7 +7451,7 @@ export async function workspaceWaiting(
     return [];
   }
   return (
-    (await response.json()) as { waiting: { id: string; name: string }[] }
+    (await response.json()) as { waiting: { id: string; title: string }[] }
   ).waiting;
 }
 

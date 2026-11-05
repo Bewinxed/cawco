@@ -54,7 +54,13 @@
   let preview = $state<PanePreview>({
     kind: "preview",
     instanceId: INSTANCE,
-    artifact: { id: ARTIFACT, kind, name, ...(ask ? { ask } : {}) },
+    artifact: {
+      id: ARTIFACT,
+      kind,
+      name,
+      title: name,
+      ...(ask ? { ask } : {}),
+    },
     artifacts: [ARTIFACT],
     port,
     revision: "bench-1",
@@ -68,7 +74,8 @@
         artifact: {
           id: THEN,
           kind: "component",
-          name: page.url.searchParams.get("thenName") ?? "Switched canvas",
+          name: "switched-canvas",
+          title: page.url.searchParams.get("thenName") ?? "Switched canvas",
           ...(page.url.searchParams.get("thenAsk")
             ? { ask: page.url.searchParams.get("thenAsk") ?? "" }
             : {}),

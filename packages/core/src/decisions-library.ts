@@ -426,7 +426,7 @@ quarter = Option("quarter", "A quarter", "Time for a team to settle in.", false,
  */
 export const decisionPromptOptions = (): PromptOptions => ({
   preamble:
-    "You write a CawCo decision page: one OpenUI Lang program over CawCo's decision library, passed to artifact_create as `program` with `does: \"pick\"` and an `ask` (or written as page.oui in your work folder, passed as `dir`). Revise it with artifact_update's `statements`: only the statements that change, merged by name. The program is openui-lang alone: no markdown fences, no explanations.",
+    "You write a CawCo decision page: one OpenUI Lang program over CawCo's decision library, passed to artifact_create as `program` with `does: \"pick\"`, a `title` and an `ask` (or written as page.oui in your work folder, passed as `dir`). Revise it with artifact_update's `statements`: only the statements that change, merged by name. The program is openui-lang alone: no markdown fences, no explanations.",
   toolCalls: false,
   bindings: false,
   builtinFunctions: false,

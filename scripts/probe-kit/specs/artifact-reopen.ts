@@ -110,6 +110,7 @@ const leg = async (
     await call(CREATE, {
       kind: "page",
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge this page: pin anything that reads wrong",
       name: "alpha",
       html: pageOf("Alpha"),
@@ -119,6 +120,7 @@ const leg = async (
     await call(CREATE, {
       kind: "page",
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge this page: pin anything that reads wrong",
       name: "beta",
       html: pageOf("Beta"),

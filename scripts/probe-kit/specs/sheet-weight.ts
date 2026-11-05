@@ -440,6 +440,7 @@ const folderCheck = async (kit: Kit) => {
         response_format: "detailed",
         kind: "preview",
         does: "try",
+        title: "Probe try artifact",
         ask: "Try this page and say whether it works",
         name: "weighed",
         dir: folder,

@@ -1652,7 +1652,7 @@ export const createPush = ({
           many
         ),
         sealed: alertOf(
-          need.name,
+          need.title,
           project,
           count === 1 && text ? (firstLine(text) ?? many) : many
         ),

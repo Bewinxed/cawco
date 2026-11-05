@@ -94,6 +94,7 @@ const run = async (kit: Kit) => {
     response_format: "detailed",
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "restarted",
     html: '<!doctype html><html><body><p id="one">A page across restarts.</p></body></html>',

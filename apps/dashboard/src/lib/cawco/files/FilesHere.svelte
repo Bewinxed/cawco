@@ -46,7 +46,7 @@
     if (!said) {
       return null;
     }
-    const asked = said.asked as Pick<ArtifactSummary, "id" | "name">;
+    const asked = said.asked as Pick<ArtifactSummary, "id" | "title">;
     return { reason: said.reason, again: () => pick(asked) };
   });
 
@@ -82,7 +82,7 @@
     }
   });
 
-  async function pick(artifact: Pick<ArtifactSummary, "id" | "name">) {
+  async function pick(artifact: Pick<ArtifactSummary, "id" | "title">) {
     const id = instanceId;
     if (!id) {
       return;
@@ -97,8 +97,8 @@
       if (showing?.id === artifact.id) {
         showing = null;
         refusals.set(`files-pick:${id}`, {
-          reason: `${artifact.name} was not shown: ${failureClause(error)}. Files stays open.`,
-          asked: { id: artifact.id, name: artifact.name },
+          reason: `${artifact.title} was not shown: ${failureClause(error)}. Files stays open.`,
+          asked: { id: artifact.id, title: artifact.title },
         });
       }
       return;

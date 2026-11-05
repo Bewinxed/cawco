@@ -177,6 +177,7 @@ const run = async (kit: Kit) => {
     kind: "canvas",
     name: "working-canvas",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge the edit surface as drawn",
     to: "parent",
   });
@@ -218,6 +219,7 @@ const run = async (kit: Kit) => {
     kind: "page",
     name: "mock-shot",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge the mock as drawn",
     html: pageOf("Mock shot"),
   });
@@ -231,6 +233,7 @@ const run = async (kit: Kit) => {
     kind: "page",
     name: "pick-shot",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Pick the shot",
     program: `root = Decisions("Which shot?", [shot])
 shot = Decision("shot", "Which shot leads the page?", [drawn, plain], "The mock is drawn below.", [], [], false, null, "behaviour")
@@ -282,18 +285,21 @@ mockup = Preview("${mock.id}", "The mock")`,
     kind: "canvas",
     name: "ended-canvas",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge what the delegate drew",
   });
   const liveCanvas = await create(live, {
     kind: "canvas",
     name: "live-canvas",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge what the delegate drew",
   });
   const nestedCanvas = await create(nested, {
     kind: "canvas",
     name: "nested-canvas",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge what the delegate drew",
   });
   await fleet.stopSession(ended);

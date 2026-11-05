@@ -605,7 +605,8 @@
               : undefined}
             {@const opened = preview?.state === "open"}
             {@const busy = opening.has(callId(m))}
-            {@const name = called?.name ?? preview?.artifact.name ?? "Artifact"}
+            {@const name =
+              called?.title ?? preview?.artifact.title ?? "Artifact"}
             <!-- The row is what travels: pressing its button departs it
                  (motion/share's click capture), and the panel or sheet
                  opens out of its box under `preview:<session>` — first open

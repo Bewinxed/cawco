@@ -12,7 +12,6 @@
   },
   "scripts/probe-kit/specs/artifacts.ts": {
     "): your panel keeps the version you opened": 1,
-    "artifact_create takes kind, name, does (pick | judge | try | draw), ask": 1,
     "changed the": 1
   },
   "scripts/probe-kit/specs/binary-prune.ts": {

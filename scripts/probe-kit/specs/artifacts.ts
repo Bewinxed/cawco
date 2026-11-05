@@ -55,11 +55,11 @@
  *    dashboard's switch flips to dark; once it says it draws dark too, dark
  *    after the flip and light after it flips back. A preview of a live port
  *    keeps its root untouched through the same flips.
- * 19. The head says no path under the artifact's name (owner: "a stray /
+ * 19. The head says no path under the artifact's title (owner: "a stray /
  *    below the preview title"): for the page, the live preview and a canvas
- *    the session makes, at 1440 and at 390, the head stands with the
- *    artifact's own ask as its line under the name, and no text in the
- *    panel holds a route.
+ *    the session makes, at 1440 and at 390, the head stands named by the
+ *    artifact's title with its own ask as its line under it, and no text
+ *    or label in the panel holds a route or the artifact's slug.
  *
  * `artifact_promote` (slice 6), read from the project's folder on the hub
  * with git:
@@ -133,6 +133,16 @@
  * ask 17. `ask: "Tap the card"`: no "tap" or "poke".
  * ask 18. `ask: "Judge src/lib/Card.svelte"`: no file in the person's words.
  *
+ * Every artifact carries a title its agent wrote, and the slug `name` is
+ * shown nowhere:
+ *
+ * title 1. `artifact_create` with no `title` is refused by the tool,
+ *    its refusal saying title is required and how to write it.
+ * title 2. A title written as a slug is refused by the hub.
+ * 19b. The artifacts menu names leg 19's page, preview and canvas by their
+ *    titles, and none of their slugs is in its text or labels (leg 19 holds
+ *    the head to the same).
+ *
  * The head carries the ask (§3.4, §4 "The head"), on a page made with
  * `ask: "Judge the six pairing states: pin anything that reads wrong"`:
  *
@@ -152,6 +162,7 @@ import { PNG } from "pngjs";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { previewWords } from "../../../packages/core/src/words/preview";
 import { shellWords } from "../../../packages/core/src/words/shell";
+import { CREATE_SHAPE } from "../../../packages/hub/src/artifacts/component";
 import type { PromotedFile } from "../../../packages/hub/src/artifacts/service";
 import type { ArtifactTool } from "../../../packages/hub/src/artifacts/tools";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -428,6 +439,7 @@ const run = async (kit: Kit) => {
   const created = await call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Hero pick",
     ask: "Judge this page: pin anything that reads wrong",
     name: "hero-pick",
     html: PAGE,
@@ -526,12 +538,12 @@ const run = async (kit: Kit) => {
       return out;
     });
   kit.check(
-    "1: its row is 44px, the kind's glyph 16px, the name in the label role, the age in meta ink",
+    "1: its row is 44px, the kind's glyph 16px, the title in the label role, the age in meta ink",
     row.height === 44 &&
       row.glyph?.join() === "16,16" &&
       row.nameFont &&
       row.ageInk &&
-      row.text === "hero-pick",
+      row.text === "Hero pick",
     JSON.stringify(row)
   );
   // The open menu holds the page's pointer events until it has gone.
@@ -710,6 +722,7 @@ const handChecks = async ({
     kind: "page",
     name: "parent-own",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     html: PAGE,
   });
@@ -730,6 +743,7 @@ const handChecks = async ({
     kind: "canvas",
     name: "handed-canvas",
     does: "draw",
+    title: "Probe draw artifact",
     ask: "Draw on this canvas",
     to: "parent",
   });
@@ -792,6 +806,7 @@ const handChecks = async ({
     kind: "canvas",
     name: "handed-drawing",
     does: "draw",
+    title: "Probe draw artifact",
     ask: "Draw over this sketch",
     to: "parent",
     elements: [
@@ -1020,6 +1035,7 @@ const treeChecks = async ({
     kind: "page",
     name: "sibling-own",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     html: PAGE,
   });
@@ -1106,6 +1122,7 @@ const treeChecks = async ({
     kind: "page",
     name: "sibling-handed",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     html: PAGE,
     to: "parent",
@@ -1185,6 +1202,7 @@ const heldChecks = async ({
     kind: "canvas",
     name: "handed-canvas",
     does: "draw",
+    title: "Probe draw artifact",
     ask: "Draw on this canvas",
     to: "parent",
   });
@@ -1208,6 +1226,7 @@ const heldChecks = async ({
     kind: "page",
     name: "held-page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     html: versionPage("1"),
     to: "parent",
@@ -1378,6 +1397,7 @@ const refusedHandChecks = async ({
     kind: "preview",
     name: "broken-preview",
     does: "try",
+    title: "Probe try artifact",
     ask: "Try this page and say whether it works",
     dir: join(fleet.repo, "no-such-folder"),
     to: "parent",
@@ -1397,6 +1417,7 @@ const refusedHandChecks = async ({
     kind: "preview",
     name: "silent-preview",
     does: "try",
+    title: "Probe try artifact",
     ask: "Try this page and say whether it works",
     port: silent,
     to: "parent",
@@ -1430,6 +1451,7 @@ const refusedHandChecks = async ({
       kind: "preview",
       name: "failing-preview",
       does: "try",
+      title: "Probe try artifact",
       ask: "Try this page and say whether it works",
       port: failingPort,
       to: "parent",
@@ -1475,6 +1497,7 @@ const refusedHandChecks = async ({
       kind: "preview",
       name: "working-preview",
       does: "try",
+      title: "Probe try artifact",
       ask: "Try this page and say whether it works",
       port: working.port,
       to: "parent",
@@ -1536,10 +1559,7 @@ const askChecks = async ({
   const body = bare.slice(bare.indexOf(" 422 ") + " 422 ".length);
   kit.check(
     "ask 12: a create with no does and no ask is 422, its body the tool's shape",
-    bare.includes(": 422 ") &&
-      body.startsWith(
-        "artifact_create takes kind, name, does (pick | judge | try | draw), ask"
-      ),
+    bare.includes(": 422 ") && body.startsWith(CREATE_SHAPE),
     bare.slice(0, 300)
   );
 
@@ -1556,12 +1576,40 @@ const askChecks = async ({
       answer.slice(0, 400)
     );
   };
+  // title 1: the tool refuses a create with no title, saying how to write one.
+  const untitled = await call(CREATE, {
+    kind: "page",
+    name: "untitled",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    html: '<!doctype html><html lang="en"><body><p>Untitled.</p></body></html>',
+  });
+  kit.check(
+    "title 1: artifact_create with no title is refused, the refusal naming title and how to write it",
+    untitled.includes(artifactToolWords.titleMissing) &&
+      !ANSWERED_ID.test(untitled),
+    untitled.slice(0, 400)
+  );
+  // title 2: a title written as a slug is refused with the name it repeats.
+  await refused(
+    "title 2",
+    {
+      kind: "page",
+      name: "slug-titled",
+      does: "judge",
+      title: "slug-titled",
+      ask: "Judge this page: pin anything that reads wrong",
+      html: '<!doctype html><html lang="en"><body><p>Slug.</p></body></html>',
+    },
+    artifactToolWords.titleSlug("slug-titled")
+  );
   await refused(
     "ask 13",
     {
       kind: "component",
       name: "picked-on-canvas",
       does: "pick",
+      title: "Probe pick artifact",
       ask: "Pick the card",
       file: "src/Card.stories.ts",
     },
@@ -1573,6 +1621,7 @@ const askChecks = async ({
       kind: "page",
       name: "nothing-to-pick",
       does: "pick",
+      title: "Probe pick artifact",
       ask: "Pick the hero",
       html: '<!doctype html><html lang="en"><body><h1>Heroes</h1><p>Two of them.</p></body></html>',
     },
@@ -1584,6 +1633,7 @@ const askChecks = async ({
     kind: "page",
     name: "setup",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Set up Flat hunt",
     program: SETUP_ONLY,
   });
@@ -1598,6 +1648,7 @@ const askChecks = async ({
       kind: "page",
       name: "tried-program",
       does: "try",
+      title: "Probe try artifact",
       ask: "Try the hero",
       program: ONE_QUESTION,
     },
@@ -1624,6 +1675,7 @@ const askChecks = async ({
       kind: "page",
       name: "captures",
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge the relay's three states",
       dir: folder,
     },
@@ -1635,6 +1687,7 @@ const askChecks = async ({
       kind: "page",
       name: "tapped",
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Tap the card",
       html: PAGE,
     },
@@ -1646,6 +1699,7 @@ const askChecks = async ({
       kind: "page",
       name: "pathed",
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge src/lib/Card.svelte",
       html: PAGE,
     },
@@ -1702,6 +1756,7 @@ const headChecks = async ({
     kind: "page",
     name: "pairing-ask",
     does: "judge",
+    title: "Probe judge artifact",
     ask: ASK,
     html: PAGE,
   });
@@ -1865,6 +1920,7 @@ const promoteChecks = async ({
   const made = await callP(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "kept",
     html: PAGE,
@@ -1995,6 +2051,7 @@ const promoteChecks = async ({
   const drawn = await callP(CREATE, {
     kind: "canvas",
     does: "draw",
+    title: "Probe draw artifact",
     ask: "Draw on this canvas",
     name: "sketch",
     mermaid: "flowchart LR; A --> B",
@@ -2051,21 +2108,40 @@ const rootTheme = (frame: Frame) =>
   }));
 
 /** The dashboard's theme switch (the sidebar's), pressed from `from` to the other scheme. */
-/** What the panel's head says under the name, read from the DOM: whether the head stands, its line (null when none), and whether any text in the panel holds a stage route. */
+/** What the panel's head says, read from the DOM: whether the head stands, its title (the artifact menu's trigger), its line under it (null when none), whether any text in the panel holds a stage route, and which of {@link HEAD_SLUGS} any text or label in it holds. */
 const headLine = (page: Page) =>
-  page.evaluate(() => {
+  page.evaluate((slugs: string[]) => {
     const head = document.querySelector(
       '[data-side-card="preview"] [data-slot="side-head"]'
     );
     const panel = head?.closest('[data-slot="side-card"]');
+    const said = [
+      panel?.textContent ?? "",
+      ...[...(panel?.querySelectorAll("[aria-label], [title]") ?? [])].map(
+        (one) =>
+          `${one.getAttribute("aria-label") ?? ""} ${one.getAttribute("title") ?? ""}`
+      ),
+    ].join(" ");
     return {
       head: !!head,
+      title:
+        head?.querySelector('[data-slot="artifact-name"]')?.textContent ?? null,
       line: head?.querySelector('[data-slot="subtitle"]')?.textContent ?? null,
       route: !!panel?.textContent?.includes("/@cawco/"),
+      slugs: slugs.filter((slug) => said.includes(slug)),
     };
-  });
+  }, HEAD_SLUGS);
 
-/** Leg 19's artifacts' asks: the line each one's head says under its name. */
+/** Leg 19's artifacts' titles: what each one's head and the artifacts menu name it by. */
+const HEAD_TITLES = {
+  page: "Fields to fill",
+  preview: "Own app",
+  canvas: "Head sketch",
+};
+/** Their slugs that no other word holds ("fields" is a common word), which no surface that names them shows. */
+const HEAD_SLUGS = ["own-app", "head-sketch"];
+
+/** Leg 19's artifacts' asks: the line each one's head says under its title. */
 const HEAD_ASKS = {
   page: "Judge this page: pin anything that reads wrong",
   preview: "Try this page and say whether it works",
@@ -2197,6 +2273,7 @@ const themeChecks = async (
     await call(CREATE, {
       kind: "preview",
       does: "try",
+      title: HEAD_TITLES.preview,
       ask: "Try this page and say whether it works",
       name: "own-app",
       port: app.port,
@@ -2242,6 +2319,7 @@ const themeChecks = async (
       kind: "canvas",
       name: "head-sketch",
       does: "draw",
+      title: HEAD_TITLES.canvas,
       ask: HEAD_ASKS.canvas,
       mermaid: "flowchart LR; A --> B",
     });
@@ -2252,19 +2330,53 @@ const themeChecks = async (
       30_000
     );
     lines.canvas = await headLines(page);
+    // The artifacts menu lists every one by its title, its slug on no row.
+    await page.locator("[data-artifact-trigger]").first().click();
+    await until(
+      "the artifacts menu listing all three",
+      () => page.locator('[data-artifact-list] [data-slot="row-name"]').count(),
+      (count) => count >= 3,
+      10_000
+    );
+    const menu = await page
+      .locator("[data-artifact-list]")
+      .evaluate((list, slugs: string[]) => {
+        const said = [
+          list.textContent ?? "",
+          ...[...list.querySelectorAll("[aria-label], [title]")].map(
+            (one) =>
+              `${one.getAttribute("aria-label") ?? ""} ${one.getAttribute("title") ?? ""}`
+          ),
+        ].join(" ");
+        return {
+          rows: [...list.querySelectorAll('[data-slot="row-name"]')].map(
+            (one) => one.textContent ?? ""
+          ),
+          slugs: slugs.filter((slug) => said.includes(slug)),
+        };
+      }, HEAD_SLUGS);
+    await page.keyboard.press("Escape");
+    kit.check(
+      "19b: the artifacts menu names the page, the preview and the canvas by their titles, and none of their slugs is on it",
+      Object.values(HEAD_TITLES).every((title) => menu.rows.includes(title)) &&
+        menu.slugs.length === 0,
+      JSON.stringify(menu)
+    );
   } finally {
     await app.stop(true);
   }
   const reads = Object.values(lines).flatMap((one) => [one.desk, one.phone]);
   kit.check(
-    "19: for the page, the live preview and a canvas, at 1440 and 390, the head stands with each one's ask as its line under the name and no route in the panel",
+    "19: for the page, the live preview and a canvas, at 1440 and 390, the head stands named by each one's title with its ask as its line under it, no route and no slug in the panel",
     Object.keys(lines).length === 3 &&
       Object.entries(lines).every(([kind, read]) =>
         [read.desk, read.phone].every(
           (one) =>
             one.head &&
+            one.title === HEAD_TITLES[kind as keyof typeof HEAD_TITLES] &&
             one.line === HEAD_ASKS[kind as keyof typeof HEAD_ASKS] &&
-            !one.route
+            !one.route &&
+            one.slugs.length === 0
         )
       ) &&
       reads.length === 6,
@@ -2304,6 +2416,7 @@ const fieldChecks = async ({
   const made = await call(CREATE, {
     kind: "page",
     does: "judge",
+    title: HEAD_TITLES.page,
     ask: "Judge this page: pin anything that reads wrong",
     name: "fields",
     html: fieldsPage("Fields, first"),
@@ -2498,6 +2611,7 @@ const fieldChecks = async ({
   const dead = await call(CREATE, {
     kind: "preview",
     does: "try",
+    title: "Probe try artifact",
     ask: "Try this page and say whether it works",
     name: "dead-port",
     port: deadPort,

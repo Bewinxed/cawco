@@ -347,7 +347,7 @@
    * title's menu): said on the same line, with Try again, kept through a
    * reload (refusals.svelte.ts), until a try goes.
    */
-  type PaneAct = { act: "verify" } | { act: "show"; id: string; name: string };
+  type PaneAct = { act: "verify" } | { act: "show"; id: string; title: string };
   const actKey = $derived(`pane:${instanceId}`);
   const paneRefused = $derived(refusals.get(actKey));
   /** The refused act's Try again is running. */
@@ -368,7 +368,7 @@
         refusals.delete(actKey);
       } catch (error) {
         refusals.set(actKey, {
-          reason: `${asked.name} was not shown: ${failureClause(error)}.`,
+          reason: `${asked.title} was not shown: ${failureClause(error)}.`,
           asked,
         });
       }
@@ -1417,7 +1417,7 @@
     detach(
       removeAsks.ask({
         at: "never-drawn-remove",
-        title: sheetWords.removeTitle(shown.name),
+        title: sheetWords.removeTitle(shown.title),
         body: sheetWords.removeBody,
         confirmLabel: sheetWords.removeConfirm,
         pendingLabel: sheetWords.removing,
@@ -1656,6 +1656,7 @@
         instanceId,
         kind: shown.kind,
         name: shown.name,
+        title: shown.title,
       });
     }
   });
@@ -3696,7 +3697,7 @@
       // Said on the pane's own line, with Try again, never a toast
       // (DESIGN.md, The Work Outlives Its Surface Rule).
       refusals.set(key, {
-        reason: `${artifact.name} was not verified: ${failureClause(error)}. The canvas stays as it is.`,
+        reason: `${artifact.title} was not verified: ${failureClause(error)}. The canvas stays as it is.`,
         asked: { act: "verify" } satisfies PaneAct,
       });
     } finally {
@@ -3870,7 +3871,8 @@
     byHand={sessionOpen}
     canStart={!!composer}
     label={previewWords.goneAskLabel(composer?.agent ?? ownerName)}
-    onask={() => composer?.ask(previewWords.goneAskWords(artifact?.name ?? ""))}
+    onask={() =>
+      composer?.ask(previewWords.goneAskWords(artifact?.title ?? ""))}
     reason={previewWords.goneCantAsk}
     size="sm"
   />
@@ -4244,7 +4246,7 @@
           asked: {
             act: "show",
             id: chosen.id,
-            name: chosen.name,
+            title: chosen.title,
           } satisfies PaneAct,
         });
       }}
@@ -4350,7 +4352,7 @@
   <section
     data-slot="preview-pane"
     data-preview-inset
-    aria-label={artifact?.name ?? "Preview"}
+    aria-label={artifact?.title ?? "Preview"}
     class="@container flex flex-col flex-1 min-h-0"
     bind:this={section}
   >

@@ -11,14 +11,17 @@ import { commonWords } from "./common";
  */
 export const artifactWords = {
   // ── The title menu (preview/ArtifactMenu.svelte) ──
+  /** The title of the person's own canvas, opened in the composer (hub artifacts service.ts `createDraft`); a second one is "Your canvas 2". */
+  draftTitle: "Your canvas",
+  /** The title of a decision page's Diagram opened as a canvas (hub server.ts `openDiagramAsCanvas`), `page` that page's title. */
+  diagramTitle: (page: string) => `${page} diagram`,
   /** A row's Remove, for a screen reader: its trailing glyph says it. */
-  removeNamed: (name: string) => `Remove ${name}`,
+  removeNamed: (title: string) => `Remove ${title}`,
   remove: "Remove",
   /** A promoted row's tag: its commit, short. */
   promoted: (commit: string) => `Promoted ${commit}`,
-  promotedTitle: (name: string) =>
-    `Promoted into the project's folder at artifacts/${name}/`,
-  notRemoved: (name: string, why: string) => `${name} wasn't removed: ${why}`,
+  promotedTitle: "Promoted into the project's folder",
+  notRemoved: (title: string, why: string) => `${title} wasn't removed: ${why}`,
   /** The head's line under the name once the person's Send is in and the session has not changed it since. */
   sentTo: (session: string) => `Sent to ${session}`,
   /** A row's dot, for a screen reader: the person has something to do on it. */

@@ -807,6 +807,7 @@ const legs = async (
   const sheet = await fleet.api<{ id: string }>(at, {
     kind: "component",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge the lamp switch",
     name: "lamp-switch",
     file: STORY,
@@ -814,6 +815,7 @@ const legs = async (
   const page = await fleet.api<{ id: string }>(at, {
     kind: "page",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Pick the lamp switch",
     name: "lamp-page",
     program: program(sheet.id),

@@ -30,10 +30,10 @@ export interface CanvasInput {
 
 /** An example call, quoted by every refusal of a component canvas's shape. */
 export const COMPONENT_EXAMPLE =
-  'artifact_create({ kind: "component", name: "pairing", does: "judge", ask: "Judge the six pairing states: pin anything that reads wrong", file: "src/lib/Pairing.stories.ts" })';
+  'artifact_create({ kind: "component", name: "pairing", title: "Pairing states", does: "judge", ask: "Judge the six pairing states: pin anything that reads wrong", file: "src/lib/Pairing.stories.ts" })';
 
-/** What `artifact_create` takes, said whole when a body is malformed or names no `does` or `ask`. */
-export const CREATE_SHAPE = `artifact_create takes kind, name, does (pick | judge | try | draw), ask (one line, what the person does here) and that kind's fields. A component canvas: { kind: "component", name, does: "judge", ask, file, edges?, group?, dials? }; edges [{ from: "Waiting", to: "Approved", label? }]; dials [{ name, kind: "number" | "color" | "select" | "toggle", min?, max?, step?, unit?, options?, target: { cssVar: "--radius" } | { arg: "size" } }]. Example: ${COMPONENT_EXAMPLE}.`;
+/** What `artifact_create` takes, said whole when a body is malformed or names no `title`, `does` or `ask`. */
+export const CREATE_SHAPE = `artifact_create takes kind, name (a slug, for tools and URLs), title (a few plain words that name it to the person), does (pick | judge | try | draw), ask (one line, what the person does here) and that kind's fields. A component canvas: { kind: "component", name, title, does: "judge", ask, file, edges?, group?, dials? }; edges [{ from: "Waiting", to: "Approved", label? }]; dials [{ name, kind: "number" | "color" | "select" | "toggle", min?, max?, step?, unit?, options?, target: { cssVar: "--radius" } | { arg: "size" } }]. Example: ${COMPONENT_EXAMPLE}.`;
 
 /** Why a canvas's edges, groups or dials can't be taken, one sentence with the shape; null when they can. */
 export function canvasProblem(input: CanvasInput): string | null {

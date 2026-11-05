@@ -531,6 +531,7 @@ try {
   previewShown = post(`/api/instances/${sessionId}/artifacts`, {
     kind: "preview",
     does: "try",
+    title: "Probe try artifact",
     ask: "Try this page and say whether it works",
     name: "binary-proof",
     port: devServer.port,

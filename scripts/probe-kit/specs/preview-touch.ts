@@ -263,6 +263,7 @@ const probe = async (kit: Kit) => {
       response_format: "detailed",
       kind: "page",
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge this page: pin anything that reads wrong",
       name: "touch",
       html: PAGE,

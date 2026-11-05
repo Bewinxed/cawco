@@ -897,6 +897,7 @@ async function realJoin(kit: Kit): Promise<void> {
       name: "cards",
       file: PLACE_STORY,
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge the card in each of its states",
     },
   });

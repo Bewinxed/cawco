@@ -47,6 +47,7 @@ const pageFor = async (fleet: KitFleet, session: string, title: string) =>
     await fleet.api<{ id: string }>(`/api/instances/${session}/artifacts`, {
       kind: "page",
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge this page: pin anything that reads wrong",
       name: PAGE,
       html: html(title),

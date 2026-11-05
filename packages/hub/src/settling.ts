@@ -370,7 +370,7 @@ export const createSettling = (deps: SettlingDeps) => {
     const projectId = page.row.projectId as string;
     const told = await deps.tellCaw(projectId, {
       trigger: decidesWords.decisionTrigger(
-        decisionLink(page.row.id, page.cards[0]?.id ?? "", page.row.name)
+        decisionLink(page.row.id, page.cards[0]?.id ?? "", page.row.title)
       ),
       text: briefOf(fleet, BUILT_IN.caw, null, asker, [page], false),
     });
@@ -460,7 +460,7 @@ export const createSettling = (deps: SettlingDeps) => {
   ): Promise<RouteState> => {
     const [page] = pages as [PageCards];
     const type = deps.delegateType(member.delegateType as string);
-    const title = `Settle: ${page.cards[0]?.question ?? page.row.name}`;
+    const title = `Settle: ${page.cards[0]?.question ?? page.row.title}`;
     const started = await deps.start({
       parentInstanceId: asker.id,
       prompt: briefOf(

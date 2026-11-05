@@ -113,6 +113,7 @@ const run = async (kit: Kit) => {
   const site = await fleet.api<{ id: string }>(at(writer), {
     kind: "preview",
     does: "try",
+    title: "Probe try artifact",
     ask: "Try this page and say whether it works",
     name: "orphans-site",
     port: server.port,
@@ -121,6 +122,7 @@ const run = async (kit: Kit) => {
   const kept = await fleet.api<{ id: string }>(at(writer), {
     kind: "page",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Pick how the code leaves",
     name: "pairing",
     program: KEPT(site.id),
@@ -128,6 +130,7 @@ const run = async (kit: Kit) => {
   const orphan = await fleet.api<{ id: string }>(at(other), {
     kind: "page",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Pick the plan's name",
     name: "plan-name",
     program: ORPHAN,

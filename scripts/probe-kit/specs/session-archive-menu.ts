@@ -171,6 +171,7 @@ const run = async (kit: Kit) => {
     {
       kind: "preview",
       does: "try",
+      title: "Probe try artifact",
       ask: "Try the board",
       name: "board",
       port,

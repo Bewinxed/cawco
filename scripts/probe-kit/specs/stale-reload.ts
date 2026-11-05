@@ -218,6 +218,7 @@ const leg = async (
   await fleet.api(`/api/instances/${session}/artifacts`, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: `kept-${index}`,
     html: PAGE,

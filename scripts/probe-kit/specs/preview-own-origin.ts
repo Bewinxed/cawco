@@ -106,6 +106,7 @@ const run = async (kit: Kit) => {
   const alpha = await fleet.api<{ id: string }>(at, {
     kind: "preview",
     does: "try",
+    title: "Probe try artifact",
     ask: "Try the alpha folder",
     name: "alpha",
     dir: folders.alpha,
@@ -113,6 +114,7 @@ const run = async (kit: Kit) => {
   const beta = await fleet.api<{ id: string }>(at, {
     kind: "preview",
     does: "try",
+    title: "Probe try artifact",
     ask: "Try the beta folder",
     name: "beta",
     dir: folders.beta,
@@ -120,6 +122,7 @@ const run = async (kit: Kit) => {
   const page = await fleet.api<{ id: string }>(at, {
     kind: "page",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Pick the word",
     name: "word-page",
     program: program(alpha.id),

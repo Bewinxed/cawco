@@ -237,7 +237,7 @@ const BOX: Record<PlanStep["status"], string> = {
 /** The page a step waits on, by its link (its name the label); a page gone, said so. */
 const pageNamed = (db: Pick<DbShape, "artifacts">, id: string): string => {
   const page = db.artifacts.get(id);
-  return page ? artifactLink(page.id, page.name) : "a page since removed";
+  return page ? artifactLink(page.id, page.title) : "a page since removed";
 };
 
 /** What a step waits on, in a message's words: a card or pin by its page's link, any other target as kept. */

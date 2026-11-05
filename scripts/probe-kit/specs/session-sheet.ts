@@ -622,6 +622,7 @@ const componentLegs = async (
     kind: "component",
     name: "bare",
     does: "judge",
+    title: "Probe judge artifact",
     ask: `Judge ${STORY}`,
     file: STORY,
   });
@@ -674,6 +675,7 @@ async function builtStories(
     name: "mixed",
     file: MIXED,
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge the card's stories, built four ways",
   });
   const mixedId = mixed.match(ID)?.[1];
@@ -970,6 +972,7 @@ async function panelLegs(
     name: PANEL_NAME,
     file: STORY,
     does: "judge",
+    title: "Probe judge artifact",
     ask: PANEL_ASK,
   });
   await desk
@@ -1250,6 +1253,7 @@ async function treeSheetLeg(
       name: "delegate-cards",
       file: KIT_STORY,
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge the delegate's card in each of its states",
     },
     delegate
@@ -1373,6 +1377,7 @@ async function neverDrawnLeg(
     kind: "component",
     name: "never-drawn",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge the card while its page never comes",
     file: STORY,
   });
@@ -1514,6 +1519,7 @@ const run = async (kit: Kit) => {
     name: "cards",
     file: STORY,
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge the card in each of its states",
   });
   const id = created.match(ID)?.[1];
@@ -1578,6 +1584,7 @@ const run = async (kit: Kit) => {
       name: "kit-cards",
       file: KIT_STORY,
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge the kit's card in each of its states",
     },
     kitSession
@@ -1612,6 +1619,7 @@ const run = async (kit: Kit) => {
       name: "npm-cards",
       file: STORY,
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge the npm project's card in each of its states",
     },
     npmSession
@@ -1701,6 +1709,7 @@ const run = async (kit: Kit) => {
         name: "enum-cards",
         file: STORY,
         does: "judge",
+        title: "Probe judge artifact",
         ask: "Judge the card of the project whose config holds an enum",
       },
       enumSession
@@ -1744,6 +1753,7 @@ const run = async (kit: Kit) => {
           name: `${title.toLowerCase().replaceAll(" ", "-")}-cards`,
           file: STORY,
           does: "judge",
+          title: "Probe judge artifact",
           ask: `Judge the card of the project whose ${title.toLowerCase()} fails`,
         },
         await fleet.spawn("claude", title, dir)
@@ -1876,6 +1886,7 @@ const run = async (kit: Kit) => {
       name: "later",
       file: LATER,
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge the card written later",
     });
     const laterId = laterMade.match(ID)?.[1];

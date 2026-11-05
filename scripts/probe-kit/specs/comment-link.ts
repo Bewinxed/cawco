@@ -346,6 +346,7 @@ const run = async (kit: Kit) => {
     {
       kind: "page",
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge this page: pin anything that reads wrong",
       name: NAME,
       html: PAGE,

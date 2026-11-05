@@ -95,6 +95,7 @@ const child = (request: Seen): Reply => {
     return useTool(CREATE, {
       kind: "page",
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge the second mock of the edit surface",
       name: SECOND_NAME,
       html: `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Second</title></head><body><h1>Second</h1></body></html>`,
@@ -103,6 +104,7 @@ const child = (request: Seen): Reply => {
   return found(request, CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this mock of the edit surface",
     name: PAGE_NAME,
     html: `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Orphan</title></head><body><h1>Orphan</h1></body></html>`,

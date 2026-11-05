@@ -774,6 +774,7 @@ const ownYjsChecks = async (on: On) => {
     await on.call(CREATE, {
       kind: "preview",
       does: "try",
+      title: "Probe try artifact",
       ask: "Try the notes app and say whether it works",
       name: "shared-notes",
       port: app.port,
@@ -872,6 +873,7 @@ const runOn = async (kit: Kit, on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "comments",
     html: page("first"),
@@ -2468,6 +2470,7 @@ const frameChecks = async (on: On) => {
     await on.call(CREATE, {
       kind: "preview",
       does: "try",
+      title: "Probe try artifact",
       ask: "Try this page and say whether it works",
       name: "routines",
       port: app.port,
@@ -2797,6 +2800,7 @@ const embedChecks = async (on: On) => {
     const made = await on.call(CREATE, {
       kind: "preview",
       does: "try",
+      title: "Probe try artifact",
       ask: "Try the toggle",
       name: "toggle",
       port: app.port,
@@ -2805,6 +2809,7 @@ const embedChecks = async (on: On) => {
     const posted = await on.call(CREATE, {
       kind: "page",
       does: "pick",
+      title: "Probe pick artifact",
       ask: "Pick how the toggle reads",
       name: "toggle-pick",
       program: embedProgram(canvas ?? ""),
@@ -3085,6 +3090,7 @@ const scaledFrameChecks = async (on: On) => {
     await on.call(CREATE, {
       kind: "preview",
       does: "try",
+      title: "Probe try artifact",
       ask: "Try this page and say whether it works",
       name: "desks",
       port: app.port,
@@ -3442,6 +3448,7 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: `cards-${scroller}`,
     html: cardsPage(scroller),
@@ -4558,6 +4565,7 @@ const sizingPin = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "sizing",
     html: SIZING_PAGE,
@@ -4973,6 +4981,7 @@ const edgeChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "edges",
     html: EDGES_PAGE,
@@ -5311,6 +5320,7 @@ const wordlessChecks = async (on: On) => {
   await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "wordless",
     html: `<!doctype html><html><head><style>body { margin: 0; } main { padding: 24px; }</style></head>
@@ -5398,6 +5408,7 @@ const cornerChecks = async (on: On) => {
   await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "corners",
     html: `<!doctype html><html><head><style>body { margin: 0; } main { padding: 24px; display: grid; gap: 32px; justify-items: start; }</style></head>
@@ -5723,6 +5734,7 @@ const targetChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "targets",
     html: `<!doctype html><html><head><style>body { margin: 0; font: 16px/1.5 system-ui; } main { padding: 24px; } #bare { width: 320px; margin: 16px 0 0; } #target { width: 320px; margin: 0; padding: 8px 12px; border-radius: 10px; color: light-dark(#1d1b18, #ece8e1); background: light-dark(#f1ede6, #2a2724); } .space { height: 1400px; }</style></head>
@@ -6258,6 +6270,7 @@ const mapPressChecks = async (on: On) => {
   await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "test-map",
     html: TEST_MAP,
@@ -6658,6 +6671,7 @@ const showSvgPage = async (on: On, name: string, shape: SvgPage) => {
   await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name,
     html: svgPage(shape),
@@ -6751,6 +6765,7 @@ const figtreeChecks = async (on: On) => {
     await on.call(CREATE, {
       kind: "preview",
       does: "try",
+      title: "Probe try artifact",
       ask: "Try this page and say whether it works",
       name: "svg-figtree",
       port: app.port,
@@ -6851,6 +6866,7 @@ const mintedIdChecks = async (on: On) => {
   await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "minted-ids",
     html: `<!doctype html><html><head><style>body { margin: 0; font: 16px/1.5 system-ui; } main { padding: 24px; } p, li { margin: 0 0 96px; min-height: 40px; } ul { padding: 0; list-style: none; }</style></head>
@@ -6948,6 +6964,7 @@ const keyOpenChecks = async (on: On) => {
   await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "key-open",
     html: `<!doctype html><html><head><style>body { margin: 0; font: 16px/1.5 system-ui; } main { padding: 24px; } p { width: 50%; margin: 0 0 48px; }</style></head>
@@ -7093,6 +7110,7 @@ const insertChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "repeated-cards",
     html: repeatedPage(false),
@@ -7485,6 +7503,7 @@ const listChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "rail",
     html: RAIL_PAGE(true),
@@ -8564,6 +8583,7 @@ const pointChecks = async (
   const decided = await on.call(CREATE, {
     kind: "page",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Pick for the launch",
     name: "pointing-cards",
     program: pointProgram(image),
@@ -9189,6 +9209,7 @@ const changedChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge what changed",
     name: "changed",
     html: changedPage(false),
@@ -9448,6 +9469,7 @@ const pressSendChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "press-send",
     html: DRAFT_PAGE,
@@ -9524,6 +9546,7 @@ const draftChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "drafts",
     html: DRAFT_PAGE,
@@ -9794,6 +9817,7 @@ const redrawChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "redraw",
     html: REDRAW_PAGE,
@@ -10035,6 +10059,7 @@ const liveWordsChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "live-words",
     html: LIVE_PAGE,
@@ -10298,6 +10323,7 @@ const pinSendChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "pin-send",
     html: SEND_PAGE,
@@ -10380,6 +10406,7 @@ const pinSendChecks = async (on: On) => {
   const gonePage = await callIn(on, writer, CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "not-sent",
     html: SEND_PAGE,
@@ -10699,6 +10726,7 @@ const refusedChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "refused",
     html: SEND_PAGE,
@@ -10810,6 +10838,7 @@ const restartChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "restart-keeps",
     html: SEND_PAGE,
@@ -10960,6 +10989,7 @@ const deleteHeadChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: "delete-head",
     html: SEND_PAGE,
@@ -11234,6 +11264,7 @@ const pinnedOnDevice = async (
   const made = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name,
     html: SEND_PAGE,
@@ -11626,6 +11657,7 @@ const canvasChangedChecks = async (on: On, pageId: string) => {
   const made = await on.call(CREATE, {
     kind: "canvas",
     does: "draw",
+    title: "Probe draw artifact",
     ask: "Draw on this canvas",
     name: "changed-canvas",
     elements: [
@@ -11915,6 +11947,7 @@ const longNameChecks = async (on: On) => {
   const decided = await on.call(CREATE, {
     kind: "page",
     does: "pick",
+    title: "Probe pick artifact",
     ask: "Pick the long one",
     name: "long-question",
     program: `root = Decisions("A long question", [long])
@@ -11927,6 +11960,7 @@ no = Option("no", "No", "It spills.", false, [], "A broken line.")`,
   const longPage = await on.call(CREATE, {
     kind: "page",
     does: "judge",
+    title: "Probe judge artifact",
     ask: "Judge this page: pin anything that reads wrong",
     name: LONGEST_NAME,
     html: `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{margin:0;font:18px/1.6 system-ui}main{padding:24px}</style></head><body><main><p id="long">${FORTY_WORDS}.</p></main></body></html>`,
@@ -12291,6 +12325,7 @@ const footSheetChecks = async (on: On) => {
       const said = await on.call(CREATE, {
         kind: "page",
         does: "judge",
+        title: "Probe judge artifact",
         ask: "Judge this page: pin anything that reads wrong",
         name: `foot-${kind}-${engine}`,
         html: footPage(kind),

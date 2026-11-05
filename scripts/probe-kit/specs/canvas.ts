@@ -233,6 +233,7 @@ const holderLeavesChecks = async (on: OnCanvas) => {
   const made = await on.call(CREATE, {
     kind: "canvas",
     does: "draw",
+    title: "Probe draw artifact",
     ask: "Draw on this canvas",
     name: "held-write",
   });
@@ -438,6 +439,7 @@ const emptyChecks = async (on: OnCanvas) => {
   const answer = await on.call(CREATE, {
     kind: "canvas",
     does: "draw",
+    title: "Probe draw artifact",
     ask: "Draw on this canvas",
     name: "blank",
   });
@@ -628,6 +630,7 @@ const imageChecks = async (on: OnCanvas) => {
   const made = await on.call(CREATE, {
     kind: "canvas",
     does: "draw",
+    title: "Probe draw artifact",
     ask: "Draw on this canvas",
     name: "images",
   });
@@ -1231,6 +1234,7 @@ const bindChecks = async (on: OnCanvas) => {
   const made = await on.call(CREATE, {
     kind: "canvas",
     does: "draw",
+    title: "Probe draw artifact",
     ask: "Draw on this canvas",
     name: "many",
     elements: many,
@@ -1298,6 +1302,7 @@ const frameChecks = async (on: OnCanvas) => {
   const made = await on.call(CREATE, {
     kind: "canvas",
     does: "draw",
+    title: "Probe draw artifact",
     ask: "Draw on this canvas",
     name: "frames",
     elements: [
@@ -1420,6 +1425,7 @@ const fitChecks = async (on: OnCanvas) => {
   const made = await on.call(CREATE, {
     kind: "canvas",
     does: "draw",
+    title: "Probe draw artifact",
     ask: "Draw on this canvas",
     name: "far",
     elements: far,
@@ -2616,6 +2622,7 @@ const shapeChecks = async (on: OnCanvas) => {
   const answer = await on.call(CREATE, {
     kind: "canvas",
     does: "draw",
+    title: "Probe draw artifact",
     ask: "Draw on this canvas",
     name: "shapes",
     elements: [
@@ -2683,6 +2690,7 @@ const created = async (
   const answer = await call(CREATE, {
     kind: "canvas",
     does: "draw",
+    title: "Probe draw artifact",
     ask: "Draw on this canvas",
     name: "flow",
     mermaid: "flowchart LR; A[Hub] --> B[Agent]",

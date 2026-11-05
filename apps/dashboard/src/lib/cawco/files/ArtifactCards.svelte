@@ -396,7 +396,7 @@
       }}
       role="option"
       tabindex={artifact.id === stop ? 0 : -1}
-      title={artifact.name}
+      title={artifact.title}
       type="button"
     >
       {#if view === "list"}
@@ -438,9 +438,7 @@
       >{artifactWords.waitingOnYou}: {reasonLine(waiting.pending)}</span
     >{/if}{#if artifact.promoted}{#if lead || waiting?.pending[0]}<span
         aria-hidden="true">·</span
-      >{/if}<span
-      class="min-w-0 truncate"
-      title={artifactWords.promotedTitle(artifact.name)}
+      >{/if}<span class="min-w-0 truncate" title={artifactWords.promotedTitle}
       >{artifactWords.promoted(artifact.promoted.commit.slice(0, 7))}</span
     >{/if}
 {/snippet}
@@ -506,7 +504,7 @@
     <span
       data-slot="name"
       class="type-label min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap"
-      >{artifact.name}</span
+      >{artifact.title}</span
     >
   </span>
   <span
@@ -537,7 +535,7 @@
   </span>
   <span class="flex min-w-0 flex-auto flex-col">
     <span data-slot="name" class="type-label min-w-0 truncate"
-      >{artifact.name}</span
+      >{artifact.title}</span
     >
     {#if said}
       <span

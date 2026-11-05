@@ -124,13 +124,14 @@ export interface PreviewTarget {
  */
 export const previewTargets = new Map<string, PreviewTarget>();
 
-/** An artifact as its panel's frame names it: with its ask, the head's line under its name, when it has one. */
+/** An artifact as its panel's frame names it: its title, the head's name, and its ask, the head's line under it, when it has one. */
 export const shownArtifact = (
-  row: Pick<ArtifactRow, "ask" | "id" | "kind" | "name">
+  row: Pick<ArtifactRow, "ask" | "id" | "kind" | "name" | "title">
 ): PreviewFrame["artifact"] => ({
   id: row.id,
   kind: row.kind,
   name: row.name,
+  title: row.title,
   ...(row.ask ? { ask: row.ask } : {}),
 });
 

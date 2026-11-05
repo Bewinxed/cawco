@@ -9,11 +9,12 @@ The person's panel is where they act, never where they look. An artifact is open
 
 ## Steps
 
-1. **Answer the ask.** Write two values:
+1. **Answer the ask.** Write three values:
    - `does`: what they do here. `pick` (choose between options), `judge` (look at a real thing in its states and pin what reads wrong), `try` (run a flow and say whether it works), `draw` (draw or mark up).
    - `ask`: one line, second person, the act and its object in their words: "Pick the head for the phone project page"; "Judge the six pairing states: pin anything that reads wrong"; "Try pairing this browser from the QR to the approved state". No file, path, id or state code; nothing like "tap" or "poke".
-   When neither value comes (proof of a change, a plan, references, a screen they already picked, today as it stands, a surface with no question), there is no artifact: say it in chat and stop here.
-   Done when both values are written and a stranger reading the ask knows what to do.
+   - `title`: a few plain words, sentence case, that name it to the person on every surface (the panel head, the artifacts menu, Needs you, chips, pushes): "Phone project page head", "Pairing states". The `name` stays a slug for tools and URLs and is never shown.
+   When neither `does` nor `ask` comes (proof of a change, a plan, references, a screen they already picked, today as it stands, a surface with no question), there is no artifact: say it in chat and stop here.
+   Done when all three are written, a stranger reading the ask knows what to do, and the title names the thing as the person calls it.
 2. **Pick the primitive from `does`.**
    | `does` | Build | Skill |
    | --- | --- | --- |
@@ -24,7 +25,7 @@ The person's panel is where they act, never where they look. An artifact is open
    A pick on a canvas or preview, a try on a program, a drawing on anything but a canvas, and a page or folder for judging with more than two desk captures are refused by the hub with the primitive to use instead.
    Done when the kind and the skill are named.
 3. **Build it with that skill.** Every word on it is theirs: states named as the product talks, no size or id captions, no legend, nothing decided or rejected left on it. The panel is 600px wide beside the transcript and 390px on a phone; a component canvas and a decision page read at both by themselves, a page of your own must.
-4. **Open it** with `artifact_create({ kind, name, does, ask, … })`. Read the answer: `opened: false` says `why`; a component answers each frame, fix every one not `drawn`; a refusal names what to change.
+4. **Open it** with `artifact_create({ kind, name, title, does, ask, … })`. Read the answer: `opened: false` says `why`; a component answers each frame, fix every one not `drawn`; a refusal names what to change.
 5. **End your turn.** The ask stands in the panel's head until they act. Their pins arrive by themselves a few seconds after they write them, and `comment_read` gives each pin's `file:line` and state; once every question is answered (a pick, a note, a value, a pin you answered and resolved) their picks reach you by themselves, no Send, read with `artifact_read`. At the start of a turn after a compaction, read `open_items`: every question you and your delegates put to them, open or answered. Act on each answered one, then close it with `question_close` (`taken`, quoting their words; `withdrawn` when it no longer applies). A new round is `artifact_update` with the new `ask`, never a second artifact of the same thing.
 
 ## Before you open it

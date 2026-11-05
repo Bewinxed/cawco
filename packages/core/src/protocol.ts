@@ -1578,6 +1578,8 @@ export const ARTIFACT_DOES = ["pick", "judge", "try", "draw"] as const;
 export type ArtifactDoes = (typeof ARTIFACT_DOES)[number];
 /** The ask's length: one line in the panel's head. */
 export const ASK_LIMIT = 160;
+/** A title's length: the panel head's name, a menu row, a chip. */
+export const ARTIFACT_TITLE_LIMIT = 80;
 /** Words the owner banned from anything that reaches him. */
 export const ASK_BANNED = /\b(tap|poke)(s|ped|ping)?\b/iu;
 /** A path or a file in the ask: the person's words carry neither. */
@@ -1590,13 +1592,14 @@ export const DESK_CAPTURE_WIDTH = 1600;
 
 /** One artifact as the panel's list shows it, newest first. */
 export interface ArtifactSummary {
-  /** The one line the panel's head shows under its name: what the person does here, in their words. Empty on one made before asks were kept. */
+  /** The one line the panel's head shows under its title: what the person does here, in their words. Empty on one made before asks were kept. */
   ask: string;
   createdAt: string;
   /** What the person does on it. */
   does: ArtifactDoes;
   id: string;
   kind: ArtifactKind;
+  /** Its slug, what the agent's tools and its URLs name it by; never shown to the person. */
   name: string;
   /**
    * What it waits on the person for, as Needs you derives it (core
@@ -1618,6 +1621,8 @@ export interface ArtifactSummary {
   shownAt: string | null;
   /** Its latest picture, served at `GET /api/artifacts/:id/thumbnail/:scheme`; null until a screen drew one. */
   thumbnail: ArtifactThumbnail | null;
+  /** What every surface names it by to the person, in the agent's plain words ({@link ARTIFACT_TITLE_LIMIT}). Empty on one made before titles were kept. */
+  title: string;
   updatedAt: string;
   /** What it waits on the person for ({@link pending}) stands: its card and its row wear the needs-you dot. */
   waiting: boolean;

@@ -2636,6 +2636,7 @@ const run = async (kit: Kit) => {
   await fleet.api(`/api/instances/${previewed}/artifacts`, {
     kind: "preview",
     does: "try",
+    title: "Probe try artifact",
     ask: "Try this page and say whether it works",
     name: "heavy",
     dir: folder,
@@ -2647,6 +2648,7 @@ const run = async (kit: Kit) => {
     await fleet.api(`/api/instances/${light}/artifacts`, {
       kind: "page",
       does: "judge",
+      title: "Probe judge artifact",
       ask: "Judge this page: pin anything that reads wrong",
       name,
       html: `<!doctype html><html><head><meta charset="utf-8"><title>${name}</title></head><body><p>${name}</p></body></html>`,

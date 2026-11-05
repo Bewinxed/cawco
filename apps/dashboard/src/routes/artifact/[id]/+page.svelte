@@ -23,7 +23,7 @@
   import { page } from "$app/state";
 
   const id = $derived(page.params.id ?? "");
-  let found = $state<{ instanceId: string; name: string } | null>(null);
+  let found = $state<{ instanceId: string; title: string } | null>(null);
   let problem = $state<string | null>(null);
   /**
    * The one session the artifact's tab follows (artifact-session.svelte.ts),
@@ -41,7 +41,7 @@
       .then((artifact) => {
         if (live) {
           session.follow(artifact.instanceId, wanted);
-          found = { instanceId: artifact.instanceId, name: artifact.name };
+          found = { instanceId: artifact.instanceId, title: artifact.title };
         }
       })
       .catch((error: unknown) => {
@@ -64,7 +64,7 @@
   const narrowToasts = new MediaQuery("(max-width: 640px)");
 </script>
 
-<svelte:head><title>{found?.name ?? "Artifact"} · CawCo</title></svelte:head>
+<svelte:head><title>{found?.title ?? "Artifact"} · CawCo</title></svelte:head>
 
 <!-- Outside the app's group: nothing of the app around it, only what the pane
      stands in (Overlays: the tooltip provider and the lightbox), the stage
