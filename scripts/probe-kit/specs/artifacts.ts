@@ -105,7 +105,10 @@
  *    still waits on the parent.
  * H8. Once the parent opened it, the delegate's re-create while the
  *    parent's panel shows it is held as its next version: the panel keeps
- *    it, it waits on the parent, the parent is told it changed.
+ *    it, its title and ask the opened version's, it waits on the parent,
+ *    the parent is told it changed.
+ * H12b. The parent's artifact_show of that held canvas takes the version's
+ *    title and ask to the panel's row, so its head reads the new ask.
  * H10–H12. The delegate's new HTML for a page the parent's panel shows, and
  *    its elements for the held canvas, wait as the next version: the
  *    panel's revision stays, the parent is told once, and the parent's
@@ -188,7 +191,9 @@ const UPDATE = "mcp__cawco__artifact_update";
 const PROMOTE = "mcp__cawco__artifact_promote";
 /** The commit in artifact_promote's answer. */
 const ANSWERED_COMMIT = /"commit":"([0-9a-f]{40})"/u;
-/** Anything the hub would tell the session of the person's responses, or the person's picks as words. */
+/** The person's picks as words, which never reach the session: it reads them with artifact_read. */
+const PICKS_AS_WORDS = /changed my picks|sent my picks/u;
+/** Anything the hub tells the session of the person's responses, or the person's picks as words: the mock model answers it "ok". */
 const TOLD =
   /\[CawCo\] The (?:page|canvas|preview) "|changed my picks|sent my picks/u;
 /** The tools the artifact tools replaced (a4f208b90, Artifacts slice 1), by name. */
@@ -613,13 +618,27 @@ const run = async (kit: Kit) => {
     `tool: ${updated.slice(0, 200)}; page marks ${readBack.join() || "nothing"}`
   );
 
-  // 5. Nothing for the person's change, nothing for the patch: only a Send tells the session.
-  await Bun.sleep(LISTEN_MS);
-  const told = fleet.seen.filter((one) => TOLD.test(one.all));
+  // 5. The page asks one question and the person's pick answers it, so once
+  // his changes stand quiet it goes to the session by itself, no Send
+  // (905b7aecf, service `sendAnswered`): its responses notice, named by its
+  // title, and never his picks as words.
+  const answered = await until(
+    "the page's responses notice, sent by itself",
+    () =>
+      fleet.seen.filter((one) =>
+        one.last.includes(`[cawco:artifact-responses id=${id} `)
+      ),
+    (found) => found.length > 0,
+    LISTEN_MS + 4000
+  ).catch(() => []);
+  const asWords = fleet.seen.filter((one) => PICKS_AS_WORDS.test(one.last));
   kit.check(
-    "5: the session hears nothing of the person's change or the agent's patch",
-    told.length === 0,
-    told.map((one) => one.last.slice(0, 160)).join(" | ") || "nothing"
+    "5: with its one question answered, the page goes to the session by itself once quiet, no Send: its responses notice names it by its title, and the picks never travel as words",
+    answered.length > 0 &&
+      answered[0]?.last.includes(`title=${encodeURIComponent("Hero pick")}`) ===
+        true &&
+      asWords.length === 0,
+    `${answered.length} notice(s): ${answered[0]?.last.slice(0, 200) ?? "none"}; picks as words: ${asWords.length}`
   );
 
   // 6. The session's own tool list.
@@ -667,11 +686,19 @@ const listedOf = async <T>(fleet: KitFleet, on: string): Promise<T[]> =>
 
 /** One artifact as artifact_list answers it (artifacts/service.ts `ArtifactStatus`). */
 interface Listed {
+  ask: string;
   id: string;
   madeBy?: string;
   shown: boolean;
+  title: string;
   waitingOn: string[];
 }
+
+/** H8's re-create of the handed canvas names a new title and ask: H12's show takes them to the panel's row. */
+const ROUND_TWO = {
+  title: "Handed canvas, round two",
+  ask: "Draw the second round on this canvas",
+};
 
 /**
  * H1–H13: a delegate's `to: "parent"` artifact reaches its parent listed,
@@ -743,7 +770,7 @@ const handChecks = async ({
     kind: "canvas",
     name: "handed-canvas",
     does: "draw",
-    title: "Probe draw artifact",
+    title: "Handed canvas",
     ask: "Draw on this canvas",
     to: "parent",
   });
@@ -1202,8 +1229,7 @@ const heldChecks = async ({
     kind: "canvas",
     name: "handed-canvas",
     does: "draw",
-    title: "Probe draw artifact",
-    ask: "Draw on this canvas",
+    ...ROUND_TWO,
     to: "parent",
   });
   const canvasNext = heldOf(again);
@@ -1212,10 +1238,12 @@ const heldChecks = async ({
   );
   const canvasShown = await shownOf(canvasId);
   kit.check(
-    "H8: the delegate's re-create of the canvas the parent's panel shows is held as its next version: the panel keeps it, it waits on the parent, and the parent is told it changed",
+    "H8: the delegate's re-create of the canvas the parent's panel shows is held as its next version: the panel keeps it, with its title and ask, it waits on the parent, and the parent is told it changed",
     !!canvasNext &&
       again.includes(artifactToolWords.heldAsNext) &&
       canvasShown.shown &&
+      relisted?.title === "Handed canvas" &&
+      relisted.ask === "Draw on this canvas" &&
       relisted?.waitingOn.includes("session") === true &&
       changedSends(canvasId).length === 1,
     `create: ${again.slice(Math.max(0, again.indexOf('{"id"')), again.indexOf('{"id"') + 300)}; shown ${canvasShown.shown}; list ${JSON.stringify(relisted ?? null)}; ${changedSends(canvasId).length} change send(s)`
@@ -1323,6 +1351,14 @@ const heldChecks = async ({
   ]);
   await callParent("mcp__cawco__artifact_show", { id: canvasId });
   const openedCanvas = await readOf(canvasId);
+  const openedRow = (await listedOf<Listed>(fleet, parent)).find(
+    (one) => one.id === canvasId
+  );
+  kit.check(
+    "H12b: the parent's artifact_show of the held canvas takes the version's title and ask to the panel's row, so its head reads the delegate's new ask",
+    openedRow?.title === ROUND_TWO.title && openedRow.ask === ROUND_TWO.ask,
+    JSON.stringify(openedRow ?? null)
+  );
   kit.check(
     "H12: the delegate's elements for the held canvas are drawn on its next version, not the panel's, the parent told no more, and its artifact_show merges them in",
     heldOf(drawn) === canvasNext &&
@@ -2483,10 +2519,15 @@ const fieldChecks = async ({
     typed !== null && pickedIn !== null,
     `typed ${typed ?? "not within 2 s"} ms, picked ${pickedIn ?? "not within 2 s"} ms; state ${JSON.stringify(fieldsRead.state).slice(0, 300)}; said: ${said.slice(-6).join(" | ") || "nothing"}`
   );
+  // Its mood still asks him, so nothing goes by itself: the session hears
+  // nothing of the fields (leg 10's pick answers it).
   await Bun.sleep(LISTEN_MS);
-  const fieldsTold = fleet.seen.filter((one) => TOLD.test(one.all));
+  const fieldsTold = fleet.seen.filter(
+    (one) =>
+      one.last.includes(`id=${fieldsId} `) || PICKS_AS_WORDS.test(one.last)
+  );
   kit.check(
-    "7: the session hears nothing of the fields until a Send",
+    "7: the session hears nothing of the fields while the page's question stands unanswered",
     fieldsTold.length === 0,
     fieldsTold.map((one) => one.last.slice(0, 160)).join(" | ") || "nothing"
   );
@@ -2591,7 +2632,7 @@ const fieldChecks = async ({
       tabValues.size === "m" &&
       tabValues.tone === "bright" &&
       crossed !== null,
-    `tab shows ${JSON.stringify(tabValues)}; pick crossed in ${crossed ?? "not within 2 s"} ms`
+    `tab shows ${JSON.stringify(tabValues)}; pick crossed in ${crossed ?? "not within 2 s"} ms; the hub's mood ${JSON.stringify(entryOf(await readFields(), "mood") ?? null)}; the tab marks cool ${await tabFrame.locator('[data-option="cool"][data-cawco-picked]').count()}; the first page's options ${JSON.stringify(await fieldFrame.locator("[data-option]").evaluateAll((all) => all.map((one) => `${one.getAttribute("data-option")}${one.hasAttribute("data-cawco-picked") ? "*" : ""}`)))}`
   );
 
   // 11. Nothing spoke JSON-RPC.

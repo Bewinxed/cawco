@@ -33,6 +33,8 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
+  readFileSync,
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -41,6 +43,8 @@ import { choiceEntryProblem } from "@cawco/core/choices";
 import { is } from "drizzle-orm";
 import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { applyUpdate, Doc } from "yjs";
+import { type TitleSource, titleFor, titlesSaid } from "../src/artifact-titles";
+import { PROGRAM_FILE } from "../src/decision-program";
 import { hubInProcess } from "./hub-in-process";
 import { storedRows, storedRowsReport } from "./stored-rows";
 
@@ -73,6 +77,51 @@ const docChoices = (
   }
   sqlite.close();
   return { checked, failures };
+};
+
+/**
+ * The artifacts with no title before the hub starts (every one, on a
+ * database from before migration 0375), each with the title the hub's
+ * one-time pass gives it (artifact-titles.ts `titleFor`), its decision
+ * page's program read from the artifacts folder beside the database.
+ */
+const untitledBefore = (
+  dbPath: string
+): Map<string, { source: TitleSource; title: string }> => {
+  const sqlite = new Database(dbPath, { readwrite: true });
+  const columns = new Set(
+    sqlite
+      .query<{ name: string }, []>(
+        "SELECT name FROM pragma_table_info('artifacts')"
+      )
+      .all()
+      .map((column) => column.name)
+  );
+  // A database from before asks (migration 0267) has none: an empty ask, as that migration leaves it.
+  const rows = sqlite
+    .query<{ ask: string; id: string; kind: string; name: string }, []>(
+      `SELECT id, kind, name, ${columns.has("ask") ? "ask" : "'' AS ask"} FROM artifacts${columns.has("title") ? " WHERE title = ''" : ""}`
+    )
+    .all();
+  sqlite.close();
+  const root = join(dirname(dbPath), "artifacts");
+  return new Map(
+    rows.map((row) => {
+      const file = join(root, row.id, PROGRAM_FILE);
+      const program = existsSync(file) ? readFileSync(file, "utf8") : undefined;
+      return [row.id, titleFor(row as Parameters<typeof titleFor>[0], program)];
+    })
+  );
+};
+
+/** Each artifact's title once the hub started, by id. */
+const titlesAfter = (dbPath: string): Map<string, string> => {
+  const sqlite = new Database(dbPath, { readwrite: true });
+  const rows = sqlite
+    .query<{ id: string; title: string }, []>("SELECT id, title FROM artifacts")
+    .all();
+  sqlite.close();
+  return new Map(rows.map((row) => [row.id, row.title]));
 };
 
 const started = performance.now();
@@ -372,6 +421,19 @@ try {
       copyFileSync(key, join(scratch, "secrets.key"));
       chmodSync(join(scratch, "secrets.key"), 0o600);
     }
+    // Its decision pages' programs beside the copy, read only from the
+    // given hub's artifacts folder: the start's title pass reads each
+    // page's own title from it (artifact-titles.ts).
+    const pages = join(dirname(resolve(GIVEN)), "artifacts");
+    if (existsSync(pages)) {
+      for (const id of readdirSync(pages)) {
+        const program = join(pages, id, PROGRAM_FILE);
+        if (existsSync(program)) {
+          mkdirSync(join(scratch, "artifacts", id), { recursive: true });
+          copyFileSync(program, join(scratch, "artifacts", id, PROGRAM_FILE));
+        }
+      }
+    }
   } else {
     await Bun.write(
       dbPath,
@@ -387,6 +449,7 @@ try {
     dbPath,
     (migration) => (whenOf.get(migration) ?? 0) > newestBefore
   );
+  const untitled = untitledBefore(dbPath);
   const { hub, lifetime } = await hubInProcess(dbPath, join(scratch, "home"));
   const answers: string[] = [];
   const answer = async (path: string): Promise<unknown> => {
@@ -515,9 +578,32 @@ try {
       `Picks in page docs that are not a choice's shape: a pass over the docs is missing.\n${choices.failures.slice(0, 10).join("\n")}`
     );
   }
+  // Every artifact made before titles took its title from the start's one
+  // pass, the source its words came from counted; none is left untitled.
+  const titles = titlesAfter(dbPath);
+  const counts: Record<TitleSource, number> = { page: 0, ask: 0, name: 0 };
+  const mistitled: string[] = [];
+  for (const [id, expected] of untitled) {
+    const title = titles.get(id);
+    if (title === undefined) {
+      continue;
+    }
+    if (title !== expected.title) {
+      mistitled.push(
+        `${id}: "${title}", where its ${expected.source} gives "${expected.title}"`
+      );
+    }
+    counts[expected.source] += 1;
+  }
+  const empty = [...titles].filter(([, title]) => title === "");
+  if (mistitled.length > 0 || empty.length > 0) {
+    throw new Error(
+      `Artifacts the start's title pass left wrong: ${[...mistitled, ...empty.map(([id]) => `${id}: no title`)].slice(0, 10).join("; ")}`
+    );
+  }
   const seeded = [...before.rows.values()].reduce((sum, n) => sum + n, 0);
   console.log(
-    `migrations:check: ${after.migrations - before.migrations} migration${after.migrations - before.migrations === 1 ? "" : "s"} applied over ${seeded} ${GIVEN ? "rows of the given database" : "fixture rows"}; the hub answered ${answers.join(", ")}; ${shapes.checked} stored JSON rows are their shape; ${choices.checked} picks in page docs are a choice's shape; ${((performance.now() - started) / 1000).toFixed(1)} s`
+    `migrations:check: ${after.migrations - before.migrations} migration${after.migrations - before.migrations === 1 ? "" : "s"} applied over ${seeded} ${GIVEN ? "rows of the given database" : "fixture rows"}; the hub answered ${answers.join(", ")}; ${shapes.checked} stored JSON rows are their shape; ${choices.checked} picks in page docs are a choice's shape; ${titlesSaid(counts)}, none left untitled; ${((performance.now() - started) / 1000).toFixed(1)} s`
   );
 } finally {
   rmSync(scratch, { recursive: true, force: true });

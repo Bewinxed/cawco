@@ -280,6 +280,8 @@ export interface ArtifactsDb {
   readonly touchedSince: (at: Date) => ArtifactRow[];
   /** Session `instanceId`'s panel shows nothing. */
   readonly unshow: (instanceId: string) => void;
+  /** Every artifact with no title: one made before titles were kept (artifact-titles.ts). */
+  readonly untitled: () => ArtifactRow[];
   readonly update: (
     id: string,
     patch: ArtifactPatch
@@ -525,6 +527,13 @@ export const artifactsDb = (
       .from(artifacts)
       .where(isNull(artifacts.heldFor))
       .orderBy(asc(artifacts.createdAt))
+      .all()
+      .map(artifactOf),
+  untitled: () =>
+    db
+      .select()
+      .from(artifacts)
+      .where(eq(artifacts.title, ""))
       .all()
       .map(artifactOf),
   picked: () =>

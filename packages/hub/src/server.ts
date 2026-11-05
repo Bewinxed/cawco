@@ -618,6 +618,7 @@ import {
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
 import { AreaRefusal, createAreas } from "./areas";
 import { createArtifactSessions } from "./artifact-session";
+import { titlesSaid, titleUntitledOnce } from "./artifact-titles";
 import { createArtifactDocs } from "./artifacts/docs";
 import { createArtifactLane } from "./artifacts/lane";
 import { artifactRoutes } from "./artifacts/routes";
@@ -15557,6 +15558,19 @@ export const createServer = (
   });
   if (settledNamed !== null) {
     console.info(`[hub] ${settledNamed} settled pick(s) named by their member`);
+  }
+  // Artifacts made before titles take their agent's words once (artifact-titles.ts).
+  const titled = titleUntitledOnce({
+    dataMigrated: (name) => db.dataMigrated(name),
+    markDataMigrated: (name) => db.markDataMigrated(name),
+    program: (row) => artifacts.program(row.id),
+    untitled: () => db.artifacts.untitled(),
+    write: (id, title) => {
+      db.artifacts.update(id, { title });
+    },
+  });
+  if (titled !== null) {
+    console.info(`[hub] ${titlesSaid(titled)}`);
   }
   /**
    * A project's page lives as long as its source in the project's folder:

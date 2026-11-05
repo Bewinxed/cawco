@@ -3304,10 +3304,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     // that serves its origin follows, and which lets the server it moved
     // off go once nothing shows it (server.ts `onSourceMoved`).
     db.resource(row.id, { machineId: next.machineId, source: next.source });
+    // What the maker named it with the version: its title, what the person
+    // does there and the head's ask, as a create in place would write them.
     db.update(row.id, {
       madeBy: next.madeBy,
       revision: next.revision,
       title: next.title,
+      does: next.does,
+      ask: next.ask,
       updatedAt: new Date(),
     });
     // Its preview origin, where its address was handed out, is the
