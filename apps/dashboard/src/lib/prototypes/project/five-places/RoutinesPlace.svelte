@@ -186,7 +186,7 @@
         </EmptyState>
       {:else}
         <ul
-          class="flex flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile"
+          class="@container/routines flex flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile"
         >
           {#each routines as one (one.id)}
             <li class="border-b border-border-hairline last:border-b-0">
@@ -206,7 +206,7 @@
                   /></span
                 >
                 <span
-                  class="flex min-w-0 flex-col gap-space-1 @desk/five:flex-row @desk/five:items-start @desk/five:gap-space-3"
+                  class="flex min-w-0 flex-col gap-space-1 @leaf/routines:flex-row @leaf/routines:items-start @leaf/routines:gap-space-3"
                   data-box
                 >
                   <span class="flex min-w-0 flex-1 flex-col gap-space-row">
@@ -222,14 +222,14 @@
                   </span>
                   <span
                     class={[
-                      "type-meta @desk/five:w-c-ledger-outcome-w @desk/five:flex-none",
+                      "type-meta @leaf/routines:w-c-ledger-outcome-w @leaf/routines:flex-none",
                       one.last?.outcome === "failed"
                         ? "text-status-fail-ink"
                         : "text-ink-muted",
                     ]}>{lastSaid(one)}</span
                   >
                   <span
-                    class="type-meta text-ink-muted num @desk/five:w-c-routine-time-w @desk/five:flex-none"
+                    class="type-meta text-ink-muted num @leaf/routines:w-c-routine-time-w @leaf/routines:flex-none"
                     >{one.next && one.on
                       ? words.nextRun(one.next)
                       : words.off}</span

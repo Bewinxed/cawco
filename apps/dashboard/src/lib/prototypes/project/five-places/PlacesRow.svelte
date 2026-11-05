@@ -132,7 +132,7 @@
 <nav
   aria-label={words.placesLabel}
   class={form === "row"
-    ? "flex min-w-0 items-center gap-space-1 overflow-x-auto"
+    ? "no-scrollbar flex min-w-0 items-center gap-space-1 overflow-x-auto"
     : "grid grid-cols-5 border-t border-border-hairline bg-material-panel glass-backdrop"}
 >
   {#each ITEMS as item (item.place)}

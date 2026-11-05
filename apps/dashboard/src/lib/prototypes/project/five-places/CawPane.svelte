@@ -346,7 +346,7 @@
   >
     {#if awake && read !== "loading"}
       <fieldset
-        class="-mx-space-1 flex gap-space-2 overflow-x-auto px-space-1 pb-space-1"
+        class="no-scrollbar -mx-space-1 flex gap-space-2 overflow-x-auto px-space-1"
       >
         <legend class="sr-only">{words.starters}</legend>
         {#each caw.starters as starter (starter)}

@@ -87,9 +87,6 @@
     )
   );
   const groups = $derived.by(() => {
-    if (grouping === "newest") {
-      return [{ task: "", taskTitle: "", stage: "", items: shown }];
-    }
     const byTask = new Map<
       string,
       { task: string; taskTitle: string; stage: string; items: Output[] }
@@ -124,7 +121,7 @@
       type="button"
     >
       <span
-        class="mark-line flex items-center gap-space-2 type-meta text-ink-muted"
+        class="mark-line flex flex-wrap items-center gap-x-space-2 type-meta text-ink-muted"
       >
         <Glyph aria-hidden="true" class="size-icon-sm flex-none" />
         <span>{words.outputsKinds[output.kind]}</span>
@@ -249,40 +246,48 @@
       {/snippet}
     </EmptyState>
   {:else}
-    <div
-      class="flex min-h-0 flex-1 flex-col gap-space-6 overflow-y-auto pb-space-4"
-    >
-      {#each groups as group (group.task)}
-        <section class="flex flex-col gap-space-2">
-          {#if group.task !== ""}
-            <h3 class="flex min-w-0 items-center gap-space-2">
-              <Button
-                align="row"
-                class="max-w-full"
-                onclick={() => onopentask(group.task)}
-                pad="none"
-                size="sm"
-                variant="link"
+    <div class="min-h-0 flex-1 overflow-x-clip overflow-y-auto pb-space-4">
+      {#if grouping === "newest"}
+        <ul
+          class="grid grid-cols-fit-c-pin-card-w gap-space-3 @max-phone/five:grid-cols-2"
+        >
+          {#each shown as output (output.id)}
+            {@render item(output)}
+          {/each}
+        </ul>
+      {:else}
+        <!-- Each task's outputs stand together under its name, the tasks
+             side by side as the shelf's columns. -->
+        <div
+          class="grid grid-cols-fit-c-pin-card-w items-start gap-x-space-3 gap-y-space-5"
+        >
+          {#each groups as group (group.task)}
+            <section class="flex min-w-0 flex-col gap-space-2">
+              <h3
+                class="flex min-w-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-row"
               >
-                <span
-                  class="overflow-clip text-ellipsis whitespace-nowrap type-label"
-                  >{group.taskTitle}</span
+                <button
+                  class="min-w-0 text-start type-label text-link-ink text-pretty can-hover:hover:underline"
+                  onclick={() => onopentask(group.task)}
+                  type="button"
                 >
-              </Button>
-              <span class="flex-none type-meta text-ink-muted"
-                >{group.stage}</span
+                  {group.taskTitle}
+                </button>
+                <span class="flex-none type-meta text-ink-muted"
+                  >{group.stage}</span
+                >
+              </h3>
+              <ul
+                class="flex flex-col gap-space-2 @max-phone/five:grid @max-phone/five:grid-cols-2"
               >
-            </h3>
-          {/if}
-          <ul
-            class="grid grid-cols-fit-c-pin-card-w gap-space-3 @max-phone/five:grid-cols-2"
-          >
-            {#each group.items as output (output.id)}
-              {@render item(output)}
-            {/each}
-          </ul>
-        </section>
-      {/each}
+                {#each group.items as output (output.id)}
+                  {@render item(output)}
+                {/each}
+              </ul>
+            </section>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 </section>

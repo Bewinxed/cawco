@@ -6,7 +6,7 @@
  */
 import FivePlaces from "./FivePlaces.svelte";
 import { EMPTY, SWING } from "./records";
-import { at, DESK, PHONE, press } from "./story-kit";
+import { press } from "./story-kit";
 
 export default {
   title: "Five places/Decisions",
@@ -15,36 +15,54 @@ export default {
 };
 
 /** Cawco-Dev's decisions: five wait on you, two were sent, three are decided. */
-export const ThreeGroups = at(DESK);
+export const ThreeGroups = {
+  args: { place: "decisions", height: 920 },
+  parameters: { viewport: 1440 },
+};
 
 /** A waiting page pressed: it opens at its first open question. */
 export const PageOpen = {
-  ...at(DESK, { decision: "dec-title-bars" }),
+  args: { place: "decisions", height: 920, decision: "dec-title-bars" },
+  parameters: { viewport: 1440 },
   from: "ThreeGroups",
   play: press("button", /^Pick where Close stands/u),
 };
 
 /** Arriving from the needs-you line's "5 decisions" on Tasks. */
 export const FromTheLine = {
-  ...at(DESK, { place: "tasks" }),
+  args: { height: 920, place: "tasks" },
+  parameters: { viewport: 1440 },
   play: press("button", /^5 decisions$/u),
 };
 
 /** No decisions yet: the three groups' place says what lands here, and Ask Caw. */
-export const Empty = at(DESK, { records: EMPTY });
+export const Empty = {
+  args: { place: "decisions", height: 920, records: EMPTY },
+  parameters: { viewport: 1440 },
+};
 
 /** The first read: skeleton rows in each group. */
-export const Loading = at(DESK, { read: "loading" });
+export const Loading = {
+  args: { place: "decisions", height: 920, read: "loading" },
+  parameters: { viewport: 1440 },
+};
 
 /** The hub is unreachable: rows kept, no group counted, no attn dots. */
-export const Stale = at(DESK, { read: "stale" });
+export const Stale = {
+  args: { place: "decisions", height: 920, read: "stale" },
+  parameters: { viewport: 1440 },
+};
 
 /** A phone: one group at a time, Waits on you first. */
-export const WaitsPhone = at(PHONE);
+export const WaitsPhone = {
+  args: { place: "decisions", height: 844 },
+  parameters: { viewport: 390 },
+};
 
 /** A phone, Decided pressed: who settled each and the tasks it made. */
 export const DecidedPhone = {
-  ...at(PHONE, { group: "decided" }),
+  args: { place: "decisions", height: 844, group: "decided" },
+  parameters: { viewport: 390 },
   from: "WaitsPhone",
   play: press("tab", /^Decided/u),
 };

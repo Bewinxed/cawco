@@ -6,7 +6,7 @@
  */
 import FivePlaces from "./FivePlaces.svelte";
 import { EMPTY, QUIET, SWING } from "./records";
-import { at, DESK, PHONE, press } from "./story-kit";
+import { press } from "./story-kit";
 
 export default {
   title: "Five places/Routines",
@@ -15,49 +15,74 @@ export default {
 };
 
 /** Routines on Cawco-Dev: one reply waits on your yes; the failed weekly check stands first. */
-export const Proposed = at(DESK);
+export const Proposed = {
+  args: { place: "routines", height: 920 },
+  parameters: { viewport: 1440 },
+};
 
 /** The failed routine pressed: it opens beside the list with its reason, runs and Run now. */
 export const FailedOpen = {
-  ...at(DESK, { routine: "d86be128" }),
+  args: { place: "routines", height: 920, routine: "d86be128" },
+  parameters: { viewport: 1440 },
   from: "Proposed",
   play: press("button", /^Weekly X milestone check/u),
 };
 
 /** Approve pressed on the reply: it leaves Proposed, which stays named with nothing in it. */
 export const Approved = {
-  ...at(DESK),
+  args: { place: "routines", height: 920 },
+  parameters: { viewport: 1440 },
   from: "Proposed",
   play: press("button", /^Approve$/u),
 };
 
 /** Arriving from the needs-you line's "1 action" on Tasks. */
 export const FromTheLine = {
-  ...at(DESK, { place: "tasks" }),
+  args: { height: 920, place: "tasks" },
+  parameters: { viewport: 1440 },
   play: press("button", /^1 action$/u),
 };
 
 /** The first read: skeleton rows at their real size. */
-export const Loading = at(DESK, { read: "loading" });
+export const Loading = {
+  args: { place: "routines", height: 920, read: "loading" },
+  parameters: { viewport: 1440 },
+};
 
 /** A quiet project: Proposed named and empty, two routines on, nothing failed. */
-export const Quiet = at(DESK, { records: QUIET });
+export const Quiet = {
+  args: { place: "routines", height: 920, records: QUIET },
+  parameters: { viewport: 1440 },
+};
 
 /** No routines yet: what runs here, and Ask Caw for a routine. */
-export const Empty = at(DESK, { records: EMPTY });
+export const Empty = {
+  args: { place: "routines", height: 920, records: EMPTY },
+  parameters: { viewport: 1440 },
+};
 
 /** The hub is unreachable: rows kept and stale; Approve, Run now and the rest wait. */
-export const Stale = at(DESK, { read: "stale", routine: "d86be128" });
+export const Stale = {
+  args: { place: "routines", height: 920, read: "stale", routine: "d86be128" },
+  parameters: { viewport: 1440 },
+};
 
 /** Routines' read failed: no mark on the row, the page says why and keeps its last rows. */
-export const Unread = at(DESK, { unread: ["routines"] });
+export const Unread = {
+  args: { place: "routines", height: 920, unread: ["routines"] },
+  parameters: { viewport: 1440 },
+};
 
 /** A phone: Proposed, then the routines, failed first. */
-export const ProposedPhone = at(PHONE);
+export const ProposedPhone = {
+  args: { place: "routines", height: 844 },
+  parameters: { viewport: 390 },
+};
 
 /** A phone, the failed routine pressed: it rises as a drawer. */
 export const FailedOpenPhone = {
-  ...at(PHONE, { routine: "d86be128" }),
+  args: { place: "routines", height: 844, routine: "d86be128" },
+  parameters: { viewport: 390 },
   from: "ProposedPhone",
   play: press("button", /^Weekly X milestone check/u),
 };

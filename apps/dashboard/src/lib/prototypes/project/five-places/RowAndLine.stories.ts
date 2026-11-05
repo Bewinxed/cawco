@@ -5,7 +5,7 @@
  */
 import FivePlaces from "./FivePlaces.svelte";
 import { QUIET, SWING } from "./records";
-import { at, DESK, PHONE } from "./story-kit";
+import {} from "./story-kit";
 
 export default {
   title: "Five places/Row and line",
@@ -14,27 +14,52 @@ export default {
 };
 
 /** Every mark live: Tasks 3, Routines failed, Decisions 5, Outputs 2 new, Caw Working; the line counts each wait. */
-export const Marks = at(DESK);
+export const Marks = {
+  args: { place: "tasks", height: 920 },
+  parameters: { viewport: 1440 },
+};
 
 /** Nothing waits: the five named with no count, Caw idle, no line. */
-export const NoMarks = at(DESK, { records: QUIET });
+export const NoMarks = {
+  args: { place: "tasks", height: 920, records: QUIET },
+  parameters: { viewport: 1440 },
+};
 
 /** The first read: the marks as skeleton dots, no line yet. */
-export const Reading = at(DESK, { read: "loading" });
+export const Reading = {
+  args: { place: "tasks", height: 920, read: "loading" },
+  parameters: { viewport: 1440 },
+};
 
 /** The hub is unreachable: marks suppressed, the line says since when. */
-export const Stale = at(DESK, { read: "stale" });
+export const Stale = {
+  args: { place: "tasks", height: 920, read: "stale" },
+  parameters: { viewport: 1440 },
+};
 
 /** Routines' read failed: its mark gone, its name kept; the rest live. */
-export const OneUnread = at(DESK, { unread: ["routines"] });
+export const OneUnread = {
+  args: { place: "tasks", height: 920, unread: ["routines"] },
+  parameters: { viewport: 1440 },
+};
 
 /** The dispatch cap reached: the line says so and leads to Spend. */
-export const AtTheCap = at(DESK, {
-  records: { ...SWING, spend: { ...SWING.spend, today: 60, atCap: true } },
-});
+export const AtTheCap = {
+  args: {
+    height: 920,
+    records: { ...SWING, spend: { ...SWING.spend, today: 60, atCap: true } },
+  },
+  parameters: { viewport: 1440 },
+};
 
 /** A phone: the five as the bottom bar, the line on top of Tasks. */
-export const MarksPhone = at(PHONE);
+export const MarksPhone = {
+  args: { place: "tasks", height: 844 },
+  parameters: { viewport: 390 },
+};
 
 /** A phone while the hub is unreachable. */
-export const StalePhone = at(PHONE, { read: "stale" });
+export const StalePhone = {
+  args: { place: "tasks", height: 844, read: "stale" },
+  parameters: { viewport: 390 },
+};

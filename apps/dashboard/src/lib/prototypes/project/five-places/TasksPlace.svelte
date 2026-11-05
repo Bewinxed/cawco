@@ -1,5 +1,6 @@
 <script lang="ts">
   import { fivePlacesWords as words } from "@cawco/core/words/proto-five-places";
+  import { untrack } from "svelte";
   /**
    * Tasks, the project's front door. Its first line is the view switch
    * (Board, Table, Calendar, Dependencies) and the saved filters (All, Needs
@@ -77,7 +78,6 @@
 
   const counts = $derived(filterCounts(records));
   let view = $derived<View>(viewArg);
-  let shownStage = $derived(stageArg ?? records.stages[0]?.id ?? "");
   let query = $state("");
   let labels = $state<string[]>([]);
   let stages = $state<string[]>([]);
@@ -102,6 +102,14 @@
         (stages.length === 0 || stages.includes(task.stage)) &&
         (types.length === 0 || (task.type && types.includes(task.type)))
     )
+  );
+  // The link's stage on a phone, else the first stage the filter keeps a card in.
+  let shownStage = $derived(
+    stageArg ??
+      records.stages.find((one) => kept.some((task) => task.stage === one.id))
+        ?.id ??
+      records.stages[0]?.id ??
+      ""
   );
   const narrowed = $derived(
     filter !== "all" ||
@@ -169,12 +177,13 @@
       });
     }
   };
-  // The link's stage on a phone: the pager stands on it from the first paint.
+  // On a phone the pager stands on the shown stage from the first paint.
   $effect(() => {
-    const column = pager?.querySelector<HTMLElement>(
-      `[data-stage="${stageArg}"]`
-    );
-    if (pager && column && stageArg) {
+    const at = untrack(() => shownStage);
+    const column = pager?.querySelector<HTMLElement>(`[data-stage="${at}"]`);
+    // Only the phone's pager, where a stage takes the pager's width.
+    const PAGED = 0.9;
+    if (pager && column && column.offsetWidth >= pager.clientWidth * PAGED) {
       pager.scrollLeft = column.offsetLeft - pager.offsetLeft;
     }
   });
@@ -266,7 +275,7 @@
     </Tabs.Root>
 
     <div
-      class="flex min-w-0 max-w-full items-center gap-space-1 @max-phone/five:order-3 @max-phone/five:w-full"
+      class="flex min-w-0 max-w-full flex-none items-center gap-space-1 @max-phone/five:w-full @max-phone/five:flex-auto"
     >
       <FluidTabs
         onValueChange={(next) => onfilter(next as Filter)}
@@ -287,7 +296,9 @@
               {/snippet}
               {#snippet trail()}
                 {#if live && count > 0}
-                  <span class="type-meta text-ink-muted num">{count}</span>
+                  <span class="ms-space-1 type-meta text-ink-muted num"
+                    >{count}</span
+                  >
                 {/if}
               {/snippet}
             </TabItem>
@@ -310,10 +321,10 @@
     </div>
 
     <div
-      class="flex min-w-0 flex-1 items-center justify-end gap-space-2 @max-phone/five:order-4 @max-phone/five:w-full @max-phone/five:flex-none @max-phone/five:justify-start @max-phone/five:overflow-x-auto"
+      class="no-scrollbar flex w-full min-w-0 flex-none flex-wrap items-center gap-space-2 @max-phone/five:flex-nowrap @max-phone/five:overflow-x-auto"
     >
       <div
-        class="min-w-c-starter-w max-w-c-machines-w flex-1 @max-phone/five:max-w-none"
+        class="min-w-c-starter-w max-w-c-machines-w flex-1 @max-phone/five:flex-none"
       >
         <Input
           aria-label={words.search}
@@ -389,7 +400,8 @@
               one.id === "archive" ? records.archived : columnOf(one).total}
             <TabItem label={one.name} value={one.id}>
               {#snippet trail()}
-                {#if total > 0}<span class="type-meta text-ink-muted num"
+                {#if total > 0}<span
+                    class="ms-space-1 type-meta text-ink-muted num"
                     >{total}</span
                   >{/if}
               {/snippet}
@@ -401,7 +413,7 @@
 
     <div
       bind:this={pager}
-      class="-mx-space-1 flex min-h-0 flex-1 snap-x snap-mandatory gap-space-3 overflow-x-auto overscroll-x-contain px-space-1 pb-space-2 @phone/five:snap-none"
+      class="no-scrollbar -mx-space-1 flex min-h-0 flex-1 snap-x snap-mandatory gap-space-3 overflow-x-auto overscroll-x-contain px-space-1 pb-space-2 @phone/five:snap-none"
       onscroll={onPage}
     >
       {#each records.stages as one, index (one.id)}
@@ -412,7 +424,7 @@
           data-stage={one.id}
         >
           <h3
-            class="mark-line flex h-c-btn-h-sm flex-none items-center gap-space-2 px-space-1 type-label text-ink-strong"
+            class="mark-line flex h-c-btn-h-sm flex-none items-center gap-space-2 px-space-1 type-label text-ink-strong @max-phone/five:sr-only"
           >
             <span>{one.name}</span>
             {#if column.cards.length > 0}

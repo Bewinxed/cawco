@@ -78,7 +78,7 @@
       </span>
       <span class="flex flex-col gap-space-row type-meta text-ink-muted">
         <span class="num"
-          >{decision.waited}{decision.settled
+          >{words.waited(decision.waited)}{decision.settled
             ? ` · ${decision.settled}`
             : ""}</span
         >
