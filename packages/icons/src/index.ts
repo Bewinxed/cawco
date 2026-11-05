@@ -109,6 +109,12 @@ export { default as IconToolNavigate } from "~icons/solar/compass-bold-duotone";
 export { default as IconCopy } from "~icons/solar/copy-bold-duotone";
 /** The other tabs closed (its menu's Close others). */
 export { default as IconCloseOthers } from "~icons/solar/copy-close-bold-duotone";
+/**
+ * The kit's CopyButton, in Solar's linear cut: the duotone's two sheets
+ * fill to one block at a button's 12px, and its result swaps to the linear
+ * Tick and Close.
+ */
+export { default as IconCopyLinear } from "~icons/solar/copy-linear";
 /** A release's Improved section (ReleaseNotes). */
 export { default as IconGraphUp } from "~icons/solar/course-up-bold-duotone";
 export { default as IconCpu } from "~icons/solar/cpu-bold-duotone";
