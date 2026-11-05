@@ -606,7 +606,13 @@
       >
         <img
           alt={shown?.title}
-          class="block h-auto max-w-full"
+          class={[
+            "block h-auto max-w-full",
+            // The page lays itself out to the well's whole width where the
+            // rail floats over it (the picture drawn to it), so what the
+            // glass covers is page, as it would be.
+            !phone.current && railAt !== "beside" && "w-full",
+          ]}
           src={phone.current ? pagePhone : pageDesk}
         />
       </div>
