@@ -19,7 +19,8 @@
  * 5. the second tab on a page with no chat, with the newest input: `on`;
  * 6. and the rule still parts: that tab hidden, `elsewhere`;
  * 7. a project's conversation docked on its page, which opens on it with
- *    his pages from before the load standing open: `on`;
+ *    his pages from before the load standing open: `on`; one that holds no
+ *    words is drawn as itself, its empty state, never "Starting…";
  * 8. a send from no device that beats: `on` for that chat;
  * 9. the link back after it dropped: the hub hears the tab at once;
  * 10. the iPhone in a chat: its every beat is input, and what a desk left on
@@ -307,11 +308,9 @@ const run = async (kit: Kit): Promise<void> => {
     fleet.repo,
     { projectId: project.id }
   );
-  // A project's conversation is started by words (hub caw.ts
-  // `startConversation`). One read whole with nothing in it is his start to
-  // the page (CawLead `starting`), whose panel draws "Starting…" in place of
-  // the conversation: words not the person's, so leg 15 still finds them away.
-  await background(conversation);
+  // Spawned with no words and none sent before leg 7: a project's
+  // conversation that holds nothing is drawn as itself, never as his start
+  // (CawLead `starting` holds only while a start is under way).
   await fleet.api(`/api/instances/${conversation}/artifacts`, {
     kind: "page",
     does: "pick",
@@ -623,6 +622,11 @@ const run = async (kit: Kit): Promise<void> => {
   await shows(
     conversation,
     "the project's page to say it draws its conversation"
+  );
+  check(
+    "7: a project's conversation that holds no words is drawn, not Starting…",
+    (await panel.locator('[data-slot="caw-starting"]').count()) === 0,
+    (await panel.innerText()).slice(0, 400)
   );
   reads(
     "7: a project's conversation docked on its page reads on",

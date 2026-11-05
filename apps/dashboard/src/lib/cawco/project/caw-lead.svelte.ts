@@ -320,7 +320,6 @@ export class CawLead {
       this.draft.text = "";
     }
     this.view = null;
-    this.#startSeen = null;
     this.#for = id;
   }
 
@@ -352,9 +351,6 @@ export class CawLead {
       if (id === this.#projectId()) {
         this.view = view;
         this.refused = null;
-        if (view.starting) {
-          this.#startSeen = id;
-        }
       }
     } catch (error) {
       this.refused = failureWords(error);
@@ -402,67 +398,50 @@ export class CawLead {
     cawco.liveRead ? cawco.onlineMachines.length > 0 : this.#loadedOnline()
   );
   /**
-   * His conversation is being started, until it has taken the words that
-   * started it. A project just made with Caw answers before his start ends
-   * (hub server.ts `startProject`), so the page reads his view's `starting`
-   * until his session's row is there. The row is listed as his spawn
-   * answers, and the words that started him are sent after it (caw.ts
-   * `startConversation`), so a running row is still his start until those
-   * words are taken: a turn under way, one ended (`turnEndedAt`), an ask
-   * of his, or anything said in it as this tab read it (its turn's end
-   * lands on the row after the pulse that says it is over). Read off the
-   * row's status alone, the page held him started
-   * and idle in between, and his panel drew a session nothing had been
-   * said in (cockpit-eb72ec86, 0.1.12-nightly.6688).
+   * His conversation is being started: only on word that a start is under
+   * way, never because a conversation holds nothing (a session started with
+   * no words, or whose first words never went, is drawn as itself, with its
+   * empty state). The word is one of:
+   * - its row is still being spawned or moved (`starting`, `moving`);
+   * - his panel's first words are on their way ({@link began}): the panel's
+   *   spawn has not answered, and its first prompt goes as it does
+   *   (client `sendFirstPrompt`, drawn at once);
+   * - his view says the hub's start runs (caw.ts `conversationFor`), and the
+   *   project's conversation is not yet the row on show. The hub names its
+   *   conversation and sends it the words that started it in one step
+   *   (caw.ts `startConversation`), so a row it has named holds those words
+   *   as a send waiting. The page reads his view again as the project's row
+   *   changes while it says so (ProjectPage), so a start that ends, or
+   *   fails with its `problem`, ends this too.
    */
   readonly starting = $derived.by((): boolean => {
-    const row = this.conversation;
+    const { conversation: row, view } = this;
+    const hubStarts = view?.starting === true && view.problem === null;
     if (!row) {
-      return this.view?.starting === true && this.view.problem === null;
+      return hubStarts;
     }
     if (row.status === "moving" || row.status === "starting") {
       return true;
     }
-    if (row.status !== "running" || row.stalled || this.#begun.has(row.id)) {
+    if (row.status !== "running" || row.stalled) {
       return false;
     }
-    const held = cawco.session(row.id);
-    const took =
-      Boolean(row.turnEndedAt) ||
-      cawco.busyOf(row.id) ||
-      this.asks.length > 0 ||
-      Boolean(held?.messages.length);
-    if (took) {
-      this.#begun.add(row.id);
-      return false;
-    }
-    // Not taken yet: his start, when this page saw it begin, or when his
-    // conversation, read whole, holds nothing yet (a page that came after
-    // the hub's start ended). Unread and unseen, it is any conversation.
-    return (
-      this.#startSeen === this.#projectId() ||
-      (held !== null && held.reads > 0 && held.cursor === null)
-    );
+    return this.#asking || (hubStarts && view?.instanceId !== row.id);
   });
+  /** His panel's first words are on their way to start a conversation, until its start answers. */
+  #asking = $state(false);
   /**
-   * The project whose start this page saw begin: his view said `starting`
-   * ({@link read}), or the words his panel sent started him ({@link began}).
-   * Such a start runs on past his row's arrival until his words are taken;
-   * one this page did not see is his start only once his conversation is
-   * read and holds nothing.
+   * His panel's first words start a conversation (ProjectConversation): he
+   * is starting while `start` runs, and not once it answers or fails.
    */
-  #startSeen = $state<string | null>(null);
-  /** His panel's words are on their way to start a conversation (ProjectConversation). */
-  began(): void {
-    this.#startSeen = this.#projectId();
+  async began<T>(start: Promise<T>): Promise<T> {
+    this.#asking = true;
+    try {
+      return await start;
+    } finally {
+      this.#asking = false;
+    }
   }
-  /**
-   * The conversations seen past their start on this page: once taken, his
-   * words stay taken, whatever lands first after (his turn's end on the
-   * row, or the pulse that says it is over). Not reactive: it only keeps
-   * an answer {@link starting} already gave.
-   */
-  readonly #begun = new Set<string>();
   /** Why he cannot start now, or why his last start failed (his view's `problem`), in a sentence; null when he can. */
   readonly problem = $derived(
     this.#machinesOnline ? (this.view?.problem ?? null) : CAW_NO_MACHINE

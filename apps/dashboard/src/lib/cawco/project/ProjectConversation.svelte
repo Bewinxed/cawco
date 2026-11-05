@@ -328,9 +328,8 @@
   async function start(text: string, extras: SendExtras) {
     starting = true;
     startError = "";
-    lead.began();
     try {
-      const id = await startConversation(projectId, text, extras);
+      const id = await lead.began(startConversation(projectId, text, extras));
       // A starter pressed into the field went: as its words stood, or
       // changed. The hub keeps it as Jev's steering; nothing waits on it.
       const pressed = lead.draft.takePressed(text);
@@ -341,6 +340,9 @@
       chosen = id;
       fresh = false;
     } catch (error) {
+      // The hero stays, its words back in the field and why over it, even
+      // where a session the start made before it failed is now the newest.
+      fresh = true;
       startError = failureWords(error);
       lead.draft.restore(text, extras);
     } finally {
