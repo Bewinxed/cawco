@@ -28,7 +28,7 @@
     stage: string;
     /** Offer a stage picker over these (the table); the board's column is the stage. */
     stages?: Stage[];
-    oncreate: (title: string, stage: string) => Promise<void>;
+    oncreate: (title: string, stage: string) => Promise<unknown>;
   } = $props();
 
   let title = $state("");

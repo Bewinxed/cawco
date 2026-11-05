@@ -13,9 +13,18 @@
    * Archived tasks never stand in the columns. They fold into the Archived
    * rail beside the scrolling columns, so it is in view however wide the
    * board runs; pressed, the rail opens into a column of its own, quieter.
+   *
+   * A task added from the board lands where the board's order puts it, at
+   * the foot of its stage (the hub's order: ranked tasks first, then by
+   * number, and a new task is unranked and the newest), just above the
+   * form it was typed in. Its card is brought into view in its column and
+   * marked new for a moment (`fresh`), and brought into view again when the
+   * hub's echo redraws the board.
    */
+  import { bringIntoStrip, bringIntoView } from "@cawco/core/bring-into-view";
   import type { StageKind } from "@cawco/core/views";
   import { tick } from "svelte";
+  import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import {
     type Stage,
     stageLabel,
@@ -60,7 +69,8 @@
     dateOf?: (id: string) => string | null;
     onopen: (id: string) => void;
     onmove: (taskId: string, stage: string, source: HTMLElement) => void;
-    oncreate: (title: string, stage: string) => Promise<void>;
+    /** Adds a task; answers its id, so its card is brought into view. */
+    oncreate: (title: string, stage: string) => Promise<string>;
     /** A card whose move the hub has not answered yet. */
     moving?: (id: string) => boolean;
     /** A move the hub refused, said under its card. */
@@ -79,6 +89,47 @@
     await tick();
     (opening ? foldButton : railButton)?.focus();
   }
+  let board = $state<HTMLElement>();
+  /** The card just added here, while it is marked new (`row-flash`'s length). */
+  let fresh = $state<string | null>(null);
+  /** The card just added, until the hub's echo has redrawn the board. */
+  let echo: string | null = null;
+  let unmark: ReturnType<typeof setTimeout> | undefined;
+  /** Brings a card into view in its column, and its column on the board's strip. */
+  function reveal(id: string) {
+    const row = board
+      ?.querySelector(`[data-task="${CSS.escape(id)}"]`)
+      ?.closest("li");
+    if (row) {
+      bringIntoStrip(row);
+      bringIntoView(row);
+    }
+  }
+  async function add(title: string, stage: string) {
+    const id = await oncreate(title, stage);
+    fresh = id;
+    clearTimeout(unmark);
+    unmark = setTimeout(
+      () => {
+        fresh = null;
+      },
+      dur("--dur-fade") * 3
+    );
+    await tick();
+    // Before the frame the board's rows are read in (motion/rows), so the
+    // card is in view as it arrives and is uncovered there.
+    reveal(id);
+    echo = id;
+  }
+  $effect(() => {
+    // The next list after the add is the hub's echo: the card is held in view across it.
+    if (tasks && echo !== null) {
+      const id = echo;
+      echo = null;
+      tick().then(() => reveal(id));
+    }
+  });
+  $effect(() => () => clearTimeout(unmark));
   const byStage = $derived.by(() => {
     const columns = new Map<string, TaskSummary[]>();
     for (const task of tasks) {
@@ -121,6 +172,7 @@
     closed={open !== null && name !== boardDrag.from && !open.has(name)}
     {dateOf}
     drop={name ? stageDropTarget(() => name, onmove) : undefined}
+    {fresh}
     foot={name && name === newIn ? addTask : undefined}
     {hrefOf}
     color={look?.color}
@@ -139,7 +191,7 @@
 {/snippet}
 
 {#snippet addTask()}
-  <NewTaskForm {oncreate} stage={newIn ?? ""} bind:open={adding} />
+  <NewTaskForm oncreate={add} stage={newIn ?? ""} bind:open={adding} />
 {/snippet}
 
 <!-- On a phone the page is the one scroller and the board is as tall as its
@@ -155,6 +207,7 @@
 >
   <div
     data-slot="board"
+    bind:this={board}
     class={[
       "kit-edge-fade grid h-full min-h-0 min-w-0 flex-auto auto-cols-(--cols) grid-flow-col gap-space-3 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-space-3 max-phone:auto-cols-(--cols-phone)",
       "max-phone:snap-x max-phone:snap-mandatory max-phone:group-data-rail-open:hidden",

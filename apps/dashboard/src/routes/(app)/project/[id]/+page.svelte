@@ -987,9 +987,10 @@
       : null;
   };
 
-  async function create(title: string, stage: string) {
+  async function create(title: string, stage: string): Promise<string> {
     const task = await createTask(projectId, { title, stage });
     changed(task);
+    return task.id;
   }
 
   // --- the filter and a bulk change ------------------------------------------

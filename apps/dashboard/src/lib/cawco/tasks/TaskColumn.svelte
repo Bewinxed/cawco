@@ -46,6 +46,7 @@
     over = false,
     drop,
     foot,
+    fresh = null,
     moving,
     refused,
     archived = false,
@@ -79,6 +80,8 @@
     drop?: Attachment<HTMLElement>;
     /** What stands under the cards: the board's new task. */
     foot?: Snippet;
+    /** The card just added from the board: marked new for a moment (`row-flash`). */
+    fresh?: string | null;
     /** A card whose move the hub has not answered: it stands here, moving. */
     moving?: (id: string) => boolean;
     /** A move the hub refused: the card is back here, the reason under it. */
@@ -186,11 +189,12 @@
       {@const fault = refused?.(task.id) ?? null}
       {@const on = picked?.(task.id) ?? false}
       <li
-        class="group/card group/task data-pickable:relative"
+        class="group/card group/task data-pickable:relative motion-safe:data-new:[&>[data-task-card]]:animate-row-flash"
         aria-busy={moving?.(task.id) || undefined}
         data-archived={archived || undefined}
         data-flip
         data-moving={moving?.(task.id) || undefined}
+        data-new={fresh === task.id || undefined}
         data-pickable={onpick ? "" : undefined}
         data-picked={on || undefined}
       >

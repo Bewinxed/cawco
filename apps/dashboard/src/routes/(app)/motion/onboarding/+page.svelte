@@ -517,11 +517,12 @@
               <SetUpBar {first} {name} onask={() => lead.talk()} />
             {/if}
             <div class="min-h-0 flex-auto">
+              <!-- The bench's board adds nothing: no id, no card to bring into view. -->
               <TaskBoard
                 allowedFrom={() => new Set<string>()}
                 hrefOf={() => "#"}
                 newIn={first}
-                oncreate={async () => undefined}
+                oncreate={async () => ""}
                 onmove={none}
                 onopen={none}
                 stages={boardStages}
