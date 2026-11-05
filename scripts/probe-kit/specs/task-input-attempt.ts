@@ -10,8 +10,13 @@
  * note "It is a comment on <task>, your task." (jev-tasks.ts `commented`);
  * the conversation hears it on a send naming the project-task-input skill.
  *
- * - a1. While an attempt at the task is live, the person's comment reaches
- *   the attempt's session, and the project's conversation once.
+ * The mock attempt starts a background `sleep` on its brief's turn, so the
+ * quiet-turns rule (work-items.ts `QUIET_TURNS`) leaves its item live while
+ * the legs read it.
+ *
+ * - a1. While an attempt at the task is live (running before the comment,
+ *   and still running as its session hears it), the person's comment
+ *   reaches the attempt's session, and the project's conversation once.
  * - a2. With the project's `attemptsHearComments` switch off (its session's
  *   `project_settings`, `set_attempts_hear_comments`), the next comment
  *   reaches no attempt, and the conversation still once.
@@ -22,7 +27,40 @@ import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
-const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
+/** The attempt's note beside the person's comment (jev-tasks.ts `commented`). */
+const ATTEMPT_NOTE = "your task.";
+/** The skill the conversation's send names (caw.ts `EVENT_SKILLS`). */
+const CONVERSATION_NOTE = "project-task-input";
+
+/** What the task's description carries, so the attempt's brief is told apart from every other send. */
+const BRIEF = "TI-BRIEF";
+/** The attempt's background work: it keeps the item live past the quiet-turns rule (work-items.ts `QUIET_TURNS`). */
+const SLEEP = "sleep 600.0447";
+
+/**
+ * The attempt's first turn starts {@link SLEEP} in the background, so its
+ * turns count for nothing while it runs (work-items.ts `waitsInBackground`)
+ * and the item stays live while the legs read it; every other request: a
+ * word.
+ */
+const respond = (request: Seen): Reply =>
+  request.tools &&
+  !request.afterTool &&
+  request.last.includes(BRIEF) &&
+  !request.last.includes(CONVERSATION_NOTE)
+    ? {
+        everyMs: 5,
+        words: [],
+        tool: {
+          name: "Bash",
+          input: {
+            command: SLEEP,
+            description: "Run a command",
+            run_in_background: true,
+          },
+        },
+      }
+    : { everyMs: 5, words: ["ok"] };
 
 /** The hub's quiet spell (task-input.ts `QUIET_MS`) and a margin past it, ms. */
 const SETTLE_MS = 10_000 + 8000;
@@ -48,11 +86,6 @@ const turns = (seen: readonly Seen[], marker: string, note: string): number =>
       one.last.includes(marker) &&
       one.last.includes(note)
   ).length;
-
-/** The attempt's note beside the person's comment (jev-tasks.ts `commented`). */
-const ATTEMPT_NOTE = "your task.";
-/** The skill the conversation's send names (caw.ts `EVENT_SKILLS`). */
-const CONVERSATION_NOTE = "project-task-input";
 
 const spec: Spec = {
   group: "Workspaces and what agents may touch",
@@ -92,7 +125,7 @@ const spec: Spec = {
     });
     const task = await fleet.api<{ id: string }>(
       `/api/projects/${project.id}/tasks`,
-      { title: "Fit the oak worktops" }
+      { title: "Fit the oak worktops", description: `${BRIEF}: oak, 40 mm.` }
     );
     const started = await fleet
       .api<{ workItemId: string | null }>(
@@ -102,22 +135,26 @@ const spec: Spec = {
       .catch((error: unknown) =>
         error instanceof Error ? error.message : String(error)
       );
-    const live =
-      typeof started !== "string" && started.workItemId
-        ? await until(
-            "the attempt's session running",
-            () =>
-              fleet.query<{ state: string }>(
-                "SELECT state FROM work_items WHERE id = ?",
-                started.workItemId ?? ""
-              )[0],
-            (row) => row.state === "running",
-            180_000
-          ).then(
-            () => true,
-            () => false
-          )
-        : false;
+    const itemId = typeof started === "string" ? null : started.workItemId;
+    /** The attempt's work item's state now. */
+    const stateNow = () =>
+      fleet.query<{ state: string }>(
+        "SELECT state FROM work_items WHERE id = ?",
+        itemId ?? ""
+      )[0]?.state;
+    // Running, with its background work started: its brief's turn is over.
+    const running = itemId
+      ? await until(
+          "the attempt running with its background work",
+          () =>
+            stateNow() === "running" &&
+            fleet.seen.some((one) => one.afterTool && one.all.includes(BRIEF))
+              ? true
+              : undefined,
+          Boolean,
+          180_000
+        ).catch(() => false)
+      : false;
 
     const comment = (text: string) =>
       fleet.api(`/api/projects/${project.id}/tasks/${task.id}/comments`, {
@@ -132,12 +169,14 @@ const spec: Spec = {
       (count) => count > 0,
       60_000
     ).catch(() => 0);
+    // Still live as it heard it: the live path, not an ended attempt's attach.
+    const liveAsHeard = stateNow();
     await Bun.sleep(SETTLE_MS);
     const told = turns(fleet.seen, "TI-LIVE", CONVERSATION_NOTE);
     check(
       "a1: while an attempt at the task is live, the person's comment reaches its session, and the project's conversation once",
-      live && heard > 0 && told === 1,
-      `attempt ${typeof started === "string" ? `refused: ${started}` : `${started.workItemId} running ${live}`}; attempt heard ${heard}; conversation woke ${told}`
+      running && heard > 0 && liveAsHeard === "running" && told === 1,
+      `attempt ${typeof started === "string" ? `refused: ${started}` : `${itemId} running before the comment ${running}, ${liveAsHeard} as it heard it`}; attempt heard ${heard}; conversation woke ${told}`
     );
 
     // a2. The attempt's switch off: the conversation alone hears it.
