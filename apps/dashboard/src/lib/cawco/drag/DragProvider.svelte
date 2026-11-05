@@ -61,6 +61,7 @@
    */
   import {
     Accessibility,
+    AutoScroller,
     type defaultPreset,
     Feedback,
     DragDropManager as Manager,
@@ -86,6 +87,17 @@
   const TOUCH_HOLD = 250;
   const TOUCH_SLOP = 5;
   const TRAVEL = 5;
+  /**
+   * A thing carried into the outer fifth of a scroller (`SCROLL_ZONE`, dnd
+   * kit's own) scrolls it, faster the deeper it goes: `SCROLL_ACCELERATION`
+   * px a frame at the very edge, falling in a straight line to none at the
+   * zone's inner side. On a phone's board (354px, a 71px zone) that is
+   * about 300px a second at the edge, under a column a second, and half of
+   * it half way in, so a person stops on the column they want. dnd kit's 25
+   * crossed the board's ten columns in about three seconds.
+   */
+  const SCROLL_ZONE = 0.2;
+  const SCROLL_ACCELERATION = 5;
   /** What a press inside a thing belongs to, never the drag. */
   const CONTROLS =
     "button, input, textarea, select, [contenteditable=''], [contenteditable='true'], [role='button'], [role='menuitem'], [role='checkbox'], [role='switch'], [role='slider']";
@@ -136,8 +148,15 @@
   /** dnd kit's plugins with the house's drop and its words: read on the client, as the provider starts. */
   const plugins = (defaults: typeof defaultPreset.plugins) => [
     ...defaults.filter(
-      (plugin) => plugin !== Feedback && plugin !== Accessibility
+      (plugin) =>
+        plugin !== Feedback &&
+        plugin !== Accessibility &&
+        plugin !== AutoScroller
     ),
+    AutoScroller.configure({
+      acceleration: SCROLL_ACCELERATION,
+      threshold: { x: SCROLL_ZONE, y: SCROLL_ZONE },
+    }),
     Feedback.configure({
       dropAnimation: houseDrop(),
       keyboardTransition: {
@@ -309,12 +328,22 @@
       held = lift(element, { x, y });
       redrawn = new MutationObserver(() => {
         const now = carried(undefined);
-        if (now) {
-          held?.follow(now);
+        if (!now) {
+          return;
+        }
+        held?.follow(now);
+        // A list that moves the thing's own node to its new place (a
+        // card taking the place of the one below it) takes it out of the
+        // top layer: a node moved closes its popover, and dnd kit leaves it
+        // closed, the thing gone from under the hand. It is lifted again
+        // before the frame paints.
+        if (now.hasAttribute("popover") && !now.matches(":popover-open")) {
+          now.showPopover();
         }
       });
       redrawn.observe(document.body, {
         subtree: true,
+        childList: true,
         attributes: true,
         attributeFilter: ["data-dnd-dragging"],
       });
@@ -323,10 +352,45 @@
   }
   /** Where it stood as it was picked up: said once it stands elsewhere. */
   let pickedAt: string | undefined;
+  /**
+   * A drag the keys carry stands on its place once the list has made room
+   * for it. dnd kit's keyboard step for a sortable puts the thing on the
+   * element its sortable names, which here is the thing itself in the air
+   * (the Svelte binding keeps the list's order in its state, never moving
+   * nodes itself): it stayed where the key left it, so the next press read
+   * the card it had just passed as still below it and came back. The place
+   * held open for it (dnd kit's placeholder) is where it stands, centre
+   * on centre (the lift's scale leaves the corners a little out).
+   */
+  function standOnPlace() {
+    const { dragOperation } = manager;
+    const drawn = document
+      .querySelector("[data-dnd-dragging]")
+      ?.getBoundingClientRect();
+    const place = document
+      .querySelector("[data-dnd-placeholder]")
+      ?.getBoundingClientRect();
+    if (!(
+      drawn?.width &&
+      place &&
+      dragOperation.activatorEvent instanceof KeyboardEvent
+    )) {
+      return;
+    }
+    const by = {
+      x: place.left + place.width / 2 - (drawn.left + drawn.width / 2),
+      y: place.top + place.height / 2 - (drawn.top + drawn.height / 2),
+    };
+    if (Math.abs(by.x) > 0.5 || Math.abs(by.y) > 0.5) {
+      manager.actions.move({ by });
+    }
+  }
+
   function over(event: DragOver) {
     onDragOver?.(event);
     // Said once the move it makes is drawn.
     tick().then(() => {
+      standOnPlace();
       const now = whereNow();
       if (now !== pickedAt) {
         pickedAt = undefined;

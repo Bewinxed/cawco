@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { byRank } from "@cawco/core/task-views";
   import { onMount } from "svelte";
   import { standBench } from "#lib/cawco/bench-api.js";
   /**
@@ -34,6 +35,7 @@
     type StagesView,
     type TaskSummary,
   } from "#lib/cawco/project-tasks.js";
+  import type { RankWrite } from "#lib/cawco/tasks/rank.js";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
   import { browser } from "$app/env";
 
@@ -91,20 +93,37 @@
   /** Moves the bench's hub has not answered, by task. */
   let moving = $state<Record<string, string>>({});
   /** Moves it refused, by task. */
-  let refused = $state<Record<string, { reason: string; stage: string }>>({});
+  let refused = $state<
+    Record<string, { reason: string; stage: string; ranks: RankWrite[] }>
+  >({});
 
-  function move(id: string, stage: string) {
+  /** The bench's list takes `ranks` and sorts as the hub does (core `byRank`). */
+  function holdRanks(ranks: RankWrite[]) {
+    const rankOf = new Map(ranks.map((one) => [one.id, one.rank]));
+    tasks = tasks
+      .map((task) =>
+        rankOf.has(task.id)
+          ? { ...task, rank: rankOf.get(task.id) ?? null }
+          : task
+      )
+      .toSorted(byRank);
+  }
+  function move(id: string, stage: string, ranks: RankWrite[] = []) {
     const { [id]: _, ...rest } = refused;
     refused = rest;
+    const before = tasks;
+    holdRanks(ranks);
     moving = { ...moving, [id]: stage };
     setTimeout(() => {
       const { [id]: _done, ...still } = moving;
       moving = still;
       if (stage === "won") {
+        tasks = before;
         refused = {
           ...refused,
           [id]: {
             stage,
+            ranks,
             reason: `${id} has to-dos still open, so it can't move to won. It can move to inbox, scouting, drafting, your-call, follow-up or dropped.`,
           },
         };
@@ -136,11 +155,15 @@
       newIn={firstTodoStage(stagesView.stages)?.name}
       oncreate={async () => ""}
       onmove={move}
+      onrank={(_id, ranks) => holdRanks(ranks)}
       onopen={() => undefined}
       refused={(id) => {
         const one = refused[id];
         return one
-          ? { reason: one.reason, again: () => move(id, one.stage) }
+          ? {
+              reason: one.reason,
+              again: () => move(id, one.stage, one.ranks),
+            }
           : null;
       }}
       stages={stagesView.stages}

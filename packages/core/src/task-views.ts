@@ -389,3 +389,22 @@ export const needsYouOf = (
   kind: StageKind | null,
   waits: readonly Pick<WaitState, "kind" | "settled">[]
 ): boolean => kind === "you" || waits.some(waitsOnPick);
+
+/**
+ * The order a project's tasks are listed in, by the hub and by a board
+ * that moves one before the hub answers: ranked tasks by rank (a string
+ * compared as written: fractional-indexing's keys, which sort so), then the
+ * rest by number.
+ */
+export const byRank = (
+  a: Pick<TaskSummary, "rank" | "number" | "path">,
+  b: Pick<TaskSummary, "rank" | "number" | "path">
+): number => {
+  if (a.rank !== null && b.rank !== null && a.rank !== b.rank) {
+    return a.rank < b.rank ? -1 : 1;
+  }
+  if ((a.rank === null) !== (b.rank === null)) {
+    return a.rank === null ? 1 : -1;
+  }
+  return a.number - b.number || (a.path < b.path ? -1 : 1);
+};
