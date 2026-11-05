@@ -1409,6 +1409,10 @@
           leafId: leaf.id,
           sessionId: tab.id,
           tabs: leaf.tabs,
+          where:
+            workspace.leaves.length > 1
+              ? transcriptWords.openTabs(groupNumber, workspace.leaves.length)
+              : undefined,
         }}
         disabled={coarse()}
         group={leaf.id}

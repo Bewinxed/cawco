@@ -213,7 +213,7 @@
     {cards}
     closed={open !== null && name !== carried?.from && !open.has(name)}
     {dateOf}
-    stage={name || undefined}
+    stage={name}
     {fresh}
     foot={name && name === newIn ? addTask : undefined}
     {hrefOf}
@@ -253,11 +253,14 @@
        and the columns snap; the page's scrolling stays the phone's. -->
   <div
     bind:this={board}
+    data-carrying={carried ? "" : undefined}
     data-slot="board"
-    bind:this={board}
     class={[
       "kit-edge-fade grid h-full min-h-0 min-w-0 flex-auto auto-cols-(--cols) grid-flow-col gap-space-3 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-space-3 @max-phone/project:auto-cols-(--cols-phone)",
-      "@max-phone/project:snap-x @max-phone/project:snap-mandatory @max-phone/project:group-data-rail-open:hidden",
+      // A card carried to the board's edge scrolls it a little each frame
+      // (dnd kit's AutoScroller), which mandatory snapping pulled straight
+      // back to the column it left: the snap rests while a card is in the air.
+      "@max-phone/project:snap-x @max-phone/project:snap-mandatory @max-phone/project:data-carrying:snap-none @max-phone/project:group-data-rail-open:hidden",
       tasks.length > 0 && "max-phone:h-auto",
     ]}
     style:--cols="minmax(var(--c-board-col-min), var(--c-board-col-max))"

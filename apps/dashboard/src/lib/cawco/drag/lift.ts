@@ -37,6 +37,14 @@ const REST_ANGLE = 0.01;
 const REST_SPIN = 0.5;
 const FLAT = "0 0 0 0 transparent";
 
+/**
+ * What casts the shadow: the part of the thing marked `data-drag-face`
+ * (a board card inside its row), so the shadow takes the card's rounded
+ * shape, never the square box around it; else the thing itself.
+ */
+const faceOf = (element: HTMLElement): HTMLElement =>
+  element.querySelector<HTMLElement>("[data-drag-face]") ?? element;
+
 export interface Lifted {
   /** What it lifted, and carries the lift now. */
   readonly element: HTMLElement;
@@ -67,21 +75,22 @@ export function lift(
   const origin = `${grab.x - rect.left}px ${grab.y - rect.top}px`;
 
   let element = first;
-  let up: Animation;
-  /** The lift on `target`, from `from` (a pick-up) or standing (a thing drawn again). */
+  let up: Animation[] = [];
+  /** The lift on `target`, from its place (a pick-up) or standing (a thing drawn again). */
   const hold = (target: HTMLElement, pickUp: boolean) => {
     target.style.transformOrigin = origin;
-    up = target.animate(
-      [
-        { scale: pickUp ? "1" : big, boxShadow: pickUp ? FLAT : shadow },
-        { scale: big, boxShadow: shadow },
-      ],
-      {
-        duration: pickUp && moving ? dur("--dur-pick-up") : 0,
-        easing: ease("--ease-out"),
-        fill: "forwards",
-      }
-    );
+    const timing: KeyframeAnimationOptions = {
+      duration: pickUp && moving ? dur("--dur-pick-up") : 0,
+      easing: ease("--ease-out"),
+      fill: "forwards",
+    };
+    up = [
+      target.animate([{ scale: pickUp ? "1" : big }, { scale: big }], timing),
+      faceOf(target).animate(
+        [{ boxShadow: pickUp ? FLAT : shadow }, { boxShadow: shadow }],
+        timing
+      ),
+    ];
   };
   hold(first, true);
 
@@ -108,7 +117,8 @@ export function lift(
 
   /** One step of the spring toward the lean the hand asks, written as `rotate`. */
   const step = (now: number) => {
-    const dt = Math.min((now - last) / 1000, 1 / 30);
+    // A frame's time can stand before the clock this started on: never a step back.
+    const dt = Math.max(0, Math.min((now - last) / 1000, 1 / 30));
     last = now;
     const target = landing
       ? 0
@@ -158,7 +168,9 @@ export function lift(
       if (next === element) {
         return;
       }
-      up.cancel();
+      for (const run of up) {
+        run.cancel();
+      }
       clear(element);
       element = next;
       hold(next, false);
@@ -168,21 +180,32 @@ export function lift(
     },
     async land() {
       landing = true;
-      const down = element.animate(
-        [
-          { scale: getComputedStyle(element).scale, boxShadow: shadow },
-          { scale: "1", boxShadow: FLAT },
-        ],
-        {
-          duration: moving ? dur("--dur-panel") : 0,
-          easing: ease("--ease-drawer"),
-          fill: "forwards",
-        }
-      );
-      up.cancel();
-      await Promise.all([down.finished.catch(() => undefined), upright]);
+      const timing: KeyframeAnimationOptions = {
+        duration: moving ? dur("--dur-panel") : 0,
+        easing: ease("--ease-drawer"),
+        fill: "forwards",
+      };
+      const down = [
+        element.animate(
+          [{ scale: getComputedStyle(element).scale }, { scale: "1" }],
+          timing
+        ),
+        faceOf(element).animate(
+          [{ boxShadow: shadow }, { boxShadow: FLAT }],
+          timing
+        ),
+      ];
+      for (const run of up) {
+        run.cancel();
+      }
+      await Promise.all([
+        ...down.map((run) => run.finished.catch(() => undefined)),
+        upright,
+      ]);
       cancelAnimationFrame(frame);
-      down.cancel();
+      for (const run of down) {
+        run.cancel();
+      }
       clear(element);
     },
   };

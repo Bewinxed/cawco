@@ -46,3 +46,37 @@ export function standApi(answers: BenchAnswers): () => void {
     }
   };
 }
+
+/** The client's dev hooks a bench stands on (client.svelte.ts `devDebug`). */
+interface BenchDebug {
+  leaveHub: () => void;
+  standHub: (answer: () => void) => void;
+  state: { projects: unknown[]; usageLimitsRead: boolean };
+}
+
+/**
+ * Stands a bench on its own hub whole: `project` (a project row, as the
+ * hub lists it) in the rail, the page's reads answered by `answers`, the
+ * accounts' limits said read, and the socket stood down, so no band says
+ * the dev server has no hub. Returns its undoing, for `onMount`.
+ */
+export function standBench(
+  project: { id: string },
+  answers: BenchAnswers
+): () => void {
+  const debug = (globalThis as unknown as { __cawcoDebug: BenchDebug })
+    .__cawcoDebug;
+  const restore = standApi((path, method, query) =>
+    method === "GET" && path === "/api/accounts/forecast"
+      ? { provider: "anthropic", accounts: [], yours: [], delegates: [] }
+      : answers(path, method, query)
+  );
+  debug.state.projects.push(project);
+  debug.state.usageLimitsRead = true;
+  debug.standHub(() => undefined);
+  return () => {
+    restore();
+    debug.leaveHub();
+    debug.state.projects.splice(debug.state.projects.indexOf(project), 1);
+  };
+}

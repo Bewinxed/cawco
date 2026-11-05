@@ -2851,6 +2851,11 @@
         "purpose": "The scale a floating surface, chip or pop grows from and shrinks to."
       },
       {
+        "name": "dur-drag-follow",
+        "value": "80ms",
+        "purpose": "A thing in the air following the hand: the perceptual duration of the house spring it trails the pointer on (drag/follow.ts), critically damped. It trails a brisk hand (0.5px/ms) by about 13px and comes to rest under it as the hand stops."
+      },
+      {
         "name": "drag-lift-scale",
         "value": "1.03",
         "purpose": "How much bigger a thing picked up by a drag (a stage, a card, a block, a row, a tab) stands as it lifts off its place, over --dur-pick-up with shadow-overlay under it; it settles back to 1 as it lands (drag/lift.ts)."

@@ -21,6 +21,8 @@
      * content's). The keys take it by its handle either way.
      */
     takenBy?: "thing" | "grab";
+    /** The list it stands in, by its name, where there are several (a board's column, a group's tabs). */
+    where?: string;
     [key: string]: unknown;
   }
 </script>
@@ -39,15 +41,23 @@
    *   held open behind it while the others make room on the house's slide
    *   (--dur-panel, ease-drawer), and flies it to where it lands on the same
    *   clock. lift.ts gives it its weight (it grows, casts its shadow and
-   *   leans into the hand's travel on the house spring).
+   *   leans into the hand's travel on the house spring), and follow.ts lets
+   *   it float: it trails the hand on a spring and settles under it.
    * - A mouse or pen takes it once the press travels; a finger once it has
    *   rested on it (dnd kit's defaults: 250ms, 5px), so a swipe still
    *   scrolls; a press on a control inside it stays that control's. The
    *   keys: Space picks up what has the focus, the arrows carry it, Space
    *   puts it down, Escape puts it back. A screen reader hears each step in
    *   the house's words (core words/drag).
-   * - Escape, a lost press, or a drop on nothing: it flies back where it was,
-   *   and `onDragEnd` hears `canceled`.
+   * - Escape, or a lost press: it flies back where it was on the drop's
+   *   clock, and `onDragEnd` hears `canceled`. While a thing is in the air
+   *   Escape is the drag's alone: nothing else on the page hears it (a
+   *   panel stays open), and a pointer's Escape keeps its flight home
+   *   (motion/keyed `spareKey`: it ends the pointer's gesture, it is no
+   *   key's action). A drag the keys carry lands at once, as every key's.
+   * - What it says is said once the page has drawn the move, so its place
+   *   and how many it stands among are the ones on screen: each arrow press
+   *   is heard, in the house's words.
    */
   import {
     Accessibility,
@@ -62,8 +72,10 @@
     KeyboardSensor,
     PointerSensor,
   } from "@dnd-kit/svelte";
-  import type { Snippet } from "svelte";
+  import { type Snippet, tick } from "svelte";
   import { dur, ease } from "../motion/curves.svelte";
+  import { spareKey } from "../motion/keyed.svelte";
+  import { Follow } from "./follow";
   import { type Lifted, lift } from "./lift";
 
   /**
@@ -103,14 +115,16 @@
     const label = (thing?.data as DragData | undefined)?.label;
     return label ?? String(thing?.id ?? "");
   };
-  /** Its place among the others, from 1, and how many: a sortable's alone. */
+  /** Its place among the others, from 1, how many, and in which list: a sortable's alone. */
   const placeOf = (
     thing: Draggable | Droppable | null
-  ): { at: number; of: number } | null => {
-    const of = (thing?.data as DragData | undefined)?.of;
+  ): { at: number; of: number; where?: string } | null => {
+    const data = thing?.data as DragData | undefined;
     // A sortable is its draggable and its droppable at once: one guard reads either.
     const sortable = thing as Parameters<typeof isSortable>[0];
-    return of && isSortable(sortable) ? { at: sortable.index + 1, of } : null;
+    return data?.of && isSortable(sortable)
+      ? { at: sortable.index + 1, of: data.of, where: data.where }
+      : null;
   };
 
   /** The drop's flight: the house's slide. */
@@ -131,38 +145,11 @@
         easing: ease("--ease-drawer"),
       },
     }),
+    // Its instructions for each thing; what it says as it moves is said
+    // here, once the move is drawn (`say`).
     Accessibility.configure({
       screenReaderInstructions: { draggable: dragWords.instructions },
-      announcements: {
-        dragstart: ({ operation: { source } }: DragStart) =>
-          source ? dragWords.pickedUp(nameOf(source)) : undefined,
-        dragover: ({ operation: { source, target } }: DragOver) => {
-          if (!source || source.id === target?.id) {
-            return;
-          }
-          const name = nameOf(source);
-          const place = placeOf(target);
-          if (place) {
-            return dragWords.movedTo(name, place.at, place.of);
-          }
-          return target
-            ? dragWords.over(name, nameOf(target))
-            : dragWords.overNothing(name);
-        },
-        dragend: ({ operation: { source, target }, canceled }: DragEnd) => {
-          if (!source) {
-            return;
-          }
-          const name = nameOf(source);
-          if (canceled || !target) {
-            return dragWords.putBack(name);
-          }
-          const place = placeOf(source);
-          return place
-            ? dragWords.droppedAt(name, place.at, place.of)
-            : dragWords.droppedIn(name, nameOf(target));
-        },
-      },
+      announcements: { dragstart: () => undefined, dragend: () => undefined },
     }),
   ];
 
@@ -223,15 +210,19 @@
    * plugins read the stylesheet, which a server render has none of.
    */
   const live = typeof document !== "undefined";
+  const modifiers = [Follow];
   const manager = new Manager({
     plugins: live ? plugins : undefined,
     sensors,
+    modifiers,
   });
   // Handed in, the provider leaves it standing as it goes: it goes with this.
   $effect(() => () => manager.destroy());
 
   /** The thing in the hand, while there is one. */
   let held: Lifted | null = null;
+  /** Hears the thing dnd kit carries drawn again (a card into another column): the lift goes to it before that frame paints. */
+  let redrawn: MutationObserver | null = null;
 
   /**
    * What Feedback carries: the thing itself, or the face a DragOverlay draws
@@ -243,17 +234,105 @@
     return element instanceof HTMLElement ? element : null;
   };
 
+  // --- what it says ---------------------------------------------------------
+
+  /** The page's one line for what a drag says, under everything. */
+  let line: HTMLElement | null = null;
+  $effect(() => {
+    const said = document.createElement("p");
+    said.className = "sr-only";
+    said.setAttribute("aria-live", "assertive");
+    said.setAttribute("aria-atomic", "true");
+    document.body.append(said);
+    line = said;
+    return () => {
+      said.remove();
+      line = null;
+    };
+  });
+  const say = (words: string | undefined) => {
+    if (line && words && line.textContent !== words) {
+      line.textContent = words;
+    }
+  };
+  /** Where the thing in the air stands now, as drawn. */
+  const whereNow = (): string | undefined => {
+    const { source, target } = manager.dragOperation;
+    if (!source) {
+      return;
+    }
+    const name = nameOf(source);
+    const place = placeOf(source);
+    if (place?.where) {
+      return dragWords.movedToIn(name, place.where, place.at, place.of);
+    }
+    if (place) {
+      return dragWords.movedTo(name, place.at, place.of);
+    }
+    return target ? dragWords.over(name, nameOf(target)) : undefined;
+  };
+
+  // --- the drag -------------------------------------------------------------
+
+  /**
+   * Escape while a thing is in the air: the drag's, and no one else's. Heard
+   * on the window before anything under it (a panel's own Escape).
+   */
+  function putBackOnEscape(event: KeyboardEvent) {
+    if (event.key !== "Escape" || manager.dragOperation.status.idle) {
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (!(manager.dragOperation.activatorEvent instanceof KeyboardEvent)) {
+      spareKey();
+    }
+    manager.actions.stop({ event, canceled: true });
+  }
+  $effect(() => {
+    window.addEventListener("keydown", putBackOnEscape, { capture: true });
+    return () =>
+      window.removeEventListener("keydown", putBackOnEscape, { capture: true });
+  });
+
   function start(event: DragStart) {
     const { x, y } = event.operation.position.current;
     const source = event.operation.source?.element;
     const drag = event.operation.source;
+    say(drag ? dragWords.pickedUp(nameOf(drag)) : undefined);
+    pickedAt = whereNow();
     requestAnimationFrame(() => {
       const element = carried(source);
-      if (element && drag === manager.dragOperation.source) {
-        held = lift(element, { x, y });
+      if (!(element && drag === manager.dragOperation.source)) {
+        return;
       }
+      held = lift(element, { x, y });
+      redrawn = new MutationObserver(() => {
+        const now = carried(undefined);
+        if (now) {
+          held?.follow(now);
+        }
+      });
+      redrawn.observe(document.body, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["data-dnd-dragging"],
+      });
     });
     onDragStart?.(event);
+  }
+  /** Where it stood as it was picked up: said once it stands elsewhere. */
+  let pickedAt: string | undefined;
+  function over(event: DragOver) {
+    onDragOver?.(event);
+    // Said once the move it makes is drawn.
+    tick().then(() => {
+      const now = whereNow();
+      if (now !== pickedAt) {
+        pickedAt = undefined;
+        say(now);
+      }
+    });
   }
   function move(event: DragMove) {
     if (fliesHome) {
@@ -264,20 +343,28 @@
         feedback.dropAnimation = fliesHome() ? houseDrop() : null;
       }
     }
-    if (held) {
-      held.move(event.operation.position.current.x);
-      // A card carried into another column is drawn again there, and dnd
-      // kit carries the new one: the lift goes with it.
-      const now = carried(undefined);
-      if (now) {
-        held.follow(now);
-      }
-    }
+    held?.move(event.operation.position.current.x);
     onDragMove?.(event);
   }
   function end(event: DragEnd) {
+    redrawn?.disconnect();
+    redrawn = null;
     held?.land();
     held = null;
+    const { source, target } = event.operation;
+    if (source) {
+      const name = nameOf(source);
+      const place = placeOf(source);
+      if (event.canceled) {
+        say(dragWords.putBack(name));
+      } else if (place?.where) {
+        say(dragWords.droppedAtIn(name, place.where, place.at, place.of));
+      } else if (place) {
+        say(dragWords.droppedAt(name, place.at, place.of));
+      } else if (target) {
+        say(dragWords.droppedIn(name, nameOf(target)));
+      }
+    }
     onDragEnd?.(event);
   }
 </script>
@@ -286,9 +373,10 @@
   {manager}
   onDragEnd={end}
   onDragMove={move}
-  {onDragOver}
+  onDragOver={over}
   onDragStart={start}
   plugins={live ? plugins : undefined}
+  {modifiers}
   {sensors}
 >
   {@render children()}
