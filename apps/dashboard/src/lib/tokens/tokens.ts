@@ -321,6 +321,7 @@ export type TokenSize =
   | "size.c-pin-list-min"
   | "size.c-pin-list-max"
   | "size.c-review-words"
+  | "size.c-ledger-time"
   | "size.c-mark"
   | "size.c-row-mark"
   | "size.c-pill-h"

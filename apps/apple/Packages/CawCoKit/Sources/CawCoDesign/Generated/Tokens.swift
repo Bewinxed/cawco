@@ -601,6 +601,8 @@ public enum Size {
     public static let cPinListMax: Double = 380
     /// A task's review on a page wide enough for two columns: the session's words, what to check and its attachments, beside the artifact it presented (TaskReview).
     public static let cReviewWords: Double = 320
+    /// A ledger row's time column (the Your move first prototype's task history): the widest day and clock time in the meta role's tabular figures ("26 Oct 15:22"), so every row's words start on one x.
+    public static let cLedgerTime: Double = 80
     public static let cMark: Double = 26
     public static let cRowMark: Double = 18
     public static let cPillH: Double = 24

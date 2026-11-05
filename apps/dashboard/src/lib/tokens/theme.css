@@ -335,6 +335,7 @@
   --spacing-c-pin-list-min: var(--c-pin-list-min);
   --spacing-c-pin-list-max: var(--c-pin-list-max);
   --spacing-c-review-words: var(--c-review-words);
+  --spacing-c-ledger-time: var(--c-ledger-time);
   --spacing-c-mark: var(--c-mark);
   --spacing-c-row-mark: var(--c-row-mark);
   --spacing-c-pill-h: var(--c-pill-h);

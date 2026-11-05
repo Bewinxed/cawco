@@ -801,6 +801,8 @@
     --c-pin-list-max: var(--c-panel-w);
     /* A task's review on a page wide enough for two columns: the session's words, what to check and its attachments, beside the artifact it presented (TaskReview). */
     --c-review-words: 320px;
+    /* A ledger row's time column (the Your move first prototype's task history): the widest day and clock time in the meta role's tabular figures ("26 Oct 15:22"), so every row's words start on one x. */
+    --c-ledger-time: 80px;
     --c-mark: 26px;
     --c-row-mark: 18px;
     --c-pill-h: 24px;
