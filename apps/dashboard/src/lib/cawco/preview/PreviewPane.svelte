@@ -43,9 +43,11 @@
     type StageErrorKind,
   } from "@cawco/core/stage";
   import {
+    STAGE_DIFFERENCES,
     STAGE_FAULT,
     STAGE_LAID,
     STAGE_REACHED,
+    stageDifferencesOf,
     stageFaultOf,
     stageLaidOf,
     stageReachedOf,
@@ -3416,6 +3418,14 @@
         const said = stageFaultOf(message);
         if (said && link) {
           link.fault = said;
+        }
+        break;
+      }
+      case STAGE_DIFFERENCES: {
+        // What differs from the state the design graph compares with: its lines at the stage's head.
+        const said = stageDifferencesOf(message);
+        if (said && link) {
+          link.heardDifferences(said);
         }
         break;
       }

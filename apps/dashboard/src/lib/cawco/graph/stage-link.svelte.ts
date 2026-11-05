@@ -1,20 +1,24 @@
 /**
  * The design graph's line to its stage page (core stage-graph.ts), the
  * page that holds the component on its stage's origin inside the panel's
- * frame: what the graph posts it (a reach, a reveal, the view), and what it
- * last said (its sheets, how its drawing is laid out, the reach that
- * landed, a fault, a press), held as state the graph reads. One per
- * component artifact's pane (PreviewPane), which hears the page and hands
- * each word here.
+ * frame: what the graph posts it (a reach, Compare, a reveal, the view),
+ * and what it last said (its sheets, how its drawing is laid out, the reach
+ * that landed, a fault, what differs, a press), held as state the graph
+ * reads. One per component artifact's pane (PreviewPane), which hears the
+ * page and hands each word here.
  */
 import type { SheetOnPage } from "@cawco/core/stage";
 import {
+  STAGE_COMPARE,
   STAGE_REACH,
   STAGE_REVEAL,
+  type StageCompare,
+  type StageDifferences,
   type StageFault,
   type StageLaid,
   type StageReach,
   type StageReached,
+  type StageReveal,
   type StateRef,
   storyOf,
 } from "@cawco/core/stage-graph";
@@ -48,6 +52,10 @@ export class StageLink {
   front = $state<string | null>(null);
   /** A story the person picked in the inspector, by its states file: the graph keeps its state, then lets it go. */
   wanted = $state<{ file: string; story: string } | null>(null);
+  /** The Compare the graph last asked for; null while it doesn't compare. */
+  comparing = $state<StageCompare | null>(null);
+  /** What differs, as the page last read it for that Compare (`cawco:stage-differences`); null until it has. */
+  differences = $state<StageDifferences | null>(null);
   readonly #post: (message: object) => void;
   #ask = 0;
 
@@ -80,9 +88,38 @@ export class StageLink {
     return this.#ask;
   }
 
-  /** The region the last reach changed, brought into the stage's view. */
-  reveal(): void {
-    this.#post({ type: STAGE_REVEAL });
+  /**
+   * Compare: `against` drawn hidden under the kept state at its width, what
+   * differs read and ringed (`show`: the compared state in the kept one's
+   * place); null ends it. The same Compare again posts nothing.
+   */
+  compare(against: StateRef | null, show: StageCompare["show"]): void {
+    const now = this.comparing;
+    const same =
+      JSON.stringify(now?.against ?? null) === JSON.stringify(against);
+    if (same && (against === null || now?.show === show)) {
+      return;
+    }
+    this.#ask += 1;
+    const asking: StageCompare = { ask: this.#ask, against, show };
+    if (!same) {
+      // Another state, or none: what differed from the last one is gone.
+      this.differences = null;
+    }
+    this.comparing = against ? asking : null;
+    this.#post({ type: STAGE_COMPARE, ...asking });
+  }
+
+  /** What differs, heard: kept only for the Compare the graph asked for last. */
+  heardDifferences(said: StageDifferences): void {
+    if (this.comparing && said.ask === this.comparing.ask) {
+      this.differences = said;
+    }
+  }
+
+  /** A region of the drawing brought into the stage's view: what the last reach changed, or a difference's ring. */
+  reveal(what: StageReveal["what"]): void {
+    this.#post({ type: STAGE_REVEAL, what });
   }
 
   /** The stage's view: its scheme, the width he picked, motion. */
@@ -108,6 +145,9 @@ export class StageLink {
     this.laid = null;
     this.reached = null;
     this.fault = null;
+    // The new page compares with nothing until the graph asks it again.
+    this.comparing = null;
+    this.differences = null;
     this.loads += 1;
   }
 

@@ -41,12 +41,16 @@ import { pinName, UNSHOWN_ELEMENTS } from "@cawco/core/pin-name";
 import { paneKeyOf, shellShortcutOf } from "@cawco/core/shell-shortcuts";
 import { interactionOf } from "@cawco/core/stage";
 import {
+  STAGE_COMPARE,
+  STAGE_DIFFERENCES,
   STAGE_FAULT,
   STAGE_LAID,
   STAGE_REACH,
   STAGE_REACHED,
   STAGE_REVEAL,
+  stageCompareOf,
   stageReachOf,
+  stageRevealOf,
 } from "@cawco/core/stage-graph";
 import {
   type Anchorable,
@@ -3369,9 +3373,19 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         dispatchEvent(new CustomEvent(STAGE_REACH, { detail: reach }));
       }
     },
-    // What the last reach changed, brought into the stage's view.
-    [STAGE_REVEAL]: () => {
-      dispatchEvent(new CustomEvent(STAGE_REVEAL));
+    // A region of the drawing brought into the stage's view: what the last reach changed, or a difference's ring.
+    [STAGE_REVEAL]: (message) => {
+      const reveal = stageRevealOf(message);
+      if (reveal) {
+        dispatchEvent(new CustomEvent(STAGE_REVEAL, { detail: reveal }));
+      }
+    },
+    // Compare: the state compared with, the flip, or Compare ended.
+    [STAGE_COMPARE]: (message) => {
+      const compare = stageCompareOf(message);
+      if (compare) {
+        dispatchEvent(new CustomEvent(STAGE_COMPARE, { detail: compare }));
+      }
     },
     "cawco:theme": (message) => takeTheme(message.theme),
     // A host that holds no doc of its own (the app) writes the person's reply,
@@ -3580,9 +3594,15 @@ window.addEventListener("cawco:sheet", (event) => {
 /*
  * A component artifact's stage (stage-host canvas stage.ts) answers the
  * design graph in the pane: a reach landed, the drawing laid out, the
- * component threw as it mounted (core stage-graph.ts).
+ * component threw as it mounted, what differs from the state compared with
+ * (core stage-graph.ts).
  */
-for (const type of [STAGE_REACHED, STAGE_LAID, STAGE_FAULT]) {
+for (const type of [
+  STAGE_REACHED,
+  STAGE_LAID,
+  STAGE_FAULT,
+  STAGE_DIFFERENCES,
+]) {
   window.addEventListener(type, (event) => {
     post(type, (event as CustomEvent<object>).detail ?? {});
   });

@@ -1,33 +1,18 @@
 /**
- * What differs between two drawings of one component (spec, The
- * difference): the kept state, drawn hidden under the stage, and the state
- * compared with it, drawn on the stage, both at one width. An element is a
- * part a person reads: a form control, an element with words of its own, an
- * image or a glyph with a name, or a house part (`data-slot`). Each is
- * matched by its part's name and place, else by its words; what only the
- * compared one has came in, what only the kept one has went, and a matched
- * pair whose words, value or availability differ changed. A part inside a
- * part that came in or went is said by its outermost part alone.
+ * What differs between two drawings of one component at one width (the
+ * design graph's Compare, stage.ts): the state compared with, drawn hidden
+ * under the stage's drawing (or beside it), and the kept state, the
+ * stage's drawing. An element is a part a person reads: a form control, an
+ * element with words of its own, an image or a glyph with a name, or a
+ * house part (`data-slot`). Each is matched by what a person calls it, else
+ * by its part's name and place, else by its words; what only the kept one
+ * has came in, what only the compared one has went, and a matched pair
+ * whose words, value or availability differ changed. A part inside a part
+ * that came in or went is said by its outermost part alone.
  */
+import type { DifferenceRead, DrawingBox } from "@cawco/core/stage-graph";
 import { graphWords as words } from "@cawco/core/words/graph";
 import { nameOf, wordsOf } from "./names";
-
-interface Box {
-  h: number;
-  w: number;
-  x: number;
-  y: number;
-}
-
-interface Difference {
-  /** Where it stands on the stage, unscaled: for one that went, where it stood. */
-  box: Box;
-  kind: "came" | "changed" | "went";
-  /** One line of words. */
-  line: string;
-  /** Its corner radius as drawn, so the ring stands on its own shape. */
-  radius: string;
-}
 
 const READ =
   "input, textarea, select, button, img, svg[aria-label], [data-slot]";
@@ -105,7 +90,7 @@ function partsOf(root: Element): Part[] {
   return parts;
 }
 
-const boxIn = (el: Element, root: Element, scale: number): Box => {
+const boxIn = (el: Element, root: Element, scale: number): DrawingBox => {
   const a = el.getBoundingClientRect();
   const b = root.getBoundingClientRect();
   return {
@@ -195,32 +180,33 @@ const outermost = (list: Part[]): Part[] =>
   );
 
 /**
- * The differences from `kept` to `shown`, two roots holding one component
- * each at one width; `scale` is how the stage draws them.
+ * The differences from `compared` to `kept`, two roots holding one
+ * component each at one width; `scale` is how the stage draws them. Each
+ * box is in its own root's px: what went, in `compared`'s.
  */
 export function differences(
+  compared: Element,
   kept: Element,
-  shown: Element,
   scale: number
-): Difference[] {
-  const before = partsOf(kept);
-  const after = partsOf(shown);
+): DifferenceRead[] {
+  const before = partsOf(compared);
+  const after = partsOf(kept);
   const pairs = pair(before, after);
   const matched = new Set(pairs.values());
   const mark = (
     part: Part,
     root: Element,
-    kind: Difference["kind"],
+    kind: DifferenceRead["kind"],
     line: string
-  ): Difference => ({
+  ): DifferenceRead => ({
     kind,
     line,
     box: boxIn(part.el, root, scale),
     radius: radiusOf(part.el),
   });
-  const found: Difference[] = outermost(
+  const found: DifferenceRead[] = outermost(
     after.filter((part) => !pairs.has(part))
-  ).map((part) => mark(part, shown, "came", words.cameIn(nameOf(part.el))));
+  ).map((part) => mark(part, kept, "came", words.cameIn(nameOf(part.el))));
   for (const [part, was] of pairs) {
     const said = saidOf(part, was);
     if (said || part.disabled !== was.disabled) {
@@ -228,7 +214,7 @@ export function differences(
       found.push(
         mark(
           part,
-          shown,
+          kept,
           "changed",
           said
             ? // In the order the two drawings stand side by side, the kept
@@ -240,7 +226,7 @@ export function differences(
     }
   }
   for (const part of outermost(before.filter((one) => !matched.has(one)))) {
-    found.push(mark(part, kept, "went", words.went(nameOf(part.el))));
+    found.push(mark(part, compared, "went", words.went(nameOf(part.el))));
   }
   return found.sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x);
 }

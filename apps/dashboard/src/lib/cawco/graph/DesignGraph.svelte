@@ -10,18 +10,22 @@
    * what to stand at by messages (StageLink, core stage-graph.ts) and the
    * page answers. Beside the stage one room of two faces on one switch:
    * the states list with its steps, and the map of the whole set
-   * (WholeSet), where a press on a card keeps its state. Several
-   * components under one ask: one in front, the others behind its name's
-   * menu.
+   * (WholeSet), where a press on a card keeps its state. Compare, a switch
+   * that stays on, compares the kept state with the one before it
+   * (`previousOf`), and a press on another state compares with that one
+   * instead: the page draws it hidden under the kept one, reads what
+   * differs and rings it; the stage's head lists each difference, a press
+   * on a line bringing its ring into view. Several components under one
+   * ask: one in front, the others behind its name's menu.
    *
    * One bar of one row (DESIGN.md, The Title Bars Follow Liquid Glass
    * Rule): leading the component's name (its menu when there are several),
-   * trailing one glass group of bare symbols (the stage's view, and Show
-   * states only while the room is put away: the room's one close is its
-   * own). The view is a card hung from the glass (HangCard, as the app's
-   * own glass hangs its cards): one settings row each, its name leading and
-   * its control trailing, the widths as device glyphs with their figures,
-   * the scheme as sun and moon, Reduce motion as a switch.
+   * trailing one glass group of bare symbols (Compare, the stage's view,
+   * and Show states only while the room is put away: the room's one close
+   * is its own). The view is a card hung from the glass (HangCard, as the
+   * app's own glass hangs its cards): one settings row each, its name
+   * leading and its control trailing, the widths as device glyphs with
+   * their figures, the scheme as sun and moon, Reduce motion as a switch.
    *
    * One grid under the bar: the stage and the room are two panels of one
    * kind (one corner, one edge, one raised head on one head line), sharing
@@ -64,6 +68,7 @@
   import {
     IconChevronDown,
     IconClose,
+    IconCompare,
     IconEye,
     IconListRows,
     IconMaximize,
@@ -80,7 +85,7 @@
   import { figureOf, pageLang } from "./figures";
   import Journey from "./Journey.svelte";
   import { keepUnder, keptUnder } from "./kept";
-  import { pathOf, type Review, reviewOf } from "./model";
+  import { pathOf, previousOf, type Review, reviewOf } from "./model";
   import StagePane from "./StagePane.svelte";
   import Stepper from "./Stepper.svelte";
   import type { StageLink } from "./stage-link.svelte";
@@ -233,6 +238,27 @@
     const pick = keptOf[review.file];
     return pick && review.states[pick.state] ? pick : first(review);
   });
+  /** Compare is on: a switch that stays on until he turns it off. */
+  let comparing = $state(false);
+  /** The state the kept one is compared with, by its id, while comparing. */
+  let against = $state<string | null>(null);
+  /** The compared state shown in the kept one's place (Compare's flip). */
+  let flipped = $state(false);
+  /** The state compared with while Compare is on and the component in front has it. */
+  const againstState = $derived(
+    comparing && review && against ? review.states[against] : undefined
+  );
+  /** Compare turned on compares with the state before the kept one (`previousOf`); it leaves the room as it stands. */
+  const setComparing = (on: boolean) => {
+    comparing = on;
+    against = on && review && kept ? previousOf(review, kept.state) : null;
+    flipped = false;
+  };
+  /** Compared with another state: the kept one shows in its place again. */
+  const compareWith = (state: string | null) => {
+    against = state;
+    flipped = false;
+  };
   // A new ask (the agent showed the canvas again, or changed its ask)
   // opens on the state it names: what he kept under the last ask goes.
   // Under the ask they were kept for, his picks stand again after a reload.
@@ -313,10 +339,13 @@
         : state?.widths.find((one) => one.width === atWidth);
     return { file: on.file, story: sized?.story ?? pick.state };
   };
-  /** A press on a state keeps it (a record set too). */
+  /** A state kept (a record set too); kept while it is the one compared with, Compare turns to the state before it. */
   const keep = (state: string, variant: string | null) => {
     if (review) {
       keptOf = { ...keptOf, [review.file]: { state, variant } };
+      if (comparing && against === state) {
+        compareWith(previousOf(review, state));
+      }
     }
   };
   /** The state a story stands for: a state's own, a variant's under it, or a state's at another width (with that width). */
@@ -350,6 +379,10 @@
       const found = wish && on ? pickOf(on, wish.story) : null;
       if (!(wish && on && found)) {
         return;
+      }
+      if (on.file !== frontFile) {
+        // Another component in front: it compares with nothing of the last one.
+        setComparing(false);
       }
       chosenFile = on.file;
       keptOf = { ...keptOf, [on.file]: found.pick };
@@ -446,10 +479,48 @@
       }
       if (reached?.ask === asking && !reached.superseded && pressed) {
         pressed = false;
-        link.reveal();
+        link.reveal({ move: true });
       }
     });
   });
+
+  // Compare said on the line after the reach, so the page compares with the
+  // state at the kept one's width (its story there, as the reach names it);
+  // again on a new page, which compares with nothing until asked.
+  $effect(() => {
+    const on = review;
+    const id = againstState ? against : null;
+    const atWidth = width;
+    const show = flipped ? "compared" : "kept";
+    const { loads } = link;
+    untrack(() => {
+      if (loads === 0 || !on) {
+        return;
+      }
+      link.compare(
+        id ? refOf(on, { state: id, variant: null }, atWidth) : null,
+        show
+      );
+    });
+  });
+  /** Compare is reading what differs: asked for, and not yet answered. */
+  const reading = $derived(
+    !!link.comparing && link.differences?.ask !== link.comparing.ask
+  );
+  /**
+   * A difference's line pressed: its ring brought into view; one that went
+   * shows the compared state in the kept one's place, where its ring
+   * stands, unless the two stand side by side (the page does the same).
+   */
+  const showDifference = (index: number) => {
+    const read = link.differences;
+    const one = read?.found[index];
+    if (!(read && one)) {
+      return;
+    }
+    flipped = !read.beside && one.kind === "went";
+    link.reveal({ difference: index });
+  };
 
   // --- Keys and presses ------------------------------------------------------
 
@@ -634,6 +705,14 @@
       });
     }
   };
+  /** A press on a state in the room: while comparing, on another state, compare with it; else keep it. */
+  const press = (state: string, variant: string | null) => {
+    if (comparing && kept && state !== kept.state) {
+      compareWith(state);
+      return;
+    }
+    choose(state, variant);
+  };
   /**
    * A move named by its arrow on the map (or its line in the map's list):
    * the Animation face opens on it once that face stands on the page; until
@@ -682,7 +761,7 @@
         return;
       }
       stopShown = standing;
-      requestAnimationFrame(() => link.reveal());
+      requestAnimationFrame(() => link.reveal({ move: true }));
     });
   });
 
@@ -800,20 +879,20 @@
       </p>
     {:else if face === "map"}
       <WholeSet
-        against={null}
+        against={againstState ? against : null}
         kept={kept.state}
         {narrow}
         onmove={chooseMove}
-        onpress={choose}
+        onpress={press}
         {review}
       />
     {:else}
       <Journey
-        against={null}
+        against={againstState ? against : null}
         kept={kept.state}
         keptVariant={kept.variant}
         {lang}
-        onpress={choose}
+        onpress={press}
         onstep={(next) => choose(next, null)}
         {review}
         stepper={stepperHere}
@@ -871,7 +950,7 @@
   <div
     data-slot="design-graph"
     class="flex h-full min-h-0 min-w-0 flex-col bg-surface-page contain-layout"
-    data-arriving={arriving || undefined}
+    data-arriving={arriving || reading || undefined}
     {lang}
     {@attach frameSize((node: HTMLElement) => {
       surface = node.clientWidth;
@@ -922,6 +1001,9 @@
                 bind:value={
                   () => frontFile,
                   (next: string) => {
+                    if (next !== frontFile) {
+                      setComparing(false);
+                    }
                     chosenFile = next;
                   }
                 }
@@ -957,9 +1039,27 @@
           glass = node.querySelector<HTMLElement>('[data-slot="tools"]');
         }}
       >
-        <!-- The view; Show states only while the room is put away. The
-             room's one close is its own. -->
+        <!-- Compare and the view; Show states only while the room is put
+             away. The room's one close is its own. -->
         <BarGlass form="group" joined={viewJoined}>
+          {#if !single}
+            <Tip label={words.compare}>
+              {#snippet children(tip)}
+                <button
+                  data-bar-item
+                  {...mergeProps(tip, {
+                    onclick: () => setComparing(!comparing),
+                  })}
+                  aria-label={words.compare}
+                  aria-pressed={comparing}
+                  class="select-none touch-hit press-tint aria-pressed:bg-selected-bg aria-pressed:text-selected-ink"
+                  type="button"
+                >
+                  <IconCompare data-slot="bar-symbol" aria-hidden="true" />
+                </button>
+              {/snippet}
+            </Tip>
+          {/if}
           <Popover.Root bind:open={viewOpen}>
             <!-- No tooltip over its own open card: shown, it took the
                  card's Escape for itself. Nor as the card hands the focus
@@ -1184,8 +1284,20 @@
           >
             <StagePane
               bind:need={stageNeed}
+              compare={againstState
+                ? {
+                    name: againstState.name,
+                    flipped,
+                    read: link.differences,
+                  }
+                : null}
               {frame}
+              {lang}
               laid={link.laid}
+              ondifference={showDifference}
+              onflip={() => {
+                flipped = !flipped;
+              }}
               name={keptState?.name ?? ""}
               scale={link.laid && link.laid.scale < 1
                 ? words.scaledTo(figure(Math.round(link.laid.scale * 100)))

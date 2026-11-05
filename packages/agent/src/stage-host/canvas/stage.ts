@@ -18,6 +18,15 @@
  * stage; `cawco:stage-fault` says the component threw as it mounted, the
  * error formula drawn in the drawing's place with its own Try again.
  *
+ * Compare is read here too, where both drawings stand: `cawco:stage-compare`
+ * names a state to compare the kept one with, which the page draws hidden
+ * under the drawing at the drawing's width, reads what differs between the
+ * two (diff.ts) as either lays out, rings each difference in a layer of its
+ * own and answers `cawco:stage-differences`; where its room holds both
+ * side by side it stands them so, each named, and the flip (`show:
+ * "compared"`) shows the compared one in the kept one's place.
+ * `cawco:stage-reveal` brings a difference's ring into view.
+ *
  * The instance mounts once for as long as the panel stays with it (again
  * only for another states file, a reach from nothing, Try again after a
  * fault, or an edit of its states file), and a reach sets the next state's
@@ -41,7 +50,6 @@
  */
 
 import { readWithin } from "@cawco/core/bounded";
-import { bringIntoView } from "@cawco/core/bring-into-view";
 import {
   type AnimationRead,
   FORMS,
@@ -56,18 +64,27 @@ import {
   type ClipRead,
   clipKindOf,
   cutRecords,
+  type DifferenceRead,
+  type DrawingBox,
+  STAGE_COMPARE,
+  STAGE_DIFFERENCES,
   STAGE_FAULT,
   STAGE_LAID,
   STAGE_REACH,
   STAGE_REACHED,
   STAGE_REVEAL,
+  type StageCompare,
+  type StageDifferences,
   type StageFault,
   type StageLaid,
   type StageReach,
   type StageReached,
+  type StageReveal,
   type StateRef,
   shownName,
+  stageCompareOf,
   stageReachOf,
+  stageRevealOf,
   storyOf,
 } from "@cawco/core/stage-graph";
 import { queriesIn, userEventIn } from "@cawco/core/stage-play";
@@ -109,6 +126,15 @@ const READ_AGAIN_MS = 300;
 const ROW_GAP = 24;
 /** The page's gutter round the drawing (the panel's stage head's inset). */
 const GUTTER = "--space-4";
+/** The gap between the kept drawing and the compared one where the two stand side by side. */
+const BESIDE_GAP = "--space-6";
+/**
+ * How long after Compare turns on (or turns to another state) each read of
+ * the differences brings the first ring into view: the first read stands
+ * on drawings still settling, and shown once it was brought to where the
+ * ring stood, not where it stands (the design graph's branch, Stage.svelte).
+ */
+const SETTLE_MS = 1200;
 /** What a reader sees of a drawing besides its words: its controls and its pictures (stage.ts `inkOf`). */
 const INKED =
   "button, input, select, textarea, img, svg, canvas, video, [role=switch], [role=checkbox], [role=button]";
@@ -135,6 +161,13 @@ interface Target {
 interface Live extends Target {
   into: { error?: PageError };
   mounted: Mounted | undefined;
+}
+
+/** The state Compare compares the drawing with: drawn hidden under it, in a body of its own. */
+interface Against extends Live {
+  body: HTMLElement;
+  /** It has come to rest: its differences can be read. */
+  rested: boolean;
 }
 
 /** An animation a reach set off, as first seen: its element, its frames and its timing. */
@@ -247,7 +280,18 @@ export function bootStage(page: Page): Mode {
   const drawing = document.createElement("div");
   drawing.className = "cawco-frame-body cawco-stage-drawing";
   drawing.toggleAttribute("data-stage-drawing", true);
-  frame.append(drawing);
+  /** Compare's rings: outside each element's box on its own shape, in a layer of the stage's own over both drawings, taking no press. */
+  const rings = document.createElement("div");
+  rings.className = "cawco-stage-rings";
+  rings.setAttribute("aria-hidden", "true");
+  frame.append(drawing, rings);
+  /** Compare side by side: each drawing named over its own column. */
+  const names = document.createElement("div");
+  names.className = "cawco-stage-names";
+  names.hidden = true;
+  const keptName = document.createElement("span");
+  const againstName = document.createElement("span");
+  names.append(keptName, againstName);
   /** What stands for the drawing until it first mounts, seen only past the wait's grace. */
   const waiting = document.createElement("div");
   waiting.className = "cawco-stage-waiting cawco-waiting";
@@ -258,9 +302,21 @@ export function bootStage(page: Page): Mode {
   const block = document.createElement("div");
   block.className = "cawco-stand-in-body";
   waiting.append(waitingWords, block);
-  canvas.append(waiting, frame);
+  canvas.append(waiting, names, frame);
 
   let live: Live | null = null;
+  /** The panel's last Compare ask, while it compares; null while it doesn't. */
+  let comparing: StageCompare | null = null;
+  /** The state compared with, drawn hidden under the drawing; null until it mounts. */
+  let against: Against | null = null;
+  /** What differs, as last read: what came in or changed on the drawing, what went on the compared one. */
+  let found: DifferenceRead[] = [];
+  /** The two stand side by side: the page's room holds both at their width, the gap between. */
+  let beside = false;
+  /** Each read brings the first ring into view until then (performance.now()). */
+  let firstUntil = 0;
+  /** The drawing's width as the frame stands it, px (`laid`). */
+  let drawnWidth = 0;
   let fault: HTMLElement | null = null;
   /** Each section's card saying it didn't load, by its file. */
   const failedCards = new Map<string, HTMLElement>();
@@ -440,6 +496,7 @@ export function bootStage(page: Page): Mode {
     canvas.append(card);
     fault = card;
     tell<StageFault>(STAGE_FAULT, { on: target.ref, message: error.message });
+    reread();
   }
 
   /* --- Mounting, and the one way the instance moves ---------------------- */
@@ -527,6 +584,10 @@ export function bootStage(page: Page): Mode {
     }
     await restOf(drawing);
     holdHeight(false);
+    // The state compared with stands at the drawing's width, which another story may lay out anew.
+    if (against) {
+      dressAgainst(against);
+    }
     laid();
     chrome.dials(() => drawing);
   }
@@ -546,6 +607,31 @@ export function bootStage(page: Page): Mode {
     await frameTick();
   }
 
+  /** A body for a drawing no one sees or presses: one held to the drawing, or the state compared with it. */
+  function hiddenBody(className: string): HTMLElement {
+    const body = document.createElement("div");
+    body.className = `cawco-frame-body ${className}`;
+    body.toggleAttribute("data-stage-drawing", true);
+    body.toggleAttribute("inert", true);
+    body.setAttribute("aria-hidden", "true");
+    return body;
+  }
+
+  /** The layers a hidden drawing opens as it mounts (a popover its state opens, portalled to the body) hidden, never seen, until the watch is let go. */
+  function hideLayers(): MutationObserver {
+    const layers = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node instanceof HTMLElement && node !== rig) {
+            node.style.visibility = "hidden";
+          }
+        }
+      }
+    });
+    layers.observe(document.body, { childList: true });
+    return layers;
+  }
+
   /**
    * A state set in place lands whatever the component's own handlers did
    * with the one before: the live instance is read against the state drawn
@@ -559,23 +645,10 @@ export function bootStage(page: Page): Mode {
 
   /** `target` drawn afresh, hidden, read against the live instance, and mounted anew where they differ. */
   async function compared(target: Target): Promise<void> {
-    const fresh = document.createElement("div");
-    fresh.className = "cawco-frame-body cawco-stage-fresh";
-    fresh.toggleAttribute("data-stage-drawing", true);
-    fresh.toggleAttribute("inert", true);
-    fresh.setAttribute("aria-hidden", "true");
+    const fresh = hiddenBody("cawco-stage-fresh");
     dress(fresh, target);
-    const layers = new MutationObserver((records) => {
-      for (const record of records) {
-        for (const node of record.addedNodes) {
-          if (node instanceof HTMLElement && node !== rig) {
-            node.style.visibility = "hidden";
-          }
-        }
-      }
-    });
-    layers.observe(document.body, { childList: true });
-    frame.append(fresh);
+    const layers = hideLayers();
+    frame.insertBefore(fresh, rings);
     const mounted = page.mountInto(
       fresh,
       target.section,
@@ -1025,6 +1098,7 @@ export function bootStage(page: Page): Mode {
     const key = `${live.section.file}@${view.widths?.[0] ?? "own"}`;
     const fit = fitAt(key, width);
     const drawn = fit === null ? width : Math.min(width, fit);
+    drawnWidth = drawn;
     frame.style.setProperty("--frame-w", `${drawn}px`);
     const scale = scaleOf(drawn);
     frame.style.zoom = scale < 1 ? String(scale) : "";
@@ -1041,6 +1115,7 @@ export function bootStage(page: Page): Mode {
       laidSaid = said;
       tell<StageLaid>(STAGE_LAID, laidOut);
     }
+    reread();
   }
 
   /**
@@ -1068,6 +1143,9 @@ export function bootStage(page: Page): Mode {
       return;
     }
     dress(drawing, live);
+    if (against) {
+      dressAgainst(against);
+    }
     ground();
     mark(live);
     laid();
@@ -1139,40 +1217,372 @@ export function bootStage(page: Page): Mode {
     });
   }
 
-  /** The region the last reach changed, brought into the page's view with room for a ring round it (DESIGN.md, The One Ring Rule). */
-  function reveal(): void {
+  /** How the page scrolls to what it brings into view: at once where motion is reduced. */
+  const scrolling = (): ScrollBehavior =>
+    view.motion === "reduce" ||
+    !matchMedia("(prefers-reduced-motion: no-preference)").matches
+      ? "instant"
+      : "smooth";
+
+  /** How far a change ring stands outside the box it rings, px: its offset and its width. */
+  const ringOut = () =>
+    tokenPx("--c-change-ring-offset") + tokenPx("--c-change-ring-width");
+
+  /** How far to scroll to stand `start`–`end` whole in a view `size` long by the least it takes; from its start where it can't stand whole. */
+  const leastTo = (start: number, end: number, size: number): number => {
+    if (start >= 0 && end <= size) {
+      return 0;
+    }
+    return start < 0 || end - start > size ? start : end - size;
+  };
+
+  /**
+   * A box of the frame (in its own px) brought into the page's view by the
+   * least it takes, room kept for a ring round it and the page's gutter
+   * (DESIGN.md, The One Ring Rule: a scroller brings a mark into view with
+   * room for its ring); across too where `across`, in the one scroll: the
+   * house's `bringIntoView` moves up and down only, and a second smooth
+   * scroll of the page's one scroller cuts the first short.
+   */
+  function showBox(box: DrawingBox, across: boolean): void {
+    // A drawing scaled to fit stands at its zoom.
+    const zoomed = Number(frame.style.zoom) || 1;
+    const at = frame.getBoundingClientRect();
+    const margin = ringOut() + tokenPx(GUTTER);
+    const top = leastTo(
+      at.top + box.y * zoomed - margin,
+      at.top + (box.y + box.h) * zoomed + margin,
+      windowHeight()
+    );
+    const left = across
+      ? leastTo(
+          at.left + box.x * zoomed - margin,
+          at.left + (box.x + box.w) * zoomed + margin,
+          windowRoom()
+        )
+      : 0;
+    if (Math.abs(top) >= 1 || Math.abs(left) >= 1) {
+      (document.scrollingElement ?? document.documentElement).scrollBy({
+        top,
+        left,
+        behavior: scrolling(),
+      });
+    }
+  }
+
+  /** The region the last reach changed, in the frame's own px; null when nothing it moved still stands. */
+  function movedBox(): DrawingBox | null {
     const els = [...moved.values()].filter(
       (el) => el.isConnected && drawing.contains(el)
     );
     if (els.length === 0) {
+      return null;
+    }
+    const zoomed = Number(frame.style.zoom) || 1;
+    const at = frame.getBoundingClientRect();
+    const boxes = els.map((el) => el.getBoundingClientRect());
+    const top = Math.min(...boxes.map((box) => box.top));
+    const left = Math.min(...boxes.map((box) => box.left));
+    return {
+      x: (left - at.left) / zoomed,
+      y: (top - at.top) / zoomed,
+      w: (Math.max(...boxes.map((box) => box.right)) - left) / zoomed,
+      h: (Math.max(...boxes.map((box) => box.bottom)) - top) / zoomed,
+    };
+  }
+
+  /**
+   * The panel's reveal (core `STAGE_REVEAL`). The move's: the region the
+   * last reach changed, where none of it stands in view (brought whole into
+   * view, a change taller than the stage, the Long list's rows, scrolled the
+   * component's head off); while comparing, the first difference's ring
+   * stands for it. A difference's: its ring, the compared drawing shown in
+   * the kept one's place for one that went where the two don't stand side
+   * by side, as its line's press asks (DesignGraph `showDifference`).
+   */
+  function reveal({ what }: StageReveal): void {
+    if ("difference" in what) {
+      const one = found[what.difference];
+      if (!(one && comparing)) {
+        return;
+      }
+      // His press wins over the first ring a settling read would bring back.
+      firstUntil = 0;
+      comparing = {
+        ...comparing,
+        show: !beside && one.kind === "went" ? "compared" : "kept",
+      };
+      arrange();
+      showBox(ringBox(one), true);
+      return;
+    }
+    const [first] = ringed();
+    if (first) {
+      showBox(ringBox(first), true);
+      return;
+    }
+    const box = movedBox();
+    if (!box) {
       return;
     }
     const at = frame.getBoundingClientRect();
-    const boxes = els.map((el) => el.getBoundingClientRect());
-    const shownTop = Math.min(...boxes.map((box) => box.top));
-    const shownBottom = Math.max(...boxes.map((box) => box.bottom));
-    // Some of it stands in view already: he sees the change, and the
-    // page's scroll stays. Brought whole into view, a change taller than
-    // the stage (the Long list's rows) scrolled the component's head off.
-    if (shownBottom > 0 && shownTop < windowHeight()) {
+    const zoomed = Number(frame.style.zoom) || 1;
+    if (
+      at.top + (box.y + box.h) * zoomed > 0 &&
+      at.top + box.y * zoomed < windowHeight()
+    ) {
       return;
     }
-    // In the frame's own px: a drawing scaled to fit stands at its zoom.
-    const zoomed = Number(frame.style.zoom) || 1;
-    const top = (shownTop - at.top) / zoomed;
-    const left = (Math.min(...boxes.map((box) => box.left)) - at.left) / zoomed;
-    const marker = document.createElement("span");
-    marker.setAttribute("aria-hidden", "true");
-    marker.style.cssText = `position: absolute; visibility: hidden; pointer-events: none; inset-block-start: ${top}px; inset-inline-start: ${left}px; inline-size: ${(Math.max(...boxes.map((box) => box.right)) - at.left) / zoomed - left}px; block-size: ${(shownBottom - at.top) / zoomed - top}px; scroll-margin: var(${GUTTER});`;
-    frame.append(marker);
-    bringIntoView(marker, {
-      behavior:
-        view.motion === "reduce" ||
-        !matchMedia("(prefers-reduced-motion: no-preference)").matches
-          ? "instant"
-          : "smooth",
+    showBox(box, false);
+  }
+
+  /* --- Compare: the state compared with, drawn hidden under the drawing ---- */
+
+  /** What came in or changed: ringed on the kept drawing. What went stands on the compared one. */
+  const ringed = () =>
+    comparing?.against ? found.filter((one) => one.kind !== "went") : [];
+
+  /** Where a difference's ring stands in the frame: one that went on the compared drawing, beside the kept one where the two stand side by side. */
+  const ringBox = (one: DifferenceRead): DrawingBox =>
+    beside && one.kind === "went"
+      ? { ...one.box, x: one.box.x + drawnWidth + tokenPx(BESIDE_GAP) }
+      : one.box;
+
+  /** A state's name as the states list says it: its own story's, whichever variant or width is drawn. */
+  const stateName = (target: Target): string => {
+    const stories = target.section.mod?.SHEET.stories ?? [];
+    const own =
+      stories.find((one) => one.name === target.ref.story) ?? target.story;
+    return shownName(own, stories);
+  };
+
+  /** The state compared with, dressed as the drawing stands: at its width, in its scheme. */
+  const dressAgainst = (one: Against) =>
+    page.dressBody(
+      one.body,
+      live ? columnOf(live.story) : columnOf(one.story),
+      one.story,
+      page.fills(one.section, one.story.name)
+    );
+
+  /** Each body Compare draws lays itself out anew (a read-back the hub answered): read again. */
+  const relaid = new ResizeObserver(() => reread());
+
+  function unmountAgainst(): void {
+    if (!against) {
+      return;
+    }
+    relaid.unobserve(against.body);
+    against.mounted?.unmount();
+    against.body.remove();
+    against = null;
+  }
+
+  /**
+   * The state compared with drawn afresh from its story, hidden under the
+   * drawing at the drawing's width, its own arrivals landed and its layers
+   * hidden as it mounts; never moved after, nor seen but side by side or
+   * flipped, nor pressed. Each read after it comes to rest, for a moment,
+   * brings the first ring into view.
+   */
+  async function mountAgainst(target: Target): Promise<void> {
+    unmountAgainst();
+    const body = hiddenBody("cawco-stage-against");
+    const one: Against = {
+      ...target,
+      body,
+      into: {},
+      mounted: undefined,
+      rested: false,
+    };
+    dressAgainst(one);
+    const layers = hideLayers();
+    frame.insertBefore(body, rings);
+    against = one;
+    one.mounted = page.mountInto(
+      body,
+      target.section,
+      target.story.name,
+      target.args,
+      one.into
+    );
+    try {
+      await restOf(body);
+      await frameTick();
+    } finally {
+      layers.disconnect();
+    }
+    if (against !== one) {
+      return;
+    }
+    one.rested = true;
+    relaid.observe(body);
+    firstUntil = performance.now() + SETTLE_MS;
+    reread();
+  }
+
+  /** The state a Compare mount waits its turn to draw (behind the reaches before it); null when none waits. */
+  let mounting: StateRef | null = null;
+
+  /**
+   * The panel's Compare (core `STAGE_COMPARE`): another state mounted
+   * hidden, in its turn behind the reaches before it; the same state, the
+   * flip set and what differs told again for this ask; or Compare ended.
+   */
+  function compare(asking: StageCompare): void {
+    comparing = asking.against ? asking : null;
+    const ref = asking.against;
+    if (!ref) {
+      mounting = null;
+      unmountAgainst();
+      found = [];
+      beside = false;
+      arrange();
+      tell<StageDifferences>(STAGE_DIFFERENCES, {
+        ask: asking.ask,
+        found,
+        beside,
+        same: false,
+      });
+      return;
+    }
+    if (sameRef(mounting, ref)) {
+      // On its way: its first read answers this ask.
+      return;
+    }
+    if (!mounting && against && sameRef(against.ref, ref)) {
+      arrange();
+      tellDifferences();
+      return;
+    }
+    mounting = ref;
+    page.quietly(
+      queue(async () => {
+        if (!sameRef(mounting, ref)) {
+          // Passed over by another state, or Compare ended.
+          return;
+        }
+        try {
+          const target = await targetOf(ref);
+          if ("refused" in target) {
+            unmountAgainst();
+            found = [];
+            arrange();
+            tellDifferences();
+            return;
+          }
+          await mountAgainst(target);
+        } finally {
+          if (sameRef(mounting, ref)) {
+            mounting = null;
+          }
+        }
+      })
+    );
+  }
+
+  /** Each read waits two frames after the layout it heard: both drawings laid out. */
+  let readFrame = 0;
+  function reread(): void {
+    if (!comparing) {
+      return;
+    }
+    cancelAnimationFrame(readFrame);
+    readFrame = requestAnimationFrame(() => {
+      readFrame = requestAnimationFrame(readDifferences);
     });
-    marker.remove();
+  }
+
+  /** Both drawings stand at rest, mounted without a fault. */
+  const bothDrawn = (): boolean =>
+    !!(
+      against?.rested &&
+      !against.into.error &&
+      live &&
+      !live.into.error &&
+      !fault &&
+      !frame.hidden
+    );
+
+  /** What differs, read; the two arranged and ringed, and told the panel. */
+  function readDifferences(): void {
+    if (
+      !comparing?.against ||
+      (against && !sameRef(against.ref, comparing.against))
+    ) {
+      // Another state is on its way: its own read tells.
+      return;
+    }
+    const drawn = bothDrawn();
+    found =
+      drawn && against
+        ? differences(against.body, drawing, Number(frame.style.zoom) || 1)
+        : [];
+    beside = drawn && room() >= 2 * drawnWidth + tokenPx(BESIDE_GAP);
+    arrange();
+    tellDifferences();
+    const [first] = ringed();
+    if (first && performance.now() < firstUntil) {
+      showBox(ringBox(first), true);
+    }
+  }
+
+  /** The differences as last read, told the panel for its last Compare ask. */
+  function tellDifferences(): void {
+    if (comparing) {
+      tell<StageDifferences>(STAGE_DIFFERENCES, {
+        ask: comparing.ask,
+        found,
+        beside,
+        same: bothDrawn() && found.length === 0,
+      });
+    }
+  }
+
+  /**
+   * The two drawings arranged as Compare stands: side by side, each named,
+   * where the page's room holds both; else the kept one, or (flipped) the
+   * compared one in its place; and the rings drawn on what shows. The frame
+   * stands at least as tall as the compared drawing, so a ring where
+   * something went stands whole inside it.
+   */
+  function arrange(): void {
+    const on = !!(comparing && against);
+    const flipped = on && !beside && comparing?.show === "compared";
+    frame.classList.toggle("cawco-stage-beside", on && beside);
+    frame.classList.toggle("cawco-stage-flipped", flipped);
+    frame.style.setProperty(
+      "--against-h",
+      on && against ? `${against.body.offsetHeight}px` : ""
+    );
+    names.hidden = !(on && beside && live && against);
+    if (!names.hidden && live && against) {
+      names.style.setProperty("--frame-w", `${drawnWidth}px`);
+      keptName.textContent = stateName(live);
+      againstName.textContent = stateName(against);
+    }
+    // Side by side, both drawings' rings; flipped, what went where it
+    // stood; else what came in or changed. What went, ringed on the kept
+    // drawing, stood over whatever stands there now.
+    const shown = on
+      ? found.filter((one) => beside || (one.kind === "went") === flipped)
+      : [];
+    rings.replaceChildren(
+      ...shown.map((one) => {
+        const box = ringBox(one);
+        const ring = document.createElement("span");
+        ring.className = "cawco-change-ring";
+        ring.dataset.kind = one.kind;
+        // Its place among the differences told, as a reveal names it.
+        ring.dataset.at = String(found.indexOf(one));
+        ring.style.setProperty("--ring-x", `${box.x}px`);
+        ring.style.setProperty("--ring-y", `${box.y}px`);
+        ring.style.setProperty("--ring-w", `${box.w}px`);
+        ring.style.setProperty("--ring-h", `${box.h}px`);
+        ring.style.setProperty("--ring-r", one.radius);
+        return ring;
+      })
+    );
   }
 
   new ResizeObserver(() => laid()).observe(drawing);
@@ -1188,7 +1598,18 @@ export function bootStage(page: Page): Mode {
       reach(asking);
     }
   });
-  addEventListener(STAGE_REVEAL, () => reveal());
+  addEventListener(STAGE_REVEAL, (event) => {
+    const asking = stageRevealOf((event as CustomEvent<unknown>).detail);
+    if (asking) {
+      reveal(asking);
+    }
+  });
+  addEventListener(STAGE_COMPARE, (event) => {
+    const asking = stageCompareOf((event as CustomEvent<unknown>).detail);
+    if (asking) {
+      compare(asking);
+    }
+  });
 
   /* --- The report: each section read in the rig --------------------------- */
 
@@ -1518,7 +1939,11 @@ export function bootStage(page: Page): Mode {
   page.quietly(sweep());
 
   return {
-    bodies: () => (live ? [{ body: drawing, mounted: live.mounted }] : []),
+    // The state compared with too: a dial turned on the drawing turns on it, so only the states differ.
+    bodies: () => [
+      ...(live ? [{ body: drawing, mounted: live.mounted }] : []),
+      ...(against ? [{ body: against.body, mounted: against.mounted }] : []),
+    ],
     framesOf: (section) =>
       (reads.get(section) ?? []).map((one) => {
         const delta = section.probes.get(one.story)?.delta.get(one.interaction);
@@ -1552,6 +1977,14 @@ export function bootStage(page: Page): Mode {
         const target = resolved(now.ref);
         if (!("refused" in target)) {
           page.quietly(queue(() => open(target, false)));
+        }
+      }
+      const standing = against;
+      if (standing?.section === section) {
+        // And the state compared with, from the module as it reads now.
+        const target = resolved(standing.ref);
+        if (!("refused" in target)) {
+          page.quietly(queue(() => mountAgainst(target)));
         }
       }
       standFirst(section);

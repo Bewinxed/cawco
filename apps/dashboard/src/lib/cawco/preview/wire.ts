@@ -22,6 +22,7 @@ import {
   type Story,
 } from "@cawco/core/stage";
 import {
+  STAGE_DIFFERENCES,
   STAGE_FAULT,
   STAGE_LAID,
   STAGE_REACHED,
@@ -477,6 +478,7 @@ const PAGE_MESSAGES = [
   STAGE_REACHED,
   STAGE_LAID,
   STAGE_FAULT,
+  STAGE_DIFFERENCES,
 ] as const;
 
 /** A message the pane answers by its `type`; each field besides is checked by what reads it. */

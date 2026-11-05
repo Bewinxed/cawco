@@ -174,11 +174,30 @@ html.cawco-stage-page .cawco-canvas { display: flex; flex-direction: column; ali
    to its measure. Its height held while the next drawing mounts, so the page's scroll stays where it stood. What spills
    past its sides is cut, but no nearer than a popover's shadow reaches (DESIGN.md, Shadows: the overlay's 48px blur): cut at
    the gutter, a popover's shadow stood as a grey box beside it, its hard sides running down past its foot. */
-.cawco-stage-frame { position: relative; inline-size: var(--frame-w); min-block-size: var(--held-h, 0px); overflow-x: clip;
-  overflow-clip-margin: calc(2 * var(--space-8)); }
+.cawco-stage-frame { position: relative; inline-size: var(--frame-w); min-block-size: max(var(--held-h, 0px), var(--against-h, 0px));
+  overflow-x: clip; overflow-clip-margin: calc(2 * var(--space-8)); }
 .cawco-stage-frame[hidden] { display: none; }
 /* The state just set in place, drawn afresh and hidden, read against the live instance (stage.ts landed) and gone. */
 .cawco-stage-fresh { position: absolute; inset-block-start: 0; inset-inline-start: 0; visibility: hidden; pointer-events: none; }
+/* Compare (stage.ts compare): the state compared with, drawn hidden under the drawing at its width; side by side it stands
+   the gap past it, and flipped it stands in its place. Placed by the left edge, as the boxes its rings are read in are. */
+.cawco-stage-against { position: absolute; inset-block-start: 0; left: 0; visibility: hidden; pointer-events: none; }
+.cawco-stage-frame.cawco-stage-beside { inline-size: calc(2 * var(--frame-w) + var(--space-6)); }
+.cawco-stage-beside > .cawco-stage-against { left: calc(var(--frame-w) + var(--space-6)); visibility: visible; }
+.cawco-stage-flipped > .cawco-stage-against { visibility: visible; }
+.cawco-stage-flipped > .cawco-stage-drawing { visibility: hidden; }
+/* Side by side, each drawing named over its own column. */
+.cawco-stage-names { display: flex; gap: var(--space-6); font: var(--type-meta); color: var(--ink-muted); }
+.cawco-stage-names[hidden] { display: none; }
+.cawco-stage-names > span { inline-size: var(--frame-w); min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A difference's ring: outside the element's box on its own shape, solid for what came in or changed, dashed for what
+   went, in the stage's own layer over both drawings, taking no press. */
+.cawco-stage-rings { position: absolute; inset: 0; pointer-events: none; }
+.cawco-change-ring { --ring-out: calc(var(--c-change-ring-offset) + var(--c-change-ring-width)); position: absolute; box-sizing: border-box;
+  left: calc(var(--ring-x) - var(--ring-out)); top: calc(var(--ring-y) - var(--ring-out));
+  inline-size: calc(var(--ring-w) + 2 * var(--ring-out)); block-size: calc(var(--ring-h) + 2 * var(--ring-out));
+  border: var(--c-change-ring-width) solid var(--c-change-ring); border-radius: calc(var(--ring-r) + var(--c-change-ring-offset)); }
+.cawco-change-ring[data-kind="went"] { border-style: dashed; }
 .cawco-stage-waiting { display: grid; gap: var(--space-2); }
 .cawco-stage-waiting > .cawco-stand-in-body { inline-size: min(var(--frame-w), 100%); }
 .cawco-stage-failed { justify-items: start; }

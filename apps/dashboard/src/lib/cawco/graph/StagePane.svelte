@@ -13,11 +13,24 @@
    * raised head, the two sharing a top and a foot. Its head holds the kept
    * state's name on the head line the room's faces stand on, its inset the
    * page's gutter, so the name and the drawing share one leading edge.
+   *
+   * While comparing, the head names the state compared with: a press that
+   * shows it in the kept one's place (the flip), or its name alone where
+   * the page stands the two side by side. Under it what differs, led by its
+   * count, a press that shows or folds the lines (open on a stage a desk's
+   * least wide or wider, folded on a phone's, until he chooses); each line
+   * a link to its ring on the stage, its mark the ring's own, solid for
+   * what came in or changed, dashed for what went. Two states that don't
+   * differ say so in one line.
    */
-  import type { StageLaid } from "@cawco/core/stage-graph";
+  import type { StageDifferences, StageLaid } from "@cawco/core/stage-graph";
   import { graphWords as words } from "@cawco/core/words/graph";
   import type { Snippet } from "svelte";
   import { frameSize } from "#lib/cawco/frame-observer.js";
+  import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
+  import { IconChevronDown } from "#lib/icons.js";
+  import { browser } from "$app/env";
+  import { figureOf } from "./figures";
 
   let {
     name,
@@ -26,6 +39,10 @@
     stale = false,
     laid,
     frame,
+    compare = null,
+    lang,
+    onflip,
+    ondifference,
     need = $bindable(0),
   }: {
     /** The kept state's name. */
@@ -41,6 +58,22 @@
     /** The frame that holds the stage page, filling the field. */
     frame: Snippet;
     /**
+     * Compare, while it is on and compares with a state: that state's
+     * name, whether it is shown in the kept one's place, and what the page
+     * last read differs (null until it has).
+     */
+    compare?: {
+      flipped: boolean;
+      name: string;
+      read: StageDifferences | null;
+    } | null;
+    /** The page's language, for its figures. */
+    lang: string | undefined;
+    /** The state compared with pressed: shown in the kept one's place, or back. */
+    onflip: () => void;
+    /** A difference's line pressed, by its place in what the page read: its ring brought into view. */
+    ondifference: (index: number) => void;
+    /**
      * The width the stage asks of its column, px: what the page needs
      * across and the panel round it (its edge). 0 until the page has laid
      * the drawing out.
@@ -48,8 +81,26 @@
     need?: number;
   } = $props();
 
+  /** The most lines of differences the stage's head names; the rest are counted. */
+  const LINES_SHOWN = 12;
   /** The panel's own width less its field's: its edge. */
   let edge = $state(-1);
+  /** The panel's own width, px. */
+  let panel = $state(0);
+  const found = $derived(compare?.read?.found ?? []);
+  const beside = $derived(compare?.read?.beside === true);
+  const lines = $derived(found.slice(0, LINES_SHOWN));
+  /** He showed or folded the lines himself; null until he has. */
+  let listOpen = $state<boolean | null>(null);
+  /**
+   * The lines stand open on a stage a desk's least wide or wider
+   * (`c-graph-stage-min`) and folded on a narrower one, until he chooses:
+   * at 390 thirteen lines took the stage above the drawer.
+   */
+  const listShown = $derived(
+    listOpen ?? panel >= (browser ? numberOf("--c-graph-stage-min") : 0)
+  );
+  const uid = $props.id();
   $effect(() => {
     need = laid && edge >= 0 ? Math.ceil(laid.need + edge) : 0;
   });
@@ -76,6 +127,26 @@
         <span class="min-w-0 truncate type-label text-ink-muted">{variant}</span
         >
       {/if}
+      {#if compare && beside}
+        <span
+          class="min-w-0 truncate type-label text-ink-muted"
+          data-slot="stage-against">{words.comparedWith(compare.name)}</span
+        >
+      {:else if compare}
+        <!-- The state it is compared with, a press that shows it in the
+             kept one's place, rings where its gone parts stood, and back. -->
+        <button
+          type="button"
+          aria-pressed={compare.flipped}
+          class="pointer-hit touch-hit min-w-0 truncate rounded-sm px-space-1 type-label text-ink-muted transition-control aria-pressed:bg-selected-bg aria-pressed:text-selected-ink aria-pressed-false:can-hover:hover:bg-surface-hover"
+          data-slot="stage-against"
+          onclick={onflip}
+          title={words.showCompared(compare.name)}
+          >{compare.flipped
+            ? words.showingCompared(compare.name)
+            : words.comparedWith(compare.name)}</button
+        >
+      {/if}
       {#if scale}
         <!-- Not 1:1: what the person judges is scaled, and says so. -->
         <span
@@ -93,6 +164,89 @@
         {words.stale}
       </p>
     {/if}
+    {#if compare && lines.length > 0}
+      <!-- What differs: led by its count, a press that shows or folds the
+           lines (folded where the stage is a phone's, so the drawing
+           stands in sight under the head); each line's mark the ring's own,
+           solid for came in or changed, dashed for went. -->
+      <button
+        type="button"
+        aria-controls="{uid}-differences"
+        aria-expanded={listShown}
+        class="mark-line pointer-hit touch-hit -ms-space-1 mb-space-2 flex h-c-btn-h-sm items-center gap-space-1 self-start rounded-sm px-space-1 type-label text-ink-row transition-control can-hover:hover:bg-surface-hover"
+        data-slot="differences-count"
+        onclick={() => {
+          listOpen = !listShown;
+        }}
+      >
+        <span
+          aria-hidden="true"
+          data-box
+          class="inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-c-change-ring"
+        ></span>
+        <span class="num"
+          >{words.differenceCount(
+            found.length,
+            figureOf(found.length, lang)
+          )}</span
+        >
+        <IconChevronDown
+          aria-hidden="true"
+          class={[
+            "size-icon-md flex-none text-ink-muted transition-transform duration-(--dur-control) ease-out",
+            listShown && "rotate-180",
+          ]}
+          data-box
+        />
+      </button>
+      {#if listShown}
+        <ul
+          id="{uid}-differences"
+          data-slot="differences"
+          aria-label={words.differences}
+          class="-ms-space-1 m-0 flex list-none flex-wrap gap-x-space-1 gap-y-0 p-0 pb-space-2"
+        >
+          {#each lines as line, at (at)}
+            <li class="min-w-0">
+              <!-- Each line a link to its ring: one that went shows the
+                   compared state, where it stood, its ring dashed; one
+                   that came in or changed, the kept state. -->
+              <button
+                type="button"
+                class="mark-line pointer-hit touch-hit flex min-h-c-btn-h-sm min-w-0 items-center gap-space-2 rounded-sm px-space-1 text-start type-label text-ink-row transition-control can-hover:hover:bg-surface-hover"
+                data-kind={line.kind}
+                data-slot="difference"
+                onclick={() => ondifference(at)}
+              >
+                <span
+                  aria-hidden="true"
+                  data-box
+                  class={[
+                    "inline-block size-space-3 flex-none rounded-xs border-(length:--c-change-ring-width) border-c-change-ring",
+                    line.kind === "went" && "border-dashed",
+                  ]}
+                ></span>
+                <span class="min-w-0 wrap-anywhere">{line.line}</span>
+              </button>
+            </li>
+          {/each}
+          {#if found.length > LINES_SHOWN}
+            <li
+              class="flex items-center px-space-1 type-meta text-ink-muted num"
+            >
+              +{figureOf(found.length - LINES_SHOWN, lang)}
+            </li>
+          {/if}
+        </ul>
+      {/if}
+    {:else if compare?.read?.same}
+      <p
+        class="m-0 pb-space-3 type-label text-ink-muted"
+        data-slot="differences-none"
+      >
+        {words.sameAs(compare.name)}
+      </p>
+    {/if}
   </div>
   <!-- The field: the frame holding the stage page fills it; the page is
        its own scroller, its own page and gutter round the drawing. -->
@@ -100,8 +254,9 @@
     data-slot="stage-field"
     class="relative min-h-0 min-w-0 flex-1 bg-surface-page"
     {@attach frameSize((node: HTMLElement) => {
-      const panel = node.closest<HTMLElement>('[data-slot="stage"]');
-      edge = panel ? panel.offsetWidth - node.clientWidth : 0;
+      const own = node.closest<HTMLElement>('[data-slot="stage"]');
+      panel = own?.offsetWidth ?? 0;
+      edge = own ? own.offsetWidth - node.clientWidth : 0;
     })}
   >
     {@render frame()}

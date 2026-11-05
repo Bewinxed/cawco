@@ -316,3 +316,21 @@ export function holesOf(review: Review, state: string): Holes {
  */
 export const pathOf = (review: Review): string[] =>
   review.machines.flatMap((machine) => machine.path);
+
+/**
+ * The state before `state`: where the move into it starts, when its states
+ * file plays one (Hub didn't answer's Filled in), else the state before it
+ * on the component's path, else the one after. Compare compares with it,
+ * as the move into the kept state plays from it: one state before.
+ */
+export function previousOf(review: Review, state: string): string | null {
+  const from = review.moves.find(
+    (move) => move.to === state && move.played !== null
+  )?.from;
+  if (from) {
+    return from;
+  }
+  const path = pathOf(review);
+  const at = path.indexOf(state);
+  return at < 0 ? null : (path[at - 1] ?? path[at + 1] ?? null);
+}

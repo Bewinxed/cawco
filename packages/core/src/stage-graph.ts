@@ -155,8 +155,69 @@ export interface StageReach {
   to: StateRef;
 }
 
-/** Pane → page: the region the last reach changed, brought into the page's view with room for a ring round it. */
+/**
+ * Pane → page: a region of the drawing brought into the page's view with
+ * room for a ring round it: what the last reach changed (`move`; while
+ * comparing, the first difference's ring stands for it), or the n-th
+ * difference the page last told (`difference`), the compared drawing shown
+ * in the kept one's place for one that went where the two don't stand side
+ * by side.
+ */
 export const STAGE_REVEAL = "cawco:stage-reveal";
+export interface StageReveal {
+  what: { move: true } | { difference: number };
+}
+
+/**
+ * Pane → page: Compare. `against` set, the page draws that state hidden
+ * under the kept drawing at the same width, reads what differs between
+ * the two as either lays out, rings each difference, and stands the two
+ * side by side where its room holds both; `show: "compared"` shows the
+ * compared drawing in the kept one's place (the flip). `against` null
+ * ends it.
+ */
+export const STAGE_COMPARE = "cawco:stage-compare";
+export interface StageCompare {
+  against: StateRef | null;
+  ask: number;
+  show: "kept" | "compared";
+}
+
+/** A box of a drawing, in its own px: unscaled, from its top-left corner. */
+export interface DrawingBox {
+  h: number;
+  w: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * One difference, as the page read it: what came in or changed stands on
+ * the kept drawing, what went on the compared one, each box in its own
+ * drawing's px.
+ */
+export interface DifferenceRead {
+  box: DrawingBox;
+  kind: "came" | "changed" | "went";
+  /** One line of words (core words/graph.ts, read on the page where the parts stand). */
+  line: string;
+  /** Its corner radius as drawn, so its ring stands on its own shape. */
+  radius: string;
+}
+
+/**
+ * Page → pane: what differs, on each read (both drawings laid out, and
+ * again as either lays out anew), for the Compare ask it answers.
+ * `beside`: the two stand side by side, each named; `same`: both drew and
+ * nothing differs.
+ */
+export const STAGE_DIFFERENCES = "cawco:stage-differences";
+export interface StageDifferences {
+  ask: number;
+  beside: boolean;
+  found: DifferenceRead[];
+  same: boolean;
+}
 
 /** Page → pane: a reach landed, was passed over by a later one, or its play threw. */
 export const STAGE_REACHED = "cawco:stage-reached";
@@ -292,6 +353,88 @@ export function stageLaidOf(value: unknown): StageLaid | null {
         scale: scale !== null && scale > 0 && scale <= 1 ? scale : 1,
       }
     : null;
+}
+
+/** A {@link StageCompare} as it crossed the frame; null when it is none. */
+export function stageCompareOf(value: unknown): StageCompare | null {
+  const said = isRecord(value) ? value : null;
+  const ask = finite(said?.ask);
+  if (!(said && ask !== null)) {
+    return null;
+  }
+  return {
+    ask,
+    against: stateRefOf(said.against),
+    show: said.show === "compared" ? "compared" : "kept",
+  };
+}
+
+/** A {@link StageReveal} as it crossed the frame; null when it is none. */
+export function stageRevealOf(value: unknown): StageReveal | null {
+  const what = isRecord(value) && isRecord(value.what) ? value.what : null;
+  const difference = finite(what?.difference);
+  if (difference !== null && difference >= 0) {
+    return { what: { difference: Math.floor(difference) } };
+  }
+  return what?.move === true ? { what: { move: true } } : null;
+}
+
+/** The most differences one read says: far past what the panel names (its `LINES_SHOWN`), so its count stays true. Ours. */
+const DIFFERENCES_MAX = 500;
+/** The longest line a difference is said in. Ours: core words/graph.ts quotes 40 characters of each value. */
+const LINE_MAX = 400;
+
+/** A {@link DifferenceRead} as it crossed the frame; null when it is none. */
+function differenceOf(value: unknown): DifferenceRead | null {
+  const said = isRecord(value) ? value : null;
+  const box = isRecord(said?.box) ? said.box : null;
+  const x = finite(box?.x);
+  const y = finite(box?.y);
+  const w = finite(box?.w);
+  const h = finite(box?.h);
+  const kind = said?.kind;
+  if (
+    !(
+      said &&
+      x !== null &&
+      y !== null &&
+      w !== null &&
+      h !== null &&
+      (kind === "came" || kind === "changed" || kind === "went")
+    ) ||
+    typeof said.line !== "string" ||
+    said.line.length > LINE_MAX
+  ) {
+    return null;
+  }
+  return {
+    kind,
+    line: said.line,
+    box: { x, y, w: Math.max(0, w), h: Math.max(0, h) },
+    radius:
+      typeof said.radius === "string" && said.radius.length <= NAME_MAX
+        ? said.radius
+        : "0px",
+  };
+}
+
+/** A {@link StageDifferences} as it crossed the frame; null when it is none. */
+export function stageDifferencesOf(value: unknown): StageDifferences | null {
+  const said = isRecord(value) ? value : null;
+  const ask = finite(said?.ask);
+  if (!(said && ask !== null && Array.isArray(said.found))) {
+    return null;
+  }
+  const found = said.found
+    .slice(0, DIFFERENCES_MAX)
+    .map(differenceOf)
+    .filter((one): one is DifferenceRead => one !== null);
+  return {
+    ask,
+    found,
+    beside: said.beside === true,
+    same: said.same === true && found.length === 0,
+  };
 }
 
 /** A {@link StageFault} as it crossed the frame; null when it is none. */

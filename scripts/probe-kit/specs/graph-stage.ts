@@ -59,6 +59,25 @@
  *    Flow map.
  * map 6. The rendered checks on the Map face at 1440×900 and 390×844.
  *
+ * The graph-compare leg (the build spec's slice 3, Compare), on a session
+ * in this checkout and a canvas of the dashboard's routine form:
+ *
+ * compare 1. Compare on in the bar with the routine form at Just opened
+ *    (compared with Filled in, the state after it on its path) reads the
+ *    lines the design graph's branch read (its design run, Use): "Menu
+ *    “When”: day ← weekdays", "Field “Name” emptied (was Triage new
+ *    onboarding issues)", "Hint removed". The page tells them
+ *    (`cawco:stage-differences`) and the stage's head lists them.
+ * compare 2. Each line's press brings its ring into view: the ring the
+ *    page draws for it (`data-at`) stands inside the frame's view.
+ * compare 3. A press on a line of what went flips: the panel posts
+ *    `cawco:stage-compare` with `show: "compared"`, and the page stands the
+ *    compared drawing in the kept one's place.
+ * compare 4. At 2529, the room closed (the stage the surface's whole
+ *    width), the two drawings stand side by side (`beside: true`), each
+ *    named over it.
+ * compare 5. The rendered checks with Compare on at 1440×900 and 390×844.
+ *
  * The stage's boundary is made of user namespaces: like a spec that
  * delegates, it runs outside every workspace boundary (README "A spec that
  * delegates runs on the host").
@@ -69,13 +88,16 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import {
+  STAGE_COMPARE,
+  STAGE_DIFFERENCES,
   STAGE_LAID,
   STAGE_REACH,
   STAGE_REACHED,
 } from "../../../packages/core/src/stage-graph";
+import { graphWords } from "../../../packages/core/src/words/graph";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
-import { type Kit, open, type Spec } from "../kit";
+import { type Kit, open, ROOT, type Spec } from "../kit";
 import { RenderedChecks } from "../rendered-checks";
 
 const STORY = "src/Card.stories.js";
@@ -89,6 +111,18 @@ const MAP_GROUP = { One: "Quiet", Two: "Quiet", Three: "Loud" };
 const MAP_EDGES = [{ from: "Three", to: "One", label: "Calm down" }];
 /** Two's card's name, alone: not Two → Three. */
 const TWO_ALONE = /^\s*Two\s*$/u;
+/** The routine form's states file, from this checkout's root (the graph-compare leg). */
+const ROUTINE = "apps/dashboard/src/lib/cawco/routines/RoutineForm.stories.ts";
+/** The compare canvas's ask: the routine form at Just opened, compared with the state after it, Filled in. */
+const ROUTINE_ASK = "Judge the routine form at Just opened";
+/** The lines the design graph's branch read with Compare on there (its design run, Use). */
+const BRANCH_LINES = [
+  "Menu “When”: day ← weekdays",
+  "Field “Name” emptied (was Triage new onboarding issues)",
+  "Hint removed",
+];
+/** A window the surface brief names: about half of it the surface's, once the room is closed the stage's whole. */
+const WIDE = { width: 2529, height: 1300 };
 
 /** The project in the session's folder: plain Vite and Svelte, installed only in its stage clone. */
 const PROJECT: Record<string, string> = {
@@ -176,13 +210,15 @@ async function graphPage(
   kit: Kit,
   base: string,
   id: string,
-  view: "desk" | "phone"
+  view: "desk" | "phone",
+  drawn = '[data-probe="title"]',
+  waitMs = 120_000
 ): Promise<{ frame: Frame; page: Page }> {
   const page = await kit.page(view, { theme: "light" });
   await hearAnswers(page);
-  await open(page, `${base}/artifact/${id}`, GRAPH, 120_000);
+  await open(page, `${base}/artifact/${id}`, GRAPH, waitMs);
   await page.waitForSelector(`${GRAPH}:not([data-arriving])`, {
-    timeout: 120_000,
+    timeout: waitMs,
   });
   const frame = await (
     await page.locator(FRAME).first().elementHandle()
@@ -190,8 +226,8 @@ async function graphPage(
   if (!frame) {
     throw new Error("The design graph's stage holds no frame.");
   }
-  await frame.waitForSelector('[data-cawco-story] [data-probe="title"]', {
-    timeout: 60_000,
+  await frame.waitForSelector(`[data-cawco-story] ${drawn}`, {
+    timeout: waitMs,
   });
   return { frame, page };
 }
@@ -213,7 +249,7 @@ const drawnStory = (frame: Frame) =>
  */
 async function hearAnswers(page: Page): Promise<void> {
   await page.addInitScript(
-    ([reached, laid]) => {
+    ([reached, laid, differences]) => {
       if (window !== window.top) {
         return;
       }
@@ -221,26 +257,34 @@ async function hearAnswers(page: Page): Promise<void> {
       (window as unknown as { __answers: unknown[] }).__answers = heard;
       addEventListener("message", (event) => {
         const type = (event.data as { type?: unknown } | null)?.type;
-        if (type === reached || type === laid) {
+        if (type === reached || type === laid || type === differences) {
           heard.push(event.data);
         }
       });
     },
-    [STAGE_REACHED, STAGE_LAID] as const
+    [STAGE_REACHED, STAGE_LAID, STAGE_DIFFERENCES] as const
   );
 }
 
 /** What the frame hears from the panel of the stage's reaches, from now. */
 async function listen(frame: Frame): Promise<void> {
-  await frame.evaluate((type) => {
-    const heard: unknown[] = [];
-    (window as unknown as { __reaches: unknown[] }).__reaches = heard;
-    addEventListener("message", (event) => {
-      if ((event.data as { type?: unknown } | null)?.type === type) {
-        heard.push(event.data);
-      }
-    });
-  }, STAGE_REACH);
+  await listenFor(frame, STAGE_REACH, "__reaches");
+}
+
+/** What the frame hears from the panel of messages of `type`, from now, kept under `key`. */
+async function listenFor(frame: Frame, type: string, key: string) {
+  await frame.evaluate(
+    ([named, under]) => {
+      const heard: unknown[] = [];
+      (window as unknown as Record<string, unknown[]>)[under] = heard;
+      addEventListener("message", (event) => {
+        if ((event.data as { type?: unknown } | null)?.type === named) {
+          heard.push(event.data);
+        }
+      });
+    },
+    [type, key] as const
+  );
 }
 
 interface Reach {
@@ -728,6 +772,198 @@ async function mapPhone(
   await page.close();
 }
 
+/** What the page last said differs, as the panel heard it. */
+interface Differences {
+  ask: number;
+  beside: boolean;
+  found: { kind: string; line: string }[];
+  same: boolean;
+  type: string;
+}
+
+/** The routine form's design graph at `view`, Compare pressed on in its bar and read. */
+async function comparing(
+  kit: Kit,
+  base: string,
+  id: string,
+  view: "desk" | "phone"
+): Promise<{ frame: Frame; page: Page; said: Differences | null }> {
+  const { frame, page } = await graphPage(
+    kit,
+    base,
+    id,
+    view,
+    '[data-slot="routine-form"]',
+    300_000
+  );
+  await page
+    .locator(
+      `${GRAPH} [data-slot="graph-bar"] button[aria-label="${graphWords.compare}"]`
+    )
+    .first()
+    .click();
+  // Compare reading what differs holds the graph arriving.
+  await page
+    .waitForSelector(`${GRAPH}[data-arriving]`, { timeout: 5000 })
+    .catch(() => undefined);
+  await page.waitForSelector(`${GRAPH}:not([data-arriving])`, {
+    timeout: 60_000,
+  });
+  // Its reads within the settle, as both drawings come to rest.
+  await page.waitForTimeout(1500);
+  const said = (
+    (await page.evaluate(
+      () => (window as unknown as { __answers: unknown[] }).__answers
+    )) as Differences[]
+  )
+    .filter((one) => one.type === STAGE_DIFFERENCES)
+    .at(-1);
+  return { frame, page, said: said ?? null };
+}
+
+/** Legs compare 1 to 3 and 5 at 1440. */
+async function compareDesk(
+  kit: Kit,
+  base: string,
+  id: string,
+  checks: RenderedChecks
+): Promise<void> {
+  const { frame, page, said } = await comparing(kit, base, id, "desk");
+  const listed = await page
+    .locator(`${GRAPH} [data-slot="stage-head"] [data-slot="difference"]`)
+    .allTextContents();
+  const told = said?.found.map((one) => one.line) ?? [];
+  kit.check(
+    "compare 1: Compare on with the routine form at Just opened reads the lines the branch read, told by the page and listed at the stage's head",
+    BRANCH_LINES.every(
+      (line) => told.includes(line) && listed.some((one) => one.trim() === line)
+    ),
+    JSON.stringify({ told, listed })
+  );
+  await checks.at(page, "1440, Compare on");
+
+  // compare 2 and 3. Each line's press, its ring in view; one that went flips.
+  await listenFor(frame, STAGE_COMPARE, "__compares");
+  const pressed: {
+    flipped: boolean;
+    inView: boolean;
+    kind: string;
+    line: string;
+    show: string | null;
+  }[] = [];
+  const lines = said?.found ?? [];
+  for (const [at, one] of lines.entries()) {
+    await page
+      .locator(`${GRAPH} [data-slot="stage-head"] [data-slot="difference"]`)
+      .nth(at)
+      .click();
+    await page.waitForTimeout(900);
+    const read = await frame.evaluate((index) => {
+      const ring = document.querySelector(
+        `.cawco-change-ring[data-at="${index}"]`
+      );
+      const box = ring?.getBoundingClientRect();
+      const compares = (
+        window as unknown as { __compares?: { show?: string }[] }
+      ).__compares;
+      return {
+        inView:
+          !!box &&
+          box.top >= 0 &&
+          box.left >= 0 &&
+          box.bottom <= innerHeight &&
+          box.right <= document.documentElement.clientWidth,
+        flipped: !!document.querySelector(
+          ".cawco-stage-frame.cawco-stage-flipped"
+        ),
+        show: compares?.at(-1)?.show ?? null,
+      };
+    }, at);
+    pressed.push({ ...read, kind: one.kind, line: one.line });
+  }
+  kit.check(
+    "compare 2: each line's press brings its ring into view, inside the stage's frame",
+    pressed.length > 0 && pressed.every((one) => one.inView),
+    JSON.stringify(pressed)
+  );
+  const went = pressed.filter((one) => one.kind === "went");
+  kit.check(
+    "compare 3: a press on a line of what went flips: the panel posts show compared, and the page stands the compared drawing in the kept one's place",
+    went.length > 0 &&
+      went.every((one) => one.flipped && one.show === "compared"),
+    JSON.stringify(went)
+  );
+  await page.close();
+}
+
+/** Leg compare 4 at 2529, the room closed. */
+async function compareWide(kit: Kit, base: string, id: string): Promise<void> {
+  const { frame, page } = await graphPage(
+    kit,
+    base,
+    id,
+    "desk",
+    '[data-slot="routine-form"]',
+    300_000
+  );
+  await page.setViewportSize(WIDE);
+  const roomName = graphWords.room([
+    graphWords.statesFace,
+    graphWords.wholeSet,
+  ]);
+  await page
+    .locator(
+      `${GRAPH} [data-slot="graph-room"] button[aria-label="${graphWords.closeRoom(roomName)}"]`
+    )
+    .first()
+    .click();
+  await page.waitForTimeout(900);
+  await page
+    .locator(
+      `${GRAPH} [data-slot="graph-bar"] button[aria-label="${graphWords.compare}"]`
+    )
+    .first()
+    .click();
+  await page.waitForSelector(`${GRAPH}:not([data-arriving])`, {
+    timeout: 60_000,
+  });
+  await page.waitForTimeout(1500);
+  const said = (
+    (await page.evaluate(
+      () => (window as unknown as { __answers: unknown[] }).__answers
+    )) as Differences[]
+  )
+    .filter((one) => one.type === STAGE_DIFFERENCES)
+    .at(-1);
+  const names = await frame.evaluate(() => {
+    const row = document.querySelector<HTMLElement>(".cawco-stage-names");
+    return row && !row.hidden
+      ? [...row.children].map((one) => one.textContent?.trim() ?? "")
+      : [];
+  });
+  kit.check(
+    "compare 4: at 2529, the room closed, the two drawings stand side by side, each named",
+    said?.beside === true &&
+      names.length === 2 &&
+      names[0] === "Just opened" &&
+      names[1] === "Filled in",
+    JSON.stringify({ beside: said?.beside, names })
+  );
+  await page.close();
+}
+
+/** Leg compare 5 at 390. */
+async function comparePhone(
+  kit: Kit,
+  base: string,
+  id: string,
+  checks: RenderedChecks
+): Promise<void> {
+  const { page } = await comparing(kit, base, id, "phone");
+  await checks.at(page, "390, Compare on");
+  await page.close();
+}
+
 /** The width and height a png's header says. */
 const pngSize = (png: Buffer) => ({
   w: png.readUInt32BE(16),
@@ -754,16 +990,18 @@ const run = async (kit: Kit) => {
   await fleet.agentUp();
   await fleet.accountSignedIn();
   const session = await fleet.spawn("claude", "Graph cards", fleet.repo);
-  const call = async (n: string, name: string, input: object) => {
-    calls.ask(n, { name, input: { response_format: "detailed", ...input } });
-    await fleet.send(session, calls.words(n));
-    return (await until(
-      `${name}'s answer`,
-      () => calls.answer(n),
-      Boolean,
-      240_000
-    )) as string;
-  };
+  const callIn =
+    (from: string) => async (n: string, name: string, input: object) => {
+      calls.ask(n, { name, input: { response_format: "detailed", ...input } });
+      await fleet.send(from, calls.words(n));
+      return (await until(
+        `${name}'s answer`,
+        () => calls.answer(n),
+        Boolean,
+        240_000
+      )) as string;
+    };
+  const call = callIn(session);
   const base = await fleet.dashboard();
   // The page open first, so the canvas the session makes stands in its panel.
   const watching = await kit.page("desk", { theme: "light" });
@@ -825,6 +1063,31 @@ const run = async (kit: Kit) => {
   if (mapId) {
     await mapDesk(kit, base, mapId, checks);
     await mapPhone(kit, base, mapId, checks);
+  }
+
+  // The graph-compare leg: the dashboard's routine form, from a session in this checkout.
+  const routines = await fleet.spawn("claude", "Routine form", ROOT);
+  const routine = await callIn(routines)(
+    "compare",
+    "mcp__cawco__artifact_create",
+    {
+      kind: "component",
+      name: "graph-compare",
+      file: [ROUTINE],
+      does: "judge",
+      ask: ROUTINE_ASK,
+    }
+  );
+  const routineId = routine.match(ID)?.[1];
+  kit.check(
+    "compare 0: artifact_create of the routine form's states file answers an id",
+    !!routineId,
+    short(routine)
+  );
+  if (routineId) {
+    await compareDesk(kit, base, routineId, checks);
+    await compareWide(kit, base, routineId);
+    await comparePhone(kit, base, routineId, checks);
   }
   checks.report();
 
