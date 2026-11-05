@@ -256,3 +256,46 @@ export const LONG: Pin[] = Array.from({ length: 150 }, (_, at) => {
     anchor: { ...like.anchor, selector: `#pin-${at + 1}` },
   };
 });
+
+/** A comment held to send with the others: unsent, its one entry held. */
+const heldPin = (
+  id: string,
+  number: number,
+  at: string,
+  title: string,
+  text: string
+): Pin => {
+  const { sentAt: _sent, ...unsent } = pin(id, number, at, title, [
+    { ...said(`${id}-1`, "person", at, text), held: true },
+  ]);
+  return unsent;
+};
+
+/**
+ * Three comments held to send together: the owner's three pins on the
+ * artifact panel's preview, 2026-11-05, as he wrote them, numbered after
+ * the five, waiting for Send all.
+ */
+export const HELD: Pin[] = [
+  heldPin(
+    "44523ab2-addd-4b52-91b9-47ce15636812",
+    6,
+    "2026-11-05T18:30:13.321Z",
+    "Tabs list · Interact Comment Draw",
+    "is this also how liquid glass ios HIG defines the tool group? cause this is not rounded yet the others are rounded, is this normal?"
+  ),
+  heldPin(
+    "4734f782-f9f3-4fee-9609-e568b5198298",
+    7,
+    "2026-11-05T18:30:32.179Z",
+    "Comment rail · Open 5",
+    "do you think the close button size is mismatched vs the search/add? or are you using oversized icons or?"
+  ),
+  heldPin(
+    "f02cf2eb-07bf-4177-8028-68f7d3cc0430",
+    8,
+    "2026-11-05T18:30:55.079Z",
+    "Comment rail · Open 5",
+    "why is this text so big? no ui does it this way i think"
+  ),
+];

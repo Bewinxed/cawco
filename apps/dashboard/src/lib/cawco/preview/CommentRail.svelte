@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Pin } from "@cawco/core/comments";
+  import { type Pin, pinHeld } from "@cawco/core/comments";
   import { parse } from "@cawco/core/find-match";
   import { pinName } from "@cawco/core/pin-name";
   import { artifactWords as words } from "@cawco/core/words/artifacts";
@@ -68,6 +68,7 @@
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import {
     IconAgent,
     IconChevronDown,
@@ -87,6 +88,7 @@
     reveal,
     revealOut,
   } from "../motion/curves.svelte";
+  import { unfold } from "../motion/fold.svelte";
   import { LINK_DROPPED, type ListHold } from "./artifact-doc";
   import {
     attachedTo,
@@ -116,6 +118,8 @@
     pageOpen = false,
     onpageclose,
     pageComposer,
+    held = 0,
+    onsendheld,
     onresolve,
     onretrypin,
     onshown,
@@ -159,6 +163,10 @@
     onpageclose?: () => void;
     /** That composer, as the pane draws it. */
     pageComposer?: Snippet;
+    /** The comments whose words the person holds to send together (core `pinHeld`). */
+    held?: number;
+    /** Send all: everything held goes with `note`; the refusal's sentence when nothing went. */
+    onsendheld?: (note: string) => string | null;
     onresolve: (id: string, resolved: boolean) => void;
     /** A comment not sent, tried again: it goes to the session once more. */
     onretrypin: (id: string) => void;
@@ -437,8 +445,32 @@
   const ink = (washed: boolean, own: string) =>
     washed ? "text-selected-ink" : own;
 
+  /** Send all's note standing open under the bar, its words, and why the last Send all didn't go. */
+  let noting = $state(false);
+  let note = $state("");
+  let noteRefused = $state<string | null>(null);
+  // Nothing held, nothing to send: the note goes with the last of them.
+  $effect(() => {
+    if (held === 0) {
+      noting = false;
+    }
+  });
+  function sendHeldNow() {
+    const refused = onsendheld?.(note) ?? null;
+    noteRefused = refused;
+    if (refused === null) {
+      note = "";
+      noting = false;
+    }
+  }
+
   /** What a row says on its line 3, if anything. */
   const backOf = (pin: Pin) => {
+    // Held to send with the others: marked Unsent (the owner's pick, "When
+    // does the agent hear a comment?", 2026-10-26).
+    if (pinHeld(pin)) {
+      return { kind: "held" as const };
+    }
     const why = markState(pin) === "unsent" ? whyNotSent(pin) : null;
     if (why) {
       return { kind: "notSent" as const, why };
@@ -581,6 +613,12 @@
             ]}
             data-line="back"
             data-not-sent="">{said.notSent(back.why)}</span
+          >
+        {:else if back?.kind === "held"}
+          <span
+            class={["mt-space-1 type-meta", ink(washed, "text-ink-muted")]}
+            data-line="back"
+            data-held="">{said.unsent}</span
           >
         {:else if back?.kind === "said"}
           {@const Speaker = back.by === "agent" ? IconAgent : IconUser}
@@ -853,8 +891,70 @@
           <BarItem icon={IconPlus} label={said.onWholePage} onclick={onpage} />
         {/if}
       </BarGlass>
+      {#if held > 0 && onsendheld}
+        <!-- Send all: the one prominent action, trailing (HIG, Toolbars:
+             "Only specify one primary action, and put it on the trailing
+             side"), its count what it sends; pressed, its note unfolds
+             under the bar. -->
+        <Button
+          aria-expanded={noting}
+          aria-label={said.sendHeldLabel(held)}
+          data-slot="send-held"
+          onclick={() => {
+            noting = !noting;
+            noteRefused = null;
+          }}><span>{said.send}</span><span class="num">{held}</span></Button
+        >
+      {/if}
     {/if}
   </header>
+  {#if noting && held > 0 && onsendheld}
+    <!-- Send all's note, under the bar where Send was pressed, as Delete
+         asks under the card's bar: one note to the agent with everything
+         held, then Send. ⌘↩ sends from the note. -->
+    <div
+      class="flex flex-none flex-col gap-space-2 px-space-3 pb-space-3"
+      data-slot="held-note"
+      transition:unfold
+    >
+      <Textarea
+        aria-label={said.heldNote}
+        onkeydown={(event: KeyboardEvent) => {
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault();
+            sendHeldNow();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            noting = false;
+          }
+        }}
+        placeholder={said.heldNote}
+        rows={2}
+        bind:value={note}
+      />
+      {#if noteRefused}
+        <p class="m-0 type-meta text-status-fail-ink" role="alert">
+          {noteRefused}
+        </p>
+      {/if}
+      <div class="flex justify-end gap-space-2">
+        <Button
+          onclick={() => {
+            noting = false;
+          }}
+          size="sm"
+          variant="ghost">{said.cancelSearch}</Button
+        >
+        <Button
+          aria-keyshortcuts="Control+Enter Meta+Enter"
+          data-slot="send-held-now"
+          onclick={sendHeldNow}
+          size="sm">{said.sendHeldCount(held)}</Button
+        >
+      </div>
+    </div>
+  {/if}
   {#if down !== null && failed === null}
     <!-- A link stands lost: said above the rows, which stand as last read, with what closed it under Show details. -->
     <RowFault

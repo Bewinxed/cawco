@@ -7,7 +7,9 @@
    * not, and stays as the rail opens, so the button keeps its width and
    * nothing in the head moves. While comments wait on him (To check), the
    * bubble wears the needs-you dot, as a pill does (PinDot), and its name
-   * says how many; ⇧C's hidden pins and comments not reaching the agent are
+   * says how many; while he holds comments to send together, the bubble
+   * wears a hollow ring, a held pill's own look, and its name says how many
+   * are unsent; ⇧C's hidden pins and comments not reaching the agent are
    * said beside the count.
    */
   import { commentWords } from "@cawco/core/words/comments";
@@ -19,6 +21,7 @@
     open,
     count,
     toCheck,
+    held = 0,
     pinsShown = true,
     down = null,
     label,
@@ -30,6 +33,8 @@
     count: number;
     /** Comments waiting on him (To check). */
     toCheck: number;
+    /** Comments he holds to send together. */
+    held?: number;
     /** ⇧C has not hidden the pins. */
     pinsShown?: boolean;
     /** Why comments aren't reaching the agent, in words; null while they are. */
@@ -44,6 +49,7 @@
       commentWords.comments,
       count > 0 ? `${count} open` : null,
       toCheck > 0 ? commentWords.toCheckWaiting(toCheck) : null,
+      held > 0 ? commentWords.heldWaiting(held) : null,
       pinsShown ? null : "pins hidden",
       down,
     ]
@@ -69,7 +75,9 @@
     >
       <span class="relative grid" data-box>
         <IconChat aria-hidden="true" data-slot="bar-symbol" />
-        {#if toCheck > 0}<PinDot dot="unread" />{/if}
+        {#if toCheck > 0}<PinDot dot="unread" />{:else if held > 0}<PinDot
+            dot="held"
+          />{/if}
       </span>
       <span class="min-w-c-count-w text-start" data-slot="num"
         >{count > 0 ? count : ""}</span

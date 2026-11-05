@@ -72,6 +72,19 @@ export const commentWords = {
   noneResolved: "Nothing resolved yet",
   noMatch: (query: string) => `Nothing matches “${query}”`,
   attached: (n: number) => `${n} attached`,
+  // Held comments (the owner, 2026-11-05): Hold beside the composer's send, Send all in the rail's bar.
+  hold: "Hold",
+  holdTitle: "Hold it, to send later with the others (⌥↩)",
+  /** A held comment's row, and its pill's name: the agent hasn't heard it. */
+  unsent: "Unsent",
+  /** Send all, read out. */
+  sendHeldLabel: (n: number) =>
+    `Send ${n} held ${n === 1 ? "comment" : "comments"}`,
+  sendHeldCount: (n: number) => `Send ${n} ${n === 1 ? "comment" : "comments"}`,
+  /** Send all's note field. */
+  heldNote: "Add a note for the agent",
+  /** The head's Comments button, read out: what waits to be sent. */
+  heldWaiting: (n: number) => `${n} unsent`,
   // The page's Send: its picks.
   send: "Send",
   sendCount: (n: number) => `Send ${n}`,

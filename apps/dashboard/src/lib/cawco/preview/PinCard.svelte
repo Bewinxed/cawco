@@ -103,6 +103,7 @@
     retrying = false,
     whyNotSent = null,
     onreply,
+    onhold,
     onretry,
     onresolve,
     ondelete,
@@ -153,6 +154,8 @@
     /** Why it hasn't reached the session, in words, when its delivery reached no one or it stands only on the page; null while it is on its way. */
     whyNotSent?: string | null;
     onreply: (text: string, extras: SendExtras) => void;
+    /** The reply held to send with the others (core `ThreadEntry.held`). */
+    onhold?: (text: string) => void;
     /** Try again: it goes to the session once more. */
     onretry: () => void;
     onresolve: (resolved: boolean) => void;
@@ -757,6 +760,7 @@
       action="Reply"
       {draft}
       onchange={ondraft}
+      {onhold}
       onsubmit={onreply}
       {placeholder}
       sendError={problem ?? ""}

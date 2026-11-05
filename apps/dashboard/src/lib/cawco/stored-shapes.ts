@@ -390,6 +390,7 @@ const ThreadEntryShape = z.object({
   attachments: z.array(CommentAttachmentShape).optional(),
   by: z.enum(["person", "agent"]),
   files: z.array(z.string()).optional(),
+  held: z.literal(true).optional(),
   id: z.string(),
   sentAt: z.string().optional(),
   text: z.string(),

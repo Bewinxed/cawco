@@ -86,14 +86,17 @@ import {
   COMMENT_LIMITS,
   type CommentAttachment,
   carryChanges,
+  heldNoteOf,
   inkSection,
   type MarkPictures,
   newAnswer,
+  notedLine,
   type Pin,
   pinDelivery,
   pinReady,
   pinSaid,
   pinStandsOn,
+  pinsToTell,
   pinUnsent,
   readPin,
   readPins,
@@ -105,6 +108,7 @@ import {
   stampHeard,
   type ThreadEntry,
   unheardEntries,
+  withoutHeld,
   writeDelivery,
   writeEntry,
   writeResolve,
@@ -4667,13 +4671,26 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const pins = [...readPins(doc).values()];
     const pinned = new Set(pins.map((pin) => pin.ink));
     const ink = doc.getMap("ink").toJSON() as Record<string, InkGroup>;
+    // What the person holds waits for their Send all (core `withoutHeld`),
+    // and so does ink drawn since the first of it.
+    const [holding] = pins
+      .flatMap((pin) => pin.thread)
+      .filter((entry) => entry.held && !entry.sentAt)
+      .map((entry) => entry.at)
+      .sort();
     return {
       pins,
       owed: pins
+        .map(withoutHeld)
         .filter((pin) => pinUnsent(pin) && pinReady(pin))
         .sort((a, b) => a.number - b.number),
       loose: Object.values(ink).filter(
-        (group) => !(group.sentAt || pinned.has(group.id))
+        (group) =>
+          !(
+            group.sentAt ||
+            pinned.has(group.id) ||
+            (holding !== undefined && group.at >= holding)
+          )
       ),
       groups: {
         ...(doc.getMap("moved").toJSON() as Record<string, InkGroup>),
@@ -5119,7 +5136,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       (pin) => held.picture(id, pin.id) ?? undefined,
       ahead
     );
+    // The person's note with what they held goes with the first delivery that carries any of it.
+    const note = only ? undefined : heldNoteOf(doc);
     const marks = [
+      ...(note && owed.length + loose.length > 0 ? [notedLine(note.text)] : []),
       ...pinSections(row.id, owed, groups, url, carried),
       ...loose.map((group) =>
         inkSection(group, {
@@ -5146,6 +5166,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (!outcome.ok) {
       notSent(id, owed, outcome.reason);
       return outcome;
+    }
+    if (note && owed.length + loose.length > 0) {
+      docs.transact(id, "hub", (live) => {
+        const meta = live.getMap("meta");
+        if (
+          (meta.get("heldNote") as { at?: string } | undefined)?.at === note.at
+        ) {
+          meta.delete("heldNote");
+        }
+      });
     }
     stampDelivered(
       id,
@@ -6945,7 +6975,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const meta = doc.getMap("meta");
     const state = stateOf(doc);
     const { sentAt } = metaOf(doc);
-    const pins = [...readPins(doc).values()].sort(
+    const pins = pinsToTell(readPins(doc).values()).sort(
       (a, b) => a.number - b.number
     );
     const questions = questionsFrom(row, doc, pins, {
@@ -7358,7 +7388,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       questionsFrom(
         row,
         doc,
-        [...readPins(doc).values()].sort((a, b) => a.number - b.number),
+        pinsToTell(readPins(doc).values()).sort((a, b) => a.number - b.number),
         {
           asked:
             mine &&
@@ -9212,7 +9242,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ...(doc.getMap("moved").toJSON() as Record<string, InkGroup>),
           ...(doc.getMap("ink").toJSON() as Record<string, InkGroup>),
         };
-        const pins = [...readPins(doc).values()]
+        const pins = pinsToTell(readPins(doc).values())
           .filter((pin) =>
             query.filter === "all"
               ? true

@@ -562,6 +562,7 @@
 @custom-variant slot-section-row-label (&[data-slot="section-row-label"]);
 @custom-variant slot-segment (&[data-slot="segment"]);
 @custom-variant slot-select-trigger (&[data-slot="select-trigger"]);
+@custom-variant slot-send-held (&[data-slot="send-held"]);
 @custom-variant slot-session-details (&[data-slot="session-details"]);
 @custom-variant slot-session-row-note (&[data-slot="session-row-note"]);
 @custom-variant slot-session-status (&[data-slot="session-status"]);
