@@ -72,23 +72,27 @@ export const Saved = {
   },
 };
 
-/** An older hub that knows no Gemini API refused it: its words, and the choice back on ChatGPT. */
+/** An older hub that knows no Gemini API refused it: Not saved in the head, why under the providers, the choice back on ChatGPT. */
 export const Refused = {
   args: {
-    fault: imageSettingsWords.refused(
-      "There is no image provider gemini-api; there are chatgpt, antigravity",
-      "chatgpt"
-    ),
+    phase: "failed",
+    fault: {
+      words: imageSettingsWords.hubLacksProvider("gemini-api", "chatgpt"),
+      fix: imageSettingsWords.updateHub,
+    },
   },
 };
 
 /** The hub couldn't be reached. */
 export const Unsent = {
   args: {
-    fault: imageSettingsWords.unsent(
-      "The dashboard couldn't reach the hub: the request got no answer. Check that the hub's machine is up and this device is online, then try again.",
-      "chatgpt"
-    ),
+    phase: "failed",
+    fault: {
+      words: imageSettingsWords.unsent(
+        "The dashboard couldn't reach the hub: the request got no answer. Check that the hub's machine is up and this device is online, then try again.",
+        "chatgpt"
+      ),
+    },
   },
 };
 

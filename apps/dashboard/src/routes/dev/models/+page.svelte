@@ -160,19 +160,23 @@
     }
   }
 
-  const real = window.fetch;
-  window.fetch = (input, init) => {
-    const url = new URL(
-      typeof input === "string" || input instanceof URL ? input : input.url,
-      location.href
-    );
-    return url.origin === location.origin && url.pathname.startsWith("/api/")
-      ? answer(url.pathname, init)
-      : real(input, init);
-  };
-  onDestroy(() => {
-    window.fetch = real;
-  });
+  // In the browser only: the server draws the page's first frame (its
+  // skeleton), and the section's reads run once it is in the browser.
+  if (typeof window !== "undefined") {
+    const real = window.fetch;
+    window.fetch = (input, init) => {
+      const url = new URL(
+        typeof input === "string" || input instanceof URL ? input : input.url,
+        location.href
+      );
+      return url.origin === location.origin && url.pathname.startsWith("/api/")
+        ? answer(url.pathname, init)
+        : real(input, init);
+    };
+    onDestroy(() => {
+      window.fetch = real;
+    });
+  }
 
   const shown = $derived(FLEET_OF[fleet]);
 </script>

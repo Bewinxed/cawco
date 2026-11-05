@@ -27,14 +27,48 @@ const PROVIDERS: Readonly<
   },
 };
 
+/**
+ * The Gemini API's models, each by the name Google gives it and what tells
+ * it apart: speed, quality, and the price of one 1K image on the paid tier.
+ * Read 2026-11-05 from https://aistudio.google.com/docs/models/<id>.md and
+ * https://aistudio.google.com/docs/pricing.md ("Output images at 1K
+ * (1024x1024px) consume 1120 tokens and are equivalent to $0.0336 per
+ * image" for Nano Banana 2.1 and 2 Lite, "$0.067 per image" for Nano
+ * Banana 2, "$0.134 per image" for Nano Banana Pro).
+ */
+const MODELS: Readonly<
+  Record<string, { name: string; note: string; price: string }>
+> = {
+  "gemini-nano-banana-2.1": {
+    name: "Nano Banana 2.1",
+    note: "Fast, with sharper text and detail.",
+    price: "$0.034 an image",
+  },
+  "gemini-3.1-flash-image": {
+    name: "Nano Banana 2",
+    note: "The earlier fast model.",
+    price: "$0.067 an image",
+  },
+  "gemini-3.1-flash-lite-image": {
+    name: "Nano Banana 2 Lite",
+    note: "Under 2 seconds, 1K images only.",
+    price: "$0.034 an image",
+  },
+  "gemini-3-pro-image": {
+    name: "Nano Banana Pro",
+    note: "Best for text, mockups and charts; slower.",
+    price: "$0.134 an image",
+  },
+};
+
 /** Where a lack is put right: a Configure page, an account's page, or ChatGPT's plans. */
 export type ImageFix =
-  | { kind: "page"; slug: "accounts" | "cli-tools"; label: string }
+  | { kind: "page"; slug: "accounts" | "cli-tools" | "updates"; label: string }
   | { kind: "account"; accountId: string; label: string };
 
 export const imageSettingsWords = {
   heading: "Images",
-  note: "The provider generate_image goes to when a call names none. The image is made on the calling session's machine.",
+  note: "Agents make images through this provider unless they ask for another. Each image is made on the machine the agent runs on.",
   /** The radio group's accessible name. */
   providers: "Image provider",
   name: (id: ImageProviderId) => PROVIDERS[id].name,
@@ -54,16 +88,23 @@ export const imageSettingsWords = {
   /** Under Machines while no machine has joined. */
   noMachines:
     "No machine has joined yet. Each machine's readiness for the chosen provider shows here once one does.",
-  /** The chosen provider's machines, headed. */
-  machinesHead: "Machines",
+  /** The chosen provider's machines, headed by its name. */
+  machinesHead: (id: ImageProviderId) =>
+    `${PROVIDERS[id].name} on each machine`,
   /** A machine's state, as its glyph is named. */
   ready: "Ready",
   notReady: "Not ready",
   installing: "Installing",
-  offline: "offline",
+  offline: "Offline",
   model: "Model",
+  /** The radio group's accessible name for the models. */
+  models: "Gemini API model",
   /** The provider's own default model, marked among its models. */
   modelDefault: "default",
+  modelName: (id: string) => MODELS[id]?.name ?? id,
+  modelNote: (id: string) => MODELS[id]?.note ?? "",
+  /** One 1K image on the paid tier, kept on one line. */
+  modelPrice: (id: string) => MODELS[id]?.price ?? "",
   /** What stops a provider on one machine. */
   lack: (lack: ImageLack): string => {
     switch (lack.kind) {
@@ -91,8 +132,9 @@ export const imageSettingsWords = {
   fix: (lack: ImageLack): ImageFix | null => {
     switch (lack.kind) {
       case "no-login":
+        return { kind: "page", slug: "accounts", label: "Add login" };
       case "no-key":
-        return { kind: "page", slug: "accounts", label: "Add account" };
+        return { kind: "page", slug: "accounts", label: "Add API key" };
       case "signed-out":
       case "free-plan":
         return {
@@ -112,12 +154,28 @@ export const imageSettingsWords = {
   },
   saving: "Saving…",
   saved: "Saved",
-  /** A save the hub refused, in its words, and what calls still go to. */
+  notSaved: "Not saved",
+  /**
+   * The hub refused a provider this dashboard offers: the hub is older
+   * than the dashboard; the fix beside it (updateHub) is updating the hub.
+   */
+  hubLacksProvider: (id: ImageProviderId, current: ImageProviderId) =>
+    `This hub doesn't offer ${PROVIDERS[id].name} yet, so images still go to ${PROVIDERS[current].name}.`,
+  /** The hub refused a model this dashboard offers, for the same reason. */
+  hubLacksModel: (model: string, current: ImageProviderId) =>
+    `This hub doesn't offer ${MODELS[model]?.name ?? model} yet, so images still go to ${PROVIDERS[current].name}.`,
+  /** The way to add it: updating the hub, on Configure › Updates. */
+  updateHub: {
+    kind: "page",
+    slug: "updates",
+    label: "Update the hub",
+  } as const,
+  /** Any other refusal, in the hub's words. */
   refused: (said: string, current: ImageProviderId) =>
-    `Not saved. ${said}. Calls still go to ${PROVIDERS[current].name}.`,
+    `${said}. Images still go to ${PROVIDERS[current].name}.`,
   /** A save that never reached the hub: why, as a sentence of its own. */
   unsent: (why: string, current: ImageProviderId) =>
-    `Not saved. ${why} Calls still go to ${PROVIDERS[current].name}.`,
+    `${why} Images still go to ${PROVIDERS[current].name}.`,
   /** The setting couldn't be read. */
   unread: (clause: string) => `Could not read the image settings — ${clause}.`,
 };
