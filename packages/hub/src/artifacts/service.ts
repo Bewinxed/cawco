@@ -1864,7 +1864,7 @@ export interface ArtifactServiceDeps {
   ) => Promise<
     { refused: string; status: ArtifactRefusal["status"] } | undefined
   >;
-  /** Whether a session has ended: it takes no input now, so its marks go to its parent, else its project's Caw. */
+  /** Whether a session has ended or takes no input now (artifacts/taker.ts `takesNoInput`), so its marks go to its parent, else its project's Caw. */
   ended: (instance: InstanceRow) => boolean;
   /**
    * Whether a session's asks are over for good (Needs you's rule 4): it

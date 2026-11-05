@@ -49,7 +49,9 @@
  * 8. A project's setup page opens in no panel, by any show (hub
  *    artifacts/service.ts `boardOf`): Caw's `artifact_create` answers that
  *    the board draws it; the person's show answers the project whose board
- *    draws it; its Needs-you row leads to the project's page; and the
+ *    draws it; its Needs-you row leads to its first open card on the
+ *    page (`routines`; a card named lands there, set up or not, since
+ *    ca09ff0626); and the
  *    session's own page at 1440 (his panel's Open as tab) draws no
  *    preview. (Nightly 6757: his panel opened as a tab showed the setup
  *    page in Preview, its old Reminders rows with a minus and a Remove.)
@@ -59,6 +61,7 @@
  */
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { setupPageAt } from "../../../packages/core/src/artifact-needs";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { toolWords } from "../../lib/tool-call";
@@ -484,12 +487,14 @@ const setupInNoPanel = async (kit: Kit, fleet: KitFleet) => {
   }>("/api/artifact-needs");
   const rows = needs.needs.filter((one) => one.artifactId === id);
   kit.check(
-    "8: a project's setup page opens in no panel: Caw's create answers that the board draws it, the person's show lands on the project's board, its Needs-you row leads to the project's page",
+    "8: a project's setup page opens in no panel: Caw's create answers that the board draws it, the person's show lands on the project's board, its Needs-you row leads to its first open card on the project's page",
     !made.refused &&
       made.text.includes(artifactToolWords.onBoard) &&
       shown.opened === false &&
       shown.href === `/project/${office.id}` &&
-      rows.every((one) => one.href === `/project/${office.id}`),
+      // Its first open card named (routines), it lands at that card on the
+      // page, set up or not (core setupLanding, ca09ff0626).
+      rows.every((one) => one.href === setupPageAt(office.id, "routines")),
     JSON.stringify({ made: made.text.slice(0, 300), shown, needs: rows })
   );
 
@@ -546,15 +551,15 @@ const setupInNoPanel = async (kit: Kit, fleet: KitFleet) => {
 /** The decision page's frame (PageFrame), served at `/__cawco/page/<id>/`. */
 const PAGE_FRAME = /\/__cawco\/page\//u;
 
-/** Where the setup page's `place` card stands in its frame's viewport, px; null before the frame draws it. */
-const placeCardAt = async (page: Page) => {
+/** Where the setup page's `routines` card (its one card since f1342594ee dropped `place`) stands in its frame's viewport, px; null before the frame draws it. */
+const routinesCardAt = async (page: Page) => {
   const frame = page.frame({ url: PAGE_FRAME });
   if (!frame) {
     return null;
   }
   try {
     return await frame.evaluate(() => {
-      const el = document.querySelector("#decision-place");
+      const el = document.querySelector("#decision-routines");
       if (!el) {
         return null;
       }
@@ -577,7 +582,8 @@ const placeCardAt = async (page: Page) => {
  * a card on it led to the board, with nothing to answer). Caw's create
  * answers that the Decisions tab draws it; a card chip's show (`card`, as
  * reference-open.svelte.ts `openReference` sends it) lands at that card,
- * and so does its Needs-you row, at its first card not picked. Then that
+ * and so does its Needs-you row, at its first card not picked (`routines`,
+ * its one card since f1342594ee dropped `place`). Then that
  * landing at 1440 and 390: the Decisions tab draws the page with the card
  * in view.
  */
@@ -603,13 +609,13 @@ const setupAtCard = async (kit: Kit, fleet: KitFleet) => {
   const shown = await fleet
     .api<{ opened: boolean; href?: string }>(
       `/api/instances/${office.session}/artifacts/${id}/show`,
-      { card: "place" }
+      { card: "routines" }
     )
     .catch((error: unknown) => ({
       opened: false,
       href: error instanceof Error ? error.message : String(error),
     }));
-  const atCard = `/project/${office.id}?view=decisions&page=setup#place`;
+  const atCard = setupPageAt(office.id, "routines");
   const needs = await fleet.api<{
     needs: { artifactId: string; href: string }[];
   }>("/api/artifact-needs");
@@ -641,8 +647,8 @@ const setupAtCard = async (kit: Kit, fleet: KitFleet) => {
       '[data-slot="decisions"] iframe'
     );
     const card = await until(
-      "the place card in view",
-      () => placeCardAt(page),
+      "the routines card in view",
+      () => routinesCardAt(page),
       (at) => at !== null && at.top >= 0 && at.top < at.height,
       30_000
     ).catch(() => null);
@@ -652,7 +658,7 @@ const setupAtCard = async (kit: Kit, fleet: KitFleet) => {
       .catch(() => 0);
     await page.screenshot({ path: join(kit.out, `setup-card-${view}.png`) });
     kit.check(
-      `9: the landing at ${view === "desk" ? 1440 : 390} draws the setup page in Decisions with its place card in view`,
+      `9: the landing at ${view === "desk" ? 1440 : 390} draws the setup page in Decisions with its routines card in view`,
       tab > 0 && card !== null,
       JSON.stringify({ url: page.url(), tab, card })
     );

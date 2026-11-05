@@ -669,8 +669,19 @@ const run = async ({ check }: Kit) => {
   const toParent = takerWith([DELEGATE], "project-1");
   const toCaw = takerWith([DELEGATE, WRITER], "project-1");
   const toNone = takerWith([DELEGATE, WRITER], null);
+  // Stopped, with no refusal: ended all the same (core ENDED_STATUSES), so
+  // setup-send leg 5's stopped writer's Set up goes to the project's Caw.
+  const stoppedWriter = artifactTaker(
+    { ...writer, status: "stopped" } as InstanceRow,
+    { projectId: "project-1" },
+    {
+      caw: "project-caw",
+      instance: () => undefined,
+      refusal: () => undefined,
+    }
+  );
   check(
-    "i: an answered page goes to whoever holds it, the one rule his marks go by: its writer while it takes input; ended, the session that delegated it (its open_items list holds it); that one ended too, the project's Caw; neither, no one",
+    "i: an answered page goes to whoever holds it, the one rule his marks go by: its writer while it takes input; ended, the session that delegated it (its open_items list holds it); that one ended too, the project's Caw; neither, no one; a stopped writer has ended though nothing refuses it",
     standing.to === "writer" &&
       standing.session.id === DELEGATE &&
       toParent.to === "parent" &&
@@ -679,8 +690,10 @@ const run = async ({ check }: Kit) => {
       toCaw.to === "caw" &&
       toCaw.caw === "project-caw" &&
       toCaw.projectId === "project-1" &&
-      toNone.to === "none",
-    JSON.stringify({ standing, toParent, toCaw, toNone })
+      toNone.to === "none" &&
+      stoppedWriter.to === "caw" &&
+      stoppedWriter.why === noticeWords.sessionEnded,
+    JSON.stringify({ standing, toParent, toCaw, toNone, stoppedWriter })
   );
 
   // (j) His "done picking" on an ended delegate's project page reaches its parent.

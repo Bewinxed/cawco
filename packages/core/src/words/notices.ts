@@ -51,6 +51,8 @@ export const noticeWords = {
   setupFromOffer: "Asked Caw to set up the project you made",
   /** A decision page's "I'm done picking", told to the session that holds it (hub decisions.ts). */
   donePicking: (title: string) => `Told you're done picking on “${title}”`,
+  /** Why an ended session (stopping, stopped, discarded) takes nothing the person does on its artifacts, in a sentence's middle. */
+  sessionEnded: "it has ended",
   /** What the session that delegated a page is told with the person's words on it once its writer takes no input. */
   handedToParent: (writer: string, id: string) =>
     `Its session “${writer}” takes no input now, so this page is yours, the session that delegated it: read the person's picks and notes with artifact_read({ id: "${id}" }).`,

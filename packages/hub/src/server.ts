@@ -645,7 +645,7 @@ import {
   artifactSocket,
   takeSentWrites,
 } from "./artifacts/sync";
-import { artifactTaker } from "./artifacts/taker";
+import { artifactTaker, takesNoInput } from "./artifacts/taker";
 import {
   answeredWithOriginal,
   clientCopy,
@@ -14453,14 +14453,15 @@ export const createServer = (
   /**
    * The person's marks on an artifact (artifacts/service.ts
    * `deliverMarks`), to the session that made it, which they wake as the
-   * person's own words do (core `byPerson`): a stopped or sleeping one is
-   * started again. One that takes no input any more (its conversation gone,
-   * its finished work's workspace archived or taken over by a later item)
-   * has ended: the marks go to whoever can act on them, the session that
-   * delegated it while that one takes input, else the project's Caw, as the
-   * projects plan's §5.8 says for a page whose writer ended ("wakes the
-   * session that wrote the page, or Caw if it has ended"). With neither,
-   * the send records why it was not taken.
+   * person's own words do (core `byPerson`): a sleeping one is woken. One
+   * that has ended (stopped or discarded) or takes no input any more (its
+   * conversation gone, its finished work's workspace archived or taken over
+   * by a later item; artifacts/taker.ts `takesNoInput`): the marks go to
+   * whoever can act on them, the session that delegated it while that one
+   * takes input, else the project's Caw, as the projects plan's §5.8 says
+   * for a page whose writer ended ("wakes the session that wrote the page,
+   * or Caw if it has ended"). With neither, they go to the writer, woken,
+   * and its send records why when it is not taken.
    *
    * Answers whether someone took them: a send the session accepted, or Caw
    * woken. When no one did (the send refused, Caw's wake refused), the
@@ -14501,9 +14502,11 @@ export const createServer = (
     artifactTaker(writer, artifact, {
       caw: lead,
       instance: (id) => db.getInstancesByIds([id])[0],
-      refusal: (id) =>
-        inputRefusal(id, { kind: "system", name: ARTIFACT_ORIGIN })?.reason,
+      refusal: artifactRefusal,
     });
+  /** Why a send of the person's marks or answers to session `id` is refused, or nothing. */
+  const artifactRefusal = (id: string): string | undefined =>
+    inputRefusal(id, { kind: "system", name: ARTIFACT_ORIGIN })?.reason;
   /** {@link deliverArtifactMarks} to the project's Caw: woken with them, or the writer's transcript says why not. */
   const marksToCaw = async (
     their: Caw,
@@ -15185,8 +15188,8 @@ export const createServer = (
       handArtifactUp(parent, maker, artifact, next),
     instance: (id) => db.getInstancesByIds([id])[0],
     instances: (ids) => db.getInstancesByIds(ids),
-    ended: (instance) =>
-      !!inputRefusal(instance.id, { kind: "system", name: ARTIFACT_ORIGIN }),
+    // The taker's own rule (artifacts/taker.ts): ended, or a send refused.
+    ended: (instance) => !!takesNoInput(instance, artifactRefusal),
     // Over for good (Needs you's rule 4), never a machine away or a sign-in to make.
     finished: (instance) => {
       if (instance.status === "discarded" || stranded(instance)) {
