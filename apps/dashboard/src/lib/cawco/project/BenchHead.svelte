@@ -2,8 +2,8 @@
   /**
    * A bench's project head (dev only): the project's own head as its page
    * draws it (ProjectHead, seated: Caw's seat and its capsule at its
-   * trailing edge), its actions the bench's no-ops but Ask Caw, which opens
-   * his panel on his conversation. `benchLead` is the Caw it seats: the
+   * trailing edge), its actions the bench's no-ops; his seat opens his
+   * panel. `benchLead` is the Caw it seats: the
    * project's lead as the page makes it, on the bench's own records.
    */
   import { cawco } from "#lib/cawco/client.svelte.js";
@@ -20,10 +20,7 @@
   <ProjectHead
     {lead}
     machine={null}
-    onask={() => {
-      lead.tab = "assistant";
-      lead.open = true;
-    }}
+    onaskview={null}
     onfilter={none}
     onnewtask={none}
     {project}

@@ -69,6 +69,7 @@
   import { sessionTitle } from "#lib/cawco/session-names.svelte.js";
   import { cawPanelOffAt } from "#lib/cawco/stop-work.svelte.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
+  import type { RoutedSend } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import FootFade from "#lib/cawco/transcript/FootFade.svelte";
   import TranscriptSkeleton from "#lib/cawco/transcript/TranscriptSkeleton.svelte";
@@ -371,7 +372,29 @@
   /** Why the last start was refused, said over the field. */
   let startError = $state("");
   /** The first words start a conversation in the project, which the panel then shows. */
+  async function sendRouted(routed: RoutedSend, text: string) {
+    starting = true;
+    startError = "";
+    try {
+      const told = await routed(text);
+      lead.draft.settle();
+      chosen = told.instanceId;
+      fresh = false;
+    } catch (error) {
+      lead.draft.restore(text);
+      startError = failureWords(error);
+    } finally {
+      starting = false;
+    }
+  }
   async function start(text: string, extras: SendExtras) {
+    // Words put in the field for a view go as a view request (CawLead
+    // `askForView`): its session is the conversation shown.
+    const routed = lead.draft.takeRoute(text);
+    if (routed) {
+      await sendRouted(routed, text);
+      return;
+    }
     starting = true;
     startError = "";
     let held: HeldSend[] = [];

@@ -115,13 +115,6 @@
       shape: {
         inset: "concentric-xs",
       },
-      /** In a view's bar (ViewBar, `data-bar`): the composer field's height,
-          at least as wide, as wide as its glyph and count make it, never
-          shrinking, at the bar's control corner. */
-      look: {
-        "in-bar":
-          "group-data-bar:h-c-composer-field group-data-bar:w-auto group-data-bar:min-w-c-composer-field group-data-bar:flex-none group-data-bar:concentric-xs",
-      },
       /** It may shrink below its words, or up to a field's cap. */
       width: { shrink: "min-w-0", capped: "min-w-0 max-w-112" },
       /** Pulled into what stands beside it, or set off from it. */
@@ -267,7 +260,6 @@
     edge,
     fit,
     shape,
-    look,
     width,
     margin,
     gap,
@@ -311,7 +303,6 @@
         edge,
         fit,
         shape,
-        look,
         width,
         margin,
         gap,

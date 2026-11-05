@@ -1,11 +1,11 @@
 <script lang="ts">
   /**
    * Caw's on/off, the project's own (fable-lead-switch.md §1), opened from
-   * the project head's `⋯`: what he is doing in one sentence, and the
+   * his panel's bar (ProjectConversation's settings), the one place it
+   * stands (the owner's rule 8): what he is doing in one sentence, and the
    * switch for whether he acts on his own (the project's events reach his
-   * conversation)
-   * (CawLeadSwitch, the one the head's details tray draws too). Talking to
-   * him is his panel over the page (CawFloat).
+   * conversation) (CawLeadSwitch). Talking to him is his panel over the
+   * page (CawFloat).
    */
   import { untrack } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";

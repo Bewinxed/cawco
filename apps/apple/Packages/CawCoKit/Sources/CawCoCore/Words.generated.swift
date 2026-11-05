@@ -2967,23 +2967,18 @@ public enum Words {
 
     public enum Views {
         // packages/core/src/words/views.ts `viewsWords`
-        /// The strip's ghost action, and the head's ⋯ on a phone, while Caw can start.
+        /// The head's More, while Caw can start: his panel, asking for a view.
         public static let ask = "Ask Caw for a view"
 
-        /// The strip's ⋯ after its tabs, holding the views with no room to stand as one.
-        public static let more = "More views"
+        /// What Ask Caw for a view puts in his composer, the caret after it.
+        public static let askWords = "Make a view of "
 
-        /// The same ⋯ while the views it holds have pages waiting on picks (Needs you).
-        public static func moreNeedsYou(count: Int) -> String {
-            "More views, \(count) needs you"
-        }
-
-        /// The strip's one menu where no tab has room, named for the view on screen.
+        /// The head's views menu, named for the view on screen.
         public static func pick(view: String) -> String {
             "View: \(view)"
         }
 
-        /// The ask's composer, a view in a sentence.
+        /// The native app's ask composer, a view in a sentence.
         public static let placeholder = "A view of what is scheduled this week…"
 
         /// A draft's bar, over the view, with its two answers.

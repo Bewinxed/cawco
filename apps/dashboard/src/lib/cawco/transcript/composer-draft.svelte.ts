@@ -153,6 +153,9 @@ export interface Lift {
  */
 export const paneDrafts = new Map<string, ComposerDraft>();
 
+/** A send that goes somewhere other than the conversation: the session it reached. */
+export type RoutedSend = (text: string) => Promise<{ instanceId: string }>;
+
 export class ComposerDraft {
   /**
    * Everything attached goes up to the hub as it is attached and rides as
@@ -222,6 +225,28 @@ export class ComposerDraft {
   /** Opens this composer's attach picker, as its own Attach does. */
   pickFiles(): void {
     this.pickWanted = true;
+  }
+
+  /**
+   * Where the next send goes instead of the conversation, once, while it
+   * still starts with the words put in the field for it (Ask Caw for a
+   * view: the request the hub hands his conversation with how a view is
+   * written). Words that no longer start so are the person's own message.
+   */
+  #routed: { lead: string; send: RoutedSend } | null = null;
+
+  /** `words` into the field, the caret after them, the send they lead going to `send`. */
+  route(words: string, send: RoutedSend): void {
+    this.text = words;
+    this.focusWanted = true;
+    this.#routed = { lead: words.trim(), send };
+  }
+
+  /** At a send: where `sent` goes instead of the conversation, or null; once. */
+  takeRoute(sent: string): RoutedSend | null {
+    const routed = this.#routed;
+    this.#routed = null;
+    return routed && sent.trim().startsWith(routed.lead) ? routed.send : null;
   }
 
   /** A starter's words into the field, the caret after them: nothing is sent. */

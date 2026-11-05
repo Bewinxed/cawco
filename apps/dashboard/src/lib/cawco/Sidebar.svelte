@@ -91,7 +91,7 @@
   import { stored } from "./storage";
   import { standsAlone, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
-  import { projectTab, tabOfPath } from "./workspace/tabs";
+  import { tabOfPath } from "./workspace/tabs";
   import { workspace } from "./workspace/workspace.svelte";
 
   let {
@@ -1166,10 +1166,11 @@
                 {@const runningCount = runningIn(project)}
                 {@const expanded = !folderPrefs.collapsed(project.id)}
                 {@const href = `/project/${project.id}`}
-                {@const here =
-                  (onWorkspace &&
-                    workspace.activeTab === projectTab(project.id)) ||
-                  path.startsWith(`${href}/`)}
+                <!-- A project open as a tab is marked by its tab, the
+                     window's one mark of where you are (the owner's rule
+                     1): its row here wears none. Only a page under it that
+                     is no tab of its own (a view's own route) marks it. -->
+                {@const here = path.startsWith(`${href}/`)}
                 <li
                   class="group/menu-item relative"
                   data-flip="box"

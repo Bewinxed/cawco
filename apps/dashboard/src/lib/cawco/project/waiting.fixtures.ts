@@ -1,22 +1,14 @@
 /**
  * Private office as its page stood on 2026-11-05 while its setup page
  * waited on the person's picks and two tasks waited on its cards: the
- * hub's own records (GET /api/projects/:id/stages, /tasks, /tasks/tsk-2,
- * /decisions), read from the live hub after the picks; the waiting bench
- * (/motion/waiting) sets the moment back to before them. What the two
- * tasks share is written once (`SHARED`).
+ * hub's own records (GET /api/projects/:id/stages, /tasks, /decisions),
+ * read from the live hub after the picks, set back to before them. What
+ * the two tasks share is written once (`SHARED`).
  */
 import type { DecisionPageSummary } from "@cawco/core/decisions";
-import type {
-  StagesView,
-  TaskSummary,
-  TaskView,
-} from "#lib/cawco/project-tasks.js";
+import type { StagesView, TaskSummary } from "#lib/cawco/project-tasks.js";
 
-export const PO_ID = "ffb5d15a-a509-43ce-b94e-cd8bf20b48e9";
 export const PO_NAME = "Private office";
-/** The setup page's artifact: its cards are what the tasks wait on. */
-export const PO_SETUP = "a1f4932b-cd80-41dd-9349-4623e2d9b372";
 
 export const PO_STAGES = {
   source: "file",
@@ -250,39 +242,6 @@ export const PO_TASKS = [
   },
   TSK2,
 ] as unknown as TaskSummary[];
-
-/** tsk-2 whole, as its sheet reads it (after the picks): its summary and what only the sheet reads. */
-export const PO_TSK2 = {
-  ...TSK2,
-  ...{
-    foundInNamed: null,
-    sendBack: {
-      stage: "drafting",
-      by: "start",
-    },
-    result: null,
-    checks: [],
-    context: [],
-    lands: "none",
-    runsOn: null,
-    group: null,
-    owns: [],
-    budget: null,
-    accounts: [],
-    description:
-      'Runs once the setup page\'s card "What happens to the claims on his public profiles?" is picked. If the pick is "Leave the profiles as they are", finish with nothing and say so.\n\nSources: research/life/portrait.md section 11 (every claim a check contradicts, with the wording to use), research/web/linkedin.md (his LinkedIn as it stands), research/github/public-presence.md (the GitHub README), research/drive/cv.md (the 2025 CV), research/gmail/voice.md and research/hmc/voice-at-work.md (his voice).\n\nIf the pick is "Fix them to the record\'s safe wording": draft, for his call, the new text for each place that changes: LinkedIn headline, About, each experience entry (HMC title and start 1 Mar 2020; Supabase as independent contractor, Jun 2025 to 7 Jun 2026; JPS Officer, Aug 2018 to Oct 2019; IAED certificates recertified Feb 2024), education (Master of Advanced Study, graduated May 2023; second of 34), the GitHub README\'s current-role line, and the CV\'s title, rank, degree and the "300%" line. Each change in a table: where, old text, new text, the record line it rests on.\n\nIf the pick is "Fix dates and ended roles only": the same table limited to dates, ended roles and the degree marked done.\n\nNothing is changed on LinkedIn, GitHub or anywhere; he applies the table himself.',
-    acceptance:
-      "- One table: where, old text, new text, the record line it rests on, for every place the pick covers\n- The new text uses portrait.md section 11's safe wording and his voice\n- Nothing on his profiles was changed by an agent",
-    comments: [],
-    sections: [],
-    extra: {
-      triage: "needs-info",
-    },
-    problems: [],
-    hash: "82cdc0eb25b6f7dbbbcb6ddc4538ad205cfb16f2e9a525ead0246810f2e4716b",
-    todos: [],
-  },
-} as unknown as TaskView;
 
 /** The setup page as the Decisions tab lists it (after the picks). */
 export const PO_SETUP_PAGE = {

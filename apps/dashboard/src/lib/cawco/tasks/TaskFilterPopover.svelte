@@ -37,7 +37,6 @@
     open = $bindable(false),
     anchor = null,
     compact = false,
-    look,
   }: {
     filter: TaskFilter;
     /** What the hub found for the words: whether it is asked, and why it refused. */
@@ -50,8 +49,6 @@
     anchor?: HTMLElement | null;
     /** The trigger as its glyph and count alone. */
     compact?: boolean;
-    /** The trigger standing in a view's bar (ViewBar): the bar's control. */
-    look?: "in-bar";
   } = $props();
 
   const labels = $derived(
@@ -98,7 +95,6 @@
           data-filter-trigger
           {...props}
           aria-label={compactName}
-          {look}
           press="pressable"
           size={compact ? "icon-sm" : "sm"}
           title={find.problem ?? compactName}

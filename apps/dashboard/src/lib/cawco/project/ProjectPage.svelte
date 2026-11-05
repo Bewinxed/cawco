@@ -10,15 +10,17 @@
   import { detach } from "@cawco/core/detach";
   import { todoProgress } from "@cawco/core/plan";
   /**
-   * The project's views (design §2, PRD §5.2): the head with Caw's face,
-   * then the view; the view strip stands in the shell's bar on
-   * a wide screen and under the head on a narrow one. On a phone (under
-   * 640px) the page is the one scroller: the head scrolls away with the
-   * view, and the views, Needs you and Ask Caw stand in one bar docked
-   * at the foot where a session's composer docks (ViewBar). Board and Table
-   * always; Calendar when a task carries a date; then each view
-   * kept in `views/`, then each Caw drafted, marked `draft`, with Keep and
-   * Discard over it. The tasks are the hub's: every change is a commit, so
+   * The project's views (design §2, PRD §5.2): one head, then the view. The
+   * head is one row at every width (ProjectHead): the name and the place,
+   * the views menu (ViewMenu) and the filter, then Needs you, New task,
+   * Caw's seat and the glass group. The workspace's tab strip is the
+   * window's one row of tabs, so the views are a menu, never a strip of
+   * their own, and a phone has no bar of its own at the foot: the shell's
+   * is its one navigation bar (the owner's rules 2 and 9). On a phone
+   * (under 640px) the page is the one scroller: the head scrolls away with
+   * the view. Board and Table always; Calendar when a task carries a date;
+   * then each view kept in `views/`, then each Caw drafted, marked `draft`,
+   * with Keep and Discard over it. The tasks are the hub's: every change is a commit, so
    * the page shows what the hub answered and reads the list again after
    * each of its own writes, whenever the hub says the project's tasks
    * changed (`tasks.changed`: Caw filed one, an attempt moved one), on a
@@ -26,8 +28,8 @@
    *
    * The view, the open task and the open file of the project's folder live
    * in the URL (`?view=`, `?task=`, `?file=`), so a link opens the same.
-   * Needs you is a filter, not a stage: the tasks whose stage is of kind
-   * `you`.
+   * Needs you counts everything that waits on the person, once, and its
+   * press opens the next of them where it stands (`nextWait`).
    *
    * A task opens in the page (DESIGN.md, The Open Page Rule): on a desk
    * beside the view it came from, in a resizable split (Split) whose width
@@ -37,7 +39,7 @@
    * of the folder (FolderFile) opens the same way, in the task's place: one
    * stands beside the view at a time.
    */
-  import { needsYouOf } from "@cawco/core/task-views";
+  import { needsYouOf, waitsOnPick } from "@cawco/core/task-views";
   import type { ProjectView, StageKind } from "@cawco/core/views";
   import { blocksWords } from "@cawco/core/words/blocks";
   import { commonWords } from "@cawco/core/words/common";
@@ -59,7 +61,6 @@
     type BlockedRequest,
     cawco,
     type PendingPermission,
-    requestView,
   } from "#lib/cawco/client.svelte.js";
   import DecisionsView from "#lib/cawco/decisions/DecisionsView.svelte";
   import {
@@ -72,7 +73,6 @@
     failureSentence,
     type HubRead,
     failureWords as message,
-    unreachable,
   } from "#lib/cawco/hub-read.js";
   import {
     crossOut,
@@ -99,8 +99,7 @@
     setupLandsOnBoard,
     setupProgressOf,
   } from "#lib/cawco/project/setup-progress.js";
-  import ViewBar from "#lib/cawco/project/ViewBar.svelte";
-  import ViewTabs from "#lib/cawco/project/ViewTabs.svelte";
+  import ViewMenu from "#lib/cawco/project/ViewMenu.svelte";
   import {
     archiveTask,
     createTask,
@@ -149,9 +148,6 @@
     selection,
   } from "#lib/cawco/tasks/task-select.svelte.js";
   import { track } from "#lib/cawco/track.js";
-  import Composer from "#lib/cawco/transcript/Composer.svelte";
-  import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
-  import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
   import type { ViewTaskRow } from "#lib/cawco/views/openui/context.js";
   import { taskEdges } from "#lib/cawco/views/task-graph.js";
   import ViewCalendar, {
@@ -181,7 +177,6 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
@@ -191,7 +186,6 @@
     IconLayers,
     IconMore,
     IconPlus,
-    IconSparkles,
     IconToolTodo,
   } from "#lib/icons.js";
   import { browser } from "$app/env";
@@ -315,7 +309,6 @@
   const openTask = $derived(here.searchParams.get("task"));
   /** The folder's file open beside the view, or as its own page on a phone: the URL's `?file=`. */
   const openFile = $derived(here.searchParams.get("file"));
-  let needsOnly = $state(false);
   let adding = $state(false);
   /** Moves the hub has not answered yet: the card already stands in its new column. */
   let moving = $state<Record<string, string>>({});
@@ -340,7 +333,7 @@
       };
     })
   );
-  /** The views that draw the tasks, which Filter and Needs you narrow. */
+  /** The views that draw the tasks, which the filter narrows. */
   const TASK_VIEWS = ["board", "table", "canvas", "calendar"];
   const kindById = $derived(new Map(tasks.map((task) => [task.id, task.kind])));
   /** What waits on you: the hub's reasons, a session's ask, an action (needs.svelte.ts). */
@@ -353,32 +346,6 @@
   const pagesWaiting = $derived(
     pagesWaitingOf(decisions.list?.pages ?? [], notSetUp)
   );
-  /**
-   * Needs you counts what it narrows the view on screen to (JOURNEY.md,
-   * "The count beside the views says how many and narrows the view to
-   * them"): on Decisions, its pages waiting on picks; on every other view,
-   * the tasks waiting on you. One number, and pressed, exactly those; the
-   * Decisions tab's own badge counts the pages from anywhere.
-   */
-  const onDecisions = $derived.by(() => current === "decisions");
-  const waitingCount = $derived(
-    onDecisions ? pagesWaiting.length : needsYou.length
-  );
-  /** The filter holds only while something it counts waits. */
-  const filtering = $derived(needsOnly && waitingCount > 0);
-  /** The views of the tasks narrow to the tasks waiting on you. */
-  const narrowsTasks = $derived(filtering && !onDecisions);
-  /**
-   * Needs you pressed: on, the view narrows to what it counts; from a view
-   * that shows no tasks or pages (Routines, Made), it goes to the board,
-   * where the tasks it counted stand.
-   */
-  function toggleNeeds() {
-    needsOnly = !filtering;
-    if (needsOnly && !(onDecisions || TASK_VIEWS.includes(current))) {
-      choose("board");
-    }
-  }
   /** What narrows every view of the tasks, kept in the URL (task-filter). */
   let filter = $state<TaskFilter>(untrack(() => filterOf(here.searchParams)));
   const narrowed = $derived(activeCount(filter));
@@ -387,17 +354,7 @@
     () => projectId,
     untrack(() => seed?.find ?? wordless(here))
   );
-  const shownTasks = $derived(
-    applyFilter(narrowsTasks ? needsYou : tasks, filter, find.ids)
-  );
-  /** Needs you on, the columns those tasks stand in. */
-  const shownStages = $derived(
-    narrowsTasks
-      ? stageList.filter((stage) =>
-          needsYou.some((task) => task.stage === stage.name)
-        )
-      : stageList
-  );
+  const shownTasks = $derived(applyFilter(tasks, filter, find.ids));
   const newIn = $derived(firstTodoStage(stageList)?.name);
   const empty = $derived(list !== null && list.tasks.length === 0);
 
@@ -575,14 +532,9 @@
       : null;
   };
 
-  // --- the strip ----------------------------------------------------------------
+  // --- the views ----------------------------------------------------------------
 
-  /**
-   * Where the strip stands: in the shell's bar on a wide screen, where the
-   * crumb would only have said the name the head says (bar-strip); a
-   * phone's bar is the burger's, so there it is the page's own row under
-   * the head. The line the shell hosts a conversation's tabs by.
-   */
+  /** The shell's narrow line: the first paint's guess at the width (`wide`). */
   const narrowQuery = new MediaQuery(NARROW_QUERY);
   /** Under 900px a task is its own page, not the split beside the view (`phone`). */
   const sheetQuery = new MediaQuery("(width < 900px)");
@@ -594,13 +546,13 @@
     !(firstRender.held ? Boolean(page.data.narrow) : narrowQuery.current)
   );
 
-  interface StripTab {
+  interface ViewTab {
     draft: boolean;
     label: string;
     value: string;
   }
   const viewLabel = (name: string): string => stageLabel(name);
-  const tabs = $derived<StripTab[]>([
+  const tabs = $derived<ViewTab[]>([
     { value: "board", label: "Board", draft: false },
     { value: "table", label: "Table", draft: false },
     // Routines, the third tab, always there.
@@ -627,13 +579,6 @@
         draft: view.draft,
       })),
   ]);
-  /** The views as a phone's bar lists them: Decisions with the pages waiting on picks. */
-  const barViews = $derived(
-    tabs.map((each) => ({
-      ...each,
-      count: each.value === "decisions" ? pagesWaiting.length : 0,
-    }))
-  );
   let tab = $derived(here.searchParams.get("view") ?? "board");
   /** The decision page open in the tab. */
   let decisionPage = $derived<string | null>(here.searchParams.get("page"));
@@ -894,6 +839,101 @@
     });
   }
 
+  // --- what waits on you ----------------------------------------------------------
+
+  /**
+   * Everything in the project that waits on the person, counted once (the
+   * owner's rule 7; JOURNEY.md, What waits on you): Caw's own questions,
+   * each task that waits on you (needs.svelte.ts), and each decision page
+   * with picks not made, but a page a waiting task already waits on (one of
+   * its cards), which the task counts. In that order: Caw is held while he
+   * asks, a task's attempt is held on its wait, a page waits for picks.
+   */
+  type Wait =
+    | { kind: "ask" }
+    | { kind: "task"; id: string }
+    | { kind: "page"; name: string };
+  /** A card wait's page, by its artifact: `cawco:decision/<artifact>/<card>`. */
+  const CARD_PAGE = /^cawco:decision\/([^/#?]+)/u;
+  const pagesTasksWaitOn = $derived(
+    new Set(
+      needsYou.flatMap((task) =>
+        task.waits
+          .filter(waitsOnPick)
+          .map((wait) => CARD_PAGE.exec(wait.href)?.[1])
+          .filter((id) => id !== undefined)
+      )
+    )
+  );
+  const waits = $derived<Wait[]>([
+    ...lead.asks.map(() => ({ kind: "ask" }) as const),
+    ...needsYou.map((task) => ({ kind: "task", id: task.id }) as const),
+    ...pagesWaiting
+      .filter(
+        (one) =>
+          one.artifactId === null || !pagesTasksWaitOn.has(one.artifactId)
+      )
+      .map((one) => ({ kind: "page", name: one.name }) as const),
+  ]);
+  const waitingCount = $derived(waits.length);
+  /** The wait on screen now: the open task, or the open decision page. */
+  const openWait = $derived(
+    waits.findIndex(
+      (one) =>
+        (one.kind === "task" && one.id === openTask) ||
+        (one.kind === "page" && one.name === openPage)
+    )
+  );
+  /**
+   * Needs you pressed: the next thing that waits opens where it stands, the
+   * same at every width (rule 10: acted on within two presses of landing).
+   * A task opens beside the board, or as its own page under 900px, on its
+   * wait (TaskPane); a page opens in Decisions; Caw's question stands up in
+   * his panel, the keys in its options. Pressed again, the one after the
+   * thing on screen, round to the first.
+   */
+  /** Where a wait stands: a page in Decisions, a task in the view of tasks on screen or the board. */
+  const viewOfWait = (wait: Wait): string => {
+    if (wait.kind === "page") {
+      return "decisions";
+    }
+    return TASK_VIEWS.includes(current) ? current : "board";
+  };
+  function nextWait() {
+    const next = waits[(openWait + 1) % waits.length];
+    if (!next) {
+      return;
+    }
+    if (next.kind === "ask") {
+      detach(lead.answerAsks(), "answer Caw");
+      return;
+    }
+    const to = viewOfWait(next);
+    if (to !== current) {
+      const order = tabs.map((each) => each.value);
+      swap.swap([], order.indexOf(to) > order.indexOf(current) ? 1 : -1);
+      tab = to;
+    }
+    if (next.kind === "page") {
+      decisionPage = next.name;
+      decisionCard = null;
+      goto(hrefOf(null, "decisions", { page: next.name, card: null }), {
+        shallow: true,
+        replace: true,
+        state: {},
+      });
+      return;
+    }
+    // On a phone a task is its own page with Back to the view: the first
+    // one opened is a history entry of its own, the next takes its place.
+    const swaps = !phone || openTask !== null;
+    goto(hrefOf(next.id, to), {
+      shallow: true,
+      replace: swaps,
+      state: phone ? { taskOpened: true } : page.state,
+    });
+  }
+
   /**
    * What the split's side holds: the open file, else the open task, kept
    * while the side closes, so it leaves as it stood.
@@ -1097,7 +1137,7 @@
     filter = next;
     remember();
   }
-  /** The phone's Filter, opened from the head's ⋯ (ProjectHead `onfilter`). */
+  /** The filter where the head is compact, opened from its ⋯ (ProjectHead `onfilter`). */
   let filterOpen = $state(false);
   let filterAnchor = $state<HTMLElement | null>(null);
 
@@ -1391,43 +1431,6 @@
     }
   }
 
-  // --- Ask Caw for a view -------------------------------------------------------
-
-  let askOpen = $state(false);
-  let askAnchor = $state<HTMLElement | null>(null);
-  /** The ask's words, in the session Composer the popover holds. */
-  const viewDraft = new ComposerDraft();
-  let viewSending = $state(false);
-  let viewRefused = $state("");
-  /** The ask never reached the hub: its line offers Send again. */
-  let viewAgain = $state(false);
-  /** What the Composer stands over its foot: the popover holds that much room. */
-  let viewFoot = $state(0);
-  function ask(anchor: HTMLElement) {
-    askAnchor = anchor;
-    askOpen = true;
-    viewDraft.focusWanted = true;
-  }
-  /**
-   * The view is asked of the project's conversation (client `requestView`):
-   * a refusal puts the words back in the composer with the reason over them.
-   */
-  async function askView(text: string) {
-    viewSending = true;
-    viewRefused = "";
-    viewAgain = false;
-    try {
-      await requestView(projectId, text);
-      askOpen = false;
-    } catch (error) {
-      viewDraft.restore(text);
-      viewAgain = unreachable(error);
-      viewRefused = message(error);
-    } finally {
-      viewSending = false;
-    }
-  }
-
   // --- what keeps the page live -------------------------------------------------
 
   // On arrival and on every reconnect: Caw, the views and their data, and the
@@ -1628,21 +1631,14 @@
     }`;
   });
   /**
-   * New task stands in the strip whenever there is no form for it on the
+   * New task stands in the head whenever there is no form for it on the
    * board: a board with tasks, and an empty one Caw's field stands over
    * (an empty board while Caw can't start holds the form itself).
    */
-  const strippedNewTask = $derived(list !== null && (!empty || canTalk));
+  const headNewTask = $derived(list !== null && (!empty || canTalk));
   /** The view on screen is one of the tasks, which the filter narrows. */
   const filterHere = $derived(
     list !== null && !empty && TASK_VIEWS.includes(current)
-  );
-  /** Something stands after the tabs: the hairline marks where it starts. */
-  const trailing = $derived(
-    waitingCount > 0 ||
-      strippedNewTask ||
-      canTalk ||
-      (filterHere && (wide || narrowed > 0))
   );
   // --- before setup -------------------------------------------------------------
 
@@ -1897,94 +1893,51 @@
   }
 </script>
 
-<!-- The view strip: the views, then what acts on them, the page's own row
-     under its head (the top bar holds the workspace's tabs). `roomy`: a wide
-     screen, where the filter stands whole. -->
-{#snippet strip(roomy: boolean)}
-  <div
-    data-slot="strip"
-    class="flex min-w-0 items-center gap-space-3 pt-0 pe-space-6 pb-space-4 ps-space-7 max-desk:px-space-5"
-  >
-    <ViewTabs
-      {current}
-      hrefOf={(view) => hrefOf(null, view)}
-      onchoose={choose}
-      views={barViews}
-    />
-    {#if trailing}
-      <!-- Under 640px New task and Ask Caw are in the head's ⋯: the rule
-           stands only while Needs you follows it there. -->
-      <span
-        data-wide={waitingCount === 0 || undefined}
-        aria-hidden="true"
-        class={[
-          "h-c-btn-h-sm w-px flex-none bg-border-hairline",
-          waitingCount === 0 && "max-phone:hidden",
-        ]}
-      ></span>
-    {/if}
-    <!-- The strip is a toolbar: its actions are bare symbols, each named in
-         its tooltip and for a screen reader, a count where one says
-         something (DESIGN.md, Title bars follow Liquid Glass: "Its items are
-         bare symbols … each named for the screen reader and in its
-         tooltip"), so the views keep the room. -->
-    <div data-form="compact" class="flex flex-none items-center gap-space-2">
-      <!-- Filter, on the views of the tasks: whole in the bar; on a phone,
-           where the row has no room for it, its glyph and count stand while
-           a filter does, and the head's ⋯ opens it. -->
-      {#if filterHere && (roomy || narrowed > 0)}
+<!-- The head's views: the menu, then the filter on a view of the tasks,
+     whole where the head has room; compact, its glyph and count while a
+     filter stands, and the head's ⋯ opens it. -->
+{#snippet headViews(compact: boolean)}
+  <div class="flex min-w-0 items-center gap-space-2">
+    <ViewMenu {current} onchoose={choose} views={tabs} />
+    {#if filterHere && (!compact || narrowed > 0)}
+      <div data-form="compact" class="flex flex-none items-center">
         <TaskFilterPopover
-          compact={!roomy}
+          {compact}
           {filter}
           {find}
           onchange={setFilter}
           tasks={[...tasks, ...archived]}
         />
-      {/if}
-      {#if waitingCount > 0}
-        <NeedsYouChip
-          count={waitingCount}
-          on={filtering}
-          ontoggle={toggleNeeds}
-        />
-      {/if}
-      {#if strippedNewTask}
-        <Button
-          aria-label="New task"
-          data-wide
-          layout="wide"
-          press="pressable"
-          onclick={() => {
-            if (current !== "table") {
-              choose("board");
-            }
-            adding = true;
-          }}
-          size="sm"
-          title="New task"
-          variant="ghost"
-        >
-          <IconPlus />
-          <span class="in-form-compact:hidden">New task</span>
-        </Button>
-      {/if}
-      {#if canTalk}
-        <Button
-          aria-label={viewsWords.ask}
-          data-wide
-          layout="wide"
-          press="pressable"
-          onclick={(event) => ask(event.currentTarget as HTMLElement)}
-          size="sm"
-          title={viewsWords.ask}
-          variant="ghost"
-        >
-          <IconSparkles />
-          <span class="in-form-compact:hidden">{viewsWords.ask}</span>
-        </Button>
-      {/if}
-    </div>
+      </div>
+    {/if}
   </div>
+{/snippet}
+
+<!-- What acts on the project, before Caw's seat: Needs you, the one count
+     of what waits, whose press opens the next of it; New task where the
+     head has room (compact, it is in the ⋯). Bare symbols, each named in
+     its tooltip (DESIGN.md, Title bars follow Liquid Glass). -->
+{#snippet headTools(compact: boolean)}
+  {#if waitingCount > 0}
+    <NeedsYouChip count={waitingCount} onopen={nextWait} />
+  {/if}
+  {#if headNewTask && !compact}
+    <Button
+      aria-label="New task"
+      press="pressable"
+      onclick={() => {
+        if (current !== "table") {
+          choose("board");
+        }
+        adding = true;
+      }}
+      size="icon-sm"
+      title="New task"
+      variant="ghost"
+    >
+      <IconPlus />
+    </Button>
+  {/if}
 {/snippet}
 
 <!-- What acts on the picked tasks, the board's cards or the table's rows. -->
@@ -2023,7 +1976,7 @@
     onpick={pick}
     picked={isPicked}
     refused={refusedMove}
-    stages={shownStages}
+    stages={stageList}
     tasks={shownTasks}
     bind:adding
   />
@@ -2221,7 +2174,6 @@
       starters={decisionStarters}
       taskHref={(id) => hrefOf(id)}
       {taskOf}
-      waitingOnly={filtering}
     />
   {:else if leavingFor}
     <!-- The tab's first read, inside its grace: it shows nothing of its
@@ -2446,31 +2398,29 @@
           />
         </div>
       {:else}
-        <!-- The frame the phone's views bar docks in, over the page's foot. -->
+        <!-- The frame the bulk bar floats in, over the page's foot. -->
         <div class="relative flex h-full min-h-0 min-w-0 flex-1 flex-col">
-          <!-- A phone: the page is the one scroller, so iOS never chains two. The
-           foot's edge fade ends at the bar's top edge, a step of air under
-           the reach. What it reveals (a scrollIntoView here, or one in a
-           decision page's frame, which carries up into it) lands in the part
-           nothing stands over: above the bar, or above Caw's sheet while it
-           stands (--reveal-foot, its scroll padding), and never inside the
-           foot's fade: at least the run the fade covers there
-           (edge-fade.css `--fade-foot`, --bar-fade-inset + its length;
-           0px while the page wears no fade). -->
+          <!-- A phone: the page is the one scroller, so iOS never chains two,
+           down to the safe area. What it reveals (a scrollIntoView here, or
+           one in a decision page's frame, which carries up into it) lands in
+           the part nothing stands over: above Caw's sheet while it stands
+           (--reveal-foot, its scroll padding), and never inside the foot's
+           edge fade (edge-fade.css `--fade-foot`; 0px while the page wears
+           no fade). -->
           <div
             data-slot="project-page"
             class={[
-              "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--bar-reach) max-phone:scroll-pb-(--reveal-foot) max-phone:fade-inset-end-(--bar-fade-inset)",
+              "flex h-full min-h-0 flex-1 flex-col overflow-hidden max-phone:@container-size max-phone:overflow-x-hidden max-phone:overflow-y-auto max-phone:overscroll-y-contain max-phone:pb-(--safe-bottom) max-phone:scroll-pb-(--reveal-foot)",
               fadeOn === "page" && "kit-edge-fade-block",
             ]}
-            style:--reveal-foot={`max(${docked ? "var(--c-sheet-max-h)" : "var(--bar-reach)"}, var(--fade-foot))`}
-            style:--bar-reach={"calc(var(--c-composer-panel) + var(--space-4) + var(--safe-bottom) + var(--space-3))"}
-            style:--bar-fade-inset="calc(var(--bar-reach) - var(--space-3))"
+            style:--reveal-foot={docked
+              ? "max(var(--c-sheet-max-h), var(--fade-foot))"
+              : "var(--fade-foot)"}
           >
             <ProjectHead
               {lead}
               {machine}
-              onask={canTalk ? ask : null}
+              onaskview={canTalk ? () => lead.askForView() : null}
               onfilter={(anchor) => {
                 filterAnchor = anchor;
                 filterOpen = true;
@@ -2482,6 +2432,8 @@
               setup={setupAct}
               {project}
               seated={!standing}
+              tools={headTools}
+              views={headViews}
             />
 
             {#if lead.problem}
@@ -2533,11 +2485,6 @@
               </Alert>
             {/if}
 
-            <!-- Under the head from 640px; a phone's views are its bar's. -->
-            <div class="contents max-phone:hidden">
-              {@render strip(wide)}
-            </div>
-
             {#if phone}
               <!-- Under 900px a task is its own page: the view stands alone,
                  the page's one scroller on a phone. -->
@@ -2556,32 +2503,6 @@
               />
             {/if}
           </div>
-          {#if !wide}
-            <ViewBar
-              {current}
-              needs={waitingCount}
-              needsOn={filtering}
-              onchoose={choose}
-              onnewsession={() => lead.newConversation()}
-              ontoggleneeds={toggleNeeds}
-              views={barViews}
-            >
-              {#snippet tools()}
-                <!-- As the strip draws it on a narrow screen: its glyph and count
-                 while a filter stands; the head's ⋯ opens it. -->
-                {#if filterHere && narrowed > 0}
-                  <TaskFilterPopover
-                    compact
-                    {filter}
-                    look="in-bar"
-                    {find}
-                    onchange={setFilter}
-                    tasks={[...tasks, ...archived]}
-                  />
-                {/if}
-              {/snippet}
-            </ViewBar>
-          {/if}
           <!-- Outside the scroller, whose edge fade would mask it where it
            floats: a fixed box is drawn under its ancestors' masks. -->
           {#if shown === "board" || shown === "table"}
@@ -2713,44 +2634,6 @@
 {/snippet}
 
 {#if project}
-  <Popover.Root bind:open={askOpen}>
-    <!-- The ask is the session Composer floating under the menu: the
-         composer is the surface (its pill, edge and shadow), so the popover
-         draws none of its own (`bare`), and its box is as tall as what the
-         Composer stands (Composer's dock stands on its foot). -->
-    <Popover.Content
-      align="end"
-      bare
-      class="w-(--ask-w)"
-      customAnchor={askAnchor}
-      side="bottom"
-      style="--ask-w: min(var(--c-panel-w), calc(100vw - 2 * var(--c-screen-margin)))"
-    >
-      <div
-        class="relative w-full"
-        style:block-size="calc({viewFoot}px + var(--space-4))"
-      >
-        <Composer
-          fleet={composerFleet}
-          agentName="Caw"
-          attach={false}
-          draft={viewDraft}
-          onfoot={(foot) => {
-            viewFoot = foot.stack;
-          }}
-          onstop={() => undefined}
-          onsubmit={(text) => {
-            detach(askView(text), "askView");
-          }}
-          placeholder={viewsWords.placeholder}
-          sendAgain={viewAgain}
-          sendError={viewRefused}
-          sending={viewSending}
-        />
-      </div>
-    </Popover.Content>
-  </Popover.Root>
-
   {#if filterAnchor}
     <TaskFilterPopover
       anchor={filterAnchor}

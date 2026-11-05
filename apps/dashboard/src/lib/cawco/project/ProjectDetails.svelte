@@ -35,7 +35,6 @@
    *   again, and the GitHub Project, or GitHub's words for why there is none.
    * - Who decides: follows the fleet, or how many kinds it handed over
    *   itself; the link to its Who decides (decides/DecidesRow).
-   * - Caw: whether events reach a conversation (CawLeadSwitch), its ways off with it.
    * - Account: the account its sessions start on, or the fleet's routing
    *   (hub project-edit.ts), and whether it is signed in anywhere.
    * - At its limit: while an account is named, whether its sessions wait
@@ -106,13 +105,10 @@
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { IconChevronDown, IconPlus } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
-  import CawLeadSwitch from "./CawLeadSwitch.svelte";
-  import type { CawLead } from "./caw-lead.svelte";
 
   let {
     project,
     machine,
-    lead,
     place,
     onclose,
     afterChecks,
@@ -120,7 +116,6 @@
     project: ProjectRow;
     /** The primary checkout's machine; null while it has none, or it left. */
     machine: Machine | null;
-    lead: CawLead;
     /** Where it lives, in the head's own words. */
     place: string;
     onclose: () => void;
@@ -1501,30 +1496,6 @@
           </p>
         {/if}
         <RowFault data-bind-fault reason={bindFault ?? trackerFault} />
-      </div>
-    </div>
-
-    <!-- Caw: his own switch, its ways off with it. -->
-    <div
-      data-slot="row"
-      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
-      data-detail="caw"
-    >
-      <p
-        data-slot="project-details-label"
-        class="type-label pt-space-1 text-ink-muted"
-      >
-        Caw
-      </p>
-      <div
-        data-slot="value"
-        class="flex min-w-0 flex-col gap-space-1 pt-space-1 type-label text-ink-strong"
-      >
-        <CawLeadSwitch
-          {lead}
-          projectId={project.id}
-          projectName={project.name}
-        />
       </div>
     </div>
 

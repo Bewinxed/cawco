@@ -39,6 +39,7 @@ import {
 } from "@cawco/core/project-conversation";
 import type { StarterPlace } from "@cawco/core/starters";
 import { conversationWords } from "@cawco/core/words/project-conversation";
+import { viewsWords } from "@cawco/core/words/views";
 import { untrack } from "svelte";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import { browser } from "$app/env";
@@ -49,6 +50,7 @@ import {
   cawOf,
   configureCaw,
   type ProjectRow,
+  requestView,
 } from "../client.svelte";
 import { minimizedAsks } from "../minimized-asks.svelte";
 import { dur } from "../motion/curves.svelte";
@@ -299,6 +301,19 @@ export class CawLead {
     this.tab = "assistant";
     this.open = true;
     this.draft.focusWanted = true;
+  }
+
+  /**
+   * Ask Caw for a view (the head's More): his panel open, the words that
+   * ask for one in his composer, the caret after them; sent, they go as a
+   * view request (client `requestView`: the hub hands his conversation the
+   * words with how a view is written), so a view is asked of him where he
+   * is talked to, in the one panel (the owner's rule 8).
+   */
+  askForView(): void {
+    const id = this.#projectId();
+    this.draft.route(viewsWords.askWords, (text) => requestView(id, text));
+    this.open = true;
   }
 
   newConversation(): void {

@@ -68,7 +68,7 @@
     switchAt?: "start" | "end";
   } = $props();
 
-  /** A phone: the page is one scroller with the views bar at its foot (ViewBar's line). */
+  /** A phone: the page is one scroller, his panel a sheet over its foot. */
   const phone = new MediaQuery("(max-width: 639px)");
   const fine = new MediaQuery("(hover: hover) and (pointer: fine)");
   const open = $derived(front && lead.open && lead.anchor !== null);

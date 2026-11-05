@@ -1,15 +1,14 @@
 <script lang="ts">
   /**
-   * Needs you, the project page's filter: a bare control, its mark in the
-   * attention glyph's spark and its count in the attention ink, never a
-   * surface filled in its hue (DESIGN.md, Needs you: "a mark, never a
-   * surface … with no card, row, chip or well filled in its hue") and never
-   * coral (that is where you act). Pressed, the filter is on and its edge
-   * takes the attention glyph's ink over --dur-control. In the view strip
-   * (`data-form="compact"`) it is a toolbar item, its glyph and count alone,
-   * named in its tooltip. The view strip draws it after its tabs; on a phone
-   * the views' bar draws it beside its pill (ViewBar), at the bar's control
-   * height. The page leaves it out while nothing needs you.
+   * Needs you, the project's one count of what waits on the person (the
+   * owner's rule 7): a bare control in the head, its mark in the attention
+   * glyph's spark and its count in the attention ink, never a surface
+   * filled in its hue (DESIGN.md, Needs you: "a mark, never a surface …
+   * with no card, row, chip or well filled in its hue") and never coral
+   * (that is where you act). A press opens the next thing that waits,
+   * where it stands (ProjectPage `nextWait`). Where the head is compact
+   * (`data-form="compact"`) its glyph and count stand alone, named in its
+   * tooltip. The page leaves it out while nothing needs you.
    */
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import { IconNeedsYou } from "#lib/icons.js";
@@ -17,14 +16,12 @@
 
   let {
     count,
-    on,
-    ontoggle,
+    onopen,
     class: className,
   }: {
     count: number;
-    /** The filter is on. */
-    on: boolean;
-    ontoggle: () => void;
+    /** Opens the next thing that waits. */
+    onopen: () => void;
     class?: string;
   } = $props();
 </script>
@@ -32,13 +29,12 @@
 <button
   data-slot="needs"
   aria-label={`Needs you, ${count}`}
-  aria-pressed={on}
   class={cn(
-    "select-none mark-line type-label inline-flex h-c-btn-h-sm flex-none items-center gap-space-2 rounded-md border border-transparent bg-transparent px-space-3 in-form-compact:px-space-2 text-status-attn-ink hover:bg-surface-hover transition-[background-color,color,border-color] duration-(--dur-control) ease-out motion-safe:active:transform-(--tpress) aria-pressed:border-status-attn-glyph",
+    "select-none touch-hit mark-line type-label inline-flex h-c-btn-h-sm flex-none items-center gap-space-2 rounded-md bg-transparent px-space-3 in-form-compact:px-space-2 text-status-attn-ink hover:bg-surface-hover transition-[background-color,color] duration-(--dur-control) ease-out motion-safe:active:transform-(--tpress)",
     className
   )}
   style:--tpress="scale(var(--press-scale))"
-  onclick={ontoggle}
+  onclick={onopen}
   title="Needs you"
   type="button"
   in:crossIn
@@ -48,8 +44,6 @@
     aria-hidden="true"
     class="size-icon-md text-status-attn-glyph"
   />
-  <!-- In the view strip (`data-form="compact"`) its glyph and count stand
-       alone. -->
   <span class="in-form-compact:hidden">Needs you</span>
   <span data-slot="num" class="num text-status-attn-ink">{count}</span>
 </button>

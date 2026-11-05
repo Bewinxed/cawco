@@ -26,25 +26,29 @@
    * (ProjectDetails), and again folds them. Caw's words are not in the head:
    * his seat's face, his panel and Needs you carry them.
    *
-   * Trailing, Caw at 48px, at the head's end so the name's start edge stays
-   * where it is when he stands over the empty board instead; then one glass
-   * capsule (the kit's BarGlass, `form="group"`) of bare symbols, each named
-   * in its tooltip: Ask Caw (his panel on a new conversation, the caret in his
-   * composer: work in a project starts by telling Caw, PRD §5.6), Spin off,
-   * and More holding its setup (Finish setting it up while it is not set
-   * up, Change how it runs once it is: the project-setup skill's one page,
-   * through Caw), Project details…, Caw's settings (CawPanel, off More: a popover on a desk, the
-   * bottom sheet on touch), Spend, then Forget and Delete
-   * (and, under 640px, Spin off, New task, Filter tasks… and Ask Caw for a
-   * view), each with its glyph. Nothing in the head is on the coral: no view
-   * of a project is for asking Caw (One prominent action, trailing). One tray
+   * After the pair, the page's `views` (its views menu: the one place the
+   * views are chosen), and at the trailing end the page's `tools` (Needs
+   * you, the filter, New task), then Caw at 48px, at the head's end so the
+   * name's start edge stays where it is when he stands over the empty board
+   * instead: his seat is the one switch of his panel (the owner's rule 8),
+   * so nothing else in the head opens him. Then one glass capsule (the kit's
+   * BarGlass, `form="group"`) of bare symbols, each named in its tooltip:
+   * Spin off, Full size, and More holding its setup (Finish setting it up
+   * while it is not set up, Change how it runs once it is: the
+   * project-setup skill's one page, through Caw), Ask Caw for a view (his
+   * panel, the words going as a view request), Spend, then Forget and
+   * Delete, each with its glyph. Caw's settings are his panel's own (its
+   * bar), and the project's details are the place's: each is reached from
+   * one place (rule 4). Nothing in the head is on the coral. One tray
    * stands under the head at a time: the details or an end.
    *
-   * Under 640px the capsule holds More alone: Ask Caw is the "+" of the
-   * page's views bar (ViewBar), which opens Caw's panel as this one does,
-   * and Spin off is in More (Apple HIG, Toolbars: "Prioritize only the most
-   * important items for inclusion in the main toolbar area … Create a More
-   * menu to include additional items").
+   * Where the head itself is under 640px wide (a phone, a narrow split: it
+   * measures its own box), More also holds Spin off, New task, Filter
+   * tasks…, Project details (the place's own press, which steps out of the
+   * row with Full size so the name keeps its room) and Full size, and
+   * `tools` is drawn compact (Apple HIG, Toolbars: "Prioritize
+   * only the most important items for inclusion in the main toolbar area …
+   * Create a More menu to include additional items").
    *
    * With the board empty and events on, Caw stands over the empty board
    * instead (picks.md), and his slot here closes.
@@ -54,9 +58,9 @@
   import { projectEndWords } from "@cawco/core/words/project-ends";
   import { viewsWords } from "@cawco/core/words/views";
   import { type Snippet, untrack } from "svelte";
-  import { MediaQuery } from "svelte/reactivity";
   import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
   import { editProject } from "#lib/cawco/client.svelte.js";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
@@ -65,31 +69,26 @@
   import { checkoutOf } from "#lib/cawco/projects.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { newSession, spawning } from "#lib/cawco/spawn/new-session.svelte.js";
-  import { cawOffAt, stopWork } from "#lib/cawco/stop-work.svelte.js";
-  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
-  import * as Drawer from "#lib/components/ui/drawer/index.js";
+  import { stopWork } from "#lib/cawco/stop-work.svelte.js";
+  import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import * as Popover from "#lib/components/ui/popover/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconArchive,
-    IconChatAdd,
     IconColumns,
     IconDeleteForGood,
     IconFilter,
     IconFolder,
     IconFork,
-    IconInfo,
     IconMaximize,
     IconMinimize,
     IconMore,
     IconPlus,
-    IconSettings,
     IconSparkles,
     IconUsage,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import { fullSize } from "../workspace/full-size.svelte";
-  import CawPanel from "./CawPanel.svelte";
   import CawSeat from "./CawSeat.svelte";
   import type { CawLead } from "./caw-lead.svelte";
   import ProjectDetails from "./ProjectDetails.svelte";
@@ -100,11 +99,17 @@
     lead,
     seated,
     onnewtask,
-    onask,
+    onaskview,
     onfilter,
     setup,
     detailsAfterChecks,
+    views,
+    tools,
   }: {
+    /** The page's views menu, after the name and the place; told whether the head is compact. */
+    views?: Snippet<[boolean]>;
+    /** What acts on the view, before Caw's seat; told whether the head is compact. */
+    tools?: Snippet<[boolean]>;
     /** Filter the tasks, from the menu on a phone, where the strip has no room for it. */
     onfilter: (anchor: HTMLElement) => void;
     project: ProjectRow;
@@ -114,28 +119,22 @@
     seated: boolean;
     onnewtask: () => void;
     /** Ask Caw for a view, from the menu; null while Caw can't start. */
-    onask: ((anchor: HTMLElement) => void) | null;
+    onaskview: (() => void) | null;
     /** Its setup, from the menu: finish it, or change how it runs; null while Caw can't start. */
     setup: { label: string; run: () => void } | null;
     /** Rows the details show under Merge checks (ProjectDetails). */
     detailsAfterChecks?: Snippet;
   } = $props();
 
-  const narrow = new MediaQuery("(max-width: 639px)");
-  /** Caw's settings rise as the bottom sheet on touch, as the head's other sheets do. */
-  const touch = new MediaQuery(
-    "(hover: none), (pointer: coarse), (max-width: 640px)"
-  );
   /**
-   * Caw's settings stand open: open again after a reload while his off
-   * tray stands in them (stop-work.svelte.ts), so it comes back where it was.
+   * The head's own width is under 640px (a phone, a narrow split): More
+   * takes Spin off, New task and the filter, and `tools` draws compact.
    */
-  let cawOpen = $state(
-    untrack(() => {
-      const off = stopWork.of("caw-off", project.id);
-      return off?.open === true && off.at === cawOffAt(project.id);
-    })
-  );
+  let compact = $state(false);
+  const COMPACT_BELOW = 640;
+  const measureHead = frameSize<HTMLElement>((node) => {
+    compact = node.clientWidth < COMPACT_BELOW;
+  });
   let more = $state<HTMLElement | null>(null);
   /** The place an end asked from this head's More stands (project-end.svelte.ts). */
   const endAt = $derived(`head:${project.id}`);
@@ -300,6 +299,8 @@
 
 <header
   data-slot="project-head"
+  data-compact={compact || undefined}
+  {@attach measureHead}
   class="flex flex-none flex-nowrap items-center gap-x-space-4 min-h-c-project-head-h pt-space-6 pe-space-6 pb-space-4 ps-space-7 max-desk:pt-space-5 max-desk:pe-space-5 max-desk:pb-space-3 max-desk:ps-space-5"
 >
   <!-- Leading: the name, then the place. The pair is as wide as it holds
@@ -361,31 +362,54 @@
         </button>
       {/if}
     </h1>
-    <!-- The place, a bare BarItem outside the glass: its machine's mark, or
-         the hub's folder, named in its tooltip. The project's details
-         unfold under the head. -->
-    <BarItem
-      data-place-line
-      expanded={details}
-      label={projectWords.details}
-      onclick={() => {
-        if (details) {
-          closeDetails();
-        } else {
-          openDetails();
-        }
-      }}
-      tip={placeTip}
-      bind:ref={placeLine}
-    >
-      {#if primary && machine}
-        <OsMark class="size-c-bar-symbol text-ink-muted" os={machine.os} />
-      {:else}
-        <IconFolder data-slot="bar-symbol" aria-hidden="true" />
-      {/if}
-    </BarItem>
+    <!-- The place, a bare item of the top bar's recipe (app.css, the bar's
+         glass group): its machine's mark, or the hub's folder, named in its
+         tooltip. The project's details unfold under the head. -->
+    <Tip label={placeTip}>
+      {#snippet children(tip)}
+        <button
+          data-bar-item
+          data-box
+          data-place-line
+          {...mergeProps(tip, {
+            onclick: () => {
+              if (details) {
+                closeDetails();
+              } else {
+                openDetails();
+              }
+            },
+          })}
+          aria-expanded={details}
+          aria-label={projectWords.details}
+          class="select-none touch-hit press-tint in-data-compact:hidden"
+          type="button"
+          bind:this={placeLine}
+        >
+          {#if primary && machine}
+            <OsMark class="size-c-bar-symbol text-ink-muted" os={machine.os} />
+          {:else}
+            <IconFolder data-slot="bar-symbol" aria-hidden="true" />
+          {/if}
+        </button>
+      {/snippet}
+    </Tip>
   </div>
+  {#if views}
+    <div data-slot="views" class="flex min-w-0 flex-none items-center">
+      {@render views(compact)}
+    </div>
+  {/if}
   <div data-slot="acts" class="ms-auto flex flex-none items-center gap-space-2">
+    {#if tools}
+      <div
+        data-slot="tools"
+        data-form={compact ? "compact" : undefined}
+        class="flex flex-none items-center gap-space-2"
+      >
+        {@render tools(compact)}
+      </div>
+    {/if}
     <!-- He sits at the head's end, by the capsule, so the name's start edge
          is the same whether he sits here or stands over the empty board.
          His seat holds its place while he is read; a read the hub refused
@@ -399,25 +423,26 @@
          recipe: bare symbols, each named for a screen reader and in its
          tooltip. Under 640px it holds More alone. -->
     <BarGlass form="group">
-      <!-- New work starts by telling Caw (PRD §5.6): his panel on a new
-           conversation, the caret in his composer. -->
-      <BarItem
-        data-new-session
-        icon={IconChatAdd}
-        label={projectWords.askCaw}
-        layout="wide"
-        onclick={() => lead.newConversation()}
-      />
       {#if primary}
-        <BarItem
-          aria-haspopup="dialog"
-          data-spin-off
-          icon={IconFork}
-          label={projectWords.spinOff}
-          layout="wide"
-          onclick={(event: MouseEvent) =>
-            spinOff(event.currentTarget as HTMLElement)}
-        />
+        <Tip label={projectWords.spinOff}>
+          {#snippet children(tip)}
+            <button
+              data-bar-item
+              data-box
+              data-spin-off
+              {...mergeProps(tip, {
+                onclick: (event: MouseEvent) =>
+                  spinOff(event.currentTarget as HTMLElement),
+              })}
+              aria-haspopup="dialog"
+              aria-label={projectWords.spinOff}
+              class="select-none touch-hit press-tint in-data-compact:hidden"
+              type="button"
+            >
+              <IconFork data-slot="bar-symbol" aria-hidden="true" />
+            </button>
+          {/snippet}
+        </Tip>
       {/if}
       <!-- Full size: the tab fills the window, the rail and the tabs put
            away; pressed again, or Escape, they come back (full-size.svelte.ts). -->
@@ -426,9 +451,29 @@
         data-full-size
         icon={fullSize.on ? IconMinimize : IconMaximize}
         label={fullSize.on ? projectWords.exitFullSize : projectWords.fullSize}
-        onclick={() => fullSize.toggle()}
-        pressed={fullSize.on}
-      />
+      >
+        {#snippet children(tip)}
+          <button
+            data-bar-item
+            data-box
+            data-full-size
+            {...mergeProps(tip, { onclick: () => fullSize.toggle() })}
+            aria-label={fullSize.on
+              ? projectWords.exitFullSize
+              : projectWords.fullSize}
+            aria-pressed={fullSize.on}
+            aria-keyshortcuts={fullSize.on ? "Escape" : undefined}
+            class="select-none touch-hit press-tint in-data-compact:hidden"
+            type="button"
+          >
+            {#if fullSize.on}
+              <IconMinimize data-slot="bar-symbol" aria-hidden="true" />
+            {:else}
+              <IconMaximize data-slot="bar-symbol" aria-hidden="true" />
+            {/if}
+          </button>
+        {/snippet}
+      </Tip>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
           {#snippet child({ props })}
@@ -453,7 +498,7 @@
             }
           }}
         >
-          {#if narrow.current}
+          {#if compact}
             {#if primary}
               <DropdownMenu.Item onSelect={() => spinOff(more)}>
                 <IconFork />
@@ -474,18 +519,26 @@
               <IconFilter />
               <span>Filter tasks…</span>
             </DropdownMenu.Item>
-            {#if onask}
-              <DropdownMenu.Item
-                onSelect={() => {
-                  if (more) {
-                    onask?.(more);
-                  }
-                }}
+            <DropdownMenu.Item onSelect={() => openDetails()}>
+              {#if primary && machine}
+                <OsMark os={machine.os} />
+              {:else}
+                <IconFolder />
+              {/if}
+              <span>{projectWords.projectDetails}</span>
+            </DropdownMenu.Item>
+            <DropdownMenu.Item onSelect={() => fullSize.toggle()}>
+              {#if fullSize.on}
+                <IconMinimize />
+              {:else}
+                <IconMaximize />
+              {/if}
+              <span
+                >{fullSize.on
+                  ? projectWords.exitFullSize
+                  : projectWords.fullSize}</span
               >
-                <IconSparkles />
-                <span>{viewsWords.ask}</span>
-              </DropdownMenu.Item>
-            {/if}
+            </DropdownMenu.Item>
             <DropdownMenu.Separator />
           {/if}
           {#if setup}
@@ -494,18 +547,12 @@
               <span>{setup.label}</span>
             </DropdownMenu.Item>
           {/if}
-          <DropdownMenu.Item onSelect={() => openDetails()}>
-            <IconInfo />
-            <span>{projectWords.projectDetails}</span>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={() => {
-              cawOpen = true;
-            }}
-          >
-            <IconSettings />
-            <span>{projectWords.cawSettings}</span>
-          </DropdownMenu.Item>
+          {#if onaskview}
+            <DropdownMenu.Item onSelect={() => onaskview?.()}>
+              <IconSparkles />
+              <span>{viewsWords.ask}</span>
+            </DropdownMenu.Item>
+          {/if}
           <DropdownMenu.Item
             onSelect={() =>
               goto(`/usage?project=${encodeURIComponent(project.id)}`)}
@@ -542,41 +589,10 @@
 >
   <RowFault again={commitName} reason={renameFault} />
 </div>
-<!-- Caw's settings, off More: the project's own, beside its other settings. -->
-{#if touch.current}
-  <Drawer.Root bind:open={cawOpen}>
-    <!-- The recipe's foot: 16px plus the safe area (DESIGN.md, Drawer). -->
-    <Drawer.Content title={`Caw, ${project.name}`}>
-      <CawPanel
-        {lead}
-        projectId={project.id}
-        projectName={project.name}
-        sheet
-      />
-    </Drawer.Content>
-  </Drawer.Root>
-{:else}
-  <Popover.Root bind:open={cawOpen}>
-    <Popover.Content
-      align="end"
-      aria-label="Caw, {project.name}"
-      class="w-(--settings-w) max-desk:w-(--settings-w-narrow)"
-      pad="inset"
-      style="--settings-w: min(var(--c-panel-w), calc(100vw - var(--space-7))); --settings-w-narrow: min(var(--c-panel-w), calc(100vw - var(--space-3) - env(safe-area-inset-right, 0px)))"
-      collisionPadding={12}
-      customAnchor={more}
-      side="bottom"
-      sideOffset={4}
-    >
-      <CawPanel {lead} projectId={project.id} projectName={project.name} />
-    </Popover.Content>
-  </Popover.Root>
-{/if}
 <!-- The project's details, under the head, from where its title starts. -->
 {#if details}
   <ProjectDetails
     afterChecks={detailsAfterChecks}
-    {lead}
     {machine}
     onclose={closeDetails}
     {place}

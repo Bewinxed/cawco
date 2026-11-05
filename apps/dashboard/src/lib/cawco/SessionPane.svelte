@@ -76,7 +76,7 @@
   import { frameSize } from "./frame-observer";
   import CawFace from "./home/CawFace.svelte";
   import { instanceTitle } from "./home/home-state.svelte";
-  import { deadlineIn } from "./hub-read";
+  import { deadlineIn, failureWords } from "./hub-read";
   import { rowHref } from "./links";
   import { minimizedAsks } from "./minimized-asks.svelte";
   import MoveWait from "./move/MoveWait.svelte";
@@ -1079,6 +1079,19 @@
       // this change is that a typed sentence never disappears without a word.
       if (import.meta.env.DEV) {
         console.warn("composer rendered without a machine", viewId);
+      }
+      return;
+    }
+    // Words put in the field for a view go as a view request instead
+    // (CawLead `askForView`); what refuses it puts them back with why.
+    const routed = draft.takeRoute(text);
+    if (routed) {
+      try {
+        await routed(text);
+        draft.settle();
+      } catch (error) {
+        draft.restore(text);
+        draft.notice = failureWords(error);
       }
       return;
     }
