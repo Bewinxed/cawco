@@ -84,6 +84,7 @@ const INLINE_STYLES = {
   "src/lib/cawco/HoverPanel.svelte": ["block-size", "inline-size"],
   "src/lib/cawco/MachinesEmpty.svelte": ["animation"],
   "src/lib/cawco/MachinesList.svelte": ["color"],
+  "src/lib/cawco/config/models/ModelsSection.svelte": ["block-size"],
   // Add machine's window stands where its anchor and its height put it,
   // read every frame its height tweens and as the keyboard rises.
   "src/lib/cawco/connect/ConnectWindow.svelte": [
@@ -221,7 +222,6 @@ const INLINE_STYLES = {
   "src/lib/components/ui/machine-row/machine-row.svelte": ["color"],
   "src/lib/components/ui/progress/progress.svelte": ["transform"],
   "src/lib/components/ui/section-header/section-header.svelte": ["color"],
-  "src/routes/(app)/config/models/+page.svelte": ["block-size"],
   "src/routes/(app)/motion/delegate-tray/+page.svelte": ["width"],
   "src/routes/(app)/project/[id]/+page.svelte": ["animation", "block-size"],
   // A decision page's media measure their own box while mounted: Preview's

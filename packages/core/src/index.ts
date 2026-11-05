@@ -165,6 +165,7 @@ export * from "./work-items";
 
 export { CAWCO_ENV, type CawcoEnvVar, readEnv } from "./cawco-env";
 export * from "./image-generation";
+export * from "./image-readiness";
 // The hub's own protocol: verbs, envelopes, payloads and rows.
 export * from "./protocol";
 // How a session with no given title names itself: its first user message,
