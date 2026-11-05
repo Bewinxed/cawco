@@ -13,7 +13,9 @@
  * `Input.insertText` and key presses. browser-keyboard-container takes the
  * container host, where it goes as neko's X keysyms.
  *
- * 1. the browser's page is a textarea that counts its Enter key presses;
+ * 1. the browser stands on one page (any other closed: an extension the
+ *    container's policy installs may open its own), a textarea that counts
+ *    its Enter key presses;
  *    the person takes it over from the session's panel, which draws its
  *    frames with "You have control";
  * 2. a tap on the textarea in the stream focuses it in the remote page;
@@ -33,6 +35,11 @@
  * The view is read by the rendered checks driving and with the keyboard up
  * at 390, and driving at 1440; its pictures go to
  * `$TMPDIR/outputs/<spec>/`.
+ *
+ * Where the tap or the typing never reached the page, the run keeps why
+ * with the fleet's evidence, in `fleet-on-failure/browser/`: the phone's
+ * view, a picture and the state of each of the browser's pages, and on the
+ * container host neko's log and what it says of control and its sessions.
  *
  * What only an iPhone shows is not read here: the soft keyboard coming up
  * on the tap, and iOS's own autocorrect replacing a word.
@@ -65,49 +72,134 @@ const FIELD_PAGE = `data:text/html,${encodeURIComponent(
 /** Where the textarea is tapped, in the page's own CSS pixels. */
 const FIELD_AT = { x: 300, y: 120 };
 
-/** `act` in each page of `key`'s browser, through its own DevTools port: what each answered. */
-const eachPage = async <T>(
-  key: BrowserKey,
-  act: (link: CdpLink, session: string) => Promise<T>
-): Promise<T[]> => {
-  const { readBrowser, portsOf } =
+/** The project's browser on the fleet's machine: its key, and the data home its agent keeps its record in. */
+interface Remote {
+  dataHome: string;
+  key: BrowserKey;
+}
+
+/**
+ * The fleet's record of the browser, read under its agent's data home for
+ * the read alone. Set on this process for longer, every browser the kit
+ * launched after it carried the fleet's folders in its environment, and the
+ * fleet's teardown ended them as its leftovers: the next spec's page found
+ * its WebKit closed.
+ */
+const recordOf = async (remote: Remote) => {
+  const { readBrowser } =
     await import("../../../packages/agent/src/browser/state");
+  const before = process.env.XDG_DATA_HOME;
+  process.env.XDG_DATA_HOME = remote.dataHome;
+  try {
+    return await readBrowser(remote.key);
+  } finally {
+    if (before === undefined) {
+      delete process.env.XDG_DATA_HOME;
+    } else {
+      process.env.XDG_DATA_HOME = before;
+    }
+  }
+};
+
+/** A target of the browser's, as DevTools lists it. */
+interface Target {
+  targetId: string;
+  type: string;
+  url: string;
+}
+
+/** The browser's DevTools, through its own port on this machine, for `act`. */
+const withDevtools = async <T>(
+  remote: Remote,
+  act: (link: CdpLink, targets: Target[]) => Promise<T>
+): Promise<T> => {
+  const { portsOf } = await import("../../../packages/agent/src/browser/state");
   const takeover =
     await import("../../../packages/agent/src/browser/cdp-takeover");
-  const record = await readBrowser(key);
+  const record = await recordOf(remote);
   if (!record) {
-    throw new Error(`no record of ${key} on this machine`);
+    throw new Error(`no record of ${remote.key} on this machine`);
   }
   const link = await takeover.CdpLink.open(
     `http://127.0.0.1:${portsOf(record).devtools}`
   );
   try {
     const { targetInfos } = await link.call("Target.getTargets");
-    const pages = (
-      (Array.isArray(targetInfos) ? targetInfos : []) as {
-        targetId: string;
-        type: string;
-      }[]
-    ).filter((info) => info.type === "page");
-    const answers: T[] = [];
-    for (const one of pages) {
-      answers.push(await act(link, await link.attach(one.targetId)));
-    }
-    return answers;
+    return await act(
+      link,
+      (Array.isArray(targetInfos) ? targetInfos : []) as Target[]
+    );
   } finally {
     link.close();
   }
 };
 
-/** `expression`'s value in each page of `key`'s browser. */
-const inPage = (key: BrowserKey, expression: string) =>
-  eachPage(key, async (link, session) => {
-    const answer = await link.call(
-      "Runtime.evaluate",
-      { expression, returnByValue: true },
-      session
-    );
-    return (answer.result as { value?: unknown }).value;
+/** What each page of the browser says of itself, and of the field when it is the field page. */
+const PAGE_SAYS = `JSON.stringify({
+  title: document.title,
+  visible: document.visibilityState,
+  focus: document.hasFocus(),
+  field: typeof f === "object" && f instanceof HTMLTextAreaElement
+    ? { value: f.value, focused: document.activeElement === f, enters: window.enters }
+    : null,
+})`;
+
+interface PageSays {
+  field: { enters: number; focused: boolean; value: string } | null;
+  focus: boolean;
+  title: string;
+  url: string;
+  visible: string;
+}
+
+/** Every page of the browser, each as it says ({@link PAGE_SAYS}); one that doesn't answer says why in its title. */
+const pagesOf = (remote: Remote): Promise<PageSays[]> =>
+  withDevtools(remote, async (link, targets) => {
+    const said: PageSays[] = [];
+    for (const page of targets.filter((one) => one.type === "page")) {
+      const url = page.url.slice(0, 60);
+      try {
+        const session = await link.attach(page.targetId);
+        const answer = await link.call(
+          "Runtime.evaluate",
+          { expression: PAGE_SAYS, returnByValue: true },
+          session
+        );
+        const { value } = answer.result as { value?: unknown };
+        said.push({ ...(JSON.parse(String(value)) as PageSays), url });
+      } catch (error) {
+        said.push({
+          url,
+          title: `no answer: ${String(error)}`,
+          visible: "unknown",
+          focus: false,
+          field: null,
+        });
+      }
+    }
+    return said;
+  });
+
+/**
+ * The browser down to one page, the field page: every other page closed (an
+ * extension the container's policy installs may open its own as it lands),
+ * so the page brought to the front and the one read back are the field page.
+ * Answers how many pages it closed.
+ */
+const fieldPageAlone = (remote: Remote): Promise<number> =>
+  withDevtools(remote, async (link, targets) => {
+    const [kept, ...rest] = targets.filter((one) => one.type === "page");
+    for (const extra of rest) {
+      await link.call("Target.closeTarget", { targetId: extra.targetId });
+    }
+    if (kept) {
+      await link.call(
+        "Page.navigate",
+        { url: FIELD_PAGE },
+        await link.attach(kept.targetId)
+      );
+    }
+    return rest.length;
   });
 
 /** What the browser view says now. */
@@ -153,17 +245,139 @@ const pointOver = (page: Page, at: { x: number; y: number }) =>
     };
   }, at);
 
-/** The remote textarea: its value, whether it has the focus, and the Enter presses it heard. */
-const fieldOf = async (key: BrowserKey) => {
-  const [value] = await inPage(
-    key,
-    "JSON.stringify({ value: f.value, focused: document.activeElement === f, enters: window.enters })"
-  );
-  return JSON.parse(String(value ?? "{}")) as {
-    value?: string;
-    focused?: boolean;
-    enters?: number;
+/** The field page's textarea (its value, whether it has the focus, the Enter presses it heard), and every page as it says. */
+const fieldOf = async (remote: Remote) => {
+  const pages = await pagesOf(remote);
+  return { ...(pages.find((one) => one.field)?.field ?? {}), pages };
+};
+
+/** An Engine API stream's frames (8-byte headers, a TTY-less container's logs) as their text. */
+const engineText = (bytes: Uint8Array): string => {
+  const parts: Uint8Array[] = [];
+  let at = 0;
+  while (at + 8 <= bytes.length) {
+    const size = new DataView(
+      bytes.buffer,
+      bytes.byteOffset + at + 4,
+      4
+    ).getUint32(0);
+    parts.push(bytes.subarray(at + 8, at + 8 + size));
+    at += 8 + size;
+  }
+  return parts.map((part) => new TextDecoder().decode(part)).join("");
+};
+
+/** What neko says of control and its sessions, read as the daemon's admin (the record's password). */
+const nekoSays = async (record: {
+  container?: { adminPassword: string };
+  slot?: number;
+  host?: string;
+  key: BrowserKey;
+}) => {
+  const { portsOf } = await import("../../../packages/agent/src/browser/state");
+  if (!record.container) {
+    return null;
+  }
+  const base = `http://127.0.0.1:${portsOf(record as never).http}/api`;
+  const login = (await (
+    await fetch(`${base}/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        username: "cawco",
+        password: record.container.adminPassword,
+      }),
+    })
+  ).json()) as { token: string };
+  const read = async (path: string) =>
+    (await fetch(`${base}${path}`, {
+      headers: { Authorization: `Bearer ${login.token}` },
+    }).then((response) => response.json())) as unknown;
+  return {
+    control: await read("/room/control"),
+    sessions: await read("/sessions"),
   };
+};
+
+/**
+ * What says why the page heard nothing, kept with the fleet's evidence
+ * (`fleet-on-failure/browser/`): the phone's view, a picture of each of the
+ * browser's pages, each page as it says, and on the container host neko's
+ * own log and what it says of control and its sessions.
+ */
+const keepEvidence = async (
+  kit: Kit,
+  remote: Remote,
+  page: Page,
+  when: string
+): Promise<void> => {
+  const dir = join(kit.out, "fleet-on-failure", "browser");
+  await mkdir(dir, { recursive: true });
+  const kept: string[] = [];
+  const keep = async (name: string, write: () => Promise<unknown>) => {
+    try {
+      await write();
+      kept.push(name);
+    } catch (error) {
+      kept.push(`${name} (not kept: ${String(error).slice(0, 200)})`);
+    }
+  };
+  await keep(`${when}-phone.png`, () =>
+    page.screenshot({ path: join(dir, `${when}-phone.png`) })
+  );
+  await keep(`${when}-pages.png`, () =>
+    withDevtools(remote, async (link, targets) => {
+      let n = 0;
+      for (const one of targets.filter((target) => target.type === "page")) {
+        const shot = await link.call(
+          "Page.captureScreenshot",
+          { format: "png" },
+          await link.attach(one.targetId)
+        );
+        n += 1;
+        await Bun.write(
+          join(dir, `${when}-page-${n}.png`),
+          Buffer.from(String(shot.data), "base64")
+        );
+      }
+    })
+  );
+  const record = await recordOf(remote);
+  await keep(`${when}-pages.json`, async () =>
+    Bun.write(
+      join(dir, `${when}-pages.json`),
+      JSON.stringify(
+        {
+          pages: await pagesOf(remote),
+          neko: record ? await nekoSays(record).catch(String) : null,
+          record: {
+            state: record?.state,
+            host: record?.host,
+            takeover: record?.takeover,
+          },
+        },
+        null,
+        2
+      )
+    )
+  );
+  const container = record?.container;
+  if (container?.runtime) {
+    const socket = container.runtime.endpoint;
+    await keep(`${when}-neko.log`, async () => {
+      const response = await fetch(
+        `http://engine/containers/${container.id}/logs?stdout=1&stderr=1&tail=400&timestamps=1`,
+        { unix: socket } as RequestInit
+      );
+      await Bun.write(
+        join(dir, `${when}-neko.log`),
+        engineText(new Uint8Array(await response.arrayBuffer()))
+      );
+    });
+  }
+  kit.note(
+    `${kit.spec}: kept for the ${when} check, in ${dir}: ${kept.join(", ")}`
+  );
 };
 
 /**
@@ -172,11 +386,11 @@ const fieldOf = async (key: BrowserKey) => {
  * checks and its pictures.
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one leg in the order a person takes it, a check at each step
-export const typeIntoTakeover = async (
+export async function typeIntoTakeover(
   kit: Kit,
   host: "local" | "container",
   name: string
-): Promise<void> => {
+): Promise<void> {
   const shots = join(process.env.TMPDIR ?? tmpdir(), "outputs", name);
   let dockerHost = "unix:///nonexistent";
   if (host === "container") {
@@ -202,7 +416,6 @@ export const typeIntoTakeover = async (
   fleet.launch("agent", [], { DOCKER_HOST: dockerHost });
   await fleet.agentUp();
   await fleet.accountSignedIn();
-  process.env.XDG_DATA_HOME = fleet.env.XDG_DATA_HOME as string;
 
   const project = await fleet.api<{ id: string }>("/api/projects", {
     name: "Keyboard",
@@ -211,6 +424,10 @@ export const typeIntoTakeover = async (
     caw: false,
   });
   const key: BrowserKey = `project:${project.id}`;
+  const remote: Remote = {
+    key,
+    dataHome: fleet.env.XDG_DATA_HOME as string,
+  };
   const keyPath = `/api/browsers/${encodeURIComponent(key)}`;
   const session = await fleet.spawn("claude", "Keyboard", fleet.repo, {
     projectId: project.id,
@@ -228,14 +445,12 @@ export const typeIntoTakeover = async (
   });
   const answered =
     start.kind === "answered" ? start.value : `no answer (${start.reason})`;
-  const { readBrowser } =
-    await import("../../../packages/agent/src/browser/state");
   const record = await until(
     `the project's browser is live on the ${host} host`,
-    () => readBrowser(key),
+    () => recordOf(remote),
     (now) => now?.state === "live" || now?.state === "failed",
     LIVE_WITHIN_MS
-  ).catch(() => readBrowser(key));
+  ).catch(() => recordOf(remote));
   kit.check(
     `the project's browser is live on the ${host} host (${record?.state}, ${record?.host})`,
     record?.state === "live" && record.host === host,
@@ -244,15 +459,17 @@ export const typeIntoTakeover = async (
   if (record?.state !== "live") {
     return;
   }
-  await eachPage(key, (link, at) =>
-    link.call("Page.navigate", { url: FIELD_PAGE }, at)
-  );
-  await until(
-    "the browser's page is the field page",
-    () => inPage(key, "document.title"),
-    (titles) => titles.every((title) => title === "field"),
-    30_000
-  );
+  const fieldAlone = async () => {
+    const closed = await fieldPageAlone(remote);
+    const pages = await until(
+      "the browser's one page is the field page",
+      () => pagesOf(remote),
+      (now) => now.length === 1 && now[0]?.title === "field",
+      30_000
+    ).catch(() => pagesOf(remote));
+    return { closed, pages };
+  };
+  const firstAlone = await fieldAlone();
 
   const base = await fleet.dashboard();
   const page = await kit.page("phone", { engine: "webkit" });
@@ -264,6 +481,14 @@ export const typeIntoTakeover = async (
   });
   page.on("pageerror", (error) => errors.push(String(error)));
   await open(page, `${base}/session/${session}`, '[data-slot="pane"]');
+  // Again just before the take-over: a page an extension opened as it
+  // landed, since the first, is closed too.
+  const alone = await fieldAlone();
+  kit.check(
+    `the browser stands on one page, the field page (closed ${firstAlone.closed}, then ${alone.closed} other page(s))`,
+    alone.pages.length === 1 && alone.pages[0]?.title === "field",
+    JSON.stringify(alone.pages)
+  );
 
   // 1. Take over from the session's panel: the panel opens on the browser.
   await fleet.api(`${keyPath}/takeover`, {
@@ -294,15 +519,18 @@ export const typeIntoTakeover = async (
   }
   const tapped = await until(
     "the tap focused the page's textarea",
-    () => fieldOf(key),
+    () => fieldOf(remote),
     (field) => field.focused === true,
     15_000
-  ).catch(() => fieldOf(key));
+  ).catch(() => fieldOf(remote));
   kit.check(
     `a tap at (${Math.round(over?.x ?? 0)}, ${Math.round(over?.y ?? 0)}) on the stream focuses the page's textarea`,
     tapped.focused === true,
     JSON.stringify({ over, tapped })
   );
+  if (tapped.focused !== true) {
+    await keepEvidence(kit, remote, page, "tap");
+  }
 
   // 3. Show keyboard focuses the view's keyboard field.
   const show = page.getByRole("button", {
@@ -373,15 +601,18 @@ export const typeIntoTakeover = async (
   const want = "Héll\nthe ж€🙂";
   const typed = await until(
     "the page's textarea holds what was typed",
-    () => fieldOf(key),
+    () => fieldOf(remote),
     (field) => field.value === want,
     15_000
-  ).catch(() => fieldOf(key));
+  ).catch(() => fieldOf(remote));
   kit.check(
     `the page's textarea reads ${JSON.stringify(typed.value)} (${JSON.stringify(want)}), with ${typed.enters} Enter press(es) (1)`,
     typed.value === want && typed.enters === 1,
     JSON.stringify(typed)
   );
+  if (!(typed.value === want && typed.enters === 1)) {
+    await keepEvidence(kit, remote, page, "typed");
+  }
 
   // 5. A keyboard over the well's foot: the view and its picture above it.
   const lifted = await page.evaluate(() => {
@@ -462,7 +693,7 @@ export const typeIntoTakeover = async (
   await fleet.api(`${keyPath}/handback`, { machineId: MACHINE });
   await fleet.api(`${keyPath}/remove`, { machineId: MACHINE });
   await page.close();
-};
+}
 
 const spec: Spec = {
   group: "iPhone Safari",
