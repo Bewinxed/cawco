@@ -5,10 +5,13 @@
  * at-limit.ts `fileDue`, server.ts `fileAtThreshold` and
  * `observeCompaction`, open-items.ts, the agent's compaction-points.ts).
  *
- * First the rules, pure: `fileDue` below, at and past the room, a point its
- * harness did not say, no reading and a room of 0; each harness's own point
- * (Claude Code's on a 1M and a 200K window, pi's reserve, OpenCode's
- * buffer); and the filing turn's words around the proven body.
+ * First the rules, pure: `fileDue` below, at and past the room, a reading
+ * past the whole window, a point its harness did not say, no reading and a
+ * room of 0; each harness's own point (Claude Code's on a 1M and a 200K
+ * window, pi's reserve, OpenCode's buffer); what a filing wrote, counted
+ * against what the records held as it started (open-items.ts
+ * `filingWrote`); and the words: the lines naming the harness and what the
+ * filing wrote, and the filing turn's around the proven body.
  *
  * Then on a scratch fleet (real hub, agent and sessiond; Claude Code, pi and
  * OpenCode against the mock model), the default room of 30,000. The mock
@@ -17,14 +20,23 @@
  * - (a) a turn at 120,000 files nothing;
  * - (b) a turn at exactly 137,000 files, before 167K: the rise is kept, its
  *   line says filing, the filing turn opens on the reading and the point,
- *   and its line then says filed;
+ *   and its line then says filed and what the filing turn wrote (its mock
+ *   model writes two plan steps through `todo_write`);
  * - (c) a turn at 140,000 in the same rise files nothing more;
  * - (d) the session's `/compact` re-arms it, says a filing came first, and
  *   the next request carries the Open items section;
- * - (e) re-armed, a turn at 139,000 files again.
+ * - (e) re-armed, a turn at 139,000 files again, and its line says it wrote
+ *   nothing new (its model writes nothing).
+ *
+ * (m) A turn within the room that ends while another message to the
+ * session waits files nothing then: its filing goes once that next turn
+ * ends, a turn of its own, never joined into the waiting message's.
  *
  * (f) On a 1M Claude session, it files at about 937,000 (Claude Code
- * compacts it at 967,000): not at 930,000, at 937,000.
+ * compacts it at 967,000): not at 930,000, at 937,000. (n) Then a turn at
+ * 970,000, past that point, and the next message: Claude Code compacts it
+ * on its own, its line says so (not "as asked") with its open items filed
+ * first, and the next request carries the Open items section.
  *
  * (g) A move's compaction on a Claude session whose filing turn ends past
  * the room sends no filing beside it, and its `/compact` no line of the
@@ -32,8 +44,9 @@
  *
  * (h) pi files within the room of its reserve (100,000 less 16,384), and
  * OpenCode within the room of its buffer (100,000 less 16,000): not at
- * 50,000, at 60,000. Each `/compact` of theirs is said in a line, and their
- * next request carries the Open items section.
+ * 50,000, at 60,000, its line naming the harness and saying it wrote
+ * nothing new. Each `/compact` of theirs is said in a line, and their next
+ * request carries the Open items section.
  *
  * (l) After each of their compactions, its own result files nothing (pi's
  * reports what its large kept tail leaves, within the room), and their next
@@ -60,6 +73,10 @@ import {
   piCompactsAt,
 } from "../../../packages/agent/src/harnesses/compaction-points";
 import { DEFAULT_COMPACTION } from "../../../packages/core/src/accounts";
+import type {
+  FilingStage,
+  FilingWrote,
+} from "../../../packages/core/src/context-filing";
 import {
   COMPACTION_ORIGIN,
   CONTEXT_LINE,
@@ -70,6 +87,7 @@ import { fileDue } from "../../../packages/hub/src/at-limit";
 import {
   COMPACT_FOCUS,
   filingPrompt,
+  filingWrote,
 } from "../../../packages/hub/src/open-items";
 import {
   ACCOUNT,
@@ -78,6 +96,7 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
+import { toolReply } from "../../tool-calls";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const ROOM = DEFAULT_COMPACTION.fileRoom;
@@ -105,11 +124,47 @@ const MOCK_WINDOW = 100_000;
  */
 const OPENCODE_TEMPLATE = "## Objective";
 
+/** Words in a session's first message that make its first filing turn write {@link FILED_STEPS} through `todo_write`. */
+const FILES = "[[files its plan]]";
+/** Words that make the mock answer slowly, about 3 seconds, so a second message waits behind the turn. */
+const SLOW = "[[slow]]";
+const TODO_WRITE = "mcp__cawco__todo_write";
+/** The plan steps (b)'s filing turn writes. */
+const FILED_STEPS = [
+  { content: "Carry the probe on past its compaction", status: "pending" },
+  { content: "Read the reading back after it", status: "pending" },
+];
+
+/** Whether the filing turn of the session sent {@link FILES} has called `todo_write`: once, its first filing alone. */
+let filedSteps = false;
+
 const respond = (request: Seen): Reply => {
   if (request.last.includes(OPENCODE_TEMPLATE)) {
     return {
       everyMs: 5,
       words: [`${OPENCODE_TEMPLATE}\n`, "- carry the probe on\n"],
+    };
+  }
+  // The first filing turn of the session that asked it to write its plan:
+  // its request, and the one after its ToolSearch (never a summary's).
+  if (
+    !filedSteps &&
+    request.all.includes(FILES) &&
+    request.all.includes(BODY) &&
+    (request.last.includes(BODY) || request.afterTool)
+  ) {
+    const reply = toolReply(request, TODO_WRITE, { steps: FILED_STEPS });
+    filedSteps = reply.tool?.name === TODO_WRITE;
+    return reply;
+  }
+  if (request.last.includes(SLOW)) {
+    return {
+      everyMs: 150,
+      words: Array.from({ length: 20 }, () => "slow "),
+      usage: {
+        prompt: Number(READING.exec(request.last)?.[1] ?? 10),
+        completion: 20,
+      },
     };
   }
   const reading = READING.exec(request.last)?.[1];
@@ -122,6 +177,15 @@ const respond = (request: Seen): Reply => {
     : { everyMs: 5, words: ["ok"] };
 };
 
+/** What a filing that wrote nothing new is counted as. */
+const WROTE_NOTHING: FilingWrote = {
+  notes: 0,
+  spec: false,
+  steps: 0,
+  tasks: 0,
+  todos: 0,
+};
+
 /** (0) The rules, pure, and the filing turn's words. */
 const rules = (kit: Kit) => {
   const { check } = kit;
@@ -131,6 +195,10 @@ const rules = (kit: Kit) => {
   check("fileDue: 136,999 of a 167,000 point files nothing", !due(136_999));
   check("fileDue: exactly the room short of the point files", due(137_000));
   check("fileDue: a reading past the point files", due(170_000));
+  check(
+    "fileDue: a reading past its whole window (a harness's count over it) files, as one at the point does",
+    due(250_000)
+  );
   check(
     "fileDue: a point its harness did not say files nothing, however full",
     !fileDue({ compactsAt: undefined, reported: 199_000, room: ROOM })
@@ -166,6 +234,14 @@ const rules = (kit: Kit) => {
       opencodeCompactsAt({ context: 100_000 }, { auto: false }) === undefined
   );
   const fill = { tokens: 137_000, compactsAt };
+  const filingLine = (stage: FilingStage, wrote?: FilingWrote) =>
+    contextWords.line({
+      kind: "filing",
+      fill,
+      harness: "claude",
+      stage,
+      ...(wrote ? { wrote } : {}),
+    });
   const compactedLine = (
     trigger: "auto" | "manual",
     filed: "filed" | null,
@@ -180,12 +256,58 @@ const rules = (kit: Kit) => {
       ...(failed ? { failed } : {}),
     });
   check(
-    "words: a filing line names the reading and the point in tokenWords' form, and once filed its title stands alone",
-    contextWords.line({ kind: "filing", fill, stage: "filing" }).title ===
-      "Filing its open items at 137k tokens · its harness compacts it at 167k" &&
-      contextWords.line({ kind: "filing", fill, stage: "filed" }).title ===
-        "Open items filed at 137k tokens · its harness compacts it at 167k" &&
-      contextWords.line({ kind: "filing", fill, stage: "filed" }).detail === ""
+    "words: a filing line names the reading, its harness and the point in tokenWords' form",
+    filingLine("filing").title ===
+      "Filing its open items at 137k tokens · Claude Code compacts it at 167k" &&
+      filingLine("filed").title ===
+        "Open items filed at 137k tokens · Claude Code compacts it at 167k" &&
+      filingLine("stopped").detail ===
+        "It is not asked to file again before Claude Code compacts it.",
+    JSON.stringify([filingLine("filing"), filingLine("stopped")])
+  );
+  check(
+    "words: once filed, its detail says what it wrote, each kind counted; nothing new said as such; unknown, its title alone",
+    filingLine("filed", { ...WROTE_NOTHING, steps: 2, spec: true, notes: 1 })
+      .detail === "Wrote 2 plan steps, its spec and 1 note." &&
+      filingLine("filed", { ...WROTE_NOTHING, tasks: 1 }).detail ===
+        "Wrote 1 task." &&
+      filingLine("filed", WROTE_NOTHING).detail ===
+        "Wrote nothing new to its records." &&
+      filingLine("filed").detail === "",
+    JSON.stringify([
+      filingLine("filed", { ...WROTE_NOTHING, steps: 2, spec: true, notes: 1 }),
+      filingLine("filed", WROTE_NOTHING),
+    ])
+  );
+  const held = {
+    notes: ["n-1"],
+    spec: "2026-11-05T10:00:00.000Z",
+    steps: ["pending\tRead the report", "in_progress\tWrite the fix"],
+    tasks: ["tsk-1"],
+    todos: ["tsk-1\t1\t \tCheck the gate"],
+  };
+  const later = {
+    notes: ["n-1", "n-2"],
+    spec: "2026-11-05T11:00:00.000Z",
+    steps: [
+      "pending\tRead the report",
+      "completed\tWrite the fix",
+      "pending\tRun the gate",
+    ],
+    tasks: ["tsk-1", "tsk-2"],
+    todos: ["tsk-1\t1\tx\tCheck the gate", "tsk-2\t1\t \tShip it"],
+  };
+  check(
+    "filingWrote: the same records again wrote nothing; a step closed, a step added, the spec rewritten, a task filed with its to-do, a to-do ticked and a note each count once, a task's own to-dos with it",
+    Bun.deepEquals(filingWrote(held, held), WROTE_NOTHING) &&
+      Bun.deepEquals(filingWrote(held, later), {
+        notes: 1,
+        spec: true,
+        steps: 2,
+        tasks: 1,
+        todos: 1,
+      }),
+    JSON.stringify([filingWrote(held, held), filingWrote(held, later)])
   );
   check(
     "words: a person's /compact is titled as asked, the harness's own is not, one detail for both",
@@ -235,6 +357,9 @@ interface Said {
   harness?: string;
   kind: string;
   stage?: string;
+  tokens?: number | null;
+  trigger?: string | null;
+  wrote?: FilingWrote;
 }
 
 const reads = (fleet: KitFleet) => {
@@ -369,7 +494,7 @@ const claude200k = async (kit: Kit, fleet: KitFleet, read: Reads) => {
   const { check } = kit;
   const { filings, filingSends, lines, rise, plan, turn } = read;
   const id = await fleet.spawn("claude", "Filing");
-  await turn(id, "hello");
+  await turn(id, `hello ${FILES}`);
 
   await turn(id, "below", 120_000);
   check(
@@ -410,14 +535,23 @@ const claude200k = async (kit: Kit, fleet: KitFleet, read: Reads) => {
     filed === "filed" && !plan(id),
     JSON.stringify({ lines: lines(id), plan: plan(id) })
   );
+  check(
+    "(b) its filed line counts what the filing turn wrote: the two plan steps its todo_write wrote, nothing else",
+    filedSteps &&
+      Bun.deepEquals(filings(id)[0]?.said.wrote, {
+        ...WROTE_NOTHING,
+        steps: FILED_STEPS.length,
+      }),
+    JSON.stringify({ filedSteps, lines: lines(id) })
+  );
   const filedNote = (await read.notes(id)).find((note) =>
     note.title.startsWith("Open items filed")
   );
   check(
-    "(b) its transcript draws the line by its words, its title alone",
+    "(b) its transcript draws the line by its words, naming Claude Code, and what it wrote under it",
     filedNote?.title ===
-      "Open items filed at 137k tokens · its harness compacts it at 167k" &&
-      filedNote.content === "",
+      "Open items filed at 137k tokens · Claude Code compacts it at 167k" &&
+      filedNote.content === "Wrote 2 plan steps.",
     JSON.stringify(filedNote)
   );
 
@@ -484,6 +618,84 @@ const claude200k = async (kit: Kit, fleet: KitFleet, read: Reads) => {
     !!second && rise(id)?.line_id === second.id,
     JSON.stringify({ lines: lines(id) })
   );
+  const secondFiled = await until(
+    "(e) its second filing ended",
+    () => filings(id)[1]?.said,
+    (said) => said?.stage === "filed",
+    120_000
+  ).catch(() => filings(id)[1]?.said);
+  check(
+    "(e) a filing turn that writes nothing says so: it wrote nothing new",
+    Bun.deepEquals(secondFiled?.wrote, WROTE_NOTHING),
+    JSON.stringify(secondFiled)
+  );
+};
+
+/**
+ * (m) A turn within the room that ends while a message to the session
+ * waits behind it: no filing then; it goes once the next turn ends, a turn
+ * of its own.
+ */
+const midTurn = async (kit: Kit, fleet: KitFleet, read: Reads) => {
+  const { check } = kit;
+  const id = await fleet.spawn("claude", "Filing mid-turn");
+  await read.turn(id, "hello");
+  const first = `busy one ${SLOW} [[reading 137000]]`;
+  const second = `busy two ${SLOW} [[reading 138000]]`;
+  const asked = fleet.seen.length;
+  await fleet.send(id, first);
+  await until(
+    "(m) the first turn asked",
+    () => fleet.seen.slice(asked).find((one) => one.last.includes(first)),
+    Boolean,
+    120_000
+  );
+  await fleet.send(id, second);
+  const secondAsked = await until(
+    "(m) the second turn asked",
+    () => fleet.seen.slice(asked).find((one) => one.last.includes(second)),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  const started = await read.filingAfter(id, 0);
+  const filingAsked = await until(
+    "(m) the filing turn asked",
+    () => fleet.seen.slice(asked).find((one) => one.last.includes(BODY)),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  const startedAt = started
+    ? fleet.query<{ at: number }>(
+        "SELECT at FROM session_lines WHERE instance_id = ? AND kind = 'context' AND id = ?",
+        id,
+        started.id
+      )[0]?.at
+    : undefined;
+  check(
+    "(m) the first turn's end, its reading within the room, files nothing while the second message waits: its filing starts once the second turn has run (its answer takes 3s)",
+    !!secondAsked &&
+      startedAt !== undefined &&
+      startedAt >= secondAsked.at + 2000 &&
+      started?.said.fill?.tokens === 138_000,
+    JSON.stringify({
+      secondAskedAt: secondAsked?.at,
+      startedAt,
+      lines: read.lines(id),
+    })
+  );
+  check(
+    "(m) the filing is a turn of its own, after the second, never joined into it",
+    !!filingAsked &&
+      !!secondAsked &&
+      filingAsked.at > secondAsked.at &&
+      !secondAsked.body.includes(BODY) &&
+      read.filingSends(id).length === 1,
+    JSON.stringify({
+      filingAskedAt: filingAsked?.at,
+      secondAskedAt: secondAsked?.at,
+      sends: read.filingSends(id).length,
+    })
+  );
 };
 
 /** (f) A 1M Claude session, compacted by Claude Code at 967,000. */
@@ -511,6 +723,67 @@ const claude1m = async (kit: Kit, fleet: KitFleet, read: Reads) => {
     started?.said.fill?.compactsAt === 967_000 &&
       started?.said.fill?.tokens === 937_000,
     JSON.stringify({ window, lines: read.lines(id) })
+  );
+  await until(
+    "(f) its filing ended",
+    () => read.filings(id)[0]?.said.stage,
+    (stage) => stage === "filed",
+    120_000
+  ).catch(() => undefined);
+
+  // (n) Past its point, Claude Code compacts it on its own before its next
+  // request.
+  const { lines, rise } = read;
+  await read.turn(id, "past the point", 970_000);
+  const compactions = () =>
+    lines(id).filter((line) => line.said.kind === "compacted");
+  const asked = fleet.seen.length;
+  await fleet.send(id, "after the point");
+  const own = await until(
+    "(n) Claude Code's own compaction's line",
+    () => compactions()[0],
+    Boolean,
+    180_000
+  ).catch(() => undefined);
+  check(
+    "(n) Claude Code compacts a 1M session past its point on its own, and its line says so, its filing first",
+    own?.said.trigger === "auto" &&
+      own.said.harness === "claude" &&
+      own.said.filed === "filed" &&
+      !rise(id),
+    JSON.stringify({ lines: lines(id), rise: rise(id) })
+  );
+  const ownNote = (await read.notes(id)).find((note) =>
+    note.title.startsWith("Compacted by")
+  );
+  const ownTitle = contextWords.line({
+    kind: "compacted",
+    filed: "filed",
+    harness: "claude",
+    tokens: own?.said.tokens ?? null,
+    trigger: "auto",
+  }).title;
+  check(
+    "(n) its line is titled as Claude Code's own compaction at what it reported, its open items filed first, not as one a person asked for",
+    own?.said.tokens !== null &&
+      own?.said.tokens !== undefined &&
+      own.said.tokens >= 970_000 &&
+      ownNote?.title === ownTitle,
+    JSON.stringify({ ownNote, ownTitle })
+  );
+  const listed = await until(
+    "(n) the request after Claude Code's own compaction",
+    () =>
+      fleet.seen
+        .slice(asked)
+        .find((one) => one.last.includes("after the point")),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  check(
+    "(n) the request after it carries the Open items section",
+    !!listed?.body.includes(OPEN_ITEMS),
+    listed ? listed.body.slice(0, 2000) : "(no request)"
   );
 };
 
@@ -638,17 +911,23 @@ const piAndOpencode = async (
   await read.turn(id, "at", 60_000);
   const started = await read.filingAfter(id, 0);
   check(
-    `(h) ${harness} files at 60,000, within the room of where it compacts it, ${point}`,
+    `(h) ${harness} files at 60,000, within the room of where it compacts it, ${point}, its line naming it`,
     started?.said.fill?.compactsAt === point &&
-      started?.said.fill?.tokens === 60_000,
+      started?.said.fill?.tokens === 60_000 &&
+      started.said.harness === harness,
     JSON.stringify(read.lines(id))
   );
-  await until(
+  const filed = await until(
     `${harness}'s filing ended`,
-    () => read.filings(id)[0]?.said.stage,
-    (stage) => stage === "filed",
+    () => read.filings(id)[0]?.said,
+    (said) => said?.stage === "filed",
     120_000
-  ).catch(() => undefined);
+  ).catch(() => read.filings(id)[0]?.said);
+  check(
+    `(h) ${harness}'s filed line says its turn wrote nothing new`,
+    Bun.deepEquals(filed?.wrote, WROTE_NOTHING),
+    JSON.stringify(filed)
+  );
 
   await read.turn(id, `read this ${LONG_TEXT}`);
   await fleet.send(id, "/compact");
@@ -828,6 +1107,7 @@ const run = async (kit: Kit) => {
   await fleet.accountSignedIn();
   const read = reads(fleet);
   await claude200k(kit, fleet, read);
+  await midTurn(kit, fleet, read);
   await claude1m(kit, fleet, read);
   await moveCompaction(kit, fleet, read);
   for (const harness of ["pi", "opencode"] as const) {

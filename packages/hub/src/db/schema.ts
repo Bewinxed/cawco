@@ -76,6 +76,7 @@ import {
   EndedBySchema,
   EnvelopeShape,
   ExternalActorSchema,
+  FiledRecordsSchema,
   FleetItemStatusSchema,
   FleetMcpConfigSchema,
   FleetRefreshSchema,
@@ -2851,6 +2852,12 @@ export const limitCompactions = sqliteTable("limit_compactions", {
   move: storedJson(AccountMoveSchema)("move"),
   /** The reading a filing at the threshold fired at; null for a move's. */
   fill: storedJson(ContextFillSchema)("fill"),
+  /**
+   * What the session's records held as its filing at the threshold started
+   * (core `FiledRecords`), which what the filing wrote is counted against as
+   * its turn ends; null for a move's, and when they could not be read.
+   */
+  records: storedJson(FiledRecordsSchema)("records"),
   /** Its carry-on's send, when its limit or sign-in stopped it: the first step. */
   carryUuid: text("carry_uuid"),
   filingUuid: text("filing_uuid").notNull(),

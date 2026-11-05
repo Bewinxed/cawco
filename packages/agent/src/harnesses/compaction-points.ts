@@ -17,6 +17,18 @@
  * the model's context window unless the person set another
  * (`autoCompactWindow`, `CLAUDE_CODE_AUTO_COMPACT_WINDOW`), which this does
  * not read: 1M → 967,000, 200K → 167,000.
+ *
+ * That point is where it compacts a native 1M model (claude-sonnet-5 on the
+ * scratch fleet compacts on its own past 967,000). A model whose window
+ * Claude Code resolves to `source:"auto"` (a 200K claude-haiku-4-5) skips
+ * it, `if(J$()&&!DEe(n,r)&&!S)return!1` with `function DEe(e,n){return
+ * xb(e,n).source!=="auto"}`, and compacts only at the model's context limit
+ * ("If you don't set an auto-compact window, Claude Code compacts when the
+ * conversation reaches the model's context limit",
+ * https://code.claude.com/docs/en/model-config#default-auto-compact-thresholds):
+ * there this point is up to 33,000 short of where it compacts, so the hub
+ * files that much earlier than its room. Which source a session's window
+ * has, the SDK's types do not say.
  */
 const CLAUDE_OUTPUT_RESERVE_CAP = 20_000;
 const CLAUDE_AUTO_COMPACT_MARGIN = 13_000;

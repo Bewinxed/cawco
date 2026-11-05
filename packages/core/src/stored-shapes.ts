@@ -68,7 +68,9 @@ import { CONNECTION_AUTHS, CONNECTION_TRANSPORTS } from "./connections";
 import type {
   ContextFill as ContextFillType,
   ContextLine as ContextLineType,
+  FiledRecords as FiledRecordsType,
   FilingStage as FilingStageType,
+  FilingWrote as FilingWroteType,
 } from "./context-filing";
 import type {
   ContinuationRead as ContinuationReadType,
@@ -1518,12 +1520,26 @@ const FilingStageShape = declared(
   "packages/core/src/context-filing.ts"
 );
 
+const FilingWroteShape = declared(
+  z.object({
+    notes: z.number(),
+    spec: z.boolean(),
+    steps: z.number(),
+    tasks: z.number(),
+    todos: z.number(),
+  }),
+  "FilingWrote",
+  "packages/core/src/context-filing.ts"
+);
+
 const ContextLineShape = declared(
   z.union([
     z.object({
       kind: z.literal("filing"),
       fill: ContextFillShape,
+      harness: HarnessKindShape,
       stage: FilingStageShape,
+      wrote: FilingWroteShape.optional(),
     }),
     z.object({
       kind: z.literal("compacted"),
@@ -2129,6 +2145,20 @@ const ExternalActorShape = declared(
 );
 export const ExternalActorSchema: z.ZodType<ExternalActorType> =
   ExternalActorShape;
+
+const FiledRecordsShape = declared(
+  z.object({
+    notes: z.array(z.string()),
+    spec: z.string().nullable(),
+    steps: z.array(z.string()),
+    tasks: z.array(z.string()),
+    todos: z.array(z.string()),
+  }),
+  "FiledRecords",
+  "packages/core/src/context-filing.ts"
+);
+export const FiledRecordsSchema: z.ZodType<FiledRecordsType> =
+  FiledRecordsShape;
 
 const FleetRefreshShape = declared(
   z.object({
@@ -3206,6 +3236,7 @@ prove<
     Same<z.output<typeof ReleaseManifestShape>, ReleaseManifestType>,
     Same<z.output<typeof ContextFillShape>, ContextFillType>,
     Same<z.output<typeof FilingStageShape>, FilingStageType>,
+    Same<z.output<typeof FilingWroteShape>, FilingWroteType>,
     Same<z.output<typeof ContextLineShape>, ContextLineType>,
     Same<z.output<typeof RoutineScheduleShape>, RoutineScheduleType>,
     Same<z.output<typeof WorkItemStateShape>, WorkItemStateType>,
@@ -3244,6 +3275,7 @@ prove<
     Same<z.output<typeof EnvelopeShape>, EnvelopeType>,
     Same<z.output<typeof ExternalSourceShape>, ExternalSourceType>,
     Same<z.output<typeof ExternalActorShape>, ExternalActorType>,
+    Same<z.output<typeof FiledRecordsShape>, FiledRecordsType>,
     Same<z.output<typeof FleetRefreshShape>, FleetRefreshType>,
     Same<z.output<typeof StatusOptionShape>, StatusOptionType>,
     Same<z.output<typeof GithubProjectShape>, GithubProjectType>,

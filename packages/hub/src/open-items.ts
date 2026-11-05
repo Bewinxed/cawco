@@ -37,7 +37,11 @@ import {
   todoLink,
 } from "@cawco/core";
 import { askLink } from "@cawco/core/asks";
-import type { ContextFill } from "@cawco/core/context-filing";
+import type {
+  ContextFill,
+  FiledRecords,
+  FilingWrote,
+} from "@cawco/core/context-filing";
 import { contextWords } from "@cawco/core/words/context";
 import type { QuestionAnswer } from "./artifacts/questions";
 import type { AskedOf } from "./artifacts/service";
@@ -297,6 +301,60 @@ export function openItemsSection(
         ]),
   ].join("\n");
 }
+
+/** A to-do as {@link recordsOf} compares it: its task, place, tick and words. */
+const todoRecord =
+  (task: string) =>
+  (todo: TaskTodo): string =>
+    [task, todo.path, todo.done ? "x" : " ", todo.text].join("\t");
+
+/**
+ * What `rows` hold, each record one line to compare (core `FiledRecords`):
+ * what a filing at the threshold counts what it wrote against
+ * ({@link filingWrote}). A step is its status and words, whatever id its
+ * writer gave it this time.
+ */
+export const recordsOf = (rows: OpenItemRows): FiledRecords => ({
+  steps: (rows.plan?.steps ?? []).map((step) =>
+    [step.status, step.content].join("\t")
+  ),
+  spec: rows.plan?.spec?.at ?? null,
+  todos: [
+    ...(rows.plan?.taskId
+      ? (rows.plan.todos ?? []).map(todoRecord(rows.plan.taskId))
+      : []),
+    ...rows.tasks.flatMap((task) => task.todos.map(todoRecord(task.id))),
+  ],
+  tasks: rows.tasks.map((task) => task.id),
+  notes: rows.notes.map((note) => note.id),
+});
+
+/**
+ * What a filing wrote, from its session's records as it started (`before`)
+ * and as its turn ended (`after`): each kind of record of `after` not in
+ * `before`, counted (a step closed or reworded counts, a step dropped does
+ * not), and whether its spec was written since. The to-dos of a task it
+ * filed count with that task, not again as to-dos.
+ */
+export const filingWrote = (
+  before: FiledRecords,
+  after: FiledRecords
+): FilingWrote => {
+  const fresh = (was: readonly string[], now: readonly string[]) => {
+    const had = new Set(was);
+    return now.filter((one) => !had.has(one));
+  };
+  const filed = new Set(fresh(before.tasks, after.tasks));
+  return {
+    steps: fresh(before.steps, after.steps).length,
+    spec: after.spec !== null && after.spec !== before.spec,
+    todos: fresh(before.todos, after.todos).filter(
+      (todo) => !filed.has(todo.slice(0, todo.indexOf("\t")))
+    ).length,
+    tasks: filed.size,
+    notes: fresh(before.notes, after.notes).length,
+  };
+};
 
 export interface OpenItemsDeps {
   db: Pick<DbShape, "asks" | "getInstancesByIds" | "workItem">;

@@ -1,5 +1,5 @@
 import type { AccountMove } from "@cawco/core";
-import type { ContextFill } from "@cawco/core/context-filing";
+import type { ContextFill, FiledRecords } from "@cawco/core/context-filing";
 import { asc, eq, inArray } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
@@ -53,17 +53,25 @@ interface CompactionSteps {
  * ended: a move's that compacts it (`move`, its line), its filing turn then
  * its harness's `/compact` (`compactUuid`); or its filing at its context
  * threshold (`fill`, the reading it fired at), the filing turn alone, its
- * harness compacting it later on its own.
+ * harness compacting it later on its own, with what its records held as it
+ * started (`records`; null when they could not be read), which what it
+ * wrote is counted against.
  */
 export type LimitCompaction = CompactionSteps &
   (
-    | { compactUuid: string; fill: null; move: AccountMove }
-    | { compactUuid: null; fill: ContextFill; move: null }
+    | { compactUuid: string; fill: null; move: AccountMove; records: null }
+    | {
+        compactUuid: null;
+        fill: ContextFill;
+        move: null;
+        records: FiledRecords | null;
+      }
   );
 
 /**
- * A session whose context reached its policy's `fileAtPct` since its
- * harness last compacted it (schema `contextRises`): one rise files once.
+ * A session whose context came within its policy's `fileRoom` of its
+ * harness's compaction point since its harness last compacted it (schema
+ * `contextRises`): one rise files once.
  */
 export interface ContextRise {
   at: number;
@@ -169,10 +177,17 @@ const toCompaction = (
       move: row.move,
       compactUuid: row.compactUuid,
       fill: null,
+      records: null,
     };
   }
   if (row.fill) {
-    return { ...steps, fill: row.fill, compactUuid: null, move: null };
+    return {
+      ...steps,
+      fill: row.fill,
+      compactUuid: null,
+      move: null,
+      records: row.records,
+    };
   }
   return undefined;
 };

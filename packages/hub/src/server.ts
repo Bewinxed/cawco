@@ -482,7 +482,9 @@ import { compressAnswer } from "@cawco/core/compress-answer";
 import type {
   ContextFill,
   ContextLine,
+  FiledRecords,
   FilingStage,
+  FilingWrote,
 } from "@cawco/core/context-filing";
 import { decidesFileProblems } from "@cawco/core/decides";
 import { PICTURES_TAG } from "@cawco/core/decisions-library";
@@ -886,7 +888,13 @@ import {
   notificationRoutes,
   turnCollapseId,
 } from "./notifications";
-import { COMPACT_FOCUS, createOpenItems, filingPrompt } from "./open-items";
+import {
+  COMPACT_FOCUS,
+  createOpenItems,
+  filingPrompt,
+  filingWrote,
+  recordsOf,
+} from "./open-items";
 import { watchPairingRequests } from "./pairing-requests";
 import {
   type AnswerFrom,
@@ -29108,6 +29116,7 @@ export const createServer = (
       lineId: line,
       move,
       fill: null,
+      records: null,
       carryUuid: stopped ? crypto.randomUUID() : null,
       filingUuid: crypto.randomUUID(),
       compactUuid: crypto.randomUUID(),
@@ -29150,7 +29159,11 @@ export const createServer = (
   ): void => {
     db.atLimit.dropCompaction(plan.instanceId);
     if (plan.move === null) {
-      sayFiling(plan, stage === "stopped" ? "stopped" : "filed");
+      if (stage === "stopped") {
+        sayFiling(plan, "stopped");
+      } else {
+        detach(sayFiled(plan), "a filing's line");
+      }
       const [row] = db.getInstancesByIds([plan.instanceId]);
       console.info(
         `[context] ${row ? sessionName(row) : plan.instanceId}: ${why}. What was sent to it meanwhile goes now.`
@@ -29681,10 +29694,15 @@ export const createServer = (
       : {};
   };
 
-  /** Says a filing's line again at `stage`, where it stood. */
+  /**
+   * Says a filing's line again at `stage`, where it stood: once filed, with
+   * what it wrote (`wrote`, when what its records held as it started is
+   * known).
+   */
   const sayFiling = (
     plan: { fill: ContextFill | null; instanceId: string; lineId: string },
-    stage: FilingStage
+    stage: FilingStage,
+    wrote?: FilingWrote
   ): void => {
     const [row] = db.getInstancesByIds([plan.instanceId]);
     if (!(row && plan.fill)) {
@@ -29696,8 +29714,41 @@ export const createServer = (
     noteContext(
       row,
       plan.lineId,
-      { kind: "filing", fill: plan.fill, stage },
+      {
+        kind: "filing",
+        fill: plan.fill,
+        harness: row.harness as HarnessKind,
+        stage,
+        ...(wrote ? { wrote } : {}),
+      },
       at
+    );
+  };
+
+  /**
+   * A filing at the threshold whose turn ended: its line says it filed, and
+   * what it wrote, counted against what its records held as it started
+   * (open-items.ts `filingWrote`); with those unknown, or its records
+   * unreadable now, it says it filed alone.
+   */
+  const sayFiled = async (
+    plan: Extract<LimitCompaction, { move: null }>
+  ): Promise<void> => {
+    const after = plan.records
+      ? await openItems
+          .rows(plan.instanceId)
+          .then(recordsOf)
+          .catch((error: unknown) => {
+            console.warn(
+              `[context] ${plan.instanceId.slice(0, 8)}: what its filing wrote could not be read: ${error instanceof Error ? error.message : String(error)}`
+            );
+            return null;
+          })
+      : null;
+    sayFiling(
+      plan,
+      "filed",
+      plan.records && after ? filingWrote(plan.records, after) : undefined
     );
   };
 
@@ -29782,6 +29833,17 @@ export const createServer = (
       if (!fileDue({ compactsAt, reported: row.contextTokens, room })) {
         return;
       }
+      // What its records hold before its filing turn, read before the idle
+      // check, so the filing follows that check with no wait between.
+      const records = await openItems
+        .rows(instanceId)
+        .then(recordsOf)
+        .catch((error: unknown) => {
+          console.warn(
+            `[context] ${sessionName(row)}: its records could not be read before its filing, so its line will not say what it wrote: ${error instanceof Error ? error.message : String(error)}`
+          );
+          return null;
+        });
       if (!(await sessionIdle(row))) {
         console.info(
           `[context] ${sessionName(row)} is within ${room} tokens of where its harness compacts it (${compactsAt}) but its machine says it is not between turns; it is asked again at its next turn's end.`
@@ -29797,7 +29859,7 @@ export const createServer = (
       ) {
         return;
       }
-      startFiling(now, { tokens: now.contextTokens, compactsAt });
+      startFiling(now, { tokens: now.contextTokens, compactsAt }, records);
     } finally {
       thresholdChecks.delete(instanceId);
     }
@@ -29807,18 +29869,29 @@ export const createServer = (
    * Starts `row`'s filing at its context threshold: its rise, so this rise
    * files once; its line; and its plan, the filing turn alone ({@link
    * compactionSend}), which goes ahead of everything it is owed while all
-   * else waits until that turn ends.
+   * else waits until that turn ends, kept with what its records hold now
+   * (`records`), which what it writes is counted against.
    */
-  const startFiling = (row: InstanceRow, fill: ContextFill): void => {
+  const startFiling = (
+    row: InstanceRow,
+    fill: ContextFill,
+    records: FiledRecords | null
+  ): void => {
     const lineId = `filing-${crypto.randomUUID()}`;
     db.atLimit.putRise({ instanceId: row.id, lineId, at: Date.now() });
-    noteContext(row, lineId, { kind: "filing", fill, stage: "filing" });
+    noteContext(row, lineId, {
+      kind: "filing",
+      fill,
+      harness: row.harness as HarnessKind,
+      stage: "filing",
+    });
     const plan: LimitCompaction = {
       instanceId: row.id,
       stage: "filing",
       lineId,
       move: null,
       fill,
+      records,
       carryUuid: null,
       filingUuid: crypto.randomUUID(),
       compactUuid: null,
