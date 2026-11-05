@@ -108,6 +108,13 @@ interface Target {
   url: string;
 }
 
+/** Chromium's own UI, listed as pages (`chrome://omnibox-popup.top-chrome/`): no tab a person sees, and none a close removes. */
+const CHROMIUM_UI = /^(chrome|chrome-untrusted|devtools):\/\//u;
+
+/** A page a person can see: a tab, not a piece of Chromium's own UI. */
+const seenPage = (target: Target): boolean =>
+  target.type === "page" && !CHROMIUM_UI.test(target.url);
+
 /** The browser's DevTools, through its own port on this machine, for `act`. */
 const withDevtools = async <T>(
   remote: Remote,
@@ -152,11 +159,11 @@ interface PageSays {
   visible: string;
 }
 
-/** Every page of the browser, each as it says ({@link PAGE_SAYS}); one that doesn't answer says why in its title. */
+/** Every page a person can see ({@link seenPage}), each as it says ({@link PAGE_SAYS}); one that does not answer says why in its title. */
 const pagesOf = (remote: Remote): Promise<PageSays[]> =>
   withDevtools(remote, async (link, targets) => {
     const said: PageSays[] = [];
-    for (const page of targets.filter((one) => one.type === "page")) {
+    for (const page of targets.filter(seenPage)) {
       const url = page.url.slice(0, 60);
       try {
         const session = await link.attach(page.targetId);
@@ -182,16 +189,19 @@ const pagesOf = (remote: Remote): Promise<PageSays[]> =>
 
 /**
  * One step toward the browser standing on one page, the field page: a tab
- * opened on it when none is, then every other page closed (an extension the
- * container's policy installs may open its own as it lands), so the page
- * brought to the front and the one read back are the field page. The field
+ * opened on it when none is, then every other page a person can see closed
+ * (an extension the container's policy installs may open its own as it
+ * lands), so the page brought to the front and the one read back are the
+ * field page. Chromium's own UI listed as a page is left be: no close
+ * removes it (r441 closed `chrome://omnibox-popup.top-chrome/` 320 times).
+ * The field
  * page is opened first and never closed: a browser whose last window closes
  * quits, and its DevTools connection with it (r440: neko's Chromium, which
  * its supervisor starts again). Answers how many pages it closed.
  */
 const towardFieldPage = (remote: Remote): Promise<number> =>
   withDevtools(remote, async (link, targets) => {
-    const pages = targets.filter((one) => one.type === "page");
+    const pages = targets.filter(seenPage);
     let field = pages.find((one) => one.url === FIELD_PAGE)?.targetId;
     if (!field) {
       const made = await link.call("Target.createTarget", { url: FIELD_PAGE });
@@ -345,7 +355,7 @@ const keepEvidence = async (
   await keep(`${when}-pages.png`, () =>
     withDevtools(remote, async (link, targets) => {
       let n = 0;
-      for (const one of targets.filter((target) => target.type === "page")) {
+      for (const one of targets.filter(seenPage)) {
         const shot = await link.call(
           "Page.captureScreenshot",
           { format: "png" },
