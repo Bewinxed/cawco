@@ -426,10 +426,18 @@ interface RenderRead {
   render?: { undrawn?: SectionUndrawn[] };
 }
 
-/** A detailed answer as a {@link RenderRead}; empty when it is no record. */
+/**
+ * The note Claude Code puts after a tool result's picture once it keeps the
+ * picture as a file of its own (`[Image: source: <its path>]`): the session
+ * reads the hub's record, then that line. Run r468's 2g answered its record
+ * whole, then `[Image: source: …/tool-results/mcp-cawco-blob-….png]`.
+ */
+const PICTURE_NOTE = /\s*\[Image: source: [^\]\n]*\]\s*$/u;
+
+/** A detailed answer as a {@link RenderRead}, the harness's note of its picture let go; empty when it is no record. */
 const renderRead = (said: string): RenderRead => {
   try {
-    return JSON.parse(said) as RenderRead;
+    return JSON.parse(said.replace(PICTURE_NOTE, "")) as RenderRead;
   } catch {
     return {};
   }
