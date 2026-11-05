@@ -52,8 +52,8 @@ export interface ProjectTypes {
 
 /**
  * Create and edit are the same route on the hub — `PUT` upserts by name. Its
- * body is the fields the route takes: the name rides the path, and
- * `cawcoTodos` and `role` are the hub's to send (core `DelegateType`).
+ * body is the fields the route takes: the name rides the path, and `role`
+ * is a project type file's alone (core `DelegateType`).
  */
 export const saveDelegateType = (draft: DelegateType): Promise<DelegateType> =>
   hubCall<DelegateType>(

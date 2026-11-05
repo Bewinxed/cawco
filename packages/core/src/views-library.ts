@@ -152,7 +152,7 @@ const TOOLS = {
   tasks: {
     description:
       "The project's tasks, in rank order, each with its stage, kind, delegate type, labels and dates. Every filter is optional.",
-    input: z.object({
+    input: z.strictObject({
       stage: z.string().optional().describe("Only tasks in this stage."),
       kind: kind.optional().describe("Only tasks in stages of this kind."),
       label: z.string().optional().describe("Only tasks with this label."),
@@ -164,7 +164,7 @@ const TOOLS = {
   stages: {
     description:
       "The project's stages in order, each with how many tasks are in it now, and the counts by kind.",
-    input: z.object({}),
+    input: z.strictObject({}),
     output: z.object({
       project: z.object({ id: z.string(), name: z.string() }),
       stages: z.array(stage),
@@ -175,7 +175,7 @@ const TOOLS = {
   routines: {
     description:
       "The project's routines, each with its schedule and its newest runs: when, how each ended, what it spent.",
-    input: z.object({
+    input: z.strictObject({
       runs: z
         .number()
         .int()
@@ -191,7 +191,7 @@ const TOOLS = {
   spend: {
     description:
       "What the project's delegated work spent over the last `days`, in dollars: per routine, and per delegate type.",
-    input: z.object({
+    input: z.strictObject({
       days: z
         .number()
         .int()
@@ -223,7 +223,7 @@ const TOOLS = {
   events: {
     description:
       "The newest inbound events from outside (GitHub, polled connections), newest first, and which routine took each.",
-    input: z.object({
+    input: z.strictObject({
       limit: z
         .number()
         .int()
@@ -241,9 +241,44 @@ const TOOLS = {
   { description: string; input: z.ZodType; output: z.ZodType }
 >;
 
-/** A view tool's input schema: what the hub's route checks a call against. */
-export const viewToolInput = <T extends ViewToolName>(name: T) =>
-  TOOLS[name].input;
+/**
+ * A view tool's input schema, strict: the one schema every door holds a
+ * call to (the draft check, the hub's route, `view_query`), so a key the
+ * tool doesn't take is refused at each, never stripped at one.
+ */
+export const viewToolInput = <T extends ViewToolName>(
+  name: T
+): (typeof TOOLS)[T]["input"] => TOOLS[name].input;
+
+/**
+ * What is wrong with a `Query(name, args)` as a view writes it: `keys`, every
+ * key it gives, and `values`, those whose values are literal (one given by an
+ * expression is read only when the view draws). The keys the tool doesn't
+ * take, and each literal value its schema refuses, with the schema's words.
+ */
+export const viewToolArgsFaults = (
+  name: ViewToolName,
+  keys: readonly string[],
+  values: Readonly<Record<string, unknown>>
+): { unknown: string[]; wrong: { field: string; reason: string }[] } => {
+  const shape: Record<string, z.ZodType> = TOOLS[name].input.shape;
+  return {
+    unknown: keys.filter((key) => !Object.hasOwn(shape, key)),
+    wrong: Object.entries(values).flatMap(([field, value]) => {
+      const parsed = Object.hasOwn(shape, field)
+        ? shape[field]?.safeParse(value)
+        : undefined;
+      return parsed && !parsed.success
+        ? [
+            {
+              field,
+              reason: parsed.error.issues.map((one) => one.message).join("; "),
+            },
+          ]
+        : [];
+    }),
+  };
+};
 
 /** The view tools as OpenUI's prompt lists them: name, description, input and output as JSON Schema. */
 export const viewToolSpecs = (): ToolSpec[] =>

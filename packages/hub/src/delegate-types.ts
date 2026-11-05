@@ -46,7 +46,6 @@ const rowToType = (row: DelegateTypeRow): DelegateType => ({
   ...(row.skills ? { skills: JSON.parse(row.skills) } : {}),
   ...(row.deny_tools ? { denyTools: JSON.parse(row.deny_tools) } : {}),
   ...(row.may_start ? { mayStart: JSON.parse(row.may_start) } : {}),
-  cawcoTodos: true,
   ...(row.account ? { account: row.account } : {}),
   ...(row.connections ? { connections: JSON.parse(row.connections) } : {}),
 });

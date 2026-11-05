@@ -1995,7 +1995,6 @@ const CompactionShape = declared(
 const AtLimitShape = declared(
   z.object({
     compaction: CompactionShape,
-    delegateWork: z.literal("move"),
     move: z.boolean(),
     moveWholeUnderK: z.number(),
     staleAfterHours: z.number(),

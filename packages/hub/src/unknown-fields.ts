@@ -9,6 +9,7 @@
  * declares it, so the 422 names exactly what the caller sent wrong.
  */
 
+import { unrecognizedKeys } from "@cawco/core/unrecognized-keys";
 import { ValidationError } from "elysia";
 
 /** A JSON Schema node as TypeBox builds one, read loosely. */
@@ -82,6 +83,11 @@ export const unknownFieldsOf = (
   if (!(error instanceof ValidationError) || error.status !== 422) {
     return null;
   }
-  const fields = unknownFields(error.schema, error.value);
+  // A TypeBox schema is read against the value; a Standard Schema's (zod's
+  // `z.strictObject`: core `viewToolInput`) own issues name each key.
+  const fields =
+    error.schema === undefined
+      ? unrecognizedKeys(error.errors)
+      : unknownFields(error.schema, error.value);
   return fields.length > 0 ? { fields, on: error.type ?? "body" } : null;
 };

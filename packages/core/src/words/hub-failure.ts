@@ -25,7 +25,18 @@ export const hubFailureWords = {
    * caller on an old shape hears which field.
    */
   unknownFields: (on: string, fields: string[]) =>
-    `The request's ${on} has ${fields.map((one) => `\`${one}\``).join(", ")}, which this route doesn't take.`,
+    `The request's ${on} has ${fieldList(fields)}, which this route doesn't take.`,
+  /**
+   * A view's `Query()` given arguments its tool doesn't take (core
+   * views-library `viewToolArgsFaults`): `call` names it as the view writes
+   * it (`rows = Query("tasks", …)`), each field by its dotted path. The
+   * draft check and `view_query` say it alike.
+   */
+  unknownArguments: (call: string, tool: string, fields: string[]) =>
+    `${call} has ${fieldList(fields)}, which the ${tool} tool doesn't take.`,
+  /** A view's `Query()` argument its tool's schema refuses, in the schema's own words. No stop: the reason ends it. */
+  wrongArgument: (call: string, field: string, reason: string) =>
+    `${call}'s \`${field}\`: ${reason}`,
   /**
    * A request that got no answer: what happened, why, and the way back. The
    * browser's own words ("Failed to fetch") are never the what-happened.
@@ -40,3 +51,7 @@ export const hubFailureWords = {
   promptUnreached:
     "Your message may not have gone: the hub didn't answer. Your words are back in the field. Send again once the hub answers, and it goes once.",
 };
+
+/** Fields named in code type, in the order given. */
+const fieldList = (fields: string[]): string =>
+  fields.map((one) => `\`${one}\``).join(", ");

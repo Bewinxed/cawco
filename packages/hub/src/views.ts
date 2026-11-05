@@ -40,7 +40,9 @@ import {
 } from "@cawco/core";
 import type { TaskSummary } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
+import { unrecognizedKeys } from "@cawco/core/unrecognized-keys";
 import { viewToolInput } from "@cawco/core/views-library";
+import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import { Elysia, t } from "elysia";
 import type { Blocks } from "./blocks";
 import type { DbShape } from "./db";
@@ -289,9 +291,18 @@ export const createViews = ({ db, projectName, tasks }: ViewsDeps) => {
   ): Promise<unknown> | unknown => {
     const parsed = viewToolInput(tool).safeParse(args ?? {});
     if (!parsed.success) {
+      // A key the tool doesn't take, named as the draft check and the
+      // route name it (core `viewToolInput`, one strict schema at every door).
+      const unknown = unrecognizedKeys(parsed.error.issues);
       throw new FolderRefusal(
-        400,
-        `${tool}'s arguments: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "(all)"} ${issue.message}`).join("; ")}.`
+        unknown.length ? 422 : 400,
+        unknown.length
+          ? hubFailureWords.unknownArguments(
+              `Query("${tool}", …)`,
+              tool,
+              unknown
+            )
+          : `${tool}'s arguments: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "(all)"} ${issue.message}`).join("; ")}.`
       );
     }
     const input = parsed.data as Record<string, never>;
@@ -408,7 +419,6 @@ const VIEW_NAME_PARAM = t.Object({
   id: t.String(),
   name: t.String({ pattern: VIEW_NAME.source }),
 });
-const STAGE_KIND = t.Union(STAGE_KINDS.map((kind) => t.Literal(kind)));
 
 /**
  * What removing a kept view does, in the hub's words: its file goes as a
@@ -505,15 +515,14 @@ export const viewRoutes = (
         }
       }
     )
-    // The view tools: one route each, its body the tool's arguments.
+    // The view tools: one route each, its body the tool's arguments, held
+    // to the tool's one strict schema (core `viewToolInput`), a zod schema
+    // Elysia takes as a Standard Schema (elysia dist/validator/index.mjs:
+    // `if ("~standard" in schema) return new StandardValidator(schema)`).
     .post(
       "/api/projects/:id/view-tools/tasks",
       {
-        body: t.Object({
-          stage: t.Optional(t.String()),
-          kind: t.Optional(STAGE_KIND),
-          label: t.Optional(t.String()),
-        }),
+        body: viewToolInput("tasks"),
       },
       async ({ params, body }) => {
         try {
@@ -525,7 +534,7 @@ export const viewRoutes = (
     )
     .post(
       "/api/projects/:id/view-tools/stages",
-      { body: t.Object({}) },
+      { body: viewToolInput("stages") },
       async ({ params }) => {
         try {
           return await views.stages(params.id);
@@ -537,9 +546,7 @@ export const viewRoutes = (
     .post(
       "/api/projects/:id/view-tools/routines",
       {
-        body: t.Object({
-          runs: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
-        }),
+        body: viewToolInput("routines"),
       },
       ({ params, body }) => {
         try {
@@ -552,9 +559,7 @@ export const viewRoutes = (
     .post(
       "/api/projects/:id/view-tools/spend",
       {
-        body: t.Object({
-          days: t.Optional(t.Integer({ minimum: 1, maximum: 90 })),
-        }),
+        body: viewToolInput("spend"),
       },
       ({ params, body }) => {
         try {
@@ -567,9 +572,7 @@ export const viewRoutes = (
     .post(
       "/api/projects/:id/view-tools/events",
       {
-        body: t.Object({
-          limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
-        }),
+        body: viewToolInput("events"),
       },
       ({ params, body }) => {
         try {

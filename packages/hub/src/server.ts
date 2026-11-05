@@ -266,7 +266,6 @@ import {
   connectWords,
   contextFitRefusal,
   continuedInWords,
-  DEFAULT_AT_LIMIT,
   DEFAULT_COMPACTION,
   DELEGATE_SUMMARIES_LIMIT,
   DELEGATE_WAIT_ORIGIN,
@@ -37411,7 +37410,6 @@ export const createServer = (
                 body.atLimit.compaction,
                 saved.compaction
               ),
-              delegateWork: DEFAULT_AT_LIMIT.delegateWork,
             },
           };
           db.accounts.setRouting(routing);

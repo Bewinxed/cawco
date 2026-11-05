@@ -259,12 +259,16 @@ import type { TailnetServing } from "./tailnet-https";
  *    longer carries `conversationInstanceId`, its project's conversation
  *    as a co-parent whose tray listed it. A page built for 51 reads a
  *    `conversationInstanceId` the hub no longer sends, so it reloads first.
+ * 53: a provider's routing no longer carries `atLimit.delegateWork`, and a
+ *    delegate type no longer carries `cawcoTodos`: both were sent only for
+ *    TestFlight builds the hub no longer serves. A page built for 52 reads
+ *    a `delegateWork` the hub no longer sends, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 52;
+export const WIRE_PROTOCOL = 53;
 
 /**
  * What a session's stream carries: the changes each frame made to its

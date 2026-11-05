@@ -953,8 +953,6 @@ public enum Words {
                         public static let byKey: [String: String] = ["harness": harness, "model": model]
                     }
                 }
-
-                public static let delegateWork = "move"
             }
 
             /// How long the hub waits on a machine's sign-in step: Claude Code printing its link (the agent waits up to 30 s), exchanging a code (up to 60 s), a device code waited for (a minute at a time). A client asks for longer.

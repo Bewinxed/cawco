@@ -19294,12 +19294,15 @@
           "content": {
             "application/json": {
               "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
                 "properties": {
                   "stage": {
+                    "description": "Only tasks in this stage.",
                     "type": "string"
                   },
                   "kind": {
+                    "description": "Only tasks in stages of this kind.",
                     "type": "string",
                     "enum": [
                       "todo",
@@ -19311,9 +19314,11 @@
                     ]
                   },
                   "label": {
+                    "description": "Only tasks with this label.",
                     "type": "string"
                   }
-                }
+                },
+                "additionalProperties": false
               }
             }
           }
@@ -19455,8 +19460,10 @@
           "content": {
             "application/json": {
               "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
-                "properties": {}
+                "properties": {},
+                "additionalProperties": false
               }
             }
           }
@@ -19598,14 +19605,17 @@
           "content": {
             "application/json": {
               "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
                 "properties": {
                   "runs": {
+                    "description": "How many of each routine's newest runs; 5 when left out.",
+                    "type": "integer",
                     "minimum": 1,
-                    "maximum": 20,
-                    "type": "integer"
+                    "maximum": 20
                   }
-                }
+                },
+                "additionalProperties": false
               }
             }
           }
@@ -19747,14 +19757,17 @@
           "content": {
             "application/json": {
               "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
                 "properties": {
                   "days": {
+                    "description": "How many days back from now; 30 when left out.",
+                    "type": "integer",
                     "minimum": 1,
-                    "maximum": 90,
-                    "type": "integer"
+                    "maximum": 90
                   }
-                }
+                },
+                "additionalProperties": false
               }
             }
           }
@@ -19896,14 +19909,17 @@
           "content": {
             "application/json": {
               "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
                 "properties": {
                   "limit": {
+                    "description": "How many; 20 when left out.",
+                    "type": "integer",
                     "minimum": 1,
-                    "maximum": 100,
-                    "type": "integer"
+                    "maximum": 100
                   }
-                }
+                },
+                "additionalProperties": false
               }
             }
           }
@@ -36191,12 +36207,6 @@
               "compaction": {
                 "$ref": "#/components/schemas/Compaction"
               },
-              "delegateWork": {
-                "type": "string",
-                "enum": [
-                  "move"
-                ]
-              },
               "move": {
                 "type": "boolean"
               },
@@ -36212,7 +36222,6 @@
             },
             "required": [
               "compaction",
-              "delegateWork",
               "move",
               "moveWholeUnderK",
               "staleAfterHours",
@@ -38655,11 +38664,6 @@
           "account": {
             "description": "The account its sessions prefer, when placement allows it (the machine,\nproject and task allow it, and it is not benched or past its reserve).\nAbsent: the provider's strategy chooses.",
             "type": "string"
-          },
-          "cawcoTodos": {
-            "description": "Always true: every session keeps CawCo's list, whatever its type. Still\nsent because the apps on TestFlight 20261015 through 20261018 read it\n(hub openapi.ts's wire check) and send it back on a save, which the hub\nignores; nothing reads it here. It goes in the change that expires those\nbuilds.",
-            "const": true,
-            "type": "boolean"
           },
           "connections": {
             "description": "The connections (Projects spec §5.5) its sessions may call, by name: the\nhub lists each one's tools to them as `conn__<name>__<tool>` and runs\nevery call itself, so no key reaches the session. A project type file\nsays `mcp: [x-brand]`.",
@@ -59299,13 +59303,6 @@
           "compaction": {
             "$ref": "#/components/schemas/Compaction"
           },
-          "delegateWork": {
-            "description": "Read by nothing: a delegate's work at its limit is answered as any\nsession's is, moved to an account with room or held until the earliest\nreset. Sent as `move`, which is what the hub does, only because the\nTestFlight builds 20261017 and 20261018 require it, which the hub's wire\ncheck holds to (packages/hub/scripts/openapi.ts). It goes in the change\nthat expires them.",
-            "type": "string",
-            "enum": [
-              "move"
-            ]
-          },
           "move": {
             "type": "boolean"
           },
@@ -59322,7 +59319,6 @@
         },
         "required": [
           "compaction",
-          "delegateWork",
           "move",
           "moveWholeUnderK",
           "staleAfterHours",

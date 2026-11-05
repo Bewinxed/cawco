@@ -25,14 +25,6 @@ export interface DelegateType {
    */
   account?: string;
   /**
-   * Always true: every session keeps CawCo's list, whatever its type. Still
-   * sent because the apps on TestFlight 20261015 through 20261018 read it
-   * (hub openapi.ts's wire check) and send it back on a save, which the hub
-   * ignores; nothing reads it here. It goes in the change that expires those
-   * builds.
-   */
-  cawcoTodos?: true;
-  /**
    * The connections (Projects spec §5.5) its sessions may call, by name: the
    * hub lists each one's tools to them as `conn__<name>__<tool>` and runs
    * every call itself, so no key reaches the session. A project type file

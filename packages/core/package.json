@@ -27,6 +27,7 @@
     "./bounded": "./src/bounded.ts",
     "./time": "./src/time.ts",
     "./unhandled": "./src/unhandled.ts",
+    "./unrecognized-keys": "./src/unrecognized-keys.ts",
     "./json-rpc": "./src/json-rpc.ts",
     "./task-views": "./src/task-views.ts",
     "./every-of": "./src/every-of.ts",

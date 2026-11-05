@@ -163,7 +163,6 @@ const CompactionShape = z.object({
 
 const AtLimitShape = z.object({
   compaction: CompactionShape,
-  delegateWork: z.literal("move"),
   move: z.boolean(),
   moveWholeUnderK: z.number(),
   staleAfterHours: z.number(),

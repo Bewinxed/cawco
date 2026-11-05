@@ -10,7 +10,9 @@
  * - A component the library does not have is dropped and reported by name,
  *   never invented: the parser leaves it out, and {@link readView} names it.
  * - Every `Query()` names one of the view tools ({@link VIEW_TOOLS}), as a
- *   string; there are no mutations and no actions.
+ *   string, with arguments its tool's one schema takes (core
+ *   `viewToolInput`, which the route and `view_query` hold it to as well);
+ *   there are no mutations and no actions.
  * - It cannot run code or reach the network: a URL or markup in a string, an
  *   action step (`@OpenUrl`, `@ToAssistant`, `@Run`, `@Set`, `@Reset`,
  *   `Action`), a function outside the built-ins, or an OpenUI Cloud scripts
@@ -19,9 +21,13 @@
  *   of the wrong type, too many arguments, no root) is refused with its own
  *   sentence, so Caw fixes it rather than the view losing a part silently.
  */
-import { VIEW_TOOLS } from "@cawco/core";
+import { VIEW_TOOLS, type ViewToolName } from "@cawco/core";
+import { unhandled } from "@cawco/core/unhandled";
+import { viewToolArgsFaults } from "@cawco/core/views-library";
 import spec from "@cawco/core/views-spec";
+import { hubFailureWords } from "@cawco/core/words/hub-failure";
 import {
+  type ASTNode,
   createParser,
   type LibraryJSONSchema,
   type ParseResult,
@@ -93,6 +99,83 @@ const unsafe = (source: string): string[] => {
   return [...new Set(found)];
 };
 
+/** A literal of the program as the value it is; `undefined` for an expression, read only when the view draws. */
+const literalOf = (node: ASTNode): unknown => {
+  switch (node.k) {
+    case "Str":
+    case "Num":
+    case "Bool":
+      return node.v;
+    case "Null":
+      return null;
+    case "Arr": {
+      const items = node.els.map(literalOf);
+      return items.includes(undefined) ? undefined : items;
+    }
+    case "Obj": {
+      const entries = node.entries.map(
+        ([key, value]) => [key, literalOf(value)] as const
+      );
+      return entries.some(([, value]) => value === undefined)
+        ? undefined
+        : Object.fromEntries(entries);
+    }
+    // An expression: read only when the view draws.
+    case "Assign":
+    case "BinOp":
+    case "Comp":
+    case "Index":
+    case "Member":
+    case "Ph":
+    case "Ref":
+    case "RuntimeRef":
+    case "StateRef":
+    case "Ternary":
+    case "UnaryOp":
+      return;
+    default:
+      return unhandled("view literal", node);
+  }
+};
+
+/**
+ * A `Query(tool, args)`'s arguments against its tool's one schema (core
+ * `viewToolArgsFaults`), as the route and `view_query` hold them: an object
+ * literal's keys are always read, so a key the tool doesn't take is refused;
+ * a value is checked where it is a literal. Arguments given whole by an
+ * expression (a `$variable`, a reference) are read only when the view draws.
+ */
+const argsProblems = (
+  statementId: string,
+  tool: ViewToolName,
+  args: ASTNode | null
+): string[] => {
+  if (args?.k !== "Obj") {
+    return [];
+  }
+  const values: Record<string, unknown> = {};
+  for (const [key, node] of args.entries) {
+    const value = literalOf(node);
+    if (value !== undefined) {
+      values[key] = value;
+    }
+  }
+  const call = `${statementId} = Query("${tool}", …)`;
+  const { unknown, wrong } = viewToolArgsFaults(
+    tool,
+    args.entries.map(([key]) => key),
+    values
+  );
+  return [
+    ...(unknown.length
+      ? [hubFailureWords.unknownArguments(call, tool, unknown)]
+      : []),
+    ...wrong.map(
+      (one) => `${hubFailureWords.wrongArgument(call, one.field, one.reason)}.`
+    ),
+  ];
+};
+
 /** Its Queries' tools, each one of the view tools, and none refreshing faster than the hub allows; and no Mutation. */
 const toolProblems = (result: ParseResult): string[] => {
   const problems: string[] = [];
@@ -102,7 +185,15 @@ const toolProblems = (result: ParseResult): string[] => {
       problems.push(
         `${query.statementId} = Query(…) names its tool by an expression: name it as a string, one of ${VIEW_TOOLS.join(", ")}.`
       );
-    } else if (!TOOLS.has(tool.v)) {
+    } else if (TOOLS.has(tool.v)) {
+      problems.push(
+        ...argsProblems(
+          query.statementId,
+          tool.v as ViewToolName,
+          query.argsAST
+        )
+      );
+    } else {
       problems.push(
         `${query.statementId} = Query("${tool.v}") names a tool views do not have; the tools are ${VIEW_TOOLS.join(", ")}.`
       );

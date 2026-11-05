@@ -416,15 +416,6 @@ export const DEFAULT_COMPACTION: Compaction = {
  */
 export interface AtLimit {
   compaction: Compaction;
-  /**
-   * Read by nothing: a delegate's work at its limit is answered as any
-   * session's is, moved to an account with room or held until the earliest
-   * reset. Sent as `move`, which is what the hub does, only because the
-   * TestFlight builds 20261017 and 20261018 require it, which the hub's wire
-   * check holds to (packages/hub/scripts/openapi.ts). It goes in the change
-   * that expires them.
-   */
-  delegateWork: "move";
   move: boolean;
   moveWholeUnderK: number;
   /**
@@ -444,7 +435,6 @@ export const DEFAULT_AT_LIMIT: AtLimit = {
   staleAfterHours: 24,
   moveWholeUnderK: 200,
   compaction: DEFAULT_COMPACTION,
-  delegateWork: "move",
 };
 
 /**
