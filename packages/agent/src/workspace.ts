@@ -602,9 +602,14 @@ const accessOf = async (
   workspace: WorkspaceRef
 ): Promise<CopyAccess | undefined> => {
   const layer = await layerOf(workspace.id, workspace.path);
-  if (!layer) {
-    return;
-  }
+  return layer ? await accessTo(workspace, layer) : undefined;
+};
+
+/** {@link accessOf} for `workspace`'s `layer`, read already. */
+const accessTo = async (
+  workspace: WorkspaceRef,
+  layer: Layer
+): Promise<CopyAccess> => {
   if (layer.form !== "overlay") {
     return {
       layer,
@@ -2590,10 +2595,6 @@ const closeClone = async (
   request: WorkspaceArchive,
   carryHeld: boolean
 ): Promise<WorkspaceArchived> => {
-  // Read unless it names a copy with nothing of anyone's own: a request
-  // naming no mode is a `keep`.
-  const unread: WorkspaceUnlanded[] = ["check", "unmade", "drop"];
-  const read = !unread.includes(request.unlanded);
   const path = request.path ?? (await createdPath(request.id));
   const forget = async () => {
     await Promise.all(
@@ -2613,8 +2614,8 @@ const closeClone = async (
   // its view end, and what reads it below runs in it alone.
   await stopWorkspaceBoundary(workspace);
   await endLeftInside(workspace);
-  const access = await accessOf(workspace);
-  if (!access) {
+  const layer = await layerOf(workspace.id, workspace.path);
+  if (!layer) {
     // No layer there (a create cut short before it made one): nothing of the
     // folder is the workspace's.
     await closeBoundary(workspace);
@@ -2624,17 +2625,25 @@ const closeClone = async (
     );
     return { carry: null };
   }
+  // Read unless it names a copy with nothing of anyone's own (a request
+  // naming no mode is a `keep`), or its create never finished: no session
+  // ran in it (layer.ts `markMade`). Unread, a Linux view is not started to
+  // close it, so a view that cannot mount is still discarded.
+  const unread: WorkspaceUnlanded[] = ["check", "unmade", "drop"];
+  const access =
+    layer.made && !unread.includes(request.unlanded)
+      ? await accessTo(workspace, layer)
+      : undefined;
   try {
-    return await readAndClose(workspace, access, request, {
+    return await readAndClose(workspace, layer, access, request, {
       carryHeld,
-      read,
       skip,
     });
   } finally {
-    // A Linux view the reads above ran in (`accessOf` starts it again) ends
+    // A Linux view the reads above ran in (`accessTo` starts it again) ends
     // with them: a workspace kept holds nothing running, and one removed
     // ended it already.
-    if (access.layer.form === "overlay") {
+    if (layer.form === "overlay") {
       await endView(request.id).catch(() => undefined);
     }
   }
@@ -2663,19 +2672,17 @@ const refusedClone = async (
  * {@link closeClone} once nothing runs in the copy but what reads it: what
  * it holds read ({@link holding}), then kept, or carried away and removed.
  * A clone CawCo does not run git in ({@link refusedClone}) is kept unread.
+ * With no `access`, nothing of it is read: it holds nothing and is removed.
  */
 const readAndClose = async (
   workspace: WorkspaceRef,
-  access: CopyAccess,
+  layer: Layer,
+  access: CopyAccess | undefined,
   request: WorkspaceArchive,
-  {
-    carryHeld,
-    read,
-    skip,
-  }: { carryHeld: boolean; read: boolean; skip: readonly string[] }
+  { carryHeld, skip }: { carryHeld: boolean; skip: readonly string[] }
 ): Promise<WorkspaceArchived> => {
   const { path } = workspace;
-  if (read && access.layer.kind === "repo") {
+  if (access && layer.kind === "repo") {
     // A git clone CawCo does not run git in is held, with why, for a
     // discard as for a keep: nothing of it can be read or carried, and only
     // a change to the clone itself lets it go.
@@ -2688,36 +2695,37 @@ const readAndClose = async (
     }
     await refreshBase(workspace, access, request.base);
   }
-  const held = read
+  const held = access
     ? await holding(workspace, access, skip, request.base, request.landed)
     : NOTHING_HELD;
   const holds = !holdsNothing({ ...held, bytes: 0 });
-  if (holds && !carryHeld) {
+  if (access && holds && !carryHeld) {
     return { carry: null, held: await keepHeld(workspace, access, held) };
   }
   // Read before the copy goes: where it is made again, and what it carries.
-  const { carry, head } = holds
-    ? await carryAway(workspace, access, request, held, skip)
-    : {
-        carry: null,
-        head:
-          read && held.strays === undefined
-            ? await headOnOrigin(
-                workspace,
-                access,
-                request.base,
-                request.landed
-              )
-            : undefined,
-      };
-  const cached = await cacheOfWorkspace(request.id, path, access.layer.form);
-  await removeLayer(request.id, access.layer);
+  const { carry, head } =
+    access && holds
+      ? await carryAway(workspace, access, request, held, skip)
+      : {
+          carry: null,
+          head:
+            access && held.strays === undefined
+              ? await headOnOrigin(
+                  workspace,
+                  access,
+                  request.base,
+                  request.landed
+                )
+              : undefined,
+        };
+  const cached = await cacheOfWorkspace(request.id, path, layer.form);
+  await removeLayer(request.id, layer);
   await closeBoundary(workspace);
   // Its place's file goes with it (fleet-place-set.ts): nothing else of the
   // fleet's moves for an archive.
   await Promise.all([...cached.map(removeTree), dropPlaceSet(workspace.path)]);
   console.info(
-    `[workspace] ${request.id}: archived; its ${goneFolder(access.layer, held.strays)}, state, scratch dir and ${cached.length} cache folders of its own are gone${head ? `; it is made again at ${head.commit.slice(0, 9)} on origin's ${head.branch}${carry ? ", its carry's commits on top" : ""}` : ""}`
+    `[workspace] ${request.id}: archived; its ${goneFolder(layer, held.strays)}, state, scratch dir and ${cached.length} cache folders of its own are gone${head ? `; it is made again at ${head.commit.slice(0, 9)} on origin's ${head.branch}${carry ? ", its carry's commits on top" : ""}` : ""}`
   );
   return head ? { carry, head } : { carry };
 };

@@ -9,8 +9,9 @@
  * ({@link applyChanges}), by the agent on its machine, outside every wall.
  *
  * - Linux, `overlay`: the delegate sees F at its real path, live, through a
- *   kernel overlay whose lower layer is F itself and whose upper and work
- *   dirs are the workspace's own, on disk under its state dir
+ *   kernel overlay whose lower layer is F itself, over a tmpfs of CawCo's
+ *   stand-ins made in the view ({@link standInsOf}), and whose upper and
+ *   work dirs are the workspace's own, on disk under its state dir
  *   (`~/.cawco/workspaces/<id>/layer/mounts/<n>`), never a tmpfs. The
  *   overlay is mounted once per workspace, in a mount namespace of its own
  *   (the view): the distro's bwrap makes the view's namespaces and one
@@ -313,65 +314,99 @@ const PASSTHROUGH = (): string[] => [
 ];
 
 /**
+ * One stand-in of an overlay's stand-ins layer ({@link standInsOf}): a
+ * folder or a file at `path` in that layer, with its mode and, for a file,
+ * its text. A folder above a stand-in is one of its own, made first.
+ */
+interface StandIn {
+  kind: "dir" | "file";
+  mode: number;
+  path: string;
+  text: string;
+}
+
+/**
  * One mount of a view: an overlay of `overlay` (F or a mount under it: its
- * top lower dir and mount point) over its stand-ins ({@link standInsOf}), or `bind` bound onto
- * itself from the host's tree.
+ * top lower dir and mount point) over its stand-ins layer, a tmpfs the
+ * mounter makes at `standIns` and fills with `standInsMade`
+ * ({@link standInsOf}), or `bind` bound onto itself from the host's tree.
  */
 type ViewMount =
-  | { overlay: string; standIns: string; upper: string; work: string }
+  | {
+      overlay: string;
+      standIns: string;
+      standInsMade: readonly StandIn[];
+      upper: string;
+      work: string;
+    }
   | { bind: string };
 
 /**
- * Where one overlay of a view keeps its stand-ins: beside its upper and
- * work dirs, CawCo's own, and its lowest layer ({@link makeStandIns}).
+ * Where one overlay of a view mounts its stand-ins layer: beside its upper
+ * and work dirs, CawCo's own. On the host it stays an empty folder, the
+ * mount point.
  */
-const standInsOf = (mount: LayerMount): string =>
+const standInsDir = (mount: LayerMount): string =>
   join(dirname(mount.upper), "stand-ins");
 
 /**
  * What stands in for each of CawCo's and srt's own paths at F that F lacks
  * (core clone-denies.ts `cloneDenies`, the one list a clone's stand-ins
- * and the change set's exclusions read too), made fresh in each overlay's
- * own stand-ins dir before the view is mounted: that dir is the overlay's
- * lowest layer, under F, so the view shows each where F has none, F's own
- * wins wherever it has one, and none is ever in an upper, the change set.
- * srt then binds each onto itself as it finds it, which leaves nothing in
- * the view, where a deny path it found absent would get a mount point made
- * through the overlay, into the upper. `.git/config`, which a clone always
- * has and so never gets a stand-in, gets an empty one here: F is no
- * repository, and with `.git/hooks` standing in it would be the one absent
- * deny path. Nothing is made under a path F holds as anything but a folder.
+ * and the change set's exclusions read too), for each overlay of the view,
+ * in `layer.mounts`' order: each overlay's lowest layer, so the view shows
+ * each where F has none, F's own wins wherever it has one, and none is ever
+ * in an upper, the change set. srt then binds each onto itself as it finds
+ * it, which leaves nothing in the view, where a deny path it found absent
+ * would get a mount point made through the overlay, into the upper.
+ * `.git/config`, which a clone always has and so never gets a stand-in,
+ * gets an empty one here: F is no repository, and with `.git/hooks`
+ * standing in it would be the one absent deny path. Nothing is made under a
+ * path F holds as anything but a folder.
+ *
+ * The layer is a tmpfs the mounter mounts in the view ({@link MOUNTER}),
+ * never a folder of the host's: CawCo's state dir lies under F whenever F
+ * holds the home (a delegate from `~`, `/home`, `/`), and overlayfs refuses
+ * a lower layer that lies under another of the same mount with ELOOP
+ * (fs/overlayfs/super.c `ovl_check_layer`: "if (is_lower &&
+ * ovl_lookup_trap_inode(sb, parent)) { err = -ELOOP; pr_err("overlapping
+ * %s path\n", name);"). A tmpfs's root has no parent to walk to F by.
  */
-const makeStandIns = async (layer: Layer): Promise<void> => {
+const standInsOf = async (layer: Layer): Promise<StandIn[][]> => {
   const mounts = layer.mounts ?? [];
-  await Promise.all(
-    mounts.map(async (mount) => {
-      await removeTree(standInsOf(mount));
-      await mkdir(standInsOf(mount), { recursive: true, mode: 0o700 });
-    })
-  );
-  const readOnly: string[] = [];
+  const made = mounts.map(() => new Map<string, StandIn>());
   for (const deny of cloneDenies(layer.folder)) {
-    const mount = [...mounts]
-      .reverse()
-      .find((each) => within(deny.path, each.at));
-    if (!(mount && (await absentUnderFolders(mount.at, deny.path)))) {
+    const n = mounts.findLastIndex((each) => within(deny.path, each.at));
+    const mount = mounts[n];
+    const into = made[n];
+    if (!(mount && into && (await absentUnderFolders(mount.at, deny.path)))) {
       continue;
     }
-    const at = join(standInsOf(mount), relative(mount.at, deny.path));
-    await mkdir(dirname(at), { recursive: true, mode: 0o755 });
-    if (deny.empty.kind === "dir") {
-      await mkdir(at, { recursive: true, mode: 0o755 });
-      if (deny.empty.readOnly) {
-        readOnly.push(at);
+    const rel = relative(mount.at, deny.path);
+    const parts = rel.split("/");
+    for (let depth = 1; depth < parts.length; depth += 1) {
+      const path = parts.slice(0, depth).join("/");
+      if (!into.has(path)) {
+        into.set(path, { kind: "dir", mode: 0o755, path, text: "" });
       }
-    } else {
-      await writeFile(at, deny.empty.kind === "file" ? deny.empty.text : "", {
-        mode: 0o644,
-      });
     }
+    into.set(
+      rel,
+      deny.empty.kind === "dir"
+        ? {
+            kind: "dir",
+            mode: deny.empty.readOnly ? 0o555 : 0o755,
+            path: rel,
+            text: "",
+          }
+        : {
+            kind: "file",
+            mode: 0o644,
+            path: rel,
+            text: deny.empty.kind === "file" ? deny.empty.text : "",
+          }
+    );
   }
-  await Promise.all(readOnly.map((dir) => chmod(dir, 0o555)));
+  return made.map((each) => [...each.values()]);
 };
 
 /** Whether `path` is absent from the host's tree and each folder above it, up to `root`, is a folder or absent. */
@@ -400,15 +435,20 @@ const absentUnderFolders = async (
  * the host's again, then its mark ({@link viewMarked}). Each later mount
  * goes on top of the overlays it lies under.
  */
-const viewPlan = (id: string, layer: Layer): ViewMount[] => {
+const viewPlan = (
+  id: string,
+  layer: Layer,
+  standIns: readonly (readonly StandIn[])[]
+): ViewMount[] => {
   const { bound } = mountsUnder(layer.folder);
   const through = PASSTHROUGH().filter(
     (path) => within(path, layer.folder) && existsSync(path)
   );
   return [
-    ...(layer.mounts ?? []).map((mount) => ({
+    ...(layer.mounts ?? []).map((mount, n) => ({
       overlay: mount.at,
-      standIns: standInsOf(mount),
+      standIns: standInsDir(mount),
+      standInsMade: standIns[n] ?? [],
       upper: mount.upper,
       work: mount.work,
     })),
@@ -568,8 +608,12 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
   for (const mount of layer.mounts ?? []) {
     await mkdir(mount.upper, { recursive: true, mode: 0o700 });
     await mkdir(mount.work, { recursive: true, mode: 0o700 });
+    // The stand-ins layer's mount point, empty: what an earlier agent made
+    // there on the host goes.
+    await removeTree(standInsDir(mount));
+    await mkdir(standInsDir(mount), { recursive: true, mode: 0o700 });
   }
-  await makeStandIns(layer);
+  const standIns = await standInsOf(layer);
   await rm(viewFile(id), { force: true });
   const env = { ...hostEnvironment(), PATH: trustedPath() };
   const holder = Bun.spawn(
@@ -600,7 +644,12 @@ const startView = async (id: string, layer: Layer): Promise<number> => {
   while (Date.now() < deadline) {
     const record = readViewRecord(id);
     if (record && nsOf(record.pid, "mnt") === record.mnt) {
-      const said = await mountView(record, viewPlan(id, layer), env, perl);
+      const said = await mountView(
+        record,
+        viewPlan(id, layer, standIns),
+        env,
+        perl
+      );
       if (said !== undefined) {
         return await refuse(`was not mounted: ${said}`);
       }
@@ -650,14 +699,17 @@ const SYSCALLS: Readonly<
  * Its words: the setns and mount numbers ({@link SYSCALLS}), the holder's
  * pid, then the namespaces it joins (`user`, when the view's is not the
  * agent's own, then `mnt`). Its stdin: the plan as NUL-separated words,
- * `overlay AT STAND-INS UPPER WORK` (F over its stand-ins) or `bind PATH`
- * each. Every source is opened
+ * `overlay AT STAND-INS UPPER WORK N` and its N stand-ins as `KIND MODE
+ * PATH TEXT` each ({@link StandIn}, MODE in octal, PATH in the layer), or
+ * `bind PATH`. First each overlay's stand-ins layer is made: a tmpfs
+ * mounted at STAND-INS in the view and filled ({@link standInsOf}). Then
+ * every source is opened
  * (`O_PATH`) in the view before the first mount and named by its
  * `/proc/self/fd/<n>`, so it is the host's tree it names: an overlay at F
  * hides what is mounted under F. Targets resolve as the view stands at
  * each mount. Answers nothing on success; a mount refused, one line
- * `ERRNO KIND AT` on stdout (errno as its number) and exit 1; a join or an
- * open that fails, its own words on stderr.
+ * `ERRNO KIND AT` on stdout (errno as its number) and exit 1; a join, an
+ * open or a stand-in that fails, its own words on stderr.
  */
 const MOUNTER = String.raw`
 use strict; use warnings; use POSIX ();
@@ -669,12 +721,39 @@ my @word = map { chomp; $_ } <STDIN>;
 my @plan;
 while (@word) {
   my $kind = shift @word;
-  push @plan, [$kind, splice @word, 0, $kind eq "overlay" ? 4 : 1];
+  if ($kind eq "overlay") {
+    my @overlay = splice @word, 0, 5;
+    my $n = pop @overlay;
+    push @plan, [$kind, @overlay, [map { [splice @word, 0, 4] } 1 .. $n]];
+  } else {
+    push @plan, [$kind, shift @word];
+  }
 }
 for my $ns (@join) {
   my $fd = POSIX::open("/proc/$pid/ns/$ns", $O_CLOEXEC);
   defined $fd or die "/proc/$pid/ns/$ns could not be opened: $!\n";
   syscall($setns, $fd, $flag{$ns}) == 0 or die "joining the view's $ns namespace failed: $!\n";
+}
+for my $p (grep { $_->[0] eq "overlay" } @plan) {
+  my ($under, $made) = @$p[2, 5];
+  my @tmpfs = ("tmpfs", $under, "tmpfs", 0, "mode=0700");
+  if (syscall($mount, @tmpfs) != 0) {
+    print $! + 0, " tmpfs $under\n";
+    exit 1;
+  }
+  for my $s (@$made) {
+    my ($kind, undef, $path, $text) = @$s;
+    if ($kind eq "dir") {
+      mkdir "$under/$path" or die "the stand-in $under/$path could not be made in the view: $!\n";
+    } else {
+      open my $fh, ">", "$under/$path" or die "the stand-in $under/$path could not be made in the view: $!\n";
+      print $fh $text;
+      close $fh or die "the stand-in $under/$path could not be written in the view: $!\n";
+    }
+  }
+  for my $s (@$made) {
+    chmod oct($s->[1]), "$under/$s->[2]" or die "the stand-in $under/$s->[2] could not be given its mode in the view: $!\n";
+  }
 }
 my $source = sub {
   my $fd = POSIX::open($_[0], $O_PATH | $O_CLOEXEC);
@@ -705,7 +784,17 @@ const kernelBelowFloor = (): boolean => {
 };
 
 /** The mounter's one line for a refused mount ({@link MOUNTER}). */
-const REFUSED = /^(\d+) (overlay|bind) (.+)$/u;
+const REFUSED = /^(\d+) (overlay|bind|tmpfs) (.+)$/u;
+
+/** What the mounter mounts, as {@link REFUSED} names it. */
+const MountKindSchema = z.enum(["overlay", "bind", "tmpfs"]);
+type MountKind = z.infer<typeof MountKindSchema>;
+
+const MOUNT_WORDS: Readonly<Record<MountKind, string>> = {
+  overlay: "an overlay",
+  bind: "a bind",
+  tmpfs: "a tmpfs",
+};
 
 /** A file's text, or "" where it cannot be read: an unread file names no fact. */
 const textOf = (path: string): string => {
@@ -759,13 +848,14 @@ const overlayLoadable = (): boolean =>
  * several gates (a kernel before 5.11 for an overlay of the user's own, a
  * security module, a seccomp filter); none is named as the cause.
  */
-const refusal = (at: string, code: number, overlay: boolean): string => {
+const refusal = (at: string, code: number, kind: MountKind): string => {
+  const overlay = kind === "overlay";
   const errno =
     Object.entries(constants.errno).find(([, value]) => value === code)?.[0] ??
     `errno ${code}`;
   const instead =
     "or delegate in a git repository, whose workspace is a clone of its own";
-  const call = `mount(2) of ${overlay ? "an overlay" : "a bind"} at ${at} in the view's user namespace said ${errno} on Linux ${release()}`;
+  const call = `mount(2) of ${MOUNT_WORDS[kind]} at ${at} in the view's user namespace said ${errno} on Linux ${release()}`;
   if (errno === "EPERM" && overlay && kernelBelowFloor()) {
     return `${at} could not be layered: ${call}, and Linux before ${USERNS_OVERLAY.join(".")} mounts no overlay of a user's own. Upgrade the kernel, ${instead}.`;
   }
@@ -803,7 +893,20 @@ const mountView = async (
   const words = mounts.flatMap((mount) =>
     "bind" in mount
       ? ["bind", mount.bind]
-      : ["overlay", mount.overlay, mount.standIns, mount.upper, mount.work]
+      : [
+          "overlay",
+          mount.overlay,
+          mount.standIns,
+          mount.upper,
+          mount.work,
+          String(mount.standInsMade.length),
+          ...mount.standInsMade.flatMap((standIn) => [
+            standIn.kind,
+            standIn.mode.toString(8),
+            standIn.path,
+            standIn.text,
+          ]),
+        ]
   );
   const mounter = Bun.spawn(
     [
@@ -834,7 +937,7 @@ const mountView = async (
   const refused = REFUSED.exec(said.trim());
   if (refused) {
     const [, errno = "0", kind, at = ""] = refused;
-    return refusal(at, Number(errno), kind === "overlay");
+    return refusal(at, Number(errno), MountKindSchema.parse(kind));
   }
   return failed.trim() || `the mounter exited ${code}`;
 };
