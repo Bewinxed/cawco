@@ -5,6 +5,7 @@
     newAnswer,
     type Pin,
     type PreviewMode,
+    pinHeld,
     pinProblem,
     previewMode,
     replyAgain,
@@ -1525,6 +1526,13 @@
       ? pins.filter((pin) => !pin.resolvedAt).length
       : 0
   );
+  /** The comments the person holds to send together (core `pinHeld`): Send all's count. */
+  const heldCount = $derived(pins.filter(pinHeld).length);
+  /** Send all: every held comment and reply let go in one write with the note; the hub's next delivery carries them (core `sendHeld`). */
+  const sendHeldNow = (note: string): string | null =>
+    doc
+      ? doc.sendHeld(note)
+      : "The pane lost the page's document, so nothing was sent. Reload, then send again.";
   /**
    * What Send sends (the artifact panel's surface brief, How comments reach the session): each pick
    * since the last Send. The person's comments go by themselves. Drawn only
@@ -2702,15 +2710,15 @@
       parked: kept.parked,
     });
   }
-  /** Comment: the words and what they carry go to the page, which writes the pin and its first entry at once. */
-  function comment(text: string) {
+  /** Comment: the words and what they carry go to the page, which writes the pin and its first entry at once; `held`, kept to send with the others (core `ThreadEntry.held`). */
+  function comment(text: string, held = false) {
     if (!(composing && nextDraft)) {
       return;
     }
     const said = saidIn(nextDraft, text);
     composing.error = "";
     composing.sending = true;
-    post({ type: "cawco:comment", ...said });
+    post({ type: "cawco:comment", ...said, held });
   }
   /** The page's answer to Comment: written, the composer goes; refused, the words are back in it with why. */
   function heardComment(message: Record<string, unknown>) {
@@ -2879,12 +2887,12 @@
     placingFrom = null;
   }
   /** The person's words in the open thread; a resolved pin's reply reopens it ("Reply to reopen"). */
-  function reply(text: string) {
+  function reply(text: string, held = false) {
     const draft = replyDraft;
     if (!(openPin && draft)) {
       return;
     }
-    const said = saidIn(draft, text);
+    const said = { ...saidIn(draft, text), held };
     const reopens = !!cardPin?.resolvedAt;
     if (onlyOnPage(openPin)) {
       // The page holds the pin and keeps the words on its device until the
@@ -4308,6 +4316,7 @@
       focus
       onchange={() => drafts?.changed(NEXT_COMMENT)}
       onchoose={(index) => post({ type: "cawco:compose-target", index })}
+      onhold={(text) => comment(text, true)}
       onsubmit={(text) => comment(text)}
       placeholder={commentWords.composeHint}
       sendError={composing.error}
@@ -4323,6 +4332,7 @@
     label={commentsTitle}
     onclick={() => showList(!listOpen)}
     open={listOpen}
+    held={heldCount}
     {pinsShown}
     toCheck={checkCount}
   />
@@ -4412,6 +4422,8 @@
   <CommentRail
     bind:this={rail}
     down={linkDown}
+    held={heldCount}
+    onsendheld={sendHeldNow}
     focused={focusedPin}
     hold={listHold}
     {layout}
@@ -4931,6 +4943,7 @@
         ondraft={() => drafts?.changed(pin.id)}
         onfind={() => focusPin(pin.id, true)}
         onplace={placeElsewhere}
+        onhold={(text) => reply(text, true)}
         onreply={(text) => reply(text)}
         onresolve={(resolved) => resolvePin(resolved)}
         onretry={() => retryPin(pin.id)}

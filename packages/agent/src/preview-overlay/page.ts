@@ -2988,6 +2988,8 @@ async function writeDraft(message: HostMessage) {
     attachments: Array.isArray(message.attachments)
       ? (message.attachments as CommentAttachment[])
       : [],
+    // Held to send with the others (core `ThreadEntry.held`).
+    held: message.held === true,
   };
   const at = drafting;
   const target = at && draftWritten(at, at.named[at.chosen]);
@@ -3521,6 +3523,7 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
           attachments: Array.isArray(message.attachments)
             ? (message.attachments as CommentAttachment[])
             : [],
+          held: message.held === true,
         })
       ),
     "cawco:resolve": (message) =>

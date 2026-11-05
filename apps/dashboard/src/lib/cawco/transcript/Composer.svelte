@@ -165,6 +165,7 @@
     landing = { done: Promise.resolve(), ms: () => 0 },
     attach = true,
     lead,
+    also,
     action,
     flush = false,
     fleet,
@@ -293,6 +294,11 @@
      * composer.
      */
     lead?: Snippet;
+    /**
+     * A second way to send, before the send glyph (the comment composer's
+     * Hold): its own button, in the controls' row.
+     */
+    also?: Snippet;
     /**
      * What the send glyph does here, as its label and its tooltip
      * ("Comment", "Reply"): where what is written does not go to the agent
@@ -3657,7 +3663,7 @@
         data-asking={askOpen || undefined}
         data-grown={!!edit || askOpen || canvasUp || undefined}
         data-hint-back={!!hintBack || undefined}
-        data-lead={!!lead || undefined}
+        data-lead={!!lead || !!also || undefined}
         data-recalling={!!recall || undefined}
         data-settling={(!!recall && !wheeling) || undefined}
         data-wheeling={wheeling || undefined}
@@ -3785,7 +3791,12 @@
         <div
           data-folded={folded || undefined}
           data-slot="composer-field"
-          class="group/field touch-hit relative flex flex-auto min-w-0 group-data-lead/cin:basis-0"
+          class={[
+            "group/field touch-hit relative flex flex-auto min-w-0",
+            // A second way to send takes the controls' row under the field,
+            // so the words keep the pill's width.
+            also ? "basis-full" : "group-data-lead/cin:basis-0",
+          ]}
           inert={askOpen}
           bind:this={fieldWrap}
           style:--roll-move="0 var(--roll-y)"
@@ -3936,7 +3947,10 @@
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a press on the controls only keeps the field's focus; the controls are buttons -->
         <div
           data-slot="ctrls"
-          class="group/ctrls flex items-center gap-space-2 coarse:gap-space-3 hit-gap-x-space-2 coarse:hit-gap-x-space-3 flex-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide"
+          class={[
+            "group/ctrls flex items-center gap-space-2 coarse:gap-space-3 hit-gap-x-space-2 coarse:hit-gap-x-space-3 flex-none transition-fade-show group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide",
+            also && "ms-auto",
+          ]}
           inert={!!recall}
           onmousedown={(event) => {
             // The field keeps the focus through a press here (`focused`):
@@ -3954,6 +3968,7 @@
               ondraw={room && recallOf ? () => room.open() : undefined}
             />
           {/if}
+          {@render also?.()}
           <!-- Pending from the press until the hub takes the message: the glyph
            slot turns to the kit spinner and presses are swallowed. It sends
            only what the hub has whole (`draft.unready`, submit's own rule): off

@@ -24,12 +24,15 @@
    * (comment 4's Delete pressed: its question under the card's bar),
    * `remove` (the artifacts menu's Remove pressed: its question in the menu),
    * `found` (Resolved in front, searching "HIG": the hits in every list),
-   * `scrolled` (the page's own title scrolled out of view: the head says it).
+   * `scrolled` (the page's own title scrolled out of view: the head says it),
+   * `held` (three comments held to send together: Send 3 in the rail's bar,
+   * each row Unsent, the head's bubble ringed), `note` (Send all pressed: its
+   * note under the bar), `hold` (a comment being written: Hold beside send).
    * The picture stands for a decision page: in every other state its title
    * is in view, so the head leaves its own out (`cawco:page-title`), except
    * where the picture is scrolled (`changes`) or a sheet covers it (`full`).
    */
-  import type { Pin } from "@cawco/core/comments";
+  import { type Pin, pinHeld } from "@cawco/core/comments";
   import { commentWords } from "@cawco/core/words/comments";
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -70,7 +73,7 @@
   import { page } from "$app/state";
   import pageDesk from "./page-desk.webp";
   import pagePhone from "./page-phone.webp";
-  import { ARTIFACTS, LONG, PINS } from "./records";
+  import { ARTIFACTS, HELD, LONG, PINS } from "./records";
 
   const INSTANCE = "bench-artifact-panel";
   /** The hub's show of an artifact: its id. */
@@ -105,8 +108,26 @@
     }
     return Promise.resolve(Response.json(ARTIFACTS));
   };
+  /** Send all pressed: what was held stands sent. */
+  let heldSent = $state(false);
+  const holding = asked === "held" || asked === "note";
   /** The pins as the state has them: none, or resolved three, or as they stand. */
   const pins: Pin[] = $derived.by(() => {
+    if (holding) {
+      return [
+        ...PINS,
+        ...(heldSent
+          ? HELD.map((one) => ({
+              ...one,
+              sentAt: one.at,
+              thread: one.thread.map(({ held: _held, ...entry }) => ({
+                ...entry,
+                sentAt: one.at,
+              })),
+            }))
+          : HELD),
+      ];
+    }
     if (asked === "none") {
       return [];
     }
@@ -135,6 +156,7 @@
   const replyDraft = new ComposerDraft();
   const nextDraft = new ComposerDraft();
   const openCount = $derived(pins.filter((one) => !one.resolvedAt).length);
+  const heldCount = $derived(pins.filter(pinHeld).length);
   const checked = asked === "check" ? [PINS[3]?.id, PINS[4]?.id] : [];
   let mode = $state<"interact" | "comment" | "draw">("interact");
   const MODE_GLYPHS = {
@@ -148,7 +170,11 @@
   /** Changed since you looked: five stops, the tour not started. */
   let tourAt = $state<number | null>(null);
   /** A comment on the whole page being written. */
-  let composing = $state(asked === "compose");
+  let composing = $state(asked === "compose" || asked === "hold");
+  if (asked === "hold") {
+    nextDraft.text =
+      "do you think the close button size is mismatched vs the search/add?";
+  }
   /** The phone's composer sheet, whose outside presses put it away (PreviewPane's rule). */
   let composerFloat = $state<HTMLElement>();
   $effect(() => {
@@ -190,27 +216,28 @@
   /** How long the head takes to fit, ms: two frames' reads and writes, with room. */
   const FITTED = 300;
   /** Opens what the state names once the panel stands (its head fitted, which draws More): a menu, the search with its words, the sheet's whole room. */
+  /** The control each state presses once the panel stands. */
+  const PRESSES: Record<string, string> = {
+    list: '[data-slot="list"]',
+    more: '[data-slot="more"]',
+    view: '[aria-label="Canvas view"]',
+    mode: '[aria-label^="Mode:"]',
+    artifacts: "[data-artifact-trigger]",
+    remove: "[data-artifact-trigger]",
+    note: '[data-slot="send-held"]',
+    delete: '[data-slot="delete"]',
+    full: "[data-thread-grab]",
+  };
   onMount(() => {
     const press = (selector: string) =>
       document.querySelector<HTMLElement>(selector)?.click();
     setTimeout(() => {
-      if (asked === "list") {
-        press('[data-slot="list"]');
-      } else if (asked === "more") {
-        press('[data-slot="more"]');
-      } else if (asked === "view") {
-        press('[aria-label="Canvas view"]');
-      } else if (asked === "mode") {
-        press('[aria-label^="Mode:"]');
-      } else if (asked === "artifacts") {
-        press("[data-artifact-trigger]");
-      } else if (asked === "remove") {
-        press("[data-artifact-trigger]");
+      const control = PRESSES[asked];
+      if (control) {
+        press(control);
+      }
+      if (asked === "remove") {
         setTimeout(() => press("[data-artifact-remove]"), FITTED);
-      } else if (asked === "delete") {
-        press('[data-slot="delete"]');
-      } else if (asked === "full") {
-        press("[data-thread-grab]");
       } else if (asked === "search" || asked === "miss" || asked === "found") {
         rail?.focusSearch();
         requestAnimationFrame(() => {
@@ -295,6 +322,7 @@
     onclick={() => {
       listOpen = !listOpen;
     }}
+    held={heldCount}
     open={listOpen}
     toCheck={checked.length}
   />
@@ -348,7 +376,12 @@
     }}
     down={null}
     focused={openPin}
+    held={heldCount}
     hold="ready"
+    onsendheld={() => {
+      heldSent = true;
+      return null;
+    }}
     {layout}
     live={new Set()}
     onclose={() => {
@@ -384,6 +417,9 @@
     chain={[commentWords.wholePage]}
     draft={nextDraft}
     focus
+    onhold={() => {
+      composing = false;
+    }}
     onsubmit={() => {
       composing = false;
     }}
@@ -421,6 +457,7 @@
     }}
     ondelete={() => Promise.resolve()}
     onfind={() => undefined}
+    onhold={() => undefined}
     onplace={() => undefined}
     onreply={() => undefined}
     onresolve={() => undefined}
