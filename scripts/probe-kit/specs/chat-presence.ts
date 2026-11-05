@@ -475,51 +475,59 @@ const run = async (kit: Kit): Promise<void> => {
     "17: setup: a decision page with a live embed and no input has said none",
     (await inputOn(embedTab)) === null
   );
-  // The frame's load is not its standing clear: the screen's skeleton leaves
-  // over it on its reveal (decisions host Preview.svelte, `out:reveal`), and
-  // a pointer there is the decision page's. The touch waits until each point
-  // it goes through is the embed's, as the decision page hit-tests it.
-  const overEmbed = () =>
-    embed.evaluate((embedded) => {
-      const box = embedded.getBoundingClientRect();
-      const [x, y] = [box.left + box.width / 2, box.top + box.height / 2];
-      const over = [0, 12, 24]
-        .map((step) =>
-          embedded.ownerDocument.elementFromPoint(x + step, y + step)
-        )
-        .find((top) => top !== embedded);
-      if (over === undefined) {
-        return "";
-      }
-      return over === null
-        ? "nothing (outside the page's view)"
-        : `${over.tagName.toLowerCase()}${over.getAttribute("data-slot") ? `[data-slot=${over.getAttribute("data-slot")}]` : ""}`;
-    });
-  const firstOver = await overEmbed();
-  const clearFrom = Date.now();
-  let lastOver = firstOver;
-  while (lastOver !== "" && Date.now() - clearFrom < 10_000) {
-    await embedTab.waitForTimeout(50);
-    lastOver = await overEmbed();
+  // Chromium hands a pointer to a frame nested in another origin's frame some
+  // moves after it enters, one here and two on a loaded machine, and the
+  // decision page hears those. So the pointer is handed over first: moved a
+  // few px at a time inside the embed until the embed hears a move of its
+  // own. What the leg reads is what comes after.
+  const box = await embed.boundingBox();
+  if (!box) {
+    throw new Error("the embed has no box to touch");
+  }
+  await embedTab.bringToFront();
+  const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+  const movesNow = async () => ({
+    embed: await inEmbed.locator("body").evaluate(counted),
+    host: await inHost.evaluate(counted),
+  });
+  await embedTab.mouse.move(x, y);
+  const handFrom = Date.now();
+  let step = 0;
+  let handed = await movesNow();
+  while (handed.embed === 0 && step < 10 && Date.now() - handFrom < 2000) {
+    step += 1;
+    await embedTab.mouse.move(x + 4 * step, y + 4 * step);
+    handed = await movesNow();
   }
   check(
-    "17: setup: nothing of the decision page stands over the embed where the pointer goes",
-    lastOver === "",
-    `as the frame loaded: ${firstOver || "the embed"}; after ${Date.now() - clearFrom} ms: ${lastOver || "the embed"}`
+    "17: setup: the pointer is handed over to the embed",
+    handed.embed > 0,
+    `after ${step} move(s): ${handed.embed} in the embed, ${handed.host} in the decision page`
   );
-  await touchInside(embedTab, embed);
-  const movesInEmbed = await inEmbed.locator("body").evaluate(counted);
-  const movesInHost = await inHost.evaluate(counted);
-  check(
-    "17: setup: the pointer landed in the embed, and the decision page around it heard nothing",
-    movesInEmbed > 0 && movesInHost === 0,
-    `${movesInEmbed} move(s) in the embed, ${movesInHost} in the decision page`
-  );
-  await until(
-    "the touch inside the embedded preview to reach the hub",
+  // What the hand-over said reaches the hub as the tab's first input; past
+  // the overlay's throttle (5 s), the leg's own moves say theirs.
+  const handedInput = await until(
+    "the hand-over's input to reach the hub",
     () => inputOn(embedTab),
     (at) => at !== null,
     20_000
+  );
+  await embedTab.waitForTimeout(5100);
+  const before = await movesNow();
+  for (const more of [1, 2, 3]) {
+    await embedTab.mouse.move(x + 4 * (step + more), y + 4 * (step + more));
+  }
+  const after = await movesNow();
+  check(
+    "17: setup: the pointer moved in the embed, and the decision page around it heard nothing",
+    after.embed > before.embed && after.host === before.host,
+    `${after.embed - before.embed} move(s) in the embed, ${after.host - before.host} in the decision page`
+  );
+  await until(
+    "the moves inside the embedded preview to move the tab's last input on",
+    () => inputOn(embedTab),
+    (at) => at !== null && handedInput !== null && at > handedInput,
+    40_000
   );
   check(
     "17: a touch inside a preview embedded in a decision page is input on its tab",
