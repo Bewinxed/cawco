@@ -42,12 +42,19 @@
 <HeadFade band="var(--c-top-bar-h)" {tint} />
 <!-- With a centre, leading and trailing share the room either side of it
      so the centre stands centred; with none, leading takes all the room
-     the trailing group leaves (a search field opened in the bar). -->
+     the trailing group leaves (a search field opened in the bar). The
+     trailing side never takes less than its whole width (`max-content`):
+     a plain `1fr` lets its floor fall to its min-content, so a label that
+     can wrap gave it half the row and its controls ran past the screen's
+     edge at 390; it is leading that gives up room, down to nothing
+     (`minmax(0, 1fr)`), and the centre moves toward it. -->
 <div
   data-slot="bar"
   class={[
     "pointer-events-none absolute inset-x-0 top-0 z-2 grid h-c-top-bar-h items-center gap-space-2 px-space-2 [&_[data-slot=tools]]:pointer-events-auto",
-    center ? "grid-cols-[1fr_auto_1fr]" : "grid-cols-[minmax(0,1fr)_auto]",
+    center
+      ? "grid-cols-[minmax(0,1fr)_auto_minmax(max-content,1fr)]"
+      : "grid-cols-[minmax(0,1fr)_auto]",
   ]}
 >
   <div class="flex min-w-0 items-center gap-space-2">

@@ -298,6 +298,40 @@ const run = async (kit: Kit) => {
     html: '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Glass bars</title></head><body><h1 id="head">Glass bars</h1><p id="one">Every bar floats its controls in glass.</p></body></html>',
   });
   const SESSION = `${base}/session/${talk}`;
+
+  // Caw's column at its fullest bar: the conversation on show holds that
+  // artifact, so Assistant | Preview stands in the trailing side beside its
+  // three items (and, on a phone, Close). Every width reads it, and the bar's
+  // ink stays on the screen (BarFloat gives its trailing side its whole
+  // width).
+  await each("caw preview shown", async (page) => {
+    await page
+      .locator(`${PANEL} [data-slot="bar"] [role="tablist"]`)
+      .first()
+      .waitFor({ timeout: 60_000 });
+    await page.waitForTimeout(800);
+    const edge = await page.evaluate((panel) => {
+      const bar = [
+        ...document.querySelectorAll<HTMLElement>(`${panel} [data-slot="bar"]`),
+      ].find((one) => one.getClientRects().length > 0);
+      const ink = [
+        ...(bar?.querySelectorAll<HTMLElement>(
+          '[data-bar-item], [role="tab"]'
+        ) ?? []),
+      ].map((one) => one.getBoundingClientRect());
+      return {
+        right: Math.max(...ink.map((one) => one.right)),
+        left: Math.min(...ink.map((one) => one.left)),
+        count: ink.length,
+        width: window.innerWidth,
+      };
+    }, PANEL);
+    kit.check(
+      `Caw's column ${edge.width}: its fullest bar (${edge.count} items and tabs) stands on the screen`,
+      edge.count >= 5 && edge.left >= 0 && edge.right <= edge.width,
+      `${Math.round(edge.left)}..${Math.round(edge.right)} of ${edge.width}`
+    );
+  });
   await surface(
     "artifact panel expanded",
     SESSION,
