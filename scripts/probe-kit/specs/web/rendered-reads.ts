@@ -26,7 +26,8 @@
  *  - fat-row: tool rows whose group's room above sits in a child's margin
  *    inside a `flow-root` row; a bench's column of pane groups.
  *  - uneven-inset: a tab strip with room after its last tab; a bar's ghost
- *    button at its end, read by its words, not its padding.
+ *    button at its end, read by its words, not its padding, and the same
+ *    ghost in a wrapper that paints nothing.
  *  - contrast: an unchosen tab's label on its tab's own sheet, one SVG path
  *    (fluid-tabs TabItem), lighter than the shelf behind it.
  *  - empty-pane: an empty editor (`contenteditable`, its placeholder a
@@ -325,6 +326,11 @@ const FIXTURES: Record<string, Fixture> = {
   "uneven-inset, a bar's ghost at its end": {
     rule: "uneven-inset",
     html: `${BASE}<header style="display: flex; justify-content: space-between; align-items: center; inline-size: 1000px; block-size: 44px; padding: 0 4px 0 21px; background: #fdfbf7"><span>Finder bench</span><button type="button" style="block-size: 32px; padding-inline: 11px; border: 1px solid transparent; background: none">Jump ⌘K</button></header>`,
+    want: null,
+  },
+  "uneven-inset, a bar's ghost in a wrapper that paints nothing": {
+    rule: "uneven-inset",
+    html: `${BASE}<header style="display: flex; justify-content: space-between; align-items: center; inline-size: 1000px; block-size: 44px; padding: 0 0 0 21px; background: #fdfbf7"><span>Finder bench</span><div style="display: flex; padding-inline-end: 4px"><button type="button" style="block-size: 32px; padding-inline: 11px; border: 1px solid transparent; background: none">Jump ⌘K</button></div></header>`,
     want: null,
   },
   "uneven-inset, a bar's padding uneven under a filled button": {

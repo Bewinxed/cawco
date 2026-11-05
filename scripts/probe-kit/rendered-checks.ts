@@ -35,7 +35,7 @@
  * | made-up     | own code                    | no fixture or probe words (`PROBE-`, `/tmp/`, `Lorem` …), a lone "Body", text outside the spec's `allowedText` source |
  * | tight-inset | own code                    | words on an edged, rounded surface of 160×48 or more stand 8px or more from its sides (DESIGN.md, The Row Grid Rule) |
  * | tight-control | own code                  | a drawn button stands 7px (`space-2`) or more under the field, line or card above it |
- * | uneven-inset | own code                   | a drawn row its children fill (to its padding at both ends) keeps one inset at both ends, a ghost control read by its ink: the smaller end not under 55% of a 16px or larger one (DESIGN.md, The Row Grid Rule) |
+ * | uneven-inset | own code                   | a drawn row its children fill (to its padding at both ends) keeps one inset at both ends, a child that paints nothing (a ghost, a wrapper) read by its ink: the smaller end not under 55% of a 16px or larger one (DESIGN.md, The Row Grid Rule) |
  * | fat-row     | own code                    | one-line rows of a list (its children of its commonest kind) not over 3.4 lines and 48px tall, a row that draws nothing less the margins its children keep inside it |
  * | loose-list  | own code                    | a list's alike rows, where two stand next to each other, not further apart than they are tall, and 24px |
  * | empty-pane  | own code                    | a landmark or pane of 120px or more holds a word, mark, control (an editor's `contenteditable` too) or drawn block |
@@ -2186,16 +2186,18 @@ function readInPage(args: InPageArgs): InPageRead {
   }
 
   // DESIGN.md, The Row Grid Rule: the trailing edge "drawn in ink". A drawn
-  // row its children fill keeps one inset at both ends, read in ink: a
-  // control that draws nothing of its own (a ghost) ends where its words and
-  // glyph end, not at its padding. A row whose children stop
+  // row its children fill keeps one inset at both ends, read in ink: a child
+  // that draws nothing of its own (a ghost control, a layout wrapper round
+  // one) ends where its words, glyphs and painted boxes end, not at its
+  // padding. A wrapper read by its box stood at the row's edge, ink at 0,
+  // whatever it held. A row whose children stop
   // short of its padding on a side (a tab strip with room after its last
   // tab) has free space there, and is a layout.
   if (!skip.has("uneven-inset")) {
-    /** Where `el` draws, sideways: its box, but a control that paints nothing of its own (a ghost) by its words, glyphs and painted boxes inside. */
+    /** Where `el` draws, sideways: its box when it paints, else (a ghost, a wrapper) its words, glyphs and painted boxes inside. */
     const drawnSides = (el: Element): { left: number; right: number } => {
       const box = el.getBoundingClientRect();
-      if (!el.matches(CONTROL) || paints(el).length > 0) {
+      if (paints(el).length > 0) {
         return box;
       }
       let left = Number.POSITIVE_INFINITY;
