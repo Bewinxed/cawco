@@ -31,7 +31,10 @@
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import FloatingBody from "#lib/components/ui/floating-body.svelte";
   import { menuSurface } from "#lib/components/ui/menu-surface.svelte.js";
-  import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
+  import {
+    type FloatingSurfaceLooks,
+    floatingSurface,
+  } from "#lib/components/ui/popover/popover-content.svelte";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import { browser } from "$app/env";
   import DropdownMenuPortal from "./dropdown-menu-portal.svelte";
@@ -49,11 +52,13 @@
     onCloseAutoFocus,
     width,
     min,
+    motion,
     child: callerChild,
     children,
     ...restProps
   }: DropdownMenuPrimitive.ContentProps &
-    DropdownMenuContentLooks & {
+    DropdownMenuContentLooks &
+    FloatingSurfaceLooks & {
       portalProps?: WithoutChildrenOrChild<
         ComponentProps<typeof DropdownMenuPortal>
       >;
@@ -83,7 +88,7 @@
   <DropdownMenuPrimitive.Content
     {align}
     class={cn(
-      floatingSurface(),
+      floatingSurface({ motion }),
       "relative z-(--layer-float) max-h-(--bits-dropdown-menu-content-available-height) w-(--bits-dropdown-menu-anchor-width) min-w-48 origin-(--bits-dropdown-menu-content-transform-origin) overflow-y-auto overflow-x-hidden outline-none",
       dropdownMenuContentVariants({ width, min }),
       className

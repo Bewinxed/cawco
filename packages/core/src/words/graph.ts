@@ -18,6 +18,7 @@ export const graphWords = {
   statesFace: "States",
   wholeSet: "Map",
   moveFace: "Animation",
+  dialsFace: "Dials",
   /** The panel's own name, whichever face it shows, from the faces it has: the room's aside and the phone drawer's title ("States, map and animation"). */
   room: (faces: readonly string[]) =>
     andList(faces.map((face, at) => (at === 0 ? face : face.toLowerCase()))),
@@ -295,4 +296,30 @@ export const graphWords = {
   tryAgain: "Try again",
   /** The hub's link down: the stage keeps its last drawing. */
   stale: "Not live: the hub can't be reached. This is the last view it sent.",
+
+  /**
+   * The agent's dials (its canvas spec's `dials`): the values it lets the
+   * person tune on the drawing, each a row of the Dials face.
+   */
+  dials: {
+    /** The two whole sets of values once he changed any, as the move's timing has. */
+    versions: "Values",
+    /** A changed dial's restore glyph: what it goes back to. */
+    reset: (dial: string, value: string) => `Reset ${dial} to ${value}`,
+    resetAllSaid: "Reset all dial values",
+    /** Copies the values as set, with what the agent is to do with them. */
+    copy: "Copy values",
+    /** What Copy puts on the clipboard, for a chat or a file: the values, then the ask. */
+    copiedText: (component: string, values: string) =>
+      `Dial values for ${component}, as set in the design graph:\n${values}\nMake these the component's own values.`,
+    /** A colour dial's swatch: the platform's picker. */
+    pick: (dial: string) => `Pick ${dial}`,
+    /** A colour typed that the browser reads as none: under its field until it is one. */
+    notAColour: (typed: string) =>
+      `“${typed}” isn't a colour. Type a hex, rgb(), hsl() or oklch() value.`,
+    on: "On",
+    off: "Off",
+    /** The As written view, under its dials: they take no turn, and the way on is Yours. */
+    readOnly: "Switch to Yours to change the values.",
+  },
 } as const;

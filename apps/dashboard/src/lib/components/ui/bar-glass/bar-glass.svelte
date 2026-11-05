@@ -1,3 +1,20 @@
+<script lang="ts" module>
+  import { createContext } from "svelte";
+
+  /**
+   * The glass a menu or popover opened from one of its items hangs from
+   * (BarMenu): the group's element, the side its foot flares to, and the
+   * card's word that it stands drawn out of the glass or has gone back.
+   */
+  export interface GlassHold {
+    readonly flare: "start" | "end";
+    hung: (shown: boolean) => void;
+    readonly node: HTMLElement | null;
+  }
+
+  export const [glassHold, setGlassHold] = createContext<GlassHold>();
+</script>
+
 <script lang="ts">
   /**
    * The top bar's glass (the top bar's surface brief, Top bar's trailing edge): one group on
@@ -33,12 +50,13 @@
    * once (motion/keyed lands it). On the phone the join runs on down through the neck, square
    * on its trailing side, which goes straight on down into the card's.
    */
-  import type { Snippet } from "svelte";
+  import { type Snippet, untrack } from "svelte";
 
   let {
     head,
     children,
     form = "bar",
+    flare = "start",
     joined = false,
   }: {
     /** Caw's head, last in the group, at the edge (the top bar's; a group has none). */
@@ -48,12 +66,45 @@
      * line. `group`: the same capsule at every width, a head's floating
      * group of bare symbols (a project's head), with no join and no tab.
      */
-    form?: "bar" | "group";
+    form?: "bar" | "group" | "title";
+    /**
+     * The foot's side that flares into the card it hangs: `start` for a
+     * card that stands out past the glass's leading side (the bar's, a
+     * trailing group's), `end` for one past its trailing side (a leading
+     * title's).
+     */
+    flare?: "start" | "end";
     /** The bar's controls ahead of the head (Files, Jump, the machines). */
     children?: Snippet;
     /** A card stands drawn out of the glass: the glass draws its join. */
     joined?: boolean;
   } = $props();
+
+  /*
+   * `title`: a bar's title as a control (the artifact panel's): the HIG's
+   * title is plain text in the bar, so it draws no glass at rest; its card
+   * (BarMenu) hangs from it as from a group's glass, and while it stands
+   * drawn out the join is the title's whole ground, one shape with the card.
+   */
+
+  let node = $state<HTMLElement | null>(null);
+  /** How many of its menus stand drawn out of it (BarMenu): one at a time, counted so a swap never drops the join between them. */
+  let hanging = $state(0);
+  setGlassHold({
+    get node() {
+      return node;
+    },
+    get flare() {
+      return flare;
+    },
+    hung(shown) {
+      // Told from a card's own effect: counted without that effect reading the count back.
+      untrack(() => {
+        hanging = Math.max(0, hanging + (shown ? 1 : -1));
+      });
+    },
+  });
+  const drawnOut = $derived(joined || hanging > 0);
 </script>
 
 <!-- The glass is drawn by a layer under the items (`before:`), never by the
@@ -65,11 +116,14 @@
   data-slot="tools"
   class={[
     "group/tools relative flex items-center gap-c-bar-group-pad h-c-btn-h p-c-bar-group-pad rounded-pill hit-gap-x-c-bar-group-pad coarse:gap-space-5 coarse:hit-gap-x-space-5 before:absolute before:inset-0 before:rounded-inherit before:border before:border-border-hairline before:bg-material-panel before:shadow-tile before:glass-backdrop before:pointer-events-none contrast-more:before:border-border-contrast contrast-more:before:bg-surface-raised contrast-more:before:backdrop-filter-none reduced-transparency:before:border-border-contrast reduced-transparency:before:bg-surface-raised reduced-transparency:before:backdrop-filter-none",
+    form === "title" && "before:hidden",
     form === "bar" &&
       "@max-desk/shell:self-start @max-desk/shell:h-c-bar-caw-glass-phone @max-desk/shell:mt-(--tools-top) @max-desk/shell:p-0 @max-desk/shell:rounded-s-(--tools-round) @max-desk/shell:rounded-e-none @max-desk/shell:caw-neck-(--tools-neck) @max-desk/shell:**:data-bar-item:rounded-e-none @max-desk/shell:**:data-bar-item:w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:min-w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:h-c-bar-caw-glass-phone",
   ]}
+  bind:this={node}
   data-bar-group={form === "bar" ? "" : undefined}
-  data-joined={joined ? "" : undefined}
+  data-flare={flare}
+  data-joined={drawnOut ? "" : undefined}
   style:--flare="var(--radius-lg)"
   style:--tools-top={"calc(var(--c-top-bar-h) - var(--c-tab-row-h) / 2 - var(--c-bar-caw-glass-phone) / 2)"}
   style:--tools-round="calc(var(--c-bar-caw-glass-phone) / 2)"
@@ -86,7 +140,10 @@
     data-slot="join"
     aria-hidden="true"
     class={[
-      "absolute inset-bs-0 -inset-be-px -start-(--f) end-0 pointer-events-none opacity-0 bg-border-control clip-path-(--join-edge) transition-[opacity] duration-(--dur-exit) ease-out [--r:var(--join-round)] group-data-joined/tools:opacity-100 group-data-joined/tools:duration-(--dur-pop) before:absolute before:inset-0 before:bg-surface-raised before:clip-join",
+      "absolute inset-bs-0 -inset-be-px pointer-events-none opacity-0 bg-border-control clip-path-(--join-edge) transition-[opacity] duration-(--dur-exit) ease-out [--r:var(--join-round)] group-data-joined/tools:opacity-100 group-data-joined/tools:duration-(--dur-pop) before:absolute before:inset-0 before:bg-surface-raised before:clip-join",
+      flare === "start"
+        ? "-start-(--f) end-0"
+        : "start-0 -end-(--f) -scale-x-100",
       form === "bar" &&
         "@max-desk/shell:-inset-be-(--caw-neck) @max-desk/shell:[--r:var(--tools-round)] @max-desk/shell:clip-path-(--join-edge-phone) @max-desk/shell:before:clip-join-phone",
     ]}

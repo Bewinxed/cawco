@@ -68,7 +68,6 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
-  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { TooltipProvider } from "#lib/components/ui/tooltip/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
@@ -96,6 +95,7 @@
     tracksOf,
     untune,
   } from "./motion";
+  import VersionSwitch from "./VersionSwitch.svelte";
 
   let {
     move,
@@ -689,32 +689,13 @@
         {/if}
         {#if move.kind === "ready" && changedCount > 0}
           <div class="flex flex-none items-center gap-space-2">
-            <ToggleGroup.Root
-              aria-label={words.versions}
-              onValueChange={(next: string) => {
-                if (next === "yours" || next === "written") {
-                  onversion(next);
-                }
-              }}
-              type="single"
-              value={version}
-            >
-              <ToggleGroup.Item value="written"
-                >{words.written}</ToggleGroup.Item
-              >
-              <ToggleGroup.Item
-                aria-label="{words.yours}, {words.changedCount(
-                  figure(changedCount)
-                )}"
-                value="yours"
-              >
-                <span>{words.yours}</span>
-                <span
-                  class="type-meta text-ink-muted num"
-                  data-slot="changed-count">{figure(changedCount)}</span
-                >
-              </ToggleGroup.Item>
-            </ToggleGroup.Root>
+            <VersionSwitch
+              changed={changedCount}
+              label={words.versions}
+              {lang}
+              {onversion}
+              {version}
+            />
             <!-- Reset all: its words on a desk; on a narrow face its glyph,
                  its words in its tooltip and its name. -->
             <Tip label={words.resetAllSaid}>

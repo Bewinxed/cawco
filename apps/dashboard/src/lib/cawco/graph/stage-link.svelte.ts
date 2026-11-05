@@ -10,9 +10,11 @@
 import type { SheetOnPage } from "@cawco/core/stage";
 import {
   STAGE_COMPARE,
+  STAGE_DIALS,
   STAGE_REACH,
   STAGE_REVEAL,
   type StageCompare,
+  type StageDials,
   type StageDifferences,
   type StageFault,
   type StageLaid,
@@ -56,6 +58,13 @@ export class StageLink {
   comparing = $state<StageCompare | null>(null);
   /** What differs, as the page last read it for that Compare (`cawco:stage-differences`); null until it has. */
   differences = $state<StageDifferences | null>(null);
+  /**
+   * Each of the agent's dials' value as written, read off the drawing by
+   * the page, by name; null until the page has read them. The Dials face
+   * stands once it has (slice 4 has the page say them; until then the
+   * stage page's own DialKit panel turns them).
+   */
+  dialsWritten = $state<StageDials["values"] | null>(null);
   readonly #post: (message: object) => void;
   #ask = 0;
 
@@ -115,6 +124,15 @@ export class StageLink {
     if (this.comparing && said.ask === this.comparing.ask) {
       this.differences = said;
     }
+  }
+
+  /** The dials as set on the drawing, the whole set by name. */
+  turn(values: StageDials["values"]): void {
+    const message: StageDials & { type: string } = {
+      type: STAGE_DIALS,
+      values,
+    };
+    this.#post(message);
   }
 
   /** A region of the drawing brought into the stage's view: what the last reach changed, or a difference's ring. */

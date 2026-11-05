@@ -23,6 +23,8 @@
           box: "w-c-number-field-w",
           field: "px-space-2 text-center tabular-nums",
         },
+        /** A figure before its unit, at the field's end (a dial's value). */
+        figure: { field: "text-end tabular-nums" },
       },
       measure: {
         shrink: { box: "min-w-0" },

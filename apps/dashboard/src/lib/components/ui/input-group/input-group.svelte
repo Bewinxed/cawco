@@ -5,9 +5,18 @@
   let {
     ref = $bindable(null),
     class: className,
+    share,
     children,
     ...props
-  }: WithElementRef<HTMLAttributes<HTMLDivElement>> = $props();
+  }: WithElementRef<HTMLAttributes<HTMLDivElement>> & {
+    /**
+     * A value's place in its range, 0 to 1, drawn as a fill from the
+     * frame's leading edge under its words (the design graph's number dial,
+     * DialKit's and the Effort chip's fill): the frame is the value's
+     * control, a drag across it the caller's.
+     */
+    share?: number;
+  } = $props();
 
   /**
    * A press on the frame's touch area beside its field: the field's own
@@ -53,6 +62,7 @@
     "has-[>[data-align=inline-end]]:[&>input]:pr-1.5",
     "has-[>[data-align=block-start]]:[&>input]:pb-3",
     "has-[>[data-align=inline-start]]:[&>input]:pl-1.5",
+    share !== undefined && "isolate cursor-ew-resize overflow-clip",
     className
   )}
   data-slot="input-group"
@@ -61,5 +71,13 @@
   bind:this={ref}
   {...props}
 >
+  {#if share !== undefined}
+    <span
+      aria-hidden="true"
+      class="pointer-events-none absolute inset-y-0 start-0 -z-1 w-(--share) border-e border-border-control bg-surface-fill transition-control"
+      data-slot="input-group-share"
+      style:--share="{Math.min(1, Math.max(0, share)) * 100}%"
+    ></span>
+  {/if}
   {@render children?.()}
 </div>

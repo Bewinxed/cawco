@@ -48,7 +48,7 @@
     numberOf,
     sheetSlide,
   } from "#lib/cawco/motion/curves.svelte.js";
-  import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
+  import { BarGlass, BarMenu } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
@@ -69,6 +69,7 @@
     IconChevronDown,
     IconClose,
     IconCompare,
+    IconDial,
     IconEye,
     IconListRows,
     IconMaximize,
@@ -82,16 +83,12 @@
   } from "#lib/icons.js";
   import { browser } from "$app/env";
   import { besideLine, DIVIDER } from "./beside";
+  import Dials from "./Dials.svelte";
+  import type { DialValue, DialValues, GraphDial } from "./dials";
   import { figureOf, pageLang } from "./figures";
   import Journey from "./Journey.svelte";
   import { keepUnder, keptUnder } from "./kept";
-  import {
-    ownStateOf,
-    pathOf,
-    previousOf,
-    type Review,
-    reviewOf,
-  } from "./model";
+  import { pathOf, previousOf, type Review, reviewOf } from "./model";
   import StagePane from "./StagePane.svelte";
   import Stepper from "./Stepper.svelte";
   import type { StageLink } from "./stage-link.svelte";
@@ -109,6 +106,11 @@
     onroom,
     inspector,
     memory,
+    dialsAt = "face",
+    numberForm = "field",
+    startFace,
+    keptDials = {},
+    ondials,
   }: {
     /** The line to the stage page: what it said, and what the graph asks of it. */
     link: StageLink;
@@ -146,6 +148,20 @@
      * reload, for the ask they were kept under (kept.ts).
      */
     memory?: string;
+    /**
+     * Where the agent's dials open (the owner's pick, tsk-198's view
+     * switch): a face of the room, or a card hung from a glyph in the bar's
+     * glass.
+     */
+    dialsAt?: "face" | "glass";
+    /** How a number dial is drawn (the owner's pick, tsk-193 and tsk-198). */
+    numberForm?: "field" | "slider";
+    /** The room's face the graph opens on (the ask's `face`); the states when it names none or one the room lacks. */
+    startFace?: "map" | "dials";
+    /** His dial values as the artifact keeps them (its doc's `dials`), by name: they stand again on open. */
+    keptDials?: DialValues;
+    /** His dial values changed: the artifact keeps them (its doc's `dials`, which `artifact_read` answers). */
+    ondials?: (values: DialValues) => void;
   } = $props();
 
   /** The page's own ids, for a label's `for`. */
@@ -226,14 +242,69 @@
    * until the Animation face stands on the page. The room is named by the
    * faces it has.
    */
-  const FACES = [
+  /**
+   * The agent's dials (its canvas spec's `dials`), once the page has read
+   * each one's value as written off the drawing: none stands before.
+   */
+  const dials = $derived<GraphDial[]>(
+    link.dialsWritten
+      ? (spec.dials ?? []).filter(
+          (dial) => dial.name in (link.dialsWritten ?? {})
+        )
+      : []
+  );
+  const FACES = $derived([
     { value: "states", label: words.statesFace, icon: IconListRows },
     { value: "map", label: words.wholeSet, icon: IconStructure },
-  ] as const;
-  type Face = (typeof FACES)[number]["value"];
-  const roomName = words.room(FACES.map((one) => one.label));
+    ...(dials.length > 0 && dialsAt === "face"
+      ? [{ value: "dials", label: words.dialsFace, icon: IconDial }]
+      : []),
+  ] as const);
+  type Face = "states" | "map" | "dials";
+  const roomName = $derived(words.room(FACES.map((one) => one.label)));
   /** The face the room shows: the states until he picks another. */
-  let face = $state<Face>("states");
+  let face = $state<Face>(untrack(() => startFace) ?? "states");
+  /** His values of the dials, by name; As written or Yours on the face and the drawing; the values Reset all took, while nothing has changed since. */
+  let dialValues = $state<DialValues>(untrack(() => ({ ...keptDials })));
+  let dialVersion = $state<"yours" | "written">("yours");
+  let dialsUndo = $state<DialValues | null>(null);
+  /** The dials as set on the drawing: his over as written, or as written alone. */
+  const dialsSet = $derived(dialVersion === "written" ? {} : dialValues);
+  // The drawing takes every turn: the whole set, each time it changes.
+  $effect(() => {
+    const set = $state.snapshot(dialsSet);
+    if (dials.length > 0) {
+      untrack(() => link.turn(set));
+    }
+  });
+  const turnDial = (name: string, value: DialValue) => {
+    dialValues = { ...dialValues, [name]: value };
+    dialsUndo = null;
+    ondials?.(dialValues);
+  };
+  const resetDials = (names: string[]) => {
+    if (names.length > 1) {
+      dialsUndo = dialValues;
+    }
+    dialValues = Object.fromEntries(
+      Object.entries(dialValues).filter(([name]) => !names.includes(name))
+    );
+    dialVersion = "yours";
+    ondials?.(dialValues);
+  };
+  /** The glass's dials card is open (the dials hung from the bar's glass), and drawn out of it. */
+  let dialsOpen = $state(
+    untrack(() => dialsAt === "glass" && startFace === "dials")
+  );
+  let dialsJoined = $state(false);
+  // A face the room no longer has (the dials gone) gives way to the states.
+  $effect(() => {
+    if (!FACES.some((one) => one.value === face)) {
+      untrack(() => {
+        face = "states";
+      });
+    }
+  });
   /** The kept state of each component, by its states file. */
   let keptOf = $state<Record<string, Pick>>({});
   /** The state he kept on the component in front, while its states file still has it; else where the component opens. */
@@ -345,11 +416,11 @@
         : state?.widths.find((one) => one.width === atWidth);
     return { file: on.file, story: sized?.story ?? pick.state };
   };
-  /** A state kept (a record set too); kept while it (or its phone twin) is the one compared with, Compare turns to the state before it. */
+  /** A state kept (a record set too); kept while it is the one compared with, Compare turns to the state before it. */
   const keep = (state: string, variant: string | null) => {
     if (review) {
       keptOf = { ...keptOf, [review.file]: { state, variant } };
-      if (comparing && against === ownStateOf(review, state)) {
+      if (comparing && against === state) {
         compareWith(previousOf(review, state));
       }
     }
@@ -603,6 +674,7 @@
       untrack(() => {
         viewOpen = false;
         menuOpen = false;
+        dialsOpen = false;
       });
     }
   });
@@ -711,17 +783,10 @@
       });
     }
   };
-  /**
-   * A press on a state in the room: while comparing, on another state,
-   * compare with it; else keep it. A phone twin's row is its state at a
-   * phone's width: Compare compares with its state, and the kept state's
-   * own twin is kept (the drawing at that width), as Compare draws both at
-   * the kept one's width, where a twin differs in nothing.
-   */
+  /** A press on a state in the room: while comparing, on another state, compare with it; else keep it. */
   const press = (state: string, variant: string | null) => {
-    const own = review ? ownStateOf(review, state) : state;
-    if (comparing && review && kept && own !== ownStateOf(review, kept.state)) {
-      compareWith(own);
+    if (comparing && kept && state !== kept.state) {
+      compareWith(state);
       return;
     }
     choose(state, variant);
@@ -884,8 +949,33 @@
   });
 </script>
 
+{#snippet dialsBody()}
+  <Dials
+    component={review?.name ?? ""}
+    {dials}
+    {lang}
+    {numberForm}
+    onchange={turnDial}
+    onreset={resetDials}
+    onundo={() => {
+      dialValues = dialsUndo ?? {};
+      dialsUndo = null;
+      ondials?.(dialValues);
+    }}
+    onversion={(next) => {
+      dialVersion = next;
+    }}
+    undoable={dialsUndo !== null}
+    values={dialValues}
+    version={dialVersion}
+    written={link.dialsWritten ?? {}}
+  />
+{/snippet}
+
 {#snippet roomFace(stepperHere: boolean)}
-  {#if review && kept}
+  {#if face === "dials" && dials.length > 0}
+    {@render dialsBody()}
+  {:else if review && kept}
     {#if single}
       <p class="m-0 max-w-c-measure type-body text-ink-muted text-pretty">
         {words.oneState}
@@ -921,7 +1011,7 @@
   <Tabs
     class="min-w-0 flex-1"
     onValueChange={(next: string) => {
-      face = next === "map" ? "map" : "states";
+      face = next === "map" || next === "dials" ? next : "states";
     }}
     size="compact"
     value={face}
@@ -980,65 +1070,71 @@
       <div class="flex min-w-0 flex-1 items-center">
         {#if files.length > 1 && frontFile}
           {@const frontName = review?.name ?? loadingName(frontFile)}
-          <DropdownMenu.Root bind:open={menuOpen}>
-            <DropdownMenu.Trigger>
-              {#snippet child({ props })}
-                <!-- Its name is what it shows, the switch said before it
-                     (WCAG 2.5.3, Label in Name). -->
-                <button
-                  {...props}
-                  bind:this={menuTrigger}
-                  class="mark-line pointer-hit touch-hit -ms-space-2 inline-flex h-c-btn-h-sm min-w-0 items-center gap-space-1 rounded-md px-space-2 type-label text-ink-strong transition-control can-hover:hover:bg-surface-hover"
-                  type="button"
-                >
-                  <span class="sr-only">{words.components}:</span>
-                  <span
-                    class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-                    >{frontName}</span
-                  >
-                  <IconChevronDown
-                    aria-hidden="true"
-                    class="size-icon-sm flex-none text-ink-muted"
+          <!-- The title: plain text with its menu chevron, no glass at
+               rest; open, its menu hangs from it as one shape (BarGlass
+               `form="title"`, BarMenu), as Caw's card hangs from his glass. -->
+          <BarGlass flare="end" form="title">
+            <DropdownMenu.Root bind:open={menuOpen}>
+              <DropdownMenu.Trigger>
+                {#snippet child({ props })}
+                  <!-- Its name is what it shows, the switch said before it
+                       (WCAG 2.5.3, Label in Name). -->
+                  <button
+                    {...props}
+                    bind:this={menuTrigger}
+                    class="select-none touch-hit press-tint mark-line max-w-full gap-space-1 ps-space-2 pe-space-1"
+                    data-bar-item
                     data-box
-                  />
-                </button>
-              {/snippet}
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content
-              align="start"
-              onCloseAutoFocus={(event: Event) =>
-                quietFocus(event, menuTrigger)}
-              width="regular"
-            >
-              <DropdownMenu.RadioGroup
-                bind:value={
-                  () => frontFile,
-                  (next: string) => {
-                    if (next !== frontFile) {
-                      setComparing(false);
-                    }
-                    chosenFile = next;
-                  }
-                }
-              >
-                <!-- Every states file from the start; one whose sheet is on
-                     its way says so in its own place. -->
-                {#each entries as one (one.file)}
-                  <DropdownMenu.RadioItem value={one.file}>
+                    type="button"
+                  >
+                    <span class="sr-only">{words.components}:</span>
                     <span
-                      class={[
-                        "min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap",
-                        !one.review && "text-ink-muted",
-                      ]}
-                      >{one.review
-                        ? one.review.name
-                        : words.mounting(loadingName(one.file))}</span
+                      class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
+                      >{frontName}</span
                     >
-                  </DropdownMenu.RadioItem>
-                {/each}
-              </DropdownMenu.RadioGroup>
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
+                    <IconChevronDown
+                      aria-hidden="true"
+                      class="size-icon-sm flex-none text-ink-muted"
+                    />
+                  </button>
+                {/snippet}
+              </DropdownMenu.Trigger>
+              <BarMenu
+                label={words.components}
+                onCloseAutoFocus={(event: Event) =>
+                  quietFocus(event, menuTrigger)}
+                width="regular"
+              >
+                <DropdownMenu.RadioGroup
+                  bind:value={
+                    () => frontFile,
+                    (next: string) => {
+                      if (next !== frontFile) {
+                        setComparing(false);
+                      }
+                      chosenFile = next;
+                    }
+                  }
+                >
+                  <!-- Every states file from the start; one whose sheet is on
+                       its way says so in its own place. -->
+                  {#each entries as one (one.file)}
+                    <DropdownMenu.RadioItem value={one.file}>
+                      <span
+                        class={[
+                          "min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap",
+                          !one.review && "text-ink-muted",
+                        ]}
+                        >{one.review
+                          ? one.review.name
+                          : words.mounting(loadingName(one.file))}</span
+                      >
+                    </DropdownMenu.RadioItem>
+                  {/each}
+                </DropdownMenu.RadioGroup>
+              </BarMenu>
+            </DropdownMenu.Root>
+          </BarGlass>
         {:else if review}
           <h1 class="m-0 min-w-0 truncate type-label text-ink-strong">
             {review.name}
@@ -1054,7 +1150,7 @@
       >
         <!-- Compare and the view; Show states only while the room is put
              away. The room's one close is its own. -->
-        <BarGlass form="group" joined={viewJoined}>
+        <BarGlass form="group" joined={viewJoined || dialsJoined}>
           {#if !single}
             <Tip label={words.compare}>
               {#snippet children(tip)}
@@ -1072,6 +1168,44 @@
                 </button>
               {/snippet}
             </Tip>
+          {/if}
+          {#if dialsAt === "glass" && dials.length > 0}
+            <!-- The agent's dials, hung from the glass as the view is. -->
+            <Popover.Root bind:open={dialsOpen}>
+              <Tip disabled={dialsOpen} label={words.dialsFace}>
+                {#snippet children(tip)}
+                  <Popover.Trigger>
+                    {#snippet child({ props })}
+                      <button
+                        data-bar-item
+                        {...mergeProps(tip, props)}
+                        aria-label={words.dialsFace}
+                        class="select-none touch-hit press-tint"
+                        type="button"
+                      >
+                        <IconDial data-slot="bar-symbol" aria-hidden="true" />
+                      </button>
+                    {/snippet}
+                  </Popover.Trigger>
+                {/snippet}
+              </Tip>
+              <HangCard
+                align="end"
+                anchor={glass}
+                aria-label={words.dialsFace}
+                bind:joined={dialsJoined}
+                customAnchor={glass}
+                frame="settings"
+                side="bottom"
+                sideOffset={0}
+              >
+                <div
+                  class="flex w-c-graph-room-w max-w-full min-w-0 flex-col p-space-4"
+                >
+                  {@render dialsBody()}
+                </div>
+              </HangCard>
+            </Popover.Root>
           {/if}
           <Popover.Root bind:open={viewOpen}>
             <!-- No tooltip over its own open card: shown, it took the

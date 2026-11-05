@@ -156,6 +156,17 @@ export interface StageReach {
 }
 
 /**
+ * Pane → page: the agent's dials (its canvas spec's `dials`) as set on
+ * the drawing, by name: a `cssVar` dial's value on the drawing's root, an
+ * `arg` dial's through the live instance's update. The whole set each time:
+ * a dial missing from it goes back to as written.
+ */
+export const STAGE_DIALS = "cawco:stage-dials";
+export interface StageDials {
+  values: Record<string, number | string | boolean>;
+}
+
+/**
  * Pane → page: a region of the drawing brought into the page's view with
  * room for a ring round it: what the last reach changed (`move`; while
  * comparing, the first difference's ring stands for it), or the n-th

@@ -113,6 +113,7 @@
   } from "#lib/cawco/motion/hang-shape.js";
   import type { Morph } from "#lib/cawco/motion/morph.svelte.js";
   import ContextMenuContent from "#lib/components/ui/context-menu/context-menu-content.svelte";
+  import DropdownMenuContent from "#lib/components/ui/dropdown-menu/dropdown-menu-content.svelte";
   import {
     drawn,
     own,
@@ -192,11 +193,12 @@
   > & {
     /** What it hangs from. */
     anchor: HTMLElement | null;
-    /** The kit surface it is: the popover's (default), bits-ui's own, or the context menu's. */
+    /** The kit surface it is: the popover's (default), bits-ui's own, the context menu's, or a bar menu's (BarMenu: the dropdown menu's). */
     as?:
       | typeof PopoverContent
       | typeof PopoverPrimitive.Content
-      | typeof ContextMenuContent;
+      | typeof ContextMenuContent
+      | typeof DropdownMenuContent;
     /** The anchor's foot flares out into the card (a chosen tab's does; another's meets it square). */
     flared?: boolean;
     /** It hangs from the top bar's glass. */
@@ -225,6 +227,8 @@
     folded?: () => boolean;
     /** How the popover's box tweens to a new size (motion/morph): the popover's own `as` only. */
     morphs?: Morph;
+    /** A bar menu's width (BarMenu): the kit dropdown menu's own `width`. */
+    menuWidth?: "compact" | "regular" | "wide";
     children: Snippet;
   };
 
@@ -242,14 +246,22 @@
     held,
     folded,
     forceMount = false,
+    menuWidth,
     class: className,
     children,
     ...rest
   }: Props = $props();
 
-  /** The kit's own surface (the popover's or the context menu's), not bits-ui's bare one. */
+  /** A bar menu's width, as the kit dropdown menu takes it; nothing for any other surface. */
+  const menuLook = $derived<Record<string, unknown>>(
+    menuWidth ? { width: menuWidth } : {}
+  );
+
+  /** The kit's own surface (the popover's, the context menu's or the dropdown menu's), not bits-ui's bare one. */
   const kitSurface = $derived(
-    Content === PopoverContent || Content === ContextMenuContent
+    Content === PopoverContent ||
+      Content === ContextMenuContent ||
+      Content === DropdownMenuContent
   );
 
   /** The anchor's span on the screen and its flare; re-read once it may have moved. */
@@ -532,6 +544,7 @@
   data-glass-card={glass || undefined}
   {...kitSurface ? { motion: "hang" as const } : {}}
   {...glass ? { portalProps: { disabled: true } } : {}}
+  {...menuLook}
   {...rest}
   class={cn(
     floatingSurface({ motion: "hang", edge: "drawn" }),

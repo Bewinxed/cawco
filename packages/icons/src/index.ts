@@ -327,6 +327,8 @@ export {
 } from "~icons/solar/users-group-rounded-bold-duotone";
 export { default as IconVideo } from "~icons/solar/video-library-bold-duotone";
 export { default as IconSoundOff } from "~icons/solar/volume-cross-bold-duotone";
+/** A dial: the design graph's Dials, the values an agent lets the person tune. */
+export { default as IconDial } from "~icons/solar/volume-knob-bold-duotone";
 export { default as IconSound } from "~icons/solar/volume-loud-bold-duotone";
 export { default as IconColumns } from "~icons/solar/widget-2-bold-duotone";
 /** A sheet: a component's states, side by side, each a tile. */
