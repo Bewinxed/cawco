@@ -90,8 +90,9 @@
     IconPlus,
   } from "#lib/icons.js";
   import { barGlass } from "../bar-glass.svelte";
+  import { dropStart } from "../spawn/parked.svelte";
   import type { CawLead } from "./caw-lead.svelte";
-  import { startConversation } from "./conversation";
+  import { cawStartsOf, startConversation } from "./conversation";
   import SetupWell from "./SetupWell.svelte";
   import StarterCards from "./StarterCards.svelte";
   import { handedOver, type SetupProgress } from "./setup-progress";
@@ -329,7 +330,12 @@
     starting = true;
     startError = "";
     try {
-      const id = await lead.began(startConversation(projectId, text, extras));
+      const id = await startConversation(
+        projectId,
+        text,
+        extras,
+        lead.draft.keep
+      );
       // A starter pressed into the field went: as its words stood, or
       // changed. The hub keeps it as Jev's steering; nothing waits on it.
       const pressed = lead.draft.takePressed(text);
@@ -349,6 +355,31 @@
       starting = false;
     }
   }
+  /**
+   * A start of his conversation a reload carried (conversation.ts, spawn/parked
+   * `recover`), once it has come to something: the conversation it started
+   * on show, its first prompt sent from what the draft store kept; or the
+   * hero, its words back in the field and why it did not start over them.
+   * Said here, it is let go.
+   */
+  $effect(() => {
+    const settled = cawStartsOf(projectId).filter(
+      (one) => one.state !== "running"
+    );
+    untrack(() => {
+      for (const one of settled) {
+        if (one.state === "started" && one.target) {
+          chosen = one.target;
+          fresh = false;
+        } else {
+          fresh = true;
+          startError = conversationWords.reloadedStart;
+          lead.draft.restore(one.draft.prompt, one.draft.extras);
+        }
+        dropStart(one.id);
+      }
+    });
+  });
 
   /**
    * The composer has a place of its own at the panel's foot and the hero's
@@ -598,7 +629,7 @@
                   }}
                   paneVisible
                   placeholder={conversationWords.placeholder.short}
-                  sendError={startError}
+                  sendError={startError || (lead.problem ?? "")}
                   sending={starting}
                 />
               </RegionBoundary>

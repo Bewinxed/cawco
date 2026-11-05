@@ -845,6 +845,7 @@ const ParkedAskShape = z.object({
 const ParkedStartShape = z.object({
   askedAt: z.number(),
   asks: z.array(ParkedAskShape),
+  caw: z.string().optional(),
   continueFrom: ContinueSourceShape.optional(),
   draft: SessionDraftShape,
   error: z.string(),

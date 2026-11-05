@@ -75,6 +75,7 @@ import { unhandled } from "@cawco/core/unhandled";
 import { areaWords } from "@cawco/core/words/areas";
 import { noticeWords } from "@cawco/core/words/notices";
 import { projectWords } from "@cawco/core/words/project";
+import { conversationWords } from "@cawco/core/words/project-conversation";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
@@ -477,6 +478,9 @@ const CAW_OFF =
 /** A refusal a route answers with its status. */
 class CawRefusal extends StatusRefusal {}
 
+/** Why a send went nowhere when its record names no reason. */
+const NOT_TAKEN = "Its session didn't take the message.";
+
 const refuse = refuser(CawRefusal);
 
 export interface CawDeps {
@@ -511,6 +515,12 @@ export interface CawDeps {
     | "updateWorkItem"
     | "workItem"
   >;
+  /**
+   * Ends a session and deletes it, as a session nothing was said in is
+   * deleted (server.ts `DELETE /api/instances/:id`): a start of the
+   * conversation whose words did not go leaves nothing standing.
+   */
+  readonly discard: (instanceId: string) => void;
   /** Ends a session (the conversation, when its harness or model moves). */
   readonly end: (instanceId: string) => void;
   /** The project's folder changed under its tasks (stages.md, a task file). */
@@ -555,8 +565,11 @@ export interface CawDeps {
    * thrown in its sentence.
    */
   readonly rename: (projectId: string, name: string) => Promise<string>;
-  /** Delivers one message to a session through the hub's one send path: whether the hub took it (its record `pending`). */
-  readonly send: (envelope: Envelope<SendPayload>) => boolean;
+  /** Delivers one message to a session through the hub's one send path: its record, `pending` when the hub took it, else why not. */
+  readonly send: (envelope: Envelope<SendPayload>) => {
+    reason: string | null;
+    state: string;
+  };
   /**
    * Starts the project's conversation as any session starts (server.ts
    * `spawnSession`): in the mode its payload names ({@link modeFor}), else
@@ -601,6 +614,7 @@ export const createCaw = ({
   caps,
   conversationStarted,
   db,
+  discard,
   end,
   folderChanged,
   leadHome,
@@ -725,11 +739,14 @@ export const createCaw = ({
    * origin (core `byPerson`). Any other is CawCo's word (`system`, named
    * `project`): a routine's says so in its origin (`routine:<id>`), the turn
    * it starts that run's (memory.ts). Answers the send's uuid when the hub
-   * took it.
+   * took it, else why it did not, in the hub's words.
    */
-  const message = (target: InstanceRow, said: Said): string | undefined => {
+  const message = (
+    target: InstanceRow,
+    said: Said
+  ): { uuid: string } | { why: string } => {
     const uuid = crypto.randomUUID();
-    const taken = send({
+    const record = send({
       verb: "send",
       machineId: target.machineId,
       instanceId: target.id,
@@ -746,7 +763,9 @@ export const createCaw = ({
         },
       },
     });
-    return taken ? uuid : undefined;
+    return record.state === "pending"
+      ? { uuid }
+      : { why: record.reason ?? NOT_TAKEN };
   };
 
   /** What starts the conversation: how it routes, its first send once its row is there, and how. */
@@ -759,14 +778,18 @@ export const createCaw = ({
   }
 
   /**
-   * Starts the project's conversation, a plain spawn in the project, makes
-   * it the one the project's events reach, and sends it the words that
-   * started it: a session is only ever started by something to say.
+   * Starts the project's conversation, a plain spawn in the project, sends
+   * it the words that started it, and makes it the one the project's events
+   * reach: a session is only ever started by something to say. Named only
+   * once its words are taken, in the same step, so nothing between sees it
+   * unnamed. A start whose words do not go is undone: its session is
+   * deleted, the project's conversation stays as it was, and why stands as
+   * the project's `problem` ({@link view}) until a start goes.
    */
   const startConversation = async (
     project: ReturnType<typeof projectOf>,
     start: Start
-  ): Promise<{ conversation: InstanceRow; sent: string | undefined }> => {
+  ): Promise<{ conversation: InstanceRow; sent: string }> => {
     const place =
       (await placeFor(project)) ??
       refuse(409, problemOf(project) ?? CAW_NO_MACHINE);
@@ -788,22 +811,43 @@ export const createCaw = ({
       projectsChanged();
       throw error;
     }
+    const conversation = row(instanceId);
+    const sent = conversation
+      ? firstSend(conversation, start)
+      : { why: `Its session ${instanceId} has no row on this hub.` };
+    if (!conversation || "why" in sent) {
+      discard(instanceId);
+      const why = conversationWords.firstSendRefused(
+        "why" in sent ? sent.why : NOT_TAKEN
+      );
+      startRefusals.set(project.id, why);
+      projectsChanged();
+      console.warn(
+        `[caw] ${project.name}: its conversation's start was undone (${instanceId}): ${why}`
+      );
+      return refuse(409, why);
+    }
     startRefusals.delete(project.id);
     setConversation(project.id, instanceId);
-    const conversation = row(instanceId);
-    if (!conversation) {
-      throw new Error(
-        `The project's conversation ${instanceId} has no row on this hub.`
-      );
-    }
-    const sent = message(conversation, start.first(conversation));
     console.log(
       `[caw] ${project.name}: started its conversation on ${project.cawHarness} (${instanceId})`
     );
     if (project.eventsOn) {
       conversationStarted(project.id);
     }
-    return { conversation, sent };
+    return { conversation, sent: sent.uuid };
+  };
+
+  /** The words that start the conversation, sent: a refusal thrown on the way is why they did not go. */
+  const firstSend = (
+    conversation: InstanceRow,
+    start: Start
+  ): { uuid: string } | { why: string } => {
+    try {
+      return message(conversation, start.first(conversation));
+    } catch (error) {
+      return { why: errorWords(error) };
+    }
   };
 
   /**
@@ -912,12 +956,13 @@ export const createCaw = ({
     if (!conversation) {
       return { woke: false, why: CAW_OFF };
     }
-    const sent = conversation.started
-      ? conversation.sent
-      : message(conversation.row, said(conversation.row));
-    return sent
-      ? { woke: true, instanceId: conversation.row.id, send: sent }
-      : { woke: false, why: "Its session didn't take the message." };
+    const sent =
+      conversation.started && conversation.sent
+        ? { uuid: conversation.sent }
+        : message(conversation.row, said(conversation.row));
+    return "uuid" in sent
+      ? { woke: true, instanceId: conversation.row.id, send: sent.uuid }
+      : { woke: false, why: sent.why };
   };
 
   /** {@link tell} for the tellers that only log what did not go: an event is never lost silently. */

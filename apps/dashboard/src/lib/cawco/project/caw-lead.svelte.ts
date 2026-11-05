@@ -59,6 +59,7 @@ import { store, stored } from "../storage";
 import { isRetry } from "../tasks/retry";
 import { ComposerDraft } from "../transcript/composer-draft.svelte";
 import { resetLabel } from "../usage";
+import { cawStartsOf } from "./conversation";
 
 /** Caw's sentence, by what the conversation is doing. */
 const said = conversationWords.status;
@@ -403,9 +404,11 @@ export class CawLead {
    * no words, or whose first words never went, is drawn as itself, with its
    * empty state). The word is one of:
    * - its row is still being spawned or moved (`starting`, `moving`);
-   * - his panel's first words are on their way ({@link began}): the panel's
-   *   spawn has not answered, and its first prompt goes as it does
-   *   (client `sendFirstPrompt`, drawn at once);
+   * - a start of his conversation is parked in this tab and running
+   *   (conversation.ts `startConversation`, spawn/parked): its spawn has
+   *   not answered, its first prompt going as it does (client
+   *   `sendFirstPrompt`, drawn at once), or a reload is finding its
+   *   session on the board to send it;
    * - his view says the hub's start runs (caw.ts `conversationFor`), and the
    *   project's conversation is not yet the row on show. The hub names its
    *   conversation and sends it the words that started it in one step
@@ -417,8 +420,11 @@ export class CawLead {
   readonly starting = $derived.by((): boolean => {
     const { conversation: row, view } = this;
     const hubStarts = view?.starting === true && view.problem === null;
+    const parkedRuns = cawStartsOf(this.#projectId()).some(
+      (one) => one.state === "running"
+    );
     if (!row) {
-      return hubStarts;
+      return hubStarts || parkedRuns;
     }
     if (row.status === "moving" || row.status === "starting") {
       return true;
@@ -426,22 +432,8 @@ export class CawLead {
     if (row.status !== "running" || row.stalled) {
       return false;
     }
-    return this.#asking || (hubStarts && view?.instanceId !== row.id);
+    return parkedRuns || (hubStarts && view?.instanceId !== row.id);
   });
-  /** His panel's first words are on their way to start a conversation, until its start answers. */
-  #asking = $state(false);
-  /**
-   * His panel's first words start a conversation (ProjectConversation): he
-   * is starting while `start` runs, and not once it answers or fails.
-   */
-  async began<T>(start: Promise<T>): Promise<T> {
-    this.#asking = true;
-    try {
-      return await start;
-    } finally {
-      this.#asking = false;
-    }
-  }
   /** Why he cannot start now, or why his last start failed (his view's `problem`), in a sentence; null when he can. */
   readonly problem = $derived(
     this.#machinesOnline ? (this.view?.problem ?? null) : CAW_NO_MACHINE

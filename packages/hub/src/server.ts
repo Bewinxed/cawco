@@ -26687,10 +26687,12 @@ export const createServer = (
       running: (projectId) => projectStops.running(projectId),
       stop: (projectId, ids) => projectStops.stop(projectId, ids),
     },
-    send: (envelope) =>
-      deliverToSession(byIdNow(envelope), false).state === "pending",
+    send: (envelope) => deliverToSession(byIdNow(envelope), false),
     end: (instanceId) =>
       endSession(instanceId, "stop", { kind: "session", name: "Caw" }),
+    // Its row goes once its machine confirms the end (session-lifecycle.ts).
+    discard: (instanceId) =>
+      endSession(instanceId, "delete", { kind: "session", name: "Caw" }),
     task: (projectId, id) => tasks.get(projectId, id),
     // The routines are made further down; a turn ends only once the hub is up.
     turnEnded: (instanceId, why, gone) =>

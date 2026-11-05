@@ -15,7 +15,8 @@
  * reload that lands while the hub answers finds them on the board and sends
  * the first prompt that never went; one the board never lists, or one whose
  * answer the reload lost, is said as failed in the error formula (DESIGN.md, Voice),
- * with Reopen.
+ * with Reopen. A conversation Caw's panel or Ask Caw starts parks here too
+ * (project/conversation.ts), marked `caw`: his panel says how it ended.
  */
 
 import { detach } from "@cawco/core/detach";
@@ -54,6 +55,11 @@ export interface ParkedStart {
   askedAt: number;
   /** Its sessions, by machine: a spawn's alone (a fork, a move and a continuation are the hub's to name). */
   asks: ParkedAsk[];
+  /**
+   * The project whose Caw it starts a conversation for (project/conversation.ts):
+   * his panel says how it ended, and lets it go.
+   */
+  caw?: string;
   /** The session it continues: the form opens continuing it. */
   continueFrom?: ContinueSource;
   /** The picks and prompt it was started with: the form opens on them again. */
@@ -147,6 +153,7 @@ function titleOf(draft: SessionDraft, continueFrom?: ContinueSource): string {
  * (`running`), and its prompt is kept in the draft store.
  */
 export function beginStart(options: {
+  caw?: string;
   content: DraftContent;
   continueFrom?: ContinueSource;
   draft: SessionDraft;
@@ -155,7 +162,7 @@ export function beginStart(options: {
   replacing: string | null;
   stage: string;
 }): ParkedStart {
-  const { content, continueFrom, draft, id, prefill, replacing, stage } =
+  const { caw, content, continueFrom, draft, id, prefill, replacing, stage } =
     options;
   if (replacing) {
     dropStart(replacing);
@@ -167,6 +174,7 @@ export function beginStart(options: {
   );
   parked.list.push({
     id,
+    ...(caw ? { caw } : {}),
     ...(continueFrom ? { continueFrom } : {}),
     ...(prefill ? { prefill } : {}),
     draft,

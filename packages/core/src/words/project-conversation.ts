@@ -20,6 +20,19 @@ export const conversationWords = {
   /** A new conversation with nowhere to run: the project has no checkout on a machine yet. */
   noCheckout:
     "This project has no checkout on a machine yet, so a conversation can't start. Add one in Project details, then try again.",
+  /**
+   * A start of his conversation undone because its first message did not
+   * go (hub caw.ts `startConversation`): the project's `problem`, on its
+   * page and in his panel, `why` the hub's sentence.
+   */
+  firstSendRefused: (why: string) =>
+    `The project's conversation didn't start: its first message didn't go. ${why}`,
+  /**
+   * His panel's start the page reloaded through, its session never listed
+   * (spawn/parked `recover`): the words are back in his composer.
+   */
+  reloadedStart:
+    "The page reloaded before the conversation started, so your message didn't go. It's back in the field: send it again.",
   /** Caw's sentence on the project head and in his panel: what the project's conversation is doing. */
   status: {
     /** Events off, with what the conversation started still finishing. */
