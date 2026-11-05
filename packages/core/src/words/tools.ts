@@ -159,18 +159,18 @@ export const toolWords = {
   signinScreen: SIGNIN_SCREEN,
   /** The tool's sign-in printed no link it may be signed in at, or ended first: what its screen said. */
   signinNoLink: (name: string, said: string) =>
-    `${name}'s sign-in showed no sign-in link, so it was stopped. Sign in again.${said ? screenOf(said) : " Its screen said nothing."}`,
+    `${name} showed no sign-in link, so CawCo stopped it.${said ? screenOf(said) : " Its screen said nothing."}`,
   /** A code sent with no sign-in waiting for it. */
   signinNotWaiting: (name: string) =>
-    `No ${name} sign-in is waiting for a code on this machine: it ended or was never started. Sign in again.`,
+    `No ${name} sign-in is waiting for a code on this machine. It ended or was never started.`,
   /** A code that was empty. */
   signinNoCode: "Paste the code from the sign-in page.",
   /** The sign-in did not end in time after the code. */
   signinNotEnded: (name: string, seconds: number) =>
-    `${name} didn't finish signing in within ${seconds} s of the code, so the sign-in was stopped. Sign in again.`,
+    `${name} didn't finish signing in within ${seconds} s of the code, so CawCo stopped it.`,
   /** The sign-in ended without signing in: what its screen said, the code never shown, and its exit. */
   signinFailed: (name: string, code: number, said: string) =>
-    `${name}'s sign-in ended without signing in. Sign in again for a new link.${screenOf(said, code)}`,
+    `${name} stopped without signing in. That link is spent.${screenOf(said, code)}`,
 
   // ── A tool's own sign-in, on its ledger (ToolMatrix, tool-signin.svelte.ts) ─
   /** The column's head. */
@@ -195,10 +195,10 @@ export const toolWords = {
     `${verb} ${name} on ${machine}`,
   /** The popover's head. */
   signinTitle: (name: string, machine: string) => `${name} on ${machine}`,
-  /** The link lapsed before a code came: the machine stopped waiting. */
+  /** The link lapsed before a code came: the machine stopped waiting. Its life is the machine's, so no length is said. */
   signinExpired: (name: string) =>
-    `The sign-in link expired after 10 minutes, so ${name} stopped waiting for a code. Sign in again for a new link.`,
+    `The sign-in link expired before a code was pasted, so ${name} stopped waiting.`,
   /** The machine took the code and the tool still reads signed out; that link is spent. */
   signinRefused: (name: string) =>
-    `That code didn't sign ${name} in. Sign in again for a new code.`,
+    `That code didn't sign ${name} in. That link is spent.`,
 } as const;
