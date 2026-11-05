@@ -184,10 +184,7 @@ export default {
 /** Nothing typed yet. When starts at Every day, 09:00. */
 export const JustOpened = { parameters: { viewport: 1440 } };
 
-export const JustOpenedPhone = {
-  name: "Just opened on a phone",
-  parameters: { viewport: 390 },
-};
+export const JustOpenedPhone = { parameters: { viewport: 390 } };
 
 /** Everything filled in, with a long prompt. */
 export const FilledIn = {
@@ -196,7 +193,6 @@ export const FilledIn = {
 };
 
 export const FilledInPhone = {
-  name: "Filled in on a phone",
   args: { draft: filled },
   parameters: { viewport: 390 },
 };
@@ -208,7 +204,6 @@ export const RunsAnOrchestrator = {
 };
 
 export const RunsAnOrchestratorPhone = {
-  name: "Runs an orchestrator on a phone",
   args: { draft: { ...filled, target: "orchestrator" as const } },
   parameters: { viewport: 390 },
 };
@@ -220,7 +215,6 @@ export const EveryWeek = {
 };
 
 export const EveryWeekPhone = {
-  name: "Every week on a phone",
   args: { draft: { ...filled, cron: "30 7 * * 1" } },
   parameters: { viewport: 390 },
 };
@@ -238,7 +232,6 @@ export const CustomSchedule = {
 };
 
 export const CustomSchedulePhone = {
-  name: "Custom schedule on a phone",
   args: { draft: { ...filled, cron: TWICE_WEEKDAYS } },
   parameters: { viewport: 390 },
 };
@@ -252,7 +245,6 @@ export const InvalidSchedule = {
 };
 
 export const InvalidSchedulePhone = {
-  name: "Schedule can't be read on a phone",
   args: { draft: unreadable },
   parameters: { viewport: 390 },
 };
@@ -266,7 +258,6 @@ export const Creating = {
 };
 
 export const CreatingPhone = {
-  name: "Creating on a phone",
   args: { draft: filled, saving: true },
   parameters: { viewport: 390 },
 };
@@ -286,7 +277,6 @@ export const FailedSave = {
 };
 
 export const FailedSavePhone = {
-  name: "Hub didn't answer on a phone",
   args: { draft: filled, failure: unanswered },
   parameters: { viewport: 390 },
 };
@@ -332,7 +322,6 @@ export const LongestName = {
 };
 
 export const LongestNamePhone = {
-  name: "Longest name on a phone",
   args: { draft: { ...filled, name: LONGEST_NAME } },
   parameters: { viewport: 390 },
 };

@@ -4,8 +4,10 @@
  * (`cawco:sheet`, CSF 3 as the stage reads it) and the agent's canvas spec
  * (`group`, `edges`, from the artifact's address). Nothing is declared
  * twice:
- * - a **state** is a story, named by its CSF `name` when it has one, else
- *   by its export in plain words (CSF 3's own rule), its note its own doc
+ * - a **state** is a story, named by its CSF `name` when it has one, a
+ *   phone twin (`FailedSavePhone` beside `FailedSave`) by its state's name
+ *   ", on a phone", else by its export in plain words (CSF 3's own rule;
+ *   core stage-graph.ts `shownName`), its note its own doc
  *   comment, its width its `parameters.viewport`, an error state where its
  *   CSF `tags` say `failure`;
  * - a **machine** is a heading the spec's `group` names (a story grouped
@@ -34,7 +36,7 @@ import {
   MANY_RECORDS,
   RECORD_SETS,
   type StateRef,
-  storyWords,
+  shownName,
 } from "@cawco/core/stage-graph";
 import { type Figure, graphWords as words } from "@cawco/core/words/graph";
 
@@ -147,11 +149,12 @@ function recordSets(
 function stateOf(
   story: Story,
   machine: string,
-  names: ReadonlySet<string>
+  names: ReadonlySet<string>,
+  stories: readonly Story[]
 ): GraphState {
   return {
     id: story.name,
-    name: story.display ?? storyWords(story.name),
+    name: shownName(story, stories),
     note: story.label,
     machine,
     line: story.line,
@@ -240,7 +243,7 @@ function holdUnder(
     }
     held.variants.push({
       id: story.name,
-      name: story.display ?? storyWords(story.name),
+      name: shownName(story, sheet.stories),
       note: story.label,
       width,
       variant: { story: story.name },
@@ -266,7 +269,7 @@ export function reviewOf(
   const machines = new Map<string, string[]>();
   for (const story of sheet.stories.filter((one) => !parentOf(one.name))) {
     const machine = group[story.name] ?? name;
-    states[story.name] = stateOf(story, machine, names);
+    states[story.name] = stateOf(story, machine, names, sheet.stories);
     machines.set(machine, [...(machines.get(machine) ?? []), story.name]);
   }
   const order = Object.keys(states);

@@ -24,7 +24,7 @@ import {
   type Story,
   type StoryOp,
 } from "@cawco/core/stage";
-import { storyWords } from "@cawco/core/stage-graph";
+import { type NamedStory, shownName } from "@cawco/core/stage-graph";
 import { storyReadWords as reasons } from "@cawco/core/words/story-read";
 
 /** A node of Babel's syntax tree, as far as a story file is read. */
@@ -832,6 +832,8 @@ export function readStoryFile(file: string, text: string): StaticSheet {
   const body = parsed(file, text);
   const scope = scopeOf(body);
   const reading: Reading = { imports: importsOf(body), scope, text };
+  const exports = exportsOf(body);
+  const named = namedOf(reading, exports);
   const meta = metaObject(body, scope);
   const metaArgs = child(propertyOf(meta, "args") ?? { type: "" }, "value");
   const metaRead = argsOf(
@@ -899,11 +901,11 @@ export function readStoryFile(file: string, text: string): StaticSheet {
       ),
       title: typeof title === "string" ? title : null,
     },
-    stories: exportsOf(body).map((one): Story => ({
+    stories: exports.map((one): Story => ({
       name: one.name,
       line: one.place.loc?.start.line ?? 1,
       column: (one.place.loc?.start.column ?? 0) + 1,
-      ...storyRead(reading, one),
+      ...storyRead(reading, one, named),
       ...canvasOf(one),
     })),
   };
@@ -928,9 +930,12 @@ function valueAt(reading: Reading, at: Bound | null, key: string): unknown {
   return "why" in read ? undefined : read.value;
 }
 
-/** The name a story is shown by: its CSF `name`, else its export in words ("Turning off title desk"), as the states list and the inspector say it. */
-const shownName = (reading: Reading, story: Export): string =>
-  shownBy(reading, story).display ?? storyWords(story.name);
+/** Each story of `exports` by what names it: its export, and its CSF `name` (core `NamedStory`). */
+const namedOf = (reading: Reading, exports: Export[]): NamedStory[] =>
+  exports.map((one) => ({
+    name: one.name,
+    display: shownBy(reading, one).display,
+  }));
 
 /**
  * What the design graph reads of a story besides its frame: the name it is
@@ -995,11 +1000,18 @@ const unread = (
  */
 function storyRead(
   reading: Reading,
-  story: Export
+  story: Export,
+  named: readonly NamedStory[]
 ): Pick<Story, "args" | "code" | "component" | "readOnly"> {
   const { init } = story;
   // The story as the inspector and the states list name it, so one state has one name on the panel.
-  const name = shownName(reading, story);
+  const name = shownName(
+    named.find((one) => one.name === story.name) ?? {
+      name: story.name,
+      display: null,
+    },
+    named
+  );
   if (
     !init ||
     init.type === "ArrowFunctionExpression" ||
@@ -1279,10 +1291,8 @@ export function writeArgs(
   const body = parsed(file, text);
   const exports = exportsOf(body);
   const named = storyNamed(file, exports, story);
-  const { readOnly } = storyRead(
-    { imports: importsOf(body), scope: scopeOf(body), text },
-    named
-  );
+  const reading = { imports: importsOf(body), scope: scopeOf(body), text };
+  const { readOnly } = storyRead(reading, named, namedOf(reading, exports));
   if (readOnly) {
     throw new StoryRefusal(readOnly.reason);
   }

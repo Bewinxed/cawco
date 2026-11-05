@@ -1058,19 +1058,25 @@
                   />
                 </div>
                 <!-- A width wider than the stage is scaled to fit it; this
-                     draws it 1:1 instead, the page scrolling across it. -->
-                <div
-                  class="contents max-phone:flex max-phone:min-w-0 max-phone:items-center max-phone:justify-between max-phone:gap-space-3"
-                >
-                  <label class="type-label text-ink-row" for="{uid}-actual"
-                    >{words.actualSize}</label
+                     draws it 1:1 instead, the page scrolling across it. It
+                     stands only while it does something: while the drawing
+                     stands scaled, or while it is on, so it can be turned
+                     off (DESIGN.md Voice: a string a rare state needs
+                     stands in that state). -->
+                {#if actual || (link.laid && link.laid.scale < 1)}
+                  <div
+                    class="contents max-phone:flex max-phone:min-w-0 max-phone:items-center max-phone:justify-between max-phone:gap-space-3"
                   >
-                  <Switch
-                    bind:checked={actual}
-                    class="justify-self-end"
-                    id="{uid}-actual"
-                  />
-                </div>
+                    <label class="type-label text-ink-row" for="{uid}-actual"
+                      >{words.actualSize}</label
+                    >
+                    <Switch
+                      bind:checked={actual}
+                      class="justify-self-end"
+                      id="{uid}-actual"
+                    />
+                  </div>
+                {/if}
               </div>
             </HangCard>
           </Popover.Root>

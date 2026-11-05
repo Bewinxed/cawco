@@ -284,6 +284,8 @@ export const graphWords = {
   reduceMotion: "Reduce motion",
   /** The view card's switch: a width wider than the stage drawn 1:1 (Apple's Actual Size), not scaled to fit. */
   actualSize: "Actual size",
+  /** A phone twin's name (stage-graph.ts `shownName`): its state's, the width a qualifier after a comma, so "Hub didn't answer" stays whole. */
+  onAPhone: (state: string) => `${state}, on a phone`,
   /** Beside the state's name while the stage draws it scaled down to fit: how much. */
   scaledTo: (percent: Figure) => `Scaled to ${percent}%`,
   mounting: (name: string) => `Loading ${name}…`,

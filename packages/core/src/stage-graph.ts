@@ -310,3 +310,33 @@ export const storyWords = (name: string): string => {
   const spaced = name.replace(CASE_BREAK, "$1 $2").toLowerCase();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 };
+
+/** A phone twin's export: its state's export and `Phone` (`FailedSavePhone`). */
+const PHONE_TWIN = /^(.+)Phone$/u;
+
+/** A story by what names it: its export, and its CSF `name` where it writes one. */
+export interface NamedStory {
+  display: string | null;
+  name: string;
+}
+
+/**
+ * The name a story is shown by, the one the states list, the inspector and
+ * the stage page all say: its CSF `name`; else, for a phone twin (an export
+ * ending in `Phone` beside an export of its stem in `stories`), that
+ * story's name ", on a phone" ("Hub didn't answer, on a phone"), so no
+ * states file names its twins by hand; else its export in plain words.
+ */
+export const shownName = (
+  story: NamedStory,
+  stories: readonly NamedStory[]
+): string => {
+  if (story.display) {
+    return story.display;
+  }
+  const stem = PHONE_TWIN.exec(story.name)?.[1];
+  const sibling = stem ? stories.find((one) => one.name === stem) : undefined;
+  return sibling
+    ? words.onAPhone(shownName(sibling, stories))
+    : storyWords(story.name);
+};

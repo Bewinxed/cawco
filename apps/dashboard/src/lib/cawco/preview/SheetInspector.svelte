@@ -18,7 +18,7 @@
 <script lang="ts">
   import { detach } from "@cawco/core/detach";
   import type { PropMeta } from "@cawco/core/stage";
-  import { storyWords } from "@cawco/core/stage-graph";
+  import { shownName } from "@cawco/core/stage-graph";
   /**
    * A sheet's inspector (live components spec §5): the chosen story's
    * props as controls, from the stage's docgen. An enum is the variant
@@ -87,12 +87,13 @@
   const story = $derived(inspector.story);
   const component = $derived(inspector.component);
   /**
-   * A story by the name the design graph's states list gives it (its CSF
-   * `name`, else its export in words: "Turning off title desk"), so one
-   * state has one name on the panel; its export stays its value.
+   * A story by the name the design graph's states list gives it (core
+   * `shownName`: its CSF `name`, a phone twin's state's ", on a phone",
+   * else its export in words), so one state has one name on the panel;
+   * its export stays its value.
    */
-  const shownName = (one: { display: string | null; name: string }) =>
-    one.display ?? storyWords(one.name);
+  const shownNameOf = (one: { display: string | null; name: string }) =>
+    shownName(one, sheet?.stories ?? []);
   /**
    * Whether any prop of the story has a control here: none (a story whose
    * args come from shared code, every prop set in its file) draws no Save
@@ -154,7 +155,7 @@
     detach(
       asks.ask({
         at: "remove-story",
-        title: words.removeTitle(story ? shownName(story) : name),
+        title: words.removeTitle(story ? shownNameOf(story) : name),
         body: words.removeBody(fileName),
         confirmLabel: words.removeConfirm,
         pendingLabel: words.removing,
@@ -288,7 +289,10 @@
           >
             {#each sheet.stories as one (one.name)}
               <NativeSelectOption value={one.name}>
-                {words.storyOption(shownName(one), inspector.dirtyOf(one.name))}
+                {words.storyOption(
+                  shownNameOf(one),
+                  inspector.dirtyOf(one.name)
+                )}
               </NativeSelectOption>
             {/each}
           </NativeSelect>
@@ -542,7 +546,7 @@
         <label class="text-ink-strong type-label" for={`${id}-name`}>
           {naming === "add"
             ? words.newStoryName
-            : words.nameCopy(story ? shownName(story) : words.theStory)}
+            : words.nameCopy(story ? shownNameOf(story) : words.theStory)}
         </label>
         <Input
           aria-invalid={nameProblem ? "true" : undefined}
@@ -604,7 +608,7 @@
             pendingLabel={words.saving}
             size="sm"
             title={words.saveTitle(
-              story ? shownName(story) : words.theStory,
+              story ? shownNameOf(story) : words.theStory,
               fileName
             )}
           />

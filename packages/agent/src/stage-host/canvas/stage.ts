@@ -66,9 +66,9 @@ import {
   type StageReach,
   type StageReached,
   type StateRef,
+  shownName,
   stageReachOf,
   storyOf,
-  storyWords,
 } from "@cawco/core/stage-graph";
 import { queriesIn, userEventIn } from "@cawco/core/stage-play";
 import { graphWords as words } from "@cawco/core/words/graph";
@@ -417,7 +417,7 @@ export function bootStage(page: Page): Mode {
     const line = document.createElement("span");
     line.textContent = words.mountFailed(
       target.section.name,
-      target.story.display ?? storyWords(target.story.name)
+      shownName(target.story, target.section.mod?.SHEET.stories ?? [])
     );
     head.append(glyph, line);
     const message = document.createElement("p");
