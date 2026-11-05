@@ -24,6 +24,12 @@
  * - h. SUCCESS with no image written: refused, no file.
  * - i. A run the orchestration stops (its signal): the provider's run is
  *   ended and answers no image.
+ * - j. A reference is never agy's image: a run that writes none with the
+ *   references left in its folder is refused, not answered with one, as
+ *   is a run that answers a reference's path; and agy's answer saying why
+ *   reaches the refusal in its words.
+ * - k. Four references, one over agy's tool's three: refused before any
+ *   image run, naming three.
  *
  *   bun scripts/probe-kit/run.ts image-antigravity
  */
@@ -44,8 +50,8 @@ import type { Kit, Spec } from "../kit";
 /** A 1×1 PNG. */
 const PNG_1X1 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-/** A JPEG's header to its SOF0, 64 × 48. */
-const JPEG_64X48 = "/9j/4AAQSkZJRgABAQAAAQABAAD/wAARCAAwAEADASIAAhEBAxEB/9k=";
+/** A JPEG's header to its SOF0, 32 × 24: a reference, other bytes than the image fake agy makes, which a reference's never count as. */
+const JPEG_32X24 = "/9j/4AAQSkZJRgABAQAAAQABAAD/wAARCAAYACADASIAAhEBAxEB/9k=";
 const sha = (base64: string): string =>
   createHash("sha256").update(Buffer.from(base64, "base64")).digest("hex");
 
@@ -53,6 +59,8 @@ const NOT_FOUND = "NOT_FOUND (code 404): Requested entity was not found.";
 const QUOTA =
   "RESOURCE_EXHAUSTED (code 429): You have exhausted your capacity on this model. Your quota will reset after 3s.";
 const INTERNAL = "INTERNAL (code 500): Internal error encountered.";
+const TOOL_REFUSED =
+  "Error invalid tool call: invalid arguments: - at '/ImagePaths': maxItems: got 14, want 3";
 
 /** The prompt of the run with references, naming each by its number. */
 const PALETTE_PROMPT =
@@ -96,7 +104,7 @@ const referencesRun = async (
       first?.endsWith("/reference-1.png") === true &&
       second === join(dirname(first), "reference-2.jpg") &&
       seen.get(first) === sha(PNG_1X1) &&
-      seen.get(second) === sha(JPEG_64X48),
+      seen.get(second) === sha(JPEG_32X24),
     JSON.stringify([...seen])
   );
   check(
@@ -149,7 +157,7 @@ export default {
     const out = join(kit.out, "images");
     await mkdir(out, { recursive: true });
     await writeFile(join(out, "ref.png"), Buffer.from(PNG_1X1, "base64"));
-    await writeFile(join(out, "ref.jpg"), Buffer.from(JPEG_64X48, "base64"));
+    await writeFile(join(out, "ref.jpg"), Buffer.from(JPEG_32X24, "base64"));
     await writeFile(join(out, "notes.png"), "text");
     /** One generation through antigravity: its result, or its error's words. */
     const attempt = async (
@@ -300,6 +308,55 @@ export default {
           refused(imageGenerationWords.agyNoImage("SUCCESS", "", "")) &&
         !existsSync(join(out, "h.jpg")),
       JSON.stringify(none)
+    );
+
+    await agy.mode("no-image");
+    const twoRefs = { reference_images: ["ref.png", "ref.jpg"] };
+    const leftBehind = await attempt({ output_path: "j.png", ...twoRefs });
+    check(
+      "j. no image written, the references left in agy's folder: refused, no file",
+      !leftBehind.ok &&
+        leftBehind.error ===
+          refused(imageGenerationWords.agyNoImage("SUCCESS", "", "")) &&
+        !existsSync(join(out, "j.png")) &&
+        !existsSync(join(out, "j.jpg")),
+      JSON.stringify(leftBehind)
+    );
+    await agy.mode("answers-reference");
+    const answeredRef = await attempt({ output_path: "j2.png", ...twoRefs });
+    check(
+      "j. a run answering a reference's path as its image: refused, no file",
+      !answeredRef.ok &&
+        answeredRef.error ===
+          refused(imageGenerationWords.agyNoImage("SUCCESS", "", "")) &&
+        !existsSync(join(out, "j2.png")) &&
+        !existsSync(join(out, "j2.jpg")),
+      JSON.stringify(answeredRef)
+    );
+    await agy.mode("tool-refused");
+    const toolRefused = await attempt({ output_path: "j3.png", ...twoRefs });
+    check(
+      "j. agy's answer saying why: carried in the refusal's words",
+      !toolRefused.ok &&
+        toolRefused.error ===
+          refused(imageGenerationWords.agyNoImage("SUCCESS", "", TOOL_REFUSED)),
+      JSON.stringify(toolRefused)
+    );
+
+    await agy.mode("image");
+    const four = await attempt({
+      output_path: "k.png",
+      reference_images: ["ref.png", "ref.jpg", "ref.png", "ref.jpg"],
+    });
+    check(
+      "k. four references: refused before any image run, naming three",
+      !four.ok &&
+        four.error ===
+          refused(imageGenerationWords.tooManyReferences("antigravity", 3)) &&
+        antigravity.references === 3 &&
+        (await imageRuns()).length === 0 &&
+        !existsSync(join(out, "k.jpg")),
+      JSON.stringify(four)
     );
 
     await agy.mode("hang");

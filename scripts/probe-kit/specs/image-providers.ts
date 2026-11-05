@@ -22,6 +22,8 @@
  * - i. An output path naming a shell variable (`$TMPDIR/i.png`, as a
  *   session with no TMPDIR sent it): refused before any request, no folder
  *   named `$TMPDIR` made.
+ * - j. A reference naming a shell variable (`$HOME/ref.png`): refused in
+ *   the same words before any request.
  *
  * One ChatGPT sign-in is held under a scratch HOME (`ownHome`), far from
  * expiry; `CAWCO_CHATGPT_BASE_URL` points at the mock. Nothing reaches
@@ -278,10 +280,32 @@ export default {
         "i. $TMPDIR/i.png outside a workspace: refused naming $TMPDIR, no request, no $TMPDIR folder",
         !unexpanded.ok &&
           unexpanded.error ===
-            imageGenerationWords.outputUnexpanded("$TMPDIR/i.png", "$TMPDIR") &&
+            imageGenerationWords.unexpanded(
+              "output_path",
+              "$TMPDIR/i.png",
+              "$TMPDIR"
+            ) &&
           asked.length === 0 &&
           !existsSync(join(out, "$TMPDIR")),
         JSON.stringify({ unexpanded, asked })
+      );
+
+      const unexpandedRef = await attempt(PNG_1X1, {
+        output_path: "j.png",
+        reference_images: ["a.png", "$HOME/ref.png"],
+      });
+      check(
+        "j. a reference naming $HOME: refused naming $HOME, no request, nothing saved",
+        !unexpandedRef.ok &&
+          unexpandedRef.error ===
+            imageGenerationWords.unexpanded(
+              "reference_images",
+              "$HOME/ref.png",
+              "$HOME"
+            ) &&
+          asked.length === 0 &&
+          !existsSync(join(out, "j.png")),
+        JSON.stringify({ unexpandedRef, asked })
       );
     } finally {
       server.stop(true);

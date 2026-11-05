@@ -62,13 +62,27 @@ async function requireNewOutput(output: string): Promise<void> {
 }
 
 /**
+ * `named`, a path the call's `field` names, refused when it names a shell
+ * variable ({@link unexpandedVariable}): no shell expands it here, and the
+ * session's own value of it is not known here.
+ */
+function refuseUnexpanded(
+  field: "output_path" | "reference_images",
+  named: string
+): void {
+  const variable = unexpandedVariable(named);
+  if (variable) {
+    throw new Error(imageGenerationWords.unexpanded(field, named, variable));
+  }
+}
+
+/**
  * Where `output_path` lands, relative from the session's working dir `cwd`:
  * for a session `bound` to a workspace, inside its clone or its $TMPDIR, by
  * the rule every file a workspace's session asks CawCo to write answers to
  * (inputs.ts `placeInWorkspace`), refused in words elsewhere; for a session
  * in no workspace, which no boundary holds, wherever it names, but a path
- * naming a shell variable ({@link unexpandedVariable}): no shell expands it
- * here, and the session's own value of it is not known here.
+ * naming a shell variable ({@link refuseUnexpanded}).
  */
 function outputOf(cwd: string, named: string, bound: unknown): Kept {
   if (isWorkspaceRef(bound)) {
@@ -78,10 +92,7 @@ function outputOf(cwd: string, named: string, bound: unknown): Kept {
     }
     return kept;
   }
-  const variable = unexpandedVariable(named);
-  if (variable) {
-    throw new Error(imageGenerationWords.outputUnexpanded(named, variable));
-  }
+  refuseUnexpanded("output_path", named);
   const output = resolve(cwd, named);
   if (extname(output).toLowerCase() !== ".png") {
     throw new Error(imageGenerationWords.notPng());
@@ -288,6 +299,9 @@ export async function generateImage(
   const provider = imageProvider(args.provider);
   const model = modelOf(provider, args.model);
   const asked = args.reference_images ?? [];
+  for (const reference of asked) {
+    refuseUnexpanded("reference_images", reference);
+  }
   if (asked.length > provider.references) {
     throw refusal(
       provider,

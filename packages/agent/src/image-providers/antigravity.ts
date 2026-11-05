@@ -7,8 +7,8 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { homedir, hostname, platform, tmpdir } from "node:os";
-import { extname, isAbsolute, join, relative, resolve } from "node:path";
-import { MAX_REFERENCE_IMAGES, toolSpec } from "@cawco/core";
+import { extname, join, resolve } from "node:path";
+import { toolSpec } from "@cawco/core";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { systemProgram } from "@cawco/core/workspace-needs";
@@ -120,6 +120,8 @@ const envelopeSchema = z.looseObject({
   conversation_id: z.string().optional(),
   status: z.string().optional(),
   error: z.string().optional(),
+  /** The agent's own answer in words: why, when it made no image. */
+  response: z.string().optional(),
   structured_output: z.looseObject({ path: z.string().optional() }).optional(),
 });
 type Envelope = z.infer<typeof envelopeSchema>;
@@ -158,45 +160,47 @@ const imagesUnder = async (dir: string, since: number): Promise<string[]> => {
   return found.sort((a, b) => b.mtime - a.mtime).map((one) => one.path);
 };
 
-/** Whether `path` is inside `dir`. */
-const inside = (dir: string, path: string): boolean => {
-  const rel = relative(dir, resolve(path));
-  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
-};
-
 /**
- * The image the run made: the path it answered when that is a file it
- * wrote in its conversation's folder (or the run's own folder) since it
- * started; else the newest image it wrote there. agy writes its image in
- * its conversation's folder, not where it is asked
+ * The image the run made, its bytes: an image file written since the run
+ * started in its conversation's folder or the run's own folder, the path
+ * it answered first, then the newest; never one whose bytes are a
+ * reference's. agy writes its image in its conversation's folder, not
+ * where it is asked
  * (`~/.gemini/antigravity-cli/brain/<conversation_id>/<name>_<time>.jpg`,
- * measured on agy 1.5.0, 2026-11-04).
+ * measured on agy 1.5.0, 2026-11-04), and CawCo writes the references in
+ * the run's own folder ({@link writeReferences}) after the run's start: a
+ * run that made nothing would otherwise answer one of them back as its
+ * image (a reference's pixels returned when agy's tool call failed,
+ * measured on agy 1.5.1, 2026-11-05). So what counts as agy's is decided
+ * by its bytes, which no name, folder or copy of agy's changes.
  */
 const madeImage = async (
   envelope: Envelope | undefined,
   cwd: string,
-  since: number
-): Promise<string | undefined> => {
+  since: number,
+  references: ImageJob["references"]
+): Promise<Buffer | undefined> => {
   const id = envelope?.conversation_id;
   const conversation = id ? join(brainDir(), id) : undefined;
   const places = [conversation, cwd].filter(
     (place): place is string => place !== undefined
   );
+  const found = (
+    await Promise.all(places.map((place) => imagesUnder(place, since)))
+  ).flat();
   const answered = envelope?.structured_output?.path;
-  if (answered && places.some((place) => inside(place, answered))) {
-    const info = await stat(answered).catch(() => undefined);
+  const named = answered ? resolve(answered) : undefined;
+  const ordered =
+    named && found.includes(named)
+      ? [named, ...found.filter((path) => path !== named)]
+      : found;
+  for (const path of ordered) {
+    const bytes = await readFile(path).catch(() => undefined);
     if (
-      info?.isFile() &&
-      info.mtimeMs >= since &&
-      IMAGE_EXTENSIONS.has(extname(answered).toLowerCase())
+      bytes &&
+      !references.some((reference) => reference.bytes.equals(bytes))
     ) {
-      return answered;
-    }
-  }
-  for (const place of places) {
-    const [newest] = await imagesUnder(place, since);
-    if (newest) {
-      return newest;
+      return bytes;
     }
   }
   return undefined;
@@ -207,9 +211,20 @@ const SIGNED_OUT = /authentication required/iu;
 const QUOTA = /RESOURCE_EXHAUSTED|code 429/u;
 const INTERNAL = /INTERNAL \(code 500\)|\b500 INTERNAL\b/u;
 
-/** A run that ended with no image, as a refusal in words, by what agy said. */
-const noImage = (envelope: Envelope | undefined, said: string): Error => {
+/** The last lines of what agy said on its errors, for a sentence. */
+const tailOf = (text: string): string =>
+  Bun.stripANSI(text).trim().split("\n").slice(-4).join(" / ").slice(0, 600);
+
+/**
+ * A run that ended with no image, as a refusal in words, by what agy said:
+ * its error, its answer and the tail of its stderr, so a limit of agy's
+ * own (a tool call it refused) reaches the person in its words.
+ */
+const noImage = (envelope: Envelope | undefined, stderr: string): Error => {
   const error = envelope?.error ?? "";
+  const said = [tailOf(envelope?.response ?? ""), tailOf(stderr)]
+    .filter(Boolean)
+    .join(" / ");
   const all = `${error}\n${said}`;
   if (SIGNED_OUT.test(all)) {
     return new Error(imageGenerationWords.agySignedOut(error || said));
@@ -228,10 +243,6 @@ const noImage = (envelope: Envelope | undefined, said: string): Error => {
     )
   );
 };
-
-/** The last lines of what agy said on its errors, for a sentence. */
-const tailOf = (text: string): string =>
-  Bun.stripANSI(text).trim().split("\n").slice(-4).join(" / ").slice(0, 600);
 
 /**
  * One print-mode run of `bin` in a folder of its own, the job's references
@@ -303,9 +314,9 @@ const runAgy = async (
       new Response(child.stderr).text(),
     ]);
     const envelope = envelopeOf(out);
-    const path = await madeImage(envelope, cwd, since);
-    if (!path) {
-      throw noImage(envelope, tailOf(err));
+    const bytes = await madeImage(envelope, cwd, since, job.references);
+    if (!bytes) {
+      throw noImage(envelope, err);
     }
     const notes =
       code === 0 && envelope?.status === "SUCCESS"
@@ -315,7 +326,7 @@ const runAgy = async (
               envelope?.error ?? `exit ${code}`
             ),
           ];
-    return { bytes: await readFile(path), notes };
+    return { bytes, notes };
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
@@ -381,12 +392,21 @@ async function readiness(): ReturnType<ImageProvider["readiness"]> {
 }
 
 /**
+ * The most references agy's `generate_image` tool takes: its `ImagePaths`
+ * holds at most 3, under the 14 its model takes on the Gemini API. A call
+ * with 14 came back from agy 1.5.1 as "Error invalid tool call: invalid
+ * arguments: - at '/ImagePaths': maxItems: got 14, want 3" (its
+ * image-generator subagent's transcript, obelisk, 2026-11-05).
+ */
+const AGY_MAX_REFERENCES = 3;
+
+/**
  * Gemini through this machine's Antigravity CLI: one model, Nano Banana 2
- * (core `IMAGE_PROVIDER_MODELS`), which takes "up to 14 reference images"
- * as the Gemini API's does (gemini-api.ts); JPEG as it makes it.
+ * (core `IMAGE_PROVIDER_MODELS`), at most {@link AGY_MAX_REFERENCES}
+ * references; JPEG as it makes it.
  */
 export const antigravity: ImageProvider = {
   id: "antigravity",
-  references: MAX_REFERENCE_IMAGES,
+  references: AGY_MAX_REFERENCES,
   readiness,
 };

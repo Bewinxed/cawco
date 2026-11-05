@@ -31,6 +31,10 @@ export type FakeAgyMode =
   | "image-then-404"
   /** Answers SUCCESS with no image written. */
   | "no-image"
+  /** Writes no image, answers SUCCESS with the path of `reference-1.png` in its working folder, exits 0. */
+  | "answers-reference"
+  /** Writes no image, answers SUCCESS with an empty path and, as its response, the tool error agy 1.5.1's image-generator subagent got for 14 references (read in its transcript on obelisk, 2026-11-05; whether agy's own answer repeats it is not measured), exits 0. */
+  | "tool-refused"
   /** Writes nothing: 429 RESOURCE_EXHAUSTED with its reset, exit 1. */
   | "quota"
   /** Writes nothing: 500 INTERNAL, as every image run on Plus did, exit 1. */
@@ -52,7 +56,7 @@ signed="$home/.fake-agy-signed-in"
 mode="$(cat "$home/.fake-agy-mode" 2>/dev/null || echo image)"
 id="fa4e0000-0000-4000-8000-$(date +%s%N | tail -c 13)"
 brain="$home/.gemini/antigravity-cli/brain/$id"
-envelope() { printf '{"conversation_id":"%s","status":"%s","response":"","error":"%s","duration_seconds":1,"num_turns":1%s}\n' "$id" "$1" "$2" "$3"; }
+envelope() { printf '{"conversation_id":"%s","status":"%s","response":"%s","error":"%s","duration_seconds":1,"num_turns":1%s}\n' "$id" "$1" "$4" "$2" "$3"; }
 case "$1" in
   --version) echo "1.5.0"; exit 0 ;;
   acp)
@@ -77,6 +81,8 @@ case "$1" in
       quota) envelope ERROR 'RESOURCE_EXHAUSTED (code 429): You have exhausted your capacity on this model. Your quota will reset after 3s.' ""; exit 1 ;;
       internal) envelope ERROR 'INTERNAL (code 500): Internal error encountered.' ""; exit 1 ;;
       no-image) envelope SUCCESS "" ',"structured_output":{"path":""}'; exit 0 ;;
+      answers-reference) envelope SUCCESS "" ",\"structured_output\":{\"path\":\"$PWD/reference-1.png\"}"; exit 0 ;;
+      tool-refused) envelope SUCCESS "" ',"structured_output":{"path":""}' "Error invalid tool call: invalid arguments: - at '/ImagePaths': maxItems: got 14, want 3"; exit 0 ;;
     esac
     mkdir -p "$brain"
     file="$brain/probe_image_1793790000000.jpg"

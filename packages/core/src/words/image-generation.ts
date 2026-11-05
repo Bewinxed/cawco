@@ -110,9 +110,13 @@ export const imageGenerationWords = {
   /** `output_path` outside a workspace, not a .png. */
   notPng: () =>
     "output_path must end in .png, for example assets/illustration.png. A provider that makes another format saves it beside that path under its own extension.",
-  /** `output_path` outside a workspace names a shell variable, which nothing expands. */
-  outputUnexpanded: (path: string, variable: string) =>
-    `output_path ${path} names ${variable}, a shell variable CawCo doesn't expand. Name the path it stands for, written out. No image was generated.`,
+  /** A reference, or `output_path` outside a workspace, names a shell variable, which nothing expands. */
+  unexpanded: (
+    field: "output_path" | "reference_images",
+    path: string,
+    variable: string
+  ) =>
+    `${field} ${path} names ${variable}, a shell variable CawCo doesn't expand. Name the path it stands for, written out. Nothing was uploaded and no image was generated.`,
   /** `output_path` refused by the workspace's placing rule. */
   outputRefused: (cause: string) =>
     `output_path ${cause}. No image was generated.`,
