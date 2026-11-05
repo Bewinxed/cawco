@@ -34,6 +34,15 @@
  *     with none held (the pulse heard it first, or it was settled and the
  *     pulse never came down). An ask that is the person's shows the hand.
  *
+ * (g) a session with a page card waiting on the person: the session waits
+ *     on you (its needs-you mark), and its Files lists that page first,
+ *     ahead of every newer artifact, from the same list the mark reads
+ *     (`artifactNeedsOpen`); the rest keep their order. Its card's press
+ *     opens it, as every Files card's does.
+ *
+ * Main fails (g): `waitingFirst` is not there (the spec does not load), and
+ * Files listed the waiting page after every newer artifact, under "N more".
+ *
  * Main fails (e) too: every ask parked made its session need you, its
  * parent's or not. Main fails (f): `sessionActivity` is not there (the spec
  * does not load), and client.svelte.ts `activityNow` returned `blocked` for
@@ -50,6 +59,7 @@ import {
   activityOf,
   sessionActivity,
 } from "../../../apps/dashboard/src/lib/cawco/activity";
+import { waitingFirst } from "../../../apps/dashboard/src/lib/cawco/files/waiting-first";
 import { waitingOnYou } from "../../../packages/core/src/activity";
 import type { ArtifactNeed } from "../../../packages/core/src/artifact-needs";
 import {
@@ -252,6 +262,26 @@ export default {
         settledHere === "working" &&
         yours === "blocked",
       `routed ask held: ${routedHere}; pulse alone: ${pulseAlone}; held none: ${settledHere}; yours: ${yours}`
+    );
+
+    const PAGE_ID = "0b1c2d3e-4f50-4617-8899-aabbccddeeff";
+    const waitingNeeds = needs(open).map((one) => ({
+      ...one,
+      artifactId: PAGE_ID,
+    }));
+    const marked = waitingOnYou({ asks: [], artifacts: waitingNeeds });
+    const files = waitingFirst(
+      [{ id: "newest" }, { id: "newer" }, { id: PAGE_ID }, { id: "older" }],
+      new Set(
+        waitingNeeds
+          .filter((one) => one.instanceId === CAW)
+          .map((one) => one.artifactId)
+      )
+    ).map((one) => one.id);
+    check(
+      "g: a session with a page card waiting on you wears the mark, and its Files lists that page first, the rest in their order",
+      marked.has(CAW) && files.join(",") === `${PAGE_ID},newest,newer,older`,
+      `waiting: ${said(marked)}; files: ${files.join(",")}`
     );
     return Promise.resolve();
   },

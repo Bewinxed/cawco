@@ -16,6 +16,10 @@
    * `--dur-fade` cross-fade. A read refused says so in its region's place
    * (RowFault), with Try again and the hub's own words.
    *
+   * The artifacts waiting on the person, the ones its needs-you mark is
+   * raised for, come first (waiting-first.ts), so the dots stand in sight
+   * as it opens; the rest after them, newest first.
+   *
    * The artifacts are a masonry of their thumbnails (ArtifactCards), or one
    * row each in the attachments' shape, as the person picks in the
    * Artifacts head (owner: "i want to be able to toggle this to list or
@@ -89,6 +93,7 @@
     searchAttachments,
   } from "./files.svelte";
   import { drawMissingPages } from "./page-thumbs";
+  import { waitingFirst } from "./waiting-first";
 
   let {
     instanceId,
@@ -153,7 +158,18 @@
   });
   const artifactsRead = $derived(artifactsOf(instanceId));
   const attachmentsRead = $derived(attachmentsOf(instanceId));
-  const artifacts = $derived(artifactsRead?.list ?? null);
+  /** The session's artifacts its needs-you mark is raised for (core `waitingOnYou`). */
+  const waiting = $derived(
+    new Set(
+      cawco.artifactNeedsOpen
+        .filter((need) => need.instanceId === instanceId)
+        .map((need) => need.artifactId)
+    )
+  );
+  /** Its artifacts as the hub lists them (newest first), the waiting ones first. */
+  const artifacts = $derived(
+    artifactsRead?.list ? waitingFirst(artifactsRead.list, waiting) : null
+  );
   // The pages no pane has a picture of yet are drawn unseen, one at a time
   // (page-thumbs); their cards take the pictures as the list is read again.
   $effect(() => {
