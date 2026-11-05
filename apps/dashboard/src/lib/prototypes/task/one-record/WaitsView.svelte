@@ -102,10 +102,17 @@
             <span
               class="col-start-2 col-end-4 flex flex-wrap items-center gap-space-2"
             >
-              <Button size="sm" variant="outline" onclick={() => open(wait)}>
-                <span>{words.openIt}</span>
-                <IconChevronRight data-icon="inline-end" aria-hidden="true" />
-              </Button>
+              {#if wait.kind === "task"}
+                <Button size="sm" variant="outline" onclick={() => open(wait)}>
+                  <span>{words.openIt}</span>
+                  <IconChevronRight data-icon="inline-end" aria-hidden="true" />
+                </Button>
+              {:else}
+                <Button size="sm" variant="outline" href={wait.href}>
+                  <span>{words.openIt}</span>
+                  <IconChevronRight data-icon="inline-end" aria-hidden="true" />
+                </Button>
+              {/if}
               {#if wait.via === null}
                 <Button
                   size="sm"

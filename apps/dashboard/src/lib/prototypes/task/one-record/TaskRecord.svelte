@@ -195,13 +195,11 @@
     >
       <!-- On a phone the head has no room for a title: it stands whole here. -->
       {#if view}
-        <p
+        <h1
           class="m-0 hidden pb-space-1 type-title text-balance text-ink-strong @max-phone/record:block"
-          role="heading"
-          aria-level={1}
         >
           {view.title}
-        </p>
+        </h1>
       {/if}
       <StateLine {view} {opened} {stale} {onopen} />
       {#if stale}
