@@ -992,8 +992,6 @@ public enum Size {
     /// Code inside a decision page's words: a step under the words around it, at any size they stand at.
     /// In em: multiply by the font size for points.
     public static let cDecisionCode: Double = 0.9
-    /// The ring of DialKit's easing-curve handle on a decision page, drawn as an inset ring so it holds 1.5px on every screen (DESIGN.md, The Whole Pixel Border Rule).
-    public static let cDialHandleRing: Double = 1.5
     /// The tallest a decision card's media well draws its piece: a canvas, a frame naming no width and a diagram each fit to it (a diagram never under its words' 10px floor).
     public static let cMediaMaxH: Double = 675.2
     /// The artifact masonry's least card width: a thumbnail that still reads beside a dozen-character name.

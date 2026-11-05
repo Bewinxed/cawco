@@ -238,7 +238,7 @@ export async function prepareAssets(options: {
   const [canvas, decision] = await Promise.all([
     // A canvas's host page, its bundle and Excalidraw's fonts (core canvas-host.ts).
     canvasHostAssets(join(WORK, "canvas"), filesUnder),
-    // A decision page's host bundle and DialKit (core decision-host.ts).
+    // A decision page's host bundle, its HTML pages' dials entry with it (core decision-host.ts).
     decisionHostAssets(join(WORK, "decision"), filesUnder),
     writeWorkFiles(copies),
   ]);

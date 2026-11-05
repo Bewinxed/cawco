@@ -174,13 +174,13 @@ export const decisionLibrary = <C>(
   );
   const Dials = define(
     "Dials",
-    "Controls for values the person tunes rather than picks: a DialKit panel at the page's foot. artifact_read answers them as the dials entry's value, by panel name and path.",
+    "Controls for values the person tunes rather than picks, drawn on the design graph's own dial controls in their own well. artifact_read answers them as the dials entry's value, by panel name and path, like {Card: {radius: 16}}.",
     z.object({
       name: z.string().describe('The panel\'s name, like "Card".'),
       config: z
         .record(z.string(), z.unknown())
         .describe(
-          'DialKit controls by name (github.com/joshpuckett/dialkit#controls): a number as [default, min, max], a colour as "#hex", a boolean, a string; like {radius: [12, 0, 32], accent: "#e65d46"}.'
+          'Controls by name: a number as [default, min, max, step?] or a bare number, a colour as any CSS colour, a boolean, a string; {type: "select", options, default}, {type: "action", label}, {type: "pad", x: [default, min, max], y: [default, min, max]}; an object of controls as a heading over them; like {radius: [12, 0, 32], accent: "#e65d46"}.'
         ),
     })
   );

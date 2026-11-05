@@ -2161,6 +2161,9 @@ public enum Words {
 
     public enum Decisions {
         // packages/core/src/words/decisions.ts `decisionsWords`
+        /// A Dials piece's head: the values he sets go to the agent with the page's Send.
+        public static let dialsGoWithSend = "These go to the agent when you send."
+
         /// A card's diagram, refused as a canvas by the hub: what came of it, said after the hub's sentence (`hubRefusal`).
         public static let canvasNotOpenedThen = "so the canvas didn't open."
 

@@ -13,7 +13,9 @@
  *   on every preview origin, core decision-host.ts), then the kit's
  *   tokens.css and page.css.
  * - `{{KIT_JS}}`: the kit's page.js.
- * - `{{DIALS}}`: DialKit (vendored, MIT) and dials.js.
+ * - `{{DIALS}}`: `cawcoDials`, the design graph's own dial controls, from the
+ *   host's sheet and its dials entry on every preview origin
+ *   (decision-program.ts `PAGE_DIALS`).
  * - `{{MK:<id>}}`: `mockups/<id>.html` beside page.html, one mockup fragment.
  * - `src="caw/…"`: a Caw still from the kit; any other relative `src`, an
  *   image beside page.html; both as data: URIs, each distinct one once per
@@ -22,7 +24,7 @@
  * A built page stops at {@link PAGE_LIMIT}.
  */
 import { bundledSkills } from "./bundled-skills";
-import { FACES_SHEET, PAGE_ICON } from "./decision-program";
+import { FACES_SHEET, PAGE_DIALS, PAGE_ICON } from "./decision-program";
 
 /** The largest page the hub publishes. */
 export const PAGE_LIMIT = 512 * 1024;
@@ -121,11 +123,7 @@ export const buildDecisionPage = async (
         `@import url("${FACES_SHEET}");\n${kitText("tokens.css")}${kitText("page.css")}`
     )
     .replaceAll("{{KIT_JS}}", () => kitText("page.js"))
-    .replaceAll(
-      "{{DIALS}}",
-      () =>
-        `<style>${kitText("vendor/dialkit/styles.css")}</style><script>${kitText("vendor/dialkit/browser.global.js")}</script><script>${kitText("dials.js")}</script>`
-    );
+    .replaceAll("{{DIALS}}", () => PAGE_DIALS);
 
   const ids = [...new Set([...page.matchAll(MOCKUP)].map((match) => match[1]))];
   const mockups = new Map(

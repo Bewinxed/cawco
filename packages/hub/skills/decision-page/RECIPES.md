@@ -65,7 +65,7 @@ For values the person tunes rather than picks (a radius, a colour, a spring), ke
 </script>
 ```
 
-`cawcoDials(name, config, options)` takes DialKit's config ([control types](https://github.com/joshpuckett/dialkit#controls)) and returns its controller. Values go to the hub under the one id `dials`, each panel's by path (`{ Card: { radius: 16, "shadow.blur": 8 } }`), restored on reload and revision; `artifact_read` returns them as that entry's `value`. A set value stops at 2,000 characters of JSON, so keep panels small. Leave `{{DIALS}}` out of pages without dials: it adds about 330 KiB.
+`cawcoDials(name, config)` draws a panel on the house's dial controls and returns its controller: `values`, `subscribe(listener)` (called at once with the values, then at every turn) and `destroy()`. Its config names each control: a number as `[default, min, max, step?]` or a bare number, a colour as any CSS colour, a boolean, a string; `{ type: "select", options, default }`, `{ type: "action", label }` (its value counts the presses), `{ type: "pad", x: [default, min, max], y: [default, min, max] }` (two numbers, `pad.x` and `pad.y`); an object of controls is a heading over them, its controls by path (`shadow.blur`). A panel stands in the page's `[data-cawco-dials]` element when it has one, else at the page's bottom-right. Values go to the hub under the one id `dials`, each panel's by path (`{ Card: { radius: 16, "shadow.blur": 8 } }`), restored on reload and revision, and reach the agent with the page's Send; `artifact_read` returns them as that entry's `value`. A set value stops at 2,000 characters of JSON, so keep panels small. Leave `{{DIALS}}` out of pages without dials.
 
 ## The bridge, from your own script
 

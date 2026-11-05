@@ -1,96 +1,123 @@
 <!--
-  Values the person tunes: a DialKit panel (vendored in the decision-page
-  kit, loaded only on a page that has Dials) drawn in its own well where the
-  program puts it, under the media it tunes, never floating over the page
-  (the kit's dials.js `cawcoDialsIn`, DialKit's own control renderer). Its
-  values are kept under the one `dials` key, each panel's by name and path
-  (`{ Card: { radius: 16 } }`), restored from the hub on a reload or a
-  revision. Its look is the house's, set through DialKit's own variables
-  (host.css, `[data-slot=dials]`).
+  Values the person tunes rather than picks, on the design graph's own dial
+  controls (graph/Dials.svelte: a number's pill, a colour's field, the kit's
+  Select, Switch and Input, an action's button), drawn in their own well
+  where the program puts it, under the media it tunes. Its config is
+  DialKit's shape, as agents write it (graph dials.ts `dialsOfConfig`): a
+  number as [default, min, max], a colour, a boolean, a string, a typed
+  control, a folder. Its values are kept under the one `dials` key, each
+  panel's by name and path (`{ Card: { radius: 16 } }`), written 400 ms
+  after the last turn and standing again on a reload or a revision; they go
+  to the agent with the page's Send. An HTML page's `cawcoDials` draws the
+  same (dials.ts), and hears each turn (`onvalues`).
 -->
 <script lang="ts">
+  import { decisionsWords } from "@cawco/core/words/decisions";
+  import GraphDials from "../../graph/Dials.svelte";
+  import {
+    type DialValue,
+    type DialValues,
+    dialsOfConfig,
+  } from "../../graph/dials";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
-  import { bridge } from "./page.svelte.js";
-  import { scheme } from "./scheme.svelte.js";
+  import { bridge, picks } from "./page.svelte.js";
   import Well from "./Well.svelte";
 
   let {
     props,
-  }: OpenUIRenderProps<{ name: unknown; config: Record<string, unknown> }> =
-    $props();
+    onvalues,
+  }: Pick<
+    OpenUIRenderProps<{ name: unknown; config: Record<string, unknown> }>,
+    "props"
+  > & {
+    /** Each turn's values, the whole panel's by path: an HTML page's own script draws with them. */
+    onvalues?: (values: DialValues) => void;
+  } = $props();
 
-  interface Drawn {
-    destroy: () => void;
-    root: HTMLElement;
-  }
-  type DrawIn = (
-    target: HTMLElement,
-    name: string,
-    config: unknown,
-    options: { theme: string }
-  ) => Drawn;
-  /** DialKit and dials.js, loaded once for the page. */
-  const kit = (): Promise<DrawIn> => {
-    const held = window as unknown as {
-      cawcoDialsIn?: DrawIn;
-      cawcoDialsLoading?: Promise<DrawIn>;
-    };
-    held.cawcoDialsLoading ??= new Promise((resolve, reject) => {
-      const sheet = document.createElement("link");
-      sheet.rel = "stylesheet";
-      sheet.href = "/__cawco/decision/dials.css";
-      document.head.append(sheet);
-      const script = document.createElement("script");
-      script.src = "/__cawco/decision/dials.js";
-      script.onload = () =>
-        held.cawcoDialsIn
-          ? resolve(held.cawcoDialsIn)
-          : reject(new Error("DialKit didn't load."));
-      script.onerror = () => reject(new Error("DialKit didn't load."));
-      document.head.append(script);
-    });
-    return held.cawcoDialsLoading;
-  };
-
-  let dock = $state<HTMLDivElement>();
-  let drawn = $state<Drawn>();
+  /** How long the values stand still before they are kept. */
+  const KEEP_AFTER_MS = 400;
+  const name = $derived(String(props.name ?? "Dials"));
+  const read = $derived(dialsOfConfig(props.config ?? {}));
+  /** Every panel's values as the hub keeps them, by panel name. */
+  const keptAll = $derived.by((): Record<string, DialValues> => {
+    const value = picks.now.dials?.value;
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, DialValues>)
+      : {};
+  });
+  /** His values, by path: the kept ones once they come, while he has turned nothing. */
+  let values = $state<DialValues>({});
+  let taken = false;
   $effect(() => {
-    const target = dock;
-    if (!(target && bridge())) {
+    const kept = keptAll[name];
+    if (taken || !kept) {
       return;
     }
-    let gone = false;
-    let made: Drawn | undefined;
-    kit()
-      .then((drawIn) => {
-        if (gone) {
-          return;
-        }
-        made = drawIn(
-          target,
-          String(props.name ?? "Dials"),
-          props.config ?? {},
-          {
-            theme: scheme.now,
-          }
-        );
-        drawn = made;
-      })
-      .catch((error: unknown) => console.error("[decision-page]", error));
-    return () => {
-      gone = true;
-      made?.destroy();
-    };
-  });
-  // DialKit's own drawings (a spring's curve) follow the page's scheme.
-  $effect(() => {
-    const { now } = scheme;
-    if (drawn) {
-      drawn.root.dataset.theme = now;
+    taken = true;
+    if (Object.keys(values).length === 0) {
+      values = Object.fromEntries(
+        Object.entries(kept).filter(([path]) =>
+          read.dials.some((dial) => dial.name === path)
+        )
+      );
     }
   });
+  let version = $state<"yours" | "written">("yours");
+  let undo = $state<DialValues | null>(null);
+  /** The values as set: his over as written, or as written alone. */
+  const set = $derived<DialValues>(
+    version === "written" ? read.written : { ...read.written, ...values }
+  );
+  // The page's own drawing takes every set, the first too.
+  $effect(() => {
+    onvalues?.($state.snapshot(set));
+  });
+  let keeping: ReturnType<typeof setTimeout> | undefined;
+  /** The panel's values kept under `dials`, every other panel's as the hub keeps them. */
+  const keep = () => {
+    clearTimeout(keeping);
+    keeping = setTimeout(() => {
+      bridge()
+        ?.set("dials", { ...keptAll, [name]: { ...read.written, ...values } })
+        .catch((error: unknown) => console.error("[decision-page]", error));
+    }, KEEP_AFTER_MS);
+  };
+  const turn = (path: string, value: DialValue) => {
+    values = { ...values, [path]: value };
+    undo = null;
+    keep();
+  };
 </script>
 
 <Well>
-  <div bind:this={dock} class="w-full min-w-0" data-slot="dials"></div>
+  <div class="flex w-full min-w-0 flex-col" data-slot="dials-well">
+    <GraphDials
+      dials={read.dials}
+      lang={undefined}
+      onchange={turn}
+      onreset={(paths, all) => {
+        if (all) {
+          undo = values;
+        }
+        values = Object.fromEntries(
+          Object.entries(values).filter(([path]) => !paths.includes(path))
+        );
+        version = "yours";
+        keep();
+      }}
+      onundo={() => {
+        values = undo ?? {};
+        undo = null;
+        keep();
+      }}
+      onversion={(next) => {
+        version = next;
+      }}
+      say={decisionsWords.dialsGoWithSend}
+      undoable={undo !== null}
+      {values}
+      {version}
+      written={read.written}
+    />
+  </div>
 </Well>

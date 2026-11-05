@@ -5676,14 +5676,6 @@
         }
       }
     },
-    "c-dial-handle-ring": {
-      "$type": "dimension",
-      "$value": {
-        "value": 1.5,
-        "unit": "px"
-      },
-      "$description": "The ring of DialKit's easing-curve handle on a decision page, drawn as an inset ring so it holds 1.5px on every screen (DESIGN.md, The Whole Pixel Border Rule)."
-    },
     "c-media-max-h": {
       "$type": "dimension",
       "$value": {

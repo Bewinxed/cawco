@@ -479,7 +479,7 @@
           "config"
         ],
         "additionalProperties": false,
-        "description": "Controls for values the person tunes rather than picks: a DialKit panel at the page's foot. artifact_read answers them as the dials entry's value, by panel name and path."
+        "description": "Controls for values the person tunes rather than picks, drawn on the design graph's own dial controls in their own well. artifact_read answers them as the dials entry's value, by panel name and path, like {Card: {radius: 16}}."
       },
       "Setup": {
         "type": "object",

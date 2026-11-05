@@ -303,8 +303,9 @@ export default {
       entry: [
         // Every states file under src/, found by its name by the component canvas's stage host: packages/agent/src/stage-host/host.ts:2358 (core stage.ts:568 STORY_FILE).
         "src/**/*.stories.{ts,js,tsx,jsx}",
-        // The decision host page's Bun.build entrypoint: packages/core/src/decision-host.ts:263.
+        // The decision host page's Bun.build entrypoints, the host and an HTML page's dials: packages/core/src/decision-host.ts:281.
         "src/lib/cawco/decisions/host/host.ts",
+        "src/lib/cawco/decisions/host/dials.ts",
         // The decision host's sheet, compiled by Tailwind from its path: packages/core/src/decision-host.ts:44.
         "src/lib/cawco/decisions/host/host.css",
         // `$app/env` in the decision host's build, a Bun plugin's resolve Knip does not follow: packages/core/src/decision-host.ts `appEnv`.
@@ -381,8 +382,6 @@ export default {
         "scripts/wire-frames.ts",
         // Inlined into every decision page as its script: src/decision-page.ts:123.
         "skills/decision-page/kit/page.js",
-        // Served to a decision page with Dials: packages/core/src/decision-host.ts:308.
-        "skills/decision-page/kit/dials.js",
         // The decision-page skill tells the agent to run it: skills/decision-page/SKILL.md:74.
         "skills/decision-page/scripts/preview.mjs",
         // The decision-page skill tells the agent it records a mockup as a webm clip: skills/decision-page/SKILL.md:74.
@@ -391,8 +390,6 @@ export default {
       project: [
         // Knip's default.
         "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}",
-        // DialKit, vendored unchanged from its npm package (skills/decision-page/kit/vendor/dialkit/VERSION): a dependency's code, not ours.
-        "!skills/decision-page/kit/vendor/**",
       ],
     },
     "packages/core": {

@@ -63,6 +63,7 @@
     numberForm = "pill",
     changedMark = "ink",
     sent = null,
+    say = null,
     lang,
     onchange,
     onreset,
@@ -89,6 +90,8 @@
     changedMark?: "ink" | "glyph";
     /** The values the face shows went to the agent: when, and whether the hub sent them by itself or he did; null while they haven't gone since his last change. */
     sent?: { at: string; by: "hub" | "person" } | null;
+    /** What becomes of the values where it is not the graph's word (a decision page's: they go with its Send); null: the graph's. */
+    say?: string | null;
     lang: string | undefined;
     onchange: (name: string, value: DialValue) => void;
     /** These dials back to as written; `all`: Reset all, which Undo reset takes back. */
@@ -163,7 +166,7 @@
     if (sent) {
       return words.dials.sent(timeOf(sent.at));
     }
-    return words.dials.reachAgent;
+    return say ?? words.dials.reachAgent;
   });
   /** Presses of each action so far, by name: what its arg is set to. */
   let presses = $state<Record<string, number>>({});

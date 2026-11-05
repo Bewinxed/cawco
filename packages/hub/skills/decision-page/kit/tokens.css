@@ -1190,8 +1190,6 @@
     --c-decision-keycap: 17px;
     /* Code inside a decision page's words: a step under the words around it, at any size they stand at. */
     --c-decision-code: 0.9em;
-    /* The ring of DialKit's easing-curve handle on a decision page, drawn as an inset ring so it holds 1.5px on every screen (DESIGN.md, The Whole Pixel Border Rule). */
-    --c-dial-handle-ring: 1.5px;
     /* The tallest a decision card's media well draws its piece: a canvas, a frame naming no width and a diagram each fit to it (a diagram never under its words' 10px floor). */
     --c-media-max-h: 80vb;
     /* The artifact masonry's least card width: a thumbnail that still reads beside a dozen-character name. */

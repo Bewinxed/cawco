@@ -11,6 +11,8 @@ import { commonWords } from "./common";
  * chain when that file is stale. So a word is changed here or nowhere.
  */
 export const decisionsWords = {
+  /** A Dials piece's head: the values he sets go to the agent with the page's Send. */
+  dialsGoWithSend: "These go to the agent when you send.",
   /** A card's diagram, refused as a canvas by the hub: what came of it, said after the hub's sentence (`hubRefusal`). */
   canvasNotOpenedThen: "so the canvas didn't open.",
   /** The tab's name in the project's strip, and ‹ back to its list. */

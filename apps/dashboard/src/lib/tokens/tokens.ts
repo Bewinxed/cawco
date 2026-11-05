@@ -528,7 +528,6 @@ export type TokenSize =
   | "size.c-decision-title-min"
   | "size.c-decision-keycap"
   | "size.c-decision-code"
-  | "size.c-dial-handle-ring"
   | "size.c-media-max-h"
   | "size.c-artifact-card-min"
   | "size.c-work-tabs-roomy-w"

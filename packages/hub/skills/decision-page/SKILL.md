@@ -85,7 +85,7 @@ Each row refuses the page until it is fixed.
 
 Write the page as HTML only when a pick is not an option: something the person places or operates to decide (a point on a map, a sample they drag into shape, a machine and folder from `cawco.pickPlace`). A choice between options stays a program; a value the person tunes is a Dials component; an animated mockup is a page artifact shown with Preview.
 
-The HTML page is the kit's, beside this file: `kit/` (page shell, CSS on CawCo's tokens, Caw stills, DialKit) and `scripts/` (preview, record). The interview and the table above hold for it too.
+The HTML page is the kit's, beside this file: `kit/` (page shell, CSS on CawCo's tokens, Caw stills, the dials) and `scripts/` (preview, record). The interview and the table above hold for it too.
 
 1. In a work folder of your own, copy `kit/page.html` to `page.html` and write its cards and widgets to [RECIPES.md](RECIPES.md); mockups go in `mockups/<id>.html`, placed with `{{MK:<id>}}` and written to [CONTRACT.md](CONTRACT.md). A design the person compares is a real-size mockup, drawn at its true width in the kit's real-size frame (RECIPES.md, "At its real size"), so they judge its real pixels. Without a shell, write `decisions/<name>/page.html` (and its mockups) into the project's folder with `folder_write`.
 2. With a shell, check each mockup: `node <this skill>/scripts/preview.mjs <work folder> <mockup-id>` renders it light on a desk and dark at 360px and prints overflow and script errors; `--reduced` shows its still. `record.mjs` records one as a webm clip.

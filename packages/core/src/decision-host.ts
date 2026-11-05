@@ -18,8 +18,9 @@
  * loaded when a page first draws one) and its files (Caw's stills);
  * `faces.css`, the house faces' rules (house-faces.ts), each face's woff2
  * pieces beside it as `face-<hash>.woff2`, linked by a program's page and
- * imported by an HTML page's `{{KIT_CSS}}`; `dials.js` and `dials.css`, DialKit with
- * the kit's dials.js, loaded only by a page that has Dials; `icon.png`, the
+ * imported by an HTML page's `{{KIT_CSS}}`; `dials.js`, the entry an HTML
+ * page's `{{DIALS}}` loads (the host's `dials.ts`: `cawcoDials` on the
+ * design graph's own dial controls, drawn in `host.css`); `icon.png`, the
  * plain CawCo icon the dashboard's tab wears (`tab-icon-working.png`), which
  * every decision page names, so a page in a tab of its own asks the origin
  * for no `/favicon.ico` it doesn't serve.
@@ -43,8 +44,6 @@ const HOST_DIR = new URL(
 ).pathname;
 /** The host's sheet: the design layer and the `@source`s Tailwind reads. */
 const HOST_CSS = join(HOST_DIR, "host.css");
-const KIT_DIR = new URL("../../hub/skills/decision-page/kit/", import.meta.url)
-  .pathname;
 /** The plain CawCo icon, the dashboard's tab's while sessions work: a decision page's icon. */
 const ICON = new URL(
   "../../../apps/dashboard/src/lib/assets/brand/tab-icon-working.png",
@@ -279,7 +278,7 @@ export async function buildDecisionHost(): Promise<Map<string, Blob>> {
   // (host.ts `CAWCO_HOST_BUILD`), as the dashboard's name its own.
   const { commit } = await readBuildInfo(async () => "");
   const result = await bundled("The decision host", {
-    entrypoints: [join(HOST_DIR, "host.ts")],
+    entrypoints: [join(HOST_DIR, "host.ts"), join(HOST_DIR, "dials.ts")],
     target: "browser",
     format: "esm",
     splitting: true,
@@ -323,23 +322,6 @@ export async function buildDecisionHost(): Promise<Map<string, Blob>> {
   return pageFiles("The decision host", result.outputs, css);
 }
 
-/** DialKit (vendored in the decision-page kit) and the kit's bridge to it (dials.js), as one script and one sheet. */
-async function dialFiles(): Promise<Map<string, string>> {
-  const [kit, bridge, sheet] = await Promise.all(
-    [
-      "vendor/dialkit/browser.global.js",
-      "dials.js",
-      "vendor/dialkit/styles.css",
-    ].map((path) => readFile(join(KIT_DIR, path), "utf8"))
-  );
-  // DialKit's own sheet in the libraries' layer, under the house's: the
-  // host's sheet sets its look through its variables (host.css).
-  return new Map([
-    ["dials.js", `${kit}\n${bridge}`],
-    ["dials.css", `@layer vendor {\n${sheet ?? ""}\n}\n`],
-  ]);
-}
-
 /**
  * The house faces (house-faces.ts) as the host serves them: each face's
  * woff2 pieces at `face-<its content's hash>.woff2`, kept for good, and
@@ -357,7 +339,7 @@ async function faceFiles(): Promise<Map<string, Blob>> {
 const iconFiles = async (): Promise<Map<string, Blob>> =>
   new Map([["icon.png", new Blob([await readFile(ICON)])]]);
 
-/** The host's files for a release build: the bundle's outputs (`outdir`), the faces, the icon and DialKit's. */
+/** The host's files for a release build: the bundle's outputs (`outdir`), the faces and the icon. */
 export async function decisionHostAssets(
   outdir: string,
   filesUnder: (dir: string, prefix: string) => Promise<[string, string][]>
@@ -368,20 +350,14 @@ export async function decisionHostAssets(
 
 const LEADING_SLASHES = /^\/+/u;
 
-/** The host's files and DialKit's, the faces and the icon, by name: what a source checkout serves (host-build.ts builds them on a thread of its own). */
+/** The host's files, the faces and the icon, by name: what a source checkout serves (host-build.ts builds them on a thread of its own). */
 export async function buildHostFiles(): Promise<Map<string, Blob>> {
-  const [files, dials, faces, icon] = await Promise.all([
+  const [files, faces, icon] = await Promise.all([
     buildDecisionHost(),
-    dialFiles(),
     faceFiles(),
     iconFiles(),
   ]);
-  return new Map<string, Blob>([
-    ...files,
-    ...faces,
-    ...icon,
-    ...[...dials].map(([name, text]) => [name, new Blob([text])] as const),
-  ]);
+  return new Map<string, Blob>([...files, ...faces, ...icon]);
 }
 
 const TYPES: Record<string, string> = {
@@ -401,7 +377,7 @@ const HASHED = /^(chunk|asset|face)-/u;
 /**
  * One of the host's files, by its path under `/__cawco/decision/`; null
  * when there is none. A chunk's, a file's or a face's name is its hash,
- * kept for good; the entry, `faces.css` and DialKit's files are named the
+ * kept for good; the entries and `faces.css` are named the
  * same build after build, so never kept.
  */
 export async function decisionHostFile(path: string): Promise<Response | null> {

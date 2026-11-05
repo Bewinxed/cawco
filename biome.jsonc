@@ -71,8 +71,6 @@
       // the address design preview's build output (apps/dashboard/scripts/address-preview.vite.ts): minified, never edited.
       "!design-previews/address/assets",
       "!design-previews/address/index.html",
-      // DialKit's browser build and stylesheet, vendored unchanged.
-      "!packages/hub/skills/decision-page/kit/vendor",
       // the decision-page template: {{KIT_CSS}}/{{KIT_JS}} slots src/decision-page.ts fills, not CSS or JS.
       "!packages/hub/skills/decision-page/kit/page.html",
       "!apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi.json",
