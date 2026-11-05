@@ -51,7 +51,8 @@ export const commentWords = {
   /** The search field's Clear: its words go, the field stays. */
   clearSearch: "Clear the search",
   /** The search's way out: the field folds back into its symbol. */
-  closeSearch: "Close the search",
+  /** Puts the rail's search away (its field back into Search), beside the field: never the field's own Clear. */
+  cancelSearch: "Cancel",
   /** The rail's title menu, read out: which comments it lists, and in what order. */
   whichComments: "Which comments",
   /** The title menu's second group: the order the rows come in. */
@@ -93,7 +94,8 @@ export const commentWords = {
     `${NOT_SENT} the hub couldn't be reached for ${seconds} seconds. Your picks are kept on this page and reach the hub once it's back; press Send again then.`,
   // Changed since you looked: the tag over the page, and what a screen reader hears.
   changedSince: (n: number) => `${n} changed since you looked`,
-  changeOf: (k: number, n: number) => `${k} of ${n}`,
+  /** The changes tag on its tour: where it stands, with its noun kept. */
+  changeOf: (k: number, n: number) => `Change ${k} of ${n}`,
   previousChange: "Previous change",
   nextChange: "Next change",
   newAnswer: "New answer",

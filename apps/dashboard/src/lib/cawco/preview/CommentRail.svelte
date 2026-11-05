@@ -60,11 +60,13 @@
     BarGlass,
     BarItem,
     BarMenu,
+    BarPopover,
   } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent from "#lib/components/ui/button/pending-content.svelte";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
     IconAgent,
@@ -111,6 +113,9 @@
     onretry,
     onclose,
     onpage,
+    pageOpen = false,
+    onpageclose,
+    pageComposer,
     onresolve,
     onretrypin,
     onshown,
@@ -145,6 +150,15 @@
     onclose: () => void;
     /** A comment on the whole page: its composer opens. */
     onpage: () => void;
+    /**
+     * Beside the page: the whole-page comment's composer stands, hung from
+     * the glass its + is in (BarPopover), never far from it over the page.
+     */
+    pageOpen?: boolean;
+    /** That composer put away (Escape, a press outside it). */
+    onpageclose?: () => void;
+    /** That composer, as the pane draws it. */
+    pageComposer?: Snippet;
     onresolve: (id: string, resolved: boolean) => void;
     /** A comment not sent, tried again: it goes to the session once more. */
     onretrypin: (id: string) => void;
@@ -349,18 +363,28 @@
     }
   };
 
-  /** A row's words, each word of the query marked in the selection ink. */
+  /**
+   * A row's words, each word of the query marked in the selection ink: the
+   * runs between the hits joined into one text each, so the row's name reads
+   * as its words do, spaces and all.
+   */
   const WORD_AT = /([\p{L}\p{N}]+)/u;
-  const segments = (text: string) =>
-    marked.length === 0
-      ? [{ text, hit: false }]
-      : text
-          .split(WORD_AT)
-          .filter(Boolean)
-          .map((part) => ({
-            text: part,
-            hit: marked.some((word) => part.toLowerCase().startsWith(word)),
-          }));
+  const segments = (text: string) => {
+    if (marked.length === 0) {
+      return [{ text, hit: false }];
+    }
+    const runs: { text: string; hit: boolean }[] = [];
+    for (const part of text.split(WORD_AT).filter(Boolean)) {
+      const hit = marked.some((word) => part.toLowerCase().startsWith(word));
+      const last = runs.at(-1);
+      if (last && !last.hit && !hit) {
+        last.text += part;
+      } else {
+        runs.push({ text: part, hit });
+      }
+    }
+    return runs;
+  };
 
   /** Where the query's first word starts in `text`, as a row marks it (a word starting with it); -1 for none. */
   const firstHit = (text: string): number => {
@@ -470,7 +494,10 @@
       onpointerleave={() => onhover(null)}
       type="button"
     >
-      <span class="mark-cell">
+      <!-- The pill's cell holds a three-figure pill, so every row's words start at one x. -->
+      <span
+        class="mark-cell w-c-pin-cell-w flex-none justify-start justify-items-start"
+      >
         <PinMark
           dot={dotOf(pin)}
           {gone}
@@ -673,12 +700,19 @@
           </InputGroup.Addon>
         {/if}
       </InputGroup.Root>
+      <!-- Cancel puts the search away (HIG, Search fields: a Cancel button
+           beside the field), in words, so it never reads as the field's own
+           Clear (×), which only empties it. -->
       <BarGlass form="group">
-        <BarItem
-          icon={IconClose}
-          label={said.closeSearch}
+        <button
+          class="select-none touch-hit press-tint px-space-3 text-ink-strong type-label"
+          data-bar-item
+          data-slot="cancel-search"
           onclick={closeSearch}
-        />
+          type="button"
+        >
+          {said.cancelSearch}
+        </button>
       </BarGlass>
     {:else}
       {#if layout === "sheet"}
@@ -788,7 +822,33 @@
           onclick={focusSearch}
           bind:ref={searchButton}
         />
-        <BarItem icon={IconPlus} label={said.onWholePage} onclick={onpage} />
+        {#if layout === "beside" && pageComposer}
+          <!-- A comment on the whole page: its composer hangs from this glass,
+               connected to its +, as every card a bar opens does. -->
+          <Popover.Root
+            onOpenChange={(next) => {
+              if (next) {
+                onpage();
+              } else {
+                onpageclose?.();
+              }
+            }}
+            open={pageOpen}
+          >
+            <Popover.Trigger>
+              {#snippet child({ props })}
+                <BarItem icon={IconPlus} label={said.onWholePage} {props} />
+              {/snippet}
+            </Popover.Trigger>
+            <BarPopover label={said.onWholePage}>
+              <div class="w-c-pin-card-w max-w-full p-space-2">
+                {@render pageComposer()}
+              </div>
+            </BarPopover>
+          </Popover.Root>
+        {:else}
+          <BarItem icon={IconPlus} label={said.onWholePage} onclick={onpage} />
+        {/if}
       </BarGlass>
     {/if}
   </header>
@@ -831,7 +891,9 @@
             class="flex items-start gap-space-3 min-h-c-artifact-row-h px-space-2 py-space-2"
             data-slot="skeleton-row"
           >
-            <span class="mark-cell">
+            <span
+              class="mark-cell w-c-pin-cell-w flex-none justify-start justify-items-start"
+            >
               <Skeleton cell="pin" radius="pill" />
             </span>
             <span class="flex flex-1 min-w-0 flex-col">
