@@ -66,6 +66,14 @@
  *     `deliverArtifactMarks`): its writer, else the session that delegated
  *     it, else the project's Caw. On main taker.ts is not there.
  *
+ * (j) His "done picking" on the Decisions tab went by a rule of its own
+ *     (decisions.ts `heardBy`: the writer unless ENDED_STATUSES, else Caw),
+ *     never the session that delegated it. It goes by the same taker now:
+ *     an ended delegate's project page reaches its parent, a note with it
+ *     tells the parent the page is its own, and the page's read names the
+ *     parent as the one that has it (`writer.heardBy`). On main the press
+ *     goes to the delegate (or Caw) and `heardBy` is not there.
+ *
  *   bun scripts/probe-kit/run.ts answered-pages
  */
 
@@ -76,6 +84,7 @@ import type { DecisionCard } from "../../../packages/core/src/decisions";
 import type { InstanceRow } from "../../../packages/core/src/protocol";
 import { DAY_MS, MINUTE_MS } from "../../../packages/core/src/time";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
+import { noticeWords } from "../../../packages/core/src/words/notices";
 import {
   type ArtifactClient,
   createArtifactDocs,
@@ -101,6 +110,7 @@ import {
 import type {
   ArtifactRead,
   AskedOf,
+  PageHearer,
   SentBy,
 } from "../../../packages/hub/src/artifacts/service";
 import { artifactTaker } from "../../../packages/hub/src/artifacts/taker";
@@ -108,6 +118,10 @@ import type {
   ArtifactRow,
   ArtifactsDb,
 } from "../../../packages/hub/src/db/artifacts";
+import {
+  createDecisions,
+  type DecisionsDeps,
+} from "../../../packages/hub/src/decisions";
 import type { HubLifetimeShape } from "../../../packages/hub/src/lifetime";
 import { openItemsSection } from "../../../packages/hub/src/open-items";
 import { artifactReadWords } from "../../../packages/hub/src/presenters/artifacts";
@@ -277,7 +291,7 @@ const sessions = (waitsOn: string): ArtifactSessions => ({
 const states = (questions: Question[]): string =>
   questions.map((one) => `${one.key}=${one.state}`).join(", ");
 
-const run = ({ check }: Kit) => {
+const run = async ({ check }: Kit) => {
   // (a) Two picks and a note, no Send.
   const answered = questionsOfPage(ANSWERED);
   const facts = factsFrom(answered);
@@ -635,7 +649,7 @@ const run = ({ check }: Kit) => {
 
   // (i) An ended writer's answered page goes to whoever holds it now.
   const session = (id: string, parent: string | null = null) =>
-    ({ id, parentInstanceId: parent }) as InstanceRow;
+    ({ id, parentInstanceId: parent, title: id }) as InstanceRow;
   const writer = session(DELEGATE, WRITER);
   const parentRow = session(WRITER);
   const takerWith = (refusing: string[], projectId: string | null) =>
@@ -668,7 +682,93 @@ const run = ({ check }: Kit) => {
       toNone.to === "none",
     JSON.stringify({ standing, toParent, toCaw, toNone })
   );
-  return Promise.resolve();
+
+  // (j) His "done picking" on an ended delegate's project page reaches its parent.
+  const pageSends: { route: string; to: PageHearer }[] = [];
+  const pageTells: { note: string; to: string }[] = [];
+  const projectPage = {
+    ...page,
+    name: "card-close-gone",
+    kind: "page",
+    instanceId: DELEGATE,
+    projectId: "project-1",
+    updatedAt: new Date(AT),
+  } as ArtifactRow;
+  const fleetRows = new Map([
+    [DELEGATE, session(DELEGATE, WRITER)],
+    [WRITER, parentRow],
+  ]);
+  const decisionDeps: DecisionsDeps = {
+    artifacts: () => [projectPage],
+    changed: () => undefined,
+    commit: () => Promise.resolve(),
+    folderNames: () => Promise.resolve([]),
+    folderText: (_project, path) =>
+      Promise.resolve(
+        path === "decisions/card-close-gone/index.html"
+          ? `<article class="dp-card"><h2>Which close?</h2><div data-cawco-choice="card-close"><button data-option="x"><b>An x</b></button></div></article>`
+          : undefined
+      ),
+    instance: (id) => fleetRows.get(id),
+    taker: (artifact) =>
+      artifactTaker(fleetRows.get(artifact.instanceId ?? ""), artifact, {
+        caw: "project-caw",
+        instance: (id) => fleetRows.get(id),
+        refusal: (id) =>
+          id === DELEGATE ? "Its work's workspace was archived." : undefined,
+      }),
+    page: () => ({
+      meta: { revisedAt: AT, sentAt: null, sentText: null },
+      state: {},
+    }),
+    projectExists: () => true,
+    send: (_artifact, route, to) => {
+      pageSends.push({ route, to });
+      return Promise.resolve("session" in to ? to.session.id : "caw-session");
+    },
+    sendInFlight: () => false,
+    takeWrites: () => null,
+    tasks: () => Promise.resolve([]),
+    tell: (instance, said) => {
+      pageTells.push({
+        to: instance.id,
+        note: "note" in said ? (said.note ?? "") : "",
+      });
+    },
+    tellConversation: () => Promise.reject(new Error("Caw was asked")),
+  };
+  const decisions = createDecisions(decisionDeps);
+  const pressed = await decisions.send(
+    "project-1",
+    "card-close-gone",
+    undefined
+  );
+  await decisions.send("project-1", "card-close-gone", "the x, smaller");
+  const projectRead = await decisions.read("project-1", "card-close-gone");
+  const [press] = pageSends;
+  check(
+    "j: his done picking on an ended delegate's project page goes to the session that delegated it, never to Caw; a note with it tells that session the page is its own now; the page names that session as the one that has it",
+    pressed.to === "session" &&
+      pageSends.length === 1 &&
+      press !== undefined &&
+      "session" in press.to &&
+      press.to.session.id === WRITER &&
+      pageTells.length === 1 &&
+      pageTells[0]?.to === WRITER &&
+      !!pageTells[0]?.note.includes(
+        noticeWords.handedToParent(DELEGATE, PAGE)
+      ) &&
+      projectRead.writer?.ended === true &&
+      projectRead.writer.heardBy?.instanceId === WRITER,
+    JSON.stringify({
+      pressed,
+      pageSends: pageSends.map((one) =>
+        "session" in one.to ? one.to.session.id : "caw"
+      ),
+      pageTells,
+      writer: projectRead.writer,
+    })
+  );
 };
 
 const spec: Spec = {

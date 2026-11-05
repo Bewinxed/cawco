@@ -51,6 +51,9 @@ export const noticeWords = {
   setupFromOffer: "Asked Caw to set up the project you made",
   /** A decision page's "I'm done picking", told to the session that holds it (hub decisions.ts). */
   donePicking: (title: string) => `Told you're done picking on “${title}”`,
+  /** What the session that delegated a page is told with the person's words on it once its writer takes no input. */
+  handedToParent: (writer: string, id: string) =>
+    `Its session “${writer}” takes no input now, so this page is yours, the session that delegated it: read the person's picks and notes with artifact_read({ id: "${id}" }).`,
   /** A page whose every question has his answer, sent by the hub to the project's Caw because its writer takes no input. */
   answeredPage: (title: string) => `Every question answered on “${title}”`,
   /** Why Caw is woken for it. */

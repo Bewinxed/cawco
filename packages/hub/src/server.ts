@@ -26908,6 +26908,14 @@ export const createServer = (
   // The project page's Decisions tab (decisions.ts): its pages, their sends
   // and Make tasks, its graph. A record keeps its tasks as they are filed.
   const decisions = createDecisions({
+    // Who hears him on a page: where his marks and the hub's own send go.
+    taker: (artifact) =>
+      takerOf(
+        artifact.instanceId
+          ? db.getInstancesByIds([artifact.instanceId])[0]
+          : undefined,
+        artifact
+      ),
     // Newest-touched first: a republished page is its name's current one.
     artifacts: (projectId) =>
       db.artifacts

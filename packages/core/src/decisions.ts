@@ -75,8 +75,10 @@ export type DecisionState = "picking" | "sent" | "making" | "decided";
 
 /** The session that wrote a page. */
 export interface DecisionWriter {
-  /** It was ended: its person, parent or the hub stopped it, so Caw is woken instead. */
+  /** It takes no input now: what the person does on the page goes to {@link heardBy}, else to the project's Caw (hub artifacts/taker.ts). */
   ended: boolean;
+  /** Who hears the person on the page instead while it takes none: the session that delegated it. Absent with `ended`: Caw. */
+  heardBy?: { instanceId: string; title: string };
   instanceId: string;
   title: string;
 }

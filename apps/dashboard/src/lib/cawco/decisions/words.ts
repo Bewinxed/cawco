@@ -55,8 +55,9 @@ export interface Pill {
 
 /**
  * Sent, and who has it: its session's name and `working` while it works
- * (the head; a tile, short of room, says `working` alone), `Caw` when its
- * session had ended and Caw took it; Decided once its record stands.
+ * (the head; a tile, short of room, says `working` alone); once its
+ * session takes no input, the session that delegated it, else `Caw`, which
+ * took it; Decided once its record stands.
  */
 export function pillOf(
   page: Pick<DecisionPageSummary, "state" | "writer">,
@@ -76,11 +77,13 @@ export function pillOf(
   }
   const { writer } = page;
   if (!writer || writer.ended) {
+    // Who took it (hub artifacts/taker.ts): the session that delegated it, else Caw.
+    const who = writer?.heardBy?.title ?? words.caw;
     return {
       tone: "live",
       word: words.sent,
-      who: words.caw,
-      title: words.pillTitle(words.sent, words.caw),
+      who,
+      title: words.pillTitle(words.sent, who),
     };
   }
   const whole = words.workingWhole(writer.title);

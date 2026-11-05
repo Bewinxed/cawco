@@ -367,7 +367,8 @@ const run = async (kit: Kit) => {
     "4: one line, 'Responses on' its title and 'waiting for the agent'; no 'artifact_read' on screen; no person's row holds it",
     drawn.lines.length === 1 &&
       drawn.lines[0].artifact === id &&
-      drawn.lines[0].name === NAME &&
+      // Its chip names it by its title (bff305589), as the line does.
+      drawn.lines[0].name === TITLE &&
       drawn.lines[0].text.includes(`Responses on ${TITLE}`) &&
       drawn.lines[0].text.includes("waiting for the agent") &&
       !drawn.instruction &&

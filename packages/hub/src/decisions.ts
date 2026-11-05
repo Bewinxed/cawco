@@ -42,11 +42,7 @@
  *   `unlocks`. An `after` naming no decision of the project's links
  *   nothing; its writer is told so on create and revision (`linksOf`).
  */
-import {
-  type ChoiceEntry,
-  ENDED_STATUSES,
-  type InstanceRow,
-} from "@cawco/core";
+import type { ChoiceEntry, InstanceRow } from "@cawco/core";
 import { SEND_WRITES_MAX } from "@cawco/core/comments";
 import {
   type AfterLinks,
@@ -73,6 +69,7 @@ import { pageHash } from "@cawco/core/preview-proxy";
 import { noticeWords } from "@cawco/core/words/notices";
 import { Elysia, status, t } from "elysia";
 import type { PageHearer } from "./artifacts/service";
+import type { ArtifactTaker } from "./artifacts/taker";
 import type { PersonsSend } from "./caw";
 import type { ArtifactRow } from "./db/artifacts";
 import { PROGRAM_FILE, readKept } from "./decision-program";
@@ -388,6 +385,12 @@ export interface DecisionsDeps {
    * has not read it yet, or the turn that read it has not ended.
    */
   sendInFlight: (uuid: string) => boolean;
+  /**
+   * Who hears the person on `artifact`: the one his marks and the hub's own
+   * send of his answers go to (artifacts/taker.ts), its writer while it
+   * takes input, else the session that delegated it, else Caw.
+   */
+  taker: (artifact: ArtifactRow) => ArtifactTaker<unknown>;
   /** A Send's carried writes (core `SendBody.writes`) applied to the artifact's doc (artifacts/sync.ts `takeSentWrites`): why not, or null. */
   takeWrites: (artifactId: string, writes: string) => string | null;
   /** The project's tasks that name a card ({@link DECIDED_FIELD}). */
@@ -636,17 +639,28 @@ export const createDecisions = (deps: DecisionsDeps) => {
     }
   };
 
+  /** The session that wrote `artifact`, and who hears the person on it ({@link DecisionsDeps.taker}). */
   const writerOf = (artifact: ArtifactRow | null): DecisionWriter | null => {
     const row = artifact?.instanceId
       ? deps.instance(artifact.instanceId)
       : undefined;
-    return row
-      ? {
-          instanceId: row.id,
-          title: boardTitle(row),
-          ended: ENDED_STATUSES.has(row.status),
-        }
-      : null;
+    if (!(artifact && row)) {
+      return null;
+    }
+    const taker = deps.taker(artifact);
+    return {
+      instanceId: row.id,
+      title: boardTitle(row),
+      ended: taker.to !== "writer",
+      ...(taker.to === "parent"
+        ? {
+            heardBy: {
+              instanceId: taker.session.id,
+              title: boardTitle(taker.session),
+            },
+          }
+        : {}),
+    };
   };
 
   /**
@@ -803,16 +817,28 @@ export const createDecisions = (deps: DecisionsDeps) => {
     return one;
   };
 
-  /** Who hears a page's send or its Make tasks: its session while it stands, else Caw. */
+  /**
+   * Who hears a page's send or its Make tasks, as its read names them
+   * ({@link writerOf}, from {@link DecisionsDeps.taker}): its writer while it
+   * takes input, else the session that delegated it, else Caw.
+   */
   const heardBy = (
     read: DecisionPageRead
-  ): { instance: InstanceRow } | { caw: true } => {
-    const instance = read.writer
-      ? deps.instance(read.writer.instanceId)
-      : undefined;
-    return instance && !ENDED_STATUSES.has(instance.status)
-      ? { instance }
-      : { caw: true };
+  ): { handed: string | null; instance: InstanceRow } | { caw: true } => {
+    const { writer } = read;
+    const heard = writer?.ended ? writer.heardBy : writer;
+    const instance = heard ? deps.instance(heard.instanceId) : undefined;
+    const { artifactId } = read;
+    if (!(writer && instance && artifactId)) {
+      return { caw: true };
+    }
+    return {
+      instance,
+      handed:
+        instance.id === writer.instanceId
+          ? null
+          : noticeWords.handedToParent(writer.title, artifactId),
+    };
   };
 
   /** What tells Caw a page is his now: where it is and how to read it. */
@@ -1086,7 +1112,11 @@ export const createDecisions = (deps: DecisionsDeps) => {
         if ("instance" in to) {
           deps.tell(
             to.instance,
-            { by: "you", words, note: page },
+            {
+              by: "you",
+              words,
+              note: [page, to.handed].filter(Boolean).join(" "),
+            },
             crypto.randomUUID()
           );
           deps.changed(projectId);
@@ -1156,7 +1186,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
         line: noticeWords.makeTasks(read.title),
         text: `The person pressed Make tasks on the decision page “${read.title}” (decisions/${name}/): load the to-tasks skill and file them now; their press approves the breakdown. ${
           "instance" in to
-            ? `artifact_read({ id: "${artifactId}" }) has their picks and notes by card id.`
+            ? `${to.handed ? `${to.handed} ` : ""}artifact_read({ id: "${artifactId}" }) has their picks and notes by card id.`
             : handedToCaw(read)
         } The record is decisions/${name}/record.json (each card's id, question, what they chose and their note), and log.md beside it says it in words. File one or more tasks for each card they decided and none for a card left open, and give each the field ${DECIDED_FIELD}: "${name}#<card id>" (task_create's fields), so it links back to its card.`,
       };

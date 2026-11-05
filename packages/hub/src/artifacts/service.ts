@@ -1782,10 +1782,10 @@ export interface ArtifactServiceDeps {
     cards: DecisionCard[]
   ) => Promise<AfterLinks>;
   /**
-   * Who hears the person's answers on `artifact`, which `writer` made, when
-   * the hub sends them itself: the one his marks go to (server.ts
-   * `artifactTaker`), its writer while it takes input, else the session
-   * that delegated it, else the project's Caw; none when no one can.
+   * Who hears the person on `artifact`, which `writer` made: the one his
+   * marks and the hub's own send of his answers go to (artifacts/taker.ts),
+   * its writer while it takes input, else the session that delegated it,
+   * else the project's Caw; none when no one can.
    */
   answersTo: (
     writer: InstanceRow | undefined,
@@ -3199,16 +3199,22 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * Whether the session is the one the artifact's marks go to: its writer,
-   * or, once the writer has ended, the writer's parent or its project's
-   * conversation. What it reads of them counts as heard.
+   * Whether the session is the one the artifact's marks go to
+   * ({@link ArtifactServiceDeps.answersTo}, artifacts/taker.ts): its writer;
+   * once the writer takes no input, the session that delegated it, else
+   * its project's conversation. What it reads of them counts as heard.
    */
   const takes = (instance: InstanceRow, row: ArtifactRow): boolean => {
     if (row.instanceId === instance.id) {
       return true;
     }
-    const writer = holder(row);
-    return !!writer && deps.ended(writer);
+    const to = deps.answersTo(holder(row), row);
+    if (to === null) {
+      return false;
+    }
+    return "session" in to
+      ? to.session.id === instance.id
+      : deps.ledProjects(instance).includes(to.caw.projectId);
   };
 
   /**
