@@ -48,6 +48,16 @@ export const commentWords = {
   // The rail.
   comments: "Comments",
   searchComments: "Search comments",
+  /** The search field's Clear: its words go, the field stays. */
+  clearSearch: "Clear the search",
+  /** The search's way out: the field folds back into its symbol. */
+  closeSearch: "Close the search",
+  /** The rail's title menu, read out: which comments it lists, and in what order. */
+  whichComments: "Which comments",
+  /** The title menu's second group: the order the rows come in. */
+  order: "Order",
+  /** The title's dot while another list is in front: what waits in To check. */
+  toCheckWaiting: (n: number) => `${n} to check`,
   sort: "Sort",
   newestFirst: "Newest first",
   topOfPageFirst: "Top of page first",

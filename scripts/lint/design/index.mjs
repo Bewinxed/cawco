@@ -4,6 +4,7 @@
 // by its path from apps/dashboard, as the ESLint config named it.
 import path from "node:path";
 import { defineRule } from "golar/unstable";
+import { detachedBarMenus } from "./bar-menu.mjs";
 import { classJoins } from "./class-join.mjs";
 import { clipWithMove } from "./clip-move.mjs";
 import { followsProps } from "./follows-props.mjs";
@@ -316,6 +317,7 @@ const FIND = {
   "house/no-raw-class-values": rawClassValues,
   "house/no-raw-motion": rawMotion,
   "house/follows-props": followsProps,
+  "house/no-detached-bar-menu": detachedBarMenus,
   "design/no-unknown-classes": unknownClasses,
   "design/no-arbitrary-values": arbitraryValues,
   "design/no-restyle": restyle,

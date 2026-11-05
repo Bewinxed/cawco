@@ -1681,6 +1681,9 @@ public enum Words {
             "\(page) diagram"
         }
 
+        /// The menu the title opens, for a screen reader: the session's artifacts.
+        public static let artifacts = "This session's artifacts"
+
         /// A row's Remove, for a screen reader: its trailing glyph says it.
         public static func removeNamed(title: String) -> String {
             "Remove \(title)"
@@ -1699,7 +1702,7 @@ public enum Words {
             "\(title) wasn't removed: \(why)"
         }
 
-        /// The head's line under the name once the person's Send is in and the session has not changed it since.
+        /// What describes the title (the menu's first row and its tooltip) once the person's Send is in and the session has not changed it since.
         public static func sentTo(session: String) -> String {
             "Sent to \(session)"
         }
