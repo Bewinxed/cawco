@@ -152,6 +152,7 @@ const EVERYTHING = [
   /^scripts\/check\.ts$/u,
   /^scripts\/lib\/checks\.ts$/u,
   /^scripts\/lib\/repo-files\.ts$/u,
+  /^scripts\/(?:lib\/)?real-modules\.ts$/u,
   /^scripts\/lint\//u,
 ];
 const CODE = /\.(?:[cm]?[jt]sx?|svelte)$/u;
@@ -477,10 +478,22 @@ const BIOME_READS =
 const biomed = [...reached].filter(
   (p) => BIOME_READS.test(p) && present.has(p)
 );
+/** What gives Biome a `node_modules` it reads a package's types through (lib/real-modules.ts). */
+const REAL_MODULES_RUN = "scripts/real-modules.ts";
+const REAL_MODULES = [REAL_MODULES_RUN, "scripts/lib/real-modules.ts"];
 {
+  // "package types": a pass from before Biome read them in a workspace is
+  // none of this one's.
   const key = await keyOf(
-    [...biomed, "biome.jsonc", "bun.lock", "apps/dashboard/src/app.css"],
-    everything ? "all" : ""
+    [
+      ...biomed,
+      "biome.jsonc",
+      "bun.lock",
+      "apps/dashboard/src/app.css",
+      ...REAL_MODULES,
+    ],
+    everything ? "all" : "",
+    "package types"
   );
   if (biomed.length === 0 && !everything) {
     skipped.push("biome check (no file it reads changed)");
@@ -492,14 +505,17 @@ const biomed = [...reached].filter(
         ? "biome check (every file)"
         : `biome check (${biomed.length} files)`,
       dir: ROOT,
+      // Through a real node_modules, where Biome reads a package's types.
       argv: [
+        BUN,
+        REAL_MODULES_RUN,
         join(ROOT, "node_modules/.bin/biome"),
         "check",
         "--no-errors-on-unmatched",
         "--files-ignore-unknown=true",
         ...(everything ? [] : biomed),
       ],
-      after: SYNC,
+      alone: true,
       stamp: { file: stampFile("biome"), key },
     });
   }

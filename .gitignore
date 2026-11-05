@@ -1,5 +1,7 @@
 # dependencies (bun install)
 node_modules
+# A workspace's node_modules link and the folder that stands for it while Biome runs (scripts/lib/real-modules.ts).
+/.cawco-modules/
 
 # output
 out

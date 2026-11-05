@@ -3,7 +3,8 @@
  * `bun run check` (check.ts) is made of. What each printed comes out whole
  * when it ends, and the run fails when any one failed, timed out, or could
  * not start. A check with `after` starts only once the check it names has
- * ended, whatever its verdict. A check with `stamp` adds to it when it
+ * ended, whatever its verdict. A check `alone` starts once every other check
+ * has ended, and none starts beside it. A check with `stamp` adds to it when it
  * passes: the key of the inputs it passed on, which check.ts reads to skip
  * it on inputs it passed on (the last few kept).
  */
@@ -21,6 +22,13 @@ const KILL_GRACE_MS = 5000;
 export interface Check {
   /** A check, earlier in the list, that ends before this one starts. */
   after?: string;
+  /**
+   * Run with no other check beside it, after all of them: one that changes
+   * what the others read while it runs (Biome's real node_modules,
+   * lib/real-modules.ts, through which TypeScript resolved a package outside
+   * the checkout and failed resolution-check).
+   */
+  alone?: boolean;
   argv: string[];
   dir: string;
   /** Environment over this process's. */
@@ -176,7 +184,8 @@ export const runChecks = async (
       slots += 1;
     }
   };
-  for (const check of checks) {
+  const together = checks.filter((check) => !check.alone);
+  for (const check of together) {
     const before = check.after ? ended.get(check.after) : undefined;
     if (check.after && !before) {
       throw new Error(
@@ -200,6 +209,11 @@ export const runChecks = async (
     );
   }
   await Promise.all(ended.values());
+  for (const check of checks.filter((one) => one.alone)) {
+    const outcome = await run(check);
+    outcomes.push(outcome);
+    report(outcome);
+  }
 
   const failed = outcomes.filter((outcome) => !outcome.ok);
   const wall = ((performance.now() - started) / 1000).toFixed(1);

@@ -29,7 +29,7 @@
     "fmt": "bun scripts/fmt.ts",
     "hub": "bun run --filter '@cawco/hub' dev",
     "knip": "knip",
-    "lint:fix": "ultracite fix && bun scripts/fmt.ts",
+    "lint:fix": "bun scripts/real-modules.ts ultracite fix && bun scripts/fmt.ts",
     "machine-paths:check": "bun scripts/machine-paths-check.ts",
     "mark-line:check": "bun apps/dashboard/scripts/mark-line-check.ts",
     "outro-reads:check": "bun apps/dashboard/scripts/outro-reads-check.ts",
@@ -53,7 +53,7 @@
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.318",
-    "@biomejs/biome": "2.6.3",
+    "@biomejs/biome": "2.6.5",
     "@earendil-works/pi-agent-core": "1.4.0",
     "@earendil-works/pi-codemode": "1.4.0",
     "@earendil-works/pi-coding-agent": "1.4.0",
