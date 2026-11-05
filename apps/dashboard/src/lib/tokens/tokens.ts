@@ -301,6 +301,8 @@ export type TokenSize =
   | "size.c-pin-gone-ring"
   | "size.c-fault-details-h"
   | "size.c-comments-w"
+  | "size.c-or-record-w"
+  | "size.c-or-beside-w"
   | "size.c-pin-card-w"
   | "size.c-pin-card-reading-w"
   | "size.c-target-stroke"

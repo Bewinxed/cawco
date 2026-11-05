@@ -3730,6 +3730,22 @@
       },
       "$description": "The Comments rail beside the page (the artifact panel's surface brief, The Comments rail): a row's three lines beside its pill, the search field and Open and Resolved over them, and the Send bar's note at its foot."
     },
+    "c-or-record-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 820,
+        "unit": "px"
+      },
+      "$description": "The One record task prototype's record column on a desk (prototypes/task/one-record): the state line, the record and Say something at their widest; past it the room goes to what stands beside."
+    },
+    "c-or-beside-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 560,
+        "unit": "px"
+      },
+      "$description": "The One record task prototype's beside column on a desk at its narrowest (prototypes/task/one-record): the result, the session, the waits, the file or another task, opened from an entry or the state line; it takes the room past the record's width."
+    },
     "c-pin-card-w": {
       "$type": "dimension",
       "$value": {
