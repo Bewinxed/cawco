@@ -107,7 +107,10 @@
   const drawnOut = $derived(joined || hanging > 0);
 </script>
 
-<!-- The glass is drawn by a layer under the items (`before:`), never by the
+<!-- A kit part standing in the glass (a Button, a Toggle, a segmented
+     track) takes its contour, a capsule concentric with it (`data-glass`,
+     the `glass-item:` variant), as a BarItem is; a title draws no glass, so
+     its control keeps its own corner. The glass is drawn by a layer under the items (`before:`), never by the
      group itself: a backdrop filter on the group would make it the box
      Caw's fixed drawer is laid out in. The layer stands under every item
      (`before:-z-1` in the group's own stacking context, `isolate`): a kit
@@ -125,6 +128,7 @@
   ]}
   bind:this={node}
   data-bar-group={form === "bar" ? "" : undefined}
+  data-glass={form === "title" ? undefined : ""}
   data-flare={flare}
   data-joined={drawnOut ? "" : undefined}
   style:--flare="var(--radius-lg)"

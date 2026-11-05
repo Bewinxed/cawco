@@ -42,7 +42,7 @@
 <div
   aria-label={label}
   class={cn(
-    "relative grid grid-cols-(--cols) gap-space-row rounded-md concentric-in r-outer-md r-inset-space-1 bg-surface-recess-deep p-space-1",
+    "relative grid grid-cols-(--cols) gap-space-row rounded-md glass-item:rounded-pill concentric-in r-outer-md glass-item:r-outer-pill r-inset-space-1 bg-surface-recess-deep p-space-1",
     className
   )}
   data-segmented-size={size}

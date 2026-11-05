@@ -167,6 +167,13 @@
 /* Not hidden by its `hidden` attribute (a pane head's fitted controls). */
 @custom-variant unhidden (&:not([hidden]));
 
+/* A control standing in a bar's glass group (BarGlass, `data-glass`): a
+   kit part there takes the glass's contour, a capsule concentric with the
+   capsule it stands in (The Concentric Rule), not its own fixed corner.
+   What hangs from the glass in its markup (a card, a menu, a list, a
+   dialog) stands outside it. */
+@custom-variant glass-item (&:where([data-glass] *):not(:where([data-glass] :is([data-hang], [role="menu"], [role="listbox"], [role="dialog"], [data-popover]) *)));
+
 /* A window too short for the Files lists' full floors, and one tall enough:
    560px of height. */
 @custom-variant short-window {

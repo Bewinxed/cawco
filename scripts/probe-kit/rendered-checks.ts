@@ -46,6 +46,7 @@
  * | anchor-drift | own code, over reads        | an open popover, menu or listbox whose height changed between two reads of a page holds its top or its bottom |
  * | decoration-spill | own code                 | an outline (offset past the border edge), a hard box-shadow (blur under 1px, by its spread and offsets), a dashed or dotted border, or an absolutely placed ::before/::after that draws, reaching 0.5px past the box it marks (a pseudo's own element, when that draws; not a pseudo flush outside it, which carries it on) or past the nearest box that clips it or rounded box that draws, its own box inside that one; a clip-path or mask is unread |
  * | nested-radius | own code                    | a wash (a fill or gradient, an element's or an absolute pseudo's) that nearly fills a rounded box (one axis within its radius of both ends) and whose corner stands within that radius of the box's corner (the box drawing or clipping) is outer radius less the mean inset, within 1.5px or a quarter of it, plus half the two insets' difference |
+ * | state-shape | own code + CSS.forcePseudoState | each control in a bar and each rounded one, with hover, active and focus-visible forced on it in turn (Chromium; transitions held off) and at rest when drawn selected: the fill or ring that state paints anew (its own, a pseudo's, a child's half its size or more) takes the control's radius less its inset where a child or pseudo draws it, and, inside the glass it stands in (the nearest box that draws over it, rounded), the glass's radius less its inset (a capsule's across it), within 1.5px or a tenth (a quarter at a corner) |
  *
  * A sheet of specimens (a bench) says what a view is on the page itself:
  * each specimen that stands for a screen of its own carries `data-specimen`,
@@ -95,7 +96,12 @@ export type CheckName =
   | "text-overlap"
   | "anchor-drift"
   | "decoration-spill"
-  | "nested-radius";
+  | "nested-radius"
+  | "state-shape";
+
+/** The states state-shape forces on each control it reads, in the order read. */
+const FORCED = ["hover", "active", "focus-visible"] as const;
+type ForcedState = (typeof FORCED)[number];
 
 /** Each rule, what it holds, and who reads it: the report's words. */
 const CHECKS: Record<CheckName, { says: string; by: string }> = {
@@ -172,6 +178,10 @@ const CHECKS: Record<CheckName, { says: string; by: string }> = {
   "nested-radius": {
     says: "a wash in a rounded corner takes the outer radius less its inset (The Concentric Rule)",
     by: "own code",
+  },
+  "state-shape": {
+    says: "a control's hover, pressed, focus and selected fill takes its shape, concentric in its glass (The Concentric Rule)",
+    by: "own code + DevTools CSS.forcePseudoState",
   },
 };
 
@@ -306,6 +316,8 @@ interface InPageArgs {
   coralExcept: { reason: string; selector: string }[];
   corals: { name: string; value: string }[];
   exempt: string[];
+  /** A state forced on every control state-shape reads (CSS.forcePseudoState): its read alone. Null for the read at rest. */
+  forced: ForcedState | null;
   marks: string | null;
   scope: string;
   shelf: { name: string; value: string };
@@ -342,8 +354,11 @@ function readInPage(args: InPageArgs): InPageRead {
   const findings: (CheckFinding & { at: number })[] = [];
   const named: string[] = [];
   const unread: string[] = [];
-  const els: Element[] = [];
-  (window as unknown as { __checkEls: Element[] }).__checkEls = els;
+  // A forced state's read (state-shape) adds to the read it follows, whose
+  // findings' kept elements it keeps.
+  const marked = window as unknown as { __checkEls?: Element[] };
+  const els: Element[] = (args.forced && marked.__checkEls) || [];
+  marked.__checkEls = els;
   const keep = (el: Element) => {
     els.push(el);
     return els.length - 1;
@@ -3545,6 +3560,245 @@ function readInPage(args: InPageArgs): InPageRead {
     }
   }
 
+  // A control's hover, pressed, focus and selected fill takes the control's
+  // shape (DESIGN.md, The Concentric Rule: "the hover ghost, the selection
+  // pill and the focus ring take the contour of what they mark"): a fill a
+  // child or a pseudo-element draws inside a rounded control takes the
+  // control's radius less its inset, and any fill inside a group's glass
+  // (a capsule, or a box that draws a rounded shape) the glass's radius
+  // less its inset, so it sits concentric. A capsule's curve runs its whole
+  // length: an item anywhere along it is concentric at the capsule's radius
+  // less its inset across it. The read at rest names the controls (each in a
+  // bar, and each rounded one), keeps what each draws at rest and reads a
+  // selected one's fill; each forced state's read (`forcedStates`, the
+  // DevTools protocol's CSS.forcePseudoState) reads what that state draws
+  // anew.
+  if (!skip.has("state-shape")) {
+    const STATE_CONTROL =
+      'button, a[href], summary, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="option"], [role="checkbox"], [role="radio"], [role="switch"]';
+    /** A control drawn chosen at rest: its fill is its selected state's. */
+    const SELECTED =
+      '[aria-pressed="true"], [aria-expanded="true"], [aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-checked="true"], [data-state="on"], [data-state="open"], [data-state="active"], [data-pressed]';
+    interface StateFill {
+      box: Contour;
+      key: string;
+      sig: string;
+      what: string;
+    }
+    const stash = window as unknown as {
+      __stateShape?: {
+        els: Element[];
+        rest: Map<Element, Map<string, string>>;
+      };
+    };
+    const shadowDraws = (s: CSSStyleDeclaration) =>
+      s.boxShadow !== "none" &&
+      [...s.boxShadow.matchAll(COLOR_FN)].some((m) => rgba(m[0])[3] > 0.02);
+    /** What `el` paints of a fill or a ring: its own, its pseudos', and each child's (and its pseudos') at least half its width and height, a nested control's aside. */
+    const fillsOf = (el: Element): StateFill[] => {
+      const out: StateFill[] = [];
+      const add = (
+        s: CSSStyleDeclaration,
+        box: Contour | null,
+        key: string,
+        what: string
+      ) => {
+        if (box && !shaped(s) && (washOf(s) || shadowDraws(s))) {
+          out.push({
+            box,
+            key,
+            what,
+            sig: `${s.backgroundColor}|${s.backgroundImage}|${s.boxShadow}|${s.opacity}`,
+          });
+        }
+      };
+      const withPseudos = (e: Element, key: string, what: string) => {
+        add(style(e), contourOf(e), key, what);
+        for (const which of ["::before", "::after"] as const) {
+          const ps = pseudoOf(e, which);
+          if (ps) {
+            add(ps, pseudoBox(e, ps), `${key}${which}`, `${what}${which}`);
+          }
+        }
+      };
+      withPseudos(el, "own", "its");
+      const b = el.getBoundingClientRect();
+      [...el.querySelectorAll("*")].forEach((d, i) => {
+        if (
+          d.closest("svg") ||
+          d.matches(STATE_CONTROL) ||
+          d.parentElement?.closest(STATE_CONTROL) !== el ||
+          !shown(d)
+        ) {
+          return;
+        }
+        const r = d.getBoundingClientRect();
+        if (r.width >= b.width / 2 && r.height >= b.height / 2) {
+          withPseudos(d, `child ${i}`, `its ${d.tagName.toLowerCase()}'s`);
+        }
+      });
+      return out;
+    };
+    /** The glass `el` stands in: the nearest box over it that draws (a fill, an edge, a shadow, its own or a placed pseudo's that holds it), when that is rounded. */
+    const glassOf = (el: Element): { box: Contour; name: string } | null => {
+      const b = el.getBoundingClientRect();
+      const holds = (c: Contour) =>
+        c.left <= b.left + 0.5 &&
+        c.top <= b.top + 0.5 &&
+        c.right >= b.right - 0.5 &&
+        c.bottom >= b.bottom - 0.5;
+      for (
+        let up = el.parentElement;
+        up && scope.contains(up) && up !== document.body;
+        up = up.parentElement
+      ) {
+        if (paints(up).length > 0) {
+          const c = contourOf(up);
+          return rounded(c) ? { box: c, name: selectorOf(up) } : null;
+        }
+        for (const which of ["::before", "::after"] as const) {
+          const ps = pseudoOf(up, which);
+          const c =
+            ps && !shaped(ps) && paintsOf(ps).length > 0
+              ? pseudoBox(up, ps)
+              : null;
+          if (c && holds(c)) {
+            return rounded(c)
+              ? { box: c, name: `${selectorOf(up)}${which}` }
+              : null;
+          }
+        }
+      }
+      return null;
+    };
+    /** Where `inner`'s corners leave `outer`'s contour, the worst corner: what it draws, what concentric is, its inset and the outer radius. */
+    const missOf = (
+      inner: Contour,
+      outer: Contour
+    ): {
+      at: string;
+      big: number;
+      drawn: number;
+      inset: number;
+      want: number;
+    } | null => {
+      const w = outer.right - outer.left;
+      const h = outer.bottom - outer.top;
+      const half = Math.min(w, h) / 2;
+      const capsule = outer.r.every(([x, y]) => Math.min(x, y) >= half - 0.5);
+      const across =
+        h <= w
+          ? [inner.top - outer.top, outer.bottom - inner.bottom]
+          : [inner.left - outer.left, outer.right - inner.right];
+      const [a0 = 0, a1 = 0] = across;
+      let worst: {
+        at: string;
+        big: number;
+        drawn: number;
+        inset: number;
+        off: number;
+        want: number;
+      } | null = null;
+      for (const [i, at] of CORNERS.entries()) {
+        const left = i === 0 || i === 3;
+        const top = i < 2;
+        const dx = Math.max(
+          0,
+          left ? inner.left - outer.left : outer.right - inner.right
+        );
+        const dy = Math.max(
+          0,
+          top ? inner.top - outer.top : outer.bottom - inner.bottom
+        );
+        const [orx = 0, ory = 0] = outer.r[i] ?? [];
+        const big = (orx + ory) / 2;
+        let inset: number;
+        let room: number;
+        if (capsule) {
+          inset = Math.max(0, (a0 + a1) / 2);
+          room = Math.max(1.5, (big - inset) * 0.1) + Math.abs(a0 - a1) / 2;
+        } else {
+          if (big < 0.5 || Math.hypot(dx, dy) >= big) {
+            continue;
+          }
+          inset = (dx + dy) / 2;
+          room = Math.max(1.5, (big - inset) * 0.25) + Math.abs(dx - dy) / 2;
+        }
+        const want = Math.max(0, big - inset);
+        const [irx = 0, iry = 0] = inner.r[i] ?? [];
+        const drawn = (irx + iry) / 2;
+        const off = Math.abs(drawn - want) - room;
+        if (off > 0 && !(worst && worst.off >= off)) {
+          worst = { at, big, drawn, inset, off, want };
+        }
+      }
+      return worst;
+    };
+    /** One finding per control and state: the first fill that leaves its control's or its glass's contour. */
+    const judge = (el: Element, fills: StateFill[], state: string) => {
+      const own = contourOf(el);
+      const glass = glassOf(el);
+      for (const f of fills) {
+        const mine =
+          f.key !== "own" && rounded(own) ? missOf(f.box, own) : null;
+        if (mine) {
+          say(
+            "state-shape",
+            el,
+            `${state}: ${f.what} fill is ${px(mine.drawn)} round at its ${mine.at} corner, ${px(mine.inset)} inside the control's own ${px(mine.big)} corner: concentric is ${px(mine.want)}`
+          );
+          return;
+        }
+        const g = glass;
+        const inside =
+          g &&
+          f.box.left >= g.box.left - 0.5 &&
+          f.box.top >= g.box.top - 0.5 &&
+          f.box.right <= g.box.right + 0.5 &&
+          f.box.bottom <= g.box.bottom + 0.5;
+        const theirs = g && inside ? missOf(f.box, g.box) : null;
+        if (g && theirs) {
+          say(
+            "state-shape",
+            el,
+            `${state}: ${f.what} fill is ${px(theirs.drawn)} round at its ${theirs.at} corner, ${px(theirs.inset)} in from ${g.name}'s ${px(theirs.big)} round glass: concentric is ${px(theirs.want)}`
+          );
+          return;
+        }
+      }
+    };
+    if (args.forced) {
+      const atRest = stash.__stateShape;
+      for (const el of atRest?.els ?? []) {
+        if (!(el.isConnected && shown(el))) {
+          continue;
+        }
+        const rest = atRest?.rest.get(el);
+        judge(
+          el,
+          fillsOf(el).filter((f) => rest?.get(f.key) !== f.sig),
+          args.forced
+        );
+      }
+    } else {
+      const read = controls.filter(
+        (el) =>
+          el.matches(STATE_CONTROL) &&
+          !el.matches(':disabled, [aria-disabled="true"]') &&
+          (el.closest(BAR) || rounded(contourOf(el)))
+      );
+      const rest = new Map<Element, Map<string, string>>();
+      for (const el of read) {
+        const fills = fillsOf(el);
+        rest.set(el, new Map(fills.map((f) => [f.key, f.sig])));
+        if (el.matches(SELECTED)) {
+          judge(el, fills, "selected");
+        }
+      }
+      stash.__stateShape = { els: read, rest };
+    }
+  }
+
   // Words over words: two text runs drawn, a reader's or not (an
   // aria-hidden ruler's figures run into each other as readily), whose line
   // boxes cross by 2px sideways and a third of the shorter's height. A run
@@ -3879,6 +4133,100 @@ async function fadeDraws(
 /** How many impeccable runs a page has had, for a unique target title. */
 let scans = 0;
 
+/**
+ * state-shape's forced reads: each state in FORCED held on every control
+ * the read at rest named (`window.__stateShape`), through the DevTools
+ * protocol's CSS.forcePseudoState, transitions held off by an inspector
+ * sheet so the read meets the state's own fill, then let go. A browser with
+ * no DevTools protocol (Firefox, WebKit) forces nothing: said unread.
+ */
+async function forcedStates(
+  page: Page,
+  args: InPageArgs
+): Promise<{
+  findings: (CheckFinding & { at: number })[];
+  named: string[];
+  unread: string[];
+}> {
+  let cdp: Awaited<ReturnType<ReturnType<Page["context"]>["newCDPSession"]>>;
+  try {
+    cdp = await page.context().newCDPSession(page);
+  } catch {
+    return {
+      findings: [],
+      named: [],
+      unread: [
+        "state-shape: this browser forces no state (no DevTools protocol): hover, pressed and focus read only where a spec puts them",
+      ],
+    };
+  }
+  const findings: (CheckFinding & { at: number })[] = [];
+  try {
+    await cdp.send("DOM.enable");
+    await cdp.send("CSS.enable");
+    await cdp.send("DOM.getDocument", { depth: 0 });
+    const { result } = await cdp.send("Runtime.evaluate", {
+      expression: "window.__stateShape?.els ?? []",
+    });
+    if (!result.objectId) {
+      return { findings, named: [], unread: [] };
+    }
+    const { result: props } = await cdp.send("Runtime.getProperties", {
+      objectId: result.objectId,
+      ownProperties: true,
+    });
+    const nodeIds = await Promise.all(
+      props
+        .filter((one) => /^\d+$/u.test(one.name) && one.value?.objectId)
+        .map((one) =>
+          cdp
+            .send("DOM.requestNode", { objectId: one.value?.objectId ?? "" })
+            .then((r) => r.nodeId)
+        )
+    );
+    const { frameTree } = await cdp.send("Page.getFrameTree");
+    const { styleSheetId } = await cdp.send("CSS.createStyleSheet", {
+      frameId: frameTree.frame.id,
+    });
+    await cdp.send("CSS.setStyleSheetText", {
+      styleSheetId,
+      text: "*, *::before, *::after { transition: none !important; }",
+    });
+    const force = (states: ForcedState[]) =>
+      Promise.all(
+        nodeIds.map((nodeId) =>
+          cdp.send("CSS.forcePseudoState", {
+            nodeId,
+            forcedPseudoClasses: states,
+          })
+        )
+      );
+    try {
+      for (const state of FORCED) {
+        await force([state]);
+        const read = await page.evaluate(readInPage, {
+          ...args,
+          forced: state,
+          exempt: RULES.filter((rule) => rule !== "state-shape"),
+        });
+        findings.push(...read.findings);
+      }
+    } finally {
+      await force([]);
+      await cdp.send("CSS.setStyleSheetText", { styleSheetId, text: "" });
+    }
+    return {
+      findings,
+      named: [
+        `state-shape: ${nodeIds.length} control(s) read at rest and with ${FORCED.join(", ")} forced`,
+      ],
+      unread: [],
+    };
+  } finally {
+    await cdp.detach();
+  }
+}
+
 /** `impeccable detect --json --cdp` on the page as it stands. */
 async function impeccable(page: Page): Promise<{
   ran: boolean;
@@ -4059,8 +4407,9 @@ async function renderedChecks(
 ): Promise<CheckRead> {
   const scope = opts.scope ?? "body";
   const exempt = Object.keys(opts.exempt ?? {});
-  const read = await page.evaluate(readInPage, {
+  const args: InPageArgs = {
     scope,
+    forced: null,
     views: opts.views ?? null,
     marks: opts.marks ?? null,
     corals: TOKEN_VALUES(CORAL_TOKENS),
@@ -4075,12 +4424,20 @@ async function renderedChecks(
         : []
     ),
     exempt,
-  });
+  };
+  const read = await page.evaluate(readInPage, args);
   const findings: (CheckFinding & { at: number })[] = [...read.findings];
   const unread = [...read.unread];
+  const stateNamed: string[] = [];
+  if (!exempt.includes("state-shape")) {
+    const states = await forcedStates(page, args);
+    findings.push(...states.findings);
+    unread.push(...states.unread);
+    stateNamed.push(...states.named);
+  }
 
   // 7: a declared fade that draws, read in the pixels with and without it.
-  const named = [...read.named];
+  const named = [...read.named, ...stateNamed];
   const fades = await fadeCues(page, read.edges);
   findings.push(...fades.findings);
   unread.push(...fades.unread);

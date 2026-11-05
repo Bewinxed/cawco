@@ -51,7 +51,10 @@
           "[--item:var(--c-btn-h-xs)] [--pad:var(--space-row)] [--px:var(--c-segment-pad-x)] [--radius:var(--radius-xs)] coarse:[--item:var(--c-tab-item)]",
       },
       variant: {
-        segmented: "",
+        /* In a bar's glass its track is a capsule, its thumb concentric
+           inside it (\`glass-item:\`, BarGlass). */
+        segmented:
+          "glass-item:rounded-pill glass-item:[--shape:var(--radius-pill)]",
         folder:
           "isolate gap-0 rounded-none bg-transparent ps-[calc(var(--flare)_+_var(--overlap))] pe-(--flare) pb-0 [--choose-dur:var(--dur-settle)] [--choose-ease:var(--ease-crossfade)] [--flare:var(--radius)] [--overlap:var(--flare)] [--shape:var(--radius)_var(--radius)_0_0] [--slope-end:var(--c-tab-slope-end)] [--slope-start:var(--c-tab-slope-start)] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:relative [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:isolate [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:z-(--z,var(--z-rest,1)) [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:-ms-(--overlap)",
       },

@@ -17,7 +17,7 @@ import { tv } from "#lib/utils.js";
 export const segmentedVariants = tv({
   slots: {
     group:
-      "group/segmented relative inline-flex items-center gap-space-row rounded-md bg-surface-recess-deep p-c-segmented-pad concentric-in r-inset-c-segmented-pad r-outer-md",
+      "group/segmented relative inline-flex items-center gap-space-row rounded-md bg-surface-recess-deep p-c-segmented-pad concentric-in r-inset-c-segmented-pad r-outer-md glass-item:rounded-pill glass-item:r-outer-pill",
     thumb:
       "pointer-events-none absolute start-0 top-0 origin-top-left concentric-well bg-surface-lift opacity-0 shadow-raised loops motion-safe:group-data-pending/segmented:animate-breath",
     segment:

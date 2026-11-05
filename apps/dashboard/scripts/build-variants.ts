@@ -230,6 +230,13 @@ const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that
 /* Not hidden by its \`hidden\` attribute (a pane head's fitted controls). */
 @custom-variant unhidden (&:not([hidden]));
 
+/* A control standing in a bar's glass group (BarGlass, \`data-glass\`): a
+   kit part there takes the glass's contour, a capsule concentric with the
+   capsule it stands in (The Concentric Rule), not its own fixed corner.
+   What hangs from the glass in its markup (a card, a menu, a list, a
+   dialog) stands outside it. */
+@custom-variant glass-item (&:where([data-glass] *):not(:where([data-glass] :is([data-hang], [role="menu"], [role="listbox"], [role="dialog"], [data-popover]) *)));
+
 /* A window too short for the Files lists' full floors, and one tall enough:
    560px of height. */
 @custom-variant short-window {
@@ -272,7 +279,7 @@ const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that
 
 /** Names Tailwind or the house already give a variant, or begin a functional one. */
 const RESERVED =
-  /^(hover|can-hover|no-hover|hover-none|coarse|fine|dark|light|pressed|reduced-transparency|at-rest|hit-pressed|hover-hover|beside-ghost|unhovered|has-link-active|mark-pressed|mark-beating|unhidden|short-window|tall-window|details-marker|reordering|details-gliding|prose-root|prose-block|prose-heading|prose-block-heading|prose-item|theme-flip|node-focus-visible|focus-within|focus-visible|placeholder-shown|read-only|in-range|out-of-range|user-valid|user-invalid|motion-safe|motion-reduce|contrast-more|contrast-less|forced-colors|inverted-colors|pointer-.*|any-pointer-.*|details-content|(group|peer|has|not|in|data|supports|max|min|nth|nth-last|nth-of-type|nth-last-of-type)-.*)$/u;
+  /^(hover|can-hover|no-hover|hover-none|coarse|fine|dark|light|pressed|reduced-transparency|at-rest|hit-pressed|hover-hover|beside-ghost|unhovered|has-link-active|mark-pressed|mark-beating|unhidden|glass-item|short-window|tall-window|details-marker|reordering|details-gliding|prose-root|prose-block|prose-heading|prose-block-heading|prose-item|theme-flip|node-focus-visible|focus-within|focus-visible|placeholder-shown|read-only|in-range|out-of-range|user-valid|user-invalid|motion-safe|motion-reduce|contrast-more|contrast-less|forced-colors|inverted-colors|pointer-.*|any-pointer-.*|details-content|(group|peer|has|not|in|data|supports|max|min|nth|nth-last|nth-of-type|nth-last-of-type)-.*)$/u;
 
 interface Pair {
   attr: string;
