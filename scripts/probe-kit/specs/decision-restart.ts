@@ -66,7 +66,7 @@ const DOWN = `${PANE} button[data-slot="comments"][data-link-down]`;
 
 /** A decision page of one card: answered by one pick, so the hub sends it by itself once his changes stand quiet (artifacts/service.ts `sendAnswered`). */
 const PROGRAM = `root = Decisions("How the rail closes", [close])
-close = Decision("rail-close", "How does the rail close?", [a, b], "Either reads.", [], [], false, null, "look")
+close = Decision("rail-close", "How does the rail close?", [a, b], "Either reads.", [], [], false, null, "behaviour")
 a = Option("a", "Its own close", "A close on the rail.", true, [], "One more control.")
 b = Option("b", "The head's close", "The panel head closes it.", false, [], "Further to reach.")`;
 /** The page's own Send, in its foot. */
