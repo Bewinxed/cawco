@@ -33,8 +33,10 @@
  *   answers the fleet's, the second project its own account.
  * - f. Undo never widens: a memory document scoped to the area alone, and a
  *   hook bound to it, each deleted while the area stood, are refused their
- *   Undo once the area went, in core's words, and stay gone; so is a
- *   document scoped to a project alone once that project is forgotten.
+ *   Undo once the area went, in core's words, and stay gone; so are a
+ *   document scoped to a project alone and a skill and an MCP server bound
+ *   to it, once that project is forgotten. A skill bound to it that was
+ *   not deleted goes with its forget and comes back with its restore.
  *
  *   bun scripts/probe-kit/run.ts areas-settings
  */
@@ -562,11 +564,54 @@ const restoreOf = (answer: Answer): number =>
   (answer.json as { restore?: number } | undefined)?.restore ?? -1;
 
 /** f, before the area goes: a document scoped to it alone, one to the outside project alone and its hook, each deleted. */
+/** The outside project's skills and server: two deleted before it is forgotten, one kept. */
+const OUTSIDE = {
+  skill: "probe-outside-skill",
+  server: "probe-outside-server",
+  kept: "probe-outside-kept",
+};
+
+/** A skill's one file, as a fetch would store it. */
+const skillFiles = (name: string) => [
+  {
+    path: "SKILL.md",
+    contentBase64: Buffer.from(
+      `---\nname: ${name}\ndescription: The outside project's.\n---\n`
+    ).toString("base64"),
+    executable: false,
+  },
+];
+
 const trashLeg = async (
   rig: Rig,
   m: Made
-): Promise<{ areaDoc: number; hook: number; projectDoc: number }> => {
-  const { call } = rig;
+): Promise<{
+  areaDoc: number;
+  hook: number;
+  projectDoc: number;
+  server: number;
+  skill: number;
+}> => {
+  const { call, db } = rig;
+  for (const name of [OUTSIDE.skill, OUTSIDE.kept]) {
+    db.putSkill({
+      name,
+      source: "probe:outside",
+      projectId: m.outside,
+      files: skillFiles(name),
+    });
+  }
+  db.putMcpServer({
+    name: OUTSIDE.server,
+    config: { command: "true" },
+    projectId: m.outside,
+  });
+  const skill = restoreOf(
+    await call("DELETE", `/api/fleet/skills/${OUTSIDE.skill}`)
+  );
+  const server = restoreOf(
+    await call("DELETE", `/api/fleet/mcp/${OUTSIDE.server}`)
+  );
   const docs = {
     "probe-area-only.md": { role: "leaf", areaIds: [m.area] },
     "probe-project-only.md": { role: "leaf", projectIds: [m.outside] },
@@ -585,11 +630,11 @@ const trashLeg = async (
   const hook = restoreOf(await call("DELETE", `/api/fleet/hooks/${m.hook}`));
   const [areaDoc = -1, projectDoc = -1] = trashed;
   rig.kit.check(
-    "f. a document scoped to the area alone, one to a project alone and the area's hook are in the trash",
-    areaDoc > 0 && projectDoc > 0 && hook > 0,
-    JSON.stringify({ areaDoc, projectDoc, hook })
+    "f. a document scoped to the area alone, one to a project alone, the area's hook, and a skill and a server bound to that project are in the trash",
+    [areaDoc, projectDoc, hook, skill, server].every((one) => one > 0),
+    JSON.stringify({ areaDoc, projectDoc, hook, skill, server })
   );
-  return { areaDoc, hook, projectDoc };
+  return { areaDoc, hook, projectDoc, server, skill };
 };
 
 /** f, once the area went: each Undo refused in core's words, and nothing comes back; the project's document once its project is forgotten. */
@@ -624,10 +669,46 @@ const undoLeg = async (
     trashed.projectDoc,
     docThere("probe-project-only.md")
   );
+  const skillThere = (name: string) => () =>
+    rig.db.listSkills().some((one) => one.name === name);
+  const skill = await undo(rig, trashed.skill, skillThere(OUTSIDE.skill));
+  const server = await undo(
+    rig,
+    trashed.server,
+    () => rig.db.getMcpServer(OUTSIDE.server) !== undefined
+  );
+  const keptGone = !skillThere(OUTSIDE.kept)();
   rig.kit.check(
-    "f. its project forgotten, a document scoped to that project alone is refused its Undo, and stays gone",
-    forgot.status === 200 && refused(projectDoc),
-    JSON.stringify({ forgot: forgot.status, projectDoc })
+    "f. its project forgotten, a document scoped to it alone, a skill and a server bound to it are refused their Undo and stay gone; its kept skill went with it",
+    forgot.status === 200 &&
+      refused(projectDoc) &&
+      refused(skill) &&
+      refused(server) &&
+      keptGone,
+    JSON.stringify({
+      forgot: forgot.status,
+      projectDoc,
+      skill,
+      server,
+      keptGone,
+    })
+  );
+  const listed = (
+    (await rig.call("GET", "/api/projects/forgotten")).json as
+      { id: string; forgottenAt: number }[] | undefined
+  )?.find((one) => one.id === m.outside);
+  const restored = await rig.call(
+    "POST",
+    `/api/projects/${m.outside}/restore`,
+    {
+      forgottenAt: listed?.forgottenAt,
+    }
+  );
+  const kept = rig.db.listSkills().find((one) => one.name === OUTSIDE.kept);
+  rig.kit.check(
+    "f. the project restored, its kept skill is back, bound to it",
+    restored.status === 200 && kept?.projectId === m.outside,
+    JSON.stringify({ restored: restored.status, kept })
   );
 };
 

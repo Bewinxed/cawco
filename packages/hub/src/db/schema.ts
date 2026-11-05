@@ -177,6 +177,15 @@ const projectKey = () =>
 const fleetRowArea = () =>
   text("area_id").references(() => areas.id, { onDelete: "cascade" });
 
+/**
+ * A fleet row's project (core `FleetPlacement.projectId`): the row goes with
+ * its project, kept in the forget's record and back with its restore, and
+ * a trashed one whose project went is refused its Undo (db/trash.ts
+ * `unbound`), never brought back bound to nothing.
+ */
+const fleetRowProject = () =>
+  text("project_id").references(() => projects.id, { onDelete: "cascade" });
+
 /** A row that goes with its area: deleted when the area is. */
 const areaKey = () =>
   text("area_id")
@@ -2034,7 +2043,7 @@ export const mcpServers = sqliteTable("mcp_servers", {
    * (project-placements.ts); no cwd is stored, as on `fleet_hooks`.
    */
   scope: text("scope").$type<FleetScope>(),
-  projectId: text("project_id"),
+  projectId: fleetRowProject(),
   /** Bound to every project in one area instead (`fleetRowArea`). */
   areaId: fleetRowArea(),
   /**
@@ -2208,7 +2217,7 @@ export const skills = sqliteTable(
      * and delegate workspace of the project, as a bound MCP server is.
      */
     scope: text("scope").$type<FleetScope>(),
-    projectId: text("project_id"),
+    projectId: fleetRowProject(),
     /** Bound to every project in one area instead (`fleetRowArea`). */
     areaId: fleetRowArea(),
     createdAt: stampedNow("created_at"),
@@ -2227,6 +2236,7 @@ export const skills = sqliteTable(
       table.error,
       table.scope,
       table.projectId,
+      table.areaId,
       table.version,
       table.lastRefresh,
       table.latestHash,
@@ -3161,17 +3171,15 @@ export interface TrashedRows {
  * standing, an MCP server's sign-in, a document's projects), as the driver
  * read them, so a restore puts back every column, dates and sealed secrets
  * as they were. Out of the live tables, so nothing that reads them sees it
- * while it waits. One bound to a project goes with its project, as the item
- * itself does. The id is what the dashboard's Undo names.
+ * while it waits. It belongs to no project: one whose project or area went
+ * while it waited is refused its Undo (db/trash.ts `unbound`), never
+ * brought back bound to nothing. The id is what the dashboard's Undo names.
  */
 export const configTrash = sqliteTable("config_trash", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   kind: text("kind").$type<TrashKind>().notNull(),
   /** The item's own key: a rule's id, a skill's name, a document's path. */
   key: text("key").notNull(),
-  projectId: text("project_id").references(() => projects.id, {
-    onDelete: "cascade",
-  }),
   /** The item's own table first, then what hangs off it, in insert order. */
   rows: storedJson(z.array(TrashedRowsSchema))("rows").notNull(),
   deletedAt: timestamp("deleted_at").notNull(),
@@ -3228,6 +3236,8 @@ export const fleetHooks = sqliteTable("fleet_hooks", {
   /** A disabled hook stays here and is registered nowhere. */
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   ...hookColumns(),
+  /** Its project (`fleetRowProject`); the history keeps it unchecked. */
+  projectId: fleetRowProject(),
   /** Bound to every project in one area instead (`fleetRowArea`). */
   areaId: fleetRowArea(),
   createdAt: stampedNow("created_at"),
@@ -3256,7 +3266,7 @@ export const fleetHarnessConfig = sqliteTable("fleet_harness_config", {
   /** An OpenCode plugin's or pi extension's npm package, `<name>@<version>`. */
   package: text("package"),
   scope: text("scope").$type<FleetScope>(),
-  projectId: text("project_id"),
+  projectId: fleetRowProject(),
   /** Bound to every project in one area instead (`fleetRowArea`). */
   areaId: fleetRowArea(),
   createdAt: stampedNow("created_at"),

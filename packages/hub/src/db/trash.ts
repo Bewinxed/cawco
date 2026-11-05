@@ -56,14 +56,15 @@ type TrashItem =
 /** What a restore came to. */
 type Untrashed =
   | { kind: TrashKind; key: string; ok: true }
-  /** Its window passed, its project went, or it was never trashed. */
+  /** Its window passed, or it was never trashed. */
   | { ok: false; why: "gone" }
   /** Something of the same key was made while it waited; that one stays. */
   | { ok: false; why: "taken" }
   /**
    * The project or area that bound it went while it waited, so it cannot
-   * come back as it was: back without that binding it would reach every
-   * project, and nothing comes back wider than it went.
+   * come back as it was: nothing comes back bound to what is gone, or
+   * wider than it went (a document whose projects all went would reach
+   * every project).
    */
   | { ok: false; why: "unbound" };
 
@@ -173,16 +174,6 @@ const partsOf = (item: TrashItem): Part[] =>
         ...(item.docs.length > 0 ? docParts(item.docs) : []),
       ]
     : PARTS[item.kind](item.key);
-
-/**
- * The project an item is bound to, as its own row names it (a rule's
- * `scope_project_id`, a hook's, skill's or MCP server's `project_id`): its
- * trash entry goes with that project, as the item itself would have.
- */
-const projectOf = (own: Record<string, string | number | null>) => {
-  const bound = own.project_id ?? own.scope_project_id ?? null;
-  return typeof bound === "string" ? bound : null;
-};
 
 /** Memory documents with their delegate types and projects. */
 const docParts = (paths: readonly string[]): Part[] => [
@@ -330,7 +321,6 @@ export const trashDb = (db: BunSQLiteDatabase): TrashDb => ({
         .values({
           kind: item.kind,
           key: item.key,
-          projectId: projectOf(own),
           rows: kept,
           deletedAt: new Date(at),
         })

@@ -52,7 +52,7 @@ export const areaWords = {
    * while it waited (hub db/trash.ts `unbound`).
    */
   undoUnbound:
-    "It can't come back as it was: the project or area it was bound to went while it waited, and without it, it would reach every project. Make it again, bound where it belongs.",
+    "It can't come back as it was: the project or area it was bound to went while it waited. Make it again, bound where it belongs.",
   /** A scope naming an area the hub has none of. */
   scopeNoArea: (id: string) => `There is no area ${id}.`,
 
