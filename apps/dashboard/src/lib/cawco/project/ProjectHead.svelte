@@ -12,9 +12,10 @@
 <script lang="ts">
   import { machineLabel } from "@cawco/core/machine-names";
   /**
-   * The project's head: one row at every width, nothing wraps (DESIGN.md,
-   * The Title Bars Follow Liquid Glass Rule: "One bar, one row"), as tall as
-   * Caw's 48px seat, every control centred on it.
+   * The project's head: one row (DESIGN.md, The Title Bars Follow Liquid
+   * Glass Rule: "One bar, one row") wherever the name keeps its 120px
+   * beside Caw and More, as tall as Caw's 48px seat, every control centred
+   * on it.
    *
    * Leading, the name, renamed where it stands, on one line that ends in an
    * ellipsis; then the place, a bare item of the top bar's recipe (the top bar's surface brief,
@@ -34,16 +35,25 @@
    * up, Change how it runs once it is: the project-setup skill's one page,
    * through Caw), Project details…, Caw's settings (CawPanel, off More: a popover on a desk, the
    * bottom sheet on touch), Spend, then Forget and Delete
-   * (and, under 640px, Spin off, New task, Filter tasks… and Ask Caw for a
-   * view), each with its glyph. Nothing in the head is on the coral: no view
+   * (and, under 640px, New task, Filter tasks… and Ask Caw for a view),
+   * each with its glyph. Nothing in the head is on the coral: no view
    * of a project is for asking Caw (One prominent action, trailing). One tray
    * stands under the head at a time: the details or an end.
    *
-   * Under 640px the capsule holds More alone: Ask Caw is the "+" of the
-   * page's views bar (ViewBar), which opens Caw's panel as this one does,
-   * and Spin off is in More (Apple HIG, Toolbars: "Prioritize only the most
-   * important items for inclusion in the main toolbar area … Create a More
-   * menu to include additional items").
+   * The head reads its own width (`@container/head`, its pane's, so a split
+   * at 1440 folds as a phone does) and folds its symbols into More as it
+   * narrows, so the name keeps at least 120px, about 11 characters, at every
+   * width a split gives it (Apple HIG, Toolbars: "To accommodate variable
+   * view widths, define which items move to the overflow menu as the
+   * toolbar becomes narrower"; "Items on the trailing edge remain visible
+   * at all window sizes"). Under head-acts Ask Caw and Spin off go to More;
+   * under head-place the place (Project details… in More) and Full size
+   * go too; under head-row, where Caw, More and the name no longer share a
+   * row, the name stands under them, on two lines at most, as a large
+   * title does. More lists exactly the symbols the bar is not drawing,
+   * read as it opens. On a phone Ask Caw is the "+" of the page's views
+   * bar (ViewBar), which opens Caw's panel as this one does, so More leaves
+   * it out there.
    *
    * With the board empty and events on, Caw stands over the empty board
    * instead (picks.md), and his slot here closes.
@@ -138,11 +148,36 @@
     })
   );
   let more = $state<HTMLElement | null>(null);
+  let askItem = $state<HTMLElement | null>(null);
+  let spinItem = $state<HTMLElement | null>(null);
+  let fullItem = $state<HTMLElement | null>(null);
+  /**
+   * The symbols the head's width folded into More (its `@container/head`
+   * widths), read as More opens: a symbol is in the menu exactly while
+   * the bar does not draw it.
+   */
+  let folded = $state({ ask: false, spinOff: false, fullSize: false });
+  const drawn = (node: HTMLElement | null): boolean =>
+    node?.checkVisibility() ?? false;
+  function readFolds(): void {
+    folded = {
+      ask: !drawn(askItem),
+      spinOff: !drawn(spinItem),
+      fullSize: !drawn(fullItem),
+    };
+  }
   /** The place an end asked from this head's More stands (project-end.svelte.ts). */
   const endAt = $derived(`head:${project.id}`);
 
   /** Its primary checkout; none while its one place is its folder on the hub. */
   const primary = $derived(checkoutOf(project));
+  /** Anything stands above the menu's own rows: they are set apart under it. */
+  const foldedAny = $derived(
+    (folded.ask && !narrow.current) ||
+      (Boolean(primary) && folded.spinOff) ||
+      folded.fullSize ||
+      narrow.current
+  );
   /**
    * Where the project lives, its machine and folder (place), said
    * in the details it opens; the head draws it as a place, never its path.
@@ -190,7 +225,7 @@
     const hadFocus = document.activeElement?.closest("[data-project-details]");
     standing.delete(project.id);
     if (hadFocus) {
-      placeLine?.focus();
+      (drawn(placeLine) ? placeLine : more)?.focus();
     }
   }
 
@@ -301,291 +336,339 @@
 
 <header
   data-slot="project-head"
-  class="flex flex-none flex-nowrap items-center gap-x-space-4 min-h-c-project-head-h pt-space-6 pe-space-6 pb-space-4 ps-space-7 max-desk:pt-space-5 max-desk:pe-space-5 max-desk:pb-space-3 max-desk:ps-space-5"
+  class="@container/head flex-none pt-space-6 pe-space-6 pb-space-4 ps-space-7 max-desk:pt-space-5 max-desk:pe-space-5 max-desk:pb-space-3 max-desk:ps-space-5"
 >
-  <!-- Leading: the name, then the place. The pair is as wide as it holds
+  <!-- The row inside the head's gutters, which its widths read: the name
+       and the place leading, Caw and the capsule trailing; under head-row
+       the name stands under them. -->
+  <div
+    data-slot="head-row"
+    class="flex flex-nowrap items-center gap-x-space-4 min-h-c-project-head-h @max-head-row/head:flex-wrap @max-head-row/head:gap-y-space-2"
+  >
+    <!-- Leading: the name, then the place. The pair is as wide as it holds
        and gives way first: the name ends in its ellipsis before anything
        trailing moves. While the name is a field the pair takes the row's
        room, so the field has it to type in. -->
-  <div
-    data-slot="who"
-    class="flex min-w-0 shrink items-center gap-space-3 has-data-field:grow"
-  >
-    <!-- The name bleeds space-1 past the page's edge on each side (its tint
+    <div
+      data-slot="who"
+      class="flex min-w-0 shrink items-center gap-space-3 has-data-field:grow @max-head-row/head:order-last @max-head-row/head:basis-full"
+    >
+      <!-- The name bleeds space-1 past the page's edge on each side (its tint
          and field): the title takes both bleeds into its own box, so the
          name fills it whole and nothing stands outside the title. Its ring
          sits inside the name's box, which the title clips to one line. -->
-    <h1
-      data-slot="title"
-      class="-mx-space-1 min-w-0 shrink grow truncate type-title text-ink-strong"
-    >
-      {#if draft !== null}
-        <!-- svelte-ignore a11y_autofocus: the field opens on the person's own Rename, and takes the focus they asked for -->
-        <input
-          data-slot="name"
-          data-field
-          aria-label="Project name"
-          autocomplete="off"
-          autofocus
-          class="field-edge block w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-border-control bg-surface-raised px-space-1 font-inherit text-start text-inherit transition-control read-only:text-ink-muted"
-          onblur={() => {
-            // Left after a refusal, it stays as typed, the reason under
-            // the head; Enter or Try again sends it.
-            if (renameFault === null) {
-              commitName();
-            }
-          }}
-          onkeydown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              commitName();
-            } else if (event.key === "Escape") {
-              event.preventDefault();
-              event.stopPropagation();
-              stopEditing();
-            }
-          }}
-          readonly={renaming !== null}
-          spellcheck="false"
-          bind:value={draft}
-          {@attach (node) => node.select()}
-        />
-      {:else}
-        <button
-          data-slot="name"
-          class="select-none press-tint block max-w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover focus-visible:outline-offset-(--focus-ring-inset)"
-          onclick={editName}
-          title="Rename {project.name}"
-          type="button"
-        >
-          {project.name}
-        </button>
-      {/if}
-    </h1>
-    <!-- The place, a bare item of the top bar's recipe (app.css, the bar's
+      <h1
+        data-slot="title"
+        class="-mx-space-1 min-w-0 shrink grow truncate type-title text-ink-strong @max-head-row/head:whitespace-normal @max-head-row/head:text-balance"
+      >
+        {#if draft !== null}
+          <!-- svelte-ignore a11y_autofocus: the field opens on the person's own Rename, and takes the focus they asked for -->
+          <input
+            data-slot="name"
+            data-field
+            aria-label="Project name"
+            autocomplete="off"
+            autofocus
+            class="field-edge block w-full overflow-hidden text-ellipsis cursor-text rounded-xs border border-border-control bg-surface-raised px-space-1 font-inherit text-start text-inherit transition-control read-only:text-ink-muted"
+            onblur={() => {
+              // Left after a refusal, it stays as typed, the reason under
+              // the head; Enter or Try again sends it.
+              if (renameFault === null) {
+                commitName();
+              }
+            }}
+            onkeydown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                commitName();
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                stopEditing();
+              }
+            }}
+            readonly={renaming !== null}
+            spellcheck="false"
+            bind:value={draft}
+            {@attach (node) => node.select()}
+          />
+        {:else}
+          <button
+            data-slot="name"
+            class="select-none press-tint block max-w-full overflow-hidden text-ellipsis @max-head-row/head:line-clamp-2 cursor-text rounded-xs border border-transparent bg-transparent px-space-1 font-inherit text-start text-inherit transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover focus-visible:outline-offset-(--focus-ring-inset)"
+            onclick={editName}
+            title="Rename {project.name}"
+            type="button"
+          >
+            {project.name}
+          </button>
+        {/if}
+      </h1>
+      <!-- The place, a bare item of the top bar's recipe (app.css, the bar's
          glass group): its machine's mark, or the hub's folder, named in its
          tooltip. The project's details unfold under the head. -->
-    <Tip label={placeTip}>
-      {#snippet children(tip)}
-        <button
-          data-bar-item
-          data-box
-          data-place-line
-          {...mergeProps(tip, {
-            onclick: () => {
-              if (details) {
-                closeDetails();
-              } else {
-                openDetails();
-              }
-            },
-          })}
-          aria-expanded={details}
-          aria-label={projectWords.details}
-          class="select-none touch-hit press-tint"
-          type="button"
-          bind:this={placeLine}
-        >
-          {#if primary && machine}
-            <OsMark class="size-c-bar-symbol text-ink-muted" os={machine.os} />
-          {:else}
-            <IconFolder data-slot="bar-symbol" aria-hidden="true" />
-          {/if}
-        </button>
-      {/snippet}
-    </Tip>
-  </div>
-  <div data-slot="acts" class="ms-auto flex flex-none items-center gap-space-2">
-    <!-- He sits at the head's end, by the capsule, so the name's start edge
-         is the same whether he sits here or stands over the empty board.
-         His seat holds its place while he is read; a read the hub refused
-         draws no one, so no empty seat stands by the capsule. -->
-    {#if seated && !(lead.refused !== null && lead.project === null)}
-      <div data-slot="seat" class="flex-none" transition:slot>
-        <CawSeat {lead} projectId={project.id} projectName={project.name} />
-      </div>
-    {/if}
-    <!-- One capsule of the panel's glass, the top bar's trailing group its
-         recipe: bare symbols, each named for a screen reader and in its
-         tooltip. Under 640px it holds More alone. -->
-    <BarGlass form="group">
-      <!-- New work starts by telling Caw (PRD §5.6): his panel on a new
-           conversation, the caret in his composer. -->
-      <Tip label={projectWords.askCaw}>
+      <Tip label={placeTip}>
         {#snippet children(tip)}
           <button
             data-bar-item
             data-box
-            data-new-session
-            {...mergeProps(tip, { onclick: () => lead.newConversation() })}
-            aria-label={projectWords.askCaw}
-            class="select-none touch-hit press-tint max-phone:hidden"
+            data-place-line
+            {...mergeProps(tip, {
+              onclick: () => {
+                if (details) {
+                  closeDetails();
+                } else {
+                  openDetails();
+                }
+              },
+            })}
+            aria-expanded={details}
+            aria-label={projectWords.details}
+            class="select-none touch-hit press-tint @max-head-place/head:hidden"
             type="button"
+            bind:this={placeLine}
           >
-            <IconChatAdd data-slot="bar-symbol" aria-hidden="true" />
-          </button>
-        {/snippet}
-      </Tip>
-      {#if primary}
-        <Tip label={projectWords.spinOff}>
-          {#snippet children(tip)}
-            <button
-              data-bar-item
-              data-box
-              data-spin-off
-              {...mergeProps(tip, {
-                onclick: (event: MouseEvent) =>
-                  spinOff(event.currentTarget as HTMLElement),
-              })}
-              aria-haspopup="dialog"
-              aria-label={projectWords.spinOff}
-              class="select-none touch-hit press-tint max-phone:hidden"
-              type="button"
-            >
-              <IconFork data-slot="bar-symbol" aria-hidden="true" />
-            </button>
-          {/snippet}
-        </Tip>
-      {/if}
-      <!-- Full size: the tab fills the window, the rail and the tabs put
-           away; pressed again, or Escape, they come back (full-size.svelte.ts). -->
-      <Tip
-        label={fullSize.on ? projectWords.exitFullSize : projectWords.fullSize}
-      >
-        {#snippet children(tip)}
-          <button
-            data-bar-item
-            data-box
-            data-full-size
-            {...mergeProps(tip, { onclick: () => fullSize.toggle() })}
-            aria-label={fullSize.on
-              ? projectWords.exitFullSize
-              : projectWords.fullSize}
-            aria-pressed={fullSize.on}
-            aria-keyshortcuts={fullSize.on ? "Escape" : undefined}
-            class="select-none touch-hit press-tint"
-            type="button"
-          >
-            {#if fullSize.on}
-              <IconMinimize data-slot="bar-symbol" aria-hidden="true" />
+            {#if primary && machine}
+              <OsMark
+                class="size-c-bar-symbol text-ink-muted"
+                os={machine.os}
+              />
             {:else}
-              <IconMaximize data-slot="bar-symbol" aria-hidden="true" />
+              <IconFolder data-slot="bar-symbol" aria-hidden="true" />
             {/if}
           </button>
         {/snippet}
       </Tip>
-      <DropdownMenu.Root>
-        <Tip label={commonWords.moreFor(project.name)}>
+    </div>
+    <div
+      data-slot="acts"
+      class="ms-auto flex flex-none items-center gap-space-2"
+    >
+      <!-- He sits at the head's end, by the capsule, so the name's start edge
+         is the same whether he sits here or stands over the empty board.
+         His seat holds its place while he is read; a read the hub refused
+         draws no one, so no empty seat stands by the capsule. -->
+      {#if seated && !(lead.refused !== null && lead.project === null)}
+        <div data-slot="seat" class="flex-none" transition:slot>
+          <CawSeat {lead} projectId={project.id} projectName={project.name} />
+        </div>
+      {/if}
+      <!-- One capsule of the panel's glass, the top bar's trailing group its
+         recipe: bare symbols, each named for a screen reader and in its
+         tooltip. Its symbols fold into More as the head narrows. -->
+      <BarGlass form="group">
+        <!-- New work starts by telling Caw (PRD §5.6): his panel on a new
+           conversation, the caret in his composer. -->
+        <Tip label={projectWords.askCaw}>
           {#snippet children(tip)}
-            <DropdownMenu.Trigger>
-              {#snippet child({ props })}
-                <button
-                  data-bar-item
-                  data-box
-                  data-head-more
-                  {...mergeProps(tip, props)}
-                  aria-label={commonWords.moreFor(project.name)}
-                  class="select-none touch-hit press-tint"
-                  type="button"
-                  bind:this={more}
-                >
-                  <IconMore data-slot="bar-symbol" aria-hidden="true" />
-                </button>
-              {/snippet}
-            </DropdownMenu.Trigger>
+            <button
+              data-bar-item
+              data-box
+              data-new-session
+              {...mergeProps(tip, { onclick: () => lead.newConversation() })}
+              aria-label={projectWords.askCaw}
+              class="select-none touch-hit press-tint @max-head-acts/head:hidden"
+              type="button"
+              bind:this={askItem}
+            >
+              <IconChatAdd data-slot="bar-symbol" aria-hidden="true" />
+            </button>
           {/snippet}
         </Tip>
-        <!-- An end asked here keeps the focus its tray took, and the New
-             Session form a Spin off opened keeps the focus it took: the menu
-             doesn't hand it back to More as it closes. -->
-        <DropdownMenu.Content
-          align="end"
-          width="regular"
-          onCloseAutoFocus={(event) => {
-            if (endHost.at === endAt || spawning.open) {
-              event.preventDefault();
+        {#if primary}
+          <Tip label={projectWords.spinOff}>
+            {#snippet children(tip)}
+              <button
+                data-bar-item
+                data-box
+                data-spin-off
+                {...mergeProps(tip, {
+                  onclick: (event: MouseEvent) =>
+                    spinOff(event.currentTarget as HTMLElement),
+                })}
+                aria-haspopup="dialog"
+                aria-label={projectWords.spinOff}
+                class="select-none touch-hit press-tint @max-head-acts/head:hidden"
+                type="button"
+                bind:this={spinItem}
+              >
+                <IconFork data-slot="bar-symbol" aria-hidden="true" />
+              </button>
+            {/snippet}
+          </Tip>
+        {/if}
+        <!-- Full size: the tab fills the window, the rail and the tabs put
+           away; pressed again, or Escape, they come back (full-size.svelte.ts). -->
+        <Tip
+          label={fullSize.on
+            ? projectWords.exitFullSize
+            : projectWords.fullSize}
+        >
+          {#snippet children(tip)}
+            <button
+              data-bar-item
+              data-box
+              data-full-size
+              {...mergeProps(tip, { onclick: () => fullSize.toggle() })}
+              aria-label={fullSize.on
+                ? projectWords.exitFullSize
+                : projectWords.fullSize}
+              aria-pressed={fullSize.on}
+              aria-keyshortcuts={fullSize.on ? "Escape" : undefined}
+              class="select-none touch-hit press-tint @max-head-place/head:hidden"
+              type="button"
+              bind:this={fullItem}
+            >
+              {#if fullSize.on}
+                <IconMinimize data-slot="bar-symbol" aria-hidden="true" />
+              {:else}
+                <IconMaximize data-slot="bar-symbol" aria-hidden="true" />
+              {/if}
+            </button>
+          {/snippet}
+        </Tip>
+        <DropdownMenu.Root
+          onOpenChange={(open) => {
+            if (open) {
+              readFolds();
             }
           }}
         >
-          {#if narrow.current}
-            {#if primary}
+          <Tip label={commonWords.moreFor(project.name)}>
+            {#snippet children(tip)}
+              <DropdownMenu.Trigger>
+                {#snippet child({ props })}
+                  <button
+                    data-bar-item
+                    data-box
+                    data-head-more
+                    {...mergeProps(tip, props)}
+                    aria-label={commonWords.moreFor(project.name)}
+                    class="select-none touch-hit press-tint"
+                    type="button"
+                    bind:this={more}
+                  >
+                    <IconMore data-slot="bar-symbol" aria-hidden="true" />
+                  </button>
+                {/snippet}
+              </DropdownMenu.Trigger>
+            {/snippet}
+          </Tip>
+          <!-- An end asked here keeps the focus its tray took, and the New
+             Session form a Spin off opened keeps the focus it took: the menu
+             doesn't hand it back to More as it closes. -->
+          <DropdownMenu.Content
+            align="end"
+            width="regular"
+            onCloseAutoFocus={(event) => {
+              if (endHost.at === endAt || spawning.open) {
+                event.preventDefault();
+              }
+            }}
+          >
+            <!-- What the head's width folded, in the bar's order. On a phone
+               Ask Caw is the views bar's "+" (ViewBar), so More leaves it. -->
+            {#if folded.ask && !narrow.current}
+              <DropdownMenu.Item onSelect={() => lead.newConversation()}>
+                <IconChatAdd />
+                <span>{projectWords.askCaw}</span>
+              </DropdownMenu.Item>
+            {/if}
+            {#if primary && folded.spinOff}
               <DropdownMenu.Item onSelect={() => spinOff(more)}>
                 <IconFork />
                 <span>{projectWords.spinOff}</span>
               </DropdownMenu.Item>
             {/if}
-            <DropdownMenu.Item onSelect={onnewtask}>
-              <IconPlus />
-              <span>New task</span>
-            </DropdownMenu.Item>
-            <DropdownMenu.Item
-              onSelect={() => {
-                if (more) {
-                  onfilter(more);
-                }
-              }}
-            >
-              <IconFilter />
-              <span>Filter tasks…</span>
-            </DropdownMenu.Item>
-            {#if onask}
+            {#if folded.fullSize}
+              <DropdownMenu.Item onSelect={() => fullSize.toggle()}>
+                {#if fullSize.on}
+                  <IconMinimize />
+                  <span>{projectWords.exitFullSize}</span>
+                {:else}
+                  <IconMaximize />
+                  <span>{projectWords.fullSize}</span>
+                {/if}
+              </DropdownMenu.Item>
+            {/if}
+            {#if narrow.current}
+              <DropdownMenu.Item onSelect={onnewtask}>
+                <IconPlus />
+                <span>New task</span>
+              </DropdownMenu.Item>
               <DropdownMenu.Item
                 onSelect={() => {
                   if (more) {
-                    onask?.(more);
+                    onfilter(more);
                   }
                 }}
               >
-                <IconSparkles />
-                <span>{viewsWords.ask}</span>
+                <IconFilter />
+                <span>Filter tasks…</span>
+              </DropdownMenu.Item>
+              {#if onask}
+                <DropdownMenu.Item
+                  onSelect={() => {
+                    if (more) {
+                      onask?.(more);
+                    }
+                  }}
+                >
+                  <IconSparkles />
+                  <span>{viewsWords.ask}</span>
+                </DropdownMenu.Item>
+              {/if}
+            {/if}
+            {#if foldedAny}
+              <DropdownMenu.Separator />
+            {/if}
+            {#if setup}
+              <DropdownMenu.Item onSelect={() => setup?.run()}>
+                <IconColumns />
+                <span>{setup.label}</span>
               </DropdownMenu.Item>
             {/if}
-            <DropdownMenu.Separator />
-          {/if}
-          {#if setup}
-            <DropdownMenu.Item onSelect={() => setup?.run()}>
-              <IconColumns />
-              <span>{setup.label}</span>
+            <DropdownMenu.Item onSelect={() => openDetails()}>
+              <IconInfo />
+              <span>{projectWords.projectDetails}</span>
             </DropdownMenu.Item>
-          {/if}
-          <DropdownMenu.Item onSelect={() => openDetails()}>
-            <IconInfo />
-            <span>{projectWords.projectDetails}</span>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={() => {
-              cawOpen = true;
-            }}
-          >
-            <IconSettings />
-            <span>{projectWords.cawSettings}</span>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={() =>
-              goto(`/usage?project=${encodeURIComponent(project.id)}`)}
-          >
-            <IconUsage />
-            <span>Spend</span>
-          </DropdownMenu.Item>
-          <!-- The project's two ends, set apart at the end: Forget, which
+            <DropdownMenu.Item
+              onSelect={() => {
+                cawOpen = true;
+              }}
+            >
+              <IconSettings />
+              <span>{projectWords.cawSettings}</span>
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              onSelect={() =>
+                goto(`/usage?project=${encodeURIComponent(project.id)}`)}
+            >
+              <IconUsage />
+              <span>Spend</span>
+            </DropdownMenu.Item>
+            <!-- The project's two ends, set apart at the end: Forget, which
                can be undone, a plain row with the archive glyph; Delete,
                which cannot, the house's destructive item. -->
-          <DropdownMenu.Separator />
-          <!-- Each end unfolds under this head (project-end.svelte.ts). -->
-          <DropdownMenu.Item onSelect={() => askEnd(project, endAt, "forget")}>
-            <IconArchive />
-            <span>{projectEndWords.forgetProject}</span>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={() => askEnd(project, endAt, "delete")}
-            variant="destructive"
-          >
-            <IconDeleteForGood />
-            <span>{projectEndWords.deleteProject}</span>
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
-    </BarGlass>
+            <DropdownMenu.Separator />
+            <!-- Each end unfolds under this head (project-end.svelte.ts). -->
+            <DropdownMenu.Item
+              onSelect={() => askEnd(project, endAt, "forget")}
+            >
+              <IconArchive />
+              <span>{projectEndWords.forgetProject}</span>
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              onSelect={() => askEnd(project, endAt, "delete")}
+              variant="destructive"
+            >
+              <IconDeleteForGood />
+              <span>{projectEndWords.deleteProject}</span>
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+      </BarGlass>
+    </div>
   </div>
 </header>
 <!-- What the hub refused, under the head as a line of its own, in its

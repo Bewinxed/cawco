@@ -395,6 +395,21 @@ const CONTAINERS = {
   // skeleton stands a second reason line on every row here, on every other
   // row wider (probe-kit suggestions-preview).
   "suggestion-rows-narrow": "340px",
+  // A project's head (project/ProjectHead.svelte, `@container/head`, its
+  // row inside the pane's gutters): its symbols fold into More as the pane
+  // narrows, so the name keeps at least 120px (about 11 characters of the
+  // title role) at every width. Each width is the name's 120px plus what
+  // stands beside it: the row's space-4 gap (14px), Caw's 48px seat and the
+  // space-2 (7px) after him, 189px. Ask Caw and Spin off stand in the
+  // capsule from here: the place (c-bar-item, 28px, after a space-3) and
+  // the whole capsule (131px).
+  "head-acts": "360px",
+  // The place and Full size stand from here: the capsule of Full size and
+  // More (68px).
+  "head-place": "296px",
+  // The name shares the row with Caw and More from here: More's capsule
+  // alone (36px). Narrower, the name stands under them, on two lines at most.
+  "head-row": "226px",
 };
 const APPLE_DIR = "../apple/Packages/CawCoKit/Sources/CawCoDesign/";
 /** The decision-page skill CawCo ships (packages/hub/src/bundled-skills.ts): its pages wear the same tokens. */
