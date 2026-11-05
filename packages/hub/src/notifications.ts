@@ -33,7 +33,8 @@
  * a chat on screen is one they are in, focused or not, so two clients on two
  * chats never take it in turn on their beats. A
  * device silent past its time is unknown, never gone: its last input still
- * counts toward the clock. Each device's last word and the last away
+ * counts toward the clock, and a lock or sleep it said last still holds them
+ * away, so only fresh input brings them back. Each device's last word and the last away
  * stretch are kept on the hub (`presence_clients`, `presence_settings`),
  * so a restart reads the person back as they were; never a history. Each
  * change goes to every dashboard (`person`), to the push outlet (push.ts
@@ -217,8 +218,6 @@ export interface DeviceFacts {
   readonly at: number;
   /** A phone or tablet: what needs the person goes to the phone while it is the one in use. */
   readonly handheld: boolean;
-  /** How long its machine word holds after it said it: an agent's 15 s beats, a hidden tab's minute. */
-  readonly holdsMs: number;
   readonly id: string;
   /** When the person last touched it; null when it never said. */
   readonly inputAt: number | null;
@@ -387,10 +386,12 @@ const chatsOn = (
  * decides; a beat alone never does.
  *
  * 1. Appear away (`manualAt`): away, whatever any device says.
- * 2. A device whose machine is locked or asleep (and still said so within
- *    {@link MACHINE_TTL_MS} for a machine, {@link DEVICE_TTL_MS} for a tab)
- *    counts for nothing: neither its chat in front nor its input.
- * 3. A lock or sleep newer than every other input: away since it.
+ * 2. A device whose last word is that its machine is locked or asleep
+ *    counts for nothing, neither its chat in front nor its input, however
+ *    long it has been quiet since: a machine that locks and then sleeps
+ *    stops beating, and its silence is no return.
+ * 3. A lock or sleep newer than every other input: away since it, until
+ *    fresh input on any device, or the device saying otherwise.
  * 4. THE AWAY CLOCK: no input on any device for `awayAfterMs` (the
  *    person's setting) is away since the last input, whatever tabs stand
  *    open, visible and focused. No input ever said is away.
@@ -407,9 +408,7 @@ const rollup = (
   awayAfterMs: number,
   now: number
 ): Rolled => {
-  const usable = devices.filter(
-    (device) => !(gone(device.machine) && now - device.at < device.holdsMs)
-  );
+  const usable = devices.filter((device) => !gone(device.machine));
   const newest = newestOf(usable);
   const lastInputAt = newest?.inputAt ?? null;
   const away = (since: number | null, why: string, manual = false): Rolled => ({
@@ -426,9 +425,7 @@ const rollup = (
     return away(manualAt, "Appear away is on", true);
   }
   const locks = devices.flatMap((device) =>
-    gone(device.machine) &&
-    device.lockedAt !== null &&
-    now - device.at < device.holdsMs
+    gone(device.machine) && device.lockedAt !== null
       ? [{ device, at: device.lockedAt }]
       : []
   );
@@ -695,7 +692,6 @@ export const createNotifications = ({
           at: client.at,
           showing: client.showing,
           handheld: client.handheld,
-          holdsMs: DEVICE_TTL_MS,
           inputAt: client.inputAt,
           lockedAt: client.lockedAt,
           machine: client.machine,
@@ -710,7 +706,6 @@ export const createNotifications = ({
                 at: client.at,
                 showing: [],
                 handheld: false,
-                holdsMs: DEVICE_TTL_MS,
                 inputAt: client.deskInputAt,
                 lockedAt: client.lockedAt,
                 machine: client.machine,
@@ -726,7 +721,6 @@ export const createNotifications = ({
           at: word.at,
           showing: [],
           handheld: false,
-          holdsMs: MACHINE_TTL_MS,
           inputAt: word.inputAt,
           lockedAt: word.lockedAt,
           machine: word.state,
@@ -741,7 +735,6 @@ export const createNotifications = ({
               at: spokeAt,
               showing: spokeOn ? [spokeOn] : [],
               handheld: false,
-              holdsMs: DEVICE_TTL_MS,
               inputAt: spokeAt,
               lockedAt: null,
               machine: null,

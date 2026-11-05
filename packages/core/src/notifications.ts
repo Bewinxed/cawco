@@ -110,15 +110,18 @@ export const PRESENCE_BEAT_MS = 30_000;
 /** A client silent this long no longer has its chat in front. */
 export const PRESENCE_TTL_MS = 60_000;
 /**
- * A device silent this long says nothing of the machine any more: unknown,
- * its last input still counting toward the away clock. Longer than a beat
- * because a hidden tab's timers run at most once a minute (Chrome's
- * intensive throttling).
+ * A tab silent this long is no longer one a desk alert goes to. Its last
+ * input still counts toward the away clock, and a lock it said last still
+ * holds the person away until fresh input (hub notifications.ts `rollup`).
+ * Longer than a beat because a hidden tab's timers run at most once a minute
+ * (Chrome's intensive throttling).
  */
 export const DEVICE_TTL_MS = 150_000;
 /**
- * A machine's agent silent this long says nothing of its desktop any more:
- * three of its 15 s heartbeats missed, as a Mac asleep stops beating.
+ * A machine's agent silent this long shows no desktop state in the presence
+ * menu: three of its 15 s heartbeats missed, as a Mac asleep stops beating.
+ * A lock it said last still holds the person away (hub notifications.ts
+ * `rollup`).
  */
 export const MACHINE_TTL_MS = 45_000;
 /**
