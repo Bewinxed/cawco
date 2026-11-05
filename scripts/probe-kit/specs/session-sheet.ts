@@ -19,6 +19,15 @@
  * 2. `artifact_create(kind: "component", does: "judge", ask, file: "src/Card.stories.js")`
  *    answers an id and its stage `live`, which states it is a states file's on
  *    Vite (`runs: "sheet"`, `toolchain: "vite"`).
+ * 2f. A canvas of two states files whose sweep runs past the render's limit
+ *    (core `STAGE_RENDER_MS`): each holds eight moves whose play never
+ *    ends, each run to its 6 s bound. `artifact_create` of it answers within
+ *    the limit, its first section's moves each named failed by story ("ran
+ *    past 6 s") and its second named undrawn, with the state read that
+ *    draws it alone.
+ * 2g. That state read (`render: true, png: true, state`) answers its
+ *    picture and its frame drawn within the limit, the first section named
+ *    as left to its last draw.
  * 3. A dashboard's raw `stageEnsure` control, naming a place id and a folder
  *    the hub never resolved (the same project, copied elsewhere), is refused
  *    at the hub's relay as the hub's to send, and never reaches the machine:
@@ -194,8 +203,10 @@ import {
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import {
   type CanvasMap,
+  type SectionUndrawn,
   STAGE_ENSURE,
   STAGE_READY_MS,
+  STAGE_RENDER_MS,
 } from "../../../packages/core/src/stage";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { sheetWords } from "../../../packages/core/src/words/sheet";
@@ -221,6 +232,21 @@ const MISSING_TAIL = "The canvas draws it once its session writes it.";
 /** A story file whose stories are built four ways (legs 16 and 17). */
 const MIXED = "src/Mixed.stories.js";
 const REFUSAL = "this session runs in no workspace";
+/** Legs 2f and 2g: two states files whose sweep runs past the render's limit, each eight moves whose play never ends. */
+const SLOW = ["src/SlowA.stories.js", "src/SlowB.stories.js"] as const;
+/** A states file of `prefix`'s eight moves from `Still`, each play waiting forever: the page's bound ends each (runtime.ts `PLAY_LIMIT_MS`). */
+const slowStories = (prefix: string): string =>
+  `import Card from "./Card.svelte";
+
+export default { component: Card, args: { title: "${prefix}" } };
+
+export const ${prefix}Still = { args: {} };
+${Array.from(
+  { length: 8 },
+  (_, at) =>
+    `export const ${prefix}Move${at + 1} = { from: "${prefix}Still", args: { title: "${prefix} ${at + 1}" }, play: () => new Promise(() => {}) };`
+).join("\n")}
+`;
 
 /** The project in the session's folder: plain Vite and Svelte, installed only in its stage clone. */
 const PROJECT: Record<string, string> = {
@@ -268,6 +294,8 @@ export const Spread = { parameters: {}, ...shared };
 export const Helper = card("Helper");
 export const Imported = { ...fixture("Imported") };
 `,
+  [SLOW[0]]: slowStories("SlowA"),
+  [SLOW[1]]: slowStories("SlowB"),
 };
 
 /** A SvelteKit project, committed as a checkout of its own: its tsconfig extends the one Kit's sync writes into node_modules, as the dashboard's does. */
@@ -387,6 +415,23 @@ const componentFiles = (said: string): string[] | undefined => {
     return record.components?.map((one) => one.file);
   } catch {
     return undefined;
+  }
+};
+
+/** What a detailed component canvas answer says of its render: the sections it did not draw, its moves, the frame asked, its picture. */
+interface RenderRead {
+  frame?: { state?: string; story?: string };
+  moves?: { error?: { message: string }; to: string }[];
+  png?: string | null;
+  render?: { undrawn?: SectionUndrawn[] };
+}
+
+/** A detailed answer as a {@link RenderRead}; empty when it is no record. */
+const renderRead = (said: string): RenderRead => {
+  try {
+    return JSON.parse(said) as RenderRead;
+  } catch {
+    return {};
   }
 };
 
@@ -673,7 +718,7 @@ const writeProject = async (dir: string) => {
   await Bun.$`bun install --lockfile-only --no-progress`.cwd(dir).quiet();
 };
 
-/** Legs 2b to 2e: the component canvas's answers through the session's own tools. */
+/** Legs 2b to 2g: the component canvas's answers through the session's own tools. */
 const componentLegs = async (
   kit: Kit,
   call: (n: string, name: string, input: object) => Promise<string>,
@@ -733,7 +778,71 @@ const componentLegs = async (
       card.includes('"usedIn":['),
     short(card)
   );
+
+  await pastTheLimit(kit, call);
 };
+
+/** Legs 2f and 2g: a canvas whose sweep runs past the render's limit answers what it drew within it, and a state read draws its own section. */
+async function pastTheLimit(
+  kit: Kit,
+  call: (n: string, name: string, input: object) => Promise<string>
+): Promise<void> {
+  // The hub's own wait on a render (server.ts `onStage`) is past the limit; the render answers inside it.
+  const within = STAGE_RENDER_MS + 15_000;
+  const [first, second] = SLOW;
+  let since = Date.now();
+  const made = await call("2f", "mcp__cawco__artifact_create", {
+    kind: "component",
+    name: "slow",
+    file: [...SLOW],
+    does: "judge",
+    title: "Probe slow canvas",
+    ask: "Judge the card's slow moves",
+  });
+  const madeMs = Date.now() - since;
+  const slowId = made.match(ID)?.[1];
+  const drew = renderRead(made);
+  const undrawn = drew.render?.undrawn ?? [];
+  const failed = (drew.moves ?? []).filter(
+    (move) => move.error?.message === `${move.to}'s play ran past 6 s.`
+  );
+  kit.check(
+    "2f: a canvas whose sweep runs past the render's limit answers within it: its first section's moves each failed by story, its second undrawn with the state read that draws it alone",
+    !!slowId &&
+      madeMs < within &&
+      Array.from({ length: 8 }, (_, at) => `SlowAMove${at + 1}`).every((to) =>
+        failed.some((move) => move.to === to)
+      ) &&
+      undrawn.some(
+        (one) => one.file === second && one.asked && one.first === "SlowBStill"
+      ) &&
+      !undrawn.some((one) => one.file === first),
+    `${madeMs} ms; failed ${failed.map((move) => move.to).join(", ")}; undrawn ${JSON.stringify(undrawn)}`
+  );
+  if (!slowId) {
+    return;
+  }
+  since = Date.now();
+  const read = await call("2g", "mcp__cawco__artifact_read", {
+    id: slowId,
+    render: true,
+    png: true,
+    state: { story: "SlowBStill" },
+  });
+  const readMs = Date.now() - since;
+  const posed = renderRead(read);
+  kit.check(
+    "2g: a state read of the second section answers its picture and its frame drawn within the limit, the first section left to its last draw",
+    readMs < within &&
+      posed.png === "beside" &&
+      posed.frame?.story === "SlowBStill" &&
+      posed.frame.state === "drawn" &&
+      (posed.render?.undrawn ?? []).some(
+        (one) => one.file === first && !one.asked
+      ),
+    `${readMs} ms; frame ${JSON.stringify(posed.frame ?? null).slice(0, 200)}; undrawn ${JSON.stringify(posed.render?.undrawn ?? null)}`
+  );
+}
 
 /** Legs 16 and 17, in the first session's folder: a sheet whose stories are built by spreads and helpers. */
 async function builtStories(

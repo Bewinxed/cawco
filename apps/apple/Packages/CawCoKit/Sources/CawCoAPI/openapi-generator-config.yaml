@@ -206,6 +206,7 @@ typeOverrides:
     StarterPlace: OpenEnums.StarterPlace
     StarterSourceKind: OpenEnums.StarterSourceKind
     StreamRelayState: OpenEnums.StreamRelayState
+    SweepStep: OpenEnums.SweepStep
     TailnetHttpsState: OpenEnums.TailnetHttpsState
     TailnetHttpsStep: OpenEnums.TailnetHttpsStep
     TaskHistoryActorMover: OpenEnums.TaskHistoryActorMover

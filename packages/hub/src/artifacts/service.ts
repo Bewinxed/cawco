@@ -145,6 +145,7 @@ import {
   type DesignQuery,
   type EmbedShape,
   type RenderReport,
+  type SectionUndrawn,
   type ServeSpec,
   type SheetRead,
   type SheetWeight,
@@ -153,6 +154,7 @@ import {
   type StageError,
   type StageFrame,
   type StageOpened,
+  type StageRendered,
   type StageState,
   type StageUnreached,
   type StageWarm,
@@ -2042,10 +2044,11 @@ export interface ArtifactServiceDeps {
   ) => Promise<{ machineId: string; opened: StageOpened; workspace: string }>;
   /** The design map of session `instance`'s workspace (agent stage.ts `stageComponents`): its components, paged, or one's card. */
   stageComponents: (at: StageAt, ask: DesignQuery) => Promise<DesignMap>;
+  /** A canvas drawn by its workspace's daemon in the machine's Chromium (agent stage-render.ts): within its limit, what it drew and what it did not. */
   stageRender: (
     at: StageAt,
     ask: { files: string[]; png?: boolean; spec?: CanvasSpec; state?: StateAsk }
-  ) => Promise<{ png?: string; report: RenderReport }>;
+  ) => Promise<StageRendered>;
   /**
    * A write to a sheet's story file in its workspace, made by its stage
    * (agent stage.ts `writeSheet`): the lines it changed and the sheet after.
@@ -5968,7 +5971,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     opened: StageOpened,
     shownNow: boolean,
     story?: string
-  ): Promise<RenderReport> => {
+  ): Promise<Pick<StageRendered, "report" | "undrawn">> => {
     let { report } = opened;
     const deadline = Date.now() + PANEL_DRAW_MS;
     while (shownNow && unseen(report, story) && Date.now() < deadline) {
@@ -5976,8 +5979,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ({ report } = (await deps.stage(at, files[0] as string, files)).opened);
     }
     return unseen(report, story)
-      ? (await deps.stageRender(at, { files, spec })).report
-      : report;
+      ? await deps.stageRender(at, { files, spec })
+      : { report, undrawn: [] };
   };
 
   /**
@@ -6057,16 +6060,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       throw new ArtifactRefusal(503, shown.why);
     }
     const owned = sheetOf(row);
-    const report = drawnHeld(
-      row,
-      await drawnReport(
-        { workspace },
-        owned?.files ?? asked,
-        spec,
-        opened,
-        openedOf(shown).opened
-      )
+    const drawn = await drawnReport(
+      { workspace },
+      owned?.files ?? asked,
+      spec,
+      opened,
+      openedOf(shown).opened
     );
+    const { undrawn } = drawn;
+    const report = drawnHeld(row, drawn.report);
     return {
       id: row.id,
       kind: row.kind,
@@ -6075,7 +6077,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       route: routeOf(row.id),
       ...openedOf(shown),
       stage: { ...sheetState(row, opened.state), errors: [] },
-      render: { ...renderSaid(report), weight: weightSaid(opened.weight) },
+      render: {
+        ...renderSaid(report, undrawn),
+        weight: weightSaid(opened.weight),
+      },
       moves: movesSaid(report),
       errors: errorsSaid(sheetState(row, opened.state).errors),
       hint: READ_HINT,
@@ -6104,6 +6109,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const sheet = sheetOf(row);
     let opened: StageOpened | undefined;
     let report: RenderReport | undefined;
+    let undrawn: SectionUndrawn[] = [];
     let png: string | undefined;
     if (sheet) {
       const at: StageAt = { workspace: sheet.workspace };
@@ -6120,7 +6126,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       // A draw asked of a stage that answered: refused in its own words when it can't be made.
       if (opened && (ask.render || ask.png)) {
-        ({ report, png } = await deps.stageRender(at, {
+        ({ report, png, undrawn } = await deps.stageRender(at, {
           files: sheet.files,
           spec: sheet.spec,
           ...(ask.state ? { state: ask.state } : {}),
@@ -6159,7 +6165,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       errors: errorsSaid(stage?.errors ?? []),
       ...(report
         ? {
-            render: renderSaid(report),
+            render: renderSaid(report, undrawn),
             moves: movesSaid(report),
             stories: storiesSaid(sheetNow, report),
             ...(ask.state ? { frame: stateSaid(report, ask.state) } : {}),

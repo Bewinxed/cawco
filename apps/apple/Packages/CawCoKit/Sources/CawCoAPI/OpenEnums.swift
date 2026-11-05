@@ -8742,6 +8742,53 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/SweepStep`.
+    public enum SweepStep: OpenEnum {
+        case draw
+        case load
+        case move
+        case post
+        case probe
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "draw": self = .draw
+            case "load": self = .load
+            case "move": self = .move
+            case "post": self = .post
+            case "probe": self = .probe
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .draw: "draw"
+            case .load: "load"
+            case .move: "move"
+            case .post: "post"
+            case .probe: "probe"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.draw, .load, .move, .post, .probe]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/TailnetHttpsState`.
     public enum TailnetHttpsState: OpenEnum {
         case absent

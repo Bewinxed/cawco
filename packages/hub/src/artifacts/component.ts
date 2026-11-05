@@ -17,6 +17,7 @@ import {
   type PageError,
   type RenderReport,
   type SectionRender,
+  type SectionUndrawn,
   type SheetRead,
   type SheetWeight,
   type StageError,
@@ -85,8 +86,11 @@ const frameLine = (frame: FrameRender) => ({
   ...(frame.error ? { error: frame.error } : {}),
 });
 
-/** A render report as an answer says it: who drew, each section's frames (bounded), the unnamed stories and what failed. */
-export function renderSaid(report: RenderReport) {
+/** A render report as an answer says it: who drew, each section's frames (bounded), the unnamed stories, what failed, and the sections the read's render did not draw. */
+export function renderSaid(
+  report: RenderReport,
+  undrawn: readonly SectionUndrawn[] = []
+) {
   const frames = report.sections.flatMap((section) => section.frames);
   const listed = frames.slice(0, FRAMES_LISTED);
   return {
@@ -108,6 +112,7 @@ export function renderSaid(report: RenderReport) {
     ...(report.page.errors.length > 0
       ? { pageErrors: report.page.errors }
       : {}),
+    ...(undrawn.length > 0 ? { undrawn } : {}),
   };
 }
 

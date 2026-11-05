@@ -42279,6 +42279,12 @@
               {
                 "type": "object",
                 "properties": {
+                  "undrawn": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/SectionUndrawn"
+                    }
+                  },
                   "pageErrors": {
                     "type": "array",
                     "items": {
@@ -42578,6 +42584,62 @@
           "file",
           "line",
           "message"
+        ]
+      },
+      "SectionUndrawn": {
+        "description": "A section a stage's render did not draw: its states file, whether the\nrender's sweep took it (a state read takes its own section alone), where\nthe sweep stood in it when the limit came (null: not begun), and its\nfirst story, whose state read draws this section alone.",
+        "type": "object",
+        "properties": {
+          "asked": {
+            "type": "boolean"
+          },
+          "at": {
+            "$ref": "#/components/schemas/SweepAt"
+          },
+          "file": {
+            "type": "string"
+          },
+          "first": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "asked",
+          "file",
+          "first"
+        ]
+      },
+      "SweepAt": {
+        "description": "Where a stage's sweep of a canvas stands: the section's states file, its step, and the story a move plays.",
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "step": {
+            "$ref": "#/components/schemas/SweepStep"
+          },
+          "story": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "step"
+        ]
+      },
+      "SweepStep": {
+        "description": "A step of a stage's sweep of one section: its module loaded, its frames' first draw, its states probed, a move played, its report posted.",
+        "type": "string",
+        "enum": [
+          "draw",
+          "load",
+          "move",
+          "post",
+          "probe"
         ]
       },
       "FrameState": {

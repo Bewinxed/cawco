@@ -529,7 +529,6 @@ import {
   type DecisionMedia,
   type DesignMap,
   isEmbedShape,
-  type RenderReport,
   type SheetWritten,
   STAGE_CLONE_MS,
   STAGE_COMPONENTS,
@@ -546,6 +545,7 @@ import {
   type StageCloneFrame,
   type StageFrame,
   type StageOpened,
+  type StageRendered,
   type StageState,
   type StageStatus,
   storiesKey,
@@ -15345,10 +15345,7 @@ export const createServer = (
     verify: (requester, artifact) => designVerify.ask(requester, artifact),
     // A component canvas drawn by its workspace's daemon in the machine's own Chromium.
     stageRender: async (at, ask) =>
-      (await onStage(at, STAGE_RENDER, ask)).result as {
-        png?: string;
-        report: RenderReport;
-      },
+      (await onStage(at, STAGE_RENDER, ask)).result as StageRendered,
     stageWrite: async (at, write) =>
       (await onStage(at, STAGE_WRITE, write)).result as SheetWritten,
     // A decision page's Previews' stage warmed as it goes out; the machine answers before the warm-up runs.

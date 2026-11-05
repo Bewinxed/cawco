@@ -10,7 +10,13 @@
 
 import { artifactLink, artifactToolWords, decidedByLine } from "@cawco/core";
 import { type Pin, pinStandsOn, type ThreadEntry } from "@cawco/core/comments";
-import type { CanvasSpec, DesignMap, PageError } from "@cawco/core/stage";
+import {
+  type CanvasSpec,
+  type DesignMap,
+  type PageError,
+  STAGE_RENDER_MS,
+} from "@cawco/core/stage";
+import { stageRenderWords } from "@cawco/core/words/stage-render";
 import type { movesSaid, renderSaid } from "../artifacts/component";
 import type {
   ArtifactList,
@@ -255,6 +261,21 @@ const pageErrorWords = (error: PageError): string =>
     ? `${error.message} (${error.file}${error.line === null ? "" : `:${error.line}`})`
     : error.message;
 
+/** The sections a read's render did not draw, each with the read that draws it alone. */
+const undrawnLines = (render: ReturnType<typeof renderSaid>): string[] => {
+  const asked = render.undrawn?.filter((one) => one.asked) ?? [];
+  const others = render.undrawn?.filter((one) => !one.asked) ?? [];
+  return [
+    ...(asked.length > 0
+      ? [
+          stageRenderWords.undrawnHead(STAGE_RENDER_MS / 1000),
+          ...asked.map(stageRenderWords.undrawn),
+        ]
+      : []),
+    ...(others.length > 0 ? [stageRenderWords.notAsked(others)] : []),
+  ];
+};
+
 /** A component canvas's read: its frames, stories, moves and the person's dials, each a line. */
 const componentLines = (read: ArtifactRead): string[] => {
   const extra = read as ArtifactRead & {
@@ -302,6 +323,7 @@ const componentLines = (read: ArtifactRead): string[] => {
                 `The canvas page's errors: ${render.pageErrors.map(pageErrorWords).join("; ")}`,
               ]
             : []),
+          ...undrawnLines(render),
         ]
       : [
           "No browser has drawn it since its files changed: read with render: true.",
@@ -537,6 +559,7 @@ export const artifactCreatedWords = (created: Created): string =>
           `- ${frame.story} · ${frame.interaction} · ${frame.state} · ${frame.box.w}×${frame.box.h}${frame.error ? ` · ${pageErrorWords(frame.error)}` : ""}`
       ),
       ...(created.render.cut ? [created.render.cut] : []),
+      ...undrawnLines(created.render),
     ],
     !!created.moves?.length &&
       `${count(created.moves.length, "move")} between its stories.`,

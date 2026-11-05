@@ -263,8 +263,50 @@ export const REPORT_PATH = "/__cawco/report";
 /** The daemon's control method that draws a canvas in the machine's browser when no panel has (agent `stage-render.ts`). */
 export const STAGE_RENDER = "stageRender";
 
-/** How long a daemon's render of a canvas may take, page load to the last section's report, past the stage's own start. Ours: a screen's first load transforms its modules. */
+/**
+ * How long a daemon's render of a canvas may take, Chromium's launch to its
+ * answer, past the stage's own start. A sweep that runs past it answers
+ * what it drew by then ({@link StageRendered} `undrawn`). Ours: a screen's
+ * first load transforms its modules.
+ */
 export const STAGE_RENDER_MS = 90_000;
+
+/** The canvas page's query naming the one state a stage's render is asked for (`Story`, or `file:Story`): the page sweeps that state's section alone ({@link sweptFiles}). */
+export const RENDER_STATE_PARAM = "state";
+
+/** The states files of `files` whose plan has story `name` (`Story`, or `file:Story` naming one file). */
+export const holdersOf = (
+  files: readonly string[],
+  plans: Record<string, SectionPlan>,
+  name: string
+): string[] => {
+  const cut = name.lastIndexOf(":");
+  const [inFile, story] =
+    cut > 0 ? [name.slice(0, cut), name.slice(cut + 1)] : [undefined, name];
+  return files.filter(
+    (file) =>
+      (inFile === undefined || file === inFile) &&
+      (plans[file]?.stories.some((one) => one.name === story) ?? false)
+  );
+};
+
+/**
+ * The sections a stage's render sweeps, in order: the one section holding
+ * the state it is asked for (`state`, by the page's plans), else every one.
+ * A state no section holds, or two hold alike, sweeps none: the page's read
+ * of it refuses in its own words, with nothing drawn first.
+ */
+export const sweptFiles = (
+  files: readonly string[],
+  plans: Record<string, SectionPlan>,
+  state: string | null
+): string[] => {
+  if (state === null) {
+    return [...files];
+  }
+  const holders = holdersOf(files, plans, state);
+  return holders.length === 1 ? holders : [];
+};
 
 /** A step of a stage's sweep of one section: its module loaded, its frames' first draw, its states probed, a move played, its report posted. */
 export type SweepStep = "load" | "draw" | "probe" | "move" | "post";
@@ -274,6 +316,30 @@ export interface SweepAt {
   file: string;
   step: SweepStep;
   story?: string;
+}
+
+/**
+ * A section a stage's render did not draw: its states file, whether the
+ * render's sweep took it (a state read takes its own section alone), where
+ * the sweep stood in it when the limit came (null: not begun), and its
+ * first story, whose state read draws this section alone.
+ */
+export interface SectionUndrawn {
+  asked: boolean;
+  at: SweepAt | null;
+  file: string;
+  first: string | null;
+}
+
+/**
+ * A daemon's render of a canvas ({@link STAGE_RENDER}): the stage's report,
+ * every section as its last draw left it; the sections this render did not
+ * draw before its limit; and the state's picture when one was asked.
+ */
+export interface StageRendered {
+  png?: string;
+  report: RenderReport;
+  undrawn: SectionUndrawn[];
 }
 
 /** The {@link Interaction}s, in the order the canvas draws them. */

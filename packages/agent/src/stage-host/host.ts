@@ -79,6 +79,7 @@ import {
   type PageError,
   type PageSection,
   type PostedReport,
+  RENDER_STATE_PARAM,
   RENDERED_PATH,
   REPORT_PATH,
   type RenderReport,
@@ -101,6 +102,7 @@ import {
   type StageFramework,
   type StageToolchain,
   sectionName,
+  sweptFiles,
   THUMB_FRAMES,
   WEIGHT_PATH,
   WRITE_PATH,
@@ -1241,9 +1243,18 @@ async function serveCanvas(
     const asked = new URL(req.url ?? CANVAS_PATH, "http://stage").searchParams;
     const files = asked.getAll("file");
     // JSON in a script element: no `<` closes it early.
-    const plan = JSON.stringify(planOf(files)).replaceAll("<", "\\u003c");
-    const embed = asked.get("by") === "embed";
-    const urls = await settledClosureOf(dev, files, embed);
+    const plans = planOf(files);
+    const plan = JSON.stringify(plans).replaceAll("<", "\\u003c");
+    const by = asked.get("by");
+    const embed = by === "embed";
+    // The sections the page loads at once: an embed's every one (runtime.ts `pump`); a stage's render, every one its sweep takes; a panel's, its first, the others as each nears the view.
+    let loaded = files.slice(0, 1);
+    if (embed) {
+      loaded = files;
+    } else if (by === "stage") {
+      loaded = sweptFiles(files, plans, asked.get(RENDER_STATE_PARAM));
+    }
+    const urls = await settledClosureOf(dev, loaded);
     // One key for the page's tags and its graph's list, read once its graph has settled.
     const key = generationOf(dev);
     const preloads = graphPreloads(urls, embed, key);
@@ -1635,20 +1646,16 @@ async function staticImportsOf(dev: DevServer, url: string): Promise<string[]> {
  * 21 levels deep, drawn 4.1 s in on the stage's own host and 11.4 s in at
  * 350 ms a request (the hub's preview proxy, as the comment card's trace
  * read it). Nothing a page's code imports only when it runs is preloaded:
- * a frame parses only the modules its stories reach. The sections are the
- * ones the page loads at once: an embed's every one (runtime.ts `pump`), a
- * canvas's first, the others as each nears the view.
+ * a frame parses only the modules its stories reach. `files` are the
+ * sections the page loads at once ({@link serveCanvas}): each one's
+ * dependencies built before the page runs, so none a section finds while
+ * the page draws builds them again and reloads it mid-sweep.
  */
-async function closureOf(
-  dev: DevServer,
-  files: string[],
-  embed: boolean
-): Promise<string[]> {
+async function closureOf(dev: DevServer, files: string[]): Promise<string[]> {
   const { base } = dev.config;
   const asPage = (address: string) => `${base}${address.slice(1)}`;
   const sections = files
     .filter((file) => sectionProblem(file) === null)
-    .slice(0, embed ? files.length : 1)
     .map((file) =>
       asPage(`/@id/__x00__${VIRTUAL}${encodeURIComponent(file)}.js`)
     );
@@ -1688,14 +1695,13 @@ const DEPENDENCY_ROUNDS = 3;
  */
 async function settledClosureOf(
   dev: DevServer,
-  files: string[],
-  embed: boolean
+  files: string[]
 ): Promise<string[]> {
   const optimizer = () => dev.environments.client.depsOptimizer;
   let urls: string[] = [];
   for (let round = 0; round < DEPENDENCY_ROUNDS; round += 1) {
     const build = optimizer()?.metadata.browserHash;
-    urls = await closureOf(dev, files, embed);
+    urls = await closureOf(dev, files);
     const building = Object.values(optimizer()?.metadata.discovered ?? {})
       .map((one) => one.processing)
       .filter((one): one is Promise<void> => one !== undefined);

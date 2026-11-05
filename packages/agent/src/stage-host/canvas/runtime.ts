@@ -40,6 +40,7 @@ import {
   type PageReport,
   type PageSection,
   type PostedReport,
+  RENDER_STATE_PARAM,
   type Scheme,
   SECTION_MISSING,
   SECTION_WRITTEN,
@@ -53,6 +54,7 @@ import {
   screenHeight,
   sectionName,
   sectionPlansOf,
+  sweptFiles,
 } from "@cawco/core/stage";
 import { queriesIn, userEventIn } from "@cawco/core/stage-play";
 import { shellWords } from "@cawco/core/words/shell";
@@ -328,6 +330,8 @@ const byOf = (params: URLSearchParams): PageBy => {
 
 /** The canvas's state, for the stage's daemon render and the probe kit. */
 export interface CanvasState {
+  /** The sections the stage's sweep has read and posted, in order (a render answers the others as undrawn). */
+  drawn: string[];
   files: string[];
   /**
    * The stage's room the window lacks to hold state `key`'s drawing whole
@@ -361,7 +365,9 @@ export interface CanvasState {
   ) => Promise<{ key: string } | { refused: string }>;
   /** The section the stage's sweep is on, and its step; null before it starts and once it has swept. */
   sweepAt: SweepAt | null;
-  /** Every section drawn once: a stage's render reads the stage's report then. */
+  /** The sections the sweep takes, in order: a stage's render asked for one state, that state's alone (core `sweptFiles`); else every one. */
+  sweeps: string[];
+  /** Every section the sweep takes drawn once: a stage's render reads the stage's report then. */
   swept: boolean;
   view: View;
 }
@@ -475,8 +481,8 @@ export interface Mode {
   bodies: () => Iterable<{ body: HTMLElement; mounted: Mounted | undefined }>;
   /** A section's module didn't load: it says why in its own place. */
   failed: (section: Section, failure: SectionFailure) => void;
-  /** A section's frames as its report says them. */
-  framesOf: (section: Section) => FrameRender[];
+  /** A section's frames as its report says them; null while it has not been read: a report leaves it out, so the stage keeps what an earlier draw saw of it. */
+  framesOf: (section: Section) => FrameRender[] | null;
   /** The width script asking `matchMedia` between mounts is answered at; null for the page's own. */
   mediaWidth: () => number | null;
   /** The inspector set or let go story `story`'s args in `section`. */
@@ -1519,7 +1525,8 @@ export function boot(options: BootOptions): void {
    * let go.
    */
   async function said(section: Section): Promise<void> {
-    if (!section.mod || by === "map" || embed) {
+    // No pane reads a stage's render, a map's card or a Preview's embed: none asks for the sheet's docgen.
+    if (!section.mod || by !== "panel") {
       return;
     }
     const asked = (sheetAsks.get(section.file) ?? 0) + 1;
@@ -1555,15 +1562,21 @@ export function boot(options: BootOptions): void {
   }
 
   function reportNow(): PageReport {
-    const drawn: PageSection[] = sections
-      .filter((one) => one.loaded && one.mod)
-      .map((section) => ({
-        file: section.file,
-        title: section.mod?.SHEET.meta.title ?? section.file,
-        frames: mode?.framesOf(section) ?? [],
-        moves: section.moves,
-        notForced: [...rewrite.refused].slice(0, 20),
-      }));
+    // A section loaded and not read yet posts nothing: an empty one would stand over what an earlier draw saw of it.
+    const drawn: PageSection[] = sections.flatMap((section) => {
+      const frames = section.loaded ? mode?.framesOf(section) : null;
+      return section.mod && frames
+        ? [
+            {
+              file: section.file,
+              title: section.mod.SHEET.meta.title ?? section.file,
+              frames,
+              moves: section.moves,
+              notForced: [...rewrite.refused].slice(0, 20),
+            },
+          ]
+        : [];
+    });
     const unnamed = sections.flatMap((section) =>
       (section.mod?.SHEET.stories ?? [])
         .filter((story) => !story.label)
@@ -1787,7 +1800,12 @@ export function boot(options: BootOptions): void {
     report: null,
     reports: 0,
     swept: false,
+    sweeps:
+      by === "stage"
+        ? sweptFiles(files, plans, params.get(RENDER_STATE_PARAM))
+        : files,
     sweepAt: null,
+    drawn: [],
     setView,
     loaded: () => sections.filter((one) => one.loaded).map((one) => one.file),
   };

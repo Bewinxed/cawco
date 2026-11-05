@@ -196,6 +196,7 @@
     "./words/project-ends": "./src/words/project-ends.ts",
     "./words/rules": "./src/words/rules.ts",
     "./words/sheet": "./src/words/sheet.ts",
+    "./words/stage-render": "./src/words/stage-render.ts",
     "./words/side": "./src/words/side.ts",
     "./words/sidebar": "./src/words/sidebar.ts",
     "./words/spend": "./src/words/spend.ts",

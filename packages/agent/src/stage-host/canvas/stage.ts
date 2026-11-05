@@ -55,6 +55,7 @@ import {
   FORMS,
   type FramePictureRead,
   type FrameRender,
+  holdersOf,
   type Interaction,
   type PageError,
   type Story,
@@ -1778,13 +1779,22 @@ export function bootStage(page: Page): Mode {
    * canvas from the report the person's own page posts.
    */
   async function sweep(): Promise<void> {
-    for (const section of sections) {
+    for (const file of state.sweeps) {
+      const section = page.sectionOf(file);
+      if (!section) {
+        continue;
+      }
       sweepOn(section, "load");
       await page.loadSection(section);
       if (section.loaded) {
         await section.settling;
       }
       sweepOn(section, "post");
+      await page.post();
+      state.drawn.push(file);
+    }
+    // A sweep of no section (a state no states file holds) still reports: the render reads it, then the page's refusal.
+    if (state.sweeps.length === 0) {
       await page.post();
     }
     state.sweepAt = null;
@@ -1799,30 +1809,23 @@ export function bootStage(page: Page): Mode {
     interaction: Interaction = "rest"
   ): Promise<{ key: string } | { refused: string }> {
     const cut = name.lastIndexOf(":");
-    const [inFile, storyName] =
-      cut > 0 ? [name.slice(0, cut), name.slice(cut + 1)] : [undefined, name];
-    for (const section of sections) {
-      if (inFile === undefined || section.file === inFile) {
-        await page.loadSection(section);
-      }
-    }
-    const holders = sections.filter(
-      (one) =>
-        (inFile === undefined || one.file === inFile) &&
-        one.mod?.SHEET.stories.some((each) => each.name === storyName)
-    );
-    const [section] = holders;
-    if (!section) {
+    const storyName = cut > 0 ? name.slice(cut + 1) : name;
+    // Found by the plans the stage wrote into the page: no other section is loaded, so none is drawn for it.
+    const holders = holdersOf(page.files, page.plans, name);
+    const section =
+      holders.length === 1 ? page.sectionOf(holders[0] as string) : undefined;
+    if (holders.length === 0) {
       return {
-        refused: `No states file of this canvas has a story ${name}: ${sections.map((one) => `${one.file} has ${one.mod?.SHEET.stories.map((each) => each.name).join(", ") || "none drawn yet"}`).join("; ")}.`,
+        refused: `No states file of this canvas has a story ${name}: ${page.files.map((file) => `${file} has ${page.plans[file]?.stories.map((each) => each.name).join(", ") || "none"}`).join("; ")}.`,
       };
     }
-    if (holders.length > 1) {
+    if (!section) {
       return {
-        refused: `${storyName} is a story of ${holders.length} states files here: name one, ${holders.map((one) => `${one.file}:${storyName}`).join(" or ")}.`,
+        refused: `${storyName} is a story of ${holders.length} states files here: name one, ${holders.map((file) => `${file}:${storyName}`).join(" or ")}.`,
       };
     }
     // Its read done first: it says which interactions the story reaches.
+    await page.loadSection(section);
     await section.settling;
     const reached = section.interactions.get(storyName) ?? ["rest"];
     return reached.includes(interaction)
@@ -1945,10 +1948,10 @@ export function bootStage(page: Page): Mode {
       ...(against ? [{ body: against.body, mounted: against.mounted }] : []),
     ],
     framesOf: (section) =>
-      (reads.get(section) ?? []).map((one) => {
+      reads.get(section)?.map((one) => {
         const delta = section.probes.get(one.story)?.delta.get(one.interaction);
         return one.interaction === "rest" || !delta ? one : { ...one, delta };
-      }),
+      }) ?? null,
     mediaWidth: () =>
       live && !frame.hidden ? Number.parseFloat(drawing.style.width) : null,
     overridden: (section, story) => {
