@@ -344,7 +344,6 @@ import {
   memoryDocProblem,
   memoryScopeProblem,
   type NeutralSystemMessage,
-  NO_REPLY_TOOL,
   namedAccount,
   OVER_STATUSES,
   offersModelChoice,
@@ -1073,13 +1072,13 @@ import {
   type TranscriptPayload,
 } from "./transcripts";
 import { createTreeStops } from "./tree-stops";
+import { turnSpeech } from "./turn-speech";
 import { turnUsageOf } from "./turn-usage";
 import { unwatchedMode } from "./unwatched-mode";
 import { TOOL_RELEASES } from "./upstreams";
 import { UsageCounter } from "./usage-count";
 import { createViews, viewRoutes } from "./views";
 import { createWaits } from "./waits";
-import { CAWCO_TOOL } from "./web-reads";
 import { WelcomeConverge } from "./welcome-converge";
 import {
   caughtUp,
@@ -6789,6 +6788,9 @@ export const createServer = (
       return;
     }
     turnsWritten.add(instanceId);
+    // Its words are its own: none of a turn before it that ended with no
+    // result (its process gone inside it) carries over.
+    speech.began(instanceId);
     db.openTurn(instanceId, Date.now());
     push.turnBegan(instanceId);
   };
@@ -11024,29 +11026,8 @@ export const createServer = (
     }
   };
   sayKeptAtStart();
-  /**
-   * Each session's final message of the turn in flight: the text frames that
-   * followed its last tool call. A tool call empties it, so what came before
-   * (narration of work still under way) never reaches the parent. It is a
-   * list because Claude emits one frame per content block, so one final
-   * message can arrive as several text frames.
-   */
-  const finalMessage = new Map<string, string[]>();
-  /**
-   * Sessions whose turn in flight last called no_reply_needed. Ended with no
-   * text after that call ({@link finalMessage} empty), the turn has nothing
-   * for the person: its end is no news on any screen (db `noteTurnEnded`) and
-   * pushes nothing (push.ts `turnEnded`). On Claude Code and pi the call
-   * ends the turn (core no-reply.ts `END_TURN_META`): its tool result is the
-   * turn's last frame before a `success` result, with no assistant frame
-   * after it, so no text can follow.
-   */
-  const endsOnNoReply = new Set<string>();
-  /** A turn's end, whatever ended it: what it said and how it ended go. */
-  const turnSpeechOver = (instanceId: string): void => {
-    finalMessage.delete(instanceId);
-    endsOnNoReply.delete(instanceId);
-  };
+  /** Each session's words in the turn in flight ({@link turnSpeech}). */
+  const speech = turnSpeech();
   /**
    * The tokens each Claude session's latest top-level request sent (its
    * uncached input plus cache reads and writes), by session: its context as
@@ -39533,7 +39514,7 @@ export const createServer = (
                     console.error(
                       `[hub] completion ${message.instanceId} has no harness result identity`
                     );
-                    turnSpeechOver(message.instanceId);
+                    speech.over(message.instanceId);
                     break;
                   }
                   if (
@@ -39544,7 +39525,7 @@ export const createServer = (
                       neutral.recovered === true
                     )
                   ) {
-                    turnSpeechOver(message.instanceId);
+                    speech.over(message.instanceId);
                     break;
                   }
                   const [claimed] = db.getInstancesByIds([message.instanceId]);
@@ -40139,33 +40120,10 @@ export const createServer = (
                       );
                     }
                   }
-                  const text = neutral.message.content
-                    .filter((block) => block.type === "text")
-                    .map((block) => block.text)
-                    .join("");
-                  // A tool call means the turn goes on: everything said up
-                  // to it, this frame's own text included, was narration.
-                  const lastCall = neutral.message.content.findLast(
-                    (block) => block.type === "tool_use"
-                  );
-                  if (lastCall) {
-                    finalMessage.delete(message.instanceId);
+                  if (
+                    speech.frame(message.instanceId, neutral.message.content)
+                  ) {
                     workedTurns.add(message.instanceId);
-                    // OpenCode's `cawco_` and pi's bare name alike.
-                    if (
-                      lastCall.name.replace(CAWCO_TOOL, "") === NO_REPLY_TOOL
-                    ) {
-                      endsOnNoReply.add(message.instanceId);
-                    } else {
-                      endsOnNoReply.delete(message.instanceId);
-                    }
-                  } else if (text) {
-                    const acc = finalMessage.get(message.instanceId);
-                    if (acc) {
-                      acc.push(text);
-                    } else {
-                      finalMessage.set(message.instanceId, [text]);
-                    }
                   }
                 } else if (
                   neutral.type === "result" &&
@@ -40177,7 +40135,7 @@ export const createServer = (
                   const ended = message.instanceId;
                   credentialTurns.delete(ended);
                   limitRefused.delete(ended);
-                  turnSpeechOver(ended);
+                  speech.over(ended);
                   atLimit.signedOut(ended).catch((error: unknown) => {
                     limitAnswerFailed(ended, "its refused sign-in", error);
                   });
@@ -40190,7 +40148,7 @@ export const createServer = (
                   // session is held, moved or continued; no report goes up,
                   // no rule answers it, and what a refused request says of
                   // the context is not the session's context.
-                  turnSpeechOver(message.instanceId);
+                  speech.over(message.instanceId);
                   const refused = message.instanceId;
                   // A move it owes to an account with room is its turn's
                   // end, as any turn's end is.
@@ -40264,15 +40222,11 @@ export const createServer = (
                       "context threshold"
                     );
                   }
-                  const parts = finalMessage.get(message.instanceId);
-                  const text = parts?.length ? parts.join("\n\n") : undefined;
+                  const { text, onNoReply } = speech.ended(message.instanceId);
                   // It ended on no_reply_needed and said nothing after: no
                   // news, no push. A failed turn is news whatever it called.
                   const silent =
-                    endsOnNoReply.has(message.instanceId) &&
-                    !text &&
-                    neutral.is_error !== true;
-                  turnSpeechOver(message.instanceId);
+                    onNoReply && !text && neutral.is_error !== true;
                   // Every turn's end: its own row, by its key.
                   const [row] = db.listedInstancesByIds([message.instanceId]);
                   const parentId = row?.parentInstanceId;
