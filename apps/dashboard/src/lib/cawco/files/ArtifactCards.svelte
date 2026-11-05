@@ -48,6 +48,10 @@
    * drawn (the nearest top in its column), so they follow the columns at
    * every width. Home and End go to the first and last; nothing wraps. A
    * card is still its button: Enter and Space open it as a press does.
+   * The listbox itself takes no tabindex: the options are its focus, and a
+   * `tabindex="-1"` on it takes them out of Tab's order in Chromium 156
+   * (HeadlessChrome 156.0.8078.4: Tab from the view switch went past the
+   * card holding the roving 0 to the region's "N more").
    */
   import type { ArtifactKind } from "@cawco/core/artifact-kinds";
   import { reasonLine, reasonShort } from "@cawco/core/artifact-needs";
@@ -306,7 +310,6 @@
   data-files-view={view}
   {onkeydown}
   role="listbox"
-  tabindex={-1}
   style:--card-min="var(--c-artifact-card-min)"
   style:--gutter={"calc((var(--c-row-inset) - (var(--c-row-lead) - var(--icon-md)) / 2) - var(--space-1))"}
   style:--lane-tracks="repeat({count}, minmax(0, 1fr))"
