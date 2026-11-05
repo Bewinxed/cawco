@@ -1,6 +1,6 @@
 ---
 name: component-canvas
-description: Build a component on CawCo's canvas: write it and its states file, open the canvas, read what was drawn, fix what failed or stands empty, show the person. Triggers when building, changing or judging a component or screen, when asked for states, hover or focus, a flow between states, motion to tune, or a design preview.
+description: "Build a component on CawCo's canvas: write it and its states file, open the canvas, read what was drawn, fix what failed or stands empty, show the person. Triggers when building, changing or judging a component or screen, when asked for states, hover or focus, a flow between states, motion to tune, or a design preview."
 ---
 
 # Component canvas

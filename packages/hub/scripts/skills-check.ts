@@ -3,7 +3,8 @@
  * BUNDLED_SKILLS and each template's TEMPLATE_SKILLS) read as the agent reads
  * it. Prints `<name> ok` per skill; exits 1 on the first-found problems:
  *
- * 1. SKILL.md exists, its frontmatter `name` is its folder's name, and its
+ * 1. SKILL.md exists, its frontmatter parses as YAML (as each harness's
+ *    skill loader reads it), its `name` is its folder's name, and its
  *    `description` is 1 to 1024 characters (Claude Code's limit) with no
  *    trailing space.
  * 2. Every `artifact_create(` call it writes names `does` in the same code
@@ -19,28 +20,27 @@ import { BUNDLED_SKILLS, TEMPLATE_SKILLS } from "../src/bundled-skills";
 const DESCRIPTION_LIMIT = 1024;
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n/u;
 const CALL = "artifact_create(";
-const LEADING_SPACE = /^ /u;
 const ABOUT = /\babout\b/u;
 /** `does` as a field: `does: "judge"`, or the shorthand `{ kind, does, ask }`. */
 const DOES = /\bdoes\s*[:,}]/u;
 
 const ROOT = join(import.meta.dir, "../skills");
 
-/** The `key: value` lines of a frontmatter block. */
-const fieldsOf = (block: string): Map<string, string> =>
-  new Map(
-    block.split("\n").flatMap((line) => {
-      const at = line.indexOf(":");
-      return at > 0
-        ? [
-            [
-              line.slice(0, at).trim(),
-              line.slice(at + 1).replace(LEADING_SPACE, ""),
-            ],
-          ]
-        : [];
-    })
-  );
+/** The frontmatter block parsed as YAML, the way each harness's skill loader reads it. */
+const frontmatterOf = (
+  block: string
+): { fields: Record<string, unknown> } | { error: string } => {
+  try {
+    const parsed: unknown = Bun.YAML.parse(block);
+    return parsed !== null &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed)
+      ? { fields: parsed as Record<string, unknown> }
+      : { error: "it is not a mapping" };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
+};
 
 /** The code span holding `at` on `line` (between backticks), else the whole line. */
 const spanAround = (line: string, at: number): string => {
@@ -66,14 +66,21 @@ const problemsOf = (name: string): string[] => {
   if (!head) {
     return [`skill ${name}: SKILL.md has no frontmatter`];
   }
+  const frontmatter = frontmatterOf(head[1] ?? "");
+  if ("error" in frontmatter) {
+    return [
+      `skill ${name}: its frontmatter does not parse as YAML: ${frontmatter.error}`,
+    ];
+  }
+  const { fields } = frontmatter;
   const problems: string[] = [];
-  const fields = fieldsOf(head[1] ?? "");
-  if (fields.get("name") !== name) {
+  if (fields.name !== name) {
     problems.push(
-      `skill ${name}: its frontmatter name is ${JSON.stringify(fields.get("name") ?? null)}, not its folder's`
+      `skill ${name}: its frontmatter name is ${JSON.stringify(fields.name ?? null)}, not its folder's`
     );
   }
-  const description = fields.get("description") ?? "";
+  const description =
+    typeof fields.description === "string" ? fields.description : "";
   if (description.length < 1 || description.length > DESCRIPTION_LIMIT) {
     problems.push(
       `skill ${name}: its description is ${description.length} characters; 1 to ${DESCRIPTION_LIMIT}`

@@ -1,6 +1,6 @@
 ---
 name: show
-description: Before anything is opened in the person's panel (artifact_create of any kind): answer what they do there, then pick the primitive. Use when asked to show, preview, demo or mock up something, when a choice, a judgement or a flow needs the person, and before design-explore, component-canvas, screen or decision-page.
+description: "Before anything is opened in the person's panel (artifact_create of any kind): answer what they do there, then pick the primitive. Use when asked to show, preview, demo or mock up something, when a choice, a judgement or a flow needs the person, and before design-explore, component-canvas, screen or decision-page."
 ---
 
 # Show
