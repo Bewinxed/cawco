@@ -68,11 +68,7 @@
     ThreadEntrySchema,
   } from "#lib/cawco/stored-shapes.js";
   import { track } from "#lib/cawco/track.js";
-  import {
-    BarGlass,
-    BarItem,
-    BarMenu,
-  } from "#lib/components/ui/bar-glass/index.js";
+  import { BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
@@ -91,8 +87,6 @@
     IconAlert,
     IconArchive,
     IconChat,
-    IconChevronLeft,
-    IconChevronRight,
     IconExternal,
     IconEyeClosed,
     IconGlobe,
@@ -154,7 +148,6 @@
     easeOut,
     motionOk,
     revealOn,
-    rise,
   } from "../motion/curves.svelte";
   import { landKey } from "../motion/keyed.svelte";
   import { settleAway } from "../motion/rest.js";
@@ -191,6 +184,7 @@
   import { handBackFromPanel, takeOverFromPanel } from "./browser-acts";
   import CanvasView from "./CanvasView.svelte";
   import ChangeLines, { type ChangeLine } from "./ChangeLines.svelte";
+  import ChangesTag from "./ChangesTag.svelte";
   import CommentRail from "./CommentRail.svelte";
   import CoverState, { type CoverWaiting } from "./CoverState.svelte";
   import { CanvasViewState } from "./canvas-view.svelte";
@@ -201,6 +195,7 @@
     type RailSort,
   } from "./comment-rows";
   import { loadedPanes } from "./loaded.svelte";
+  import ModeButton from "./ModeButton.svelte";
   import CanvasMap from "./map/CanvasMap.svelte";
   import { frameHand, holdOpen } from "./open-pages";
   import PinFloat from "./PinFloat.svelte";
@@ -1917,7 +1912,12 @@
   const drawnPin = $derived.by(() => {
     if (!openPin) {
       lastDrawn = closingPin;
-    } else if (floatSheet || !connected || pinHeard === openPin) {
+    } else if (
+      floatSheet ||
+      threadPushed ||
+      !connected ||
+      pinHeard === openPin
+    ) {
       lastDrawn = openPin;
     }
     return lastDrawn;
@@ -1941,9 +1941,11 @@
   let composerFloat = $state<HTMLElement>();
   /** The thread's or the composer's float: told to the page as what covers it on a phone. */
   let cardFloat = $state<HTMLElement>();
-  /** The rail's foot sheet (a phone, a pane under 640px) stands aside while a thread, a composer or a place picker stands, so neither covers the other. */
+  /** Changed since you looked, over the page at the well's foot: told to the page as what covers it. */
+  let changesTag = $state<HTMLFieldSetElement>();
+  /** The rail's foot sheet (a phone, a pane under 640px) stands aside while a composer or a place picker stands, so neither covers the other; a thread opens in it (`threadPushed`). */
   const railAway = $derived(
-    listOpen && railSheet && (!!cardPin || !!composing || !!picking)
+    listOpen && railSheet && (!!composing || !!picking)
   );
   /**
    * How much of the well's foot a software keyboard covers, px: what stands
@@ -1990,19 +1992,24 @@
   /**
    * What the host's chrome covers of the page, told to its overlay
    * (`cawco:covered`, the page's viewport px): on a phone, the thread or the
-   * composer standing at the well's foot. A pin the pane opens is brought
-   * out from under them (pins.ts `reveal`). Told again as either resizes,
-   * and as nothing once neither stands. The rail's foot sheet is a layer
-   * over the page that never moves it: it stands aside for a thread
-   * (`railAway`), so no pin is brought out from under it.
+   * composer standing at the well's foot; at every width, Changed since you
+   * looked floating at the foot. A pin the pane opens is brought out from
+   * under them (pins.ts `reveal`). Told again as any resizes, and as
+   * nothing once none stands. The rail's foot sheet holding its list is a
+   * layer over the page that never moves it, so no pin is brought out from
+   * under it; holding a thread (`threadPushed`), it is told, so that
+   * thread's pin is.
    */
   $effect(() => {
     const frame = iframe;
-    const sheetCard = floatSheet ? (cardFloat ?? composerFloat ?? null) : null;
+    const floating = floatSheet ? (cardFloat ?? composerFloat ?? null) : null;
+    const sheetCard = threadPushed ? (railSurface ?? null) : floating;
     if (!(frame && connected)) {
       return;
     }
-    const covering = [sheetCard].filter((el): el is HTMLElement => !!el);
+    const covering = [sheetCard, changesTag].filter(
+      (el): el is HTMLElement => !!el
+    );
     if (covering.length === 0) {
       post({ type: "cawco:covered", boxes: [] });
       return;
@@ -2410,18 +2417,6 @@
       });
     }
   });
-
-  /** J and K step the tag while it holds the focus; elsewhere they step the pins. */
-  function tagKey(event: KeyboardEvent) {
-    const key = event.key.toLowerCase();
-    if (event.metaKey || event.ctrlKey || event.altKey) {
-      return;
-    }
-    if (key === "j" || key === "k") {
-      event.preventDefault();
-      stepChange(key === "j" ? 1 : -1, "key");
-    }
-  }
 
   /** The pins J and K step through: those on the page, by number (a resolved pin has left it). */
   const stepping = $derived(
@@ -3514,6 +3509,28 @@
   );
   /** The rail's bottom sheet is drawn: from its open until it has slid down (ThreadSheet `onclosed`). */
   let railSheetDrawn = $state(false);
+  /** The rail's bottom sheet's surface: what covers the page while a thread stands in it. */
+  let railSurface = $state<HTMLElement>();
+  /**
+   * A thread opened while the Comments sheet stands opens in that sheet,
+   * over its list, Back leading (HIG, Sheets: "Display only one sheet at a
+   * time"), never as a second sheet after the list's goes.
+   */
+  const threadPushed = $derived(
+    listOpen && railPlaced && !isCanvas && railSheet && openPin !== null
+  );
+  /** Back, in the sheet: the list again, the thread gone at once (no card goes back into a pill). */
+  function backToList() {
+    closeCard();
+    closingPin = null;
+  }
+  /** The Comments sheet goes, with a thread standing in it. */
+  function closeSheet() {
+    if (threadPushed) {
+      backToList();
+    }
+    showList(false);
+  }
   $effect(() => {
     if (railSheetOpen) {
       railSheetDrawn = true;
@@ -4192,33 +4209,12 @@
 <!-- The mode as one button where the head has no room for its three
      segments: the chosen mode's glyph, opening the three. -->
 {#snippet modeCompact()}
-  {@const Glyph = MODE_GLYPHS[mode]}
-  <BarGlass form="group">
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger>
-        {#snippet child({ props })}
-          <Tip keys="V, C, D" label={`Mode: ${MODE_WORDS[mode]}`}>
-            {#snippet children(tip)}
-              <button
-                {...tip}
-                {...props}
-                aria-label={`Mode: ${MODE_WORDS[mode]}`}
-                class="select-none touch-hit press-tint"
-                data-bar-item
-                data-box
-                type="button"
-              >
-                <Glyph aria-hidden="true" data-slot="bar-symbol" />
-              </button>
-            {/snippet}
-          </Tip>
-        {/snippet}
-      </DropdownMenu.Trigger>
-      <BarMenu label="Mode" width="compact">
-        {@render modeMenu()}
-      </BarMenu>
-    </DropdownMenu.Root>
-  </BarGlass>
+  <ModeButton
+    glyph={MODE_GLYPHS[mode]}
+    keys="V, C, D"
+    menu={modeMenu}
+    word={MODE_WORDS[mode]}
+  />
 {/snippet}
 
 {#snippet commentsBar()}
@@ -4408,7 +4404,6 @@
     class="@container flex flex-col flex-1 min-h-0"
     bind:this={section}
   >
-    {@render changesBar()}
     <div
       class="relative flex flex-col flex-1 min-h-0 overflow-hidden border border-border-well rounded-sm bg-surface-well"
       bind:this={well}
@@ -4431,7 +4426,6 @@
     {switcher}
     {switcherAt}
     titleControl={artifact ? artifactTitle : undefined}
-    above={changesBar}
     beside={railBeside}
     bind:section
     bind:well
@@ -4440,65 +4434,15 @@
   </SideSurface>
 {/if}
 
-<!-- Changed since you looked, in its own room above the well (the artifact panel's surface brief, Changed since you looked). -->
+<!-- Changed since you looked: a glass over the page at the well's foot (ChangesTag). -->
 {#snippet changesBar()}
   {#if changeStops.length > 0 && !isCanvas}
-    {@const total = tour?.length ?? changeStops.length}
-    <!-- Changed since you looked: its own bar between the head and the
-           well, so it never stands over the page (the page starts under
-           it), stepping through the stops (‹ ›; J and K while it holds the
-           focus). -->
-    <div
-      data-slot="changes-bar"
-      class="flex flex-none justify-center min-w-0 pb-space-2"
-      in:rise={"--dur-panel"}
-      out:rise={"--dur-exit"}
-    >
-      <fieldset
-        data-slot="changes-tag"
-        aria-label={commentWords.changedSince(total)}
-        class="mark-line w-fit max-w-full p-0 m-0 min-w-0 flex items-center h-c-btn-h-sm coarse:h-c-btn-h-lg border border-border-hairline rounded-md bg-surface-raised text-size-label font-medium text-ink-strong"
-      >
-        <button
-          aria-label={commentWords.previousChange}
-          class="touch-hit grid place-items-center h-full px-space-2 rounded-s-md text-ink-muted can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
-          data-box
-          data-slot="change-previous"
-          onkeydown={tagKey}
-          onclick={(event) =>
-            stepChange(-1, event.detail === 0 ? "key" : "pointer")}
-          title={commentWords.previousChange}
-          type="button"
-        >
-          <IconChevronLeft class="size-icon-md" />
-        </button>
-        <button
-          class="touch-hit min-w-0 h-full px-space-1 overflow-clip text-ellipsis whitespace-nowrap num can-hover:hover:bg-surface-hover"
-          data-slot="change-count"
-          onkeydown={tagKey}
-          onclick={(event) =>
-            stepChange(tour ? 0 : 1, event.detail === 0 ? "key" : "pointer")}
-          type="button"
-        >
-          {tour
-            ? commentWords.changeOf(tourAt + 1, total)
-            : commentWords.changedSince(total)}
-        </button>
-        <button
-          aria-label={commentWords.nextChange}
-          class="touch-hit grid place-items-center h-full px-space-2 rounded-e-md text-ink-muted can-hover:hover:bg-surface-hover can-hover:hover:text-ink-strong"
-          data-box
-          data-slot="change-next"
-          onkeydown={tagKey}
-          onclick={(event) =>
-            stepChange(1, event.detail === 0 ? "key" : "pointer")}
-          title={commentWords.nextChange}
-          type="button"
-        >
-          <IconChevronRight class="size-icon-md" />
-        </button>
-      </fieldset>
-    </div>
+    <ChangesTag
+      at={tour ? tourAt : null}
+      onstep={stepChange}
+      total={tour?.length ?? changeStops.length}
+      bind:ref={changesTag}
+    />
   {/if}
 {/snippet}
 
@@ -4878,6 +4822,50 @@
   {#if picking}
     <PlacePick oncancel={cancelPick} onpick={pickedPlace} />
   {/if}
+  <!-- A pin's thread as its card holds it: the drawn pin's whole, or the
+       rested-on pin's as its peek (`peek`), the same card; `pushed`, opened
+       in the Comments sheet over its list, Back leading. -->
+  {#snippet thread(
+    pin: Pin,
+    draft: ComposerDraft,
+    peek: boolean,
+    pushed = false
+  )}
+    {#if kit}
+      {@const Card = kit.PinCard}
+      <Card
+        agentName={owner ? ownerName : "The session"}
+        changes={(view?.activity[pin.id]?.length ?? 0) > 0
+          ? threadChanges
+          : undefined}
+        marked={peek || !!pinAt?.mark}
+        session={owner ? instanceId : null}
+        {draft}
+        link={pinLink(pin.number)}
+        live={live.has(pin.id)}
+        name={pin.movedAt ? commentWords.elementGone : pinName(pin)}
+        back={pushed
+          ? { to: commentWords.comments, onback: backToList }
+          : undefined}
+        onclose={pushed ? closeSheet : () => closeCard()}
+        ondelete={deleteOpenPin}
+        ondraft={() => drafts?.changed(pin.id)}
+        onfind={() => focusPin(pin.id, true)}
+        onplace={placeElsewhere}
+        onreply={(text) => reply(text)}
+        onresolve={(resolved) => resolvePin(resolved)}
+        onretry={() => retryPin(pin.id)}
+        parent={!peek && cardParent?.id === pin.id ? cardParent.name : null}
+        {peek}
+        {pin}
+        placing={placing === pin.id}
+        problem={peek ? null : cardError}
+        sending={!peek && replying}
+        retrying={pinsRetrying.has(pin.id)}
+        whyNotSent={notSentWhy(pin)}
+      />
+    {/if}
+  {/snippet}
   {#if railSheetDrawn}
     <!-- The rail as the well's bottom sheet, on a phone and in a pane under
          640px: the kit's drawer (ThreadSheet's host), its grabber and two
@@ -4886,11 +4874,15 @@
          detents), dragged below the lower one it goes, as Close does. A
          layer over the page: the frame keeps its whole box under it, so the
          page neither moves, resizes nor scrolls as it opens, drags or
-         closes. It stands aside while a thread, a composer or a place
-         picker stands, and comes back as it was. -->
+         closes. A thread opened while it stands opens in it, over the list,
+         Back leading (HIG, Sheets: "Display only one sheet at a time"); it
+         stands aside while a composer or a place picker stands, and comes
+         back as it was. -->
     <ThreadSheet
-      label={commentWords.comments}
-      onclose={() => showList(false)}
+      label={threadPushed && cardPin
+        ? `Comment ${cardPin.number}`
+        : commentWords.comments}
+      onclose={closeSheet}
       onclosed={() => {
         if (!railSheetOpen) {
           railSheetDrawn = false;
@@ -4898,8 +4890,15 @@
       }}
       onmoved={() => sayCovered?.()}
       open={railSheetOpen}
+      bind:surface={railSurface}
     >
-      {@render railOf("sheet")}
+      {#if threadPushed && cardPin && kit && replyDraft}
+        {#key cardPin.id}
+          {@render thread(cardPin, replyDraft, false, true)}
+        {/key}
+      {:else}
+        {@render railOf("sheet")}
+      {/if}
     </ThreadSheet>
   {/if}
   <!-- What stands over the page beside a pill (the frame fills the well):
@@ -4954,44 +4953,9 @@
         />
       </PinFloat>
     {/if}
-    <!-- A pin's thread as its card holds it: the drawn pin's whole, or the
-         rested-on pin's as its peek (`peek`), the same card. -->
-    {#snippet thread(pin: Pin, draft: ComposerDraft, peek: boolean)}
-      {#if kit}
-        {@const Card = kit.PinCard}
-        <Card
-          agentName={owner ? ownerName : "The session"}
-          changes={(view?.activity[pin.id]?.length ?? 0) > 0
-            ? threadChanges
-            : undefined}
-          marked={peek || !!pinAt?.mark}
-          session={owner ? instanceId : null}
-          {draft}
-          link={pinLink(pin.number)}
-          live={live.has(pin.id)}
-          name={pin.movedAt ? commentWords.elementGone : pinName(pin)}
-          onclose={() => closeCard()}
-          ondelete={deleteOpenPin}
-          ondraft={() => drafts?.changed(pin.id)}
-          onfind={() => focusPin(pin.id, true)}
-          onplace={placeElsewhere}
-          onreply={(text) => reply(text)}
-          onresolve={(resolved) => resolvePin(resolved)}
-          onretry={() => retryPin(pin.id)}
-          parent={!peek && cardParent?.id === pin.id ? cardParent.name : null}
-          {peek}
-          {pin}
-          placing={placing === pin.id}
-          problem={peek ? null : cardError}
-          sending={!peek && replying}
-          retrying={pinsRetrying.has(pin.id)}
-          whyNotSent={notSentWhy(pin)}
-        />
-      {/if}
-    {/snippet}
     <!-- The drawn pin's card (`drawnPin`); each pin's card is its own, so
          another's never moves to it. -->
-    {#if cardPin && kit && replyDraft}
+    {#if cardPin && kit && replyDraft && !threadPushed}
       {#key cardPin.id}
         {#if floatSheet}
           <!-- On a phone and under a finger, the thread is the well's
@@ -5102,4 +5066,5 @@
       {/if}
     </div>
   {/if}
+  {@render changesBar()}
 {/snippet}

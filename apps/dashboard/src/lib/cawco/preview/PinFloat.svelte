@@ -507,8 +507,10 @@
   <div
     class={[
       "flex min-h-0 min-w-0 flex-col",
+      // Squeezed (a keyboard over a short well), the card itself scrolls,
+      // and the house edge fade says what is past its edge.
       !bare &&
-        "gap-space-2 overflow-x-hidden overflow-y-auto overscroll-contain",
+        "kit-edge-fade-block gap-space-2 overflow-x-hidden overflow-y-auto overscroll-contain",
       card && "p-space-3",
       sheet &&
         "px-space-3 pt-space-3 pb-(--sheet-pb) border-t border-border-hairline rounded-t-lg bg-surface-raised shadow-drawer",
