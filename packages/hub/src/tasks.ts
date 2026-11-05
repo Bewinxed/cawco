@@ -156,6 +156,7 @@ import {
   sendBackOf,
   stageNamed,
   startProblem,
+  templateHolding,
   templateStages,
   templateText,
   withRetiredMoverAsSession,
@@ -2678,13 +2679,51 @@ export const createTasks = (store: TaskStore) => {
       : reading;
 
   /**
+   * The template a project with no stages.md and no template stands on, read
+   * off its folder's task files (the board's, not the archive's): the one
+   * whose stages hold every file's stage (stages.ts `templateHolding`), the
+   * code template when none does; none while it holds no task file. The
+   * files, not the index: the index catches up from them later (as the hub
+   * starts, as a forgotten folder comes back), and a read before then would
+   * find a project with tasks not set up.
+   */
+  const templateOfTaskFiles = async (
+    projectId: string
+  ): Promise<StagesTemplate | null> => {
+    const names = (await folderFileNames(projectId, "tasks")).filter(
+      (name) => name.endsWith(".md") && fileTaskNumber(name) !== undefined
+    );
+    const stages = await Promise.all(
+      names.map(async (name) => {
+        const path = `tasks/${name}`;
+        const content = await readFolderFile(projectId, path).then(
+          (file) => file.content,
+          (error: unknown) => {
+            // One gone since the listing stands on no board.
+            if (error instanceof FolderRefusal && error.status === 404) {
+              return;
+            }
+            throw error;
+          }
+        );
+        return content === undefined
+          ? undefined
+          : (new TaskDoc(path, content).read().fields.stage ?? "");
+      })
+    );
+    const read = stages.filter((stage) => stage !== undefined);
+    return read.length === 0 ? null : templateHolding(read.filter(Boolean));
+  };
+
+  /**
    * The project's stages as the hub applies them: stages.md as it reads; the
-   * code template, with its Review before done on top, while it has none and
-   * was set up as the code template (`template`); or none at all while it is
-   * not set up yet (no stages.md, no template: Caw's setup page writes them
-   * when the person sends it, setup.ts). A project made before setup wrote
-   * its stages, with tasks and neither, read the code template as it stood
-   * in for it: it is recorded as the code template once, so it keeps them.
+   * template its row records, with its Review before done on top, while it
+   * has none; or none at all while it is not set up yet (no stages.md, no
+   * template, no task file: Caw's setup page writes them when the person
+   * sends it, setup.ts). A project with task files and neither (made before
+   * setup wrote its stages, or a folder brought back from the trash with no
+   * row, project-trash.ts) is recorded once as the template its tasks stand
+   * in ({@link templateOfTaskFiles}), so it keeps them.
    */
   const stagesOf = async (
     projectId: string
@@ -2706,21 +2745,24 @@ export const createTasks = (store: TaskStore) => {
       }
     }
     const project = store.project(projectId);
-    if (!project?.template && store.index(projectId).length === 0) {
+    const template =
+      project?.template ??
+      (project ? await templateOfTaskFiles(projectId) : null);
+    if (!template) {
       return { source: "none", content: "", reading: NOT_SET_UP };
     }
-    if (project && !project.template) {
-      store.setTemplate(projectId, DEFAULT_TEMPLATE);
+    if (!project?.template) {
+      store.setTemplate(projectId, template);
       console.info(
-        `[tasks] project ${projectId} had tasks on the code template that stood in for its stages; it is recorded as the code template.`
+        `[tasks] project ${projectId} had task files and no stages; it is recorded as the ${template} template, whose stages they stand in.`
       );
     }
     return {
       source: "template",
-      content: templateText(DEFAULT_TEMPLATE),
+      content: templateText(template),
       reading: ruled(projectId, {
         ok: true,
-        stages: templateStages(DEFAULT_TEMPLATE),
+        stages: templateStages(template),
       }),
     };
   };
@@ -2751,12 +2793,20 @@ export const createTasks = (store: TaskStore) => {
    * A stages.md that is the code template, now or as it was before review
    * was a project's choice, goes: the project reads the hub's code template,
    * so it follows the template and its Review before done. A project's own
-   * stages stay.
+   * stages stay, and so does the file of one whose row records another
+   * template, which it would read in the file's place ({@link stagesOf}).
    */
   const dropTemplateCopy = async (projectId: string): Promise<void> => {
     const content = await stagesFileOf(projectId);
-    if (!(content !== undefined && isCodeTemplate(content))) {
+    const template = store.project(projectId)?.template ?? null;
+    if (
+      !(content !== undefined && isCodeTemplate(content)) ||
+      (template !== null && template !== DEFAULT_TEMPLATE)
+    ) {
       return;
+    }
+    if (template === null) {
+      store.setTemplate(projectId, DEFAULT_TEMPLATE);
     }
     await deleteFolderFile(projectId, STAGES_FILE, {
       message:

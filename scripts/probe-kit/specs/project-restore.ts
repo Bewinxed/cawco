@@ -36,6 +36,11 @@
  *   name; one forgotten before records names its folder and what the
  *   folder says of it (its AGENTS.md heading, newest task, decision pages,
  *   stages and newest file's time).
+ * - i. One forgotten before records holding two task files and no stages.md
+ *   (made on the code template, and on the brand template whose stages.md
+ *   went) comes back with both tasks in the column they were filed in on
+ *   its board's first read: through the route, and read before its index
+ *   caught up with its folder.
  *
  *   bun scripts/probe-kit/run.ts project-restore
  */
@@ -780,6 +785,87 @@ const placesLeg = async (rig: Rig): Promise<void> => {
   );
 };
 
+/** A project's board as the dashboard reads it: its stages and its tasks at once. */
+const boardOf = async (rig: Rig, id: string) => {
+  const [stages, tasks] = await Promise.all([
+    rig.call("GET", `/api/projects/${id}/stages`),
+    rig.call("GET", `/api/projects/${id}/tasks`),
+  ]);
+  const read = stages.json as
+    { source?: string; stages?: { name: string }[] } | undefined;
+  const columns = (read?.stages ?? []).map((one) => one.name);
+  return {
+    source: read?.source ?? null,
+    columns,
+    // Each task by its title, and the column it stands in: "" for none.
+    tasks: (
+      (tasks.json as { tasks?: { title: string; stage: string }[] } | undefined)
+        ?.tasks ?? []
+    ).map((one) => [one.title, columns.includes(one.stage) ? one.stage : ""]),
+  };
+};
+
+/**
+ * i: a folder forgotten before records holding two task files and no
+ * stages.md, made on `template` (its stages.md taken out in a commit, as a
+ * hub before stages.md held every template left one). Brought back, the
+ * board's first read (its stages and tasks at once, as the dashboard loads)
+ * shows both tasks in its columns: through the route, and before the index
+ * has caught up with the folder (the restore alone, which the route then
+ * catches up after).
+ */
+const twoTasksLeg = async (
+  rig: Rig,
+  template: "brand" | "code",
+  caughtUp: boolean
+): Promise<void> => {
+  const { call, db } = rig;
+  const { deleteFolderFile } =
+    await import("../../../packages/hub/src/project-folder");
+  const { projectTrash } =
+    await import("../../../packages/hub/src/project-trash");
+  const id = crypto.randomUUID();
+  db.createProject({ id, name: `Probe two ${template}`, remote: null });
+  const applied = await call("POST", `/api/projects/${id}/stages/template`, {
+    template,
+  });
+  const titles = ["First of two", "Second of two"];
+  const made: number[] = [];
+  for (const title of titles) {
+    made.push(
+      (await call("POST", `/api/projects/${id}/tasks`, { title })).status
+    );
+  }
+  if (template !== "code") {
+    await deleteFolderFile(id, "stages.md", { message: "stages: none" });
+  }
+  await forgetAsBefore(rig, id);
+  const entry = (await listed(rig)).find((one) => one.id === id);
+  const name = `Probe two ${template}, back`;
+  const restored = caughtUp
+    ? (await call("POST", `/api/projects/${id}/restore`, { name })).status
+    : await projectTrash(db)
+        .restore(id, { name })
+        .then(
+          () => 200,
+          (error: unknown) => String(error)
+        );
+  const board = await boardOf(rig, id);
+  const stage = template === "code" ? "ready" : "source";
+  check(
+    rig,
+    `i. a ${template} folder of two task files and no stages.md comes back with both in its ${stage} column${caughtUp ? "" : ", read before its index caught up"}`,
+    applied.status === 200 &&
+      made.every((status) => status === 200) &&
+      entry?.brings.tasks === 2 &&
+      restored === 200 &&
+      board.source === "template" &&
+      JSON.stringify(board.tasks.sort()) ===
+        JSON.stringify(titles.map((title) => [title, stage])),
+    JSON.stringify({ restored, ...board })
+  );
+};
+
 export default {
   group: "The hub and machines",
   name: "project-restore",
@@ -844,6 +930,11 @@ export default {
         await runningBrowserLeg(rig);
         await foldLeg(rig);
         await placesLeg(rig);
+        for (const template of ["code", "brand"] as const) {
+          for (const caughtUp of [true, false]) {
+            await twoTasksLeg(rig, template, caughtUp);
+          }
+        }
       } finally {
         raw.close();
       }

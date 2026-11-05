@@ -45,9 +45,10 @@
  *   neither draws no mark but its kind's.
  * - **Views** are a name and, optionally, `by <field>`.
  *
- * A project without stages.md that was set up as the code template reads
- * the code template; one with neither is not set up yet and has no stages
- * (tasks.ts `stagesOf`). "Needs you" is not a
+ * A project without stages.md reads the template it was set up as; one
+ * with neither reads the template its task files' stages are of
+ * (`templateHolding`), and with no task file either it is not set up yet and
+ * has no stages (tasks.ts `stagesOf`). "Needs you" is not a
  * stage: it is every task whose stage is of kind `you`, worked out on read.
  */
 
@@ -1006,3 +1007,15 @@ export const templateStages = (name: StagesTemplate): Stages => {
   }
   return reading.stages;
 };
+
+/**
+ * The template whose stages hold every one of `names` (task files' stages),
+ * the first of {@link STAGES_TEMPLATES} that does; the code template when
+ * none does, or `names` is empty. What a folder with task files and no
+ * stages.md was set up as.
+ */
+export const templateHolding = (names: readonly string[]): StagesTemplate =>
+  STAGES_TEMPLATES.find((name) => {
+    const held = new Set(templateStages(name).stages.map((one) => one.name));
+    return names.every((stage) => held.has(stage));
+  }) ?? "code";
