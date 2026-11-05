@@ -137,7 +137,7 @@
     startFace,
     keptDials = {},
     dialsSent = null,
-    changedMark = "ink",
+    changedMark = "plain",
     ondials,
     keptTuned = [],
     ontuned,
@@ -192,8 +192,8 @@
     keptDials?: DialValues;
     /** His dial values went to the agent since he last turned one (the doc's `sentAt`, `sentBy`); null while they haven't. */
     dialsSent?: { at: string; by: "hub" | "person" } | null;
-    /** How a changed dial is marked (the owner's pick, graph-dials-questions `changed-mark`). */
-    changedMark?: "ink" | "glyph";
+    /** How a changed dial is marked (the owner's pick, graph-dials-questions `changed-mark`, still open; Dials.svelte says why `plain` is the default). */
+    changedMark?: "ink" | "glyph" | "plain";
     /** His dial values changed: the artifact keeps them (its doc's `dials`, which `artifact_read` answers). */
     ondials?: (values: DialValues) => void;
     /** His tuning of every move as the artifact keeps it (its doc's `tuned`): put back on each move's first read. */

@@ -338,9 +338,17 @@
   const ring =
     "focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-2";
   const ms = (t: number) => words.ms(figureOf(Math.round(t), lang));
-  /** An end's grip, px wide: the bar keeps its grips inside it while it is three grips wide. */
+  /**
+   * An end's grip, px wide, and the most it takes a pointer's press: the
+   * bar keeps its grips inside it while it is three of either wide. Under a
+   * mouse each grip takes a press 24px across (`pointer-hit`, the house's
+   * pointer floor), so a 32px bar measured against its grips' 7px stood
+   * its two press areas over its whole body, and a drag from its middle
+   * took its end.
+   */
   const GRIPS = 3;
   let grip = $state(0);
+  const POINTER_FLOOR = browser ? numberOf("--c-pointer-floor") : 0;
 </script>
 
 <div
@@ -361,7 +369,8 @@
     {@const narrow =
       wide > 0 &&
       grip > 0 &&
-      ((span.to - span.from) / across) * wide < GRIPS * grip}
+      ((span.to - span.from) / across) * wide <
+        GRIPS * Math.max(grip, POINTER_FLOOR)}
     {#if tuned}
       <!-- Its timing as the engine ran it, under the tuned bar. -->
       <span

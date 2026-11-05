@@ -1147,8 +1147,11 @@
                 class="relative flex min-w-0 flex-col justify-end gap-space-1 px-space-2"
                 data-slot="ruler"
               >
+                <!-- Tall enough that its figures (at its top) and the
+                     playhead's flag (at its foot) never meet: at 25px the
+                     flag ran 3px into a figure standing over it. -->
                 <Slider.Root
-                  class="relative block h-space-7 w-full cursor-ew-resize touch-none select-none coarse:h-c-btn-h-lg"
+                  class="relative block h-space-8 w-full cursor-ew-resize touch-none select-none coarse:h-c-btn-h-lg"
                   max={Math.max(viewTo, viewFrom + 1)}
                   min={viewFrom}
                   onValueChange={(next: number) =>

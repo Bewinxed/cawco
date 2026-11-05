@@ -61,7 +61,7 @@
     version = "yours",
     undoable = false,
     numberForm = "pill",
-    changedMark = "ink",
+    changedMark = "plain",
     sent = null,
     say = null,
     kept = [],
@@ -89,11 +89,17 @@
     numberForm?: "pill" | "field" | "slider";
     /**
      * How a changed value is marked (the owner's pick, graph-dials-questions
-     * `changed-mark`): its words in the edit's ink beside the restore glyph
-     * (`ink`, the system's edited tone), or its words as they are and the
-     * restore glyph alone in the edit's ink (`glyph`).
+     * `changed-mark`, still open): its words in the edit's ink beside the
+     * restore glyph (`ink`), the restore glyph alone in the edit's ink
+     * (`glyph`), or the restore glyph alone in the ghost's ink, its words as
+     * they are (`plain`, the default). Both of the card's options draw the
+     * edit's ink, which is the Selected ink, coral, on every changed dial:
+     * three turned dials stood three corals in one view, where coral marks
+     * the one place he acts and is never a status (DESIGN.md, The Coral Is
+     * Where You Act Rule). `plain` is the Animation face's mark for an
+     * edited value, its restore glyph on it, coral the selected row's alone.
      */
-    changedMark?: "ink" | "glyph";
+    changedMark?: "ink" | "glyph" | "plain";
     /** The values the face shows went to the agent: when, and whether the hub sent them by itself or he did; null while they haven't gone since his last change. */
     sent?: { at: string; by: "hub" | "person" } | null;
     /** What becomes of the values where it is not the graph's word (a decision page's: they go with its Send); null: the graph's. */

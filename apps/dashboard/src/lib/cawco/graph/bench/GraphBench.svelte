@@ -39,7 +39,7 @@
     face,
     also = [],
     sentAt = null,
-    changedMark = "ink",
+    changedMark = "plain",
   }: {
     /** The agent's dials, as its canvas spec writes them. */
     dials?: GraphDial[];
@@ -54,7 +54,7 @@
     /** The hub sent his values by itself at this time (ISO): the head says so. */
     sentAt?: string | null;
     /** How a changed dial is marked (graph-dials-questions `changed-mark`). */
-    changedMark?: "ink" | "glyph";
+    changedMark?: "ink" | "glyph" | "plain";
   } = $props();
 
   const FILE = "apps/dashboard/src/lib/cawco/routines/RoutineForm.stories.ts";

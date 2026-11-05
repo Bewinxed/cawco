@@ -1947,6 +1947,8 @@ export function bootStage(page: Page): Mode {
     const read: FrameRender[] = [];
     let y = 0;
     for (let at = 0; at < stories.length; at += SWEEP_KEPT) {
+      // Each batch its own turn: never while the person's act is still being answered.
+      await page.turn();
       const batch = mountInRig(section, stories.slice(at, at + SWEEP_KEPT));
       try {
         await frameTick();

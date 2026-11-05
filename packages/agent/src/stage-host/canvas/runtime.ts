@@ -57,6 +57,18 @@ import {
   sectionPlansOf,
   sweptFiles,
 } from "@cawco/core/stage";
+import {
+  STAGE_COMPARE,
+  STAGE_DIALS,
+  STAGE_LET_GO,
+  STAGE_PAUSE,
+  STAGE_PLAY,
+  STAGE_REACH,
+  STAGE_RETIME,
+  STAGE_REVEAL,
+  STAGE_RING,
+  STAGE_SEEK,
+} from "@cawco/core/stage-graph";
 import { queriesIn, userEventIn } from "@cawco/core/stage-play";
 import { shellWords } from "@cawco/core/words/shell";
 import { bootFrames } from "./frames";
@@ -276,6 +288,32 @@ const sectionOfPath = (path: string): string | null => {
 
 /** The next task: the page draws and answers between two. */
 const nextTask = () => new Promise<void>((done) => setTimeout(done, 0));
+
+/** How many stories a probe pass holds mounted at once. Ours: a few, as the rig's reads hold, never a whole sheet's in one task. */
+const PROBE_KEPT = 3;
+/**
+ * How long the rig's work stands aside after the person acts on the page
+ * (a reach, a reveal, Compare, the move's play or scrub, a dial, the
+ * view): his act is answered and its scroll or motion runs before the
+ * report's next step takes the main thread. Ours: a second, past a smooth
+ * scroll's run.
+ */
+const PERSON_QUIET_MS = 1000;
+/** The words the panel sends for the person's acts (core stage-graph.ts, the inspector's and the view's). */
+const PERSON_ACTS = [
+  STAGE_REACH,
+  STAGE_REVEAL,
+  STAGE_COMPARE,
+  STAGE_PLAY,
+  STAGE_PAUSE,
+  STAGE_SEEK,
+  STAGE_LET_GO,
+  STAGE_RETIME,
+  STAGE_RING,
+  STAGE_DIALS,
+  "cawco:canvas-view",
+  "cawco:story-args",
+];
 
 /** Two frames on: what was mounted has drawn and its first frames' work is done. */
 export const frameTick = () =>
@@ -580,6 +618,14 @@ export interface Page {
   readonly state: CanvasState;
   /** The page's own sheet: a mode's rules, its duration tokens. */
   readonly style: PageStyle;
+  /**
+   * The rig's next step's turn (the report's sweep): a task of its own,
+   * and none while the person acted in the last {@link PERSON_QUIET_MS}, so
+   * a reveal heard is scrolled before the sweep takes the main thread again:
+   * a probe pass of a sheet's thirty forms held a reveal behind it for half
+   * a second on a loaded host, and its scroll for 700 ms more.
+   */
+  turn: () => Promise<void>;
   readonly view: View;
   widthOf: (story: Story, slot: WidthSlot) => number | null;
 }
@@ -1291,10 +1337,30 @@ export function boot(options: BootOptions): void {
       }
     }
     const probed = asked.filter((one) => one.reached.length > 0);
-    if (probed.length > 0) {
-      await probeTogether(section, probed);
+    // A few at a time, each pass its own tasks: the whole sheet mounted and read at once held the page for seconds under load.
+    for (let at = 0; at < probed.length; at += PROBE_KEPT) {
+      await turn();
+      await probeTogether(section, probed.slice(at, at + PROBE_KEPT));
     }
     later();
+  }
+
+  /** The person's last act on the page (performance.now()). */
+  let actedAt = Number.NEGATIVE_INFINITY;
+  for (const type of PERSON_ACTS) {
+    addEventListener(type, () => {
+      actedAt = performance.now();
+    });
+  }
+  async function turn(): Promise<void> {
+    await nextTask();
+    for (
+      let left = PERSON_QUIET_MS - (performance.now() - actedAt);
+      left > 0;
+      left = PERSON_QUIET_MS - (performance.now() - actedAt)
+    ) {
+      await new Promise<void>((done) => setTimeout(done, left));
+    }
   }
 
   async function probeTogether(
@@ -1529,6 +1595,7 @@ export function boot(options: BootOptions): void {
   ): Promise<void> {
     const moves: MoveRender[] = [];
     for (const { to } of movesOf(section)) {
+      await turn();
       const body = document.createElement("div");
       body.className = "cawco-frame-body";
       const story = section.mod?.SHEET.stories.find((one) => one.name === to);
@@ -1887,6 +1954,7 @@ export function boot(options: BootOptions): void {
     schemeOf,
     sectionOf,
     sizeBody,
+    turn,
     widthOf,
   };
   window.__cawcoCanvas = state;
