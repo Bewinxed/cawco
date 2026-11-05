@@ -86,13 +86,55 @@ const frameLine = (frame: FrameRender) => ({
   ...(frame.error ? { error: frame.error } : {}),
 });
 
-/** A render report as an answer says it: who drew, each section's frames (bounded), the unnamed stories, what failed, and the sections the read's render did not draw. */
-export function renderSaid(
+/**
+ * The frames a read lists, at most {@link FRAMES_LISTED}: a state read's
+ * from the asked state (`Story`, or `file:Story`) on, in the section that
+ * holds it; any other read's every section's, in the canvas's order. With
+ * the words for what was left out, when anything was.
+ */
+function framesListed(
   report: RenderReport,
-  undrawn: readonly SectionUndrawn[] = []
-) {
+  state: string | undefined
+): { cut?: string; listed: FrameRender[] } {
+  const cut = state?.lastIndexOf(":") ?? -1;
+  const [inFile, story] =
+    state && cut > 0
+      ? [state.slice(0, cut), state.slice(cut + 1)]
+      : [undefined, state];
+  const holder = story
+    ? report.sections.find(
+        (section) =>
+          (inFile === undefined || section.file === inFile) &&
+          section.frames.some((frame) => frame.story === story)
+      )
+    : undefined;
+  if (holder) {
+    const from = holder.frames.findIndex((frame) => frame.story === story);
+    const listed = holder.frames.slice(from, from + FRAMES_LISTED);
+    return listed.length < holder.frames.length
+      ? {
+          listed,
+          cut: `${listed.length} of ${holder.frames.length} frames of ${holder.file} listed, from ${story} on: read another with state: { story, interaction }.`,
+        }
+      : { listed };
+  }
   const frames = report.sections.flatMap((section) => section.frames);
   const listed = frames.slice(0, FRAMES_LISTED);
+  return frames.length > listed.length
+    ? {
+        listed,
+        cut: `${listed.length} of ${frames.length} frames listed: read one with state: { story, interaction }.`,
+      }
+    : { listed };
+}
+
+/** A render report as an answer says it: who drew, each section's frames (bounded; a state read's from that state, in its section), the unnamed stories, what failed, and the sections the read's render did not draw. */
+export function renderSaid(
+  report: RenderReport,
+  undrawn: readonly SectionUndrawn[] = [],
+  state?: string
+) {
+  const { listed, cut } = framesListed(report, state);
   return {
     by: report.by,
     at: report.at,
@@ -103,11 +145,7 @@ export function renderSaid(
       ...(section.notForced.length > 0 ? { notForced: section.notForced } : {}),
     })),
     frames: listed.map(frameLine),
-    ...(frames.length > listed.length
-      ? {
-          cut: `${listed.length} of ${frames.length} frames listed: read one with state: { story, interaction }.`,
-        }
-      : {}),
+    ...(cut ? { cut } : {}),
     unnamed: report.unnamed,
     ...(report.page.errors.length > 0
       ? { pageErrors: report.page.errors }

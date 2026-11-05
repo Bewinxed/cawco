@@ -6165,7 +6165,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       errors: errorsSaid(stage?.errors ?? []),
       ...(report
         ? {
-            render: renderSaid(report, undrawn),
+            render: renderSaid(report, undrawn, ask.state?.story),
             moves: movesSaid(report),
             stories: storiesSaid(sheetNow, report),
             ...(ask.state ? { frame: stateSaid(report, ask.state) } : {}),
