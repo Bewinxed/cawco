@@ -715,6 +715,15 @@ const gated: Gated[] = [
     "packages/hub/src/landing.ts",
     "packages/core/src/safe-git.ts",
   ]),
+  // Every body a shell script sends the hub, against the hub's own routes.
+  bun("scripts/shell-bodies-check.ts", [
+    ...PKG,
+    "scripts/",
+    "apps/apple/scripts/",
+    "apps/mac-helper/scripts/",
+    "mocks/",
+    "bun.lock",
+  ]),
   bun("scripts/compress-answer-check.ts", [
     "packages/core/src/compress-answer.ts",
   ]),

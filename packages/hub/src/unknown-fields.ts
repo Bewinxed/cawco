@@ -91,3 +91,21 @@ export const unknownFieldsOf = (
       : unknownFields(error.schema, error.value);
   return fields.length > 0 ? { fields, on: error.type ?? "body" } : null;
 };
+
+/**
+ * The fields of `value` route schema `schema` doesn't take, as a request
+ * carrying it would be refused for: a TypeBox schema read as above, a
+ * Standard Schema (zod) by its own parse. For a caller read without
+ * sending, as scripts/shell-bodies-check.ts reads the shell's bodies.
+ */
+export const fieldsNotTaken = (schema: unknown, value: unknown): string[] =>
+  typeof schema === "object" &&
+  schema !== null &&
+  "~standard" in schema &&
+  "safeParse" in schema &&
+  typeof schema.safeParse === "function"
+    ? unrecognizedKeys(
+        (schema.safeParse(value) as { error?: { issues: unknown[] } }).error
+          ?.issues ?? []
+      )
+    : unknownFields(schema, value);

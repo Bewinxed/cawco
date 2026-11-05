@@ -2802,7 +2802,7 @@ workspace_opens() {
   start_session "$jid" wsparent-1 > /dev/null
   wait_until 60 'session_running wsparent-1'
   # Its prompt names the wait the delegate declares in its first turn, which holds its item open (WS_WAIT_LINE).
-  answer=$(ws_post /api/work-items "{\"parentInstanceId\":\"wsparent-1\",\"title\":\"Prove the workspace boundary\",\"prompt\":$(printf '%s\n%s' "The stage 2 proof's workspace." "$WS_WAIT_LINE" | json_string),\"harness\":\"claude\",\"model\":\"stub\",\"cwd\":\"$WS_REPO\",\"machineId\":\"$jid\",\"lands\":\"none\",\"checks\":[{\"name\":\"Run true\",\"command\":\"true\"}]}")
+  answer=$(ws_post /api/work-items "{\"parentInstanceId\":\"wsparent-1\",\"title\":\"Prove the workspace boundary\",\"prompt\":$(printf '%s\n%s' "The stage 2 proof's workspace." "$WS_WAIT_LINE" | json_string),\"harness\":\"claude\",\"model\":\"stub\",\"cwd\":\"$WS_REPO\",\"machineId\":\"$jid\",\"lands\":\"none\"}")
   echo "the hub answered the delegation: $answer"
   [[ "$answer" == *"HTTP 200" ]]
   body=$(sed '$d' <<< "$answer")
@@ -3501,7 +3501,7 @@ bare_delegate_from_home() {
   local answer body item delegate words
   start_session "$jid" bareparent-1 > /dev/null
   wait_until 60 'session_running bareparent-1'
-  answer=$(ws_post /api/work-items "{\"parentInstanceId\":\"bareparent-1\",\"title\":\"Delegate from home on a bare machine\",\"prompt\":\"The stage 2 proof's bare machine.\",\"harness\":\"claude\",\"model\":\"stub\",\"cwd\":\"/home/cawco\",\"machineId\":\"$jid\",\"lands\":\"none\",\"checks\":[{\"name\":\"Run true\",\"command\":\"true\"}]}")
+  answer=$(ws_post /api/work-items "{\"parentInstanceId\":\"bareparent-1\",\"title\":\"Delegate from home on a bare machine\",\"prompt\":\"The stage 2 proof's bare machine.\",\"harness\":\"claude\",\"model\":\"stub\",\"cwd\":\"/home/cawco\",\"machineId\":\"$jid\",\"lands\":\"none\"}")
   echo "the hub answered the delegation: $answer"
   if [[ $answer == *"HTTP 200" ]]; then
     body=$(sed '$d' <<< "$answer")

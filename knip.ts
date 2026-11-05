@@ -116,6 +116,8 @@ export default {
         "scripts/lint/biome-plugins.ts",
         // scripts/check.ts:533
         "scripts/case-clash-check.ts",
+        // scripts/check.ts, beside compress-answer-check.ts
+        "scripts/shell-bodies-check.ts",
         // scripts/check.ts:538
         "scripts/runtime-bundles-check.ts",
         // scripts/check.ts:555
