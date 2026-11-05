@@ -20,7 +20,10 @@
       },
       /* Caw stands on the composition's axis (DESIGN.md, The Caw Stands On
          The Axis Rule): the mark, title and why centre on the block's own
-         vertical axis; the action keeps its own layout. */
+         vertical axis, and so does the action (emptyActionVariants' axis):
+         its box centres what it holds, so a lone button stands under the
+         line as one block, while a child as wide as the box (a column of
+         starters) stays full width. */
       axis: {
         true: "[&>:not([data-box])]:self-center [&>:not([data-box])]:text-center",
       },
@@ -31,11 +34,16 @@
     },
   });
 
-  /** Its action's looks: `fill`, an action as wide as the block (a column of starters). */
+  /**
+   * Its action's looks: `fill`, an action as wide as the block (a column of
+   * starters). `axis`: the box stands on the block's axis and centres what
+   * it holds, `fill` or not; a full-width child still fills it.
+   */
   const emptyActionVariants = tv({
     base: "mt-space-2",
     variants: {
       inline: { true: "mt-0 flex-none" },
+      axis: { true: "flex flex-col items-center self-center" },
       actionWidth: { fill: "self-stretch" },
     },
   });
@@ -150,7 +158,7 @@
       </p>
     {/if}
   {/if}
-  <div class={emptyActionVariants({ inline, actionWidth })} data-box>
+  <div class={emptyActionVariants({ inline, axis, actionWidth })} data-box>
     {@render action()}
   </div>
 </div>
