@@ -22,10 +22,13 @@
 
   let {
     entry,
+    by,
     state = "ready",
     onsession,
   }: {
     entry: Extract<Entry, { kind: "handed" }>;
+    /** Who handed it in, as the record names them: its attempt. */
+    by: string;
     /** The hub is reading it, or does not hold it. */
     state?: "ready" | "loading" | "missing";
     onsession: () => void;
@@ -39,9 +42,7 @@
     class="m-0 flex flex-wrap items-center gap-x-space-3 gap-y-space-1 type-meta text-ink-muted"
   >
     <span>{words.handedInBy}</span>
-    <span class="type-label text-ink-strong wrap-anywhere"
-      >{entry.actor.name}</span
-    >
+    <span class="type-label text-ink-strong wrap-anywhere">{by}</span>
     <span class="num">{clock(entry.at)}</span>
     <Button size="sm" variant="ghost" onclick={onsession}>
       <IconTranscript data-icon="inline-start" aria-hidden="true" />

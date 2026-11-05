@@ -141,7 +141,7 @@
     ]}
   >
     <h1
-      class="m-0 min-w-0 flex-1 type-title text-ink-strong text-balance line-clamp-2"
+      class="m-0 min-w-0 flex-1 type-title text-ink-strong text-balance line-clamp-2 @max-phone/record:invisible"
     >
       {#if view}
         {view.title}

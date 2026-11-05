@@ -60,6 +60,8 @@
     onact: Acts["onact"];
   } = $props();
 
+  /** A change to what an attempt reads, in the commit's words. */
+  const BRIEF = /^update (?:title|description|acceptance|checks|context|type)/u;
   const mark = $derived(entryGlyph(entry));
   /** An older attempt opened by the reader: a fold of the page's own, not a record. */
   let unfolded = $state(false);
@@ -72,9 +74,12 @@
       case "filed":
         return words.entry.filed;
       case "changed":
-        return entry.what.startsWith("update triage")
-          ? words.entry.triaged
-          : words.entry.briefChanged;
+        if (entry.what.startsWith("update triage")) {
+          return words.entry.triaged;
+        }
+        return BRIEF.test(entry.what)
+          ? words.entry.briefChanged
+          : words.entry.changed;
       case "moved":
         return words.entry.moved;
       case "attempt":
@@ -105,6 +110,21 @@
   const sessionOpen = $derived(
     opened?.what === "session" && opened.entry === entry.id
   );
+  /** A session's state now, in the liveness words. */
+  const sessionWord = (state: string): string => {
+    switch (state) {
+      case "working":
+        return words.live.working;
+      case "asking":
+        return words.live.asking;
+      case "failed":
+        return words.live.failed;
+      case "stopped":
+        return words.live.stopped;
+      default:
+        return words.attemptDone;
+    }
+  };
   /** Who takes the task up where Send back puts it (hub stages.ts `sendBackOf`). */
   const whoTakesUp = (review: NonNullable<TaskView["review"]>): string => {
     if (review.sendBackBy === "nobody") {
@@ -137,7 +157,9 @@
       <span class="text-ink-strong">{entry.from} → {entry.to}</span>
     {/if}
     <span class="min-w-0 type-meta text-ink-muted wrap-anywhere"
-      >{entry.actor.name}</span
+      >{entry.actor.name === view.title
+        ? words.itsSession
+        : entry.actor.name}</span
     >
   </p>
   <time
@@ -174,7 +196,11 @@
         >
           <IconChevronRight class="size-icon-sm" aria-hidden="true" />
           <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-            >{entry.session.title} · {words.folded(entry.entries.length)}</span
+            >{sessionWord(entry.session.state)} · {clock(
+              entry.at
+            )}–{entry.endedAt === null ? "" : clock(entry.endedAt)} · {words.folded(
+              entry.entries.length
+            )}</span
           >
         </button>
       {:else}
@@ -185,7 +211,11 @@
             class="flex items-center gap-space-2 mark-line text-ink-strong type-label"
           >
             {#if entry.session.state === "working"}<LiveDot />{/if}
-            <span class="wrap-anywhere">{entry.session.title}</span>
+            <span class="wrap-anywhere"
+              >{entry.session.title === view.title
+                ? sessionWord(entry.session.state)
+                : entry.session.title}</span
+            >
           </span>
           {#if entry.session.type}<span
               >{words.runsAs} {entry.session.type}</span
@@ -237,23 +267,6 @@
             </Button>
           {/if}
         </div>
-        {#if nested.length > 0}
-          <ol class="m-0 grid list-none p-0" in:unfold>
-            {#each nested as child (child.id)}
-              <EntrySelf
-                entry={child}
-                {now}
-                {view}
-                {pending}
-                {asking}
-                {stale}
-                {opened}
-                {onopen}
-                {onact}
-              />
-            {/each}
-          </ol>
-        {/if}
       {/if}
     {:else if entry.kind === "ask"}
       <p class="m-0 type-body text-pretty text-ink-strong">{entry.words}</p>
@@ -277,28 +290,6 @@
             {entry.notCarried}
           </p>
         {/if}
-        <div class="flex items-center justify-between gap-space-8">
-          <Button
-            hit="always"
-            size="lg"
-            variant="secondary"
-            label={words.approve}
-            pending={pending === "approve"}
-            pendingLabel={words.approve}
-            disabled={stale || pending === "deny"}
-            onclick={() => onact("approve")}
-          />
-          <Button
-            hit="always"
-            size="lg"
-            variant="secondary"
-            label={words.deny}
-            pending={pending === "deny"}
-            pendingLabel={words.deny}
-            disabled={stale || pending === "approve"}
-            onclick={() => onact("deny")}
-          />
-        </div>
       {/if}
     {:else if entry.kind === "ended"}
       <p class="m-0 type-body text-pretty text-ink-strong">{entry.words}</p>
@@ -360,39 +351,6 @@
             >
           {/each}
         </p>
-      {/if}
-      {#if live && view.review}
-        <div class="flex items-center justify-between gap-space-8 pt-space-1">
-          <ReviewMove
-            move="sendBack"
-            look="peer"
-            review={view.review}
-            {pending}
-            {stale}
-            expanded={asking?.what === "sendBack"}
-            onpress={() => onact("ask:sendBack")}
-          />
-          <ReviewMove
-            move="passOn"
-            look="peer"
-            review={view.review}
-            {pending}
-            {stale}
-            onpress={() => onact("passOn")}
-          />
-        </div>
-        {#if asking?.what === "sendBack"}
-          <AskInPage
-            title={words.sendBackAsk(view.review.sendBack)}
-            consequence={whoTakesUp(view.review)}
-            field={words.note}
-            verb={words.sendBack(view.review.sendBack)}
-            pendingVerb={words.sendingBack}
-            pending={pending === "sendBack"}
-            onconfirm={() => onact("sendBack")}
-            oncancel={() => onact("cancel")}
-          />
-        {/if}
       {/if}
     {:else if entry.kind === "refused"}
       <p class="m-0 type-body text-pretty text-error-11" role="alert">
@@ -463,4 +421,89 @@
       {/if}
     {/if}
   </div>
+  <!-- The acts, at the entry's text column on a desk and from its lead
+       column on a phone, so a pair keeps its two ends apart. -->
+  <div
+    class="col-start-2 col-end-4 grid min-w-0 gap-space-2 empty:hidden @max-phone/record:col-start-1"
+  >
+    {#if entry.kind === "ask" && entry.answer === null}
+      <div class="flex items-center justify-between gap-space-8">
+        <Button
+          hit="always"
+          size="lg"
+          variant="secondary"
+          label={words.approve}
+          pending={pending === "approve"}
+          pendingLabel={words.approve}
+          disabled={stale || pending === "deny"}
+          onclick={() => onact("approve")}
+        />
+        <Button
+          hit="always"
+          size="lg"
+          variant="secondary"
+          label={words.deny}
+          pending={pending === "deny"}
+          pendingLabel={words.deny}
+          disabled={stale || pending === "approve"}
+          onclick={() => onact("deny")}
+        />
+      </div>
+    {:else if entry.kind === "handed"}
+      {#if live && view.review}
+        <div class="flex items-center justify-between gap-space-8 pt-space-1">
+          <ReviewMove
+            move="sendBack"
+            look="peer"
+            review={view.review}
+            {pending}
+            {stale}
+            expanded={asking?.what === "sendBack"}
+            onpress={() => onact("ask:sendBack")}
+          />
+          <ReviewMove
+            move="passOn"
+            look="peer"
+            review={view.review}
+            {pending}
+            {stale}
+            onpress={() => onact("passOn")}
+          />
+        </div>
+        {#if asking?.what === "sendBack"}
+          <AskInPage
+            title={words.sendBackAsk(view.review.sendBack)}
+            consequence={whoTakesUp(view.review)}
+            field={words.note}
+            verb={words.sendBack(view.review.sendBack)}
+            pendingVerb={words.sendingBack}
+            pending={pending === "sendBack"}
+            onconfirm={() => onact("sendBack")}
+            oncancel={() => onact("cancel")}
+          />
+        {/if}
+      {/if}
+    {/if}
+  </div>
+  {#if entry.kind === "attempt" && !showFolded && nested.length > 0}
+    <!-- Its own entries one step in, on a rail from the attempt's glyph. -->
+    <ol
+      class="col-start-1 col-end-4 m-0 grid min-w-0 list-none border-s border-s-border-hairline p-0 ms-space-4 ps-space-2"
+      in:unfold
+    >
+      {#each nested as child (child.id)}
+        <EntrySelf
+          entry={child}
+          {now}
+          {view}
+          {pending}
+          {asking}
+          {stale}
+          {opened}
+          {onopen}
+          {onact}
+        />
+      {/each}
+    </ol>
+  {/if}
 </li>

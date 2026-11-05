@@ -83,6 +83,7 @@ export const taskOneRecordWords = {
     filedFrom: "made from",
     triaged: "Triaged",
     briefChanged: "Brief changed",
+    changed: "Changed",
     moved: "Moved",
     attemptStarted: "Attempt started",
     attemptRunning: "Attempt running",
@@ -99,6 +100,10 @@ export const taskOneRecordWords = {
   },
   /** Where a filed task started. */
   inStage: (stage: string): string => `In ${stage}`,
+  /** An entry's actor when it is the attempt's own session, which carries the task's title. */
+  itsSession: "its session",
+  /** An attempt that ended as it should: handed in. */
+  attemptDone: "Done",
   /** An older attempt folded to one line, by its number. */
   attemptLine: (n: number): string => `Attempt ${n}`,
   /** How many entries an older attempt folds. */
