@@ -1070,6 +1070,10 @@ public enum Size {
     public static let cLedgerUsdW: Double = 96
     /// A matrix's wide column, its floor: a tool's name, its count and its Required switch over each machine's cell (Command-line tools), an update's state and its act (Updates).
     public static let cMatrixColW: Double = 224
+    /// Where a machine ledger's words start inside its row: past the OS mark and its gap (MachineLedger's machine cell), so a phone card's own line under it starts on the machine's name (Command-line tools' Sign-in line).
+    public static let cLedgerTextInset: Double = 23
+    /// A ledger's sign-in column: its state in meta at the column's start and its one act at its end, "Waiting for the pasted code" beside Paste code the widest (Command-line tools, a tool with its own sign-in).
+    public static let cSigninColW: Double = 288
     /// A ledger title's least width, the column the ledger exists for: about 30 characters of the label role before it truncates. A ledger's lesser columns fold until the title keeps it (the task ledger's container widths in build-tokens.ts CONTAINERS are this plus its column widths).
     public static let cLedgerTitleMin: Double = 224
     /// The side divider's hit width when the split is expanded.

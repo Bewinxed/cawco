@@ -5,10 +5,15 @@
  */
 
 import type { Bounded } from "@cawco/core/bounded";
-import type { ToolPolicy, ToolSpec, ToolStatus } from "@cawco/core/tools";
+import type {
+  ToolPolicy,
+  ToolSigninChallenge,
+  ToolSpec,
+  ToolStatus,
+} from "@cawco/core/tools";
 import { INSTALL_TIMEOUT_MS } from "#lib/config.js";
 import { machineControl } from "./client.svelte";
-import { couldNot } from "./hub-read";
+import { couldNot, hubRefusal, jsonBody } from "./hub-read";
 
 /** What `GET /api/tools` answers with. */
 export interface ToolsSnapshot {
@@ -65,3 +70,53 @@ export const installTool = (
     [id],
     INSTALL_TIMEOUT_MS
   );
+
+/**
+ * A tool sign-in's refusal, in the hub's words (hub server.ts, the tool
+ * sign-in routes). `spent`: the machine answered, so its sign-in is over
+ * and its link is dead (a `422`); a machine that didn't answer (`503`)
+ * may still hold it.
+ */
+export class ToolSigninRefusal extends Error {
+  readonly spent: boolean;
+  constructor(words: string, spent: boolean) {
+    super(words);
+    this.name = "ToolSigninRefusal";
+    this.spent = spent;
+  }
+}
+
+const signinPath = (machineId: string, toolId: string): string =>
+  `/api/machines/${encodeURIComponent(machineId)}/tools/${encodeURIComponent(toolId)}/signin`;
+
+async function signinCall<T>(url: string, body?: unknown): Promise<T> {
+  const response = await fetch(url, {
+    method: "POST",
+    ...(body === undefined ? {} : jsonBody(body)),
+  });
+  if (!response.ok) {
+    throw new ToolSigninRefusal(
+      (await hubRefusal(response)).message,
+      response.status === 422
+    );
+  }
+  return (await response.json()) as T;
+}
+
+/**
+ * Starts the tool's own sign-in on the machine (core `ToolSpec.signin`):
+ * the link the person opens in their own browser, and until when the
+ * machine waits for its code. One already waiting answers its kept link.
+ */
+export const beginToolSignin = (
+  machineId: string,
+  toolId: string
+): Promise<ToolSigninChallenge> => signinCall(signinPath(machineId, toolId));
+
+/** Types the pasted code into the machine's waiting sign-in: the tool's status there, its sign-in read again. */
+export const completeToolSignin = (
+  machineId: string,
+  toolId: string,
+  code: string
+): Promise<ToolStatus> =>
+  signinCall(`${signinPath(machineId, toolId)}/complete`, { code });

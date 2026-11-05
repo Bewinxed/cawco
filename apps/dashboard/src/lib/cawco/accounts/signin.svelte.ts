@@ -16,7 +16,46 @@ import { failureWords } from "../hub-read";
 export type SigninPhase =
   "idle" | "opening" | "ready" | "checking" | "signed-in" | "mismatch";
 
-export class SigninFlow {
+/**
+ * What SigninPanel draws: a sign-in by a link and the code its page shows,
+ * pasted back. An account's (`SigninFlow`) and a tool's own
+ * (`tool-signin.svelte.ts`).
+ */
+export interface PasteSignin {
+  code: string;
+  done: () => Promise<void>;
+  /** Who it signed in as, where the sign-in says. */
+  readonly email?: string | null;
+  open: () => Promise<void>;
+  readonly phase: SigninPhase;
+  readonly problem: string | null;
+  readonly url: string | null;
+}
+
+/**
+ * Opens a sign-in's link in a new tab: the tab opens in the press itself,
+ * blank, and goes to the link `ask` answers (a tab opened after an `await`
+ * is a popup the browser blocks); refused, the tab closes and the refusal
+ * is thrown. Call it before any `await` of the press.
+ */
+export async function openSigninTab<T extends { url: string }>(
+  ask: () => Promise<T>
+): Promise<T> {
+  const tab = window.open("about:blank", "_blank");
+  try {
+    const answer = await ask();
+    if (tab) {
+      tab.opener = null;
+      tab.location.href = answer.url;
+    }
+    return answer;
+  } catch (error) {
+    tab?.close();
+    throw error;
+  }
+}
+
+export class SigninFlow implements PasteSignin {
   phase = $state<SigninPhase>("idle");
   /** The link Claude Code's login answered, once it has. */
   url = $state<string | null>(null);
@@ -66,20 +105,16 @@ export class SigninFlow {
     if (this.busy) {
       return;
     }
-    const tab = window.open("about:blank", "_blank");
+    const opened = openSigninTab(async () =>
+      beginSignin(await this.#account(), this.#machineId)
+    );
     this.phase = "opening";
     this.problem = null;
     try {
-      const id = await this.#account();
-      const { url } = await beginSignin(id, this.#machineId);
+      const { url } = await opened;
       this.url = url;
       this.phase = "ready";
-      if (tab) {
-        tab.opener = null;
-        tab.location.href = url;
-      }
     } catch (error) {
-      tab?.close();
       this.phase = this.url ? "ready" : "idle";
       this.problem = failureWords(error);
     }
