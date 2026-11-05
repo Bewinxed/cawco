@@ -471,12 +471,6 @@ export interface PreviewListenerDeps {
    * that no screen follows does not.
    */
   sessionUsed: (instanceId: string) => boolean;
-  /** An artifact of the session's brought to the front of its panel from a page (`/show`: a decision page's Canvas, Open to draw). */
-  showFrom: (
-    request: Request,
-    instanceId: string,
-    artifactId: string
-  ) => Promise<Response>;
   socket: ReturnType<typeof artifactSocket>;
   /** Artifact `artifactId`'s stage answered its page through the relay (core `PREVIEW_SERVED_HEADER`): it is reachable. */
   stageAnswered: (artifactId: string) => void;
@@ -524,9 +518,6 @@ const joinArtifact = (
   }
   if (action === "/canvas") {
     return deps.canvasFrom(request, instanceId, artifactId);
-  }
-  if (action === "/show") {
-    return deps.showFrom(request, instanceId, artifactId);
   }
   return new Response("Not found", { status: 404 });
 };

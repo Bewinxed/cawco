@@ -109,21 +109,51 @@ export function previewTitle(value: unknown): string | null {
 
 const RPC_ID_MAX = 100;
 
-/**
- * The one request the page makes of its host (`cawco.pickPlace`): a
- * JSON-RPC `cawco/pick-place`, answered with the pane's own machine and
- * folder pickers. Its id, or null when the message is not one.
- */
-export function previewPickPlace(value: unknown): number | string | null {
+/** A JSON-RPC ask of `method` from the page's overlay: its id, or null when the message is not one. */
+function rpcAsk(
+  value: unknown,
+  method: string
+): { id: number | string; params: Record<string, unknown> | null } | null {
   const raw = record(value);
-  if (raw?.jsonrpc !== "2.0" || raw.method !== "cawco/pick-place") {
+  if (raw?.jsonrpc !== "2.0" || raw.method !== method) {
     return null;
   }
   const { id } = raw;
+  const params = record(raw.params);
   if (typeof id === "number" && Number.isSafeInteger(id)) {
-    return id;
+    return { id, params };
   }
-  return typeof id === "string" && id.length <= RPC_ID_MAX ? id : null;
+  return typeof id === "string" && id.length <= RPC_ID_MAX
+    ? { id, params }
+    : null;
+}
+
+/**
+ * The page's ask for a place (`cawco.pickPlace`): a JSON-RPC
+ * `cawco/pick-place`, answered with the pane's own machine and folder
+ * pickers. Its id, or null when the message is not one.
+ */
+export function previewPickPlace(value: unknown): number | string | null {
+  return rpcAsk(value, "cawco/pick-place")?.id ?? null;
+}
+
+/**
+ * The page's ask to open an artifact (`cawco.open`: a decision page's
+ * Canvas, Open to draw, or Preview, Open full): a JSON-RPC
+ * `cawco/open-artifact` naming it, answered with the refusal's words, or
+ * null once it opened. Null when the message is not one.
+ */
+export function previewOpenArtifact(
+  value: unknown
+): { artifact: string; id: number | string } | null {
+  const ask = rpcAsk(value, "cawco/open-artifact");
+  const artifact = ask?.params?.artifact;
+  return ask &&
+    typeof artifact === "string" &&
+    artifact.length > 0 &&
+    artifact.length <= RPC_ID_MAX
+    ? { artifact, id: ask.id }
+    : null;
 }
 
 /** What the page's `cawco:error` is about: a field or a send carry their own way back; anything else reloads. */

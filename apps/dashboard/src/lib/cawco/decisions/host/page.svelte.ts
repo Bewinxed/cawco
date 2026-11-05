@@ -174,6 +174,8 @@ export interface Bridge {
     ): () => void;
     (event: "sent", listener: (sentAt: string | null) => void): () => void;
   };
+  /** Opens an artifact where a chip of it opens (the host's `openReference`): the refusal's words, or null once it opened. */
+  open: (artifact: string) => Promise<string | null>;
   /** `control` names what the person pressed: the hub's journal says it. */
   send: (text?: string, control?: "page-send" | "page-key") => Promise<void>;
   set: (key: string, value: unknown) => Promise<void>;

@@ -374,7 +374,7 @@ const updateProblem = (doc: Doc, update: Uint8Array): string | null => {
  * as the overlay and the canvas's host page reach them.
  */
 export const ARTIFACT_PATH =
-  /^\/__cawco\/artifact\/([0-9a-f-]{36})(\/send|\/picture|\/pictures|\/canvas|\/show)?$/u;
+  /^\/__cawco\/artifact\/([0-9a-f-]{36})(\/send|\/picture|\/pictures|\/canvas)?$/u;
 
 /** Where a canvas's latest picture is kept: its folder under the artifacts' root. */
 export const picturePath = (root: string, artifactId: string): string =>

@@ -2141,11 +2141,8 @@ public enum Words {
 
     public enum Decisions {
         // packages/core/src/words/decisions.ts `decisionsWords`
-        /// A card's canvas or diagram, refused by the hub: what came of it, said after the hub's sentence (`hubRefusal`).
+        /// A card's diagram, refused as a canvas by the hub: what came of it, said after the hub's sentence (`hubRefusal`).
         public static let canvasNotOpenedThen = "so the canvas didn't open."
-
-        /// A card's preview, refused by the hub (`hubRefusal`).
-        public static let previewNotOpenedThen = "so the preview didn't open."
 
         /// The tab's name in the project's strip, and ‹ back to its list.
         public static let tab = "Decisions"

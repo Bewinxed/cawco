@@ -10,19 +10,18 @@
   the frame stands at that size, so the canvas fits its drawing at zoom 1,
   1 CSS px per px; its well hugs it and scrolls it sideways where it is
   wider (Well.svelte). Until the canvas has told it, its skeleton holds the
-  well. The frame takes no presses: Open to draw brings the canvas
-  to the front of the panel, where it is drawn. One the hub no longer holds
+  well. The frame takes no presses: Open to draw opens the canvas
+  where a chip of it opens (the host's `openReference`, asked through the
+  overlay's `cawco.open`), where it is drawn. One the hub no longer holds
   says so in words where it would stand.
 -->
 <script lang="ts">
   import { CANVAS_EMBED_SIZE } from "@cawco/core/stage";
-  import { decisionsWords } from "@cawco/core/words/decisions";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { hubRefusal } from "../../hub-read.js";
   import { revealHere, revealOut } from "../../motion/curves.svelte.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
-  import { pieceName, served } from "./page.svelte.js";
+  import { bridge, pieceName, served } from "./page.svelte.js";
   import { scheme } from "./scheme.svelte.js";
   import Well from "./Well.svelte";
 
@@ -36,20 +35,12 @@
   let opening = $state(false);
   let said = $state("");
 
-  /** The canvas at the front of the session's panel, to draw on. */
+  /** The canvas in front of a panel to draw on: where a chip of it opens (the host's `openReference`). */
   async function openToDraw() {
     opening = true;
     said = "";
     try {
-      const response = await fetch(`/__cawco/artifact/${id}/show`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        said = (await hubRefusal(response, decisionsWords.canvasNotOpenedThen))
-          .message;
-      }
-    } catch {
-      said = "The canvas didn't open: the hub didn't answer.";
+      said = (await bridge()?.open(id)) ?? "";
     } finally {
       opening = false;
     }

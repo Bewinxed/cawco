@@ -28,8 +28,14 @@
   import { frameHand, holdOpen } from "#lib/cawco/preview/open-pages.js";
   import { pageSource } from "#lib/cawco/preview/page-source.js";
   import { enterPreviews, turnedAwayWords } from "#lib/cawco/preview/pass.js";
-  import { previewError, previewErrorOf } from "#lib/cawco/preview/wire.js";
+  import {
+    previewError,
+    previewErrorOf,
+    previewOpenArtifact,
+  } from "#lib/cawco/preview/wire.js";
+  import { openReference } from "#lib/cawco/reference-open.svelte.js";
   import { heardInput } from "#lib/cawco/reload.svelte.js";
+  import { sessionHere } from "#lib/cawco/session-here.js";
   import { track } from "#lib/cawco/track.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -158,6 +164,9 @@
     );
   });
 
+  /** The session whose conversation the page stands in, where it stands in one. */
+  const here = sessionHere();
+
   function post(message: object) {
     if (origin) {
       frame?.contentWindow?.postMessage(message, origin);
@@ -253,6 +262,15 @@
         of?: unknown;
         type?: unknown;
       } | null;
+      // A Canvas's Open to draw or a Preview's Open full: the artifact opens
+      // where a chip of it pressed here opens.
+      const opening = previewOpenArtifact(event.data);
+      if (opening) {
+        openReference(opening.artifact, { top: true }, here?.()).then(
+          (refused) => post({ jsonrpc: "2.0", id: opening.id, result: refused })
+        );
+        return;
+      }
       const type = told?.type;
       if (type === PAGE_TOUCHED_MESSAGE) {
         heardInput();

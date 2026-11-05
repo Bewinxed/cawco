@@ -1208,9 +1208,10 @@ const pick = listenForPicks(window, {
 });
 
 /*
- * `cawco.pickPlace`: the one request the page makes of its host, which
- * answers with its own machine list and folder browser (the dashboard's
- * PlacePick) as a JSON-RPC result.
+ * What the page asks of its host, answered as a JSON-RPC result:
+ * `cawco.pickPlace`, with its own machine list and folder browser (the
+ * dashboard's PlacePick), and `cawco.open`, an artifact opened where a chip
+ * of it opens (the dashboard's `openReference`).
  */
 let nextAsk = 1;
 const asking = new Map<number, (result: unknown) => void>();
@@ -1271,6 +1272,12 @@ declare global {
        * like a `set`, and answered, or null when they cancel.
        */
       pickPlace: () => Promise<PlacePick | null>;
+      /**
+       * Opens an artifact for the person where a chip of it opens: the
+       * panel the page stands in, or the session holding it as a tab beside
+       * it. Answers the refusal's words, or null once it opened.
+       */
+      open: (artifact: string) => Promise<string | null>;
     };
   }
 }
@@ -1342,6 +1349,10 @@ Object.defineProperty(window, "cawco", {
       }
       await change({ choice: "place", pageHash, value: picked });
       return picked;
+    },
+    open: async (id: string) => {
+      const refused = await askHost("cawco/open-artifact", { artifact: id });
+      return typeof refused === "string" ? refused : null;
     },
   }),
 });

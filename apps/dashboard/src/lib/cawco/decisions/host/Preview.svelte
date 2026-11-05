@@ -9,8 +9,9 @@
   width it stands at that width and that screen's own height (core
   `screenHeight`: upright under a desk's width, 16:10 from there up), the
   media cap aside: wider than its well it scrolls sideways, as a story does.
-  Open full size brings it to the front of the session's panel,
-  as Canvas's Open to draw does. Each draws the version the page's media
+  Open full size opens it where a chip of it opens (the host's
+  `openReference`, asked through the overlay's `cawco.open`), as Canvas's
+  Open to draw does. Each draws the version the page's media
   names, the artifact's newest, whatever version its panel keeps open. A
   page stands at its own address on this page's origin
   (`/__cawco/page/<id>/`), loaded at once with no turn, a screen's skeleton
@@ -90,11 +91,10 @@
   import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconRefresh } from "#lib/icons.js";
-  import { hubRefusal } from "../../hub-read.js";
   import { dur, reveal, revealHere } from "../../motion/curves.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { type EmbedTurn, embedTurn, scrollerOf } from "./embed-turns.js";
-  import { pieceName, served } from "./page.svelte.js";
+  import { bridge, pieceName, served } from "./page.svelte.js";
   import Well from "./Well.svelte";
 
   let {
@@ -192,21 +192,12 @@
   /** What a press on Open full size was refused, in the hub's words. */
   let refusal = $state("");
   let opening = $state(false);
-  /** The preview at the front of the session's panel, at the panel's whole size (the house's open-in-panel path, as Canvas's Open to draw). */
+  /** The preview in front of a panel at its whole size: where a chip of it opens (the host's `openReference`), as Canvas's Open to draw. */
   async function openFull() {
     opening = true;
     refusal = "";
     try {
-      const response = await fetch(`/__cawco/artifact/${id}/show`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        refusal = (
-          await hubRefusal(response, decisionsWords.previewNotOpenedThen)
-        ).message;
-      }
-    } catch {
-      refusal = "The preview didn't open: the hub didn't answer.";
+      refusal = (await bridge()?.open(id)) ?? "";
     } finally {
       opening = false;
     }

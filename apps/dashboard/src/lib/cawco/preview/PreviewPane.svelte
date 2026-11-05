@@ -214,6 +214,7 @@
     previewError,
     previewErrorOf,
     previewKey,
+    previewOpenArtifact,
     previewPickPlace,
     previewPinAt,
     previewPinId,
@@ -3107,6 +3108,21 @@
     }
     if (event.data?.type === PREVIEW_LOCKED_MESSAGE) {
       turnedAway();
+      return;
+    }
+    // A decision page's Open to draw or Open full: the artifact opens where
+    // a chip of it pressed in this session's conversation opens. Loaded on
+    // the press, as a pin's chip loads it: the artifact's own tab never
+    // reaches the conversation's code (page-imports-check.ts).
+    const opening = previewOpenArtifact(event.data);
+    if (opening) {
+      import("../reference-open.svelte")
+        .then(({ openReference }) =>
+          openReference(opening.artifact, { top: true }, instanceId)
+        )
+        .then((refused) =>
+          post({ jsonrpc: "2.0", id: opening.id, result: refused })
+        );
       return;
     }
     const ask = previewPickPlace(event.data);

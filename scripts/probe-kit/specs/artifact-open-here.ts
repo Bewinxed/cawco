@@ -28,6 +28,15 @@
  *     the group.
  * (f) The same press on a phone: that session in place of the parent's,
  *     the page in its panel, and Back returns to the parent's.
+ * (g) A decision page of the parent's, in its panel, embeds that other
+ *     tree's page as a Preview (a page of its project: `embeds`); its Open
+ *     full, pressed in the page's frame, opens on the first press where
+ *     the chip of (e) opens: the holder's session as a tab beside the
+ *     parent's, the page in front of its panel (cockpit-904cae9d's finding
+ *     1: the press went to the hub from the frame, read only `ok`, and
+ *     nothing happened).
+ * (h) The same press on a phone: the holder's session in place, the page
+ *     in its panel, and Back returns to the parent's conversation.
  *
  *   bun scripts/probe-kit/run.ts artifact-open-here
  */
@@ -344,6 +353,135 @@ const run = async (kit: Kit) => {
     JSON.stringify(f)
   );
   await phone.close();
+
+  // (g) A decision page of the parent's embeds the stranger's page; its Open full, on a desk.
+  const decision = await create(parent, {
+    kind: "page",
+    does: "pick",
+    ask: "Pick whether the stranger's page stays",
+    name: "embeds-stranger",
+    program: `root = Decisions("Keep the stranger's page", [keep])
+keep = Decision("keep", "Does the stranger's page stay?", [yes, no], "Drawn live.", [], [], false, null, "behaviour")
+yes = Option("yes", "It stays", "As it stands.", true, [theirs], "Nothing changes.")
+no = Option("no", "It goes", "Taken down.", false, [], "One page fewer.")
+theirs = Preview("${theirs.id}", "The stranger's page")`,
+  });
+  /**
+   * The heading of a page a panel on screen shows: a frame of the
+   * dashboard's own, seen (the parent's pane, still in the tab group, shows
+   * the decision page, whose Preview draws the same page a frame deeper).
+   */
+  const panelShows = async (tab: Page): Promise<string[]> => {
+    const said: string[] = [];
+    for (const frame of tab.frames()) {
+      if (frame.parentFrame() !== tab.mainFrame()) {
+        continue;
+      }
+      const seen = await frame
+        .frameElement()
+        .then((element) => element.isVisible())
+        .catch(() => false);
+      const heading = seen
+        ? await frame
+            .locator("h1")
+            .first()
+            .textContent({ timeout: 500 })
+            .catch(() => null)
+        : null;
+      if (heading) {
+        said.push(heading);
+      }
+    }
+    return said;
+  };
+  /** Pressing Open full on the parent's decision page in `tab`, its panel showing it: the heading the panel on screen shows after, the address, the tabs and the page's refusal. */
+  const openFull = async (tab: Page) => {
+    await fleet.api(
+      `/api/instances/${parent}/artifacts/${decision.id}/show`,
+      {}
+    );
+    const button = tab
+      .frameLocator(`${PANE} iframe[title="Preview"]`)
+      .locator("[data-open-full]")
+      .first();
+    await button.waitFor({ timeout: 60_000 });
+    await close(stranger);
+    await button.click();
+    return {
+      seen: await until(
+        "Stranger in a panel on screen",
+        () => panelShows(tab),
+        (headings) => headings.includes("Stranger"),
+        30_000
+      ).catch(() => panelShows(tab)),
+      at: new URL(tab.url()).pathname,
+      tabs: await tab.evaluate(
+        () =>
+          (
+            JSON.parse(localStorage.getItem("cawco-workspace") ?? "{}") as {
+              root?: { tabs?: string[] };
+            }
+          ).root?.tabs ?? []
+      ),
+    };
+  };
+  const desk = await kit.page("desk");
+  await desk.addInitScript(
+    ([tab]) => {
+      localStorage.setItem(
+        "cawco-workspace",
+        JSON.stringify({
+          v: 1,
+          root: { t: "l", id: "pone", tabs: [tab], active: tab, opened: null },
+          focusedLeaf: "pone",
+        })
+      );
+    },
+    [parent] as const
+  );
+  await open(desk, `${base}/session/${parent}`, '[data-slot="pane"]');
+  const g = await openFull(desk);
+  check(
+    "(g) on a desk, Open full on a decision page's Preview of another tree's page opens on the first press: the holder's session as a tab beside the parent's, the page in front of its panel",
+    g.seen.includes("Stranger") &&
+      g.at === `/session/${stranger}` &&
+      g.tabs.indexOf(stranger) === g.tabs.indexOf(parent) + 1,
+    JSON.stringify(g)
+  );
+  await desk.close();
+
+  // (h) The same press on a phone: in place, and Back.
+  const hand = await kit.page("phone");
+  await hand.addInitScript(
+    ([tab]) => {
+      localStorage.setItem(
+        "cawco-workspace",
+        JSON.stringify({
+          v: 1,
+          root: { t: "l", id: "pone", tabs: [tab], active: tab, opened: null },
+          focusedLeaf: "pone",
+        })
+      );
+    },
+    [parent] as const
+  );
+  await open(hand, `${base}/session/${parent}`, '[data-slot="pane"]');
+  const h = { ...(await openFull(hand)), back: "" };
+  await hand.goBack();
+  h.back = await until(
+    "the parent's conversation again",
+    () => Promise.resolve(new URL(hand.url()).pathname),
+    (path) => path === `/session/${parent}`,
+    15_000
+  ).catch(() => new URL(hand.url()).pathname);
+  check(
+    "(h) on a phone, Open full on that Preview opens the holder's session in place with the page in its panel, and Back returns to the parent's conversation",
+    h.seen.includes("Stranger") &&
+      h.at === `/session/${stranger}` &&
+      h.back === `/session/${parent}`,
+    JSON.stringify(h)
+  );
+  await hand.close();
 };
 
 const spec: Spec = {

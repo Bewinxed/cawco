@@ -15964,8 +15964,7 @@ export const createServer = (
         return true;
       }
       // Any artifact a page of the project shows as a Canvas or Preview
-      // piece: its Open to draw and Open full size ask for it on the
-      // project's origin, where the page stands.
+      // piece, drawn on the project's origin, where the page stands.
       const project = projectOfOrigin(key);
       return (
         project !== null &&
@@ -16044,25 +16043,6 @@ export const createServer = (
     },
     canvasFrom: (request, instanceId, artifactId) =>
       openDiagramAsCanvas(request, instanceId, artifactId),
-    // A decision page's Canvas, Open to draw: that canvas at the front of the panel.
-    showFrom: async (request, instanceId, artifactId) => {
-      if (request.method !== "POST") {
-        return new Response("Show an artifact with a POST.", {
-          status: 405,
-          headers: { allow: "POST" },
-        });
-      }
-      try {
-        return Response.json(
-          await artifacts.show(instanceId, artifactId, "person")
-        );
-      } catch (error) {
-        if (error instanceof ArtifactRefusal) {
-          return new Response(error.message, { status: error.status });
-        }
-        throw error;
-      }
-    },
     // A decision page's Preview heard a canvas of its media say its shape, or a whole screen tell its least words: kept for the next Preview of it.
     keepShape: async (request, pageId) => {
       if (request.method !== "POST") {
