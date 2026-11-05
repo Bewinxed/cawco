@@ -15,6 +15,10 @@
  *   in, and the next report says so.
  * - f. A read that says neither: unknown, with the exit and its words.
  * - g. A tool with no sign-in of its own (Claude Code): refused in words.
+ * - h. Signed in, the read through the tether's real shell (core tether.ts
+ *   `spawnTethered`, a process group of its own): agy's status runs, exits
+ *   0, and the report says signed in. Spawned in the agent's group the
+ *   tether refused (exit 125) before agy ran, and every read said unknown.
  *
  *   bun scripts/probe-kit/run.ts tool-signin
  */
@@ -143,6 +147,19 @@ export default {
       "g. a tool with no sign-in of its own: refused in words",
       !none.ok && none.error === toolWords.signinNone(claude?.name ?? "claude"),
       JSON.stringify(none)
+    );
+
+    await agy.signedIn(true);
+    await agy.runs();
+    const read = await report();
+    const ran = await agy.runs();
+    check(
+      "h. the read runs through the real tether shell: agy's status ran and exited 0, and the report says signed in",
+      read.signin?.state === "signed-in" &&
+        ran.some(
+          (args) => JSON.stringify(args) === JSON.stringify(spec.signin?.status)
+        ),
+      `${JSON.stringify(read)}; agy ran ${JSON.stringify(ran)}`
     );
   },
 } satisfies Spec;

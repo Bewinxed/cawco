@@ -58,9 +58,8 @@ import { LineSplitter } from "@cawco/core/lines";
 import { darwinSocketRoot } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
-import { tetherArgs, untether } from "@cawco/core/tether";
+import { spawnTethered, untether } from "@cawco/core/tether";
 import { unhandled } from "@cawco/core/unhandled";
-import { systemProgram } from "@cawco/core/workspace-needs";
 import { DB_PATH } from "./config";
 import type { SshMachineRow, SshMachinesDb } from "./db/ssh-machines";
 import { hubIdKept } from "./hub-id";
@@ -374,29 +373,20 @@ const master = (
   row: SshMachineRow,
   path: string
 ): Bun.Subprocess<"pipe", "ignore", "pipe"> =>
-  Bun.spawn(
+  spawnTethered(
     [
-      systemProgram("sh"),
-      ...tetherArgs([
-        "ssh",
-        "-N",
-        "-o",
-        "BatchMode=yes",
-        ...sshOptions(row.sshPort),
-        "-M",
-        "-S",
-        path,
-        "--",
-        row.target,
-      ]),
+      "ssh",
+      "-N",
+      "-o",
+      "BatchMode=yes",
+      ...sshOptions(row.sshPort),
+      "-M",
+      "-S",
+      path,
+      "--",
+      row.target,
     ],
-    {
-      env: hostEnvironment(),
-      stdin: "pipe",
-      stdout: "ignore",
-      stderr: "pipe",
-      detached: true,
-    }
+    { env: hostEnvironment(), stdout: "ignore", stderr: "pipe" }
   );
 
 /** One command on the machine over the master at `path`: `sh -c` and one single-quoted word, as join.ts runs its own. */

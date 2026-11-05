@@ -16,8 +16,9 @@
  *    process of it gone within {@link GONE_MS}, `untether` then nothing.
  * 3. The caller SIGKILLed (tether-child.ts `caller`): the command, the
  *    reader and its `cat` are gone within {@link GONE_MS}.
- * 4. Spawned in its caller's process group, not detached: the tether exits
- *    `TETHER_UNLED` with its words, and its command never runs.
+ * 4. Spawned in its caller's process group, not detached (`spawnTethered`'s
+ *    own spawn with its `detached` dropped, which no caller can write): the
+ *    tether exits `TETHER_UNLED` with its words, and its command never runs.
  * 5. Linux, where a user namespace may be made (the host): in a PID
  *    namespace of its own (tether-child.ts `reuse`), the spawned process
  *    SIGKILLed and reaped while its reader waits on a pipe whose writer
@@ -38,8 +39,8 @@ import {
 } from "../../../packages/core/src/process-identity";
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import {
+  spawnTethered,
   TETHER_UNLED,
-  tetherArgs,
   untether,
 } from "../../../packages/core/src/tether";
 import { tetherWords } from "../../../packages/core/src/words/tether";
@@ -106,12 +107,10 @@ const readAll = async (
 /** 1 and 2: as the hub spawns it, then that process SIGKILLed alone. */
 async function spawnedKilled(kit: Kit): Promise<void> {
   const { check } = kit;
-  const child = Bun.spawn([systemProgram("sh"), ...tetherArgs(COMMAND)], {
+  const child = spawnTethered(COMMAND, {
     env: process.env,
-    stdin: "pipe",
     stdout: "ignore",
     stderr: "pipe",
-    detached: true,
   });
   const lines: string[] = [];
   const reading = readAll(child.stderr, lines);
@@ -195,17 +194,26 @@ async function unled(kit: Kit): Promise<void> {
     process.env.TMPDIR ?? "/tmp",
     `tether-unled-${crypto.randomUUID()}`
   );
-  const child = Bun.spawn(
-    [
-      systemProgram("sh"),
-      ...tetherArgs([
+  // `spawnTethered` always spawns `detached`, so no caller can start one
+  // unled: here its own spawn is made to drop `detached`, for this one call.
+  const { spawn } = Bun;
+  Bun.spawn = ((
+    cmds: string[],
+    options: Bun.SpawnOptions.SpawnOptions<"pipe", "ignore", "pipe">
+  ) => spawn(cmds, { ...options, detached: false })) as typeof Bun.spawn;
+  let child: Bun.Subprocess<"pipe", "ignore", "pipe">;
+  try {
+    child = spawnTethered(
+      [
         process.execPath,
         "-e",
         `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "")`,
-      ]),
-    ],
-    { env: process.env, stdin: "pipe", stdout: "ignore", stderr: "pipe" }
-  );
+      ],
+      { env: process.env, stdout: "ignore", stderr: "pipe" }
+    );
+  } finally {
+    Bun.spawn = spawn;
+  }
   const [code, said] = await Promise.all([
     child.exited,
     new Response(child.stderr).text(),

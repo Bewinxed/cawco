@@ -1,7 +1,7 @@
 /**
  * The tether spec's own processes (specs/tether.ts), each spawning the
- * tether (core tether.ts) `detached`, as the hub spawns an SSH master (hub
- * ssh-tunnels.ts `master`).
+ * tether (core tether.ts `spawnTethered`), as the hub spawns an SSH master
+ * (hub ssh-tunnels.ts `master`).
  *
  * - `caller`: spawns one over a `sleep` as the hub does (stdin a pipe it
  *   never writes, stderr a pipe), prints `{"tether":<pid>}` once its reader
@@ -36,7 +36,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { processTable } from "../../packages/core/src/process-identity";
 import { listedPid, signal } from "../../packages/core/src/signal";
-import { tetherArgs } from "../../packages/core/src/tether";
+import { spawnTethered } from "../../packages/core/src/tether";
 import { systemProgram } from "../../packages/core/src/workspace-needs";
 
 /** How long the reader has to stand, and the group to go. Ours: each takes milliseconds. */
@@ -45,16 +45,12 @@ const LAST_PID = "/proc/sys/kernel/ns_last_pid";
 
 /** The tether over a `sleep`, `detached`, its stdin `stdin`. */
 const spawnTether = (stdin: "pipe" | number) =>
-  Bun.spawn(
-    [systemProgram("sh"), ...tetherArgs([systemProgram("sleep"), "600"])],
-    {
-      env: process.env,
-      stdin,
-      stdout: "ignore",
-      stderr: "pipe",
-      detached: true,
-    }
-  );
+  spawnTethered([systemProgram("sleep"), "600"], {
+    env: process.env,
+    stdin,
+    stdout: "ignore",
+    stderr: "pipe",
+  });
 
 /** A `sleep` of this process's own. */
 const sleeper = () =>

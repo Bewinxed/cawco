@@ -1,4 +1,5 @@
 import { tetherWords } from "./words/tether";
+import { systemProgram } from "./workspace-needs";
 
 /** The tether's exit when its caller spawned it in a process group not its own: its command never ran. */
 export const TETHER_UNLED = 125;
@@ -58,17 +59,45 @@ exec 3<&0
 exec "$@" </dev/null 3<&-`;
 
 /**
- * A shell's arguments that run `argv` under the tether: `sh` and these,
- * spawned `detached` (the leader of a process group of its own) with stdin
- * a pipe the parent holds and never writes. The process spawned runs
- * `argv` itself once the shell has forked the reader.
+ * Spawns `argv` under the tether, the one way CawCo starts one: `sh -c
+ * TETHER sh <argv…>`, always `detached` (the leader of a process group of
+ * its own), its stdin a pipe the caller holds and never writes: Bun's own
+ * (`"pipe"`), or the read end of one whose writer the caller keeps (a FIFO,
+ * as fd). Nothing else may be set for stdin or the group, so no caller can
+ * start one that the tether refuses ({@link TETHER_UNLED}). The process
+ * spawned runs `argv` itself once the shell has forked the reader; once it
+ * has ended, the caller lets the reader go with {@link untether}.
+ *
+ * POSIX only. On win32 there is no `sh` to run the tether (its path,
+ * workspace-needs.ts, is `/bin/sh`), so it throws before spawning
+ * anything, as `Bun.spawn` throws for a program that is missing: the
+ * caller's own handling of a spawn that fails is what runs.
  */
-export const tetherArgs = (argv: readonly string[]): string[] => [
-  "-c",
-  TETHER,
-  "sh",
-  ...argv,
-];
+export const spawnTethered = <
+  const In extends "pipe" | number = "pipe",
+  const Out extends Bun.SpawnOptions.Readable = "pipe",
+  const Err extends Bun.SpawnOptions.Readable = "inherit",
+>(
+  argv: readonly string[],
+  options: Omit<
+    Bun.SpawnOptions.SpawnOptions<In, Out, Err>,
+    "stdin" | "stdio" | "detached" | "env"
+  > & {
+    /** Named, never left to Bun: its default is the environment this process started with (oven-sh/bun#40846). */
+    env: Record<string, string | undefined>;
+    stdin?: In;
+  }
+): Bun.Subprocess<In, Out, Err> => {
+  if (process.platform === "win32") {
+    throw new Error(tetherWords.noShell);
+  }
+  return Bun.spawn([systemProgram("sh"), "-c", TETHER, "sh", ...argv], {
+    ...options,
+    env: options.env,
+    stdin: options.stdin ?? ("pipe" as In),
+    detached: true,
+  });
+};
 
 /**
  * Lets the tether's reader go once its command has ended on its own: the

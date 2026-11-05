@@ -49,12 +49,13 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { Readable } from "node:stream";
 import {
   type MachineActivity,
   type MachineState,
   presenceLogWords,
 } from "@cawco/core";
-import { tetherArgs } from "@cawco/core/tether";
+import { spawnTethered, untether } from "@cawco/core/tether";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { Display, type Wl_interface } from "wayland-client";
 import coreProtocol from "wayland-client/protocol/wayland.json" with { type: "json" };
@@ -448,26 +449,27 @@ export const hearSleep = (
   if (!gdbus) {
     return () => undefined;
   }
-  const tether = tetherArgs([
-    gdbus,
-    "monitor",
-    "--system",
-    "--dest",
-    "org.freedesktop.login1",
-    "--object-path",
-    "/org/freedesktop/login1",
-  ]);
-  const child = spawn(systemProgram("sh"), tether, {
-    env: toolEnv(),
+  let child: Bun.Subprocess<"pipe", "pipe", "ignore">;
+  try {
     // stdin is the agent's end of the pipe whose close ends the listener.
-    stdio: ["pipe", "pipe", "ignore"],
-    // The tether leads a process group of its own, which its reader signals whole.
-    detached: true,
-  });
+    child = spawnTethered(
+      [
+        gdbus,
+        "monitor",
+        "--system",
+        "--dest",
+        "org.freedesktop.login1",
+        "--object-path",
+        "/org/freedesktop/login1",
+      ],
+      { env: toolEnv(), stdout: "pipe", stderr: "ignore" }
+    );
+  } catch {
+    return () => undefined;
+  }
   child.unref();
-  child.stdin.on("error", () => undefined);
-  child.stdout.on("end", () => child.stdin.end());
-  createInterface({ input: child.stdout }).on("line", (line) => {
+  const lines = createInterface({ input: Readable.fromWeb(child.stdout) });
+  lines.on("line", (line) => {
     if (line.startsWith("Monitoring signals")) {
       listening();
     }
@@ -476,9 +478,10 @@ export const hearSleep = (
       onSleep(said[1] === "true");
     }
   });
-  child.on("error", () => undefined);
+  // gdbus gone first: its stdout's end lets the tether's reader go.
+  lines.on("close", () => untether(child.stdin));
   // Closing the tether's stdin ends it and the listener with it.
-  return () => child.stdin.end();
+  return () => untether(child.stdin);
 };
 
 const PREPARE_FOR_SLEEP = /PrepareForSleep \((true|false),\)/u;

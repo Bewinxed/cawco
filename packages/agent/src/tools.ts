@@ -29,9 +29,8 @@ import {
 import { readWithin } from "@cawco/core/bounded";
 import { type Ran, runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { tetherArgs, untether } from "@cawco/core/tether";
+import { spawnTethered, untether } from "@cawco/core/tether";
 import { toolWords } from "@cawco/core/words/tools";
-import { systemProgram } from "@cawco/core/workspace-needs";
 import { cawcoCommand } from "./cawco-command";
 import { type SettingsRead, SettingsReadSchema } from "./claude-settings";
 import { expandHome } from "./fs";
@@ -1073,17 +1072,13 @@ const readSignin = async (spec: ToolSpec): Promise<ToolSignin> => {
   // past an agent stopped mid-read, as `agy -p /usage` did past a scratch
   // fleet's agent (2026-11-04); the tether ends it with the agent.
   const read = await readWithin(SIGNIN_READ_MS, async (signal) => {
-    const child = Bun.spawn(
-      [systemProgram("sh"), ...tetherArgs([bin, ...words.status])],
-      {
-        env: toolEnv(),
-        // The agent's end of the pipe whose close ends the read.
-        stdin: "pipe",
-        stdout: "pipe",
-        stderr: "pipe",
-        signal,
-      }
-    );
+    // stdin is the agent's end of the pipe whose close ends the read.
+    const child = spawnTethered([bin, ...words.status], {
+      env: toolEnv(),
+      stdout: "pipe",
+      stderr: "pipe",
+      signal,
+    });
     const [code, out, err] = await Promise.all([
       child.exited,
       new Response(child.stdout).text(),
