@@ -23789,8 +23789,10 @@ export const createServer = (
     db.atLimit.dropHold(row.id);
     publishInstances(row.machineId);
     publishStalls();
-    if (live) {
-      relaunchOnAccount(row.id, stopped, true);
+    // One at rest is relaunched only when its limit or sign-in cut its last
+    // turn: its carry-on starts it there ({@link relaunchOnAccount}).
+    if (live || stopped) {
+      relaunchOnAccount(row.id, stopped, live);
     }
     if (move) {
       noteAtLimit(row, move);
@@ -23908,11 +23910,11 @@ export const createServer = (
    * owedMoves}) is carried first, its process ended at rest for it,
    * and its row names the account only once its data is there; one whose
    * carry cannot happen stays on its account and in place. `carry`: its
-   * turn was refused at its account's limit (or on its sign-in), so once
-   * relaunched it is told to carry on, and answers there what that turn was
-   * asked. `live`: whether its process worked before the carry ended it
-   * ({@link processWorks}), read now when no carry came first; only then is
-   * it relaunched.
+   * turn was refused at its account's limit (or on its sign-in), so it is
+   * told to carry on there, relaunched or not, and answers there what that
+   * turn was asked. `live`: whether its process worked before the carry
+   * ended it ({@link processWorks}), read now when no carry came first; only
+   * then is it relaunched.
    */
   const relaunchOnAccount = (
     instanceId: string,
@@ -23931,17 +23933,25 @@ export const createServer = (
     if (!(row?.sessionId && agent)) {
       return;
     }
-    // At rest, starting, or being ended: a move never starts it. Its row
-    // names the account now, so whatever wakes it next starts it there.
+    // At rest, starting, or being ended: a move never relaunches it. Its row
+    // names the account now, so whatever wakes it next starts it there. A
+    // turn its limit or sign-in cut is that wake: its carry-on goes now,
+    // whatever its process's state, as any send does (it starts one at
+    // rest, and waits for one starting to be up). Dropped here, nothing
+    // sent it again until a person wrote (obelisk, 2026-11-05 12:40).
     if (!(live ?? processWorks(row))) {
       console.log(
         relaunchWords.atRest(
           sessionName(row),
           accountWords(row.accountId),
           row.status,
-          launchInFlight(row.id)
+          launchInFlight(row.id),
+          carry !== undefined
         )
       );
+      if (carry) {
+        carryOn(row, carry);
+      }
       return;
     }
     console.log(
@@ -30940,7 +30950,8 @@ export const createServer = (
           sessionName(now),
           accountWords(now.accountId),
           now.status,
-          false
+          false,
+          stopped !== false
         )
       );
     }

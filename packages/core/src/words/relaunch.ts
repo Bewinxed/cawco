@@ -44,12 +44,17 @@ export const relaunchWords = {
   /** An account move relaunches a session whose process worked, on its conversation; `then`: what it is told first, from ", " on. */
   onAccount: (session: string, account: string, then = "") =>
     `[hub] ${session} ${RELAUNCHES_ON} ${account}, its conversation resumed${then}.`,
-  /** An account move of a session whose process wasn't working: moved, never started. */
+  /**
+   * An account move of a session whose process wasn't working: moved, not
+   * relaunched. `carried`: its limit or sign-in cut its last turn, so its
+   * carry-on goes to it now and starts it there.
+   */
   atRest: (
     session: string,
     account: string,
     status: string,
-    launching: boolean
+    launching: boolean,
+    carried: boolean
   ) =>
-    `[hub] ${session} is on ${account} now, and isn't relaunched: its process wasn't working (it is ${status}${launching ? ", its launch on its way" : ""}). Whatever wakes it next starts it there.`,
+    `[hub] ${session} is on ${account} now, and isn't relaunched: its process wasn't working (it is ${status}${launching ? ", its launch on its way" : ""}). ${carried ? "What stopped its last turn no longer applies, so it is told to carry on, and that starts it there." : "Whatever wakes it next starts it there."}`,
 };

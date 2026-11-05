@@ -1970,6 +1970,24 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   };
 
   /**
+   * Whether `row` no longer runs on `current`: a decision moves a session
+   * off `current` only while it runs there, so a timer or a look that began
+   * before another move took it off decides nothing ({@link lookAt}).
+   */
+  const left = (row: LimitRow, current: Account): boolean => {
+    const on = ports.accountOf(row);
+    if (on === current.id) {
+      return false;
+    }
+    const accounts = db.accounts.list();
+    const now = on ? db.accounts.get(on) : undefined;
+    console.info(
+      `[at-limit] ${ports.named(row)} isn't decided again off ${accountNameAmong(current, accounts)}: it runs on ${now ? accountNameAmong(now, accounts) : "no account"} now.`
+    );
+    return true;
+  };
+
+  /**
    * Moves `row` off `current`, or holds it, as {@link decideStop} says; one
    * a person moved, only as they asked ({@link carryByHand}).
    */
@@ -1979,6 +1997,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     cause: Cause = "limit"
   ): Promise<void> => {
     if (acting.has(row.id) || over(row)) {
+      return;
+    }
+    if (left(row, current)) {
       return;
     }
     if (ports.moving(row)) {
@@ -2473,13 +2494,44 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     return { ...held, since: now, staleAt: null };
   };
 
+  /** Held sessions a look is on now: one look at a hold at a time ({@link lookAt}). */
+  const looking = new Set<string>();
+
   /**
-   * One held session: past the cutoff, nothing is done to it
-   * ({@link goneStale}) unless `asked`: a person's or its parent's word, or a
-   * Continue, took it up ({@link takenUp}); else it is carried on
-   * ({@link carryHold}). One that runs no more has its hold dropped.
+   * One held session, its hold as it stands now: past the cutoff, nothing is
+   * done to it ({@link goneStale}) unless `asked`: a person's or its
+   * parent's word, or a Continue, took it up ({@link takenUp}); else it is
+   * carried on ({@link carryHold}). One that runs no more has its hold
+   * dropped.
+   *
+   * Looks run side by side (a recheck, a rebalance's pass, an account back
+   * from its bench, a message held at the limit), each over the holds it
+   * listed as it began. So a hold is looked at by one look at a time, read
+   * as it stands when that look reaches it: one another look is on is left
+   * to it, and one another look ended (it moved the session, or carried it
+   * on at its reset) is not looked at. A look acting on its list's copy
+   * moved a session it no longer held a second time (obelisk, 2026-11-05
+   * 12:40:30: a move re-reading 1,000k tokens cold, 3 s after the first).
    */
   const lookAt = async (
+    instanceId: string,
+    now: number,
+    asked: TakenUpBy | undefined
+  ): Promise<void> => {
+    const held = db.atLimit.hold(instanceId);
+    if (!held || looking.has(instanceId)) {
+      return;
+    }
+    looking.add(instanceId);
+    try {
+      await lookAtHeld(held, now, asked);
+    } finally {
+      looking.delete(instanceId);
+    }
+  };
+
+  /** {@link lookAt}'s one hold, read as it stands. */
+  const lookAtHeld = async (
     held: LimitHold,
     now: number,
     asked: TakenUpBy | undefined
@@ -2604,7 +2656,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const now = Date.now();
     landing.clear();
     for (const held of admissionOrder(db.atLimit.holds())) {
-      await lookAt(held, now, undefined);
+      await lookAt(held.instanceId, now, undefined);
     }
   };
 
@@ -2818,7 +2870,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       console.info(
         `[at-limit] ${row ? ports.named(row) : instanceId} is looked at again now, not at the next recheck: ${why}.`
       );
-      await lookAt(held, Date.now(), asked);
+      await lookAt(instanceId, Date.now(), asked);
       plan();
     },
     /**
