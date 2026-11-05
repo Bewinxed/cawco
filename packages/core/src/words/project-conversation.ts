@@ -13,6 +13,8 @@ export const conversationWords = {
     full: "Message Caw…  /  for commands, @ to mention",
     short: "Message Caw…",
   },
+  /** The docked head's action on a desk: puts his panel away; the conversation goes on. The phone's sheet keeps its Close. */
+  hidePanel: "Hide Caw",
   /** The panel head's action: the conversation on show, as a tab. */
   openAsTab: "Open as a tab",
   /** A new conversation with nowhere to run: the project has no checkout on a machine yet. */

@@ -1017,7 +1017,23 @@ public enum Words {
         /// A tab's details card, and the tabs of a pane's group.
         public static let sessionDetails = "Session details"
 
-        public static let openSessions = "Open sessions in this group"
+        /// The tab strip's name: its tabs are chats and projects alike. In a split each strip says its group's number, the one Move to group names.
+        public static func openTabs(group: Int, groups: Int) -> String {
+            groups > 1 ? "Open tabs, group \(group)" : "Open tabs"
+        }
+
+        /// A tab's menu: its place in the workspace's groups, for a chat's tab and a project's alike.
+        public static let splitRight = "Split right"
+
+        public static let splitDown = "Split down"
+
+        public static func moveToGroup(group: Int) -> String {
+            "Move to group \(group)"
+        }
+
+        public static let closeTab = "Close"
+
+        public static let closeOthers = "Close others"
 
         /// The transcript's landmark, as a screen reader names it.
         public static let transcript = "Session transcript"
@@ -2879,6 +2895,9 @@ public enum Words {
             /// Each word by the key it stands under, for a lookup by data value.
             public static let byKey: [String: String] = ["full": full, "short": short]
         }
+
+        /// The docked head's action on a desk: puts his panel away; the conversation goes on. The phone's sheet keeps its Close.
+        public static let hidePanel = "Hide Caw"
 
         /// The panel head's action: the conversation on show, as a tab.
         public static let openAsTab = "Open as a tab"

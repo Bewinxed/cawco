@@ -196,9 +196,16 @@
   import type { ProjectPageData } from "./project-page-data";
 
   let {
+    front,
     projectId,
     seed,
   }: {
+    /**
+     * Its tab is its group's chosen one. A phone's swipe neighbour is drawn
+     * beside it and is not: only the page in front draws Caw's panel
+     * (CawFloat `front`), whose sheet stands over the whole screen.
+     */
+    front: boolean;
     /** The project this tab is. */
     projectId: string;
     /**
@@ -444,7 +451,7 @@
     });
   });
   /** His panel stands docked beside the page, which yields it its room (CawFloat). */
-  const docked = $derived(lead.open && lead.anchor !== null);
+  const docked = $derived(front && lead.open && lead.anchor !== null);
 
   /** The project's views, kept then drafted, once read. */
   let views = $state<ProjectView[]>([]);
@@ -2163,6 +2170,10 @@
       taskHref={(id) => hrefOf(id)}
       {taskOf}
     />
+  {:else if leavingFor}
+    <!-- The tab's first read, inside its grace: it shows nothing of its
+         own, never the refusal it has not had (a quick read drew "Tasks are
+         not available" for a beat on every open from the rail). -->
   {:else if !list}
     <div class="max-w-c-measure">
       <EmptyState
@@ -2525,6 +2536,7 @@
     {#snippet dock()}
       <CawFloat
         {asksElsewhere}
+        {front}
         {lead}
         {projectId}
         projectName={project?.name ?? ""}

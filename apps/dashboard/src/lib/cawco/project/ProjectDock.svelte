@@ -6,11 +6,13 @@
    * the head. On a phone the panel is the bottom sheet, and the page keeps
    * it all.
    *
-   * The side column (`@project-dock`, the panel and the page at their
-   * narrowest) stands from the width where both fit: the panel with its end
-   * margin, the pane's inline padding and two board columns with the gap
-   * between. Where the page has no room beside it: a row of its own under
-   * the page, at most half the height (from 640px). On his Preview tab
+   * The side column (`@project-dock`) stands from the width where one board
+   * column and the pane's padding leave the panel a phone's composer width:
+   * the panel at its full width where that fits, narrower down to there, so
+   * a project in a desk's split keeps its board beside him. Where the page
+   * has no room beside it: a row of its own under the page, at most half
+   * the height. Both from 640px: under it the panel is the sheet, so a
+   * phone's page keeps its whole width. On his Preview tab
    * (`preview`, CawLead `tab`) the panel widens for what he shows: its
    * column takes two conversations' widths while a board column still
    * stands beside it, its row three quarters of the height; the grid tweens
@@ -36,7 +38,7 @@
 
 <div class="@container flex h-full min-h-0 min-w-0 flex-1 flex-col">
   <div
-    class="grid min-h-0 flex-1 grid-areas-(--docked-areas) grid-cols-(--docked-cols) grid-rows-(--docked-rows) motion-safe:transition-[grid-template-columns,grid-template-rows] motion-safe:duration-(--dur-panel) motion-safe:ease-drawer phone:data-caw-open:grid-areas-(--docked-areas-row) phone:data-caw-open:grid-rows-(--docked-rows-row) @project-dock:data-caw-open:grid-areas-(--docked-areas-side) @project-dock:data-caw-open:grid-cols-(--docked-cols-side) @project-dock:data-caw-open:grid-rows-(--docked-rows)"
+    class="grid min-h-0 flex-1 grid-areas-(--docked-areas) grid-cols-(--docked-cols) grid-rows-(--docked-rows) motion-safe:transition-[grid-template-columns,grid-template-rows] motion-safe:duration-(--dur-panel) motion-safe:ease-drawer phone:data-caw-open:grid-areas-(--docked-areas-row) phone:data-caw-open:grid-rows-(--docked-rows-row) phone:@project-dock:data-caw-open:grid-areas-(--docked-areas-side) phone:@project-dock:data-caw-open:grid-cols-(--docked-cols-side) phone:@project-dock:data-caw-open:grid-rows-(--docked-rows)"
     data-caw-open={docked || undefined}
     data-caw-preview={(docked && preview) || undefined}
     style:--docked-areas={'"page"'}
@@ -45,7 +47,7 @@
     style:--docked-cols="minmax(0, 1fr)"
     style:--docked-cols-side={preview
       ? "minmax(0, 1fr) min(calc(2 * var(--c-panel-w) + var(--space-6)), calc(100% - var(--c-board-col-min) - var(--space-7)))"
-      : "minmax(0, 1fr) calc(var(--c-panel-w) + var(--space-6))"}
+      : "minmax(0, 1fr) min(calc(var(--c-panel-w) + var(--space-6)), calc(100% - var(--c-board-col-min) - var(--space-7) - var(--space-6)))"}
     style:--docked-rows="minmax(0, 1fr)"
     style:--docked-rows-row={preview
       ? "minmax(0, 1fr) 75%"

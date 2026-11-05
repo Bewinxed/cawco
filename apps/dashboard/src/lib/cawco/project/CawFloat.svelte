@@ -42,6 +42,7 @@
   import type { SetupProgress } from "./setup-progress";
 
   let {
+    front,
     lead,
     projectId,
     projectName,
@@ -49,6 +50,13 @@
     asksElsewhere,
     switchAt,
   }: {
+    /**
+     * Its page's tab is the one in front. A page drawn beside it (a phone's
+     * swipe neighbour) keeps its panel's state but draws none: the sheet is
+     * portaled over the whole screen, so another project's would stand over
+     * this one's page.
+     */
+    front: boolean;
     lead: CawLead;
     projectId: string;
     projectName: string;
@@ -63,7 +71,7 @@
   /** A phone: the page is one scroller with the views bar at its foot (ViewBar's line). */
   const phone = new MediaQuery("(max-width: 639px)");
   const fine = new MediaQuery("(hover: hover) and (pointer: fine)");
-  const open = $derived(lead.open && lead.anchor !== null);
+  const open = $derived(front && lead.open && lead.anchor !== null);
   /**
    * The project's stops stand (a forget's or Caw off's tray, or their line
    * parked under the head): on a phone, where his sheet covers the page
@@ -89,7 +97,11 @@
       });
     }
   });
+  // A sheet that closes because its page left the front was not put away.
   const setOpen = (next: boolean) => {
+    if (!front) {
+      return;
+    }
     lead.open = next;
   };
 
@@ -172,7 +184,7 @@
        2026-10-23). -->
   <aside
     aria-label="Caw, {projectName}"
-    class="grid-area-dock in-data-caw-open:phone:mx-space-5 in-data-caw-open:phone:mt-0 in-data-caw-open:phone:mb-space-6 in-data-caw-open:@min-[938px]:mt-space-6 in-data-caw-open:@min-[938px]:mr-space-6 in-data-caw-open:@min-[938px]:mb-space-6 in-data-caw-open:@min-[938px]:ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile"
+    class="grid-area-dock in-data-caw-open:phone:mx-space-5 in-data-caw-open:phone:mt-0 in-data-caw-open:phone:mb-space-6 in-data-caw-open:@project-dock:mt-space-6 in-data-caw-open:@project-dock:mr-space-6 in-data-caw-open:@project-dock:mb-space-6 in-data-caw-open:@project-dock:ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile"
     data-caw-dock
     {@attach dock}
     {@attach appearOnMount({

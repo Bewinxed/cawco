@@ -77,7 +77,7 @@
     values={tabs}
     variant="folder"
   >
-    <TabsList aria-label="Open sessions in this group">
+    <TabsList aria-label={transcriptWords.openTabs(1, 1)}>
       {#each tabs as tab (tab)}
         {@const hung = tab === chosen && joined}
         <!-- The tab's box the card hangs from, as PaneTabs wraps its tabs. -->

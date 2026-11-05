@@ -366,10 +366,14 @@ const CONTAINERS = {
   // another below (decisions/host Decision.svelte).
   "pictures-split": "680px",
   "decisions-900px": "900px",
-  // The project page holds Caw's docked panel beside the page: the panel
-  // (c-panel-w and its space-6 end margin), the pane's inline padding
-  // (space-7, space-6), two 240px board columns and the space-3 between.
-  "project-dock": "938px",
+  // The project page holds Caw's docked panel beside the page from here:
+  // one board column (c-board-col-min, 240px) and the pane's inline padding
+  // (space-7, space-6: 46px) leave the panel about 314px with its space-6
+  // end margin, a phone's composer width. Narrower, the panel takes the
+  // page's foot; that halved the board to one card in a desk's split
+  // (cold review 60401c37), where a group is about 600px wide. From 938px
+  // the panel stands at its full c-panel-w (ProjectDock's columns).
+  "project-dock": "600px",
   // A section row on a phone (config/SectionRow.svelte) holds its controls
   // beside its name from here: the padding (2 × space-2), the mark (c-mark,
   // 26px), two space-3 gaps and the controls under a finger (a rollout chip

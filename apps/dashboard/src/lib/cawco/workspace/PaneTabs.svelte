@@ -96,6 +96,7 @@
   import { workingSet } from "../working-set.svelte";
   import { dropHint, tabDropTarget } from "./dnd.svelte";
   import { cardWidthIn, placeUnder } from "./hang-place";
+  import { layoutPolicy } from "./layout-policy.svelte";
   import SessionDetails from "./SessionDetails.svelte";
   import SessionStatus from "./SessionStatus.svelte";
   import { rebuildScheduler } from "./scheduler.svelte";
@@ -270,6 +271,18 @@
    */
   const restAt = (i: number) => restRank(tabs.length, chosenAt, i);
 
+  /**
+   * A split is offered where it can be seen: a deck shows one group at a
+   * time, so a split there drew nothing (cold review 60401c37), and a
+   * layout at its most groups (`maxLeaves`) makes no more.
+   */
+  const splits = $derived(
+    !layoutPolicy.deck && workspace.leaves.length < layoutPolicy.maxLeaves
+  );
+  /** This group's number among the workspace's, counted from 1: the strip's name and Move to group say it. */
+  const groupNumber = $derived(
+    workspace.leaves.findIndex((other) => other.id === leaf.id) + 1
+  );
   const otherLeaves = $derived(
     workspace.leaves.filter((other) => other.id !== leaf.id)
   );
@@ -720,7 +733,8 @@
   /* ── A new session, from the strip's end ──────────────────────────
      The "+" after the last tab opens the New Session form at the "+" (the
      popover, the bottom sheet under 640px: spawn/NewSessionPopover), in the
-     place of the tab in front: its machine, its folder and its project.
+     place of the tab in front: its machine, its folder and its project; a
+     project's tab, that project.
      Harness, model and mode are the form's own: the last
      start's (the mode last chosen on its machine), else none, and Start
      says it waits for a mode. The session it starts
@@ -733,10 +747,12 @@
   function startHere(plus: HTMLElement) {
     const here = leaf.active;
     const ctx = here ? contextOf(here) : null;
+    // A project's tab in front starts the session in that project.
     const projectId =
-      here && ctx?.cwd
+      projectOfTab(here) ??
+      (here && ctx?.cwd
         ? cawco.instanceIndex.byId.get(here)?.projectId
-        : undefined;
+        : undefined);
     newSession(
       {
         ...(ctx?.machine ? { machineId: ctx.machine } : {}),
@@ -1363,7 +1379,7 @@
   variant="folder"
 >
   <TabsList
-    aria-label={transcriptWords.openSessions}
+    aria-label={transcriptWords.openTabs(groupNumber, workspace.leaves.length)}
     onscroll={scrolledUnderCard}
     scrollable
   >
@@ -1523,33 +1539,39 @@
           <!-- Every gesture has a command that does the same thing. Splitting
                  and moving are reachable from here before drag-and-drop exists,
                  and stay reachable for anyone not using a pointer. -->
-          <ContextMenu.Item
-            onSelect={() => workspace.split(leaf.id, "right", tab.id)}
-          >
-            <IconSplitRight />
-            <span>Split right</span>
-          </ContextMenu.Item>
-          <ContextMenu.Item
-            onSelect={() => workspace.split(leaf.id, "bottom", tab.id)}
-          >
-            <IconSplitDown />
-            <span>Split down</span>
-          </ContextMenu.Item>
+          {#if splits}
+            <ContextMenu.Item
+              onSelect={() => workspace.split(leaf.id, "right", tab.id)}
+            >
+              <IconSplitRight />
+              <span>{transcriptWords.splitRight}</span>
+            </ContextMenu.Item>
+            <ContextMenu.Item
+              onSelect={() => workspace.split(leaf.id, "bottom", tab.id)}
+            >
+              <IconSplitDown />
+              <span>{transcriptWords.splitDown}</span>
+            </ContextMenu.Item>
+          {/if}
           {#if otherLeaves.length > 0}
             <ContextMenu.Separator />
-            {#each otherLeaves as other, i (other.id)}
+            {#each otherLeaves as other (other.id)}
               <ContextMenu.Item
                 onSelect={() => workspace.move(tab.id, other.id)}
               >
                 <IconMoveTab />
-                <span>Move to group {i + 2}</span>
+                <span
+                  >{transcriptWords.moveToGroup(
+                    workspace.leaves.findIndex((one) => one.id === other.id) + 1
+                  )}</span
+                >
               </ContextMenu.Item>
             {/each}
           {/if}
           <ContextMenu.Separator />
           <ContextMenu.Item onSelect={() => workspace.close(tab.id)}>
             <IconCloseTab />
-            <span>Close</span>
+            <span>{transcriptWords.closeTab}</span>
           </ContextMenu.Item>
           <ContextMenu.Item
             disabled={leaf.tabs.length < 2}
@@ -1562,7 +1584,7 @@
             }}
           >
             <IconCloseOthers />
-            <span>Close others</span>
+            <span>{transcriptWords.closeOthers}</span>
           </ContextMenu.Item>
           <ContextMenu.Separator />
           <ContextMenu.CopyItem
