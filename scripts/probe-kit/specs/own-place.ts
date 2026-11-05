@@ -15,19 +15,41 @@
  * Private office is on a machine that is online, so there is nowhere to cut
  * this task's workspace." Its plain delegates ran.
  *
- * - o1. A delegate routine of the project, run now: its run is not skipped,
- *   and its work item's workspace is cut on the hub's machine from the
- *   project's folder on the hub.
- * - o2. A task of the project, an attempt started at it by a session of the
- *   project: the start is taken, and its workspace is cut from that folder
- *   too.
+ * The project is made as New project makes one (`caw: false`, so no
+ * conversation answers for it) and set up as an "own" setup is: its Send
+ * writes nothing, and the project's session writes stages.md after it with
+ * `folder_write` (the project-setup skill's step 6, setup-send's leg 2).
+ * Before that a task is refused: "The project is not set up yet, so it has
+ * no stages" (r443).
+ *
+ * - o1. A delegate routine of the project: the test run every new routine
+ *   fires once as it is made (routines.ts `create`, slot `test:<at>`) is not
+ *   skipped, and its work item's workspace is cut on the hub's machine from
+ *   the project's folder on the hub. Only that one run: a run asked for
+ *   while it goes is skipped as "the test run is still going" (r443).
+ * - o2. A task of the project, filed in its first stage, and an attempt
+ *   started at it by a session of the project: the start is taken, and its
+ *   workspace is cut from that folder too.
  *
  *   bun scripts/probe-kit/run.ts own-place
  */
+import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
+
+/** The stages an "own" setup's session writes after its Send, as setup-send's leg 2 writes them. */
+const STAGES_MD = `---
+found      todo
+your-call  you
+done       done
+moves
+  * → *    you
+views
+  board    by stage
+---
+`;
 
 interface Cut {
   machine_id: string;
@@ -74,8 +96,30 @@ const spec: Spec = {
       "SELECT kind FROM project_places WHERE project_id = ?",
       project.id
     );
+    // The project's session sets it up as an own setup's does after its
+    // Send; it is the parent of o2's attempt too.
+    const parent = await fleet.spawn("claude", "Office lead", fleet.repo, {
+      projectId: project.id,
+    });
+    const wrote = await toolWords(
+      {
+        base: fleet.base,
+        id: parent,
+        credential: await fleet.sessionCredential(parent),
+      },
+      "folder_write",
+      { path: "stages.md", content: STAGES_MD }
+    );
+    const stages = await fleet.api<{ source: string }>(
+      `/api/projects/${project.id}/stages`
+    );
+    check(
+      "o0: the own project is set up: its session's stages.md is its stages",
+      !wrote.refused && stages.source === "file",
+      `wrote: ${wrote.text.slice(0, 200)}; stages from ${stages.source}`
+    );
 
-    // o1. A routine's delegate run.
+    // o1. A routine's delegate run: the test run its making fires.
     const routine = await fleet.api<{ id: string }>("/api/routines", {
       projectId: project.id,
       name: "Weekly listings scan",
@@ -85,16 +129,15 @@ const spec: Spec = {
       prompt: "Say ok.",
       lands: "none",
     });
-    await fleet.api(`/api/routines/${routine.id}/run`, {});
     const run = await until(
-      "the routine's run started or was skipped",
+      "the routine's test run started or was skipped",
       () =>
         fleet.query<{
           reason: string | null;
           state: string;
           work_item_id: string | null;
         }>(
-          "SELECT state, reason, work_item_id FROM routine_runs WHERE routine_id = ? ORDER BY rowid DESC LIMIT 1",
+          "SELECT state, reason, work_item_id FROM routine_runs WHERE routine_id = ? AND slot LIKE 'test:%'",
           routine.id
         )[0],
       (row) =>
@@ -113,10 +156,8 @@ const spec: Spec = {
       `places ${JSON.stringify(places)}; run ${JSON.stringify(run)}; cut ${JSON.stringify(runCut)}`
     );
 
-    // o2. A task's attempt, started by a session of the project.
-    const parent = await fleet.spawn("claude", "Office lead", fleet.repo, {
-      projectId: project.id,
-    });
+    // o2. A task's attempt, started by the project's session; filed in its
+    // first stage, `found`.
     const task = await fleet.api<{ id: string }>(
       `/api/projects/${project.id}/tasks`,
       { title: "Shortlist three offices near the station" }
