@@ -1,10 +1,11 @@
 /**
  * The agent's stores thread (packages/agent/src/stores/) and its search
- * process (packages/agent/src/search/process.ts), asked inside the compiled
+ * processes (packages/agent/src/search/process.ts), asked inside the compiled
  * binary as `cawco proof-stores` (proof-runtime.ts): the thread starts from
  * the binary's embedded entry (build-binary.ts,
- * ./scripts/binary/stores-worker.js), the search process as the binary's own
- * `search-host` verb (entry.ts), and the transcript index it holds parses new
+ * ./scripts/binary/stores-worker.js), the search processes (its writer and
+ * its reader) as the binary's own `search-host` verb (entry.ts), and the
+ * transcript index the writer holds parses new
  * transcripts on worker threads of its own, started from inside it
  * (jsonl-parser pool.ts `workerUrl`), as in a shipped agent.
  *
@@ -59,15 +60,18 @@ export const proveStores = async (): Promise<void> => {
   );
   const rows = await storeRead("opencode.ownRows", undefined, 10_000);
   let through: number | undefined;
-  const index = new SearchProcess((opened) => {
-    through ??= opened;
-  });
-  await index.work("sync", Date.now());
-  const found = await index.read("search", {
+  const opened = (at: number) => {
+    through ??= at;
+  };
+  const writer = new SearchProcess("write", opened);
+  const reader = new SearchProcess("read", opened);
+  await writer.work("sync", Date.now());
+  const found = await reader.read("search", {
     query: WORD,
     options: { limit: 20 },
   });
-  index.close();
+  reader.close();
+  writer.close();
   const usage = await storeWork("usage.scan", Date.now());
   const sessions = new Set(found.map((hit) => hit.sessionId));
   const said = {

@@ -1,19 +1,23 @@
 /**
- * Transcript search service: keeps the transcript index (held by the
- * agent's search process, search/host.ts) in sync with Claude Code and pi
- * transcripts and OpenCode sessions, in the background and before a search,
- * and asks it each search. Nothing of the index's SQLite runs in the agent:
- * a question that runs past its limit, or that its asker lets go, ends with
- * the process that ran it (search/process.ts).
+ * Transcript search service: keeps the transcript index in sync with Claude
+ * Code and pi transcripts and OpenCode sessions, in the background and
+ * before a search, and asks it each search. Nothing of the index's SQLite
+ * runs in the agent: its writer and its reader are processes of their own
+ * (search/host.ts, search/process.ts). A sync runs in the writer to its end
+ * whatever happens to the searches; a question that runs past its limit, or
+ * that its asker lets go, ends with the reader that ran it, and the next
+ * question is answered by the reader started in its place.
  */
 
-import type {
-  TranscriptAnswer,
-  TranscriptQuery,
-  TranscriptTurns,
-  TranscriptTurnsQuery,
-} from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import {
+  TRANSCRIPT_ANSWER_MS,
+  TRANSCRIPT_QUERY_MS,
+  type TranscriptAnswer,
+  type TranscriptQuery,
+  type TranscriptTurns,
+  type TranscriptTurnsQuery,
+} from "@cawco/core/find";
 import { inFlight } from "@cawco/core/loop-watch";
 import { unhandled } from "@cawco/core/unhandled";
 import { SearchProcess } from "./process";
@@ -42,14 +46,22 @@ const SYNC_INTERVAL_MS = 10 * 60_000;
  */
 const SEARCH_FRESH_MS = 10_000;
 /**
- * How long a search waits for the sync it starts, ms: inside the hub's 1.5 s
- * window for each machine. A sync still running past it answers from what
- * the index holds so far, saying how far that is ({@link
- * TranscriptAnswer.indexedThrough}), rather than every search timing out at
- * the hub; a search that finds a sync already running waits for none. A
- * sync that fails within it refuses the search with its reason.
+ * What the wire and the hub take of a machine's window, ms, besides its
+ * sync and its query. Our call.
  */
-const SYNC_WAIT_MS = 1000;
+const WIRE_MS = 200;
+/**
+ * How long a search waits for the sync it starts, ms: what is left of the
+ * hub's window for each machine ({@link TRANSCRIPT_ANSWER_MS}) once the
+ * query ({@link TRANSCRIPT_QUERY_MS}) and the wire ({@link WIRE_MS}) have
+ * theirs. A sync of the few turns ten busy sessions add in ten minutes takes
+ * 150 ms. A sync still running past it goes on in the writer, and the
+ * search answers from what the index holds so far, saying how far that is
+ * ({@link TranscriptAnswer.indexedThrough}); a search that finds a sync
+ * already running waits for none. A sync that fails within it refuses the
+ * search with its reason.
+ */
+const SYNC_WAIT_MS = TRANSCRIPT_ANSWER_MS - TRANSCRIPT_QUERY_MS - WIRE_MS;
 const MAX_SEARCH_LIMIT = 50;
 const DEFAULT_SEARCH_LIMIT = 20;
 /** How many documents a listing (an author's words, no query) answers with at most. */
@@ -88,11 +100,19 @@ export class TranscriptSearchService {
   readonly #firstSync = Promise.withResolvers<void>();
   /** Settles once the first sync has ended, however it ended. */
   readonly synced = this.#firstSync.promise;
-  /** The index, in its own process: each process that opens it says how far it is whole. */
-  readonly #index = new SearchProcess((through) => {
+  /** Each process that opens the index says how far it is whole. */
+  readonly #heardOpen = (through: number): void => {
     this.#indexedThrough = Math.max(this.#indexedThrough, through);
     this.#whole ||= through > 0;
-  });
+  };
+  /** The index's one writer, in its own process: syncs and forgets, never stopped for a search. */
+  readonly #writer = new SearchProcess("write", this.#heardOpen);
+  /** The index's reader, in its own process: killed with a question past its limit or let go. */
+  readonly #reader = new SearchProcess(
+    "read",
+    this.#heardOpen,
+    this.#writer.firstOpen
+  );
 
   /**
    * Run one sync cycle, or join the one in flight: claude and pi transcripts +
@@ -132,7 +152,7 @@ export class TranscriptSearchService {
 
   async #syncOnce(): Promise<void> {
     const startedAt = Date.now();
-    await this.#index.work("sync", startedAt, (through) => {
+    await this.#writer.work("sync", startedAt, (through) => {
       this.#indexedThrough = Math.max(this.#indexedThrough, Number(through));
     });
     this.#syncedAt = startedAt;
@@ -147,7 +167,7 @@ export class TranscriptSearchService {
    */
   async forget(sessionId: string): Promise<void> {
     await this.#syncing?.catch(() => undefined);
-    const gone = await this.#index.work("forget", sessionId);
+    const gone = await this.#writer.work("forget", sessionId);
     console.info(
       `[search] transcript ${sessionId} deleted: ${gone} indexed document${gone === 1 ? "" : "s"} forgotten`
     );
@@ -254,7 +274,7 @@ export class TranscriptSearchService {
     signal?: AbortSignal
   ): Promise<TranscriptTurns> {
     await this.#fresh();
-    return this.#index.read(
+    return this.#reader.read(
       "turns",
       {
         sessions: query.sessions,
@@ -283,7 +303,7 @@ export class TranscriptSearchService {
       ...(options?.before ? { before: options.before } : {}),
     };
     if (query.trim() === "" && author !== undefined) {
-      return this.#index.read(
+      return this.#reader.read(
         "listed",
         {
           author,
@@ -296,7 +316,7 @@ export class TranscriptSearchService {
         signal
       );
     }
-    return this.#index.read(
+    return this.#reader.read(
       "search",
       {
         query,
@@ -317,6 +337,7 @@ export class TranscriptSearchService {
       clearInterval(this.#timer);
       this.#timer = null;
     }
-    this.#index.close();
+    this.#reader.close();
+    this.#writer.close();
   }
 }

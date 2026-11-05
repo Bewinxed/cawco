@@ -1,27 +1,36 @@
 /**
- * The agent's search process: the transcript search index, its SQLite file
- * and every read of OpenCode's databases it takes documents from, in a
- * process of its own, which the agent (search/process.ts) asks over IPC and
- * kills when a question passes its limit or its asker lets it go.
+ * The agent's search processes: the transcript search index, its SQLite
+ * file and every read of OpenCode's databases it takes documents from, in
+ * processes of their own, which the agent (search/process.ts) asks over IPC.
+ * Each runs in one of two roles, its last argument:
  *
- * A process, not a thread: a query inside `sqlite3_step()` stops for
+ * - `write`: the index's one writer. It syncs the index and forgets what a
+ *   purge deleted; it is never stopped for a search, so a sync runs to its
+ *   end whoever lets a search go. It opens the index first, bringing its
+ *   layout up to date.
+ * - `read`: answers searches, listings and a conversation's turns from the
+ *   index opened read-only, beside the writer: what it holds as of the
+ *   writer's last commit. The agent kills it (SIGKILL) when a question
+ *   passes its limit or its asker lets it go, and starts another.
+ *
+ * Processes, not threads: a query inside `sqlite3_step()` stops for
  * nothing a JavaScript thread can send it. bun:sqlite has no
  * `Database.interrupt()` (oven-sh/bun#31014, its PR #31078 still open), and
  * a Worker's `terminate()` waits for the thread to come back to JavaScript:
  * a recursive CTE went on burning 2,011 ms of CPU in the 2 s after
  * `terminate()`, and the worker never closed (bun 1.4.4, 2026-10-25). A
- * process's SIGKILL ends it wherever it is. The index is a rollback-journal
- * database at `synchronous = FULL` (jsonl-parser fts5.ts `#open`), so a
- * write cut short there leaves a hot journal, which the next process to open
- * it rolls back.
+ * process's SIGKILL ends it wherever it is. The index is a WAL database
+ * (jsonl-parser fts5.ts `#open`): a reader reads the last commit beside the
+ * writer and writes nothing, and a write cut short (the writer killed for
+ * its silence) never committed, so no reader sees it.
  *
- * It opens the index as it starts and says `ready`; it beats every
+ * Each opens the index as it starts and says `ready`; each beats every
  * {@link BEAT_MS} while its thread is free, which is how the agent bounds a
- * sync's steps; it ends when the agent's channel closes.
+ * sync's steps; each ends when the agent's channel closes.
  *
  * Each OpenCode database's watermark (its newest `time_updated` indexed) is
  * kept in the index's `meta`, under {@link WATERMARK} and its path, and
- * here, written only by a sync that committed.
+ * in the writer, written only by a sync that committed.
  */
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
@@ -55,11 +64,8 @@ const BEAT_MS = 1000;
 /** How an op says how far it has come, before it answers. */
 type Tell = (value: unknown) => void;
 
-/** Everything the agent asks of the index, by name: each op takes one argument, and answers once. */
-const searchOps = (
-  index: TranscriptIndex,
-  watermarks: Map<string, number>
-) => ({
+/** What the writer is asked, by name: each op takes one argument, and answers once. */
+const writeOps = (index: TranscriptIndex, watermarks: Map<string, number>) => ({
   /**
    * One sync: every OpenCode database's messages since its watermark and
    * every Claude and pi transcript's new lines, committed as fts5.ts `sync`
@@ -104,13 +110,26 @@ const searchOps = (
   /** A deleted transcript's documents forgotten; how many. */
   forget: (sessionId: string) =>
     Promise.resolve(index.forgetSession(sessionId)),
+});
+
+/** What the reader is asked, by name: each op takes one argument, and answers once. */
+const readOps = (index: TranscriptIndex) => ({
   turns: (options: TurnsOptions) => Promise.resolve(index.turns(options)),
   listed: (options: ListOptions) => Promise.resolve(index.listed(options)),
   search: (args: { query: string; options: SearchOptions }) =>
     Promise.resolve(index.search(args.query, args.options)),
 });
 
-export type SearchOps = ReturnType<typeof searchOps>;
+/** A search process's role: the index's one writer, or a reader beside it. */
+export type SearchRole = "read" | "write";
+
+type WriteOps = ReturnType<typeof writeOps>;
+type ReadOps = ReturnType<typeof readOps>;
+export type SearchOps = WriteOps & ReadOps;
+/** What each role is asked. */
+export type RoleOp<R extends SearchRole> = R extends "write"
+  ? keyof WriteOps
+  : keyof ReadOps;
 export type SearchOp = keyof SearchOps;
 export type SearchArg<K extends SearchOp> = Parameters<SearchOps[K]>[0];
 export type SearchAnswer<K extends SearchOp> = Awaited<
@@ -145,22 +164,41 @@ const failure = (error: unknown): { code?: string; message: string } => {
   };
 };
 
-/** The index opened, every watermark it keeps read, and each ask answered as it comes. */
+/** This process's role, its last argument (search/process.ts `HOST`). */
+const role = process.argv.at(-1);
+
+/** The index opened for `role`, and each ask answered as it comes. */
 const serve = async (): Promise<void> => {
-  const path = transcriptIndexPath();
-  await mkdir(dirname(path), { recursive: true });
-  const index = new TranscriptIndex(path);
-  const watermarks = new Map<string, number>();
-  const rows = index.db
-    .query("SELECT key, value FROM meta WHERE key LIKE ?")
-    .all(`${WATERMARK}%`) as { key: string; value: string }[];
-  for (const row of rows) {
-    watermarks.set(row.key, Number(row.value));
+  if (role !== "read" && role !== "write") {
+    throw new Error(
+      `a search process is started as read or write, not ${role}`
+    );
   }
-  const ops = searchOps(index, watermarks);
+  const path = transcriptIndexPath();
+  let ops: Record<string, (arg: never, tell: Tell) => Promise<unknown>>;
+  let index: TranscriptIndex;
+  if (role === "write") {
+    await mkdir(dirname(path), { recursive: true });
+    index = new TranscriptIndex(path);
+    const watermarks = new Map<string, number>();
+    const rows = index.db
+      .query("SELECT key, value FROM meta WHERE key LIKE ?")
+      .all(`${WATERMARK}%`) as { key: string; value: string }[];
+    for (const row of rows) {
+      watermarks.set(row.key, Number(row.value));
+    }
+    ops = writeOps(index, watermarks);
+  } else {
+    index = new TranscriptIndex(path, { readonly: true });
+    ops = readOps(index);
+  }
   process.on("message", async (ask: SearchAsk) => {
-    const run = ops[ask.op] as (arg: unknown, tell: Tell) => Promise<unknown>;
+    const run = ops[ask.op] as
+      ((arg: unknown, tell: Tell) => Promise<unknown>) | undefined;
     try {
+      if (!run) {
+        throw new Error(`the ${role} search process is not asked ${ask.op}`);
+      }
       const value = await run(ask.arg, (told) =>
         say({ id: ask.id, kind: "told", value: told })
       );

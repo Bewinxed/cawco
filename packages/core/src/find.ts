@@ -80,6 +80,26 @@ export interface TranscriptConversation {
   sidechain: boolean;
 }
 
+/**
+ * How long the hub waits on each machine's transcript search, ms (hub
+ * find.ts): one query per keystroke, so a slow machine is named as one that
+ * didn't answer rather than holding every other machine's moments back.
+ * Chosen from what a current index answers within
+ * ({@link TRANSCRIPT_QUERY_MS}), with room for the sync a search may wait on
+ * first (agent search/index.ts `SYNC_WAIT_MS`).
+ */
+export const TRANSCRIPT_ANSWER_MS = 1500;
+
+/**
+ * The longest a query of a current index takes on the machine, ms: what
+ * {@link TRANSCRIPT_ANSWER_MS} is chosen from. Measured on a copy of
+ * obelisk's index (1.47M documents, 2026-10-25): the 34-word query an
+ * agent's `find` asked answered in 552 ms, the 16- to 20-word ones in
+ * 111–318 ms, a word or two in tens of ms; probe-kit search-held (a) holds
+ * the 34-word one inside the window. Our call: the worst of those, with room.
+ */
+export const TRANSCRIPT_QUERY_MS = 800;
+
 /** A machine's answer to a {@link TranscriptQuery}. */
 export interface TranscriptAnswer {
   /**

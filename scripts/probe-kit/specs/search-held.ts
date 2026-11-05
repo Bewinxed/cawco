@@ -1,9 +1,10 @@
 /**
  * No transcript search holds the agent: a search runs in the agent's search
- * process (agent search/process.ts), which a question past its limit, or one
+ * reader (agent search/process.ts), which a question past its limit, or one
  * the hub lets go, ends with SIGKILL; the agent answers everything else
- * meanwhile, and the next search is answered by the process started in its
- * place.
+ * meanwhile, and the next search is answered by the reader started in its
+ * place. (The index's writer is never stopped for a search:
+ * search-sync-let-go.)
  *
  * 2026-10-25, obelisk: the agent's main thread was held 26 minutes inside
  * "search index: query" (jsonl-parser fts5.ts), four hangs in ten minutes,
@@ -34,22 +35,21 @@
  *
  *   bun scripts/probe-kit/run.ts search-held --index <copy of transcript-index.db>
  */
-import { copyFile, mkdir, readdir, readFile } from "node:fs/promises";
+import { copyFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { READ_LIMIT_MS } from "../../../packages/agent/src/search/process";
-import type {
-  FindAnswer,
-  TranscriptAnswer,
+import {
+  type FindAnswer,
+  TRANSCRIPT_ANSWER_MS,
+  type TranscriptAnswer,
 } from "../../../packages/core/src/find";
 import { listedPid, signal } from "../../../packages/core/src/signal";
 import { searchWords } from "../../../packages/core/src/words/search";
 import { delay, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { running, theProcess } from "../search-processes";
 
 const args = process.argv.slice(2);
-const PID = /^\d+$/u;
-/** The search process, run from source or as the binary's verb. */
-const SEARCH_HOST = /search\/host\.ts|search-host/u;
 const INDEX = args[args.indexOf("--index") + 1];
 /** The query that took 87 s on main (an agent's `find`, its words as the hub splits them). */
 const Q34 =
@@ -62,49 +62,8 @@ const PROBE_EVERY_MS = 100;
 const ANSWER_MS = 1000;
 /** When the person's next keystroke drops the Find the browser asked, ms. */
 const SUPERSEDED_AFTER_MS = 300;
-/** The hub's window on a machine's search (hub find.ts `TRANSCRIPT_ANSWER_MS`). */
-const HUB_WINDOW_MS = 1500;
-
-/** The agent's search processes, by the fleet's HOME in their environment. */
-const searchProcesses = async (home: string): Promise<number[]> => {
-  const found: number[] = [];
-  for (const entry of await readdir("/proc")) {
-    if (!PID.test(entry)) {
-      continue;
-    }
-    const read = await Promise.all([
-      readFile(`/proc/${entry}/cmdline`, "utf8"),
-      readFile(`/proc/${entry}/environ`, "utf8"),
-    ]).catch(() => null);
-    if (
-      read &&
-      SEARCH_HOST.test(read[0]) &&
-      read[1].split("\0").includes(`HOME=${home}`)
-    ) {
-      found.push(Number(entry));
-    }
-  }
-  return found;
-};
-
-/** The one search process, once it is there. */
-const theProcess = (home: string, not?: number) =>
-  until(
-    "the agent's search process",
-    async () => (await searchProcesses(home)).filter((pid) => pid !== not),
-    (pids) => pids.length === 1
-  ).then((pids) => pids[0] as number);
-
-/** Whether `pid` still runs: there, and not a zombie its parent has yet to reap. */
-const running = async (pid: number): Promise<boolean> => {
-  const stat = await readFile(`/proc/${pid}/stat`, "utf8").catch(() => "");
-  // The state follows the command's closing parenthesis: "1234 (bun) S …".
-  const state = stat.slice(
-    stat.lastIndexOf(")") + 2,
-    stat.lastIndexOf(")") + 3
-  );
-  return state !== "" && state !== "Z" && state !== "X";
-};
+/** The hub's window on a machine's search. */
+const HUB_WINDOW_MS = TRANSCRIPT_ANSWER_MS;
 
 /** The busy probe and the stores thread's listing, asked every {@link PROBE_EVERY_MS} until stopped: each answer's time. */
 const probing = (fleet: KitFleet) => {
@@ -194,12 +153,12 @@ export default {
     );
 
     // (b) Held: refused at its limit, the process killed, another opened.
-    const held = await theProcess(fleet.home);
+    const held = await theProcess(fleet.home, "read");
     signal(listedPid(held), "SIGSTOP");
     at = performance.now();
     const refused = await search("fix the bug", { limit: 20 });
     const refusedMs = performance.now() - at;
-    const after = await theProcess(fleet.home, held);
+    const after = await theProcess(fleet.home, "read", held);
     const heldRuns = await running(held);
     check(
       `b: its search process held, a search is refused at its ${READ_LIMIT_MS / 1000} s limit, that process is killed and another opens the index`,
@@ -261,7 +220,7 @@ export default {
 
     // (c2) Held again, the person types on: the browser drops the request,
     // and the hub tells the agent at once, inside its own 1.5 s.
-    const third = await theProcess(fleet.home, after);
+    const third = await theProcess(fleet.home, "read", after);
     await until(
       "the third process answers",
       () => search("the", { limit: 5 }),
@@ -292,7 +251,7 @@ export default {
     );
 
     // (d) The work carries on.
-    await theProcess(fleet.home, third);
+    await theProcess(fleet.home, "read", third);
     at = performance.now();
     const again = await search("fix the bug", { limit: 20 });
     check(

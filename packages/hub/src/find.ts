@@ -43,6 +43,7 @@ import {
   noticePartWords,
   reasonLine,
   type StageKind,
+  TRANSCRIPT_ANSWER_MS,
   type TranscriptAnswer,
   type TranscriptQuery,
   unparked,
@@ -80,14 +81,6 @@ import {
   taskEntry,
 } from "./find-names";
 import { boardTitle, leafOf } from "./labels";
-
-/**
- * How long the transcripts part waits on each machine: one query per
- * keystroke, so a slow machine is named as one that didn't answer rather than
- * holding every other machine's moments back (the 1.5 s the jump palette's
- * search had, `SEARCH_ANSWER_MS`).
- */
-const TRANSCRIPT_ANSWER_MS = 1500;
 
 /**
  * How stale the names part may be, ms: what it reads besides the sessions

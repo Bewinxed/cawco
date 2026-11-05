@@ -1,24 +1,26 @@
 /**
- * The agent's side of its search process (search/host.ts): the one place
+ * The agent's side of its search processes (search/host.ts): the one place
  * the transcript index is asked, and where a question that runs too long
- * ends, with the process that held it.
+ * ends, with the process that held it. The agent runs two: the index's
+ * writer, which syncs it, and a reader beside it, which answers questions.
  *
- * A question of the index (a search, a listing, a conversation's turns) is
- * given {@link READ_LIMIT_MS} from when it is asked, and may be let go
- * sooner by its asker's signal (the hub stopped waiting). Questions go to
- * the process one at a time, in the order they came: the one there is the
- * one running, so a question past its limit or let go while there is
- * stopped by killing the process (SIGKILL), and one still waiting here is
- * dropped without touching it. A killed process takes what it was doing with
- * it: the sync in flight fails, and the next one takes up where its last
- * commit left off. Another process is started at once, and opens the index.
+ * A question of the index (a search, a listing, a conversation's turns) goes
+ * to the reader, and is given {@link READ_LIMIT_MS} from when it is asked,
+ * and may be let go sooner by its asker's signal (the hub stopped waiting).
+ * Questions go to the reader one at a time, in the order they came: the one
+ * there is the one running, so a question past its limit or let go while
+ * there is stopped by killing the reader (SIGKILL), and one still waiting
+ * here is dropped without touching it. Another reader is started at once,
+ * and opens the index. The writer is never stopped for a question: a
+ * search let go while a sync runs takes nothing of the sync with it.
  *
- * Work (a sync, a forget) has no deadline of its own: a catch-up runs for
- * hours. It is bounded by its steps instead: a process silent for
- * {@link SILENT_MS} while work runs is held in one step (an insert, a commit,
- * a merge, a read of OpenCode's database), and is killed; so is one that has
- * not opened the index {@link OPEN_MS} after it started, while anything
- * waits on it.
+ * Work (a sync, a forget) goes to the writer, and has no deadline of its
+ * own: a catch-up runs for hours. It is bounded by its steps instead: a
+ * writer silent for {@link SILENT_MS} while work runs is held in one step
+ * (an insert, a commit, a merge, a read of OpenCode's database), and is
+ * killed; the sync it held fails, and the next one takes up where its last
+ * commit left off. Either process that has not opened the index
+ * {@link OPEN_MS} after it started, while anything waits on it, is killed.
  */
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,17 +28,19 @@ import { standalone } from "@cawco/core/runtime";
 import { unhandled } from "@cawco/core/unhandled";
 import { searchWords } from "@cawco/core/words/search";
 import type {
+  RoleOp,
   SearchAnswer,
   SearchArg,
   SearchAsk,
   SearchOp,
+  SearchRole,
   SearchSaid,
 } from "./host";
 
 /**
  * How long a question of the index is given, ms, from its ask: past it, it
  * is refused, and stopped where it runs. The hub waits 1.5 s on a machine's
- * search and 5 s on its turns (hub find.ts `TRANSCRIPT_ANSWER_MS`, server.ts
+ * search and 5 s on its turns (core find.ts `TRANSCRIPT_ANSWER_MS`, hub server.ts
  * `FIND_TURNS_MS`) and tells the agent when it stops waiting; this bounds
  * every asker. A search of obelisk's 1.47M-document index answers in under
  * 0.8 s (fts5.ts `MARKED_CHARS`). Our call.
@@ -59,13 +63,15 @@ const OPEN_MS = 120_000;
 /** How often the silence is looked at. */
 const LOOK_MS = 1000;
 
-/** The process, run as the binary's own verb when compiled, its source under bun otherwise. */
-const HOST = standalone
-  ? [process.execPath, "search-host"]
-  : [
-      process.execPath,
-      join(dirname(fileURLToPath(import.meta.url)), "host.ts"),
-    ];
+/** The process in `role`, run as the binary's own verb when compiled, its source under bun otherwise. */
+const host = (role: SearchRole): string[] =>
+  standalone
+    ? [process.execPath, "search-host", role]
+    : [
+        process.execPath,
+        join(dirname(fileURLToPath(import.meta.url)), "host.ts"),
+        role,
+      ];
 
 /** Why a question of the index got no answer: past its limit, let go, or its process gone. */
 class SearchStopped extends Error {
@@ -103,7 +109,8 @@ interface Running {
   ready: boolean;
 }
 
-export class SearchProcess {
+export class SearchProcess<R extends SearchRole> {
+  readonly #role: R;
   #running: Running | null = null;
   /** Closed: no process is started again. */
   #closed = false;
@@ -118,8 +125,34 @@ export class SearchProcess {
   /** Hears how far the index is whole (ms epoch) each time a process opens it. */
   readonly #opened: (through: number) => void;
 
-  constructor(opened: (through: number) => void) {
+  /** Settles once a process of this role has first opened the index, or failed to. */
+  readonly #firstOpen = Promise.withResolvers<void>();
+  readonly firstOpen = this.#firstOpen.promise;
+  /** No process is started until `after` settles: what is asked meanwhile waits here. */
+  #gated: boolean;
+
+  /**
+   * `role`'s process (search/host.ts), started at its first ask once
+   * `after` has settled; `opened` hears how far the index is whole each
+   * time one opens it. A reader starts after the writer has first opened
+   * the index: the writer makes the file, and brings an older layout up to
+   * date by making it anew (jsonl-parser fts5.ts `#rebuild`), which a reader
+   * opened before would never see.
+   */
+  constructor(
+    role: R,
+    opened: (through: number) => void,
+    after?: Promise<void>
+  ) {
+    this.#role = role;
     this.#opened = opened;
+    this.#gated = after !== undefined;
+    after?.then(() => {
+      this.#gated = false;
+      if (this.#waiting.length > 0 && !this.#closed) {
+        this.#process();
+      }
+    });
     this.#look = setInterval(() => this.#lookAtSilence(), LOOK_MS);
     this.#look.unref();
   }
@@ -129,7 +162,7 @@ export class SearchProcess {
     if (this.#running) {
       return this.#running;
     }
-    const child = Bun.spawn(HOST, {
+    const child = Bun.spawn(host(this.#role), {
       env: process.env,
       stdin: "ignore",
       stdout: "inherit",
@@ -158,6 +191,7 @@ export class SearchProcess {
       case "ready":
         from.ready = true;
         this.#opened(said.through);
+        this.#firstOpen.resolve();
         for (const work of this.#work.values()) {
           if (!work.sent) {
             work.sent = true;
@@ -167,6 +201,7 @@ export class SearchProcess {
         this.#next();
         return;
       case "unopened":
+        this.#firstOpen.resolve();
         // Every ask would meet the same: none waits for another process.
         this.#stop(`its index could not be opened: ${said.message}`, true);
         return;
@@ -277,11 +312,11 @@ export class SearchProcess {
     const owed = this.#work.size > 0 || this.#waiting.length > 0;
     if (!running.ready && owed && silent > OPEN_MS) {
       this.#stop(
-        `its index's process did not open it within ${OPEN_MS / 1000} s`
+        `its index's ${this.#role === "write" ? "writer" : "reader"} did not open it within ${OPEN_MS / 1000} s`
       );
     } else if (running.ready && this.#work.size > 0 && silent > SILENT_MS) {
       this.#stop(
-        `its index's process was held ${Math.round(silent / 1000)} s in one step of a sync`
+        `its index's writer was held ${Math.round(silent / 1000)} s in one step of a sync`
       );
     }
   }
@@ -291,7 +326,8 @@ export class SearchProcess {
    * when `signal` aborts: its answer, or a {@link SearchStopped} that says
    * why there is none.
    */
-  read<K extends SearchOp>(
+  read<K extends RoleOp<"read">>(
+    this: SearchProcess<"read">,
     op: K,
     arg: SearchArg<K>,
     signal?: AbortSignal
@@ -333,13 +369,16 @@ export class SearchProcess {
         },
       };
       this.#waiting.push(question);
-      this.#process();
-      this.#next();
+      if (!this.#gated) {
+        this.#process();
+        this.#next();
+      }
     });
   }
 
   /** `op` run in the process to its end, `tell` hearing how far it has come. */
-  work<K extends SearchOp>(
+  work<K extends RoleOp<"write">>(
+    this: SearchProcess<"write">,
     op: K,
     arg: SearchArg<K>,
     tell?: (value: unknown) => void

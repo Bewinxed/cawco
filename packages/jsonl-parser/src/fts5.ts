@@ -694,12 +694,47 @@ function byteBatches<F extends { size: number }>(files: F[], limit: number): F[]
   return batches;
 }
 
+/**
+ * How an index is opened: by its one writer (a sync, a forget), which
+ * brings its layout up to date as it opens, or by a reader, which only
+ * searches and opens the file read-only, beside the writer's connection.
+ */
+export interface IndexOpenOptions {
+  /**
+   * Opened read-only, for searching only: no layout is changed and nothing
+   * is written, so a reader killed mid-query (agent search/process.ts) leaves
+   * the index as it was. Its writer must have opened it first: that makes
+   * the file and its WAL ("a read-only WAL-mode database file can be opened
+   * if the -shm and -wal files already exist", https://www.sqlite.org/wal.html).
+   */
+  readonly?: boolean;
+}
+
+/**
+ * How long a reader waits on a lock, ms: in WAL only the moment another
+ * connection recovers the log after a crash, or resets it, holds a reader
+ * ("Sometimes Queries Return SQLITE_BUSY In WAL Mode",
+ * https://www.sqlite.org/wal.html). Our own call: well inside a search's
+ * window.
+ */
+const READER_BUSY_MS = 1000;
+
 export class TranscriptIndex {
   db: Database;
-  /** `strings`, held whole: each value's id. */
+  /**
+   * `strings`, each value's id: held whole by the writer; a reader holds
+   * what it has looked up ({@link TranscriptIndex.#idOf}), since the writer
+   * adds strings after the reader opened.
+   */
   readonly #strings = new Map<string, number>();
 
-  constructor(path: string) {
+  constructor(path: string, options: IndexOpenOptions = {}) {
+    if (options.readonly) {
+      this.db = new Database(path, { readonly: true });
+      this.db.exec(`PRAGMA busy_timeout = ${READER_BUSY_MS}; PRAGMA temp_store = MEMORY;`);
+      this.db.exec(MARKING);
+      return;
+    }
     this.db = this.#open(path);
     if (this.#olderLayout()) {
       this.#rebuild(path);
@@ -788,26 +823,32 @@ export class TranscriptIndex {
 
   #open(path: string): Database {
     const db = new Database(path, { create: true });
-    // journal_mode: the index only grows, and a rollback journal writes a
-    // page added past the end of the file once, where WAL writes every page
-    // twice (to the log, then back at checkpoint). Only the few existing pages
-    // a sync changes are journaled. Measured over four simulated hours of ten
-    // sessions writing, synced every ten minutes: 9.5 KB/s in WAL, 6.1 KB/s
-    // with this. The agent is the index's one connection, so WAL's readers
-    // beside a writer bought nothing.
-    // synchronous: FULL is the rollback journal's default and what keeps it
-    // from corrupting on power loss; NORMAL there is "Maybe not consistent"
-    // (https://www.sqlite.org/pragma.html#pragma_synchronous). Its extra syncs
-    // write no extra pages.
-    // busy_timeout: a reader from outside (the sqlite3 shell, a probe) holds
-    // its lock for a query's length; a commit waits that out, not fails.
+    // journal_mode: WAL, since a reader (agent search/host.ts) searches
+    // beside this writer: "readers do not block writers and a writer does
+    // not block readers" (https://www.sqlite.org/wal.html). In the rollback
+    // journal a commit shuts every reader out of the file: measured while a
+    // 180 MB catch-up synced on a loaded 48-core machine, a commit held the
+    // file 1,456 ms, searches waited up to 1,636 ms and 8 of 867 failed
+    // "database is locked"; in WAL the same searches' slowest was 77 ms and
+    // none failed, the sync as quick (18.2-18.6 s against 19.9-24.5 s). The
+    // cost is disk writes: WAL writes every page twice (to the log, then back
+    // at checkpoint), 9.5 KB/s against the rollback journal's 6.1 KB/s over
+    // four simulated hours of ten sessions writing, synced every ten minutes.
+    // synchronous: NORMAL, as "WAL mode is always consistent with
+    // synchronous=NORMAL, but WAL mode does lose durability"
+    // (https://www.sqlite.org/pragma.html#pragma_synchronous): a commit lost
+    // to power loss takes its files' checkpoints with it, and the next sync
+    // reads those transcripts again.
+    // busy_timeout: another writer (the sqlite3 shell, a probe) holds the
+    // write lock for its transaction's length; a commit waits that out, not
+    // fails.
     // temp_store: FTS5 flushes its pending terms (and merges segments) in the
     // middle of an insert once they pass 1 MB, and SQLite journals every page
     // that statement touches, spilling past 64 KB to a temp file: measured, a
     // tenth of a sync's writes went to `etilqs_*` files. In memory, they cost
     // a few MB of RAM for the moment of the flush.
     db.exec(
-      "PRAGMA journal_mode = TRUNCATE; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000; PRAGMA temp_store = MEMORY;",
+      "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000; PRAGMA temp_store = MEMORY;",
     );
     return db;
   }
@@ -853,6 +894,26 @@ export class TranscriptIndex {
       this.#strings.set(value, id);
     }
     return id;
+  }
+
+  /**
+   * `value`'s id in `strings`, or undefined when no row names it: what a
+   * search looks values up by. Held when found; a value not held is read
+   * from the table, where the writer may have added it since this
+   * connection opened. An id, once committed, never changes.
+   */
+  #idOf(value: string): number | undefined {
+    const held = this.#strings.get(value);
+    if (held !== undefined) {
+      return held;
+    }
+    const row = this.db.query("SELECT id FROM strings WHERE value = ?").get(value) as {
+      id: number;
+    } | null;
+    if (row) {
+      this.#strings.set(value, row.id);
+    }
+    return row?.id;
   }
 
   /** `strings` read afresh: a transaction rolled back takes the ids it added with it. */
@@ -1180,7 +1241,7 @@ export class TranscriptIndex {
   #ranked(pass: Pass, filters: string, params: (string | number)[], scan: number): Ranked[] {
     const weight = Object.entries(AUTHOR_WEIGHT)
       .flatMap(([author, w]) => {
-        const id = this.#strings.get(author);
+        const id = this.#idOf(author);
         return id === undefined ? [] : [`WHEN ${id} THEN ${w}`];
       })
       .join(" ");
@@ -1307,7 +1368,7 @@ export class TranscriptIndex {
     let filters = "";
     if (options.author !== undefined) {
       // An author no row names has no id, and no hits.
-      const id = this.#strings.get(options.author);
+      const id = this.#idOf(options.author);
       if (id === undefined) {
         return [];
       }
@@ -1384,7 +1445,7 @@ export class TranscriptIndex {
    */
   #sessionIds(sessions: readonly string[]): string | null {
     const ids = sessions.flatMap((session) => {
-      const id = this.#strings.get(session);
+      const id = this.#idOf(session);
       return id === undefined ? [] : [id];
     });
     return ids.length === 0 ? null : JSON.stringify(ids);
@@ -1420,7 +1481,7 @@ export class TranscriptIndex {
   }
 
   #listedNow(options: ListOptions): ConversationHit[] {
-    const author = this.#strings.get(options.author);
+    const author = this.#idOf(options.author);
     if (author === undefined || options.limit < 1) {
       return [];
     }
@@ -1508,7 +1569,7 @@ export class TranscriptIndex {
   #turnsNow(options: TurnsOptions): TurnsAnswer {
     const sessions = new Set(
       options.sessions.flatMap((session) => {
-        const id = this.#strings.get(session);
+        const id = this.#idOf(session);
         return id === undefined ? [] : [id];
       }),
     );
