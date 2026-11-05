@@ -43,7 +43,6 @@
   import { goto, onNavigate } from "$app/navigation";
   import { page } from "$app/state";
   import { barGlass, type GlassCard as GlassFace } from "./bar-glass.svelte";
-  import { barStrip } from "./bar-strip.svelte";
   import { cawco } from "./client.svelte";
   import ConnectWindow from "./connect/ConnectWindow.svelte";
   import { connect } from "./connect/installs.svelte";
@@ -72,7 +71,9 @@
   import { newSession, spawning } from "./spawn/new-session.svelte";
   import { store, stored } from "./storage";
   import { floor } from "./visible-viewport.svelte";
+  import { fullSize } from "./workspace/full-size.svelte";
   import PaneTabs from "./workspace/PaneTabs.svelte";
+  import { projectOfTab, tabOfPath } from "./workspace/tabs";
   import { type WorkspaceV1, workspace } from "./workspace/workspace.svelte";
 
   // The sidebar primitives (SidebarMenuButton etc.) call `useSidebar()` which
@@ -340,8 +341,8 @@
       // too costs nothing and saves the reader learning a second one.
       case "split-right":
       case "split-down": {
-        const here = workspace.activeSessionId;
-        if (!(onSession && here && workspace.openIds.length >= 2)) {
+        const here = workspace.activeTab;
+        if (!(onSession && here && workspace.openTabs.length >= 2)) {
           return false;
         }
         workspace.split(
@@ -365,6 +366,18 @@
    * the field's text key (`fieldKeeps`).
    */
   function shortcut(event: KeyboardEvent) {
+    // Escape takes Full size back, where nothing nearer took the key (an
+    // open menu or card, a field's own Escape).
+    if (
+      event.key === "Escape" &&
+      full &&
+      !event.defaultPrevented &&
+      !fieldKeeps(event)
+    ) {
+      event.preventDefault();
+      fullSize.exit();
+      return;
+    }
     const name = shellShortcutOf(event);
     if (!name || event.defaultPrevented || fieldKeeps(event)) {
       return;
@@ -374,7 +387,16 @@
     }
   }
 
-  const onSession = $derived(page.url.pathname.startsWith("/session"));
+  /**
+   * Whether the workspace is in front: the board, a conversation's tab or a
+   * project's (workspace/tabs.ts `tabOfPath`), read off the URL shown, as
+   * the workspace moves between them shallowly. A route's own failure (a
+   * project the hub would not read) is its error page, not the workspace.
+   */
+  const onSession = $derived(
+    !(page.error && !page.error.region) &&
+      tabOfPath((page.shallow?.url ?? page.url).pathname) !== undefined
+  );
   // "Spawn here" from anywhere in the app arrives as `?spawn=<machine>`;
   // consumed once and cleared, so a reload is not a second spawn.
   $effect(() => {
@@ -402,6 +424,63 @@
    * is parked, still laid out but hidden and inert, so coming back finds
    * every transcript scrolled and every disclosure open as it was left.
    */
+  /**
+   * Full size (workspace/full-size.svelte.ts): the project in front fills
+   * the window, the rail and the bar put away. It ends by itself once no
+   * project is in front.
+   */
+  const full = $derived(
+    fullSize.on && onSession && projectOfTab(workspace.activeTab) !== null
+  );
+  $effect(() => {
+    if (fullSize.on && !full) {
+      untrack(() => fullSize.exit());
+    }
+  });
+  /**
+   * The page the rail and the bar leave room for glides to where it stands
+   * now, from where it stood: its box is read before the change is drawn
+   * and after, and the page travels the difference on the drawer curve
+   * over --dur-panel (motion/route's page travel). It is one object on both
+   * sides (DESIGN.md, The One Object Rule); the rail and the bar fade as
+   * they go and come. With less motion, the page only fades.
+   */
+  let content = $state<HTMLElement | null>(null);
+  let fullFrom: DOMRect | null = null;
+  $effect.pre(() => {
+    // biome-ignore lint/complexity/noVoid: read-only dependency
+    void full;
+    fullFrom = untrack(() => content?.getBoundingClientRect() ?? null);
+  });
+  $effect(() => {
+    // biome-ignore lint/complexity/noVoid: read-only dependency
+    void full;
+    const from = fullFrom;
+    const node = untrack(() => content);
+    if (!(from && node)) {
+      return;
+    }
+    const to = node.getBoundingClientRect();
+    const timing = {
+      duration: dur("--dur-panel"),
+      easing: ease("--ease-drawer"),
+    };
+    if (!motionOk.current) {
+      node.animate([{ opacity: 0.6 }, { opacity: 1 }], timing);
+      return;
+    }
+    if (from.left !== to.left || from.top !== to.top) {
+      node.animate(
+        [
+          {
+            transform: `translate(${from.left - to.left}px, ${from.top - to.top}px)`,
+          },
+          { transform: "none" },
+        ],
+        timing
+      );
+    }
+  });
   let surfaceMounted = $state(untrack(() => onSession));
   $effect(() => {
     if (onSession) {
@@ -638,30 +717,6 @@
   const routeError = $derived(
     page.error && !page.error.region ? page.error : null
   );
-  /**
-   * Whether the bar shows a page's own strip (bar-strip): a project's
-   * views, where the crumb would only repeat the name its head says. On a
-   * wide screen, the line the session's tabs are hosted by; the page's
-   * data says so, so the server draws the bar without the crumb.
-   */
-  const stripHosted = $derived(
-    !(narrow || routeError) &&
-      (page.data as { barStrip?: boolean }).barStrip === true
-  );
-  /**
-   * A page's strip leaving stands as it was while its place fades: an
-   * outro pauses what it holds, so the page's state, already reading the
-   * next route's data, is never drawn again; it goes when the fade has.
-   */
-  const stands = (_node: Element) => ({ duration: dur("--dur-control") });
-  /**
-   * The page's strip's place in the slot, drawn from the first paint (the
-   * server's too) so its first arrival moves as every later one does. Where
-   * no strip is hosted it is drawn as `barTabs` holds one away, out of the
-   * row and hidden: mounted after the paint it stood in the row for a frame
-   * and took half the session's strip.
-   */
-  const stripAwayAtFirst = untrack(() => !stripHosted);
   // A row or card dragged inside the page never types into a field, and a
   // file let go off a composer never opens in the tab (internal-drag.ts).
   onMount(guardDrops);
@@ -838,7 +893,7 @@
      bar floats over its two ends (the strip leaves them room); anywhere
      else the bar is the row, with the page's name where tabs would be. */
   const floating = $derived(
-    !railed && onSession && workspace.activeSessionId !== null
+    !railed && onSession && workspace.activeTab !== null
   );
   /* What the bar is, floating or hosting the tabs, said on the root for the
      screen's top edge (ScreenEdges, page-marks). */
@@ -946,11 +1001,6 @@
     files.sheet = true;
   }
 
-  /** A project's page, whose head names it (ProjectHead). */
-  const onProject = $derived(
-    !routeError && page.route.id === "/(app)/project/[id]"
-  );
-
   /**
    * What the bar names: the page's own name where it has one (a
    * conversation's title, a project's name), else its section.
@@ -1042,7 +1092,8 @@
          its outer edge stays where a drag puts it (`startDrag`). -->
     <aside
       data-slot="rail"
-      class="hidden desk:flex relative w-(--sidebar-width) grow-0 shrink-0 basis-(--sidebar-width) min-w-0 ps-(--rail-inset) bg-(--sidebar) border-e border-e-border-hairline"
+      data-full={full || undefined}
+      class="hidden desk:flex data-full:hidden relative w-(--sidebar-width) grow-0 shrink-0 basis-(--sidebar-width) min-w-0 ps-(--rail-inset) bg-(--sidebar) border-e border-e-border-hairline"
       style:--rail-inset="env(safe-area-inset-left, 0px)"
     >
       {#if railed}
@@ -1148,9 +1199,10 @@
            field it stands on is its ground. -->
       <header
         data-slot="top"
+        data-full={full || undefined}
         data-floating={floating || undefined}
         data-hosting={hosting || undefined}
-        class="group/top peer/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 ps-0 pe-(--top-end) coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-c-top-bar-h max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:shelf-hairline"
+        class="group/top peer/top h-c-top-bar-h shrink-0 flex data-full:hidden items-center gap-space-2 py-0 ps-0 pe-(--top-end) coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-c-top-bar-h max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:shelf-hairline"
         style:--top-end="calc(var(--space-6) + env(safe-area-inset-right, 0px))"
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
         style:--top-inset-end={"calc(var(--c-bar-phone-edge) + env(safe-area-inset-right, 0px))"}
@@ -1235,30 +1287,9 @@
               {/each}
             </div>
           {/if}
-          {#if !narrow}
-            <!-- The page's own strip (bar-strip), standing where the crumb
-               would: the room the crumb had, its own insets the page's. What
-               holds it while it leaves lays nothing out itself: the page's
-               strip is the slot's row. -->
-            <div
-              data-slot="slot-strip"
-              class="relative flex grow shrink basis-0 items-center self-stretch min-w-0 data-shell-lifted:absolute data-shell-lifted:inset-0 data-shell-away:invisible max-desk:hidden coarse:portrait:hidden"
-              data-shell-away={stripAwayAtFirst || undefined}
-              inert={stripAwayAtFirst}
-              {@attach barTabs(() => stripHosted)}
-            >
-              {#if stripHosted}
-                <div class="contents" out:stands>
-                  {@render barStrip.strip?.()}
-                </div>
-              {/if}
-            </div>
-          {/if}
-          {#if hosting || stripHosted || (!railed && onSession) || onProject}
-            <!-- The strips above have the slot; on a phone the session's tabs
-               are its own row, and the board needs no name over it. A
-               project's page names itself in its head (ProjectHead), so the
-               bar doesn't say its name twice. -->
+          {#if hosting || (!railed && onSession)}
+            <!-- The tabs above have the slot; on a phone the workspace's tabs
+               are its own row, and the board needs no name over it. -->
           {:else if narrow && page.url.pathname.startsWith("/config/")}
             <!-- Inside a section on a phone the rail is its own page, so the bar
                leads back to it. -->
@@ -1393,6 +1424,7 @@
         data-safe={!onSession || undefined}
         data-safe-bottom
         id="main-content"
+        bind:this={content}
         style:--content-end="env(safe-area-inset-right, 0px)"
         style:--content-start="env(safe-area-inset-left, 0px)"
         style:--shelf-band-size="100% var(--c-top-bar-h)"

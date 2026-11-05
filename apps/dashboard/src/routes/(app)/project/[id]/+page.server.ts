@@ -1,114 +1,40 @@
 import { error } from "@sveltejs/kit";
-import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
 import {
-  failureSentence,
-  type HubFailure,
-  type HubRead,
-  readHub,
-} from "#lib/cawco/hub-read.js";
-import type { StagesView, TaskList } from "#lib/cawco/project-tasks.js";
-import { checkoutOf } from "#lib/cawco/projects.js";
-import { type FindSeed, wordsOf } from "#lib/cawco/tasks/task-find.svelte.js";
+  isRefusal,
+  readProjectPage,
+  refusalSentence,
+} from "#lib/cawco/project/project-page-data.js";
 import type { PageServerLoad } from "./$types";
 
-/** The error page's line for a read the page cannot stand without. */
-const refused = (what: string, failure: HubFailure): never =>
-  error(
-    failure.status,
-    `Reading ${what} failed. ${failureSentence(failure)} Reload the page to try again.`
-  );
-
-/** What the hub found for the URL's words, or why it could not say, for TaskFind. */
-function findSeed(
-  words: string,
-  live: HubRead<TaskList> | null,
-  archived: HubRead<TaskList> | null
-): FindSeed {
-  if (!(words && live && archived)) {
-    return { words, found: null, problem: null };
-  }
-  if (!live.ok) {
-    return { words, found: null, problem: failureSentence(live) };
-  }
-  if (!archived.ok) {
-    return {
-      words,
-      found: null,
-      problem: failureSentence(archived),
-    };
-  }
-  return {
-    words,
-    found: {
-      words,
-      ids: new Set(
-        [...live.value.tasks, ...archived.value.tasks].map((task) => task.id)
-      ),
-    },
-    problem: null,
-  };
-}
-
 /**
- * The project's views: the project and its machine, its tasks and stages,
- * read through the hub proxy so the page renders on the server and a shared
- * link opens straight onto its board. A server load: the page is handed
- * what it returns and nothing else. Run in the browser too, the load had
- * every hub answer it fetched inlined into the HTML (every project, every
- * machine, the tasks and stages: 195 KB on a board of 200 tasks) for the
- * browser to run it again over them as the page hydrated. The project is
- * the page and a refused read of it is the page's error; the tasks and
- * stages are carried as they ended, so a refusal is said where the board
- * would be, never drawn as an empty board. `?view=` names the view (the board when absent) and
- * `?task=` the task whose sheet is open; on the Decisions tab `?page=`
- * names the decision page open in it.
+ * A project's tab, as the server paints it on a cold load or a shared link:
+ * read whole (project-page-data.ts), so the server's HTML holds its board.
+ * Awaited for a DOCUMENT request alone, as a conversation's first screen is
+ * (`/session`'s load): on a navigation the browser makes, the workspace
+ * already holds the tab and the tab reads itself. A refused read of the
+ * projects or the machines is the page's error.
  */
-export const load: PageServerLoad = async ({ fetch, params, url }) => {
-  const base = `/api/projects/${encodeURIComponent(params.id)}`;
-  // The filter's words are the hub's to match (task-find.svelte.ts): a link
-  // that carries them opens on what the hub found, live and archived.
-  const words = wordsOf(url.searchParams.get("q") ?? "");
-  const finding = (archived: boolean) =>
-    readHub<TaskList>(
-      fetch,
-      `${base}/tasks?${new URLSearchParams({ q: words, ...(archived ? { archived: "1" } : {}) })}`
+export const load: PageServerLoad = async ({
+  fetch,
+  params,
+  url,
+  isDataRequest,
+  untrack,
+}) => {
+  if (isDataRequest) {
+    return { seed: null };
+  }
+  const id = untrack(() => params.id);
+  const read = await readProjectPage(
+    fetch,
+    id,
+    untrack(() => url.searchParams)
+  );
+  if (isRefusal(read)) {
+    return error(
+      read.failure.status,
+      `${refusalSentence(read)} Reload the page to try again.`
     );
-  const [projects, machines, tasks, stages, found, foundArchived] =
-    await Promise.all([
-      readHub<ProjectRow[]>(fetch, "/api/projects"),
-      readHub<Machine[]>(fetch, "/api/agents"),
-      readHub<TaskList>(fetch, `${base}/tasks`),
-      readHub<StagesView>(fetch, `${base}/stages`),
-      words ? finding(false) : null,
-      words ? finding(true) : null,
-    ]);
-  if (!projects.ok) {
-    return refused("the projects", projects);
   }
-  if (!machines.ok) {
-    return refused("the machines", machines);
-  }
-  const project = projects.value.find((row) => row.id === params.id) ?? null;
-  const primary = project ? checkoutOf(project) : undefined;
-  const machine = primary
-    ? (machines.value.find((row) => row.machineId === primary.machineId) ??
-      null)
-    : null;
-  return {
-    /** The page hands the shell's bar its view strip (bar-strip.svelte). */
-    barStrip: project !== null,
-    project,
-    machine,
-    /**
-     * A machine is online as the page opens: whether Caw can start, until
-     * the dashboard's own machines are in (CawLead `canTalk`).
-     */
-    machinesOnline: machines.value.some((row) => row.status === "online"),
-    tasks,
-    stages,
-    find: findSeed(words, found, foundArchived),
-    view: url.searchParams.get("view") ?? "board",
-    task: url.searchParams.get("task"),
-    decisionPage: url.searchParams.get("page"),
-  };
+  return { seed: { id, ...read } };
 };

@@ -91,6 +91,7 @@
   import { stored } from "./storage";
   import { standsAlone, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
+  import { projectTab, tabOfPath } from "./workspace/tabs";
   import { workspace } from "./workspace/workspace.svelte";
 
   let {
@@ -141,14 +142,40 @@
   });
   const configuring = $derived(path.startsWith("/config"));
   /**
+   * Whether the workspace is in front (workspace/tabs.ts `tabOfPath`), read
+   * off the URL shown: the workspace moves between its tabs shallowly.
+   */
+  const onWorkspace = $derived(
+    tabOfPath((page.shallow?.url ?? page.url).pathname) !== undefined
+  );
+  /**
    * Which conversation is in front, for the rows to mark. The workspace
    * store, not the URL: a tab switch writes the address with `pushState`,
    * which moves nothing the page reads, so a rail keyed to the path stayed
    * on the tab the reader had left.
    */
   const activeSession = $derived(
-    path.startsWith("/session") ? workspace.activeSessionId : null
+    onWorkspace ? workspace.activeSessionId : null
   );
+  /**
+   * A project's row, pressed with the workspace in front, opens its tab
+   * where it is, as it was left (workspace `openProject`); a press with a
+   * key held, or from another spoke, follows its link.
+   */
+  function openProjectTab(event: MouseEvent, projectId: string) {
+    if (
+      !onWorkspace ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+    event.preventDefault();
+    workspace.openProject(projectId);
+  }
 
   /**
    * The conversations the project tree draws right now, kept by each row
@@ -1136,7 +1163,10 @@
                 {@const runningCount = runningIn(project)}
                 {@const expanded = !folderPrefs.collapsed(project.id)}
                 {@const href = `/project/${project.id}`}
-                {@const here = path === href || path.startsWith(`${href}/`)}
+                {@const here =
+                  (onWorkspace &&
+                    workspace.activeTab === projectTab(project.id)) ||
+                  path.startsWith(`${href}/`)}
                 <li
                   class="group/menu-item relative"
                   data-flip="box"
@@ -1164,6 +1194,8 @@
                           {...props}
                           id={railLinkId(project.id)}
                           aria-current={here ? "page" : undefined}
+                          onclickcapture={(event) =>
+                            openProjectTab(event, project.id)}
                           class="{props.class} mark-line"
                           style:--mark-hit-gap="var(--space-3)"
                         >

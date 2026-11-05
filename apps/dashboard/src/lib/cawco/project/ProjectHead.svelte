@@ -80,6 +80,8 @@
     IconFolder,
     IconFork,
     IconInfo,
+    IconMaximize,
+    IconMinimize,
     IconMore,
     IconPlus,
     IconSettings,
@@ -87,6 +89,7 @@
     IconUsage,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
+  import { fullSize } from "../workspace/full-size.svelte";
   import CawPanel from "./CawPanel.svelte";
   import CawSeat from "./CawSeat.svelte";
   import type { CawLead } from "./caw-lead.svelte";
@@ -444,6 +447,33 @@
           {/snippet}
         </Tip>
       {/if}
+      <!-- Full size: the tab fills the window, the rail and the tabs put
+           away; pressed again, or Escape, they come back (full-size.svelte.ts). -->
+      <Tip
+        label={fullSize.on ? projectWords.exitFullSize : projectWords.fullSize}
+      >
+        {#snippet children(tip)}
+          <button
+            data-bar-item
+            data-box
+            data-full-size
+            {...mergeProps(tip, { onclick: () => fullSize.toggle() })}
+            aria-label={fullSize.on
+              ? projectWords.exitFullSize
+              : projectWords.fullSize}
+            aria-pressed={fullSize.on}
+            aria-keyshortcuts={fullSize.on ? "Escape" : undefined}
+            class="select-none touch-hit press-tint"
+            type="button"
+          >
+            {#if fullSize.on}
+              <IconMinimize data-slot="bar-symbol" aria-hidden="true" />
+            {:else}
+              <IconMaximize data-slot="bar-symbol" aria-hidden="true" />
+            {/if}
+          </button>
+        {/snippet}
+      </Tip>
       <DropdownMenu.Root>
         <Tip label={commonWords.moreFor(project.name)}>
           {#snippet children(tip)}

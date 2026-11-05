@@ -73,6 +73,7 @@
     IconClose,
     IconCloseOthers,
     IconCloseTab,
+    IconFolder,
     IconInfo,
     IconMoveTab,
     IconSplitDown,
@@ -86,9 +87,12 @@
   import { frameSize } from "../frame-observer";
   import type { HubRead } from "../hub-read";
   import { conversationHref } from "../links";
+  import { markHue } from "../mark";
   import { integrate, type Sample, sampleAt } from "../motion/spring";
+  import { folderOf } from "../projects";
   import { sessionName } from "../session-name";
   import { newSession } from "../spawn/new-session.svelte";
+  import TreeMark from "../TreeMark.svelte";
   import { workingSet } from "../working-set.svelte";
   import { dropHint, tabDropTarget } from "./dnd.svelte";
   import { cardWidthIn, placeUnder } from "./hang-place";
@@ -102,6 +106,7 @@
     sessionStatusOf,
   } from "./session-status";
   import { noNativeDrag, pressTab, swallowClick } from "./tab-drag.svelte";
+  import { projectHref, projectOfTab } from "./tabs";
   import { warm } from "./warm.svelte";
   import { contextOf, type LeafNode, workspace } from "./workspace.svelte";
 
@@ -133,6 +138,8 @@
     key: string;
     label: string;
     named: boolean;
+    /** The project a project's tab is, or null for a conversation's. */
+    projectId: string | null;
     stale: boolean;
     /** What the badge says, or '' for a tab with nothing to say. */
     status: string;
@@ -145,7 +152,36 @@
     tone: StatusTone;
   }
 
+  /**
+   * A project's tab: its name, its own address as it last stood (its view,
+   * the task it has open), no status of its own. It leads with the
+   * project's mark as the rail draws it.
+   */
+  function resolveProject(id: string, projectId: string): Tab {
+    const project = cawco.project(projectId);
+    const served = servedNames[id];
+    const name = project?.name ?? (served?.ok ? served.value : null);
+    return {
+      id,
+      key: `${id}:${arrivals.get(id) ?? 0}`,
+      href: projectHref(projectId, workspace.projectSearchOf(projectId)),
+      label: name ?? "Project",
+      named: name !== null,
+      activity: "idle",
+      failed: false,
+      stale: false,
+      status: "",
+      statusLabel: "Project",
+      tone: "quiet",
+      projectId,
+    };
+  }
+
   function resolve(id: string): Tab {
+    const projectId = projectOfTab(id);
+    if (projectId) {
+      return resolveProject(id, projectId);
+    }
     const row = cawco.instanceIndex.byId.get(id);
     const ctx = contextOf(id);
     const { label, named } = sessionName(id, servedNames);
@@ -180,6 +216,7 @@
       status,
       statusLabel: status || state.label,
       tone: state.tone,
+      projectId: null,
     };
   }
 
@@ -213,7 +250,7 @@
   // its id until its transcript arrives.
   $effect(() => {
     const named = tabs
-      .filter((tab) => tab.named)
+      .filter((tab) => tab.named && tab.projectId === null)
       .map((tab) => [tab.id, tab.label] as const);
     untrack(() => {
       for (const [id, label] of named) {
@@ -299,6 +336,11 @@
     morphing = false;
   }
   function showDetails(id: string, anchor: HTMLElement, pin: boolean) {
+    if (projectOfTab(id)) {
+      // A project's tab has no session card.
+      closeDetails();
+      return;
+    }
     clearTimeout(timer);
     holdMove();
     pinned = pin;
@@ -493,7 +535,14 @@
     wrapper?.toggleAttribute("data-details-morph", morphing);
   });
   function hoverTab(id: string, event: PointerEvent) {
-    if (touch.current || event.pointerType !== "mouse" || pinned || menuOpen) {
+    // A project's tab has no session card: its page is the project's details.
+    if (
+      projectOfTab(id) ||
+      touch.current ||
+      event.pointerType !== "mouse" ||
+      pinned ||
+      menuOpen
+    ) {
       return;
     }
     clearTimeout(timer);
@@ -577,7 +626,10 @@
     }
     if (leaf.active === id) {
       event.preventDefault();
-      if (detailsOpen && pinned && detailId === id) {
+      if (projectOfTab(id)) {
+        // In front already: a project's tab opens no card.
+        closeDetails();
+      } else if (detailsOpen && pinned && detailId === id) {
         closeDetails();
       } else {
         showDetails(id, anchor, true);
@@ -1442,24 +1494,28 @@
         >
         <!-- The tab's options: a finger's hanging menu and a mouse's both. -->
         {#snippet options()}
-          <ContextMenu.Item
-            onSelect={() => {
-              const anchor = anchorOf(tab.id);
-              if (anchor) {
-                showDetails(tab.id, anchor, true);
-              }
-            }}
-          >
-            <IconInfo />
-            <span>{transcriptWords.sessionDetails}</span>
-          </ContextMenu.Item>
-          <ContextMenu.Item
-            onSelect={() =>
-              continueInNewSession(continueSourceOf(tab.id, tab.label))}
-          >
-            <IconArrowRight />
-            <span>Continue in new session…</span>
-          </ContextMenu.Item>
+          <!-- A conversation's own; a project's tab moves, splits and
+               closes as one does. -->
+          {#if !tab.projectId}
+            <ContextMenu.Item
+              onSelect={() => {
+                const anchor = anchorOf(tab.id);
+                if (anchor) {
+                  showDetails(tab.id, anchor, true);
+                }
+              }}
+            >
+              <IconInfo />
+              <span>{transcriptWords.sessionDetails}</span>
+            </ContextMenu.Item>
+            <ContextMenu.Item
+              onSelect={() =>
+                continueInNewSession(continueSourceOf(tab.id, tab.label))}
+            >
+              <IconArrowRight />
+              <span>Continue in new session…</span>
+            </ContextMenu.Item>
+          {/if}
           {@const row = cawco.rowOf(tab.id)}
           {#if row}
             <AccountSubmenu instance={row} />
@@ -1527,7 +1583,9 @@
               aria-expanded={menuFor === tab.id}
               aria-haspopup="menu"
               aria-keyshortcuts="Delete Shift+F10"
-              aria-label={`${tab.label}, ${tab.statusLabel}${chosen ? " — open session details" : ""}`}
+              aria-label={tab.projectId
+                ? `${tab.label}, ${tab.statusLabel}`
+                : `${tab.label}, ${tab.statusLabel}${chosen ? " — open session details" : ""}`}
               data-session-tab={tab.id}
               flush={hungFlush(cardHere, menuHere)}
               hung={cardHere || menuHere}
@@ -1584,9 +1642,25 @@
                      the icon if the rim is there"; "desktop has icons
                      mobile not"); the tab's label says the status in words
                      either way. -->
-                <span class="max-desk:hidden">
-                  <SessionStatus compact sessionId={tab.id} />
-                </span>
+                {#if tab.projectId}
+                  <!-- A project's tab leads with its mark as the rail draws
+                       it, on every width: it has no status rim to say it. -->
+                  {@const project = cawco.project(tab.projectId)}
+                  <TreeMark
+                    faceAlways
+                    fill="var(--mark-{markHue(
+                      project ? folderOf(project) : tab.projectId
+                    )})"
+                  >
+                    {#snippet face()}
+                      <IconFolder aria-hidden="true" class="size-icon-sm" />
+                    {/snippet}
+                  </TreeMark>
+                {:else}
+                  <span class="max-desk:hidden">
+                    <SessionStatus compact sessionId={tab.id} />
+                  </span>
+                {/if}
               {/snippet}
               {#snippet trail()}
                 <!-- Every tab keeps the details slot, so choosing one never
@@ -1607,33 +1681,35 @@
                        no chevron: a long press opens the tab's menu (Session
                        details first), and a tap on the chosen tab its
                        details. -->
-                <span
-                  class="group/tdetails flex flex-none data-idle:scale-(--pop-scale) data-idle:opacity-0 max-desk:hidden motion-safe:transition-[opacity,scale] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease) motion-safe:in-data-ride:transition-off motion-reduce:in-data-ride:transition-off"
-                  data-idle={!chosen || undefined}
-                  data-open={chosen && detailsOpen && detailId === tab.id
-                    ? ""
-                    : undefined}
-                >
-                  <Button
-                    data-slot="tdetails"
-                    aria-hidden="true"
-                    onclick={(event) => {
-                      if (chosen) {
-                        clickTab(tab.id, event);
-                      } else {
-                        workspace.activate(tab.id, leaf.id);
-                      }
-                    }}
-                    size="icon-xs"
-                    tabindex={-1}
-                    tone="muted"
-                    variant="ghost"
+                {#if !tab.projectId}
+                  <span
+                    class="group/tdetails flex flex-none data-idle:scale-(--pop-scale) data-idle:opacity-0 max-desk:hidden motion-safe:transition-[opacity,scale] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease) motion-safe:in-data-ride:transition-off motion-reduce:in-data-ride:transition-off"
+                    data-idle={!chosen || undefined}
+                    data-open={chosen && detailsOpen && detailId === tab.id
+                      ? ""
+                      : undefined}
                   >
-                    <IconChevronDown
-                      class="group-data-open/tdetails:rotate-180 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out"
-                    />
-                  </Button>
-                </span>
+                    <Button
+                      data-slot="tdetails"
+                      aria-hidden="true"
+                      onclick={(event) => {
+                        if (chosen) {
+                          clickTab(tab.id, event);
+                        } else {
+                          workspace.activate(tab.id, leaf.id);
+                        }
+                      }}
+                      size="icon-xs"
+                      tabindex={-1}
+                      tone="muted"
+                      variant="ghost"
+                    >
+                      <IconChevronDown
+                        class="group-data-open/tdetails:rotate-180 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out"
+                      />
+                    </Button>
+                  </span>
+                {/if}
                 <!-- A mouse's close. A finger's is in the tab's options,
                      held or pulled down from the tab, and the phone's row
                      draws none. The keyboard's and a screen reader's is the

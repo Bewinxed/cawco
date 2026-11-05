@@ -27,6 +27,10 @@ export const projectWords = {
   spinOff: "Spin off",
   /** The head's Ask Caw: his panel on a new conversation. */
   askCaw: "Ask Caw",
+  /** The head's Full size: the project's tab fills the window, the rail and the tabs put away. */
+  fullSize: "Full size",
+  /** The head's way back from Full size: the rail and the tabs return. */
+  exitFullSize: "Exit full size",
   /** The head's place: its name, which opens the project's details. */
   details: "Project details",
   /** The head's place's tooltip while the project's one place is its folder on the hub. */

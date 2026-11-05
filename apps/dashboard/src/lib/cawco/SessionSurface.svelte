@@ -56,14 +56,22 @@
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { presenceWorkspace } from "#lib/cawco/presence.js";
+  import { fullSize } from "#lib/cawco/workspace/full-size.svelte.js";
   import { layoutPolicy } from "#lib/cawco/workspace/layout-policy.svelte.js";
   import PaneDeck from "#lib/cawco/workspace/PaneDeck.svelte";
   import PaneGrid from "#lib/cawco/workspace/PaneGrid.svelte";
   import PaneHost from "#lib/cawco/workspace/PaneHost.svelte";
+  import PaneLeaf from "#lib/cawco/workspace/PaneLeaf.svelte";
   import {
-    sessionIdOf,
-    workspace,
-  } from "#lib/cawco/workspace/workspace.svelte.js";
+    holdProjectSeed,
+    type ProjectSeed,
+  } from "#lib/cawco/workspace/project-seed.js";
+  import {
+    isSessionTab,
+    projectOfTab,
+    tabOfPath,
+  } from "#lib/cawco/workspace/tabs.js";
+  import { workspace } from "#lib/cawco/workspace/workspace.svelte.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { browser } from "$app/env";
   import { afterNavigate } from "$app/navigation";
@@ -139,7 +147,7 @@
      never cut off mid-entrance. After that what lands is not kept waiting:
      he fades out over it. Ready with nothing to open is no wait: it
      is where to start, and shows at once. */
-  const detailEmpty = $derived(!homePage && workspace.activeSessionId === null);
+  const detailEmpty = $derived(!homePage && workspace.activeTab === null);
   const nothingToOpen = $derived(fleetHome.ready && !fleetHome.landing);
   const waiting = $derived(detailEmpty && !atRest);
   /** The wait outlasted its grace and Caw stands in for it. */
@@ -217,7 +225,7 @@
   };
 
   /** The home page is in front: a narrow screen with no conversation open. */
-  const onBoard = $derived(homePage && workspace.activeSessionId === null);
+  const onBoard = $derived(homePage && workspace.activeTab === null);
 
   /**
    * What the app put in front on its own (`land`, `fillGroups`), not the
@@ -249,7 +257,10 @@
     // An address that names a session is that session's to fill: arriving
     // from another route (a task's Open), the effect runs before the URL is
     // followed (onMount below), and landing here took the tab elsewhere.
-    if (workspace.activeSessionId !== null || sessionIdOf(page.url) !== null) {
+    if (
+      workspace.activeTab !== null ||
+      tabOfPath((page.shallow?.url ?? page.url).pathname)
+    ) {
       return;
     }
     const { landing } = fleetHome;
@@ -290,7 +301,7 @@
     (narrow
       ? [workspace.activeSessionId]
       : workspace.leaves.map((leaf) => leaf.active)
-    ).filter((id) => id !== null)
+    ).filter((id): id is string => id !== null && isSessionTab(id))
   );
   $effect(() => {
     if (!(shown && pageVisible) || onBoard) {
@@ -344,6 +355,11 @@
   });
 
   let entry = $state<EntryData>(captureEntry());
+  // A project's page carries its project's server read instead: held for its
+  // tab to claim once (project-seed.ts).
+  if (browser) {
+    holdProjectSeed((page.data as { seed?: ProjectSeed | null }).seed);
+  }
   // Only a `/session` page carries a conversation's server answer; a trip to
   // another spoke leaves the one this surface holds alone.
   afterNavigate(({ to, type, shallow }) => {
@@ -353,6 +369,8 @@
 
     if (to?.url.pathname.startsWith("/session")) {
       entry = captureEntry();
+    } else if (to?.url.pathname.startsWith("/project/")) {
+      holdProjectSeed((page.data as { seed?: ProjectSeed | null }).seed);
     }
     // A real navigation is the owner's: the app moves the URL shallowly.
     // One to a conversation the app had put in front opens it.
@@ -411,6 +429,25 @@
         if (row) {
           workspace.retarget(id, row.id);
         }
+      }
+    });
+  });
+
+  /* ── A project's tab whose project is gone ──────────────────────────
+     A project removed or forgotten elsewhere leaves no page to show: once
+     the projects are read, its tab is taken away as a tab that names
+     nothing is (workspace `drop`), never walked back to. */
+  $effect(() => {
+    if (!(workspace.restored && cawco.projectsRead)) {
+      return;
+    }
+    const gone = workspace.openTabs.filter((tab) => {
+      const projectId = projectOfTab(tab);
+      return projectId !== null && !cawco.project(projectId);
+    });
+    untrack(() => {
+      for (const tab of gone) {
+        workspace.drop(tab);
       }
     });
   });
@@ -671,6 +708,13 @@
       <!-- The detail area stands in for the groups. -->
     {:else if narrow}
       <PaneDeck />
+    {:else if fullSize.on && workspace.leaves.length > 1}
+      <!-- Full size in a split: the project's group alone fills the
+           window, the others kept as they were for when it ends. -->
+      {@const focused = workspace.leaf(workspace.focusedLeafId)}
+      {#if focused}
+        <PaneLeaf hosted leaf={focused} />
+      {/if}
     {:else}
       <PaneGrid node={workspace.root} />
     {/if}

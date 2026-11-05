@@ -29,6 +29,7 @@
   import { browser } from "$app/env";
   import { page } from "$app/state";
   import type { ServerTail } from "../client.svelte";
+  import ProjectPage from "../project/ProjectPage.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
   import SessionPane from "../SessionPane.svelte";
   import Composer, { type TrayRow } from "../transcript/Composer.svelte";
@@ -40,8 +41,11 @@
   } from "./composer-dock.svelte";
   import { dropHint, paneDropTarget } from "./dnd.svelte";
   import { settling, slot } from "./dock.svelte";
+  import { fullSize } from "./full-size.svelte";
   import { createSwipe } from "./gesture.svelte";
   import PaneTabs from "./PaneTabs.svelte";
+  import { type ProjectSeed, takeProjectSeed } from "./project-seed";
+  import { projectOfTab } from "./tabs";
   import { warm } from "./warm.svelte";
   import { contextOf, type LeafNode, workspace } from "./workspace.svelte";
 
@@ -55,6 +59,25 @@
   }: { leaf: LeafNode; swipeable?: boolean; hosted?: boolean } = $props();
 
   const swipe = createSwipe(() => leaf.id);
+  /** Full size, this group's project in front: its strip is put away. */
+  const bare = $derived(
+    fullSize.on &&
+      workspace.focusedLeafId === leaf.id &&
+      projectOfTab(leaf.active) !== null
+  );
+
+  /**
+   * The server's read of a project's page, for the tab that page named:
+   * claimed once in the browser (project-seed.ts), read off this render's
+   * own data on the server.
+   */
+  const seedFor = (projectId: string): ProjectSeed | null => {
+    if (browser) {
+      return takeProjectSeed(projectId);
+    }
+    const { seed } = page.data as { seed?: ProjectSeed | null };
+    return seed?.id === projectId ? seed : null;
+  };
 
   /** The active conversation, as this group's composer writes to it; none when it cannot be written to. */
   const bound = $derived(
@@ -386,7 +409,8 @@
     class="pointer-events-none absolute inset-y-0 start-0 z-2 w-space-row bg-ink-muted opacity-0 data-pane-leaf-shown:opacity-50 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out"
   ></span>
 
-  {#if !hosted}
+  <!-- Full size puts the strip away with the rail (full-size.svelte.ts). -->
+  {#if !(hosted || bare)}
     <RegionBoundary barOver face="strip" part="tabs">
       <PaneTabs {leaf} travel={swipe.travel} />
     </RegionBoundary>
@@ -482,7 +506,20 @@
              PaneHost mounts the live pane into the slot. The server has no
              group composer to lend a session to, so its pane paints its own
              in the same place. -->
-        {#if !browser}
+        {#if projectOfTab(paneId)}
+          <!-- A project's tab: its page, drawn here while it is shown and
+               read again as it comes back, as it was left (ProjectPage
+               `here`); the server's read of the page entered at claimed
+               once (project-seed.ts). -->
+          {#if shown}
+            {@const projectId = projectOfTab(paneId) ?? ""}
+            <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+              <RegionBoundary face="page" part="page">
+                <ProjectPage {projectId} seed={seedFor(projectId)} />
+              </RegionBoundary>
+            </div>
+          {/if}
+        {:else if !browser}
           <SessionPane
             active={isActive}
             browsing={ctx?.machine ?? null}
