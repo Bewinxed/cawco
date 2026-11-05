@@ -1,24 +1,34 @@
 /**
  * `generate_image` through the Gemini API provider (agent
- * image-providers/gemini-api.ts, on `@google/genai` as published) against a
- * mock of the API at `CAWCO_GEMINI_BASE_URL`, with a Google key account held
- * under a scratch HOME (`ownHome`). Nothing reaches Google and nothing is
- * billed.
+ * image-providers/gemini-api.ts, on `@google/genai` as published, its
+ * `interactions.create`) against a mock of the Interactions API at
+ * `CAWCO_GEMINI_BASE_URL`, answering the documented shapes
+ * (https://aistudio.google.com/api-reference/interactions-api/create-interaction.md,
+ * https://aistudio.google.com/docs/api-errors.md), with a Google key account
+ * held under a scratch HOME (`ownHome`). Nothing reaches Google and nothing
+ * is billed.
  *
  * - a. No Google key account: refused before any request, naming where to
  *   add one.
- * - b. The default: one generateContent on gemini-nano-banana-2.1, the key
- *   in `x-goog-api-key`, the image modality, the size's 3:2 and 2K, the
- *   prompt; a PNG saved at the asked path, by gemini-api.
+ * - b. The default: one POST /v1beta/interactions on
+ *   gemini-nano-banana-2.1, the key in `x-goog-api-key`, the prompt as text,
+ *   `response_format` an image at the size's 3:2 and 2K; the answer's model
+ *   output image (not its thought image) saved at the asked path, a PNG by
+ *   gemini-api.
  * - c. A chosen model and two reference images: the request names that
- *   model, and carries each reference inline, by its type, before the
- *   prompt.
+ *   model, and carries the prompt then each reference as an image, by its
+ *   type.
  * - d. A model it doesn't offer: refused before any request.
- * - e. A bad key (400 "API key not valid"): refused naming the key, once.
- * - f. 429: refused naming quota and the free tier, sent once.
- * - g. A blocked prompt (no candidate): refused with the block reason.
+ * - e. A bad key (401 `authentication`): refused naming the key, sent once.
+ * - f. 429 `quota_exceeded`: refused naming quota and the free tier, sent
+ *   once.
+ * - g. A blocked image: a 200 interaction `failed` with `image_safety` in its
+ *   errors, and a 400 `image_safety`: each refused with the code and the
+ *   API's words.
  * - h. `model` on chatgpt: refused, it has one; six references on chatgpt:
  *   refused, it takes five.
+ * - i. gemini-3.1-flash-lite-image asked for 3840x2160: 16:9 at 1K, its one
+ *   size, where the other models are asked 4K.
  *
  *   bun scripts/probe-kit/run.ts image-gemini-api
  */
@@ -42,21 +52,36 @@ const PNG_1X1 =
 const JPEG_64X48 = "/9j/4AAQSkZJRgABAQAAAQABAAD/wAARCAAwAEADASIAAhEBAxEB/9k=";
 const KEY = "AIza-probe-key";
 const BAD_KEY = "API key not valid. Please pass a valid API key.";
-const QUOTA =
-  "You exceeded your current quota, please check your plan and billing details.";
+const QUOTA = "You have exceeded your daily quota.";
+const BLOCKED = "Safety violations blocked image generation.";
 
 /** What the mock answers next. */
-type Answer = "image" | "bad-key" | "quota" | "blocked";
+type Answer = "image" | "bad-key" | "quota" | "blocked-failed" | "blocked-400";
 
 /** One request the mock saw. */
 interface Asked {
   body: {
-    contents?: { parts?: Record<string, unknown>[] }[];
-    generationConfig?: Record<string, unknown>;
+    input?: Record<string, unknown>[];
+    model?: string;
+    response_format?: Record<string, unknown>;
   };
   key: string | null;
   path: string;
 }
+
+/** An interaction as create-interaction.md's Interaction resource has it. */
+const interaction = (fields: Record<string, unknown>) => ({
+  id: "v1_probe",
+  object: "interaction",
+  model: "gemini-nano-banana-2.1",
+  created: "2026-11-05T12:00:00Z",
+  updated: "2026-11-05T12:00:05Z",
+  ...fields,
+});
+
+/** api-errors.md's error body: "an `error` object containing a `code` and `message`". */
+const apiError = (status: number, code: string, message: string) =>
+  Response.json({ error: { code, message } }, { status });
 
 export default {
   group: "The hub and machines",
@@ -77,44 +102,43 @@ export default {
         });
         switch (answer) {
           case "bad-key":
-            return Response.json(
-              {
-                error: {
-                  code: 400,
-                  message: BAD_KEY,
-                  status: "INVALID_ARGUMENT",
-                },
-              },
-              { status: 400 }
-            );
+            return apiError(401, "authentication", BAD_KEY);
           case "quota":
+            return apiError(429, "quota_exceeded", QUOTA);
+          case "blocked-400":
+            return apiError(400, "image_safety", BLOCKED);
+          case "blocked-failed":
             return Response.json(
-              {
-                error: {
-                  code: 429,
-                  message: QUOTA,
-                  status: "RESOURCE_EXHAUSTED",
-                },
-              },
-              { status: 429 }
+              interaction({
+                status: "failed",
+                steps: [],
+                errors: [{ code: "image_safety", message: BLOCKED }],
+              })
             );
-          case "blocked":
-            return Response.json({ promptFeedback: { blockReason: "SAFETY" } });
           case "image":
-            return Response.json({
-              candidates: [
-                {
-                  content: {
-                    role: "model",
-                    parts: [
-                      { text: "Here it is." },
-                      { inlineData: { mimeType: "image/png", data: PNG_1X1 } },
+            return Response.json(
+              interaction({
+                status: "completed",
+                steps: [
+                  {
+                    type: "thought",
+                    summary: [
+                      {
+                        type: "image",
+                        mime_type: "image/jpeg",
+                        data: JPEG_64X48,
+                      },
                     ],
                   },
-                  finishReason: "STOP",
-                },
-              ],
-            });
+                  {
+                    type: "model_output",
+                    content: [
+                      { type: "image", mime_type: "image/png", data: PNG_1X1 },
+                    ],
+                  },
+                ],
+              })
+            );
           default:
             return unhandled("answer", answer);
         }
@@ -185,19 +209,20 @@ export default {
         JSON.stringify(made)
       );
       check(
-        "b. one generateContent on that model, the key in x-goog-api-key, the image modality, 3:2 at 2K, the prompt",
+        "b. one POST /v1beta/interactions on that model, the key in x-goog-api-key, the prompt as text, an image at 3:2 and 2K",
         asked.length === 1 &&
-          first?.path.endsWith(
-            "/models/gemini-nano-banana-2.1:generateContent"
-          ) === true &&
+          first?.path === "/v1beta/interactions" &&
           first.key === KEY &&
-          JSON.stringify(first.body.generationConfig) ===
+          JSON.stringify(first.body) ===
             JSON.stringify({
-              responseModalities: ["IMAGE"],
-              imageConfig: { aspectRatio: "3:2", imageSize: "2K" },
-            }) &&
-          JSON.stringify(first.body.contents?.[0]?.parts) ===
-            JSON.stringify([{ text: "a probe" }]),
+              model: "gemini-nano-banana-2.1",
+              input: [{ type: "text", text: "a probe" }],
+              response_format: {
+                type: "image",
+                aspect_ratio: "3:2",
+                image_size: "2K",
+              },
+            }),
         JSON.stringify(asked)
       );
 
@@ -207,21 +232,21 @@ export default {
         output_path: "c.png",
         reference_images: ["ref.png", "ref.jpg"],
       });
-      const parts = asked[0]?.body.contents?.[0]?.parts;
+      const input = asked[0]?.body.input;
       check(
-        "c. a chosen model and two references: that model, each reference inline by its type, then the prompt",
+        "c. a chosen model and two references: that model, the prompt, then each reference as an image by its type",
         edit.ok &&
           edit.image.model === "gemini-3-pro-image" &&
-          asked[0]?.path.endsWith(
-            "/models/gemini-3-pro-image:generateContent"
-          ) === true &&
-          JSON.stringify(parts) ===
+          asked[0]?.body.model === "gemini-3-pro-image" &&
+          JSON.stringify(input) ===
             JSON.stringify([
-              { inlineData: { mimeType: "image/png", data: PNG_1X1 } },
-              { inlineData: { mimeType: "image/jpeg", data: JPEG_64X48 } },
-              { text: "a probe" },
-            ]),
-        JSON.stringify({ edit, parts })
+              { type: "text", text: "a probe" },
+              { type: "image", mime_type: "image/png", data: PNG_1X1 },
+              { type: "image", mime_type: "image/jpeg", data: JPEG_64X48 },
+            ]) &&
+          JSON.stringify(asked[0]?.body.response_format) ===
+            JSON.stringify({ type: "image" }),
+        JSON.stringify({ edit, input })
       );
 
       const unknown = await attempt("image", {
@@ -245,10 +270,10 @@ export default {
         output_path: "e.png",
       });
       check(
-        "e. a bad key: refused naming the key, sent once, nothing saved",
+        "e. a bad key (401 authentication): refused naming the key, sent once, nothing saved",
         !badKey.ok &&
           badKey.error ===
-            refused(imageGenerationWords.geminiKeyRefused(400, BAD_KEY)) &&
+            refused(imageGenerationWords.geminiKeyRefused(401, BAD_KEY)) &&
           asked.length === 1 &&
           !existsSync(join(out, "e.png")),
         JSON.stringify({ badKey, asked: asked.length })
@@ -259,23 +284,33 @@ export default {
         output_path: "f.png",
       });
       check(
-        "f. 429: refused naming quota and the free tier, sent once",
+        "f. 429 quota_exceeded: refused naming quota and the free tier, sent once",
         !quota.ok &&
           quota.error === refused(imageGenerationWords.geminiQuota(QUOTA)) &&
           asked.length === 1,
         JSON.stringify({ quota, asked: asked.length })
       );
 
-      const blocked = await attempt("blocked", {
+      const blocked = await attempt("blocked-failed", {
         provider: "gemini-api",
         output_path: "g.png",
       });
+      const blocked400 = await attempt("blocked-400", {
+        provider: "gemini-api",
+        output_path: "g.png",
+      });
+      const saidBlocked = refused(
+        imageGenerationWords.geminiNoImage("image_safety", BLOCKED)
+      );
       check(
-        "g. a blocked prompt: refused with the block reason",
+        "g. a blocked image, as a failed interaction and as a 400: each refused with image_safety and the API's words, sent once",
         !blocked.ok &&
-          blocked.error ===
-            refused(imageGenerationWords.geminiNoImage("SAFETY", "")),
-        JSON.stringify(blocked)
+          blocked.error === saidBlocked &&
+          !blocked400.ok &&
+          blocked400.error === saidBlocked &&
+          asked.length === 1 &&
+          !existsSync(join(out, "g.png")),
+        JSON.stringify({ blocked, blocked400 })
       );
 
       const chatgptModel = await attempt("image", {
@@ -300,6 +335,41 @@ export default {
               imageGenerationWords.tooManyReferences("chatgpt", 5)
             ),
         JSON.stringify({ chatgptModel, chatgptRefs })
+      );
+
+      const lite = await attempt("image", {
+        provider: "gemini-api",
+        model: "gemini-3.1-flash-lite-image",
+        output_path: "i.png",
+        size: "3840x2160",
+      });
+      const [liteAsked] = asked;
+      kit.note(`i request: ${JSON.stringify(liteAsked?.body)}`);
+      const pro = await attempt("image", {
+        provider: "gemini-api",
+        model: "gemini-3-pro-image",
+        output_path: "i-pro.png",
+        size: "3840x2160",
+      });
+      check(
+        "i. gemini-3.1-flash-lite-image at 3840x2160: asked 16:9 at 1K, its one size; gemini-3-pro-image at the same size is asked 4K",
+        lite.ok &&
+          lite.image.model === "gemini-3.1-flash-lite-image" &&
+          liteAsked?.body.model === "gemini-3.1-flash-lite-image" &&
+          JSON.stringify(liteAsked.body.response_format) ===
+            JSON.stringify({
+              type: "image",
+              aspect_ratio: "16:9",
+              image_size: "1K",
+            }) &&
+          pro.ok &&
+          JSON.stringify(asked[0]?.body.response_format) ===
+            JSON.stringify({
+              type: "image",
+              aspect_ratio: "16:9",
+              image_size: "4K",
+            }),
+        JSON.stringify({ lite, liteAsked, pro, proAsked: asked[0] })
       );
     } finally {
       server.stop(true);

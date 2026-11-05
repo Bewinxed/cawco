@@ -1,8 +1,13 @@
 /**
  * The aspect ratios Nano Banana makes, through Antigravity's image tool and
- * the Gemini API alike: "1:1, 3:2, 2:3, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9,
- * 21:9" (https://ai.google.dev/gemini-api/docs/image-generation, read
- * 2026-11-04).
+ * the Gemini API alike: the ten every per-model table of
+ * https://aistudio.google.com/docs/image-generation.md holds ("Aspect
+ * ratios and image size", read 2026-11-05) and Gemini 3.1 Flash Lite Image
+ * names ("New `1:1`, `3:2`, `2:3`, `3:4`, `4:3`, `4:5`, `5:4`, `9:16`,
+ * `16:9`, `21:9` aspect ratios",
+ * https://aistudio.google.com/docs/models/gemini-3.1-flash-lite-image.md).
+ * Nano Banana 2.1 and 3.1 Flash Image also make 1:4, 4:1, 1:8 and 8:1, but
+ * no size the call admits (at most 3:1) is nearer one of those than 21:9.
  */
 const RATIOS = [
   [1, 1],
