@@ -26,7 +26,14 @@
  * parent's own answer goes untold, and an ask no screen was shown.
  *
  * Each word is a send under the delegate's peer origin, as its report and
- * its ask are, so it wakes a parent at rest.
+ * its ask are, so it wakes a parent at rest. Each is told once: its send is
+ * named by the ask and what it tells ({@link NoticeMark}), and the hub hands
+ * a send it already holds a record of over once (server.ts
+ * `deliverToSession`). That record is the mark, kept with the parent's
+ * sends, so an ask parked again (a design proposal as the hub starts, a
+ * prompt kept as a permit) tells its parent nothing it was told before,
+ * however often the hub restarts. An ask handed to the parent to answer is
+ * marked by its `delegate_events` row.
  */
 import {
   type AskAnswer,
@@ -45,6 +52,9 @@ const PERSON_ONLY = [
   "memoryProposal",
   "move",
 ] as const;
+
+/** What a notice tells of its ask, by which its send is named: each is told once. */
+export type NoticeMark = "waits" | "persons-now" | "ended" | "handed-back";
 
 /** How an ask left the ledger. */
 type AskEnd = { kind: "answered"; answer?: AskAnswer } | { kind: "withdrawn" };
@@ -68,10 +78,18 @@ export interface DelegateWaitsDeps {
   readonly owned: (requestId: string) => AskRecord["asked"]["kind"] | undefined;
   /** The parent the asks of `asker` go to now; none for a session with no parent that can take them. */
   readonly parentOf: (asker: InstanceRow) => InstanceRow | undefined;
-  /** Says `body` to `parent` about its delegate `asker`, under the note's `line`, in a send that wakes it. */
+  /**
+   * Says `body` to `parent` about its delegate `asker`, under the note's
+   * `line`, in a send that wakes it, named by the ask `requestId` and
+   * `mark`: a send under a name already sent goes nowhere.
+   */
   readonly tell: (
-    asker: InstanceRow,
-    parent: InstanceRow,
+    told: {
+      asker: InstanceRow;
+      mark: NoticeMark;
+      parent: InstanceRow;
+      requestId: string;
+    },
     line: string,
     body: string
   ) => void;
@@ -167,8 +185,12 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
       return PERSON_ONLY.some((field) => payload[field] !== undefined);
     },
 
-    /** `ask` started waiting, on the person or its parent: the parent is told, as the rule says. */
-    asked(ask: Envelope): void {
+    /**
+     * `ask` started waiting, on the person or its parent, or (`escalated`) an
+     * ask handed to the parent went to the person: the parent is told, as
+     * the rule says, once.
+     */
+    asked(ask: Envelope, escalated = false): void {
       const asker = askerOf(ask);
       const pair = asker ? pairOf(asker.id) : undefined;
       if (!pair) {
@@ -177,17 +199,18 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
       const { parent } = pair;
       const requestId = ask.requestId ?? "";
       const name = deps.link(pair.asker);
-      if (deps.handed(requestId)) {
+      if (escalated) {
         deps.tell(
-          pair.asker,
-          parent,
+          { ...pair, mark: "persons-now", requestId },
           delegateWaitWords.personsNowLine(deps.title(pair.asker)),
           delegateWaitWords.personsNow(name, requestId)
         );
         return;
       }
       if (!waits.personOnly(ask)) {
-        deps.hand(pair.asker, parent, ask);
+        if (!deps.handed(requestId)) {
+          deps.hand(pair.asker, parent, ask);
+        }
         return;
       }
       const browser = payloadOf(ask).browserAsk;
@@ -195,8 +218,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
         ? delegateWaitWords.browserHeld(name, browser.origin, browser.reason)
         : delegateWaitWords.held(name, whatOf(ask));
       deps.tell(
-        pair.asker,
-        parent,
+        { ...pair, mark: "waits", requestId },
         delegateWaitWords.waitsLine(deps.title(pair.asker)),
         `${said} ${delegateWaitWords.personOnly}`
       );
@@ -234,8 +256,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
       const taken =
         end.kind === "answered" && !answer && !!payloadOf(ask).browserAsk;
       deps.tell(
-        pair.asker,
-        pair.parent,
+        { ...pair, mark: "ended", requestId: ask.requestId ?? "" },
         taken
           ? delegateWaitWords.tookOverLine(title)
           : delegateWaitWords.endedLine(title),
@@ -253,6 +274,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
      */
     handedBack(
       instanceId: string,
+      requestId: string,
       reason: string,
       origin: string | null
     ): void {
@@ -261,8 +283,7 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
         return;
       }
       deps.tell(
-        pair.asker,
-        pair.parent,
+        { ...pair, mark: "handed-back", requestId },
         delegateWaitWords.endedLine(deps.title(pair.asker)),
         delegateWaitWords.ended(
           deps.link(pair.asker),

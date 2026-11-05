@@ -19,6 +19,12 @@
  * (c) The person takes the browser over: the parent hears so.
  * (d) The person hands the browser back: the parent hears so, with the
  *     page's origin, and the delegate's call answers that it was handed back.
+ * (e) The delegate's `design_write` to the project's design system is a
+ *     proposal waiting on the person: the parent is woken with one note. The
+ *     parent goes to sleep and the hub restarts (SIGKILL, as a crash does);
+ *     the proposal is parked again as the hub starts (design-system.ts
+ *     `start`), and the parent gets no second note: a wait is told once,
+ *     however often the hub restarts while it stands.
  *
  *   bun scripts/probe-kit/run.ts delegate-waits
  */
@@ -82,6 +88,24 @@ const callAs = async (
     timeoutMs ? { timeoutMs } : {}
   );
 
+/** Asks `id` to sleep (again every 15 s: a machine refuses one not at rest) until its row reads sleeping. */
+const asleep = async (fleet: KitFleet, id: string): Promise<string> => {
+  let askedAt = 0;
+  return await until(
+    `${id.slice(0, 8)} asleep`,
+    async () => {
+      const status = fleet.instance(id)?.status ?? "";
+      if (status !== "sleeping" && Date.now() - askedAt > 15_000) {
+        askedAt = Date.now();
+        await fleet.control(id, "sleep");
+      }
+      return status;
+    },
+    (status) => status === "sleeping",
+    120_000
+  ).catch(() => fleet.instance(id)?.status ?? "gone");
+};
+
 const run = async (kit: Kit) => {
   const { check } = kit;
   const fleet = await kit.fleet(respond);
@@ -111,52 +135,57 @@ const run = async (kit: Kit) => {
   });
   const inProject = { projectId: project.id };
   const parent = await fleet.spawn("claude", "Waits parent", src, inProject);
-  const delegate = await fleet.spawn("claude", "Delegate", src, inProject);
-
-  // The delegate: a work item in a workspace of its own, as `delegate`
-  // writes them, the parent its parent.
-  const now = Date.now();
-  const workspace = crypto.randomUUID();
-  const item = crypto.randomUUID();
-  fleet.write(
-    "INSERT INTO workspaces (id, machine_id, repo_root, path, branch, state, created_by_instance_id, created_at) VALUES (?, ?, ?, ?, ?, 'active', ?, ?)",
-    workspace,
-    MACHINE,
-    src,
-    join(fleet.sandbox, `ws-${workspace.slice(0, 8)}`),
-    `ws/${workspace.slice(0, 8)}`,
-    parent,
-    now
-  );
-  fleet.write(
-    "INSERT INTO work_items (id, workspace_id, parent_instance_id, instance_id, brief, title, harness, state, project_id, created_at) VALUES (?, ?, ?, ?, ?, ?, 'claude', 'running', ?, ?)",
-    item,
-    workspace,
-    parent,
-    delegate,
-    "Get past the CAPTCHA.",
-    "Waits delegate",
-    project.id,
-    now
-  );
-  fleet.write(
-    "UPDATE instances SET parent_instance_id = ?, work_item_id = ? WHERE id = ?",
-    parent,
-    item,
-    delegate
-  );
-  // Renamed through the hub, so its board reads the row these writes made
-  // (the hub hears its own connection's writes alone, db `instance_changes`).
-  const renamed = await fetch(`${fleet.base}/api/instances/${delegate}`, {
-    method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ title: "Waits delegate" }),
-  });
-  if (!renamed.ok) {
-    throw new Error(
-      `the delegate's rename: ${renamed.status} ${await renamed.text()}`
+  /**
+   * A delegate of the parent titled `title`, working in `cwd`: a work item
+   * in a workspace of its own, as `delegate` writes them, renamed through
+   * the hub so its board reads the row these writes made (the hub hears
+   * its own connection's writes alone, db `instance_changes`).
+   */
+  const seeded = async (title: string, cwd: string): Promise<string> => {
+    const child = await fleet.spawn("claude", "Delegate", cwd, inProject);
+    const now = Date.now();
+    const workspace = crypto.randomUUID();
+    const item = crypto.randomUUID();
+    fleet.write(
+      "INSERT INTO workspaces (id, machine_id, repo_root, path, branch, state, created_by_instance_id, created_at) VALUES (?, ?, ?, ?, ?, 'active', ?, ?)",
+      workspace,
+      MACHINE,
+      cwd,
+      join(fleet.sandbox, `ws-${workspace.slice(0, 8)}`),
+      `ws/${workspace.slice(0, 8)}`,
+      parent,
+      now
     );
-  }
+    fleet.write(
+      "INSERT INTO work_items (id, workspace_id, parent_instance_id, instance_id, brief, title, harness, state, project_id, created_at) VALUES (?, ?, ?, ?, ?, ?, 'claude', 'running', ?, ?)",
+      item,
+      workspace,
+      parent,
+      child,
+      "Do your part.",
+      title,
+      project.id,
+      now
+    );
+    fleet.write(
+      "UPDATE instances SET parent_instance_id = ?, work_item_id = ? WHERE id = ?",
+      parent,
+      item,
+      child
+    );
+    const renamed = await fetch(`${fleet.base}/api/instances/${child}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title }),
+    });
+    if (!renamed.ok) {
+      throw new Error(
+        `${title}'s rename: ${renamed.status} ${await renamed.text()}`
+      );
+    }
+    return child;
+  };
+  const delegate = await seeded("Waits delegate", src);
 
   // (a) The parent's turn ends quietly; then its delegate asks the person.
   await fleet.send(parent, HELLO);
@@ -301,6 +330,105 @@ const run = async (kit: Kit) => {
       heard
         .slice(beforeBack)
         .map((one) => one.last.slice(0, 200))
+        .join(" | ") || "none"
+    }`
+  );
+
+  // (e) A design proposal's wait, across a restart: told once. The system
+  // is the person's, in the project's folder (written as they write it),
+  // and a second delegate of the parent works there.
+  for (const [path, content] of [
+    ["design/manifest.json", `${JSON.stringify({ sources: {}, files: {} })}\n`],
+    ["design/DESIGN.md", "# Waits\n"],
+  ] as const) {
+    const put = await fetch(
+      `${fleet.base}/api/projects/${project.id}/folder/file`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ path, content }),
+      }
+    );
+    if (!put.ok) {
+      throw new Error(
+        `the person's ${path}: ${put.status} ${await put.text()}`
+      );
+    }
+  }
+  const folder = join(fleet.sandbox, "hub", "projects", project.id);
+  const designer = await seeded("Design delegate", folder);
+  const beforeDesign = heard.length;
+  const waitsLine = delegateWaitWords.waitsLine("Design delegate");
+  /** The parent's requests since (e) began that a design wait note woke. */
+  const designNotes = () =>
+    heard
+      .slice(beforeDesign)
+      .filter(
+        (one) => one.last.includes(WAIT_TAG) && one.last.includes(waitsLine)
+      );
+  const proposed = await callAs(fleet, designer, "design_write", {
+    files: [{ path: "references/waits.md", content: `${REASON}\n` }],
+    why: "The probe's change to the design system",
+  });
+  const proposal = await until(
+    "(e) the design proposal waiting on the person",
+    async () =>
+      (await fleet.api<Parked[]>("/api/pending")).find((one) =>
+        one.requestId?.startsWith("dp-")
+      ),
+    Boolean,
+    60_000
+  ).catch(() => undefined);
+  const first = await until(
+    "(e) the parent's note of the proposal",
+    () => designNotes(),
+    (told) => told.length > 0,
+    120_000
+  ).catch(() => []);
+  check(
+    "(e) the delegate's design_write is a proposal waiting on the person, and its parent is woken with a note that it waits",
+    !!proposal && first.length === 1,
+    `design_write: ${proposed.text.slice(0, 300)}; pending: ${proposal?.requestId ?? "none"}; notes: ${first.length}`
+  );
+  if (!proposal?.requestId) {
+    return;
+  }
+  await until(
+    "(e) the parent's turn over",
+    () => fleet.instance(parent)?.turn_open_at ?? null,
+    (open) => open === null,
+    120_000
+  );
+  const slept = await asleep(fleet, parent);
+  await fleet.stop("hub", "SIGKILL");
+  fleet.launch("hub");
+  await fleet.hubUp();
+  await fleet.agentUp();
+  const again = await until(
+    "(e) the proposal parked again after the restart",
+    async () =>
+      (await fleet.api<Parked[]>("/api/pending")).some(
+        (one) => one.requestId === proposal.requestId
+      ),
+    Boolean,
+    60_000
+  ).catch(() => false);
+  // The hub tells a parent as it parks the ask, so by the time the proposal
+  // is parked again any second note is among the parent's sends.
+  const sends =
+    fleet.query<{ n: number }>(
+      "SELECT count(*) AS n FROM sent_messages WHERE instance_id = ? AND instr(body, ?) > 0",
+      parent,
+      encodeURIComponent(waitsLine)
+    )[0]?.n ?? 0;
+  const notes = designNotes();
+  check(
+    "(e) the parent asleep and the hub restarted, the proposal is parked again and the parent gets no second note",
+    slept === "sleeping" && again && sends === 1 && notes.length === 1,
+    `the parent before the restart: ${slept}; parked again: ${again}; the parent's sends of its wait: ${sends}; notes since (e): ${notes.length}; the parent's requests since: ${
+      heard
+        .slice(beforeDesign)
+        .map((one) => one.last.slice(0, 160))
         .join(" | ") || "none"
     }`
   );

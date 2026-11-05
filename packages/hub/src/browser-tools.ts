@@ -75,6 +75,7 @@ export interface BrowserAsksDeps {
    */
   readonly handedBack: (
     instanceId: string,
+    requestId: string,
     ask: BrowserAskFrame,
     origin: string | null
   ) => void;
@@ -209,7 +210,7 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
             deps.settle(id);
           }
           waiter.resolve({ outcome: "handed_back", origin });
-          deps.handedBack(waiter.instanceId, waiter.ask, origin);
+          deps.handedBack(waiter.instanceId, id, waiter.ask, origin);
         }
       }
     },

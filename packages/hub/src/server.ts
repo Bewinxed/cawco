@@ -3638,8 +3638,14 @@ export const createServer = (
     handed: (requestId) => db.delegateAsk(requestId) !== undefined,
     hand: (asker, parent, ask) =>
       deliverDelegateAsk(asker, parent, clientCopy(ask)),
-    tell: (asker, parent, line, body) =>
-      tellParentOfWait(asker, parent, line, body),
+    tell: ({ asker, parent, requestId, mark }, line, body) =>
+      tellParentOfWait(
+        asker,
+        parent,
+        uuidOf(`delegate-wait\u0000${requestId}\u0000${mark}`),
+        line,
+        body
+      ),
     title: (row) => boardTitle(row),
     link: (row) => sessionLink(row.id, boardTitle(row)),
     answererName: (row) => sessionName(row),
@@ -3978,8 +3984,8 @@ export const createServer = (
     settle: (requestId) => {
       pending.resolve(requestId);
     },
-    handedBack: (instanceId, ask, origin) =>
-      delegateWaits.handedBack(instanceId, ask.reason, origin),
+    handedBack: (instanceId, requestId, ask, origin) =>
+      delegateWaits.handedBack(instanceId, requestId, ask.reason, origin),
   });
   // A session's ask that the person sign the hub in to a fleet MCP server
   // (connect-asks.ts), answered by the hub's own sign-in landing.
@@ -6158,7 +6164,7 @@ export const createServer = (
       registry.broadcast(clientCopy(parked));
       push.onAsk(parked);
       // Its parent, if it can still be woken, hears it is the person's now.
-      delegateWaits.asked(parked);
+      delegateWaits.asked(parked, true);
     }
   };
 
@@ -6285,11 +6291,13 @@ export const createServer = (
    * The hub's word to `parent` while its delegate `delegate` waits on the
    * person, or of how its ask ended (delegate-waits.ts): a peer message from
    * the delegate, as its ask and its report are, so it wakes a parent at
-   * rest, drawn in the parent's transcript as a note titled `line`.
+   * rest, drawn in the parent's transcript as a note titled `line`. Under a
+   * `uuid` already sent it goes nowhere: each is told once.
    */
   const tellParentOfWait = (
     delegate: InstanceRow,
     parent: InstanceRow,
+    uuid: string,
     line: string,
     body: string
   ): void => {
@@ -6301,7 +6309,7 @@ export const createServer = (
         instanceId: parent.id,
         message: {
           type: "user",
-          uuid: crypto.randomUUID(),
+          uuid,
           message: {
             role: "user",
             content: withContext(
