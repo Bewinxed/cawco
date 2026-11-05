@@ -92,7 +92,7 @@
   </InputGroup.Root>
   {#if refused}
     <p class="m-0 type-meta text-status-fail-ink" id="{uid}-refused">
-      {words.notAColour(typing ?? "")}
+      {words.notAColour}
     </p>
   {/if}
 </div>

@@ -37,6 +37,7 @@
     dialsAt = "face",
     numberForm = "pill",
     face,
+    also = [],
   }: {
     /** The agent's dials, as its canvas spec writes them. */
     dials?: GraphDial[];
@@ -46,6 +47,8 @@
     numberForm?: "pill" | "field" | "slider";
     /** The room's face it opens on. */
     face?: "dials";
+    /** More states files under the ask, their sheets on their way: the title is the components' menu. */
+    also?: string[];
   } = $props();
 
   const FILE = "apps/dashboard/src/lib/cawco/routines/RoutineForm.stories.ts";
@@ -277,7 +280,7 @@
   <DesignGraph
     ask="Judge the routine form's dials"
     {dialsAt}
-    files={[FILE]}
+    files={[FILE, ...also]}
     {frame}
     {link}
     {numberForm}
