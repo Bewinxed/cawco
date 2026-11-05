@@ -37,6 +37,7 @@
    * of the folder (FolderFile) opens the same way, in the task's place: one
    * stands beside the view at a time.
    */
+  import { needsYouOf } from "@cawco/core/task-views";
   import type { ProjectView, StageKind } from "@cawco/core/views";
   import { blocksWords } from "@cawco/core/words/blocks";
   import { commonWords } from "@cawco/core/words/common";
@@ -61,7 +62,10 @@
     requestView,
   } from "#lib/cawco/client.svelte.js";
   import DecisionsView from "#lib/cawco/decisions/DecisionsView.svelte";
-  import { ProjectDecisions } from "#lib/cawco/decisions/decisions.svelte.js";
+  import {
+    ProjectDecisions,
+    pagesWaitingOf,
+  } from "#lib/cawco/decisions/decisions.svelte.js";
   import { firstRender } from "#lib/cawco/first-render.svelte.js";
   import {
     failureClause,
@@ -332,17 +336,49 @@
         ...task,
         stage,
         kind,
-        needsYou: kind === "you" || task.lastAttemptFailed,
+        needsYou: needsYouOf(kind, task.waits),
       };
     })
   );
+  /** The views that draw the tasks, which Filter and Needs you narrow. */
+  const TASK_VIEWS = ["board", "table", "canvas", "calendar"];
   const kindById = $derived(new Map(tasks.map((task) => [task.id, task.kind])));
   /** What waits on you: the hub's reasons, a session's ask, an action (needs.svelte.ts). */
   const needsYou = $derived(
     tasks.filter((task) => waitsOnYou(projectId, task))
   );
-  /** The filter holds only while something needs you. */
-  const filtering = $derived(needsOnly && needsYou.length > 0);
+  /** The project's decision pages (decisions.svelte.ts): the tab and its trail read them. */
+  const decisions = new ProjectDecisions(() => projectId);
+  /** The decision pages waiting on the person's picks (decisions.svelte.ts). */
+  const pagesWaiting = $derived(
+    pagesWaitingOf(decisions.list?.pages ?? [], notSetUp)
+  );
+  /**
+   * Needs you counts what it narrows the view on screen to (JOURNEY.md,
+   * "The count beside the views says how many and narrows the view to
+   * them"): on Decisions, its pages waiting on picks; on every other view,
+   * the tasks waiting on you. One number, and pressed, exactly those; the
+   * Decisions tab's own badge counts the pages from anywhere.
+   */
+  const onDecisions = $derived.by(() => current === "decisions");
+  const waitingCount = $derived(
+    onDecisions ? pagesWaiting.length : needsYou.length
+  );
+  /** The filter holds only while something it counts waits. */
+  const filtering = $derived(needsOnly && waitingCount > 0);
+  /** The views of the tasks narrow to the tasks waiting on you. */
+  const narrowsTasks = $derived(filtering && !onDecisions);
+  /**
+   * Needs you pressed: on, the view narrows to what it counts; from a view
+   * that shows no tasks or pages (Routines, Made), it goes to the board,
+   * where the tasks it counted stand.
+   */
+  function toggleNeeds() {
+    needsOnly = !filtering;
+    if (needsOnly && !(onDecisions || TASK_VIEWS.includes(current))) {
+      choose("board");
+    }
+  }
   /** What narrows every view of the tasks, kept in the URL (task-filter). */
   let filter = $state<TaskFilter>(untrack(() => filterOf(here.searchParams)));
   const narrowed = $derived(activeCount(filter));
@@ -352,11 +388,11 @@
     untrack(() => seed?.find ?? wordless(here))
   );
   const shownTasks = $derived(
-    applyFilter(filtering ? needsYou : tasks, filter, find.ids)
+    applyFilter(narrowsTasks ? needsYou : tasks, filter, find.ids)
   );
   /** Needs you on, the columns those tasks stand in. */
   const shownStages = $derived(
-    filtering
+    narrowsTasks
       ? stageList.filter((stage) =>
           needsYou.some((task) => task.stage === stage.name)
         )
@@ -595,7 +631,7 @@
   const barViews = $derived(
     tabs.map((each) => ({
       ...each,
-      count: each.value === "decisions" ? decisions.waiting : 0,
+      count: each.value === "decisions" ? pagesWaiting.length : 0,
     }))
   );
   let tab = $derived(here.searchParams.get("view") ?? "board");
@@ -607,7 +643,7 @@
   );
   /** The setup page lands on the board while the project is not set up (setup-progress.ts `setupLandsOnBoard`). */
   const setupLands = (at: string | null, card: string | null): boolean =>
-    setupLandsOnBoard(notSetUp, at, card);
+    setupLandsOnBoard(notSetUp, at, card, draftOpenCards.length > 0);
   /** The view on screen: the one asked for once it exists, the board meanwhile. */
   const current = $derived.by(() => {
     if (tab === "decisions" && setupLands(decisionPage, decisionCard)) {
@@ -622,8 +658,6 @@
 
   // --- the Decisions tab ---------------------------------------------------------
 
-  /** The project's decision pages (decisions.svelte.ts): the tab and its trail read them. */
-  const decisions = new ProjectDecisions(() => projectId);
   /** The decision page the person has open, in the Decisions tab. */
   const openPage = $derived(current === "decisions" ? decisionPage : null);
   /**
@@ -636,16 +670,19 @@
   const sheetCovers = () =>
     pageScrollsQuery.current && (openPage !== null || notSetUp);
   /**
-   * A decision page opened on a phone puts Caw's sheet away, as his Close
-   * does (DESIGN.md, The Work Outlives Its Surface Rule): the sheet leaves
-   * by its own exit, his conversation keeps its place, and his seat brings it
-   * back over the page when the person asks. Only an opening moves it: his
-   * panel reopened over the page stays.
+   * A view or a decision page opened on a phone puts Caw's sheet away, as
+   * his Close does (DESIGN.md, The Work Outlives Its Surface Rule): a link
+   * pressed in his conversation (a card's chip, a page's row) opens where
+   * it goes under the sheet, so the sheet leaves by its own exit, his
+   * conversation keeps its place, and his seat brings it back over the page
+   * when the person asks. Only an opening moves it: his panel reopened over
+   * the page stays.
    */
   $effect(() => {
     track(openPage);
+    track(current);
     untrack(() => {
-      if (lead.open && sheetCovers()) {
+      if (lead.open && pageScrollsQuery.current) {
         lead.open = false;
       }
     });
@@ -1601,13 +1638,11 @@
   const strippedNewTask = $derived(list !== null && (!empty || canTalk));
   /** The view on screen is one of the tasks, which the filter narrows. */
   const filterHere = $derived(
-    list !== null &&
-      !empty &&
-      ["board", "table", "canvas", "calendar"].includes(current)
+    list !== null && !empty && TASK_VIEWS.includes(current)
   );
   /** Something stands after the tabs: the hairline marks where it starts. */
   const trailing = $derived(
-    needsYou.length > 0 ||
+    waitingCount > 0 ||
       strippedNewTask ||
       canTalk ||
       (filterHere && (wide || narrowed > 0))
@@ -1700,12 +1735,28 @@
   });
   /** His draft, read from the setup page he writes, kept and sent from the board. */
   const draft = new SetupDraftSource();
+  /** The setup page's cards beside the draft still waiting on a pick: the line over the draft names them. */
+  const draftOpenCards = $derived(
+    draft.cards.filter((id) => !draft.picked.has(id))
+  );
   $effect(() => {
     const id = projectId;
     const row = notSetUp ? setupPage : null;
     untrack(() => detach(draft.follow(id, row), "read the setup draft"));
   });
   $effect(() => () => draft.leave());
+  /**
+   * Not set up, and what the board would draw is still being read: the
+   * project's decision pages (whether a setup page exists), or the setup
+   * page's program. Until then the board can't say the project holds
+   * nothing, so the draft stands as its skeleton, never the empty scene
+   * (The Claim Of Nothing Rule).
+   */
+  const draftUnread = $derived(
+    notSetUp &&
+      ((decisions.list === null && decisions.problem === null) ||
+        (Boolean(setupPage?.artifactId) && !draft.read && !draft.problem))
+  );
   /** The draft stands on the board: the page holds it, or he is drafting it. */
   const drafting = $derived(
     notSetUp && (Boolean(setupPage?.artifactId) || setupProgress !== null)
@@ -1867,11 +1918,11 @@
       <!-- Under 640px New task and Ask Caw are in the head's ⋯: the rule
            stands only while Needs you follows it there. -->
       <span
-        data-wide={needsYou.length === 0 || undefined}
+        data-wide={waitingCount === 0 || undefined}
         aria-hidden="true"
         class={[
           "h-c-btn-h-sm w-px flex-none bg-border-hairline",
-          needsYou.length === 0 && "max-phone:hidden",
+          waitingCount === 0 && "max-phone:hidden",
         ]}
       ></span>
     {/if}
@@ -1893,13 +1944,11 @@
           tasks={[...tasks, ...archived]}
         />
       {/if}
-      {#if needsYou.length > 0}
+      {#if waitingCount > 0}
         <NeedsYouChip
-          count={needsYou.length}
+          count={waitingCount}
           on={filtering}
-          ontoggle={() => {
-            needsOnly = !filtering;
-          }}
+          ontoggle={toggleNeeds}
         />
       {/if}
       {#if strippedNewTask}
@@ -1966,6 +2015,7 @@
   <TaskBoard
     {allowedFrom}
     archived={applyFilter(archived, filter, find.ids)}
+    current={openTask}
     {dateOf}
     hrefOf={(id) => hrefOf(id)}
     moving={(id) => id in moving}
@@ -2174,6 +2224,7 @@
       starters={decisionStarters}
       taskHref={(id) => hrefOf(id)}
       {taskOf}
+      waitingOnly={filtering}
     />
   {:else if leavingFor}
     <!-- The tab's first read, inside its grace: it shows nothing of its
@@ -2198,24 +2249,29 @@
         {/snippet}
       </EmptyState>
     </div>
-  {:else if notSetUp && !adding && drafting}
+  {:else if notSetUp && !adding && (drafting || draftUnread)}
     <SetupBoard
       aim={draft.aim}
       asks={setupAsks}
-      cards={draft.cards}
+      cards={draftOpenCards}
       coming={draftComing}
       delegates={draft.delegates}
       name={project?.name ?? ""}
       onaim={(next) => draft.keep("aim", next)}
+      ondelegates={(ids) => draft.keep("delegates", ids)}
+      proposed={draft.drafted?.delegates ?? []}
       onanswercaw={() => detach(lead.answerAsks(), "answer Caw")}
       onBoard={asksOnBoard}
-      pageHref={draft.cards[0] ? setupPageAt(projectId, draft.cards[0]) : null}
+      pageHref={draftOpenCards[0]
+        ? setupPageAt(projectId, draftOpenCards[0])
+        : null}
       onsetup={() => detach(setUp(), "set the project up")}
       onstages={(next) => draft.keep("stages", next)}
       onaskagain={canTalk
         ? () => lead.ask(setupWords.askSetupWords, "board")
         : undefined}
       problem={draft.problem}
+      reading={draftUnread}
       sending={draft.sending}
       stale={draft.stale}
       stages={draft.stages}
@@ -2506,13 +2562,11 @@
           {#if !wide}
             <ViewBar
               {current}
-              needs={needsYou.length}
+              needs={waitingCount}
               needsOn={filtering}
               onchoose={choose}
               onnewsession={() => lead.newConversation()}
-              ontoggleneeds={() => {
-                needsOnly = !filtering;
-              }}
+              ontoggleneeds={toggleNeeds}
               views={barViews}
             >
               {#snippet tools()}

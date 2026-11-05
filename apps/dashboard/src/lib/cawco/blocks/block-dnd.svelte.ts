@@ -27,9 +27,8 @@ import { combine } from "@atlaskit/pragmatic-drag-and-drop/utils/combine";
 import { preserveOffsetOnSource } from "@atlaskit/pragmatic-drag-and-drop/utils/preserve-offset-on-source";
 import { setCustomNativeDragPreview } from "@atlaskit/pragmatic-drag-and-drop/utils/set-custom-native-drag-preview";
 import { attachClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge/attach-closest-edge";
-import { extractClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge/extract-closest-edge";
-import type { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/types";
 import { bareDrag, internalData } from "../internal-drag";
+import { dropPlace, type EdgeOver, hintEdge } from "../reorder";
 
 interface BlockDrag {
   block: string;
@@ -48,8 +47,8 @@ const asDrag = (data: Record<string | symbol, unknown>): BlockDrag | null =>
 export class BlockDragState {
   /** The block in the air, whose slot stands where it was. */
   dragging = $state<string | null>(null);
-  /** The block the pointer is nearest, and the edge the drop would take. */
-  over = $state<{ block: string; edge: Edge } | null>(null);
+  /** The block the pointer is nearest, by its id, and the edge the drop would take. */
+  over = $state<EdgeOver | null>(null);
 }
 
 /** A press on one of these in the head is that control's, never a drag. */
@@ -122,30 +121,14 @@ export function dropOnBlock(
   state: BlockDragState,
   params: () => { block: string; columns: number; page: string }
 ) {
-  /**
-   * The indicator on the edge the drop would take. Heard as the pointer
-   * enters the block, so the line is drawn from that frame, and then on
-   * every frame it moves over it (Pragmatic throttles `onDrag` to frames).
-   */
+  /** The indicator on the edge the drop would take (reorder.ts). */
   const point = ({
     self,
     source,
   }: {
     self: { data: Record<string | symbol, unknown> };
     source: { data: Record<string | symbol, unknown> };
-  }) => {
-    const { block } = params();
-    const edge = extractClosestEdge(self.data);
-    if (asDrag(source.data)?.block === block || edge === null) {
-      if (state.over?.block === block) {
-        state.over = null;
-      }
-      return;
-    }
-    if (state.over?.block !== block || state.over.edge !== edge) {
-      state.over = { block, edge };
-    }
-  };
+  }) => hintEdge(state, params().block, asDrag(source.data)?.block, self.data);
   return (node: HTMLElement) =>
     dropTargetForElements({
       element: node,
@@ -170,7 +153,7 @@ export function dropOnBlock(
       onDragEnter: point,
       onDrag: point,
       onDragLeave: () => {
-        if (state.over?.block === params().block) {
+        if (state.over?.key === params().block) {
           state.over = null;
         }
       },
@@ -195,37 +178,10 @@ export function watchDrops(
       onDrop: ({ source, location }) => {
         const drag = asDrag(source.data);
         const [target] = location.current.dropTargets;
-        const edge = target ? extractClosestEdge(target.data) : null;
-        const onto = target?.data.block;
-        if (drag && typeof onto === "string" && edge && onto !== drag.block) {
-          const to = placeAt(params().order, drag.block, onto, edge);
-          if (to !== null) {
-            onmove(drag.block, to);
-          }
+        const to = dropPlace(params().order, drag?.block, target, "block");
+        if (drag && to !== null) {
+          onmove(drag.block, to);
         }
       },
     });
-}
-
-/**
- * Where `block` lands, dropped at `onto`'s `edge`: before the target (its
- * top or leading side) or after it, counted in the order `block` has
- * already left. Null when it would not move.
- */
-function placeAt(
-  order: string[],
-  block: string,
-  onto: string,
-  edge: Edge
-): number | null {
-  const from = order.indexOf(block);
-  const at = order.indexOf(onto);
-  if (from < 0 || at < 0) {
-    return null;
-  }
-  let to = edge === "top" || edge === "left" ? at : at + 1;
-  if (from < to) {
-    to -= 1;
-  }
-  return to === from ? null : to;
 }

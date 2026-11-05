@@ -197,10 +197,14 @@
                 {#if view.draft}
                   <Badge variant="secondary"><span>draft</span></Badge>
                 {:else if view.count > 0}
-                  <span
+                  <!-- Decisions' pages waiting on picks: a Needs you count
+                       (JOURNEY.md), the attn badge as the strip's ⋯ wears it. -->
+                  <Badge
+                    class="ms-auto"
+                    data-box
                     data-slot="count"
-                    class="type-meta ms-auto text-ink-muted tabular-nums"
-                    >{view.count}</span
+                    size="count"
+                    variant="attn"><span>{view.count}</span></Badge
                   >
                 {/if}
               {/snippet}

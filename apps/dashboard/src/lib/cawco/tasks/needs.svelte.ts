@@ -1,8 +1,8 @@
 /**
  * Whether a task waits on you now, one answer for every place that says it
  * (the board's Needs you filter, a card's foot, the task's own TaskNeeds):
- * - the hub says so (`needsYou`: its stage is of kind `you`, or its last
- *   attempt failed);
+ * - the hub says so (`needsYou`, core task-views.ts `needsYouOf`: its
+ *   stage is of kind `you`, or it waits on a decision card not picked yet);
  * - a session of one of its attempts asks you something (a permission or a
  *   question its parent does not answer): live, from the fleet's asks;
  * - a session of one of its attempts has a card or canvas in Needs you;

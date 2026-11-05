@@ -111,6 +111,7 @@ import type {
   TaskWait,
   WaitState,
 } from "@cawco/core/task-views";
+import { needsYouOf } from "@cawco/core/task-views";
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
 import type { Tracker, WorkBudget } from "./db/schema";
@@ -503,7 +504,7 @@ export interface TaskView extends TaskFlags, TaskTimes, TaskReviewRead {
    * source last said it.
    */
   links: ExternalRef[];
-  /** It waits for you: its stage is of kind `you` (see {@link TaskSummary.needsYou}). */
+  /** It waits for you (core task-views.ts `needsYouOf`, {@link TaskSummary.needsYou}). */
   needsYou: boolean;
   number: number;
   outputs: string[];
@@ -1145,7 +1146,7 @@ const summaryOf = (
     title: row.title,
     stage: row.stage,
     kind,
-    needsYou: kind === "you",
+    needsYou: needsYouOf(kind, flags.waits),
     ...flags,
     type: row.type,
     waitsOn: row.waitsOn,
@@ -1183,7 +1184,7 @@ const viewOf = (
   links,
   stage: parsed.fields.stage ?? "",
   kind: kindIn(stages, parsed.fields.stage ?? ""),
-  needsYou: kindIn(stages, parsed.fields.stage ?? "") === "you",
+  needsYou: needsYouOf(kindIn(stages, parsed.fields.stage ?? ""), flags.waits),
   ...flags,
   result,
   type: parsed.fields.type,

@@ -183,6 +183,9 @@ const keyOf = (kind: StopKind, projectId: string) => `${kind}:${projectId}`;
 
 /** Caw's switch's place (CawLeadSwitch): his off tray stands there when asked there. */
 export const cawOffAt = (projectId: string): string => `caw:${projectId}`;
+/** Caw's off tray asked in his own panel, under its head (ProjectConversation): his sheet stands for it. */
+export const cawPanelOffAt = (projectId: string): string =>
+  `caw-panel:${projectId}`;
 
 /** The key a tray travels under, into its parked place and back out. */
 export const stopShare = (job: { kind: StopKind; projectId: string }): string =>

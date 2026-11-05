@@ -197,8 +197,8 @@
 
   /**
    * The views that stand as tabs: all of them where they fit; otherwise the
-   * chosen one, then each before or after it in order while it fits beside
-   * the ⋯, the first that does not ending the run. The ⋯ is taken at the
+   * chosen one, then each with a count that fits, then the rest in order
+   * while each fits beside the ⋯, the first that does not ending the run. The ⋯ is taken at the
    * width it will be drawn at: counted while a view still to go in it has a
    * count, alone otherwise.
    */
@@ -226,9 +226,23 @@
     if (left < moreOf(others)) {
       return { kept, menu: picker <= room + EDGE ? "named" : "dots" };
     }
-    for (const [at, view] of others.entries()) {
+    // A view with a count stays out of the ⋯ while it fits: what waits on
+    // the person is never folded before what does not. Then the rest, in
+    // order, the first that does not fit ending the run.
+    const counted = others.filter((view) => countOf(view) > 0);
+    const plain = others.filter((view) => countOf(view) === 0);
+    const outside = (view: BarView) =>
+      others.filter((one) => one !== view && !kept.has(one.value));
+    for (const view of counted) {
       const takes = width(view.value) + gap;
-      if (takes + moreOf(others.slice(at + 1)) > left) {
+      if (takes + moreOf(outside(view)) <= left) {
+        kept.add(view.value);
+        left -= takes;
+      }
+    }
+    for (const view of plain) {
+      const takes = width(view.value) + gap;
+      if (takes + moreOf(outside(view)) > left) {
         break;
       }
       kept.add(view.value);
@@ -274,10 +288,15 @@
     <!-- The tag stands after the view's name, never over it. -->
     <Badge class="ms-space-1" variant="secondary"><span>draft</span></Badge>
   {:else if view.count > 0}
-    <!-- The Decisions tab's trail: the pages still waiting for picks, as
-         Needs you's number. -->
-    <span data-slot="tab-num" class="ms-space-1 type-meta num text-ink-muted"
-      >{view.count}</span
+    <!-- The Decisions tab's trail: the pages still waiting for picks, a
+         Needs you count (JOURNEY.md, Needs you is a mark), the attn badge
+         its ⋯ wears for the same pages. -->
+    <Badge
+      class="ms-space-1"
+      data-box
+      data-slot="tab-num"
+      size="count"
+      variant="attn"><span>{view.count}</span></Badge
     >
   {/if}
 {/snippet}
@@ -333,7 +352,12 @@
   {:else}
     <!-- Until the room is read (the server's paint) the list ends at the
          room it has, never over what stands after it. -->
-    <div class="min-w-0 overflow-x-clip">
+    <!-- Until the room is read the tabs hold their place unseen: a first
+         frame of words cut short ("Bo… Ta…") reads as broken. -->
+    <div
+      class="min-w-0 overflow-x-clip data-unread:invisible"
+      data-unread={measures === null || undefined}
+    >
       <Tabs onValueChange={onchoose} value={current}>
         <TabsList aria-label="Views">
           {@render tabItems(tabs, true)}

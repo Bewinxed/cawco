@@ -17,7 +17,10 @@
     projectId,
     projectName,
     sheet = false,
+    place,
   }: {
+    /** Where the switch's off tray stands (CawLeadSwitch `place`). */
+    place?: string;
     lead: CawLead;
     projectId: string;
     projectName: string;
@@ -55,7 +58,7 @@
   {#if lead.capLine}
     <p class="type-meta text-status-attn-ink">{lead.capLine}</p>
   {/if}
-  <CawLeadSwitch {lead} {projectId} {projectName} />
+  <CawLeadSwitch {lead} {place} {projectId} {projectName} />
   {#if cawco.hub === "unreachable"}
     <p class="type-meta text-ink-muted">
       The hub is not answering; what shows was read before.

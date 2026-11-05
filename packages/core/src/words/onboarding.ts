@@ -132,16 +132,22 @@ export const setupWords = {
     count === 1
       ? "Answer his question, then set it up."
       : `Answer his ${count} questions, then set it up.`,
+  /** Under the drafted bar's line while the setup page's cards wait on picks: Set up waits on them. */
+  cardsBefore: (count: number) =>
+    count === 1
+      ? "Pick the setup page's last card, then set it up."
+      : `Pick the setup page's ${count} cards, then set it up.`,
   /** The draft bar once it is set up, while the board has no task: the next step, named. */
   isSetUp: (name: string) => `${name} is set up`,
   firstTask: (stage: string) =>
     `Add the first task to ${stage}, or tell Caw what to work on.`,
   /**
-   * Over the draft while his setup page holds cards beside the draft (the
-   * project-setup skill's `area`, `account`, `routines`, `what-moves`): what
-   * else it asks, each part named, and the way to the page where they are
-   * answered. One entry per card the hub lists beside the Setup (hub
-   * setup.ts `BESIDE_CARDS`, typed by these keys).
+   * Over the draft while his setup page holds cards beside the draft not
+   * picked yet (the project-setup skill's `area`, `account`, `routines`,
+   * `what-moves`, typed by these keys as the hub lists them beside the
+   * Setup, hub setup.ts `BESIDE_CARDS`, and any other card he asks there):
+   * what else it asks, the known parts named and the rest counted, and the
+   * way to the page where they are answered.
    */
   alsoAsks: {
     area: "its area",
@@ -149,8 +155,23 @@ export const setupWords = {
     routines: "its routines",
     "what-moves": "where its tasks move",
   },
-  alsoOnPage: (parts: string[]) =>
-    `The setup page also asks ${parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}` : parts[0]}.`,
+  /**
+   * Every card still open on it: those with words of their own named, the
+   * rest counted ("and 3 more questions").
+   */
+  alsoOnPage: (parts: string[], more: number) => {
+    const said = [
+      ...parts,
+      ...(more > 0
+        ? [
+            parts.length > 0
+              ? `${more} more ${more === 1 ? "question" : "questions"}`
+              : `${more} ${more === 1 ? "question" : "questions"}`,
+          ]
+        : []),
+    ];
+    return `The setup page also asks ${said.length > 1 ? `${said.slice(0, -1).join(", ")} and ${said.at(-1)}` : said[0]}.`;
+  },
   openPage: "Open the setup page",
   /** His setup element once the draft is on the board: where the person goes next. */
   reviewDraft: "Review the draft",
@@ -168,6 +189,11 @@ export const setupWords = {
  * decision host): its parts' names, said or read, as a product names them.
  */
 export const setupPageWords = {
+  /** The hub's refusal of a setup page sent with cards not picked (hub decisions.ts `send`). */
+  cardsFirst: (count: number) =>
+    count === 1
+      ? "A card on the setup page isn't picked yet: pick it, then set the project up."
+      : `${count} cards on the setup page aren't picked yet: pick them, then set the project up.`,
   /** The name's field, for a screen reader: the title stands with no label. */
   name: "Project name",
   /** The description's field, for a screen reader: under the title it needs no label. */
@@ -189,8 +215,8 @@ export const setupPageWords = {
   worker: "Who does it",
   /** No type does the stage's work. */
   noWorker: "No one",
-  /** A stage's menu: its glyph and colour, a level in place. */
-  look: "Glyph and colour",
+  /** A stage's mark, which opens its glyphs and colours: its name and tooltip. */
+  lookFor: (name: string) => `Glyph and colour of ${name}`,
   /** Back to the menu's first level. */
   back: "Back",
   /** Under the kinds, on a stage that needs you: why it has no look of its own. */
@@ -202,6 +228,14 @@ export const setupPageWords = {
   earlier: "Move earlier",
   later: "Move later",
   remove: (name: string) => `Remove ${name}`,
+  /** The draft's delegate types: their group's head. */
+  delegates: "Who does the work",
+  /** A delegate type's tile, for a screen reader. */
+  draftDelegate: (name: string) => `${name}, a delegate type in Caw's draft`,
+  /** Under a type's brief: the stages whose work it does. */
+  delegateDoes: (stages: string[]) =>
+    `Works in ${stages.length > 1 ? `${stages.slice(0, -1).join(", ")} and ${stages.at(-1)}` : stages[0]}`,
+  addBack: (name: string) => `Add back ${name}`,
   /** The page's Send: what it does, to the project by name. */
   send: (name: string) => `Set up ${name}`,
   /** Set up on its way. */

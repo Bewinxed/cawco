@@ -288,9 +288,10 @@ export interface TaskSummary extends TaskFlags, TaskTimes {
   /** The external items it links (`issue:` first, then `links:`), as the card draws them: each source's mark and ref. */
   links: TaskLinkSummary[];
   /**
-   * It waits for you: its stage is of kind `you`, where only you move it on.
-   * An attempt that failed or was stopped is its starter's business, not
-   * yours. Derived on read, never stored.
+   * It waits for you (`needsYouOf`): its stage is of kind `you`, where only
+   * you move it on, or a decision card it waits on is not picked, a pick
+   * only you make. An attempt that failed or was stopped is its starter's
+   * business, not yours. Derived on read, never stored.
    */
   needsYou: boolean;
   number: number;
@@ -370,3 +371,21 @@ export interface TaskHistory {
   /** `live`: on the board; `archived`: in tasks/archive/; `deleted`: its file deleted, its history kept. */
   state: (typeof TASK_FILE_STATES)[number];
 }
+
+/**
+ * A wait that asks the person to decide: a decision card not picked yet
+ * (JOURNEY.md, Act on what waits: a pick is the person's).
+ */
+export const waitsOnPick = (
+  wait: Pick<WaitState, "kind" | "settled">
+): boolean => wait.kind === "card" && !wait.settled;
+
+/**
+ * Whether a task waits for the person ({@link TaskSummary.needsYou}): its
+ * stage is of kind `you`, or a card it waits on is not picked. The one
+ * answer the hub's list, Caw's Needs you and the project page's count read.
+ */
+export const needsYouOf = (
+  kind: StageKind | null,
+  waits: readonly Pick<WaitState, "kind" | "settled">[]
+): boolean => kind === "you" || waits.some(waitsOnPick);
