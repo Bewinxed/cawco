@@ -177,6 +177,7 @@ import {
   agents,
   agentTools,
   artifacts,
+  askPushes,
   capabilityUsageDaily,
   chosenModes,
   claudeContextWindows,
@@ -736,6 +737,15 @@ export interface DbShape {
   ) => WorkspaceRow[];
   /** Artifacts and their documents' update logs (artifacts/). */
   readonly artifacts: ArtifactsDb;
+  /**
+   * The asks the push outlet took (push.ts `onAsk`), by request id, kept
+   * across a restart: `take` is true only the first time, `drop` forgets
+   * one whose ask settled.
+   */
+  readonly askPushes: {
+    readonly drop: (requestId: string) => void;
+    readonly take: (requestId: string, at: Date) => boolean;
+  };
   /** What sessions asked the person, and what the hub carried out (asks.ts). */
   readonly asks: AsksDb;
   /** Sessions held at their account's limit, summaries kept ahead of it, and the lines it wrote. */
@@ -10103,6 +10113,18 @@ const make = async (path: string): Promise<DbShape> => {
     ingress: ingressDb(db),
     relays: relaysDb(db),
     asks: asksDb(db),
+    askPushes: {
+      take: (requestId, at) =>
+        db
+          .insert(askPushes)
+          .values({ requestId, takenAt: at })
+          .onConflictDoNothing()
+          .returning()
+          .all().length > 0,
+      drop: (requestId) => {
+        db.delete(askPushes).where(eq(askPushes.requestId, requestId)).run();
+      },
+    },
     sshMachines: sshMachinesDb(db, hubId),
     memoryFacts: memoryFactsDb(db),
     trackers: trackersDb(db),

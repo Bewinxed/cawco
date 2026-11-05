@@ -25,6 +25,15 @@
  *     the proposal is parked again as the hub starts (design-system.ts
  *     `start`), and the parent gets no second note: a wait is told once,
  *     however often the hub restarts while it stands.
+ * (f) The person's phone (a stand-in Cawrier, one phone paired) was pushed
+ *     that proposal once before the restart, and is not pushed it again by
+ *     its parking after it: a second proposal's push, which goes behind any
+ *     push of the first, lands, and the first has still been pushed once.
+ * (g) A parent read `unknown` as the ask parks: the machine's agent is
+ *     killed and the hub restarts, so every live row reads `unknown` until
+ *     the agent registers. A third proposal parks then, and its parent is
+ *     not told; the agent comes back and registers, and the parent is told
+ *     of it, once.
  *
  *   bun scripts/probe-kit/run.ts delegate-waits
  */
@@ -32,9 +41,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { browserAskWords } from "../../../packages/core/src/words/browser";
 import { delegateWaitWords } from "../../../packages/core/src/words/delegates";
+import { askCollapseId } from "../../../packages/hub/src/notifications";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
+import { type Phone, standInPhone } from "../phone";
 
 /** Every request the mock was asked with a tool list, in order. */
 const heard: Seen[] = [];
@@ -110,10 +121,13 @@ const run = async (kit: Kit) => {
   const { check } = kit;
   const fleet = await kit.fleet(respond);
   const home = fleet.env.HOME as string;
+  // Before the hub starts: it reads where Cawrier is as it starts.
+  const phone = standInPhone(fleet);
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
   await fleet.hubUp();
+  await phone.pair();
   fleet.fileAccount();
   fleet.launch("agent");
   await fleet.agentUp();
@@ -370,15 +384,22 @@ const run = async (kit: Kit) => {
     files: [{ path: "references/waits.md", content: `${REASON}\n` }],
     why: "The probe's change to the design system",
   });
-  const proposal = await until(
+  /** The design proposal waiting on the person that is none of `known`. */
+  const newProposal = (what: string, known: readonly string[]) =>
+    until(
+      what,
+      async () =>
+        (await fleet.api<Parked[]>("/api/pending")).find(
+          (one) =>
+            one.requestId?.startsWith("dp-") && !known.includes(one.requestId)
+        ),
+      Boolean,
+      60_000
+    ).catch(() => undefined);
+  const proposal = await newProposal(
     "(e) the design proposal waiting on the person",
-    async () =>
-      (await fleet.api<Parked[]>("/api/pending")).find((one) =>
-        one.requestId?.startsWith("dp-")
-      ),
-    Boolean,
-    60_000
-  ).catch(() => undefined);
+    []
+  );
   const first = await until(
     "(e) the parent's note of the proposal",
     () => designNotes(),
@@ -415,12 +436,13 @@ const run = async (kit: Kit) => {
   ).catch(() => false);
   // The hub tells a parent as it parks the ask, so by the time the proposal
   // is parked again any second note is among the parent's sends.
-  const sends =
+  const waitSends = (): number =>
     fleet.query<{ n: number }>(
       "SELECT count(*) AS n FROM sent_messages WHERE instance_id = ? AND instr(body, ?) > 0",
       parent,
       encodeURIComponent(waitsLine)
     )[0]?.n ?? 0;
+  const sends = waitSends();
   const notes = designNotes();
   check(
     "(e) the parent asleep and the hub restarted, the proposal is parked again and the parent gets no second note",
@@ -431,6 +453,150 @@ const run = async (kit: Kit) => {
         .map((one) => one.last.slice(0, 160))
         .join(" | ") || "none"
     }`
+  );
+
+  await legsAfter({
+    check,
+    designer,
+    fleet,
+    first: proposal.requestId,
+    key,
+    newProposal,
+    parent,
+    phone,
+    waitSends,
+    waitsLine,
+  });
+};
+
+/** What legs (f) and (g) work with, as (e) left it. */
+interface After {
+  check: Kit["check"];
+  designer: string;
+  /** The first proposal's request id. */
+  first: string;
+  fleet: KitFleet;
+  /** The project's browser, which (c) started. */
+  key: string;
+  newProposal: (
+    what: string,
+    known: readonly string[]
+  ) => Promise<Parked | undefined>;
+  parent: string;
+  phone: Phone;
+  /** The parent's sends of the design delegate's wait, so far. */
+  waitSends: () => number;
+  waitsLine: string;
+}
+
+/** Legs (f) and (g). */
+const legsAfter = async ({
+  check,
+  designer,
+  fleet,
+  first,
+  key,
+  newProposal,
+  parent,
+  phone,
+  waitSends,
+  waitsLine,
+}: After): Promise<void> => {
+  // (f) The person's phone: the first proposal pushed once, across the
+  // restart. A push of an ask goes under its collapse id, or leads a
+  // burst's push carrying its request id.
+  const pushesOf = (requestId: string): number =>
+    phone
+      .pushes()
+      .filter(
+        (one) =>
+          one.collapseId === askCollapseId(requestId) ||
+          (one.payload.cawco as { requestId?: string } | undefined)
+            ?.requestId === requestId
+      ).length;
+  await callAs(fleet, designer, "design_write", {
+    files: [{ path: "references/second.md", content: `${REASON} second\n` }],
+    why: "The probe's second change to the design system",
+  });
+  const second = await newProposal("(f) the second proposal", [first]);
+  const secondPushed = second?.requestId
+    ? await until(
+        "(f) the second proposal pushed",
+        () => pushesOf(second.requestId ?? ""),
+        (n) => n > 0,
+        120_000
+      ).catch(() => 0)
+    : 0;
+  const firstPushes = pushesOf(first);
+  check(
+    "(f) the person's phone was pushed the first proposal once: its parking again after the restart pushes nothing, while a later proposal's push lands",
+    secondPushed > 0 && firstPushes === 1,
+    `the first's pushes: ${firstPushes}; the second's: ${secondPushed}; every push: ${phone.ids().join(", ") || "none"}`
+  );
+
+  // (g) A parent `unknown` as the ask parks is told once its machine registers.
+  // The browser (c) started is stopped first: its agent is killed below, and
+  // a Chromium whose agent died is left running.
+  await fleet.api(`/api/browsers/${encodeURIComponent(key)}/stop`, {
+    machineId: MACHINE,
+  });
+  await until(
+    "(g) the parent at rest",
+    () => fleet.instance(parent)?.turn_open_at ?? null,
+    (open) => open === null,
+    120_000
+  );
+  // Awake again, so the hub's start reads it `unknown`, not asleep.
+  await fleet.send(parent, `${HELLO}-again`);
+  await until(
+    "(g) the parent awake and at rest",
+    () => fleet.instance(parent),
+    (row) => row?.status === "running" && row.turn_open_at === null,
+    120_000
+  );
+  const beforeUnknown = waitSends();
+  const heardBefore = heard.length;
+  await fleet.stop("agent", "SIGKILL");
+  await fleet.stop("hub", "SIGKILL");
+  fleet.launch("hub");
+  await fleet.hubUp();
+  const status = fleet.instance(parent)?.status ?? "gone";
+  const third = await callAs(fleet, designer, "design_write", {
+    files: [{ path: "references/third.md", content: `${REASON} third\n` }],
+    why: "The probe's third change to the design system",
+  });
+  const thirdAsk = await newProposal("(g) the third proposal", [
+    first,
+    second?.requestId ?? "",
+  ]);
+  const whileUnknown = waitSends() - beforeUnknown;
+  fleet.launch("agent");
+  await fleet.agentUp();
+  const toldAfter = await until(
+    "(g) the parent told once its machine registered",
+    () => waitSends() - beforeUnknown,
+    (n) => n > 0,
+    120_000
+  ).catch(() => waitSends() - beforeUnknown);
+  const woken = await until(
+    "(g) the parent woken with the note",
+    () =>
+      heard
+        .slice(heardBefore)
+        .filter(
+          (one) => one.last.includes(WAIT_TAG) && one.last.includes(waitsLine)
+        ).length,
+    (n) => n > 0,
+    120_000
+  ).catch(() => 0);
+  check(
+    "(g) a parent read unknown as its delegate's proposal parks is not told then, and is told once when its machine registers",
+    status === "unknown" &&
+      !!thirdAsk &&
+      whileUnknown === 0 &&
+      toldAfter === 1 &&
+      woken > 0,
+    `the parent after the hub's start: ${status}; design_write: ${third.text.slice(0, 200)}; pending: ${thirdAsk?.requestId ?? "none"}; its sends of the wait while unknown: ${whileUnknown}, after the register: ${toldAfter}; woken: ${woken}`
   );
 };
 

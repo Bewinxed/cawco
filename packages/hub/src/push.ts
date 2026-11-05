@@ -876,7 +876,11 @@ export const createPush = ({
   notifications,
   task,
 }: PushServices) => {
-  /** Asks already pushed, by request id: a replayed or re-escalated ask is not a new moment. */
+  /**
+   * Asks parked now that push took, by request id: a replayed or
+   * re-escalated ask is not a new moment. Which it took is kept across a
+   * restart too (db `askPushes`): one parked again as the hub starts is not.
+   */
   const asked = new Set<string>();
   /** When each collapse id last went out. */
   const recent = new Map<string, number>();
@@ -1728,6 +1732,12 @@ export const createPush = ({
         return;
       }
       asked.add(requestId);
+      // Taken once, whichever hub took it: one parked again as the hub
+      // starts (a design proposal, design-system.ts `start`) was pushed by
+      // the hub that first parked it.
+      if (!db.askPushes.take(requestId, new Date())) {
+        return;
+      }
       const instanceId = envelope.instanceId ?? payload.instanceId ?? "";
       const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
       // An ask with no session row (a memory proposal) is its project's.
@@ -1824,6 +1834,7 @@ export const createPush = ({
     /** An ask left the pending list: a later ask can never reuse its id, so its mark goes. */
     onSettled(requestId: string): void {
       asked.delete(requestId);
+      db.askPushes.drop(requestId);
       answered(requestId);
     },
 

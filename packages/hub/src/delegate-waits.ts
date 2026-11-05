@@ -34,6 +34,15 @@
  * prompt kept as a permit) tells its parent nothing it was told before,
  * however often the hub restarts. An ask handed to the parent to answer is
  * marked by its `delegate_events` row.
+ *
+ * A parent that could not be told as the ask parked (its row `unknown`, as
+ * every live row is from a hub's start until its machine registers) is told
+ * when its machine registers: the hub asks the rule again of every ask
+ * still parked (server.ts, the agent's register), and the marks keep what
+ * was told from going twice. `unknown` is not taken for reachable: the send
+ * path holds a send for a machine only inside its reconnecting window and
+ * fails it outside (server.ts `deliverToSession`, `away`), and a failed send
+ * under its name would mark the wait told when nobody was.
  */
 import {
   type AskAnswer,

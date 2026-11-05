@@ -37889,6 +37889,14 @@ export const createServer = (
               for (const id of peekInstances(message.payload)) {
                 resumeCutTurn(id);
               }
+              // Its sessions are reachable again, a parent read `unknown`
+              // until now among them (as every live row is from a hub's
+              // start to its machine's register): each wait their delegates
+              // hold that one was never told of is told now, each once
+              // (delegate-waits.ts).
+              for (const parked of pending.list()) {
+                delegateWaits.asked(parked);
+              }
               // Reconnect retries overdue stored schedules right after the register ACK.
               detach(keepAliveScheduler.wake(), "keepalive wake");
               // Continuations waiting on this machine — for their summary, or

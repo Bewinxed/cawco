@@ -3876,6 +3876,16 @@ export const machineKeys = sqliteTable("machine_keys", {
 });
 
 /**
+ * The asks the push outlet took (push.ts `onAsk`), by request id: each ask
+ * is one moment for the person's phone, however often it is parked again
+ * (a design proposal as the hub starts). Gone when its ask settles.
+ */
+export const askPushes = sqliteTable("ask_pushes", {
+  requestId: text("request_id").primaryKey(),
+  takenAt: timestamp("taken_at").notNull(),
+});
+
+/**
  * Notifications a device was shown and nobody has cleared yet
  * (notifications.ts), by collapse id: a look or a settle clears only what
  * was sent, so looking at a session no notification named sends nothing.
