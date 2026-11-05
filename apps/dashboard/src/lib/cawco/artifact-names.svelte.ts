@@ -30,6 +30,8 @@ export interface NamedArtifact {
   instanceId: string;
   kind: ArtifactKind;
   name: string;
+  /** Its project, for a project's page (core `ArtifactSummary.project`): a setup page's lands by core `setupLanding`. */
+  project?: string;
 }
 
 /** What a chip reads of an artifact's doc: its pins and picks. */
@@ -120,6 +122,7 @@ function ask(id: string): void {
         instanceId: found.instanceId,
         kind: found.kind,
         name: found.name,
+        ...(found.project ? { project: found.project } : {}),
       });
     })
     .catch((error: unknown) => {

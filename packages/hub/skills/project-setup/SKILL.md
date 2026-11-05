@@ -1,16 +1,21 @@
 ---
 name: project-setup
-description: Set up a project with the person — its name, what it is for, its stages with their look, its delegates, its place and routines — drafted on one setup page (a Setup in a decision program) that their board draws as you write it, asking what their words leave open with `ask` as you go; write its files once they send it. Use when a project was just made with Caw (its first message is the person's words, or CawCo's notice of a project made from an offer), when the person asks to set the project up again, to change how it runs or one part of it, or says it should become something else.
+description: Set up a project with the person — its name, what it is for, its stages with their look, its delegates, its place and routines — drafted on one setup page (a Setup in a decision program) that their board draws as you write it (their Decisions tab once the project is set up), asking what their words leave open with `ask` as you go; write its files once they send it. Use when a project was just made with Caw (its first message is the person's words, or CawCo's notice of a project made from an offer), when the person asks to set the project up again, to change how it runs or one part of it, or says it should become something else.
 ---
 
 # Setting a project up
 
 A setup is one decision page, `setup`, that you open early and draft on, your questions asked as they come up, and that the person sends once. The project's board draws the page as you write it: what it is for, then each stage as a column the person changes where it stands, and Set up in the board's draft bar. Your open questions stand on the board on a desk and in your conversation on a phone. Nothing is written into the project before they send it: no stages.md, no delegate types, no AGENTS.md, no template. Their Send approves the whole page, so what you write from it goes in directly.
 
+Where the page stands depends on whether the project is set up (it has stages.md or a template), and every way to it lands there, your `artifact_create` and `artifact_show` included; it never opens in a panel:
+
+- **Not set up yet:** the project's board draws it, as below.
+- **Set up** (set up again, one part, a pivot): the project's Decisions tab draws it. A card you name as a chip (`[title](cawco:decision/<page>/<card>)`) opens the tab at that card, so name the card the person should answer. The tool's answer says which of the two it is.
+
 ## When it applies
 
 - **A project just made.** Your first message is the person's words about the project, or CawCo's notice that they made it from a session's offer. The words are theirs: read them for what the project is, never quote them back.
-- **Set up again, or one part.** The person asks to change how it runs, or a part of it ("move it to my laptop", "rename the stages"): pass the parts they named in `project_setup`'s `change`.
+- **Set up again, or one part.** The person asks to change how it runs, or a part of it ("move it to my laptop", "rename the stages"): pass the parts they named in `project_setup`'s `change`. The page is in their Decisions tab, not on the board: say so where the steps below say board.
 - **A pivot.** The person says the project should become something else: the same page, with the **What moves** card.
 
 ## 1. Read the facts

@@ -7,17 +7,30 @@
  * once its page is ready (artifact-names.svelte.ts `askOpen`). In an
  * artifact's own tab, a chip of another artifact opens that artifact's own
  * tab at the place (`?pin=<n>`, `?card=<id>`, `?change=<anchor>`), as a
- * pin's Copy link does.
+ * pin's Copy link does; a project's setup page, which no panel or tab
+ * opens, lands where the hub's show says (core `setupLanding`).
  */
+import { SETUP_PAGE } from "@cawco/core/artifact-needs";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
 import { showArtifact } from "./artifact-api";
-import { artifactNamed, askOpen, type OpenAt } from "./artifact-names.svelte";
+import {
+  artifactNamed,
+  askOpen,
+  type NamedArtifact,
+  type OpenAt,
+} from "./artifact-names.svelte";
 import { barGlass } from "./bar-glass.svelte";
 import { cawco, revealPreview } from "./client.svelte";
 import { failureClause } from "./hub-read";
 import { askPlan, type Thing } from "./reference-things.svelte";
 import { refusals } from "./refusals.svelte";
+
+/** Whether `named` is a project's setup page, which opens in no panel (hub artifacts/service.ts `boardOf`). */
+const isSetupPage = (named: NamedArtifact): boolean =>
+  named.kind === "page" &&
+  named.name === SETUP_PAGE &&
+  named.project !== undefined;
 
 /** The decision card `at` names, which a project's setup page lands at (core `setupLanding`). */
 const cardOf = (at: OpenAt): string | null => ("card" in at ? at.card : null);
@@ -56,7 +69,13 @@ export async function openReference(
   if (!named) {
     return null;
   }
-  if (page.route.id === "/artifact/[id]" && page.params.id !== id) {
+  // A project's setup page has no tab of its own to open: it lands where
+  // the hub's show says, as from anywhere else (core `setupLanding`).
+  if (
+    page.route.id === "/artifact/[id]" &&
+    page.params.id !== id &&
+    !isSetupPage(named)
+  ) {
     await goto(ownTab(id, at));
     return null;
   }
