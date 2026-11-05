@@ -389,14 +389,13 @@ const run = async (kit: Kit) => {
 
   // The artifact panel's head (the mode centred, the trailing glass, Close
   // in its own, the ask never a line under the name) beside the
-  // conversation, read in its card.
+  // conversation, read whole: the top bar's shelf and its session tabs
+  // with it.
   await surface(
     "artifact head",
     `${base}/session/${talk}`,
     '[data-slot="side-head"]',
-    WIDTHS,
-    undefined,
-    '[data-slot="side-card"]'
+    WIDTHS
   );
 
   // Pages with no head of their own under the bar.
