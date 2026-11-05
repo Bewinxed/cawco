@@ -90,7 +90,7 @@
     }
     return PINS;
   });
-  let listOpen = $state(asked !== "rest");
+  let listOpen = $state(asked !== "rest" && asked !== "changes");
   let filter = $state<"check" | "open" | "resolved">(
     asked === "resolved" ? "resolved" : "open"
   );
@@ -129,11 +129,13 @@
   });
 
   let rail = $state<ReturnType<typeof CommentRail>>();
-  /** Opens what the state names once the panel stands: a menu, the search with its words, the sheet's whole room. */
+  /** How long the head takes to fit, ms: two frames' reads and writes, with room. */
+  const FITTED = 300;
+  /** Opens what the state names once the panel stands (its head fitted, which draws More): a menu, the search with its words, the sheet's whole room. */
   onMount(() => {
     const press = (selector: string) =>
       document.querySelector<HTMLElement>(selector)?.click();
-    requestAnimationFrame(() => {
+    setTimeout(() => {
       if (asked === "list") {
         press('[data-slot="list"]');
       } else if (asked === "more") {
@@ -158,7 +160,7 @@
           }
         });
       }
-    });
+    }, FITTED);
   });
   // The bench names no fleet: the panel's own words stand for the session's.
   const agent = "The session";
