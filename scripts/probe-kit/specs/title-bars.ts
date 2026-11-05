@@ -337,7 +337,8 @@ const run = async (kit: Kit) => {
       .locator(`${PANEL} [data-slot="bar"] [role="tablist"]`)
       .first()
       .waitFor({ timeout: 20_000 });
-    await page.waitForTimeout(800);
+    // The shown artifact's mark echoes three loops (7.2s), then stills.
+    await page.waitForTimeout(7500);
     const edge = await page.evaluate((panel) => {
       const bar = [
         ...document.querySelectorAll<HTMLElement>(`${panel} [data-slot="bar"]`),

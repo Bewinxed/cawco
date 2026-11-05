@@ -3554,10 +3554,18 @@ function readInPage(args: InPageArgs): InPageRead {
   // page (a popover, a dialog) and a pinned bar over what scrolls under it
   // stand over words by design: only runs on one plane are compared.
   if (!skip.has("text-overlap")) {
+    // A floating bar over its scroll edge effect (BarFloat: HeadFade, then
+    // the bar) is pinned as a sticky one is: what scrolls under it is blurred
+    // and faded there, never drawn under its words.
     const pinned = (el: Element) => {
       for (let up: Element | null = el; up; up = up.parentElement) {
         const at = style(up).position;
-        if (at === "fixed" || at === "sticky") {
+        if (
+          at === "fixed" ||
+          at === "sticky" ||
+          (at === "absolute" &&
+            up.previousElementSibling?.matches('[data-slot="head-fade"]'))
+        ) {
           return up;
         }
       }
