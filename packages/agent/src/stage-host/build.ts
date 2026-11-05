@@ -177,6 +177,27 @@ export async function buildStageHost(): Promise<string> {
   return await (result.outputs[0] as Bun.BuildArtifact).text();
 }
 
+/**
+ * The environment the host's bun runs with, past the stage's own words.
+ *
+ * `BUN_JSC_heapGrowthMaxIncrease`: how far JavaScriptCore lets its heap grow
+ * past what the last full collection left before it collects the old space
+ * again. Bun sets each `BUN_JSC_<option>` with `JSC::Options::setOption` as
+ * it starts (its `JSCInitialize`, src/jsc/bindings/ZigGlobalObject.cpp). On
+ * a machine of 16 GB or more the limit is `(3 · e^(−2 · heap/RAM) + 1) ·
+ * heap` (WebKit heap/Heap.cpp `proportionalHeapSize`, OptionsList.h
+ * `heapGrowthMaxIncrease` 3): about 4× for a 1 GB stage on obelisk's RAM.
+ * An edit's work (its compile, its props' checker, its section read again)
+ * outlives the eden collections run while it does, so a stage climbed some
+ * 30 to 50 MB of heap a round of edits, 0.9 GB to 1.5 GB and RSS 1.2 GB to
+ * 2.2 GB over 13, freed only when the limit was reached. At 0.3 the old
+ * space is collected at 1.3× instead, as the edits come: across the same
+ * 13 rounds the heap held at 0.9–1.0 GB and RSS within 250 MB of idle.
+ */
+export const HOST_RUNTIME_ENV: Record<string, string> = {
+  BUN_JSC_heapGrowthMaxIncrease: "0.3",
+};
+
 let built: Promise<string> | undefined;
 
 /**

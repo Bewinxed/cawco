@@ -12,7 +12,10 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildStageHost } from "../../packages/agent/src/stage-host/build";
+import {
+  buildStageHost,
+  HOST_RUNTIME_ENV,
+} from "../../packages/agent/src/stage-host/build";
 import { decisionHostFile } from "../../packages/core/src/decision-host";
 import { OVERLAY_PATH } from "../../packages/core/src/frames";
 import {
@@ -441,6 +444,7 @@ export async function startDecisionStage(
     cwd: project.root,
     env: {
       ...process.env,
+      ...HOST_RUNTIME_ENV,
       CAWCO_STAGE: "1",
       CAWCO_STAGE_PORT: String(stagePort),
       CAWCO_STAGE_FRAMEWORK: "svelte",

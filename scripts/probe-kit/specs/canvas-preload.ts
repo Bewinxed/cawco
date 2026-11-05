@@ -33,7 +33,10 @@ import { spawn } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
+import {
+  buildStageHost,
+  HOST_RUNTIME_ENV,
+} from "../../../packages/agent/src/stage-host/build";
 import { until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 import { PIN_STORY } from "./composer-weight";
@@ -279,6 +282,7 @@ const run = async (kit: Kit) => {
     cwd: APP,
     env: {
       ...process.env,
+      ...HOST_RUNTIME_ENV,
       CAWCO_STAGE: "1",
       CAWCO_STAGE_PORT: String(port),
       CAWCO_STAGE_FRAMEWORK: "svelte",

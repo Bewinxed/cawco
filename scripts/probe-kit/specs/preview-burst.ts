@@ -225,7 +225,7 @@ async function stage(
   port: number,
   kit: boolean
 ): Promise<ChildProcess> {
-  const { buildStageHost } =
+  const { buildStageHost, HOST_RUNTIME_ENV } =
     await import("../../../packages/agent/src/stage-host/build");
   mkdirSync(join(dir, ".cawco/stage"), { recursive: true });
   writeFileSync(join(dir, ".cawco/stage/host.mjs"), await buildStageHost());
@@ -233,6 +233,7 @@ async function stage(
     cwd: dir,
     env: {
       ...process.env,
+      ...HOST_RUNTIME_ENV,
       CAWCO_STAGE: "1",
       CAWCO_STAGE_PORT: String(port),
       CAWCO_STAGE_FRAMEWORK: "svelte",

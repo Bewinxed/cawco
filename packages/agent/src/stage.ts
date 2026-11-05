@@ -119,7 +119,7 @@ import {
   stageCloneOf,
   syncStageClone,
 } from "./stage-clone";
-import { stageHost } from "./stage-host/build";
+import { HOST_RUNTIME_ENV, stageHost } from "./stage-host/build";
 import { installMoved, installProject, type ProjectAt } from "./stage-install";
 import { type RenderAsk, type Rendered, renderCanvas } from "./stage-render";
 import { userBun } from "./user-bun";
@@ -1124,6 +1124,7 @@ const commandOf = (stage: Stage): [string, Record<string, string>] =>
     ? [
         `exec ${shellQuote(stage.runs.runtime)} ${HOST_FILE}`,
         {
+          ...HOST_RUNTIME_ENV,
           CAWCO_STAGE: "1",
           CAWCO_STAGE_PORT: String(stage.port),
           CAWCO_STAGE_FRAMEWORK: stage.runs.framework,

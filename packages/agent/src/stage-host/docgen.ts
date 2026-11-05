@@ -748,7 +748,13 @@ const TYPED_OPTIONS = {
 
 /* --- The one door ---------------------------------------------------- */
 
-const kept = new Map<string, { doc: ComponentDoc; hash: string }>();
+/**
+ * Each component's props by its content's hash, kept from the moment they
+ * are asked for: the reads that arrive while its checker runs (a page's
+ * sheet, the daemon's stories, an agent's) share that one run. Kept only
+ * once read, four reads after an edit built four programs and checkers.
+ */
+const kept = new Map<string, { doc: Promise<ComponentDoc>; hash: string }>();
 
 const SVELTE = /\.svelte$/u;
 const VUE = /\.vue$/u;
@@ -763,7 +769,7 @@ const EXTENSION = /\.[^.]+$/u;
  * for a file of several), read again only when its content changed. A read
  * that fails says why in `note`, never thrown: a sheet still mounts.
  */
-export async function propsOf(
+export function propsOf(
   file: string,
   name = nameOf(file)
 ): Promise<ComponentDoc> {
@@ -771,19 +777,31 @@ export async function propsOf(
   try {
     text = readFileSync(file, "utf8");
   } catch (error) {
-    return {
+    return Promise.resolve({
       file: relative(root, file),
       name,
       props: [],
       types: "unknown",
       note: `${relative(root, file)} could not be read: ${error instanceof Error ? error.message : String(error)}`,
-    };
+    });
   }
   const hash = createHash("sha1").update(text).digest("hex");
-  const hit = kept.get(`${file}#${name}`);
+  const key = `${file}#${name}`;
+  const hit = kept.get(key);
   if (hit?.hash === hash) {
     return hit.doc;
   }
+  const doc = docOf(file, name, text);
+  kept.set(key, { doc, hash });
+  return doc;
+}
+
+/** Component `file`'s props read by its framework's docgen; a read that fails says why in `note`. */
+async function docOf(
+  file: string,
+  name: string,
+  text: string
+): Promise<ComponentDoc> {
   let read: Omit<ComponentDoc, "file" | "name">;
   try {
     if (SVELTE.test(file)) {
@@ -800,7 +818,5 @@ export async function propsOf(
       note: `Its props could not be read: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`,
     };
   }
-  const doc: ComponentDoc = { file: relative(root, file), name, ...read };
-  kept.set(`${file}#${name}`, { doc, hash });
-  return doc;
+  return { file: relative(root, file), name, ...read };
 }

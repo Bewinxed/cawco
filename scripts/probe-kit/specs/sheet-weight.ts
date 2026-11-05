@@ -34,7 +34,10 @@ import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
+import {
+  buildStageHost,
+  HOST_RUNTIME_ENV,
+} from "../../../packages/agent/src/stage-host/build";
 import type { SheetWeight } from "../../../packages/core/src/stage";
 import { connectWords } from "../../../packages/core/src/words/connect";
 import { mcpWords } from "../../../packages/core/src/words/mcp";
@@ -140,6 +143,7 @@ const stageChecks = async (kit: Kit) => {
     cwd: APP,
     env: {
       ...process.env,
+      ...HOST_RUNTIME_ENV,
       CAWCO_STAGE: "1",
       CAWCO_STAGE_PORT: String(port),
       CAWCO_STAGE_FRAMEWORK: "svelte",

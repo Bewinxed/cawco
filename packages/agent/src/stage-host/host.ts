@@ -571,28 +571,45 @@ async function mountedFiles(abs: string, text: string): Promise<string[]> {
 const IMPORT_FROM = /\bimport\s+(?:[\w*{}\s,$]+\s+from\s+)?["']([^"']+)["']/gu;
 /** A file whose imports the stage reads: a component or a script. */
 const SOURCE_FILE = /\.(?:svelte|vue|[cm]?[jt]sx?)$/u;
-/** Each source file's resolved imports, kept by the file's time. */
-const importsKept = new Map<string, { at: number; to: string[] }>();
+/**
+ * Each source file's resolved imports, kept by the file's time from the
+ * moment they are asked for: every walk that reaches a changed file while
+ * its resolve runs shares that one resolve. Kept only once resolved, the
+ * 21 walks one edit of `client.svelte.ts` started at once each resolved all
+ * its imports again.
+ */
+const importsKept = new Map<string, { at: number; to: Promise<string[]> }>();
 
 /** The files source file `file` imports (absolute), resolved as Vite resolves them; none for a file that is no source (a stylesheet, an image). */
-async function sourceImports(file: string): Promise<string[]> {
+function sourceImports(file: string): Promise<string[]> {
   if (!SOURCE_FILE.test(file)) {
-    return [];
+    return Promise.resolve([]);
   }
   const at = statTime(file);
   const kept = importsKept.get(file);
   if (kept?.at === at) {
     return kept.to;
   }
+  const to = resolvedImports(file);
+  importsKept.set(file, { at, to });
+  // A file gone mid-read is read again by the next walk.
+  to.catch(() => {
+    if (importsKept.get(file)?.to === to) {
+      importsKept.delete(file);
+    }
+  });
+  return to;
+}
+
+/** The files `file` imports, read from it now and resolved ({@link sourceImports} keeps them). */
+async function resolvedImports(file: string): Promise<string[]> {
   const text = readFileSync(file, "utf8");
   const sources = [
     ...new Set([...text.matchAll(IMPORT_FROM)].map((one) => one[1] as string)),
   ];
-  const to = (
+  return (
     await Promise.all(sources.map((source) => resolved(source, file)))
   ).filter((one): one is string => !!one);
-  importsKept.set(file, { at, to });
-  return to;
 }
 
 /** A file of the project's own: inside the toolchain root, not a package. */
@@ -3002,6 +3019,34 @@ function cawcoStage() {
   /** Each states file whose section module a page has loaded (from the root), with that module's id. */
   const sections = new Map<string, string>();
 
+  /**
+   * Each loaded section's files ({@link drawnFrom}), read once and kept
+   * until one of them changes or a file is created or deleted (a failed
+   * import may resolve now, a resolved one fail). An edit to a file outside
+   * a section's set can't change that set: only an edit to a file in it
+   * adds or drops an import. Walked again for every section on every
+   * changed file, one edit of `client.svelte.ts` on a stage with the
+   * dashboard's 52 states files loaded spent 2 to 9 s in Vite's resolver.
+   */
+  const drawnKept = new Map<string, Promise<Set<string>>>();
+  const drawnSet = (sheet: string): Promise<Set<string>> => {
+    const kept = drawnKept.get(sheet);
+    if (kept) {
+      return kept;
+    }
+    const abs = resolve(root, sheet);
+    const read = drawnFrom(abs, readFileSync(abs, "utf8")).then(
+      (files) => new Set(files)
+    );
+    drawnKept.set(sheet, read);
+    read.catch(() => {
+      if (drawnKept.get(sheet) === read) {
+        drawnKept.delete(sheet);
+      }
+    });
+    return read;
+  };
+
   /** The story files (from the root) whose sheets import `file`, read up Vite's module graph. */
   const sheetsOf = (file: string): string[] => {
     const graph = server?.environments.client.moduleGraph;
@@ -3157,6 +3202,9 @@ function cawcoStage() {
       if (!graph || this.environment.name !== "client") {
         return;
       }
+      if (type !== "update" || isManifest(file)) {
+        drawnKept.clear();
+      }
       if (isManifest(file)) {
         if (type !== "create") {
           return;
@@ -3180,8 +3228,15 @@ function cawcoStage() {
           if (!(mod && existsSync(abs))) {
             return null;
           }
-          const files = await drawnFrom(abs, readFileSync(abs, "utf8"));
-          return files.includes(file) ? mod : null;
+          const set = drawnSet(sheet);
+          if (!(await set).has(file)) {
+            return null;
+          }
+          // Its imports may have changed with this edit: read again on the next.
+          if (drawnKept.get(sheet) === set) {
+            drawnKept.delete(sheet);
+          }
+          return mod;
         })
       );
       const redrawn = reached.filter((mod): mod is ModuleNode => !!mod);

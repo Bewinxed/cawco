@@ -71,7 +71,10 @@ import {
 import { tmpdir, totalmem } from "node:os";
 import { join, relative } from "node:path";
 import { type CDPSession, type Page, webkit } from "playwright-core";
-import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
+import {
+  buildStageHost,
+  HOST_RUNTIME_ENV,
+} from "../../../packages/agent/src/stage-host/build";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { signalGroup, spawnedPid } from "../../../packages/core/src/signal";
 import { until } from "../../scratch-fleet";
@@ -149,6 +152,7 @@ async function startStage(): Promise<Stage> {
     cwd: APP,
     env: {
       ...process.env,
+      ...HOST_RUNTIME_ENV,
       CAWCO_STAGE: "1",
       CAWCO_STAGE_PORT: String(port),
       CAWCO_STAGE_FRAMEWORK: "svelte",
