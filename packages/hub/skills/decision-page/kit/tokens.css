@@ -869,8 +869,14 @@
     --c-bar-group-pad: 4px;
     /* An item in the top bar's icon group: the group's height, the bar's control height, less its inset on both sides. */
     --c-bar-item: calc(var(--c-btn-h) - 2 * var(--c-bar-group-pad));
-    /* A symbol in the top bar's glass group: the machines glyph and Caw's head. */
-    --c-bar-symbol: 20px;
+    /* A symbol in a bar's glass group (the top bar's, a head's): sized to the bar's text as SF Symbols are ("relative to the cap height of the San Francisco system font"), so a line glyph at 18px inks about 15px beside the head's 16px title. It was 20px in the bold-duotone cut, which the owner pinned as far too big (artifact panel, 2026-11-05). */
+    --c-bar-symbol: 18px;
+    /* A count worn as a badge at a bar symbol's top-trailing corner (the artifact panel's Comments bubble): a capsule this tall at least, its figures in meta, as Apple badges a toolbar item (SwiftUI badge: "Badges appear in list rows, tab bars, toolbar items, and menus"). */
+    --c-count-badge-h: 16px;
+    /* The room a pane keeps at its content's top while its head floats over it (Liquid Glass: content runs to the top edge and scrolls beneath the controls): the head's glass, its inset above and the same gap below, so the content's first line starts clear of the glass and scrolls under it. */
+    --c-head-room: calc(var(--c-btn-h) + 2 * var(--space-2));
+    /* The corner of a panel whose head floats as glass over its content (the artifact panel): its glass capsules' radius plus their inset from its edge, so a capsule in its corner is concentric with it (Adopting Liquid Glass: windows "adopt rounder corners to fit controls"); a floating part inset space-2 inside it takes the capsule's own radius. */
+    --c-float-panel-r: calc(var(--c-btn-h) / 2 + var(--space-2));
     /* Caw's own glass on the phone bar, its side: round at its leading side, square at its trailing one, its trailing edge c-bar-phone-edge in from the screen's, as the sidebar toggle's glyph is from the other. Caw's phone glass stands centred on the tabs' centre line, as the sidebar toggle's glyph does, clear of the floor; open, his panel hangs from the floor through a neck (half of c-tab-row-h less this, his glass's foot to the row's floor). */
     --c-bar-caw-glass-phone: 32px;
     /* Caw's head in his phone glass: the glass less the desktop item's 4px margin round its head on each side. */

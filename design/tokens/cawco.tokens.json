@@ -4208,10 +4208,44 @@
     "c-bar-symbol": {
       "$type": "dimension",
       "$value": {
-        "value": 20,
+        "value": 18,
         "unit": "px"
       },
-      "$description": "A symbol in the top bar's glass group: the machines glyph and Caw's head."
+      "$description": "A symbol in a bar's glass group (the top bar's, a head's): sized to the bar's text as SF Symbols are (\"relative to the cap height of the San Francisco system font\"), so a line glyph at 18px inks about 15px beside the head's 16px title. It was 20px in the bold-duotone cut, which the owner pinned as far too big (artifact panel, 2026-11-05)."
+    },
+    "c-count-badge-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      },
+      "$description": "A count worn as a badge at a bar symbol's top-trailing corner (the artifact panel's Comments bubble): a capsule this tall at least, its figures in meta, as Apple badges a toolbar item (SwiftUI badge: \"Badges appear in list rows, tab bars, toolbar items, and menus\")."
+    },
+    "c-head-room": {
+      "$type": "dimension",
+      "$value": {
+        "value": 50,
+        "unit": "px"
+      },
+      "$description": "The room a pane keeps at its content's top while its head floats over it (Liquid Glass: content runs to the top edge and scrolls beneath the controls): the head's glass, its inset above and the same gap below, so the content's first line starts clear of the glass and scrolls under it.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({size.c-btn-h} + 2 * {space.space-2})"
+        }
+      }
+    },
+    "c-float-panel-r": {
+      "$type": "dimension",
+      "$value": {
+        "value": 25,
+        "unit": "px"
+      },
+      "$description": "The corner of a panel whose head floats as glass over its content (the artifact panel): its glass capsules' radius plus their inset from its edge, so a capsule in its corner is concentric with it (Adopting Liquid Glass: windows \"adopt rounder corners to fit controls\"); a floating part inset space-2 inside it takes the capsule's own radius.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "calc({size.c-btn-h} / 2 + {space.space-2})"
+        }
+      }
     },
     "c-bar-caw-glass-phone": {
       "$type": "dimension",

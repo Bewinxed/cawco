@@ -692,7 +692,7 @@
   data-slot="comment-rail"
   aria-label={said.comments}
   data-layout={layout}
-  class="flex flex-col min-h-0 w-c-comments-w max-w-full bg-surface-raised data-[layout=beside]:h-full data-[layout=sheet]:flex-1 data-[layout=sheet]:w-full"
+  class="flex flex-col min-h-0 w-c-comments-w max-w-full bg-surface-raised in-data-rail-float:bg-transparent data-[layout=beside]:h-full data-[layout=sheet]:flex-1 data-[layout=sheet]:w-full"
 >
   <!-- One row: Close leading on the sheet, the title menu, the glass;
        searching, the field and its Close. The title names a part of the

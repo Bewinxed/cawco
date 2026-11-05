@@ -67,6 +67,7 @@
     lineId,
     shown,
     titleAway = false,
+    described = false,
     onrefused,
   }: {
     instanceId: string;
@@ -84,6 +85,8 @@
     shown: { id: string; kind: ArtifactKind; title: string };
     /** The page says this title itself, in view: the bar draws its glyph, the words only for a screen reader. */
     titleAway?: boolean;
+    /** The line stands under the title in the bar, a window's subtitle (macOS: a toolbar's title over its subtitle), each one line cut at its end. */
+    described?: boolean;
     /** A chosen artifact the hub would not show: the words, and which it was. */
     onrefused: (
       reason: string,
@@ -293,14 +296,32 @@
           {...props}
           data-artifact-trigger
           aria-describedby={line ? lineId : undefined}
-          class="select-none touch-hit press-tint mark-line max-w-full gap-space-1 ps-space-2 pe-space-1 max-phone:h-auto max-phone:min-h-c-bar-item max-phone:rounded-lg"
+          class="select-none touch-hit press-tint mark-line max-w-full gap-space-1 ps-space-2 pe-space-1 max-phone:h-auto max-phone:min-h-c-bar-item max-phone:rounded-lg data-described:h-auto data-described:min-h-c-bar-item data-described:rounded-lg data-described:py-space-1"
           data-artifact={shown.id}
+          data-described={(described && !!line) || undefined}
           data-bar-item
           data-box
           title={line || undefined}
           type="button"
         >
-          {#if titleAway}
+          {#if described && line}
+            <!-- The title over its line, a window's subtitle: one line each,
+                 cut at its end, the chevron beside the title. -->
+            <span
+              class="flex min-w-0 flex-col items-start text-start"
+              data-slot="name-lead"
+              in:reveal
+            >
+              <span
+                class="max-w-full overflow-clip text-ellipsis whitespace-nowrap text-ink-strong type-label"
+                data-slot="name-words">{shown.title}</span
+              >
+              <span
+                class="max-w-full overflow-clip text-ellipsis whitespace-nowrap text-ink-muted type-meta"
+                data-slot="name-line">{line}</span
+              >
+            </span>
+          {:else if titleAway}
             <KindGlyph aria-hidden="true" data-slot="bar-symbol" />
             <span class="sr-only" data-slot="name-words">{shown.title}</span>
           {:else}
@@ -322,7 +343,7 @@
                 />{/if}</span
             >
           {/if}
-          {#if titleAway || !phone.current}
+          {#if titleAway || !phone.current || (described && line)}
             <IconChevronDown
               aria-hidden="true"
               class="size-icon-sm flex-none text-ink-muted"

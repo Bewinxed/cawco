@@ -54,13 +54,18 @@
   import { HEAD_PRIORITY, type HeadItem } from "#lib/cawco/side/head.js";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
-  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import {
+    BarGlass,
+    BarItem,
+    BarPopover,
+  } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
     TabItem,
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
+  import * as Popover from "#lib/components/ui/popover/index.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import {
     IconChat,
@@ -79,13 +84,23 @@
   /** The hub's show of an artifact: its id. */
   const SHOW_PATH = /\/artifacts\/([^/]+)\/show$/u;
   const asked = page.url.searchParams.get("state") ?? "rail";
+  /**
+   * Where the Comments rail floats on a desk (`?rail=`): `over` the page's
+   * trailing side, the page keeping its width under it; `beside` the page,
+   * the page stopping short of it with its ground running under the glass
+   * (Adopting Liquid Glass: content "beneath sidebars and inspectors"
+   * without "placing content under it"); or `hung` from the Comments
+   * bubble, as tall as its comments.
+   */
+  const railAt = (page.url.searchParams.get("rail") ?? "beside") as
+    | "over"
+    | "beside"
+    | "hung";
+  /** The title over its description in the bar (`?line=1`), a window's subtitle. */
+  const described = page.url.searchParams.get("line") === "1";
   const phone = new MediaQuery("(width < 640px)");
   /** The picture stands scrolled to its foot. */
   const scrolled = asked === "scrolled" || asked === "changes";
-  /** The page's own title in view, as its overlay would tell it. */
-  const titleAway = $derived(
-    !(scrolled || (asked === "full" && phone.current))
-  );
 
   /** The artifact on show: the newest, until the menu shows another. */
   let shownId = $state(ARTIFACTS[0]?.id ?? "");
@@ -316,16 +331,54 @@
   <CanvasView as="sub" onverify={() => undefined} {view} />
 {/snippet}
 {#snippet commentsBar()}
-  <CommentsButton
-    count={openCount}
-    label="Comments (⇧C hides the pins)"
-    onclick={() => {
-      listOpen = !listOpen;
-    }}
-    held={heldCount}
-    open={listOpen}
-    toCheck={checked.length}
-  />
+  {#if railAt === "hung" && !phone.current}
+    <!-- The rail hung from the bubble's glass as one shape with it, as tall
+         as its comments up to the well's foot; it stays while the page is
+         pressed (Comment mode marks the page under it). -->
+    <Popover.Root
+      onOpenChange={(next) => {
+        listOpen = next;
+      }}
+      open={listOpen}
+    >
+      <Popover.Trigger>
+        {#snippet child({ props })}
+          <CommentsButton
+            count={openCount}
+            held={heldCount}
+            label="Comments (⇧C hides the pins)"
+            open={listOpen}
+            {props}
+            toCheck={checked.length}
+          />
+        {/snippet}
+      </Popover.Trigger>
+      <BarPopover
+        interactOutsideBehavior="ignore"
+        label={commentWords.comments}
+        onOpenAutoFocus={(event: Event) => event.preventDefault()}
+        trapFocus={false}
+      >
+        <div
+          class="flex max-h-[calc(var(--bits-popover-content-available-height)-var(--space-2))] min-h-0 w-c-comments-w"
+          data-rail-float="hung"
+        >
+          {@render railOf("beside")}
+        </div>
+      </BarPopover>
+    </Popover.Root>
+  {:else}
+    <CommentsButton
+      count={openCount}
+      label="Comments (⇧C hides the pins)"
+      onclick={() => {
+        listOpen = !listOpen;
+      }}
+      held={heldCount}
+      open={listOpen}
+      toCheck={checked.length}
+    />
+  {/if}
 {/snippet}
 {#snippet commentsMenu()}
   <DropdownMenu.Item
@@ -353,6 +406,7 @@
   <ArtifactMenu
     held={ARTIFACTS.map((one) => one.id)}
     instanceId={INSTANCE}
+    described={described}
     line={shown?.ask ?? ""}
     lineId="bench-line"
     onrefused={() => undefined}
@@ -361,7 +415,6 @@
       kind: "page",
       title: shown?.title ?? "",
     }}
-    {titleAway}
   />
 {/snippet}
 
@@ -427,9 +480,14 @@
   />
 {/snippet}
 
+<!-- The rail as a floating glass panel under the head, inset from the
+     card's edges with corners concentric with it (the capsules' radius). -->
 {#snippet railBeside()}
-  {#if listOpen && !phone.current}
-    <div class="flex flex-none min-h-0 overflow-hidden">
+  {#if listOpen && !phone.current && railAt !== "hung"}
+    <div
+      class="absolute end-space-2 top-c-head-room bottom-space-2 z-1 flex min-h-0 overflow-hidden rounded-[calc(var(--c-btn-h)/2)] border border-border-hairline bg-material-panel shadow-overlay glass-backdrop reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"
+      data-rail-float={railAt}
+    >
       {@render railOf("beside")}
     </div>
   {/if}
@@ -528,17 +586,29 @@
       subtitle={shown?.ask}
       subtitleId="bench-line"
       titleControl={title}
-      {titleAway}
+      float
     >
-      <img
-        alt={shown?.title}
-        class={[
-          "size-full object-cover",
-          scrolled ? "object-bottom" : "object-top",
-        ]}
-        src={phone.current ? pagePhone : pageDesk}
+      <!-- The page runs to the card's top under the floating head, keeping
+           the head's room at its top (c-head-room) so its first line starts
+           clear of the glass and scrolls beneath it. -->
+      <div
+        class="size-full overflow-y-auto overscroll-contain pt-c-head-room"
+        data-slot="bench-page"
         {@attach measureWell}
-      />
+        {@attach (node) => {
+          if (scrolled) {
+            requestAnimationFrame(() => {
+              node.scrollTop = node.scrollHeight;
+            });
+          }
+        }}
+      >
+        <img
+          alt={shown?.title}
+          class="block h-auto max-w-full"
+          src={phone.current ? pagePhone : pageDesk}
+        />
+      </div>
       {#if asked === "changes"}
         <!-- The page's own foot bar (its Send) stands at the picture's foot,
              scrolled there: 66px, as the overlay reads it (cawco:page-foot). -->

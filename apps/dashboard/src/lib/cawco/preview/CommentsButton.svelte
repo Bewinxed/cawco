@@ -2,20 +2,21 @@
   /**
    * The Comments rail's toggle in the artifact panel's head (the artifact
    * panel's surface brief, The head): a bare symbol of the head's glass, its
-   * bubble and the open comments' count (The Earned Count Rule), pressed
-   * while the rail stands. The count holds three figures' room, shown or
-   * not, and stays as the rail opens, so the button keeps its width and
-   * nothing in the head moves. While comments wait on him (To check), the
-   * bubble wears the needs-you dot, as a pill does (PinDot), and its name
-   * says how many; while he holds comments to send together, the bubble
-   * wears a hollow ring, a held pill's own look, and its name says how many
-   * are unsent; ⇧C's hidden pins and comments not reaching the agent are
-   * said beside the count.
+   * bubble, pressed while the rail stands. The open comments' count is a
+   * badge at the bubble's top-trailing corner, as Apple badges a toolbar
+   * item (SwiftUI badge: "Badges appear in list rows, tab bars, toolbar
+   * items, and menus"), only above 0 (The Earned Count Rule); the button is
+   * the symbol's own width, so a count growing moves nothing in the head.
+   * While comments wait on him (To check) the badge takes the needs-you
+   * pair and its name says how many; while he holds comments to send
+   * together it is hollow, a held pill's own look, and its name says how
+   * many are unsent; ⇧C's hidden pins and comments not reaching the agent
+   * are said beside the bubble.
    */
   import { commentWords } from "@cawco/core/words/comments";
+  import { mergeProps } from "bits-ui";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconChat, IconEyeClosed, IconWarningTriangle } from "#lib/icons.js";
-  import PinDot from "./PinDot.svelte";
 
   let {
     open,
@@ -26,6 +27,7 @@
     down = null,
     label,
     onclick,
+    props = {},
   }: {
     /** The rail stands. */
     open: boolean;
@@ -41,8 +43,20 @@
     down?: string | null;
     /** Its tooltip. */
     label: string;
-    onclick: () => void;
+    onclick?: () => void;
+    /** A primitive's trigger props (a card hung from it), merged in. */
+    props?: Record<string, unknown>;
   } = $props();
+  /** How the badge is dressed: what waits on him, what he holds, or the count alone. */
+  const badge = $derived.by(() => {
+    if (toCheck > 0) {
+      return "check";
+    }
+    if (held > 0) {
+      return "held";
+    }
+    return count > 0 ? "count" : null;
+  });
 
   const name = $derived(
     [
@@ -61,27 +75,29 @@
 <Tip {label}>
   {#snippet children(tip)}
     <button
-      {...tip}
+      {...mergeProps(tip, props, { onclick })}
       aria-expanded={open}
       aria-label={name}
       class="select-none touch-hit press-tint mark-line aria-expanded:bg-surface-pressed"
       data-bar-item
       data-box
-      data-counted
       data-link-down={down ? "" : undefined}
       data-slot="comments"
-      {onclick}
       type="button"
     >
       <span class="relative grid" data-box>
         <IconChat aria-hidden="true" data-slot="bar-symbol" />
-        {#if toCheck > 0}<PinDot dot="unread" />{:else if held > 0}<PinDot
-            dot="held"
-          />{/if}
+        {#if badge}
+          <!-- The badge: on the bubble's top-trailing corner, cut round by
+               the glass's ground so it reads apart from the symbol. -->
+          <span
+            aria-hidden="true"
+            class="absolute start-[calc(100%-var(--space-2))] -top-space-2 grid h-c-count-badge-h min-w-c-count-badge-h place-items-center rounded-pill px-space-1 type-meta num leading-none ring-(length:--status-dot-cut) ring-material-panel data-[badge=count]:bg-ink-solid data-[badge=count]:text-on-ink data-[badge=check]:bg-status-attn-bg data-[badge=check]:text-status-attn-ink data-[badge=held]:border data-[badge=held]:border-ink-muted data-[badge=held]:bg-surface-raised data-[badge=held]:text-ink-strong"
+            data-badge={badge}
+            data-slot="badge">{count > 0 ? count : held}</span
+          >
+        {/if}
       </span>
-      <span class="min-w-c-count-w text-start" data-slot="num"
-        >{count > 0 ? count : ""}</span
-      >
       {#if !pinsShown}
         <!-- ⇧C hid the pins: said where the person looks for them. -->
         <IconEyeClosed aria-hidden="true" class="size-icon-sm" />

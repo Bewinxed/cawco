@@ -74,6 +74,7 @@
     well = $bindable(),
     section = $bindable(),
     beside,
+    float = false,
     children,
   }: {
     /** What the card is, read out. */
@@ -138,6 +139,17 @@
      * its width.
      */
     beside?: Snippet;
+    /**
+     * The head floats as glass over the well (Adopting Liquid Glass:
+     * "Liquid Glass applies to the topmost layer of the interface", content
+     * "scrolls beneath controls"): the well fills the card to its edges, the
+     * head's groups stand over its top on the scroll edge effect, and the
+     * content keeps `--c-head-room` at its top so its first line starts
+     * clear of the glass. What stands `beside` floats too, placed by its
+     * own `data-rail-float` (over the page, or beside it with the page
+     * stopping short of it).
+     */
+    float?: boolean;
     /** The well's content. */
     children: Snippet;
   } = $props();
@@ -576,8 +588,9 @@
   data-side-surface-expanded={expanded || undefined}
   data-expanded-recessed={(expanded && recessed) || undefined}
   data-recessed={recessed || undefined}
+  data-float={float || undefined}
   aria-label={label}
-  class="group/card @container flex h-full min-h-0 min-w-0 flex-col rounded-lg concentric-in r-outer-lg r-inset-space-2 bg-surface-raised px-space-2 pt-0 pb-space-2 shadow-drawer data-side-surface-expanded:rounded-none data-side-surface-expanded:px-0 data-side-surface-expanded:pt-space-3 data-side-surface-expanded:pb-0 data-side-surface-expanded:shadow-none data-side-surface-expanded:not-data-recessed:px-(--expanded-inset) in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
+  class="group/card @container data-float:relative data-float:overflow-hidden data-float:rounded-(--c-float-panel-r) data-float:p-0 flex h-full min-h-0 min-w-0 flex-col rounded-lg concentric-in r-outer-lg r-inset-space-2 bg-surface-raised px-space-2 pt-0 pb-space-2 shadow-drawer data-side-surface-expanded:rounded-none data-side-surface-expanded:px-0 data-side-surface-expanded:pt-space-3 data-side-surface-expanded:pb-0 data-side-surface-expanded:shadow-none data-side-surface-expanded:not-data-recessed:px-(--expanded-inset) in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
   style:--expanded-inset="calc(var(--space-3) + var(--space-2))"
   style:--card-max="calc(100% - var(--sheet-hidden, 0px))"
   bind:this={section}
@@ -601,7 +614,7 @@
     data-slot="side-head"
     data-fitted={all.length > 0 || undefined}
     data-placement={placement}
-    class="relative z-1 flex h-c-btn-h-lg flex-none items-center gap-space-1 hit-gap-x-space-1 coarse:data-fitted:gap-space-2 coarse:data-fitted:hit-gap-x-space-2"
+    class="relative z-2 flex h-c-btn-h-lg flex-none items-center gap-space-1 group-data-float/card:absolute group-data-float/card:inset-x-0 group-data-float/card:top-0 group-data-float/card:h-c-head-room group-data-float/card:px-space-2 hit-gap-x-space-1 coarse:data-fitted:gap-space-2 coarse:data-fitted:hit-gap-x-space-2"
     bind:this={head}
   >
     {#if placement === "sheet"}
@@ -727,6 +740,19 @@
       {@render closeGlass()}
     {/if}
   </header>
+  {#if float}
+    <!-- The scroll edge effect (Adopting Liquid Glass: a scroll view's
+         edge effect "helps maintain sufficient legibility and contrast for
+         controls by obscuring content that scrolls beneath them"): what
+         passes under the head is blurred and washed toward the card's
+         ground, fading out a step under the glass. At rest the page's own
+         room is under it, so it draws nothing a reader sees. -->
+    <div
+      aria-hidden="true"
+      data-slot="scroll-edge"
+      class="pointer-events-none absolute inset-x-0 top-0 z-1 h-[calc(var(--c-head-room)+var(--space-4))] bg-linear-to-b from-material-panel to-transparent glass-backdrop mask-b-from-40% reduced-transparency:backdrop-filter-none contrast-more:backdrop-filter-none"
+    ></div>
+  {/if}
   {#if recessed}
     <!-- The content's ground: a well inside its edge (surface-well,
          border-well: the recess and hairline by day, deeper with a clear
@@ -735,12 +761,15 @@
          hears nothing; the cue is the cursor and the pressed segment), the
          edge easing in and out except while the split slides, and points a
          crosshair. -->
-    <div class="flex min-h-0 flex-1 gap-space-2" data-slot="well-row">
+    <div
+      class="relative flex min-h-0 flex-1 gap-space-2 group-data-float/card:gap-0 group-data-float/card:bg-surface-well has-[>[data-rail-float=beside]]:*:data-side-well:me-[calc(var(--c-comments-w)+var(--space-2)*2)]"
+      data-slot="well-row"
+    >
       <div
         data-side-well
         data-mode={mode && mode !== "interact" ? mode : undefined}
         data-ringed={mode ? "" : undefined}
-        class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden concentric-sm border border-border-well bg-surface-well data-ringed:outline-1 data-ringed:outline-solid data-ringed:not-data-mode:outline-transparent data-ringed:-outline-offset-1 data-ringed:not-in-data-split-sliding:transition-[outline-color] data-ringed:not-in-data-split-sliding:duration-(--dur-control) data-ringed:not-in-data-split-sliding:ease-in-out data-mode:cursor-crosshair data-mode:outline-seam group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
+        class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden concentric-sm border border-border-well bg-surface-well data-ringed:outline-1 data-ringed:outline-solid data-ringed:not-data-mode:outline-transparent data-ringed:-outline-offset-1 data-ringed:not-in-data-split-sliding:transition-[outline-color] data-ringed:not-in-data-split-sliding:duration-(--dur-control) data-ringed:not-in-data-split-sliding:ease-in-out data-mode:cursor-crosshair data-mode:outline-seam group-data-float/card:rounded-none group-data-float/card:border-0 group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
         bind:this={well}
       >
         {@render children()}
