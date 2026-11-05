@@ -30,6 +30,7 @@ import {
 import { readWithin } from "@cawco/core/bounded";
 import { type HubRepoKey, hubRepoSegment } from "@cawco/core/hub-repo";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { startedPath } from "@cawco/core/workspace-needs";
 import type { Connections } from "./connections";
@@ -256,7 +257,7 @@ export const createRepoPublish = ({
         break;
       case "unanswered":
         throw new Error(
-          `The hub's push to ${url} did not finish within ${Math.round(ran.after / 1000)} s; the repository may hold part of it.`
+          `The hub's push to ${url} did not finish within ${secondsOf(ran.after)} s; the repository may hold part of it.`
         );
       default:
         unhandled("read", ran);
@@ -314,7 +315,7 @@ export const createRepoPublish = ({
         break;
       case "unanswered":
         throw new Error(
-          `GitHub did not answer within ${Math.round(asked.after / 1000)} s about creating ${change.name}, so it may or may not exist: look on GitHub before you retry.`
+          `GitHub did not answer within ${secondsOf(asked.after)} s about creating ${change.name}, so it may or may not exist: look on GitHub before you retry.`
         );
       default:
         unhandled("read", asked);

@@ -52,6 +52,7 @@ import {
   proxyHeaders,
   upgradePreview,
 } from "@cawco/core/preview-proxy";
+import { secondsOf } from "@cawco/core/time";
 import { z } from "zod";
 import type { HubLifetimeShape } from "./lifetime";
 import { openTailnetDoor, type TailnetDoor } from "./tailnet-door";
@@ -212,7 +213,7 @@ export const createTailnetHttps = ({
       return {
         reading: {
           state: "unread",
-          why: `tailscale status didn't answer within ${Math.round(asked.after / 1000)} s`,
+          why: `tailscale status didn't answer within ${secondsOf(asked.after)} s`,
         },
       };
     }
@@ -319,7 +320,7 @@ export const createTailnetHttps = ({
     if (asked.kind === "unanswered") {
       return {
         state: "unread",
-        why: `tailscale cert ${name} didn't answer within ${Math.round(asked.after / 1000)} s`,
+        why: `tailscale cert ${name} didn't answer within ${secondsOf(asked.after)} s`,
       };
     }
     const pair = asked.value.code === 0 ? pairOf(asked.value.stdout) : null;

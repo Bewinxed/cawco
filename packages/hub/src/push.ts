@@ -102,7 +102,7 @@ import {
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
-import { DAY_MS } from "@cawco/core/time";
+import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { firstLine } from "@cawco/core/tool-presentation";
 import { unhandled } from "@cawco/core/unhandled";
 import { decidesWords } from "@cawco/core/words/decides";
@@ -760,7 +760,7 @@ type PushBody =
 
 /** "Cawrier did not answer within N s". */
 const cawrierSilent = (after: number): string =>
-  `Cawrier did not answer within ${Math.round(after / 1000)} s`;
+  `Cawrier did not answer within ${secondsOf(after)} s`;
 
 /**
  * One POST to Cawrier for this device, its body made here (a visible alert

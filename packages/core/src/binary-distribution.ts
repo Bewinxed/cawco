@@ -10,6 +10,7 @@ import {
   downloadResumably,
   fileMatches,
 } from "./resumable-download";
+import { secondsOf } from "./time";
 import { unhandled } from "./unhandled";
 import { downloadWords } from "./words/downloads";
 
@@ -71,7 +72,7 @@ async function fromReleaseHost<T>(
       return got.value;
     case "unanswered":
       throw new Error(
-        `The release host did not answer ${what} within ${Math.round(got.after / 1000)}s`
+        `The release host did not answer ${what} within ${secondsOf(got.after)}s`
       );
     default:
       unhandled("read", got);

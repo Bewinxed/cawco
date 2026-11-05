@@ -7,6 +7,7 @@
 import type { Subprocess } from "bun";
 import { readWithin } from "./bounded";
 import { hostEnvironment } from "./session-env";
+import { secondsOf } from "./time";
 import { unhandled } from "./unhandled";
 import { updatesWords } from "./words/updates";
 
@@ -89,7 +90,7 @@ export const runInC = async (argv: readonly string[]): Promise<Ran> => {
       return ran.value;
     case "unanswered":
       throw new Error(
-        updatesWords.didNotEnd(named(argv), Math.round(ran.after / 1000))
+        updatesWords.didNotEnd(named(argv), secondsOf(ran.after))
       );
     default:
       unhandled("read", ran);

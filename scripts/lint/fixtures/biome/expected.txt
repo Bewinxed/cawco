@@ -57,3 +57,5 @@ tool-answer-from-last/scripts/planted.ts:11:1 tool-answer-from-last
 tool-answer-from-last/scripts/planted.ts:12:1 tool-answer-from-last
 tool-answer-from-last/scripts/planted.ts:13:1 tool-answer-from-last
 tool-answer-from-last/scripts/planted.ts:14:7 tool-answer-from-last
+no-whole-seconds/planted.ts:5:27 no-whole-seconds
+no-whole-seconds/planted.ts:6:27 no-whole-seconds

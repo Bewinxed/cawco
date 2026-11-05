@@ -25,7 +25,7 @@ import { dirname, join } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { isPublicDestination } from "@cawco/core/public-address";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
-import { DAY_MS } from "@cawco/core/time";
+import { DAY_MS, secondsOf } from "@cawco/core/time";
 import { faviconReachable } from "@cawco/core/tool-presentation";
 import { unhandled } from "@cawco/core/unhandled";
 import { Elysia, t } from "elysia";
@@ -375,7 +375,7 @@ const iconFor = (host: string): Promise<Bounded<Icon | null>> => {
         break;
       case "unanswered":
         console.warn(
-          `[favicon] ${host}: did not answer within ${Math.round(fetched.after / 1000)} s; nothing kept`
+          `[favicon] ${host}: did not answer within ${secondsOf(fetched.after)} s; nothing kept`
         );
         return fetched;
       default:
@@ -414,7 +414,7 @@ export const faviconRoutes = () =>
           if (icon === undefined) {
             return status(
               504,
-              `That site did not answer within ${Math.round(read.after / 1000)} s.`
+              `That site did not answer within ${secondsOf(read.after)} s.`
             );
           }
           break;

@@ -27,6 +27,7 @@ import type {
   JevResult,
   JevText,
 } from "@cawco/core/jev";
+import { secondsOf } from "@cawco/core/time";
 import type { DbShape } from "./db";
 import { TYPESAFE_URL } from "./upstreams";
 
@@ -88,7 +89,7 @@ interface SystemOneResponse {
 
 /** "Jev did not answer within N s": an unanswered ask, in every caller's words. */
 export const jevUnanswered = (after: number): string =>
-  `Jev did not answer within ${Math.round(after / 1000)} s`;
+  `Jev did not answer within ${secondsOf(after)} s`;
 
 /**
  * Asks every question in one request on `access`'s route, within

@@ -22,6 +22,7 @@ import {
   type ForgeVerdict,
   type ForgeWrite,
 } from "@cawco/core/forge-post";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { giteaForge } from "./gitea";
 import { githubForge } from "./github";
@@ -196,7 +197,7 @@ const within = async <T>(
     ? { ok: true, value: read.value }
     : {
         ok: false,
-        said: `${what} did not answer within ${Math.round(read.after / 1000)} s, so it may or may not be there.`,
+        said: `${what} did not answer within ${secondsOf(read.after)} s, so it may or may not be there.`,
       };
 };
 

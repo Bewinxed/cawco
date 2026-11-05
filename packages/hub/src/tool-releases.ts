@@ -37,7 +37,7 @@ import {
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
-import { MINUTE_MS } from "@cawco/core/time";
+import { MINUTE_MS, secondsOf } from "@cawco/core/time";
 import type { HubLifetimeShape } from "./lifetime";
 
 /**
@@ -82,7 +82,7 @@ export const readRelease = async (
   if (read.kind === "unanswered") {
     return {
       at: Date.now(),
-      failed: `no answer within ${Math.round(read.after / 1000)} s`,
+      failed: `no answer within ${secondsOf(read.after)} s`,
     };
   }
   const { status, body } = read.value;

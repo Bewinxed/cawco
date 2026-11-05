@@ -41,6 +41,7 @@ import {
   sessionIdentityDir,
 } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { chatgptClaims, readChatgptUsage } from "@cawco/core/usage/chatgpt";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
@@ -1013,7 +1014,7 @@ const answered = <T>(read: Bounded<T>): T => {
       return read.value;
     case "unanswered":
       throw new Error(
-        `OpenCode's own sign-ins were not read within ${Math.round(read.after / 1000)} s (${read.reason})`
+        `OpenCode's own sign-ins were not read within ${secondsOf(read.after)} s (${read.reason})`
       );
     default:
       unhandled("read", read);

@@ -1,3 +1,4 @@
+import { secondsOf } from "@cawco/core/time";
 /**
  * What the person reads when a read of a machine got no answer in time: the
  * fleet store's (client.svelte.ts `didntAnswer`) and an artifact tab's, one
@@ -28,7 +29,7 @@ export interface MissedRead {
 
 /** {@link MissedRead} said. */
 export function unansweredWords(read: MissedRead): string {
-  const within = `within ${Math.round(read.after / 1000)} s${read.outcome ? `, so ${read.outcome}` : ""}`;
+  const within = `within ${secondsOf(read.after)} s${read.outcome ? `, so ${read.outcome}` : ""}`;
   if (!read.online) {
     return `${read.machine} didn't answer ${within}. It may be offline.`;
   }

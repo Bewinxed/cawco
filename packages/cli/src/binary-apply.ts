@@ -106,6 +106,7 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { updatesWords } from "@cawco/core/words/updates";
 import { z } from "zod";
@@ -177,7 +178,7 @@ async function takeLock(version: string): Promise<boolean> {
 
 /** What a service-manager call that did not answer says, from how long it was given. */
 const unansweredService = (what: string, after: number): string =>
-  `${what}: the service manager did not answer within ${Math.round(after / 1000)}s`;
+  `${what}: the service manager did not answer within ${secondsOf(after)}s`;
 
 /** A restart or install through the service manager; one it did not answer in time throws saying so. */
 const svc = async (
@@ -455,7 +456,7 @@ async function binaryUnits(
     })
   );
   if (ran.kind !== "answered") {
-    throw new Error(updatesWords.didNotEnd(what, Math.round(ran.after / 1000)));
+    throw new Error(updatesWords.didNotEnd(what, secondsOf(ran.after)));
   }
   const { code, stderr: err, stdout: out } = ran.value;
   if (code !== 0) {

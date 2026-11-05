@@ -1,0 +1,10 @@
+language js
+
+// A wait is said in the seconds a person reads: secondsOf from
+// @cawco/core/time, to a tenth under ten seconds. A deadline's `after`
+// (core bounded.ts `unanswered`) said through Math.round(after / 1000) told
+// find's 1,500 ms window as "it didn't answer within 2 s" (2026-11-05).
+`Math.round($ms / 1000)` as $hit where {
+  $ms <: or { `after`, `$_.after` },
+  register_diagnostic(span=$hit, message="Say a wait with secondsOf from @cawco/core/time: Math.round(after / 1000) says 1.5 s as 2 s.")
+}

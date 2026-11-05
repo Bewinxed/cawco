@@ -562,7 +562,7 @@ import {
 } from "@cawco/core/stored-shapes";
 import type { RelayFrame } from "@cawco/core/stream-relay";
 import { CAPABILITY_KINDS } from "@cawco/core/suggest";
-import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
+import { DAY_MS, HOUR_MS, MINUTE_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { accountsWords } from "@cawco/core/words/accounts";
@@ -1207,7 +1207,7 @@ function searchMiss(answer: Bounded<ControlResult>): string {
     case "unanswered":
       return answer.reason === "dead"
         ? "it went offline"
-        : `it didn't answer within ${Math.round(answer.after / 1000)} s`;
+        : `it didn't answer within ${secondsOf(answer.after)} s`;
     default:
       throw unreachable(answer);
   }
@@ -5068,7 +5068,7 @@ export const createServer = (
           return payload;
         }
         return {
-          refusal: `${machineName(machineId)} could not say which model pi starts on in ${payload.cwd}: it did not answer within ${Math.round(answer.after / 1000)} s. Nothing was started.`,
+          refusal: `${machineName(machineId)} could not say which model pi starts on in ${payload.cwd}: it did not answer within ${secondsOf(answer.after)} s. Nothing was started.`,
         };
       case "answered": {
         if (!answer.value.ok) {
@@ -9104,7 +9104,7 @@ export const createServer = (
         // Not known to have moved or not: the move stays pending and the
         // next tick asks again; the machine answers a move it already made.
         console.warn(
-          `[hub] moving ${what}: ${answer.reason === "dead" ? "a machine it needs is not connected" : `no answer within ${Math.round(answer.after / 1000)} s`}; asked again at the next tick`
+          `[hub] moving ${what}: ${answer.reason === "dead" ? "a machine it needs is not connected" : `no answer within ${secondsOf(answer.after)} s`}; asked again at the next tick`
         );
         return;
       case "answered":
@@ -9298,9 +9298,7 @@ export const createServer = (
       case "unanswered":
         return lent.reason === "dead"
           ? { error: lenderAway(accountId, lender) }
-          : refused(
-              `it did not answer within ${Math.round(lent.after / 1000)} s`
-            );
+          : refused(`it did not answer within ${secondsOf(lent.after)} s`);
       case "answered":
         return lent.value.ok
           ? lent.value.result
@@ -13240,7 +13238,7 @@ export const createServer = (
           ? { code: 503, error: "Machine is not connected" }
           : {
               code: 504,
-              error: `Machine did not answer within ${Math.round(asked.after / 1000)} s; whether it applied the permission mode is not known`,
+              error: `Machine did not answer within ${secondsOf(asked.after)} s; whether it applied the permission mode is not known`,
             };
       case "answered":
         break;
@@ -14821,7 +14819,7 @@ export const createServer = (
             )
           : new ArtifactRefusal(
               504,
-              `The workspace's machine didn't answer within ${Math.round(asked.after / 1000)}s, so the stage's state is unknown.`
+              `The workspace's machine didn't answer within ${secondsOf(asked.after)}s, so the stage's state is unknown.`
             );
       case "answered":
         break;
@@ -15407,7 +15405,7 @@ export const createServer = (
           }
           throw new ArtifactRefusal(
             503,
-            `The canvas ${artifact.name} wasn't drawn: the hub's machine didn't open it ${asked.reason === "dead" ? "(its daemon isn't connected)" : `within ${Math.round(asked.after / 1000)} s`}.`
+            `The canvas ${artifact.name} wasn't drawn: the hub's machine didn't open it ${asked.reason === "dead" ? "(its daemon isn't connected)" : `within ${secondsOf(asked.after)} s`}.`
           );
         case "answered":
           break;
@@ -15457,7 +15455,7 @@ export const createServer = (
               )
             : new ArtifactRefusal(
                 504,
-                `The workspace's machine didn't answer within ${Math.round(asked.after / 1000)}s, so the server's state is unknown.`
+                `The workspace's machine didn't answer within ${secondsOf(asked.after)}s, so the server's state is unknown.`
               );
         case "answered":
           break;
@@ -15490,7 +15488,7 @@ export const createServer = (
               )
             : new ArtifactRefusal(
                 504,
-                `The folder's machine didn't answer within ${Math.round(asked.after / 1000)}s.`
+                `The folder's machine didn't answer within ${secondsOf(asked.after)}s.`
               );
         case "answered":
           break;
@@ -15857,7 +15855,7 @@ export const createServer = (
       case "unanswered":
         throw new ArtifactRefusal(
           503,
-          `${row.name} wasn't drawn: the hub's machine didn't draw it ${asked.reason === "dead" ? "(its daemon isn't connected)" : `within ${Math.round(asked.after / 1000)} s`}.`
+          `${row.name} wasn't drawn: the hub's machine didn't draw it ${asked.reason === "dead" ? "(its daemon isn't connected)" : `within ${secondsOf(asked.after)} s`}.`
         );
       case "answered":
         break;
@@ -15904,7 +15902,7 @@ export const createServer = (
       case "unanswered":
         throw new ArtifactRefusal(
           503,
-          `The picture wasn't saved: ${machineName(instance.machineId)} ${asked.reason === "dead" ? "isn't connected" : `didn't answer within ${Math.round(asked.after / 1000)} s`}.`
+          `The picture wasn't saved: ${machineName(instance.machineId)} ${asked.reason === "dead" ? "isn't connected" : `didn't answer within ${secondsOf(asked.after)} s`}.`
         );
       case "answered":
         break;
@@ -17094,7 +17092,7 @@ export const createServer = (
       case "unanswered":
         return {
           code: 504,
-          message: `the session on ${machineName(machineId)} did not start within ${Math.round(reply.after / 1000)} s`,
+          message: `the session on ${machineName(machineId)} did not start within ${secondsOf(reply.after)} s`,
         };
       case "answered":
         if (!reply.value.ok) {
@@ -17235,7 +17233,7 @@ export const createServer = (
     switch (reply.kind) {
       case "unanswered":
         throw new Error(
-          `the ${payload.harness} session on ${machineName(machineId)} did not start within ${Math.round(reply.after / 1000)}s`
+          `the ${payload.harness} session on ${machineName(machineId)} did not start within ${secondsOf(reply.after)}s`
         );
       case "answered":
         if (!reply.value.ok) {
@@ -17886,7 +17884,7 @@ export const createServer = (
                 kind: "control_result",
                 requestId,
                 ok: false,
-                error: `Stop got no answer within ${Math.round(settled.after / 1000)} s. The machine may be offline. Check the machine, then retry.`,
+                error: `Stop got no answer within ${secondsOf(settled.after)} s. The machine may be offline. Check the machine, then retry.`,
               },
               "timed-out"
             );
@@ -18090,7 +18088,7 @@ export const createServer = (
         throw new Error(
           asked.reason === "dead"
             ? machineFault(machineId, "offline")
-            : `${machineName(machineId)} didn't list its ${harness} models within ${Math.round(asked.after / 1000)} s. Try again in a moment.`
+            : `${machineName(machineId)} didn't list its ${harness} models within ${secondsOf(asked.after)} s. Try again in a moment.`
         );
       case "answered":
         break;
@@ -18221,7 +18219,7 @@ export const createServer = (
         throw answer.reason === "dead"
           ? awayError(row.machineId)
           : new Error(
-              `session ${row.id} did not report its context within ${Math.round(answer.after / 1000)} s`
+              `session ${row.id} did not report its context within ${secondsOf(answer.after)} s`
             );
       case "answered":
         if (!answer.value.ok) {
@@ -22184,7 +22182,7 @@ export const createServer = (
         case "unanswered":
           unpushable.set(
             machineId,
-            `the machine did not answer the write within ${Math.round(answer.after / 1000)} s`
+            `the machine did not answer the write within ${secondsOf(answer.after)} s`
           );
           return;
         case "answered":
@@ -25866,7 +25864,7 @@ export const createServer = (
         throw new Error(
           answer.reason === "dead"
             ? machineFault(machineId, "offline")
-            : `${machineName(machineId)} didn't answer ${method} within ${Math.round(answer.after / 1000)} s. Try again in a moment.`
+            : `${machineName(machineId)} didn't answer ${method} within ${secondsOf(answer.after)} s. Try again in a moment.`
         );
       case "answered":
         if (!answer.value.ok) {
@@ -28423,7 +28421,7 @@ export const createServer = (
           switch (reply.kind) {
             case "unanswered":
               console.warn(
-                `[delegation-mcp] ${row.id} (pi) did not answer its tools refresh within ${Math.round(reply.after / 1000)} s`
+                `[delegation-mcp] ${row.id} (pi) did not answer its tools refresh within ${secondsOf(reply.after)} s`
               );
               return;
             case "answered":
@@ -28703,7 +28701,7 @@ export const createServer = (
       switch (reply.kind) {
         case "unanswered":
           throw new Error(
-            `Credential installation is still waiting: no answer within ${Math.round(reply.after / 1000)} s`
+            `Credential installation is still waiting: no answer within ${secondsOf(reply.after)} s`
           );
         case "answered":
           if (!reply.value.ok) {
@@ -32974,7 +32972,7 @@ export const createServer = (
                   )
                 : status(
                     504,
-                    `Image generation did not finish within ${Math.round(answer.after / 1000)} s. Check the output path before retrying; do not submit a duplicate automatically.`
+                    `Image generation did not finish within ${secondsOf(answer.after)} s. Check the output path before retrying; do not submit a duplicate automatically.`
                   );
             case "answered":
               return answer.value.ok
@@ -33501,7 +33499,7 @@ export const createServer = (
                 ? status(404, machineFault(params.machineId, "offline"))
                 : status(
                     504,
-                    `${machineName(params.machineId)} didn't finish the update within ${Math.round(answer.after / 1000)} s. Check it once it's back.`
+                    `${machineName(params.machineId)} didn't finish the update within ${secondsOf(answer.after)} s. Check it once it's back.`
                   );
             case "answered":
               return answer.value.ok
@@ -37321,7 +37319,7 @@ export const createServer = (
                   )
                 : status(
                     409,
-                    `${machine} did not answer within ${Math.round(answer.after / 1000)} s, so whether ${named} was signed out there is not known. Try again.`
+                    `${machine} did not answer within ${secondsOf(answer.after)} s, so whether ${named} was signed out there is not known. Try again.`
                   );
             case "answered":
               if (!answer.value.ok) {

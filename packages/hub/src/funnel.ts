@@ -37,6 +37,7 @@
  */
 import { hostname, userInfo } from "node:os";
 import type { Bounded } from "@cawco/core/bounded";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import { firstLine, type Heard, type Ran, runTailscale } from "./tailscale-cli";
@@ -102,7 +103,7 @@ export const createFunnel = ({ bin = "tailscale" }: FunnelDeps = {}) => {
 
   /** "<what> did not answer within N s." */
   const noAnswer = (what: string, after: number): string =>
-    `${what} did not answer within ${Math.round(after / 1000)} s`;
+    `${what} did not answer within ${secondsOf(after)} s`;
 
   const notInstalled = (): FunnelState => ({
     state: "needs-owner",

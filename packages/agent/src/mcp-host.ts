@@ -97,6 +97,7 @@ import { processStart } from "@cawco/core/process-identity";
 import { identifiedPid, signal as sendSignal } from "@cawco/core/signal";
 import { parseRecord, writeStateFileSync } from "@cawco/core/state-file";
 import { FleetMcpConfigSchema } from "@cawco/core/stored-shapes";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import { harnessMcpUrl } from "./delegation";
@@ -476,7 +477,7 @@ const within = async (
       return read.value;
     case "unanswered":
       throw new Error(
-        `The ${name} MCP server did not answer ${what} within ${Math.round(read.after / 1000)} s.`
+        `The ${name} MCP server did not answer ${what} within ${secondsOf(read.after)} s.`
       );
     default:
       unhandled("read", read);

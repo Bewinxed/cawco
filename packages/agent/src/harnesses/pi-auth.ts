@@ -9,6 +9,7 @@
  * extension's config is read here and no request is made to any proxy.
  */
 import { readWithin } from "@cawco/core/bounded";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
@@ -46,7 +47,7 @@ export async function checkPiCredential(
     case "unanswered":
       return {
         state: "unknown",
-        reason: `pi: ${name} sign-in status unknown — pi's check did not answer within ${Math.round(checked.after / 1000)} s`,
+        reason: `pi: ${name} sign-in status unknown — pi's check did not answer within ${secondsOf(checked.after)} s`,
       };
     case "failed":
       return {

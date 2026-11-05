@@ -86,7 +86,7 @@ import type { ProcSpec } from "@cawco/core/sessiond";
 import { isAlive, listedPid } from "@cawco/core/signal";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
 import { ModelInfoSchema, SignInFaultSchema } from "@cawco/core/stored-shapes";
-import { HOUR_MS } from "@cawco/core/time";
+import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import type {
   CredentialCreateInput,
@@ -1190,9 +1190,7 @@ const v1Decision = async (
       say(`out of reach (${read.reason}); read again later`);
       return false;
     case "unanswered":
-      say(
-        `did not answer within ${Math.round(read.after / 1000)} s; read again later`
-      );
+      say(`did not answer within ${secondsOf(read.after)} s; read again later`);
       return false;
     case "refused":
       say(
@@ -1229,7 +1227,7 @@ const sessionsOnMachine = async (
       return read.value;
     case "unanswered":
       throw new Error(
-        `OpenCode's sessions were not read within ${Math.round(read.after / 1000)} s (${read.reason})`
+        `OpenCode's sessions were not read within ${secondsOf(read.after)} s (${read.reason})`
       );
     default:
       unhandled("read", read);
@@ -1723,7 +1721,7 @@ const standaloneRead = async <S extends z.ZodType>(
       return read.value;
     case "unanswered":
       throw new Error(
-        `\`${command}\` did not answer within ${Math.round(read.after / 1000)} s`
+        `\`${command}\` did not answer within ${secondsOf(read.after)} s`
       );
     default:
       unhandled("read", read);
@@ -3768,7 +3766,7 @@ export class OpencodeHarness implements Harness {
     const changes = await opencodeOwnChanges();
     if (changes.kind === "unanswered") {
       throw new Error(
-        `its sign-ins were not read within ${Math.round(changes.after / 1000)} s (${changes.reason})`
+        `its sign-ins were not read within ${secondsOf(changes.after)} s (${changes.reason})`
       );
     }
     const changed = changes.value;

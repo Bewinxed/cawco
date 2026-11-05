@@ -13,6 +13,7 @@ import type {
 import { HARNESSES } from "@cawco/core/harness";
 import { isPublicAddress } from "@cawco/core/public-address";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { packageInstall, workspaceNeeds } from "@cawco/core/workspace-needs";
 import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "./auth";
@@ -206,7 +207,7 @@ async function readVersion(item: MachineCapability): Promise<void> {
       console.info(
         `[capabilities] ${item.path} --version did not answer within ${read.after / 1000} s; its version is not known`
       );
-      item.reason = `Installed tool did not answer its version command within ${Math.round(read.after / 1000)} s; its version is not known`;
+      item.reason = `Installed tool did not answer its version command within ${secondsOf(read.after)} s; its version is not known`;
       break;
     default:
       unhandled("read", read);

@@ -31,6 +31,7 @@
  */
 import type { ProjectStopFrame, SessionPulse } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import type { DbShape } from "./db";
 import type { HubLifetimeShape } from "./lifetime";
@@ -55,7 +56,7 @@ export interface RunningSession {
 
 /** Why a stop was not confirmed in time, from how long it waited. */
 const noAnswer = (after: number): string =>
-  `The machine did not confirm the stop within ${Math.round(after / 1000)} s. It may be offline. Check the machine, then retry.`;
+  `The machine did not confirm the stop within ${secondsOf(after)} s. It may be offline. Check the machine, then retry.`;
 
 export const createProjectStops = (ports: {
   db: DbShape;

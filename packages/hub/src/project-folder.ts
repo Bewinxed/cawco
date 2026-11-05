@@ -45,6 +45,7 @@ import { hubAreasDir, hubProjectsDir } from "@cawco/core/paths";
 import { type Ran, runCaptured } from "@cawco/core/run-captured";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { projectTrashWords } from "@cawco/core/words/project-trash";
 import { Elysia, status, t } from "elysia";
@@ -412,7 +413,7 @@ const run = async (root: string, args: string[]): Promise<Ran> => {
       // Not a git answer: never read as a failed or empty one.
       throw new FolderRefusal(
         504,
-        `git ${args[0]} did not finish within ${Math.round(ran.after / 1000)} s in the project folder.`
+        `git ${args[0]} did not finish within ${secondsOf(ran.after)} s in the project folder.`
       );
     default:
       unhandled("read", ran);

@@ -58,7 +58,7 @@ import {
 import type { MachineSource, Upstream } from "@cawco/core/preview-upstream";
 import type { StageState } from "@cawco/core/stage";
 import { isStreamRelayPort } from "@cawco/core/stream-relay";
-import { MINUTE_MS } from "@cawco/core/time";
+import { MINUTE_MS, secondsOf } from "@cawco/core/time";
 import {
   type PortHolders,
   previewPortWords,
@@ -786,7 +786,7 @@ export async function loadedOnce(
       ? said(pinged.value)
       : {
           failure: "machine",
-          why: `its listener didn't answer the hub within ${Math.round(pinged.after / 1000)} s`,
+          why: `its listener didn't answer the hub within ${secondsOf(pinged.after)} s`,
         };
   } catch (error) {
     return {

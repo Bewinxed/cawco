@@ -31,6 +31,7 @@ import {
   canvasHostPage,
 } from "@cawco/core/canvas-host";
 import { injectOverlay } from "@cawco/core/preview-proxy";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { Map as YMap } from "yjs";
 import { type ArtifactDocs, elementsOf } from "./docs";
@@ -224,7 +225,7 @@ export const convertOnScreen = async (
       case "unanswered":
         throw new ArtifactRefusal(
           504,
-          `The canvas wasn't changed: no screen drew it within ${Math.round(drawn.after / 1000)} s. Try again.`
+          `The canvas wasn't changed: no screen drew it within ${secondsOf(drawn.after)} s. Try again.`
         );
       default:
         unhandled("read", drawn);

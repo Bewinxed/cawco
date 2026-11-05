@@ -69,7 +69,7 @@ import {
   type WaitTarget,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
-import { HOUR_MS } from "@cawco/core/time";
+import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import { Elysia, t } from "elysia";
 import { RE2JS } from "re2js";
 import { z } from "zod";
@@ -934,7 +934,7 @@ export const createIngress = ({
     );
     for (const { repo, after } of unanswered) {
       console.log(
-        `[ingress] polled ${repo}: GitHub did not answer within ${Math.round(after / 1000)} s; the poller's state stands`
+        `[ingress] polled ${repo}: GitHub did not answer within ${secondsOf(after)} s; the poller's state stands`
       );
     }
     const reason = pollProblem(polls);

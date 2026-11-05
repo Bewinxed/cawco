@@ -43,6 +43,7 @@ import {
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { ForgeWrite } from "@cawco/core/forge-post";
 import type { MachinePath } from "@cawco/core/machine-path";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { contextWords } from "@cawco/core/words/context";
 import type { Started } from "./call-cuts";
@@ -124,7 +125,7 @@ async function fetchDelegateTypes(projectId?: string): Promise<DelegateType[]> {
       return read.value;
     case "unanswered": {
       // Not answered is never an empty catalog.
-      const message = `Could not load delegate types: the hub did not answer within ${Math.round(read.after / 1000)} s`;
+      const message = `Could not load delegate types: the hub did not answer within ${secondsOf(read.after)} s`;
       console.warn(`[cawco] ${message}`);
       throw new Error(message);
     }
@@ -1528,7 +1529,7 @@ async function readFollowupState(
     case "unanswered":
       // Its state is unknown: never read as cold or warm.
       throw new Error(
-        `The hub did not answer within ${Math.round(read.after / 1000)} s whether that session's cache is warm, so nothing was sent. Retry.`
+        `The hub did not answer within ${secondsOf(read.after)} s whether that session's cache is warm, so nothing was sent. Retry.`
       );
     default:
       unhandled("read", read);
@@ -1767,7 +1768,7 @@ export const handoffActions = ({
           return read.value;
         case "unanswered":
           throw new Error(
-            `The hub did not answer within ${Math.round(read.after / 1000)} s with the image.`
+            `The hub did not answer within ${secondsOf(read.after)} s with the image.`
           );
         default:
           unhandled("read", read);

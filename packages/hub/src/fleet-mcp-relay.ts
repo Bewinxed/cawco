@@ -4,7 +4,7 @@ import {
   type JsonRpcMessage,
   JsonRpcMessageSchema,
 } from "@cawco/core/json-rpc";
-import { DAY_MS, HOUR_MS } from "@cawco/core/time";
+import { DAY_MS, HOUR_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -180,7 +180,7 @@ interface ServerState {
 class NoAnswer extends Error {
   constructor(after: number) {
     super(
-      `The upstream MCP server did not answer within ${Math.round(after / 1000)} s. Retry the request.`
+      `The upstream MCP server did not answer within ${secondsOf(after)} s. Retry the request.`
     );
   }
 }

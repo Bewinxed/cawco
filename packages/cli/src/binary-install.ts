@@ -35,6 +35,7 @@ import type {
 import { writeWrapper } from "@cawco/core/binary-wrapper";
 import { machineId } from "@cawco/core/machine-id";
 import { runtimeVersion } from "@cawco/core/runtime";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { askYes, closeAsking } from "./ask";
@@ -81,7 +82,7 @@ async function runAllowed(id: string): Promise<boolean> {
     case "unanswered":
       console.log(
         yes.reason === "timeout"
-          ? `${id}: skipped, nobody answered within ${Math.round(yes.after / 1000)}s. CawCo works without it.`
+          ? `${id}: skipped, nobody answered within ${secondsOf(yes.after)}s. CawCo works without it.`
           : `${id}: skipped, the terminal's input ended. CawCo works without it.`
       );
       return false;

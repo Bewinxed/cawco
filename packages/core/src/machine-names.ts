@@ -1,3 +1,5 @@
+import { secondsOf } from "./time";
+
 /**
  * How the fleet names its machines in words: a hostname as the dashboard
  * shows it, a machine among others in a sentence, why a machine could not
@@ -121,7 +123,7 @@ export function machineSilenceWords(
 ): string {
   return after === undefined
     ? `${name} is not connected`
-    : `${name} did not answer within ${Math.round(after / 1000)} s`;
+    : `${name} did not answer within ${secondsOf(after)} s`;
 }
 
 /** The causes {@link machineFaultWords} and {@link machineSilenceWords} say a machine's silence with. */

@@ -7,6 +7,7 @@ import {
   type MachineFleetConfig,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { mcpWords } from "@cawco/core/words/mcp";
 import {
@@ -261,9 +262,7 @@ const reachWithin = async (
     case "answered":
       return reached.value;
     case "unanswered":
-      throw new Unreachable(
-        `No answer within ${Math.round(reached.after / 1000)} s.`
-      );
+      throw new Unreachable(`No answer within ${secondsOf(reached.after)} s.`);
     default:
       unhandled("read", reached);
   }

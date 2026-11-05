@@ -1,4 +1,5 @@
 import { readWithin } from "../bounded";
+import { secondsOf } from "../time";
 import { unhandled } from "../unhandled";
 import type { LimitWindow, OpenCodeGoLimits } from "./types";
 
@@ -138,7 +139,7 @@ export async function fetchOpenCodeGoLimits(
         break;
       case "unanswered":
         // No reading: the last good windows stand, marked stale below.
-        error = `no answer within ${Math.round(read.after / 1000)}s`;
+        error = `no answer within ${secondsOf(read.after)}s`;
         console.warn(
           `[usage] OpenCode Go's usage endpoint: ${error}; the last reading stands`
         );

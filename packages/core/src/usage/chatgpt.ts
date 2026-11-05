@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { readWithin } from "../bounded";
+import { secondsOf } from "../time";
 import { unhandled } from "../unhandled";
 import type { LimitWindow } from "./types";
 
@@ -155,7 +156,7 @@ export const readChatgptUsage = async (
         return read.value;
       case "unanswered": {
         // No reading: the caller keeps the last one it holds.
-        const error = `ChatGPT's usage endpoint did not answer within ${Math.round(read.after / 1000)}s`;
+        const error = `ChatGPT's usage endpoint did not answer within ${secondsOf(read.after)}s`;
         console.warn(`[usage] ${error}; the last reading stands`);
         return { ok: false, status: null, error };
       }

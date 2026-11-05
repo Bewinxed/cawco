@@ -21,6 +21,7 @@ import {
   signal as signalPid,
 } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { readJson } from "../fleet";
 import { launchGateForm } from "../gate-form";
@@ -261,7 +262,7 @@ const startRefused = (error: unknown, whose: string): Error => {
  */
 const startUnanswered = (what: string, after: number, whose: string): Error =>
   new Error(
-    `${whose} did not answer ${what} within ${Math.round(after / 1000)} s. Its next start is tried at the next OpenCode session or message.`
+    `${whose} did not answer ${what} within ${secondsOf(after)} s. Its next start is tried at the next OpenCode session or message.`
   );
 
 /** The server a start launched, or {@link startUnanswered} when it did not answer in time. */

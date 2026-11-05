@@ -13,6 +13,7 @@
 import type { PairingPoll, PairingStart } from "@cawco/core";
 import { OWNER_SCHEME } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 
 /** This run's approval, once the person gave it. */
@@ -54,7 +55,7 @@ const approve = async (origin: string, command: string): Promise<string> => {
   switch (started.kind) {
     case "unanswered":
       throw new OwnerApprovalError(
-        `${origin} did not answer within ${Math.round(started.after / 1000)}s when asked to start an approval; nothing was sent.`
+        `${origin} did not answer within ${secondsOf(started.after)}s when asked to start an approval; nothing was sent.`
       );
     case "answered":
       if (!started.value.ok) {
@@ -188,7 +189,7 @@ export const ownerAsk = async (
   );
   switch (answer.kind) {
     case "unanswered":
-      throw new Fail(unanswered(Math.round(answer.after / 1000)));
+      throw new Fail(unanswered(secondsOf(answer.after)));
     case "answered":
       return answer.value;
     default:

@@ -64,6 +64,7 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { machineId } from "@cawco/core/machine-id";
 import { octokitAnswer } from "@cawco/core/octokit-answer";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
@@ -563,7 +564,7 @@ export const createRelay = ({
 
   /** "GitHub did not answer within N s". */
   const githubSilent = (after: number): string =>
-    `GitHub did not answer within ${Math.round(after / 1000)} s`;
+    `GitHub did not answer within ${secondsOf(after)} s`;
 
   /** What GitHub said with a refusal, ": <message>", or nothing. */
   const saidBy = (data: unknown): string => {

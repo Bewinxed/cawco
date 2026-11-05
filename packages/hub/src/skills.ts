@@ -21,6 +21,7 @@ import { hashFiles } from "@cawco/core/file-hash";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { $ } from "bun";
 import { skillMdName } from "./fleet-versions";
@@ -323,7 +324,7 @@ export const get = async (url: string): Promise<Response> => {
       return asked.value;
     case "unanswered":
       throw new Error(
-        `${url} did not answer within ${Math.round(asked.after / 1000)} s`
+        `${url} did not answer within ${secondsOf(asked.after)} s`
       );
     default:
       unhandled("read", asked);
@@ -419,7 +420,7 @@ export const downloadRepo = async (
         break;
       case "unanswered":
         throw new Error(
-          `git ${step} for ${slug} did not finish within ${Math.round(ran.after / 1000)} s`
+          `git ${step} for ${slug} did not finish within ${secondsOf(ran.after)} s`
         );
       default:
         unhandled("read", ran);

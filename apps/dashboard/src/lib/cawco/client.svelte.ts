@@ -138,7 +138,7 @@ import type {
   RelayTry,
 } from "@cawco/core/stream-relay";
 import type { TailnetHttps } from "@cawco/core/tailnet-https";
-import { HOUR_MS } from "@cawco/core/time";
+import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import type {
   ToolGlance,
   TranscriptBlock,
@@ -6053,7 +6053,7 @@ async function waitForHub(timeoutMs = 5000): Promise<void> {
       return;
     case "unanswered":
       throw new Error(
-        `Could not reach the hub within ${Math.round(opened.after / 1000)} s. Check that it is running, then try again.`
+        `Could not reach the hub within ${secondsOf(opened.after)} s. Check that it is running, then try again.`
       );
     default:
       unhandled("read", opened);
@@ -7787,7 +7787,7 @@ function harnessDidntAnswer(
   return catalogWords.harnessDidntAnswer(
     accountsWords.harnesses[harness] ?? harness,
     machineName(machineId),
-    Math.round(after / 1000)
+    secondsOf(after)
   );
 }
 

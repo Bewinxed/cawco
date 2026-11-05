@@ -32,6 +32,7 @@ import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { canonicalJson } from "@cawco/core/canonical-json";
 import { writeStateFile } from "@cawco/core/state-file";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { delegationHubUrl } from "../delegation";
 
@@ -141,7 +142,7 @@ class OpencodeModels {
         break;
       case "unanswered":
         // The held copy stays: the caller says this read failed and keeps it.
-        throw new Error(`no answer within ${Math.round(read.after / 1000)} s`);
+        throw new Error(`no answer within ${secondsOf(read.after)} s`);
       default:
         unhandled("read", read);
     }

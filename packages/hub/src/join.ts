@@ -54,6 +54,7 @@ import { reachableLinks } from "@cawco/core/reachable-links";
 import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
 import { runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { Elysia, t } from "elysia";
@@ -87,7 +88,7 @@ const output = async (
       return ran.value;
     case "unanswered":
       console.warn(
-        `[join] ${argv.join(" ")} did not answer within ${Math.round(ran.after / 1000)} s; what it would answer is not had`
+        `[join] ${argv.join(" ")} did not answer within ${secondsOf(ran.after)} s; what it would answer is not had`
       );
       return;
     default:

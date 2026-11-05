@@ -10,6 +10,7 @@
 import type { FleetMarketplace, SourceFacts } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { hashFiles } from "@cawco/core/file-hash";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { Octokit } from "@octokit/rest";
 import {
@@ -103,7 +104,7 @@ const read = (url: string): Promise<Bounded<unknown>> =>
 
 /** The words for a read the registry did not answer in time. */
 const unanswered = (after: number): string =>
-  `the registry didn't answer within ${Math.round(after / 1000)} s`;
+  `the registry didn't answer within ${secondsOf(after)} s`;
 
 const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);

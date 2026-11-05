@@ -15,6 +15,7 @@
  */
 import { type SlashCommand, type ToolSpec, toolSpec } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { OpenCode, type OpenCodeClient } from "@opencode/client";
 import { toolBinary } from "../tools";
@@ -28,7 +29,7 @@ export type Unanswered = Extract<Bounded<unknown>, { kind: "unanswered" }>;
 export const notAnswered = (what: string, unanswered: Unanswered): string =>
   unanswered.reason === "dead"
     ? `OpenCode ended before it answered ${what}.`
-    : `OpenCode did not answer ${what} within ${Math.round(unanswered.after / 1000)} s.`;
+    : `OpenCode did not answer ${what} within ${secondsOf(unanswered.after)} s.`;
 
 /** A read's answer; one not answered is said to the caller as its own error ({@link notAnswered}), never a value. */
 export const answerOf = <T>(read: Bounded<T>, what: string): T => {

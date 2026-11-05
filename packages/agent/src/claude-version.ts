@@ -9,6 +9,7 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { claudeVersionPath } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { secondsOf } from "@cawco/core/time";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
 import { toolWords } from "@cawco/core/words/tools";
 import type { Subprocess } from "bun";
@@ -247,7 +248,7 @@ export const versionRefusal = (
   switch (version.kind) {
     case "unanswered":
       return harnessRefusedWords.claudeVersionUnsaid(
-        Math.round(version.after / 1000),
+        secondsOf(version.after),
         CLAUDE_VERSION_FLOOR
       );
     case "answered":

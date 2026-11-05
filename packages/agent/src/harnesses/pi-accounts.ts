@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { configurePage, mcpGatewayPort } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { accountCredentialPath, credentialAccountIds } from "@cawco/core/paths";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import type {
   AuthOperationOptions,
@@ -103,7 +104,7 @@ const askFresh = async (accountId: string): Promise<void> => {
       return;
     case "unanswered":
       throw new Error(
-        `The agent did not answer the refresh of the account's sign-in within ${Math.round(asked.after / 1000)} s.`
+        `The agent did not answer the refresh of the account's sign-in within ${secondsOf(asked.after)} s.`
       );
     default:
       unhandled("read", asked);

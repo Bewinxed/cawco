@@ -72,7 +72,7 @@ import {
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
-import { HOUR_MS } from "@cawco/core/time";
+import { HOUR_MS, secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { areaWords } from "@cawco/core/words/areas";
 import { LinearClient } from "@linear/sdk";
@@ -515,9 +515,7 @@ const postToGitHub = async <T>(
     return (await answer.json()) as T;
   });
   if (read.kind === "unanswered") {
-    throw new Error(
-      `GitHub did not answer within ${Math.round(read.after / 1000)} s`
-    );
+    throw new Error(`GitHub did not answer within ${secondsOf(read.after)} s`);
   }
   return read.value;
 };
@@ -1367,7 +1365,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
   /** "<name> did not answer within N s": a use of a connection that was not answered. */
   const unanswered = (r: ConnectionRow, after: number): ConnectionProblem =>
     new ConnectionProblem(
-      `${r.name} did not answer within ${Math.round(after / 1000)} s.`
+      `${r.name} did not answer within ${secondsOf(after)} s.`
     );
 
   /**

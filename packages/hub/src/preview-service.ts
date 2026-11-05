@@ -9,6 +9,7 @@ import {
   sourceMachine,
   type Upstream,
 } from "@cawco/core/preview-upstream";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import type { ArtifactRow, ArtifactServed, SourceMoved } from "./db/artifacts";
 import { originOfKey } from "./db/previews";
@@ -211,7 +212,7 @@ export function createPreviewService(deps: PreviewServiceDeps) {
         return {
           ok: false,
           down: "machine",
-          error: `Machine did not answer within ${Math.round(asked.after / 1000)} s`,
+          error: `Machine did not answer within ${secondsOf(asked.after)} s`,
         };
       case "answered":
         break;

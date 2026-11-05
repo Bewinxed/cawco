@@ -28,6 +28,7 @@ import {
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { CLAUDE_JSON_LABEL, userLayerLabel } from "@cawco/core/claude-dirs";
+import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import { landedFetch } from "./fleet-fetches";
@@ -115,7 +116,7 @@ const request = async (
       return asked.value;
     case "unanswered":
       throw new Error(
-        `${method} ${path}: the hub did not answer within ${Math.round(asked.after / 1000)} s`
+        `${method} ${path}: the hub did not answer within ${secondsOf(asked.after)} s`
       );
     default:
       unhandled("read", asked);

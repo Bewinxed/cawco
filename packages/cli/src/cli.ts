@@ -22,6 +22,7 @@ import { SERVICE_IDS } from "@cawco/core/binary-installation";
 import { hubCredentialSocket } from "@cawco/core/paths";
 import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
 import { AgentRowSchema } from "@cawco/core/stored-shapes";
+import { secondsOf } from "@cawco/core/time";
 import { z } from "zod";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
 import { OwnerApprovalError, ownerFetch } from "./owner";
@@ -443,7 +444,7 @@ const status = async (args: Args): Promise<number> => {
   switch (asked.kind) {
     case "unanswered":
       console.error(
-        `\ncawco: ${hub.httpUrl} did not answer /api/agents within ${Math.round(asked.after / 1000)}s`
+        `\ncawco: ${hub.httpUrl} did not answer /api/agents within ${secondsOf(asked.after)}s`
       );
       return 1;
     case "answered":
