@@ -8,11 +8,15 @@
    * Cards are carried between columns (drag/DragProvider): picked up, the
    * card itself lifts under the hand; over a column it may go to, its place
    * opens there where the hub's order will put it (the column's cards make
-   * room), and the columns it may not go to step back and take nothing. Let
-   * go in another column, the move is asked of the hub, which has the last
-   * word: the card stands there, moving, until it answers, and a refusal
-   * puts it back with the hub's sentence (the page owns that). Escape puts
-   * it back at once. Tasks
+   * room), and the columns it may not go to step back and take nothing.
+   * Over another card of the column it stands in, it takes that card's
+   * place, the others making room, so a column's order is the person's too:
+   * up and down with the keys as with the hand. Let go in another column,
+   * the move is asked of the hub, which has the last word: the card stands
+   * there, moving, until it answers, and a refusal puts it back with the
+   * hub's sentence (the page owns that), the card brought into view. Let go
+   * at a place of its own, the ranks that keep it there go with it
+   * (rank.ts). Escape puts it back at once. Tasks
    * whose stage the project does not name stand in a last column, so a stage
    * renamed in stages.md never hides one.
    *
@@ -28,6 +32,7 @@
    * hub's echo redraws the board.
    */
   import { bringIntoStrip, bringIntoView } from "@cawco/core/bring-into-view";
+  import { byRank } from "@cawco/core/task-views";
   import type { StageKind } from "@cawco/core/views";
   import { tick } from "svelte";
   import DragProvider, {
@@ -41,6 +46,7 @@
   } from "#lib/cawco/project-tasks.js";
   import { IconArchive } from "#lib/icons.js";
   import NewTaskForm from "./NewTaskForm.svelte";
+  import { type RankWrite, ranksFor } from "./rank";
   import TaskColumn from "./TaskColumn.svelte";
 
   let {
@@ -53,6 +59,7 @@
     dateOf = () => null,
     onopen,
     onmove,
+    onrank,
     oncreate,
     moving,
     refused,
@@ -76,8 +83,14 @@
     /** The date a task's file sets it for, said short; null without one. */
     dateOf?: (id: string) => string | null;
     onopen: (id: string) => void;
-    /** A card let go in another column: the drop has already flown it to its place there. */
-    onmove: (taskId: string, stage: string) => void;
+    /**
+     * A card let go in another column: the drop has already flown it to its
+     * place there. `ranks` keep it at the place it was let go, empty where
+     * that is the place the hub's order gives it.
+     */
+    onmove: (taskId: string, stage: string, ranks: RankWrite[]) => void;
+    /** Card `taskId` let go at a new place in its own column: the ranks that keep it there. */
+    onrank?: (taskId: string, ranks: RankWrite[]) => void;
     /** Adds a task; answers its id, so its card is brought into view. */
     oncreate: (title: string, stage: string) => Promise<string>;
     /** A card whose move the hub has not answered yet. */
@@ -140,28 +153,60 @@
   });
   $effect(() => () => clearTimeout(unmark));
   /**
-   * The card in the air: the stage it left, and the stage whose column holds
-   * its place now (where it is let go).
+   * A move the hub refused puts the card back where it was, its sentence
+   * under it: that column may stand out of the board's view (Other stages,
+   * at its far end), so the card is brought into view with it.
    */
-  let carried = $state<{ id: string; from: string; to: string } | null>(null);
-  /** The tasks as the board draws them: the card in the air in the column it is over. */
-  const drawn = $derived(
-    carried === null
-      ? tasks
-      : tasks.map((task) =>
-          task.id === carried?.id ? { ...task, stage: carried.to } : task
-        )
-  );
+  let told = new Set<string>();
+  $effect(() => {
+    const now = new Set(
+      tasks.filter((task) => refused?.(task.id)).map((task) => task.id)
+    );
+    for (const id of now) {
+      if (!told.has(id)) {
+        tick().then(() => reveal(id));
+      }
+    }
+    told = now;
+  });
+  /**
+   * The card in the air: the stage it left, the stage whose column holds its
+   * place now (where it is let go), and its place there: null where the
+   * hub's order puts it, a number where the person put it.
+   */
+  let carried = $state<{
+    id: string;
+    from: string;
+    to: string;
+    at: number | null;
+  } | null>(null);
+  /** The column a stage's cards stand in: its own, or Other stages. */
+  const columnOf = (stage: string): string => (named.has(stage) ? stage : "");
+  /** The columns as the board draws them: the card in the air at its place in the column it is over. */
   const byStage = $derived.by(() => {
     const columns = new Map<string, TaskSummary[]>();
-    for (const task of drawn) {
-      const key = named.has(task.stage) ? task.stage : "";
+    const lift = carried;
+    let held: TaskSummary | null = null;
+    for (const task of tasks) {
+      if (task.id === lift?.id) {
+        held = { ...task, stage: lift.to };
+        continue;
+      }
+      const key = columnOf(task.stage);
       const column = columns.get(key);
       if (column) {
         column.push(task);
       } else {
         columns.set(key, [task]);
       }
+    }
+    if (lift && held) {
+      const key = columnOf(lift.to);
+      const column = columns.get(key) ?? [];
+      const card = held;
+      const natural = column.findIndex((one) => byRank(card, one) < 0);
+      const at = lift.at ?? (natural === -1 ? column.length : natural);
+      columns.set(key, column.toSpliced(Math.min(at, column.length), 0, card));
     }
     return columns;
   });
@@ -247,26 +292,51 @@
     <DragProvider
       onDragEnd={(event) => {
         const was = carried;
+        const column = was ? (byStage.get(columnOf(was.to)) ?? []) : [];
         carried = null;
-        if (was && !event.canceled && was.to !== was.from) {
-          onmove(was.id, was.to);
+        if (!was || event.canceled) {
+          return;
+        }
+        // Where the person put it, kept: unless that is where the hub's
+        // order puts it anyway.
+        const placed = column.map((task) => task.id);
+        const natural = column.toSorted(byRank).map((task) => task.id);
+        const ranks =
+          was.at === null || placed.indexOf(was.id) === natural.indexOf(was.id)
+            ? []
+            : ranksFor(column, was.id);
+        if (was.to !== was.from) {
+          onmove(was.id, was.to, ranks);
+        } else if (ranks.length > 0) {
+          onrank?.(was.id, ranks);
         }
       }}
       onDragOver={(event) => {
-        const to = stageOf(event.operation.target);
+        const { target } = event.operation;
+        const to = stageOf(target);
         if (
-          carried &&
-          to !== null &&
-          to !== carried.to &&
-          (to === carried.from || open?.has(to))
+          !carried ||
+          to === null ||
+          !(to === carried.from || open?.has(to))
         ) {
-          carried = { ...carried, to };
+          return;
+        }
+        if (columnOf(to) !== columnOf(carried.to)) {
+          // Into another column: where the hub's order puts it there.
+          carried = { ...carried, to, at: null };
+          return;
+        }
+        // Over another card of its column: it takes that card's place.
+        const ids = (byStage.get(columnOf(to)) ?? []).map((task) => task.id);
+        const at = target ? ids.indexOf(String(target.id)) : -1;
+        if (at >= 0 && String(target?.id) !== carried.id) {
+          carried = { ...carried, to, at };
         }
       }}
       onDragStart={(event) => {
         const id = String(event.operation.source?.id ?? "");
         const from = tasks.find((task) => task.id === id)?.stage;
-        carried = from === undefined ? null : { id, from, to: from };
+        carried = from === undefined ? null : { id, from, to: from, at: null };
       }}
     >
       {#each stages as stage (stage.name)}

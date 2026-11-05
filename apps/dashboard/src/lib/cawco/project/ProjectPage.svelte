@@ -37,6 +37,7 @@
    * of the folder (FolderFile) opens the same way, in the task's place: one
    * stands beside the view at a time.
    */
+  import { byRank } from "@cawco/core/task-views";
   import type { ProjectView, StageKind } from "@cawco/core/views";
   import { blocksWords } from "@cawco/core/words/blocks";
   import { commonWords } from "@cawco/core/words/common";
@@ -121,6 +122,7 @@
   import BulkBar, { type BulkRun } from "#lib/cawco/tasks/BulkBar.svelte";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
   import { setTaskProject, waitsOnYou } from "#lib/cawco/tasks/needs.svelte.js";
+  import type { RankWrite } from "#lib/cawco/tasks/rank.js";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
   import TaskFilterPopover from "#lib/cawco/tasks/TaskFilterPopover.svelte";
   import TaskPane from "#lib/cawco/tasks/TaskPane.svelte";
@@ -1027,26 +1029,74 @@
    * column with the hub's sentence (which names the moves that are open)
    * under it, and Try again makes the same move.
    */
-  let refusedMoves = $state<Record<string, { reason: string; stage: string }>>(
-    {}
-  );
-
-  function drop(id: string, stage: string) {
+  let refusedMoves = $state<
+    Record<string, { reason: string; again: () => void }>
+  >({});
+  /** A refusal said under the card `id`, Try again making the same change. */
+  const refuse = (id: string, error: unknown, again: () => void) => {
+    refusedMoves = { ...refusedMoves, [id]: { reason: message(error), again } };
+  };
+  const unrefuse = (id: string) => {
     const { [id]: _, ...rest } = refusedMoves;
     refusedMoves = rest;
-    move(id, stage).catch((error: unknown) => {
-      refusedMoves = {
-        ...refusedMoves,
-        [id]: { reason: message(error), stage },
-      };
-    });
-  }
-  const refusedMove = (id: string) => {
-    const refused = refusedMoves[id];
-    return refused
-      ? { reason: refused.reason, again: () => drop(id, refused.stage) }
-      : null;
   };
+
+  /**
+   * The list takes `ranks` at once, sorted as the hub sorts (core
+   * `byRank`), so a card let go at a place of its own stays there while
+   * the hub writes them.
+   */
+  function holdRanks(ranks: RankWrite[]) {
+    if (!list || ranks.length === 0) {
+      return;
+    }
+    const rankOf = new Map(ranks.map((one) => [one.id, one.rank]));
+    list = {
+      ...list,
+      tasks: list.tasks
+        .map((task) =>
+          rankOf.has(task.id)
+            ? { ...task, rank: rankOf.get(task.id) ?? null }
+            : task
+        )
+        .toSorted(byRank),
+    };
+  }
+
+  /** The hub writes `ranks`; a refusal puts the column back as the hub has it, its sentence under card `id`. */
+  async function writeRanks(id: string, ranks: RankWrite[]): Promise<void> {
+    if (ranks.length === 0) {
+      return;
+    }
+    try {
+      for (const one of ranks) {
+        await updateTask(projectId, one.id, { rank: one.rank });
+      }
+    } catch (error) {
+      refuse(id, error, () => rerank(id, ranks));
+    } finally {
+      detach(refresh(), "refresh");
+    }
+  }
+
+  /** A card let go in another column, and the ranks that keep it where it was put (tasks/rank.ts). */
+  function drop(id: string, stage: string, ranks: RankWrite[] = []) {
+    unrefuse(id);
+    holdRanks(ranks);
+    move(id, stage)
+      .then(() => writeRanks(id, ranks))
+      .catch((error: unknown) => {
+        refuse(id, error, () => drop(id, stage, ranks));
+      });
+  }
+
+  /** A card let go at a place of its own in its own column. */
+  function rerank(id: string, ranks: RankWrite[]) {
+    unrefuse(id);
+    holdRanks(ranks);
+    detach(writeRanks(id, ranks), "rank");
+  }
+  const refusedMove = (id: string) => refusedMoves[id] ?? null;
 
   async function create(title: string, stage: string): Promise<string> {
     const task = await createTask(projectId, { title, stage });
@@ -1972,6 +2022,7 @@
     onopen={openOne}
     onpick={pick}
     picked={isPicked}
+    onrank={rerank}
     refused={refusedMove}
     stages={shownStages}
     tasks={shownTasks}

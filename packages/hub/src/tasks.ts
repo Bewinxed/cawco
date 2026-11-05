@@ -111,6 +111,7 @@ import type {
   TaskWait,
   WaitState,
 } from "@cawco/core/task-views";
+import { byRank } from "@cawco/core/task-views";
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
 import type { Tracker, WorkBudget } from "./db/schema";
@@ -1284,17 +1285,6 @@ const holders = (
     ...(waiting.length > 0 ? [`${named(waiting, "waits", "wait")} on it`] : []),
     ...(parts.length > 0 ? [`${named(parts, "is", "are")} part of it`] : []),
   ].join(", and ");
-
-/** A list's sort: ranked tasks by rank, then the rest by number. */
-const byRank = (a: TaskSummary, b: TaskSummary): number => {
-  if (a.rank !== null && b.rank !== null && a.rank !== b.rank) {
-    return a.rank < b.rank ? -1 : 1;
-  }
-  if ((a.rank === null) !== (b.rank === null)) {
-    return a.rank === null ? 1 : -1;
-  }
-  return a.number - b.number || (a.path < b.path ? -1 : 1);
-};
 
 /** What an edge's commit message says it did. */
 const EDGE_PHRASE: Record<TaskEdge, string> = {
