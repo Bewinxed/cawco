@@ -20,11 +20,8 @@
     type BlockedRequest,
     submitCommand,
   } from "#lib/cawco/client.svelte.js";
-  import type {
-    SetupDelegate,
-    Stage,
-  } from "#lib/cawco/decisions/host/setup/stage.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import type { SetupDelegate, Stage } from "#lib/cawco/project/setup-stage.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import Prompt from "#lib/cawco/transcript/Prompt.svelte";
   import { buttonVariants } from "#lib/components/ui/button/index.js";

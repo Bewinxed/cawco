@@ -183,7 +183,7 @@ import {
   folderFileNames,
   folderPath,
 } from "../project-folder";
-import type { SentPage } from "../setup";
+import { isSetupPage, type SentPage } from "../setup";
 import {
   canvasEntries,
   clearDrawing,
@@ -874,11 +874,19 @@ export interface Created {
  * mounted the pane and loaded the page, and said so ({@link Artifacts.shown})
  * within {@link SHOWN_WAIT_MS}; else why not, in one sentence.
  */
-export type Opened = { opened: true } | { opened: false; why: string };
+export type Opened =
+  | { opened: true }
+  | {
+      opened: false;
+      why: string;
+      /** A project's setup page: the project whose board draws it, where a person's show takes them ({@link onBoard}). */
+      board?: string;
+    };
 
 /** What `artifact_show` answers: {@link Opened}, with the artifact's link, `[name](cawco:artifact/<id>)`, which the agent names it by and its tool row draws. */
 export type Shown =
-  { link: string; opened: true } | { link: string; opened: false; why: string };
+  | { link: string; opened: true }
+  | { board?: string; link: string; opened: false; why: string };
 
 /**
  * What `artifact_browse` answers: the address the session's own browser
@@ -902,6 +910,18 @@ const NOT_PUT_ON_SCREEN = `A dashboard is showing this session, but none put the
 
 /** Why a `to: "parent"` create opened nothing: the parent opens it. */
 const HELD = artifactToolWords.handedToParent;
+
+/** Why a project's setup page opened nothing: its project's board draws it ({@link boardOf}). */
+const ON_BOARD = artifactToolWords.onBoard;
+
+/**
+ * The project whose board draws artifact `row`, or null: a project's setup
+ * page (setup.ts `isSetupPage`) is drawn as its board on the project's page
+ * (decision page `onboarding-first-minutes`, card `draft-where`), the one
+ * editor of the draft, and never in a session's panel, by any show.
+ */
+export const boardOf = (row: ArtifactRow): string | null =>
+  row.projectId !== null && isSetupPage(row) ? row.projectId : null;
 
 /** Why a maker's change opened nothing: the parent had opened the artifact, so the change waits as its next version ({@link holdNext}). */
 const HELD_NEXT = artifactToolWords.heldAsNext;
@@ -2604,12 +2624,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * The session's newest artifact the panel can show: a draft canvas still
    * in the composer is not one, nor one a delegate handed up that the
    * session hasn't shown ({@link isHanded}): that is its parent's to put in
-   * front of the person, never the panel's by itself.
+   * front of the person, never the panel's by itself; nor a project's setup
+   * page, which its board draws ({@link boardOf}).
    */
   const nextNewest = (instance: InstanceRow): ArtifactRow | undefined =>
     db.ofInstance(instance.id).find((other) => {
       const meta = docs.doc(other.id).getMap("meta");
-      return meta.get("draft") !== true && meta.get(HANDED) !== true;
+      return (
+        meta.get("draft") !== true &&
+        meta.get(HANDED) !== true &&
+        boardOf(other) === null
+      );
     });
 
   /**
@@ -4216,8 +4241,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     panel = row.instanceId
   ): Promise<
     | { opened: true; started: true }
-    | { opened: false; started: boolean; why: string }
+    | { opened: false; started: boolean; why: string; board?: string }
   > => {
+    const board = boardOf(row);
+    if (board) {
+      return { opened: false, started: true, why: ON_BOARD, board };
+    }
     const published = await timedShowStep("open", row, panel, () =>
       deps.open(row, panel)
     );
@@ -4265,8 +4294,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return { opened: true, started: true };
   };
   /** A show's answer, as the tools and the panel's Show give it. */
-  const openedOf = (shown: Opened): Opened =>
-    shown.opened ? { opened: true } : { opened: false, why: shown.why };
+  const openedOf = (shown: Opened): Opened => {
+    if (shown.opened) {
+      return { opened: true };
+    }
+    return shown.board
+      ? { opened: false, why: shown.why, board: shown.board }
+      : { opened: false, why: shown.why };
+  };
 
   /*
    * A canvas (Projects spec §5.10, D24–D25). Its `deliveredSeq` is the seq

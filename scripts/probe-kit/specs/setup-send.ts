@@ -46,8 +46,20 @@
  *    head's seat still opens and closes his panel, drawn with it at every
  *    press. (Nightly 6688: the seat's `aria-expanded` changed and no panel
  *    drew at 1440, its one anchor cleared by the seat that left.)
+ * 8. A project's setup page opens in no panel, by any show (hub
+ *    artifacts/service.ts `boardOf`): Caw's `artifact_create` answers that
+ *    the board draws it; the person's show answers the project whose board
+ *    draws it; its Needs-you row leads to the project's page; and the
+ *    session's own page at 1440 (his panel's Open as tab) draws no
+ *    preview. (Nightly 6757: his panel opened as a tab showed the setup
+ *    page in Preview, its old Reminders rows with a minus and a Remove.)
+ *    Then the page at the board's "Open the setup page" link (its `place`
+ *    card), at 1440 and 390: every stage drawn as the board's column
+ *    (DraftColumn), none of the old rows nor its list of delegate types.
  */
+import { join } from "node:path";
 import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
+import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolAnswer, toolReply } from "../../tool-calls";
@@ -406,6 +418,123 @@ const run = async (kit: Kit) => {
   );
 
   await panelAtDesk(kit, fleet);
+  await setupInNoPanel(kit, fleet);
+};
+
+/** Leg 8's setup page: a Setup with a type that runs a stage, and a `place` card beside it. */
+const OFFICE = `root = Decisions("Private office", [setup, place])
+setup = Setup("Private office", "Find a private office to rent near the station and sign by March.", [inbox, scouting, drafting, call, won, dropped], [writer], "own")
+inbox = Stage("Inbox", "todo", "inbox", "cyan")
+scouting = Stage("Scouting", "active", "search", "cyan")
+drafting = Stage("Drafting", "active", "pen", "amber", {runs: "writer"}, "Runs the writer")
+call = Stage("Your call", "you")
+won = Stage("Won", "done", "done", "green")
+dropped = Stage("Dropped", "dropped")
+writer = Delegate("writer", "Writer", "Drafts enquiries to landlords in your voice.", "Claude Code · Opus")
+place = Decision("place", "Where does its work live?", [none, here], "No folder is needed to rent an office.", [], [], false, null, "behaviour")
+none = Option("none", "No folder", "Its work lives in the project.", true, [], "Nothing to clone.")
+here = Option("here", "A folder on this machine", "Its notes in a checkout.", false, [], "One more place to keep.")`;
+/** Leg 8's stages, in the board's order. */
+const OFFICE_STAGES = [
+  "Inbox",
+  "Scouting",
+  "Drafting",
+  "Your call",
+  "Won",
+  "Dropped",
+];
+/** The old setup rows' parts (decisions/host/setup's Reminders rows, gone): a row's minus, its Remove, its name field, a type's row. */
+const OLD_ROWS =
+  '[data-part="remove"], [data-part="remove-now"], [data-slot="setup-stage-name"], [data-slot="setup-delegate"]';
+
+/**
+ * Leg 8: a project's setup page made and shown, read for where it opens,
+ * then drawn at the board's link to it at 1440 and 390.
+ */
+const setupInNoPanel = async (kit: Kit, fleet: KitFleet) => {
+  const office = await projectWithSession(fleet, "Private office");
+  const made = await office.call("artifact_create", {
+    kind: "page",
+    name: "setup",
+    does: "pick",
+    ask: "Set up Private office",
+    program: OFFICE,
+  });
+  const row = await fleet.api<{ artifactId: string | null }>(
+    `/api/projects/${office.id}/decisions/setup`
+  );
+  const id = row.artifactId ?? "";
+  const shown = await fleet
+    .api<{ opened: boolean; board?: string }>(
+      `/api/instances/${office.session}/artifacts/${id}/show`,
+      {}
+    )
+    .catch((error: unknown) => ({
+      opened: false,
+      board: error instanceof Error ? error.message : String(error),
+    }));
+  const needs = await fleet.api<{
+    needs: { artifactId: string; href: string }[];
+  }>("/api/artifact-needs");
+  const rows = needs.needs.filter((one) => one.artifactId === id);
+  kit.check(
+    "8: a project's setup page opens in no panel: Caw's create answers that the board draws it, the person's show names the project's board, its Needs-you row leads to the project's page",
+    !made.refused &&
+      made.text.includes(artifactToolWords.onBoard) &&
+      shown.opened === false &&
+      shown.board === office.id &&
+      rows.every((one) => one.href === `/project/${office.id}`),
+    JSON.stringify({ made: made.text.slice(0, 300), shown, needs: rows })
+  );
+
+  // His panel opened as a tab: the session's own page draws no preview.
+  const base = await fleet.dashboard();
+  const tab = await kit.page("desk");
+  await open(tab, `${base}/session/${office.session}`, '[data-slot="pane"]');
+  await tab.waitForTimeout(3000);
+  const panes = await tab.locator('[data-slot="preview-pane"]').count();
+  kit.check(
+    "8: the setup page's session opened as a tab at 1440 draws no preview",
+    panes === 0,
+    JSON.stringify({ panes })
+  );
+
+  // The board's "Open the setup page": at its first card beyond the draft.
+  for (const view of ["desk", "phone"] as const) {
+    const page = await kit.page(view);
+    await open(
+      page,
+      `${base}/project/${office.id}?view=decisions&page=setup#place`,
+      '[data-slot="decisions"] iframe'
+    );
+    const frame = page.locator('[data-slot="decisions"] iframe').contentFrame();
+    await frame
+      .locator('[data-slot="draft-column"]')
+      .first()
+      .waitFor({ timeout: 60_000 })
+      .catch(() => undefined);
+    const columns = await frame
+      .locator('[data-slot="draft-column"]')
+      .evaluateAll((all) =>
+        all.map((one) => {
+          const name = one.querySelector("input")?.value ?? "";
+          const words = (one as HTMLElement).innerText
+            .replace(/\s+/gu, " ")
+            .trim();
+          return words ? `${name} · ${words}` : name;
+        })
+      );
+    const old = await frame.locator(OLD_ROWS).count();
+    await page.screenshot({ path: join(kit.out, `setup-page-${view}.png`) });
+    console.log(`… the setup page at ${view}: ${JSON.stringify(columns)}`);
+    kit.check(
+      `8: the setup page at ${view === "desk" ? 1440 : 390} draws every stage as the board's column, none of the old rows`,
+      columns.length === OFFICE_STAGES.length &&
+        OFFICE_STAGES.every((name, at) => columns[at]?.startsWith(name)) &&
+        old === 0,
+      JSON.stringify({ columns, old })
+    );
+  }
 };
 
 /** What leg 7 sends as the person's words. */

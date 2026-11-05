@@ -1,46 +1,31 @@
 <!--
   A project's setup (the decision library's `Setup`; the project-setup
-  skill): Caw drafts it as data and the person shapes it in place on the
-  house's own controls, so every project's page is one design. The page's
-  title is the project's name, renamed where it stands (SetupTitle, in the
-  page's head), and its Send names it ("Set up <name>", Decisions).
+  skill): Caw drafts it as data and the person shapes it in place. The
+  page's title is the project's name, renamed where it stands (SetupTitle,
+  in the page's head), and its Send names it ("Set up <name>", Decisions).
 
-  - What it is for: Caw's paragraph under the title, text at rest with no
-    box and no label, a field only while it has focus (the house Textarea's
-    `prose` look; DESIGN.md, The Caret Rule), growing a line at a time.
-  - Stages: under the house's section head, one list on one grid, each row
-    one line, as Apple's Reminders edits its lists (SetupStages).
-  - Delegate types: only when Caw proposed any; one row each on the stage
-    list's grid, its name and what runs it, its brief under it on every
-    row, and More to remove it. A stage or type removed waits under its
-    list with Add back (RemovedLine).
-
-  The groups stand on the page's ground under their heads.
+  Under the title the draft is drawn by the board's own editor
+  (DraftStages: what the project is for, then each stage as the column it
+  becomes, DraftColumn), the one editor of a setup draft (decision page
+  `onboarding-first-minutes`, card `draft-where`): the project's board
+  draws the same parts over the same picks, so the page and the board never
+  differ. The delegate types Caw proposed are who may do a stage's work,
+  picked in a stage's menu, as on the board.
 
   Every change is kept through the page's bridge (`cawco.set`, hub
-  setup.ts): `aim`, `stages`, `delegates` and, as drafted, `shape`; the
-  name is SetupTitle's. A reload or a revision draws what the hub kept.
+  setup.ts): `aim`, `stages` and, as drafted, `shape`; the name is
+  SetupTitle's. A reload or a revision draws what the hub kept.
 -->
 <script lang="ts">
-  import { setupPageWords as words } from "@cawco/core/words/onboarding";
-  import type { Snippet } from "svelte";
-  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import { iconTileVariants } from "#lib/components/ui/icon-tile/index.js";
-  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
-  import { Textarea } from "#lib/components/ui/textarea/index.js";
-  import { IconMore, IconSubagents } from "#lib/icons.js";
-  import { STAGE_GLYPHS, STAGE_HUES } from "../../tasks/stage-look";
-  import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
-  import { bridge, picks } from "./page.svelte.js";
-  import RemovedLine from "./setup/RemovedLine.svelte";
-  import SetupStages from "./setup/SetupStages.svelte";
+  import DraftStages from "../../project/DraftStages.svelte";
   import {
     draftedOf,
-    LIST_CLASS,
     type Stage,
     stageOf,
     storedStages,
-  } from "./setup/stage";
+  } from "../../project/setup-stage";
+  import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
+  import { bridge, picks } from "./page.svelte.js";
 
   let {
     props,
@@ -61,12 +46,10 @@
   // or a revision draws them as they stood; once they edit, their own.
   let aim = $state("");
   let stages = $state<Stage[]>([]);
-  let keptIds = $state<string[]>([]);
   let editing = false;
   $effect(() => {
     const keptAim = kept("aim");
     const keptStages = kept("stages");
-    const keptDelegates = kept("delegates");
     if (editing) {
       return;
     }
@@ -74,9 +57,6 @@
     stages = Array.isArray(keptStages)
       ? keptStages.map((one) => stageOf(one as Record<string, unknown>))
       : drafted.stages;
-    keptIds = Array.isArray(keptDelegates)
-      ? keptDelegates.map(String)
-      : drafted.delegates.map((one) => one.id);
   });
   // What it starts from, as drafted, kept once.
   $effect(() => {
@@ -85,160 +65,33 @@
       bridge()?.set("shape", shape);
     }
   });
+  /** The delegate types it proposes, less those the hub kept as removed (setup-draft.svelte.ts `delegates`). */
+  const delegates = $derived.by(() => {
+    const keptIds = kept("delegates");
+    return Array.isArray(keptIds)
+      ? drafted.delegates.filter((one) => keptIds.includes(one.id))
+      : drafted.delegates;
+  });
 
-  const timers: Record<string, ReturnType<typeof setTimeout>> = {};
-  /** Kept a moment after typing rests; a structural change, at once. */
-  function keep(key: string, value: unknown, now = false): void {
+  /** Kept at once, as the board keeps each change (setup-draft.svelte.ts `keep`). */
+  function keep(key: "aim" | "stages", value: unknown): void {
     editing = true;
-    clearTimeout(timers[key]);
-    const send = () => bridge()?.set(key, value);
-    if (now) {
-      send();
-    } else {
-      timers[key] = setTimeout(send, 400);
-    }
+    bridge()?.set(key, value);
   }
-  function change(next: Stage[], now = true): void {
-    stages = next;
-    keep("stages", storedStages(next), now);
-  }
-  function setDelegates(next: string[]): void {
-    keptIds = next;
-    keep("delegates", next, true);
-  }
-  const removed = $derived(
-    drafted.delegates.filter((one) => !keptIds.includes(one.id))
-  );
-  const working = $derived(
-    drafted.delegates.filter((one) => keptIds.includes(one.id))
-  );
-  /** Caw's stages the person removed, each with its place in his draft, to put back. */
-  const gone = $derived(
-    drafted.stages
-      .map((stage, at) => ({ stage, at }))
-      .filter(({ stage }) => !stages.some((one) => one.name === stage.name))
-  );
-  /** The stage that runs a type: its row wears that stage's mark. */
-  const runner = (id: string): Stage | undefined =>
-    stages.find((one) => one.hooks?.runs === id);
 </script>
 
-{#snippet aimField()}
-  <Textarea
-    aria-label={words.aim}
-    data-slot="setup-aim"
-    look="prose"
-    measure="reading"
-    oninput={(event: Event) => {
-      aim = (event.currentTarget as HTMLTextAreaElement).value;
-      keep("aim", aim.trim());
+<section class="flex min-w-0 flex-col gap-space-4" data-slot="setup">
+  <DraftStages
+    {aim}
+    {delegates}
+    onaim={(next) => {
+      aim = next;
+      keep("aim", next);
     }}
-    value={aim}
-  />
-{/snippet}
-
-{#snippet stageList()}
-  <h2 class={sectionHeadVariants()} id="setup-stages">{words.stages}</h2>
-  <SetupStages onchange={change} {stages} />
-  <RemovedLine
-    names={gone.map(({ stage, at }) => ({ key: String(at), name: stage.name }))}
-    onback={(key) => {
-      const one = gone.find(({ at }) => String(at) === key);
-      if (one) {
-        const next = [...stages];
-        next.splice(Math.min(one.at, next.length), 0, one.stage);
-        change(next);
-      }
+    onstages={(next) => {
+      stages = next;
+      keep("stages", storedStages(next));
     }}
+    {stages}
   />
-{/snippet}
-
-{#snippet delegateList()}
-  <h2 class={sectionHeadVariants()} id="setup-delegates">
-    {words.delegates}
-  </h2>
-  <!-- The stage list's grid and surface: a 26px mark, the words, one 30px
-       More; every type has a brief, so every row is two lines (`c-row-h-two`). -->
-  <!-- biome-ignore-start lint/a11y/noRedundantRoles: WebKit drops a list's semantics once its markers are styled away. -->
-  <ul
-    class="{LIST_CLASS} grid-cols-(--row-cols)"
-    role="list"
-    style:--row-cols="var(--c-mark) minmax(0, 1fr) var(--c-btn-h-sm)"
-  >
-    <!-- biome-ignore-end lint/a11y/noRedundantRoles: the list above -->
-    {#each working as one (one.id)}
-      {@const by = runner(one.id)}
-      {@const Glyph = by?.icon ? STAGE_GLYPHS[by.icon] : IconSubagents}
-      <!-- mark-line: the mark stands centred on the row's two lines, beside no single run of words. -->
-      <li
-        class="col-span-full grid min-h-c-row-h-two min-w-0 grid-cols-subgrid items-center px-space-1"
-        data-slot="setup-delegate"
-      >
-        <span
-          aria-hidden="true"
-          class={iconTileVariants({ class: "text-(--stage-hue)" })}
-          data-box
-          style:--stage-hue={by?.color
-            ? STAGE_HUES[by.color]
-            : "var(--ink-muted)"}><Glyph class="size-icon-md" /></span
-        >
-        <span class="flex min-w-0 flex-col">
-          <span class="flex min-w-0 items-baseline gap-x-space-2">
-            <span class="truncate type-label text-ink-row">{one.name}</span>
-            {#if one.runs}
-              <span class="truncate type-meta text-ink-muted">{one.runs}</span>
-            {/if}
-          </span>
-          <span class="truncate type-meta text-ink-muted">{one.brief}</span>
-        </span>
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger
-            aria-label={words.moreFor(one.name)}
-            size="icon-sm"
-            variant="ghost"
-          >
-            <IconMore />
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="end" width="regular">
-            <!-- Its whole brief, which its row cuts to one line. -->
-            <DropdownMenu.Label kind="line">{one.brief}</DropdownMenu.Label>
-            <DropdownMenu.Separator />
-            <DropdownMenu.Item
-              onSelect={() =>
-                setDelegates(keptIds.filter((id) => id !== one.id))}
-              variant="destructive"
-            >
-              <span>{words.remove(one.name)}</span>
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
-      </li>
-    {/each}
-  </ul>
-  <RemovedLine
-    names={removed.map((one) => ({ key: one.id, name: one.name }))}
-    onback={(id) => setDelegates([...keptIds, id])}
-  />
-{/snippet}
-
-{#snippet group(head: string, part: Snippet)}
-  <section aria-labelledby={head} class="flex min-w-0 flex-col gap-space-2">
-    {@render part()}
-  </section>
-{/snippet}
-
-<section class="@container flex min-w-0 flex-col gap-space-6" data-slot="setup">
-  {@render aimField()}
-  <!-- On a desk (the page's own tab, a wide panel) the stages and the
-       types they run stand side by side, their tops on one line; narrower,
-       the types follow the stages. -->
-  <div
-    class="grid min-w-0 items-start gap-space-6 @desk:grid-cols-(--setup-cols)"
-    style:--setup-cols="minmax(0, 3fr) minmax(0, 2fr)"
-  >
-    {@render group("setup-stages", stageList)}
-    {#if drafted.delegates.length > 0}
-      {@render group("setup-delegates", delegateList)}
-    {/if}
-  </div>
 </section>

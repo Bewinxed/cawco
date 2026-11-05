@@ -15,12 +15,9 @@
   import type { StageKind } from "@cawco/core/views";
   import { setupPageWords, setupWords } from "@cawco/core/words/onboarding";
   import { tick } from "svelte";
-  import StageKindItems from "#lib/cawco/decisions/host/setup/StageKindItems.svelte";
-  import StageLookItems from "#lib/cawco/decisions/host/setup/StageLookItems.svelte";
-  import type {
-    SetupDelegate,
-    Stage,
-  } from "#lib/cawco/decisions/host/setup/stage.js";
+  import StageKindItems from "#lib/cawco/project/StageKindItems.svelte";
+  import StageLookItems from "#lib/cawco/project/StageLookItems.svelte";
+  import type { SetupDelegate, Stage } from "#lib/cawco/project/setup-stage.js";
   import { markOf } from "#lib/cawco/tasks/stage-look.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Input } from "#lib/components/ui/input/index.js";

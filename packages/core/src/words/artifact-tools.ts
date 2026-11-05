@@ -18,6 +18,9 @@ export const artifactToolWords = {
   /** A `to: "parent"` create opened nothing: the parent opens it. */
   handedToParent:
     "Handed to your parent, not opened: it opens in their panel when they call artifact_show.",
+  /** A project's setup page shown or made (hub artifacts/service.ts `boardOf`): the project's board draws it, and no panel opens it. */
+  onBoard:
+    "Drawn as the project's board, on its page, where the person reads and changes it as you write it; a setup page never opens in a panel.",
   /** A maker's change while the parent has it open. */
   heldAsNext:
     "Your parent opened it, so this change waits as its next version: their panel keeps the version they opened until they call artifact_show, and decision pages, artifact_read and artifact_browse have this one now.",

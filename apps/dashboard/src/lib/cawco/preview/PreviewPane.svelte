@@ -203,7 +203,6 @@
   import { paneFleet } from "./pane-fleet";
   import { enterPreviews, turnedAwayWords } from "./pass";
   import SheetInspector from "./SheetInspector.svelte";
-  import { isSetupPage } from "./setup-page";
   import { SheetInspector as Inspector } from "./sheet-inspector.svelte";
   import ThreadSheet from "./ThreadSheet.svelte";
   import {
@@ -1775,25 +1774,6 @@
       throw new Error(why);
     }
   }
-  let sentSeen: string | null | undefined;
-  $effect(() => {
-    if (!view) {
-      sentSeen = undefined;
-      return;
-    }
-    const at = view.sentAt;
-    const was = sentSeen;
-    sentSeen = at;
-    if (
-      was !== undefined &&
-      at &&
-      at !== was &&
-      sheet &&
-      isSetupPage(artifact, owner?.projectId)
-    ) {
-      untrack(close);
-    }
-  });
   /** A page's `cawco.pickPlace()` waiting on the person: the request it answers. */
   let picking = $state<{ id: number | string } | null>(null);
   /** The place picked goes back to the page, which keeps it in its state. */

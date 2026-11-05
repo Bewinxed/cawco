@@ -29898,6 +29898,9 @@
           {
             "type": "object",
             "properties": {
+              "board": {
+                "type": "string"
+              },
               "link": {
                 "type": "string"
               },

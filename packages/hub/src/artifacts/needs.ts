@@ -62,6 +62,7 @@ import {
 } from "@cawco/core";
 import { unhandled } from "@cawco/core/unhandled";
 import type { ArtifactRow } from "../db/artifacts";
+import { isSetupPage } from "../setup";
 
 /**
  * The artifact's latest ask, kept in its doc (`meta.asked`): the session
@@ -243,9 +244,15 @@ const stopOf = (
   }
 };
 
-/** Where its item opens: the session that holds it. */
-const viewOf = (row: ArtifactRow, _facts: ArtifactFacts): string =>
-  row.instanceId as string;
+/**
+ * Where its item opens: the session that holds it, at `stop`; a project's
+ * setup page, the project's page, whose board draws it and where no panel
+ * opens it (service `boardOf`).
+ */
+const hrefOf = (row: ArtifactRow, stop: ArtifactStop): string =>
+  row.projectId !== null && isSetupPage(row)
+    ? `/project/${encodeURIComponent(row.projectId)}`
+    : artifactStopHref(row.instanceId as string, row.id, stop);
 
 /** Its pending state as its own list reads it (Files, the panel's menu): null when it asks nothing now. */
 export const pendingOf = (
@@ -287,7 +294,7 @@ export const needOf = (
     pending,
     raisedAt,
     stop,
-    href: artifactStopHref(viewOf(row, facts), row.id, stop),
+    href: hrefOf(row, stop),
     notNow: notNowId(row.id, raisedAt),
     parked: false,
     unsent: facts.unsent,
@@ -366,9 +373,6 @@ export const noticeOf = (
     at,
     parts,
     stop,
-    href:
-      row.instanceId === null
-        ? null
-        : artifactStopHref(viewOf(row, facts), row.id, stop),
+    href: row.instanceId === null ? null : hrefOf(row, stop),
   };
 };

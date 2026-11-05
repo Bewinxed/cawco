@@ -25,7 +25,6 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { mcpServerHost } from "#lib/cawco/mcp.js";
   import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
-  import { isSetupPage } from "#lib/cawco/preview/setup-page.js";
   import {
     type CalledArtifact,
     calledArtifact,
@@ -54,7 +53,6 @@
     IconWindow,
   } from "#lib/icons.js";
   import { browser } from "$app/env";
-  import { goto } from "$app/navigation";
   /**
    * A run of tool calls as rail-led rows — never a nested card. The rail is a
    * 2px stripe; each row is a glyph, the verb, a mono argument, and whatever the
@@ -334,21 +332,6 @@
   const openFailed = new SvelteMap<string, string>();
 
   async function openArtifact(m: Message, artifact: CalledArtifact) {
-    // A project's setup page is drawn as the board it becomes, on the
-    // project's page (decision page `onboarding-first-minutes`, card
-    // `draft-where`): its card opens the board, never a second copy in
-    // his Preview.
-    const projectId = cawco.instanceIndex.byId.get(m.instanceId)?.projectId;
-    if (
-      projectId &&
-      isSetupPage(
-        { kind: artifact.kind ?? "page", name: artifact.name ?? "" },
-        projectId
-      )
-    ) {
-      await goto(`/project/${encodeURIComponent(projectId)}`);
-      return;
-    }
     const key = callId(m);
     opening.add(key);
     openFailed.delete(key);

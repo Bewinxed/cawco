@@ -370,14 +370,6 @@ const CONTAINERS = {
   // of "1/1 machines", the switch and the ⋯ at space-4 apart, 195px) leave
   // the name 3rem (48px). Narrower, the controls take a line of their own.
   "section-row": "312px",
-  // A setup page's stage list (decisions/host/setup, the Reminders drawing)
-  // holds a stage's kind beside its name from here: the list's and the
-  // row's insets (4 × space-1), the remove, mark, kind (101.7px, "Needs
-  // you" with its glyph) and handle columns and their four space-2 gaps
-  // (232px) leave the name 7rem (112px), "Waiting on reply" in the label
-  // role with its field's pads (a phone's 16px floor has 14px more: its
-  // page pads 14px, not 21). Narrower, the kind stands under the name.
-  "setup-stages-line": "344px",
   // A connect record row that lapsed (transcript/ConnectRow.svelte) keeps
   // Reconnect's word from here: the glyph (icon-md, 16px), "Connected to
   // Linear as bewinxed" (195px), "· signed out" (68px) and Reconnect (97px)

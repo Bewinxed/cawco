@@ -1,7 +1,6 @@
 <!--
   A stage's kind, as radio items of the house menu it stands in: the six
-  kinds the board knows (core STAGE_KINDS), in words; then what its hooks
-  do, in words, where it has any ("Runs the researcher").
+  kinds the board knows (core STAGE_KINDS), in words.
 -->
 <script lang="ts">
   import type { StageKind } from "@cawco/core/views";
@@ -11,11 +10,9 @@
 
   let {
     kind,
-    line,
     onkind,
   }: {
     kind: StageKind;
-    line?: string;
     onkind: (next: StageKind) => void;
   } = $props();
 </script>
@@ -35,7 +32,3 @@
     </DropdownMenu.RadioItem>
   {/each}
 </DropdownMenu.RadioGroup>
-{#if line}
-  <DropdownMenu.Separator />
-  <DropdownMenu.Label kind="line">{line}</DropdownMenu.Label>
-{/if}

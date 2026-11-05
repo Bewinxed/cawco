@@ -47,7 +47,6 @@
   import { rowHref } from "#lib/cawco/links.js";
   import { crossIn } from "#lib/cawco/motion/curves.svelte.js";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
-  import { isSetupPage } from "#lib/cawco/preview/setup-page.js";
   import {
     type ProjectStarter,
     readStages,
@@ -161,16 +160,12 @@
 
   /**
    * The conversation on show has something to show: Preview stands beside
-   * Assistant. The project's setup page is never his to show: its draft is
-   * the board (decision page `onboarding-first-minutes`, card
-   * `draft-where`), drawn there from the page as he writes it.
+   * Assistant. (A project's setup page is never in it: the hub opens it in
+   * no panel, its board draws it; hub artifacts/service.ts `boardOf`.)
    */
-  const previewOpen = $derived.by(() => {
-    const preview = shown ? cawco.previews[shown] : undefined;
-    return (
-      preview?.state === "open" && !isSetupPage(preview.artifact, projectId)
-    );
-  });
+  const previewOpen = $derived(
+    shown !== null && cawco.previews[shown]?.state === "open"
+  );
   // Caw showing something brings it to the front, as a session's split does
   // (SideSplit); with nothing left to show the panel is his conversation.
   let previewWas = untrack(() => previewOpen);

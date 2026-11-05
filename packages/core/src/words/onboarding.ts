@@ -169,7 +169,6 @@ export const setupPageWords = {
   name: "Project name",
   /** The description's field, for a screen reader: under the title it needs no label. */
   aim: "What it's for",
-  stages: "Stages",
   stageName: (at: number) => `Stage ${at} name`,
   addStage: "Add a stage",
   newStage: "New stage",
@@ -181,18 +180,7 @@ export const setupPageWords = {
     done: "Done",
     dropped: "Dropped",
   } satisfies Record<StageKind, string>,
-  kindOf: (name: string) => `Kind of ${name}`,
-  /** The kind menu's head over the kinds. */
-  kind: "What the board does with it",
-  /** A stage's reorder handle, for a screen reader: where it stands, as the house order list says it. */
-  place: (name: string, at: number, of: number) =>
-    `Move ${name}, ${at} of ${of}`,
-  draggable: "draggable",
-  /** A stage's remove button, and the button it turns into that removes it (Reminders' minus, then Delete). */
-  removeAsk: (name: string) => `Remove ${name}…`,
-  removeNow: "Remove",
-  /** The Notion list's rename item, and its kind submenu. */
-  rename: "Rename",
+  /** A stage's menu: its kind, a level in place. */
   kindItem: "Kind",
   /** A stage's menu: who does its work, a level in place. */
   worker: "Who does it",
@@ -204,9 +192,6 @@ export const setupPageWords = {
   back: "Back",
   /** Under the kinds, on a stage that needs you: why it has no look of its own. */
   youMark: "A stage that needs you keeps the Needs-you mark.",
-  /** A kind's head's add button (Notion's + on a group). */
-  addTo: (kind: string) => `Add a stage to ${kind}`,
-  lookOf: (name: string) => `Look of ${name}`,
   glyph: "Glyph",
   color: "Colour",
   noColor: "No colour",
@@ -214,9 +199,6 @@ export const setupPageWords = {
   earlier: "Move earlier",
   later: "Move later",
   remove: (name: string) => `Remove ${name}`,
-  delegates: "Delegate types",
-  removed: "Removed",
-  addBack: "Add back",
   /** The page's Send: what it does, to the project by name. */
   send: (name: string) => `Set up ${name}`,
   /** Set up on its way. */

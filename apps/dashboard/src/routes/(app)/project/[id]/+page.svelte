@@ -118,6 +118,7 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { refusals } from "#lib/cawco/refusals.svelte.js";
   import Split from "#lib/cawco/side/Split.svelte";
+  import { store, stored } from "#lib/cawco/storage.js";
   import BulkBar, { type BulkRun } from "#lib/cawco/tasks/BulkBar.svelte";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
   import { setTaskProject, waitsOnYou } from "#lib/cawco/tasks/needs.svelte.js";
@@ -1570,6 +1571,41 @@
   const asksElsewhere = (request: PendingPermission): boolean =>
     asksOnBoard && isQuestion(request);
   /**
+   * The setup page Caw has stood at rest over, by its artifact: the draft
+   * he handed over (the project-setup skill hands it over by ending the
+   * turn that wrote it). Stages come only from that turn; a turn of his
+   * after it (a word with the person, a revision in place) adds no stage
+   * still to come, so the draft stays whole and Set up stays in reach.
+   * Kept for the tab, so a reload or a way back to this page after the
+   * hand-over finds the draft whole; a page read mid-draft, never rested
+   * over, still shows the stages coming.
+   */
+  const restedKey = $derived(`cawco-setup-rested-${projectId}`);
+  let restedOver = $state<string | null>(null);
+  $effect(() => {
+    restedOver = stored("session", restedKey);
+  });
+  /** He is at rest: his turn over, no question of his open, the board read (a wait or a load says nothing of his turn). */
+  const atRest = $derived(
+    setupAsks.length === 0 &&
+      lead.status !== "working" &&
+      lead.status !== "needs-you" &&
+      lead.status !== "loading" &&
+      lead.status !== "reconnecting"
+  );
+  $effect(() => {
+    const artifactId = setupPage?.artifactId;
+    if (artifactId && atRest && artifactId !== untrack(() => restedOver)) {
+      restedOver = artifactId;
+      store("session", restedKey, artifactId);
+    }
+  });
+  /** He is writing the draft: at work on a page he has not yet handed over (a page read mid-draft included). */
+  const writingPage = $derived(
+    lead.status === "working" &&
+      (setupPage === null || setupPage.artifactId !== restedOver)
+  );
+  /**
    * How far he has got, while he drafts the setup in his conversation: his
    * setup element in his panel (SetupWell) reads it; none once the page is
    * open, or while nothing of his runs on it. A project just made stands
@@ -1588,9 +1624,10 @@
       open: setupAsks.map((one) => ({
         blocks: (one.request.input as { blocks?: unknown }).blocks === true,
       })),
-      // Handed over once the page holds his draft and he is at rest: he
-      // writes it early and adds to it as he drafts (project-setup skill).
-      page: setupPage !== null && lead.status !== "working",
+      // Handed over once the page holds his draft and he is not writing
+      // it: he writes it early and adds to it as he drafts (project-setup
+      // skill), and ends his turn to hand it over.
+      page: setupPage !== null && !writingPage,
     });
     const going =
       lead.starting ||

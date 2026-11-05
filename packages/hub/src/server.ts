@@ -617,6 +617,7 @@ import {
   type ArtifactServiceDeps,
   type Artifacts,
   type Browsed,
+  boardOf,
   createArtifacts,
   type MarksDelivery,
   type MarksOutcome,
@@ -15407,10 +15408,16 @@ export const createServer = (
    * What every panel showed when this hub last ran, kept in the database
    * (openPreview): served again from here on, each machine preview's
    * listener pointed at again by its machine's next register when it is
-   * still for what the row names, else started by its first request.
+   * still for what the row names, else started by its first request. A
+   * project's setup page an earlier hub kept as shown is shown no more: its
+   * board draws it, never a panel (service `boardOf`).
    */
   const restoreShownPreviews = (): void => {
     for (const { instanceId, artifact } of db.artifacts.shown()) {
+      if (boardOf(artifact)) {
+        db.artifacts.unshow(instanceId);
+        continue;
+      }
       previewTargets.set(instanceId, {
         artifact: shownArtifact(artifact),
         revision: crypto.randomUUID(),

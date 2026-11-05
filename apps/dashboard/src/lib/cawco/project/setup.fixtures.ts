@@ -9,11 +9,8 @@
 import { ASK_USER_QUESTION } from "@cawco/core/ask-tools";
 import { presentPermission } from "@cawco/core/permission-presentation";
 import type { BlockedRequest } from "../client.svelte";
-import type {
-  Stage as DraftStage,
-  SetupDelegate,
-} from "../decisions/host/setup/stage";
 import type { Message } from "../types";
+import type { Stage as DraftStage, SetupDelegate } from "./setup-stage";
 
 /** The name Caw gives it in his first turn. */
 export const PR_NAME = "Your PR team";

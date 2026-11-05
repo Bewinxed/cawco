@@ -13,6 +13,8 @@
 
 @source "./";
 @source "../../views/openui/OpenUiRenderer.svelte";
+@source "../../project/DraftColumn.svelte";
+@source "../../project/DraftStages.svelte";
 @source "../../fault/FaultActions.svelte";
 @source "../../fault/FaultBoundary.svelte";
 @source "../../fault/FaultDetails.svelte";

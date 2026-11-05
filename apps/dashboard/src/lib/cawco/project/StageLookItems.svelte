@@ -15,8 +15,8 @@
     setupPageWords as words,
   } from "@cawco/core/words/onboarding";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import { STAGE_GLYPHS, STAGE_HUES } from "../../../tasks/stage-look";
-  import type { Stage } from "./stage";
+  import { STAGE_GLYPHS, STAGE_HUES } from "../tasks/stage-look";
+  import type { Stage } from "./setup-stage";
 
   let {
     stage,

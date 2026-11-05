@@ -142,6 +142,8 @@ export default {
         "scripts/design-budget-check.ts",
         // scripts/check.ts:622
         "scripts/surface-briefs-check.ts",
+        // scripts/check.ts:639
+        "scripts/setup-draft-check.ts",
         // scripts/check.ts:575
         "scripts/page-imports-check.ts",
         // scripts/check.ts:576

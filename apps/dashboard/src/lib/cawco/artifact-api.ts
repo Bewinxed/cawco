@@ -15,6 +15,7 @@ import type {
 } from "@cawco/core/protocol";
 import type { CanvasMap, SheetRead, StoryOp } from "@cawco/core/stage";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
+import { goto } from "$app/navigation";
 import { currentClientId } from "./client-id";
 
 const artifactsPath = (instanceId: string, id?: string) =>
@@ -119,7 +120,10 @@ export class ArtifactRefused extends Error {
 
 /**
  * Brings an artifact to the front of a session's panel (its own, or one of
- * its delegation tree's sessions'); the panel follows its frame.
+ * its delegation tree's sessions'); the panel follows its frame. A
+ * project's setup page opens in no panel: the hub names the project whose
+ * board draws it (hub artifacts/service.ts `boardOf`), and the person goes
+ * to that board.
  */
 export async function showArtifact(
   instanceId: string,
@@ -133,6 +137,12 @@ export async function showArtifact(
       response.status,
       (await hubRefusal(response)).message
     );
+  }
+  const shown = (await response.json().catch(() => null)) as {
+    board?: unknown;
+  } | null;
+  if (typeof shown?.board === "string") {
+    await goto(`/project/${encodeURIComponent(shown.board)}`);
   }
 }
 
