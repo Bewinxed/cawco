@@ -111,7 +111,9 @@ export const rail = {
  * Machines in the reader's order. A peer that showed up after they last said
  * sorts behind the ones they placed, by hostname among themselves.
  */
-export function orderMachines(machines: Machine[]): Machine[] {
+export function orderMachines<
+  M extends Pick<Machine, "hostname" | "machineId">,
+>(machines: M[]): M[] {
   const placed = new Map(layout.machines.map((id, index) => [id, index]));
   return [...machines].sort((a, b) => {
     const left = placed.get(a.machineId);

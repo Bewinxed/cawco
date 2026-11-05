@@ -346,6 +346,12 @@ const CONTAINERS = {
   // 200px) and four gaps (space-3, 56px) fit: 820px.
   forgotten: "51.25rem",
   kinds: "480px",
+  // Models CawCo uses › Images: the providers and the chosen one's machines
+  // side by side once each column holds its longest line whole (a provider's
+  // "On Google AI Pro or Ultra, through the Antigravity CLI", about 20rem
+  // with its lead; a machine's name, its lack and its fix, about 22rem) and
+  // the gap between them (space-6).
+  images: "44rem",
   "decisions-520px": "520px",
   leaf: "620px",
   setup: "640px",

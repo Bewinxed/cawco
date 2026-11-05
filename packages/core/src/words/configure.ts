@@ -194,7 +194,8 @@ export const CONFIG_SECTIONS: readonly ConfigSectionDefinition[] = [
     slug: "models",
     group: "Hub",
     label: "Models CawCo uses",
-    purpose: "Jev's route (OpenRouter or a TypeSafe key), and fleet watch",
+    purpose:
+      "Jev's route (OpenRouter or a TypeSafe key), fleet watch, and the default image provider",
     counted: false,
     badge: "fleet-faults",
     icon: "cpu-bold-duotone",
