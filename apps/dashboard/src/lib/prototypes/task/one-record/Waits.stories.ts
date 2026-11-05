@@ -8,7 +8,7 @@
  */
 import { READ_AT, t18, t18Missing, t112Dropped, t226Blocked } from "./fixtures";
 import { type Play, press, screenArgs } from "./plays";
-import TaskRecord from "./TaskRecord.svelte";
+import TaskRecordSheet from "./TaskRecordSheet.svelte";
 
 const waits = { what: "waits" } as const;
 const otherTask = (task: typeof t18 | null) =>
@@ -16,7 +16,7 @@ const otherTask = (task: typeof t18 | null) =>
 
 export default {
   title: "Task/One record/Waits",
-  component: TaskRecord,
+  component: TaskRecordSheet,
   args: {
     ...screenArgs,
     view: t226Blocked,

@@ -32,7 +32,7 @@ import {
   t239LongTitle,
 } from "./fixtures";
 import { answered, type Play, press, screenArgs, typeIn } from "./plays";
-import TaskRecord from "./TaskRecord.svelte";
+import TaskRecordSheet from "./TaskRecordSheet.svelte";
 
 const desk = { viewport: 1440 };
 const phone = { viewport: 390 };
@@ -42,7 +42,7 @@ const sessionOf = (entry: string) => ({ what: "session", entry }) as const;
 
 export default {
   title: "Task/One record",
-  component: TaskRecord,
+  component: TaskRecordSheet,
   args: {
     ...screenArgs,
     view: t142Review,
