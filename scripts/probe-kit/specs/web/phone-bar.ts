@@ -12,12 +12,19 @@
  *    (`[data-slot="rim"]`, the svg the arcs are drawn in, each arc at its
  *    stroke's outer edge when arcs stand).
  *
- *    One exception, by design: Caw's glass is a tab tucked into the
- *    screen's trailing edge (the top bar's surface brief, Top bar: "flush with it …, square
- *    on that side, which draws no hairline"), so its glass's shadow
- *    (`[data-slot="tools"]::before`) runs on past that edge and is cut
- *    there, and only there. Its box itself still ends at `innerWidth`.
- * 2. The overflow sweep totals 0 (journeys/scan.ts: nothing spills past
+ *    Caw's glass and its shadow (`[data-slot="tools"]::before`) are held
+ *    to it too: the glass stands the bar's phone margin in from the
+ *    trailing edge, so nothing of it is cut there.
+ * 2. Caw's glass is the shape the person picked on 2026-11-04
+ *    (decisions/caw-phone-shape/log.md, "Caw's button on a phone, inset
+ *    from the edge": "Caw's button now stands 12px in from the right edge,
+ *    as the sidebar button does from the left", picked "Round on the left,
+ *    flat on the right, always"; built by b2d5f5209): its box ends
+ *    `--c-bar-phone-edge` in from the trailing edge, as the sidebar
+ *    toggle's glyph starts that far in from the leading one; round on its
+ *    leading side and square on its trailing one; and, standing clear of
+ *    the edge, it draws its hairline on both sides.
+ * 3. The overflow sweep totals 0 (journeys/scan.ts: nothing spills past
  *    the screen or its box, no control covers text).
  *
  *   bun scripts/probe-kit/run.ts web phone-bar
@@ -123,17 +130,10 @@ function readBar(): BarRead {
       right = Math.max(right, box.right + by.right);
     };
     grow(shadowReach(getComputedStyle(el).boxShadow), "shadow");
-    const glassShadow = shadowReach(getComputedStyle(el, "::before").boxShadow);
-    if (el.matches("[data-slot='tools']")) {
-      // The flush tab's shadow is cut at the trailing edge by design: its
-      // leading reach counts, its trailing one is named, not counted.
-      grow({ left: glassShadow.left, right: 0 }, "glass shadow");
-      why.push(
-        `glass shadow past the trailing edge, cut by design ${glassShadow.right}px`
-      );
-    } else {
-      grow(glassShadow, "::before shadow");
-    }
+    grow(
+      shadowReach(getComputedStyle(el, "::before").boxShadow),
+      "::before shadow"
+    );
     if (el.matches("button, a[href], [role='button']")) {
       // Its focus ring, as the keyboard shows it.
       el.focus({ focusVisible: true } as FocusOptions);
@@ -225,17 +225,6 @@ async function leg(kit: Kit, bench: string, engine: Engine, width: number) {
         "\n"
       )}${read.unfocused.length > 0 ? `\n    no focus ring shown: ${read.unfocused.join(", ")}` : ""}`
   );
-  const { glass } = read;
-  kit.check(
-    `${at}: Caw's glass, the one exception, is the flush tab the top bar's surface brief draws: its box ends at the trailing edge, square there with no hairline`,
-    !!glass &&
-      Math.abs(read.innerWidth - glass.right) < 0.5 &&
-      px(glass.borderEnd) === 0 &&
-      px(glass.borderStart) > 0 &&
-      px(glass.radii[1] ?? "") === 0 &&
-      px(glass.radii[2] ?? "") === 0,
-    JSON.stringify(glass)
-  );
   const toggle = await page.evaluate(() => {
     const probe = document.createElement("span");
     probe.style.cssText =
@@ -277,6 +266,19 @@ async function leg(kit: Kit, bench: string, engine: Engine, width: number) {
           : null,
     };
   });
+  const { glass } = read;
+  kit.check(
+    `${at}: Caw's glass is the inset shape the person picked (decisions/caw-phone-shape): its box ends --c-bar-phone-edge (${toggle.edge}px) in from the trailing edge, round on its leading side, square on its trailing one, its hairline on both`,
+    !!glass &&
+      Math.abs(read.innerWidth - toggle.edge - glass.right) < 0.5 &&
+      px(glass.borderEnd) > 0 &&
+      px(glass.borderStart) > 0 &&
+      px(glass.radii[0] ?? "") > 0 &&
+      px(glass.radii[3] ?? "") > 0 &&
+      px(glass.radii[1] ?? "") === 0 &&
+      px(glass.radii[2] ?? "") === 0,
+    JSON.stringify(glass)
+  );
   kit.check(
     `${at}: the sidebar toggle's glyph still stands --c-bar-phone-edge (${toggle.edge}px) in from the leading edge (${toggle.glyphLeft})`,
     toggle.glyphLeft !== null && Math.abs(toggle.glyphLeft - toggle.edge) < 0.5
