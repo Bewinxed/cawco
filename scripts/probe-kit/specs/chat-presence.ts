@@ -475,6 +475,38 @@ const run = async (kit: Kit): Promise<void> => {
     "17: setup: a decision page with a live embed and no input has said none",
     (await inputOn(embedTab)) === null
   );
+  // The frame's load is not its standing clear: the screen's skeleton leaves
+  // over it on its reveal (decisions host Preview.svelte, `out:reveal`), and
+  // a pointer there is the decision page's. The touch waits until each point
+  // it goes through is the embed's, as the decision page hit-tests it.
+  const overEmbed = () =>
+    embed.evaluate((embedded) => {
+      const box = embedded.getBoundingClientRect();
+      const [x, y] = [box.left + box.width / 2, box.top + box.height / 2];
+      const over = [0, 12, 24]
+        .map((step) =>
+          embedded.ownerDocument.elementFromPoint(x + step, y + step)
+        )
+        .find((top) => top !== embedded);
+      if (over === undefined) {
+        return "";
+      }
+      return over === null
+        ? "nothing (outside the page's view)"
+        : `${over.tagName.toLowerCase()}${over.getAttribute("data-slot") ? `[data-slot=${over.getAttribute("data-slot")}]` : ""}`;
+    });
+  const firstOver = await overEmbed();
+  const clearFrom = Date.now();
+  let lastOver = firstOver;
+  while (lastOver !== "" && Date.now() - clearFrom < 10_000) {
+    await embedTab.waitForTimeout(50);
+    lastOver = await overEmbed();
+  }
+  check(
+    "17: setup: nothing of the decision page stands over the embed where the pointer goes",
+    lastOver === "",
+    `as the frame loaded: ${firstOver || "the embed"}; after ${Date.now() - clearFrom} ms: ${lastOver || "the embed"}`
+  );
   await touchInside(embedTab, embed);
   const movesInEmbed = await inEmbed.locator("body").evaluate(counted);
   const movesInHost = await inHost.evaluate(counted);
