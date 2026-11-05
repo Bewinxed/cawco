@@ -1010,8 +1010,41 @@ async function compareDesk(
         },
       };
     }, index);
+  // The stage page's and the panel's console from here, said when a ring stands out of view.
+  const consoleSaid: string[] = [];
+  page.on("console", (message) => {
+    consoleSaid.push(
+      `${message.type()} ${message.location().url.slice(0, 60)}: ${message.text().slice(0, 300)}`
+    );
+  });
   for (const [at, one] of lines.entries()) {
     const before = await frameHeight();
+    // When the page hears the press's reveal, and when its scroll first moves, from just before the press, on its own clock.
+    await frame.evaluate(() => {
+      const timed = window as unknown as {
+        __press?: { heard: number | null; scrolled: number | null };
+      };
+      const t0 = performance.now();
+      const press = {
+        heard: null as number | null,
+        scrolled: null as number | null,
+      };
+      timed.__press = press;
+      addEventListener(
+        "cawco:stage-reveal",
+        () => {
+          press.heard ??= Math.round(performance.now() - t0);
+        },
+        { once: true }
+      );
+      addEventListener(
+        "scroll",
+        () => {
+          press.scrolled ??= Math.round(performance.now() - t0);
+        },
+        { once: true }
+      );
+    });
     await page
       .locator(`${GRAPH} [data-slot="stage-head"] [data-slot="difference"]`)
       .nth(at)
@@ -1035,6 +1068,10 @@ async function compareDesk(
         why: {
           at900: read,
           at2400: await ringRead(at),
+          press: await frame.evaluate(
+            () => (window as unknown as { __press?: unknown }).__press ?? null
+          ),
+          console: consoleSaid.slice(-20),
           frame: { pressed: before, now: await frameHeight() },
           listed: await page
             .locator(
