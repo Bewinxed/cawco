@@ -63,7 +63,7 @@ const MODELS: Readonly<
 
 /** Where a lack is put right: a Configure page, an account's page, or ChatGPT's plans. */
 export type ImageFix =
-  | { kind: "page"; slug: "accounts" | "cli-tools" | "updates"; label: string }
+  | { kind: "page"; slug: "accounts" | "cli-tools"; label: string }
   | { kind: "account"; accountId: string; label: string };
 
 export const imageSettingsWords = {
@@ -85,9 +85,9 @@ export const imageSettingsWords = {
       ? "Ready on no machine"
       : `Ready on ${ready} of ${of} machines`;
   },
-  /** Under Machines while no machine has joined. */
+  /** Why the machines list is empty, under "No machines yet" and over Add machine. */
   noMachines:
-    "No machine has joined yet. Each machine's readiness for the chosen provider shows here once one does.",
+    "Where the chosen provider can make an image shows here, machine by machine.",
   /** The chosen provider's machines, headed by its name. */
   machinesHead: (id: ImageProviderId) =>
     `${PROVIDERS[id].name} on each machine`,
@@ -96,9 +96,8 @@ export const imageSettingsWords = {
   notReady: "Not ready",
   installing: "Installing",
   offline: "Offline",
+  /** The Gemini API's own setting, under its option. */
   model: "Model",
-  /** The radio group's accessible name for the models. */
-  models: "Gemini API model",
   /** The provider's own default model, marked among its models. */
   modelDefault: "default",
   modelName: (id: string) => MODELS[id]?.name ?? id,
@@ -155,21 +154,6 @@ export const imageSettingsWords = {
   saving: "Saving…",
   saved: "Saved",
   notSaved: "Not saved",
-  /**
-   * The hub refused a provider this dashboard offers: the hub is older
-   * than the dashboard; the fix beside it (updateHub) is updating the hub.
-   */
-  hubLacksProvider: (id: ImageProviderId, current: ImageProviderId) =>
-    `This hub doesn't offer ${PROVIDERS[id].name} yet, so images still go to ${PROVIDERS[current].name}.`,
-  /** The hub refused a model this dashboard offers, for the same reason. */
-  hubLacksModel: (model: string, current: ImageProviderId) =>
-    `This hub doesn't offer ${MODELS[model]?.name ?? model} yet, so images still go to ${PROVIDERS[current].name}.`,
-  /** The way to add it: updating the hub, on Configure › Updates. */
-  updateHub: {
-    kind: "page",
-    slug: "updates",
-    label: "Update the hub",
-  } as const,
   /** Any other refusal, in the hub's words. */
   refused: (said: string, current: ImageProviderId) =>
     `${said}. Images still go to ${PROVIDERS[current].name}.`,

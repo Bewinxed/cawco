@@ -46,7 +46,7 @@ export const Antigravity = {
   args: { value: { provider: "antigravity", model: null } },
 };
 
-/** The Gemini API on its own default model: the model chips show, the key is only on obelisk-of-light. */
+/** The Gemini API on its own default model: its model setting wakes under it; the key is only on obelisk-of-light. */
 export const GeminiApi = {
   args: { value: { provider: "gemini-api", model: null } },
 };
@@ -72,14 +72,11 @@ export const Saved = {
   },
 };
 
-/** An older hub that knows no Gemini API refused it: Not saved in the head, why under the providers, the choice back on ChatGPT. */
+/** The hub refused the save in its words: Not saved in the head, why under the providers, the choice back on ChatGPT. */
 export const Refused = {
   args: {
     phase: "failed",
-    fault: {
-      words: imageSettingsWords.hubLacksProvider("gemini-api", "chatgpt"),
-      fix: imageSettingsWords.updateHub,
-    },
+    fault: imageSettingsWords.refused("database is locked (500)", "chatgpt"),
   },
 };
 
@@ -87,12 +84,10 @@ export const Refused = {
 export const Unsent = {
   args: {
     phase: "failed",
-    fault: {
-      words: imageSettingsWords.unsent(
-        "The dashboard couldn't reach the hub: the request got no answer. Check that the hub's machine is up and this device is online, then try again.",
-        "chatgpt"
-      ),
-    },
+    fault: imageSettingsWords.unsent(
+      "The dashboard couldn't reach the hub: the request got no answer. Check that the hub's machine is up and this device is online, then try again.",
+      "chatgpt"
+    ),
   },
 };
 

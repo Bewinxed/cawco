@@ -5,13 +5,17 @@
    * model) `generate_image` goes to when a call names none, and where the
    * chosen provider can make an image now.
    *
-   * On a desk the providers stand in one column and the chosen one's model
-   * and machines in the next, so a pick shows at once what it means across
-   * the fleet; under the `images` container width the second column stands
-   * under the first. A pick saves at once (as the page's switches do): the
-   * coral moves with it and the head says Saving… then Saved. A failed save
-   * says Not saved in that same line, puts the hub's choice back, and says
-   * why right under the providers, where the press was.
+   * On a desk the providers stand in one column, the Gemini API's model
+   * under its option as that provider's own setting, and the chosen
+   * provider's machines in the next, so a pick shows at once what it means
+   * across the fleet; under the `images` container width the machines stand
+   * under the providers. Every part stands whatever is chosen (the model
+   * setting waits, disabled, while another provider is), so a pick never
+   * moves the page under the pointer. A pick saves at once (as the page's
+   * switches do): the coral moves with it and the head says Saving… then
+   * Saved. A failed save says Not saved in that same line, puts the hub's
+   * choice back, and says why right under the providers, where the press
+   * was.
    *
    * Every value comes in as props (the section reads and saves), so each
    * state is a story (ImageDefault.stories.ts).
@@ -21,7 +25,6 @@
     IMAGE_PROVIDERS,
     type ImageProviderId,
     type ImageSettings,
-    offersModelChoice,
   } from "@cawco/core/image-generation";
   import type { MachineImageReadiness } from "@cawco/core/image-readiness";
   import {
@@ -30,6 +33,8 @@
   } from "@cawco/core/words/image-settings";
   import { blur } from "svelte/transition";
   import ProviderMark from "#lib/cawco/accounts/ProviderMark.svelte";
+  import Field from "#lib/cawco/config/Field.svelte";
+  import NoMachines from "#lib/cawco/config/NoMachines.svelte";
   import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
@@ -39,6 +44,7 @@
     OptionGroupItem,
   } from "#lib/components/ui/option-group/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
+  import * as Select from "#lib/components/ui/select/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconChevronRight,
@@ -64,8 +70,8 @@
     readiness: Record<ImageProviderId, MachineImageReadiness[]>;
     /** A save on its way, just landed, or refused. */
     phase?: "idle" | "saving" | "saved" | "failed";
-    /** Why the last save failed, in words, and where it is put right. */
-    fault?: { words: string; fix?: ImageFix } | null;
+    /** Why the last save failed, in words. */
+    fault?: string | null;
     onchoose: (next: ImageSettings) => void;
   } = $props();
 
@@ -76,9 +82,15 @@
     "gemini-api": "google",
   };
 
+  /** The one provider with a choice of model; its setting stands under its option. */
+  const MODEL_PROVIDER = "gemini-api" satisfies ImageProviderId;
+  const models = IMAGE_PROVIDER_MODELS[MODEL_PROVIDER];
+
   const chosen = $derived(readiness[value.provider]);
-  const models = $derived(IMAGE_PROVIDER_MODELS[value.provider]);
-  const model = $derived(value.model ?? models[0]);
+  /** The model its calls go to: the saved one while it is chosen, else its default. */
+  const model = $derived(
+    value.provider === MODEL_PROVIDER ? (value.model ?? models[0]) : models[0]
+  );
 
   const standing = (provider: ImageProviderId) => {
     const all = readiness[provider];
@@ -93,14 +105,13 @@
     }
   }
 
-  function pickModel(next: string[]) {
-    const [picked] = next;
-    if (!picked || picked === model) {
+  function pickModel(picked: string) {
+    if (!picked || picked === model || value.provider !== MODEL_PROVIDER) {
       return;
     }
     // The provider's own default saves as none, so it follows the provider.
     onchoose({
-      provider: value.provider,
+      provider: MODEL_PROVIDER,
       model: picked === models[0] ? null : picked,
     });
   }
@@ -127,11 +138,9 @@
     installing: words.installing,
     "not-ready": words.notReady,
   };
-  /** The lack worth saying: an install that was going on says nothing once the machine is gone. */
+  /** The lack worth saying: none while the machine is offline, whose line says Offline. */
   const shownLack = (machine: MachineImageReadiness) =>
-    machine.lack && !(machine.lack.kind === "agy-installing" && !machine.online)
-      ? machine.lack
-      : null;
+    machine.online ? machine.lack : null;
 
   const fixHref = (fix: ImageFix) =>
     fix.kind === "page"
@@ -161,7 +170,7 @@
   class="@container/images flex flex-col gap-space-2 border-t border-border-hairline pt-space-5"
   data-group="images"
 >
-  <SectionHeader {hue} icon={IconImage} label={words.heading}>
+  <SectionHeader {hue} icon={IconImage} label={words.heading} level={2}>
     {#snippet right()}
       <!-- The save's line: one cell the words cross-fade in, so the head
            keeps its height whatever it says. -->
@@ -255,11 +264,50 @@
           </OptionGroupItem>
         {/each}
       </OptionGroup>
+      <!-- The Gemini API's own setting, under its option (the last), tied
+           to it by the rule down its lead edge; it waits, disabled, while
+           another provider is chosen. -->
+      <div
+        class="ms-space-5 border-s border-border-hairline ps-space-3"
+        data-slot="model"
+      >
+        <Field id="images-model" label={words.model}>
+          <Select.Root
+            disabled={value.provider !== MODEL_PROVIDER}
+            onValueChange={pickModel}
+            type="single"
+            value={model}
+          >
+            <Select.Trigger class="w-full" id="images-model">
+              {words.modelName(model)}
+            </Select.Trigger>
+            <Select.Content>
+              {#each models as one, index (one)}
+                <Select.Item label={words.modelName(one)} value={one}>
+                  {#snippet children()}
+                    <span>{words.modelName(one)}</span>
+                    {#if index === 0}
+                      <span class="text-ink-muted">{words.modelDefault}</span>
+                    {/if}
+                    <span class="num ms-auto ps-space-3 text-ink-muted"
+                      >{words.modelPrice(one)}</span
+                    >
+                  {/snippet}
+                </Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+          {#snippet hint()}
+            {words.modelNote(model)}
+            <span class="num whitespace-nowrap">{words.modelPrice(model)}</span>
+          {/snippet}
+        </Field>
+      </div>
       {#if fault}
         <!-- Why the pick didn't hold, under the options it was made in,
              brought into view once it has unfolded. -->
         <p
-          class="m-0 flex flex-wrap items-baseline gap-x-space-2 type-meta text-pretty"
+          class="m-0 type-meta text-pretty text-status-fail-ink"
           onintroend={(event) =>
             bringIntoView(event.currentTarget, {
               behavior: motionOk.current ? "smooth" : "auto",
@@ -267,65 +315,25 @@
           role="alert"
           transition:unfold
         >
-          <span class="text-status-fail-ink">{fault.words}</span>
-          {#if fault.fix}
-            {@render fixLink(fault.fix)}
-          {/if}
+          {fault}
         </p>
       {/if}
     </div>
 
     <div class="flex min-w-0 flex-col gap-space-5" data-slot="chosen">
-      {#if offersModelChoice(value.provider)}
-        <div class="flex min-w-0 flex-col gap-space-2" transition:unfold>
-          <p class="m-0 type-label text-ink-muted" id="images-model">
-            {words.model}
-          </p>
-          <OptionGroup
-            aria-label={words.models}
-            layout="list"
-            bind:value={() => [model], pickModel}
-          >
-            {#each models as one, index (one)}
-              <OptionGroupItem digit={index + 1} value={one}>
-                <span class="flex min-w-0 flex-col gap-space-row">
-                  <span class="flex items-baseline gap-space-2">
-                    <span class="type-label text-ink-strong"
-                      >{words.modelName(one)}</span
-                    >
-                    {#if index === 0}
-                      <span class="type-meta text-ink-muted"
-                        >{words.modelDefault}</span
-                      >
-                    {/if}
-                  </span>
-                  <span class="num type-meta text-ink-muted text-pretty"
-                    >{words.modelNote(one)}
-                    <span class="whitespace-nowrap"
-                      >{words.modelPrice(one)}</span
-                    ></span
-                  >
-                </span>
-              </OptionGroupItem>
-            {/each}
-          </OptionGroup>
-        </div>
-      {/if}
-
       <div class="flex min-w-0 flex-col gap-space-1">
-        <p class="m-0 type-label text-ink-muted" id="images-machines">
+        <h3 class="m-0 type-label text-ink-muted" id="images-machines">
           {words.machinesHead(value.provider)}
-        </p>
+        </h3>
         {#if chosen.length === 0}
-          <p class="m-0 max-w-c-measure type-meta text-ink-muted text-pretty">
-            {words.noMachines}
-          </p>
+          <NoMachines line={words.noMachines} />
         {:else}
           <!-- One row per machine, down fixed columns: its OS mark in the
                lead column; its name, and under it what it lacks with the way
                to put it right; and at the trailing edge its state as a glyph
                alone (the word is its name and tooltip), at one x on every
-               row. A ready machine is one quiet line. -->
+               row. A ready machine is one quiet line; an offline one says
+               Offline, and nothing it lacked. -->
           <ul
             aria-labelledby="images-machines"
             class="m-0 flex min-w-0 list-none flex-col p-0"
@@ -335,7 +343,7 @@
               {@const fix = lack ? words.fix(lack) : null}
               {@const state = stateOf(machine)}
               <li
-                class="flex min-h-c-row-h items-center gap-x-space-3 border-b border-border-hairline py-space-1 last:border-b-0"
+                class="flex min-h-c-row-h-two items-center gap-x-space-3 border-b border-border-hairline py-space-1 last:border-b-0"
                 data-lack={lack?.kind}
                 data-state={state}
               >
@@ -351,7 +359,10 @@
                     class:text-ink-strong={state !== "offline"}
                     >{machine.name}</span
                   >
-                  {#if lack}
+                  {#if state === "offline"}
+                    <span class="type-meta text-ink-muted">{words.offline}</span
+                    >
+                  {:else if lack}
                     <span
                       class="flex min-w-0 flex-wrap items-baseline gap-x-space-2"
                     >
