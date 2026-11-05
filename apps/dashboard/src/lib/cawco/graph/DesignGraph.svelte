@@ -1171,19 +1171,16 @@
   /**
    * A move chosen by name (the Animation face's title menu, an arrow on the
    * map, its line in the map's list): the Animation face opens on it, the
-   * stage stood at its from state at once, its own motion landed, then
-   * brought to its to state, so the move read is that one, whatever state
-   * stood before.
+   * stage stood at its from state, then brought to its to state, so the
+   * move read is that one, whatever state stood before.
    */
   const chooseMove = (fromId: string, toId: string) => {
     face = "move";
     if (!review) {
       return;
     }
+    // The page stands at its from state first, whatever stood (stage.ts `standFor`).
     const ref = refOf(review, { state: fromId, variant: null }, width);
-    link.reach(ref, null, { play: false, still: true });
-    stood = ref;
-    stoodAt = fromId;
     chosenFrom = { id: fromId, ref };
     if (kept?.state === toId && kept.variant === null) {
       reachAgain += 1;

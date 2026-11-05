@@ -1058,8 +1058,9 @@ export function bootStage(page: Page): Mode {
     roomWidth(live.story) === roomWidth(target.story);
 
   /**
-   * Where the drawing stands before a reach acts: a move's from state for
-   * a played move (mounted afresh unless it stands there); for a first
+   * Where the drawing stands before a reach acts: its from state, mounted
+   * afresh where it doesn't stand there (a played move, a move he chose by
+   * name); for a first
    * reach, one on another states file, one from nothing, one after a
    * fault, or one the live instance can't be set to in place (another
    * component, another width), `to` itself, mounted afresh, and nothing
@@ -1070,15 +1071,21 @@ export function bootStage(page: Page): Mode {
     target: Target,
     play: PlayFn | null
   ): Promise<"opened" | "acts" | { refused: string }> {
-    if (play && asking.from) {
-      if (standsAt(target.section, asking.from)) {
-        return "acts";
-      }
+    // A reach from a state the drawing doesn't stand at (a played move, a
+    // move he chose by name) stands there first, so the move read is that one.
+    if (
+      asking.from &&
+      (play || (live?.section === target.section && !fault)) &&
+      !standsAt(target.section, asking.from)
+    ) {
       const start = resolved(asking.from);
       if ("refused" in start) {
         return start;
       }
       await open(start);
+      return "acts";
+    }
+    if (play && asking.from) {
       return "acts";
     }
     if (
