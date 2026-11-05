@@ -362,27 +362,43 @@
             hit: marked.some((word) => part.toLowerCase().startsWith(word)),
           }));
 
+  /** Where the query's first word starts in `text`, as a row marks it (a word starting with it); -1 for none. */
+  const firstHit = (text: string): number => {
+    let at = 0;
+    for (const part of text.split(WORD_AT)) {
+      if (marked.some((word) => part.toLowerCase().startsWith(word))) {
+        return at;
+      }
+      at += part.length;
+    }
+    return -1;
+  };
+  /** How far into a line a match may stand before the line starts near it instead, characters. Our call: under a line of the rail. */
+  const HIT_LEAD = 40;
+  /** `text`, starting a few words before its first match when that stands further in than a clamped line shows. */
+  const aroundHit = (text: string): string => {
+    const at = firstHit(text);
+    if (at <= HIT_LEAD) {
+      return text;
+    }
+    const from = text.lastIndexOf(" ", at - HIT_LEAD / 2);
+    return `…${text.slice(from > 0 ? from + 1 : at)}`;
+  };
   /**
    * What a row's words line says: the comment's first words, or, while a
-   * search finds the comment by words further in its thread (a reply), the
-   * passage holding the first match, so every row a search shows marks
-   * what it was found by.
+   * search finds the comment by words further in (in them past what two
+   * lines show, or in a reply), the passage holding the first match, so
+   * every row a search shows marks what it was found by.
    */
   const wordsOf = (pin: Pin, first: string): string => {
-    if (marked.length === 0 || segments(first).some((part) => part.hit)) {
+    if (marked.length === 0) {
       return first;
     }
-    for (const entry of pin.thread) {
-      const at = marked
-        .map((word) => entry.text.toLowerCase().indexOf(word))
-        .filter((index) => index >= 0)
-        .reduce((a, b) => Math.min(a, b), Number.POSITIVE_INFINITY);
-      if (Number.isFinite(at)) {
-        const from = entry.text.lastIndexOf(" ", Math.max(0, at - 24));
-        return `${from > 0 ? "…" : ""}${entry.text.slice(from > 0 ? from + 1 : 0)}`;
-      }
+    if (firstHit(first) >= 0) {
+      return aroundHit(first);
     }
-    return first;
+    const holding = pin.thread.find((entry) => firstHit(entry.text) >= 0);
+    return holding ? aroundHit(holding.text) : first;
   };
 
   /** A pill's dot: the agent at work on it, else an answer unread, else none. */
@@ -561,9 +577,8 @@
             ><span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
               >{#if back.unread}<span
                   class="text-status-attn-ink font-medium"
-                  data-slot="new-answer"
-                  >{said.newAnswer} ·
-                </span>{/if}{#each segments(back.text) as part, at (at)}{#if part.hit}<mark
+                  data-slot="new-answer">{`${said.newAnswer} · `}</span
+                >{/if}{#each segments(marked.length > 0 ? aroundHit(back.text) : back.text) as part, at (at)}{#if part.hit}<mark
                     class="bg-selection text-inherit rounded-xs"
                     >{part.text}</mark
                   >{:else}{part.text}{/if}{/each}</span
