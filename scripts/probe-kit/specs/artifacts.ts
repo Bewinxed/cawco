@@ -150,9 +150,9 @@
  * `ask: "Judge the six pairing states: pin anything that reads wrong"`:
  *
  * ask 22. At 1440 and 390, light and dark, the 44px head says the ask once:
- *    its subtitle under the name where the head has the room the line needs
- *    by the name's own rule (side/head.ts `NAME_KEEPS`), else the menu's
- *    first row; the title control's title is the ask either way.
+ *    the menu's first row, never a line under the name (side/SideSurface,
+ *    The Title Bars Follow Liquid Glass Rule); the title control's title is
+ *    the ask.
  * ask 23. Within 5 s of a Send with a note, the same line reads
  *    "Sent to <the session's title>".
  * ask 24. `artifact_update({ id, ask })` turns the line to the new ask with
@@ -1750,29 +1750,18 @@ const ASK = "Judge the six pairing states: pin anything that reads wrong";
 const ASK_AGAIN = "Round two: judge the denied state";
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 
-/** The head's line as it shows: its subtitle under the name, or the menu's first row; the head's height and the title control's title. */
+/** The head's line as it shows: the menu's first row, never a line under the name; the head's height and the title control's title. */
 const lineOf = async (on: Page) => {
   const head = await on.evaluate((pane) => {
     const side = document.querySelector(`${pane} [data-slot="side-head"]`);
-    const line = side?.querySelector<HTMLElement>('[data-slot="subtitle"]');
     return {
       height: side?.getBoundingClientRect().height ?? 0,
       title:
         side?.querySelector<HTMLElement>("[data-artifact-trigger]")?.title ??
         "",
-      line:
-        line && !line.hasAttribute("data-dropped")
-          ? (line.textContent?.trim() ?? null)
-          : null,
-      inside: line
-        ? line.getBoundingClientRect().bottom <=
-          (side?.getBoundingClientRect().bottom ?? 0)
-        : false,
+      inside: false,
     };
   }, PANE);
-  if (head.line !== null) {
-    return { ...head, at: "head" as const };
-  }
   await on.locator(`${PANE} [data-artifact-trigger]`).click();
   const row = await on
     .locator('[data-artifact-list] [data-slot="menu-line"]')
@@ -2164,7 +2153,11 @@ const headLine = (page: Page) =>
       head: !!head,
       title:
         head?.querySelector('[data-slot="artifact-name"]')?.textContent ?? null,
-      line: head?.querySelector('[data-slot="subtitle"]')?.textContent ?? null,
+      // The ask is the name's tooltip and its menu's first row, never a line
+      // under the name (side/SideSurface).
+      line:
+        head?.querySelector<HTMLElement>("[data-artifact-trigger]")?.title ??
+        null,
       route: !!panel?.textContent?.includes("/@cawco/"),
       slugs: slugs.filter((slug) => said.includes(slug)),
     };

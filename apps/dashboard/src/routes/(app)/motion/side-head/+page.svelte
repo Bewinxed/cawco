@@ -6,12 +6,8 @@
    * once for each kind of name a side card carries, beside a pane's actions:
    * - the plan's: its title, its progress ring and figure (`titleControl`,
    *   the title its lead);
-   * - a task attempt's to-dos with the task id under them (`title`, and
-   *   `subtitle` set as code, `subtitleCode`). No pane sets a to-dos
-   *   subtitle: the one product caller of `subtitle` is PreviewPane, whose
-   *   line is an artifact's ask in meta ink (`subtitle={headLine}`), not
-   *   code;
-   * - a project file's path (`title`), the longest, beside icon actions.
+   * - a task attempt's to-dos (`title`);
+   * - a project file's name (`title`), beside icon actions.
    * The probe reads every word and the ring of the name against every action.
    */
   import { planWords } from "@cawco/core/words/plan";
@@ -21,12 +17,11 @@
   import { IconCopy, IconExternal, IconMaximize } from "#lib/icons.js";
 
   const CARDS = [
-    { key: "plan", title: undefined, subtitle: undefined },
-    { key: "todos", title: planWords.todos, subtitle: "tsk-2026-10-19-plan" },
+    { key: "plan", title: undefined },
+    { key: "todos", title: planWords.todos },
     {
       key: "file",
-      title: "design/plans/2026-10-06-projects-plan-view-proposal.md",
-      subtitle: undefined,
+      title: "2026-10-06-projects-plan-view-proposal.md",
     },
   ] as const;
   const noop = () => undefined;
@@ -56,8 +51,6 @@
         label="Bench {card.key}"
         onclose={noop}
         recessed={false}
-        subtitle={card.subtitle}
-        subtitleCode={card.key === "todos"}
         title={card.title}
         titleControl={card.key === "plan" ? planName : undefined}
       >

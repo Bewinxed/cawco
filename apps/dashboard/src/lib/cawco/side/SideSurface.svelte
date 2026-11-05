@@ -3,8 +3,10 @@
    * The card beside a page (Split), one for whatever it holds: a
    * conversation's plan or preview, a project's task. One header, one well:
    * - the header leads with the Plan | Preview switch while both are there,
-   *   then what is on show (`title`, `subtitle`): the words the switch does
-   *   not already say, so "Preview" or "Plan" is never said twice; then the
+   *   then what is on show (`title`): the words the switch does not already
+   *   say, so "Preview" or "Plan" is never said twice, and never a line
+   *   under them (DESIGN.md, The Title Bars Follow Liquid Glass Rule: "One
+   *   bar, one row"; an ask is content); then the
    *   pane's own controls (`actions`), Expand on a desk (expand.ts) and
    *   Close, every one in the same button recipe and press;
    * - the well is the content's ground, the recess inside a hairline, its
@@ -25,7 +27,7 @@
    * split's full width. The head keeps its place, so the control just
    * pressed is still under the pointer to press back.
    */
-  import { type Snippet, untrack } from "svelte";
+  import type { Snippet } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -55,7 +57,6 @@
     titleCode = false,
     subtitle,
     subtitleId,
-    subtitleCode = false,
     subtitleStands = $bindable(true),
     actions,
     items,
@@ -87,18 +88,16 @@
     titleControl?: Snippet;
     /** The title is a path or an identifier (a folder file's path), set as code. */
     titleCode?: boolean;
-    /** One line under it in meta ink (an artifact's ask), cut with an ellipsis, its whole text its title. */
-    subtitle?: string;
-    /** The line's id, for the control it describes. */
-    subtitleId?: string;
-    /** The line is an identifier (a task's id), set as code. */
-    subtitleCode?: boolean;
     /**
-     * Whether the line stands in the head: while the head gives the
-     * identity what the line needs by the name's own rule (`NAME_KEEPS`:
-     * its own width, up to that), else it is dropped from view for the pane
-     * to say elsewhere (the artifact menu's first row).
+     * What is on show says this of itself (an artifact's ask). It is never
+     * a line under the name: the head reads it out as the title control's
+     * description (`subtitleId`) and draws nothing, so the pane says it
+     * where it shows facts (the artifact menu's first row).
      */
+    subtitle?: string;
+    /** The description's id, for the control it describes. */
+    subtitleId?: string;
+    /** Whether the line stands in the head: never, so the pane says it elsewhere. */
     subtitleStands?: boolean;
     /** The pane's own controls, before Close. */
     actions?: Snippet;
@@ -327,16 +326,6 @@
     );
   }
 
-  /** The line's own width, up to {@link NAME_KEEPS}: what it needs to stand, by the name's rule. */
-  function lineNeeds(line: HTMLElement): number {
-    return Math.ceil(Math.min(line.scrollWidth, NAME_KEEPS));
-  }
-
-  /** Which controls stand, from the head's room and what each was drawn at. */
-  function fit(): void {
-    measureFit()?.();
-  }
-
   /**
    * The head measured as it is laid out now: answers the write that stands
    * its name, line and controls by that measure, for the caller to make
@@ -348,11 +337,8 @@
     }
     zoom = zoomOf(head);
     const keeps = nameWidth(identity);
-    const line = identity.querySelector<HTMLElement>('[data-slot="subtitle"]');
-    const lineFits = !line || identity.clientWidth >= lineNeeds(line);
     const name = () => {
       nameKeeps = keeps;
-      subtitleStands = lineFits;
     };
     if (all.length === 0) {
       return name;
@@ -435,10 +421,10 @@
     }
     return () => seen.disconnect();
   });
-  // A new line is measured as it comes, once it is drawn.
-  $effect(() => {
-    if (subtitle !== undefined) {
-      untrack(fit);
+  // The line never stands in the head: the pane says it elsewhere.
+  $effect.pre(() => {
+    if (subtitle !== undefined && subtitleStands) {
+      subtitleStands = false;
     }
   });
 </script>
@@ -561,16 +547,12 @@
          title control's ring is not cut. Its text stands where the controls'
          text does, their inset: a switch before it takes its own inset
          back, and a title control's padding is its text's inset. -->
-    <!-- Under a title control, a line standing beneath it (`data-lined`)
-         gives the control its height back: it grows to its two lines, a
-         `--space-1` above and below. -->
     <div
       data-slot="identity"
       data-controlled={titleControl ? "" : undefined}
       data-switched={switcher && switcherAt === "start" ? "" : undefined}
-      data-lined={(titleControl && subtitle && subtitleStands) || undefined}
       class={[
-        "-m-space-1 flex min-w-(--name-keeps) flex-col items-start overflow-hidden p-space-1 ps-space-3 *:max-w-full data-switched:ps-space-2 data-controlled:not-data-switched:ps-space-1 data-lined:[&>:is(button,a)]:h-auto data-lined:[&>:is(button,a)]:py-space-1",
+        "-m-space-1 flex min-w-(--name-keeps) flex-col items-start overflow-hidden p-space-1 ps-space-3 *:max-w-full data-switched:ps-space-2 data-controlled:not-data-switched:ps-space-1",
         centred.some((one) => stands(one.key)) ? "flex-initial" : "flex-1",
       ]}
       style:--name-keeps="{nameKeeps}px"
@@ -592,14 +574,9 @@
         >
       {/if}
       {#if subtitle}
-        <!-- One line under the name, cut with an ellipsis; whole in its tooltip. -->
-        <span
-          data-slot="subtitle"
-          data-code={subtitleCode || undefined}
-          data-dropped={subtitleStands ? undefined : ""}
-          class="truncate type-meta text-ink-muted data-code:type-code data-dropped:pointer-events-none data-dropped:invisible data-dropped:absolute"
-          id={subtitleId}
-          title={subtitle}>{subtitle}</span
+        <!-- Read out as the title control's description, never drawn in the bar. -->
+        <span class="sr-only" data-slot="subtitle" id={subtitleId}
+          >{subtitle}</span
         >
       {/if}
     </div>

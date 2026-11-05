@@ -29,7 +29,7 @@ const ANSWER = Array.from(
     `Step ${i + 1}: the glass groups float over the transcript, and the rows pass under them as you scroll.\n\n`
 );
 
-/** What a peeked session is asked: it answers slowly, so it is still working when peeked. */
+/** What a peeked session is asked: it answers slowly, so it is still working when peeked, and is done (~110s) before the pages after the peek are read, which wait for a page standing still. */
 const SLOW = "Take your time over the glass bars.";
 
 const respond = (request: Seen): Reply => {
@@ -37,7 +37,7 @@ const respond = (request: Seen): Reply => {
     return { everyMs: 5, words: ["Glass bars"] };
   }
   return request.last.includes(SLOW)
-    ? { everyMs: 1500, words: Array.from({ length: 6 }, () => ANSWER).flat() }
+    ? { everyMs: 1500, words: Array.from({ length: 3 }, () => ANSWER).flat() }
     : { everyMs: 2, words: ANSWER };
 };
 
@@ -175,8 +175,15 @@ const run = async (kit: Kit) => {
       hovered
     );
   }
+  // The pointer leaves; Escape puts away Session details' card, and the
+  // panel with it where Escape closes the panel: it is opened again.
   await desk.mouse.move(10, 10);
   await desk.keyboard.press("Escape");
+  await desk.waitForTimeout(500);
+  if ((await items.count()) === 0) {
+    await openPanel(desk, PANEL);
+    await items.first().waitFor({ timeout: 10_000 });
+  }
   await items.first().focus();
   await desk.keyboard.press("Tab");
   await desk.waitForTimeout(300);
@@ -309,13 +316,15 @@ const run = async (kit: Kit) => {
   );
 
   // The artifact panel's head (the mode centred, the trailing glass, Close
-  // in its own) beside the conversation, read whole: the top bar's shelf and
-  // its session tabs with it.
+  // in its own, the ask never a line under the name) beside the
+  // conversation, read in its card.
   await surface(
     "artifact head",
     `${base}/session/${talk}`,
     '[data-slot="side-head"]',
-    WIDTHS
+    WIDTHS,
+    undefined,
+    '[data-slot="side-card"]'
   );
 
   // Pages with no head of their own under the bar.
