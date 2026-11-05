@@ -17,7 +17,9 @@
  *   browser to its machine by the address it asks from, `thisMachine`), the
  *   yes turns that agent's report on; else, where the browser has Idle
  *   Detection, the yes asks it; else the step says this browser can't.
- *   Notifications are asked while still to answer. A no is kept.
+ *   Notifications are asked while still to answer. A no is kept. On a
+ *   phone the onboarding row asks for notifications alone ({@link rowAsks});
+ *   the presence menu still offers this browser's report there.
  */
 import type {
   DeskAck,
@@ -215,6 +217,20 @@ export const deskAsks = (): DeskAsk => {
 };
 
 /**
+ * What the onboarding row asks for: on a phone notifications alone, never
+ * whether the person is using it; elsewhere all {@link deskAsks} names.
+ */
+export const rowAsks = (): DeskAsk =>
+  onPhone()
+    ? {
+        agent: null,
+        idle: false,
+        notify: state.permissions?.notify === "default",
+        unavailable: false,
+      }
+    : deskAsks();
+
+/**
  * This device's report of whether the person is at this computer, as the
  * presence menu says it: on (its agent's report, or this browser's, turned
  * on by the person), off, blocked in the browser's site settings, or
@@ -268,11 +284,11 @@ export async function setAtComputer(on: boolean): Promise<void> {
 
 /**
  * Site settings this browser blocks for CawCo, by the names it shows them:
- * Idle Detection only where it counts ({@link deskAsks}' rule), notifications
- * always.
+ * Idle Detection only where it counts ({@link deskAsks}' rule) and was
+ * offered (`idle`: not the phone's row), notifications always.
  */
-const blockedNames = (after: DeskPermissions): string[] => [
-  ...(after.idle === "denied" && deskSource() === "browser"
+const blockedNames = (after: DeskPermissions, idle: boolean): string[] => [
+  ...(idle && after.idle === "denied" && deskSource() === "browser"
     ? [presenceWords.deviceUse]
     : []),
   ...(after.notify === "denied"
@@ -280,10 +296,13 @@ const blockedNames = (after: DeskPermissions): string[] => [
     : []),
 ];
 
-/** What this browser blocks and where to turn it on; null when nothing is. */
-export const blockedHere = (): Refusal | null => {
+/**
+ * What this browser blocks and where to turn it on; null when nothing is.
+ * `idle` false leaves Idle Detection out: the phone's row never offered it.
+ */
+export const blockedHere = (idle = true): Refusal | null => {
   const { permissions } = state;
-  const names = permissions ? blockedNames(permissions) : [];
+  const names = permissions ? blockedNames(permissions, idle) : [];
   if (!permissions || names.length === 0) {
     return null;
   }
@@ -295,13 +314,19 @@ export const blockedHere = (): Refusal | null => {
 };
 
 /**
- * Asks this browser for what it is still to be asked ({@link deskAsks}), on the
- * person's press: the browser's own prompts. A refusal names each setting
- * it blocks and where to turn it on.
+ * Asks this browser, on the person's press, for what its place offers: the
+ * onboarding row's {@link rowAsks} (`row`), the presence menu's
+ * {@link deskAsks} (`menu`); the browser's own prompts. A refusal names
+ * each setting it blocks and where to turn it on.
  */
-export async function allowHere(): Promise<void> {
-  const ask = deskAsks();
-  state.asked = ask;
+export async function allowHere(from: "row" | "menu"): Promise<void> {
+  const ask = from === "row" ? rowAsks() : deskAsks();
+  // The row says what the press asked for and ticks it; on a phone it
+  // never says the menu's presence, so a menu press there leaves it be.
+  const inRow = from === "row" || !onPhone();
+  if (inRow) {
+    state.asked = ask;
+  }
   state.pending = "allow";
   state.refusal = null;
   // The browser's prompts first, in the press itself (presence.ts).
@@ -319,9 +344,12 @@ export async function allowHere(): Promise<void> {
     }
     state.reportOn = deskReportOn();
     state.answered = deskAnswered();
-    const blocked = blockedHere();
+    const blocked = blockedHere(from === "menu" || !onPhone());
     if (blocked) {
       state.refusal = blocked;
+      return;
+    }
+    if (!inRow) {
       return;
     }
     state.ticked = true;
@@ -359,7 +387,7 @@ export const asksHere = (): boolean => {
   if (state.skipped) {
     return false;
   }
-  const ask = deskAsks();
+  const ask = rowAsks();
   // A browser that can't read presence, with notifications answered, has
   // nothing to allow: the presence menu says so ("not available here").
   return ask.agent !== null || ask.idle || ask.notify;

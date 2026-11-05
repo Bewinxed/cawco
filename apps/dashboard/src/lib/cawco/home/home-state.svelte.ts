@@ -69,7 +69,7 @@ import {
 import { signInWarning } from "../machine";
 import { type MarkHue, markHue } from "../mark";
 import { heldOrder } from "../motion/held-order.svelte";
-import { asksHere, deskAsks, onPhone, person } from "../person.svelte";
+import { asksHere, onPhone, person, rowAsks } from "../person.svelte";
 import {
   listTasksWaiting,
   stageLabel,
@@ -451,7 +451,8 @@ interface TailnetItem {
  * The consent step: this computer telling CawCo when the person is at it
  * (its CawCo agent's report, else Chromium's Idle Detection) and showing
  * what needs them as a desktop notification (presence.ts), while either is
- * still to ask (person.svelte.ts `deskAsks`) and the row wasn't put away
+ * still to ask (person.svelte.ts `rowAsks`: on a phone, notifications
+ * alone) and the row wasn't put away
  * with Skip, which is a no, remembered. Its notice says why and what the
  * person gets, what is read and what never is; Allow is the yes: it turns
  * the agent's report on, or asks the browser. Nothing reports before it.
@@ -1390,7 +1391,7 @@ class Home {
     // This browser's presence: its step while something is still to ask,
     // its tick a moment after; a press's refusal stands on it until Skip.
     // While a press stands, the row says what that press asked for.
-    const ask = person.asked ?? deskAsks();
+    const ask = person.asked ?? rowAsks();
     const desk: NeedsItem[] =
       person.permissions &&
       (asksHere() ||

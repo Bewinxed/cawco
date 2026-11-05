@@ -255,7 +255,8 @@
           closeOnSelect={false}
           data-slot="set-up-browser"
           disabled={person.pending === "allow"}
-          onSelect={() => allowHere()}>{presenceWords.setUp}</DropdownMenu.Item
+          onSelect={() => allowHere("menu")}
+          >{presenceWords.setUp}</DropdownMenu.Item
         >
       {/if}
     </DropdownMenu.Group>

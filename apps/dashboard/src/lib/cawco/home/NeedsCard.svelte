@@ -206,7 +206,7 @@
           );
         }
         return item.unavailable
-          ? presenceWords.unavailable(onPhone())
+          ? presenceWords.unavailable
           : presenceWords.lead(item, onPhone());
       case "relay":
         return "";
@@ -1128,7 +1128,7 @@
                 data-allow
                 disabled={person.pending === "allow"}
                 label={presenceWords.allow}
-                onclick={() => allowHere()}
+                onclick={() => allowHere("row")}
                 pending={person.pending === "allow"}
                 pendingLabel={presenceWords.allowing}
                 size="sm"

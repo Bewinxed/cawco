@@ -4,7 +4,8 @@
  * that count), and the consent step in Needs you that lets this computer
  * say when the person is at it (its CawCo agent, or Chromium's Idle
  * Detection, "Your device use" in its site settings) and show what needs
- * them as a desktop notification. Nothing reports before the person's yes.
+ * them as a desktop notification; on a phone that step asks for
+ * notifications alone. Nothing reports before the person's yes.
  * State words only: nothing says what the person did.
  */
 /**
@@ -59,46 +60,33 @@ export const presenceWords = {
   setUp: "Set up this browser",
   /** The trigger's name, with the dot's word after it. */
   you: (state: string) => `You · ${state}`,
-  /** The onboarding row's title, a noun true before and after: your presence while it is asked, else notifications alone. */
+  /**
+   * The onboarding row's title, a noun true before and after: your presence
+   * while it is asked (never on a phone), else notifications alone.
+   */
   title: (activity: boolean, phone: boolean) => {
     if (activity) {
-      return phone
-        ? "Your presence on this phone"
-        : "Your presence at this computer";
+      return "Your presence at this computer";
     }
     return phone
       ? "Notifications on this phone"
       : "Notifications in this browser";
   },
-  /**
-   * What the person gets, the ask's first sentence: on a phone only that
-   * agents stay quiet, since the phone is where what needs them goes.
-   */
-  gets: (phone: boolean) =>
-    phone
-      ? "Agents stay quiet while you're away."
-      : "Agents stay quiet while you're away, and what needs you goes to your phone.",
-  /**
-   * What is read, by what reads it; "only" says what never is. The agent
-   * reads its own computer, whichever device shows the ask.
-   */
-  reads: (reader: "agent" | "computer" | "phone") => {
-    switch (reader) {
-      case "agent":
-        return "only whether its keys or pointer moved and whether its screen is locked";
-      case "phone":
-        return "only whether you've touched this phone and whether it's locked";
-      case "computer":
-        return "only whether keys or the pointer moved and whether the screen is locked";
-    }
-  },
+  /** What the person gets, the presence ask's first sentence. */
+  gets: "Agents stay quiet while you're away, and what needs you goes to your phone.",
+  /** What is read, by what reads it; "only" says what never is. */
+  reads: (reader: "agent" | "computer") =>
+    reader === "agent"
+      ? "only whether its keys or pointer moved and whether its screen is locked"
+      : "only whether keys or the pointer moved and whether the screen is locked",
   /** Notifications, while still to ask: the Allow sentence's last clause. */
   notifies: "this site show notifications",
   /**
    * The consent step's notice: what the person gets, then what Allow turns
    * on and what it reads (this computer's CawCo agent by the machine's
    * name, or this browser's Idle Detection), then notifications while they
-   * are still to ask. Nothing is on before Allow.
+   * are still to ask. A phone is asked for notifications alone. Nothing is
+   * on before Allow.
    */
   lead: (
     ask: { agent: string | null; idle: boolean; notify: boolean },
@@ -106,10 +94,10 @@ export const presenceWords = {
   ) => {
     const notify = ask.notify ? `, and ${presenceWords.notifies}` : "";
     if (ask.agent) {
-      return `${presenceWords.gets(phone)} Allow lets the agent on ${ask.agent} read ${presenceWords.reads("agent")}${notify}.`;
+      return `${presenceWords.gets} Allow lets the agent on ${ask.agent} read ${presenceWords.reads("agent")}${notify}.`;
     }
     if (ask.idle) {
-      return `${presenceWords.gets(phone)} Allow lets this browser read ${presenceWords.reads(phone ? "phone" : "computer")}${notify}.`;
+      return `${presenceWords.gets} Allow lets this browser read ${presenceWords.reads("computer")}${notify}.`;
     }
     return phone
       ? `What needs you reaches you while CawCo isn't in front. Allow lets ${presenceWords.notifies}.`
@@ -125,19 +113,13 @@ export const presenceWords = {
    * with no CawCo agent, asked only while notifications are still to ask:
    * what counts here instead, then notifications.
    */
-  unavailable: (phone: boolean) =>
-    `${
-      phone
-        ? "This browser can't read whether you're on this phone, so only taps in CawCo count here."
-        : "This browser can't read whether you're at this computer, so only presses in the CawCo tab count here."
-    } Allow lets ${presenceWords.notifies}.`,
+  unavailable:
+    "This browser can't read whether you're at this computer, so only presses in the CawCo tab count here. Allow lets this site show notifications.",
   meta: "Onboarding · this browser",
   /** Its tick, once allowed: what turned on. */
   done: (activity: boolean, phone: boolean) => {
     if (activity) {
-      return phone
-        ? "CawCo knows when you're on this phone now."
-        : "CawCo knows when you're at this computer now.";
+      return "CawCo knows when you're at this computer now.";
     }
     return phone
       ? "This phone shows notifications now."
