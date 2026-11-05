@@ -243,12 +243,18 @@ import type { TailnetServing } from "./tailnet-https";
  *    at the page, at the card the show names, once it is), where the
  *    project whose board draws it (`board`) stood. A page built for 48
  *    reads a `board` the hub no longer sends, so it reloads first.
+ * 50: an artifact waits on the person for its questions not answered
+ *    (`ArtifactReason` `answers`: answered of asked, a pick, a note or a
+ *    pin the agent answered and resolved each answering one), where its
+ *    cards not picked (`picks`) and its writes not sent (`unsent`) stood.
+ *    A page built for 49 reads reasons the hub no longer sends, so it
+ *    reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 49;
+export const WIRE_PROTOCOL = 50;
 
 /**
  * What a session's stream carries: the changes each frame made to its

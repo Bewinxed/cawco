@@ -15,10 +15,11 @@
  *   2026-10-16): the filing is what carries.
  * - **Reading** ({@link createOpenItems}): code builds the "Open items"
  *   section from those rows, word for word: the session's plan (its open
- *   steps and its spec), its task's open to-dos, the open tasks it filed, its
- *   decision pages not yet decided with their cards, and its notes still in
- *   the project's memory inbox, and its asks still waiting on the person
- *   (asks.ts). Every harness has it listed after each of its compactions,
+ *   steps and its spec), its task's open to-dos, the open tasks it filed,
+ *   every question its delegation tree put to the person, open or answered
+ *   and not yet taken (artifacts/questions.ts, its own first, an ended
+ *   delegate's taken up by it), its notes still in the project's memory
+ *   inbox, and its asks still waiting on the person (asks.ts). Every harness has it listed after each of its compactions,
  *   whoever asked for it, each reading the `open_items` tool: Claude Code
  *   through the agent's SessionStart hook on the `compact` source (claude.ts
  *   `openItemsAfterCompaction`), pi as a message that starts no turn on its
@@ -27,8 +28,6 @@
  *   opencode-plugin.ts). A person's Continue opens the new session on it.
  */
 import {
-  artifactLink,
-  decisionLink,
   type InstanceRow,
   type PlanStep,
   type SessionPlan,
@@ -39,10 +38,10 @@ import {
 } from "@cawco/core";
 import { askLink } from "@cawco/core/asks";
 import type { ContextFill } from "@cawco/core/context-filing";
-import type { DecisionCard, DecisionPageRead } from "@cawco/core/decisions";
 import { contextWords } from "@cawco/core/words/context";
+import type { QuestionAnswer } from "./artifacts/questions";
+import type { AskedOf } from "./artifacts/service";
 import type { DbShape } from "./db";
-import type { Decisions } from "./decisions";
 import type { Note } from "./memory";
 import type { Tasks } from "./tasks";
 
@@ -89,14 +88,14 @@ const OPEN_ITEMS_HEADING =
 export interface OpenItemRows {
   /** Its asks still waiting on the person, approvals and questions, each by its link. */
   asks: string[];
-  /** Its decision pages not decided yet, each with its cards. */
-  decisions: { cards: DecisionCard[]; read: DecisionPageRead }[];
   /** Its notes still in its project's memory inbox. */
   notes: Note[];
   /** Its plan: steps, spec, and an attempt's task with its to-dos. */
   plan: SessionPlan | null;
   /** The project its records live in; null for a session in none. */
   projectId: string | null;
+  /** Every question its delegation tree put to the person, open or answered, its own first (artifacts/service.ts `questions`). */
+  questions: AskedOf[];
   /** The session whose records these are: its steps' links name it. */
   session: string;
   /** The open tasks it filed, each with its description and open to-dos. */
@@ -132,12 +131,112 @@ const under = (text: string): string[] =>
     .split("\n")
     .map((line) => (line ? `  ${line}` : ""));
 
+/** Questions one read of the Open items lists, at most: a page, from `cursor`. Our call. */
+const QUESTIONS_PAGE = 30;
+
+/** Which questions a read lists, and how: from `cursor` (a count), each said whole when `detailed`. */
+export interface QuestionsPage {
+  cursor: number;
+  detailed: boolean;
+}
+
+/** His words in a line: quoted, cut at `most` characters unless the read is detailed. */
+const quoted = (text: string, detailed: boolean, most = 160): string => {
+  const flat = detailed ? text.trim() : text.trim().replace(/\s+/gu, " ");
+  return `“${!detailed && flat.length > most ? `${flat.slice(0, most - 1)}…` : flat}”`;
+};
+
+/** What he answered with, in words. */
+const answerWords = (answer: QuestionAnswer, detailed: boolean): string => {
+  switch (answer.by) {
+    case "pick":
+      return `picked ${(answer.options ?? []).map((one) => quoted(one, detailed, 60)).join(", ")}${answer.said ? `, note ${quoted(answer.said, detailed)}` : ""}`;
+    case "note":
+      return `note ${quoted(answer.said, detailed)}`;
+    case "value":
+      return `set ${answer.said}`;
+    case "pin":
+      return `a pin on it you answered and resolved: ${quoted(answer.said, detailed)}`;
+    case "reply":
+      return `replied ${quoted(answer.said, detailed)}`;
+    case "resolve":
+      return "resolved it";
+    default:
+      return String(answer.by);
+  }
+};
+
+/** An artifact's line in the questions part: its link and kind, and whose it is when not the session's. */
+const artifactHead = (of: AskedOf): string => {
+  const ended = of.session?.ended ? ", ended: yours now" : "";
+  const whose = of.session ? `, made in ${of.session.link}${ended}` : "";
+  return `- ${of.artifact.link} (${of.artifact.kind}${whose})`;
+};
+
+/** A question's lines: answered with what he said and when, or open, by its link; detailed, what was asked of a pin and a card's why. */
+const questionLines = (
+  question: AskedOf["questions"][number],
+  detailed: boolean
+): string[] => {
+  const { answer } = question;
+  const head =
+    question.state === "answered" && answer
+      ? `answered, ${answerWords(answer, detailed)} (${answer.at.slice(0, 16).replace("T", " ")})`
+      : "open";
+  return [
+    `  - ${head}: ${question.link}`,
+    ...(detailed && question.kind === "pin" && question.words
+      ? [`    You asked: ${quoted(question.words, true)}`]
+      : []),
+    ...(detailed && question.why ? [`    Why: ${question.why}`] : []),
+  ];
+};
+
+/**
+ * The questions part: each artifact by its link, whose it is when not the
+ * session's, then each question open or answered, by its link (what
+ * `question_close` takes), a page of {@link QUESTIONS_PAGE} from the
+ * cursor, its own first as the reader gave them.
+ */
+const questionsPart = (
+  asked: readonly AskedOf[],
+  page: QuestionsPage
+): string[] => {
+  const all = asked.flatMap((of) =>
+    of.questions.map((question) => ({ of, question }))
+  );
+  if (all.length === 0) {
+    return [];
+  }
+  const shown = all.slice(page.cursor, page.cursor + QUESTIONS_PAGE);
+  const lines: string[] = [
+    "### Questions you and your delegates put to the person",
+    "An open one waits on him; an answered one waits on you: act on it, then close it with question_close (taken, or withdrawn when it no longer applies).",
+  ];
+  shown.forEach(({ of, question }, n) => {
+    if (shown[n - 1]?.of !== of) {
+      lines.push(artifactHead(of));
+    }
+    lines.push(...questionLines(question, page.detailed));
+  });
+  const next = page.cursor + shown.length;
+  if (next < all.length) {
+    lines.push(
+      `${all.length - next} more questions past these: open_items with cursor ${next}.`
+    );
+  }
+  return lines;
+};
+
 /**
  * The Open items section, built from `rows`: each source under its own
  * heading, its rows as stored; a source with nothing open says nothing. With
  * nothing open anywhere it says so, so a reader knows the records were read.
  */
-function openItemsSection(rows: OpenItemRows): string {
+export function openItemsSection(
+  rows: OpenItemRows,
+  page: QuestionsPage
+): string {
   const parts: string[] = [];
   const steps = (rows.plan?.steps ?? []).filter(
     (step) => step.status !== "completed"
@@ -173,18 +272,7 @@ function openItemsSection(rows: OpenItemRows): string {
       ])
     );
   }
-  if (rows.decisions.length > 0) {
-    parts.push(
-      "### Your decision pages the person has not decided",
-      ...rows.decisions.flatMap(({ read, cards }) => [
-        `- ${read.artifactId ? artifactLink(read.artifactId, read.title) : `${read.name}: ${read.title}`} (${read.state})`,
-        ...cards.flatMap((card) => [
-          `  - ${read.artifactId ? decisionLink(read.artifactId, card.id, card.question) : card.question}`,
-          ...(card.why.trim() ? [`    Why: ${card.why.trim()}`] : []),
-        ]),
-      ])
-    );
-  }
+  parts.push(...questionsPart(rows.questions, page));
   if (rows.asks.length > 0) {
     parts.push(
       "### Your asks waiting on the person (each answer arrives as a message)",
@@ -205,18 +293,19 @@ function openItemsSection(rows: OpenItemRows): string {
     ...(parts.length > 0
       ? parts
       : [
-          "Nothing open is filed: no open plan steps, spec, to-dos, tasks, decision pages, notes or asks.",
+          "Nothing open is filed: no open plan steps, spec, to-dos, tasks, questions to the person, notes or asks.",
         ]),
   ].join("\n");
 }
 
 export interface OpenItemsDeps {
   db: Pick<DbShape, "asks" | "getInstancesByIds" | "workItem">;
-  decisions: Pick<Decisions, "undecidedBy">;
   /** A project's memory inbox, oldest first (memory.ts `inboxNotes`). */
   inbox: (projectId: string) => Promise<Note[]>;
   /** A session's plan as its followers hold it (plans.ts `read`). */
   plan: (instanceId: string) => Promise<SessionPlan>;
+  /** Every question a session's delegation tree put to the person (artifacts/service.ts `questions`). */
+  questions: (instanceId: string) => AskedOf[];
   tasks: Pick<Tasks, "get" | "list">;
 }
 
@@ -264,20 +353,20 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
     const projectId = projectOf(deps, row);
     const plan = await deps.plan(instanceId);
     const asks = deps.db.asks.openOf(instanceId).map(askLink);
+    const questions = deps.questions(instanceId);
     if (!projectId) {
       return {
         session: instanceId,
         projectId: null,
         asks,
         plan,
+        questions,
         tasks: [],
-        decisions: [],
         notes: [],
       };
     }
-    const [tasks, decisions, notes] = await Promise.all([
+    const [tasks, notes] = await Promise.all([
       filedTasks(deps, projectId, instanceId),
-      deps.decisions.undecidedBy(projectId, instanceId),
       deps.inbox(projectId),
     ]);
     return {
@@ -285,15 +374,17 @@ export const createOpenItems = (deps: OpenItemsDeps) => {
       projectId,
       asks,
       plan,
+      questions,
       tasks,
-      decisions,
       notes: notes.filter((note) => note.session === instanceId),
     };
   };
   return {
     rows,
-    /** The Open items section for `instanceId`, built now from its records. */
-    read: async (instanceId: string): Promise<string> =>
-      openItemsSection(await rows(instanceId)),
+    /** The Open items section for `instanceId`, built now from its records: its questions from `page`'s cursor, said whole when detailed. */
+    read: async (
+      instanceId: string,
+      page: QuestionsPage = { cursor: 0, detailed: false }
+    ): Promise<string> => openItemsSection(await rows(instanceId), page),
   };
 };

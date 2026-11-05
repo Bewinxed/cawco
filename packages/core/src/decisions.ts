@@ -231,6 +231,17 @@ export const pickMade = (
 ): boolean =>
   card ? pickOf(card, entry).picked : (entry?.options?.length ?? 0) > 0;
 
+/**
+ * Whether the person answered one choice by what he wrote on it: a pick
+ * ({@link pickMade}) or a note. What the page's own bar and Send count;
+ * the hub's questions count a pin on it the agent answered and resolved
+ * too (hub artifacts/questions.ts), which the page does not hold.
+ */
+export const answerMade = (
+  card: { options: Pick<DecisionOption, "id">[] } | undefined,
+  entry: { note?: string | null; options?: string[] } | undefined
+): boolean => pickMade(card, entry) || !!entry?.note?.trim();
+
 /** A page's choices counted by {@link pickMade}: how many it asks, how many are picked, and its first one not picked. */
 export const picksMade = (
   asked: readonly {
@@ -288,6 +299,8 @@ export const CANVAS_DIAGRAMS = [
 export interface ProgramRead {
   /** The artifacts its Canvas and Preview pieces show, by id; a Preview's `width` its stories' own, px, when it says it. */
   artifacts: {
+    /** The card it is a picture of (the Decision's or one of its Options' media); absent outside a card. */
+    card?: string;
     component: Extract<DecisionComponentName, "Canvas" | "Preview">;
     id: string;
     width?: number;
@@ -361,12 +374,18 @@ const cardOf = (
 /** A Canvas or Preview as the artifact it shows; a Preview's `width` its stories' own, px, when it says one. */
 const artifactOf = (
   component: Extract<DecisionComponentName, "Canvas" | "Preview">,
-  props: Record<string, unknown>
+  props: Record<string, unknown>,
+  card: string | undefined
 ): ProgramRead["artifacts"][number] => {
   const { width } = props;
+  const piece = {
+    component,
+    id: text(props.artifact),
+    ...(card ? { card } : {}),
+  };
   return component === "Preview" && typeof width === "number" && width > 0
-    ? { component, id: text(props.artifact), width }
-    : { component, id: text(props.artifact) };
+    ? { ...piece, width }
+    : piece;
 };
 
 /** A Section's id: its title as a slug, made its own on the page with `-2`, `-3`… */
@@ -414,15 +433,19 @@ export const readProgram = (root: ElementNode | null): ProgramRead => {
     if (section) {
       read.sections.at(-1)?.cards.push(card.id);
     }
-    walk(props.media, section);
+    walk(props.media, section, card.id);
     for (const option of elementsOf(props.options)) {
-      walk(option.props.media, section);
+      walk(option.props.media, section, card.id);
     }
   };
-  const walk = (value: unknown, section: string | null): void => {
+  const walk = (
+    value: unknown,
+    section: string | null,
+    card?: string
+  ): void => {
     if (Array.isArray(value)) {
       for (const each of value) {
-        walk(each, section);
+        walk(each, section, card);
       }
       return;
     }
@@ -438,13 +461,13 @@ export const readProgram = (root: ElementNode | null): ProgramRead => {
     } else if (typeName === "Decision") {
       decision(props, section);
     } else if (typeName === "Canvas" || typeName === "Preview") {
-      read.artifacts.push(artifactOf(typeName, props));
+      read.artifacts.push(artifactOf(typeName, props, card));
     } else if (typeName === "Image") {
       read.images.push(text(props.file));
     } else if (typeName === "Setup") {
       read.setup = { shape: text(props.shape) };
     } else {
-      walk(props.children, section);
+      walk(props.children, section, card);
     }
   };
   walk(root.props.children, null);

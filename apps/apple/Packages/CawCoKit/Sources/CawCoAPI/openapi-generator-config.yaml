@@ -167,6 +167,7 @@ typeOverrides:
     ProjectOfferReason: OpenEnums.ProjectOfferReason
     ProjectStopFrameOutcome: OpenEnums.ProjectStopFrameOutcome
     PropKind: OpenEnums.PropKind
+    QuestionClosedAs: OpenEnums.QuestionClosedAs
     QueueSlot: OpenEnums.QueueSlot
     RebalanceNoticeHow: OpenEnums.RebalanceNoticeHow
     RelayPortName: OpenEnums.RelayPortName

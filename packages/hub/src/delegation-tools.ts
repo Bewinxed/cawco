@@ -30,6 +30,7 @@ import type {
   CommentRead,
   Created,
   Promoted,
+  QuestionClosed,
   Removed,
   Revised,
   Settled,
@@ -49,6 +50,7 @@ import {
   commentReply,
   commentResolve,
   designMap,
+  questionClose,
   settle,
 } from "./artifacts/tools";
 import {
@@ -56,7 +58,7 @@ import {
   handoffActions,
   type ItemEnd,
 } from "./delegation-actions";
-import { sentence, tool } from "./mcp-tool";
+import { type Presenter, sentence, tool } from "./mcp-tool";
 import {
   type AskChanged,
   artifactBrowsedWords,
@@ -77,6 +79,7 @@ import {
   commentRepliedWords,
   commentResolvedWords,
   designMapWords,
+  questionClosedWords,
   settledWords,
   type Updated,
 } from "./presenters/artifacts";
@@ -98,6 +101,14 @@ import {
   SESSION_TITLE_MAX,
   WAIT_ITEM_LIMIT,
 } from "./work-items";
+
+/**
+ * A tool whose answer the hub wrote already in the form asked for
+ * (`open_items`, concise or detailed): it is given as written, and the
+ * tool takes `response_format` (mcp-tool.ts lists it for any presenter but
+ * {@link sentence}).
+ */
+const verbatim: Presenter<string, unknown> = (text) => text;
 
 /** The name the caller gives a session it starts or delegates to; never cut from the brief. */
 const sessionTitle = () =>
@@ -914,11 +925,17 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "open_items",
-      "Your open items, word for word, as every compaction lists them: your plan's open steps and spec, your task's open to-dos, the open tasks you filed, your undecided decision pages with their cards, your notes still in the memory inbox and your asks still waiting on the person.",
-      {},
-      () => actions.openItems(),
-      sentence,
-      { annotations: { readOnlyHint: true } }
+      "Your open items, as every compaction lists them: read it first when one ends. Your plan, task to-dos, filed tasks, inbox notes, asks, and every question your tree put to the person, open or answered, yours first.",
+      {
+        cursor: z
+          .string()
+          .max(20)
+          .optional()
+          .describe("next_cursor, for more questions."),
+      },
+      ({ cursor }, format) => actions.openItems(cursor, format),
+      verbatim,
+      { annotations: { readOnlyHint: true }, detailed: verbatim }
     ),
     tool(
       "set_title",
@@ -984,11 +1001,8 @@ export function handoffTools(deps: HandoffDeps) {
       artifactList.name,
       artifactList.description,
       artifactList.input,
-      ({ cursor, waiting }) => {
-        const query = new URLSearchParams({
-          ...(cursor ? { cursor } : {}),
-          ...(waiting ? { waiting: "true" } : {}),
-        }).toString();
+      ({ cursor }) => {
+        const query = new URLSearchParams(cursor ? { cursor } : {}).toString();
         return actions.artifactCall(
           "GET",
           `/list${query ? `?${query}` : ""}`
@@ -1090,6 +1104,18 @@ export function handoffTools(deps: HandoffDeps) {
         ) as Promise<Settled>;
       },
       settledWords
+    ),
+    tool(
+      questionClose.name,
+      questionClose.description,
+      questionClose.input,
+      (closing) =>
+        actions.artifactCall(
+          "POST",
+          "/questions/close",
+          closing
+        ) as Promise<QuestionClosed>,
+      questionClosedWords
     ),
     tool(
       artifactRead.name,

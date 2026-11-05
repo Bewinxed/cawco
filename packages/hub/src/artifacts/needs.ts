@@ -9,22 +9,25 @@
  * Only an open ask counts. An artifact asks when it is a page to pick on or
  * a canvas to judge with its ask line set (the panel's head, `artifacts.ask`;
  * a row made before asks were kept has none), and is its session's to put
- * to the person: not a draft, not handed up to a parent that hasn't opened
- * it, not a maker's change held for one, not an option's media on a
+ * to the person: not a draft, not handed up to a parent that hasn't
+ * opened it, not a maker's change held for one, not an option's media on a
  * decision page (the page asks, its Canvases and Previews are its
  * pictures, before and after it is answered or gone), not a preview whose
- * folder is gone from its machine. Its ask is open while (a reason
- * each, strongest first) a canvas to judge was never opened; a decision
- * page has a card not picked; picks and notes are written and not sent
- * (comments go by themselves). Any artifact of its session's that is the
- * person's (not a draft, not handed up or held), a `try` preview and a
- * `draw` canvas too, also asks while an open pin's last entry is the agent's
- * reply marked as asking (`comment_reply`'s `asks`, core comments.ts
- * `pinAsks`): the person's reply there or resolve answers it, a look does
- * not. A reply that asks nothing reaches the person only on the page.
- * Never: a page or preview with no ask and no pin asking, an answered one. Picks sent that
- * the session hasn't read yet are its move, and ask nothing more of the
- * person; what is still unpicked is still theirs (rule 1).
+ * folder is gone from its machine. Its ask is open while (a reason each,
+ * strongest first) a canvas to judge was never opened and nothing on it
+ * answers it; a decision page has a question open (questions.ts: no pick,
+ * no note, no pin on it the agent answered and resolved, not taken or
+ * withdrawn by the agent). What is written and not sent is an answer: Send
+ * counts for nothing here. Any artifact of its session's that is the
+ * person's (not a draft, not handed up or held, not an option's media, not
+ * a working canvas: `draw`), a `try` preview too, also asks while an open
+ * pin's last entry is the agent's reply marked as asking (`comment_reply`'s `asks`,
+ * core comments.ts `pinAsks`) and the agent has not closed it: the person's
+ * reply there or resolve answers it, a look does not. A reply that asks
+ * nothing reaches the person only on the page. Never: a page or preview
+ * with no ask and no pin asking, an answered one. Answers the session
+ * hasn't read yet are its move, and ask nothing more of the person; what is
+ * still open is still theirs (rule 1).
  *
  * How it leaves, by rule:
  * 1. Answered: its reasons go as they are answered, a partial answer
@@ -35,8 +38,7 @@
  *    it), the writer's next turn ended ({@link ArtifactAsked.movedAt}), with
  *    no new show of it. A page wait stands until the page is answered or
  *    deleted, whatever the plan's steps are rewritten to. That retires its
- *    ask (not opened, picks), never the person's own unsent picks or an
- *    answer he hasn't read.
+ *    ask (not opened, questions open), never an answer he hasn't read.
  * 3. Superseded: a revision, or a same-name create, is the same artifact:
  *    its item changes in place.
  * 4. Its session ended: it leaves Needs you and is one notice, "<harness>
@@ -44,7 +46,7 @@
  * 5. Not now: the person's ✕, a notice id the item carries
  *    (`notNow`), acknowledged; a new `raisedAt` makes it another.
  * 6. A look: opening a canvas to judge clears "not opened", and opening
- *    anything clears its notices; only an answer clears picks or unsent.
+ *    anything clears its notices; only an answer clears an open question.
  */
 import {
   type ArtifactNeed,
@@ -81,8 +83,10 @@ export interface ArtifactAsked {
 
 /** What an artifact's doc and row say, read once per change of either. */
 export interface ArtifactFacts {
+  /** A decision page's questions (questions.ts `answersOf`): answered or taken, of those not withdrawn; none for any other artifact. */
+  answers: { answered: number; asked: number } | null;
   asked: ArtifactAsked | null;
-  /** Open pins whose agent's reply asks the person something (core `pinAsks`), by number. */
+  /** Open pins whose agent's reply asks the person something (core `pinAsks`), not closed by the agent, by number. */
   asking: number[];
   /** The newest of those replies, ISO; null when no pin asks. */
   askingAt: string | null;
@@ -91,17 +95,18 @@ export interface ArtifactFacts {
   /** Resolved pins whose closing answer is newer than the person's look, by number. */
   closed: { at: string; pin: number }[];
   draft: boolean;
-  /** The first decision, in page order, not picked. */
-  firstUnpicked: string | null;
+  /** The first decision, in page order, with no answer. */
+  firstOpen: string | null;
   /** Its folder isn't on its machine any more, in the daemon's words (core preview-proxy `folderGone`); null while it was there at its last start. */
   gone: string | null;
   /** Handed up to a parent session that hasn't opened it, or a maker's change held for it: not the person's yet. */
   handed: boolean;
+  /** A canvas to judge has its answer: a value, pick or note set on it, or the agent took or withdrew it. */
+  judged: boolean;
   /** When the person last had it on screen (a view's word), ISO. */
   lookedAt: string | null;
   /** An option's media on a decision page of its session (its Canvas or Preview piece), now or before that page went. */
   media: boolean;
-  picks: { asked: number; made: number } | null;
   /** When its session last published or changed it (`meta.revisedAt`), ISO. */
   revisedAt: string | null;
   /** What Send sends now: picks and notes since the last Send. */
@@ -142,18 +147,23 @@ const asks = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
     row.heldFor !== null
   );
 
-/** Whether `row` has a pin asking the person, and is theirs to be asked on: not a draft, not handed up or held. */
+/**
+ * Whether `row` has a pin asking the person, and is theirs to be asked on:
+ * not a draft, not handed up or held, not an option's media, not a working
+ * canvas (`draw`: the agent's drawing for the next agent).
+ */
 const pinsAsk = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
   facts.asking.length > 0 &&
-  !(facts.draft || facts.handed || row.heldFor !== null);
+  row.does !== "draw" &&
+  !(facts.draft || facts.handed || facts.media || row.heldFor !== null);
 
-/** A canvas to judge no view has had on screen yet (rule 6). */
-const unjudged = (row: ArtifactRow): boolean =>
-  row.does === "judge" && row.openedRevision === null;
+/** A canvas to judge no view has had on screen yet and nothing answers (rule 6). */
+const unjudged = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
+  row.does === "judge" && row.openedRevision === null && !facts.judged;
 
-/** A decision page with a card not picked. */
-const unpicked = (facts: ArtifactFacts): boolean =>
-  facts.picks !== null && facts.picks.made < facts.picks.asked;
+/** A decision page with a question open. */
+const unanswered = (facts: ArtifactFacts): boolean =>
+  facts.answers !== null && facts.answers.answered < facts.answers.asked;
 
 /**
  * Whether `row` could wait on the person or notice them at all, read from
@@ -165,13 +175,33 @@ export const mayWait = (row: ArtifactRow, facts: ArtifactFacts): boolean =>
   (!facts.draft &&
     row.heldFor === null &&
     row.does !== "try" &&
-    ((asks(row, facts) &&
-      (unjudged(row) || unpicked(facts) || facts.unsent > 0)) ||
+    ((asks(row, facts) && (unjudged(row, facts) || unanswered(facts))) ||
       facts.closed.length > 0 ||
       (facts.changes !== null &&
         facts.changes.count > 0 &&
         row.openedRevision !== null &&
         row.openedRevision < row.revision)));
+
+/**
+ * Whether what the person wrote on `row` goes to its session by itself
+ * (the owner, 2026-11-05: no Send once he has answered; artifacts/service.ts
+ * `sendAnswered`): a page to pick on with every question answered, taken or
+ * withdrawn, or a canvas to judge with its answer set, its picks, notes or
+ * values not sent yet. A project's setup page never does: its Send sets
+ * the project up. Nor does one not the person's (a draft, handed up or
+ * held, an option's media).
+ */
+export const answeredWhole = (
+  row: ArtifactRow,
+  facts: ArtifactFacts
+): boolean => {
+  if (!asks(row, facts) || isSetupPage(row) || facts.unsent === 0) {
+    return false;
+  }
+  return facts.answers
+    ? facts.answers.answered === facts.answers.asked
+    : row.does === "judge" && facts.judged;
+};
 
 /**
  * Rule 2: the writer moved on. Its plan waiting on the artifact holds the
@@ -205,14 +235,11 @@ const reasonsOf = (
   const reasons: ArtifactReason[] = [];
   if (asks(row, facts)) {
     const retired = movedOn(row.id, facts.asked, waits);
-    if (!retired && unjudged(row)) {
+    if (!retired && unjudged(row, facts)) {
       reasons.push({ kind: "unopened" });
     }
-    if (!retired && facts.picks && unpicked(facts)) {
-      reasons.push({ kind: "picks", ...facts.picks });
-    }
-    if (facts.unsent > 0) {
-      reasons.push({ kind: "unsent", count: facts.unsent });
+    if (!retired && facts.answers && unanswered(facts)) {
+      reasons.push({ kind: "answers", ...facts.answers });
     }
   }
   const [pin] = facts.asking;
@@ -232,13 +259,10 @@ const stopOf = (
   facts: ArtifactFacts
 ): ArtifactStop => {
   switch (reason?.kind) {
-    case "picks":
-      return facts.firstUnpicked
-        ? { card: facts.firstUnpicked }
-        : { top: true };
+    case "answers":
+      return facts.firstOpen ? { card: facts.firstOpen } : { top: true };
     case "answer":
       return { pin: reason.pin };
-    case "unsent":
     case "unopened":
     case undefined:
       return { top: true };
@@ -305,7 +329,7 @@ export const needOf = (
     notNow: notNowId(row.id, raisedAt),
     parked: false,
     unsent: facts.unsent,
-    ownSend: facts.picks !== null,
+    ownSend: facts.answers !== null,
   };
 };
 

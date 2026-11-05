@@ -1052,37 +1052,6 @@ export const createDecisions = (deps: DecisionsDeps) => {
     },
 
     /**
-     * The pages `instanceId` wrote that are not decided yet, newest first,
-     * each with its cards as the person sees them: a session's open
-     * questions to the person, for its open items (open-items.ts).
-     */
-    async undecidedBy(
-      projectId: string,
-      instanceId: string
-    ): Promise<{ cards: DecisionCard[]; read: DecisionPageRead }[]> {
-      known(projectId);
-      const [names, tasks] = await Promise.all([
-        pageNames(projectId),
-        deps.tasks(projectId),
-      ]);
-      const pages: { cards: DecisionCard[]; read: DecisionPageRead }[] = [];
-      for (const { name, artifact } of names) {
-        if (artifact && writerOf(artifact)?.instanceId !== instanceId) {
-          continue;
-        }
-        const { read, page } = await readOne(projectId, name, artifact, tasks);
-        if (
-          read.writer?.instanceId === instanceId &&
-          read.state !== "decided" &&
-          decisionPage(read, page)
-        ) {
-          pages.push({ read, cards: page.cards });
-        }
-      }
-      return pages.sort((a, b) => b.read.updatedAt - a.read.updatedAt);
-    },
-
-    /**
      * The person's send on a page: I'm done picking (no words), the page's
      * Send, which decides it (through the artifact's Send, which applies a
      * setup page's Setup too, whoever hears it); or a note (words), said to

@@ -17,7 +17,7 @@
  * (a) a decision page of five cards, none picked, made by session `caw`
  *     whose plan waits on it: Needs you lists it under `caw`, and `caw`
  *     waits on you.
- * (b) every card picked and sent: nothing listed, `caw` waits on nothing.
+ * (b) every card answered: nothing listed, `caw` waits on nothing.
  * (c) put away with Not now (`parked`): `caw` waits on nothing.
  * (d) a canvas to judge never opened, and a question parked under another
  *     session: both sessions wait on you; a session with neither does not.
@@ -98,13 +98,14 @@ const factsOf = (by: string, more: Partial<ArtifactFacts>): ArtifactFacts => ({
   askingAt: null,
   changes: null,
   closed: [],
+  answers: null,
   draft: false,
-  firstUnpicked: null,
+  firstOpen: null,
   gone: null,
   handed: false,
+  judged: false,
   lookedAt: null,
   media: false,
-  picks: null,
   revisedAt: "2026-11-05T10:00:00Z",
   unsent: 0,
   ...more,
@@ -140,8 +141,8 @@ export default {
     const open = needOf(
       page,
       factsOf(CAW, {
-        picks: { asked: 5, made: 0 },
-        firstUnpicked: "head",
+        answers: { asked: 5, answered: 0 },
+        firstOpen: "head",
       }),
       sessionsOf(PAGE)
     );
@@ -154,12 +155,12 @@ export default {
 
     const answered = needOf(
       page,
-      factsOf(CAW, { picks: { asked: 5, made: 5 } }),
+      factsOf(CAW, { answers: { asked: 5, answered: 5 } }),
       sessionsOf(PAGE)
     );
     const afterAnswer = waitingOnYou({ asks: [], artifacts: needs(answered) });
     check(
-      "b: every card picked and sent: nothing in Needs you, and the session waits on nothing",
+      "b: every card answered: nothing in Needs you, and the session waits on nothing",
       answered === null && afterAnswer.size === 0,
       `need: ${JSON.stringify(answered)}; waiting: ${said(afterAnswer)}`
     );

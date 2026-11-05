@@ -152,7 +152,9 @@ export const SEND_WRITES_MAX = 4 * 1024 * 1024;
 /**
  * The controls that send a page, each as the journal names it: the page's
  * own foot Send and its ⌘/Ctrl+↵, the panel head's Send and its More entry,
- * a Needs you row's Send, and the Decisions tab's I'm done picking. The owner, after a Send no one could trace: "make every
+ * a Needs you row's Send, and the Decisions tab's I'm done picking; and
+ * the hub's own, once every question is answered (hub artifacts/service.ts
+ * `sendAnswered`). The owner, after a Send no one could trace: "make every
  * page send log one line naming its route and control".
  */
 export const SEND_CONTROLS = {
@@ -162,6 +164,7 @@ export const SEND_CONTROLS = {
   "panel-more": "the panel's More › Send",
   "needs-you": "a Needs you row's Send",
   "decisions-done": "the Decisions tab's I'm done picking",
+  answered: "the hub, every question answered",
 } as const;
 
 export type SendControl = keyof typeof SEND_CONTROLS;

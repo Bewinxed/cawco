@@ -71,10 +71,17 @@ import type { Tasks } from "./tasks";
  * 2026-11-04: generate_image's provider may be the Gemini API on a held
  * key, which takes a `model` of its four, and its default is the fleet's
  * setting (worker 29,540, delegate 10,569 measured).
+ * 2026-11-05: every session settles its own questions to the person:
+ * open_items lists each question its tree put to him, open or answered,
+ * paged (`cursor`, `response_format`), and question_close takes or
+ * withdraws one (231 tokens); artifact_list loses `waiting`, the list it
+ * overlapped (worker 29,514, delegate 10,821 measured). A delegate puts
+ * pages and canvases to the person as a worker does, so it lists both; its
+ * budget is raised to it.
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 29_600,
-  delegate: 10_600,
+  delegate: 10_850,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,

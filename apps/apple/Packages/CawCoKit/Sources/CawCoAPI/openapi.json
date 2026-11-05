@@ -8126,6 +8126,77 @@
         }
       }
     },
+    "/api/instances/{id}/artifacts/questions/close": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "question": {
+                    "minLength": 1,
+                    "maxLength": 400,
+                    "type": "string"
+                  },
+                  "as": {
+                    "type": "string",
+                    "enum": [
+                      "taken",
+                      "withdrawn"
+                    ]
+                  },
+                  "why": {
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "question",
+                  "as",
+                  "why"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiInstancesByIdArtifactsQuestionsClose",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdArtifactsQuestionsClose 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionClosed"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesByIdArtifactsQuestionsClose 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances/{id}/artifacts/{artifact}/statements": {
       "post": {
         "parameters": [
@@ -41969,40 +42040,22 @@
           {
             "type": "object",
             "properties": {
+              "answered": {
+                "type": "number"
+              },
               "asked": {
                 "type": "number"
               },
               "kind": {
                 "type": "string",
                 "enum": [
-                  "picks"
+                  "answers"
                 ]
-              },
-              "made": {
-                "type": "number"
               }
             },
             "required": [
+              "answered",
               "asked",
-              "kind",
-              "made"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "count": {
-                "type": "number"
-              },
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "unsent"
-                ]
-              }
-            },
-            "required": [
-              "count",
               "kind"
             ]
           },
@@ -43857,6 +43910,27 @@
           "card",
           "option",
           "settled"
+        ]
+      },
+      "QuestionClosed": {
+        "description": "What `question_close` answers: the question, by its link, as it stands now.",
+        "type": "object",
+        "properties": {
+          "as": {
+            "$ref": "#/components/schemas/QuestionClosedAs"
+          },
+          "link": {
+            "type": "string"
+          },
+          "words": {
+            "description": "Its words as asked.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "as",
+          "link",
+          "words"
         ]
       },
       "Revised": {
@@ -66680,6 +66754,13 @@
           "deferred",
           "failed",
           "stopped"
+        ]
+      },
+      "QuestionClosedAs": {
+        "type": "string",
+        "enum": [
+          "taken",
+          "withdrawn"
         ]
       },
       "RebalanceNoticeHow": {

@@ -24,6 +24,7 @@ import type {
   Opened,
   PageBroken,
   Promoted,
+  QuestionClosed,
   Removed,
   Revised,
   Settled,
@@ -748,5 +749,11 @@ export const designMapWords = (map: DesignMap): string => {
 };
 
 /** `settle`: the card, the option it holds now, and who settled it. */
+/** `question_close`: the question by its link, and what it means for the person. */
+export const questionClosedWords = (answer: QuestionClosed): string =>
+  answer.as === "taken"
+    ? `${answer.link} is taken: it asks the person nothing more, and open_items lists it again only if he answers it anew.`
+    : `${answer.link} is withdrawn: it asks the person nothing more.`;
+
 export const settledWords = (answer: Settled): string =>
   `${answer.card} now holds ${answer.option.label}. ${decidedByLine(answer.settled)}. Its waits settle now; the person can pick again.`;

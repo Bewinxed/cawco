@@ -20,7 +20,7 @@
   decision and piece of media the program puts on it. The second row is the
   foot, the panel's full width, "never a scroll away" and never over a
   card, clear of a host's docked composer (the page's bottom padding) and
-  the screen's bottom inset: the count picked and its bar at the column's
+  the screen's bottom inset: the count answered and its bar at the column's
   start, Send at its end. It is a bar (DESIGN.md, The Title Bars Follow
   Liquid Glass Rule: "A bar draws no fill, hairline or shadow of its own",
   Send on a page of picks its one prominent action), so it stands on the
@@ -35,7 +35,11 @@
   setup page's never is: its Send carries the Setup whole every time (hub
   artifacts/service.ts `sendOwes`), so it says Set up whenever it stands.
 
-  The count and Send's label ("Send 3 picks": what goes) change in place
+  The count is the cards answered, by a pick or a note (core `answerMade`):
+  once every one is, the hub sends them by itself when his changes stand
+  quiet (hub artifacts/service.ts `sendAnswered`), and Send turns Sent; until
+  then Send sends what is answered now. The count and Send's label ("Send 3
+  answers": what goes) change in place
   through MorphText (DESIGN.md, The Steady Swap Rule), the count's digit
   rolling. ⌘/Ctrl+Enter sends from anywhere on the page; Send wears the keys
   on its keycaps. Sending, Send runs the kit's pending: its label stays, the
@@ -49,7 +53,7 @@
 -->
 <script lang="ts">
   import { unsentChoices } from "@cawco/core/choices";
-  import { pickMade, readProgram } from "@cawco/core/decisions";
+  import { answerMade, readProgram } from "@cawco/core/decisions";
   import { setupPageWords } from "@cawco/core/words/onboarding";
   import type { ElementNode } from "@openuidev/lang-core";
   import { setContext } from "svelte";
@@ -173,9 +177,9 @@
     return () => sizes.disconnect();
   });
   const ids = $derived(cards.map((card) => card.id));
-  /** Cards picked as core `pickMade` counts them, as artifact_list, artifact_read and the graph do. */
+  /** Cards answered, by a pick or a note (core `answerMade`): once every one is, the hub sends them by itself. */
   const count = $derived(
-    cards.filter((card) => pickMade(card, picks.now[card.id])).length
+    cards.filter((card) => answerMade(card, picks.now[card.id])).length
   );
   /** The bar's share filled, 0 to 1. */
   const share = $derived(ids.length ? count / ids.length : 0);
@@ -224,8 +228,8 @@
       return setupPageWords.send(setupName.now || String(props.title ?? ""));
     }
     return count === 0
-      ? "Send picks"
-      : `Send ${count} ${count === 1 ? "pick" : "picks"}`;
+      ? "Send answers"
+      : `Send ${count} ${count === 1 ? "answer" : "answers"}`;
   });
   /** What the page's live region says now. */
   let said = $state("");

@@ -1003,8 +1003,11 @@ export interface HandoffActions {
    * alone (the person's; a delegate's brief and hand-offs from its parent),
    * verbatim and in order, and the open items.
    */
-  /** This session's Open items section, built by the hub from its records (open-items.ts). */
-  readonly openItems: () => Promise<string>;
+  /** This session's Open items section, built by the hub from its records (open-items.ts): its questions from `cursor`, each said whole when `detailed`. */
+  readonly openItems: (
+    cursor?: string,
+    format?: "concise" | "detailed"
+  ) => Promise<string>;
   /** Shows the person a note in the transcript and pushes it to their devices — no peer, no ask. */
   sendToUser: (message: string, attachments?: string[]) => Promise<string>;
   /** Names this session; refused, in the hub's words, once the owner has named it. */
@@ -1588,9 +1591,13 @@ export const handoffActions = ({
       }
       return await delegateList(query);
     },
-    async openItems() {
+    async openItems(cursor, format) {
+      const query = new URLSearchParams({
+        ...(cursor ? { cursor } : {}),
+        ...(format === "detailed" ? { format } : {}),
+      }).toString();
       const response = await fetch(
-        `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/open-items`
+        `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/open-items${query ? `?${query}` : ""}`
       );
       return await hubText(response);
     },

@@ -42,6 +42,7 @@ import {
   DESK_CAPTURE_WIDTH,
   DESK_CAPTURES_PER_PAGE,
   decisionLink,
+  decisionReference,
   fileHash,
   type HandUpFailure,
   type InstanceRow,
@@ -51,6 +52,7 @@ import {
   type PlanWaits,
   type PreviewAddress,
   type PreviewSource,
+  parseReference,
   pinLink,
   planWaitsOnArtifact,
   type SendAttachment,
@@ -87,7 +89,6 @@ import {
   type MarkPictures,
   newAnswer,
   type Pin,
-  pinAsks,
   pinDelivery,
   pinReady,
   pinSaid,
@@ -219,6 +220,7 @@ import {
   type ArtifactAsked,
   type ArtifactFacts,
   type ArtifactSessions,
+  answeredWhole,
   mayWait,
   movedOn,
   needOf,
@@ -234,6 +236,15 @@ import {
   sceneChanges,
 } from "./page-changes";
 import { pagePictures } from "./page-pictures";
+import {
+  answersOf,
+  noneOpen,
+  QUESTIONS_CLOSED,
+  type Question,
+  type QuestionClose,
+  questionsOf,
+  stillAsked,
+} from "./questions";
 import { picturePath, thumbnailPath } from "./sync";
 import { LIST_PAGE } from "./tools";
 
@@ -719,6 +730,59 @@ export interface Settled {
 
 /** A decision page's choice, as the kit marks it (`data-cawco-choice="<id>"`). */
 const CHOICE_ATTRIBUTE = /\bdata-cawco-choice="([^"]+)"/gu;
+
+/** One artifact's questions to the person as `open_items` lists them (questions.ts): each open or answered; one taken or withdrawn is left out. */
+export interface AskedOf {
+  artifact: {
+    does: ArtifactDoes;
+    id: string;
+    kind: ArtifactKind;
+    link: string;
+    name: string;
+  };
+  questions: Question[];
+  /** The session that holds it, when it is not the reader: its link, and whether it ended (the reader takes its questions up). */
+  session: { ended: boolean; link: string } | null;
+}
+
+/** What `question_close` answers: the question, by its link, as it stands now. */
+export interface QuestionClosed {
+  as: QuestionClose["as"];
+  link: string;
+  /** Its words as asked. */
+  words: string;
+}
+
+/** A markdown link's destination, the last one in `text`. */
+const LINK_DESTINATION = /\]\((cawco:[^)\s]+)\)\s*$/u;
+
+/**
+ * The artifact and question key `asked` names (`question_close`): a card's
+ * link or `<page>#<card>` (`card:<id>`), a pin's link (`pin:<number>`, its
+ * number read to its id by the caller), else an artifact's link, name or
+ * handle (`judge`). A link is read bare or as its markdown.
+ */
+const questionKeyOf = (asked: string): [artifact: string, key: string] => {
+  const trimmed = asked.trim();
+  const ref = parseReference(LINK_DESTINATION.exec(trimmed)?.[1] ?? trimmed);
+  if (ref?.kind === "decision") {
+    const card = decisionReference(ref.id);
+    if (card) {
+      return [card.artifact, `card:${card.card}`];
+    }
+  }
+  if (ref?.kind === "pin") {
+    const slash = ref.id.lastIndexOf("/");
+    return [ref.id.slice(0, slash), `pin:${ref.id.slice(slash + 1)}`];
+  }
+  if (ref?.kind === "artifact") {
+    return [ref.id, "judge"];
+  }
+  const hash = trimmed.lastIndexOf("#");
+  return hash > 0
+    ? [trimmed.slice(0, hash), `card:${trimmed.slice(hash + 1)}`]
+    : [trimmed, "judge"];
+};
 
 /** One artifact as `artifact_list` answers it. */
 export interface ArtifactStatus {
@@ -4453,6 +4517,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
               `[artifacts] ${id}: the person's marks and the sheet's saves and errors were not delivered: ${error instanceof Error ? error.message : String(error)}`
             );
           })
+          .then(() => sendAnswered(id))
+          .catch((error: unknown) => {
+            console.warn(
+              `[artifacts] ${id}: the person's answers did not go by themselves: ${error instanceof Error ? error.message : String(error)}`
+            );
+          })
           .finally(() => delivering.delete(id));
       }),
     });
@@ -4670,7 +4740,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     row: ArtifactRow,
     body: SendBody,
     route: string,
-    to: PageHearer
+    to: PageHearer,
+    by: "person" | "hub" = "person"
   ): Promise<string> => {
     const doc = docs.doc(row.id);
     const state = stateOf(doc);
@@ -4716,8 +4787,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const meta = live.getMap("meta");
       meta.set("sentAt", at);
       meta.set("sentText", note);
-      // His Send is a look at everything on this revision: every change and every answer.
-      const changes = meta.get("changes") as ArtifactChanges | undefined;
+      // His Send is a look at everything on this revision: every change and every answer. The hub's is none.
+      const changes =
+        by === "person"
+          ? (meta.get("changes") as ArtifactChanges | undefined)
+          : undefined;
       if (changes) {
         seeChanges(
           live,
@@ -4725,7 +4799,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           changes.items.map((item) => item.anchor)
         );
       }
-      for (const pin of readPins(live).values()) {
+      for (const pin of by === "person" ? readPins(live).values() : []) {
         if (newAnswer(pin)) {
           seePin(live, pin.id, at);
         }
@@ -6615,15 +6689,55 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return entry > resolved ? entry : resolved;
   };
 
-  /** A decision page's picks, made of asked, and its first card not picked; none for any other artifact. */
-  const picksFacts = (
+  /** The agent's closes of an artifact's questions (questions.ts `QUESTIONS_CLOSED`). */
+  const closesOf = (doc: Doc): Record<string, QuestionClose> =>
+    (doc.getMap("meta").get(QUESTIONS_CLOSED) as
+      Record<string, QuestionClose> | undefined) ?? {};
+
+  /** The card each Canvas or Preview piece of page `row` is a picture of, by the artifact it shows. */
+  const mediaCards = (row: ArtifactRow): Map<string, string> => {
+    const program = programOf(row);
+    return new Map(
+      program === undefined
+        ? []
+        : readKept(program).artifacts.flatMap((media) =>
+            media.card ? [[media.id, media.card] as const] : []
+          )
+    );
+  };
+
+  /**
+   * Artifact `row`'s questions to the person (questions.ts), read from its
+   * doc; `put` whether it is put to the person at all (needs.ts `asks`) and
+   * whether its pins may ask him. Needs you reads them with both set and
+   * its own rules gating (needs.ts), `open_items` with each read here.
+   */
+  const questionsFrom = (
     row: ArtifactRow,
-    state: Record<string, ChoiceEntry>
-  ): Pick<ArtifactFacts, "firstUnpicked" | "picks"> => {
-    const { asked, made, firstUnpicked } = picksMade(choicesAsked(row), state);
+    doc: Doc,
+    pins: readonly Pin[],
+    put: { asked: boolean; pinsMayAsk: boolean }
+  ): Question[] =>
+    questionsOf({
+      artifact: { id: row.id, name: row.name, ask: row.ask },
+      ...put,
+      cards: choicesAsked(row),
+      judged: row.does === "judge",
+      media: row.kind === "page" ? mediaCards(row) : new Map(),
+      pins,
+      state: stateOf(doc),
+      closes: closesOf(doc),
+    });
+
+  /** A decision page's questions counted, its first open one, and whether a canvas to judge has its answer (needs.ts). */
+  const answersFacts = (
+    questions: readonly Question[]
+  ): Pick<ArtifactFacts, "answers" | "firstOpen" | "judged"> => {
+    const { asked, answered, firstOpen } = answersOf(questions);
     return {
-      firstUnpicked,
-      picks: asked > 0 ? { asked, made } : null,
+      answers: asked > 0 ? { asked, answered } : null,
+      firstOpen,
+      judged: noneOpen(questions, "judge"),
     };
   };
 
@@ -6663,9 +6777,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const pins = [...readPins(doc).values()].sort(
       (a, b) => a.number - b.number
     );
-    const asking = pins.filter(pinAsks);
+    const questions = questionsFrom(row, doc, pins, {
+      asked: true,
+      pinsMayAsk: true,
+    });
+    // A pin asks while its question is open: its reply answers it, and the agent's close takes it.
+    const open = new Set(
+      questions.flatMap((one) =>
+        one.kind === "pin" && one.state === "open" ? [one.key] : []
+      )
+    );
+    const asking = pins.filter((pin) => open.has(`pin:${pin.id}`));
     const facts: ArtifactFacts = {
-      ...picksFacts(row, state),
+      ...answersFacts(questions),
       asked: (meta.get("asked") as ArtifactAsked | undefined) ?? null,
       asking: asking.map((pin) => pin.number),
       askingAt: asking
@@ -6868,6 +6992,53 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     deps.needsMoved();
   };
 
+  /** Whether what the person wrote on `row` goes to its session by itself (needs.ts `sendsItself`). */
+  const sendsItself = (row: ArtifactRow): boolean =>
+    answeredWhole(row, withMedia(row, factsOf(row)));
+
+  /**
+   * The hub's own Send of `row` once the person's changes stand quiet
+   * ({@link marked}), when it sends itself ({@link sendsItself}): the same
+   * Send as his (`sendPage`: a decision page decided, the session told to
+   * read), taken as no look of his. Its session ended, it waits for the
+   * session that takes it up.
+   */
+  const sendAnswered = async (id: string): Promise<void> => {
+    const row = db.get(id);
+    const owner = row ? holder(row) : undefined;
+    if (!(row && owner && sendsItself(row)) || deps.finished(owner)) {
+      return;
+    }
+    await sendPage(
+      row,
+      { control: "answered" },
+      "hub",
+      { session: owner },
+      "hub"
+    );
+  };
+
+  /**
+   * Any change of artifact `row`'s doc, by anyone (a pick, a note, a value,
+   * a pin's reply or resolve, the agent's close): with nothing on it asking
+   * the person, its writer's plan waits on it no more (needs.ts rule 1, the
+   * page wait the hub set); with every question answered, what he wrote
+   * goes by itself once his changes stand quiet ({@link sendAnswered}).
+   */
+  const answersMoved = (row: ArtifactRow): void => {
+    // Only a pick or a judgement is waited on (askedNow) or sends itself.
+    if (row.does !== "pick" && row.does !== "judge") {
+      return;
+    }
+    const writer = askOf(row, factsOf(row))?.by;
+    if (writer && !pendingFor(row)) {
+      deps.clearArtifactWait(writer, row.id);
+    }
+    if (sendsItself(row)) {
+      marked(row.id, COMMENTS_QUIET_MS);
+    }
+  };
+
   /**
    * The Not now's in the person's acknowledgements, by artifact: the
    * latest `raisedAt` each was put away at. Raised again later, it is back.
@@ -6917,11 +7088,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (pendingFor(row)) {
       waitingOn.push("person");
     }
+    // The session's move: what is handed to it, what the person sent or drew and it hasn't read, and every answer of his it hasn't taken (question_close).
     if (
       !draft &&
       (handed ||
         picksAwaiting > 0 ||
-        (row.kind === "canvas" && unread.length > 0))
+        (row.kind === "canvas" && unread.length > 0) ||
+        questionsAsked(row).some((one) => one.state === "answered"))
     ) {
       waitingOn.push("session");
     }
@@ -6948,6 +7121,121 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ...(picks ? { picks } : {}),
       waitingOn,
     };
+  };
+
+  /**
+   * Artifact `row`'s questions as the session that asked reads them: put
+   * to the person only while it is his (not a draft, not handed up or held,
+   * not an option's media, its folder not gone; needs.ts `asks`), open or
+   * answered, never one taken or withdrawn.
+   */
+  const questionsAsked = (row: ArtifactRow): Question[] => {
+    if (row.heldFor !== null) {
+      return [];
+    }
+    const facts = withMedia(row, factsOf(row));
+    const mine = !(facts.draft || facts.handed || facts.media);
+    // A working canvas (`draw`) is the agent's drawing for the next agent: it asks him nothing.
+    const doc = docs.doc(row.id);
+    return stillAsked(
+      questionsFrom(
+        row,
+        doc,
+        [...readPins(doc).values()].sort((a, b) => a.number - b.number),
+        {
+          asked:
+            mine &&
+            facts.gone === null &&
+            (row.does === "pick" || row.does === "judge") &&
+            row.ask.trim() !== "",
+          pinsMayAsk: mine && row.does !== "draw",
+        }
+      )
+    );
+  };
+
+  /**
+   * Every question `instance`'s delegation tree put to the person
+   * ({@link questionsAsked}): its own artifacts first (those it holds and those it
+   * made into another's panel), then those of the sessions under it in its
+   * project, an ended delegate's included (its parent takes them up), each
+   * part newest first.
+   */
+  const askedBy = (instance: InstanceRow): AskedOf[] => {
+    const holders = holdersInTree(instance);
+    const mine = [...db.ofInstance(instance.id), ...db.ofMaker(instance.id)];
+    const seen = new Set<string>();
+    const rows = [
+      ...mine.sort(newestFirst),
+      ...[
+        ...ofTree(instance, holders),
+        ...answerable(instance, holders).filter(
+          (row) => row.instanceId !== instance.id
+        ),
+      ].sort(newestFirst),
+    ].filter((row) => {
+      const first = !seen.has(row.id);
+      seen.add(row.id);
+      return first;
+    });
+    return rows.flatMap((row) => {
+      const questions = questionsAsked(row);
+      if (questions.length === 0) {
+        return [];
+      }
+      const owner = holder(row);
+      return [
+        {
+          artifact: {
+            id: row.id,
+            kind: row.kind,
+            name: row.name,
+            does: row.does,
+            link: artifactLink(row.id, row.name),
+          },
+          session:
+            row.instanceId === null || row.instanceId === instance.id
+              ? null
+              : {
+                  link: sessionNamed(row.instanceId),
+                  ended: !owner || deps.finished(owner),
+                },
+          questions,
+        },
+      ];
+    });
+  };
+
+  /**
+   * The question `asked` names for `instance` (`question_close`): a card's
+   * link or `<page>#<card>`, a pin's link, an artifact's link, name or
+   * handle (its judgement), on an artifact it reads ({@link readable}).
+   * Refused in words when it names none of its questions.
+   */
+  const questionNamed = (
+    instance: InstanceRow,
+    asked: string
+  ): { question: Question; row: ArtifactRow } => {
+    const [artifact, key] = questionKeyOf(asked);
+    const row = readable(instance, artifact);
+    const doc = docs.doc(row.id);
+    const pins = [...readPins(doc).values()];
+    // A pin's link names it by number; its key is its id.
+    const pinKey = key.startsWith("pin:")
+      ? `pin:${pins.find((pin) => String(pin.number) === key.slice(4))?.id ?? key.slice(4)}`
+      : key;
+    const questions = questionsFrom(row, doc, pins, {
+      asked: true,
+      pinsMayAsk: true,
+    });
+    const question = questions.find((one) => one.key === pinKey);
+    if (!question) {
+      throw new ArtifactRefusal(
+        404,
+        `${named(row)} asks no such question. Its questions: ${questions.map((one) => one.link).join(", ") || "none"}.`
+      );
+    }
+    return { question, row };
   };
 
   return {
@@ -8797,6 +9085,52 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
     /** The person changed artifact `id`'s doc: what of it the session hasn't heard goes once quiet ({@link personMarked}). */
     personMarked,
+
+    /** Every question session `instanceId`'s delegation tree put to the person, open or answered ({@link askedBy}). */
+    questions: (instanceId: string): AskedOf[] =>
+      askedBy(sessionOf(instanceId)),
+
+    /**
+     * `question_close`: the session takes question `question` (it acted on
+     * his answer, `why` his words quoted) or withdraws it (`why` what
+     * superseded it). Kept in the artifact's doc
+     * ({@link QUESTIONS_CLOSED}), the hub's alone to write; nothing is
+     * deleted. Neither counts as asking the person (needs.ts), and a newer
+     * answer of his to one taken stands answered again.
+     */
+    closeQuestion: (
+      instanceId: string,
+      asked: { as: QuestionClose["as"]; question: string; why: string }
+    ): QuestionClosed => {
+      const instance = sessionOf(instanceId);
+      const { row, question } = questionNamed(instance, asked.question);
+      const close: QuestionClose = {
+        as: asked.as,
+        at: new Date().toISOString(),
+        by: instance.id,
+        why: asked.why.trim(),
+      };
+      docs.transact(row.id, "hub", (doc) => {
+        const meta = doc.getMap("meta");
+        meta.set(QUESTIONS_CLOSED, {
+          ...closesOf(doc),
+          [question.key]: close,
+        });
+      });
+      console.log(
+        `[artifacts] ${row.name} ${question.key} ${close.as} by ${instance.id}`
+      );
+      deps.needsMoved();
+      return { as: close.as, link: question.link, words: question.words };
+    },
+
+    /** Anyone changed artifact `id`'s doc: what waits on its answers moves ({@link answersMoved}). */
+    answersMoved: (id: string): void => {
+      const row = db.get(id);
+      if (row) {
+        answersMoved(row);
+      }
+    },
 
     /**
      * The page's pictures of the marks the person just made there (core

@@ -595,6 +595,24 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }
       }
     )
+    // question_close: the session takes a question from the person's answer, or withdraws it; nothing is deleted.
+    .post(
+      "/api/instances/:id/artifacts/questions/close",
+      {
+        body: t.Object({
+          question: t.String({ minLength: 1, maxLength: 400 }),
+          as: t.Union([t.Literal("taken"), t.Literal("withdrawn")]),
+          why: t.String({ minLength: 1, maxLength: CHOICE_LIMITS.why }),
+        }),
+      },
+      ({ params, body }) => {
+        try {
+          return artifacts.closeQuestion(params.id, body);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
     // A decision page's revision (artifact_update's statements): merged into its program by name; what changed.
     .post(
       "/api/instances/:id/artifacts/:artifact/statements",

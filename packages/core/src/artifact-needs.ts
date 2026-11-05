@@ -7,12 +7,15 @@
  * (hub artifacts/needs.ts), and serves the lane with every other item:
  * `GET /api/artifact-needs`, the `artifact.needs` frame, and `/api/pending`.
  *
- * One item per artifact with an open ask (a page to pick on or a canvas to
- * judge, its ask line set, its session not ended) or an open pin whose
- * agent's reply asks the person something (core comments.ts `pinAsks`), its
- * reasons strongest first: not opened, picks not made, marks written and not
- * sent, pins asking. A reply that asks nothing stays on the page. A page or
- * preview with no ask and no pin asking is never one. A revision with nothing asked, a resolved pin's
+ * One item per artifact with an open question (hub artifacts/questions.ts):
+ * a page to pick on or a canvas to judge, its ask line set, its session not
+ * ended, or an open pin whose agent's reply asks the person something (core
+ * comments.ts `pinAsks`), its reasons strongest first: not opened, questions
+ * not answered, pins asking. A question is answered by a pick, a note, a set
+ * value, or a pin on it the agent replied to and resolved, Send or no Send:
+ * what is written and not sent asks nothing more of the person. A reply that
+ * asks nothing stays on the page. A page or preview with no ask and no pin
+ * asking is never one. A revision with nothing asked, a resolved pin's
  * closing answer and a session that ended with its ask unanswered are
  * notices, never needs: a notice never outranks an ask.
  */
@@ -26,10 +29,8 @@ import { artifactWords } from "./words/artifacts";
 export type ArtifactReason =
   /** A canvas or page to judge, shown and never opened. */
   | { kind: "unopened" }
-  /** A decision page's picks: `made` of `asked`. */
-  | { asked: number; kind: "picks"; made: number }
-  /** Picks and notes written and not sent (the panel's Send count); comments go by themselves. */
-  | { count: number; kind: "unsent" }
+  /** A decision page's questions: `answered` of `asked` (those withdrawn are not asked). */
+  | { answered: number; asked: number; kind: "answers" }
   /**
    * Open pins whose agent's reply asks the person something, not yet
    * replied to or resolved (core comments.ts `pinAsks`); `pin` the first by
@@ -40,8 +41,7 @@ export type ArtifactReason =
 /** The reasons' order, strongest first: what the row line leads with. */
 export const ARTIFACT_REASONS = [
   "unopened",
-  "picks",
-  "unsent",
+  "answers",
   "answer",
 ] as const satisfies readonly ArtifactReason["kind"][];
 
@@ -232,10 +232,8 @@ export const reasonWords = (reason: ArtifactReason, alone = false): string => {
   switch (reason.kind) {
     case "unopened":
       return artifactWords.notOpened;
-    case "picks":
-      return artifactWords.picked(reason.made, reason.asked);
-    case "unsent":
-      return artifactWords.unsent(reason.count);
+    case "answers":
+      return artifactWords.answered(reason.answered, reason.asked);
     case "answer":
       return alone && reason.count === 1
         ? artifactWords.newAnswerOn(reason.pin)
@@ -245,7 +243,7 @@ export const reasonWords = (reason: ArtifactReason, alone = false): string => {
   }
 };
 
-/** The row's line: every reason, strongest first ("3 of 9 picked · 2 unsent · 1 new answer"). */
+/** The row's line: every reason, strongest first ("3 of 9 answered · 1 new answer"). */
 export const reasonLine = (pending: readonly ArtifactReason[]): string =>
   pending
     .map((reason) => reasonWords(reason, pending.length === 1))
@@ -256,9 +254,8 @@ export const reasonShort = (reason: ArtifactReason): string => {
   switch (reason.kind) {
     case "unopened":
       return artifactWords.notOpenedShort;
-    case "picks":
-      return artifactWords.pickedShort(reason.made, reason.asked);
-    case "unsent":
+    case "answers":
+      return artifactWords.answeredShort(reason.answered, reason.asked);
     case "answer":
       return reasonWords(reason);
     default:
@@ -271,10 +268,8 @@ const neverDone = (reason: ArtifactReason, name: string): string => {
   switch (reason.kind) {
     case "unopened":
       return artifactWords.neverOpened(name);
-    case "picks":
-      return artifactWords.neverPicked(reason.asked - reason.made, name);
-    case "unsent":
-      return artifactWords.neverSent(reason.count, name);
+    case "answers":
+      return artifactWords.neverAnswered(reason.asked - reason.answered, name);
     case "answer":
       return artifactWords.neverRead(reason.count, name);
     default:

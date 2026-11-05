@@ -50,6 +50,7 @@ export const ARTIFACT_TOOLS = [
   "comment_resolve",
   "design_map",
   "settle",
+  "question_close",
 ] as const;
 export type ArtifactTool = (typeof ARTIFACT_TOOLS)[number];
 
@@ -313,14 +314,13 @@ export const artifactList = {
   name: "artifact_list",
   description:
     "Every artifact your artifact tools act on (yours, your tree's, your project's pages, what its cold sessions left), newest first, with whose move each is. " +
-    `${LIST_PAGE} a page. \`waiting: true\` keeps those waiting on someone.`,
+    `${LIST_PAGE} a page. What you asked the person is open_items'.`,
   input: {
     cursor: z
       .string()
       .max(60)
       .optional()
       .describe("A page's next_cursor, for the older ones."),
-    waiting: z.boolean().optional(),
   },
 };
 
@@ -413,6 +413,29 @@ export const commentResolve = {
   description:
     "Resolve a pin once your change answers it, with a last line when it helps. The person can reopen it.",
   input: { pin, text: z.string().min(1).max(COMMENT_LIMITS.text).optional() },
+};
+
+export const questionClose = {
+  name: "question_close",
+  description:
+    "Close a question your tree put to the person: use when open_items lists it answered and you acted on it, or when it no longer applies. He is asked it no more; nothing is deleted.",
+  input: {
+    question: z
+      .string()
+      .min(1)
+      .max(400)
+      .describe("Its link from open_items, or <page>#<card>."),
+    as: z
+      .enum(["taken", "withdrawn"])
+      .describe("taken: you acted on his answer. withdrawn: superseded."),
+    why: z
+      .string()
+      .min(1)
+      .max(CHOICE_LIMITS.why)
+      .describe(
+        "taken: his words you acted on, quoted. withdrawn: what superseded it."
+      ),
+  },
 };
 
 export const settle = {

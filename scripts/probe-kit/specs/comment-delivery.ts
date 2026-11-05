@@ -62,10 +62,12 @@
  *    moving the command aside in its own words (not interrupted, naming no
  *    one; turn-not-cut), and the command runs on to its own end; the
  *    journal says it went. A reply during the next long command joins
- *    the same way, with only the new words. A pick on the same page waits
- *    for Send: nothing reaches the session until the page's own Send at its
- *    foot (decisions/host Decisions.svelte), which counts it; the panel's
- *    head stands no Send for a decision page (its doc's `ownSend`).
+ *    the same way, with only the new words. A pick that answers the page's
+ *    one question goes by itself once quiet (the owner, 2026-11-05: no Send
+ *    once he has answered; hub artifacts/service.ts `sendAnswered`): the
+ *    session hears the picks' notice with no Send pressed, the page's own
+ *    Send at its foot turns Sent, and the panel's head stands no Send for a
+ *    decision page (its doc's `ownSend`).
  * 13. The same session asleep: a reply on its pin wakes it, the delivery
  *    its turn's first message.
  *
@@ -298,8 +300,8 @@ const BUSY_NOTICE = `The person commented on the page "${BUSY_PAGE}"`;
 const REASON_STOP = /\.$/u;
 /** The picks' notice (core injected.ts `artifactResponsesNotice`) for the busy page. */
 const PICKS_NOTICE = `The page "${BUSY_PAGE}" has new responses`;
-/** The page's own Send with one pick standing (decisions/host Decisions.svelte `sendLabel`). */
-const PAGE_SEND_ONE = "Send 1 pick";
+/** The page's own Send once what he answered went (decisions/host Decisions.svelte `sendLabel`). */
+const PAGE_SENT = "Sent";
 /** Step 13's reply, which wakes the sleeping session. */
 const WAKE_WORDS = "Are you still there?";
 /** The busy session's turn (12): on while the leg runs, each long command's issue time, and every request of it. */
@@ -439,7 +441,7 @@ const sendCount = async (page: Page) =>
       .textContent({ timeout: 1000 })
       .catch(() => null)
   )?.trim() ?? null;
-/** A decision page's own Send at its foot (decisions/host Decisions.svelte): its words, which count the picks that go; null when it doesn't stand. */
+/** A decision page's own Send at its foot (decisions/host Decisions.svelte): its words, which count the answers that go; null when it doesn't stand. */
 const pageSendSays = async (frame: Frame) =>
   (
     await frame
@@ -449,12 +451,6 @@ const pageSendSays = async (frame: Frame) =>
   )
     ?.replace(/\s+/gu, " ")
     .trim() ?? null;
-/** The person's press on a decision page's own Send: when it was pressed. */
-const pageSendNow = async (frame: Frame) => {
-  const at = Date.now();
-  await frame.locator('[data-slot="page-foot"] [data-send]').click();
-  return at;
-};
 /**
  * A press at the screen's `x`, `y` in Comment mode: its composer opens,
  * writing nothing; `words` typed and Enter comment, the pin and its first
@@ -1307,43 +1303,34 @@ const busyDecisionChecks = async (
     JSON.stringify(outputs)
   );
 
-  // A pick on the same page waits for Send.
+  // A pick answering the page's one question goes by itself: no Send.
   await turnClosed(fleet, decider);
   const beforePick = busyTurn.heard.length;
   if (await inCommentMode(frame)) {
     await tab.keyboard.press("Escape");
   }
+  const pickedAt = Date.now();
   await pressIn(frame, '[data-option="snapshot"]');
-  await until(
-    "the pick counted on the page's Send",
-    () => pageSendSays(frame),
-    (says) => !!says?.includes(PAGE_SEND_ONE),
-    10_000
-  ).catch(() => null);
-  await Bun.sleep(MARK_TO_MODEL_MS + STILL_MS);
-  const heldPick = busyTurn.heard
-    .slice(beforePick)
-    .filter((one) => one.all.includes(PICKS_NOTICE)).length;
-  const counted = await pageSendSays(frame);
-  const headSend = await tab.locator(`${PANE} [data-slot="send"]`).count();
-  const pickSentAt = await pageSendNow(frame);
   const picked = await until(
-    "the picks' notice at the model",
+    "the picks' notice at the model, no Send pressed",
     () =>
       busyTurn.heard
         .slice(beforePick)
         .find((one) => one.last.includes(PICKS_NOTICE)),
     Boolean,
-    REACH_MS + 10_000
+    MARK_TO_MODEL_MS + REACH_MS + 10_000
   ).catch(() => undefined);
+  const spent = await until(
+    "the page's Send spent",
+    () => pageSendSays(frame),
+    (says) => !!says?.includes(PAGE_SENT),
+    10_000
+  ).catch(() => null);
+  const headSend = await tab.locator(`${PANE} [data-slot="send"]`).count();
   kit.check(
-    "12: a pick on the same page waits for Send: nothing of it reaches the session past the comments' quiet, the page's own Send counts it (the head standing none), and one press tells the session",
-    heldPick === 0 &&
-      !!counted?.includes(PAGE_SEND_ONE) &&
-      headSend === 0 &&
-      !!picked &&
-      picked.at >= pickSentAt,
-    `before Send ${heldPick}; the page's Send says ${JSON.stringify(counted)}; head Sends ${headSend}; notice ${picked ? `${picked.at - pickSentAt} ms after Send` : "never"}`
+    "12: a pick that answers the page's last open question goes to the session by itself once quiet, no Send pressed: the picks' notice reaches it, the page's own Send turns Sent, and the head stands none",
+    !!picked && picked.at >= pickedAt && !!spent && headSend === 0,
+    `notice ${picked ? `${picked.at - pickedAt} ms after the pick` : "never"}; the page's Send says ${JSON.stringify(spent)}; head Sends ${headSend}`
   );
 
   // 13. The session asleep: a reply on its pin wakes it.

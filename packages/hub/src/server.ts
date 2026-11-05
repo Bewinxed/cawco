@@ -14598,6 +14598,8 @@ export const createServer = (
       if (by === "person") {
         artifacts.personMarked(id);
       }
+      // Answered, its plan's page wait goes; every question answered, what he wrote goes by itself.
+      artifacts.answersMoved(id);
       // A task or a plan step waiting on a card or pin of it may settle now.
       waitPageMoved(id);
     },
@@ -26987,9 +26989,9 @@ export const createServer = (
   // and every person's Continue carries (open-items.ts).
   const openItems = createOpenItems({
     db,
-    decisions,
     inbox: inboxNotes,
     plan: (instanceId) => plans.read(instanceId),
+    questions: (instanceId) => artifacts.questions(instanceId),
     tasks,
   });
   /**
@@ -32994,9 +32996,15 @@ export const createServer = (
       .get(
         "/api/instances/:id/open-items",
         hidden,
-        async ({ params, status }) => {
+        async ({ params, query, status }) => {
           try {
-            return { text: await openItems.read(db.instanceIdOf(params.id)) };
+            const cursor = Number(query.cursor ?? 0);
+            return {
+              text: await openItems.read(db.instanceIdOf(params.id), {
+                cursor: Number.isInteger(cursor) && cursor > 0 ? cursor : 0,
+                detailed: query.format === "detailed",
+              }),
+            };
           } catch (error) {
             return status(
               404,

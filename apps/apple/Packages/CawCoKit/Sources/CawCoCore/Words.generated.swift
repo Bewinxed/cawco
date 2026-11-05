@@ -1680,19 +1680,14 @@ public enum Words {
         /// The same on a Files card's meta line.
         public static let notOpenedShort = "New"
 
-        /// A decision page's picks.
-        public static func picked(made: Int, asked: Int) -> String {
-            "\(made) of \(asked) picked"
+        /// A decision page's questions answered: by a pick, a note, or a pin the agent answered and resolved.
+        public static func answered(answered: Int, asked: Int) -> String {
+            "\(answered) of \(asked) answered"
         }
 
         /// The same on a Files card's meta line.
-        public static func pickedShort(made: Int, asked: Int) -> String {
-            "\(made) of \(asked)"
-        }
-
-        /// Written and not sent: picks, notes, pins and ink.
-        public static func unsent(count: Int) -> String {
-            "\(count) unsent"
+        public static func answeredShort(answered: Int, asked: Int) -> String {
+            "\(answered) of \(asked)"
         }
 
         /// Open pins whose agent's reply asks the person something: the row's line, the push's body.
@@ -1775,12 +1770,8 @@ public enum Words {
             "\(name) never opened"
         }
 
-        public static func neverPicked(count: Int, name: String) -> String {
-            count == 1 ? "1 pick on \(name) never made" : "\(count) picks on \(name) never made"
-        }
-
-        public static func neverSent(count: Int, name: String) -> String {
-            "\(count) unsent on \(name) never sent"
+        public static func neverAnswered(count: Int, name: String) -> String {
+            count == 1 ? "1 question on \(name) never answered" : "\(count) questions on \(name) never answered"
         }
 
         public static func neverRead(count: Int, name: String) -> String {

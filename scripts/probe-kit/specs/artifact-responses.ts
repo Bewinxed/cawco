@@ -14,13 +14,14 @@
  * the agent's tool answer:
  *
  * 0. Steps 1–4 all run inside that turn.
- * 1. Picking an option and editing the card's note twice, each ending on a
- *    Return, sends the session nothing.
- * 2. The page's Send: exactly one pending send to the session, of the system
- *    origin `artifact`, its words the responses notice; no person's send.
- *    The pane's head then offers no Send: nothing of the page is unsent.
- * 3. A third note edit and a second Send while that one waits: still one
- *    pending event, from the first one's `since`; the first is `replaced`.
+ * 1–3. Picking an option and editing the card's note three times, each
+ *    ending on a Return, answers the page's one question: once the person's
+ *    changes stand quiet his answers go by themselves (the owner,
+ *    2026-11-05: no Send once he has answered; artifacts/service.ts
+ *    `sendAnswered`), as exactly one pending send to the session, of the
+ *    system origin `artifact`, its words the responses notice, any earlier
+ *    one `replaced` and the pending one from the first one's `since`; no
+ *    person's send. The pane's head then offers no Send.
  * 4. The transcript draws it as one line: "Responses on <page>", "waiting for
  *    the agent"; the words the agent reads ("artifact_read") are nowhere on
  *    screen, and no row of the person's holds it.
@@ -29,9 +30,9 @@
  *    note as typed, its inner line break kept and no Return at its end.
  * 6. The line then says "read".
  * 7. A pick after that is one the session hasn't heard: the hub counts it
- *    unsent (artifact_list's `picks.unsent`), and the page's own Send at
- *    its foot is the one that sends it, the pane's head standing none for a
- *    decision page (PreviewPane.svelte `ownSend`, 88d8ed976).
+ *    unsent (artifact_list's `picks.unsent`) until it goes by itself once
+ *    quiet, the pane's head standing no Send for a decision page
+ *    (PreviewPane.svelte `ownSend`, 88d8ed976).
  *
  *   bun scripts/probe-kit/run.ts artifact-responses
  */
@@ -53,6 +54,8 @@ const NOTICE =
 /** The id in artifact_create's answer, as the tool result carries it. */
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 const NAME = "coconut-song";
+/** How long the person's changes stand quiet before his answers go by themselves (hub artifacts/service.ts `COMMENTS_QUIET_MS`), with room. */
+const QUIET_MS = 3000 + 2000;
 /** The note as the person leaves it: two lines, the last Return still in the box. */
 const FINAL_NOTE =
   "The whole point is the coconut song\nthis has nothing to do with it";
@@ -281,34 +284,37 @@ const run = async (kit: Kit) => {
   await typeNote(
     "The whole point is the coconut song\nthis has nothing to do with jt"
   );
-  const beforeSend = sendsOf(dbPath, session, busyAt);
-  kit.check(
-    "1: a pick and two note edits send the session nothing",
-    beforeSend.length === 0,
-    JSON.stringify(beforeSend.map((one) => one.body.slice(0, 80)))
-  );
+  await typeNote(FINAL_NOTE);
+  const typedAt = Date.now();
 
-  // 2. The page's own Send.
-  await pressIn(frame, "[data-dp-send]");
-  const firstSend = await until(
-    "the responses event",
-    () => sendsOf(dbPath, session, busyAt),
-    (rows) => rows.length > 0,
-    15_000
-  ).catch(() => sendsOf(dbPath, session, busyAt));
-  const firstEvent = firstSend.find((one) => one.origin === "system:artifact");
-  kit.check(
-    "2: the Send makes exactly one pending send, of origin system:artifact, its words the notice; no person's send",
-    firstSend.length === 1 &&
-      firstEvent?.state === "pending" &&
-      NOTICE.test(firstEvent.body) &&
-      !firstSend.some((one) => one.origin === "human"),
-    JSON.stringify(firstSend)
-  );
-  // The pane's head offers Send only while the page has something unsent: none now.
+  // 1–3. Every question answered, they go by themselves once quiet: no Send.
   const sendControl = page.locator(
     ':is([data-slot="preview-pane"], [data-side-card="preview"]) [data-slot="send"]'
   );
+  const went = await until(
+    "the responses event after the last edit stood quiet",
+    () => sendsOf(dbPath, session, busyAt),
+    (rows) =>
+      rows.some((one) => one.state === "pending") &&
+      Date.now() - typedAt > QUIET_MS,
+    QUIET_MS + 15_000
+  ).catch(() => sendsOf(dbPath, session, busyAt));
+  const pending = went.filter((one) => one.state === "pending");
+  const [firstEvent] = went;
+  const since = Number(NOTICE.exec(pending[0]?.body ?? "")?.[2] ?? -1);
+  kit.check(
+    "1–3: a pick and three note edits answer the page's one question and go by themselves once quiet, no Send pressed: one pending send of origin system:artifact, its words the notice, any earlier one replaced and the pending one from the first one's since; no person's send",
+    pending.length === 1 &&
+      pending[0].origin === "system:artifact" &&
+      NOTICE.test(pending[0].body) &&
+      went.every(
+        (one) => one.state === "pending" || one.state === "replaced"
+      ) &&
+      since === Number(NOTICE.exec(firstEvent?.body ?? "")?.[2] ?? -2) &&
+      !went.some((one) => one.origin === "human"),
+    JSON.stringify(went)
+  );
+  // The pane's head offers Send only while the page has something unsent: none now.
   const afterSend = await until(
     "the head's Send gone",
     () => sendControl.count(),
@@ -316,31 +322,9 @@ const run = async (kit: Kit) => {
     10_000
   ).catch(() => sendControl.count());
   kit.check(
-    "2b: once the Send is taken the pane's head offers no Send",
+    "2b: once they went the pane's head offers no Send",
     afterSend === 0,
     `${afterSend} Send control(s)`
-  );
-
-  // 3. A third edit and a second Send while it waits.
-  await typeNote(FINAL_NOTE);
-  await pressIn(frame, "[data-dp-send]");
-  const secondSend = await until(
-    "the second responses event",
-    () => sendsOf(dbPath, session, busyAt),
-    (rows) => rows.length > 1,
-    15_000
-  ).catch(() => sendsOf(dbPath, session, busyAt));
-  const pending = secondSend.filter((one) => one.state === "pending");
-  const since = Number(NOTICE.exec(pending[0]?.body ?? "")?.[2] ?? -1);
-  kit.check(
-    "3: a second Send while the first waits leaves one pending event, from the first one's since; the first is replaced",
-    pending.length === 1 &&
-      pending[0].origin === "system:artifact" &&
-      since === Number(NOTICE.exec(firstEvent?.body ?? "")?.[2] ?? -2) &&
-      secondSend.find((one) => one.uuid === firstEvent?.uuid)?.state ===
-        "replaced" &&
-      !secondSend.some((one) => one.origin === "human"),
-    JSON.stringify(secondSend)
   );
 
   // 4. The transcript's one line, while the agent has not read it.
@@ -429,7 +413,7 @@ const run = async (kit: Kit) => {
     readWord
   );
 
-  // 7. A pick after the Send: unsent on the hub, sent by the page's own Send.
+  // 7. A pick after that: a new answer, gone by itself once quiet.
   await pressIn(frame, '[data-option="original"]');
   const unsent = async () =>
     (
@@ -437,18 +421,23 @@ const run = async (kit: Kit) => {
         artifacts: { id: string; picks?: { unsent: number } }[];
       }>(`/api/instances/${session}/artifacts/list`)
     ).artifacts.find((one) => one.id === id)?.picks?.unsent ?? null;
-  const unsentNow = await until(
+  const counted = await until(
     "the later pick counted unsent",
     unsent,
     (count) => count === 1,
-    10_000
+    QUIET_MS
+  ).catch(unsent);
+  const goneNow = await until(
+    "the later pick gone by itself",
+    unsent,
+    (count) => count === 0,
+    QUIET_MS + 15_000
   ).catch(unsent);
   const headSends = await sendControl.count();
-  const ownSend = await frame.locator("[data-dp-send]:enabled").count();
   kit.check(
-    "7: a later pick is counted unsent on the hub (1), the page's own Send stands to send it, and the pane's head stands no Send of its own",
-    unsentNow === 1 && ownSend === 1 && headSends === 0,
-    JSON.stringify({ unsentNow, ownSend, headSends })
+    "7: a later pick is counted unsent on the hub (1), then goes by itself once quiet (0) with no Send pressed, and the pane's head stands no Send of its own",
+    counted === 1 && goneNow === 0 && headSends === 0,
+    JSON.stringify({ counted, goneNow, headSends })
   );
 };
 

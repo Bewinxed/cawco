@@ -29,12 +29,11 @@ export const artifactWords = {
   notOpened: "New · not opened",
   /** The same on a Files card's meta line. */
   notOpenedShort: "New",
-  /** A decision page's picks. */
-  picked: (made: number, asked: number) => `${made} of ${asked} picked`,
+  /** A decision page's questions answered: by a pick, a note, or a pin the agent answered and resolved. */
+  answered: (answered: number, asked: number) =>
+    `${answered} of ${asked} answered`,
   /** The same on a Files card's meta line. */
-  pickedShort: (made: number, asked: number) => `${made} of ${asked}`,
-  /** Written and not sent: picks, notes, pins and ink. */
-  unsent: (count: number) => `${count} unsent`,
+  answeredShort: (answered: number, asked: number) => `${answered} of ${asked}`,
   /** Open pins whose agent's reply asks the person something: the row's line, the push's body. */
   newAnswers: (count: number) =>
     count === 1 ? "1 new answer" : `${count} new answers`,
@@ -73,12 +72,10 @@ export const artifactWords = {
   /** Who ended, when the hub no longer holds the session. */
   itsSession: commonWords.itsSession,
   neverOpened: (name: string) => `${name} never opened`,
-  neverPicked: (count: number, name: string) =>
+  neverAnswered: (count: number, name: string) =>
     count === 1
-      ? `1 pick on ${name} never made`
-      : `${count} picks on ${name} never made`,
-  neverSent: (count: number, name: string) =>
-    `${count} unsent on ${name} never sent`,
+      ? `1 question on ${name} never answered`
+      : `${count} questions on ${name} never answered`,
   neverRead: (count: number, name: string) =>
     count === 1
       ? `1 answer on ${name} never read`
