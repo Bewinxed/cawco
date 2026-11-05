@@ -40298,7 +40298,7 @@
             }
           },
           "needsYou": {
-            "description": "It waits for you: its stage is of kind `you`, where only you move it on.\nAn attempt that failed or was stopped is its starter's business, not\nyours. Derived on read, never stored.",
+            "description": "It waits for you (`needsYouOf`): its stage is of kind `you`, where only\nyou move it on, or a decision card it waits on is not picked, a pick\nonly you make. An attempt that failed or was stopped is its starter's\nbusiness, not yours. Derived on read, never stored.",
             "type": "boolean"
           },
           "number": {
@@ -41047,7 +41047,7 @@
             }
           },
           "needsYou": {
-            "description": "It waits for you: its stage is of kind `you` (see {@link TaskSummary.needsYou}).",
+            "description": "It waits for you (core task-views.ts `needsYouOf`, {@link TaskSummary.needsYou}).",
             "type": "boolean"
           },
           "number": {

@@ -42,7 +42,10 @@
     sitDown,
     starters,
     go,
+    waitingOnly = false,
   }: {
+    /** Needs you is on: the list holds only the pages waiting on picks. */
+    waitingOnly?: boolean;
     projectId: string;
     projectName: string;
     decisions: ProjectDecisions;
@@ -184,7 +187,11 @@
             hrefOf={(name) => hrefOf({ page: name, card: null })}
             {now}
             onopen={(name) => go({ page: name, card: null })}
-            pages={list?.pages ?? null}
+            pages={list
+              ? list.pages.filter(
+                  (each) => !waitingOnly || each.state === "picking"
+                )
+              : null}
             {projectId}
           />
         {/if}

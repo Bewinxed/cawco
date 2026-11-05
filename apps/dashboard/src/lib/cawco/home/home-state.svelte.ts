@@ -34,6 +34,7 @@ import { questionsOf } from "@cawco/core/question";
 import type { RelayJourneyView } from "@cawco/core/stream-relay";
 import { STREAM_RELAY_WORDS } from "@cawco/core/stream-relay";
 import type { TailnetHttps } from "@cawco/core/tailnet-https";
+import { waitsOnPick } from "@cawco/core/task-views";
 import { contactWords, MACHINE_LOST_MS } from "@cawco/core/words/contact";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { presenceWords } from "@cawco/core/words/presence";
@@ -549,9 +550,10 @@ interface InstallItem {
 }
 
 /**
- * A project's task waiting on you, as the hub says (its stage is of kind
- * `you`, or its last session failed): it opens the task, its deliverable and
- * the way to act on it first.
+ * A project's task waiting on you, as the hub says (core task-views.ts
+ * `needsYouOf`: its stage is of kind `you`, or it waits on a card not
+ * picked): it opens the task, its deliverable and the way to act on it
+ * first.
  */
 interface TaskItem {
   href: string;
@@ -562,8 +564,8 @@ interface TaskItem {
   project: ProjectMarking | null;
   /** When the task last changed, ms epoch: how long it has waited. */
   raisedAt: number;
-  /** Why it waits on you. */
-  reason: "review" | "failed";
+  /** Why it waits on you: the card it is held on, the first not picked, else its stage's review. */
+  reason: { pick: string } | "review";
   /** Its stage, as the board names it. */
   stage: string;
   taskId: string;
@@ -630,6 +632,12 @@ interface McpItem {
   /** Why it ended, in the provider's words. */
   why: string;
 }
+
+/** Why a task the hub lists waits on you: a card it is held on comes first, a pick being what starts it. */
+const reasonOf = (task: TaskSummary): TaskItem["reason"] => {
+  const pick = task.waits.find(waitsOnPick);
+  return pick ? { pick: pick.label } : "review";
+};
 
 export type NeedsItem =
   | ArtifactItem
@@ -1489,7 +1497,7 @@ class Home {
         key: `task:${project.id}:${task.id}`,
         taskId: task.id,
         title: task.title,
-        reason: task.kind === "you" ? ("review" as const) : ("failed" as const),
+        reason: reasonOf(task),
         stage: stageLabel(task.stage),
         place: project.name,
         project: { name: project.name, hue: markHue(folderOf(project)) },

@@ -10,10 +10,11 @@
   `onboarding-first-minutes`, card `draft-where`): the project's board
   draws the same parts over the same picks, so the page and the board never
   differ. The delegate types Caw proposed are who may do a stage's work,
-  picked in a stage's menu, as on the board.
+  picked in a stage's menu and listed under the stages, each removed or
+  added back there, as on the board.
 
   Every change is kept through the page's bridge (`cawco.set`, hub
-  setup.ts): `aim`, `stages` and, as drafted, `shape`; the name is
+  setup.ts): `aim`, `stages`, `delegates` and, as drafted, `shape`; the name is
   SetupTitle's. A reload or a revision draws what the hub kept.
 -->
 <script lang="ts">
@@ -74,7 +75,7 @@
   });
 
   /** Kept at once, as the board keeps each change (setup-draft.svelte.ts `keep`). */
-  function keep(key: "aim" | "stages", value: unknown): void {
+  function keep(key: "aim" | "stages" | "delegates", value: unknown): void {
     editing = true;
     bridge()?.set(key, value);
   }
@@ -88,6 +89,8 @@
       aim = next;
       keep("aim", next);
     }}
+    ondelegates={(ids) => keep("delegates", ids)}
+    proposed={drafted.delegates}
     onstages={(next) => {
       stages = next;
       keep("stages", storedStages(next));

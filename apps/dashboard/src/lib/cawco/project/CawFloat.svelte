@@ -36,7 +36,7 @@
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import type { PendingPermission } from "../client.svelte";
   import { appearOnMount } from "../motion/curves.svelte";
-  import { stopWork } from "../stop-work.svelte";
+  import { cawPanelOffAt, stopWork } from "../stop-work.svelte";
   import type { CawLead } from "./caw-lead.svelte";
   import ProjectConversation from "./ProjectConversation.svelte";
   import type { SetupProgress } from "./setup-progress";
@@ -77,17 +77,19 @@
    * parked under the head): on a phone, where his sheet covers the page
    * under the head, it gives way once so the tray and then its line stay
    * one press away (The Work Outlives Its Surface Rule). His seat brings
-   * it back whenever the reader wants it.
+   * it back whenever the reader wants it. A tray asked in his own panel
+   * (`cawPanelOffAt`) stands in it: the sheet stays.
    */
   const stopsStand = $derived(
     stopWork
       .on(projectId)
       .some(
         (job) =>
-          job.open ||
-          job.phase === "stopping" ||
-          job.phase === "fail" ||
-          job.phase === "ending"
+          job.at !== cawPanelOffAt(projectId) &&
+          (job.open ||
+            job.phase === "stopping" ||
+            job.phase === "fail" ||
+            job.phase === "ending")
       )
   );
   $effect(() => {

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { waitsOnPick } from "@cawco/core/task-views";
+  import { projectWords } from "@cawco/core/words/project";
   import {
     createSortedRowModel,
     createTable,
@@ -336,6 +338,7 @@
                   >{task.id}</span
                 >
               {:else if cell.column.id === "title"}
+                {@const pick = task.waits.find(waitsOnPick)}
                 <a
                   data-slot="title"
                   class="flex items-baseline gap-space-2 min-w-0 text-inherit no-underline after:absolute after:inset-0 focus-inset"
@@ -347,6 +350,25 @@
                     class="min-w-0 type-label text-ink-row truncate"
                     >{task.title}</span
                   >
+                  {#if pick}
+                    <!-- Held on a pick of yours, said as its card says it:
+                         the task starts once the card is picked. -->
+                    <span
+                      data-slot="pick"
+                      class="mark-line inline-flex min-w-0 items-center gap-space-1 type-meta text-ink-muted"
+                      title={pick.label}
+                    >
+                      <IconNeedsYou
+                        aria-hidden="true"
+                        class="size-icon-sm flex-none text-status-attn-glyph"
+                      />
+                      <span class="flex-none">{projectWords.waitsOnPick}</span>
+                      <span
+                        class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong"
+                        >{pick.label}</span
+                      >
+                    </span>
+                  {/if}
                 </a>
               {:else if cell.column.id === "stage"}
                 <span

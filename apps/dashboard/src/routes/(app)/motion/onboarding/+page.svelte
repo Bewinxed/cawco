@@ -34,20 +34,25 @@
    * unnamed), `drafting` (named, five stages written), `questions` (three
    * of his questions, one holding him), `drafted` (every stage written,
    * Set up in the draft bar), `set` (the board on its stages, the set-up
-   * bar over it); `first-run` is the fleet board's first-run row. An
+   * bar over it); `first-run` is the fleet board's first-run row;
+   * `reading` is a drafted project as its page first paints, the draft
+   * still being read (its skeleton, never the empty scene). `?cards=N`
+   * opens N of the setup page's cards beside the draft once drafted. An
    * answer and Set up go to the bench's hub, which answers them as the hub
    * does. `?closed` puts his panel away; `?switch=start` stands
    * Assistant | Preview leading the bar (card `artifact-open`).
    */
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import { standApi } from "#lib/cawco/bench-api.js";
   import { blankSession, cawco } from "#lib/cawco/client.svelte.js";
+  import DecisionsList from "#lib/cawco/decisions/DecisionsList.svelte";
   import FirstRun from "#lib/cawco/home/FirstRun.svelte";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
+  import BenchHead from "#lib/cawco/project/BenchHead.svelte";
+  import { benchLead } from "#lib/cawco/project/bench-lead.svelte.js";
   import CawFloat from "#lib/cawco/project/CawFloat.svelte";
-  import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import ProjectDock from "#lib/cawco/project/ProjectDock.svelte";
-  import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
   import SetUpBar from "#lib/cawco/project/SetUpBar.svelte";
   import SetupBoard from "#lib/cawco/project/SetupBoard.svelte";
   import {
@@ -59,14 +64,27 @@
     SETUP_CALLS,
   } from "#lib/cawco/project/setup.fixtures.js";
   import { setupProgressOf } from "#lib/cawco/project/setup-progress.js";
+  import {
+    PO_DETAILS,
+    PO_SETUP_PAGE,
+  } from "#lib/cawco/project/waiting.fixtures.js";
   import { firstTodoStage } from "#lib/cawco/project-tasks.js";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
   import type { Message } from "#lib/cawco/types.js";
+  import { browser } from "$app/env";
+  import { beforeNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
 
   type Beat =
-    "sent" | "drafting" | "questions" | "drafted" | "set" | "first-run";
+    | "reading"
+    | "sent"
+    | "drafting"
+    | "questions"
+    | "drafted"
+    | "set"
+    | "first-run";
   const BEATS: Beat[] = [
+    "reading",
     "sent",
     "drafting",
     "questions",
@@ -89,6 +107,7 @@
   const DELEGATES = PR_DELEGATES;
   /** While he drafts, the stages he has written so far. */
   const WRITTEN: Partial<Record<Beat, number>> = {
+    reading: DRAFT.length,
     sent: 0,
     drafted: DRAFT.length,
     set: DRAFT.length,
@@ -100,6 +119,17 @@
   /** Set up is on its way to the bench's hub. */
   let sending = $state(false);
   let draftAim = $state(beat === "sent" ? "" : AIM);
+  /** The delegate types kept: one removed waits under them with Add back. */
+  let keptTypes = $state(DELEGATES.map((one) => one.id));
+  /**
+   * The setup page's cards beside the draft still open once he has drafted
+   * (`?cards=`, default three: the place, the routines and one of his own),
+   * as the line over the draft counts them.
+   */
+  const openCards = ["place", "routines", "claims", "fellows", "first"].slice(
+    0,
+    Number(page.url.searchParams.get("cards") ?? 3)
+  );
 
   const WORDS =
     "set up a new project to be my personal PR team, you will handle my personal tasks, job hunts, social media and others, visa applications and travel. the aim is to propel me into wealth";
@@ -156,6 +186,7 @@
       done,
     ],
     "first-run": [],
+    reading: [sent, ...drafted.slice(0, 1), first, ...drafted.slice(1), handed],
   };
 
   const debug = (
@@ -223,7 +254,10 @@
     // (core asks.ts `askQuestionWords`): at rest, so his composer offers
     // Send, not Stop.
     pulse(
-      beat === "set" || beat === "drafted" || beat === "questions"
+      beat === "set" ||
+        beat === "drafted" ||
+        beat === "questions" ||
+        beat === "reading"
         ? "idle"
         : "working"
     );
@@ -376,13 +410,7 @@
     }))
   );
 
-  const lead = new CawLead({
-    id: () => PROJECT,
-    machinesOnline: () => true,
-    project: () => cawco.project(PROJECT),
-    reading: () => false,
-    tasks: () => [],
-  });
+  const lead = benchLead(PROJECT);
   untrack(() => {
     // On a phone his sheet would stand over the draft, which is the board:
     // he arrives put away, as on the project's page (its `sheetCovers`).
@@ -425,9 +453,57 @@
   /** His panel stands docked beside the page while it is open and anchored, as the page's `docked`. */
   const docked = $derived(lead.open && lead.anchor !== null);
   const none = () => undefined;
-  const project = $derived(cawco.project(PROJECT));
+
+  // The hub's reads Project details makes, answered as Private office's
+  // were (bench-api.ts): Who decides from the fleet's, no merge checks,
+  // tasks kept in CawCo, none yet.
+  const restoreApi = browser
+    ? standApi((path, method) => {
+        const base = `/api/projects/${PROJECT}`;
+        if (method !== "GET") {
+          return;
+        }
+        const answers: Record<string, unknown> = {
+          [`${base}/decides`]: PO_DETAILS.decides,
+          [`${base}/gate`]: PO_DETAILS.gate,
+          [`${base}/tracker`]: PO_DETAILS.tracker,
+          [`${base}/tasks`]: {
+            tasks: [],
+            problems: [],
+            stagesProblems: [],
+            tracker: "cawco",
+          },
+        };
+        return answers[path];
+      })
+    : () => undefined;
+  /** This bench's own address: a row of its Decisions list stays here. */
+  const here = $derived(page.url.search);
+  /** The project's Decisions, where Open the setup page leads: the bench draws its list. */
+  const decisionsView = $derived(
+    page.url.searchParams.get("view") === "decisions"
+  );
+  /** Its setup page as the list names it: a real setup page's record (Private office's), named for this project, its open cards the line's. */
+  const benchSetupPage = $derived({
+    ...PO_SETUP_PAGE,
+    title: name,
+    artifactId: null,
+    state: "picking" as const,
+    cards: PO_SETUP_PAGE.cards,
+    picked: PO_SETUP_PAGE.cards - openCards.length,
+  });
+  beforeNavigate((navigation) => {
+    const to = navigation.to?.url;
+    if (to?.pathname === `/project/${PROJECT}`) {
+      navigation.cancel();
+      const query = new URLSearchParams(page.url.searchParams.toString());
+      query.set("view", "decisions");
+      goto(`?${query}`);
+    }
+  });
 
   onMount(() => () => {
+    restoreApi();
     clearInterval(writing);
     debug.leaveHub();
     delete debug.state.sessions[ID];
@@ -460,21 +536,7 @@
     {#snippet page()}
       <!-- The project's own head, as its page draws it: Caw's seat and
            its capsule at its trailing edge. -->
-      {#if project}
-        <ProjectHead
-          {lead}
-          machine={null}
-          onask={() => {
-            lead.tab = "assistant";
-            lead.open = true;
-          }}
-          onfilter={none}
-          onnewtask={none}
-          {project}
-          seated
-          setup={null}
-        />
-      {/if}
+      <BenchHead {lead} projectId={PROJECT} />
       <!-- The draft scrolls in the page's whole column, its pads inside the
            scroller: the scrollbar stands at the column's edge, clear of the
            cards, a field's bleed is never cut, and what passes under the
@@ -488,17 +550,36 @@
           ? "var(--space-7)"
           : "var(--space-5)"}
       >
-        {#if at !== "set"}
+        {#if decisionsView}
+          <!-- Open the setup page went where the product sends it, the
+               project's Decisions: its list, the setup page waiting. -->
+          <DecisionsList
+            hrefOf={() => here}
+            now={Date.now()}
+            onopen={() => undefined}
+            pages={[benchSetupPage]}
+            projectId={PROJECT}
+          />
+        {:else if at !== "set"}
           <div class="min-h-0 flex-auto">
             <SetupBoard
               aim={draftAim}
               {asks}
               coming={Math.max(DRAFT.length - written, 0)}
-              delegates={DELEGATES}
+              cards={at === "drafted" ? openCards : []}
+              delegates={DELEGATES.filter((one) => keptTypes.includes(one.id))}
               {name}
               onaim={(next) => {
                 draftAim = next;
               }}
+              ondelegates={(ids) => {
+                keptTypes = ids;
+              }}
+              pageHref={at === "drafted"
+                ? `/project/${PROJECT}?view=decisions&page=setup#${openCards[0] ?? ""}`
+                : null}
+              proposed={DELEGATES}
+              reading={at === "reading"}
               onanswercaw={() => detach(lead.answerAsks(), "answer Caw")}
               onBoard={asksOnBoard}
               onsetup={setUp}

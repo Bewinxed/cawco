@@ -53,7 +53,10 @@
     picked,
     onpick,
     picking = false,
+    current = null,
   }: {
+    /** The task open in the sheet beside the board: its card is marked. */
+    current?: string | null;
     /** The board's Archived rail: its cards are archived tasks, and its kind line says so. */
     archived?: boolean;
     /** Whether a card is picked for a bulk change; without it, no card is pickable. */
@@ -199,6 +202,7 @@
         data-picked={on || undefined}
       >
         <TaskCard
+          current={task.id === current}
           date={dateOf(task.id)}
           href={hrefOf(task.id)}
           {onopen}

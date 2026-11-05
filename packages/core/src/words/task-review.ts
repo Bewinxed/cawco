@@ -6,8 +6,8 @@
 export const taskReviewWords = {
   /** The line naming the commits its words say landed, before them. */
   landed: "Landed",
-  /** The head of the decisions it waits on you to answer. */
-  waitsOnAnswer: "Waits on your answer:",
+  /** No session has worked on the task: its own words are the stage. */
+  noSession: "No session has worked on it.",
   /** No session handed in a result, and the task has no words of its own. */
   nothingToReview:
     "No session handed in a result, and the task has no description. Its history says how it got here.",
@@ -27,4 +27,22 @@ export const taskReviewWords = {
   backToStart: "A new session starts on it, your note with it.",
   backToNobody: (stage: string): string =>
     `Nobody is on this yet. In ${stage} it waits until someone starts it.`,
+};
+
+/**
+ * What a task's sheet says of the decision cards it waits on (TaskNeeds on
+ * Details, TaskReview's result band): yours while not picked, and once
+ * picked, what was picked.
+ */
+export const taskNeedsWords = {
+  /** The head over the cards it waits on that are not picked yet. */
+  picksHead: (count: number): string =>
+    count === 1 ? "Waits on your pick" : "Waits on your picks",
+  /** Each card's act: open it where it is picked. */
+  pick: "Pick",
+  pickOn: (question: string): string => `Pick: ${question}`,
+  /** Under them: what a pick does. */
+  picksLine: "It starts once you pick.",
+  /** A settled card wait in the review: what it waited on, before its chip. */
+  waited: "Waited on your pick:",
 };

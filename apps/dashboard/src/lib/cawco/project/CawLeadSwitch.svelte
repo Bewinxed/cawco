@@ -2,7 +2,8 @@
   /**
    * Whether the project's events reach a conversation, the project's own
    * switch (fable-lead-switch.md §1): one component wherever it stands,
-   * CawPanel (⋯ › Caw settings…) and the head's details tray
+   * CawPanel (⋯ › Caw settings…, and Events on/off in his panel's head)
+   * and the head's details tray
    * (ProjectDetails), so its ways off come with it. Off, no event starts or
    * reaches a conversation.
    *
@@ -29,7 +30,10 @@
     projectId,
     projectName,
     label = "Events reach a conversation",
+    place,
   }: {
+    /** Where its off tray stands (stop-work places); the project's settings' own when left out. */
+    place?: string;
     lead: CawLead;
     projectId: string;
     projectName: string;
@@ -40,7 +44,7 @@
   const on = $derived(lead.on ?? false);
 
   /** The switch's place: the Caw-off tray stands here when asked here. */
-  const at = $derived(cawOffAt(projectId));
+  const at = $derived(place ?? cawOffAt(projectId));
   /** What he started still runs: the tray's job, asked or parked. */
   const offJob = $derived(stopWork.of("caw-off", projectId));
   // His switch's place can hold his off tray while it is drawn (stop-work `reopen`).
