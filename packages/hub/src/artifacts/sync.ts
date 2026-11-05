@@ -756,7 +756,7 @@ const sentWritesProblem = (writes: unknown): string | null =>
  * The person sends their picks (`cawco.send`): the page's own writes it
  * carries applied first, as its socket's would be ({@link takeUpdate}), so
  * the picks the page counts are the ones read; then what the send applies
- * (a project's setup page: its fleet choices and place), then the session
+ * (a project's setup page: its name, shape and account), then the session
  * hears it has new responses to read (service.ts `send`). `instanceId`
  * already owns `artifactId` (the listener checked).
  */

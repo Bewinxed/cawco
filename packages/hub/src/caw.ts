@@ -80,13 +80,12 @@ import { Elysia, status, t } from "elysia";
 import { z } from "zod";
 import type { Blocks } from "./blocks";
 import { topsAtCaw } from "./caw-own";
-import type { DbShape } from "./db";
+import type { DbShape, ProjectRow } from "./db";
 import type { Origin } from "./db/schema";
 import { boardTitle } from "./labels";
 import { type McpTool, sentence, tool } from "./mcp-tool";
 import { AGENTS_FILE, personsTier, ROUTINE_ORIGIN } from "./memory";
 import { VIEW_PROMPT } from "./openui";
-import { onAccountMachines } from "./placement";
 import {
   folderReadWords,
   folderWrittenWords,
@@ -118,6 +117,7 @@ import {
 import { readStages } from "./stages";
 import { MODE, stagesFileOf, type TaskEvent, type TaskView } from "./tasks";
 import type { Views } from "./views";
+import type { WorkPlace } from "./work-place";
 
 /**
  * Where a view asked for from a page's end stands once drafted: that page,
@@ -590,6 +590,8 @@ export interface CawDeps {
    * change (views.ts).
    */
   readonly views: Pick<Views, "draft" | "kept" | "query" | "view">;
+  /** Where the project's work runs now (work-place.ts `workPlace`). */
+  readonly workPlace: (project: ProjectRow) => WorkPlace;
 }
 
 export const createCaw = ({
@@ -613,6 +615,7 @@ export const createCaw = ({
   task,
   turnEnded,
   views,
+  workPlace,
 }: CawDeps) => {
   /** Conversations being started now, by project: one start per project at a time. */
   const starting = new Map<string, Promise<InstanceRow>>();
@@ -656,32 +659,28 @@ export const createCaw = ({
   };
 
   /**
-   * A checkout of the project on a machine that is online, the primary
-   * first, among those where its account is signed in when any is
-   * (placement.ts `onAccountMachines`).
+   * The checkout the project's work runs in (work-place.ts `workPlace`),
+   * when its place is one.
    */
-  const checkoutFor = (project: ReturnType<typeof projectOf>) => {
-    const checkouts = onAccountMachines(
-      project.places.filter(
-        (place) => place.kind === "checkout" && online(place.machineId)
-      ),
-      project.inEffect.account.value,
-      db.accounts.signins()
-    );
-    return checkouts.find((place) => place.isPrimary) ?? checkouts[0];
+  const checkoutFor = (
+    project: ReturnType<typeof projectOf>
+  ): { cwd: string; machineId: string } | undefined => {
+    const place = workPlace(project);
+    return place.kind === "checkout" ? place : undefined;
   };
 
   /**
-   * Where the conversation starts: a checkout that is online; before the
-   * project has one online, its folder on the hub or a folder of its own
-   * ({@link CawDeps.leadHome}).
+   * Where the conversation starts: the checkout the project's work runs in;
+   * before the project has one online, its folder on the hub or a folder of
+   * its own ({@link CawDeps.leadHome}). The conversation cuts no workspace,
+   * so a project whose checkouts are all away still has one.
    */
   const placeFor = async (
     project: ReturnType<typeof projectOf>
   ): Promise<{ machineId: string; cwd: string } | undefined> => {
     const checkout = checkoutFor(project);
     return checkout
-      ? { machineId: checkout.machineId, cwd: checkout.path }
+      ? { machineId: checkout.machineId, cwd: checkout.cwd }
       : await leadHome(project.id);
   };
 

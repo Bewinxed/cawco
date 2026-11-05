@@ -55,7 +55,7 @@
     coming: number;
     /** His open questions on the setup, oldest first. */
     asks: BlockedRequest[];
-    /** The ids of the setup page's cards beside the draft (`place`, `routines`, `what-moves`). */
+    /** The ids of the setup page's cards beside the draft (`account`, `routines`, `what-moves`). */
     cards?: string[];
     /** The setup page in the project's Decisions at the first of those cards, where they are answered (a link naming no card lands on this board). */
     pageHref?: string | null;

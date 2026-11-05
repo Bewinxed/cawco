@@ -115,7 +115,7 @@ function setupIn(
 export class SetupDraftSource {
   /** What he drafted, as his program says; null until it is read. */
   drafted = $state<SetupDrafted | null>(null);
-  /** The ids of the page's cards beside the draft (`place`, `routines`, `what-moves`). */
+  /** The ids of the page's cards beside the draft (`account`, `routines`, `what-moves`). */
   cards = $state<string[]>([]);
   /** What the person kept over it on the page, by key. */
   kept = $state<Record<string, unknown>>({});

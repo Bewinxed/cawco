@@ -515,10 +515,6 @@ import {
 import { placeNesting } from "@cawco/core/place-nesting";
 import type { FolderWeight } from "@cawco/core/preview-proxy";
 import type { ServingPreview } from "@cawco/core/preview-upstream";
-import {
-  remoteWithoutCredential,
-  withoutRemoteCredential,
-} from "@cawco/core/remote-credential";
 import { protocolRange } from "@cawco/core/runtime";
 import {
   type DecisionMedia,
@@ -627,7 +623,6 @@ import {
   type MarksDelivery,
   type MarksOutcome,
   type PageFrom,
-  type PageHearer,
   SHOWN_WAIT_MS,
   type StageAt,
   timedShowStep,
@@ -967,7 +962,7 @@ import {
 import { createProjectStarters, starterRoutes } from "./project-starters";
 import { createProjectStops } from "./project-stops";
 import { projectTrash, RestoreRefusal } from "./project-trash";
-import { cloneRepository, NOTHING_READ, readCheckout } from "./projects";
+import { NOTHING_READ, readCheckout } from "./projects";
 import { createProviderRetries } from "./provider-retries";
 import { createPush, pushRoutes } from "./push";
 import {
@@ -1090,6 +1085,7 @@ import {
   type WorkItemRequest,
   type WorkItemStart,
 } from "./work-items";
+import { type WorkAsk, type WorkPlace, workPlace } from "./work-place";
 import { createWorkspaceRetire } from "./workspace-retire";
 
 /**
@@ -13974,136 +13970,6 @@ export const createServer = (
   };
 
   /**
-   * The person's act to whoever heard a page's Send ({@link PageHearer}): its
-   * session, or the project's Caw, whose conversation it starts again when
-   * it has none. One that reaches neither is logged.
-   */
-  const tellHearer = (
-    to: PageHearer,
-    act: Extract<PersonsSend, { by: "act" }>
-  ): void => {
-    if ("session" in to) {
-      sendYours(to.session, act);
-      return;
-    }
-    caw
-      .tellYours(to.caw.projectId, {
-        by: "act",
-        kind: "person-request",
-        trigger: "CawCo finished what the person's setup Send started",
-        origin: { name: ACT_ORIGIN, line: act.line },
-        text: act.text,
-      })
-      .catch((error: unknown) =>
-        console.warn(
-          `[setup] ${to.caw.projectId}: the project's conversation did not hear “${act.line}”: ${error instanceof Error ? error.message : String(error)}`
-        )
-      );
-  };
-
-  /** Each setup clone running now, by machine and folder ({@link cloneProjectPlace}). */
-  const clonesRunning = new Set<string>();
-
-  /**
-   * A setup page's place that names a repository to clone (setup.ts
-   * `PlacePicked`): checked now, then cloned once the Send has answered, as
-   * a clone takes as long as its repository and a Send's request ends long
-   * before that ({@link cloneRepository}, the machine's own git and
-   * credentials). Cloned, or found there already, it is added as the
-   * project's checkout, its remote read from the clone, which joins a
-   * project that has that remote already ({@link addProjectPlace}). Either
-   * way whoever heard the Send (`to`: the session that holds the page, else
-   * the project's Caw, whose conversation the notice starts again) is told,
-   * as a notice of the person's act; on a failure the page's `place` pick
-   * is counted as unsent again, so their next Send tries again. A Send
-   * again for a folder still being cloned is refused.
-   */
-  const cloneProjectPlace = (
-    to: PageHearer,
-    artifactId: string,
-    projectId: string,
-    place: { clone: string; machineId: string; path: string }
-  ): void => {
-    if (!db.project(projectId)) {
-      throw new PlaceRefusal(404, "No project with that id on this hub.");
-    }
-    if (!db.listAgents().some((row) => row.machineId === place.machineId)) {
-      throw new PlaceRefusal(404, "No machine with that id on this hub.");
-    }
-    const path = askedMachinePath(
-      place.machineId,
-      place.path,
-      (message, cause) => new PlaceRefusal(400, message, { cause })
-    );
-    const where = machineName(place.machineId);
-    // Every word that names the repository names it with no credential; the clone takes it as given.
-    const shown = remoteWithoutCredential(place.clone).url;
-    const key = `${place.machineId}\0${path}`;
-    if (clonesRunning.has(key)) {
-      throw new PlaceRefusal(
-        409,
-        `${shown} is still being cloned onto ${where} at ${path}; the conversation hears when it ends.`
-      );
-    }
-    clonesRunning.add(key);
-    const failed = (why: string): void => {
-      artifacts.unsend(artifactId, "place");
-      tellHearer(to, {
-        by: "act",
-        line: noticeWords.cloneFailed(where),
-        text: `CawCo could not clone ${shown} onto ${where} at ${path}: ${withoutRemoteCredential(why, place.clone)}. Nothing was added; the setup page's place pick stands unsent, so the person's next Send of the page tries it again.`,
-      });
-    };
-    const cloning = async (): Promise<void> => {
-      const outcome = await cloneRepository(
-        runOnMachine,
-        place.machineId,
-        where,
-        place.clone,
-        path
-      );
-      if (outcome.kind === "refused") {
-        failed(outcome.why);
-        return;
-      }
-      try {
-        await addProjectPlace(projectId, place.machineId, path);
-      } catch (error) {
-        failed(error instanceof Error ? error.message : String(error));
-        return;
-      }
-      // A remote another project has folds this one into it (project-merge.ts).
-      const into =
-        db.project(projectId) ??
-        db
-          .listProjects()
-          .find((project) =>
-            project.places.some(
-              (each) => each.machineId === place.machineId && each.path === path
-            )
-          );
-      tellHearer(to, {
-        by: "act",
-        line: noticeWords.cloned(where),
-        text: [
-          outcome.kind === "there"
-            ? `${path} on ${where} is a checkout of ${shown} already, so CawCo used it as it is: it is the project's checkout now.`
-            : `CawCo cloned ${shown} onto ${where} at ${path}: it is the project's checkout now.`,
-          ...(into && into.id !== projectId
-            ? [
-                `That repository was the project “${into.name}”'s already, so this project joined it: its tasks, files, places and this conversation are “${into.name}”'s now.`,
-              ]
-            : []),
-        ].join(" "),
-      });
-    };
-    detach(
-      cloning().finally(() => clonesRunning.delete(key)),
-      `setup clone ${where}:${path}`
-    );
-  };
-
-  /**
    * The person's word on an artifact, to its session: one event of origin
    * {@link ARTIFACT_ORIGIN}, never their bubble. Their picks' Send is a
    * notice to read them (core `artifactResponsesNotice`); their pins, replies,
@@ -15151,10 +15017,10 @@ export const createServer = (
       if (artifact.kind === "page" && artifact.projectId) {
         await decisions.decide(artifact.projectId, artifact.name, artifact.id);
       }
-      // A project's setup page: its name, shape, account and place applied
-      // before whoever hears it reads the picks.
+      // A project's setup page: its name, shape and account applied before
+      // whoever hears it reads the picks.
       await applySetupPicks(artifact, page, {
-        // Its name field's and account's refusals are the send's to answer, as a place's is.
+        // Its name field's, account's and area's refusals are the send's to answer.
         name: (projectId, name) => setupEdit(projectId, { name }),
         account: (projectId, account) => setupEdit(projectId, { account }),
         area: async (projectId, area) => {
@@ -15168,19 +15034,6 @@ export const createServer = (
         },
         shape: async (projectId, template) => {
           await tasks.applyTemplate(projectId, template, YOU_ACTOR);
-        },
-        // A refusal is an ArtifactRefusal too: the send answers it. A clone
-        // is checked now and runs after the Send, its result told.
-        place: async (projectId, place) => {
-          const { clone } = place;
-          if (clone) {
-            cloneProjectPlace(to, artifact.id, projectId, {
-              ...place,
-              clone,
-            });
-            return;
-          }
-          await addProjectPlace(projectId, place.machineId, place.path);
         },
       });
     },
@@ -25325,6 +25178,24 @@ export const createServer = (
   };
 
   /**
+   * Where a project's work runs now (work-place.ts): one rule for a task's
+   * attempt, a routine's run, a delegate moved to its project's account and
+   * the project's conversation's checkout.
+   */
+  const workPlaceOf = (project: ProjectRow, ask?: WorkAsk): WorkPlace =>
+    workPlace(
+      project,
+      {
+        hubFolder: projectRoot,
+        hubMachine: ownMachineIdRead,
+        machines: db.listAgents(),
+        online: (machineId) => Boolean(registry.agent(machineId)),
+        signins: db.accounts.signins(),
+      },
+      ask
+    );
+
+  /**
    * One repository is one project: a folder whose remote a project already
    * has joins it as a checkout place (`placeAdded`), and the answer is that
    * project, not a second one. Else a new project, its places its folder on
@@ -25632,6 +25503,7 @@ export const createServer = (
     }
   };
   const workItems = createWorkItems({
+    workPlace: workPlaceOf,
     // A delegate whose tools reach the fleet's chrome-devtools is told the
     // dashboard's address off this machine (core `withDashboardLine`).
     browserDashboard: (machineId, projectId) => {
@@ -26312,6 +26184,7 @@ export const createServer = (
         ? onlineMachines().length > 0
         : Boolean(registry.agent(machineId)),
     leadHome,
+    workPlace: workPlaceOf,
     folderChanged: (projectId) => {
       tasks.touched(projectId);
       decisionsChanged(projectId);
@@ -26531,7 +26404,7 @@ export const createServer = (
     lifetime,
     tasks,
     conversationFor: (projectId, by) => caw.conversationFor(projectId, by),
-    online: (machineId) => Boolean(registry.agent(machineId)),
+    workPlace: workPlaceOf,
     pauses: (projectId) => caps.pauses(projectId),
     placement: {
       access: () => jevAccess(db),
@@ -27242,7 +27115,7 @@ export const createServer = (
     if (placed.length > 0) {
       throw new WorkItemRefusal(
         400,
-        `An attempt at ${task} runs where the task runs (its runs_on, on a checkout of its project), so it takes no ${placed.join(", ")}. Leave ${placed.length === 1 ? "it" : "them"} out, or delegate without task.`
+        `An attempt at ${task} runs where the task runs (its runs_on, at its project's place for its work), so it takes no ${placed.join(", ")}. Leave ${placed.length === 1 ? "it" : "them"} out, or delegate without task.`
       );
     }
     const [parent] = db.getInstancesByIds([parentInstanceId]);
@@ -27362,7 +27235,7 @@ export const createServer = (
     db,
     lifetime,
     anyOnline: () => onlineMachines().length > 0,
-    online: (machineId) => Boolean(registry.agent(machineId)),
+    workPlace: workPlaceOf,
     pauses: (projectId) => caps.pauses(projectId),
     quiets: (projectId) => caps.quiets(projectId),
     // A routine's failure, told to you, asks for its project's starters again.

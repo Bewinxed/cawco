@@ -3,8 +3,9 @@
  * tasks into running work.
  *
  * - **An attempt** at a task is a work item (work-items.ts): a delegate
- *   session in a new workspace cut from one of the project's checkouts on a
- *   machine that is online, briefed from the task file (title, description,
+ *   session in a new workspace cut at the project's place for its work
+ *   (work-place.ts: a checkout on a machine that is online, else, for a
+ *   project with no checkout, its folder on the hub), briefed from the task file (title, description,
  *   acceptance criteria, open to-dos, checks, and where it sits among its
  *   edges), with `work_items.task_id` naming the task. It runs the task's
  *   own `type:`, else the type the stage it enters `runs:`, else the
@@ -61,12 +62,14 @@
  *   capped; and one whose start cannot go goes on to its todo stage as the
  *   hub. The tracker's moves are a person's work elsewhere, held by none of
  *   this.
- * - **Where it runs** (runs-on.ts). An attempt is cut only on a machine its
- *   task's `runs_on:` names, else its project's: a machine, or a capability
- *   such as `apple`, read from the OS each agent reports. With none online
- *   holding a checkout, the start is refused, saying what it needs, and is
- *   never placed elsewhere; a retry's old workspace on another machine is
- *   passed over. Neither set, it starts on any machine with a checkout.
+ * - **Where it runs** (runs-on.ts, work-place.ts). An attempt is cut only on
+ *   a machine its task's `runs_on:` names, else its project's: a machine, or
+ *   a capability such as `apple`, read from the OS each agent reports. With
+ *   none online holding the project's place (a checkout, or for a project
+ *   with no checkout its folder on the hub), the start is refused, saying
+ *   what it needs, and is never placed elsewhere; a retry's old workspace on
+ *   another machine is passed over. Neither set, it starts at the project's
+ *   place wherever that is online.
  * - **Landing.** An attempt lands as its task says (`lands:`), else as its
  *   delegate type says, else as the project does: `main`, `branch`, `pr` or
  *   `none` (work-items.ts). Its task's `outputs` are collected into the
@@ -117,7 +120,6 @@ import {
   deliverableKind,
   type InstanceRow,
   type LandsMode,
-  machinesCalled,
   markdownLink,
   POST_OUTPUT_RULE,
   type StageKind,
@@ -134,7 +136,7 @@ import type {
   WaitWitness,
 } from "@cawco/core/task-views";
 import { Elysia, status, t } from "elysia";
-import type { DbShape, PlaceRow, ProjectRow, WorkItemRow } from "./db";
+import type { DbShape, ProjectRow, WorkItemRow } from "./db";
 import type { Origin, WorkBudget } from "./db/schema";
 import { needsDesignSystem } from "./design-offers";
 import type { JevAccess } from "./jev";
@@ -151,10 +153,9 @@ import {
   tailOf,
 } from "./jev-placement";
 import type { HubLifetimeShape } from "./lifetime";
-import { onAccountMachines } from "./placement";
 import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
 import { orchestrates } from "./roles";
-import { fits, type MachineFacts, runsOnValue, runsOnWords } from "./runs-on";
+import { fits, type MachineFacts, runsOnValue } from "./runs-on";
 import { waitingStageOf } from "./stages";
 import { criteriaOf, type TaskComment } from "./task-file";
 import {
@@ -177,6 +178,7 @@ import {
   type WorkItemRequest,
   type WorkItemStart,
 } from "./work-items";
+import { capitalized, type WorkAsk, type WorkPlace } from "./work-place";
 
 /** What the dispatcher needs of the hub. */
 export interface DispatchDeps {
@@ -226,8 +228,6 @@ export interface DispatchDeps {
   readonly designSection: (clone: CloneRef) => Promise<string>;
   /** Runs the safety net until the hub closes. */
   readonly lifetime: HubLifetimeShape;
-  /** Whether a machine is connected now. */
-  readonly online: (machineId: string) => boolean;
   /**
    * Why the project's attempts are held back by its spend cap now, or
    * nothing (project-caps.ts `pauses`): the dispatcher then starts none, as
@@ -264,13 +264,15 @@ export interface DispatchDeps {
     projectId: string,
     type: string
   ) => LandsMode | undefined;
+  /** Where the project's work runs now (work-place.ts `workPlace`). */
+  readonly workPlace: (project: ProjectRow, ask?: WorkAsk) => WorkPlace;
 }
 
 /**
  * What a `delegate` call that names its task asks of the attempt over the
  * task file: its brief, which the attempt's brief carries above the task
  * file, its name, and how it runs. Where the attempt runs is the task's
- * (`runs_on`, the project's checkouts), so it names no machine, folder or
+ * (`runs_on`, the project's place for its work), so it names no machine, folder or
  * workspace.
  */
 export type AttemptAsk = Pick<
@@ -826,12 +828,12 @@ export const createDispatcher = ({
   designSection,
   conversationFor,
   lifetime,
-  online,
   pauses,
   placement,
   start,
   tasks,
   typeLands,
+  workPlace,
 }: DispatchDeps) => {
   /**
    * Jev's readiness and order for each frontier task, by `project\0task`,
@@ -882,65 +884,12 @@ export const createDispatcher = ({
     db.listAgents().filter((machine) => fits(runsOn, machine));
 
   /**
-   * Where a new workspace is cut: a checkout of the project on a machine that
-   * is online and, when the attempt names where it runs, one of those
-   * machines, among those where the project's account is signed in when any
-   * is (placement.ts `onAccountMachines`); the starting session's own first,
-   * then the primary place.
-   */
-  const placeFor = (
-    project: ProjectRow,
-    parent: InstanceRow,
-    runsOn: string | null
-  ): PlaceRow | undefined => {
-    const allowed = runsOn
-      ? new Set(machinesFor(runsOn).map((machine) => machine.machineId))
-      : undefined;
-    const checkouts = onAccountMachines(
-      project.places.filter(
-        (place) =>
-          place.kind === "checkout" &&
-          online(place.machineId) &&
-          (!allowed || allowed.has(place.machineId))
-      ),
-      project.inEffect.account.value,
-      db.accounts.signins()
-    );
-    return (
-      checkouts.find(
-        (place) =>
-          place.machineId === parent.machineId && place.path === parent.cwd
-      ) ??
-      checkouts.find((place) => place.machineId === parent.machineId) ??
-      checkouts[0]
-    );
-  };
-
-  /**
-   * Why an attempt that runs on `runsOn` has nowhere to start, in one
-   * sentence: no machine it names is known, none of them is online, or none
-   * online holds a checkout of the project. It is never placed elsewhere.
-   */
-  const unplaced = (project: ProjectRow, runsOn: string): string => {
-    const needs = `This task runs on ${runsOnWords(runsOn)}`;
-    const fitting = machinesFor(runsOn);
-    if (fitting.length === 0) {
-      return `${needs}, and no machine this hub knows is one, so it starts nowhere else: join one, or change its runs_on.`;
-    }
-    const up = fitting.filter((machine) => online(machine.machineId));
-    const fleet = db.listAgents();
-    const hosts = (machines: MachineFacts[]) => machinesCalled(machines, fleet);
-    if (up.length === 0) {
-      return `${needs}, and none is online (${hosts(fitting)} ${fitting.length === 1 ? "is" : "are"} offline), so it starts nowhere else: bring one online.`;
-    }
-    return `${needs}, and no checkout of ${project.name} is on one that is online (${hosts(up)}), so it starts nowhere else: add a checkout place there.`;
-  };
-
-  /**
-   * Where an attempt's work item is cut, as its request says it: a checkout
-   * its task's runs_on names (else its project's), and for a retry the last
-   * workspace, kept only on a machine runs_on names. Refused, and the reason
-   * remembered on the task, when there is nowhere to cut it.
+   * Where an attempt's work item is cut, as its request says it: the
+   * project's place for its work (work-place.ts), on a machine its task's
+   * runs_on names (else its project's), the starting session's own checkout
+   * first; and for a retry the last workspace, kept only on a machine
+   * runs_on names. Refused, and the reason remembered on the task, when
+   * there is nowhere to cut it.
    */
   const placementOf = (
     project: ProjectRow,
@@ -949,19 +898,20 @@ export const createDispatcher = ({
     previous: WorkItemRow | undefined
   ): Pick<WorkItemRequest, "cwd" | "machineId" | "reuse" | "reuseOn"> => {
     const runsOn = task.runsOn ?? project.runsOn;
-    const place = placeFor(project, parent, runsOn);
-    let message: string | undefined;
-    if (runsOn && !place) {
-      message = unplaced(project, runsOn);
-    } else if (!(place || previous)) {
-      message = `No checkout of ${project.name} is on a machine that is online, so there is nowhere to cut this task's workspace. Bring one of its machines online, or add a checkout place on one that is.`;
-    }
-    if (message) {
+    const place = workPlace(project, {
+      runsOn,
+      near: { machineId: parent.machineId, cwd: parent.cwd },
+    });
+    // A retry goes on in its last workspace, where runs_on allows it.
+    if (place.kind === "none" && (runsOn || !previous)) {
+      const message = `${capitalized(place.why)}, so this task's attempt starts nowhere: ${place.fix}.`;
       note(project.id, task, message);
       refuse(409, message);
     }
     return {
-      ...(place ? { cwd: place.path, machineId: place.machineId } : {}),
+      ...(place.kind === "none"
+        ? {}
+        : { cwd: place.cwd, machineId: place.machineId }),
       ...(previous ? { reuse: previous.workspaceId } : {}),
       ...(previous && runsOn
         ? {
@@ -2345,15 +2295,18 @@ export const createDispatcher = ({
 
     /**
      * A machine connected, or its sign-ins changed: every project with a
-     * checkout there gets another look, its old start failures forgotten.
+     * checkout there, or whose work now runs there (its folder on the hub,
+     * the hub's machine back), gets another look, its old start failures
+     * forgotten.
      */
     machineOnline(machineId: string): void {
       for (const project of db.listProjects()) {
+        const place = workPlace(project);
         if (
           project.places.some(
-            (place) =>
-              place.kind === "checkout" && place.machineId === machineId
-          )
+            (each) => each.kind === "checkout" && each.machineId === machineId
+          ) ||
+          (place.kind !== "none" && place.machineId === machineId)
         ) {
           for (const key of problems.keys()) {
             if (key.startsWith(`${project.id}\0`)) {

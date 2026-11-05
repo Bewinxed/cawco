@@ -216,6 +216,7 @@ const standUp = (): { roles: RoleTools[]; unrouted: string[] } => {
         conversationStarted: () => undefined,
         turnEnded: () => undefined,
         views: {} as never,
+        workPlace: () => ({ kind: "none", why: "measuring", fix: "" }),
       }).tools(actor),
     routineTools: (actor) =>
       createRoutines({
@@ -226,12 +227,12 @@ const standUp = (): { roles: RoleTools[]; unrouted: string[] } => {
         hubCheckout: () => Promise.reject(new Error("measuring")),
         jevAccess: () => undefined,
         lifetime,
-        online: () => false,
         pauses: () => undefined,
         push: {} as never,
         quiets: () => undefined,
         types: () => [],
         workItems: {} as never,
+        workPlace: () => ({ kind: "none", why: "measuring", fix: "" }),
       }).tools(actor),
     ingressTools: (actor) =>
       createIngress({

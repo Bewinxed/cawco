@@ -18,8 +18,10 @@
  *   cap, the project's spend cap, and, for a conversation routine, the project's conversation being
  *   off (§7 P2: with Caw off nothing wakes a model).
  * - **Delegate runs** are work items (work-items.ts `startForHub`) in a
- *   new workspace cut from a checkout of the project on a machine that is
- *   online (the hub's own checkout for a routine in no project), landing
+ *   new workspace cut at the project's place for its work (work-place.ts: a
+ *   checkout on a machine that is online, else, for a project with no
+ *   checkout, its folder on the hub; the hub's own checkout for a routine in
+ *   no project), landing
  *   `none` unless the routine says, carrying the routine's budget. Their
  *   parent is the routine (`routine:<id>`): they report to no session, and
  *   this module reads how each ended.
@@ -101,7 +103,6 @@ import { boardTitle } from "./labels";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { tool } from "./mcp-tool";
 import { ROUTINE_ORIGIN } from "./memory";
-import { onAccountMachines } from "./placement";
 import {
   routineListWords,
   routineRunWords,
@@ -121,6 +122,7 @@ import {
   type WorkItemRequest,
   type WorkItems,
 } from "./work-items";
+import type { WorkPlace } from "./work-place";
 
 /** What a delegate's headline says to stay silent. */
 const NO_REPLY = "NO_REPLY";
@@ -329,8 +331,6 @@ export interface RoutineDeps {
   /** Jev's route while Jev is on (jev.ts `jevAccess`). */
   readonly jevAccess: () => JevAccess | undefined;
   readonly lifetime: HubLifetimeShape;
-  /** Whether a machine is connected now. */
-  readonly online: (machineId: string) => boolean;
   /** Why the project's spend cap holds its work back now, or nothing (project-caps.ts). */
   readonly pauses: (projectId: string) => string | undefined;
   readonly push: Pick<Push, "routine" | "routineMade">;
@@ -339,6 +339,8 @@ export interface RoutineDeps {
   /** The delegate types a project's sessions see (the fleet's without one). */
   readonly types: (projectId?: string | null) => DelegateType[];
   readonly workItems: Pick<WorkItems, "archive" | "spentBy" | "startForHub">;
+  /** Where a project's work runs now (work-place.ts `workPlace`). */
+  readonly workPlace: (project: ProjectRow) => WorkPlace;
 }
 
 /** A schedule, parsed; refused with Effect's own words when it does not parse. */
@@ -557,12 +559,12 @@ export const createRoutines = ({
   hubCheckout,
   jevAccess,
   lifetime,
-  online,
   pauses,
   push,
   quiets,
   types,
   workItems,
+  workPlace,
 }: RoutineDeps) => {
   /**
    * Delegate type (§5.9) for a delegate run: the type the routine names;
@@ -897,9 +899,10 @@ export const createRoutines = ({
   };
 
   /**
-   * Where a delegate run's workspace is cut: a checkout that is online, the
-   * primary first, among those where its project's account is signed in
-   * when any is (placement.ts `onAccountMachines`); or the hub's own.
+   * Where a delegate run's workspace is cut: its project's place for its
+   * work (work-place.ts: a checkout that is online, else, for a project with
+   * no checkout, its folder on the hub); the hub's own checkout for a
+   * routine in no project.
    */
   const placeOf = async (
     routine: RoutineRow
@@ -907,18 +910,10 @@ export const createRoutines = ({
     if (!routine.projectId) {
       return await hubCheckout();
     }
-    const project = projectOf(routine.projectId);
-    const checkouts = onAccountMachines(
-      project.places.filter(
-        (each) => each.kind === "checkout" && online(each.machineId)
-      ),
-      project.inEffect.account.value,
-      db.accounts.signins()
-    );
-    const place = checkouts.find((each) => each.isPrimary) ?? checkouts[0];
-    return place
-      ? { cwd: place.path, machineId: place.machineId }
-      : `no checkout of ${project.name} is on a machine that is online`;
+    const place = workPlace(projectOf(routine.projectId));
+    return place.kind === "none"
+      ? place.why
+      : { cwd: place.cwd, machineId: place.machineId };
   };
 
   /**

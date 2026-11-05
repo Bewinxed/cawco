@@ -53,7 +53,7 @@
  *    session's own page at 1440 (his panel's Open as tab) draws no
  *    preview. (Nightly 6757: his panel opened as a tab showed the setup
  *    page in Preview, its old Reminders rows with a minus and a Remove.)
- *    Then the page at the board's "Open the setup page" link (its `place`
+ *    Then the page at the board's "Open the setup page" link (its `routines`
  *    card), at 1440 and 390: every stage drawn as the board's column
  *    (DraftColumn), none of the old rows nor its list of delegate types.
  */
@@ -423,8 +423,8 @@ const run = async (kit: Kit) => {
   await setupAtCard(kit, fleet);
 };
 
-/** Leg 8's setup page: a Setup with a type that runs a stage, and a `place` card beside it. */
-const OFFICE = `root = Decisions("Private office", [setup, place])
+/** Leg 8's setup page: a Setup with a type that runs a stage, and a `routines` card beside it. */
+const OFFICE = `root = Decisions("Private office", [setup, routines])
 setup = Setup("Private office", "Find a private office to rent near the station and sign by March.", [inbox, scouting, drafting, call, won, dropped], [writer], "own")
 inbox = Stage("Inbox", "todo", "inbox", "cyan")
 scouting = Stage("Scouting", "active", "search", "cyan")
@@ -433,9 +433,9 @@ call = Stage("Your call", "you")
 won = Stage("Won", "done", "done", "green")
 dropped = Stage("Dropped", "dropped")
 writer = Delegate("writer", "Writer", "Drafts enquiries to landlords in your voice.", "Claude Code · Opus")
-place = Decision("place", "Where does its work live?", [none, here], "No folder is needed to rent an office.", [], [], false, null, "behaviour")
-none = Option("none", "No folder", "Its work lives in the project.", true, [], "Nothing to clone.")
-here = Option("here", "A folder on this machine", "Its notes in a checkout.", false, [], "One more place to keep.")`;
+routines = Decision("routines", "Which routines does it keep?", [scan, none], "New listings come in through the week.", [], [], false, null, "behaviour")
+scan = Option("scan", "A weekly listings scan", "Every Monday, new offices near the station.", true, [], "One run a week.")
+none = Option("none", "No routines", "You bring the listings.", false, [], "Listings wait on you.")`;
 /** Leg 8's stages, in the board's order. */
 const OFFICE_STAGES = [
   "Inbox",
@@ -506,7 +506,7 @@ const setupInNoPanel = async (kit: Kit, fleet: KitFleet) => {
     const page = await kit.page(view);
     await open(
       page,
-      `${base}/project/${office.id}?view=decisions&page=setup#place`,
+      `${base}/project/${office.id}?view=decisions&page=setup#routines`,
       '[data-slot="decisions"] iframe'
     );
     const frame = page.locator('[data-slot="decisions"] iframe').contentFrame();

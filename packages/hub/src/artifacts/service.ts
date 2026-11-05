@@ -8780,26 +8780,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * Pick `choice` of artifact `id`, as it stands, counted as not sent: the
-     * hub could not apply it (a setup place whose clone failed), so the
-     * person's next Send carries it and applies it again.
-     */
-    unsend: (id: string, choice: string): void => {
-      if (!db.get(id)) {
-        return;
-      }
-      const entry = stateOf(docs.doc(id))[choice];
-      if (!entry) {
-        return;
-      }
-      docs.transact(id, "hub", (live) =>
-        live
-          .getMap("state")
-          .set(choice, { ...entry, at: new Date().toISOString() })
-      );
-    },
-
-    /**
      * The person's Send (the panel's Send, a page's `cawco.send`): their
      * picks are applied (`sending`) and the session hears it has new
      * responses to read ({@link ArtifactServiceDeps.signal}), the note

@@ -37,7 +37,7 @@ export interface SetupProgress {
  * is not set up (decision page `onboarding-first-minutes`, `draft-where`:
  * "the page no longer opens in his Preview"), so asked for in Decisions,
  * by its row, a link, Needs you or his showing it, it lands on the board
- * his draft is drawn on. A link naming one of its cards (`#place`, the
+ * his draft is drawn on. A link naming one of its cards (`#routines`, the
  * board's way to what else it asks) opens it at that card, which stands
  * only there.
  */

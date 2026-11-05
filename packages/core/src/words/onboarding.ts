@@ -138,11 +138,10 @@ export const setupWords = {
     `Add the first task to ${stage}, or tell Caw what to work on.`,
   /**
    * Over the draft while his setup page holds cards beyond the draft (the
-   * project-setup skill's `place`, `routines`, `what-moves`): what else it
+   * project-setup skill's `routines`, `what-moves`): what else it
    * asks, each part named, and the way to the page where they are answered.
    */
   alsoAsks: {
-    place: "where it lives",
     routines: "its routines",
     "what-moves": "where its tasks move",
   } as Record<string, string>,

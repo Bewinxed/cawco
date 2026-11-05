@@ -10,8 +10,15 @@
  * Nothing is written into a new project before its setup page is sent: the
  * template tapped on New project is kept as what was tapped
  * (`projects.tapped`), and the shape picked on the page is applied on Send
- * ({@link applySetupPicks}), with the name, the area, the account and the place. Caw writes the
+ * ({@link applySetupPicks}), with the name, the area and the account. Caw writes the
  * rest (stages.md, delegates/, AGENTS.md) after it.
+ *
+ * The page has no place card: a program's cards are choices between
+ * options, which whoever settles a card can pick, and a machine and a folder
+ * on it is none (the decision-page skill: such a pick is an HTML page, and a
+ * setup page is a program the board draws). A project with no checkout runs
+ * its work in its folder on the hub (work-place.ts); a checkout is added in
+ * the project's details (server.ts `addProjectPlace`).
  */
 
 import {
@@ -61,10 +68,6 @@ export const SETUP_CARDS = [
     send: 'Nothing: you write delegates/<type>.md for each type id kept under "delegates" (the ones the person did not remove).',
   },
   {
-    id: "place",
-    send: "Adds the machine and folder picked with cawco.pickPlace() as the project's checkout. Picked with cawco.pickPlace({ clone: url }), it clones that repository into the folder first, after the Send, and its result comes to you as its own notice.",
-  },
-  {
     id: "account",
     send: 'Sets the account the project\'s sessions start on (its conversation, its routines\' runs, its delegates, unless one names its own) to the account id kept under "account", one of Accounts above; "routing" leaves them to the fleet\'s routing. Its connectors are the ones those sessions get.',
   },
@@ -84,9 +87,9 @@ export const SETUP_CARDS = [
 
 /**
  * The answered parts of a setup the person can ask Caw to put to them again
- * (`project_setup`'s `change`): its place, its shape, its name, its stages.
+ * (`project_setup`'s `change`): its shape, its name, its stages.
  */
-export const SETUP_PARTS = ["place", "shape", "name", "stages"] as const;
+export const SETUP_PARTS = ["shape", "name", "stages"] as const;
 export type SetupPart = (typeof SETUP_PARTS)[number];
 
 /** A shipped template as `project_setup` lists it: its stages in a line and the delegate types they run. */
@@ -195,45 +198,9 @@ export interface SetupApply {
   area: (projectId: string, area: string | null) => Promise<void>;
   /** Renames the project (project-edit.ts, the dashboard's rename); a refusal throws. */
   name: (projectId: string, name: string) => Promise<void>;
-  /**
-   * Adds the place picked as the project's checkout, its `clone` URL cloned
-   * into `path` first when it names one; a refusal throws.
-   */
-  place: (projectId: string, place: PlacePicked) => Promise<void>;
   /** Applies a shipped template: its files, its starter skills, the project's template (tasks.ts `applyTemplate`). */
   shape: (projectId: string, template: StagesTemplate) => Promise<void>;
 }
-
-/**
- * The `place` pick as Send applies it: a machine and a folder on it, and the
- * repository to clone there when the page named one (`cawco.pickPlace({ clone })`).
- */
-export interface PlacePicked {
-  clone?: string;
-  machineId: string;
-  path: string;
-}
-
-const placeOf = (
-  state: Record<string, ChoiceEntry>
-): PlacePicked | undefined => {
-  const entry: ChoiceEntry | undefined = state.place;
-  const value = entry?.value as
-    { clone?: unknown; machineId?: unknown; path?: unknown } | null | undefined;
-  if (!(
-    typeof value?.machineId === "string" &&
-    typeof value.path === "string" &&
-    value.path.startsWith("/")
-  )) {
-    return;
-  }
-  const clone = typeof value.clone === "string" ? value.clone.trim() : "";
-  return {
-    machineId: value.machineId,
-    path: value.path,
-    ...(clone ? { clone } : {}),
-  };
-};
 
 const nameOf = (state: Record<string, ChoiceEntry>): string | undefined => {
   const entry: ChoiceEntry | undefined = state.name;
@@ -302,12 +269,12 @@ export interface SentPage {
  * Set up, the page's own `cawco.send`, the panel's Send), whatever it
  * holds beside its Setup: the name in its `name` field, the shipped
  * template the Setup's shape starts from (the person's pick, else as Caw
- * drew it), the area picked on `area`, the account picked on `account` and the place picked on
- * `place` are applied before Caw hears the page, so he writes only the
- * project's files. Only what is new since the last Send (`sentAt`) applies:
- * a pick made since, or, for a part the person left as drawn, the page
- * drawn again since; so a Send again for one pick (a place whose clone
- * failed) leaves the stages Caw wrote alone. Any other artifact is left
+ * drew it), the area picked on `area` and the account picked on `account`
+ * are applied before Caw hears the page, so he writes only the project's
+ * files. Only what is new since the last Send (`sentAt`) applies: a pick
+ * made since, or, for a part the person left as drawn, the page drawn
+ * again since; so a Send again for one pick leaves the stages Caw wrote
+ * alone. Any other artifact is left
  * alone.
  */
 export const applySetupPicks = async (
@@ -348,9 +315,5 @@ export const applySetupPicks = async (
   const account = accountOf(state);
   if (account !== undefined) {
     await apply.account(projectId, account);
-  }
-  const place = placeOf(state);
-  if (place) {
-    await apply.place(projectId, place);
   }
 };

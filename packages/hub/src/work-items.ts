@@ -165,6 +165,7 @@ import { gateStepFor, readTargetMap, type TargetMap } from "./app-targets";
 import { briefingFor } from "./briefings";
 import type {
   DbShape,
+  ProjectRow,
   QueuedWorkItemRow,
   WorkItemRow,
   WorkspaceRow,
@@ -236,6 +237,7 @@ import type { Todo } from "./task-file";
 import type { TodoChanges } from "./tasks";
 import { unwatchedMode } from "./unwatched-mode";
 import { CAWCO_TOOL } from "./web-reads";
+import type { WorkPlace } from "./work-place";
 
 /** How long the name a caller gives a delegate or a started session may run. */
 export const SESSION_TITLE_MAX = 48;
@@ -1216,6 +1218,8 @@ export interface WorkItemDeps {
    * while any does ({@link servedFrom}).
    */
   readonly waitingOnPerson?: (served: readonly ArtifactRow[]) => ArtifactRow[];
+  /** Where a project's work runs now (work-place.ts `workPlace`). */
+  readonly workPlace: (project: ProjectRow) => WorkPlace;
   /** A workspace was settled on its machine, archived or held: the dashboards draw it so. */
   readonly workspaceChanged?: (workspace: WorkspaceRow) => void;
 }
@@ -2519,6 +2523,7 @@ export const createWorkItems = ({
   waitingOnPerson,
   makingFrom,
   workspaceChanged,
+  workPlace,
 }: WorkItemDeps) => {
   /**
    * THE HELD STOP: once a stop of an item's session is asked (its
@@ -5778,21 +5783,20 @@ export const createWorkItems = ({
   /**
    * A delegate whose brief names neither its machine, nor its folder, nor a
    * fork, in a project whose account is not signed in on its parent's
-   * machine: cut from a checkout of the project that is online on a machine
-   * where the account is, the primary first (placement.ts `signedInOn`). A
-   * brief that names any of them keeps it, and placement refuses the start
-   * where the account is not signed in; so does one with no such checkout.
+   * machine: cut at the project's place for its work (work-place.ts), when
+   * the account is signed in there. A brief that names any of them keeps
+   * it, and placement refuses the start where the account is not signed
+   * in; so does one whose project's place is not on such a machine.
    */
   const onProjectAccount = (
     request: WorkItemRequest,
     parent: Parent,
     projectId: string | null
   ): WorkItemRequest => {
-    const account = projectId
-      ? db.project(projectId)?.inEffect.account.value
-      : undefined;
+    const project = projectId ? db.project(projectId) : undefined;
+    const account = project?.inEffect.account.value;
     if (
-      !(account && projectId) ||
+      !(account && project) ||
       request.machineId ||
       request.cwd?.trim() ||
       request.fork
@@ -5803,15 +5807,10 @@ export const createWorkItems = ({
     if (signedInOn(signins, account, parent.machineId)) {
       return request;
     }
-    const checkouts = (db.project(projectId)?.places ?? []).filter(
-      (each) =>
-        each.kind === "checkout" &&
-        online(each.machineId) &&
-        signedInOn(signins, account, each.machineId)
-    );
-    const place = checkouts.find((each) => each.isPrimary) ?? checkouts[0];
-    return place
-      ? { ...request, machineId: place.machineId, cwd: place.path }
+    const place = workPlace(project);
+    return place.kind !== "none" &&
+      signedInOn(signins, account, place.machineId)
+      ? { ...request, machineId: place.machineId, cwd: place.cwd }
       : request;
   };
 
