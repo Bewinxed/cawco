@@ -588,9 +588,9 @@ A compact tinted row, never a slab: `radius-md`, body type, an optional glyph sp
 
 ## Voice
 
-The words the product shows live in `packages/core/src/words/**`, their one source, and are written to these rules.
+The product's words live in `packages/core/src/words/**`, written to these rules.
 
-**The Should It Exist Rule.** Before a string is phrased, it earns its place on the screen (the `clean-copy` skill). Walk it down in order and cut at the first that fires: a thing the person would never have wondered about, unprompted, goes, since naming it plants the question; a caption that restates its label, field or value goes; a line that rules out a failure, defends a choice or remembers a fixed bug goes (the fix is the fix). Cut whole clauses; when nothing is left, the element goes with its words, its empty hint prop and its `<p>` too.
+**The Should It Exist Rule.** A string earns its place before it is phrased (the `clean-copy` skill). Walk it down in order and cut at the first that fires: a thing the person would never have wondered about, unprompted, goes, since naming it plants the question; a caption that restates its label, field or value goes; a line that rules out a failure, defends a choice or remembers a fixed bug goes (the fix is the fix). Cut whole clauses; when nothing is left, the element goes with its words, its empty hint prop and its `<p>` too.
 
 What survives is what the person cannot act without:
 - a real consequence at the moment of choosing ("Anything not yet synced is lost."), without the permission slip about when to press;
@@ -600,7 +600,7 @@ What survives is what the person cannot act without:
 
 A string needed only in a rare state stands in that state, not on the page at rest.
 
-- **Precise.** Name the exact thing, never a category: "nixbox stopped answering (timeout)", not "Something went wrong with a machine." A number beats a word ("3 sessions", not "a few"), and the target comes before the effect.
+- **Precise.** Name the exact thing, never a category or the plumbing: "nixbox stopped answering (timeout)", not "Something went wrong with a machine"; "Caw is off", not "Events off". A number beats a word ("3 sessions", not "a few"), and the target comes before the effect.
 - **Calm.** Say what is true and the next step. No alarm inflation, no empty reassurance, no humour in an error, warning, confirm or permission ask.
 - **Commanding.** Active voice, the imperative for actions. No "we" as the product, no "I" for it: name the harness or "the agent".
 - **Honest.** Say when the product doesn't know ("no machine has reported" is not "reported zero") and when an action cannot be undone. A grant is never made more attractive: "Approve", never "Allow all".

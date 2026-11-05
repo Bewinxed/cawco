@@ -6,7 +6,7 @@
    * (`lead.anchor`): over an empty board he stands at 80, and when he sits
    * down in the head the open panel moves with him. His face keeps saying
    * what he is doing either way. His on/off is the project's: in the head
-   * of the panel this opens (Events on/off), and under the head's `⋯`.
+   * of the panel this opens (Caw is on / off), and under the head's `⋯`.
    * While he works on a project's setup in his panel
    * (`lead.inPanel`, SetupWell) he is there, not here: the seat stays (it
    * is his panel's anchor, and a press still puts the panel away) and

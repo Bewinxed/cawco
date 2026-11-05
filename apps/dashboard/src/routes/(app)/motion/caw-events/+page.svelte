@@ -15,7 +15,8 @@
    * - `on`: events on, the newest conversation the one they reach;
    * - `stopping`: events on with two attempts the conversation started
    *   still running, so turning him off unfolds the off tray.
-   * `?closed` leaves his panel put away. Each conversation's answer names
+   * `?closed` leaves his panel put away; `?preview` opens something in the
+   * newest conversation's panel, its Preview tab beside Assistant. Each conversation's answer names
    * the setup page's `routines` card as Caw writes it, a chip to press;
    * `?keep` keeps the bench's hub standing once the page is left, so a
    * conversation opened as a tab draws on the same records.
@@ -109,6 +110,7 @@
         };
         adoptInstances: (rows: InstanceRow[]) => void;
         standHub: (answer: () => void) => void;
+        frame: (frame: unknown) => void;
         leaveHub: () => void;
       };
     }
@@ -133,6 +135,8 @@
   };
   /** His view as the hub answers it, the switch's state. */
   let view = $state<ProjectConversationView>({
+    attemptsHearComments: true,
+    hearsTasks: true,
     harness: "claude",
     instanceId: row.conversationInstanceId,
     mode: null,
@@ -199,6 +203,21 @@
       debug.state.sessions[one.id] = session;
     }
     debug.standHub(() => undefined);
+    if (page.url.searchParams.has("preview")) {
+      // The conversation on show has something open in its panel: its
+      // Preview tab, the preview's own bar heading the panel.
+      debug.frame({
+        kind: "preview",
+        instanceId: newest.id,
+        artifact: {
+          id: "bench-preview",
+          kind: "preview",
+          name: "Release notes",
+        },
+        revision: "bench-1",
+        state: "open",
+      });
+    }
   }
   const restore = browser
     ? standApi((path, method, _query) => {

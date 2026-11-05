@@ -17,14 +17,8 @@ export const conversationWords = {
   hidePanel: "Hide Caw",
   /** The panel head's action: the conversation on show, as a tab. */
   openAsTab: "Open as a tab",
-  /**
-   * The panel head's control: whether the project's events reach a
-   * conversation, said as it stands; pressed, its switch unfolds under the
-   * head.
-   */
-  events: { on: "Events on", off: "Events off" },
-  /** The panel head's line, after the status word: the conversation on show is the one the project's events reach. */
-  getsEvents: "gets the project's events",
+  /** The conversation on show, as its More names it ("More for this conversation"). */
+  conversation: "this conversation",
   /** A new conversation with nowhere to run: the project has no checkout on a machine yet. */
   noCheckout:
     "This project has no checkout on a machine yet, so a conversation can't start. Add one in Project details, then try again.",
@@ -43,10 +37,10 @@ export const conversationWords = {
     "The page reloaded before the conversation started, so your message didn't go. It's back in the field: send it again.",
   /** Caw's sentence on the project head and in his panel: what the project's conversation is doing. */
   status: {
-    /** Events off, with what the conversation started still finishing. */
-    offFinishing: (count: number) => `Events off · ${count} still finishing`,
-    /** Events off, nothing running: only the person's words reach it. */
-    off: "Events off · answers when you write",
+    /** Off, with what he started still finishing. */
+    offFinishing: (count: number) => `Caw is off · ${count} still finishing`,
+    /** Off, nothing running. */
+    off: "Caw is off",
     /** It waits on an answer of yours. */
     waiting: "Waiting on you",
     /** A task just landed. */
@@ -64,4 +58,22 @@ export const conversationWords = {
   },
   /** His at-work element in his conversation, for a screen reader. */
   atWork: "Caw at work",
+};
+
+/**
+ * Whether Caw acts on his own in a project (the project's switch, hub
+ * caw.ts `configure`): said as Caw himself is, on or off, never as the
+ * events that reach him (DESIGN.md, Voice: the person's words, not the
+ * plumbing). His panel's bar says it, and the switch says what on does.
+ */
+export const cawSwitchWords = {
+  /** The bar's item, and its tooltip: his state. */
+  on: "Caw is on",
+  off: "Caw is off",
+  /** His settings, for a screen reader. */
+  settings: "Caw's settings",
+  /** The switch. */
+  label: "Caw acts on his own",
+  /** Under it: the one consequence a person needs before flipping it. */
+  line: "He picks up what happens in the project without you writing: a task handed in, a routine's report, a pick you made. Off, he answers only when you write.",
 };
