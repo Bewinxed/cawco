@@ -553,29 +553,29 @@
               </Tip>
             {/if}
             {#if shown}
-            <BarItem
-              aria-expanded={cardOpen}
-              aria-haspopup="dialog"
-              icon={IconListRows}
-              label={transcriptWords.sessionDetails}
-              onclick={cardPress}
-              onpointerenter={(event: PointerEvent) => {
-                cardAnchor = event.currentTarget as HTMLElement;
-                cardRest(event);
-              }}
-              onpointerleave={cardLeave}
-              bind:ref={cardAnchor}
-            />
-            <BarItem
-              icon={IconPlus}
-              label={conversationWords.newConversation}
-              onclick={newConversation}
-            />
-            <BarItem
-              href={rowHref(shown ?? "")}
-              icon={IconMoveTab}
-              label={conversationWords.openAsTab}
-            />
+              <BarItem
+                aria-expanded={cardOpen}
+                aria-haspopup="dialog"
+                icon={IconListRows}
+                label={transcriptWords.sessionDetails}
+                onclick={cardPress}
+                onpointerenter={(event: PointerEvent) => {
+                  cardAnchor = event.currentTarget as HTMLElement;
+                  cardRest(event);
+                }}
+                onpointerleave={cardLeave}
+                bind:ref={cardAnchor}
+              />
+              <BarItem
+                icon={IconPlus}
+                label={conversationWords.newConversation}
+                onclick={newConversation}
+              />
+              <BarItem
+                href={rowHref(shown ?? "")}
+                icon={IconMoveTab}
+                label={conversationWords.openAsTab}
+              />
             {/if}
           </BarGlass>
         {/if}

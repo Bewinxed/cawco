@@ -277,6 +277,6 @@
     <BenchHead {lead} projectId={PROJECT} />
   {/snippet}
   {#snippet dock()}
-    <CawFloat {lead} projectId={PROJECT} projectName={NAME} />
+    <CawFloat front {lead} projectId={PROJECT} projectName={NAME} />
   {/snippet}
 </ProjectDock>
