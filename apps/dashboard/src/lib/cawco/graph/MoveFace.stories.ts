@@ -163,6 +163,33 @@ const longMove: Clip[] = [
   }),
 ];
 
+const heading = thing();
+const card = thing();
+const badge = thing();
+/** A mockup's own choreography, written in its play: a header of two under the agent's group, a card of two legs, a badge going back and forth. */
+const authoredMove: Clip[] = [
+  clip(heading, "Title", "moves", "transform", 0, 260, "--dur-pop", {
+    group: "Header",
+    values: [{ property: "transform", from: "translateY(24px)", to: "none" }],
+  }),
+  clip(heading, "Title", "fades", "opacity", 0, 260, "--dur-pop", {
+    group: "Header",
+    values: [{ property: "opacity", from: "0", to: "1" }],
+  }),
+  clip(card, "Card", "scales", "scale", 120, 400, null, {
+    legs: [0.4],
+    values: [{ property: "scale", from: "0.9", to: "1" }],
+  }),
+  clip(badge, "Badge", "fades", "opacity", 200, 300, "--dur-glide", {
+    iterations: 3,
+    values: [{ property: "opacity", from: "0.4", to: "1" }],
+  }),
+];
+const authored = (): Clip[] =>
+  authoredMove.map((one) =>
+    one.thing === badge ? { ...one, repeat: "mirror", was: one } : one
+  );
+
 const noop = () => undefined;
 
 export default {
@@ -191,7 +218,10 @@ export default {
     chosen: "filled->hub",
     onplay: noop,
     onpause: noop,
+    onreplay: noop,
     onrepeat: noop,
+    onloopfrom: noop,
+    onkeep: noop,
     onseek: noop,
     onseekend: noop,
     onretime: noop,
@@ -293,3 +323,21 @@ export const Phone = { parameters: { viewport: 390 } };
 
 /** In the drawer at 680. */
 export const Drawer = { parameters: { viewport: 680 } };
+
+/** A mockup's own choreography: the agent's Header group over its rows, the card's two legs marked on its bar, the badge going back and forth to the lane's end; the card chosen, its Values and Repeats chips under it. */
+export const Authored = {
+  args: {
+    move: ready(authored(), "Shown"),
+    selected: String(authoredMove[2]?.id),
+  },
+};
+
+/** Repeat on, going round again from 300 ms: its mark on the ruler. */
+export const RepeatFrom = {
+  args: { playing: true, playhead: 500, repeat: true, loopFrom: 300 },
+};
+
+/** A version he kept, Version 2, shown and played as it was kept, beside his own. */
+export const KeptVersion = {
+  args: { move: ready(edited()), kept: [edited()], version: 0 },
+};
