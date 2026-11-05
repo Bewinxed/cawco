@@ -29,6 +29,7 @@
     cells,
     rowClass,
     machineCell,
+    settle,
   }: {
     machines: M[];
     online: (machine: M) => boolean;
@@ -39,6 +40,11 @@
     rowClass?: string;
     /** What the machine cell carries besides. */
     machineCell?: HTMLTdAttributes;
+    /**
+     * `top`: the rows' cells wrap under their first line (Table.Cell
+     * `settle`), and the machine stands on that first line.
+     */
+    settle?: "top";
   } = $props();
 </script>
 
@@ -60,8 +66,13 @@
       {@const os = machineOs(machine.os)}
       {@const on = online(machine)}
       <Table.Row class={rowClass} variant="stacks">
-        <Table.Cell {...machineCell} variant="ledger-stacks">
-          <span class="flex min-w-0 items-center gap-space-2">
+        <Table.Cell {...machineCell} {settle} variant="ledger-stacks">
+          <span
+            class={[
+              "flex min-w-0 items-center gap-space-2",
+              settle === "top" && "@phone/table:min-h-c-ledger-row-h",
+            ]}
+          >
             <OsMark
               class="size-icon-md shrink-0 text-ink-muted"
               os={machine.os}

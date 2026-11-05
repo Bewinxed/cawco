@@ -2,6 +2,7 @@
   import { machineLabel } from "@cawco/core/machine-names";
   import type { ToolPolicy, ToolSpec, ToolStatus } from "@cawco/core/tools";
   import { unhandled } from "@cawco/core/unhandled";
+  import { commonWords } from "@cawco/core/words/common";
   import { toolWords } from "@cawco/core/words/tools";
   import Check from "#lib/cawco/accounts/Check.svelte";
   import SigninPanel from "#lib/cawco/accounts/SigninPanel.svelte";
@@ -11,14 +12,17 @@
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button, buttonVariants } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import {
+    IconAsk,
     IconCheck,
     IconExternal,
+    IconNotYet,
     IconTerminal,
     IconWarningTriangle,
   } from "#lib/icons.js";
@@ -136,8 +140,59 @@
   });
 
   /** A refusal's sentence, without the tool's screen it quotes, for the cell's line; the popover shows it whole. */
-  const sentence = (problem: string): string =>
-    problem.split(` ${toolWords.signinScreen} `)[0] ?? problem;
+  /** A sign-in's words without the tool's screen they quote (core words/tools `screenOf`), for the cell's line. */
+  const sentence = (words: string): string =>
+    words.split(` ${toolWords.signinScreen}`)[0] ?? words;
+  /** The tool's screen lines those words quote, one per line; null where they quote none. */
+  const screenOf = (words: string): string | null => {
+    const at = words.indexOf(` ${toolWords.signinScreen}`);
+    return at < 0
+      ? null
+      : words.slice(at + toolWords.signinScreen.length + 1).trim();
+  };
+  type SigninState = "signed-in" | "waiting" | "unknown" | "signed-out";
+  /** What a sign-in cell says: the machine's read, or a sign-in under way here. */
+  function signinStateOf(
+    signedIn: boolean,
+    parked: boolean,
+    read: string | undefined
+  ): SigninState {
+    if (signedIn) {
+      return "signed-in";
+    }
+    if (parked) {
+      return "waiting";
+    }
+    return read === "unknown" ? "unknown" : "signed-out";
+  }
+  const SIGNIN_WORDS: Record<SigninState, string> = {
+    "signed-in": toolWords.signedIn,
+    waiting: toolWords.signinWaiting,
+    unknown: toolWords.signinUnknown,
+    "signed-out": toolWords.signedOut,
+  };
+  /** The cell's act: back to a waiting sign-in, again after a refusal, or a first one. */
+  function signinVerbOf(parked: boolean, spent: boolean): string {
+    if (parked) {
+      return toolWords.pasteCode;
+    }
+    return spent ? commonWords.signInAgain : toolWords.signIn;
+  }
+  /** Every wording the act takes, stood in one cell (The Steady Swap Rule). */
+  const SIGNIN_VERBS = [
+    toolWords.signIn,
+    toolWords.pasteCode,
+    commonWords.signInAgain,
+  ];
+  /** The tool's sign-in read whose popover is open (Unknown's), by `machine:tool`. */
+  let readOpen = $state<string | null>(null);
+  function showRead(key: string, open: boolean) {
+    if (open) {
+      readOpen = key;
+    } else if (readOpen === key) {
+      readOpen = null;
+    }
+  }
 
   async function install(machine: Machine, spec: ToolSpec) {
     const key = cellKey(machine.machineId, spec.id);
@@ -208,198 +263,208 @@
     />
   {/snippet}
 
-  {#if shown === "installed" && toolStatus?.detail}
-    <!-- A copy an update left older than its newest release (core
-         ToolStatus.detail on installed): it still runs, so its version stays
-         in ink; beside it the Needs you mark (a mark, never a surface), a
-         button that opens why, in the updater's words, and Retry, the one
-         press it takes. -->
-    {@const head = toolWords.notUpdatedHead(
-      spec.name,
-      toolStatus.version ?? "",
-      where
-    )}
-    <span class={STACKED}>
-      <code data-slot="num" class="num type-code text-ink-strong"
-        >{toolStatus.version ?? "—"}</code
-      >
-      <Popover.Root>
-        <Popover.Trigger aria-label={head} look="mark">
-          <Badge size="cell" variant="attn">
-            <span>{toolWords.notUpdated}</span>
-          </Badge>
-        </Popover.Trigger>
-        <Popover.Content
-          align="start"
-          frame="panel-high"
-          pad="none"
-          width="widest"
-        >
-          <header
-            class="flex items-baseline gap-space-1 border-b border-border-hairline px-space-3 py-space-2"
-          >
-            <span class="type-label text-ink-strong">{head}</span>
-            {#if toolStatus.method}
-              <code class="ml-auto shrink-0 type-code text-ink-muted"
-                >{toolStatus.method}</code
-              >
-            {/if}
-          </header>
-          <pre
-            class="max-h-56 overflow-auto px-space-3 py-space-2 type-code whitespace-pre-wrap wrap-anywhere">{toolStatus.detail}</pre>
-          <footer class="border-t border-border-hairline px-space-3 py-space-2">
-            {@render installAct("Retry", toolWords.updating, false)}
-          </footer>
-        </Popover.Content>
-      </Popover.Root>
-    </span>
-  {:else if shown === "installed"}
-    <!-- Installed is the quiet state: the check and the version in ink, no
-         chip (DESIGN.md, The Idle Has No Fill Rule's quiet row). A tool
-         CawCo keeps current has no Reinstall: its own update is the one
-         path. -->
-    <span class="flex items-center gap-space-2">
-      <span
-        class="mark-line inline-flex items-center gap-space-1 text-ink-strong"
-      >
-        <IconCheck class="size-icon-md shrink-0 text-status-done-glyph" />
-        <code data-slot="num" class="num type-code"
-          >{toolStatus?.version ?? "—"}</code
-        >
-      </span>
-      {#if !kept}
-        <span
-          class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 hover-hover:opacity-0"
-        >
-          {@render installAct("Reinstall", "Installing…", true)}
-        </span>
-      {/if}
-    </span>
-  {:else if shown === "installing"}
-    <!-- An update keeps the copy's version in ink beside its progress. -->
-    <span class={STACKED}>
-      {#if toolStatus?.version}
+  <!-- The state on the row's first line (MachineLedger `settle`), a
+       refusal under it. -->
+  <span class="flex items-center @phone/table:min-h-c-ledger-row-h">
+    {#if shown === "installed" && toolStatus?.detail}
+      <!-- A copy an update left older than its newest release (core
+           ToolStatus.detail on installed): it still runs, so its version stays
+           in ink; beside it the Needs you mark (a mark, never a surface), a
+           button that opens why, in the updater's words, and Retry, the one
+           press it takes. -->
+      {@const head = toolWords.notUpdatedHead(
+        spec.name,
+        toolStatus.version ?? "",
+        where
+      )}
+      <span class={STACKED}>
         <code data-slot="num" class="num type-code text-ink-strong"
-          >{toolStatus.version}</code
+          >{toolStatus.version ?? "—"}</code
         >
-      {/if}
-      <Badge size="cell" tone="muted" variant="ghost">
-        <Spinner class="shrink-0" />
-        <span
-          >{kept && toolStatus?.version
-            ? toolWords.updating
-            : "Installing…"}</span
-        >
-      </Badge>
-    </span>
-  {:else if shown === "missing"}
-    {@render installAct("Install", "Installing…", false)}
-  {:else if shown === "failed"}
-    <span class="flex items-center gap-space-1">
-      <Popover.Root>
-        <!-- A real button, its badge its whole look (the trigger's `mark`). -->
-        <Popover.Trigger
-          aria-label="Why {spec.name} {outdated
-            ? `${toolStatus?.version} can't run`
-            : 'did not install'} on {where}"
-          look="mark"
-        >
-          <Badge size="cell" variant="destructive">
-            <IconWarningTriangle class="size-icon-sm shrink-0" />
-            {#if outdated}
-              <code data-slot="num" class="num type-code"
-                >{toolStatus?.version}</code
-              >
-            {:else}
-              <span>Failed</span>
-            {/if}
-          </Badge>
-        </Popover.Trigger>
-        <Popover.Content
-          align="start"
-          frame="panel-high"
-          pad="none"
-          width="widest"
-        >
-          <header
-            class="flex items-baseline gap-space-1 border-b border-border-hairline px-space-3 py-space-2"
+        <Popover.Root>
+          <Popover.Trigger aria-label={head} look="mark">
+            <Badge size="cell" variant="attn">
+              <span>{toolWords.notUpdated}</span>
+            </Badge>
+          </Popover.Trigger>
+          <Popover.Content
+            align="start"
+            frame="panel-high"
+            pad="none"
+            width="widest"
           >
-            <span class="type-label text-ink-strong"
-              >{spec.name}
-              {outdated
-                ? `${toolStatus?.version} isn't one CawCo runs`
-                : "did not install"}</span
+            <header
+              class="flex items-baseline gap-space-1 border-b border-border-hairline px-space-3 py-space-2"
             >
-            {#if toolStatus?.method}
-              <code class="ml-auto shrink-0 type-code text-ink-muted"
-                >{toolStatus.method}</code
-              >
-            {/if}
-          </header>
-          {#if toolStatus?.detail}
+              <span class="type-label text-ink-strong">{head}</span>
+              {#if toolStatus.method}
+                <code class="ml-auto shrink-0 type-code text-ink-muted"
+                  >{toolStatus.method}</code
+                >
+              {/if}
+            </header>
             <pre
               class="max-h-56 overflow-auto px-space-3 py-space-2 type-code whitespace-pre-wrap wrap-anywhere">{toolStatus.detail}</pre>
-          {:else}
-            <p class="px-space-3 py-space-2 type-body text-ink-muted">
-              The machine did not say why.
-            </p>
-          {/if}
-          <footer class="border-t border-border-hairline px-space-3 py-space-2">
-            {@render installAct(
-              outdated && !kept ? "Update" : "Retry",
-              outdated ? toolWords.updating : "Installing…",
-              false
-            )}
-          </footer>
+            <footer
+              class="border-t border-border-hairline px-space-3 py-space-2"
+            >
+              {@render installAct("Retry", toolWords.updating, false)}
+            </footer>
+          </Popover.Content>
+        </Popover.Root>
+      </span>
+    {:else if shown === "installed"}
+      <!-- Installed is the quiet state: the check and the version in ink, no
+           chip (DESIGN.md, The Idle Has No Fill Rule's quiet row). A tool
+           CawCo keeps current has no Reinstall: its own update is the one
+           path. -->
+      <span class="flex items-center gap-space-2">
+        <span
+          class="mark-line inline-flex items-center gap-space-1 text-ink-strong"
+        >
+          <IconCheck class="size-icon-md shrink-0 text-status-done-glyph" />
+          <code data-slot="num" class="num type-code"
+            >{toolStatus?.version ?? "—"}</code
+          >
+        </span>
+        {#if !kept}
+          <span
+            class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 hover-hover:opacity-0"
+          >
+            {@render installAct("Reinstall", "Installing…", true)}
+          </span>
+        {/if}
+      </span>
+    {:else if shown === "installing"}
+      <!-- An update keeps the copy's version in ink beside its progress. -->
+      <span class={STACKED}>
+        {#if toolStatus?.version}
+          <code data-slot="num" class="num type-code text-ink-strong"
+            >{toolStatus.version}</code
+          >
+        {/if}
+        <Badge size="cell" tone="muted" variant="ghost">
+          <Spinner class="shrink-0" />
+          <span
+            >{kept && toolStatus?.version
+              ? toolWords.updating
+              : "Installing…"}</span
+          >
+        </Badge>
+      </span>
+    {:else if shown === "missing"}
+      {@render installAct("Install", "Installing…", false)}
+    {:else if shown === "failed"}
+      <span class="flex items-center gap-space-1">
+        <Popover.Root>
+          <!-- A real button, its badge its whole look (the trigger's `mark`). -->
+          <Popover.Trigger
+            aria-label="Why {spec.name} {outdated
+              ? `${toolStatus?.version} can't run`
+              : 'did not install'} on {where}"
+            look="mark"
+          >
+            <Badge size="cell" variant="destructive">
+              <IconWarningTriangle class="size-icon-sm shrink-0" />
+              {#if outdated}
+                <code data-slot="num" class="num type-code"
+                  >{toolStatus?.version}</code
+                >
+              {:else}
+                <span>Failed</span>
+              {/if}
+            </Badge>
+          </Popover.Trigger>
+          <Popover.Content
+            align="start"
+            frame="panel-high"
+            pad="none"
+            width="widest"
+          >
+            <header
+              class="flex items-baseline gap-space-1 border-b border-border-hairline px-space-3 py-space-2"
+            >
+              <span class="type-label text-ink-strong"
+                >{spec.name}
+                {outdated
+                  ? `${toolStatus?.version} isn't one CawCo runs`
+                  : "did not install"}</span
+              >
+              {#if toolStatus?.method}
+                <code class="ml-auto shrink-0 type-code text-ink-muted"
+                  >{toolStatus.method}</code
+                >
+              {/if}
+            </header>
+            {#if toolStatus?.detail}
+              <pre
+                class="max-h-56 overflow-auto px-space-3 py-space-2 type-code whitespace-pre-wrap wrap-anywhere">{toolStatus.detail}</pre>
+            {:else}
+              <p class="px-space-3 py-space-2 type-body text-ink-muted">
+                The machine did not say why.
+              </p>
+            {/if}
+            <footer
+              class="border-t border-border-hairline px-space-3 py-space-2"
+            >
+              {@render installAct(
+                outdated && !kept ? "Update" : "Retry",
+                outdated ? toolWords.updating : "Installing…",
+                false
+              )}
+            </footer>
+          </Popover.Content>
+        </Popover.Root>
+        {@render installAct(
+          outdated && !kept ? "Update" : "Retry",
+          outdated ? toolWords.updating : "Installing…",
+          true
+        )}
+      </span>
+    {:else if shown === "unsupported"}
+      <Popover.Root>
+        <Popover.Trigger
+          aria-label="Why {spec.name} cannot run on {where}"
+          look="mark"
+        >
+          <Badge size="cell" tone="muted" variant="ghost">
+            <span>Unsupported</span>
+          </Badge>
+        </Popover.Trigger>
+        <Popover.Content align="start" frame="panel-high" width="wide">
+          <p class="type-body text-ink-strong">
+            {toolStatus?.detail ?? "No install method for this platform."}
+          </p>
         </Popover.Content>
       </Popover.Root>
-      {@render installAct(
-        outdated && !kept ? "Update" : "Retry",
-        outdated ? toolWords.updating : "Installing…",
-        true
-      )}
-    </span>
-  {:else if shown === "unsupported"}
-    <Popover.Root>
-      <Popover.Trigger
-        aria-label="Why {spec.name} cannot run on {where}"
-        look="mark"
-      >
-        <Badge size="cell" tone="muted" variant="ghost">
-          <span>Unsupported</span>
-        </Badge>
-      </Popover.Trigger>
-      <Popover.Content align="start" frame="panel-high" width="wide">
-        <p class="type-body text-ink-strong">
-          {toolStatus?.detail ?? "No install method for this platform."}
-        </p>
-      </Popover.Content>
-    </Popover.Root>
-  {:else}
-    <span class="flex items-center gap-space-1">
-      <Tooltip.Root>
-        <Tooltip.Trigger>
-          {#snippet child({ props })}
-            <Badge {...props} size="cell" tone="subtle" variant="ghost"
-              ><span>Unknown</span></Badge
-            >
-          {/snippet}
-        </Tooltip.Trigger>
-        <Tooltip.Content>The daemon has not reported this tool</Tooltip.Content>
-      </Tooltip.Root>
-      <Button
-        disabled={!online}
-        {failed}
-        label="Install"
-        onclick={() => install(machine, spec)}
-        {pending}
-        pendingLabel="Installing…"
-        size="xs"
-        tone="muted"
-        variant="ghost"
-      />
-    </span>
-  {/if}
+    {:else}
+      <span class="flex items-center gap-space-1">
+        <Tooltip.Root>
+          <Tooltip.Trigger>
+            {#snippet child({ props })}
+              <Badge {...props} size="cell" tone="subtle" variant="ghost"
+                ><span>Unknown</span></Badge
+              >
+            {/snippet}
+          </Tooltip.Trigger>
+          <Tooltip.Content
+            >The daemon has not reported this tool</Tooltip.Content
+          >
+        </Tooltip.Root>
+        <Button
+          disabled={!online}
+          {failed}
+          label="Install"
+          onclick={() => install(machine, spec)}
+          {pending}
+          pendingLabel="Installing…"
+          size="xs"
+          tone="muted"
+          variant="ghost"
+        />
+      </span>
+    {/if}
+  </span>
   <!-- An install the hub refused, in its words, in the cell it was asked in. -->
   <RowFault
     again={online ? () => install(machine, spec) : undefined}
@@ -425,65 +490,67 @@
   {@const read = toolStatus?.signin}
   {@const signedIn = read?.state === "signed-in"}
   {@const parked = flow?.live === true}
-  {@const verb = parked ? toolWords.pasteCode : toolWords.signIn}
+  {@const refusal =
+    flow?.problem && flow.phase !== "signed-in" && !parked
+      ? flow.problem
+      : null}
+  {@const state = signinStateOf(signedIn, parked, read?.state)}
+  {@const verb = signinVerbOf(parked, refusal !== null)}
   {#if hasCopy(toolStatus) || flow}
-    <!-- The state at the column's start, its act at its end. -->
-    <span class="flex items-center justify-between gap-space-2">
-      {#if signedIn}
-        <span
-          class="mark-line inline-flex items-center gap-space-1 type-label text-ink-strong"
-          data-signin="signed-in"
-        >
-          {#if flow?.phase === "signed-in"}
+    <!-- One line on the row's first line: the state's glyph and word at
+         the column's start, in meta, and its act at the column's end. -->
+    <span
+      class="flex items-center justify-between gap-space-2 @phone/table:min-h-c-ledger-row-h"
+    >
+      <span
+        class="mark-line flex min-w-0 items-start gap-space-2 type-meta text-ink-muted"
+        data-signin={state}
+      >
+        <!-- On the words' first line; a phone's narrow card may wrap them. -->
+        <span class="mark-cell w-icon-md">
+          {#if state === "signed-in" && flow?.phase === "signed-in"}
             <Check />
+          {:else if state === "signed-in"}
+            <IconCheck class="size-icon-md text-status-done-glyph" />
+          {:else if state === "waiting"}
+            <LiveDot />
+          {:else if state === "unknown"}
+            <IconAsk class="size-icon-md" />
           {:else}
-            <IconCheck class="size-icon-md shrink-0 text-status-done-glyph" />
+            <IconNotYet class="size-icon-md" />
           {/if}
-          <span>{toolWords.signedIn}</span>
         </span>
-      {:else if read?.state === "unknown" && !parked}
-        <Popover.Root>
-          <Popover.Trigger
-            aria-label={toolWords.signinUnknownHead(spec.name, where)}
-            look="mark"
-          >
-            <Badge size="cell" tone="muted" variant="ghost">
-              <span>{toolWords.signinUnknown}</span>
-            </Badge>
-          </Popover.Trigger>
-          <Popover.Content
-            align="start"
-            frame="panel-high"
-            pad="none"
-            width="widest"
-          >
-            <header
-              class="border-b border-border-hairline px-space-3 py-space-2"
+        {#if state === "unknown"}
+          <!-- The word is the way to the tool's own words. -->
+          <span data-box>
+            <NsPopover
+              align="start"
+              id="tool-signin-read-{key}"
+              label={toolWords.signinUnknownHead(spec.name, where)}
+              onchange={(next) => showRead(key, next)}
+              open={readOpen === key}
+              triggerClass="pointer-hit touch-hit rounded-xs text-ink-muted transition-colors hover:text-ink-strong"
+              width="var(--c-signin-pop-w)"
             >
-              <span class="type-label text-ink-strong"
-                >{toolWords.signinTitle(spec.name, where)}</span
-              >
-            </header>
-            {#if read.detail}
-              <pre
-                class="max-h-56 overflow-auto px-space-3 py-space-2 type-code whitespace-pre-wrap wrap-anywhere">{read.detail}</pre>
-            {:else}
-              <p class="px-space-3 py-space-2 type-body text-ink-muted">
-                {toolWords.signinUnknownSilent}
-              </p>
-            {/if}
-          </Popover.Content>
-        </Popover.Root>
-      {:else}
-        <span
-          class="type-meta whitespace-nowrap text-ink-muted"
-          data-signin={parked ? "waiting" : "signed-out"}
-          >{parked ? toolWords.signinWaiting : toolWords.signedOut}</span
-        >
-      {/if}
+              {#snippet trigger()}
+                {toolWords.signinUnknown}
+              {/snippet}
+              {@render signinFrame(
+                toolWords.signinTitle(spec.name, where),
+                read?.detail ?? toolWords.signinUnknownSilent
+              )}
+            </NsPopover>
+          </span>
+        {:else}
+          <span class="min-w-0 text-pretty">{SIGNIN_WORDS[state]}</span>
+        {/if}
+      </span>
       {#if online && (!signedIn || open)}
+        <!-- Its end edge holds still on the column's end; its words stand
+             in one cell as wide as the widest (The Steady Swap Rule), so
+             the popover hung from that edge never moves. -->
         <NsPopover
-          align="start"
+          align="end"
           id="tool-signin-{key}"
           label={toolWords.signInOn(verb, spec.name, where)}
           onchange={(next) => setOpen(machine.machineId, spec.id, next)}
@@ -492,7 +559,16 @@
           width="var(--c-signin-pop-w)"
         >
           {#snippet trigger()}
-            {verb}
+            <span class="grid">
+              {#each SIGNIN_VERBS as word (word)}
+                <span
+                  class={[
+                    "col-start-1 row-start-1 text-center",
+                    word !== verb && "invisible",
+                  ]}>{word}</span
+                >
+              {/each}
+            </span>
           {/snippet}
           <div class="flex flex-col gap-space-3 p-space-2">
             <p data-slot="title" class="type-label text-ink-strong">
@@ -510,13 +586,29 @@
         </NsPopover>
       {/if}
     </span>
-    {#if !open && flow?.problem && flow.phase !== "signed-in"}
-      <!-- The sign-in's refusal, said on its cell while the popover is put
-           away, until it is opened and tried again. -->
-      <!-- Its way on is the cell's own Sign in, beside the state above. -->
-      <RowFault reason={sentence(flow.problem)} />
+    {#if refusal}
+      <!-- The refusal, on its cell until tried again, whether its popover
+           is open or put away: the cell never changes height under it.
+           Its way on is the cell's own Sign in again; the tool's screen is
+           in the popover. -->
+      <RowFault reason={sentence(refusal)} />
     {/if}
   {/if}
+{/snippet}
+
+<!-- The frame both sign-in popovers share: the title, then the words. A
+     tool's screen it quotes stands as its own lines in the code face, the
+     sentence before it in meta. -->
+{#snippet signinFrame(title: string, words: string)}
+  {@const lines = screenOf(words)}
+  <div class="flex flex-col gap-space-3 p-space-2">
+    <p data-slot="title" class="type-label text-ink-strong">{title}</p>
+    <p class="type-meta text-pretty text-ink-strong">{sentence(words)}</p>
+    {#if lines}
+      <pre
+        class="max-h-56 overflow-auto type-code whitespace-pre-wrap wrap-anywhere text-ink-muted">{lines}</pre>
+    {/if}
+  </div>
 {/snippet}
 
 {#if catalog.length === 0}
@@ -595,6 +687,7 @@
             {machines}
             online={(machine) => machine.status === "online"}
             rowClass="group/cell"
+            settle="top"
           >
             {#snippet heads()}
               {#if spec.signin}
@@ -614,6 +707,7 @@
                      State, from the machine's name to the card's end. -->
                 <Table.Cell
                   class="@max-phone/table:col-span-full @max-phone/table:row-start-2"
+                  settle="top"
                   variant="ledger-stacks"
                 >
                   <div
@@ -623,8 +717,10 @@
                   </div>
                 </Table.Cell>
               {/if}
-              <Table.Cell variant="ledger-stacks">
-                <div class="flex flex-col gap-space-1 whitespace-normal">
+              <Table.Cell settle="top" variant="ledger-stacks">
+                <div
+                  class="flex flex-col items-start gap-space-1 whitespace-normal"
+                >
                   {@render cell(machine, spec, online)}
                 </div>
               </Table.Cell>
