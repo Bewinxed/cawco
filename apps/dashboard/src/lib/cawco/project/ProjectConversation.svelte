@@ -43,6 +43,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import {
     cawco,
+    type HeldSend,
     type PendingPermission,
     type SendExtras,
   } from "#lib/cawco/client.svelte.js";
@@ -354,6 +355,7 @@
   async function start(text: string, extras: SendExtras) {
     starting = true;
     startError = "";
+    let held: HeldSend[] = [];
     try {
       // Drawn at once: the conversation stands with the person's words in
       // it, him at work after them, while its session is asked for.
@@ -365,6 +367,9 @@
         (drawn) => {
           chosen = drawn;
           fresh = false;
+        },
+        (withdrawn) => {
+          held = withdrawn;
         }
       );
       // A starter pressed into the field went: as its words stood, or
@@ -383,7 +388,22 @@
       chosen = null;
       fresh = true;
       startError = failureWords(error);
-      lead.draft.restore(text, extras);
+      // Every word written to it, the first and those held while it
+      // started, back in the field in the order written, with what rode
+      // them, ahead of anything written there since.
+      const back = [text, ...held.map((one) => one.text)];
+      const typed = lead.draft.text.trim();
+      lead.draft.restore(
+        [...back, ...(typed ? [typed] : [])].filter(Boolean).join("\n\n"),
+        {
+          attachments: [extras, ...held.map((one) => one.extras)].flatMap(
+            (one) => one.attachments ?? []
+          ),
+          images: [extras, ...held.map((one) => one.extras)].flatMap(
+            (one) => one.images ?? []
+          ),
+        }
+      );
     } finally {
       starting = false;
     }

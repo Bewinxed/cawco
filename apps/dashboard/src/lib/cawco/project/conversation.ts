@@ -12,6 +12,7 @@ import {
   answeredOr,
   cawco,
   drawFirstPrompt,
+  type HeldSend,
   type SendExtras,
   spawnSession,
   withdrawFirstPrompt,
@@ -42,8 +43,10 @@ import { spawnPrefs } from "../spawnPrefs.svelte";
  * The person's words are drawn in the conversation before its spawn is
  * asked for, as theirs, the session at work after them (client
  * `drawFirstPrompt`): `drawn` hands the caller the session's id then, so it
- * shows the conversation from the first moment. A start that fails takes
- * them back before it throws.
+ * shows the conversation from the first moment. What the person writes to
+ * it meanwhile is drawn and held, and goes after them (client
+ * `holdForStart`). A start that fails takes all of it back before it
+ * throws, the held sends handed to `withdrawn` for the caller to put back.
  */
 export async function startConversation(
   projectId: string,
@@ -52,7 +55,9 @@ export async function startConversation(
   /** What the composer held as it sent, kept for a reload to send. */
   content?: DraftContent,
   /** The conversation's session id, as its first words are drawn in it. */
-  drawn?: (instanceId: string) => void
+  drawn?: (instanceId: string) => void,
+  /** A start that failed: what was written to it while it started, oldest first. */
+  withdrawn?: (held: HeldSend[]) => void
 ): Promise<string> {
   const project = cawco.project(projectId);
   const place = project ? checkoutOf(project) : undefined;
@@ -100,7 +105,11 @@ export async function startConversation(
   ]);
   askedFor(id, instanceId);
   const commandId = newId();
-  drawFirstPrompt(instanceId, commandId, prompt, extras);
+  drawFirstPrompt(instanceId, commandId, prompt, extras, {
+    machineId: place.machineId,
+    cwd: place.path,
+    harness,
+  });
   drawn?.(instanceId);
   try {
     const started = await spawnSession({
@@ -118,7 +127,7 @@ export async function startConversation(
     });
     return answeredOr(place.machineId, started, spawnWords.form.startUnknown);
   } catch (error) {
-    withdrawFirstPrompt(instanceId, commandId);
+    withdrawn?.(withdrawFirstPrompt(instanceId, commandId));
     throw error;
   } finally {
     dropStart(id);

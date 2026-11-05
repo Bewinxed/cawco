@@ -48,6 +48,7 @@
     clearReadFault,
     commandFault,
     faultMessage,
+    holdForStart,
     keepServedAway,
     keepServedPage,
     loadMcpServers,
@@ -1078,6 +1079,12 @@
         console.warn("composer rendered without a machine", viewId);
       }
       return;
+    }
+    // A session its start is still making has no row the hub could hold a
+    // send against: the send is drawn and held, and goes once the start has
+    // answered, after its first prompt (client `holdForStart`).
+    if (unborn) {
+      return holdForStart(viewId, text, extras, id);
     }
     // A message to a sleeping session wakes it on the hub, in the one path every
     // send takes, so this tab sends and nothing else. The hub's own refusal

@@ -6296,7 +6296,38 @@ export function sendFirstPrompt(
       commandId
     );
   }
+  // What the person sent while its start was still making it, after it, in
+  // the order written, each under the row it was drawn as.
+  const held = heldForStart.get(instanceId) ?? [];
+  heldForStart.delete(instanceId);
+  if (held.length > 0) {
+    subscribeSession(streamState, streamHost, instanceId);
+  }
+  for (const one of held) {
+    submitCommand(
+      instanceId,
+      machineId,
+      "send",
+      { text: one.text, extras: one.extras },
+      one.commandId
+    );
+  }
 }
+
+/** A send written to a session its start is still making ({@link holdForStart}). */
+export interface HeldSend {
+  commandId: string;
+  extras: SendExtras;
+  text: string;
+}
+
+/**
+ * The sends written to each session a start is still making, oldest first:
+ * drawn as theirs, held in this tab, and sent after its first prompt once
+ * its spawn has answered ({@link sendFirstPrompt}). The hub has no row to
+ * hold them against yet, and refuses a send to an id it does not list.
+ */
+const heldForStart = new Map<string, HeldSend[]>();
 
 /**
  * A new session's first message, drawn in its conversation before the
@@ -6310,21 +6341,57 @@ export function drawFirstPrompt(
   instanceId: string,
   commandId: string,
   text: string,
-  extras: SendExtras
+  extras: SendExtras,
+  /** Where it starts: its conversation can be written to before its row is listed. */
+  where: { cwd: string; harness: HarnessKind; machineId: string }
 ): void {
+  const target = session(instanceId);
+  target.machineId ||= where.machineId;
+  target.cwd ||= where.cwd;
+  target.harness = where.harness;
   noteSendSubmitted(instanceId, text, extras, commandId);
 }
 
-/** A first message drawn for a start that failed, taken back: nothing of it went. */
+/**
+ * A send the person writes to a session its start is still making (its
+ * pane `unborn`): drawn as theirs at once, as every send is, and held here
+ * until its start answers, when it goes after the first prompt under the
+ * same row ({@link sendFirstPrompt}). Never sent to an id the hub does not
+ * list, which it would refuse.
+ */
+export function holdForStart(
+  instanceId: string,
+  text: string,
+  extras: SendExtras,
+  commandId: string
+): string {
+  noteSendSubmitted(instanceId, text, extras, commandId);
+  heldForStart.set(instanceId, [
+    ...(heldForStart.get(instanceId) ?? []),
+    { commandId, text, extras },
+  ]);
+  return commandId;
+}
+
+/**
+ * A start that failed, its words taken back: the first message drawn for
+ * it and whatever was written to it while it started. Nothing of them went;
+ * the held ones are answered, oldest first, for the caller to put back.
+ */
 export function withdrawFirstPrompt(
   instanceId: string,
   commandId: string
-): void {
-  dropSendEcho(instanceId, commandId);
+): HeldSend[] {
+  const held = heldForStart.get(instanceId) ?? [];
+  heldForStart.delete(instanceId);
+  for (const drawn of [commandId, ...held.map((one) => one.commandId)]) {
+    dropSendEcho(instanceId, drawn);
+  }
   const target = state.sessions[instanceId];
   if (target) {
     target.busy = false;
   }
+  return held;
 }
 
 /** Where a fork branches from: the conversation, its machine, folder and harness, and the answer it branches at. */
