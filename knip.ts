@@ -229,6 +229,8 @@ export default {
         "scripts/probe-kit/store-reads-child.ts",
         // scripts/probe-kit/specs/hub-loop-ends.ts:31
         "scripts/probe-kit/hub-loop-child.ts",
+        // scripts/probe-kit/specs/slow-hub-trial.ts:35
+        "scripts/probe-kit/trial-verify-child.ts",
         // scripts/probe-kit/specs/tether.ts:48
         "scripts/probe-kit/tether-child.ts",
         // scripts/probe-kit/specs/atomic-writes.ts:26

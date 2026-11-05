@@ -19983,9 +19983,17 @@ export const createServer = (
    * `db.listAgents()` callers are fleet/config lookups that never read `status`,
    * and are deliberately left alone.
    */
-  /** One machine's row as `GET /api/agents` answers it; undefined when the hub knows none. */
-  const machineRow = (machineId: string): AgentRow | undefined =>
-    withPresence(db.listAgents()).find((row) => row.machineId === machineId);
+  /**
+   * One machine's row as `GET /api/agents` answers it; undefined when the hub
+   * knows none. Read and dressed alone: an update's trial asks it every
+   * second (core binary-health.ts), so it costs one machine's row, never the
+   * fleet's (every machine's fleet document, tools, harness reports and held
+   * sessions, all but one thrown away).
+   */
+  const machineRow = (machineId: string): AgentRow | undefined => {
+    const row = db.agentRow(machineId);
+    return row ? withPresence([row])[0] : undefined;
+  };
 
   const withPresence = (rows: AgentRow[]): AgentRow[] =>
     rows.map((row) => {

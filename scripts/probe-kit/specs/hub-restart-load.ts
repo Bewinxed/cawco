@@ -1,9 +1,11 @@
 /**
  * Updates › after its update restarts the hub on a machine carrying the
  * fleet's load, the hub answers what the updater's trial probes, `GET
- * /health` and this machine's row, within the probe's 3 s, every second of
- * the trial (core binary-health.ts `PROBE_TIMEOUT_MS`), so a good build is
- * never rolled back.
+ * /health` and this machine's row, within a second, every second of the
+ * trial, so a good build is never rolled back. (The trial's probe waits on
+ * each request far longer, core binary-health.ts `PROBE_TIMEOUT_MS`, since
+ * 6796 on 2026-11-05; this bar is the hub's own speed, from the days it
+ * waited 3 s.)
  *
  * 2026-10-23 09:44Z, obelisk, nightly 5146: the trial went healthy at 25 s,
  * then through its confirmation window "the hub does not answer (GET
@@ -19,8 +21,7 @@
  * {@link WATCH_MS}.
  *
  * (a) Every probe of `/health` and of this machine's row is answered within
- *     {@link SLOWEST_MS}, a third of the trial's 3 s (the margin the live
- *     database's size needs).
+ *     {@link SLOWEST_MS} (the margin the live database's size needs).
  *
  * `PROBE_CPU_PROF=1` writes the restarted hub's CPU profile (Chrome .cpuprofile) to
  * the spec's folder.
@@ -35,11 +36,12 @@ import { CLAUDE_DIR_NAME } from "../../../packages/core/src/claude-dirs";
 import { MACHINE, MODEL } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
-/** The trial's probe: once a second, each request given 3 s (core binary-health.ts). */
+/** The trial's probe: once a second; each request here given 3 s, three times the bar. */
 const PROBE_EVERY_MS = 1000;
 const PROBE_TIMEOUT_MS = 3000;
 /**
- * The longest any probe may take here: a third of the trial's 3 s. This
+ * The longest any probe may take here: a third of the 3 s the trial's probe
+ * waited until 6796 (2026-11-05). This
  * scratch database holds the live one's rows at a twelfth of its size (39 MB
  * of 467 MB), and the live hub went silent for over 30 s where this one was
  * held 1.2 to 6 s, so a hold this one shows at a third of the bound is past
@@ -437,7 +439,7 @@ async function run(kit: Kit): Promise<void> {
   );
   writeFileSync(join(kit.out, "probes.json"), JSON.stringify(reads, null, 1));
   kit.check(
-    `a: after the restart, with ${sessions} sessions on ${Object.keys(SHAPE).length} machines and the live database's rows, every probe of /health and this machine's row in ${WATCH_MS / 1000} s is answered within ${SLOWEST_MS} ms, a third of the trial's ${PROBE_TIMEOUT_MS / 1000} s`,
+    `a: after the restart, with ${sessions} sessions on ${Object.keys(SHAPE).length} machines and the live database's rows, every probe of /health and this machine's row in ${WATCH_MS / 1000} s is answered within ${SLOWEST_MS} ms`,
     missed.length === 0 && slowest <= SLOWEST_MS,
     `${reads.length} probes, ${missed.length} unanswered (at ${missed.map((one) => `${(one.at / 1000).toFixed(0)}s`).join(", ") || "none"}), slowest ${slowest} ms; each probe in probes.json`
   );

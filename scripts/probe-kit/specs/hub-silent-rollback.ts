@@ -12,9 +12,12 @@
  * (a) The trial's probe (core binary-health.ts `probeHealth`), against a
  *     hub of the spec's own that takes the request and never answers: on a
  *     machine other than the hub's, the problem is the hub's silence
- *     (`hubSilent`); on the hub's own machine, where the hub is the new
- *     build, it is the build's. A hub that answers the row offline is the
- *     build's too.
+ *     (`hubSilent`), said once the trial's deadline (`byMs`) is reached, not
+ *     a request bound later; on the hub's own machine, where the hub is the
+ *     new build, it is the build's. A hub that answers the row offline is
+ *     the build's too, and so is its 404 for a machine it does not know; an
+ *     answer that is not about the row (a refusal of the probe's own
+ *     request, a forward's 502) is the hub's silence.
  * (b) The failed-version rule (core binary-updates.ts `rolledBack`,
  *     `failedForGood`, which agent binary-update.ts `#takeUp` reads): a
  *     rollback for the hub's silence leaves the build to be taken up again,
@@ -36,6 +39,8 @@ import type { Spec } from "../kit";
 
 const VERSION = "0.0.1-test.6688";
 const MACHINE = "b106e1516d863601";
+/** How far the trial's deadline stands from each probe here: what a silent hub is waited on. */
+const DEADLINE_MS = 1500;
 
 type Failed = Pick<BinaryUpdateState, "failedVersion" | "hubSilentTrials">;
 
@@ -50,6 +55,18 @@ const spec: Spec = {
     const silent = Bun.serve({
       port: 0,
       fetch: () => new Promise<Response>(() => undefined),
+    });
+    const refusing = Bun.serve({
+      port: 0,
+      fetch: () => new Response("pairing required", { status: 401 }),
+    });
+    const forward502 = Bun.serve({
+      port: 0,
+      fetch: () => new Response("hub did not answer", { status: 502 }),
+    });
+    const unknown = Bun.serve({
+      port: 0,
+      fetch: () => new Response("unknown machine", { status: 404 }),
     });
     const offline = Bun.serve({
       port: 0,
@@ -66,14 +83,39 @@ const spec: Spec = {
           installation: { hubUrl, role },
           machineId: MACHINE,
           sinceMs: Date.now() - 60_000,
+          byMs: Date.now() + DEADLINE_MS,
           version: VERSION,
         });
+      const asked = performance.now();
       const agentSilent = await probe(silent.url.origin, "agent");
+      const waited = performance.now() - asked;
       check(
         "(a) a machine other than the hub's: its hub's silence is no fault of the build",
         agentSilent?.hubSilent === true &&
           agentSilent.said.includes(`/api/agents/${MACHINE}`),
         JSON.stringify(agentSilent)
+      );
+      check(
+        `(a) a silent hub is waited on until the trial's deadline (${DEADLINE_MS} ms away), not past it`,
+        waited >= DEADLINE_MS - 50 && waited < DEADLINE_MS + 1000,
+        `${Math.round(waited)} ms`
+      );
+      for (const [what, hub] of [
+        ["refuses the probe's request (401)", refusing],
+        ["answers through its forward 502", forward502],
+      ] as const) {
+        const said = await probe(hub.url.origin, "agent");
+        check(
+          `(a) a hub that ${what}: its silence, not the build's`,
+          said?.hubSilent === true,
+          JSON.stringify(said)
+        );
+      }
+      const notKnown = await probe(unknown.url.origin, "agent");
+      check(
+        "(a) a hub that knows no such machine (404): the build's own",
+        notKnown?.hubSilent === false && notKnown.said.includes("HTTP 404"),
+        JSON.stringify(notKnown)
       );
       const hubSilent = await probe(silent.url.origin, "hub");
       check(
@@ -89,6 +131,9 @@ const spec: Spec = {
       );
     } finally {
       await silent.stop(true);
+      await refusing.stop(true);
+      await forward502.stop(true);
+      await unknown.stop(true);
       await offline.stop(true);
     }
 

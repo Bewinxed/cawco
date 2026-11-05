@@ -118,7 +118,7 @@ const SERVICE_TIMEOUT_MS = 120_000;
 /** How long a build has to become healthy, from the swap or from a resumed helper's start, before it is rolled back (core {@link UPDATE_TRIAL_MS}). */
 const TRIAL_WINDOW_S = timerMs(UPDATE_TRIAL_MS) / 1000;
 /** How long the build must stay healthy, unbroken, to be confirmed: a minute. */
-const CONFIRM_MS = timerMs(60_000);
+export const CONFIRM_MS = timerMs(60_000);
 
 const lockPath = lockFilePath;
 const note = (line: string) =>
@@ -857,7 +857,7 @@ async function settle(start: TrialMarker): Promise<HealthProblem | undefined> {
  * its time and attempt count. A rollback's reason is then in the log of the
  * unit that decided it, not only in the update state.
  */
-async function verify(
+export async function verify(
   start: TrialMarker,
   holdMs: number
 ): Promise<HealthProblem | undefined> {
@@ -883,6 +883,9 @@ async function verify(
         installation: { ...installation, role: watch.trial.role },
         machineId: id,
         sinceMs: watch.trial.swappedAt * 1000,
+        ...(watch.trial.decideBy === undefined
+          ? {}
+          : { byMs: watch.trial.decideBy * 1000 }),
         version: watch.trial.version,
         requireCustody: true,
       })

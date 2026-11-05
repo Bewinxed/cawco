@@ -734,6 +734,13 @@ export interface DbShape {
     generation: number;
   };
   readonly agentHarnesses: (machineId: string) => HarnessReport[] | undefined;
+  /**
+   * One machine's row as {@link listAgents} shapes it, read alone: what
+   * `GET /api/agents/:machineId` answers, which an update's trial asks every
+   * second through a loaded hub, so it reads that machine's cells and no
+   * other's. Undefined when the hub knows no such machine.
+   */
+  readonly agentRow: (machineId: string) => AgentRow | undefined;
   /** A machine's last-known tool status by id; empty for one that never reported. */
   readonly agentTools: (machineId: string) => Record<string, ToolStatus>;
   /** Keeps where one of the hub's lines stands ({@link lineAnchorsOf}); a line placed again keeps its newest place. */
@@ -4521,21 +4528,75 @@ const make = async (path: string): Promise<DbShape> => {
   };
 
   /** Each machine's chosen permission mode by harness (schema `chosenModes`). */
-  const chosenModesByMachine = (): Map<
-    string,
-    Partial<Record<HarnessKind, PermissionMode>>
-  > => {
+  const chosenModesByMachine = (
+    machineId?: string
+  ): Map<string, Partial<Record<HarnessKind, PermissionMode>>> => {
     const byMachine = new Map<
       string,
       Partial<Record<HarnessKind, PermissionMode>>
     >();
-    for (const row of db.select().from(chosenModes).all()) {
+    for (const row of db
+      .select()
+      .from(chosenModes)
+      .where(
+        machineId === undefined
+          ? undefined
+          : eq(chosenModes.machineId, machineId)
+      )
+      .all()) {
       byMachine.set(row.machineId, {
         ...byMachine.get(row.machineId),
         [row.harness]: row.permissionMode,
       });
     }
     return byMachine;
+  };
+
+  /**
+   * Machines' rows in the shape everything downstream reads them, each with
+   * its tools, harness reports and chosen modes; with `machineId`, the cells
+   * of that machine alone are read ({@link DbShape.agentRow}).
+   */
+  const agentRows = (
+    rows: (typeof agents.$inferSelect)[],
+    machineId?: string
+  ): AgentRow[] => {
+    const toolCells = toolsByMachine(machineId);
+    const reports = harnessesByMachine(machineId);
+    const modes = chosenModesByMachine(machineId);
+    return rows.map(
+      ({
+        fleet,
+        fleetSync,
+        fleetItems,
+        fleetGeneration: _generation,
+        fleetFingerprint: _fingerprint,
+        build,
+        home,
+        machineCapabilities,
+        pausedUntil,
+        pauseStopped,
+        ...agent
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one optional field per nullable column, each left out of the row while null
+      }) => {
+        const harnesses = reports.get(agent.machineId);
+        const chosen = modes.get(agent.machineId);
+        return {
+          ...agent,
+          tools: toolCells.get(agent.machineId) ?? {},
+          pausedUntil: pausedUntil?.getTime() ?? null,
+          pauseStopped: (pauseStopped && stoppedWords(pauseStopped)) || null,
+          ...(fleet ? { fleet } : {}),
+          ...(fleetSync ? { fleetSync } : {}),
+          ...(fleetItems ? { fleetItems } : {}),
+          ...(build ? { build } : {}),
+          ...(harnesses ? { harnesses } : {}),
+          ...(chosen ? { chosenModes: chosen } : {}),
+          ...(home ? { home } : {}),
+          ...(machineCapabilities ? { machineCapabilities } : {}),
+        };
+      }
+    );
   };
 
   /**
@@ -7907,52 +7968,22 @@ const make = async (path: string): Promise<DbShape> => {
         .run();
       return true;
     },
-    listAgents: () => {
-      const toolCells = toolsByMachine();
-      const reports = harnessesByMachine();
-      const modes = chosenModesByMachine();
-      return (
+    listAgents: () =>
+      agentRows(
         db
           .select()
           .from(agents)
           // Join order: core `machineCalled` numbers machines that share a name by it.
           .orderBy(asc(agents.createdAt), asc(agents.machineId))
           .all()
-          .map(
-            ({
-              fleet,
-              fleetSync,
-              fleetItems,
-              fleetGeneration: _generation,
-              fleetFingerprint: _fingerprint,
-              build,
-              home,
-              machineCapabilities,
-              pausedUntil,
-              pauseStopped,
-              ...agent
-              // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one optional field per nullable column, each left out of the row while null
-            }) => {
-              const harnesses = reports.get(agent.machineId);
-              const chosen = modes.get(agent.machineId);
-              return {
-                ...agent,
-                tools: toolCells.get(agent.machineId) ?? {},
-                pausedUntil: pausedUntil?.getTime() ?? null,
-                pauseStopped:
-                  (pauseStopped && stoppedWords(pauseStopped)) || null,
-                ...(fleet ? { fleet } : {}),
-                ...(fleetSync ? { fleetSync } : {}),
-                ...(fleetItems ? { fleetItems } : {}),
-                ...(build ? { build } : {}),
-                ...(harnesses ? { harnesses } : {}),
-                ...(chosen ? { chosenModes: chosen } : {}),
-                ...(home ? { home } : {}),
-                ...(machineCapabilities ? { machineCapabilities } : {}),
-              };
-            }
-          )
-      );
+      ),
+    agentRow: (machineId) => {
+      const row = db
+        .select()
+        .from(agents)
+        .where(eq(agents.machineId, machineId))
+        .get();
+      return row ? agentRows([row], machineId)[0] : undefined;
     },
     // A discarded spin-off is gone for good, and a row that has not moved in a
     // day is history no rail has a use for — a running one stays whatever its
