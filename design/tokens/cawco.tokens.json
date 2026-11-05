@@ -7087,6 +7087,36 @@
       },
       "$description": "A tab's hanging menu at its narrowest, the kit menu's compact floor."
     },
+    "c-ledger-w": {
+      "$type": "dimension",
+      "$value": { "value": 440, "unit": "px" },
+      "$description": "The stage-and-ledger task prototype: the ledger strip's width beside the stage on a desk (its structure canvas: stage 940, strip 440)."
+    },
+    "c-ledger-min-w": {
+      "$type": "dimension",
+      "$value": { "value": 340, "unit": "px" },
+      "$description": "The stage-and-ledger task prototype: the ledger strip at its narrowest, at the 900px breakpoint."
+    },
+    "c-ledger-peek": {
+      "$type": "dimension",
+      "$value": { "value": 152, "unit": "px" },
+      "$description": "The stage-and-ledger task prototype: how much of the phone's ledger drawer stands at rest, its handle row with the two moves."
+    },
+    "c-session-beside-w": {
+      "$type": "dimension",
+      "$value": { "value": 400, "unit": "px" },
+      "$description": "The stage-and-ledger task prototype: the session's transcript standing third beside the stage and the strip."
+    },
+    "c-result-page-h": {
+      "$type": "dimension",
+      "$value": { "value": 560, "unit": "px" },
+      "$description": "The stage-and-ledger task prototype: a handed-in page drawn on the stage, its frame's height."
+    },
+    "c-wait-node-w": {
+      "$type": "dimension",
+      "$value": { "value": 264, "unit": "px" },
+      "$description": "The stage-and-ledger task prototype: a node of the wait map (a wait, this task, what it unblocks) at its widest."
+    },
     "c-new-task-w": {
       "$type": "dimension",
       "$value": {

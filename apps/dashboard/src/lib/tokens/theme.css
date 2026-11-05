@@ -644,6 +644,12 @@
   --spacing-c-details-card-w: var(--c-details-card-w);
   --spacing-c-details-card-max-h: var(--c-details-card-max-h);
   --spacing-c-tab-menu-min: var(--c-tab-menu-min);
+  --spacing-c-ledger-w: var(--c-ledger-w);
+  --spacing-c-ledger-min-w: var(--c-ledger-min-w);
+  --spacing-c-ledger-peek: var(--c-ledger-peek);
+  --spacing-c-session-beside-w: var(--c-session-beside-w);
+  --spacing-c-result-page-h: var(--c-result-page-h);
+  --spacing-c-wait-node-w: var(--c-wait-node-w);
   --spacing-c-new-task-w: var(--c-new-task-w);
   --spacing-c-draft-line: var(--c-draft-line);
   --spacing-c-skeleton-card-h: var(--c-skeleton-card-h);

@@ -1319,6 +1319,18 @@ public enum Size {
     public static let cDetailsCardMaxH: Double = 760
     /// A tab's hanging menu at its narrowest, the kit menu's compact floor.
     public static let cTabMenuMin: Double = 192
+    /// The stage-and-ledger task prototype: the ledger strip's width beside the stage on a desk (its structure canvas: stage 940, strip 440).
+    public static let cLedgerW: Double = 440
+    /// The stage-and-ledger task prototype: the ledger strip at its narrowest, at the 900px breakpoint.
+    public static let cLedgerMinW: Double = 340
+    /// The stage-and-ledger task prototype: how much of the phone's ledger drawer stands at rest, its handle row with the two moves.
+    public static let cLedgerPeek: Double = 152
+    /// The stage-and-ledger task prototype: the session's transcript standing third beside the stage and the strip.
+    public static let cSessionBesideW: Double = 400
+    /// The stage-and-ledger task prototype: a handed-in page drawn on the stage, its frame's height.
+    public static let cResultPageH: Double = 560
+    /// The stage-and-ledger task prototype: a node of the wait map (a wait, this task, what it unblocks) at its widest.
+    public static let cWaitNodeW: Double = 264
     /// The table view's new-task form.
     public static let cNewTaskW: Double = 576
     /// The width a draft view's sentence takes before its Keep and Discard wrap beneath it.
