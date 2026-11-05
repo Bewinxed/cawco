@@ -10,9 +10,8 @@
    */
   import type { Snippet } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
-  import { IconClose } from "#lib/icons.js";
   import { scrimFade, sheetIn, sheetOut } from "./motion";
+  import SheetHead from "./SheetHead.svelte";
 
   let {
     title,
@@ -29,6 +28,12 @@
 
   const desk = new MediaQuery("(min-width: 900px)");
   const side = $derived(desk.current ? "end" : "bottom");
+  // The side it leaves by, written down while it stands: an outro cannot
+  // read a derived (derived_inert).
+  let leaving: "end" | "bottom" = "end";
+  $effect(() => {
+    leaving = side;
+  });
 </script>
 
 {#if !desk.current}
@@ -46,28 +51,13 @@
   class="absolute z-(--layer-float) flex flex-col overflow-hidden bg-surface-raised shadow-drawer desk:inset-y-0 desk:end-0 desk:w-1/3 desk:min-w-c-panel-w desk:border-s desk:border-border-hairline max-desk:inset-x-0 max-desk:bottom-0 max-desk:max-h-c-sheet-max-h max-desk:rounded-t-lg"
   aria-label={title}
   in:sheetIn={{ side }}
-  out:sheetOut={{ side }}
+  out:sheetOut={{ side: leaving }}
 >
   <div
     class="mx-auto mt-space-2 h-c-grabber-h w-c-grabber-w flex-none rounded-pill bg-surface-fill-strong desk:hidden"
     aria-hidden="true"
   ></div>
-  <header
-    class="flex h-c-top-bar-h flex-none items-center gap-space-3 ps-space-5 pe-space-3"
-  >
-    <h2 class="min-w-0 flex-1 truncate type-label text-ink-strong">{title}</h2>
-    <BarGlass form="group">
-      <button
-        data-bar-item
-        type="button"
-        class="select-none touch-hit press-tint"
-        aria-label={closeLabel}
-        onclick={onclose}
-      >
-        <IconClose data-slot="bar-symbol" aria-hidden="true" />
-      </button>
-    </BarGlass>
-  </header>
+  <SheetHead {title} {closeLabel} {onclose} />
   <div class="min-h-0 flex-1 overflow-y-auto px-space-5 pb-space-6">
     {@render children()}
   </div>

@@ -9,8 +9,8 @@
 import { CAWCO_IN_SWING } from "./cawco-in-swing";
 import { CAWCO_DEV_BUSY, JUST_MADE, LOADING, STALE } from "./fixtures";
 import { LIVE } from "./model";
-import { press } from "./play";
 import ProjectScreen from "./ProjectScreen.svelte";
+import { press } from "./play";
 
 export default {
   title: "Rail of places/Outputs",
@@ -19,54 +19,50 @@ export default {
 };
 
 /** Cawco's shelf by task: two new post drafts, the reply shortlist, the bookend kit, the parody clip and a master the hub can't serve. */
-export const ByTask = { parameters: { viewport: 1440 } };
+export const ShelfByTask = { parameters: { viewport: 1440 } };
 
 /** By task, on a phone: two across. */
-export const ByTaskPhone = { parameters: { viewport: 390 } };
+export const ShelfByTaskPhone = { parameters: { viewport: 390 } };
 
 /** Newest first, each item naming its task and stage. */
-export const Newest = { args: { group: "newest" }, parameters: { viewport: 1440 } };
-
-/** Only posts, each drawn whole with its alternates and media plan. */
-export const OnlyPosts = { args: { kind: "post" }, parameters: { viewport: 1440 } };
+export const ShelfNewest = {
+  args: { group: "newest" },
+  parameters: { viewport: 1440 },
+};
 
 /** Cawco-Dev's shelf: reports, previews, a log, a choice set and a canvas. */
-export const CawcoDev = {
+export const ShelfCawcoDev = {
   args: { project: CAWCO_DEV_BUSY },
   parameters: { viewport: 1440 },
 };
 
 /** Nothing made yet, and Ask Caw. */
-export const NothingYet = {
+export const ShelfNothingYet = {
   args: { project: JUST_MADE },
   parameters: { viewport: 1440 },
 };
 
 /** Nothing made yet, on a phone. */
-export const NothingYetPhone = {
+export const ShelfNothingYetPhone = {
   args: { project: JUST_MADE },
   parameters: { viewport: 390 },
 };
 
 /** The first read is out. */
-export const Reading = { args: { read: LOADING }, parameters: { viewport: 1440 } };
+export const ShelfReading = {
+  args: { read: LOADING },
+  parameters: { viewport: 1440 },
+};
 
 /** The hub unreachable: the shelf kept, marked. */
-export const HubUnreachable = {
+export const ShelfHubUnreachable = {
   args: { read: STALE },
   parameters: { viewport: 1440 },
 };
 
 /** The Post chip pressed: the shelf narrows to posts. */
-export const PostChipPressed = {
-  from: "ByTask",
+export const ShelfPostChipPressed = {
+  from: "ShelfByTask",
   parameters: { viewport: 1440 },
   play: press(/^Post$/u),
-};
-
-/** A post's task name pressed: the task's pane over the shelf. */
-export const TaskFromItem = {
-  from: "ByTask",
-  parameters: { viewport: 1440 },
-  play: press(/^Post: answer an agent permission prompt/u),
 };

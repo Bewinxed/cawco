@@ -17,19 +17,14 @@
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
   import * as Tabs from "#lib/components/ui/tabs/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import {
-    IconAgent,
-    IconArchive,
-    IconChevronDown,
-    IconSearch,
-  } from "#lib/icons.js";
+  import { IconAgent, IconArchive, IconChevronDown } from "#lib/icons.js";
   import type { Project, Read, Task } from "./model";
-  import StaleNote from "./StaleNote.svelte";
+  import PageColumn from "./PageColumn.svelte";
+  import SearchField from "./SearchField.svelte";
   import TaskCard from "./TaskCard.svelte";
 
   let {
@@ -111,10 +106,7 @@
   });
 </script>
 
-<div class="flex flex-col gap-space-group">
-  {#if stale && read.stale}
-    <StaleNote since={read.stale} />
-  {/if}
+<PageColumn {read}>
   <div class="flex flex-wrap items-center gap-space-3">
     <div
       class="max-desk:-mx-space-1 max-desk:w-full max-desk:overflow-x-auto max-desk:no-scrollbar"
@@ -146,23 +138,11 @@
     </div>
     <div class="flex min-w-0 flex-1 flex-wrap items-center gap-space-2">
       <div class="min-w-0 flex-1 desk:max-w-c-page-column-w">
-        <InputGroup.Root>
-          <InputGroup.Addon>
-            <IconSearch
-              class="size-icon-md text-ink-muted"
-              aria-hidden="true"
-            />
-          </InputGroup.Addon>
-          <InputGroup.Input
-            type="search"
-            placeholder={w.searchTasks}
-            aria-label={w.searchTasks}
-          />
-        </InputGroup.Root>
+        <SearchField label={w.searchTasks} />
       </div>
       {#each [w.filters.label, w.filters.stage, w.filters.type] as chip (chip)}
         <Button variant="outline" size="sm" class="flex-none">
-          {chip}<IconChevronDown
+          <span>{chip}</span><IconChevronDown
             class="size-icon-sm text-ink-muted"
             aria-hidden="true"
           />
@@ -362,4 +342,4 @@
       </section>
     </div>
   {/if}
-</div>
+</PageColumn>

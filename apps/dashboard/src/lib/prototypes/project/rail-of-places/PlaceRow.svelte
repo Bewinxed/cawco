@@ -44,7 +44,10 @@
   </span>
   <span class="flex min-w-0 flex-1 flex-col gap-space-1">
     <span class="mark-line flex min-w-0 items-center gap-space-2">
-      <span class="min-w-0 truncate type-label">{name}</span>
+      <span
+        class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label"
+        >{name}</span
+      >
       {#if fact.needs}
         <span
           class="size-(--status-dot-size) flex-none rounded-pill bg-status-attn-glyph"

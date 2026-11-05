@@ -14,7 +14,6 @@
 import { CAWCO_DEV_TASKS } from "./cawco-dev-tasks";
 import type { Project, Read, Stage } from "./model";
 
-
 const DEV_STAGES: Stage[] = [
   { key: "ready", name: "Ready", kind: "todo" },
   { key: "working", name: "Working", kind: "active" },

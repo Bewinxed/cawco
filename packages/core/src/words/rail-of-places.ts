@@ -44,7 +44,7 @@ export const railOfPlacesWords = {
   noneRunning: "none running",
   spentOf: (spent: string, cap: string) => `${spent} of ${cap} today`,
   spentToday: (spent: string) => `${spent} today`,
-  nothingYet: "nothing yet",
+  nothingYet: "nothing here yet",
   couldNotRead: "could not read",
   /** A count's place while the hub is not live (PRODUCT.md, How state is shown). */
   staleSince: (time: string) => `stale since ${time}, hub unreachable`,
@@ -69,8 +69,8 @@ export const railOfPlacesWords = {
   newConversation: "New conversation",
   openAsSession: "Open as its own session",
   eventsReachHim: "The project's events reach him",
-  turnOff: "Turn off",
-  turnOn: "Turn on",
+  turnOff: "Turn Caw off",
+  turnOn: "Turn Caw on",
   cawOff:
     "Caw is off. Routines and reports still run, but nothing wakes him until you turn him on.",
   cawUnreachable: (machine: string) =>

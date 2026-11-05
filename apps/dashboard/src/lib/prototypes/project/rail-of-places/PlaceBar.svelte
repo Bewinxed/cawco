@@ -27,7 +27,13 @@
   }: {
     title: string;
     /** The one prominent action, trailing. */
-    action?: { label: string; icon: Component; onclick: () => void };
+    action?: {
+      label: string;
+      icon: Component;
+      onclick: () => void;
+      /** It offers ways to do it (New routine: by hand, or ask Caw). */
+      choices?: { label: string; onclick: () => void }[];
+    };
     /** The trailing group's bare symbols, before More. */
     symbols?: Snippet;
     /** The place's own acts, first under More. */
@@ -65,7 +71,11 @@
       </Tip>
     </BarGlass>
   </div>
-  <h1 class="min-w-0 flex-1 truncate type-title text-ink-strong">{title}</h1>
+  <h1
+    class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap type-title text-ink-strong"
+  >
+    {title}
+  </h1>
   <BarGlass form="group">
     {@render symbols?.()}
     <DropdownMenu.Root bind:open>
@@ -101,7 +111,31 @@
       </DropdownMenu.Content>
     </DropdownMenu.Root>
   </BarGlass>
-  {#if action}
+  {#if action?.choices}
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger>
+        {#snippet child({ props })}
+          <Button
+            {...props}
+            label={action.label}
+            icon={action.icon}
+            size="sm"
+          />
+        {/snippet}
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content
+        align="end"
+        portalProps={{ disabled: true }}
+        width="regular"
+      >
+        {#each action.choices as choice (choice.label)}
+          <DropdownMenu.Item onSelect={choice.onclick}
+            >{choice.label}</DropdownMenu.Item
+          >
+        {/each}
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+  {:else if action}
     <Button
       label={action.label}
       icon={action.icon}

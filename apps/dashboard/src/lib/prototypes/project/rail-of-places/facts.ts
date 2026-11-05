@@ -8,7 +8,7 @@
 import { railOfPlacesWords as w } from "@cawco/core/words/rail-of-places";
 import type { PlaceKey, Project, Read } from "./model";
 
-export interface FactPart {
+interface FactPart {
   text: string;
   tone: "plain" | "fail" | "attn";
 }

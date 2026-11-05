@@ -63,35 +63,25 @@
   class="flex min-h-0 flex-1 flex-col gap-space-1"
   aria-label={w.placesLabel(project.name)}
 >
-  <ul class="flex flex-col gap-space-1">
-    {#each DAILY as key (key)}
-      <li>
-        <PlaceRow
-          name={w.places[key]}
-          glyph={PLACE_GLYPHS[key]}
-          fact={facts[key]}
-          chosen={place === key}
-          {reading}
-          onchoose={() => onplace(key)}
-        />
-      </li>
-    {/each}
-  </ul>
-  <hr class="mx-space-3 my-space-2 border-border-hairline" />
-  <ul class="flex flex-col gap-space-1">
-    {#each WEEKLY as key (key)}
-      <li>
-        <PlaceRow
-          name={w.places[key]}
-          glyph={PLACE_GLYPHS[key]}
-          fact={facts[key]}
-          chosen={place === key}
-          {reading}
-          onchoose={() => onplace(key)}
-        />
-      </li>
-    {/each}
-  </ul>
+  {#each [DAILY, WEEKLY] as keys, index (index)}
+    {#if index > 0}
+      <hr class="mx-space-3 my-space-2 border-border-hairline" />
+    {/if}
+    <ul class="flex flex-col gap-space-1">
+      {#each keys as key (key)}
+        <li>
+          <PlaceRow
+            name={w.places[key]}
+            glyph={PLACE_GLYPHS[key]}
+            fact={facts[key]}
+            chosen={place === key}
+            {reading}
+            onchoose={() => onplace(key)}
+          />
+        </li>
+      {/each}
+    </ul>
+  {/each}
   <div class="mt-auto flex flex-col gap-space-1 pt-space-5">
     <button
       type="button"

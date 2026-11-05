@@ -8,6 +8,7 @@
     IconWorking,
   } from "#lib/icons.js";
   import type { Session } from "./model";
+  import PageColumn from "./PageColumn.svelte";
 
   /** A session's status glyph (DESIGN.md, Status displays). */
   export const SESSION_GLYPHS: Record<Session["state"], Component> = {
@@ -34,7 +35,6 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconSessionAdd, IconTranscript } from "#lib/icons.js";
   import type { Project, Read } from "./model";
-  import StaleNote from "./StaleNote.svelte";
 
   let {
     project,
@@ -61,10 +61,7 @@
   ];
 </script>
 
-<div class="flex flex-col gap-space-group">
-  {#if stale && read.stale}
-    <StaleNote since={read.stale} />
-  {/if}
+<PageColumn {read}>
   {#if spinning && !stale}
     <form
       class="flex flex-col gap-space-4 rounded-lg bg-surface-raised p-space-5 shadow-tile"
@@ -124,6 +121,7 @@
       <ul class="flex flex-col divide-y divide-border-hairline">
         {#each project.sessions as session (session.id)}
           {@const Glyph = SESSION_GLYPHS[session.state]}
+          <!-- mark-line: the status glyph stands in its lead cell; the ledger's columns beside it wrap on a phone -->
           <li
             class="flex flex-wrap items-center gap-x-space-3 gap-y-space-1 px-space-3 py-space-3 data-stale:opacity-55"
             data-stale={stale || undefined}
@@ -140,7 +138,7 @@
               />
             </span>
             <span
-              class="min-w-0 flex-1 basis-56 truncate type-label text-ink-row"
+              class="min-w-0 flex-1 basis-56 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-row"
               >{session.title}</span
             >
             <span
@@ -149,7 +147,7 @@
               {w.sessionKinds[session.kind]}
             </span>
             <span
-              class="w-c-ledger-outcome-w flex-none truncate type-meta text-ink-muted max-phone:w-auto"
+              class="w-c-ledger-outcome-w flex-none overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted max-phone:w-auto"
             >
               {session.machine} · {session.harness}
             </span>
@@ -183,4 +181,4 @@
       </ul>
     {/if}
   </div>
-</div>
+</PageColumn>

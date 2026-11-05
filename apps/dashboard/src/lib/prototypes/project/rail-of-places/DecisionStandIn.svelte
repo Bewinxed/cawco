@@ -20,6 +20,7 @@
   <p class="type-meta num text-ink-muted">
     {w.picked(decision.picked[0], decision.picked[1])} · {decision.age}
   </p>
+  <!-- mark-line: the glyph stands over the words, not beside them -->
   <div
     class="flex min-h-c-caw-panel-h flex-1 flex-col items-start justify-center gap-space-2 rounded-lg border border-dashed border-border-control bg-surface-recess p-space-6"
   >

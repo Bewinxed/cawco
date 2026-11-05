@@ -8,10 +8,10 @@
  * his last turn reading.
  */
 import { CAWCO_IN_SWING } from "./cawco-in-swing";
-import { CAWCO_DEV_QUIET, JUST_MADE, LOADING } from "./fixtures";
+import { JUST_MADE, LOADING } from "./fixtures";
 import { LIVE } from "./model";
-import { press } from "./play";
 import ProjectScreen from "./ProjectScreen.svelte";
+import { press } from "./play";
 
 export default {
   title: "Rail of places/Caw",
@@ -20,39 +20,37 @@ export default {
 };
 
 /** Docked beside Home: working on the routines card. */
-export const Docked = { parameters: { viewport: 1440 } };
+export const CawDocked = { parameters: { viewport: 1440 } };
 
 /** At 900: a sheet from the trailing edge over Home. */
-export const SheetAt900 = { parameters: { viewport: 900 } };
+export const CawSheetAt900 = { parameters: { viewport: 900 } };
 
 /** On a phone: a bottom drawer up to 85% of the screen. */
-export const Drawer = { parameters: { viewport: 390 } };
-
-/** Idle on Cawco-Dev, last night's conversation. */
-export const Idle = {
-  args: { project: CAWCO_DEV_QUIET },
-  parameters: { viewport: 1440 },
-};
+export const CawDrawer = { parameters: { viewport: 390 } };
 
 /** A fresh conversation on a project just made: the starters fill the composer. */
-export const Fresh = {
+export const CawFresh = {
   args: { project: JUST_MADE },
   parameters: { viewport: 1440 },
 };
 
 /** Off: nothing wakes him until Turn on. */
-export const Off = {
+export const CawOff = {
   args: {
     project: {
       ...CAWCO_IN_SWING,
-      caw: { ...CAWCO_IN_SWING.caw, status: "off", sentence: "Turned off at 09:12" },
+      caw: {
+        ...CAWCO_IN_SWING.caw,
+        status: "off",
+        sentence: "Turned off at 09:12",
+      },
     },
   },
   parameters: { viewport: 1440 },
 };
 
 /** Unreachable: his machine stopped answering. */
-export const Unreachable = {
+export const CawUnreachable = {
   args: {
     project: {
       ...CAWCO_IN_SWING,
@@ -67,18 +65,14 @@ export const Unreachable = {
 };
 
 /** His conversation is being read. */
-export const Reading = { args: { read: LOADING }, parameters: { viewport: 1440 } };
-
-/** A starter pressed: it fills the composer and does not send. */
-export const StarterFilled = {
-  from: "Docked",
+export const CawReading = {
+  args: { read: LOADING },
   parameters: { viewport: 1440 },
-  play: press(/^Plan this week's five posts/u),
 };
 
-/** Close on the docked pane: Home takes the room back. */
-export const Undocked = {
-  from: "Docked",
+/** A starter pressed: it fills the composer and does not send. */
+export const CawStarterFilled = {
+  from: "CawDocked",
   parameters: { viewport: 1440 },
-  play: press("Close Caw"),
+  play: press(/^Plan this week's five posts/u),
 };

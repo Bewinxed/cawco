@@ -6,10 +6,10 @@
  * unreachable; one page unread. At 1440 and 390.
  */
 import { CAWCO_IN_SWING } from "./cawco-in-swing";
-import { CAWCO_DEV_BUSY, JUST_MADE, LOADING, STALE } from "./fixtures";
+import { JUST_MADE, LOADING, STALE } from "./fixtures";
 import { LIVE } from "./model";
-import { press } from "./play";
 import ProjectScreen from "./ProjectScreen.svelte";
+import { press } from "./play";
 
 export default {
   title: "Rail of places/Decisions",
@@ -18,48 +18,38 @@ export default {
 };
 
 /** Cawco: the setup page waits at 8 of 9 picked; the lyrics were sent; ten decided. */
-export const InFullSwing = { parameters: { viewport: 1440 } };
+export const DecisionsInFullSwing = { parameters: { viewport: 1440 } };
 
 /** On a phone: one group at a time under a segmented control. */
-export const InFullSwingPhone = { parameters: { viewport: 390 } };
-
-/** Cawco-Dev: a page waiting 3 days, one sent, one decided. */
-export const CawcoDev = {
-  args: { project: CAWCO_DEV_BUSY },
-  parameters: { viewport: 1440 },
-};
+export const DecisionsInFullSwingPhone = { parameters: { viewport: 390 } };
 
 /** None yet: the three groups named, and Ask Caw. */
-export const NoneYet = {
+export const DecisionsNoneYet = {
   args: { project: JUST_MADE },
   parameters: { viewport: 1440 },
 };
 
 /** The first read is out. */
-export const Reading = { args: { read: LOADING }, parameters: { viewport: 1440 } };
+export const DecisionsReading = {
+  args: { read: LOADING },
+  parameters: { viewport: 1440 },
+};
 
 /** The hub unreachable: rows kept and marked. */
-export const HubUnreachable = {
+export const DecisionsHubUnreachable = {
   args: { read: STALE },
   parameters: { viewport: 1440 },
 };
 
 /** The airplane shots' page could not be read; the rest are current. */
-export const PageUnread = {
+export const DecisionsPageUnread = {
   args: { read: { ...LIVE, unread: ["decision:d-airplane"] } },
   parameters: { viewport: 1440 },
 };
 
 /** The waiting page opened at question 9. */
-export const SetupOpened = {
-  from: "InFullSwing",
+export const DecisionsSetupOpened = {
+  from: "DecisionsInFullSwing",
   parameters: { viewport: 1440 },
-  play: press("Open Set up the project again"),
-};
-
-/** On a phone, the waiting page opened. */
-export const SetupOpenedPhone = {
-  from: "InFullSwingPhone",
-  parameters: { viewport: 390 },
   play: press("Open Set up the project again"),
 };

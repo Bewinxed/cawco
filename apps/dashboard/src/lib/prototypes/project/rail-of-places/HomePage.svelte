@@ -11,12 +11,12 @@
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconAgent, IconNeedsYou, IconWorking } from "#lib/icons.js";
   import type { Need, Project, Read, Work } from "./model";
   import NeedRow from "./NeedRow.svelte";
+  import PageColumn from "./PageColumn.svelte";
+  import SkeletonRows from "./SkeletonRows.svelte";
   import StagesLine from "./StagesLine.svelte";
-  import StaleNote from "./StaleNote.svelte";
   import WorkRow from "./WorkRow.svelte";
 
   let {
@@ -53,10 +53,7 @@
   const empty = $derived(project.tasks.length === 0 && needs.length === 0);
 </script>
 
-<div class="flex flex-col gap-space-group">
-  {#if stale && read.stale}
-    <StaleNote since={read.stale} />
-  {/if}
+<PageColumn {read}>
   <StagesLine {project} {reading} {stale} {onstage} />
   <div class="@container/home">
     <div class="grid gap-space-group @desk/home:grid-cols-5">
@@ -84,11 +81,7 @@
         </h2>
         <div class="rounded-lg bg-surface-raised shadow-tile">
           {#if reading}
-            <div class="flex flex-col gap-space-3 p-space-3" aria-busy="true">
-              {#each [0, 1, 2] as row (row)}
-                <Skeleton height="block" radius="tile" />
-              {/each}
-            </div>
+            <SkeletonRows tall />
           {:else if needs.length === 0 && !stale}
             {#if empty}
               <EmptyState
@@ -148,11 +141,7 @@
         </h2>
         <div class="rounded-lg bg-surface-raised shadow-tile">
           {#if reading}
-            <div class="flex flex-col gap-space-3 p-space-3" aria-busy="true">
-              {#each [0, 1, 2] as row (row)}
-                <Skeleton height="row" radius="tile" />
-              {/each}
-            </div>
+            <SkeletonRows />
           {:else if working.length === 0 && !stale}
             <EmptyState
               icon={IconWorking}
@@ -189,4 +178,4 @@
       </section>
     </div>
   </div>
-</div>
+</PageColumn>

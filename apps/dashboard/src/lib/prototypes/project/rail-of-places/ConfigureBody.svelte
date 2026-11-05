@@ -11,9 +11,17 @@
   import { IconChevronRight } from "#lib/icons.js";
   import type { Project } from "./model";
 
-  let { project }: { project: Project } = $props();
+  let {
+    project,
+    ask = null,
+  }: {
+    project: Project;
+    /** The question standing open: Forget or Delete. */
+    ask?: "forget" | "delete" | null;
+  } = $props();
 
-  let asking = $state<"forget" | "delete" | null>(null);
+  // Open from the story's state, until a press changes it (follows-props).
+  let asking = $derived(ask);
   const running = $derived(
     project.sessions.filter(
       (session) => session.state === "working" || session.state === "needs"
@@ -56,12 +64,13 @@
       <li>
         <button
           type="button"
-          class="press-tint focus-inset touch-hit flex w-full items-center gap-space-3 rounded-sm px-space-2 py-space-3 text-start hover:bg-surface-hover"
+          class="press-tint focus-inset touch-hit mark-line flex w-full items-center gap-space-3 rounded-sm px-space-2 py-space-3 text-start hover:bg-surface-hover"
         >
           <span class="w-c-setup-label-w flex-none type-label text-ink-row"
             >{row.name}</span
           >
-          <span class="min-w-0 flex-1 truncate type-meta text-ink-muted"
+          <span
+            class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted"
             >{row.value}</span
           >
           <IconChevronRight

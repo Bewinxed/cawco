@@ -9,9 +9,8 @@
    */
   import type { Snippet } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
-  import { IconClose } from "#lib/icons.js";
   import { scrimFade, sheetIn, sheetOut } from "./motion";
+  import SheetHead from "./SheetHead.svelte";
 
   let {
     title,
@@ -39,6 +38,12 @@
   const desk = new MediaQuery("(min-width: 900px)");
   const bottom = $derived(drops && !desk.current);
   const travel = $derived(bottom ? "bottom" : side);
+  // The side it leaves by, written down while it stands: an outro cannot
+  // read a derived (derived_inert).
+  let leaving: "start" | "end" | "bottom" = "end";
+  $effect(() => {
+    leaving = travel;
+  });
 </script>
 
 <button
@@ -58,7 +63,7 @@
   data-at={travel}
   data-size={size}
   in:sheetIn={{ side: travel }}
-  out:sheetOut={{ side: travel }}
+  out:sheetOut={{ side: leaving }}
 >
   {#if bottom}
     <div
@@ -66,23 +71,7 @@
       aria-hidden="true"
     ></div>
   {/if}
-  <header
-    class="flex h-c-top-bar-h flex-none items-center gap-space-3 ps-space-5 pe-space-3"
-  >
-    <h2 class="min-w-0 flex-1 truncate type-label text-ink-strong">{title}</h2>
-    {@render head?.()}
-    <BarGlass form="group">
-      <button
-        data-bar-item
-        type="button"
-        class="select-none touch-hit press-tint"
-        aria-label={closeLabel}
-        onclick={onclose}
-      >
-        <IconClose data-slot="bar-symbol" aria-hidden="true" />
-      </button>
-    </BarGlass>
-  </header>
+  <SheetHead {title} {closeLabel} {onclose} symbols={head} />
   <div class="flex min-h-0 flex-1 flex-col overflow-y-auto">
     {@render children()}
   </div>

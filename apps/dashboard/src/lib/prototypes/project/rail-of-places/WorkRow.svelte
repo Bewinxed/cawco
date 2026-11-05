@@ -66,7 +66,8 @@
   </span>
   <div class="flex min-w-0 flex-1 flex-col gap-space-1">
     <div class="mark-line flex min-w-0 items-center gap-space-3">
-      <span class="min-w-0 flex-1 truncate type-label text-ink-row"
+      <span
+        class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-row"
         >{work.title}</span
       >
       <Button

@@ -22,6 +22,7 @@
       >{w.inStage(stage)}</span
     >
   </p>
+  <!-- mark-line: the glyph stands over the words, not beside them -->
   <div
     class="flex min-h-c-caw-panel-h flex-1 flex-col items-start justify-center gap-space-2 rounded-lg border border-dashed border-border-control bg-surface-recess p-space-6"
   >

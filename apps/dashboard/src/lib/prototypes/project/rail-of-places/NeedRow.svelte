@@ -83,15 +83,16 @@
   </Tip>
   <div class="flex min-w-0 flex-1 flex-col gap-space-2">
     <div class="mark-line flex min-w-0 items-center gap-space-3">
-      <span class="min-w-0 flex-1 truncate type-label text-ink-row"
+      <span class="min-w-0 flex-1 line-clamp-2 type-label text-ink-row"
         >{need.title}</span
       >
       <span
-        class="w-c-ledger-when-w flex-none text-end type-meta num text-ink-muted"
+        class="w-c-ledger-when-w flex-none text-end max-phone:w-auto type-meta num text-ink-muted"
         >{need.wait}</span
       >
       <Button
         class="flex-none"
+        data-box
         variant="ghost"
         size="xs"
         tone="quiet"

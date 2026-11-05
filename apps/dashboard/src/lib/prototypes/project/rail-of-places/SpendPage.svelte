@@ -10,7 +10,7 @@
   import { Progress } from "#lib/components/ui/progress/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import type { Project, Read } from "./model";
-  import StaleNote from "./StaleNote.svelte";
+  import PageColumn from "./PageColumn.svelte";
 
   let {
     project,
@@ -22,10 +22,7 @@
   const spend = $derived(project.spend);
 </script>
 
-<div class="flex flex-col gap-space-group desk:max-w-c-grid-4">
-  {#if read.stale}
-    <StaleNote since={read.stale} />
-  {/if}
+<PageColumn {read} narrow>
   {#if reading}
     <div class="grid gap-space-group phone:grid-cols-2">
       <Skeleton height="block" radius="card" />
@@ -73,7 +70,7 @@
             class="flex flex-wrap items-center gap-x-space-4 gap-y-space-1 px-space-4 py-space-3"
           >
             <span
-              class="min-w-0 flex-1 basis-48 truncate type-label text-ink-row"
+              class="min-w-0 flex-1 basis-48 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-row"
               >{source.name}</span
             >
             <span class="w-c-limit-bar flex-none">
@@ -97,4 +94,4 @@
       {w.noSpend}
     </p>
   {/if}
-</div>
+</PageColumn>

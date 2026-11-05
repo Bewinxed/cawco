@@ -7,7 +7,6 @@
  */
 import { CAWCO_IN_SWING } from "./cawco-in-swing";
 import { LIVE } from "./model";
-import { press } from "./play";
 import ProjectScreen from "./ProjectScreen.svelte";
 
 export default {
@@ -22,27 +21,25 @@ export default {
 };
 
 /** Cawco's settings over Home. */
-export const Open = { parameters: { viewport: 1440 } };
+export const ConfigureOpen = { parameters: { viewport: 1440 } };
 
 /** On a phone, a bottom drawer. */
-export const OpenPhone = { parameters: { viewport: 390 } };
+export const ConfigureOpenPhone = { parameters: { viewport: 390 } };
 
-/** Forget pressed: the question unfolds in place, naming the four sessions that stop first. */
-export const ForgetAsked = {
-  from: "Open",
+/** Forget asked in place: the question names the four sessions that stop first. */
+export const ConfigureForgetAsked = {
+  args: { ask: "forget" },
   parameters: { viewport: 1440 },
-  play: press("Forget project…"),
 };
 
-/** Delete pressed, on a phone. */
-export const DeleteAskedPhone = {
-  from: "OpenPhone",
+/** Delete asked, on a phone: what goes and that it cannot be undone. */
+export const ConfigureDeleteAskedPhone = {
+  args: { ask: "delete" },
   parameters: { viewport: 390 },
-  play: press("Delete project…"),
 };
 
 /** More open on Home's bar: the project's rare acts, each opening this sheet. */
-export const MoreOpen = {
+export const ConfigureMoreOpen = {
   args: { sheet: null, more: true },
   parameters: { viewport: 1440 },
 };

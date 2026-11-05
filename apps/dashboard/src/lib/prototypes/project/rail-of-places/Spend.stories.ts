@@ -5,7 +5,7 @@
  * reading; the hub unreachable. At 1440 and 390.
  */
 import { CAWCO_IN_SWING } from "./cawco-in-swing";
-import { CAWCO_DEV_QUIET, JUST_MADE, LOADING, STALE } from "./fixtures";
+import { JUST_MADE, LOADING, STALE } from "./fixtures";
 import { LIVE } from "./model";
 import ProjectScreen from "./ProjectScreen.svelte";
 
@@ -16,28 +16,25 @@ export default {
 };
 
 /** Cawco: $4.10 of a $10 day, $38.62 of a $200 month. */
-export const Cawco = { parameters: { viewport: 1440 } };
+export const SpendCawco = { parameters: { viewport: 1440 } };
 
 /** On a phone. */
-export const CawcoPhone = { parameters: { viewport: 390 } };
-
-/** Cawco-Dev: $27.80 of a $60 day. */
-export const CawcoDev = {
-  args: { project: CAWCO_DEV_QUIET },
-  parameters: { viewport: 1440 },
-};
+export const SpendCawcoPhone = { parameters: { viewport: 390 } };
 
 /** Nothing spent yet. */
-export const NothingSpent = {
+export const SpendNothingSpent = {
   args: { project: JUST_MADE },
   parameters: { viewport: 1440 },
 };
 
 /** The first read is out. */
-export const Reading = { args: { read: LOADING }, parameters: { viewport: 1440 } };
+export const SpendReading = {
+  args: { read: LOADING },
+  parameters: { viewport: 1440 },
+};
 
 /** The hub unreachable: the last figures kept. */
-export const HubUnreachable = {
+export const SpendHubUnreachable = {
   args: { read: STALE },
   parameters: { viewport: 1440 },
 };

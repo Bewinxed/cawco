@@ -23,7 +23,7 @@
     IconSuccess,
   } from "#lib/icons.js";
   import type { Project, Read, Routine } from "./model";
-  import StaleNote from "./StaleNote.svelte";
+  import PageColumn from "./PageColumn.svelte";
 
   let {
     project,
@@ -62,10 +62,7 @@
   );
 </script>
 
-<div class="flex flex-col gap-space-group">
-  {#if stale && read.stale}
-    <StaleNote since={read.stale} />
-  {/if}
+<PageColumn {read}>
   <section class="flex flex-col gap-space-2" aria-labelledby="proposed-head">
     <h2
       id="proposed-head"
@@ -121,7 +118,8 @@
                     >{one.connection} · {one.account}</span
                   >
                   <span class="type-meta num text-ink-muted">{one.when}</span>
-                  <span class="min-w-0 truncate type-meta text-ink-muted"
+                  <span
+                    class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted"
                     >{w.from(one.from)}</span
                   >
                 </div>
@@ -227,6 +225,7 @@
             {@const failing = read.unread.includes(`source:${routine.id}`)
               ? w.sourceFailing(routine.source.name)
               : routine.source.failing}
+            <!-- mark-line: the outcome glyph stands in its lead cell on the first line (mark-cell); the columns beside it wrap -->
             <li
               class="group/routine relative flex flex-wrap items-start gap-x-space-3 gap-y-space-1 px-space-3 py-space-3 data-chosen:bg-selected-bg data-stale:opacity-55"
               data-chosen={chosen === routine.id || undefined}
@@ -306,4 +305,4 @@
       {/if}
     </div>
   </section>
-</div>
+</PageColumn>

@@ -8,19 +8,13 @@
    * in a sheet the sheet's bar is its.
    */
   import { railOfPlacesWords as w } from "@cawco/core/words/rail-of-places";
-  import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
-  import {
-    IconAgent,
-    IconChatAdd,
-    IconClose,
-    IconSend,
-    IconUndock,
-  } from "#lib/icons.js";
+  import { IconAgent, IconChatAdd, IconSend, IconUndock } from "#lib/icons.js";
   import type { Project, Read } from "./model";
+  import SheetHead from "./SheetHead.svelte";
 
   let {
     project,
@@ -42,11 +36,8 @@
 
 <div class="flex min-h-0 flex-1 flex-col">
   {#if docked}
-    <header
-      class="flex h-c-top-bar-h flex-none items-center gap-space-3 ps-space-5 pe-space-3"
-    >
-      <h2 class="min-w-0 flex-1 type-label text-ink-strong">{w.caw}</h2>
-      <BarGlass form="group">
+    <SheetHead title={w.caw} closeLabel={w.closeCaw} {onclose}>
+      {#snippet symbols()}
         <button
           data-bar-item
           type="button"
@@ -63,17 +54,8 @@
         >
           <IconUndock data-slot="bar-symbol" aria-hidden="true" />
         </button>
-        <button
-          data-bar-item
-          type="button"
-          class="select-none touch-hit press-tint"
-          aria-label={w.closeCaw}
-          onclick={onclose}
-        >
-          <IconClose data-slot="bar-symbol" aria-hidden="true" />
-        </button>
-      </BarGlass>
-    </header>
+      {/snippet}
+    </SheetHead>
   {/if}
   <div
     class="flex flex-none flex-col gap-space-3 border-b border-border-hairline px-space-5 pb-space-4"

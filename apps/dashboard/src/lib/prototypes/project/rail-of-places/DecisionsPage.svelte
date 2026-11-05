@@ -14,7 +14,7 @@
   import * as Tabs from "#lib/components/ui/tabs/index.js";
   import { IconAgent } from "#lib/icons.js";
   import type { Decision, Project, Read } from "./model";
-  import StaleNote from "./StaleNote.svelte";
+  import PageColumn from "./PageColumn.svelte";
 
   let {
     project,
@@ -145,10 +145,7 @@
   </section>
 {/snippet}
 
-<div class="flex flex-col gap-space-group">
-  {#if stale && read.stale}
-    <StaleNote since={read.stale} />
-  {/if}
+<PageColumn {read}>
   {#if project.decisions.length === 0 && !reading}
     <div
       class="flex items-center gap-space-3 rounded-lg bg-surface-raised px-space-4 py-space-3 shadow-tile"
@@ -180,4 +177,4 @@
       </div>
     {/each}
   </div>
-</div>
+</PageColumn>

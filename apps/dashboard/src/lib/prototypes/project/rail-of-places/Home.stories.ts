@@ -12,8 +12,8 @@
 import { CAWCO_IN_SWING } from "./cawco-in-swing";
 import { CAWCO_DEV_QUIET, JUST_MADE, LOADING, STALE } from "./fixtures";
 import { LIVE } from "./model";
-import { type Play, press } from "./play";
 import ProjectScreen from "./ProjectScreen.svelte";
+import { press } from "./play";
 
 export default {
   title: "Rail of places/Home",
@@ -36,12 +36,6 @@ export const NothingWaits = {
   parameters: { viewport: 1440 },
 };
 
-/** Nothing waits, on a phone. */
-export const NothingWaitsPhone = {
-  args: { project: CAWCO_DEV_QUIET },
-  parameters: { viewport: 390 },
-};
-
 /** A project Caw made a minute ago: stages named without numbers, and the one act that starts work. */
 export const JustMade = {
   args: { project: JUST_MADE },
@@ -55,12 +49,9 @@ export const JustMadePhone = {
 };
 
 /** The first read is out: the rail's facts and Home's groups stand as skeletons at their size. */
-export const Reading = { args: { read: LOADING }, parameters: { viewport: 1440 } };
-
-/** Reading, on a phone. */
-export const ReadingPhone = {
+export const Reading = {
   args: { read: LOADING },
-  parameters: { viewport: 390 },
+  parameters: { viewport: 1440 },
 };
 
 /** The hub stopped answering at 10:42: rows kept and marked, no count claimed, answers held. */
@@ -77,7 +68,9 @@ export const HubUnreachablePhone = {
 
 /** Needs you is current but Working now could not be read: its last rows kept from 10:31, marked. */
 export const WorkingNowUnread = {
-  args: { read: { ...LIVE, unread: ["home:working", "rail:sessions"], kept: "10:31" } },
+  args: {
+    read: { ...LIVE, unread: ["home:working", "rail:sessions"], kept: "10:31" },
+  },
   parameters: { viewport: 1440 },
 };
 
@@ -95,27 +88,16 @@ export const PostOpened = {
   play: press(/^Open Post: one board/u),
 };
 
-/** Close on the task's pane: back to Home where it was. */
-export const PostClosed = {
-  from: "PostOpened",
-  parameters: { viewport: 1440 },
-  play: async (context: Play) => {
-    await press(/^Open Post: one board/u)(context);
-    await context.userEvent.wait(400);
-    await press("Close task")(context);
-  },
-};
-
 /** Ask Caw: his pane docks beside the page; Home stays as it was. */
-export const CawDocked = {
+export const AskedCaw = {
   from: "InFullSwing",
   parameters: { viewport: 1440 },
   play: press("Ask Caw"),
 };
 
-/** On a phone, Open on a post: the task rises as a bottom drawer over Home. */
-export const PostOpenedPhone = {
+/** On a phone, the bar's places symbol: the places sheet slides in from the leading edge, the same rows and facts. */
+export const PlacesOpenedPhone = {
   from: "InFullSwingPhone",
   parameters: { viewport: 390 },
-  play: press(/^Open Post: one board/u),
+  play: press("Places"),
 };

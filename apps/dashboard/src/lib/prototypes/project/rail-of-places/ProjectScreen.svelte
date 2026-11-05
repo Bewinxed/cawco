@@ -65,6 +65,7 @@
     kind = "all",
     group = "task",
     more = false,
+    ask = null,
   }: {
     project: Project;
     read: Read;
@@ -86,6 +87,8 @@
     group?: "task" | "newest";
     /** The bar's More menu stands open. */
     more?: boolean;
+    /** Configure's Forget or Delete question stands open. */
+    ask?: "forget" | "delete" | null;
   } = $props();
 
   // The live instance's own moves, from the story's state (follows-props).
@@ -182,6 +185,7 @@
         class="mark-line flex h-c-top-bar-h flex-none items-center gap-space-2 ps-space-1"
       >
         <a
+          data-box
           href="/"
           class="press-tint focus-inset touch-hit grid size-c-btn-h-sm flex-none place-items-center rounded-sm text-ink-muted hover:bg-surface-hover"
           aria-label={w.backToFleet}
@@ -189,7 +193,8 @@
           <IconArrowLeft class="size-icon-md" aria-hidden="true" />
           <span class="sr-only">{w.backToFleet}</span>
         </a>
-        <span class="min-w-0 truncate type-label text-ink-strong"
+        <span
+          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
           >{project.name}</span
         >
       </div>
@@ -240,7 +245,15 @@
       {:else if placeNow === "routines"}
         <PlaceBar
           title={w.places.routines}
-          action={{ label: w.newRoutine, icon: IconAdd, onclick: toggleCaw }}
+          action={{
+            label: w.newRoutine,
+            icon: IconAdd,
+            onclick: toggleCaw,
+            choices: [
+              { label: w.byHand, onclick: () => undefined },
+              { label: w.askCaw, onclick: toggleCaw },
+            ],
+          }}
           onplaces={() => {
             sheetNow = "places";
           }}
@@ -467,7 +480,7 @@
           sheetNow = null;
         }}
       >
-        <ConfigureBody {project} />
+        <ConfigureBody {project} {ask} />
       </Sheet>
     {/if}
   </div>

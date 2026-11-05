@@ -58,6 +58,7 @@
   class="flex min-w-0 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile"
   aria-label="{w.kinds[output.kind]}: {output.name}"
 >
+  <!-- mark-line: a column; its first row is the mark line -->
   <button
     type="button"
     class="press-tint focus-inset flex min-w-0 flex-1 flex-col gap-space-2 p-space-3 text-start hover:bg-surface-hover"
@@ -65,14 +66,15 @@
   >
     <span class="mark-line flex min-w-0 items-center gap-space-2">
       <Glyph class="size-icon-md flex-none text-ink-muted" aria-hidden="true" />
-      <span class="min-w-0 flex-1 truncate type-label text-ink-row"
+      <span
+        class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-row"
         >{output.post ? output.post.account : output.name}</span
       >
       {#if output.isNew}
-        <Badge>{w.isNew}</Badge>
+        <Badge data-box><span>{w.isNew}</span></Badge>
       {/if}
       {#if output.promoted}
-        <Badge variant="secondary">{w.promoted}</Badge>
+        <Badge variant="secondary" data-box><span>{w.promoted}</span></Badge>
       {/if}
     </span>
     {#if output.post}
@@ -118,11 +120,13 @@
     {#if showTask && byTask}
       <button
         type="button"
-        class="focus-inset min-w-0 truncate text-start text-link-ink hover:underline"
+        class="focus-inset min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-start text-link-ink hover:underline"
         onclick={() => ontask(output.task)}>{output.taskTitle}</button
       >
     {:else if showTask}
-      <span class="min-w-0 truncate">{output.taskTitle}</span>
+      <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+        >{output.taskTitle}</span
+      >
     {/if}
     {#if stage && showTask}
       <span aria-hidden="true">·</span><span class="flex-none">{stage}</span>

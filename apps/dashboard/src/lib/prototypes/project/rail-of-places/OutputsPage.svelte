@@ -9,13 +9,13 @@
   import { railOfPlacesWords as w } from "@cawco/core/words/rail-of-places";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import * as Tabs from "#lib/components/ui/tabs/index.js";
-  import { IconAgent, IconBox, IconSearch } from "#lib/icons.js";
+  import { IconAgent, IconBox } from "#lib/icons.js";
   import type { Output, OutputKind, Project, Read } from "./model";
   import OutputItem from "./OutputItem.svelte";
-  import StaleNote from "./StaleNote.svelte";
+  import PageColumn from "./PageColumn.svelte";
+  import SearchField from "./SearchField.svelte";
 
   let {
     project,
@@ -48,7 +48,6 @@
   let kindNow = $derived(kind);
   let groupNow = $derived<string>(group);
   const reading = $derived(read.status === "loading");
-  const stale = $derived(read.stale !== null);
   const shown = $derived(
     project.outputs.filter((one) => kindNow === "all" || one.kind === kindNow)
   );
@@ -62,22 +61,10 @@
     project.stages.find((one) => one.key === output.stage)?.name ?? null;
 </script>
 
-<div class="flex flex-col gap-space-group">
-  {#if stale && read.stale}
-    <StaleNote since={read.stale} />
-  {/if}
+<PageColumn {read}>
   <div class="flex flex-wrap items-center gap-space-3">
     <div class="min-w-0 flex-1 basis-64 desk:max-w-c-page-column-w">
-      <InputGroup.Root>
-        <InputGroup.Addon>
-          <IconSearch class="size-icon-md text-ink-muted" aria-hidden="true" />
-        </InputGroup.Addon>
-        <InputGroup.Input
-          type="search"
-          placeholder={w.searchOutputs}
-          aria-label={w.searchOutputs}
-        />
-      </InputGroup.Root>
+      <SearchField label={w.searchOutputs} />
     </div>
     <Tabs.Root bind:value={groupNow}>
       <Tabs.List>
@@ -105,7 +92,7 @@
 
   {#if reading}
     <div
-      class="grid grid-cols-fit-c-made-tile-min gap-space-4 max-phone:grid-cols-2"
+      class="grid grid-cols-2 gap-space-4 max-phone:gap-space-2 wide:grid-cols-3"
     >
       {#each [0, 1, 2, 3] as tile (tile)}
         <Skeleton height="view" radius="card" />
@@ -131,7 +118,7 @@
     </div>
   {:else if groupNow === "newest"}
     <div
-      class="grid grid-cols-fit-c-made-tile-min items-start gap-space-4 max-phone:grid-cols-2 max-phone:gap-space-2"
+      class="grid grid-cols-2 items-start gap-space-4 max-phone:gap-space-2 wide:grid-cols-3"
     >
       {#each shown as output (output.id)}
         <OutputItem {output} stage={stageOf(output)} ontask={onopen} />
@@ -145,11 +132,12 @@
           {#if head?.task.startsWith("tsk-")}
             <button
               type="button"
-              class="focus-inset min-w-0 truncate text-start type-label text-ink-strong hover:underline"
+              class="focus-inset min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-start type-label text-ink-strong hover:underline"
               onclick={() => onopen(head.task)}>{title}</button
             >
           {:else}
-            <span class="min-w-0 truncate type-label text-ink-strong"
+            <span
+              class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
               >{title}</span
             >
           {/if}
@@ -163,7 +151,7 @@
           >
         </h2>
         <div
-          class="grid grid-cols-fit-c-made-tile-min items-start gap-space-4 max-phone:grid-cols-2 max-phone:gap-space-2"
+          class="grid grid-cols-2 items-start gap-space-4 max-phone:gap-space-2 wide:grid-cols-3"
         >
           {#each items as output (output.id)}
             <OutputItem
@@ -177,4 +165,4 @@
       </section>
     {/each}
   {/if}
-</div>
+</PageColumn>

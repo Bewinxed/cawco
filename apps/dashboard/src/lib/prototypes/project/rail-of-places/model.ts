@@ -5,6 +5,7 @@
  * sessions, spend and Caw. Every screen takes one `Project` and one `Read`
  * as props, so every state is a story's args.
  */
+import type { StageKind } from "@cawco/core/views";
 
 export type PlaceKey =
   | "home"
@@ -14,10 +15,6 @@ export type PlaceKey =
   | "outputs"
   | "sessions"
   | "spend";
-
-/** The stage kinds the TOM names (Objects, Stage). */
-export type StageKind =
-  "todo" | "active" | "waiting" | "you" | "done" | "dropped";
 
 export interface Stage {
   key: string;
@@ -79,7 +76,7 @@ export interface Work {
   type?: string;
 }
 
-export interface Run {
+interface Run {
   outcome: "ok" | "silent" | "failed";
   produced: string;
   session: string;
@@ -108,7 +105,7 @@ export interface Routine {
 }
 
 /** An approved action waiting on the person, or one that failed (TOM, Approved action). */
-export interface Proposed {
+interface Proposed {
   account: string;
   call: string;
   connection: string;
@@ -175,7 +172,7 @@ export interface Session {
   title: string;
 }
 
-export interface Spend {
+interface Spend {
   capDay: string;
   capMonth: string;
   month: string;
@@ -186,7 +183,7 @@ export interface Spend {
   today: string;
 }
 
-export interface Caw {
+interface Caw {
   eventsReach: boolean;
   harness: string;
   machine: string;

@@ -10,8 +10,8 @@
 import { CAWCO_IN_SWING } from "./cawco-in-swing";
 import { CAWCO_DEV_BUSY, JUST_MADE, LOADING, STALE } from "./fixtures";
 import { LIVE } from "./model";
-import { type Play, press } from "./play";
 import ProjectScreen from "./ProjectScreen.svelte";
+import { type Play, press } from "./play";
 
 export default {
   title: "Rail of places/Tasks",
@@ -20,84 +20,74 @@ export default {
 };
 
 /** Cawco's board: five posts in Your call, two drafting, two stuck, the stages it doesn't use yet named and empty. */
-export const InFullSwing = { parameters: { viewport: 1440 } };
+export const BoardInFullSwing = { parameters: { viewport: 1440 } };
 
 /** On a phone: one stage per screen, swiped, under the strip of stages that is its index. */
-export const InFullSwingPhone = { parameters: { viewport: 390 } };
+export const BoardInFullSwingPhone = { parameters: { viewport: 390 } };
 
 /** Cawco-Dev's 238 tasks: 102 Ready, one Working, two in Review waiting on you, 109 Done, 24 Dropped. */
-export const BusyBoard = {
+export const BoardBusyBoard = {
   args: { project: CAWCO_DEV_BUSY },
   parameters: { viewport: 1440 },
 };
 
 /** The busy board on a phone, standing on Review. */
-export const BusyBoardPhone = {
+export const BoardBusyBoardPhone = {
   args: { project: CAWCO_DEV_BUSY, stage: "review" },
   parameters: { viewport: 390 },
 };
 
 /** The same 238 tasks as a ledger. */
-export const AsATable = {
+export const BoardAsATable = {
   args: { project: CAWCO_DEV_BUSY, view: "table" },
   parameters: { viewport: 1440 },
 };
 
-/** The ledger on a phone. */
-export const AsATablePhone = {
-  args: { project: CAWCO_DEV_BUSY, view: "table" },
-  parameters: { viewport: 390 },
-};
-
 /** What waits on what: each blocker with the tasks it holds back. */
-export const Dependencies = {
+export const BoardDependencies = {
   args: { project: CAWCO_DEV_BUSY, view: "dependencies" },
   parameters: { viewport: 1440 },
 };
 
 /** A project just made: its stages named and empty, the composer open in the first, and Ask Caw to plan. */
-export const JustMade = {
+export const BoardJustMade = {
   args: { project: JUST_MADE },
   parameters: { viewport: 1440 },
 };
 
 /** Just made, on a phone. */
-export const JustMadePhone = {
+export const BoardJustMadePhone = {
   args: { project: JUST_MADE },
   parameters: { viewport: 390 },
 };
 
 /** The first read is out: each column holds skeleton cards. */
-export const Reading = { args: { read: LOADING }, parameters: { viewport: 1440 } };
+export const BoardReading = {
+  args: { read: LOADING },
+  parameters: { viewport: 1440 },
+};
 
 /** The hub unreachable: the last board kept, marked, its cards held. */
-export const HubUnreachable = {
+export const BoardHubUnreachable = {
   args: { read: STALE },
   parameters: { viewport: 1440 },
 };
 
 /** The hub unreachable, on a phone. */
-export const HubUnreachablePhone = {
+export const BoardHubUnreachablePhone = {
   args: { read: STALE },
   parameters: { viewport: 390 },
 };
 
 /** Your call could not be read; every other stage is current. */
-export const StageUnread = {
+export const BoardStageUnread = {
   args: { read: { ...LIVE, unread: ["stage:your-call", "rail:tasks"] } },
   parameters: { viewport: 1440 },
 };
 
-/** Add task: the composer opens at the top of Ideas. */
-export const AddingATask = {
-  from: "InFullSwing",
-  parameters: { viewport: 1440 },
-  play: press("Add task"),
-};
-
 /** A title typed and filed: the task stands first in Ideas, and the composer stays open for the next. */
-export const TaskFiled = {
-  from: "JustMade",
+export const BoardTaskFiled = {
+  from: "BoardJustMade",
   parameters: { viewport: 1440 },
   play: async ({ canvas, userEvent }: Play) => {
     await userEvent.type(
@@ -109,15 +99,15 @@ export const TaskFiled = {
 };
 
 /** A card pressed: the task's pane slides over the board's trailing third; the board stays live. */
-export const CardOpened = {
-  from: "InFullSwing",
+export const BoardCardOpened = {
+  from: "BoardInFullSwing",
   parameters: { viewport: 1440 },
   play: press(/^Open Post: one board/u),
 };
 
 /** On a phone, a card pressed: the task rises as a bottom drawer. */
-export const CardOpenedPhone = {
-  from: "InFullSwingPhone",
+export const BoardCardOpenedPhone = {
+  from: "BoardInFullSwingPhone",
   parameters: { viewport: 390 },
   play: press(/^Open Post: Caw&Co launch/u),
 };
