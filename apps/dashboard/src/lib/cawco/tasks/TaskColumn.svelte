@@ -189,7 +189,7 @@
       {@const fault = refused?.(task.id) ?? null}
       {@const on = picked?.(task.id) ?? false}
       <li
-        class="group/card group/task data-pickable:relative motion-safe:data-new:[&>[data-task-card]]:animate-row-flash"
+        class="group/card group/task data-pickable:relative data-new:[&>[data-task-card]]:animate-row-flash"
         aria-busy={moving?.(task.id) || undefined}
         data-archived={archived || undefined}
         data-flip
