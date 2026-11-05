@@ -228,15 +228,14 @@
     class="select-none touch-hit press-tint mark-line aria-expanded:bg-surface-pressed"
     data-bar-item
     data-box
-    data-counted={openCount > 0 && !listOpen ? "" : undefined}
+    data-counted={openCount > 0 ? "" : undefined}
     onclick={() => {
       listOpen = !listOpen;
     }}
     type="button"
   >
     <IconChat aria-hidden="true" data-slot="bar-symbol" />
-    {#if openCount > 0 && !listOpen}<span data-slot="num">{openCount}</span
-      >{/if}
+    {#if openCount > 0}<span data-slot="num">{openCount}</span>{/if}
   </button>
 {/snippet}
 {#snippet commentsMenu()}
@@ -466,6 +465,7 @@
             listOpen = false;
           }}
           open={listOpen && !composing}
+          short={pins.length === 0 && !thread}
         >
           {#if thread}
             {#key thread.id}

@@ -11,12 +11,15 @@
    * needs-you dot, the status's own glyph ink (The Glyph, Word, Hue Rule);
    * choosing one shows it.
    * Its line (the ask, or "Sent to <session>") is the menu's first row, and
-   * the control's tooltip and description; never a line under the title. Each row's Remove (its trailing glyph, or Delete
-   * or Backspace on the highlighted row) removes it where it stands: a light
-   * action, no confirm; focus goes on to the row that takes its place. The row leaves once the hub says it is gone, closing as the
-   * rows under it slide up (motion/rows), in every tab: the panel's frame
-   * lists the session's artifacts (`held`), and the panel follows that frame
-   * when the removed one was shown.
+   * the control's tooltip and description; never a line under the title.
+   * The row on show is marked (the selection wash, and its words at full
+   * ink). No row carries a Remove at rest: the menu's last item removes the
+   * one on show, and Delete or Backspace on a highlighted row asks for that
+   * one; either asks in the menu, under its last item (AskHere), since a
+   * removal can't be undone. The row leaves once the hub says it is gone,
+   * closing as the rows under it slide up (motion/rows), in every tab: the
+   * panel's frame lists the session's artifacts (`held`), and the panel
+   * follows that frame when the removed one was shown.
    *
    * A refusal is never a toast (DESIGN.md, The Work Outlives Its Surface
    * Rule): a list the hub would not read is said at the top of the open
@@ -27,7 +30,7 @@
   import type { ArtifactKind } from "@cawco/core/artifact-kinds";
   import type { ArtifactSummary } from "@cawco/core/protocol";
   import { artifactWords } from "@cawco/core/words/artifacts";
-  import type { Component } from "svelte";
+  import { type Component, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery, SvelteSet } from "svelte/reactivity";
   import { BarGlass, BarMenu } from "#lib/components/ui/bar-glass/index.js";
@@ -42,7 +45,9 @@
     IconWindow,
   } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
+  import AskHere from "../AskHere.svelte";
   import { listArtifacts, removeArtifact, showArtifact } from "../artifact-api";
+  import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import { failureClause } from "../hub-read";
   import { reflow } from "../motion/rows.svelte";
   import RowFault from "../RowFault.svelte";
@@ -175,10 +180,25 @@
     );
   }
 
-  /** The row's own control, apart from the row's choose. */
-  const own = (event: Event) => {
-    event.stopPropagation();
-  };
+  /** The menu's one question: a removal, asked under its last item. */
+  const asks = new Asker<AskHereRequest>();
+  function askRemove(artifact: { id: string; title: string }) {
+    asks.ask({
+      at: "remove",
+      title: artifactWords.removeArtifactAsk(artifact.title),
+      body: artifactWords.removeArtifactBody,
+      confirmLabel: artifactWords.remove,
+      destructive: true,
+      pendingLabel: artifactWords.removingArtifact,
+      run: () => remove(artifact),
+    });
+  }
+  // The menu shut: a question asked in it goes with it.
+  $effect(() => {
+    if (!open) {
+      untrack(() => asks.dismiss());
+    }
+  });
 
   /** Each row's name is its name and tags, never its Remove's words. */
   const uid = $props.id();
@@ -268,23 +288,33 @@
         >
           <!-- On a phone two lines, clamped in the bar's row, so a title of
                ordinary length reads whole at 390 (the artifact panel's
-               surface brief, The title); one line, cut at its end, on a desk. -->
+               surface brief, The title), its chevron inline after its last
+               word (a wrapped box is as wide as its room, so a chevron after
+               the box stood far from the words); one line, cut at its end,
+               and the chevron after it on a desk. -->
           <span
-            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-start text-ink-strong type-row max-phone:line-clamp-2 max-phone:whitespace-normal max-phone:text-pretty"
+            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-start text-ink-strong type-row max-phone:line-clamp-2 max-phone:whitespace-normal max-phone:text-pretty mark-line"
             data-box={phone.current || undefined}
-            data-slot="name-lead">{shown.title}</span
+            data-slot="name-lead"
+            ><span data-slot="name-words">{shown.title}</span
+            >{#if phone.current}&nbsp;<IconChevronDown
+                aria-hidden="true"
+                class="inline size-icon-sm align-middle text-ink-muted"
+              />{/if}</span
           >
-          <IconChevronDown
-            aria-hidden="true"
-            class="size-icon-sm flex-none text-ink-muted"
-          />
+          {#if !phone.current}
+            <IconChevronDown
+              aria-hidden="true"
+              class="size-icon-sm flex-none text-ink-muted"
+            />
+          {/if}
         </button>
       {/snippet}
     </DropdownMenu.Trigger>
     <BarMenu
       data-artifact-list
       label={artifactWords.artifacts}
-      width="wide"
+      width="titles"
       bind:ref={list}
     >
       {#if line}
@@ -323,7 +353,7 @@
             onkeydown={(event: KeyboardEvent) => {
               if (event.key === "Delete" || event.key === "Backspace") {
                 event.preventDefault();
-                remove(artifact);
+                askRemove(artifact);
               }
             }}
             onSelect={() => choose(artifact)}
@@ -370,23 +400,6 @@
                 >{formatAgeShort(Date.parse(artifact.createdAt))}</span
               >
             {/if}
-            <button
-              data-box
-              aria-label={artifactWords.removeNamed(artifact.title)}
-              class="select-none grid place-items-center -me-space-1 p-space-1 border-none border-current rounded-sm bg-transparent text-ink-muted opacity-0 transition-[opacity,color] duration-(--dur-control) ease-out hover:text-error-9 coarse:opacity-100 group-data-highlighted/artifact:opacity-100"
-              disabled={removing.has(artifact.id)}
-              onclick={(event) => {
-                own(event);
-                remove(artifact);
-              }}
-              onpointerdown={own}
-              onpointerup={own}
-              tabindex={-1}
-              title={artifactWords.remove}
-              type="button"
-            >
-              <IconTrash />
-            </button>
           </DropdownMenu.Item>
           <RowFault
             again={() => remove(artifact)}
@@ -398,6 +411,24 @@
           />
         {/each}
       </div>
+      <DropdownMenu.Separator />
+      <!-- Remove, for the one on show: the menu's last item, asked under it. -->
+      <DropdownMenu.Item
+        closeOnSelect={false}
+        data-artifact-remove
+        disabled={removing.has(shown.id)}
+        onSelect={() => askRemove(shown)}
+        variant="destructive"
+      >
+        <IconTrash />
+        <span>{artifactWords.removeNamed(shown.title)}</span>
+      </DropdownMenu.Item>
+      <AskHere
+        asker={asks}
+        at="remove"
+        end="calc(var(--spacing) * 2.5)"
+        indent="calc(var(--spacing) * 2.5)"
+      />
     </BarMenu>
   </DropdownMenu.Root>
 </BarGlass>

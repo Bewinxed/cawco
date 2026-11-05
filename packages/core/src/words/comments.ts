@@ -97,7 +97,6 @@ export const commentWords = {
   previousChange: "Previous change",
   nextChange: "Next change",
   newAnswer: "New answer",
-  pinNewAnswer: (n: number) => `Pin ${n}, new answer`,
   // What changed for a comment: its thread's change lines, the rail's To check, the turn's chips.
   changed: "Changed",
   /** A change chip, read out: what changed, and that it opens there. */
