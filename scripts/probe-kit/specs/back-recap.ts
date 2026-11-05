@@ -1,0 +1,240 @@
+/**
+ * When the person comes back from being away, each session holding news for
+ * them starts a turn on its recap by itself (hub server.ts `tellBack`): its
+ * reply is the news, and nothing waits on them to ask.
+ *
+ * 2026-11-05: two sessions kept their news in their plans under "Since
+ * 12:13" while the person was away, and the recap rode only on his next
+ * message to each; he came back, saw nothing, and had to ask "?".
+ *
+ * On a scratch fleet (real hub, agent and sessiond; Claude Code against the
+ * mock model), read from what the model was sent and the hub's records:
+ * - setup: two sessions, each asleep after one turn of the person's; the
+ *   person appears away; one session's
+ *   plan holds away notes (`## Since HH:MM (you were away)`), the other's
+ *   holds none.
+ * - (a) The person comes back (a tab's input, Appear away off): the session
+ *   with notes is woken and starts a turn with no message from the person;
+ *   the turn is the hub's word that they are back, its presence line
+ *   carrying the notes, and it ends. Its notes are seen. (Fails on main:
+ *   nothing is sent until the person writes.)
+ * - (b) The session with no notes is sent nothing and stays asleep.
+ * - (c) The person's next message to the session with notes carries no
+ *   second recap.
+ *
+ *   bun scripts/probe-kit/run.ts back-recap
+ */
+import {
+  awayNotesHeading,
+  BACK_MESSAGE,
+} from "../../../packages/core/src/injected";
+import { type Reply, type Seen, until } from "../../scratch-fleet";
+import type { Kit, KitFleet, Spec } from "../kit";
+
+/** The line of news the session kept while the person was away. */
+const NEWS = "PROBE-BACK-NEWS: the build landed on main";
+/** The person's message after their return. */
+const AFTER = "PROBE-BACK-AFTER";
+/** Each session's first message, before the person goes away. */
+const FIRST = "PROBE-BACK-FIRST";
+/** What the recap's presence line opens its notes with (core injected.ts `whereTheyAre`). */
+const NOTES_SAID = "Your plan's notes from while they were away";
+
+const respond = (_request: Seen): Reply => ({ everyMs: 5, words: ["ok"] });
+
+/** The session's turns the mock answered since `since` (not a side call). */
+const turnsSince = (fleet: KitFleet, since: number) =>
+  fleet.seen.filter((one) => one.tools && one.at >= since);
+
+/** The hub's sends to `id` of the "back" origin. */
+const backSends = (fleet: KitFleet, id: string) =>
+  fleet
+    .query<{ body: string }>(
+      "SELECT body FROM sent_messages WHERE instance_id = ?",
+      id
+    )
+    .filter((one) => one.body.includes('"name":"back"')).length;
+
+const person = async (fleet: KitFleet): Promise<string> =>
+  (await (await fetch(`${fleet.base}/api/person`)).json()).state;
+
+const appearAway = (fleet: KitFleet, on: boolean) =>
+  fetch(`${fleet.base}/api/person/away`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ on }),
+  });
+
+/** A tab's beat with the person's input now. */
+const input = (fleet: KitFleet) =>
+  fetch(`${fleet.base}/api/presence`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      clientId: "probe-back-tab",
+      client: "web",
+      sessionId: null,
+      active: true,
+      showing: [],
+      saidAt: Date.now(),
+      idleMs: 0,
+    }),
+  });
+
+const asleep = async (fleet: KitFleet, id: string): Promise<string> => {
+  await fleet.control(id, "sleep");
+  return (
+    (await until(
+      "the session asleep",
+      () => fleet.instance(id)?.status,
+      (status) => status === "sleeping",
+      60_000
+    ).catch(() => fleet.instance(id)?.status)) ?? "gone"
+  );
+};
+
+const run = async (kit: Kit): Promise<void> => {
+  const fleet = await kit.fleet(respond);
+  fleet.launch("sessiond");
+  await fleet.sessiondUp();
+  fleet.launch("hub");
+  await fleet.hubUp();
+  fleet.fileAccount();
+  fleet.launch("agent");
+  await fleet.agentUp();
+  await fleet.accountSignedIn();
+
+  const news = await fleet.spawn("claude", "Holding news");
+  const quiet = await fleet.spawn("claude", "No news");
+  // One turn each, so each has a conversation to sleep on and wake into.
+  for (const [id, tag] of [
+    [news, "news"],
+    [quiet, "quiet"],
+  ] as const) {
+    const said = `${FIRST}-${tag}`;
+    await fleet.send(id, `${said}: say ok.`);
+    await until(
+      "its first turn answered",
+      () => fleet.seen.some((one) => one.tools && one.last.includes(said)),
+      Boolean,
+      120_000
+    ).catch(() => false);
+    await until(
+      "its first turn ended",
+      () => fleet.instance(id)?.turn_open_at,
+      (open) => open === null,
+      120_000
+    ).catch(() => "open");
+  }
+  const sleeps = [await asleep(fleet, news), await asleep(fleet, quiet)];
+  await appearAway(fleet, true);
+  const away = await until(
+    "the person away",
+    () => person(fleet),
+    (state) => state === "away",
+    30_000
+  ).catch(() => "not away");
+  fleet.write(
+    "INSERT OR REPLACE INTO session_plans (instance_id, steps, spec, spec_at, updated_at) VALUES (?, '[]', ?, ?, ?)",
+    news,
+    `${awayNotesHeading("12:13")}\n- ${NEWS}\n\n## Goal\nShip it.`,
+    Date.now(),
+    Date.now()
+  );
+  kit.check(
+    "setup: two sessions asleep, the person away, one plan holding away notes",
+    sleeps.every((one) => one === "sleeping") && away === "away",
+    JSON.stringify({ sleeps, away })
+  );
+
+  // (a) The person comes back, and writes nothing.
+  const backAt = Date.now();
+  await input(fleet);
+  await appearAway(fleet, false);
+  const here = await until(
+    "the person here",
+    () => person(fleet),
+    (state) => state === "here",
+    30_000
+  ).catch(() => "not here");
+  const recapped = await until(
+    "the session with news starts its recap turn",
+    () =>
+      turnsSince(fleet, backAt).filter(
+        (one) =>
+          one.last.includes(BACK_MESSAGE) &&
+          one.last.includes(NOTES_SAID) &&
+          one.last.includes(NEWS)
+      ).length,
+    (n) => n > 0,
+    120_000
+  ).catch(() => 0);
+  const ended = await until(
+    "its recap turn ended",
+    () => fleet.instance(news)?.turn_open_at,
+    (open) => open === null,
+    120_000
+  ).catch(() => "open");
+  const seen = fleet.query<{ away_seen: string | null }>(
+    "SELECT away_seen FROM session_plans WHERE instance_id = ?",
+    news
+  )[0]?.away_seen;
+  const personSends = (id: string) =>
+    fleet
+      .query<{ body: string }>(
+        "SELECT body FROM sent_messages WHERE instance_id = ?",
+        id
+      )
+      .filter((one) => one.body.includes('"kind":"human"')).length;
+  kit.check(
+    "(a) the person back, the session holding news is woken and starts a turn by itself: the hub's word that they are back, its presence line carrying the notes; the turn ends and the notes are seen",
+    here === "here" &&
+      recapped > 0 &&
+      ended === null &&
+      personSends(news) === 1 &&
+      backSends(fleet, news) === 1 &&
+      (seen ?? "").includes(NEWS),
+    JSON.stringify({
+      here,
+      recapped,
+      ended,
+      personSends: personSends(news),
+      backSends: backSends(fleet, news),
+      seen,
+      status: fleet.instance(news)?.status,
+    })
+  );
+  // Read once (a)'s turn has run: the return told both at once.
+  kit.check(
+    "(b) the session with no news is sent nothing and stays asleep",
+    backSends(fleet, quiet) === 0 &&
+      fleet.instance(quiet)?.status === "sleeping",
+    JSON.stringify({
+      backSends: backSends(fleet, quiet),
+      status: fleet.instance(quiet)?.status,
+    })
+  );
+
+  // (c) His next message: no second recap.
+  const afterAt = Date.now();
+  await fleet.send(news, `${AFTER}: thanks.`);
+  const after = await until(
+    "his next message reaches the model",
+    () => turnsSince(fleet, afterAt).find((one) => one.last.includes(AFTER)),
+    (one) => one !== undefined,
+    120_000
+  ).catch(() => undefined);
+  kit.check(
+    "(c) the person's next message to it carries no second recap",
+    after !== undefined &&
+      !after.last.includes(NOTES_SAID) &&
+      !after.last.includes(NEWS),
+    after ? after.last.slice(0, 600) : "no request with his message"
+  );
+};
+
+export default {
+  group: "The hub and machines",
+  name: "back-recap",
+  run,
+} satisfies Spec;

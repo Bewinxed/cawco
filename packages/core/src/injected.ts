@@ -441,13 +441,23 @@ export const withMovedLine = (text: string, move: CheckoutMove): string =>
   afterMarker(text, movedLine(move));
 
 /**
+ * The hub's word to a session holding news for the person as they come back
+ * from being away (hub server.ts `tellBack`): it starts a turn whose reply
+ * is the recap; its presence line carries the notes ({@link PresenceSaid}
+ * `recap`).
+ */
+export const BACK_MESSAGE =
+  "[CawCo] The person is back. Tell them what happened while they were away.";
+
+/**
  * Where the person is, as a session is told at the start of each turn (hub
  * server.ts `presenced`, from notifications.ts `person`):
  * - `on`: on this chat now, or this is their own message: talk normally.
- *   With `recap`, this is their first message to the session since they
- *   came back from being away since `recap.since` (the hub's own word on
- *   when they left), and the notes the session kept meanwhile (its plan's
- *   "Since `recap.section`" section) ride along for it to recap or point to;
+ *   With `recap`, the person has just come back from being away since
+ *   `recap.since` (the hub's own word on when they left), and this turn is
+ *   the hub's word that they are back ({@link BACK_MESSAGE}): the notes the
+ *   session kept meanwhile (its plan's "Since `recap.section`" section)
+ *   ride along for it to recap as its reply;
  * - `elsewhere`: here, on another chat or another app: a turn that delivers
  *   work they asked for ends on its report, which pushes (push.ts
  *   `turnEnded`); every other turn is silent, reaching them only with a
@@ -539,7 +549,7 @@ const whereTheyAre = (said: PresenceSaid): string => {
   switch (said.kind) {
     case "on":
       return said.recap
-        ? `[CawCo presence] The person is back on this chat; they were away since ${said.recap.since}. Your plan's notes from while they were away:\n\n${said.recap.notes}${said.recap.waiting?.length ? `\n\nWhat waits on them in your plan now:\n${said.recap.waiting.map(waitLine).join("\n")}\nName each by its link as written here.` : ""}\n\nIf their message asks something specific, answer it in full and point to "Since ${said.recap.section}" in your plan in one line. Otherwise open with a short recap of those notes, then answer. Then fold that section into the rest of your plan's spec with todo_write.`
+        ? `[CawCo presence] The person has just come back; they were away since ${said.recap.since}. Your plan's notes from while they were away:\n\n${said.recap.notes}${said.recap.waiting?.length ? `\n\nWhat waits on them in your plan now:\n${said.recap.waiting.map(waitLine).join("\n")}\nName each by its link as written here.` : ""}\n\nThis turn's reply is your recap of those notes, short: what was done, what was decided, and what waits on them. It reaches them, so do not end it on ${NO_REPLY_TOOL}. Then fold that section into the rest of your plan's spec with todo_write.`
         : "[CawCo presence] The person is on this chat now: talk to them normally.";
     case "elsewhere":
       return `[CawCo presence] The person is at their desk but not on this chat. A turn that delivers work they asked for ends on its report, which reaches them; every other turn ends on ${NO_REPLY_TOOL} as its last call, and a question or a choice reaches them by ask or a decision card. Keep your plan current with todo_write.`;

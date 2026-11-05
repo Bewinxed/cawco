@@ -24,7 +24,7 @@ export const presenceLogWords = {
   appearingAway: (since: string) => `away (Appear away, since ${since})`,
   /** The person's input after an away stretch: a return. */
   back: (since: string) =>
-    `[presence] the person is back, after away since ${since}: their next message to each session carries its recap`,
+    `[presence] the person is back, after away since ${since}: each session holding news from then is told, to recap it`,
   /** The restart read each device's last word back. */
   readBack: (count: number, seconds: number) =>
     `[presence] read back ${count} device(s) as the hub last heard them ${seconds}s ago`,

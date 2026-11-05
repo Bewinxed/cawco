@@ -167,6 +167,7 @@ import {
   attachedFileName,
   attachedPictureLine,
   awayNotesOf,
+  BACK_MESSAGE,
   BOUNDARY_RELAUNCH,
   byPerson,
   CANCEL_BINARY_UPDATE,
@@ -1550,6 +1551,11 @@ const CARRY_ON_CUT = "Carry on from where it stopped.";
 
 /** The system origin name of the hub's word that a session at its account's limit may go on (at-limit.ts `CARRY_ON_ORIGIN`). */
 const LIMIT_ORIGIN = "limit";
+/** The system origin name of the hub's word that the person is back, to a session holding news for them (`tellBack`). */
+const BACK_ORIGIN = "back";
+/** Whether `origin` is the hub's word that the person is back: its wake goes in its turn among the hub's own launches. */
+const isBack = (origin: NeutralOrigin): boolean =>
+  origin.kind === "system" && origin.name === BACK_ORIGIN;
 
 /** The system origin name of the hub's word that something a session started leaks (core `LEAK_FOUND`). */
 const LEAK_ORIGIN = "leak";
@@ -1797,6 +1803,8 @@ const WAKES_AT_REST: ReadonlySet<string> = new Set([
   PROJECT_ORIGIN,
   // Its looping delegate, for it as that delegate's steward (fleet-watch.ts).
   "fleet-watch",
+  // The person came back, and it holds news for them (`tellBack`).
+  BACK_ORIGIN,
 ]);
 /** The words a continuation stopped by its Cancel ends with. */
 const CONTINUATION_CANCELLED = "the continuation was cancelled";
@@ -8713,7 +8721,9 @@ export const createServer = (
   const wakeForSend = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
     machineId: string,
-    instanceId: string
+    instanceId: string,
+    /** The hub's own wake of many at once (the person back, {@link tellBack}): it goes in its turn ({@link paceSpawn}). */
+    paced = false
   ): void => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (!(row && wakesForSend(row))) {
@@ -8721,7 +8731,7 @@ export const createServer = (
     }
     // Moving a session whose cache is cold is free: it is re-placed first.
     replaceAtWake(row);
-    resumeSpawn(agent, machineId, row);
+    resumeSpawn(agent, machineId, row, false, paced);
   };
 
   /**
@@ -8822,7 +8832,9 @@ export const createServer = (
     machineId: string,
     row: ReturnType<typeof db.getInstancesByIds>[number],
     /** The process is replaced even if the machine still runs one: a move to another account. */
-    relaunch = false
+    relaunch = false,
+    /** The hub's own launch: it goes in its turn ({@link paceSpawn}). A relaunch is one. */
+    paced = relaunch
   ): void => {
     const instanceId = row.id;
     // Its item is blocked: nothing starts it without what is missing, and
@@ -8881,7 +8893,7 @@ export const createServer = (
       agent,
       machineId,
       { verb: "spawn", machineId, instanceId, payload: revive },
-      relaunch
+      paced
     );
     // What a move ended with its old process, said to this one first.
     tellEndedByMove(row);
@@ -10044,29 +10056,39 @@ export const createServer = (
       hour12: false,
     }).format(at);
 
+  /** The recap each of the hub's "back" sends was given as it was first handed: a hand again gives it the same ({@link recapFor}). */
+  const recapsGiven = new Map<string, PresenceSaid>();
+
   /**
-   * The person's own message: on this chat. The first one handed to a
-   * session after the person came back from an away stretch (a real
-   * return: their input after it, notifications.ts `takeRecap`, kept on
-   * the hub through a restart) carries the notes the session kept in its
-   * plan meanwhile (`awayNotesOf`) and what waits on them there, for its
-   * recap, with the hub's own away-since; once per return, and never notes
-   * the person has seen (`session_plans.away_seen`: opened in the plan, or
-   * recapped before). Recapped, they are seen: the plan ring's mark goes.
+   * The recap a session's "back" send carries ({@link tellBack}), read as it
+   * is first handed (a held session's when it next runs): the notes the
+   * session kept in its plan while the person was away (`awayNotesOf`) and
+   * what waits on them there, with the hub's own away-since. Once per return
+   * (notifications.ts `takeRecap`, kept on the hub through a restart), and
+   * never notes the person has seen (`session_plans.away_seen`: opened in
+   * the plan, or recapped before). Recapped, they are seen: the plan ring's
+   * mark goes. Undefined when there is none to give.
    */
-  const recapFor = (instanceId: string): PresenceSaid => {
+  const recapFor = (
+    instanceId: string,
+    uuid: string
+  ): PresenceSaid | undefined => {
+    const given = recapsGiven.get(uuid);
+    if (given) {
+      return given;
+    }
     const back = notifications.takeRecap(instanceId);
     if (!back) {
-      return { kind: "on" };
+      return undefined;
     }
     const plan = db.sessionPlan(instanceId);
     const notes = awayNotesOf(plan?.spec ?? undefined);
     if (!notes || plan?.awaySeen === notes.notes) {
-      return { kind: "on" };
+      return undefined;
     }
     detach(plans.seeAway(instanceId), "away notes recapped are seen");
     const waiting = waitingOn(instanceId, plan);
-    return {
+    const said: PresenceSaid = {
       kind: "on",
       recap: {
         notes: notes.notes,
@@ -10075,19 +10097,98 @@ export const createServer = (
         ...(waiting.length > 0 ? { waiting } : {}),
       },
     };
+    recapsGiven.set(uuid, said);
+    return said;
   };
+
+  /** Whether `row` holds news the person hasn't seen: away notes in its plan, unseen ({@link recapFor}). */
+  const holdsNews = (row: PublicInstanceRow): boolean => {
+    if (
+      !talksWithPerson(row) ||
+      row.continuedInto !== null ||
+      row.status === "discarded"
+    ) {
+      return false;
+    }
+    const plan = db.sessionPlan(row.id);
+    const notes = awayNotesOf(plan?.spec ?? undefined);
+    return (
+      !!notes &&
+      plan?.awaySeen !== notes.notes &&
+      !db
+        .sendsIn(row.id, ["pending"])
+        .some((send) => !!send.body.origin && isBack(send.body.origin))
+    );
+  };
+
+  /**
+   * THE RETURN'S RECAP: the person came back from being away (notifications.ts
+   * `turned`: the rollup of every device's facts went from away to here), so
+   * each session holding news for them ({@link holdsNews}) is sent the hub's
+   * word that they are back (core `BACK_MESSAGE`). It starts a turn whose
+   * presence line carries the notes ({@link recapFor}), and its reply is the
+   * recap: nothing waits on the person to ask. A session with no news gets
+   * nothing, nor does one this word already waits in. One send each: a
+   * session whose process is up takes its turn now; one asleep is woken in
+   * its turn among the hub's own launches on its machine ({@link paceSpawn},
+   * SPAWN_PACE_MS apart), so a return to many never starts their processes
+   * at once; one held (at its limit, its machine away or paused) gets it
+   * when it next runs, as any send does.
+   */
+  const tellBack = (): void => {
+    recapsGiven.clear();
+    const told = db
+      .listedInstancesByIds(db.plansWithAwayNotes())
+      .filter(holdsNews);
+    for (const row of told) {
+      deliverSend({
+        verb: "send",
+        machineId: row.machineId,
+        instanceId: row.id,
+        payload: {
+          instanceId: row.id,
+          message: {
+            type: "user",
+            uuid: crypto.randomUUID(),
+            message: { role: "user", content: BACK_MESSAGE },
+            parent_tool_use_id: null,
+            origin: {
+              kind: "system",
+              name: BACK_ORIGIN,
+              line: noticeWords.back,
+            },
+          },
+        },
+      } satisfies Envelope<SendPayload>);
+    }
+    console.log(
+      `[presence] the person is back: ${told.length} session(s) holding news from while they were away told so, each to recap it${told.length > 0 ? `: ${told.map((row) => sessionName(row)).join(", ")}` : ""}`
+    );
+  };
+  notifications.onPerson((now, before) => {
+    if (now.state === "here" && before.state === "away") {
+      tellBack();
+    }
+  });
 
   /**
    * What the session is told of the person as this send starts its turn
    * (core injected.ts `presenceLine`): on this chat (the person's own words
    * always are), here elsewhere, or away since when, and, on any other
-   * send, that their last message still waits for its reply. The person's
-   * own message after an away stretch carries the notes the session kept in
-   * its plan meanwhile (`awayNotesOf`), once per section, for its recap.
+   * send, that their last message still waits for its reply. The hub's word
+   * that they are back ({@link tellBack}) carries the notes the session kept
+   * in its plan while they were away, for its recap ({@link recapFor}).
    */
-  const personSaid = (instanceId: string, human: boolean): PresenceSaid => {
-    if (human) {
-      return recapFor(instanceId);
+  const personSaid = (
+    instanceId: string,
+    { origin, uuid }: { origin: NeutralOrigin; uuid: string }
+  ): PresenceSaid => {
+    if (origin.kind === "human") {
+      return { kind: "on" };
+    }
+    const recap = isBack(origin) ? recapFor(instanceId, uuid) : undefined;
+    if (recap) {
+      return recap;
     }
     const person = notifications.person();
     const owed = db.personUnanswered(instanceId) !== null;
@@ -10164,7 +10265,7 @@ export const createServer = (
     const said =
       row && !talksWithPerson(row)
         ? undefined
-        : personSaid(instanceId, message.origin.kind === "human");
+        : personSaid(instanceId, message);
     const { reminder, ...sent } = message;
     const lines = [
       ...(reminder ? [reminder] : []),
@@ -10270,7 +10371,7 @@ export const createServer = (
       if (keepAlive) {
         db.updateKeepAlive(instanceId, { keepAliveTurn: message.uuid });
       } else {
-        wakeForSend(agent, machineId, instanceId);
+        wakeForSend(agent, machineId, instanceId, isBack(message.origin));
       }
     }
     const owed =
@@ -10756,7 +10857,7 @@ export const createServer = (
       return true;
     }
     if (row.status === "sleeping") {
-      wakeForSend(agent, row.machineId, send.instanceId);
+      wakeForSend(agent, row.machineId, send.instanceId, isBack(origin));
     }
     return handToProcess(agent, send, envelope);
   };

@@ -1732,6 +1732,12 @@ export interface DbShape {
     instanceId: string,
     limit: number
   ) => PlanChangeRow[];
+  /**
+   * The sessions whose plan's spec may hold away notes (a `## Since`
+   * heading; core injected.ts `awayNotesOf` reads whether it does), by id:
+   * those that may hold news for the person on their return.
+   */
+  readonly plansWithAwayNotes: () => string[];
   /** The person's Appear away, the machines that count toward their presence, each device's last word and the last away stretch (notifications.ts). */
   readonly presence: {
     /** Appear away: on since when, or null while off. */
@@ -8266,6 +8272,13 @@ const make = async (path: string): Promise<DbShape> => {
         .from(sessionPlans)
         .where(eq(sessionPlans.instanceId, instanceId))
         .get(),
+    plansWithAwayNotes: () =>
+      db
+        .select({ instanceId: sessionPlans.instanceId })
+        .from(sessionPlans)
+        .where(sql`${sessionPlans.spec} LIKE '%## Since %'`)
+        .all()
+        .map((one) => one.instanceId),
     putPlanChange: (row) => {
       db.insert(planChanges).values(row).run();
     },

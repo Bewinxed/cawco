@@ -74,6 +74,8 @@ export const noticeWords = {
   /** The containers a session's work started were stopped as it ended; `by` names the delegate. */
   containersStopped: (by: string | null) =>
     `Containers stopped as ${by ?? "this session"} ended`,
+  /** A session holding news from while you were away, told you're back so it recaps them (hub server.ts `tellBack`). */
+  back: "Told you're back, to recap what happened while you were away",
   /** A session at its account's limit, or stopped by a failed sign-in, told to go on once that is over. */
   carryOn: {
     limit: "Told to carry on: the usage limit no longer applies",
