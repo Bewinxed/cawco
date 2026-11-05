@@ -304,6 +304,15 @@ const run = async (kit: Kit) => {
   // so Assistant | Preview stands in the trailing side beside its three
   // items (and, on a phone, Close). Every width reads it, and the bar's ink
   // stays on the screen (BarFloat gives its trailing side its whole width).
+  // Its slow answer ends first: a page whose transcript still streams never
+  // stands still to be read.
+  for (const end = Date.now() + 240_000; Date.now() < end;) {
+    const row = fleet.instance(busy);
+    if (row?.turn_open_at === null && row.status === "running") {
+      break;
+    }
+    await Bun.sleep(1000);
+  }
   const shown = await fleet.api<{ id: string }>(
     `/api/instances/${busy}/artifacts`,
     {
