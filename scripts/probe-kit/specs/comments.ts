@@ -9348,11 +9348,11 @@ const changedChecks = async (on: On) => {
   const b = await boxIn(held, "#b");
   const counted = (await tag.textContent().catch(() => null))?.trim();
   on.kit.check(
-    'changed: a step onto #b chooses it (the outline over it), marks it seen in the doc\'s `seen` once its ring has pinged, fades its ring off over --dur-fade (200ms), and the tag reads "1 of 3"',
+    'changed: a step onto #b chooses it (the outline over it), marks it seen in the doc\'s `seen` once its ring has pinged, fades its ring off over --dur-fade (200ms), and the tag reads "Change 1 of 3"',
     !!stepped &&
       near(chosen, b, 6) &&
       leaving.includes("200ms") &&
-      counted === "1 of 3",
+      counted === "Change 1 of 3",
     `seen ${JSON.stringify(stepped?.seen)}; washes ${JSON.stringify(stepped?.washes.map((w) => w.anchor))}; outline ${JSON.stringify(chosen)} over ${JSON.stringify(b)}; leaving ${JSON.stringify(leaving)}; tag ${counted}`
   );
 
@@ -11794,12 +11794,12 @@ const canvasChangedChecks = async (on: On, pageId: string) => {
     () => (window as unknown as { probeLeaving: string[] }).probeLeaving
   );
   on.kit.check(
-    'canvas changed: a step onto Beta selects it, marks it seen in the doc\'s seen, fades its ring off over --dur-fade (0.2s), and the tag reads "1 of 3"',
+    'canvas changed: a step onto Beta selects it, marks it seen in the doc\'s seen, fades its ring off over --dur-fade (0.2s), and the tag reads "Change 1 of 3"',
     !!stepped &&
       stepped.selected.includes("b") &&
       !stepped.washes.some((wash) => wash.anchor === "b") &&
       leaving.includes("0.2s") &&
-      stepped.tag === "1 of 3",
+      stepped.tag === "Change 1 of 3",
     `seen ${JSON.stringify(stepped?.seen)}; selected ${JSON.stringify(stepped?.selected)}; washes ${JSON.stringify(stepped?.washes.map((wash) => wash.anchor))}; leaving ${JSON.stringify(leaving)}; tag ${stepped?.tag}`
   );
 

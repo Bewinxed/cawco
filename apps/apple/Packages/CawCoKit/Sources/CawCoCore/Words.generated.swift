@@ -1684,19 +1684,19 @@ public enum Words {
         /// The menu the title opens, for a screen reader: the session's artifacts.
         public static let artifacts = "This session's artifacts"
 
-        /// A row's Remove, for a screen reader: its trailing glyph says it.
-        public static func removeNamed(title: String) -> String {
-            "Remove \(title)"
-        }
-
         public static let remove = "Remove"
 
-        /// The question a removal asks under the menu's last item.
+        /// The artifacts menu's last item: removes the one on show, whose row the menu marks above it.
+        public static let removeShown = "Remove from this session"
+
+        /// Its question; one asked from another row (Delete on it) names that one.
+        public static let removeShownAsk = "Remove this artifact?"
+
         public static func removeArtifactAsk(title: String) -> String {
             "Remove \(title)?"
         }
 
-        public static let removeArtifactBody = "It goes from this session's artifacts. This can't be undone."
+        public static let removeArtifactBody = "This can't be undone."
 
         public static let removingArtifact = "Removing…"
 

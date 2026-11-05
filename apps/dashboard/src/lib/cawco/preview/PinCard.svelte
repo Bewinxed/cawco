@@ -595,9 +595,12 @@
   {/if}
 </div>
 <!-- What the comment holds, the one part that scrolls, between the title
-     and the reply; the house edge fade says there is more past either edge. -->
+     and the reply; the house edge fade says there is more past either edge.
+     It stands a space out past the card's text edges and pads back in
+     (Journey's recipe), and keeps a scrollbar's gutter, so an age at a
+     line's end is never cut by its edge. -->
 <div
-  class="kit-edge-fade-block relative flex flex-auto flex-col gap-space-2 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain data-whole:shrink-0"
+  class="kit-edge-fade-block relative -mx-space-1 flex flex-auto flex-col gap-space-2 min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain px-space-1 scrollbar-gutter-stable data-whole:shrink-0"
   data-whole={squeezed || undefined}
   data-pin-room
   onscroll={readAt}

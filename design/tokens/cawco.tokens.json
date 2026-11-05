@@ -3698,6 +3698,14 @@
       },
       "$description": "A comment's pill: its height on the page, in the Comments rail and in its thread's head, and its least width, a square at one figure: past the 24 Pointer Rule's floor, so the bubble has room round its number and is a whole target under a mouse (the artifact panel's surface brief, A pin's pill)."
     },
+    "c-pin-cell-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 40,
+        "unit": "px"
+      },
+      "$description": "A list row's pill cell holds a three-figure pill, so the words beside it stand at one x whatever the number (the Comments rail)."
+    },
     "c-pin-pad": {
       "$type": "dimension",
       "$value": {
@@ -5143,6 +5151,19 @@
       "$extensions": {
         "dev.cawco": {
           "css": "32ch"
+        }
+      }
+    },
+    "c-count-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      },
+      "$description": "A bar button's count holds three figures' room, so the button keeps its width as its count grows and nothing beside it in the bar moves (the artifact panel's Comments).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "3ch"
         }
       }
     },

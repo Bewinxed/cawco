@@ -30,11 +30,13 @@
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { frameSize } from "#lib/cawco/frame-observer.js";
+  import { pressOutside } from "#lib/cawco/press-outside.js";
   import ArtifactMenu from "#lib/cawco/preview/ArtifactMenu.svelte";
   import CanvasView from "#lib/cawco/preview/CanvasView.svelte";
   import ChangesTag from "#lib/cawco/preview/ChangesTag.svelte";
   import CommentComposer from "#lib/cawco/preview/CommentComposer.svelte";
   import CommentRail from "#lib/cawco/preview/CommentRail.svelte";
+  import CommentsButton from "#lib/cawco/preview/CommentsButton.svelte";
   import { CanvasViewState } from "#lib/cawco/preview/canvas-view.svelte.js";
   import type { RailSort } from "#lib/cawco/preview/comment-rows.js";
   import ModeButton from "#lib/cawco/preview/ModeButton.svelte";
@@ -67,17 +69,32 @@
   import { ARTIFACTS, LONG, PINS } from "./records";
 
   const INSTANCE = "bench-artifact-panel";
+  /** The hub's show of an artifact: its id. */
+  const SHOW_PATH = /\/artifacts\/([^/]+)\/show$/u;
   const asked = page.url.searchParams.get("state") ?? "rail";
   const phone = new MediaQuery("(width < 640px)");
 
-  // The artifacts menu reads the session's artifacts from the hub: answered here from the records.
+  /** The artifact on show: the newest, until the menu shows another. */
+  let shownId = $state(ARTIFACTS[0]?.id ?? "");
+  const shown = $derived(
+    ARTIFACTS.find((one) => one.id === shownId) ?? ARTIFACTS[0]
+  );
+  // The artifacts menu reads the session's artifacts from the hub and asks it
+  // to show one: answered here from the records, the one asked for shown.
   const hubFetch = window.fetch.bind(window);
-  window.fetch = (input, init) =>
-    String(input).startsWith(`/api/instances/${INSTANCE}/artifacts`)
-      ? Promise.resolve(Response.json(ARTIFACTS))
-      : hubFetch(input, init);
-
-  const [shown] = ARTIFACTS;
+  const listed = `/api/instances/${INSTANCE}/artifacts`;
+  window.fetch = (input, init) => {
+    const path = String(input);
+    if (!path.startsWith(listed)) {
+      return hubFetch(input, init);
+    }
+    const show = path.match(SHOW_PATH);
+    if (show?.[1]) {
+      shownId = decodeURIComponent(show[1]);
+      return Promise.resolve(Response.json({}));
+    }
+    return Promise.resolve(Response.json(ARTIFACTS));
+  };
   /** The pins as the state has them: none, or resolved three, or as they stand. */
   const pins: Pin[] = $derived.by(() => {
     if (asked === "none") {
@@ -102,7 +119,9 @@
     asked === "thread" || asked === "delete" ? (PINS[3]?.id ?? null) : null
   );
   const thread = $derived(pins.find((one) => one.id === openPin) ?? null);
-  const draft = new ComposerDraft();
+  /** The reply's draft and the next comment's, apart, as the pane keeps them. */
+  const replyDraft = new ComposerDraft();
+  const nextDraft = new ComposerDraft();
   const openCount = $derived(pins.filter((one) => !one.resolvedAt).length);
   const checked = asked === "check" ? [PINS[3]?.id, PINS[4]?.id] : [];
   let mode = $state<"interact" | "comment" | "draw">("interact");
@@ -118,6 +137,30 @@
   let tourAt = $state<number | null>(null);
   /** A comment on the whole page being written. */
   let composing = $state(asked === "compose");
+  /** The phone's composer sheet, whose outside presses put it away (PreviewPane's rule). */
+  let composerFloat = $state<HTMLElement>();
+  $effect(() => {
+    const float = composerFloat;
+    if (!float) {
+      return;
+    }
+    return pressOutside(float, () => {
+      composing = false;
+    });
+  });
+  // Escape puts the composer away, as the pane's does.
+  $effect(() => {
+    if (!composing) {
+      return;
+    }
+    const away = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        composing = false;
+      }
+    };
+    addEventListener("keydown", away);
+    return () => removeEventListener("keydown", away);
+  });
   let well = $state({ w: 0, h: 0 });
   const measureWell = frameSize<HTMLElement>((node) => {
     well = { w: node.clientWidth, h: node.clientHeight };
@@ -172,6 +215,8 @@
   });
   // The bench names no fleet: the panel's own words stand for the session's.
   const agent = "The session";
+  /** The decision page's own foot bar, px: what the overlay tells the pane of it (the picture's Send bar). */
+  const PAGE_FOOT = 66;
   /** The stops Changed since you looked steps through. */
   const CHANGES = 5;
 </script>
@@ -229,22 +274,15 @@
   <CanvasView as="sub" onverify={() => undefined} {view} />
 {/snippet}
 {#snippet commentsBar()}
-  <!-- The rail's toggle as PreviewPane draws it: its bubble, and the count while shut. -->
-  <button
-    aria-expanded={listOpen}
-    aria-label={`Comments, ${openCount} open`}
-    class="select-none touch-hit press-tint mark-line aria-expanded:bg-surface-pressed"
-    data-bar-item
-    data-box
-    data-counted={openCount > 0 ? "" : undefined}
+  <CommentsButton
+    count={openCount}
+    label="Comments (⇧C hides the pins)"
     onclick={() => {
       listOpen = !listOpen;
     }}
-    type="button"
-  >
-    <IconChat aria-hidden="true" data-slot="bar-symbol" />
-    {#if openCount > 0}<span data-slot="num">{openCount}</span>{/if}
-  </button>
+    open={listOpen}
+    toCheck={checked.length}
+  />
 {/snippet}
 {#snippet commentsMenu()}
   <DropdownMenu.Item
@@ -308,6 +346,11 @@
       openPin = null;
       composing = true;
     }}
+    onpageclose={() => {
+      composing = false;
+    }}
+    pageComposer={composer}
+    pageOpen={composing && listOpen && !phone.current}
     onresolve={() => undefined}
     onretry={() => undefined}
     onretrypin={() => undefined}
@@ -319,6 +362,18 @@
   />
 {/snippet}
 {#snippet noChanges(_pin: Pin)}{/snippet}
+{#snippet composer()}
+  <CommentComposer
+    action="Comment"
+    chain={[commentWords.wholePage]}
+    draft={nextDraft}
+    focus
+    onsubmit={() => {
+      composing = false;
+    }}
+    placeholder={commentWords.composeHint}
+  />
+{/snippet}
 
 {#snippet railBeside()}
   {#if listOpen && !phone.current}
@@ -339,7 +394,7 @@
           },
         }
       : undefined}
-    {draft}
+    draft={replyDraft}
     link={`#comment-${one.number}`}
     name={one.title ?? ""}
     onclose={() => {
@@ -423,12 +478,18 @@
     >
       <img
         alt={shown?.title}
-        class="size-full object-cover object-top"
+        class={[
+          "size-full object-cover",
+          asked === "changes" ? "object-bottom" : "object-top",
+        ]}
         src={phone.current ? pagePhone : pageDesk}
         {@attach measureWell}
       />
       {#if asked === "changes"}
+        <!-- The page's own foot bar (its Send) stands at the picture's foot,
+             scrolled there: 66px, as the overlay reads it (cawco:page-foot). -->
         <ChangesTag
+          above={PAGE_FOOT}
           at={tourAt}
           onstep={(by) => {
             tourAt =
@@ -439,28 +500,22 @@
           total={CHANGES}
         />
       {/if}
-      {#if composing}
-        <!-- A comment on the whole page, as PreviewPane opens it from the rail's +: the composer at the page's top, the foot sheet on a phone. -->
+      {#if composing && phone.current}
+        <!-- A comment on the whole page on a phone: the composer as the
+             well's foot sheet, as PreviewPane draws it; a press outside it,
+             or Escape, puts it away. -->
         <div class="contents">
           <PinFloat
             bare
             box={null}
             label={commentWords.comment}
-            mark={{ x: 12, y: 12, w: 24, h: 24 }}
+            mark={null}
             room={well}
-            sheet={phone.current}
+            sheet
             slot="pin-composer"
+            bind:float={composerFloat}
           >
-            <CommentComposer
-              action="Comment"
-              chain={[commentWords.wholePage]}
-              {draft}
-              focus
-              onsubmit={() => {
-                composing = false;
-              }}
-              placeholder={commentWords.composeHint}
-            />
+            {@render composer()}
           </PinFloat>
         </div>
       {/if}
@@ -495,15 +550,19 @@
           </ThreadSheet>
         {/if}
       {:else if thread}
-        <!-- The card beside its pin, as PinFloat stands it: as tall as it needs, up to the well's room. -->
-        <div
-          class="pointer-events-none absolute inset-y-space-4 end-space-4 flex flex-col"
-        >
-          <div
-            class="pointer-events-auto w-c-pin-card-w max-h-full min-h-0 flex flex-col p-space-3 rounded-lg bg-surface-raised shadow-overlay"
+        <!-- The card beside its pin in the pane's own shell (PinFloat), its
+             pill where the picture draws comment 4's. -->
+        <div class="contents">
+          <PinFloat
+            label={`Comment ${thread.number}`}
+            mark={{ x: Math.max(0, well.w - 360), y: 96, w: 28, h: 28 }}
+            open
+            pin={thread.number}
+            room={well}
+            slot="pin-card"
           >
             {@render card(thread)}
-          </div>
+          </PinFloat>
         </div>
       {/if}
     </SideSurface>

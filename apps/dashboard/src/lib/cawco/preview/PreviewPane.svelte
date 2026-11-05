@@ -88,7 +88,6 @@
     IconArchive,
     IconChat,
     IconExternal,
-    IconEyeClosed,
     IconGlobe,
     IconInteract,
     IconLock,
@@ -100,7 +99,6 @@
     IconTrash,
     IconTuning,
     IconUndock,
-    IconWarningTriangle,
   } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
   import { formatTimestamp } from "#lib/utils/time.js";
@@ -187,6 +185,7 @@
   import ChangeLines, { type ChangeLine } from "./ChangeLines.svelte";
   import ChangesTag from "./ChangesTag.svelte";
   import CommentRail from "./CommentRail.svelte";
+  import CommentsButton from "./CommentsButton.svelte";
   import CoverState, { type CoverWaiting } from "./CoverState.svelte";
   import { CanvasViewState } from "./canvas-view.svelte";
   import type { CommentDrafts } from "./comment-drafts.svelte";
@@ -1942,8 +1941,21 @@
   let composerFloat = $state<HTMLElement>();
   /** The thread's or the composer's float: told to the page as what covers it on a phone. */
   let cardFloat = $state<HTMLElement>();
+  /** The comment being written was asked for the whole page from the rail's + (its composer then hangs from the rail's glass beside the page). */
+  let composingPage = $state(false);
+  $effect(() => {
+    if (!composing) {
+      composingPage = false;
+    }
+  });
   /** Changed since you looked, over the page at the well's foot: told to the page as what covers it. */
   let changesTag = $state<HTMLFieldSetElement>();
+  /** How tall the page's own foot bar stands over its viewport's foot, px (`cawco:page-foot`): the tag stands above it. */
+  let pageFoot = $state(0);
+  /** A whole-page comment asked from the rail beside the page: its composer hangs from the rail's glass, not over the page. */
+  const pageHung = $derived(
+    composingPage && !!composing && listOpen && !railSheet
+  );
   /** The rail's foot sheet (a phone, a pane under 640px) stands aside while a composer or a place picker stands, so neither covers the other; a thread opens in it (`threadPushed`). */
   const railAway = $derived(
     listOpen && railSheet && (!!composing || !!picking)
@@ -3336,6 +3348,13 @@
       case "cawco:change-stops":
         pageStops = changeStopsOf(message.stops);
         break;
+      // The page's own foot bar over the viewport's foot (its Send): Changed since you looked stands above it.
+      case "cawco:page-foot":
+        pageFoot =
+          typeof message.px === "number" && Number.isFinite(message.px)
+            ? Math.max(0, message.px)
+            : 0;
+        break;
       case "cawco:change-pressed":
         changePressed(message.anchor);
         break;
@@ -4260,41 +4279,43 @@
   />
 {/snippet}
 
+<!-- The comment being written: in its float by its target, or, a whole-page
+     comment asked from the rail beside the page, hung from the rail's glass
+     (CommentRail `pageComposer`). -->
+{#snippet composerBody()}
+  {#if composing && kit && nextDraft}
+    {@const Composer = kit.CommentComposer}
+    <Composer
+      action="Comment"
+      chain={composing.chain.map((one) =>
+        pinName({
+          anchor: one.anchor,
+          elements: one.elements,
+        } as unknown as Pin)
+      )}
+      chosen={composing.chosen}
+      draft={nextDraft}
+      focus
+      onchange={() => drafts?.changed(NEXT_COMMENT)}
+      onchoose={(index) => post({ type: "cawco:compose-target", index })}
+      onsubmit={(text) => comment(text)}
+      placeholder={commentWords.composeHint}
+      sendError={composing.error}
+      sending={composing.sending}
+    />
+  {/if}
+{/snippet}
+
 {#snippet commentsBar()}
-  <!-- The Comments rail's toggle: its bubble and the open comments' count (The Earned Count Rule), pressed while the rail stands; the count stays as it opens, so the button holds its width and nothing in the head moves. -->
-  <Tip label={commentsTitle}>
-    {#snippet children(tip)}
-      <button
-        {...tip}
-        data-slot="comments"
-        aria-expanded={listOpen}
-        aria-label={`Comments${openCount > 0 ? `, ${openCount} open` : ""}${pinsShown ? "" : ", pins hidden"}${linkDown ? `, ${NOT_REACHING}` : ""}`}
-        class="select-none touch-hit press-tint mark-line aria-expanded:bg-surface-pressed"
-        data-bar-item
-        data-box
-        data-counted={openCount > 0 || !pinsShown || linkDown ? "" : undefined}
-        data-link-down={linkDown ? "" : undefined}
-        onclick={() => showList(!listOpen)}
-        type="button"
-      >
-        <IconChat aria-hidden="true" data-slot="bar-symbol" />
-        {#if openCount > 0}
-          <span data-slot="num" class="min-w-c-count-digit">{openCount}</span>
-        {/if}
-        {#if !pinsShown}
-          <!-- ⇧C hid the pins: said where the person looks for them. -->
-          <IconEyeClosed aria-hidden="true" class="size-icon-sm" />
-        {/if}
-        {#if linkDown}
-          <!-- The comments aren't reaching the agent: said where the person looks for them, why in the panel. -->
-          <IconWarningTriangle
-            aria-hidden="true"
-            class="size-icon-sm text-data-bad"
-          />
-        {/if}
-      </button>
-    {/snippet}
-  </Tip>
+  <CommentsButton
+    count={openCount}
+    down={linkDown ? NOT_REACHING : null}
+    label={commentsTitle}
+    onclick={() => showList(!listOpen)}
+    open={listOpen}
+    {pinsShown}
+    toCheck={checkCount}
+  />
 {/snippet}
 {#snippet commentsMenu()}
   <DropdownMenu.Item onSelect={() => showList(!listOpen)}>
@@ -4400,8 +4421,12 @@
       if (openPin) {
         closeCard();
       }
+      composingPage = true;
       post({ type: "cawco:compose-page" });
     }}
+    onpageclose={cancelComposer}
+    pageComposer={composerBody}
+    pageOpen={pageHung}
     onresolve={(id, resolved) => resolvePin(resolved, id)}
     onretry={relink}
     onretrypin={retryPin}
@@ -4479,6 +4504,7 @@
 {#snippet changesBar()}
   {#if changeStops.length > 0 && !isCanvas}
     <ChangesTag
+      above={pageFoot}
       at={tour ? tourAt : null}
       onstep={stepChange}
       total={tour?.length ?? changeStops.length}
@@ -4963,8 +4989,7 @@
     data-mode={mode !== "interact" && !isCanvas ? mode : undefined}
     {@attach measureRoom}
   >
-    {#if composing && kit && nextDraft}
-      {@const Composer = kit.CommentComposer}
+    {#if composing && kit && nextDraft && !pageHung}
       <PinFloat
         bare
         box={composing.at?.box ?? null}
@@ -4975,24 +5000,7 @@
         slot="pin-composer"
         bind:float={composerFloat}
       >
-        <Composer
-          action="Comment"
-          chain={composing.chain.map((one) =>
-            pinName({
-              anchor: one.anchor,
-              elements: one.elements,
-            } as unknown as Pin)
-          )}
-          chosen={composing.chosen}
-          draft={nextDraft}
-          focus
-          onchange={() => drafts?.changed(NEXT_COMMENT)}
-          onchoose={(index) => post({ type: "cawco:compose-target", index })}
-          onsubmit={(text) => comment(text)}
-          placeholder={commentWords.composeHint}
-          sendError={composing.error}
-          sending={composing.sending}
-        />
+        {@render composerBody()}
       </PinFloat>
     {/if}
     <!-- The drawn pin's card (`drawnPin`); each pin's card is its own, so

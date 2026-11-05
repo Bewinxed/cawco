@@ -2056,6 +2056,57 @@ addEventListener("resize", () => {
   changesSeen += 1;
 });
 
+/**
+ * How tall the page's own foot bar stands over the viewport's foot, px: a
+ * fixed or sticky box (a decision page's Send, an app's tab bar) under any of
+ * three points along the viewport's last pixel row, the overlay's own nodes
+ * left out; 0 for none. Told to the host (`cawco:page-foot`) as it changes,
+ * read on load, scroll and resize in the next frame, so what the host floats
+ * over the page's foot (Changed since you looked) stands clear of it.
+ */
+function pageFootNow(): number {
+  const y = innerHeight - 1;
+  let top = innerHeight;
+  for (const share of [0.25, 0.5, 0.75]) {
+    for (const el of document.elementsFromPoint(innerWidth * share, y)) {
+      if (ownNode(el)) {
+        continue;
+      }
+      for (let at: Element | null = el; at; at = at.parentElement) {
+        const { position } = getComputedStyle(at);
+        if (position === "fixed" || position === "sticky") {
+          const box = at.getBoundingClientRect();
+          if (box.bottom >= innerHeight - 1 && box.height < innerHeight / 2) {
+            top = Math.min(top, box.top);
+          }
+          break;
+        }
+      }
+      break;
+    }
+  }
+  return Math.max(0, Math.round(innerHeight - top));
+}
+let pageFootTold = -1;
+let pageFootAsked = false;
+function tellPageFoot() {
+  if (pageFootAsked) {
+    return;
+  }
+  pageFootAsked = true;
+  requestAnimationFrame(() => {
+    pageFootAsked = false;
+    const px = pageFootNow();
+    if (px !== pageFootTold) {
+      pageFootTold = px;
+      post("cawco:page-foot", { px });
+    }
+  });
+}
+addEventListener("scroll", tellPageFoot, { passive: true, capture: true });
+addEventListener("resize", tellPageFoot);
+addEventListener("load", tellPageFoot);
+
 /** The count of the page's changes as they stand now, `doc` watched from here on: changes not yet delivered (a write this very task) taken first. */
 function changesNow(doc: Document): number {
   if (!readDocs.has(doc)) {
@@ -3298,6 +3349,8 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
   {
     "cawco:hello": (message) => {
       ready();
+      pageFootTold = -1;
+      tellPageFoot();
       // The host names the artifact this page is, and where its doc is synced.
       const hello = message as {
         artifact: Parameters<typeof artifact.join>[0];

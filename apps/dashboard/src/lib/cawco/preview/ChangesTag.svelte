@@ -21,6 +21,7 @@
   let {
     total,
     at,
+    above = 0,
     onstep,
     ref = $bindable(),
   }: {
@@ -28,6 +29,8 @@
     total: number;
     /** The stop the tour stands on, from 0; null before it starts. */
     at: number | null;
+    /** The page's own foot bar over the well's foot, px (a decision page's Send): it stands above that, never over what the page acts on. */
+    above?: number;
     /** A step: back, on, or the count (which starts the tour, or brings the stop out again). `via` says whether a key or a press did it. */
     onstep: (by: 1 | -1 | 0, via: "key" | "pointer") => void;
     /** Its box, told to the page as what covers it. */
@@ -49,7 +52,8 @@
 
 <div
   data-slot="changes-bar"
-  class="absolute inset-x-0 bottom-space-3 mb-(--keyboard-lift) z-1 flex justify-center px-space-3 pointer-events-none"
+  class="absolute inset-x-0 bottom-space-3 mb-(--tag-lift) z-1 flex justify-center px-space-3 pointer-events-none"
+  style:--tag-lift="calc(var(--keyboard-lift, 0px) + {above}px)"
   in:rise={"--dur-panel"}
   out:rise={"--dur-exit"}
 >
