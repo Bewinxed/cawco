@@ -17,7 +17,7 @@
    * that view.
    *
    * The bench stands its own hub (client.svelte.ts `standHub`, bench-api.ts
-   * `standApi`): the hub's reads answered from the same records, and a
+   * `standBench`): the hub's reads answered from the same records, and a
    * setup card's open answered as the hub answers it (`board`), so Pick and
    * a card's chip go where the product sends them, this project's Decisions,
    * drawn here by its list (DecisionsList). The setup page itself is the
@@ -28,7 +28,7 @@
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { noteArtifact } from "#lib/cawco/artifact-names.svelte.js";
-  import { standApi } from "#lib/cawco/bench-api.js";
+  import { standBench } from "#lib/cawco/bench-api.js";
   import DecisionsList from "#lib/cawco/decisions/DecisionsList.svelte";
   import { pagesWaitingOf } from "#lib/cawco/decisions/decisions.svelte.js";
   import NeedsYouChip from "#lib/cawco/project/NeedsYouChip.svelte";
@@ -37,6 +37,7 @@
     PO_DETAILS,
     PO_ID,
     PO_NAME,
+    PO_ROW,
     PO_SETUP,
     PO_SETUP_PAGE,
     PO_STAGES,
@@ -106,34 +107,9 @@
   const pages = [setupPage];
 
   // --- the bench's hub ----------------------------------------------------------
-  const debug = (
-    globalThis as unknown as {
-      __cawcoDebug: {
-        state: { projects: unknown[] };
-        standHub: (answer: () => void) => void;
-        leaveHub: () => void;
-      };
-    }
-  ).__cawcoDebug;
-  const row = {
-    id: PO_ID,
-    name: PO_NAME,
-    cawHarness: "claude",
-    cawModel: null,
-    conversationInstanceId: null,
-    createdAt: new Date(PO_SETUP_PAGE.updatedAt).toISOString(),
-    eventsOn: true,
-    lands: "main",
-    lfsConnection: null,
-    lfsUrl: null,
-    links: [],
-    places: [],
-    primaryPlaceId: null,
-    review: false,
-  };
   const base = `/api/projects/${PO_ID}`;
   const restore = browser
-    ? standApi((path, method, query) => {
+    ? standBench(PO_ROW, (path, method, query) => {
         if (method === "POST" && path.endsWith(`/artifacts/${PO_SETUP}/show`)) {
           // A setup page opens in no panel: the hub names the project.
           return { board: PO_ID };
@@ -169,15 +145,7 @@
         return answers[path];
       })
     : () => undefined;
-  if (browser) {
-    debug.state.projects.push(row);
-    debug.standHub(() => undefined);
-  }
-  onMount(() => () => {
-    restore();
-    debug.leaveHub();
-    debug.state.projects.splice(debug.state.projects.indexOf(row), 1);
-  });
+  onMount(() => restore);
   // Where the product sends a card's open (its project's Decisions, at the
   // card), the bench stands on its own Decisions.
   beforeNavigate((navigation) => {

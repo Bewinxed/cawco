@@ -371,3 +371,21 @@ export const PO_DETAILS = {
     binding: null,
   },
 };
+
+/** Private office as the hub lists it among the projects (GET /api/projects). */
+export const PO_ROW = {
+  id: PO_ID,
+  name: PO_NAME,
+  cawHarness: "claude",
+  cawModel: null,
+  conversationInstanceId: null,
+  createdAt: "2026-11-05T09:00:00.000Z",
+  eventsOn: true,
+  lands: "main",
+  lfsConnection: null,
+  lfsUrl: null,
+  links: [],
+  places: [],
+  primaryPlaceId: null,
+  review: false,
+};

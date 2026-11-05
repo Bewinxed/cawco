@@ -19,13 +19,16 @@ export const dragWords = {
   /** It stands at a new place among the others. */
   movedTo: (name: string, place: number, of: number) =>
     `${name} is at ${place} of ${of}.`,
+  /** It stands at a new place in one of several lists (a board's column, a group's tabs). */
+  movedToIn: (name: string, where: string, place: number, of: number) =>
+    `${name} is in ${where}, at ${place} of ${of}.`,
   /** It is over somewhere it can land. */
   over: (name: string, where: string) => `${name} is over ${where}.`,
-  /** Over nothing that takes it. */
-  overNothing: (name: string) => `${name} is over nothing that takes it.`,
   droppedAt: (name: string, place: number, of: number) =>
     `Put ${name} down at ${place} of ${of}.`,
   droppedIn: (name: string, where: string) => `Put ${name} down in ${where}.`,
+  droppedAtIn: (name: string, where: string, place: number, of: number) =>
+    `Put ${name} down in ${where}, at ${place} of ${of}.`,
   /** Let go where nothing takes it, or Escape: it goes back. */
   putBack: (name: string) => `${name} went back where it was.`,
 };

@@ -101,6 +101,7 @@
           {#snippet children(thing)}
             <li data-slot="slot" class="group relative" {@attach thing.attach}>
               <button
+                data-drag-face
                 data-slot="row"
                 aria-label={words.place(
                   nameOf(account),

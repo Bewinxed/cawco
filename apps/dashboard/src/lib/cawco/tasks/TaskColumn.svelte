@@ -81,7 +81,11 @@
     onopen: (id: string) => void;
     /** A card in the air may not come here: the column steps back, and takes nothing. */
     closed?: boolean;
-    /** The stage it is on a board: its cards are carried between columns and it takes them. */
+    /**
+     * The stage it is on a board: its cards are carried between columns and
+     * it takes them. `""` for the column of the stages stages.md does not
+     * name: its cards are carried out, and it takes none.
+     */
     stage?: string;
     /** What stands under the cards: the board's new task. */
     foot?: Snippet;
@@ -248,7 +252,7 @@
         {#if stage !== undefined}
           <Sortable
             accept="task"
-            data={{ stage }}
+            data={{ stage: stage || task.stage, where: label }}
             group={stage}
             id={task.id}
             {index}
@@ -276,7 +280,7 @@
   </section>
 {/snippet}
 
-{#if stage !== undefined}
+{#if stage}
   <Droppable
     accept="task"
     data={{ stage }}
