@@ -8583,7 +8583,7 @@ const pointChecks = async (
   const decided = await on.call(CREATE, {
     kind: "page",
     does: "pick",
-    title: "Probe pick artifact",
+    title: POINTING_TITLE,
     ask: "Pick for the launch",
     name: "pointing-cards",
     program: pointProgram(image),
@@ -8710,7 +8710,7 @@ const pointChecks = async (
   const [chipDot] = await srgbOf(on.page, [chips.dot ?? ""]);
   const wanted = pinName(pin2);
   on.kit.check(
-    "chip: the agent's `[When](cawco:pin/<artifact>/2)` draws as the pin chip: its pill numbered 2, its label what the pin stands on, its name with its state (Pin 2 on …, New answer), the needs-you dot while the answer is unread; a bare \"pin 2\" stays words; the artifact's and the card's links draw as their chips; no cawco: link is an anchor",
+    "chip: the agent's `[When](cawco:pin/<artifact>/2)` draws as the pin chip: its pill numbered 2, its label what the pin stands on, its name with its state (Pin 2 on …, New answer), the needs-you dot while the answer is unread; a bare \"pin 2\" stays words; the artifact's link draws as its chip named by the page's title, the card's as its chip; no cawco: link is an anchor",
     chips.inLine === 1 &&
       chips.figure === "2" &&
       chips.label === wanted &&
@@ -8718,7 +8718,7 @@ const pointChecks = async (
       sameRgb(chipDot, attnRgb) &&
       chips.bare &&
       chips.cawcoLinks === 0 &&
-      chips.page === "pointing-cards" &&
+      chips.page === POINTING_TITLE &&
       chips.card === "Which channels carry it?",
     `${JSON.stringify(chips)}; wanted ${JSON.stringify(wanted)}; dot ${JSON.stringify(chipDot)}`
   );
@@ -11869,6 +11869,9 @@ const FORTY_WORDS = Array.from(
       "copy",
     ][i % 10]
 ).join(" ");
+/** The pointing page's title: its artifact chip names it by this, never by its slug. */
+const POINTING_TITLE = "Launch cards";
+
 /** The longest name an artifact takes (core `ARTIFACT_NAME`: 63 characters), unbroken. */
 const LONGEST_NAME =
   "a-name-that-runs-to-every-character-an-artifact-name-may-hold-x";
