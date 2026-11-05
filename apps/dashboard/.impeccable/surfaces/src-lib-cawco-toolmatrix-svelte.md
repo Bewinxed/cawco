@@ -42,3 +42,12 @@ The flow belongs to machine × tool (`tool-signin.svelte.ts`), not to the popove
 Streamline: the ledger served every task but the two sign-in ones; the fact and the act fit as one column. P0: draw the sign-in state; sign in from the dashboard. P1: park and reload; a visible 10-minute life; refusals in the CLI's words with a new link; the signed-in count on the head.
 
 direction: inherits DESIGN.md
+
+## Review round 2 (2026-11-05)
+
+- While a sign-in popover is open its cell holds as it stood when it opened (state, act's words, refusal line); the popover is where the sign-in moves. Put away, the cell says what it came to; a refusal line on the row is not a live region (the popover announced it).
+- Signed in: the popover leaves with its outcome drawn, then the cell's tick draws and focus lands on its Signed in.
+- Focus follows the next act in the panel: the code field while a link waits for it, Open sign-in link after a refusal spent the link, the outcome once signed in.
+- A refusal quoting the CLI's screen: sentence in meta, then the screen's lines muted in the code face, as the Unknown popover sets them. No HTTP status after them.
+- Refusal sentences name no button and say what is spent; the expiry names no length.
+- Phone card: the State cell lends its parts to the card's grid (Table.Cell `inCard="lends"`): the state at the card's end, an install refusal across the card from the machine's name. An empty Sign-in line drops (`inCard="drops-empty"`).

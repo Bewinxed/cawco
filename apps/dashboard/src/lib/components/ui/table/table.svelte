@@ -101,6 +101,17 @@
      */
     settle: { top: "align-top" },
     /**
+     * What a cell is in its table's phone card (`stacks="phone"`), after the
+     * card's own classes: `lends`, no box of its own, its parts the card's
+     * grid items (a state at the card's end, a refusal across the card
+     * under it); `drops-empty`, gone where it holds no element, so an
+     * empty line adds no gap to the card.
+     */
+    card: {
+      lends: "@max-phone/table:contents",
+      "drops-empty": "@max-phone/table:not-has-[*]:hidden",
+    },
+    /**
      * Where a column folds away, by its own table's width
      * (`@container/table`), so a ledger fits its place and never scrolls
      * sideways.

@@ -31,6 +31,10 @@
    * `indent` and `end`: where its words start and stop, to line up with the
    * row above (`--fault-indent`, `--fault-end`); a host that sets those for
    * every row inside it passes neither.
+   *
+   * `live`: false for a reason the person was already told where they were
+   * (a popover's own alert, put away onto its row): the line stands, said
+   * once.
    */
   import { configureWords } from "@cawco/core/words/configure";
   import { shellWords } from "@cawco/core/words/shell";
@@ -57,6 +61,7 @@
     copyLabel = "Copy",
     indent,
     end,
+    live = true,
     ...rest
   }: {
     /** Why it did not go; nothing is drawn while it is empty. */
@@ -86,6 +91,8 @@
     indent?: string;
     /** Its words' inline-end inset: a space token or a calc() of tokens. */
     end?: string;
+    /** An alert when it appears; false where it repeats one already said. */
+    live?: boolean;
     [attribute: `data-${string}`]: unknown;
   } = $props();
 
@@ -140,7 +147,7 @@
         <p
           data-slot="reason"
           class="m-0 min-w-0 flex-initial type-meta text-(--reason-ink) wrap-anywhere"
-          role="alert"
+          role={live ? "alert" : undefined}
           style:--reason-ink="var(--fault-ink, var(--status-fail-ink))"
         >
           {said}

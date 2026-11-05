@@ -182,16 +182,21 @@ for (const key of Object.keys(kept.value.links)) {
   }
 }
 
-/** The sign-in of the tool on the machine: the one under way, or a new one. */
+/**
+ * The sign-in of the tool on the machine: the one under way, or a new one.
+ * One that signed in is held until the next starts, so its popover leaves
+ * with its outcome drawn and its cell keeps the tick it drew.
+ */
 export function toolSigninFlow(
   machineId: string,
   toolId: string
 ): ToolSigninFlow {
   const key = toolSigninKey(machineId, toolId);
   const held = flows.get(key);
-  if (held) {
+  if (held && held.phase !== "signed-in") {
     return held;
   }
+  held?.dispose();
   const made = new ToolSigninFlow(machineId, toolId);
   flows.set(key, made);
   return made;
