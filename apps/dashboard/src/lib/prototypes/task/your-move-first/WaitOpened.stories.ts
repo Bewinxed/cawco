@@ -76,3 +76,9 @@ export const WaitMissingDesk = {
   args: { layer: "none", missingWait: TASK_WAIT },
   parameters: DESK,
 };
+
+/** tsk-18 being read in tsk-226's place, on a desk. */
+export const WaitLoadingDesk = {
+  args: { waitLoad: "loading" },
+  parameters: DESK,
+};

@@ -262,3 +262,27 @@ export const StalePhone = {
   args: { stale: reviewLook.now - 6 * MINUTE_MS },
   parameters: PHONE,
 };
+
+/** Approve pending on a desk. */
+export const ApprovingDesk = {
+  args: { task: asking, looking: workingLook, pending: "approve" },
+  parameters: DESK,
+};
+
+/** The answer carried, on a desk. */
+export const AnsweredDesk = {
+  args: { task: asking, looking: workingLook, answeredAt: workingLook.now },
+  parameters: DESK,
+};
+
+/** Retry pending on a desk. */
+export const RetryingDesk = {
+  args: { task: stopped, looking: stoppedLook, pending: "retry" },
+  parameters: DESK,
+};
+
+/** Every change once, on a phone, at the foot of the page. */
+export const HistoryOpenPhone = {
+  args: { historyOpen: true },
+  parameters: PHONE,
+};

@@ -164,3 +164,33 @@ export const DroppedNow = {
     await update({ pending: null, layer: "none", task: droppedNow });
   },
 };
+
+/** Send back pending on a desk. */
+export const SendingBackDesk = {
+  args: { layer: "sendBack", note: NOTE, pending: "sendBack" },
+  parameters: DESK,
+};
+
+/** The hub didn't answer Send back, on a desk: the reason stays in the question. */
+export const SendBackUnansweredDesk = {
+  args: { layer: "sendBack", note: NOTE, refusal: unanswered("review") },
+  parameters: DESK,
+};
+
+/** Drop pending on a desk. */
+export const DroppingDesk = {
+  args: {
+    task: beforeDrop,
+    looking: dropLook,
+    layer: "drop",
+    dropReason: DROP_WHY,
+    pending: "drop",
+  },
+  parameters: DESK,
+};
+
+/** Dropped, on a desk: why, by whom, Reopen. */
+export const DroppedNowDesk = {
+  args: { task: droppedNow, looking: dropLook },
+  parameters: DESK,
+};
