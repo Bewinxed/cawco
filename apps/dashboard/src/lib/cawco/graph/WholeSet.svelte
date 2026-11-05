@@ -24,7 +24,12 @@
    * (FlowAutoFit). The fit tool frames the same way, never under the
    * readable zoom (fitted whole at 0.47 its words drew at 6px), and says so
    * ("Fit at a readable size"); the pan stops at the set's own bounds. No
-   * zoom figure. The kept card wears the
+   * zoom figure. Each edge with more of the set past it (a set too big
+   * for the room at the readable zoom, or panned) wears the house edge
+   * fade (edge-fade.css `kit-edge-fade-pan`, WholeFade), so a cut card
+   * reads as more to pan to; an edge with nothing past it stays sharp.
+   * The fade is the map's alone: the zoom tools stand over it, outside
+   * it, on the flow's provider. The kept card wears the
    * chosen card's coral edge (WholeCard). One press keeps a state, or,
    * while comparing, compares with it; resting on a card changes nothing.
    *
@@ -44,8 +49,8 @@
     type Edge,
     MarkerType,
     type Node,
-    Panel,
     SvelteFlow,
+    SvelteFlowProvider,
   } from "@xyflow/svelte";
   import { untrack } from "svelte";
   import { on } from "svelte/events";
@@ -64,6 +69,7 @@
     type StateCard,
     type StateMark,
   } from "./StateNode.svelte";
+  import WholeFade, { type PastEdges } from "./WholeFade.svelte";
   import WholeList from "./WholeList.svelte";
   import WholeMeasure from "./WholeMeasure.svelte";
 
@@ -276,31 +282,44 @@
    * other edge; held to them, a set smaller than the room stands in its
    * middle (d3-zoom's constrain).
    */
+  /** The set's own bounds: every card and group, in the flow's coordinates; null with none. */
+  const bounds = $derived.by(() => {
+    const boxes = [
+      ...Object.values(layout.states),
+      ...Object.values(layout.machines),
+    ];
+    if (boxes.length === 0) {
+      return null;
+    }
+    return {
+      left: Math.min(...boxes.map((box) => box.x)),
+      top: Math.min(...boxes.map((box) => box.y)),
+      right: Math.max(...boxes.map((box) => box.x + box.w)),
+      bottom: Math.max(...boxes.map((box) => box.y + box.h)),
+    };
+  });
   const translateExtent = $derived.by(
     (): [[number, number], [number, number]] => {
-      const boxes = [
-        ...Object.values(layout.states),
-        ...Object.values(layout.machines),
-      ];
       const gutter = browser ? numberOf("--space-8") : 0;
-      if (boxes.length === 0) {
+      if (!bounds) {
         return [
           [Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY],
           [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY],
         ];
       }
       return [
-        [
-          Math.min(...boxes.map((box) => box.x)) - gutter,
-          Math.min(...boxes.map((box) => box.y)) - gutter,
-        ],
-        [
-          Math.max(...boxes.map((box) => box.x + box.w)) + gutter,
-          Math.max(...boxes.map((box) => box.y + box.h)) + gutter,
-        ],
+        [bounds.left - gutter, bounds.top - gutter],
+        [bounds.right + gutter, bounds.bottom + gutter],
       ];
     }
   );
+  /** The edges with more of the set past them, each faded. */
+  let past = $state<PastEdges>({
+    top: false,
+    right: false,
+    bottom: false,
+    left: false,
+  });
   /** A move by its arrow's id (`from->to`), opened on the Animation face. */
   const openMove = (id: string) => {
     const one = review.moves.find((move) => `${move.from}->${move.to}` === id);
@@ -349,9 +368,11 @@
 {:else}
   <!-- Enter and Space on a focused arrow (Svelte Flow's edge, role
        button) open its move: the key is the arrow's, heard where it
-       bubbles. -->
+       bubbles. In the drawer a drag on the map pans it, never the drawer
+       (vaul's `data-vaul-no-drag`): the drawer moves by its grabber. -->
   <div
     data-slot="whole-set"
+    data-vaul-no-drag
     bind:this={pane}
     {@attach (node: HTMLElement) =>
       on(node, "keydown", (event) => {
@@ -368,67 +389,88 @@
     style:--xy-edge-stroke="var(--border-contrast)"
     style:--xy-edge-stroke-width="var(--c-graph-edge)"
   >
-    <SvelteFlow
-      aria-label={words.wholeMap(review.name)}
-      colorMode={theme.current}
-      deleteKey={null}
-      elementsSelectable={false}
-      {edgeTypes}
-      fitView
-      fitViewOptions={{ ...FIT, minZoom: READABLE }}
-      {...ZOOM}
-      nodesConnectable={false}
-      nodesDraggable={false}
-      nodesFocusable={false}
-      {nodeTypes}
-      onmovestart={(event) => {
-        if (event) {
-          held = true;
-        }
-      }}
-      onedgeclick={({ edge }) => openMove(edge.id)}
-      panOnDrag
-      {translateExtent}
-      proOptions={{ hideAttribution: true }}
-      zoomOnDoubleClick={false}
-      bind:edges
-      bind:nodes
-    >
-      <Background gap={16} size={1} variant={BackgroundVariant.Dots} />
-      <FlowZoomTracker
-        onZoomChange={(value) => {
-          zoom = value;
-        }}
-      />
-      <FlowAutoFit
-        bind:this={fit}
-        focus={keptMiddle}
-        {held}
-        minZoom={READABLE}
-        layout={placed}
-        nodeCount={nodes.length}
-      />
-      <WholeMeasure
-        {heights}
-        onheights={(next) => {
-          heights = next;
-        }}
-      />
-      <Panel position="bottom-center">
-        <FlowCanvasTools
-          figure={false}
-          fit={() => fit?.fit()}
-          fitLabel={words.fitReadable}
-          onfit={() => {
-            held = false;
+    <SvelteFlowProvider>
+      <div
+        class="kit-edge-fade-pan absolute inset-0"
+        data-fade-bottom={past.bottom || undefined}
+        data-fade-left={past.left || undefined}
+        data-fade-right={past.right || undefined}
+        data-fade-top={past.top || undefined}
+      >
+        <SvelteFlow
+          aria-label={words.wholeMap(review.name)}
+          colorMode={theme.current}
+          deleteKey={null}
+          elementsSelectable={false}
+          {edgeTypes}
+          fitView
+          fitViewOptions={{ ...FIT, minZoom: READABLE }}
+          {...ZOOM}
+          nodesConnectable={false}
+          nodesDraggable={false}
+          nodesFocusable={false}
+          {nodeTypes}
+          onmovestart={(event) => {
+            if (event) {
+              held = true;
+            }
           }}
-          onzoom={() => {
-            held = true;
-          }}
-          {zoom}
-        />
-      </Panel>
-    </SvelteFlow>
+          onedgeclick={({ edge }) => openMove(edge.id)}
+          panOnDrag
+          {translateExtent}
+          proOptions={{ hideAttribution: true }}
+          zoomOnDoubleClick={false}
+          bind:edges
+          bind:nodes
+        >
+          <Background gap={16} size={1} variant={BackgroundVariant.Dots} />
+          <FlowZoomTracker
+            onZoomChange={(value) => {
+              zoom = value;
+            }}
+          />
+          <FlowAutoFit
+            bind:this={fit}
+            focus={keptMiddle}
+            {held}
+            minZoom={READABLE}
+            layout={placed}
+            nodeCount={nodes.length}
+          />
+          <WholeMeasure
+            {heights}
+            onheights={(next) => {
+              heights = next;
+            }}
+          />
+          <WholeFade
+            {bounds}
+            onedges={(next) => {
+              past = next;
+            }}
+          />
+        </SvelteFlow>
+      </div>
+      <!-- The zoom tools over the map's foot, outside its fade. -->
+      <div
+        class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-space-4"
+      >
+        <div class="pointer-events-auto">
+          <FlowCanvasTools
+            figure={false}
+            fit={() => fit?.fit()}
+            fitLabel={words.fitReadable}
+            onfit={() => {
+              held = false;
+            }}
+            onzoom={() => {
+              held = true;
+            }}
+            {zoom}
+          />
+        </div>
+      </div>
+    </SvelteFlowProvider>
     <!-- An act's label measured in its own type, at its widest. -->
     <span
       bind:this={ruler}

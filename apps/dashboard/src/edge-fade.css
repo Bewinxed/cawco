@@ -94,16 +94,64 @@
     );
     animation-timeline: scroll(self block);
   }
+  /* A canvas that pans and zooms rather than scrolls (the design graph's
+     map) fades the same way: each edge with more of it past, only that
+     edge, the house length, its owner saying which edges as the view moves
+     (`data-fade-top`, `-right`, `-bottom`, `-left`; graph WholeFade). An
+     edge with nothing past it stays sharp, and with none the mask goes. */
+  .kit-edge-fade-pan {
+    isolation: isolate;
+    --fade-top: 0px;
+    --fade-right: 0px;
+    --fade-bottom: 0px;
+    --fade-left: 0px;
+    mask-image:
+      linear-gradient(
+        to bottom,
+        transparent,
+        var(--mask-opaque) var(--fade-top),
+        var(--mask-opaque) calc(100% - var(--fade-bottom)),
+        transparent
+      ),
+      linear-gradient(
+        to right,
+        transparent,
+        var(--mask-opaque) var(--fade-left),
+        var(--mask-opaque) calc(100% - var(--fade-right)),
+        transparent
+      );
+    mask-composite: intersect;
+  }
+  .kit-edge-fade-pan[data-fade-top] {
+    --fade-top: var(--fade-len);
+  }
+  .kit-edge-fade-pan[data-fade-right] {
+    --fade-right: var(--fade-len);
+  }
+  .kit-edge-fade-pan[data-fade-bottom] {
+    --fade-bottom: var(--fade-len);
+  }
+  .kit-edge-fade-pan[data-fade-left] {
+    --fade-left: var(--fade-len);
+  }
+  .kit-edge-fade-pan:not(
+    [data-fade-top],
+    [data-fade-right],
+    [data-fade-bottom],
+    [data-fade-left]
+  ) {
+    mask-image: none;
+  }
   /* The fade's length and the inline mask, at no weight under every host's
      own: the house 40px, a phone's 16px so it reads as an edge, not a band
      (`--c-edge-fade-len`, `-phone`), which `fade-len-*` sets per scroller;
      PaneTabs' phone strip redraws the inline mask on its own run
      (`strip-edge-mask`). */
-  :where(.kit-edge-fade, .kit-edge-fade-block) {
+  :where(.kit-edge-fade, .kit-edge-fade-block, .kit-edge-fade-pan) {
     --fade-len: var(--c-edge-fade-len);
   }
   @media (width < --theme(--breakpoint-phone)) {
-    :where(.kit-edge-fade, .kit-edge-fade-block) {
+    :where(.kit-edge-fade, .kit-edge-fade-block, .kit-edge-fade-pan) {
       --fade-len: var(--c-edge-fade-len-phone);
     }
   }
