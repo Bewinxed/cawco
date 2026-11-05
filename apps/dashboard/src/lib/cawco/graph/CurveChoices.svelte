@@ -11,8 +11,7 @@
    * its preset (his pick, animation-face-questions#curve-draw: "The list
    * with a curve to drag"); a curve kept in a transition's frames has
    * none. A spring is drawn there instead, read only (`springDrawn`): its
-   * response from rest to rest, overshoot and all (DialKit's spring
-   * visualisation).
+   * response from rest to rest, overshoot and all.
    */
   import { bringIntoView } from "@cawco/core/bring-into-view";
   import { graphWords as words } from "@cawco/core/words/graph";

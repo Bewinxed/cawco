@@ -14,7 +14,7 @@
    * drag only once the pointer travels. The drag's distance from where it
    * was taken goes through one rule (motion `moveRun`): the one snapper
    * (`snapRun`: 10 ms on the body, the duration ladder on an end, 10 ms
-   * steps while ⌥ is held) and the clamps (`clampRun*`, after DialKit's).
+   * steps while ⌥ is held) and the clamps (`clampRun*`).
    * Letting go retimes that run's clips (motion `retimeRun`) and the move
    * plays once on the stage.
    *

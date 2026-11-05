@@ -59,8 +59,8 @@
    * Resting on a row, or focusing in it, rings the thing it names on the
    * stage (DesignGraph `lit`); nothing else on the stage changes.
    *
-   * What DialKit's timeline gave (parity.md, the surface brief's "DialKit's
-   * other features"), on the same rows and ruler:
+   * What a timeline tool gives besides (parity.md, and the surface brief's
+   * list of where each stands), on the same rows and ruler:
    * - **Replay** after Play, always from the move's start.
    * - **Zoom and pan**: a pinch or Ctrl-wheel on the lanes zooms round the
    *   pointer, a sideways wheel or Shift-wheel pans; while zoomed, a strip
@@ -283,7 +283,7 @@
       kept = { move: chosen, scale };
     }
   });
-  /** The most the lanes zoom in: a tenth of a second across, or eight times, whichever is more (DialKit's floor). */
+  /** The most the lanes zoom in: a tenth of a second across, or eight times, whichever is more. */
   const zoomMost = $derived(Math.max(8, scale / (10 * RUN_STEP)));
   /** The part of the move the lanes show, ms: the whole of it unzoomed. */
   const viewSpan = $derived(scale / Math.min(zoom, zoomMost));

@@ -29,8 +29,8 @@ export interface DialRange {
 
 /**
  * The step a range moves by when the agent names none: a hundredth of a
- * range up to 1, a tenth up to 10, a unit up to 100, else ten (DialKit's
- * `inferStep`, so a dial an agent wrote for it moves as it did).
+ * range up to 1, a tenth up to 10, a unit up to 100, else ten, so a dial
+ * an agent wrote for a panel library moves as it did there.
  */
 const stepFor = (span: number): number => {
   if (span <= 1) {
@@ -147,7 +147,7 @@ export interface ConfigDials {
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** A key in words, camelCase broken (DialKit's `formatLabel`): `shadowBlur` → "Shadow blur". */
+/** A key in words, camelCase broken: `shadowBlur` → "Shadow blur". */
 const CASE_BREAK = /([a-z0-9])([A-Z])/gu;
 const labelOf = (key: string): string => {
   const spaced = key.replace(CASE_BREAK, "$1 $2").toLowerCase();
@@ -254,7 +254,7 @@ function typedDial(
 
 /**
  * A decision page's panel (its program's `Dials` piece, or an HTML page's
- * `cawcoDials(name, config)`), as DialKit's config wrote one: a number as
+ * `cawcoDials(name, config)`), in the config shape agents write: a number as
  * `[default, min, max, step?]` or bare, a colour as a CSS colour, a
  * boolean, a string, `{ type: "select" | "color" | "text" | "action" |
  * "pad", … }`, a nested object as a folder (its controls under its name),

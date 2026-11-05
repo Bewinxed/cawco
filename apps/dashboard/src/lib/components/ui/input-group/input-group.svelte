@@ -12,7 +12,7 @@
     /**
      * A value's place in its range, 0 to 1, drawn as a fill from the
      * frame's leading edge under its words (the design graph's number dial,
-     * DialKit's and the Effort chip's fill): the frame is the value's
+     * the Effort chip's fill): the frame is the value's
      * control, a drag across it the caller's.
      */
     share?: number;

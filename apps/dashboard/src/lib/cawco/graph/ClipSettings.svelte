@@ -19,9 +19,8 @@
    *   spring or any curve the agent wrote").
    *
    * - **Values**: what the clip runs between, per property, its first
-   *   frame's value and its last's, each typed (DialKit's `from` and `to`).
-   * - **Repeats**: once, round again, or back and forth to the move's end
-   *   (DialKit's `loop`).
+   *   frame's value and its last's, each typed.
+   * - **Repeats**: once, round again, or back and forth to the move's end.
    *
    * Legs dragged on the bar (ClipBar) carry their restore glyph here too.
    *

@@ -291,7 +291,7 @@ export const artifactRead = {
     "Read the person's picks, notes and values on an artifact (yours, your delegation tree's, your project's pages, what its cold sessions left): each choice " +
     "picked or not yet. `since`: the seq your last read gave. No id: your newest. `png` adds its picture, pins and all, `width` px wide; " +
     "a preview or a page drawn in `state`, its link's `?query` or `#hash`. `save` keeps it at a .png path in your clone or `$TMPDIR/`. " +
-    "A canvas: its outline and what the person changed. A component: its frames, moves, stories, dials and tuning; `state` adds a frame's style delta, " +
+    "A canvas: its outline and what the person changed. A component: its frames, moves, stories, `dials` and `tuned`; `state` adds a frame's style delta, " +
     '`detail: "story"` a story\'s args, `render` draws it now, `verify` asks the design verifier.',
   input: {
     id: id.optional(),

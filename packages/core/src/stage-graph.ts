@@ -208,7 +208,7 @@ export interface StageDialsWritten {
   values: Record<string, DialSet>;
 }
 
-/** How a clip runs after its first time through: once, round again, or back and forth (DialKit's `loop`). */
+/** How a clip runs after its first time through: once, round again, or back and forth. */
 export type ClipRepeat = "once" | "repeat" | "mirror";
 
 /**

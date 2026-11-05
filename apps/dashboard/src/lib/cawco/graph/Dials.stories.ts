@@ -105,7 +105,7 @@ export const ResetAll = {
   parameters: { viewport: 400 },
 };
 
-/** Under the agent's headings, as DialKit's folders were. */
+/** Under the agent's headings, as a panel's folders are. */
 export const UnderHeadings = {
   args: { dials: ROUTINE_DIALS_GROUPED, values: { radius: 4 } },
   parameters: { viewport: 400 },

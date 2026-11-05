@@ -162,8 +162,7 @@ const registered = new Set<string>();
  * in one unit, registered as that type (CSS Properties and Values,
  * `CSS.registerProperty`), inheriting, so the engine interpolates it as it
  * runs, never stepping it at half-way: a mockup binds any element under the
- * one the clip runs on to its live value with `var(--name)` (DialKit's
- * `current`). One the author registered with `@property` stays as written.
+ * one the clip runs on to its live value with `var(--name)`. One the author registered with `@property` stays as written.
  */
 export function interpolated(keyframes: readonly Keyframe[]): void {
   const [first] = keyframes;

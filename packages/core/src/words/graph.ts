@@ -197,7 +197,7 @@ export const graphWords = {
   valueFrom: (property: string) => `${property} at the start`,
   valueTo: (property: string) => `${property} at the end`,
   resetValues: "Reset values to as written",
-  /** How a clip runs on past its first time through (DialKit's loop). */
+  /** How a clip runs on past its first time through. */
   clipRepeat: "Repeats",
   clipRepeats: {
     once: "Once",

@@ -7,7 +7,7 @@
    * - **field**: one field a control high, as every other dial is (the
    *   settings pattern: every control one field high). Its fill runs from
    *   its leading edge to where the value stands in its range, the figure
-   *   and its unit at its trailing end inside it (DialKit's slider, Dessn's
+   *   and its unit at its trailing end inside it (Dessn's
    *   field, the house Effort chip's fill). A drag across it sets the
    *   value where the pointer stands; a press without a drag takes the
    *   caret to type a figure (Enter or leaving it keeps it, Escape puts the

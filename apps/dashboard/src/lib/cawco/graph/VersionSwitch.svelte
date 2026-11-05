@@ -8,7 +8,7 @@
    * The whole versions of what he tuned on the graph, once he changed
    * anything (the owner's pick): As written | Yours, Yours counting what he
    * changed, on the house's segmented control. Keep, after it, keeps Yours
-   * as a version of its own (DialKit's saved versions), named by its place
+   * as a version of its own, named by its place
    * after As written ("Version 2", "Version 3"…), each on the switch
    * between As written and Yours; past three, the rest stand in a menu at
    * the switch's end. A kept version, like As written, is shown and played

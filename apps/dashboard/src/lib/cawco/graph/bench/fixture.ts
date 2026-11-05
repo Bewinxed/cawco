@@ -39,7 +39,7 @@ export const ROUTINE_DIALS: GraphDial[] = [
   },
 ];
 
-/** The same dials under the agent's headings (DialKit's folders). */
+/** The same dials under the agent's headings (a panel's folders). */
 export const ROUTINE_DIALS_GROUPED: GraphDial[] = ROUTINE_DIALS.map((dial) => ({
   ...dial,
   group: dial.kind === "color" || dial.kind === "toggle" ? "Look" : "Shape",

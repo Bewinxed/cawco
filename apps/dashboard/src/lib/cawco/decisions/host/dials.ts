@@ -2,7 +2,7 @@
  * The dials of an HTML decision page (the kit's `{{DIALS}}`, hub
  * decision-page.ts): `cawcoDials(name, config)` draws a panel on the design
  * graph's own dial controls (Dials.svelte, as a program's Dials piece is
- * drawn) and hands back its controller, as DialKit's `createDialKit` did:
+ * drawn) and hands back its controller, as the panel library it replaced did:
  * `values`, `subscribe(listener, immediate = true)` and `destroy()`. A panel
  * stands in the page's `[data-cawco-dials]` element when it has one, else
  * in a column of panels at the page's bottom-right. Its values are kept

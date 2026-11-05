@@ -429,11 +429,10 @@ export const RUN_STEP = 10;
 export const RUN_BIG_STEP = 100;
 
 /*
- * A run's clamps, one per gesture, after DialKit's timeline
- * (`clampClipMove`, `clampClipResizeStart`, `clampClipResizeEnd`,
- * dialkit/timeline, MIT): its three take seconds and hold a clip to 0,
- * ours ms and hold a run to the moment the move set it off, so they are
- * modelled on them rather than imported. The drag and the keys call the
+ * A run's clamps, one per gesture, modelled on a timeline library's
+ * (`clampClipMove`, `clampClipResizeStart`, `clampClipResizeEnd`, MIT),
+ * never imported: its three take seconds and hold a clip to 0, ours ms
+ * and hold a run to the moment the move set it off. The drag and the keys call the
  * same ones.
  */
 const clamp = (n: number, low: number, high: number) =>
@@ -922,7 +921,7 @@ export function withTuning(
  * A move's clips with what the artifact keeps of his tuning (its doc's
  * `tuned`, read back on open) put back: each record of this move on the
  * clip of its animation, in order where one thing animates a property more
- * than once. DialKit's `persist`.
+ * than once.
  */
 export function withTuned(
   move: string,

@@ -9,7 +9,7 @@ This is a literal record of the New Session form's implementation contracts as b
 - The primitives own dismissal; do not replace them with an in-flow conditional container. Both prevent automatic focus: the prompt takes it as the popover opens and it goes back to whatever held it; the sheet opened with no trigger holds it itself (the keyboard waits for a tap in the prompt). The popover stands on the float layer (`--layer-float`).
 - The popover's height is the kit popover's own; the phone sheet's height is the kit drawer's.
 - Every chip popover in the form shares one portaled bits-ui surface, `NsPopoverGroup` (Form's `<NsPopoverGroup>`; `NsPopoverGroup.svelte`): opening a sibling glides the surface to the new trigger instead of closing one popover and opening another. `NsPopover` is the trigger and, outside a group, its own portaled popover. Popovers sit at z-index 90 (`ns-theme.css` `.ns-theme.ns-pop`).
-- The dialog's motion was first tuned with DialKit (commit `07a1782a`) on an authoring route. That route and the `dialkit` dependency are gone: `routes/motion/new-session/+page.svelte` only opens the Shell's form (`newSession`). The tuned motion lives in CSS and root tokens (§4).
+- The dialog's motion was first tuned with a dial panel (commit `07a1782a`) on an authoring route. That route and its dependency are gone: `routes/motion/new-session/+page.svelte` only opens the Shell's form (`newSession`). The tuned motion lives in CSS and root tokens (§4).
 
 ## 2. State Preservation
 

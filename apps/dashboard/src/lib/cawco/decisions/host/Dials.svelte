@@ -3,7 +3,7 @@
   controls (graph/Dials.svelte: a number's pill, a colour's field, the kit's
   Select, Switch and Input, an action's button), drawn in their own well
   where the program puts it, under the media it tunes. Its config is
-  DialKit's shape, as agents write it (graph dials.ts `dialsOfConfig`): a
+  the shape agents write (graph dials.ts `dialsOfConfig`): a
   number as [default, min, max], a colour, a boolean, a string, a typed
   control, a folder. Its values are kept under the one `dials` key, each
   panel's by name and path (`{ Card: { radius: 16 } }`), written 400 ms
