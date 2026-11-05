@@ -66,11 +66,17 @@ const PORT_C = 47_643;
 const WORD_A = "rehand page A";
 const WORD_B = "rehand page B";
 const WORD_C = "rehand page C";
+/** The titles the hub's words name p and q by: never their slugs. */
+const TITLE_P = "Rehand page";
+const TITLE_Q = "Second rehand page";
 /** Each delegate's port and page word; A and B hand up `p`, C hands up `q`. */
-const PAGES: Record<Tag, { name: string; port: number; word: string }> = {
-  A: { name: "p", port: PORT_A, word: WORD_A },
-  B: { name: "p", port: PORT_B, word: WORD_B },
-  C: { name: "q", port: PORT_C, word: WORD_C },
+const PAGES: Record<
+  Tag,
+  { name: string; port: number; title: string; word: string }
+> = {
+  A: { name: "p", port: PORT_A, title: TITLE_P, word: WORD_A },
+  B: { name: "p", port: PORT_B, title: TITLE_P, word: WORD_B },
+  C: { name: "q", port: PORT_C, title: TITLE_Q, word: WORD_C },
 };
 /** A workspace's settle once nothing holds it. */
 const SETTLE_MS = 180_000;
@@ -120,7 +126,7 @@ const want = (request: Seen, tag: Tag, name: string, input: object): Reply => {
 const handUp = (tag: Tag): object => ({
   kind: "preview",
   does: "try",
-  title: "Probe try artifact",
+  title: PAGES[tag].title,
   ask: "Try this page and say whether it reads right",
   name: PAGES[tag].name,
   port: PAGES[tag].port,
@@ -422,7 +428,7 @@ const spec: Spec = {
       workspace: b.workspaceId,
     });
     const refusal = workWords.servesWaiting(handle(b.workspaceId), [
-      artifactLink(p, "p"),
+      artifactLink(p, TITLE_P),
     ]);
     check(
       "(5) with p a try the person hasn't sent, the parent's discard_workspace of WB is refused in words naming p and both ways forward (hand it up again, or ask him), and WB stays",
@@ -482,7 +488,7 @@ const spec: Spec = {
       !asked.refused &&
         !!ask?.requestId &&
         ask.payload?.input?.waiting ===
-          workWords.discardAskWaiting([artifactLink(p, "p")]) &&
+          workWords.discardAskWaiting([artifactLink(p, TITLE_P)]) &&
         approvedState === "archived",
       JSON.stringify({
         asked: asked.text.slice(0, 300),
@@ -506,20 +512,22 @@ const spec: Spec = {
       target: c.instanceId,
     });
     const named = await fleet
-      .api<{ waiting: { id: string; name: string }[] }>(
+      .api<{ waiting: { id: string; title: string }[] }>(
         `/api/workspaces/${c.workspaceId}/waiting`
       )
       .catch(() => ({ waiting: [] }));
     const unconfirmed = await ownerArchive(c.workspaceId, false);
     const confirmed = await ownerArchive(c.workspaceId, true);
     check(
-      "(6b) his own archive of WC, where q waits on him unsent: the confirm's read names q, unconfirmed it is refused naming q, confirmed it archives WC",
+      "(6b) his own archive of WC, where q waits on him unsent: the confirm's read names q by its title, unconfirmed it is refused naming q, confirmed it archives WC",
       !!qRow &&
-        named.waiting.some((one) => one.id === qRow.id) &&
+        named.waiting.some(
+          (one) => one.id === qRow.id && one.title === TITLE_Q
+        ) &&
         unconfirmed.status === 409 &&
         unconfirmed.text.includes(
           workWords.servesWaitingConfirm(handle(c.workspaceId), [
-            artifactLink(qRow.id, "q"),
+            artifactLink(qRow.id, TITLE_Q),
           ])
         ) &&
         confirmed.status === 200 &&

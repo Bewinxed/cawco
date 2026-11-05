@@ -410,7 +410,7 @@ const run = async ({ check }: Kit) => {
         kind: "page",
         name: page.name,
         does: "pick",
-        link: `[title-bars-close](cawco:artifact/${PAGE})`,
+        link: `[Answered page](cawco:artifact/${PAGE})`,
       },
       session: null,
       questions: stillAsked(questionsOfPage(twoPicks)),
@@ -421,7 +421,7 @@ const run = async ({ check }: Kit) => {
         kind: "page",
         name: "card-close-gone",
         does: "pick",
-        link: `[card-close-gone](cawco:artifact/${delegatePage})`,
+        link: `[Card close gone](cawco:artifact/${delegatePage})`,
       },
       session: {
         ended: true,
@@ -459,7 +459,7 @@ const run = async ({ check }: Kit) => {
     },
     { cursor: 0, detailed: false }
   );
-  const own = section.indexOf("[title-bars-close]");
+  const own = section.indexOf("[Answered page]");
   const theirs = section.indexOf(
     `(page, made in [Land the title bars](cawco:session/${DELEGATE}), ended: yours now)`
   );

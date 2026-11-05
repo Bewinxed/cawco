@@ -99,6 +99,11 @@ import {
 const MANY = 42;
 const LONG_NAME =
   "a-page-whose-name-runs-on-and-on-to-the-very-end-of-what-it-may";
+/** The title each seeded page is made with: its name in words, sentence case ("pricing-notes" is "Pricing notes"), what its card names it by. */
+const titleOf = (name: string): string => {
+  const words = name.split("-").join(" ");
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+};
 const PRICING = "pricing-notes";
 const BROKEN = "broken-picture";
 const UNPICTURED = ["never-pictured", "also-unpictured"];
@@ -134,6 +139,9 @@ const FORTY_WORDS = Array.from(
 const DECISIONS = [
   {
     name: "what-routines-become",
+    // The longest a title runs (core ARTIFACT_TITLE_LIMIT, 80): its program's 40 words, cut at a word.
+    title:
+      "What routines become once a saved program runs real delegates, what routines do",
     program: `root = Decisions("${FORTY_WORDS}", [shape])
 shape = Decision("shape", "A saved program that runs real delegates", [saved, adhoc], "Today a routine is a brief in the session.", [], [], false, null, "behaviour")
 saved = Option("saved", "A saved program", "Runs again from the project, with its own name.", true, [], "One more thing to keep.")
@@ -141,6 +149,7 @@ adhoc = Option("adhoc", "As it is", "Nothing new to learn.", false, [], "Nothing
   },
   {
     name: "resize-handle-pick",
+    title: "Which resize handle?",
     program: `root = Decisions("Which resize handle?", [handle])
 handle = Decision("handle", "Which handle does the panel's edge wear?", [bead, light], "Today the edge has none.", [], [], false, null, "behaviour")
 bead = Option("bead", "A bead", "A dot at the edge's middle.", true, [], "It covers a line of the page.")
@@ -388,7 +397,16 @@ const openSession = async (
 const seed = (page: Page, id: string, names: string[]) =>
   page.evaluate(
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one function serialized into the page, every seed in it
-    async ({ instanceId, names: all, pricing, broken, unpictured, shapes }) => {
+    async (seeds) => {
+      const {
+        instanceId,
+        names: all,
+        titles,
+        pricing,
+        broken,
+        unpictured,
+        shapes,
+      } = seeds;
       const made: string[] = [];
       for (const [i, name] of all.entries()) {
         const words =
@@ -404,8 +422,8 @@ const seed = (page: Page, id: string, names: string[]) =>
               kind: "page",
               name,
               does: "judge",
-              title: "Probe judge artifact",
-              ask: `Judge ${name}: pin anything that reads wrong`,
+              title: titles[name],
+              ask: `Judge ${titles[name]}: pin anything that reads wrong`,
               html: `<!doctype html><html><body><h1>${name}</h1><p>${words}</p></body></html>`,
             }),
           }
@@ -471,6 +489,7 @@ const seed = (page: Page, id: string, names: string[]) =>
     {
       instanceId: id,
       names,
+      titles: Object.fromEntries(names.map((name) => [name, titleOf(name)])),
       pricing: PRICING,
       broken: BROKEN,
       unpictured: UNPICTURED,
@@ -482,7 +501,7 @@ const seed = (page: Page, id: string, names: string[]) =>
 const seedDecisions = (page: Page, id: string) =>
   page.evaluate(
     async ({ instanceId, pages }) => {
-      for (const { name, program } of pages) {
+      for (const { name, title, program } of pages) {
         const response = await fetch(
           `/api/instances/${encodeURIComponent(instanceId)}/artifacts`,
           {
@@ -492,7 +511,7 @@ const seedDecisions = (page: Page, id: string) =>
               kind: "page",
               name,
               does: "pick",
-              title: "Probe pick artifact",
+              title,
               ask: "Pick one option on each card",
               program,
             }),
@@ -802,14 +821,14 @@ const desk = async (
   // A card's picture is asked for once it nears the region's view (lazy), so
   // the broken one is scrolled to, as a person would, and the region back.
   await page
-    .locator(`[data-files-card][title="${BROKEN}"]`)
+    .locator(`[data-files-card][title="${titleOf(BROKEN)}"]`)
     .scrollIntoViewIfNeeded();
   await until(
     "the broken picture's glyph",
     () =>
       page
         .locator(
-          `[data-files-card][title="${BROKEN}"] [data-files-thumb="glyph"]`
+          `[data-files-card][title="${titleOf(BROKEN)}"] [data-files-thumb="glyph"]`
         )
         .count(),
     (n) => n > 0,
@@ -828,7 +847,7 @@ const desk = async (
   });
   kit.check(
     `8 (${theme}): a picture that won't decode stands as its kind's glyph in the well`,
-    glyphs.includes(BROKEN),
+    glyphs.includes(titleOf(BROKEN)),
     JSON.stringify(glyphs)
   );
   // The long name gives way with an ellipsis, inside its card.
@@ -845,9 +864,9 @@ const desk = async (
             (card?.getBoundingClientRect().right ?? 0) + 0.5,
         }
       : null;
-  }, LONG_NAME);
+  }, titleOf(LONG_NAME));
   kit.check(
-    `long name (${theme}): a 63-character name gives way inside its card`,
+    `long name (${theme}): a 63-character title gives way inside its card`,
     !!long?.cut && long.inside,
     JSON.stringify(long)
   );
@@ -883,7 +902,7 @@ const desk = async (
         )
       ),
     // Until the hub answers, the cards stand unfiltered: wait for its answer.
-    (titles) => titles.length === 1 && titles[0] === "tall-board",
+    (titles) => titles.length === 1 && titles[0] === titleOf("tall-board"),
     15_000
   ).catch(() => 0);
   const byTitle = await page.evaluate(() =>
@@ -902,12 +921,12 @@ const desk = async (
   await sweep(page, `search none 1440 ${theme}`);
   kit.check(
     `6 (${theme}): search finds by the words on a page (marked), by title, and says when nothing matches`,
-    byContent.cards[0] === PRICING &&
+    byContent.cards[0] === titleOf(PRICING) &&
       byContent.marked.some((word) =>
         word?.toLowerCase().startsWith("tiers")
       ) &&
       byTitle.length === 1 &&
-      byTitle[0] === "tall-board" &&
+      byTitle[0] === titleOf("tall-board") &&
       nothing.some(
         (line) => line.trim() === filesWords.noArtifactsMatch("invoice")
       ) &&
@@ -919,7 +938,9 @@ const desk = async (
   await field.fill("");
 
   // 7. A picked artifact opens in the session's panel, and Files goes.
-  const pricingCard = page.locator(`[data-files-card][title="${PRICING}"]`);
+  const pricingCard = page.locator(
+    `[data-files-card][title="${titleOf(PRICING)}"]`
+  );
   const pricingId = (await pricingCard.getAttribute("data-artifact")) ?? "";
   await pricingCard.click();
   const picked = await pickLanded(page, pricingId);
@@ -2000,7 +2021,7 @@ const roundThree = async (
                 )
                 ?.getAttribute("data-files-thumb") ?? null
           ),
-        UNPICTURED
+        UNPICTURED.map(titleOf)
       ),
     (thumbs) => thumbs.every((one) => one === "picture"),
     60_000
@@ -2243,7 +2264,7 @@ const slotLeg = async (
     () =>
       page.evaluate(
         picturesShown,
-        DECISIONS.map((one) => one.name)
+        DECISIONS.map((one) => one.title)
       ),
     (ready) => ready,
     30_000
@@ -2893,7 +2914,7 @@ const rowOpensLeg = async (kit: Kit, base: string, id: string) => {
   await openFiles(page, "desk");
   await page.locator(VIEW_PICK("list")).click();
   const row = page.locator(
-    `[data-files-cards][data-files-view="list"] [data-files-card][title="${PRICING}"]`
+    `[data-files-cards][data-files-view="list"] [data-files-card][title="${titleOf(PRICING)}"]`
   );
   const rowId = (await row.getAttribute("data-artifact")) ?? "";
   await row.click();
@@ -2913,7 +2934,7 @@ const rowOpensLeg = async (kit: Kit, base: string, id: string) => {
     "36: a row's press opens its artifact as its card's does (the session's panel shows it, Files goes); Files opened again is still the list, the row the one on show",
     !(landed.filesOpen || landed.float) &&
       landed.pane === rowId &&
-      opened.current === PRICING &&
+      opened.current === titleOf(PRICING) &&
       opened.view === "list",
     `${JSON.stringify(landed)} (picked ${rowId}); again ${JSON.stringify(opened)}`
   );
@@ -3025,7 +3046,7 @@ const pickLeg = async (
     await openFiles(page, view);
   }
   await atRest(page);
-  const card = page.locator(`[data-files-card][title="${PRICING}"]`);
+  const card = page.locator(`[data-files-card][title="${titleOf(PRICING)}"]`);
   const wanted = (await card.getAttribute("data-artifact")) ?? "";
   if (by === "pointer") {
     // The real pointer rests on the card, as the owner's did, then presses it.

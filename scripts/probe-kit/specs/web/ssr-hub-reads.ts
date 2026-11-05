@@ -20,13 +20,13 @@
  *   server draws both links by their written labels (references.ts: an
  *   artifact not named yet is its label); the browser asks the hub for the
  *   artifact (`GET /api/artifacts/<id>`) and its pins, draws both chips, and
- *   the artifact's takes the hub's name.
+ *   the artifact's takes the hub's title.
  * - artifact read again: a second artifact in the same message, whose first
  *   read the hub refuses (503), is not taken as gone. The browser says why
  *   in one console line (`[cawco] reading artifact <id> failed: …`) and
  *   keeps nothing, so the message's next draw asks again: the stub holds the
  *   first artifact's answer until the refusal is out, and that answer
- *   landing redraws the message. The chip takes the hub's name on the
+ *   landing redraws the message. The chip takes the hub's title on the
  *   second read, with no reload.
  * - sent captions (ToolGroup.svelte `captionText`): a `send_to_user` call
  *   attached a lone `.vtt` file. The server draws the row, the file
@@ -46,11 +46,12 @@ const SESSION = "5e5a1c0d-7b2e-4f6a-9c1d-2b3a4c5d6e7f";
 const MACHINE = "ssr-machine";
 const ARTIFACT = "art-ssr-launch-plan";
 const ARTIFACT_LABEL = "PROBE-label-written";
-const ARTIFACT_NAME = "PROBE-launch-plan-named-by-hub";
+/** The hub's title for the artifact: what its chip takes once read (never its slug, `launch-plan`). */
+const ARTIFACT_TITLE = "PROBE launch plan titled by the hub";
 /** The artifact whose first read the hub refuses. */
 const FLAKY = "art-ssr-refused-once";
 const FLAKY_LABEL = "PROBE-flaky-label-written";
-const FLAKY_NAME = "PROBE-flaky-named-on-second-read";
+const FLAKY_TITLE = "PROBE flaky titled on second read";
 const VTT_PATH = "/home/probe/clips/PROBE-captions.vtt";
 const VTT_WORDS = "PROBE-caption-line-read-by-browser";
 const AGENT_WORDS = "PROBE-agent-message-rendered-on-server";
@@ -136,7 +137,8 @@ function stubHub(asked: Asked[], phase: () => Asked["phase"]): string {
           id: FLAKY,
           instanceId: SESSION,
           kind: "page",
-          name: FLAKY_NAME,
+          name: "flaky",
+          title: FLAKY_TITLE,
           shown: false,
         });
       }
@@ -147,7 +149,8 @@ function stubHub(asked: Asked[], phase: () => Asked["phase"]): string {
             id: ARTIFACT,
             instanceId: SESSION,
             kind: "page",
-            name: ARTIFACT_NAME,
+            name: "launch-plan",
+            title: ARTIFACT_TITLE,
             shown: false,
           })
         );
@@ -245,7 +248,7 @@ const spec: Spec = {
           document
             .querySelector(`[data-artifact-chip="${id}"]`)
             ?.getAttribute("title") === name,
-        [ARTIFACT, ARTIFACT_NAME] as const,
+        [ARTIFACT, ARTIFACT_TITLE] as const,
         { timeout: 20_000 }
       )
       .then(
@@ -262,7 +265,7 @@ const spec: Spec = {
       one.path.startsWith(`/api/instances/${SESSION}/artifacts/comments`)
     );
     kit.check(
-      "artifact chips: loaded cold, the server renders the agent's message and its artifact link's label with no relative fetch in its log; the browser asks the hub for the artifact and its pins, and the chip takes the hub's name",
+      "artifact chips: loaded cold, the server renders the agent's message and its artifact link's label with no relative fetch in its log; the browser asks the hub for the artifact and its pins, and the chip takes the hub's title",
       cold.status === 200 &&
         cold.relative.length === 0 &&
         cold.html.includes(AGENT_WORDS) &&
@@ -293,7 +296,7 @@ const spec: Spec = {
           document
             .querySelector(`[data-artifact-chip="${id}"]`)
             ?.getAttribute("title") === name,
-        [FLAKY, FLAKY_NAME] as const,
+        [FLAKY, FLAKY_TITLE] as const,
         { timeout: 20_000 }
       )
       .then(
@@ -307,7 +310,7 @@ const spec: Spec = {
       line.startsWith(`[cawco] reading artifact ${FLAKY} failed: `)
     );
     kit.check(
-      "artifact read again: the hub refuses the second artifact's first read (503); the browser says why in one line and keeps nothing, the next draw asks again, and its chip takes the hub's name with no reload",
+      "artifact read again: the hub refuses the second artifact's first read (503); the browser says why in one line and keeps nothing, the next draw asks again, and its chip takes the hub's title with no reload",
       flakyReads.length === 2 &&
         flakyReads.every((one) => one.phase === "browser") &&
         failedLines.length === 1 &&

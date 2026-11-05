@@ -27,6 +27,8 @@ import {
 /** How the comments notice opens (core injected.ts `artifactCommentsNotice`). */
 const NOTICE = "[CawCo] The person commented on the page";
 const PAGE = "release-notes";
+/** Its title: what the transcript's Comments line names it by. */
+const PAGE_TITLE = "Release notes page";
 const LEAD = "Version 4.2 ships the new import screen and two fixes.";
 const DETAIL = "The import screen reads CSV and Excel files up to 50 MB.";
 /** The hub's send, the agent and the harness's request. */
@@ -47,7 +49,7 @@ const pageFor = async (fleet: KitFleet, session: string, title: string) =>
     await fleet.api<{ id: string }>(`/api/instances/${session}/artifacts`, {
       kind: "page",
       does: "judge",
-      title: "Probe judge artifact",
+      title: PAGE_TITLE,
       ask: "Judge this page: pin anything that reads wrong",
       name: PAGE,
       html: html(title),
@@ -149,8 +151,8 @@ async function walk(leg: Leg): Promise<void> {
       await shows(
         page
           .getByRole("log", { name: transcriptWords.transcript })
-          .getByText(`Comments on ${PAGE}`),
-        `the session's “Comments on ${PAGE}” line`
+          .getByText(`Comments on ${PAGE_TITLE}`),
+        `the session's “Comments on ${PAGE_TITLE}” line`
       );
     }
   );
