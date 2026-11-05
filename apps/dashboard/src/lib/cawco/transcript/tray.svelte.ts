@@ -15,7 +15,7 @@
  * entered yet" is a fact about the delegate.
  */
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
-import { cawco } from "../client.svelte";
+import { cawco, type TrayChild } from "../client.svelte";
 import { departBox } from "../motion/share.svelte";
 
 /** How a chip entered the tray: its mark flew in, it faded in, or it was simply there. */
@@ -29,6 +29,21 @@ export const entered = new SvelteMap<string, Entry>();
 
 /** Chips (by TrayChild id) that have had their time on screen as done or cancelled, and left. */
 export const left = new SvelteSet<string>();
+
+/**
+ * Whether a child's chip stands in its parent's tray: it has entered, has
+ * not had its time on screen and left, and was not dismissed. The tray draws
+ * these (DelegateTray `chips`); a pane keeps the tray row's room clear at
+ * its transcript's foot only while one stands (SessionPane `trayStands`).
+ */
+export const inTray = (item: TrayChild): boolean =>
+  entered.has(item.instanceId) &&
+  !left.has(item.id) &&
+  item.dismissedAt === null;
+
+/** Whether any chip stands in this session's tray. */
+export const trayHasChips = (parentId: string): boolean =>
+  cawco.trayOf(parentId).some(inTray);
 
 /** Each registered card's visibility, by delegate instance id. */
 const cards = new SvelteMap<string, "visible" | "hidden">();

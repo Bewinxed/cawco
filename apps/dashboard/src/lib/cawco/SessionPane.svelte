@@ -78,6 +78,7 @@
   import { instanceTitle } from "./home/home-state.svelte";
   import { deadlineIn } from "./hub-read";
   import { rowHref } from "./links";
+  import { minimizedAsks } from "./minimized-asks.svelte";
   import MoveWait from "./move/MoveWait.svelte";
   import { moveOf } from "./move.svelte";
   import PlanPane, { planProgress, planShows } from "./plan/PlanPane.svelte";
@@ -115,6 +116,7 @@
   import { speakerName } from "./transcript/speaker";
   import Transcript from "./transcript/Transcript.svelte";
   import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
+  import { trayHasChips } from "./transcript/tray.svelte";
   import { setVoice } from "./turn/voice";
   import {
     type ComposerBinding,
@@ -1122,15 +1124,32 @@
   );
 
   /**
+   * Something stands in the tray row on this conversation's composer: a
+   * delegate's chip (tray.svelte.ts `trayHasChips`, the chips DelegateTray
+   * draws), the plan's ring or a connect ask's chip at the row's end
+   * (`planRing` below), or a question the reader minimized to its bar there
+   * (Composer `minimized`).
+   */
+  const trayStands = $derived(
+    trayHasChips(viewId) ||
+      !!planProgressNow ||
+      connectsOpen.length > 0 ||
+      (!!firstAsk && minimizedAsks.has(firstAsk.request.requestId))
+  );
+  /**
    * The room this pane's transcript keeps clear at its foot for the
-   * composer standing over it: the composer's one-line box and the delegate
-   * tray's row on it, kept whether or not a chip is in it (app.css
-   * `--c-composer-panel`, `--c-tray-row`). Everything else the composer
-   * holds — a longer draft, attachments, the suggestion chips while one is
-   * typed, a failed send's line, the ask it grows into — stands over the
-   * transcript's foot and moves no row: the suggestion row's room kept while
-   * it stood empty was a 59px blank band under the last row. A conversation
-   * that cannot be written to has no composer.
+   * composer standing over it: the composer's one-line box, and the tray
+   * row on it while something stands in that row (`trayStands`; app.css
+   * `--c-composer-panel`, `--c-tray-row`). An empty row's room kept was a
+   * blank band under the last row (42px in Caw's column), as the
+   * suggestion row's was (59px). Everything else the composer holds — a
+   * longer draft, attachments, the suggestion chips while one is typed, a
+   * failed send's line, the ask it grows into — stands over the
+   * transcript's foot and moves no row. A chip arriving or leaving changes
+   * only the foot: a reader scrolled up keeps the rows where they stand,
+   * and a tail pinned at the end is made whole for it in the same delivery
+   * (Transcript `rooms`). A conversation that cannot be written to has no
+   * composer.
    *
    * CSS, from this conversation's own state, not a measurement: it holds
    * while the pane is off screen and is the same when it comes on screen.
@@ -1140,7 +1159,9 @@
    * 35px as a switch's glide ended, when two tabs' trays differed).
    */
   const composerRoom = $derived(
-    writable ? "var(--c-composer-panel) + var(--c-tray-row)" : "0px"
+    writable
+      ? `var(--c-composer-panel)${trayStands ? " + var(--c-tray-row)" : ""}`
+      : "0px"
   );
   /**
    * Docked, the composer has a place of its own at the pane's foot and the

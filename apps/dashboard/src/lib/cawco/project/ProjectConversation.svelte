@@ -447,11 +447,12 @@
   /**
    * The composer has a place of its own at the panel's foot and the hero's
    * room ends over it, as a docked conversation's does (SessionPane
-   * `reserved`); with no machine for a conversation, the line that says so
-   * stands there instead.
+   * `reserved`), with no tray row: no conversation has delegates yet; with
+   * no machine for a conversation, the line that says so stands there
+   * instead.
    */
   const reserved =
-    "calc(var(--space-4) + var(--safe-bottom) + var(--c-composer-panel) + var(--c-tray-row) + var(--space-2))";
+    "calc(var(--space-4) + var(--safe-bottom) + var(--c-composer-panel) + var(--space-2))";
 </script>
 
 <!-- Assistant and Preview: the switch in whichever bar heads the panel,

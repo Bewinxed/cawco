@@ -84,6 +84,7 @@
     type Entry,
     entered,
     flightKey,
+    inTray,
     left,
     trayNews,
     trayReveal,
@@ -192,16 +193,7 @@
     };
   };
 
-  const chips = $derived(
-    items
-      .filter(
-        (item) =>
-          entered.has(item.instanceId) &&
-          !left.has(item.id) &&
-          item.dismissedAt === null
-      )
-      .map(toChip)
-  );
+  const chips = $derived(items.filter(inTray).map(toChip));
   /** A failed work item: owed a decision (a started session's failure owes none). */
   const owed = (chip: Chip) =>
     chip.tone === "failed" && chip.item.work !== null;
@@ -1130,9 +1122,10 @@
   const quiet = $derived(chips.every((chip) => chip.entry === "none"));
 
   /**
-   * The row comes and goes in the room the composer keeps for it from its
-   * first render (app.css `--c-tray-row`): opacity only, so nothing standing
-   * on it or under it moves. Growing its height instead, a first chip
+   * The row comes and goes in the room the composer lays out for it from
+   * its first render (app.css `--c-tray-row`): opacity only, so nothing
+   * standing on it moves; the transcript clears that room while a chip
+   * stands (SessionPane `trayStands`). Growing its height instead, a first chip
    * arriving after the switch lifted the suggestion row 35px.
    */
   function rowFade(_node: Element): TransitionConfig {

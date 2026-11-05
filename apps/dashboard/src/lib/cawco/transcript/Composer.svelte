@@ -3293,9 +3293,10 @@
     </div>
   {/if}
   <!-- The row standing on the composer, outside its box: the delegate
-       tray's fixed row, kept clear at every transcript's foot (app.css
-       `--c-tray-row`), and the suggestion chips standing on it (out of
-       flow), over the transcript's foot. An offer stands on top of both. -->
+       tray's fixed row (app.css `--c-tray-row`), which a transcript keeps
+       clear at its foot while something stands in it (SessionPane
+       `trayStands`), and the suggestion chips standing on it (out of flow),
+       over the transcript's foot. An offer stands on top of both. -->
   <!-- The delegate tray's row, on the composer's width and left edge. It is
        the positioned box the suggestion chips stand on. -->
   <div
@@ -3390,10 +3391,10 @@
       <!-- One conversation's tray over the next while they cross-fade, in a
            column the composer's width: an auto column grew to the chips' own
            width. The slot is the tray's one row from the composer's first
-           render, chips or none (app.css `--c-tray-row`, which every
-           transcript keeps clear), with the tray standing on its foot: a chip
-           arriving late fills room already there, and the suggestion row
-           standing on the slot never moves. The tray's shelf and panel
+           render, chips or none (app.css `--c-tray-row`; a transcript keeps
+           it clear while a chip stands, SessionPane `trayStands`), with the
+           tray standing on its foot: a chip arriving late fills room already
+           laid out, and the suggestion row standing on the slot never moves. The tray's shelf and panel
            float over it, in none of its flow. -->
       <div
         data-slot="tray-slot"

@@ -2607,8 +2607,9 @@
   /**
    * The foot's height, as its observer last delivered it: after a layout,
    * never by asking for one. It comes as the foot is first laid out and
-   * whenever it resizes (the composer's clearance changing), and the list
-   * is made whole again for it. The parked room is not observed: it moves
+   * whenever it resizes (the composer's clearance changing: a tray chip
+   * arriving or leaving), and the list is made whole again for it and a
+   * pinned tail follows it. The parked room is not observed: it moves
    * neither the tail nor the view.
    */
   const rooms = { foot: 0, measured: false };
@@ -2619,12 +2620,20 @@
     }
     // biome-ignore lint/style/noRestrictedGlobals: the foot is read in the delivery, after the layout that sized it, and a pinned tail made whole there, so no frame paints it off the end
     const sizes = new ResizeObserver((entries) => {
+      const was = rooms.measured ? rooms.foot : null;
       for (const entry of entries) {
         rooms.foot = entry.borderBoxSize[0]?.blockSize ?? 0;
       }
       rooms.measured = true;
-      if (keepWhole() && pinned()) {
+      // The foot resizing moves the tail by its whole change, not only the
+      // spare's part of a pixel: a tray chip arriving grows it a tray row,
+      // and a pinned tail gated on the spare stayed where it was, its last
+      // row under the chip.
+      keepWhole();
+      if (pinned()) {
         pinNext();
+      } else if (was !== null) {
+        endMoved(rooms.foot - was);
       }
     });
     sizes.observe(footNode);
@@ -3838,14 +3847,45 @@
    * `keepPlace`'s.
    */
   function onresize(): void {
+    const view = list?.getViewportSize() ?? 0;
+    const shrank = viewSeen > 0 ? viewSeen - view : 0;
+    viewSeen = view;
     if (!pinned()) {
       if (awayAtTail()) {
         landAway();
+      } else {
+        endMoved(shrank);
       }
       return;
     }
     keepWhole();
     pinNext();
+  }
+  /** The scroller's own height as `onresize` last read it. */
+  let viewSeen = 0;
+
+  /**
+   * THE COMPOSER'S ROOM MOVES THE END, NOT THE ROWS. The room a pane keeps
+   * for its composer changes as a tray chip comes or goes (SessionPane
+   * `trayStands`): a tab's foot grows or shrinks by the tray row, a docked
+   * pane's scroller by as much. A view standing at the end before that
+   * change stays at the end after it, in the delivery that saw it, before
+   * the frame paints: its last row stays clear of the chip. This holds for
+   * a pane that is not the one worked in too (Caw's column beside the work
+   * at 1440), which follows no row of its own (`pinned`): its rows coming
+   * in are content, the composer's room is not. A view anywhere else keeps
+   * its offset, so no row it reads moves.
+   */
+  function endMoved(shift: number): void {
+    if (!(scroller && landed) || jumping || Math.abs(shift) < 0.5) {
+      return;
+    }
+    const tail = tailTop(scroller);
+    if (Math.abs(tail - shift - scroller.scrollTop) > TAIL_SLACK) {
+      return;
+    }
+    scroller.scrollTop = tail;
+    lastWrite = scroller.scrollTop;
   }
 
   /**
