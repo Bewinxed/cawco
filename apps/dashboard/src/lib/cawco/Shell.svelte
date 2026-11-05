@@ -708,6 +708,8 @@
   });
   /** The groups whose tabs the bar carries, once the session has shown, on any route: those along the workspace's top edge. */
   const barLeaves = $derived(surfaceMounted && !narrow ? gridView.tops : []);
+  /** Groups to tell apart: the focus rail marks one of two or more. */
+  const groupsApart = $derived(barLeaves.length >= 2);
   /** Whether the bar shows them: on a session page. */
   const hosting = $derived(onSession && barLeaves.length > 0);
   /**
@@ -1207,14 +1209,21 @@
            is the wide bar's alone (`desk:` with `not-coarse:` or
            `not-portrait:`); anywhere else the bar draws no ground of its
            own, no fill and no hairline (DESIGN.md, No bar ground): the
-           field it stands on is its ground. -->
+           field it stands on is its ground. Hosting them on a desk, its
+           trailing glass stands in from the edge of the screen as far as
+           the body of the first tab stands in from its pane: the flare of
+           a tab (`--strip-flare` on the strip, `--radius-sm` at a desk;
+           fluid-tabs Tabs.svelte), its foot running out to the edge as the
+           join of the glass does, so the shelf holds one inset at both
+           ends. -->
       <header
         data-slot="top"
         data-full={full || undefined}
         data-floating={floating || undefined}
         data-hosting={hosting || undefined}
-        class="group/top peer/top h-c-top-bar-h shrink-0 flex data-full:hidden items-center gap-space-2 py-0 ps-0 pe-(--top-end) coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-c-top-bar-h max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:shelf-hairline"
+        class="group/top peer/top h-c-top-bar-h shrink-0 flex data-full:hidden items-center gap-space-2 py-0 ps-0 pe-(--top-end) desk:not-coarse:data-hosting:pe-(--shelf-end) desk:not-portrait:data-hosting:pe-(--shelf-end) coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-c-top-bar-h max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:shelf-hairline"
         style:--top-end="calc(var(--space-6) + env(safe-area-inset-right, 0px))"
+        style:--shelf-end={"calc(var(--radius-sm) + env(safe-area-inset-right, 0px))"}
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
         style:--top-inset-end={"calc(var(--c-bar-phone-edge) + env(safe-area-inset-right, 0px))"}
       >
@@ -1278,7 +1287,8 @@
                   data-slot="col"
                   class="group/col absolute inset-y-0 start-(--col-start) w-(--col-size) flex min-w-0 overflow-hidden data-seam:shadow-(--seam-line)"
                   data-col={leaf.id}
-                  data-focused={workspace.focusedLeafId === leaf.id ||
+                  data-focused={(groupsApart &&
+                    workspace.focusedLeafId === leaf.id) ||
                     undefined}
                   data-seam={i > 0 || undefined}
                   style:--col-start="var(--col-x, 0px)"
@@ -1286,7 +1296,9 @@
                   style:--seam-line="-1px 0 0 var(--border-hairline)"
                 >
                   <!-- The group the keyboard belongs to, as the group says
-                       it: a hairline rail down the leading edge. -->
+                       it: a hairline rail down the leading edge, where
+                       there are groups to tell apart (one alone drew a
+                       stray line at the start of the shelf). -->
                   <span
                     aria-hidden="true"
                     class="absolute inset-y-0 start-0 w-space-row bg-ink-muted opacity-0 z-2 pointer-events-none group-data-focused/col:opacity-50 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out"
