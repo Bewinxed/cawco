@@ -33,6 +33,45 @@ export function activityOf(session: {
     : "idle";
 }
 
+/**
+ * What a session's row, tab and seat say it is doing (client.svelte.ts
+ * `activityNow`), from what this page holds of it. Needs you is core
+ * `waitingOnYou`'s alone (`waiting`): nothing else here raises it. The
+ * daemon's pulse says `blocked` for every ask its harness parked, one
+ * routed to the session's parent too, so its `blocked` is read as a turn
+ * waiting on an answer; whether that answer is the person's, the asks the
+ * hub broadcasts say, through `waiting`.
+ */
+export function sessionActivity(sources: {
+  /** Core `waitingOnYou` holds it: an ask parked for the person, or a card of it in Needs you. */
+  waiting: boolean;
+  /** Its project is moving for it. */
+  moving: boolean;
+  runningDelegates: number;
+  /** Its frame-fed state, where this page holds one. */
+  session?: Parameters<typeof activityOf>[0];
+  /** Its frames stream to this page: an open tab, the peek. */
+  subscribed: boolean;
+  /** The daemon's pulse, the word on a session this page does not follow. */
+  pulse?: Activity;
+}): Activity {
+  if (sources.waiting) {
+    return "blocked";
+  }
+  if (sources.moving || sources.runningDelegates > 0) {
+    return "working";
+  }
+  const { session, subscribed } = sources;
+  // An open session's frames are live and authoritative; anything else falls
+  // back to the daemon's pulse — the only word on a session this browser has
+  // not subscribed to, whose frame-fed state is frozen at the tab that closed.
+  const said =
+    session && subscribed
+      ? activityOf(session)
+      : (sources.pulse ?? (session ? activityOf(session) : "idle"));
+  return said === "blocked" ? "working" : said;
+}
+
 /** How many of a session's subagents are still going — 0 for a session with none. */
 export function runningSubagents(
   subagents: Record<string, { status: string }> | undefined

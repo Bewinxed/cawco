@@ -26,8 +26,19 @@
  *     hub's `unroute` takes the routing off); the dashboard's `activityOf`
  *     reads it as working, and blocked once the ask is the person's.
  *
+ * (f) a delegate this page does not follow (no tab, no peek), whose only
+ *     ask is routed to its parent, shows no hand wherever it is drawn (the
+ *     dashboard's `activityOf`, through `sessionActivity`): the daemon's
+ *     pulse says `blocked` for every ask its harness parked, the parent's
+ *     too, and reads only as working; with the routed ask held here, and
+ *     with none held (the pulse heard it first, or it was settled and the
+ *     pulse never came down). An ask that is the person's shows the hand.
+ *
  * Main fails (e) too: every ask parked made its session need you, its
- * parent's or not.
+ * parent's or not. Main fails (f): `sessionActivity` is not there (the spec
+ * does not load), and client.svelte.ts `activityNow` returned `blocked` for
+ * an unfollowed session whose pulse said so with no ask of it held here
+ * (`pulseSays === "blocked" && !(target && isSubscribed(instanceId))`).
  *
  * Main fails: `waitingOnYou` is not there (the spec does not load), and
  * every mark read the asks alone. (a)'s need is there on main: Needs you listed the cards;
@@ -35,7 +46,10 @@
  *
  *   bun scripts/probe-kit/run.ts waiting-on-you
  */
-import { activityOf } from "../../../apps/dashboard/src/lib/cawco/activity";
+import {
+  activityOf,
+  sessionActivity,
+} from "../../../apps/dashboard/src/lib/cawco/activity";
 import { waitingOnYou } from "../../../packages/core/src/activity";
 import type { ArtifactNeed } from "../../../packages/core/src/artifact-needs";
 import {
@@ -198,6 +212,46 @@ export default {
         parentsAsk === "working" &&
         personsAsk === "blocked",
       `routed: ${said(routed)}; handed up: ${said(handedUp)}; activity, routed: ${parentsAsk}; with one of yours: ${personsAsk}`
+    );
+
+    const unfollowed = {
+      moving: false,
+      runningDelegates: 0,
+      subscribed: false,
+      pulse: "blocked" as const,
+    };
+    const routedHere = sessionActivity({
+      ...unfollowed,
+      waiting: waitingOnYou({
+        asks: [{ instanceId: DELEGATE, routedTo: "parent" }],
+        artifacts: [],
+      }).has(DELEGATE),
+      session: { pending: [{ routedTo: "parent" }], busy: true },
+    });
+    const pulseAlone = sessionActivity({
+      ...unfollowed,
+      waiting: waitingOnYou({ asks: [], artifacts: [] }).has(DELEGATE),
+    });
+    const settledHere = sessionActivity({
+      ...unfollowed,
+      waiting: false,
+      session: { pending: [], busy: false },
+    });
+    const yours = sessionActivity({
+      ...unfollowed,
+      waiting: waitingOnYou({
+        asks: [{ instanceId: DELEGATE }],
+        artifacts: [],
+      }).has(DELEGATE),
+      session: { pending: [{}], busy: true },
+    });
+    check(
+      "f: a delegate not open here whose pulse says blocked for an ask routed to its parent shows no hand, the ask held here or not; an ask of yours shows it",
+      routedHere === "working" &&
+        pulseAlone === "working" &&
+        settledHere === "working" &&
+        yours === "blocked",
+      `routed ask held: ${routedHere}; pulse alone: ${pulseAlone}; held none: ${settledHere}; yours: ${yours}`
     );
     return Promise.resolve();
   },

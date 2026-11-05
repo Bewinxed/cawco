@@ -180,7 +180,7 @@ import {
 import type { SubagentState } from "#lib/utils/flow-types.js";
 import { browser } from "$app/env";
 import { page as servedPage } from "$app/state";
-import { activityOf, runningSubagents } from "./activity";
+import { activityOf, runningSubagents, sessionActivity } from "./activity";
 import { deletePreview } from "./artifact-api";
 import { Keyed, Pulse, type PulseReading, unlessSame } from "./board.svelte";
 import { currentClientId } from "./client-id";
@@ -9108,43 +9108,15 @@ let waitingWas: ReadonlySet<string> = new Set();
 
 /** What a session needs from you — `idle` for one nothing has been heard from. */
 function activityNow(instanceId: string): Activity {
-  const target = state.sessions[instanceId];
-  // Blocked wins everywhere: a parked permission is broadcast, not
-  // filtered, and a card of its waits on the person whatever its turn does.
-  if (waiting.has(instanceId)) {
-    return "blocked";
-  }
   const row = rowsById.get(instanceId);
-  // Its project is moving for it: working from the move's start (a yes
-  // the move waits on is its parked ask, above).
-  if (row?.status === "moving") {
-    return "working";
-  }
-  const pulse = pulseOf(instanceId);
-  // The daemon's blocked counts every ask of its session, one routed to
-  // its parent too. With the session's asks here, none of them the
-  // person's (`waiting` above), it is at work on its parent's answer; with
-  // none here yet, the pulse heard an ask first.
-  const pulseSays: Activity | undefined =
-    pulse?.activity === "blocked" && target && target.pending.length > 0
-      ? "working"
-      : pulse?.activity;
-  if (pulseSays === "blocked" && !(target && isSubscribed(instanceId))) {
-    return "blocked";
-  }
-  if ((row?.runningDelegates ?? 0) > 0) {
-    return "working";
-  }
-  // An open session's frames are live and authoritative; anything else falls
-  // back to the daemon's pulse — the only word on a session this browser has
-  // not subscribed to, whose frame-fed state is frozen at the tab that closed.
-  if (target && isSubscribed(instanceId)) {
-    return activityOf(target);
-  }
-  if (pulseSays) {
-    return pulseSays;
-  }
-  return target ? activityOf(target) : "idle";
+  return sessionActivity({
+    waiting: waiting.has(instanceId),
+    moving: row?.status === "moving",
+    runningDelegates: row?.runningDelegates ?? 0,
+    session: state.sessions[instanceId],
+    subscribed: isSubscribed(instanceId),
+    pulse: pulseOf(instanceId)?.activity,
+  });
 }
 
 /**
