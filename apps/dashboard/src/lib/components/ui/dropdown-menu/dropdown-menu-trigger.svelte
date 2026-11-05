@@ -7,7 +7,9 @@
    * title, the name of what is on show (the artifact switcher), its glyph
    * and chevron on its words' line: the label role and the strong ink, as
    * the head's own title (SideSurface's `title`; DESIGN.md, The Role, Not
-   * Size Rule, The Mark Line Rule), its padding the title's inset there.
+   * Size Rule, The Mark Line Rule), its padding the title's inset there,
+   * its corner concentric with the card whose head's corner it stands in
+   * (The Concentric Rule; `concentric-md` where no card declares one).
    * `count`: a glyph and the count it holds on one line (a pane head's
    * More: menu-dots, then the counted control's own glyph and its count),
    * at `space-2` in so the three stand where Send keeps its room. `look`: the trigger by its role.
@@ -20,7 +22,7 @@
     variants: {
       face: {
         title:
-          "mark-line type-label min-w-0 gap-space-1 px-space-2 text-ink-strong",
+          "mark-line type-label min-w-0 gap-space-1 px-space-2 text-ink-strong concentric-md",
         count: "mark-line px-space-2",
       },
       look: {

@@ -64,7 +64,7 @@
      .mark-text, centred on the lead mark (the rows under it hold other things) -->
 <div
   data-slot="row"
-  class="group/row relative grid min-h-c-row-h grid-cols-(--row-cols) items-baseline gap-x-space-3 rounded-sm px-space-3 py-space-2 data-stale:opacity-55"
+  class="group/row relative grid min-h-c-row-h grid-cols-(--row-cols) items-baseline gap-x-space-3 concentric-sm px-space-3 py-space-2 data-stale:opacity-55"
   data-flip
   data-artifact={artifact}
   data-kind={kind}

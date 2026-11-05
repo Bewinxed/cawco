@@ -46,7 +46,7 @@
  * | anchor-drift | own code, over reads        | an open popover, menu or listbox whose height changed between two reads of a page holds its top or its bottom |
  * | decoration-spill | own code                 | an outline (offset past the border edge), a hard box-shadow (blur under 1px, by its spread and offsets), a dashed or dotted border, or an absolutely placed ::before/::after that draws, reaching 0.5px past the box it marks (a pseudo's own element, when that draws; not a pseudo flush outside it, which carries it on) or past the nearest box that clips it or rounded box that draws, its own box inside that one; a clip-path or mask is unread |
  * | nested-radius | own code                    | a wash (a fill or gradient, an element's or an absolute pseudo's) that nearly fills a rounded box (one axis within its radius of both ends) and whose corner stands within that radius of the box's corner (the box drawing or clipping) is outer radius less the mean inset, within 1.5px or a quarter of it, plus half the two insets' difference |
- * | state-shape | own code + CSS.forcePseudoState | each control in a bar and each rounded one, with hover, active and focus-visible forced on it in turn (Chromium; transitions held off) and at rest when drawn selected: the fill or ring that state paints anew (its own, a pseudo's, a child's half its size or more) takes the control's radius less its inset where a child or pseudo draws it, and, inside the glass it stands in (the nearest box that draws over it, rounded), the glass's radius less its inset (a capsule's across it), within 1.5px or a tenth (a quarter at a corner) |
+ * | state-shape | own code + CSS.forcePseudoState | each control in a bar and each rounded one, with hover, active and focus-visible forced on it in turn (Chromium; transitions held off) and at rest when drawn selected: the fill or ring that state paints anew (its own, a pseudo's, a child's half its size or more) takes the control's radius less its inset where a child or pseudo draws it, and, inside the glass it stands in (the nearest box that draws over it, rounded, and not scrolling it past its corners), the glass's radius less its inset (a capsule's across it), within 1.5px or a tenth (a quarter at a corner) |
  *
  * A sheet of specimens (a bench) says what a view is on the page itself:
  * each specimen that stands for a screen of its own carries `data-specimen`,
@@ -3639,7 +3639,17 @@ function readInPage(args: InPageArgs): InPageRead {
       });
       return out;
     };
-    /** The glass `el` stands in: the nearest box over it that draws (a fill, an edge, a shadow, its own or a placed pseudo's that holds it), when that is rounded. */
+    /** Whether a box scrolls what it holds: its content moves under its corners. */
+    const scrollsContent = (box: Element) => {
+      const s = style(box);
+      return (
+        (/auto|scroll/u.test(s.overflowY) &&
+          box.scrollHeight > box.clientHeight + 1) ||
+        (/auto|scroll/u.test(s.overflowX) &&
+          box.scrollWidth > box.clientWidth + 1)
+      );
+    };
+    /** The glass `el` stands in: the nearest box over it that draws (a fill, an edge, a shadow, its own or a placed pseudo's that holds it), when that is rounded and holds it still (a box that scrolls it moves it past its corners: where it stands there is the scroll's, not a drawing's). */
     const glassOf = (el: Element): { box: Contour; name: string } | null => {
       const b = el.getBoundingClientRect();
       const holds = (c: Contour) =>
@@ -3654,7 +3664,9 @@ function readInPage(args: InPageArgs): InPageRead {
       ) {
         if (paints(up).length > 0) {
           const c = contourOf(up);
-          return rounded(c) ? { box: c, name: selectorOf(up) } : null;
+          return rounded(c) && !scrollsContent(up)
+            ? { box: c, name: selectorOf(up) }
+            : null;
         }
         for (const which of ["::before", "::after"] as const) {
           const ps = pseudoOf(up, which);
