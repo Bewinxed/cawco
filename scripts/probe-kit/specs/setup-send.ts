@@ -609,7 +609,9 @@ const setupAtCard = async (kit: Kit, fleet: KitFleet) => {
   const shown = await fleet
     .api<{ opened: boolean; href?: string }>(
       `/api/instances/${office.session}/artifacts/${id}/show`,
-      { card: "routines" }
+      // The place a card chip's show names (core `ArtifactPlace`), as
+      // artifact-api.ts `showArtifact` sends it (route body since 5646cadda).
+      { at: { card: "routines" } }
     )
     .catch((error: unknown) => ({
       opened: false,
