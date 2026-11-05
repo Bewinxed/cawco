@@ -237,7 +237,7 @@ interface Queued {
 }
 
 export interface FleetWatchDeps {
-  /** Whether the session has an ask parked on you now. */
+  /** Whether something of the session waits on you now (core `waitingOnYou`): an ask parked, a card or canvas in Needs you. */
   asking: (instanceId: string) => boolean;
   db: Pick<
     DbShape,

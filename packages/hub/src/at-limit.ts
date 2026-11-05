@@ -1086,8 +1086,9 @@ export interface AtLimitPorts {
   /** `row`'s stale hold was taken up or ended: its Needs you notice goes. */
   unstale: (row: Pick<LimitRow, "id">) => void;
   /**
-   * Whether a person waits on `row`: a question or permission of it is
-   * pending, or it is a top-level session whose last turn a person sent.
+   * Whether a person waits on `row`: something of it waits on them (core
+   * `waitingOnYou`: an ask parked, a card or canvas in Needs you), or it is
+   * a top-level session whose last turn a person sent.
    * Admission takes these first.
    */
   waitedOn: (row: LimitRow) => boolean;

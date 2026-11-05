@@ -69,7 +69,6 @@ import {
 import { signInWarning } from "../machine";
 import { type MarkHue, markHue } from "../mark";
 import { heldOrder } from "../motion/held-order.svelte";
-import { notices } from "../notices.svelte";
 import { asksHere, deskAsks, onPhone, person } from "../person.svelte";
 import {
   listTasksWaiting,
@@ -1498,41 +1497,38 @@ class Home {
       }))
     );
     // The artifacts waiting on you, each under its session as an ask is;
-    // one put away with Not now (the hub's `parked`, and here at once its
-    // acknowledged id) waits in Files until it is raised again.
-    const artifacts: NeedsItem[] = cawco.artifactNeeds
-      .filter((need) => !(need.parked || notices.seen.has(need.notNow)))
-      .map((need) => {
-        const row = cawco.instanceIndex.byId.get(need.instanceId);
-        const machine = cawco.machines.find(
-          (one) => one.machineId === need.machineId
-        );
-        return {
-          kind: "artifact" as const,
-          key: `artifact:${need.artifactId}`,
-          artifactId: need.artifactId,
-          artifactKind: need.artifactKind,
-          instanceId: need.instanceId,
-          machineId: need.machineId,
-          cwd: row?.cwd ?? "",
-          title: need.ask,
-          name: need.name,
-          pending: need.pending,
-          stop: need.stop,
-          unsent: need.unsent,
-          ownSend: need.ownSend,
-          notNow: need.notNow,
-          raisedAt: need.raisedAt,
-          href: need.href,
-          place: row ? placeOfRow(row) : machineName(need.machineId),
-          project: row ? projectMarkOfRow(row) : null,
-          machine: {
-            name: machineName(need.machineId),
-            os: machine?.os ?? "",
-          },
-          stale: machine?.status !== "online",
-        };
-      });
+    // one put away with Not now waits in Files until it is raised again.
+    const artifacts: NeedsItem[] = cawco.artifactNeedsOpen.map((need) => {
+      const row = cawco.instanceIndex.byId.get(need.instanceId);
+      const machine = cawco.machines.find(
+        (one) => one.machineId === need.machineId
+      );
+      return {
+        kind: "artifact" as const,
+        key: `artifact:${need.artifactId}`,
+        artifactId: need.artifactId,
+        artifactKind: need.artifactKind,
+        instanceId: need.instanceId,
+        machineId: need.machineId,
+        cwd: row?.cwd ?? "",
+        title: need.ask,
+        name: need.name,
+        pending: need.pending,
+        stop: need.stop,
+        unsent: need.unsent,
+        ownSend: need.ownSend,
+        notNow: need.notNow,
+        raisedAt: need.raisedAt,
+        href: need.href,
+        place: row ? placeOfRow(row) : machineName(need.machineId),
+        project: row ? projectMarkOfRow(row) : null,
+        machine: {
+          name: machineName(need.machineId),
+          os: machine?.os ?? "",
+        },
+        stale: machine?.status !== "online",
+      };
+    });
     // A fleet MCP server's sign-in that ended without the person.
     const signIns: NeedsItem[] = (cawco.fleetMcp ?? []).flatMap((server) => {
       const ended = server.auth?.state === "needs-auth" && server.auth.ended;

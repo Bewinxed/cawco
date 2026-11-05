@@ -27,7 +27,7 @@ import type {
   RefusalVerdict,
 } from "@cawco/core/accounts";
 import type { ApprovedActionView } from "@cawco/core/actions";
-import type { Activity } from "@cawco/core/activity";
+import { type Activity, waitingOnYou } from "@cawco/core/activity";
 import type {
   ArtifactNeed,
   ArtifactNeedNotice,
@@ -9107,11 +9107,47 @@ export async function takeOverBrowser(
   }
 }
 
+/**
+ * Needs you's artifacts as this page lists them: the hub's, less the ones
+ * put away with Not now (the hub's `parked`, and here at once its
+ * acknowledged id, before the hub's frame says so).
+ */
+const artifactNeedsOpen = $derived(
+  state.artifactNeeds.filter(
+    (need) => !(need.parked || notices.seen.has(need.notNow))
+  )
+);
+
+/**
+ * The sessions waiting on the person (core `waitingOnYou`): an ask parked
+ * under it, or an artifact of it in Needs you. The set it gave before while
+ * it holds the same sessions, so a frame that moved an ask's words wakes no
+ * row's activity.
+ */
+const waiting = $derived.by((): ReadonlySet<string> => {
+  const now = waitingOnYou({
+    asks: Object.values(state.sessions).filter(
+      (target) => target.pending.length > 0
+    ),
+    artifacts: artifactNeedsOpen,
+  });
+  if (
+    now.size === waitingWas.size &&
+    [...now].every((id) => waitingWas.has(id))
+  ) {
+    return waitingWas;
+  }
+  waitingWas = now;
+  return now;
+});
+let waitingWas: ReadonlySet<string> = new Set();
+
 /** What a session needs from you — `idle` for one nothing has been heard from. */
 function activityNow(instanceId: string): Activity {
   const target = state.sessions[instanceId];
-  // Blocked wins everywhere: a parked permission is broadcast, not filtered.
-  if (target && target.pending.length > 0) {
+  // Blocked wins everywhere: a parked permission is broadcast, not
+  // filtered, and a card of its waits on the person whatever its turn does.
+  if (waiting.has(instanceId)) {
     return "blocked";
   }
   const row = rowsById.get(instanceId);
@@ -9575,6 +9611,10 @@ export const cawco = {
   /** The artifacts waiting on the person, longest wait first. */
   get artifactNeeds(): ArtifactNeed[] {
     return state.artifactNeeds;
+  },
+  /** Needs you's artifacts, less the ones put away with Not now: what Needs you lists, and a session's mark reads. */
+  get artifactNeedsOpen(): ArtifactNeed[] {
+    return artifactNeedsOpen;
   },
   /** The artifacts' notices, newest first. */
   get artifactNotices(): ArtifactNeedNotice[] {

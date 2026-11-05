@@ -5,6 +5,7 @@
  *   attempt failed);
  * - a session of one of its attempts asks you something (a permission or a
  *   question its parent does not answer): live, from the fleet's asks;
+ * - a session of one of its attempts has a card or canvas in Needs you;
  * - an approved action filed for it waits on your decision, or failed.
  *
  * The project a card stands in is the page's (`setTaskProject`): an
@@ -22,6 +23,14 @@ export const asksOf = (task: Attempted) => {
   return cawco.blocked.filter((blocked) => sessions.has(blocked.instanceId));
 };
 
+/** The cards and canvases its attempts' sessions have in Needs you. */
+const cardsOf = (task: Attempted) => {
+  const sessions = new Set(task.attempts.map((attempt) => attempt.instanceId));
+  return cawco.artifactNeedsOpen.filter((need) =>
+    sessions.has(need.instanceId)
+  );
+};
+
 /** The approved actions filed for it that wait on you. */
 export const actionsOf = (projectId: string, taskId: string) =>
   cawco.actions.filter(
@@ -35,6 +44,7 @@ export const waitsOnYou = (
 ): boolean =>
   task.needsYou ||
   asksOf(task).length > 0 ||
+  cardsOf(task).length > 0 ||
   actionsOf(projectId, task.id).length > 0;
 
 const KEY = Symbol("task-project");

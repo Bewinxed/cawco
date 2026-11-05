@@ -13,7 +13,8 @@
  * - `reconnecting` while the hub is unreachable, `loading` while another
  *   project's board is on its way past its grace;
  * - `loading` until the project's row is read (shown past its grace);
- * - `needs-you` while the conversation has an ask parked;
+ * - `needs-you` while something of the conversation waits on you (core
+ *   `waitingOnYou`): an ask parked, a card or canvas of his in Needs you;
  * - `working` while it is in a turn;
  * - `sleeping` otherwise while events are off: only your words wake him;
  * - `trying` while an attempt at a task runs again after a failed one;
@@ -26,6 +27,7 @@
  * panel says it too (project-caps.ts in the hub).
  */
 
+import type { ArtifactNeed } from "@cawco/core/artifact-needs";
 import { bringIntoView } from "@cawco/core/bring-into-view";
 import type { HarnessKind } from "@cawco/core/harness";
 import {
@@ -511,6 +513,17 @@ export class CawLead {
     return id ? cawco.blocked.filter((row) => row.instanceId === id) : [];
   });
 
+  /**
+   * His cards and canvases in Needs you (a decision page with a card not
+   * picked, a canvas to judge, a pin asking), oldest first.
+   */
+  readonly cards = $derived.by((): ArtifactNeed[] => {
+    const id = this.conversationId;
+    return id
+      ? cawco.artifactNeedsOpen.filter((need) => need.instanceId === id)
+      : [];
+  });
+
   /** The attempt running again after a failed one, if any. */
   readonly retrying = $derived.by(() => this.#tasks().find(isRetry) ?? null);
 
@@ -526,12 +539,15 @@ export class CawLead {
     if (!this.project) {
       return "loading";
     }
-    if (this.asks.length > 0) {
+    // Something of his waits on you (core `waitingOnYou`): an ask, or a
+    // card or canvas of his in Needs you. His row's mark and his tab's
+    // glyph read the same.
+    const id = this.conversationId;
+    if (id && cawco.activityOf(id) === "blocked") {
       return "needs-you";
     }
     // The conversation's own turn: an attempt it parents running is not Caw
     // working. Off, it still answers your words, and works while it does.
-    const id = this.conversationId;
     if (id && cawco.busyOf(id)) {
       return "working";
     }
@@ -589,9 +605,11 @@ export class CawLead {
       case "loading":
         return this.#reading() ? "Reading the board…" : null;
       case "needs-you":
-        // Its asks are Approve cards: its questions are decision pages.
+        // Its asks are Approve cards; its cards say what they ask of you.
         return (
-          this.asks[0]?.request.presentation.summary || "Caw asks you something"
+          this.asks[0]?.request.presentation.summary ||
+          this.cards[0]?.ask ||
+          "Caw asks you something"
         );
       case "working": {
         const id = this.conversationId;

@@ -429,6 +429,7 @@ import {
   WORKSPACE_CREATE_TIMEOUT_MS,
   type WorkInFlight,
   waitArtifact,
+  waitingOnYou,
   windowWords,
   withMovedLine,
   withReminder,
@@ -14523,6 +14524,14 @@ export const createServer = (
     },
   });
   /**
+   * The sessions waiting on the person now (core `waitingOnYou`): an ask
+   * parked under it, or an artifact of it in Needs you. Find's state, fleet
+   * watch's stall sweep and an account's admission read it, as every
+   * screen's mark does.
+   */
+  const waitingNow = (): Set<string> =>
+    waitingOnYou({ asks: pending.list(), artifacts: artifactLane.now().needs });
+  /**
    * A page's picks or pins moved: once the burst is over, each project whose
    * tasks wait on a card or pin of it looks again (tasks.ts `waitsMoved`:
    * readiness is live, and a live attempt dispatched on a card answered
@@ -26308,12 +26317,7 @@ export const createServer = (
     purged: () => db.find.purged(),
     refreshInstances: refreshBoard,
     online: (machineId) => registry.agent(machineId) !== undefined,
-    needsYou: () =>
-      new Set(
-        pending
-          .list()
-          .flatMap((ask) => (ask.instanceId ? [ask.instanceId] : []))
-      ),
+    needsYou: waitingNow,
     artifactNeeds: () => artifactLane.now(),
     stageKinds: async (projectId) =>
       new Map(
@@ -26411,8 +26415,7 @@ export const createServer = (
   // Fleet watch (fleet-watch.ts): code detectors, Jev as the gate, one
   // triage run per episode whose word goes to the session's steward.
   watch = createFleetWatch({
-    asking: (instanceId) =>
-      pending.list().some((ask) => ask.instanceId === instanceId),
+    asking: (instanceId) => waitingNow().has(instanceId),
     db,
     end: (instanceId) =>
       endSession(instanceId, "stop", {
@@ -30900,10 +30903,10 @@ export const createServer = (
     idle: sessionIdle,
     admission,
     cacheExpiresAt: cacheExpiry,
-    // A question or permission of its pending, or a top-level session a
-    // person wrote to last.
+    // Something of it waiting on the person (an ask, a card), or a
+    // top-level session a person wrote to last.
     waitedOn: (row) =>
-      pending.list().some((ask) => ask.instanceId === row.id) ||
+      waitingNow().has(row.id) ||
       (!row.parentInstanceId &&
         db
           .sendsIn(row.id, ["read", "pending", "failed"])

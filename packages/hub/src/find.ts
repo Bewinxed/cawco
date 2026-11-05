@@ -312,7 +312,7 @@ export interface FindDeps {
       }
     | { error: string }
   >;
-  /** The sessions waiting on the person: a permission or a question parked for them. */
+  /** The sessions waiting on the person (core `waitingOnYou`): an ask parked for them, or an artifact of it in Needs you. */
   needsYou: () => ReadonlySet<string>;
   /** Whether the hub holds `machineId`'s socket now. */
   online: (machineId: string) => boolean;
