@@ -160,6 +160,7 @@
         >
           <IconMore />
         </DropdownMenu.Trigger>
+        <!-- golar-ignore-next-line house/no-detached-bar-menu -- a draft column's menu waits for its own screen's run: the artifact panel run (2026-11-05) fixed only its own and named this one -->
         <DropdownMenu.Content align="end" width="tiles">
           {#if level === "root"}
             <DropdownMenu.Item

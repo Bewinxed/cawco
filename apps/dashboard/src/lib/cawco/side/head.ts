@@ -26,6 +26,13 @@ export interface HeadItem {
   key: string;
   /** The same control as More's entries. */
   menu: Snippet;
+  /**
+   * Where it stands in the head (HIG, Toolbars, Item groupings): in the
+   * trailing glass of bare symbols (none), the centre (the mode, a
+   * segmented control), or after the glass as the one prominent action
+   * (Send, Take over).
+   */
+  place?: "centre" | "prominent";
   /** Its place in {@link HEAD_PRIORITY}: the lower stands while the higher goes to More. */
   priority: number;
   /** `bar` says words its glyph and count stand without (Send, Comments): drawn `compact`, they go, and they come back only on a pane {@link WORDS_FROM}px or wider. */

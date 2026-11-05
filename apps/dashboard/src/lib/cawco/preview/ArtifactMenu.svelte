@@ -1,14 +1,17 @@
 <script lang="ts">
   /**
-   * The artifact panel's title control (the artifact panel's surface brief, Artifact panel, canvas and
-   * ink): the shown artifact's title as a menu button listing the session's
-   * artifacts, newest first, each promoted one tagged with its commit and
+   * The artifact panel's title control (the artifact panel's surface brief,
+   * The head): the shown artifact's title, the HIG's bar title (Headline:
+   * plain text, the row role) with a menu chevron, opening the session's
+   * artifacts, newest first, as a card hung from the title (BarGlass
+   * `form="title"`, BarMenu), one shape with it, as Caw's card hangs from
+   * his glass. Each is named by its title, the words its agent wrote, never
+   * its slug, which is an id; each promoted one tagged with its commit and
    * each waiting on the person (core artifact-needs.ts) wearing the
    * needs-you dot, the status's own glyph ink (The Glyph, Word, Hue Rule);
    * choosing one shows it.
-   * Its line (the ask, or "Sent to <session>") stands under it in the head's
-   * subtitle (SideSurface); where the head drops it, it is the menu's first
-   * row, and always the control's title and description. Each row's Remove (its trailing glyph, or Delete
+   * Its line (the ask, or "Sent to <session>") is the menu's first row, and
+   * the control's tooltip and description; never a line under the title. Each row's Remove (its trailing glyph, or Delete
    * or Backspace on the highlighted row) removes it where it stands: a light
    * action, no confirm; focus goes on to the row that takes its place. The row leaves once the hub says it is gone, closing as the
    * rows under it slide up (motion/rows), in every tab: the panel's frame
@@ -27,6 +30,7 @@
   import type { Component } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { SvelteSet } from "svelte/reactivity";
+  import { BarGlass, BarMenu } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
     IconArtifactCanvas,
@@ -49,17 +53,14 @@
     held,
     line,
     lineId,
-    lineDropped,
     shown,
     onrefused,
   }: {
     instanceId: string;
-    /** The head's line under the title (the ask, or "Sent to <session>"); empty: the title alone. */
+    /** What describes the title (the ask, or "Sent to <session>"); empty: the title alone. */
     line: string;
-    /** The head's line's element (SideSurface's subtitle), which describes this control. */
+    /** The description's element (SideSurface's subtitle), which describes this control. */
     lineId: string;
-    /** The head dropped the line for want of room: the menu says it first. */
-    lineDropped: boolean;
     /**
      * The session's artifacts by id, as its panel's frame lists them: a row
      * whose id leaves it (removed in any tab, or by the agent) leaves the
@@ -246,141 +247,150 @@
   });
 </script>
 
-<DropdownMenu.Root bind:open>
-  <!-- The head's title as a control: the kit's sm ghost in the title face. -->
-  <DropdownMenu.Trigger
-    data-artifact-trigger
-    aria-describedby={line ? lineId : undefined}
-    class="max-w-full"
-    data-artifact={shown.id}
-    face="title"
-    size="sm"
-    title={line || undefined}
-    variant="ghost"
-  >
-    {@const Glyph = GLYPHS[shown.kind]}
-    <Glyph />
-    <span
-      class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
-      data-slot="artifact-name">{shown.title}</span
-    >
-    <IconChevronDown />
-  </DropdownMenu.Trigger>
-  <DropdownMenu.Content
-    data-artifact-list
-    align="start"
-    width="wide"
-    bind:ref={list}
-  >
-    {#if line && lineDropped}
-      <DropdownMenu.Label data-slot="menu-line" kind="line"
-        >{line}</DropdownMenu.Label
-      >
-    {/if}
-    <RowFault
-      again={readList}
-      data-artifact-list-refused
-      indent="calc(var(--spacing) * 2.5)"
-      end="calc(var(--spacing) * 2.5)"
-      reason={refusals.reason(listKey)}
-    />
-    <div {@attach reflow()} {@attach keepFocus}>
-      {#each rows as artifact (artifact.id)}
-        {@const Glyph = GLYPHS[artifact.kind]}
-        <DropdownMenu.Item
-          data-artifact-row
-          aria-busy={removing.has(artifact.id) || undefined}
-          aria-current={artifact.id === shown.id || undefined}
-          aria-keyshortcuts="Delete Backspace"
-          aria-labelledby={[
-            part(artifact.id, "name"),
-            artifact.promoted ? part(artifact.id, "promoted") : "",
-            artifact.waiting ? part(artifact.id, "waiting") : "",
-            artifact.createdAt ? part(artifact.id, "age") : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-          class="group/artifact"
-          data-artifact={artifact.id}
-          data-flip
-          marks="current-busy"
-          row="artifact"
-          onkeydown={(event: KeyboardEvent) => {
-            if (event.key === "Delete" || event.key === "Backspace") {
-              event.preventDefault();
-              remove(artifact);
-            }
-          }}
-          onSelect={() => choose(artifact)}
+<!-- The title: plain text with its menu chevron, no glass at rest; open,
+     its card hangs from it and the join is its ground. -->
+<BarGlass flare="end" form="title">
+  <DropdownMenu.Root bind:open>
+    <DropdownMenu.Trigger>
+      {#snippet child({ props })}
+        <button
+          {...props}
+          data-artifact-trigger
+          aria-describedby={line ? lineId : undefined}
+          class="select-none touch-hit press-tint mark-line max-w-full gap-space-1 ps-space-2 pe-space-1"
+          data-artifact={shown.id}
+          data-bar-item
+          data-box
+          title={line || undefined}
+          type="button"
         >
-          <Glyph />
-          <!-- The name and its promoted tag on one line: the name whole while
+          <span
+            class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong type-row"
+            data-slot="name-lead">{shown.title}</span
+          >
+          <IconChevronDown
+            aria-hidden="true"
+            class="size-icon-sm flex-none text-ink-muted"
+          />
+        </button>
+      {/snippet}
+    </DropdownMenu.Trigger>
+    <BarMenu
+      data-artifact-list
+      label={artifactWords.artifacts}
+      width="wide"
+      bind:ref={list}
+    >
+      {#if line}
+        <DropdownMenu.Label data-slot="menu-line" kind="line"
+          >{line}</DropdownMenu.Label
+        >
+      {/if}
+      <RowFault
+        again={readList}
+        data-artifact-list-refused
+        indent="calc(var(--spacing) * 2.5)"
+        end="calc(var(--spacing) * 2.5)"
+        reason={refusals.reason(listKey)}
+      />
+      <div {@attach reflow()} {@attach keepFocus}>
+        {#each rows as artifact (artifact.id)}
+          {@const Glyph = GLYPHS[artifact.kind]}
+          <DropdownMenu.Item
+            data-artifact-row
+            aria-busy={removing.has(artifact.id) || undefined}
+            aria-current={artifact.id === shown.id || undefined}
+            aria-keyshortcuts="Delete Backspace"
+            aria-labelledby={[
+              part(artifact.id, "name"),
+              artifact.promoted ? part(artifact.id, "promoted") : "",
+              artifact.waiting ? part(artifact.id, "waiting") : "",
+              artifact.createdAt ? part(artifact.id, "age") : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            class="group/artifact"
+            data-artifact={artifact.id}
+            data-flip
+            marks="current-busy"
+            row="artifact"
+            onkeydown={(event: KeyboardEvent) => {
+              if (event.key === "Delete" || event.key === "Backspace") {
+                event.preventDefault();
+                remove(artifact);
+              }
+            }}
+            onSelect={() => choose(artifact)}
+          >
+            <Glyph />
+            <!-- The name and its promoted tag on one line: the name whole while
                it fits, the tag giving way first. -->
-          <span class="flex min-w-0 flex-auto gap-inherit" data-box>
-            <span
-              data-slot="row-name"
-              class="max-w-full flex-none overflow-clip text-ellipsis whitespace-nowrap type-label"
-              id={part(artifact.id, "name")}>{artifact.title}</span
-            >
-            {#if artifact.promoted}
+            <span class="flex min-w-0 flex-auto gap-inherit" data-box>
               <span
-                data-slot="row-promoted"
-                class="min-w-0 flex-initial overflow-clip text-ellipsis whitespace-nowrap text-ink-muted text-size-meta num"
-                id={part(artifact.id, "promoted")}
-                title={artifactWords.promotedTitle}
-                >{artifactWords.promoted(
-                  artifact.promoted.commit.slice(0, 7)
-                )}</span
+                data-slot="row-name"
+                class="max-w-full flex-none overflow-clip text-ellipsis whitespace-nowrap type-label"
+                id={part(artifact.id, "name")}>{artifact.title}</span
+              >
+              {#if artifact.promoted}
+                <span
+                  data-slot="row-promoted"
+                  class="min-w-0 flex-initial overflow-clip text-ellipsis whitespace-nowrap text-ink-muted text-size-meta num"
+                  id={part(artifact.id, "promoted")}
+                  title={artifactWords.promotedTitle}
+                  >{artifactWords.promoted(
+                    artifact.promoted.commit.slice(0, 7)
+                  )}</span
+                >
+              {/if}
+            </span>
+            {#if artifact.waiting}
+              <!-- The needs-you dot (DESIGN.md, Status dot), its words for the
+                 screen reader. -->
+              <span
+                data-slot="row-waiting"
+                aria-label={artifactWords.waitingOnYou}
+                class="size-(--status-dot-size) flex-none rounded-pill bg-status-attn-glyph"
+                data-box
+                id={part(artifact.id, "waiting")}
+                role="img"
+              ></span>
+            {/if}
+            {#if artifact.createdAt}
+              <span
+                data-slot="row-age"
+                class="text-ink-muted text-size-meta num"
+                id={part(artifact.id, "age")}
+                >{formatAgeShort(Date.parse(artifact.createdAt))}</span
               >
             {/if}
-          </span>
-          {#if artifact.waiting}
-            <!-- The needs-you dot (DESIGN.md, Status dot), its words for the
-                 screen reader. -->
-            <span
-              data-slot="row-waiting"
-              aria-label={artifactWords.waitingOnYou}
-              class="size-(--status-dot-size) flex-none rounded-pill bg-status-attn-glyph"
+            <button
               data-box
-              id={part(artifact.id, "waiting")}
-              role="img"
-            ></span>
-          {/if}
-          {#if artifact.createdAt}
-            <span
-              data-slot="row-age"
-              class="text-ink-muted text-size-meta num"
-              id={part(artifact.id, "age")}
-              >{formatAgeShort(Date.parse(artifact.createdAt))}</span
+              aria-label={artifactWords.removeNamed(artifact.title)}
+              class="select-none grid place-items-center -me-space-1 p-space-1 border-none border-current rounded-sm bg-transparent text-ink-muted opacity-0 transition-[opacity,color] duration-(--dur-control) ease-out hover:text-error-9 coarse:opacity-100 group-data-highlighted/artifact:opacity-100"
+              disabled={removing.has(artifact.id)}
+              onclick={(event) => {
+                own(event);
+                remove(artifact);
+              }}
+              onpointerdown={own}
+              onpointerup={own}
+              tabindex={-1}
+              title={artifactWords.remove}
+              type="button"
             >
-          {/if}
-          <button
-            data-box
-            aria-label={artifactWords.removeNamed(artifact.title)}
-            class="select-none grid place-items-center -me-space-1 p-space-1 border-none border-current rounded-sm bg-transparent text-ink-muted opacity-0 transition-[opacity,color] duration-(--dur-control) ease-out hover:text-error-9 coarse:opacity-100 group-data-highlighted/artifact:opacity-100"
-            disabled={removing.has(artifact.id)}
-            onclick={(event) => {
-              own(event);
-              remove(artifact);
-            }}
-            onpointerdown={own}
-            onpointerup={own}
-            tabindex={-1}
-            title={artifactWords.remove}
-            type="button"
-          >
-            <IconTrash />
-          </button>
-        </DropdownMenu.Item>
-        <RowFault
-          again={() => remove(artifact)}
-          data-artifact-remove-refused={artifact.id}
-          data-flip
-          indent="calc(var(--spacing) * 2.5)"
-          end="calc(var(--spacing) * 2.5)"
-          reason={refusals.reason(removeKey(artifact.id))}
-        />
-      {/each}
-    </div>
-  </DropdownMenu.Content>
-</DropdownMenu.Root>
+              <IconTrash />
+            </button>
+          </DropdownMenu.Item>
+          <RowFault
+            again={() => remove(artifact)}
+            data-artifact-remove-refused={artifact.id}
+            data-flip
+            indent="calc(var(--spacing) * 2.5)"
+            end="calc(var(--spacing) * 2.5)"
+            reason={refusals.reason(removeKey(artifact.id))}
+          />
+        {/each}
+      </div>
+    </BarMenu>
+  </DropdownMenu.Root>
+</BarGlass>

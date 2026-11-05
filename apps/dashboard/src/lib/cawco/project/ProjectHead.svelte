@@ -498,6 +498,7 @@
         <!-- An end asked here keeps the focus its tray took, and the New
              Session form a Spin off opened keeps the focus it took: the menu
              doesn't hand it back to More as it closes. -->
+        <!-- golar-ignore-next-line house/no-detached-bar-menu -- the project head's More waits for its own screen's run: the artifact panel run (2026-11-05) fixed only its own and named this one -->
         <DropdownMenu.Content
           align="end"
           width="regular"

@@ -197,6 +197,7 @@
                   </Button>
                 {/snippet}
               </DropdownMenu.Trigger>
+              <!-- golar-ignore-next-line house/no-detached-bar-menu -- the editor frame's menu waits for its own screen's run: the artifact panel run (2026-11-05) fixed only its own and named this one -->
               <DropdownMenu.Content align="end" class="w-auto" min="regular">
                 <DropdownMenu.Item
                   disabled={down !== null || deleting || saving}
