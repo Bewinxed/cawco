@@ -56,3 +56,55 @@ export const delegatePeekWords = {
   lastWords: (when: string, text: string) => `Last words (${when}): ${text}`,
   lastWordsNone: "Last words: none yet.",
 };
+
+/**
+ * What a parent is told while its delegate waits on the person (hub
+ * delegate-waits.ts): the ask the person alone holds, an ask it was handed
+ * that went to the person, and how each ended. Its transcript draws each as
+ * a note titled by its line (core injected.ts `delegateWaitNotice`); the
+ * agent reads the body.
+ */
+export const delegateWaitWords = {
+  /** The note's kind, as the parent's transcript draws it. */
+  noteKind: "Delegate",
+  /** The note's title, by what it tells. */
+  waitsLine: (delegate: string) => `${delegate} waits on the person`,
+  personsNowLine: (delegate: string) => `${delegate}'s ask is the person's now`,
+  endedLine: (delegate: string) => `${delegate}'s ask to the person ended`,
+  tookOverLine: (delegate: string) =>
+    `The person took over ${delegate}'s browser`,
+  /** An ask only the person answers: a browser to take over, or anything else. */
+  browserHeld: (delegate: string, origin: string, reason: string) =>
+    `Your delegate ${delegate} asked the person to take over its browser on ${origin}: “${reason}”.`,
+  held: (delegate: string, what: string) =>
+    `Your delegate ${delegate} asked the person: “${what}”.`,
+  personOnly:
+    "Only the person can answer it, so answer_delegate is refused for it. Its work waits on them: tell them if they may not have seen it, and plan around the wait. You hear here when it ends.",
+  /** An ask handed to the parent that went to the person when the parent ended its rest unanswered. */
+  personsNow: (delegate: string, request: string) =>
+    `Your delegate ${delegate}'s ask (request ${request}) went unanswered while you were at rest, so it waits on the person now, on every screen and their phone. You may still answer it with answer_delegate. You hear here when it ends.`,
+  /** How the ask ended, after what it asked. */
+  ended: (delegate: string, what: string, how: string) =>
+    `Your delegate ${delegate}'s ask “${what}” ended: ${how}`,
+  approved: (by: string) => `${by} approved it.`,
+  denied: (by: string) => `${by} denied it.`,
+  answered: (by: string) =>
+    `${by} answered it; your delegate reads the answer.`,
+  declined: (by: string) =>
+    `${by} declined it; your delegate was told their words.`,
+  /** Who answered, by where: the person on a named device, the person, another session. */
+  thePersonOn: (device: string) => `the person, on ${device},`,
+  thePerson: "the person",
+  harness: "it was answered in its session's own interface.",
+  tookOver:
+    "the person took over its browser. Its call waits until they hand it back; you hear here when they do.",
+  handedBack: (origin: string | null) =>
+    `the person handed its browser back${origin ? ` on ${origin}` : ""}, and your delegate goes on.`,
+  connected: "the person signed the hub in, and your delegate goes on.",
+  withdrawn: "it was withdrawn before anyone answered it.",
+  /** Settled by the hub with no answer it can name (a move whose job ended). */
+  settled: "it no longer waits on anyone.",
+  /** A parent's answer_delegate to an ask only the person answers, refused. */
+  refused:
+    "That ask waits on the person; only they answer it. Tell them, or plan around the wait.",
+};

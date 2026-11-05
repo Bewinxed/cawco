@@ -18,6 +18,7 @@
 import type { Envelope, InstanceRow, PermissionResult } from "@cawco/core";
 import { BROWSER_ASK_TOOL, type BrowserAskFrame } from "@cawco/core";
 import type { BrowserKey } from "@cawco/core/browser";
+import { browserAskWords } from "@cawco/core/words/browser";
 import { z } from "zod";
 import { tool } from "./mcp-tool";
 import { parkedToolAsk, refuseSecondAsk } from "./parked-ask";
@@ -33,8 +34,8 @@ export type BrowserAskAnswer =
 /** What the person did with the browser, in words: what the asking agent reads. */
 const browserAnsweredWords = (answer: BrowserAskAnswer): string =>
   answer.outcome === "declined"
-    ? `They declined: ${answer.words}`
-    : `They handed the browser back${answer.origin ? `, on ${answer.origin}` : "; it did not say which origin it was on"}. Go on in your browser tool.`;
+    ? browserAskWords.declined(answer.words)
+    : browserAskWords.handedBack(answer.origin);
 
 /** The longest reason the person reads. */
 const REASON_MAX = 300;
@@ -68,6 +69,15 @@ export interface BrowserAsksDeps {
     key: BrowserKey;
     machineId: string;
   };
+  /**
+   * The person handed back the browser session `instanceId`'s ask had them
+   * take over: its call answers now (delegate-waits.ts tells its parent).
+   */
+  readonly handedBack: (
+    instanceId: string,
+    ask: BrowserAskFrame,
+    origin: string | null
+  ) => void;
   /** Parks the ask for the person: the pending ledger, every screen, push. */
   readonly park: (envelope: Envelope) => void;
   /** Takes an answered ask off the pending ledger. */
@@ -199,6 +209,7 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
             deps.settle(id);
           }
           waiter.resolve({ outcome: "handed_back", origin });
+          deps.handedBack(waiter.instanceId, waiter.ask, origin);
         }
       }
     },

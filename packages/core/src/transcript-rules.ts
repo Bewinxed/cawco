@@ -51,6 +51,7 @@ import {
 import {
   parseArtifactNotice,
   parseDelegateAsk,
+  parseDelegateWaitNotice,
   parseFleetWatchNudge,
   parseForkNotice,
   parseHandoffMarker,
@@ -70,6 +71,7 @@ import type {
   TranscriptBranch,
 } from "./transcript-types";
 import { contextWords } from "./words/context";
+import { delegateWaitWords } from "./words/delegates";
 import { noticeLine, noticeWords } from "./words/notices";
 
 type AssistantBlock = NeutralAssistantMessage["message"]["content"][number];
@@ -1713,7 +1715,8 @@ export function turnStart(
 /**
  * A note the hub wrote into the session, drawn as one: fleet watch's nudge
  * to this session, its steward (the same note the watched session's transcript
- * draws), or the hub's word to a fork about the delegates in the history it
+ * draws), the hub's word to a parent while its delegate waits on the person,
+ * or the hub's word to a fork about the delegates in the history it
  * copied. Null for any other text.
  */
 function hubNoteBlock(text: string, base: BlockBase): TranscriptBlock | null {
@@ -1727,6 +1730,18 @@ function hubNoteBlock(text: string, base: BlockBase): TranscriptBlock | null {
         subtype: FLEET_WATCH,
         noteKind: "Fleet watch",
         noteTitle: nudge.line,
+      },
+    };
+  }
+  const wait = parseDelegateWaitNotice(text);
+  if (wait) {
+    return {
+      ...base,
+      type: "ui.system_note",
+      content: wait.body,
+      metadata: {
+        noteKind: delegateWaitWords.noteKind,
+        noteTitle: wait.line,
       },
     };
   }

@@ -884,6 +884,29 @@ export function parseForkNotice(
   return { line, body: afterLine(tag.rest, forkLine(line)) };
 }
 
+/** The words a delegate-wait notice opens with. */
+const delegateWaitLine = (line: string): string => `[Delegate] ${line}\n\n`;
+
+/**
+ * The hub's word to a parent while its delegate waits on the person
+ * (packages/hub `delegate-waits.ts`): the ask the person holds, or how it
+ * ended. A transcript draws it as a note titled by its line.
+ */
+export const delegateWaitNotice = (line: string, body: string): string =>
+  `${markerTag("delegate-wait", { line })}${delegateWaitLine(line)}${body}`;
+
+/** A delegate-wait notice read back into its line and what it says. */
+export function parseDelegateWaitNotice(
+  text: string
+): { line: string; body: string } | null {
+  const tag = tagOf(text, "delegate-wait");
+  if (!tag) {
+    return null;
+  }
+  const { line = "" } = tag.fields;
+  return { line, body: afterLine(tag.rest, delegateWaitLine(line)) };
+}
+
 /** How a report's turn ended, as its tag says it. */
 type ReportOutcome = "complete" | "failed" | "notice";
 

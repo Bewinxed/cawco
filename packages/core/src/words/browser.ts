@@ -59,3 +59,10 @@ export const browserWords = {
   tryAgain: commonWords.tryAgain,
   tryingAgain: "Trying again…",
 };
+
+/** What a `browser_ask` call answers its agent (hub browser-tools.ts): the person's decline, or their hand-back. */
+export const browserAskWords = {
+  declined: (words: string) => `They declined: ${words}`,
+  handedBack: (origin: string | null) =>
+    `They handed the browser back${origin ? `, on ${origin}` : "; it did not say which origin it was on"}. Go on in your browser tool.`,
+};

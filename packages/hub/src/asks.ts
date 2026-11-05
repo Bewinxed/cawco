@@ -38,7 +38,8 @@
  * can give it a turn again ({@link withdrawEnded}). Nothing else expires it.
  *
  * A delegate's question is told to its parent too, which may answer it with
- * `answer_delegate` (server.ts); an approve ask is the person's alone. A
+ * `answer_delegate` (server.ts); an approve ask is the person's alone, and
+ * its parent is told the person holds it (delegate-waits.ts). A
  * question is never answered by Full Send. A session in Full Send is never
  * asked to approve (the owner, 2026-10-22: "FULL SEND LITERALLY MEANS FULL
  * SEND"): its write still needs its `reason`, then runs at once, approved by
@@ -168,7 +169,11 @@ export interface AsksDeps {
   readonly ended: (instanceId: string) => boolean;
   /** The session that asked, as the hub holds it now. */
   readonly instance: (instanceId: string) => InstanceRow | undefined;
-  /** Puts an ask on every screen and push (server.ts `parkForPerson`). */
+  /**
+   * Puts an ask on every screen and push, and tells a delegate's parent
+   * (server.ts `parkForPerson`, delegate-waits.ts): a question it may
+   * answer with `answer_delegate`, an approval as the person's alone.
+   */
   readonly park: (envelope: Envelope) => void;
   /**
    * Writes again the line the person's transcript says of the send `uuid`
@@ -212,12 +217,6 @@ export interface AsksDeps {
     origin: string,
     uuid?: string
   ) => void;
-  /**
-   * Tells a delegate's parent of its question, which it may answer with
-   * `answer_delegate` (server.ts `deliverDelegateAsk`); nothing for a
-   * session with no parent that can take it.
-   */
-  readonly tellParent: (asker: InstanceRow, envelope: Envelope) => void;
 }
 
 /** Why a session's ask goes unanswered when it ends. */
@@ -323,8 +322,8 @@ export const createAsks = (deps: AsksDeps) => {
 
   /**
    * Records `actor`'s question for the person, parks it on every screen and
-   * push, tells a delegate's parent, and answers the words its session
-   * reads. Refuses one identical to a question of the session's still open.
+   * push (which tells a delegate's parent), and answers the words its
+   * session reads. Refuses one identical to a question of the session's still open.
    */
   const question = (
     actor: InstanceRow,
@@ -353,9 +352,7 @@ export const createAsks = (deps: AsksDeps) => {
       ...(toolUseId ? { toolUseId } : {}),
     };
     deps.asks.add(ask);
-    const envelope = askEnvelope(ask, actor);
-    deps.park(envelope);
-    deps.tellParent(actor, envelope);
+    deps.park(askEnvelope(ask, actor));
     console.log(
       `[asks] ${actor.id} asks the person a question (${ask.id}, ${asked.blocks ? "blocks work" : "work goes on"})`
     );

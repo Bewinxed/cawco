@@ -327,6 +327,7 @@ const standUp = (): { roles: RoleTools[]; unrouted: string[] } => {
         },
         park: () => undefined,
         settle: () => undefined,
+        handedBack: () => undefined,
       }).tools(actor),
     // The connect ask, from the one list the server gives sessions.
     connectTools: (actor) =>

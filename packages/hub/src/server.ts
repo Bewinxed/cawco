@@ -268,6 +268,8 @@ import {
   DEFAULT_COMPACTION,
   DELEGATE_SUMMARIES_LIMIT,
   delegateAskText,
+  delegateWaitNotice,
+  delegateWaitWords,
   deriveTitleFromFirstMessage,
   EFFORT_LEVELS,
   EFFORT_NONE,
@@ -771,6 +773,7 @@ import {
   decisionRoutes,
 } from "./decisions";
 import { delegateTypesRoutes } from "./delegate-types";
+import { createDelegateWaits } from "./delegate-waits";
 import type {
   DelegateResult,
   SendDelivery,
@@ -3623,8 +3626,27 @@ export const createServer = (
     task: (projectId, id) => tasks.get(projectId, id),
   });
   /**
+   * Its parent knows while a delegate waits on an ask, whatever door the ask
+   * came in by, and hears how it ended (delegate-waits.ts): every door below
+   * tells it, as each ask starts waiting and as it leaves the ledger.
+   */
+  const delegateWaits = createDelegateWaits({
+    parentOf: (asker) => delegateAskParent(asker),
+    instance: (id) => db.getInstancesByIds([id])[0],
+    owned: (requestId) => db.asks.get(requestId)?.asked.kind,
+    handed: (requestId) => db.delegateAsk(requestId) !== undefined,
+    hand: (asker, parent, ask) =>
+      deliverDelegateAsk(asker, parent, clientCopy(ask)),
+    tell: (asker, parent, line, body) =>
+      tellParentOfWait(asker, parent, line, body),
+    title: (row) => boardTitle(row),
+    link: (row) => sessionLink(row.id, boardTitle(row)),
+    answererName: (row) => sessionName(row),
+  });
+  /**
    * An ask the hub itself raises for the person — an admin write — parked like a session's own: on the pending ledger, to every
-   * dashboard, and to push the first time.
+   * dashboard, and to push the first time. A delegate's parent is told of
+   * it the first time too.
    */
   const parkForPerson = (envelope: Envelope, outlivesHub = false): void => {
     if (!envelope.requestId) {
@@ -3632,7 +3654,7 @@ export const createServer = (
     }
     const { requestId } = envelope;
     const existed = pending.get(requestId);
-    askInOrder(
+    const parked = askInOrder(
       requestId,
       () => pending.remember(requestId, envelope, outlivesHub),
       () => {
@@ -3649,6 +3671,9 @@ export const createServer = (
         }
       }
     );
+    if (parked && !existed) {
+      delegateWaits.asked(envelope);
+    }
   };
   // The relay (relay.ts), made further down with ingress; an approved
   // `relay_create` kept across a restart reaches it through this.
@@ -3709,14 +3734,8 @@ export const createServer = (
       }
     },
     // Not kept with the session asks: its row is (pending.ts `askEnvelope`).
-    park: (envelope) => parkForPerson(envelope),
     // A delegate's question reaches its parent too, which may answer it.
-    tellParent: (asker, envelope) => {
-      const parent = delegateAskParent(asker);
-      if (parent) {
-        deliverDelegateAsk(asker, parent, clientCopy(envelope));
-      }
-    },
+    park: (envelope) => parkForPerson(envelope),
     settle: (id, outcome) => {
       if ("cut" in outcome) {
         pending.resolve(id, "cancelled");
@@ -3958,6 +3977,8 @@ export const createServer = (
     settle: (requestId) => {
       pending.resolve(requestId);
     },
+    handedBack: (instanceId, ask, origin) =>
+      delegateWaits.handedBack(instanceId, ask.reason, origin),
   });
   // A session's ask that the person sign the hub in to a fleet MCP server
   // (connect-asks.ts), answered by the hub's own sign-in landing.
@@ -4078,6 +4099,9 @@ export const createServer = (
     if (outcome === "cancelled") {
       browserAsks.withdrawn(parked.requestId);
     }
+    // A delegate's parent hears how its ask ended; of one no screen was
+    // shown, nobody was told.
+    delegateWaits.ended(parked, outcome, answer, why === undefined);
     registry.broadcast({
       verb: "frames",
       machineId: parked.machineId,
@@ -6132,6 +6156,8 @@ export const createServer = (
       );
       registry.broadcast(clientCopy(parked));
       push.onAsk(parked);
+      // Its parent, if it can still be woken, hears it is the person's now.
+      delegateWaits.asked(parked);
     }
   };
 
@@ -6252,6 +6278,47 @@ export const createServer = (
         status: "pending",
       })
     );
+  };
+
+  /**
+   * The hub's word to `parent` while its delegate `delegate` waits on the
+   * person, or of how its ask ended (delegate-waits.ts): a peer message from
+   * the delegate, as its ask and its report are, so it wakes a parent at
+   * rest, drawn in the parent's transcript as a note titled `line`.
+   */
+  const tellParentOfWait = (
+    delegate: InstanceRow,
+    parent: InstanceRow,
+    line: string,
+    body: string
+  ): void => {
+    deliverSend({
+      verb: "send",
+      machineId: parent.machineId,
+      instanceId: parent.id,
+      payload: {
+        instanceId: parent.id,
+        message: {
+          type: "user",
+          uuid: crypto.randomUUID(),
+          message: {
+            role: "user",
+            content: withContext(
+              delegateWaitNotice(line, body),
+              conversationContext(parent, line)
+            ),
+          },
+          parent_tool_use_id: null,
+          origin: {
+            kind: "peer",
+            from: delegate.id,
+            name: sessionLabel(delegate).name,
+            fromSession: delegate.id,
+          },
+          shouldQuery: false,
+        },
+      },
+    });
   };
 
   /**
@@ -28021,18 +28088,16 @@ export const createServer = (
         }
         // A question the hub owns (asks.ts) is its asker's parent's to
         // answer too, and a permit is, as the prompt it was kept from was;
-        // an approve ask is a change only the person answers.
+        // an ask the hub raised and settles itself (an approval, a browser
+        // or connect ask, a move, a proposal) only the person answers
+        // (delegate-waits.ts `personOnly`).
         const owned = db.asks.get(answer.requestId);
-        if (
-          owned &&
-          (owned.asked.kind === "approve" || owned.instanceId !== row.id)
-        ) {
-          throw new WorkItemRefusal(
-            403,
-            owned.asked.kind === "approve"
-              ? "That ask is a change waiting on the person; only they answer it."
-              : "That ask isn't this delegate's."
-          );
+        const parked = pending.get(answer.requestId);
+        if (parked && delegateWaits.personOnly(parked)) {
+          throw new WorkItemRefusal(403, delegateWaitWords.refused);
+        }
+        if (owned && owned.instanceId !== row.id) {
+          throw new WorkItemRefusal(403, "That ask isn't this delegate's.");
         }
         // Its refusal says which delegate the target named: an ask that is
         // no longer pending reads the same for every session otherwise.
@@ -39177,7 +39242,7 @@ export const createServer = (
                   break;
                 }
                 if (sender && parent) {
-                  deliverDelegateAsk(sender, parent, clientCopy(message));
+                  delegateWaits.asked(message);
                 } else if (!internal) {
                   push.onAsk(message);
                 }
