@@ -22,6 +22,8 @@
   const box = VIEWBOX[face];
   const TITLE = "Where Close stands in the glass bars";
   const phone = new MediaQuery("(width < 640px)");
+  /** The open comments' count on the badge (`?count=`). */
+  const count = Number(page.url.searchParams.get("count") ?? 5);
 </script>
 
 {#snippet glyph(name: Glyph)}
@@ -51,8 +53,8 @@
 {#snippet comments()}
   <!-- mark-line: the badge is a mark on the symbol's corner, not words set beside it -->
   <button
-    aria-label="Comments, 5 open"
-    class="select-none press-tint"
+    aria-label={`Comments, ${count} open`}
+    class="select-none press-tint pe-space-6"
     data-bar-item
     data-box
     title="Comments"
@@ -60,11 +62,12 @@
   >
     <span class="relative grid" data-box>
       {@render glyph("comments")}
-      <span
-        aria-hidden="true"
-        class="absolute -end-space-2 -top-space-2 grid h-c-count-badge-h min-w-c-count-badge-h place-items-center rounded-pill bg-ink-solid px-space-1 text-on-ink type-meta num leading-none ring-(length:--status-dot-cut) ring-material-panel"
-        >5</span
-      >
+      <span aria-hidden="true" class="absolute end-0 top-0 size-0">
+        <span
+          class="absolute -start-c-count-badge-inset -top-c-count-badge-inset grid h-c-count-badge-h min-w-c-count-badge-h place-items-center rounded-pill bg-ink-solid px-space-1 text-on-ink type-meta num leading-none"
+          >{count}</span
+        >
+      </span>
     </span>
   </button>
 {/snippet}

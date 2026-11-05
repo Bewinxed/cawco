@@ -359,6 +359,7 @@ export type TokenSize =
   | "size.c-bar-item"
   | "size.c-bar-symbol"
   | "size.c-count-badge-h"
+  | "size.c-count-badge-inset"
   | "size.c-head-room"
   | "size.c-float-inner-r"
   | "size.c-scroll-edge-h"

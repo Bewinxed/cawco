@@ -78,7 +78,7 @@
       {...mergeProps(tip, props, { onclick })}
       aria-expanded={open}
       aria-label={name}
-      class="select-none touch-hit press-tint mark-line aria-expanded:bg-surface-pressed"
+      class="select-none touch-hit press-tint mark-line pe-space-6 aria-expanded:bg-surface-pressed"
       data-bar-item
       data-box
       data-link-down={down ? "" : undefined}
@@ -89,14 +89,18 @@
       <span class="relative grid" data-box>
         <IconChat aria-hidden="true" data-slot="bar-symbol" />
         {#if badge}
-          <!-- The badge: on the bubble's top-trailing corner, cut round by
-               the glass's ground so it reads apart from the symbol. -->
-          <span
-            aria-hidden="true"
-            class="absolute -end-space-2 -top-space-2 grid h-c-count-badge-h min-w-c-count-badge-h place-items-center rounded-pill px-space-1 type-meta num leading-none ring-(length:--status-dot-cut) ring-material-panel data-[badge=count]:bg-ink-solid data-[badge=count]:text-on-ink data-[badge=check]:bg-status-attn-bg data-[badge=check]:text-status-attn-ink data-[badge=held]:border data-[badge=held]:border-ink-muted data-[badge=held]:bg-surface-raised data-[badge=held]:text-ink-strong"
-            data-badge={badge}
-            data-slot="badge">{count > 0 ? count : held}</span
-          >
+          <!-- The badge: a plain capsule, no ring or shadow, its leading
+               half-circle centred on the bubble's top-trailing corner so the
+               bubble reads and a longer count grows outward, into the room
+               the button keeps after the symbol (`pe-space-6`, three
+               figures' worth, so nothing moves as the count grows). -->
+          <span aria-hidden="true" class="absolute end-0 top-0 size-0">
+            <span
+              class="absolute -start-c-count-badge-inset -top-c-count-badge-inset grid h-c-count-badge-h min-w-c-count-badge-h place-items-center rounded-pill px-space-1 type-meta num leading-none data-[badge=count]:bg-ink-solid data-[badge=count]:text-on-ink data-[badge=check]:bg-status-attn-bg data-[badge=check]:text-status-attn-ink data-[badge=held]:border data-[badge=held]:border-ink-muted data-[badge=held]:bg-surface-raised data-[badge=held]:text-ink-strong"
+              data-badge={badge}
+              data-slot="badge">{count > 0 ? count : held}</span
+            >
+          </span>
         {/if}
       </span>
       {#if !pinsShown}

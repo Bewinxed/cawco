@@ -603,7 +603,7 @@
     data-slot="side-head"
     data-fitted={all.length > 0 || undefined}
     data-placement={placement}
-    class="relative z-2 flex h-c-btn-h-lg flex-none items-center gap-space-1 group-data-float/card:absolute group-data-float/card:inset-x-0 group-data-float/card:top-0 group-data-float/card:h-c-head-room group-data-float/card:px-space-2 hit-gap-x-space-1 coarse:data-fitted:gap-space-2 coarse:data-fitted:hit-gap-x-space-2"
+    class="relative z-2 flex h-c-btn-h-lg flex-none items-center gap-space-1 group-data-float/card:absolute group-data-float/card:inset-x-0 group-data-float/card:top-0 group-data-float/card:h-c-head-room group-data-float/card:px-space-2 group-data-float/card:opacity-(--head-shown) hit-gap-x-space-1 coarse:data-fitted:gap-space-2 coarse:data-fitted:hit-gap-x-space-2"
     bind:this={head}
   >
     {#if placement === "sheet"}

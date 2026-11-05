@@ -373,6 +373,7 @@
   --spacing-c-bar-item: var(--c-bar-item);
   --spacing-c-bar-symbol: var(--c-bar-symbol);
   --spacing-c-count-badge-h: var(--c-count-badge-h);
+  --spacing-c-count-badge-inset: var(--c-count-badge-inset);
   --spacing-c-head-room: var(--c-head-room);
   --spacing-c-float-inner-r: var(--c-float-inner-r);
   --spacing-c-scroll-edge-h: var(--c-scroll-edge-h);
