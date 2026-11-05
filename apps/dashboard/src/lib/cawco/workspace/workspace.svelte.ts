@@ -34,6 +34,13 @@ import { askOpenAt, carryOpenAt } from "../transcript/open-at.svelte";
 import { workingSet } from "../working-set.svelte";
 import { layoutPolicy } from "./layout-policy.svelte";
 import {
+  isSessionTab,
+  projectHref,
+  projectOfTab,
+  projectTab,
+  tabOfPath,
+} from "./tabs";
+import {
   type BranchNode,
   blankWorkspace,
   isTree,
@@ -134,7 +141,7 @@ const toName = new Set<string>();
 
 /** Asks the hub what tab `id` names, beside every other tab asked in this task. */
 function askName(id: string): void {
-  if (!browser || unnamed.has(id) || resolved.has(id)) {
+  if (!(browser && isSessionTab(id)) || unnamed.has(id) || resolved.has(id)) {
     return;
   }
   unnamed.add(id);
@@ -469,15 +476,6 @@ export function contextOf(sessionId: string): SessionContext | null {
   return held.ctx?.[sessionId] ?? workingSet.contextOf(sessionId);
 }
 
-/** The session id a URL names, or `null` for the board. */
-export function sessionIdOf(url: { readonly pathname: string }): string | null {
-  const parts = url.pathname.split("/").filter(Boolean);
-  if (parts[0] !== "session") {
-    return null;
-  }
-  return parts[1] ?? null;
-}
-
 /**
  * Write the URL without running a load.
  *
@@ -522,11 +520,14 @@ function project(sessionId: string | null, mode: "push" | "replace"): void {
   if (!browser) {
     return;
   }
-  const ctx = sessionId ? contextOf(sessionId) : null;
-  const url = conversationHref(sessionId, cawco.instanceIndex, {
-    machineId: ctx?.machine,
-    cwd: ctx?.cwd,
-  });
+  const projectId = projectOfTab(sessionId);
+  const ctx = sessionId && !projectId ? contextOf(sessionId) : null;
+  const url = projectId
+    ? projectHref(projectId, projectSearch.get(projectId))
+    : conversationHref(sessionId, cawco.instanceIndex, {
+        machineId: ctx?.machine,
+        cwd: ctx?.cwd,
+      });
   unwritten.push({ url, mode });
   if (document.hidden) {
     writeUrls();
@@ -534,6 +535,15 @@ function project(sessionId: string | null, mode: "push" | "replace"): void {
     requestAnimationFrame(() => setTimeout(writeUrls));
   }
 }
+
+/**
+ * Each open project's own address past its path (its view, the task or
+ * file it has open, its filter: `?view=board&task=tsk-4`), as it last stood
+ * in front: the URL names only the tab in front, and a project shown again
+ * comes back as it was left. Kept for this page's life; a reload opens the
+ * one in front from the URL, the others on their board.
+ */
+const projectSearch = new Map<string, string>();
 
 /** A tab out of its group (`close`, `drop`); `mode` is how the URL comes to name what is in front. */
 function remove(sessionId: string, mode: "push" | "replace"): void {
@@ -549,7 +559,11 @@ function remove(sessionId: string, mode: "push" | "replace"): void {
       : null;
   leaf.tabs.splice(at, 1);
   forget(leaf, sessionId);
-  workingSet.forget(sessionId);
+  if (isSessionTab(sessionId)) {
+    workingSet.forget(sessionId);
+  } else {
+    projectSearch.delete(projectOfTab(sessionId) ?? "");
+  }
   if (held.ctx) {
     delete held.ctx[sessionId];
   }
@@ -572,8 +586,15 @@ function remove(sessionId: string, mode: "push" | "replace"): void {
 /* ── The store ────────────────────────────────────────────────────────── */
 
 export const workspace = {
-  /** Every open conversation, in tab order, across every group. */
+  /** Every open conversation, in tab order, across every group: no project's tab. */
   get openIds(): string[] {
+    return leavesOf(held.root).flatMap((leaf) =>
+      leaf.tabs.filter(isSessionTab)
+    );
+  },
+
+  /** Every open tab, conversations and projects, in tab order across every group. */
+  get openTabs(): string[] {
     return leavesOf(held.root).flatMap((leaf) => leaf.tabs);
   },
 
@@ -590,9 +611,15 @@ export const workspace = {
     return focused().id;
   },
 
-  /** What the reader is looking at — `null` is the fleet board. */
-  get activeSessionId(): string | null {
+  /** The tab the reader is looking at, a conversation's or a project's; `null` is the fleet board. */
+  get activeTab(): string | null {
     return focused().active;
+  },
+
+  /** The conversation the reader is looking at: `null` for the board, and for a project in front. */
+  get activeSessionId(): string | null {
+    const { active } = focused();
+    return active && isSessionTab(active) ? active : null;
   },
 
   /** Which conversation a given group is showing. */
@@ -627,6 +654,24 @@ export const workspace = {
     project(sessionId, "push");
   },
 
+  /**
+   * Open a project's tab, as a conversation's opens: just after the tab in
+   * front, or brought forward where it already stands.
+   */
+  openProject(projectId: string, into?: string): void {
+    this.open(projectTab(projectId), undefined, into);
+  },
+
+  /** A project's own address past its path as its page last wrote it, kept for when it is shown again. */
+  keepProjectSearch(projectId: string, search: string): void {
+    projectSearch.set(projectId, search);
+  },
+
+  /** A project's own address past its path as it last stood in front, or none. */
+  projectSearchOf(projectId: string): string {
+    return projectSearch.get(projectId) ?? "";
+  },
+
   /** Move keyboard focus between groups without changing what is shown. */
   focus(leafId: string): void {
     restore();
@@ -649,7 +694,9 @@ export const workspace = {
   open(sessionId: string, ctx?: AskedContext, into?: string): void {
     restore();
     remember(sessionId, ctx);
-    if (ctx) {
+    if (!isSessionTab(sessionId)) {
+      // A project's tab: no conversation to visit.
+    } else if (ctx) {
       workingSet.visit(sessionId, ctx);
     } else {
       workingSet.visit(sessionId);
@@ -665,7 +712,7 @@ export const workspace = {
    */
   reveal(sessionId: string | null, ctx?: AskedContext): void {
     restore();
-    if (sessionId) {
+    if (sessionId && isSessionTab(sessionId)) {
       remember(sessionId, ctx);
       if (ctx) {
         workingSet.visit(sessionId, ctx);
@@ -698,11 +745,20 @@ export const workspace = {
    */
   followUrl(href: string): void {
     const url = new URL(href);
-    const parts = url.pathname.split("/").filter(Boolean);
-    if (parts[0] !== "session") {
+    const tab = tabOfPath(url.pathname);
+    if (tab === undefined) {
       return;
     }
-    const urlId = parts[1] ?? null;
+    const projectId = projectOfTab(tab);
+    if (projectId) {
+      // A project's address: its view and what it has open are its own.
+      projectSearch.set(projectId, url.search);
+      if (tab !== this.activeTab) {
+        this.reveal(tab);
+      }
+      return;
+    }
+    const urlId = tab;
     // A record to open at (`?at=`), asked of the conversation whether or not
     // it is already in front: its transcript seeks there either way.
     const at = url.searchParams.get("at");
@@ -724,7 +780,7 @@ export const workspace = {
         "openArtifactIn"
       );
     }
-    if (urlId === this.activeSessionId) {
+    if (urlId === this.activeTab) {
       return;
     }
     // Only carry context when the URL actually names a machine. A stored

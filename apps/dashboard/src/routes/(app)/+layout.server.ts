@@ -4,6 +4,11 @@ import type { AgentRow, InstanceRow, SessionPulse } from "@cawco/core/protocol";
 import { type HubRead, readHub } from "#lib/cawco/hub-read.js";
 import { type Pref, prefCookie } from "#lib/cawco/prefs.js";
 import {
+  isSessionTab,
+  projectOfTab,
+  tabOfPath,
+} from "#lib/cawco/workspace/tabs.js";
+import {
   blankWorkspace,
   leavesOf,
   parseContexts,
@@ -38,8 +43,6 @@ const WORKSPACE_KEY = "cawco-workspace";
 /** The addresses of what the tree holds, kept apart from it (workspace.svelte.ts, Persistence). */
 const WORKSPACE_CTX_KEY = "cawco-workspace-ctx";
 
-const SESSION_PATH = /^\/session\/([^/]+)/u;
-
 /**
  * Whether this browser is a phone, for the session surface's first paint.
  * The deck-or-grid decision is a media query on the client, which the server
@@ -65,12 +68,6 @@ function narrowOf(cookie: string | undefined, headers: Headers): boolean {
     return hint.trim() === "?1";
   }
   return PHONE_UA.test(headers.get("user-agent") ?? "");
-}
-
-/** The conversation the URL names, or '' on the board and everywhere else. */
-function currentId(pathname: string): string {
-  const match = SESSION_PATH.exec(pathname);
-  return match ? decodeURIComponent(match[1]) : "";
 }
 
 export const load: LayoutServerLoad = async ({
@@ -119,7 +116,9 @@ export const load: LayoutServerLoad = async ({
   // for the first paint only — re-running it on every navigation would repeat
   // the title fetches for nothing. Mirrors what `workspace.reveal()` does.
   const pathname = untrack(() => url.pathname);
-  const urlId = currentId(pathname);
+  // The tab the URL names: a conversation, a project, or none.
+  const urlTab = tabOfPath(pathname);
+  const urlId = urlTab ?? "";
   if (urlId) {
     workspace ??= blankWorkspace();
     const leaves = leavesOf(workspace.root);
@@ -139,7 +138,7 @@ export const load: LayoutServerLoad = async ({
     const harness = harnessNamed(
       untrack(() => url.searchParams.get("harness"))
     );
-    if (machine && harness) {
+    if (machine && harness && isSessionTab(urlId)) {
       workspace.ctx ??= {};
       workspace.ctx[urlId] ??= {
         machine,
@@ -173,7 +172,30 @@ export const load: LayoutServerLoad = async ({
     };
   }
 
-  const open = leavesOf(workspace.root).flatMap((leaf) => leaf.tabs);
+  // Each project's tab named as the hub names the project, so its tab is
+  // drawn with its name from the first paint.
+  const projectTabs = leavesOf(workspace.root).flatMap((leaf) =>
+    leaf.tabs.filter((tab) => !isSessionTab(tab))
+  );
+  if (projectTabs.length > 0) {
+    const projects = await readHub<{ id: string; name: string }[]>(
+      fetch,
+      "/api/projects"
+    );
+    for (const tab of projectTabs) {
+      const project = projects.ok
+        ? projects.value.find((row) => row.id === projectOfTab(tab))
+        : undefined;
+      if (project) {
+        names[tab] = { ok: true, value: project.name };
+      }
+    }
+  }
+
+  // The conversations open: a project's tab has no name or pulse to read.
+  const open = leavesOf(workspace.root).flatMap((leaf) =>
+    leaf.tabs.filter(isSessionTab)
+  );
   if (open.length === 0) {
     return {
       railWidth,

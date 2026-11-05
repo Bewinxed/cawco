@@ -209,6 +209,7 @@ const INLINE_STYLES = {
     "stroke-linecap",
     "stroke-width",
   ],
+  "src/lib/cawco/project/ProjectPage.svelte": ["animation", "block-size"],
   "src/lib/cawco/views/ViewRoutines.svelte": ["block-size"],
   "src/lib/cawco/workspace/PaneLeaf.svelte": ["inset", "width"],
   "src/lib/cawco/workspace/PaneTabs.svelte": ["height"],
@@ -223,7 +224,6 @@ const INLINE_STYLES = {
   "src/lib/components/ui/progress/progress.svelte": ["transform"],
   "src/lib/components/ui/section-header/section-header.svelte": ["color"],
   "src/routes/(app)/motion/delegate-tray/+page.svelte": ["width"],
-  "src/routes/(app)/project/[id]/+page.svelte": ["animation", "block-size"],
   // A decision page's media measure their own box while mounted: Preview's
   // frame takes the height its page or component canvas says it stands at,
   // and Canvas's frame the box its drawing's shape gives it in its well
