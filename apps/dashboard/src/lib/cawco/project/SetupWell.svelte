@@ -22,19 +22,16 @@
    */
   import { setupWords } from "@cawco/core/words/onboarding";
   import type { Component } from "svelte";
-  import { cawLoop } from "#lib/cawco/feel.svelte.js";
-  import Caw from "#lib/cawco/home/Caw.svelte";
   import { takeHandOff } from "#lib/cawco/transcript/Prompt.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
-  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import {
     type StepInk,
     type StepStatus,
     ThinkingStep,
     ThinkingSteps,
   } from "#lib/components/ui/thinking-steps/index.js";
-  import { IconNeedsYou, IconSuccess } from "#lib/icons.js";
+  import { IconSuccess } from "#lib/icons.js";
+  import CawAtWork from "./CawAtWork.svelte";
   import {
     handedOver,
     type SetupProgress,
@@ -68,35 +65,14 @@
   }
 </script>
 
-<!-- A rail row (design.css `rail-row`, `rail-line`, `rail-hang`): the
-     transcript's line runs down it, its head line on the glyph and text
-     columns, what it holds hung at the text column, as a tool's body is. -->
-<section
-  aria-label={setupWords.element}
-  data-slot="setup-well"
-  data-tx-rail
-  class="tx-columns rail-row max-w-c-measure"
+<CawAtWork
+  doing={progress.doing}
+  label={setupWords.element}
+  present={!handedOver(progress)}
+  slot="setup-well"
+  {status}
+  waiting={progress.phase === "waiting"}
 >
-  <!-- He stands here while he works; handed over, he is back in his seat
-       (one live Caw), and the element stays as the record of what he did. -->
-  {#if !handedOver(progress)}
-    <div class="rail-hang" data-box>
-      <Caw size={80} still={!cawLoop.on} {status} />
-    </div>
-  {/if}
-  <p
-    aria-live="polite"
-    class="m-0 min-h-(--tx-line) rail-line text-size-label font-medium text-ink-strong"
-  >
-    <span data-slot="rail-cell" class="rail-cell">
-      {#if progress.phase === "waiting"}
-        <IconNeedsYou class="size-icon-md text-status-attn-glyph" />
-      {:else if !handedOver(progress)}
-        <LiveDot />
-      {/if}
-    </span>
-    <MorphText text={progress.doing} />
-  </p>
   <div class="rail-hang">
     <ThinkingSteps>
       {#each progress.steps as step, index (step.id)}
@@ -137,4 +113,4 @@
       />
     </div>
   {/if}
-</section>
+</CawAtWork>

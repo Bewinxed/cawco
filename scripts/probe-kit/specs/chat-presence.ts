@@ -20,7 +20,7 @@
  * 6. and the rule still parts: that tab hidden, `elsewhere`;
  * 7. a project's conversation docked on its page, which opens on it with
  *    his pages from before the load standing open: `on`; one that holds no
- *    words is drawn as itself, its empty state, never "Starting…";
+ *    words is drawn as a conversation, its pane and its empty state;
  * 8. a send from no device that beats: `on` for that chat;
  * 9. the link back after it dropped: the hub hears the tab at once;
  * 10. the iPhone in a chat: its every beat is input, and what a desk left on
@@ -664,8 +664,9 @@ const run = async (kit: Kit): Promise<void> => {
     "the project's page to say it draws its conversation"
   );
   check(
-    "7: a project's conversation that holds no words is drawn, not Starting…",
-    (await panel.locator('[data-slot="caw-starting"]').count()) === 0,
+    "7: a project's conversation that holds no words is drawn as a conversation: its pane, its empty state",
+    (await panel.locator('[data-slot="pane"] [data-slot="empty"]').count()) ===
+      1,
     (await panel.innerText()).slice(0, 400)
   );
   reads(

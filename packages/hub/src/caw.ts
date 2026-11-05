@@ -634,6 +634,8 @@ export const createCaw = ({
 }: CawDeps) => {
   /** Conversations being started now, by project: one start per project at a time. */
   const starting = new Map<string, Promise<InstanceRow>>();
+  /** The session each start in {@link starting} is making, by project, once its id is minted. */
+  const startingIds = new Map<string, string>();
 
   const projectOf = (projectId: string) =>
     db.project(projectId) ??
@@ -794,6 +796,7 @@ export const createCaw = ({
       (await placeFor(project)) ??
       refuse(409, problemOf(project) ?? CAW_NO_MACHINE);
     const instanceId = crypto.randomUUID();
+    startingIds.set(project.id, instanceId);
     try {
       await spawn(place.machineId, {
         instanceId,
@@ -876,9 +879,10 @@ export const createCaw = ({
     if (pending !== undefined) {
       return { row: await pending, started: false };
     }
-    const begun = startConversation(project, start).finally(() =>
-      starting.delete(projectId)
-    );
+    const begun = startConversation(project, start).finally(() => {
+      starting.delete(projectId);
+      startingIds.delete(projectId);
+    });
     const shared = begun.then((one) => one.conversation);
     // A start that fails is the starter's to answer; those sharing it hear it too.
     shared.catch(() => undefined);
@@ -1134,6 +1138,7 @@ export const createCaw = ({
       instanceId: project.conversationInstanceId,
       problem: problemOf(project) ?? startRefusals.get(projectId) ?? null,
       starting: starting.has(projectId),
+      startingId: startingIds.get(projectId) ?? null,
       running: initiated(project),
       spendUsd: db.cawSpentSince(projectId, 0),
     };

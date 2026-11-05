@@ -399,40 +399,35 @@ export class CawLead {
     cawco.liveRead ? cawco.onlineMachines.length > 0 : this.#loadedOnline()
   );
   /**
-   * His conversation is being started: only on word that a start is under
-   * way, never because a conversation holds nothing (a session started with
-   * no words, or whose first words never went, is drawn as itself, with its
-   * empty state). The word is one of:
-   * - its row is still being spawned or moved (`starting`, `moving`);
-   * - a start of his conversation is parked in this tab and running
-   *   (conversation.ts `startConversation`, spawn/parked): its spawn has
-   *   not answered, its first prompt going as it does (client
-   *   `sendFirstPrompt`, drawn at once), or a reload is finding its
-   *   session on the board to send it;
-   * - his view says the hub's start runs (caw.ts `conversationFor`), and the
-   *   project's conversation is not yet the row on show. The hub names its
-   *   conversation and sends it the words that started it in one step
-   *   (caw.ts `startConversation`), so a row it has named holds those words
-   *   as a send waiting. The page reads his view again as the project's row
-   *   changes while it says so (ProjectPage), so a start that ends, or
-   *   fails with its `problem`, ends this too.
+   * The session a start of his conversation is making, while that start
+   * runs; null while none does. His panel draws it as his conversation from
+   * the first moment, in the conversation's own transcript (no view of its
+   * own: the person's words and his work stand there as any session's do),
+   * and holds its transcript's reads until the start has named it (SessionPane
+   * `unborn`). The start is one of:
+   * - his panel's or Ask Caw's, parked in this tab and running
+   *   (conversation.ts `startConversation`, spawn/parked): its spawn has not
+   *   answered (the person's words already drawn in it), or a reload is
+   *   finding its session on the board to send them;
+   * - the hub's (caw.ts `conversationFor`, a project just made), as his view
+   *   names it, until the project names it its conversation: the hub sends
+   *   it its first words and names it in one step (caw.ts
+   *   `startConversation`), so a named one holds them as a send waiting.
+   *   The page reads his view again as the project's row changes while it
+   *   starts (ProjectPage), so one that fails, with its `problem`, ends too.
    */
-  readonly starting = $derived.by((): boolean => {
-    const { conversation: row, view } = this;
-    const hubStarts = view?.starting === true && view.problem === null;
-    const parkedRuns = cawStartsOf(this.#projectId()).some(
+  readonly startingId = $derived.by((): string | null => {
+    const mine = cawStartsOf(this.#projectId()).find(
       (one) => one.state === "running"
     );
-    if (!row) {
-      return hubStarts || parkedRuns;
+    const ask = mine?.asks[0]?.instanceId;
+    if (ask) {
+      return ask;
     }
-    if (row.status === "moving" || row.status === "starting") {
-      return true;
-    }
-    if (row.status !== "running" || row.stalled) {
-      return false;
-    }
-    return parkedRuns || (hubStarts && view?.instanceId !== row.id);
+    const { view } = this;
+    const hub =
+      view?.starting === true && view.problem === null ? view.startingId : null;
+    return hub && this.project?.conversationInstanceId !== hub ? hub : null;
   });
   /** Why he cannot start now, or why his last start failed (his view's `problem`), in a sentence; null when he can. */
   readonly problem = $derived(
@@ -573,7 +568,7 @@ export class CawLead {
         const tool = id ? cawco.currentToolOf(id) : null;
         return tool
           ? [tool.name, tool.glance].filter(Boolean).join(" · ")
-          : "Working…";
+          : said.working;
       }
       case "trying":
         return `Retrying ${this.retrying?.id}`;
@@ -597,7 +592,7 @@ export class CawLead {
       }
       case "working":
       case "trying":
-        return this.#said ?? "Working…";
+        return this.#said ?? said.working;
       case "needs-you":
         return said.waiting;
       case "done":

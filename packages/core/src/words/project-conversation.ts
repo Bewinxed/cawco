@@ -51,7 +51,9 @@ export const conversationWords = {
     reading: "Reading the board…",
     /** The hub is away. */
     reconnecting: "Reconnecting to the hub",
-    /** His conversation is starting: the words that start it are not taken yet. */
-    starting: "Starting…",
+    /** At work, no tool of his under way: under him in his conversation, and on the project head. */
+    working: "Working…",
   },
+  /** His at-work element in his conversation, for a screen reader. */
+  atWork: "Caw at work",
 };

@@ -1423,7 +1423,7 @@
     });
   });
 
-  // His start carries on after a project is made (CawLead `starting`): each
+  // His start carries on after a project is made (his view's `starting`): each
   // change of the project's row while it does (the hub's `projects.changed`
   // as it ends, a refusal with it) reads his view again, for whether he is
   // still starting and why he could not.
@@ -1671,12 +1671,12 @@
    * How far he has got, while he drafts the setup in his conversation: his
    * setup element in his panel (SetupWell) reads it; none once the page is
    * open, or while nothing of his runs on it. A project just made stands
-   * here from his start (CawLead `starting`): its first step, before his
+   * here from his start (CawLead `startingId`): its first step, before his
    * session has said anything.
    */
   const setupProgress = $derived.by(() => {
-    const id = lead.conversationId;
-    if (!(notSetUp && project && (id || lead.starting))) {
+    const id = lead.startingId ?? lead.conversationId;
+    if (!(notSetUp && project && id)) {
       return null;
     }
     const progress = setupProgressOf({
@@ -1692,7 +1692,7 @@
       page: setupPage !== null && !writingPage,
     });
     const going =
-      lead.starting ||
+      lead.startingId !== null ||
       lead.status === "working" ||
       lead.status === "needs-you" ||
       setupAsks.length > 0;

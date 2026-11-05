@@ -46646,6 +46646,13 @@
           "starting": {
             "description": "His conversation is being started now (a project just made with Caw: its\ncreate answers once the project is made, and his start carries on).",
             "type": "boolean"
+          },
+          "startingId": {
+            "description": "The session his start is making, minted before its spawn is asked for,\nwhile that start runs: his panel draws it as his conversation from the\nfirst moment, its transcript read once the start has named it. Null\nwhile no start runs.",
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
@@ -46658,7 +46665,8 @@
           "problem",
           "running",
           "spendUsd",
-          "starting"
+          "starting",
+          "startingId"
         ]
       },
       "CawRunning": {

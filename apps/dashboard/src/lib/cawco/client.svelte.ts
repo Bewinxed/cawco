@@ -6211,6 +6211,7 @@ export async function spawnSession({
   projectId,
   account,
   extras = {},
+  firstCommandId,
 }: {
   /**
    * The id the session is asked for under, minted by the caller before it
@@ -6232,6 +6233,8 @@ export async function spawnSession({
   projectId?: string;
   /** The account picked for this session; absent: the hub places it. */
   account?: string;
+  /** The id its first prompt goes under, drawn already ({@link drawFirstPrompt}). */
+  firstCommandId?: string;
 }): Promise<Bounded<string>> {
   const started = await start({
     ...(instanceId ? { instanceId } : {}),
@@ -6255,7 +6258,13 @@ export async function spawnSession({
     default:
       unhandled("read", started);
   }
-  sendFirstPrompt(started.value.instanceId, machineId, prompt, extras);
+  sendFirstPrompt(
+    started.value.instanceId,
+    machineId,
+    prompt,
+    extras,
+    firstCommandId
+  );
   detach(refresh(), "refresh");
   return { kind: "answered", value: started.value.instanceId };
 }
@@ -6269,7 +6278,9 @@ export function sendFirstPrompt(
   instanceId: string,
   machineId: string,
   prompt: string | undefined,
-  extras: SendExtras
+  extras: SendExtras,
+  /** The row it goes as, drawn before its session was asked for ({@link drawFirstPrompt}). */
+  commandId?: string
 ): void {
   const first = prompt?.trim() ?? "";
   if (first || extras.images?.length || extras.attachments?.length) {
@@ -6277,7 +6288,42 @@ export function sendFirstPrompt(
     // that send's record is among the first frames the session's stream
     // carries, and a tab that joined after it would never hear it.
     subscribeSession(streamState, streamHost, instanceId);
-    submitCommand(instanceId, machineId, "send", { text: first, extras });
+    submitCommand(
+      instanceId,
+      machineId,
+      "send",
+      { text: first, extras },
+      commandId
+    );
+  }
+}
+
+/**
+ * A new session's first message, drawn in its conversation before the
+ * session is asked for (a project conversation's start, project/conversation.ts):
+ * the person's words stand as theirs at once, the session at work after
+ * them, as a send's own row stands (`noteSendSubmitted`). The send that
+ * follows the spawn goes under `commandId` and takes this row; a start that
+ * fails takes it back ({@link withdrawFirstPrompt}).
+ */
+export function drawFirstPrompt(
+  instanceId: string,
+  commandId: string,
+  text: string,
+  extras: SendExtras
+): void {
+  noteSendSubmitted(instanceId, text, extras, commandId);
+}
+
+/** A first message drawn for a start that failed, taken back: nothing of it went. */
+export function withdrawFirstPrompt(
+  instanceId: string,
+  commandId: string
+): void {
+  dropSendEcho(instanceId, commandId);
+  const target = state.sessions[instanceId];
+  if (target) {
+    target.busy = false;
   }
 }
 

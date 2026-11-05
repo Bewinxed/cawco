@@ -11,8 +11,10 @@ import { spawnWords } from "@cawco/core/words/spawn";
 import {
   answeredOr,
   cawco,
+  drawFirstPrompt,
   type SendExtras,
   spawnSession,
+  withdrawFirstPrompt,
 } from "../client.svelte";
 import { continuationStageWords } from "../continue.svelte";
 import type { DraftContent } from "../draft-store";
@@ -36,13 +38,21 @@ import { spawnPrefs } from "../spawnPrefs.svelte";
  * board and sends the first prompt the draft store kept, or says it did not
  * start, and his panel says which ({@link cawStartsOf}). A start this page
  * sees through is its caller's to show: it is let go as it answers.
+ *
+ * The person's words are drawn in the conversation before its spawn is
+ * asked for, as theirs, the session at work after them (client
+ * `drawFirstPrompt`): `drawn` hands the caller the session's id then, so it
+ * shows the conversation from the first moment. A start that fails takes
+ * them back before it throws.
  */
 export async function startConversation(
   projectId: string,
   prompt: string,
   extras: SendExtras = {},
   /** What the composer held as it sent, kept for a reload to send. */
-  content?: DraftContent
+  content?: DraftContent,
+  /** The conversation's session id, as its first words are drawn in it. */
+  drawn?: (instanceId: string) => void
 ): Promise<string> {
   const project = cawco.project(projectId);
   const place = project ? checkoutOf(project) : undefined;
@@ -89,8 +99,12 @@ export async function startConversation(
     { instanceId, machineId: place.machineId, asked: false, sent: false },
   ]);
   askedFor(id, instanceId);
+  const commandId = newId();
+  drawFirstPrompt(instanceId, commandId, prompt, extras);
+  drawn?.(instanceId);
   try {
     const started = await spawnSession({
+      firstCommandId: commandId,
       instanceId,
       machineId: place.machineId,
       cwd: place.path,
@@ -103,6 +117,9 @@ export async function startConversation(
       projectId,
     });
     return answeredOr(place.machineId, started, spawnWords.form.startUnknown);
+  } catch (error) {
+    withdrawFirstPrompt(instanceId, commandId);
+    throw error;
   } finally {
     dropStart(id);
   }

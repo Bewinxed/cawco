@@ -80,7 +80,6 @@
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
-  import { LiveDot } from "#lib/components/ui/live-dot/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import {
     IconChatAdd,
@@ -91,6 +90,7 @@
   } from "#lib/icons.js";
   import { barGlass } from "../bar-glass.svelte";
   import { dropStart } from "../spawn/parked.svelte";
+  import CawAtWork from "./CawAtWork.svelte";
   import type { CawLead } from "./caw-lead.svelte";
   import { cawStartsOf, startConversation } from "./conversation";
   import SetupWell from "./SetupWell.svelte";
@@ -137,16 +137,38 @@
       chosen = null;
     }
   });
-  const shown = $derived(fresh ? null : (chosen ?? lead.conversationId));
   /**
-   * His conversation on show is still starting (CawLead `starting`: from
-   * the hub's start until it has taken the words that started it): the
-   * well shows him starting, never a session nothing has been said in nor
-   * the hero asking for words already sent.
+   * The conversation on show: the one this panel started, else the one a
+   * start is making (CawLead `startingId`, drawn from its first moment), else
+   * the project's newest. A start is drawn in the conversation itself, as
+   * every session's start and work are: the person's words, then him at
+   * work after them; a move or a restart says so in its own line there.
    */
-  const startingHere = $derived(
-    lead.starting && !fresh && (shown === null || shown === lead.conversationId)
+  const shown = $derived(
+    fresh ? null : (chosen ?? lead.startingId ?? lead.conversationId)
   );
+  /** The conversation on show is one a start is still making: nothing reads it until the start has named it (SessionPane `unborn`). */
+  const unborn = $derived(shown !== null && shown === lead.startingId);
+  /**
+   * He is at work in the conversation on show: a turn of his under way, or
+   * his start making it (the person's words drawn, his session on its way).
+   * He stands after its rows (CawAtWork) in the bare working line's place.
+   */
+  const atWork = $derived(shown !== null && (unborn || cawco.busyOf(shown)));
+  /** Waiting on you while at work: a question of his holds him. */
+  const heldOnYou = $derived(
+    shown !== null && cawco.activityOf(shown) === "blocked"
+  );
+  /** What he is on now, under him: the tool under way, else at work. */
+  const doing = $derived.by(() => {
+    if (heldOnYou) {
+      return conversationWords.status.waiting;
+    }
+    const tool = shown ? cawco.currentToolOf(shown) : null;
+    return tool
+      ? [tool.name, tool.glance].filter(Boolean).join(" · ")
+      : conversationWords.status.working;
+  });
   function newConversation() {
     fresh = true;
     chosen = null;
@@ -205,7 +227,10 @@
   // He is drawn in his setup element while it stands with the panel open:
   // the seat stands empty meanwhile, and he goes back to it as it goes.
   $effect(() => {
-    const here = setup !== null && !handedOver(setup) && lead.open;
+    const here =
+      lead.open &&
+      !onPreview &&
+      ((setup !== null && !handedOver(setup)) || (setup === null && atWork));
     lead.inPanel = here;
     return () => {
       lead.inPanel = false;
@@ -330,11 +355,17 @@
     starting = true;
     startError = "";
     try {
+      // Drawn at once: the conversation stands with the person's words in
+      // it, him at work after them, while its session is asked for.
       const id = await startConversation(
         projectId,
         text,
         extras,
-        lead.draft.keep
+        lead.draft.keep,
+        (drawn) => {
+          chosen = drawn;
+          fresh = false;
+        }
       );
       // A starter pressed into the field went: as its words stood, or
       // changed. The hub keeps it as Jev's steering; nothing waits on it.
@@ -346,8 +377,10 @@
       chosen = id;
       fresh = false;
     } catch (error) {
-      // The hero stays, its words back in the field and why over it, even
-      // where a session the start made before it failed is now the newest.
+      // The hero again, the words back in the field and why over it: their
+      // row in the conversation was taken back (conversation.ts), and a
+      // session the start made before it failed is no conversation of his.
+      chosen = null;
       fresh = true;
       startError = failureWords(error);
       lead.draft.restore(text, extras);
@@ -497,29 +530,7 @@
     </BarFloat>
   {/if}
   <div data-slot="well" class="relative flex min-h-0 flex-auto flex-col">
-    {#if startingHere}
-      <!-- His start, on the transcript's own columns where his conversation
-           will stand: setting the project up, his setup element at its first
-           step (SetupWell, the page's one live Caw meanwhile); else his
-           starting line. -->
-      <div
-        data-slot="caw-starting"
-        data-tx-columns
-        class="tx-columns flex min-h-0 flex-auto flex-col overflow-y-auto scroll-timeline-transcript-head ps-space-7 pe-space-6 pt-(--bar-room,0px) max-desk:ps-space-5 max-desk:pe-space-5"
-        in:crossIn
-      >
-        {#if setup}
-          {@render setupTail()}
-        {:else}
-          <p
-            class="mark-line flex items-center gap-space-2 py-space-5 text-size-meta font-normal text-ink-muted"
-            role="status"
-          >
-            <LiveDot /><span>{conversationWords.status.starting}</span>
-          </p>
-        {/if}
-      </div>
-    {:else if shown}
+    {#if shown}
       <!-- The conversation stays laid out under Preview, so going back to it
            finds it as it was; only the tab on show takes the pointer. -->
       <div
@@ -538,8 +549,9 @@
             browsingHarness={undefined}
             docked={{ draft: lead.draft, headRoom: "var(--c-top-bar-h)" }}
             focused={!onPreview}
-            afterRows={setup ? setupTail : undefined}
-            afterRowsAtWork={setup !== null && !handedOver(setup)}
+            afterRows={setup ? setupTail : atWorkTail}
+            afterRowsAtWork={setup ? !handedOver(setup) : atWork}
+            {unborn}
             viewId={shown}
             visible={!onPreview}
           />
@@ -664,6 +676,16 @@
     {/if}
   </div>
 </div>
+
+{#snippet atWorkTail()}
+  {#if atWork}
+    <CawAtWork
+      {doing}
+      label={conversationWords.atWork}
+      status={heldOnYou ? "needs-you" : "working"}
+    />
+  {/if}
+{/snippet}
 
 {#snippet setupTail()}
   {#if setup}

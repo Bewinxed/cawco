@@ -58,6 +58,13 @@ export interface ProjectConversationView {
    * create answers once the project is made, and his start carries on).
    */
   starting: boolean;
+  /**
+   * The session his start is making, minted before its spawn is asked for,
+   * while that start runs: his panel draws it as his conversation from the
+   * first moment, its transcript read once the start has named it. Null
+   * while no start runs.
+   */
+  startingId: string | null;
 }
 
 /**

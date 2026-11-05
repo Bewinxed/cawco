@@ -2948,9 +2948,12 @@ public enum Words {
             /// The hub is away.
             public static let reconnecting = "Reconnecting to the hub"
 
-            /// His conversation is starting: the words that start it are not taken yet.
-            public static let starting = "Starting…"
+            /// At work, no tool of his under way: under him in his conversation, and on the project head.
+            public static let working = "Working…"
         }
+
+        /// His at-work element in his conversation, for a screen reader.
+        public static let atWork = "Caw at work"
     }
 
     public enum Views {

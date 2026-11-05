@@ -36,8 +36,8 @@
  *    starts after. (Nightly 6583: the answer waited on his session's start
  *    on its machine, about 14 s.)
  * 7. That project's page at 1440, opened as the create answers: Caw's
- *    panel shows him starting, then his conversation with the person's
- *    words its first row, nothing above them (the project-setup skill
+ *    panel shows his conversation from the first (no view of his start of
+ *    its own: CawLead `startingId`), the person's words its first row, nothing above them (the project-setup skill
  *    CawCo loads at his spawn leaves no row, live or read again after a
  *    reload), and never a session nothing has been said in (nightly 6688: "Nothing has been said here yet · Ask Claude Code
  *    about this folder"). Then his seat changes places, the head's going and coming
@@ -712,7 +712,7 @@ const panelAtDesk = async (kit: Kit, fleet: KitFleet) => {
     ...(window as unknown as { __cawWell: Set<string> }).__cawWell,
   ]);
   kit.check(
-    "7: his panel at 1440 shows him starting, then his conversation with the person's words first, never a session nothing has been said in",
+    "7: his panel at 1440 shows his conversation from the first, the person's words its first row, never a session nothing has been said in",
     words !== "never" &&
       FIRST_SAID.exec(words)?.[1]?.trim() === WORDS7 &&
       !wells.some((text) => NOTHING_SAID.test(text)),

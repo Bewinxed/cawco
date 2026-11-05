@@ -136,6 +136,7 @@
     docked,
     afterRows,
     afterRowsAtWork = false,
+    unborn = false,
     asksElsewhere,
 
     /** Whether this pane is on screen at all — governs row building. */
@@ -170,6 +171,13 @@
     afterRows?: Snippet;
     /** What stands after the rows says the agent is at work: the bare working line stands down (Transcript). */
     afterRowsAtWork?: boolean;
+    /**
+     * A session a start is still making (a project conversation's, CawLead
+     * `startingId`): nothing reads or follows it until the start has named
+     * it, so its transcript is what this tab drew of it (the person's first
+     * words), never a read of a session not there yet.
+     */
+    unborn?: boolean;
     /**
      * Asks another surface on the page draws and answers (a project's
      * questions on its board before setup, SetupScene): the composer does
@@ -409,7 +417,7 @@
     // has no transcript at all.
     // A tab the hub has not named yet (workspace `named`) is read once it
     // has: an id that names nothing is dropped, never read.
-    if (!id || prestart || askAlone || !workspace.named(id)) {
+    if (!id || prestart || unborn || askAlone || !workspace.named(id)) {
       return;
     }
     // Retry the read once the hub can actually answer. On a reload the effect
