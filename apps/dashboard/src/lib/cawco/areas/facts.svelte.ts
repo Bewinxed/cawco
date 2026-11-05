@@ -1,9 +1,8 @@
 /**
  * What each area's folder sets, read from the hub per area: its Who
  * decides (how many kinds it hands over itself) and its own delegate types.
- * The list's sets line and an area's page both read them here, so the two say
- * the same; each is read again when the hub says the projects changed (an
- * area's every change says it).
+ * An area's page and its delegate types read them here; each is read again
+ * when the hub says the projects changed (an area's every change says it).
  */
 import type { DecidesTable } from "@cawco/core/decides";
 import { readTable } from "../decides/decides-client";

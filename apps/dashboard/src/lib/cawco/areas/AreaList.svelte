@@ -1,10 +1,10 @@
 <script lang="ts">
   /**
    * Configure › Areas: every area in its order, each a row that opens its
-   * page. A row reads down fixed columns: the switch that folds its projects,
-   * its tile (its look, and the handle that orders it), its name with what
-   * it sets named in words under it (its page shows each value), and how
-   * many projects are in it. The handle drags the row into a new
+   * page. A row reads: the switch that folds its projects, its tile (its
+   * look, and the handle that orders it), its name, with how many projects
+   * it holds under it while they are folded away. What it sets is its
+   * page's to say. The handle drags the row into a new
    * place, or the up and down arrows move it (motion/hand-order); the order
    * is saved as the row lands, and a refusal puts it back with the hub's
    * words above the list.
@@ -34,7 +34,7 @@
    */
   import type { StageColor, StageIcon } from "@cawco/core/views";
   import { areasScreenWords as words } from "@cawco/core/words/areas";
-  import { tick, untrack } from "svelte";
+  import { tick } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -81,19 +81,11 @@
   } from "./areas";
   import { deleteQuestion } from "./fallback";
   import { areaMark, lookPatch } from "./mark";
-  import { areaSets } from "./summary";
 
   const store = configStore();
   const section = sectionOf("areas");
 
   const areas = $derived(store.areas.value ?? []);
-  // Each area's folder facts (its Who decides, its delegate types), read
-  // once per list the hub hands over.
-  $effect(() => {
-    for (const area of areas) {
-      untrack(() => store.areaFacts.load(area.id));
-    }
-  });
 
   /** The line to an area's projects leaves its tile and ends at each project's mark. */
   const TILE = '[data-slot="handle"]';
@@ -285,9 +277,6 @@
       })
     );
   }
-
-  const setsOf = (area: AreaView) =>
-    areaSets(area, store.areaFacts.of(area.id));
 </script>
 
 {#snippet saidLines(lines: readonly string[])}
@@ -482,9 +471,8 @@
           >
             <div
               data-slot="row"
-              class="group/row relative grid min-h-c-row-h-two grid-cols-(--area-cols) items-center gap-x-space-3 gap-y-space-row rounded-sm px-space-2 py-space-2 transition-control has-link-active:bg-surface-fill max-phone:grid-cols-(--area-cols-phone)"
-              style:--area-cols={"auto var(--c-mark) minmax(0, 1fr) var(--c-area-count-w) auto"}
-              style:--area-cols-phone="auto var(--c-mark) minmax(0, 1fr) auto"
+              class="group/row relative grid min-h-c-row-h grid-cols-(--area-cols) items-center gap-x-space-3 rounded-sm px-space-2 py-space-2 transition-control has-link-active:bg-surface-fill"
+              style:--area-cols="auto var(--c-mark) minmax(0, 1fr) auto"
             >
               <!-- The switch that folds its projects: the sidebar's chevron,
                    turned down while they are out. Its own column, as wide
@@ -495,7 +483,7 @@
                   aria-controls={open ? foldId(area) : undefined}
                   aria-expanded={open}
                   aria-label={words.fold(area.name, open)}
-                  class="relative z-1 inline-grid w-space-5 self-stretch place-items-center rounded-sm text-ink-muted transition-control hover:text-ink-strong touch-hit coarse:w-c-touch-floor focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) max-phone:row-span-2 max-phone:h-c-mark max-phone:self-start"
+                  class="relative z-1 inline-grid w-space-5 self-stretch place-items-center rounded-sm text-ink-muted transition-control hover:text-ink-strong touch-hit coarse:w-c-touch-floor focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
                   data-slot="fold"
                   onclick={() => folderPrefs.setCollapsed(area.id, open)}
                   title={words.fold(area.name, open)}
@@ -510,7 +498,7 @@
               {:else}
                 <span
                   aria-hidden="true"
-                  class="w-space-5 coarse:w-c-touch-floor max-phone:row-span-2"
+                  class="w-space-5 coarse:w-c-touch-floor"
                 ></span>
               {/if}
 
@@ -574,7 +562,7 @@
                         index + 1,
                         shown.length
                       )}
-                      class="relative z-1 inline-flex size-c-mark cursor-grab touch-none items-center justify-center rounded-sm bg-surface-raised text-(--hue) shadow-tile select-none touch-hit pointer-hit in-data-held:cursor-grabbing focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) max-phone:row-span-2 max-phone:self-start"
+                      class="relative z-1 inline-flex size-c-mark cursor-grab touch-none items-center justify-center rounded-sm bg-surface-raised text-(--hue) shadow-tile select-none touch-hit pointer-hit in-data-held:cursor-grabbing focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
                       data-id={area.id}
                       data-slot="handle"
                       style={`--hue: ${mark.hue}`}
@@ -603,26 +591,18 @@
                   data-link
                   href="/config/areas/{area.id}">{area.name}</a
                 >
-                <!-- What it sets, named in words: the list says which
-                     settings each area carries at a glance; its page shows
-                     each one's value. -->
-                <span
-                  data-slot="sets"
-                  class="type-meta text-pretty text-ink-muted"
-                  >{words.sets(setsOf(area))}</span
-                >
+                <!-- How many projects it holds, while they are folded
+                     away; out, the list under it says so. -->
+                {#if area.projects.length > 0 && !open}
+                  <span data-slot="count" class="num type-meta text-ink-muted"
+                    >{words.projects(area.projects.length)}</span
+                  >
+                {/if}
               </span>
-
-              <!-- How many projects are in it, "No projects" at none. -->
-              <span
-                data-slot="count"
-                class="num w-c-area-count-w type-meta whitespace-nowrap text-ink-muted max-phone:col-start-3 max-phone:row-start-2 max-phone:w-auto"
-                >{words.projects(area.projects.length)}</span
-              >
 
               <Button
                 aria-label={words.deleteArea(area.name)}
-                class="relative z-1 max-phone:col-start-4 max-phone:row-start-1"
+                class="relative z-1"
                 data-delete-area
                 data-ghost
                 disabled={cawco.hub !== "connected"}
@@ -678,9 +658,6 @@
           class="flex items-baseline gap-space-2 type-label text-ink-strong"
         >
           {words.noArea}
-          <span class="num type-meta text-ink-muted"
-            >{words.projects(inNoArea.length)}</span
-          >
         </h3>
         {#if inNoArea.length === 0}
           <p class="type-meta text-ink-muted">{words.noAreaEmpty}</p>

@@ -510,7 +510,7 @@ const moveLeg = async (rig: Rig, m: Made): Promise<void> => {
     "c. put back, it takes the area's again",
     back.status === 200 &&
       ((back.json as { said?: string[] } | undefined)?.said ?? []).includes(
-        "It takes the area Probe client's account"
+        "It takes the account from Probe client."
       ) &&
       inArea(again, m, null),
     JSON.stringify({ status: back.status, text: back.text, again })

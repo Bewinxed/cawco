@@ -302,9 +302,6 @@ export const createAreas = ({
       ...(taken.length > 0 ? [areaWords.takes(taken, area?.name ?? null)] : []),
       ...(fell.length > 0 ? [areaWords.takes(fell, null)] : []),
     ];
-    if (said.length === 0) {
-      said.push(areaWords.takesNothing(area?.name ?? null));
-    }
     const moved =
       now.inEffect.account.value === before.inEffect.account.value
         ? undefined

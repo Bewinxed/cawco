@@ -380,7 +380,6 @@ export type TokenSize =
   | "size.c-section-head-h"
   | "size.c-row-inset"
   | "size.c-row-h"
-  | "size.c-area-count-w"
   | "size.c-area-page-side-w"
   | "size.c-routine-time-w"
   | "size.c-grid-4"
