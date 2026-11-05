@@ -180,7 +180,15 @@ async function threeEmbeds(
       return;
     }
     total += 1;
-    if (!(event.response.fromDiskCache || cached.has(event.requestId))) {
+    // Read off a connection of its own. A request for a module another frame's request is still
+    // fetching joins that fetch in the HTTP cache (Chromium net/http/http_cache_writers.cc,
+    // `PARALLEL_WRITING_JOIN`) and is told `fromDiskCache: false` with `connectionId` 0: the stage
+    // answered it once (counted at the stage in a failing run: 393 keyed requests, none twice, where
+    // `fromDiskCache` alone read 361 modules as fetched twice).
+    const fetched =
+      event.response.connectionId > 0 &&
+      !(event.response.fromDiskCache || cached.has(event.requestId));
+    if (fetched) {
       const key = `${at.pathname}${at.search}`;
       network.set(key, (network.get(key) ?? 0) + 1);
     }

@@ -149,7 +149,14 @@ interface DevServer {
           discovered: Record<string, { processing?: Promise<void> }>;
         };
       } | null;
-      hot: { send: (payload: unknown, ...rest: unknown[]) => void };
+      hot: {
+        send: (payload: unknown, ...rest: unknown[]) => void;
+        /** A page's event over Vite's HMR channel, with the page's client (one object per connection): the stage's own, and Vite's `vite:client:disconnect`. */
+        on: (
+          event: string,
+          listener: (data: unknown, client: object) => void
+        ) => void;
+      };
       pluginContainer: {
         resolveId: (
           id: string,
@@ -642,16 +649,96 @@ async function drawnFrom(abs: string, text: string): Promise<string[]> {
   return [...files].sort();
 }
 
+/** The event a canvas page sends the stage over Vite's HMR channel as it loads a section: `{ file }`, its states file from the root. */
+const SECTION_HELD = "cawco:section-held";
+
+/** Each open page's sections: the states files (from the root) its canvas has loaded, by its connection to Vite's HMR (its hot channel's client). */
+const pageSections = new Map<object, Set<string>>();
+
+/**
+ * The sections an open page holds: each states file by how many pages have
+ * loaded it ({@link SECTION_HELD}), let go when the last of them closes
+ * (Vite's `vite:client:disconnect`), and with it its files
+ * ({@link drawnKept}) and its kept report: the hub holds a canvas's last
+ * draws past the stage (hub artifacts/component.ts `drawsHeld`). An edit
+ * checks only these. Kept from the section module's load, a stage open all
+ * day kept every states file it ever drew, and each edit checked them all.
+ * A page with no HMR connection holds none: no edit reaches it either.
+ */
+const heldSections = new Map<string, number>();
+
+/** Page `page` loaded the section of `file`. */
+function holdSection(page: object, file: string): void {
+  const own = pageSections.get(page) ?? new Set<string>();
+  pageSections.set(page, own);
+  if (own.has(file)) {
+    return;
+  }
+  own.add(file);
+  heldSections.set(file, (heldSections.get(file) ?? 0) + 1);
+}
+
+/** Page `page` closed: each section no other page holds is let go. */
+function releasePage(page: object): void {
+  for (const file of pageSections.get(page) ?? []) {
+    const left = (heldSections.get(file) ?? 1) - 1;
+    if (left > 0) {
+      heldSections.set(file, left);
+      continue;
+    }
+    heldSections.delete(file);
+    drawnKept.delete(file);
+    reports.delete(file);
+  }
+  pageSections.delete(page);
+}
+
+/**
+ * Each held section's files ({@link drawnFrom}), read once and kept until
+ * one of them changes or a file is created or deleted (the plugin's
+ * `hotUpdate`: a failed import may resolve now, a resolved one fail). An
+ * edit to a file outside a section's set can't change that set: only an
+ * edit to a file in it adds or drops an import. Walked again for every
+ * section on every changed file, one edit of `client.svelte.ts` on a stage
+ * with the dashboard's 52 states files loaded spent 2 to 9 s in Vite's
+ * resolver. Sorted, as {@link drawnFrom} answers them.
+ */
+const drawnKept = new Map<string, Promise<Set<string>>>();
+
+/** Held section `sheet`'s files, kept ({@link drawnKept}). */
+function drawnSet(sheet: string): Promise<Set<string>> {
+  const kept = drawnKept.get(sheet);
+  if (kept) {
+    return kept;
+  }
+  const abs = resolve(root, sheet);
+  const read = drawnFrom(abs, readFileSync(abs, "utf8")).then(
+    (files) => new Set(files)
+  );
+  drawnKept.set(sheet, read);
+  read.catch(() => {
+    if (drawnKept.get(sheet) === read) {
+      drawnKept.delete(sheet);
+    }
+  });
+  return read;
+}
+
 /**
  * A states file's content hash: of every file its frames are drawn from
- * ({@link drawnFrom}). Its section's module carries it (`HASH`), a report is
- * kept under it, and an edit to any of those files makes its frames `unseen`
- * until a browser draws them again.
+ * ({@link drawnFrom}; a held section's kept, {@link drawnSet}). Its
+ * section's module carries it (`HASH`), a report is kept under it, and an
+ * edit to any of those files makes its frames `unseen` until a browser
+ * draws them again. Each file is read now: the set is kept, never the
+ * bytes.
  */
 async function contentHash(file: string): Promise<string> {
   const abs = resolve(root, file);
+  const files = heldSections.has(file)
+    ? await drawnSet(file)
+    : await drawnFrom(abs, readFileSync(abs, "utf8"));
   const hash = createHash("sha256");
-  for (const one of await drawnFrom(abs, readFileSync(abs, "utf8"))) {
+  for (const one of files) {
     hash
       .update(relative(root, one))
       .update("\0")
@@ -878,7 +965,10 @@ boot({
   root: ${JSON.stringify(root)},
   tokens: ${JSON.stringify(CANVAS_TOKENS)},
   faces: ${JSON.stringify(CANVAS_FACES)},
-  load: (file, fresh) => import(/* @vite-ignore */ BASE + "/@id/__x00__${VIRTUAL}" + encodeURIComponent(file) + ".js" + (fresh ? "?t=" + Date.now() : "")),
+  load: (file, fresh) => {
+    import.meta.hot?.send(${JSON.stringify(SECTION_HELD)}, { file });
+    return import(/* @vite-ignore */ BASE + "/@id/__x00__${VIRTUAL}" + encodeURIComponent(file) + ".js" + (fresh ? "?t=" + Date.now() : ""));
+  },
 });
 if (import.meta.hot) {
   import.meta.hot.on("vite:beforeUpdate", (payload) => dispatchEvent(new CustomEvent("cawco:updates", { detail: payload.updates.map((one) => one.path) })));
@@ -2944,6 +3034,10 @@ function sectionProblem(named: string): string | null {
   );
 }
 
+/** The id of states file `file`'s section module in Vite's graph (from the root): the stage's address of it, `/@id/__x00__cawco:sheet/<file>.js`, unwrapped. */
+const sectionIdOf = (file: string): string =>
+  `\0${VIRTUAL}${encodeURIComponent(file)}.js`;
+
 /** The states file (from the toolchain root) a section module's id (`\0cawco:sheet/<file>.js`) stands for; null for any other module. */
 function sectionOfId(id: string): string | null {
   const bare = id.split("?")[0] as string;
@@ -3016,37 +3110,6 @@ interface SentError {
  * anyone who can view the preview.
  */
 function cawcoStage() {
-  /** Each states file whose section module a page has loaded (from the root), with that module's id. */
-  const sections = new Map<string, string>();
-
-  /**
-   * Each loaded section's files ({@link drawnFrom}), read once and kept
-   * until one of them changes or a file is created or deleted (a failed
-   * import may resolve now, a resolved one fail). An edit to a file outside
-   * a section's set can't change that set: only an edit to a file in it
-   * adds or drops an import. Walked again for every section on every
-   * changed file, one edit of `client.svelte.ts` on a stage with the
-   * dashboard's 52 states files loaded spent 2 to 9 s in Vite's resolver.
-   */
-  const drawnKept = new Map<string, Promise<Set<string>>>();
-  const drawnSet = (sheet: string): Promise<Set<string>> => {
-    const kept = drawnKept.get(sheet);
-    if (kept) {
-      return kept;
-    }
-    const abs = resolve(root, sheet);
-    const read = drawnFrom(abs, readFileSync(abs, "utf8")).then(
-      (files) => new Set(files)
-    );
-    drawnKept.set(sheet, read);
-    read.catch(() => {
-      if (drawnKept.get(sheet) === read) {
-        drawnKept.delete(sheet);
-      }
-    });
-    return read;
-  };
-
   /** The story files (from the root) whose sheets import `file`, read up Vite's module graph. */
   const sheetsOf = (file: string): string[] => {
     const graph = server?.environments.client.moduleGraph;
@@ -3156,9 +3219,7 @@ function cawcoStage() {
       if (!id.startsWith(`\0${VIRTUAL}`)) {
         return null;
       }
-      const file = sectionOfId(id) as string;
-      sections.set(file, id);
-      return sectionLoad(file);
+      return sectionLoad(sectionOfId(id) as string);
     },
     /**
      * An edit to a file a loaded section is drawn from ({@link drawnFrom}:
@@ -3222,8 +3283,8 @@ function cawcoStage() {
         return importers.length > 0 ? [...modules, ...importers] : undefined;
       }
       const reached = await Promise.all(
-        [...sections].map(async ([sheet, id]) => {
-          const mod = graph.getModuleById(id);
+        [...heldSections.keys()].map(async (sheet) => {
+          const mod = graph.getModuleById(sectionIdOf(sheet));
           const abs = resolve(root, sheet);
           if (!(mod && existsSync(abs))) {
             return null;
@@ -3269,6 +3330,15 @@ function cawcoStage() {
         }
         return send(payload, ...rest);
       };
+      // Each section a page loads is held while the page is open: an edit checks only those.
+      hot.on(SECTION_HELD, (data, client) => {
+        const named = (data as { file?: unknown } | null)?.file;
+        const file = typeof named === "string" ? storyFile(named) : null;
+        if (file) {
+          holdSection(client, file);
+        }
+      });
+      hot.on("vite:client:disconnect", (_data, client) => releasePage(client));
       // A states file written lets its missing problem go; one a loaded section draws from, taken away, is missing.
       const nowWritten = (abs: string) => {
         if (stageErrors.get(abs)?.kind === "missing") {
@@ -3282,16 +3352,13 @@ function cawcoStage() {
       dev.watcher.on("change", nowWritten);
       dev.watcher.on("unlink", (abs: string) => {
         const file = relative(root, abs);
-        const id = sections.get(file);
-        if (id === undefined) {
-          return;
-        }
         // Its section module's transform is kept: the next page's load must ask `sectionLoad` again, which refuses it.
         const graph = dev.environments.client.moduleGraph;
-        const mod = graph.getModuleById(id);
-        if (mod) {
-          graph.invalidateModule(mod);
+        const mod = graph.getModuleById(sectionIdOf(file));
+        if (!mod) {
+          return;
         }
+        graph.invalidateModule(mod);
         keepMissing([file]);
       });
       // Here, not in a returned post hook: before Vite's own middlewares and SvelteKit's handler.
