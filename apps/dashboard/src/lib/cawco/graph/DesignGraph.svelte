@@ -1091,68 +1091,80 @@
           <!-- The title: plain text with its menu chevron, no glass at
                rest; open, its menu hangs from it as one shape (BarGlass
                `form="title"`, BarMenu), as Caw's card hangs from his glass. -->
-          <BarGlass flare="end" form="title">
-            <DropdownMenu.Root bind:open={menuOpen}>
-              <DropdownMenu.Trigger>
-                {#snippet child({ props })}
-                  <!-- Its name is what it shows, the switch said before it
-                       (WCAG 2.5.3, Label in Name). -->
-                  <button
-                    {...props}
-                    bind:this={menuTrigger}
-                    class="select-none touch-hit press-tint mark-line max-w-full gap-space-1 ps-space-2 pe-space-1"
-                    data-bar-item
-                    data-box
-                    type="button"
-                  >
-                    <span class="sr-only">{words.components}:</span>
-                    <span
-                      class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
-                      >{frontName}</span
+          <!-- Its words on the panels' leading edge, as the h1's: the glass
+               and the item stand out past it by their own padding, so the
+               ground hung open stands out past the edge as a hover does. -->
+          <div
+            class="-ms-(--title-in) flex min-w-0"
+            style:--title-in="calc(var(--c-bar-group-pad) + var(--space-2))"
+          >
+            <BarGlass flare="end" form="title">
+              <DropdownMenu.Root bind:open={menuOpen}>
+                <DropdownMenu.Trigger>
+                  {#snippet child({ props })}
+                    <!-- Its name is what it shows, the switch said before it
+                         (WCAG 2.5.3, Label in Name). -->
+                    <button
+                      {...props}
+                      bind:this={menuTrigger}
+                      class="select-none touch-hit press-tint mark-line max-w-full gap-space-1 ps-space-2 pe-space-1"
+                      data-bar-item
+                      data-box
+                      type="button"
                     >
-                    <IconChevronDown
-                      aria-hidden="true"
-                      class="size-icon-sm flex-none text-ink-muted"
-                    />
-                  </button>
-                {/snippet}
-              </DropdownMenu.Trigger>
-              <BarMenu
-                label={words.components}
-                onCloseAutoFocus={(event: Event) =>
-                  quietFocus(event, menuTrigger)}
-                width="regular"
-              >
-                <DropdownMenu.RadioGroup
-                  bind:value={
-                    () => frontFile,
-                    (next: string) => {
-                      if (next !== frontFile) {
-                        setComparing(false);
-                      }
-                      chosenFile = next;
-                    }
-                  }
-                >
-                  <!-- Every states file from the start; one whose sheet is on
-                       its way says so in its own place. -->
-                  {#each entries as one (one.file)}
-                    <DropdownMenu.RadioItem value={one.file}>
+                      <span class="sr-only">{words.components}:</span>
                       <span
-                        class={[
-                          "min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap",
-                          !one.review && "text-ink-muted",
-                        ]}
-                        >{one.review
-                          ? one.review.name
-                          : words.mounting(loadingName(one.file))}</span
+                        class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label text-ink-strong"
+                        >{frontName}</span
                       >
-                    </DropdownMenu.RadioItem>
-                  {/each}
-                </DropdownMenu.RadioGroup>
-              </BarMenu>
-            </DropdownMenu.Root>
-          </BarGlass>
+                      <IconChevronDown
+                        aria-hidden="true"
+                        class="size-icon-sm flex-none text-ink-muted"
+                      />
+                    </button>
+                  {/snippet}
+                </DropdownMenu.Trigger>
+                <!-- Hung flush from the title's ground, which stands a padding
+                     out past the panels' edge: no collision inset pushes it
+                     off the ground at the pane's edge. -->
+                <BarMenu
+                  collisionPadding={0}
+                  label={words.components}
+                  onCloseAutoFocus={(event: Event) =>
+                    quietFocus(event, menuTrigger)}
+                  width="regular"
+                >
+                  <DropdownMenu.RadioGroup
+                    bind:value={
+                      () => frontFile,
+                      (next: string) => {
+                        if (next !== frontFile) {
+                          setComparing(false);
+                        }
+                        chosenFile = next;
+                      }
+                    }
+                  >
+                    <!-- Every states file from the start; one whose sheet is on
+                         its way says so in its own place. -->
+                    {#each entries as one (one.file)}
+                      <DropdownMenu.RadioItem value={one.file}>
+                        <span
+                          class={[
+                            "min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap",
+                            !one.review && "text-ink-muted",
+                          ]}
+                          >{one.review
+                            ? one.review.name
+                            : words.mounting(loadingName(one.file))}</span
+                        >
+                      </DropdownMenu.RadioItem>
+                    {/each}
+                  </DropdownMenu.RadioGroup>
+                </BarMenu>
+              </DropdownMenu.Root>
+            </BarGlass>
+          </div>
         {:else if review}
           <h1 class="m-0 min-w-0 truncate type-label text-ink-strong">
             {review.name}

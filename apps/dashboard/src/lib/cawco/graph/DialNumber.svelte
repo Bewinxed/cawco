@@ -27,6 +27,7 @@
    * the edit's ink (the input's `edited` tone), as a changed timing does.
    */
   import { Slider } from "bits-ui";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
   import { type DialRange, type GraphDial, shareOf, snapTo } from "./dials";
   import { figureOf } from "./figures";
@@ -114,9 +115,19 @@
   let dragging = $state(false);
   /** A pointer that moves this far from its press is a drag, not a press to type. */
   const DRAG_FROM = 3;
+  /**
+   * The pill's knob as drawn, with the fill's padding round it, px: the fill
+   * runs to its end, so the fill's width and the drag both read it (a long
+   * figure widens the knob, and the fill never starts under it). 0 until it
+   * is measured, and for the field.
+   */
+  let knob = $state(0);
+  /** The value where the pointer stands: on the pill, where the knob's middle would stand. */
   const valueAt = (x: number, frame: HTMLElement): number => {
     const box = frame.getBoundingClientRect();
-    const at = Math.min(1, Math.max(0, (x - box.left) / box.width));
+    const held = form === "pill" ? knob : 0;
+    const span = Math.max(1, box.width - held);
+    const at = Math.min(1, Math.max(0, (x - box.left - held / 2) / span));
     return snapTo(range.min + at * (range.max - range.min), range);
   };
   const down = (event: PointerEvent) => {
@@ -224,10 +235,20 @@
     <div class="pointer-events-none absolute inset-0 overflow-clip rounded-md">
       <div
         class="absolute inset-y-0 start-0 flex w-(--fill) items-center justify-end rounded-md bg-surface-recess-deep p-space-row"
-        style:--fill="calc(var(--c-number-field-w) + {share} * (100% - var(--c-number-field-w)))"
+        style:--fill={knob > 0
+          ? `calc(${knob}px + ${share} * (100% - ${knob}px))`
+          : `calc(var(--c-number-field-w) + ${share} * (100% - var(--c-number-field-w)))`}
       >
         <span
-          class="flex h-full min-w-c-number-field-w items-center justify-center gap-space-1 rounded-sm bg-surface-lift px-space-2 shadow-knob"
+          {@attach frameSize((node: HTMLElement) => {
+            const pad = node.parentElement
+              ? Number.parseFloat(
+                  getComputedStyle(node.parentElement).paddingInlineStart
+                )
+              : 0;
+            knob = node.offsetWidth + 2 * pad;
+          })}
+          class="flex h-full min-w-c-number-field-w flex-none items-center justify-center gap-space-1 rounded-sm bg-surface-lift px-space-2 shadow-knob"
         >
           <input
             aria-label={label}

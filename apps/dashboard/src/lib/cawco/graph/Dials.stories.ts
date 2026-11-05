@@ -122,3 +122,39 @@ export const Hardened = {
   },
   parameters: { viewport: 400 },
 };
+
+export const HardenedPhone = {
+  args: {
+    dials: [
+      ...ROUTINE_DIALS,
+      {
+        kind: "number",
+        name: "pace",
+        label:
+          "Delay before the failure line unfolds after Create routine is pressed",
+        unit: "ms",
+        target: { cssVar: "--pace" },
+      },
+      {
+        kind: "text",
+        name: "cta",
+        label: "Button words",
+        target: { arg: "cta" },
+      },
+      {
+        kind: "action",
+        name: "replay",
+        label: "Play the failure again",
+        target: { arg: "replay" },
+      },
+    ],
+    written: {
+      ...ROUTINE_WRITTEN,
+      pace: 1_250_000,
+      cta: "Create routine",
+      replay: 0,
+    },
+    values: { pace: 2_400_000 },
+  },
+  parameters: { viewport: 390 },
+};
