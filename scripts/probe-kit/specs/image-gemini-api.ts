@@ -12,9 +12,9 @@
  *   add one.
  * - b. The default: one POST /v1beta/interactions on
  *   gemini-nano-banana-2.1, the key in `x-goog-api-key`, the prompt as text,
- *   `response_format` an image at the size's 3:2 and 2K; the answer's model
- *   output image (not its thought image) saved at the asked path, a PNG by
- *   gemini-api.
+ *   `response_format` an image at the size's 3:2 and 2K, `store: false`; the
+ *   answer's model output image (not its thought image) saved at the asked
+ *   path, a PNG by gemini-api.
  * - c. A chosen model and two reference images: the request names that
  *   model, and carries the prompt then each reference as an image, by its
  *   type.
@@ -209,7 +209,7 @@ export default {
         JSON.stringify(made)
       );
       check(
-        "b. one POST /v1beta/interactions on that model, the key in x-goog-api-key, the prompt as text, an image at 3:2 and 2K",
+        "b. one POST /v1beta/interactions on that model, the key in x-goog-api-key, the prompt as text, an image at 3:2 and 2K, store false",
         asked.length === 1 &&
           first?.path === "/v1beta/interactions" &&
           first.key === KEY &&
@@ -222,6 +222,7 @@ export default {
                 aspect_ratio: "3:2",
                 image_size: "2K",
               },
+              store: false,
             }),
         JSON.stringify(asked)
       );

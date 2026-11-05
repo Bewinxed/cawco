@@ -185,7 +185,8 @@ const refusal = (error: unknown): Error => {
  * `response_format` `{type: "image", aspect_ratio, image_size}`, an image
  * format alone so the answer is the image without conversational text
  * ("You can configure the response to return only the generated images …
- * by specifying an image format in the `response_format` parameter"). Not
+ * by specifying an image format in the `response_format` parameter"), and
+ * `store: false` so Google keeps neither the prompt nor the images. Not
  * streamed and not in the background, the call returns the finished
  * interaction. Its image is the SDK's `output_image`, "the last generated
  * image block" of the model's output (thought images are not output); none,
@@ -224,6 +225,17 @@ const askGemini = async (
           ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
           ...(imageSize ? { image_size: imageSize } : {}),
         },
+        // Kept nowhere: "By default, the API stores all Interaction objects
+        // (`store=true`)", 55 days on the Paid Tier; "you can set
+        // `store=false` in your request … `store=false` is incompatible with
+        // background execution and prevents using `previous_interaction_id`
+        // for subsequent turns"
+        // (https://aistudio.google.com/docs/interactions-overview.md, "Data
+        // storage and retention", read 2026-11-05), neither of which this
+        // one synchronous call uses. The SDK's automatic continuation still
+        // runs: with `store: false` it resends the input with the
+        // `continuation_token` (`continuationBody`).
+        store: false,
       },
       // One attempt: a failed image is said, never sent again by itself.
       // The interactions client retries 408, 409, 429 and 5XX four times
