@@ -192,6 +192,8 @@
   let zoom = 1;
 
   /** A box's width as laid out: its drawn width over the head's zoom. */
+  /** Positions that take a box out of its row's flow. */
+  const OUT_OF_FLOW = new Set(["absolute", "fixed"]);
   const laidOut = (el: Element): number =>
     el.getBoundingClientRect().width / zoom;
 
@@ -248,7 +250,10 @@
   /**
    * The head's controls as one row: a glass group's items stand in the row
    * where the group does (its own gap is the head's), and its inline
-   * padding is room the row keeps.
+   * padding is room the row keeps. What a glass draws out of the flow (its
+   * join, as wide as the glass) takes no room: counted, it widened as the
+   * controls stood, so they went to More, the glass narrowed and they stood
+   * again, every frame (the probe's Caw preview at 680, never still).
    */
   function rowOf(el: HTMLElement): { row: Element[]; pads: number[] } {
     const row: Element[] = [];
@@ -260,7 +265,11 @@
           (Number.parseFloat(style.paddingInlineStart) || 0) +
             (Number.parseFloat(style.paddingInlineEnd) || 0)
         );
-        row.push(...child.children);
+        row.push(
+          ...[...child.children].filter(
+            (one) => !OUT_OF_FLOW.has(getComputedStyle(one).position)
+          )
+        );
       } else {
         row.push(child);
       }
