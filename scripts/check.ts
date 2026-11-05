@@ -418,9 +418,18 @@ const codegen = await keyOf([
 ]);
 const fresh = !(await passed("golar-tsc-codegen", codegen));
 const tscProjects = (fresh ? projects : affected).map((p) => p.config);
-if (tscProjects.length > 0) {
+/**
+ * The type check, when this run has one: it writes every project's
+ * declarations under `.tsbuild/`, which a check reading those projects'
+ * references reads ({@link Gated.after}). None in a run that builds none.
+ */
+const TSC =
+  tscProjects.length > 0
+    ? `golar tsc -b (${tscProjects.length} projects${fresh ? ", every one rebuilt: Golar's codegen changed" : ""})`
+    : undefined;
+if (TSC) {
   checks.push({
-    name: `golar tsc -b (${tscProjects.length} projects${fresh ? ", every one rebuilt: Golar's codegen changed" : ""})`,
+    name: TSC,
     dir: ROOT,
     argv: [
       join(ROOT, "node_modules/.bin/golar"),
@@ -498,6 +507,13 @@ const biomed = [...reached].filter(
 
 /* The house and artifact checks, by the files each reads. */
 interface Gated {
+  /**
+   * The check it starts after, when not the sync: one whose output it reads
+   * must have ended first, or it reads a file half written (resolution-check
+   * read `.tsbuild/packages/core/src/asks.d.ts` while `golar tsc -b` rewrote
+   * it, and failed a merge check on TS1434).
+   */
+  after?: string;
   argv: string[];
   dir?: string;
   /** Folders (ending `/`) and files it reads, beside its own script. */
@@ -682,6 +698,10 @@ const gated: Gated[] = [
   },
   {
     ...bun("scripts/resolution-check.ts", []),
+    // `golar tsc --listFilesOnly` resolves a project's references to the
+    // declarations the type check writes under `.tsbuild/` (the only two
+    // checks of a run that open anything there, read under strace).
+    after: TSC,
     // What resolves: the lockfile, every tsconfig and manifest, and every
     // file's import specifiers.
     key: () =>
@@ -733,7 +753,7 @@ for (const check of gated) {
     name: check.name,
     dir: join(ROOT, check.dir ?? "."),
     argv: check.argv,
-    after: SYNC,
+    after: check.after ?? SYNC,
     stamp: { file: stampFile(check.name), key },
   });
 }
