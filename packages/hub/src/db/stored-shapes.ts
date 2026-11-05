@@ -219,7 +219,6 @@ const ContinueRequestShape = declared(
       machineId: z.string().optional(),
       model: z.string().optional(),
       permissionMode: PermissionModeShape.optional(),
-      fallbackPermissionMode: PermissionModeShape.optional(),
       projectId: z.string().optional(),
       scratch: z
         .object({

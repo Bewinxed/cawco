@@ -123,6 +123,7 @@ import {
   SESSION_STOPPED,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
+import { FULL_SEND_ANSWER } from "@cawco/core/asks";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
@@ -1422,6 +1423,13 @@ const CLAUDE_ROOT_SANDBOX = "IS_SANDBOX";
 /** The `canUseTool` callback, parked until `resolvePermission` answers it. */
 type PermissionResolver = (result: PermissionResult) => void;
 
+/** An ask the CLI put that waits on an answer: its callback, and the call it gates. */
+interface OpenPermission {
+  input: Record<string, unknown>;
+  resolve: PermissionResolver;
+  toolName: string;
+}
+
 /** CawCo's `fullSend` is the CLI's `bypassPermissions`: the SDK never sees CawCo's own mode. */
 const sdkMode = (
   mode: PermissionMode
@@ -2144,7 +2152,7 @@ class ClaudeSession implements HarnessSession {
   readonly #turn: Turn;
   readonly #pump: Promise<void>;
   readonly #ctx: HarnessContext;
-  readonly #permissions = new Map<string, PermissionResolver>();
+  readonly #permissions = new Map<string, OpenPermission>();
   /**
    * Session-start hooks that failed, held until the first prompt of this run
    * is taken up ({@link #hookFailure}).
@@ -2539,7 +2547,11 @@ class ClaudeSession implements HarnessSession {
               });
               return;
             }
-            this.#permissions.set(requestId, resolve);
+            this.#permissions.set(requestId, {
+              resolve,
+              toolName,
+              input: toolInput,
+            });
             // The CLI withdrew the ask (an interrupt mid-ask): nobody can
             // answer it any more, and the hub hears it was withdrawn.
             signal.addEventListener(
@@ -3583,6 +3595,29 @@ class ClaudeSession implements HarnessSession {
     }
     await this.#handle.setPermissionMode(sdkMode(mode));
     this.#mode.choose(mode);
+    this.#answerOpen();
+  }
+
+  /**
+   * The asks still open that the session's mode answers here now: once it
+   * is in Full Send, each one Full Send answers ({@link
+   * SessionMode.answersHostSide}: every one but a question) is approved and
+   * the hub hears Full Send approved it, so nothing of a session in Full
+   * Send waits on the person, however recently the mode was set. Asked of
+   * every mode it enters; in any other, none is answered.
+   */
+  #answerOpen(): void {
+    for (const [requestId, held] of this.#permissions) {
+      if (!this.#mode.answersHostSide(held.toolName)) {
+        continue;
+      }
+      this.#permissions.delete(requestId);
+      console.log(
+        `[claude] ${this.instanceId}: its open ${held.toolName} ask (${requestId}) approved by Full Send as the session entered it`
+      );
+      held.resolve({ behavior: "allow", updatedInput: held.input });
+      this.#ctx.permissionResolved?.(requestId, "answered", FULL_SEND_ANSWER);
+    }
   }
 
   async control(method: string, args: unknown[]): Promise<unknown> {
@@ -4303,13 +4338,15 @@ class ClaudeSession implements HarnessSession {
     requestId: string,
     result: import("@cawco/core").PermissionResult
   ): void {
-    const resolve = this.#permissions.get(requestId);
-    if (!resolve) {
+    const held = this.#permissions.get(requestId);
+    if (!held) {
       throw new Error(`no permission request ${requestId}`);
     }
     this.#permissions.delete(requestId);
+    held.resolve(sdkPermissionResult(result));
     // An answer that moves the session into Full Send (an approved plan, say)
-    // puts the CLI in bypass; the session is Full Send from here.
+    // puts the CLI in bypass; the session is Full Send from here, and so are
+    // the asks it still holds open.
     if (
       result.behavior === "allow" &&
       result.updatedPermissions?.some(
@@ -4317,8 +4354,8 @@ class ClaudeSession implements HarnessSession {
       )
     ) {
       this.#mode.choose("fullSend");
+      this.#answerOpen();
     }
-    resolve(sdkPermissionResult(result));
   }
 
   /**
@@ -4326,13 +4363,13 @@ class ClaudeSession implements HarnessSession {
    * words, and its turn goes on, as an interrupt withdraws one.
    */
   withdrawPermission(requestId: string, message: string): void {
-    const resolve = this.#permissions.get(requestId);
-    if (!resolve) {
+    const held = this.#permissions.get(requestId);
+    if (!held) {
       throw new Error(`no permission request ${requestId}`);
     }
     this.#permissions.delete(requestId);
     console.log(`[claude] permission withdrawn: ${requestId} — ${message}`);
-    resolve({ behavior: "deny", message });
+    held.resolve({ behavior: "deny", message });
   }
 
   /**
@@ -4362,8 +4399,8 @@ class ClaudeSession implements HarnessSession {
     // No turn starts from here on; the stream ends, and the CLI's stdin with
     // it, only once the effort reads below have landed.
     this.#input.close();
-    for (const resolve of this.#permissions.values()) {
-      resolve({ behavior: "deny", message: "session stopped" });
+    for (const held of this.#permissions.values()) {
+      held.resolve({ behavior: "deny", message: "session stopped" });
     }
     this.#permissions.clear();
     // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the child may already be gone

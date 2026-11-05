@@ -21642,18 +21642,6 @@
                           "fullSend"
                         ]
                       },
-                      "fallbackPermissionMode": {
-                        "type": "string",
-                        "enum": [
-                          "default",
-                          "acceptEdits",
-                          "bypassPermissions",
-                          "plan",
-                          "dontAsk",
-                          "auto",
-                          "fullSend"
-                        ]
-                      },
                       "scratch": {
                         "type": "object",
                         "properties": {

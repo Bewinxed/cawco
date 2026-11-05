@@ -13,6 +13,7 @@ import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type {
   AgentBusyReport,
+  AskAnswer,
   AsleepFrame,
   CarrySessionOutcome,
   CarrySessionRequest,
@@ -3801,8 +3802,8 @@ export class SessionSupervisor {
         this.#openAsks.set(request.requestId, body);
         this.sink(body);
       },
-      permissionResolved: (requestId, outcome) =>
-        this.#settleAsk(instanceId, requestId, outcome),
+      permissionResolved: (requestId, outcome, answer) =>
+        this.#settleAsk(instanceId, requestId, outcome, false, answer),
       busy: (active) => {
         if (active) {
           this.#busy.add(instanceId);
@@ -6874,7 +6875,9 @@ export class SessionSupervisor {
     instanceId: string,
     requestId: string,
     outcome: "answered" | "cancelled" = "answered",
-    processEnded = false
+    processEnded = false,
+    /** Who answered it, when its harness says (Full Send). */
+    answer?: AskAnswer
   ): void {
     const ask = this.#openAsks.get(requestId);
     if (!(ask && "instanceId" in ask) || ask.instanceId !== instanceId) {
@@ -6891,6 +6894,7 @@ export class SessionSupervisor {
       processGeneration: ask.processGeneration,
       outcome,
       ...(processEnded ? { processEnded } : {}),
+      ...(answer ? { answer } : {}),
     };
     if (!this.sink(settled)) {
       this.#unheardSettles.set(requestId, settled);

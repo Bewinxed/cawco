@@ -14,6 +14,7 @@
  * folding layer about them (they arrive as `raw` frames until then).
  */
 import type {
+  AskAnswer,
   AuthState,
   CutCommand,
   Envelope,
@@ -175,11 +176,13 @@ export interface HarnessContext {
   /**
    * A gate was answered elsewhere, or by the adapter's own policy; or, with
    * `cancelled`, withdrawn by the harness before anyone answered it (an
-   * interrupt mid-ask).
+   * interrupt mid-ask). `answer` names who answered when the adapter knows
+   * (Full Send, as the session entered it: core `FULL_SEND_ANSWER`).
    */
   permissionResolved?: (
     requestId: string,
-    outcome?: "answered" | "cancelled"
+    outcome?: "answered" | "cancelled",
+    answer?: AskAnswer
   ) => void;
   /** Server-session work waits for durable hub storage of its address. */
   recordSessionAddress?: (sessionId: string) => Promise<void>;

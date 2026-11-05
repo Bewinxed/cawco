@@ -72,6 +72,7 @@ import {
   askOutcome,
   askQuestionWords,
   askRecordedWords,
+  FULL_SEND_ANSWER,
   HUB_RESTARTED,
   isAdminWrite,
   newAskId,
@@ -133,9 +134,6 @@ const questionResult = (
 
 /** The mode that approves every ask for its session (core `PermissionMode`). */
 const FULL_SEND: PermissionMode = "fullSend";
-
-/** Who answers an approval its session had open as it entered Full Send. */
-const FULL_SEND_ANSWER: AnswerFrom = { via: "fullSend" };
 
 /**
  * Why a write is refused before anyone is asked: an `admin_*_write` with no

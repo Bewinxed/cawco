@@ -25,16 +25,65 @@
  * (d) A write made while the switch is on its way (the call and the command
  *     sent together) leaves nothing open once the switch has applied, and
  *     its rule is made.
+ * (e) A session in Bypass whose repository's ask rule makes Claude Code ask
+ *     for a shell command (`permissions.ask`, which Bypass still asks): its
+ *     prompt waits on the person. The card's mode control switches it to
+ *     Full Send: the prompt is approved by Full Send (the agent says so), it
+ *     leaves every screen, and the command runs.
+ * (f) A continuation asked by a session in Accept edits (its
+ *     `continue_session`, naming no mode for the new session, while its
+ *     machine is paused so the new session cannot start yet). The asking
+ *     session is switched to Full Send by the mode control, the pause ends,
+ *     and the new session starts in Full Send: the asking session's mode as
+ *     it starts, not as the continuation was asked.
  *
  *   bun scripts/probe-kit/run.ts full-send-asks
  */
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { projectClaudeDir } from "../../../packages/core/src/paths";
+import type { ContinuationJob } from "../../../packages/core/src/protocol";
 import { toolWords } from "../../lib/tool-call";
-import { MACHINE, MODEL, until } from "../../scratch-fleet";
+import {
+  MACHINE,
+  MODEL,
+  type Reply,
+  type Seen,
+  until,
+} from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const TAG = crypto.randomUUID().slice(0, 8);
+/** The person's words that make the mock call {@link ASKED_COMMAND} (e). */
+const BASH_STEP = `PROBE-FSA-BASH-${TAG}`;
+/** The shell command the repository's ask rule asks for (e). */
+const ASKED_COMMAND = "echo probe-full-send-asked";
+/** The agent's line for a prompt Full Send approved as its session entered it (claude.ts `#answerOpen`). */
+const APPROVED_LINE = "approved by Full Send as the session entered it";
+
+/** What the mock heard come back from {@link ASKED_COMMAND}. */
+const heardResults: string[] = [];
+
+/** The mock: (e)'s step calls the asked command; every other request says ok. */
+const respond = (request: Seen): Reply => {
+  if (request.all.includes(BASH_STEP)) {
+    if (request.afterTool) {
+      heardResults.push(request.last);
+      return { everyMs: 5, words: ["done"] };
+    }
+    if (request.toolNames.includes("Bash")) {
+      return {
+        everyMs: 5,
+        words: [],
+        tool: {
+          name: "Bash",
+          input: { command: ASKED_COMMAND, description: "Probe step" },
+        },
+      };
+    }
+  }
+  return { everyMs: 5, words: ["ok"] };
+};
 /** What an approve ask's call answers (core asks.ts `askRecordedWords`). */
 const RECORDED = "Recorded as";
 
@@ -114,9 +163,145 @@ const madeWithin = async (fleet: KitFleet, name: string) =>
     30_000
   ).catch(() => false);
 
+/** (e): a harness's own prompt, open as the card switches Bypass to Full Send. */
+const promptLeg = async (kit: Kit, fleet: KitFleet) => {
+  const { check } = kit;
+  const asking = join(fleet.sandbox, "ask-rule");
+  await mkdir(projectClaudeDir(asking), { recursive: true });
+  await writeFile(
+    projectClaudeDir(asking, "settings.json"),
+    JSON.stringify({ permissions: { ask: [`Bash(${ASKED_COMMAND}:*)`] } })
+  );
+  const prompted = await fleet.spawn("claude", "Full Send prompt", asking);
+  const agentMark = await fleet.logMark("agent");
+  await fleet.send(prompted, BASH_STEP);
+  /** The harness's own prompts `prompted` has on every screen (not the hub's asks). */
+  const promptsOf = async () =>
+    (await fleet.api<Parked[]>("/api/pending")).filter(
+      (one) => one.instanceId === prompted && !one.requestId?.startsWith("ask_")
+    );
+  const [prompt] = await until(
+    "the ask rule's prompt on every screen",
+    promptsOf,
+    (open) => open.length > 0,
+    120_000
+  ).catch(() => []);
+  const promptSwitch = await fleet.command(
+    prompted,
+    "set-permission-mode",
+    "setPermissionMode",
+    ["fullSend"]
+  );
+  const promptsLeft = await until(
+    "the prompt gone from every screen",
+    async () => (await promptsOf()).length,
+    (left) => left === 0,
+    30_000
+  ).catch(async () => (await promptsOf()).length);
+  const ran = await until(
+    "the asked command's output heard",
+    () => heardResults.join("\n"),
+    (said) => said.includes("probe-full-send-asked"),
+    60_000
+  ).catch(() => heardResults.join("\n"));
+  const agentSaid = await agentMark.since();
+  check(
+    "(e) a harness's prompt open as the card's mode control switches the session from Bypass to Full Send is approved by Full Send, leaves every screen, and its call runs",
+    prompt?.payload.toolName === "Bash" &&
+      promptSwitch.stage === "applied" &&
+      promptsLeft === 0 &&
+      ran.includes("probe-full-send-asked") &&
+      agentSaid.includes(APPROVED_LINE),
+    `the prompt: ${prompt ? `${prompt.requestId} (${prompt.payload.toolName})` : "none"}; the switch: ${JSON.stringify(promptSwitch)}; prompts left: ${promptsLeft}; the command said: ${ran.slice(0, 200) || "nothing"}; the agent said Full Send approved it: ${agentSaid.includes(APPROVED_LINE)}`
+  );
+};
+
+/** (f): a continuation asked in Accept edits, started after a switch to Full Send. */
+const continuationLeg = async (kit: Kit, fleet: KitFleet, cwd: string) => {
+  const { check } = kit;
+  const source = await fleet.spawn("claude", "Continued source", cwd);
+  const said = await fleet.send(source, "Say ok.");
+  await until(
+    "the source's turn read and ended",
+    () => ({ send: fleet.sendRow(said), row: fleet.instance(source) }),
+    ({ send, row }) => send?.state === "read" && !row?.turn_open_at,
+    180_000
+  );
+  const caller = await fleet.spawn("claude", "Continuing caller", cwd, {
+    permissionMode: "acceptEdits",
+  });
+  const paused = await fetch(`${fleet.base}/api/machines/${MACHINE}/pause`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      until: new Date(Date.now() + 10 * 60_000).toISOString(),
+    }),
+  });
+  const before = new Set(
+    (await fleet.api<ContinuationJob[]>("/api/continuations")).map(
+      (one) => one.id
+    )
+  );
+  const continuing = toolWords(
+    {
+      base: fleet.base,
+      id: caller,
+      credential: await fleet.sessionCredential(caller),
+    },
+    "continue_session",
+    {
+      session: source,
+      from: "asks",
+      target_harness: "claude",
+      target_model: MODEL.claude,
+    },
+    { timeoutMs: 300_000 }
+  );
+  const job = await until(
+    "the continuation held at its start",
+    async () =>
+      (await fleet.api<ContinuationJob[]>("/api/continuations")).find(
+        (one) => !before.has(one.id)
+      ),
+    (one) => one?.stage === "starting",
+    60_000
+  ).catch(() => undefined);
+  const callerSwitch = await fleet.command(
+    caller,
+    "set-permission-mode",
+    "setPermissionMode",
+    ["fullSend"]
+  );
+  const callerMode = modeOf(fleet, caller);
+  await fleet.api(`/api/machines/${MACHINE}/resume`, {});
+  const answered = await continuing;
+  const started = job
+    ? await until(
+        "the continuation started",
+        async () =>
+          (await fleet.api<ContinuationJob[]>("/api/continuations")).find(
+            (one) => one.id === job.id
+          ),
+        (one) => one !== undefined && ["started", "failed"].includes(one.stage),
+        180_000
+      ).catch(() => undefined)
+    : undefined;
+  const targetMode = job ? modeOf(fleet, job.targetInstanceId) : null;
+  check(
+    "(f) a continuation asked by a session in Accept edits, switched to Full Send before the continuation starts, starts its new session in Full Send",
+    paused.status === 200 &&
+      job?.stage === "starting" &&
+      callerSwitch.stage === "applied" &&
+      callerMode === "fullSend" &&
+      started?.stage === "started" &&
+      targetMode === "fullSend",
+    `pause: ${paused.status}; the job held: ${job ? `${job.id} at ${job.stage}` : "none"}; the switch: ${JSON.stringify(callerSwitch)}, the caller's row ${callerMode}; the job ended ${started?.stage ?? "unseen"}${started?.error ? ` (${started.error})` : ""}; its new session's mode: ${targetMode}; continue_session said: ${answered.text.slice(0, 200)}`
+  );
+};
+
 const run = async (kit: Kit) => {
   const { check } = kit;
-  const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
+  const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
@@ -248,6 +433,9 @@ const run = async (kit: Kit) => {
     raceSwitch.stage === "applied" && raceOpen === 0 && raceMade,
     `the write said: ${raced.text.slice(0, 160)}; the switch: ${JSON.stringify(raceSwitch)}; open after: ${raceOpen}; rule made: ${raceMade}`
   );
+
+  await promptLeg(kit, fleet);
+  await continuationLeg(kit, fleet, cwd);
 };
 
 const spec: Spec = {

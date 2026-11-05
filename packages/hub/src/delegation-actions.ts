@@ -1609,9 +1609,9 @@ export const handoffActions = ({
           "continue_session continues another session, never this one. If your context is too big, say so in one line: the person compacts it with Claude Code's own /compact."
         );
       }
-      // The new session answers permissions as the caller does, where its
-      // harness has modes; the hub settles it, never the machine's default.
-      const fallbackPermissionMode = callerMode(rows, instanceId);
+      // The new session answers permissions as the caller does as it starts
+      // (`askedBy`), where its harness has modes; the hub settles it, never
+      // the machine's default.
       const response = await fetch(
         `${hubHttpUrl()}/api/instances/${encodeURIComponent(source)}/continue`,
         {
@@ -1625,7 +1625,6 @@ export const handoffActions = ({
               ...(input.target_permission_mode
                 ? { permissionMode: input.target_permission_mode }
                 : {}),
-              ...(fallbackPermissionMode ? { fallbackPermissionMode } : {}),
             },
             askedBy: instanceId,
             ...(input.note ? { note: input.note } : {}),

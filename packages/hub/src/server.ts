@@ -435,7 +435,7 @@ import {
   withReminder,
   workWords,
 } from "@cawco/core";
-import { PROJECT_SETTINGS } from "@cawco/core/asks";
+import { FULL_SEND_ANSWER, PROJECT_SETTINGS } from "@cawco/core/asks";
 import { readTrial } from "@cawco/core/binary-installation";
 import {
   AGENT_RESTARTING,
@@ -1862,12 +1862,12 @@ const continueBody = t.Object({
     machineId: t.Optional(t.String({ minLength: 1 })),
     cwd: t.Optional(t.String({ minLength: 1 })),
     effort: t.Optional(t.Union(EFFORT_LEVELS.map((level) => t.Literal(level)))),
-    // The mode the new session is asked to run in, and the one it takes when
-    // none is asked (the caller's own). A harness with modes gets an
-    // explicit mode, and with neither nothing starts; one with none (pi)
-    // records none and refuses one asked of it. The hub's `settleMode` decides.
+    // The mode the new session is asked to run in. Asked none, it takes the
+    // mode of the session that asked for it (`askedBy`) as it starts
+    // (`continuationCauseMode`). A harness with modes gets an explicit mode,
+    // and with neither nothing starts; one with none (pi) records none and
+    // refuses one asked of it. The hub's `settleMode` decides.
     permissionMode: t.Optional(permissionModeSchema),
-    fallbackPermissionMode: t.Optional(permissionModeSchema),
     scratch: t.Optional(
       t.Object({
         worktree: t.Optional(t.Boolean()),
@@ -18992,6 +18992,37 @@ export const createServer = (
   };
 
   /**
+   * The mode a continuation's sessions fall back on where none is asked:
+   * that of the session that caused it, read from its row as each of them
+   * starts, never as the job was asked, so a switch made meanwhile (into
+   * Full Send, say) is the one they take. The cause is the session whose
+   * `continue_session` asked for it, else the source itself (a comment on
+   * its task, its move to another account); the person's own continuation
+   * is caused by none, and names its mode.
+   */
+  const continuationCauseMode = (row: ContinuationRow): string | undefined => {
+    const { askedBy } = row;
+    let cause: string | undefined;
+    switch (askedBy.kind) {
+      case "person":
+        cause = undefined;
+        break;
+      case "session":
+        cause = askedBy.id;
+        break;
+      case "task":
+      case "move":
+        cause = row.sourceInstanceId;
+        break;
+      default:
+        throw unreachable(askedBy);
+    }
+    return cause
+      ? (db.getInstancesByIds([cause])[0]?.permissionMode ?? undefined)
+      : undefined;
+  };
+
+  /**
    * A summarising job's summary. A summariser this job already started —
    * before a restart, or before its machine went away — is read first: an
    * answer its transcript holds for a turn that ended is taken as it is.
@@ -19005,10 +19036,9 @@ export const createServer = (
       throw new Error("a summarising continuation has no summariser prompt");
     }
     const cancelled = () => cancelledContinuation(row.id);
-    // Caused by the session that called continue_session, whose mode the
-    // tool files on the request as the target's fallback. The dashboard
-    // sends none: the owner's continuation is caused by no session.
-    const mode = unwatchedMode(row.request.target.fallbackPermissionMode);
+    // Caused by the session whose mode its sessions fall back on, as that
+    // mode reads now; the owner's own continuation is caused by none.
+    const mode = unwatchedMode(continuationCauseMode(row));
     const current = row.summariserInstanceId;
     if (db.getInstancesByIds([current]).length === 0) {
       return summariserRun(
@@ -19300,7 +19330,7 @@ export const createServer = (
       request.target.scratch ? "scratch" : "mainline",
       // It goes on with its source's work, as whoever started that.
       source?.origin ?? "person",
-      request.target.fallbackPermissionMode,
+      continuationCauseMode(row),
       // Its row names the source's item before its process lists its tools,
       // so its first turn has finish_item; the item moves to it before its
       // opening ({@link startTarget}).
@@ -26968,9 +26998,6 @@ export const createServer = (
         target: {
           harness,
           ...(row.model ? { model: row.model } : {}),
-          ...(row.permissionMode
-            ? { fallbackPermissionMode: row.permissionMode as PermissionMode }
-            : {}),
         },
         note: comment,
       };
@@ -30884,9 +30911,6 @@ export const createServer = (
           ...(row.model ? { model: row.model } : {}),
           account: to,
           machineId: row.machineId,
-          ...(row.permissionMode
-            ? { fallbackPermissionMode: row.permissionMode as PermissionMode }
-            : {}),
         },
       };
       const refusal = await continuationRefusal(prepared, request, asker);
@@ -39408,16 +39432,24 @@ export const createServer = (
                       .processEnded === true && keepPrompt(parked)
                   )
                 ) {
-                  // Answered with no answer of the hub's in flight: the
-                  // harness took it in its own interface, and says not how.
-                  // One in flight is that answer's, and says itself
-                  // (`answeringPermissions`).
+                  // Answered with no answer of the hub's in flight: by Full
+                  // Send as its session entered it, when the harness says
+                  // so (its frame's `answer`), else taken in the harness's
+                  // own interface, which says not how. One in flight is that
+                  // answer's, and says itself (`answeringPermissions`).
+                  const { answer } =
+                    message.payload as Partial<PermissionSettledFrame>;
                   pending.resolve(
                     message.requestId,
                     peek(message.payload, "outcome") === "cancelled"
                       ? "cancelled"
                       : "answered",
-                    { answer: { via: "harness" } }
+                    {
+                      answer:
+                        answer?.via === FULL_SEND_ANSWER.via
+                          ? FULL_SEND_ANSWER
+                          : { via: "harness" },
+                    }
                   );
                 }
                 break;

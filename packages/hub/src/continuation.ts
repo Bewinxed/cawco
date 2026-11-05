@@ -61,10 +61,12 @@ export interface ContinueRequest {
     machineId?: string;
     /** Absent: the harness's own default. */
     model?: string;
-    /** The mode asked for; settled with the fallback by the hub's one rule (`settleMode`). */
+    /**
+     * The mode asked for; none asked, the mode of the session that caused
+     * the job as it starts (server.ts `continuationCauseMode`), settled by
+     * the hub's one rule (`settleMode`).
+     */
     permissionMode?: PermissionMode;
-    /** The caller's own mode, taken when none is asked and the harness has modes. */
-    fallbackPermissionMode?: PermissionMode;
     projectId?: string;
     scratch?: { worktree?: boolean; baseCwd?: string };
   };

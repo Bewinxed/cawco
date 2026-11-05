@@ -207,6 +207,16 @@ const ADMIN_WRITE_TOOL = /^admin_[a-z_]+_write$/u;
 export const isAdminWrite = (name: string): boolean =>
   ADMIN_WRITE_TOOL.test(name);
 
+/**
+ * Full Send's answer: an approval or a harness's prompt its session held
+ * open as it entered Full Send, approved by it (hub asks.ts
+ * `fullSendFiled`, the agent's harnesses as the mode is set).
+ */
+export const FULL_SEND_ANSWER = {
+  behavior: "allow",
+  via: "fullSend",
+} as const satisfies AskAnswer;
+
 /** A new ask's id. */
 export const newAskId = (): string => `ask_${crypto.randomUUID()}`;
 

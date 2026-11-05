@@ -25,6 +25,7 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type {
+  AskAnswer,
   EffortLevel,
   FleetMcpChange,
   FleetMcpTakeAnswer,
@@ -80,6 +81,7 @@ import {
   usageByModel,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
+import { FULL_SEND_ANSWER } from "@cawco/core/asks";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { readRecordSync, writeStateFileSync } from "@cawco/core/state-file";
@@ -2136,6 +2138,31 @@ export class OpencodeSession implements HarnessSession {
     }
   }
 
+  /**
+   * The tool asks still open, once the session is in Full Send: each is
+   * approved, and the hub hears Full Send approved it, so nothing of a
+   * session in Full Send waits on the person, however recently the mode
+   * was set. A form (a question) stays the person's; in any other mode
+   * nothing is answered.
+   */
+  #answerOpen(): void {
+    if (this.#permissionMode !== "fullSend") {
+      return;
+    }
+    for (const requestId of this.#seenGates) {
+      if (
+        this.#resolvedGates.has(requestId) ||
+        this.#questions.has(requestId)
+      ) {
+        continue;
+      }
+      console.log(
+        `[opencode] ${this.instanceId}: its open ask ${requestId} approved by Full Send as the session entered it`
+      );
+      this.#replyPermission(requestId, "once", FULL_SEND_ANSWER);
+    }
+  }
+
   /** OpenCode's reply carries no words for a tool ask; a withdrawn gate is rejected as a denied one is. */
   withdrawPermission(requestId: string, message: string): void {
     this.resolvePermission(requestId, { behavior: "deny", message });
@@ -2164,16 +2191,20 @@ export class OpencodeSession implements HarnessSession {
     this.#replyPermission(requestId, decision);
   }
 
-  /** The one answer path for a tool permission — the auto-allow shares it. */
+  /**
+   * The one answer path for a tool permission — the auto-allow and Full
+   * Send's answer to an open ask ({@link #answerOpen}, `answer`) share it.
+   */
   #replyPermission(
     requestId: string,
-    decision: "once" | "always" | "reject"
+    decision: "once" | "always" | "reject",
+    answer?: AskAnswer
   ): void {
     if (this.#resolvedGates.has(requestId)) {
       return;
     }
     this.#resolvedGates.add(requestId);
-    this.#ctx.permissionResolved?.(requestId);
+    this.#ctx.permissionResolved?.(requestId, "answered", answer);
     const sessionID = this.#opencodeSessionId();
     detach(
       withRestartHold("write", `permission:${requestId}`, () =>
@@ -3290,6 +3321,7 @@ export class OpencodeSession implements HarnessSession {
         return;
       case CONTROL_SET_PERMISSION_MODE:
         this.#permissionMode = offeredMode(args[0] as PermissionMode);
+        this.#answerOpen();
         return;
       case CONTROL_CONTEXT_USAGE: {
         const tokens = this.#lastTokens;
