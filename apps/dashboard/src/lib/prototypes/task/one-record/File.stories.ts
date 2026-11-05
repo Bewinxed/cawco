@@ -48,6 +48,7 @@ export const EditingBrief = {
   },
 };
 
+/** Editing the brief on a phone. */
 export const EditingBriefPhone = {
   args: { opened: editing },
   parameters: { viewport: 390 },

@@ -107,6 +107,16 @@
       )?.session ?? null
     );
   });
+  /** The attempt an opened hand-in belongs to. */
+  const openedAttempt = $derived(
+    view?.entries.find(
+      (
+        entry
+      ): entry is Extract<TaskView["entries"][number], { kind: "attempt" }> =>
+        entry.kind === "attempt" &&
+        entry.entries.some((child) => child.id === openedEntry?.id)
+    ) ?? null
+  );
   const besideTitle = $derived.by(() => {
     switch (opened?.what) {
       case "result":
@@ -183,6 +193,16 @@
       ]}
       {@attach follow}
     >
+      <!-- On a phone the head has no room for a title: it stands whole here. -->
+      {#if view}
+        <p
+          class="m-0 hidden pb-space-1 type-title text-balance text-ink-strong @max-phone/record:block"
+          role="heading"
+          aria-level={1}
+        >
+          {view.title}
+        </p>
+      {/if}
       <StateLine {view} {opened} {stale} {onopen} />
       {#if stale}
         <!-- mark-line: the glyph stands on the first line of words that wrap -->
@@ -278,6 +298,9 @@
         {#if opened.what === "result" && openedEntry?.kind === "handed"}
           <ResultView
             entry={openedEntry}
+            by={openedAttempt
+              ? words.attemptLine(openedAttempt.n)
+              : openedEntry.actor.name}
             state={besideState}
             onsession={() => onopen({ what: "session", entry: openedEntry.id })}
           />

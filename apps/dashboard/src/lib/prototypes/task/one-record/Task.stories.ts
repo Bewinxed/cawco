@@ -72,6 +72,7 @@ export const OneAttempt = {
   parameters: desk,
 };
 
+/** One attempt waiting on you, on a phone: its two moves at the hand-in's foot. */
 export const OneAttemptPhone = {
   args: { view: t218Review },
   parameters: phone,
@@ -98,6 +99,7 @@ export const PassedOn = {
   },
 };
 
+/** Passed on from a phone: the move is the newest entry. */
 export const PassedOnPhone = {
   args: { view: t218Passed },
   parameters: phone,
@@ -120,6 +122,7 @@ export const PassRefused = {
   },
 };
 
+/** The hub didn't answer the move, on a phone: its words stand under the hand-in. */
 export const PassRefusedPhone = {
   args: { view: t218Refused },
   parameters: phone,
@@ -141,6 +144,7 @@ export const SendBackAsked = {
   },
 };
 
+/** Send back asked on a phone: the question and its note under the pair. */
 export const SendBackAskedPhone = {
   args: { view: t218Review, asking: { what: "sendBack" } },
   parameters: phone,
@@ -181,6 +185,7 @@ export const Working = {
   parameters: desk,
 };
 
+/** Working, on a phone: the attempt's entry with its session live. */
 export const WorkingPhone = {
   args: { view: t142Working, now: T142_RUNNING_AT },
   parameters: phone,
@@ -196,6 +201,7 @@ export const SessionAsks = {
   parameters: desk,
 };
 
+/** The session asks, on a phone: Approve and Deny at the row's two ends. */
 export const SessionAsksPhone = {
   args: { view: t142Asking, now: T142_RUNNING_AT },
   parameters: phone,
@@ -216,6 +222,7 @@ export const AskApproved = {
   },
 };
 
+/** Approved from a phone: the ask says who answered. */
 export const AskApprovedPhone = {
   args: { view: t142Answered, now: T142_RUNNING_AT },
   parameters: phone,
@@ -247,6 +254,7 @@ export const AttemptStopped = {
   parameters: desk,
 };
 
+/** The attempt stopped, on a phone, Retry in its entry. */
 export const AttemptStoppedPhone = {
   args: { view: t15Stopped, now: T15_STOPPED_AT },
   parameters: phone,
@@ -263,6 +271,7 @@ export const AttemptFailed = {
   tags: ["failure"],
 };
 
+/** The attempt failed, on a phone, Retry in its entry. */
 export const AttemptFailedPhone = {
   args: { view: t15Failed, now: T15_STOPPED_AT },
   parameters: phone,
@@ -287,6 +296,7 @@ export const Retried = {
   },
 };
 
+/** Retried from a phone: the fresh attempt is the newest entry. */
 export const RetriedPhone = {
   args: { view: t15Retried, now: T15_STOPPED_AT },
   parameters: phone,
@@ -303,6 +313,7 @@ export const JustFiled = {
   parameters: desk,
 };
 
+/** Just filed, on a phone: one entry and its triage. */
 export const JustFiledPhone = {
   args: { view: t218Filed, now: T218_FILED_AT },
   parameters: phone,
@@ -324,6 +335,7 @@ export const CommentWaitsInFile = {
   },
 };
 
+/** Said something from a phone: the words wait in the file. */
 export const CommentWaitsInFilePhone = {
   args: { view: t218Commented, now: T218_FILED_AT },
   parameters: phone,
@@ -350,6 +362,7 @@ export const Dropped = {
   parameters: desk,
 };
 
+/** Dropped, on a phone, Reopen in its entry. */
 export const DroppedPhone = { args: { view: t112Dropped }, parameters: phone };
 
 /** Reopen pressed: the question unfolds under it. */
@@ -373,6 +386,7 @@ export const Landed = {
   parameters: desk,
 };
 
+/** Landed, on a phone: the landing commit is the newest entry. */
 export const LandedPhone = { args: { view: t233Landed }, parameters: phone };
 
 /** No attempt handed a result in: a session's comment names the commit that landed the work, and is its source. */
@@ -381,6 +395,7 @@ export const ResultByComment = {
   parameters: desk,
 };
 
+/** A result known only by a comment, on a phone. */
 export const ResultByCommentPhone = {
   args: { view: t135Partial },
   parameters: phone,
@@ -389,6 +404,7 @@ export const ResultByCommentPhone = {
 /** The first read on its way: the state line and three entries at their real size. */
 export const Reading = { args: { view: null }, parameters: desk };
 
+/** The first read on its way, on a phone. */
 export const ReadingPhone = { args: { view: null }, parameters: phone };
 
 /** The hub isn't answering: the last read stays, said stale, its acts waiting for the hub. */
@@ -398,6 +414,7 @@ export const HubNotAnswering = {
   tags: ["failure"],
 };
 
+/** The hub isn't answering, on a phone: the last read stays, said stale. */
 export const HubNotAnsweringPhone = {
   args: { stale: "10:41" },
   parameters: phone,

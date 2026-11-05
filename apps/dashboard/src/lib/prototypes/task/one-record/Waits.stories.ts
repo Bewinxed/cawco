@@ -56,6 +56,7 @@ export const TaskOpened = {
   },
 };
 
+/** Open it on a phone: the other task stands in the waits' place. */
 export const TaskOpenedPhone = {
   args: { opened: otherTask(t18) },
   parameters: { viewport: 390 },
@@ -79,6 +80,7 @@ export const InheritedWait = {
   parameters: { viewport: 1440 },
 };
 
+/** An inherited wait, on a phone. */
 export const InheritedWaitPhone = {
   args: { view: t112Dropped },
   parameters: { viewport: 390 },
