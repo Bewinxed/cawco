@@ -20,8 +20,10 @@ import type {
   WindowAsk,
 } from "@cawco/core";
 import {
+  CONTROL_FOLDER_COMMANDS,
   CONTROL_MODEL_CATALOG,
   CONTROL_PI_DEFAULT_MODEL,
+  type SupportedCommands,
   type ToolSpec,
   toolSpec,
 } from "@cawco/core";
@@ -1142,6 +1144,10 @@ export class PiProfile {
   async machine(method: string, args: unknown[]): Promise<unknown> {
     if (method === CONTROL_PI_DEFAULT_MODEL) {
       return await piDefaultModel(String(args[0]));
+    }
+    // pi has no slash commands: its sessions answer the same empty list.
+    if (method === CONTROL_FOLDER_COMMANDS) {
+      return [] satisfies SupportedCommands;
     }
     return method === CONTROL_MODEL_CATALOG ? await modelCatalog() : undefined;
   }

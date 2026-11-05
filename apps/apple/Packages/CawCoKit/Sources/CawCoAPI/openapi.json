@@ -23046,6 +23046,111 @@
         }
       }
     },
+    "/api/agents/{machineId}/commands": {
+      "get": {
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "harness",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "claude",
+                "opencode",
+                "pi"
+              ]
+            }
+          },
+          {
+            "name": "cwd",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "name": "account",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiAgentsByMachineIdCommands",
+        "responses": {
+          "200": {
+            "description": "getApiAgentsByMachineIdCommands 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiAgentsByMachineIdCommands200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiAgentsByMachineIdCommands 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiAgentsByMachineIdCommands 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiAgentsByMachineIdCommands 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiAgentsByMachineIdCommands 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances": {
       "get": {
         "operationId": "getApiInstances",
@@ -32753,6 +32858,13 @@
           "busy",
           "instances"
         ]
+      },
+      "getApiAgentsByMachineIdCommands200": {
+        "description": "What {@link CONTROL_SUPPORTED_COMMANDS} answers, on every harness: the\nsession's `/` menu. A harness with no slash commands (pi) answers an empty\nlist, never nothing, so the menu reads one shape whoever answered.",
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/SlashCommand"
+        }
       },
       "getApiInstances200": {
         "type": "array",
@@ -52066,6 +52178,40 @@
           "scope"
         ]
       },
+      "SlashCommand": {
+        "description": "What the composer's `/` menu renders. Replaces the SDK's `SlashCommand`.",
+        "type": "object",
+        "properties": {
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "argumentHint": {
+            "type": "string"
+          },
+          "builtin": {
+            "description": "Claude Code's own command, as its SDK marks it (`SlashCommand.builtin`,\nclaude-agent-sdk 0.3.296): \"Rows can share a name: when a marked row\ncarries it, /name runs that one, and an unmarked row is the one /name\nruns only when no marked row shares its name.\" Absent on every other\nharness.",
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SlashCommandKind",
+            "description": "What the harness says this is, when it knows. Absent → derived from the name and the session's skill list."
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "argumentHint",
+          "description",
+          "name"
+        ]
+      },
       "Stall": {
         "description": "A session stopped at its account's limit, as its tray chip and\n`delegate_list` say it (core `accountsWords.stalled`): the words, and\nwhen it carries on (epoch ms): the reset it waits for.",
         "type": "object",
@@ -53960,40 +54106,6 @@
           "sessionId",
           "totalCost",
           "turnsEnded"
-        ]
-      },
-      "SlashCommand": {
-        "description": "What the composer's `/` menu renders. Replaces the SDK's `SlashCommand`.",
-        "type": "object",
-        "properties": {
-          "aliases": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "argumentHint": {
-            "type": "string"
-          },
-          "builtin": {
-            "description": "Claude Code's own command, as its SDK marks it (`SlashCommand.builtin`,\nclaude-agent-sdk 0.3.296): \"Rows can share a name: when a marked row\ncarries it, /name runs that one, and an unmarked row is the one /name\nruns only when no marked row shares its name.\" Absent on every other\nharness.",
-            "type": "boolean"
-          },
-          "description": {
-            "type": "string"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/SlashCommandKind",
-            "description": "What the harness says this is, when it knows. Absent → derived from the name and the session's skill list."
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "argumentHint",
-          "description",
-          "name"
         ]
       },
       "NeutralStatus": {

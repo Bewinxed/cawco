@@ -13,7 +13,7 @@
  * `FormAlreadySettledError`, …), and a request that never reached the server
  * as a `ClientError` with reason `Transport`.
  */
-import { type ToolSpec, toolSpec } from "@cawco/core";
+import { type SlashCommand, type ToolSpec, toolSpec } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { unhandled } from "@cawco/core/unhandled";
 import { OpenCode, type OpenCodeClient } from "@opencode/client";
@@ -100,6 +100,43 @@ export const opencodeClient = (
 export const at = (directory: string): { location: { directory: string } } => ({
   location: { directory },
 });
+
+/**
+ * A location's `/` menu: its commands and skills as the fleet's slash
+ * commands, and `/mcp`. What a session there answers for
+ * `supportedCommands` and what the machine answers for `folderCommands`
+ * before one exists (core `CONTROL_FOLDER_COMMANDS`): one reading of the
+ * same server's lists.
+ */
+export const opencodeSlashCommands = async (
+  client: OpencodeClient,
+  directory: string
+): Promise<SlashCommand[]> => {
+  const [commands, skills] = await Promise.all([
+    client.command.list(at(directory)),
+    client.skill.list(at(directory)),
+  ]);
+  return [
+    ...commands.data.map((command): SlashCommand => ({
+      name: command.name,
+      description: command.description ?? "",
+      argumentHint: "",
+      kind: "custom",
+    })),
+    ...skills.data.map((skill): SlashCommand => ({
+      name: skill.name,
+      description: skill.description ?? "",
+      argumentHint: "",
+      kind: "skill",
+    })),
+    {
+      name: "mcp",
+      description: "Connect or disconnect an MCP server",
+      argumentHint: "connect|disconnect <server>",
+      kind: "builtin",
+    },
+  ];
+};
 
 /** The server's `_tag` for a declared error (`SessionNotFoundError`, …), or the client's reason. */
 export const errorTag = (error: unknown): string | undefined => {

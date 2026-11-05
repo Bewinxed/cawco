@@ -83,6 +83,7 @@ import {
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
   CONTROL_CONTEXT_USAGE,
   CONTROL_FLEET_SETTINGS,
+  CONTROL_FOLDER_COMMANDS,
   CONTROL_FORGET_ACCOUNT,
   CONTROL_INTERRUPT,
   CONTROL_JOIN_ACCOUNT_LOGIN,
@@ -153,6 +154,7 @@ import {
   checkAccount,
   claudeSignins,
   dirIdentity,
+  folderCommands,
   linkProjectMemory,
   probeAccount,
   projectMemoryRoot,
@@ -2033,6 +2035,28 @@ const launchedSettings = (
       .flatMap((row) => Object.entries(row.settings ?? {}))
       .filter(([key]) => !CLAUDE_SETTINGS_REFUSED.includes(key))
   );
+
+/**
+ * What a session launched in `cwd` on `model` (none: Claude Code's default)
+ * is started with that decides its `/` menu: its flag settings, the fleet's
+ * and the folder's project's Claude Code settings ({@link launchedSettings})
+ * under CawCo's own ({@link SESSION_SETTINGS}), as {@link
+ * sessionSettingsOptions} merges them; its CLI flags ({@link
+ * sessionExtraArgs}); and its model, which says the efforts `/effort` takes.
+ * Its boundary and its placed hooks are left out: they decide what a command
+ * may do, not which commands it has.
+ */
+const folderLaunch = async (cwd: string, model: string | undefined) => {
+  const set = await readFleetHarnessSet();
+  return {
+    settings: {
+      ...(set ? launchedSettings(set, await placeSetAt(cwd)) : {}),
+      ...SESSION_SETTINGS,
+    },
+    extraArgs: sessionExtraArgs(undefined, false),
+    ...(model ? { model } : {}),
+  };
+};
 
 /**
  * The MCP servers a session launches with: the caller's and CawCo's, or
@@ -5275,6 +5299,15 @@ class ClaudeHarness implements Harness {
         return { forgotten: true };
       case CONTROL_PROBE_ACCOUNT:
         return probeAccount(args[0] as string);
+      case CONTROL_FOLDER_COMMANDS:
+        return folderCommands(
+          args[0] as string,
+          args[1] as string | undefined,
+          await folderLaunch(
+            args[0] as string,
+            (args[2] as string | undefined) || undefined
+          )
+        );
       case CONTROL_CHECK_ACCOUNT:
         return checkAccount(args[0] as string);
       case CONTROL_READ_HOME_LOGIN:

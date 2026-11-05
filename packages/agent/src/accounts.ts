@@ -11,7 +11,7 @@ import {
 } from "node:fs/promises";
 import { platform, userInfo } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { query, type SlashCommand } from "@anthropic-ai/claude-agent-sdk";
 import {
   type AccountCheck,
   type AccountIdentity,
@@ -760,6 +760,64 @@ export const probeAccount = async (account: string): Promise<AccountProbe> => {
         ? { subscriptionType: init.account.subscriptionType }
         : {}),
     };
+  } finally {
+    handle.close();
+  }
+};
+
+/**
+ * The `/` menu a Claude session started in `cwd` on `account` (none: the
+ * machine's own login) opens with, read before it exists: the initialize
+ * response of a Claude Code that never takes a turn, in that folder and
+ * that config dir, launched with what decides a session's menu there
+ * (claude.ts `folderLaunch`: its flag settings, CLI flags and model). It is
+ * what that session's own `supportedCommands()` answers until a
+ * `commands_changed` replaces it: "async
+ * supportedCommands(){let{commands:e}=await this.initialization;return
+ * this.latestCommands??e}" (agent SDK 0.3.318). Its hooks are off and it is
+ * handed no MCP server (`strictMcpConfig`), so reading the menu runs nothing
+ * of the folder's or the fleet's; an MCP server's prompts join a session's
+ * list as its servers connect (`commands_changed`).
+ */
+export const folderCommands = async (
+  cwd: string,
+  account: string | undefined,
+  launch: {
+    extraArgs: Record<string, string | null>;
+    model?: string;
+    settings: Record<string, unknown>;
+  }
+): Promise<SlashCommand[]> => {
+  if (account) {
+    await notLockedAway(account, "read for its commands");
+  }
+  const handle = query({
+    prompt: idle,
+    options: {
+      cwd,
+      pathToClaudeCodeExecutable: await claudeToStart(),
+      env: account ? envFor(account) : bareEnv(),
+      ...launch,
+      settings: { ...launch.settings, disableAllHooks: true },
+      strictMcpConfig: true,
+      mcpServers: {},
+      persistSession: false,
+    },
+  });
+  try {
+    const read = await readWithin(PROBE_TIMEOUT_MS, () =>
+      handle.initializationResult()
+    );
+    switch (read.kind) {
+      case "unanswered":
+        throw new Error(
+          `Claude Code did not list the commands of ${cwd} within ${PROBE_TIMEOUT_MS / 1000}s`
+        );
+      case "answered":
+        return read.value.commands;
+      default:
+        unhandled("read", read);
+    }
   } finally {
     handle.close();
   }

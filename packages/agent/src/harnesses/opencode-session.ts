@@ -39,7 +39,6 @@ import type {
   ProviderRefusal,
   SentMessage,
   SessionInstruction,
-  SlashCommand,
   UserAnswers,
   UserQuestion,
 } from "@cawco/core";
@@ -109,6 +108,7 @@ import {
   type McpNotConnected,
   notAnswered,
   type OpencodeClient,
+  opencodeSlashCommands,
   SEND_NOW_METADATA,
 } from "./opencode-client";
 import {
@@ -3274,34 +3274,6 @@ export class OpencodeSession implements HarnessSession {
     return model ? requestWindow(model.limit) : 200_000;
   }
 
-  /** The location's commands and skills as the fleet's slash commands, and `/mcp`. */
-  async #slashCommands(): Promise<SlashCommand[]> {
-    const [commands, skills] = await Promise.all([
-      this.#client.command.list(at(this.#directory)),
-      this.#client.skill.list(at(this.#directory)),
-    ]);
-    return [
-      ...commands.data.map((command): SlashCommand => ({
-        name: command.name,
-        description: command.description ?? "",
-        argumentHint: "",
-        kind: "custom",
-      })),
-      ...skills.data.map((skill): SlashCommand => ({
-        name: skill.name,
-        description: skill.description ?? "",
-        argumentHint: "",
-        kind: "skill",
-      })),
-      {
-        name: "mcp",
-        description: "Connect or disconnect an MCP server",
-        argumentHint: "connect|disconnect <server>",
-        kind: "builtin",
-      },
-    ];
-  }
-
   async control(method: string, args: unknown[]): Promise<unknown> {
     // Config convergence gate: MCP mutations must not race a server replacement.
     if (
@@ -3369,13 +3341,13 @@ export class OpencodeSession implements HarnessSession {
       case CONTROL_SUPPORTED_MODELS:
         return await opencodeCatalog(this.#client, this.#directory);
       case CONTROL_SUPPORTED_COMMANDS:
-        return await this.#slashCommands();
+        return await opencodeSlashCommands(this.#client, this.#directory);
       case CONTROL_RELOAD_SKILLS:
         this.#commands = null;
         return {
-          skills: (await this.#slashCommands()).filter(
-            (command) => command.kind === "skill"
-          ),
+          skills: (
+            await opencodeSlashCommands(this.#client, this.#directory)
+          ).filter((command) => command.kind === "skill"),
         };
       case CONTROL_MCP_STATUS: {
         const listed = await this.#client.mcp.list(at(this.#directory));

@@ -53,6 +53,7 @@ import type {
 } from "@cawco/core";
 import {
   CAWCO_ENV,
+  CONTROL_FOLDER_COMMANDS,
   CONTROL_MODEL_CATALOG,
   CONTROL_SUPPORTED_COMMANDS,
   CUSTODY_HELD,
@@ -168,6 +169,7 @@ import {
   type OpencodeClient,
   opencodeBinary,
   opencodeClient,
+  opencodeSlashCommands,
   unreachable,
   waitForMcp,
 } from "./opencode-client";
@@ -6166,10 +6168,18 @@ export class OpencodeHarness implements Harness {
     forgetBackground(sessionKey);
   }
 
-  async machine(method: string, _args: unknown[]): Promise<unknown> {
+  async machine(method: string, args: unknown[]): Promise<unknown> {
     switch (method) {
       case CONTROL_MODEL_CATALOG:
         return await this.#catalog();
+      // The machine's own server's reading of the folder's lists: commands
+      // and skills are read from the folder and the machine's config, which
+      // every server here shares.
+      case CONTROL_FOLDER_COMMANDS:
+        return await opencodeSlashCommands(
+          await this.#ensure(),
+          String(args[0])
+        );
       default:
         return;
     }

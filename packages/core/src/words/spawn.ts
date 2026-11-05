@@ -165,7 +165,7 @@ export const spawnWords = {
       machine: "Machine",
       project: "Project",
       skill: "Skill",
-      plugin: "Plugin",
+      command: "Command",
     },
     insert: "Insert",
     noMatches: "No matches",

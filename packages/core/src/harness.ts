@@ -2197,6 +2197,20 @@ export const CONTROL_CARRY_SESSIONS = "carrySessions";
 export const CONTROL_MODEL_CATALOG = "modelCatalog";
 
 /**
+ * The `/` menu a session of a harness would open with in a folder, asked
+ * before any session exists there: args `[cwd, account?, model?]`
+ * (`account`, a Claude account's id, says whose config dir it is read in;
+ * `model`, the one the session would start on: Claude Code's `/effort`
+ * names the efforts its model takes); answers
+ * {@link SupportedCommands}. Machine-scoped. It is the answer the session's
+ * own {@link CONTROL_SUPPORTED_COMMANDS} gives before its MCP servers have
+ * connected: the same harness read in the same folder, so the New Session
+ * form and the started session's composer list the same commands. An MCP
+ * server's prompts join the session's list once its servers connect.
+ */
+export const CONTROL_FOLDER_COMMANDS = "folderCommands";
+
+/**
  * What git says changed in a directory, for a continuation's artifact index:
  * `git status --porcelain` and `git log --since=<iso> --name-status` — those
  * two commands, nothing else (`GitChanges`). Machine-scoped.

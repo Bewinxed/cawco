@@ -195,6 +195,7 @@ import {
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_COMPLETE_TOOL_SIGNIN,
   CONTROL_CONTEXT_USAGE,
+  CONTROL_FOLDER_COMMANDS,
   CONTROL_FORGET_ACCOUNT,
   CONTROL_FORGET_CREDENTIALS,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
@@ -409,6 +410,7 @@ import {
   type StreamHeartbeat,
   SUMMARISER_OUTPUT_RESERVE_TOKENS,
   SUMMARY_CAP_TOKENS,
+  type SupportedCommands,
   sameIdentity,
   sessionLink,
   sessionMayStart,
@@ -1635,6 +1637,12 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
+/**
+ * A folder's `/` menu read before a session: a harness started without a
+ * turn (Claude Code answers its initialize in 0.3–2.4 s, measured
+ * 2026-11-05), with room for a cold start on a busy machine.
+ */
+const FOLDER_COMMANDS_TIMEOUT_MS = 30_000;
 /**
  * How long a tool install the hub runs itself (a joined machine's harness
  * CLIs, `readyHarnesses`) may take to answer: the dashboard's own install wait
@@ -33255,6 +33263,52 @@ export const createServer = (
                     500,
                     answer.value.error ??
                       "the machine could not read its config"
+                  );
+            default:
+              throw unreachable(answer);
+          }
+        }
+      )
+      // The `/` menu a session of `harness` would open with in `cwd` on this
+      // machine on `model`, before one exists: the machine's harness reads it
+      // the way that session's own `supportedCommands` does (core
+      // `CONTROL_FOLDER_COMMANDS`), so the New Session form lists what the
+      // session's composer will. A Claude session's on the account it names,
+      // else the machine's. Nothing is stored, like `/inspect` beside it.
+      .get(
+        "/api/agents/:machineId/commands",
+        {
+          query: t.Object({
+            harness: harnessSchema,
+            cwd: t.String({ minLength: 1 }),
+            account: t.Optional(t.String()),
+            model: t.Optional(t.String()),
+          }),
+        },
+        async ({ params, query, set, status }) => {
+          const account =
+            query.harness === "claude"
+              ? (query.account ?? machineAccount(db, params.machineId))
+              : undefined;
+          const answer = await readAgent(
+            params.machineId,
+            CONTROL_FOLDER_COMMANDS,
+            [query.cwd, account, query.model],
+            FOLDER_COMMANDS_TIMEOUT_MS,
+            query.harness
+          );
+          switch (answer.kind) {
+            case "unanswered": {
+              const away = unansweredStatus(set, params.machineId, answer);
+              return status(away.code, away.said);
+            }
+            case "answered":
+              return answer.value.ok
+                ? (answer.value.result as SupportedCommands)
+                : status(
+                    500,
+                    answer.value.error ??
+                      `${machineName(params.machineId)} could not list the commands of ${query.cwd}`
                   );
             default:
               throw unreachable(answer);

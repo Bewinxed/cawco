@@ -13,6 +13,7 @@
     TARGET_HEADROOM_TOKENS,
   } from "@cawco/core/continuation";
   import { detach } from "@cawco/core/detach";
+  import type { AvailableCommand } from "@cawco/core/fleet";
   import {
     type EffortLevel,
     HARNESSES,
@@ -67,13 +68,13 @@
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconBolt as Bolt,
-    IconBook2 as Book,
     IconTranscript as Chat,
     IconToolFiles as Files,
     IconChevronLeft,
     IconKey,
     IconShield,
     IconStars as Stars,
+    IconTerminal as Terminal,
     IconClose as X,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
@@ -97,7 +98,7 @@
   } from "../continue.svelte";
   import type { DraftContent } from "../draft-store";
   import { EFFORT_OPTIONS } from "../effort-levels";
-  import { type FleetSnapshot, inspectMachine } from "../fleet";
+  import { inspectMachine } from "../fleet";
   import { newId } from "../id";
   import { conversationHref } from "../links";
   import MachineAway from "../MachineAway.svelte";
@@ -114,6 +115,7 @@
     permissionModesFor,
   } from "../permission-modes";
   import { checkoutOf, checkoutOn, placedOn } from "../projects";
+  import { folderCommands } from "../slash-commands";
   import {
     rememberedMachine,
     rememberMachine,
@@ -350,8 +352,13 @@
   let popover = $state<"machines" | "project" | "location" | "lifetime" | null>(
     null
   );
-  let skills = $state<string[]>([]);
-  let plugins = $state<string[]>([]);
+  /**
+   * The `/` menu: what a session of the picked harness opens with in the
+   * picked folder on the first machine, asked of that machine
+   * ({@link folderCommands}) and drawn as that session's composer draws its
+   * own list. Empty until it answers.
+   */
+  let commands = $state<AvailableCommand[]>([]);
   /** Continue mode: who writes the summary. Reset on every open; never remembered. */
   let summarizerHarness = $state<HarnessKind>(spawnPrefs.harness);
   let summarizerModel = $state("");
@@ -1311,7 +1318,6 @@
       if (continueFrom) {
         loadEstimate(continueFrom.instanceId, submission);
       }
-      loadFleetMenu(submission);
     });
     return () => {
       submission += 1;
@@ -1404,22 +1410,39 @@
       }
     }
   }
-  async function loadFleetMenu(request: number) {
-    try {
-      const response = await fetch("/api/fleet");
-      if (!response.ok) {
-        return;
-      }
-      const snapshot = (await response.json()) as FleetSnapshot;
-      if (request !== submission) {
-        return;
-      }
-      skills = snapshot.skills.map((row) => row.name);
-      plugins = snapshot.config.plugins.map((row) => row.id);
-    } catch {
-      // A hub without a fleet catalog leaves the `/` menu with nothing to offer.
+  $effect(() => {
+    const ask = {
+      machineId,
+      harness,
+      cwd: cwd.trim(),
+      account: harness === "claude" ? placedAccount : null,
+      model,
+    };
+    commands = [];
+    if (
+      !(open && machineOnline && ask.cwd) ||
+      verifiedLocation !== locationKey ||
+      missingMachines.includes(ask.machineId)
+    ) {
+      return;
     }
-  }
+    let stale = false;
+    folderCommands(ask).then(
+      (listed) => {
+        if (!stale) {
+          commands = listed;
+        }
+      },
+      (cause: unknown) => {
+        // The menu offers nothing, as a session's composer does when its
+        // session did not list its commands.
+        console.warn(`[cawco] the commands of ${ask.cwd}:`, cause);
+      }
+    );
+    return () => {
+      stale = true;
+    };
+  });
   $effect(() => {
     const ids = machineIds;
     const path = cwd.trim();
@@ -1672,28 +1695,24 @@
       ];
     }
     return [
-      ...skills.filter(hit).map((name, i) => ({
-        key: `skill:${name}`,
-        label: `/${name}`,
-        kind: spawnWords.form.kinds.skill,
-        icon: Stars,
-        hue: HUES[i % 5],
-        serial: `/${name}`,
-        apply: () => {
-          // A skill chip only changes the prompt text.
-        },
-      })),
-      ...plugins.filter(hit).map((id, i) => ({
-        key: `plugin:${id}`,
-        label: id,
-        kind: spawnWords.form.kinds.plugin,
-        icon: Book,
-        hue: HUES[(i + 2) % 5],
-        serial: `/${id}`,
-        apply: () => {
-          // A plugin chip only changes the prompt text.
-        },
-      })),
+      ...commands
+        .filter((command) => hit(command.name))
+        .map((command, i) => ({
+          key: `command:${command.name}`,
+          label: `/${command.name}`,
+          // Its family as the composer files it: a skill, else the plugin or
+          // MCP server it came from, else a command.
+          kind:
+            command.type === "skill"
+              ? spawnWords.form.kinds.skill
+              : (command.source ?? spawnWords.form.kinds.command),
+          icon: command.type === "skill" ? Stars : Terminal,
+          hue: HUES[i % 5],
+          serial: `/${command.name}`,
+          apply: () => {
+            // A command chip only changes the prompt text.
+          },
+        })),
     ];
   }
   /** Whether the folder is missing on `id`; `unanswered` when its machine did not say in time. */
