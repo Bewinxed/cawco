@@ -116,7 +116,10 @@ const run = async (kit: Kit) => {
         await page.waitForTimeout(800);
         await then?.(page);
         const where = `${state} ${label} ${theme}`;
-        await house.at(page, where);
+        // Caw's column is what is read, as the artifact head is read in its
+        // card: the top bar round it hosts the project's tabs, their shelf
+        // its own surface (PaneTabs).
+        await house.at(page, where, { scope: PANEL });
         await shot(kit, page, where.replaceAll(" ", "-"));
         await page.context().close();
       }

@@ -1207,18 +1207,14 @@
            is the wide bar's alone (`desk:` with `not-coarse:` or
            `not-portrait:`); anywhere else the bar draws no ground of its
            own, no fill and no hairline (DESIGN.md, No bar ground): the
-           field it stands on is its ground. Hosting them, its trailing
-           glass stands in from the screen's edge (`--shelf-end`) as far as
-           the first tab stands in from its pane's, so the shelf holds one
-           inset at both ends. -->
+           field it stands on is its ground. -->
       <header
         data-slot="top"
         data-full={full || undefined}
         data-floating={floating || undefined}
         data-hosting={hosting || undefined}
-        class="group/top peer/top h-c-top-bar-h shrink-0 flex data-full:hidden items-center gap-space-2 py-0 ps-0 pe-(--top-end) desk:not-coarse:data-hosting:pe-(--shelf-end) desk:not-portrait:data-hosting:pe-(--shelf-end) coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-c-top-bar-h max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:shelf-hairline"
+        class="group/top peer/top h-c-top-bar-h shrink-0 flex data-full:hidden items-center gap-space-2 py-0 ps-0 pe-(--top-end) coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-c-top-bar-h max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:shelf-hairline"
         style:--top-end="calc(var(--space-6) + env(safe-area-inset-right, 0px))"
-        style:--shelf-end="calc(var(--space-3) + var(--top-inset-end))"
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
         style:--top-inset-end={"calc(var(--c-bar-phone-edge) + env(safe-area-inset-right, 0px))"}
       >
