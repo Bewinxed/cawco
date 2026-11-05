@@ -20,7 +20,10 @@
    * looked over the page's foot), `long` (150 comments), `compose` (a
    * comment on the whole page being written), `more` (the head's More open,
    * where the head has one), `view` (the canvas view's menu open), `mode`
-   * (the mode's one-button form open, where the head draws it).
+   * (the mode's one-button form open, where the head draws it), `delete`
+   * (comment 4's Delete pressed: its question under the card's bar),
+   * `remove` (the artifacts menu's Remove pressed: its question in the menu),
+   * `found` (Resolved in front, searching "HIG": the hits in every list).
    */
   import type { Pin } from "@cawco/core/comments";
   import { commentWords } from "@cawco/core/words/comments";
@@ -83,7 +86,7 @@
     if (asked === "long") {
       return LONG;
     }
-    if (asked === "resolved") {
+    if (asked === "resolved" || asked === "found") {
       return PINS.map((one, at) =>
         at < 3 ? { ...one, resolvedAt: "2026-11-05T10:00:00.000Z" } : one
       );
@@ -92,11 +95,11 @@
   });
   let listOpen = $state(asked !== "rest" && asked !== "changes");
   let filter = $state<"check" | "open" | "resolved">(
-    asked === "resolved" ? "resolved" : "open"
+    asked === "resolved" || asked === "found" ? "resolved" : "open"
   );
   let sort = $state<RailSort>("newest");
   let openPin = $state<string | null>(
-    asked === "thread" ? (PINS[3]?.id ?? null) : null
+    asked === "thread" || asked === "delete" ? (PINS[3]?.id ?? null) : null
   );
   const thread = $derived(pins.find((one) => one.id === openPin) ?? null);
   const draft = new ComposerDraft();
@@ -146,16 +149,21 @@
         press('[aria-label^="Mode:"]');
       } else if (asked === "artifacts") {
         press("[data-artifact-trigger]");
+      } else if (asked === "remove") {
+        press("[data-artifact-trigger]");
+        setTimeout(() => press("[data-artifact-remove]"), FITTED);
+      } else if (asked === "delete") {
+        press('[data-slot="delete"]');
       } else if (asked === "full") {
         press("[data-thread-grab]");
-      } else if (asked === "search" || asked === "miss") {
+      } else if (asked === "search" || asked === "miss" || asked === "found") {
         rail?.focusSearch();
         requestAnimationFrame(() => {
           const field = document.querySelector<HTMLInputElement>(
             'input[data-slot="search"]'
           );
           if (field) {
-            field.value = asked === "search" ? "HIG" : "zebra";
+            field.value = asked === "miss" ? "zebra" : "HIG";
             field.dispatchEvent(new Event("input", { bubbles: true }));
           }
         });
@@ -487,10 +495,15 @@
           </ThreadSheet>
         {/if}
       {:else if thread}
+        <!-- The card beside its pin, as PinFloat stands it: as tall as it needs, up to the well's room. -->
         <div
-          class="absolute end-space-4 top-space-8 w-c-pin-card-w max-h-full flex flex-col p-space-3 rounded-lg bg-surface-raised shadow-overlay"
+          class="pointer-events-none absolute inset-y-space-4 end-space-4 flex flex-col"
         >
-          {@render card(thread)}
+          <div
+            class="pointer-events-auto w-c-pin-card-w max-h-full min-h-0 flex flex-col p-space-3 rounded-lg bg-surface-raised shadow-overlay"
+          >
+            {@render card(thread)}
+          </div>
         </div>
       {/if}
     </SideSurface>
