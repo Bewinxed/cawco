@@ -158,11 +158,14 @@ const LENGTH_UNITS = /^(px|r?em|ch|ex|vw|vh|vmin|vmax|cq[iwhb]|dvh|svh|lvh)$/u;
 const registered = new Set<string>();
 
 /**
- * A custom property an authored clip animates, its frames all one figure
- * in one unit, registered as that type (CSS Properties and Values,
- * `CSS.registerProperty`), inheriting, so the engine interpolates it as it
- * runs, never stepping it at half-way: a mockup binds any element under the
- * one the clip runs on to its live value with `var(--name)`. One the author registered with `@property` stays as written.
+ * A custom property an authored clip animates on the drawing's root, its
+ * frames all one figure in one unit, registered as that type (CSS
+ * Properties and Values, `CSS.registerProperty`), inheriting, so the engine
+ * interpolates it as it runs, never stepping it at half-way: a mockup binds
+ * any element of the drawing to its live value with `var(--name)`. One the
+ * author registered with `@property` stays as written. The caller asks it
+ * only of the drawing's root: a component's own animation on an element of
+ * its own is never touched, so the stage draws it as it runs anywhere.
  */
 export function interpolated(keyframes: readonly Keyframe[]): void {
   const [first] = keyframes;
@@ -296,11 +299,17 @@ export class Replays {
   #heldAt = 0;
   readonly #told: (time: StageTime) => void;
   readonly #frame: () => void;
+  readonly #rooted: (el: Element) => boolean;
 
-  /** `told`: the move's clock said to the panel. `frame`: called on each frame a replay stands or plays (the lit ring follows). */
-  constructor(told: (time: StageTime) => void, frame: () => void) {
+  /** `told`: the move's clock said to the panel. `frame`: called on each frame a replay stands or plays (the lit ring follows). `rooted`: an element is the drawing's root, where an authored custom property interpolates. */
+  constructor(
+    told: (time: StageTime) => void,
+    frame: () => void,
+    rooted: (el: Element) => boolean
+  ) {
     this.#told = told;
     this.#frame = frame;
+    this.#rooted = rooted;
   }
 
   /** A new move read: every replay of the last let go. */
@@ -340,7 +349,9 @@ export class Replays {
     if (!held.target?.isConnected) {
       return null;
     }
-    interpolated(held.keyframes);
+    if (this.#rooted(held.target)) {
+      interpolated(held.keyframes);
+    }
     let animation: Animation;
     try {
       animation = held.target.animate(

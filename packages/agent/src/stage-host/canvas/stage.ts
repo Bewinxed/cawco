@@ -218,6 +218,32 @@ type Reads = Map<Section, FrameRender[]>;
 const sameRef = (a: StateRef | null, b: StateRef | null): boolean =>
   !!a && !!b && JSON.stringify(a) === JSON.stringify(b);
 
+/**
+ * An animation a reach set off, as first seen: its frames and timing as the
+ * engine has them then (a transition's engine drops its effect once it
+ * ends); null for one that runs no time.
+ */
+function takenOf(
+  animation: Animation,
+  first: number,
+  t0: number
+): Taken | null {
+  const effect = animation.effect as KeyframeEffect | null;
+  if (!((Number(effect?.getComputedTiming().duration) || 0) > 0)) {
+    return null;
+  }
+  const iterations = Number(effect?.getComputedTiming().iterations ?? 1);
+  return {
+    animation,
+    first,
+    target: effect?.target ?? null,
+    keyframes: effect?.getKeyframes() ?? [],
+    iterations: Number.isFinite(iterations) ? iterations : 0,
+    property: propertyOf(animation),
+    read: readAnimation(animation, t0),
+  };
+}
+
 /** A picture's key: a state of a story in an interaction. */
 const pictureKey = (file: string, story: string, interaction: Interaction) =>
   `${file}|${story}|${interaction}`;
@@ -412,7 +438,8 @@ export function bootStage(page: Page): Mode {
   /** The move the last reach read, replayed as the Animation face plays, scrubs and tunes it; the page its clock. */
   const replays = new Replays(
     (time) => tell<StageTime>(STAGE_TIME, time),
-    () => ringLit()
+    () => ringLit(),
+    (el) => rootOf(el)
   );
   /** The thing the face's row rests on, by the clips' id for it; null while none. */
   let lit: string | null = null;
@@ -444,6 +471,10 @@ export function bootStage(page: Page): Mode {
   /** The state a picture stands the drawing at, and its forced interaction. */
   let posed: { interaction: Interaction; key: string } | null = null;
   const reads: Reads = new Map();
+
+  /** Whether `el` is the drawing's root: its body, or the story's own outermost element. */
+  const rootOf = (el: Element) =>
+    el === drawing || el === drawing.firstElementChild;
 
   /** Tells the panel, through the overlay (preview-overlay page.ts relays each to the pane). */
   const tell = <Message extends object>(type: string, message: Message) =>
@@ -829,22 +860,13 @@ export function bootStage(page: Page): Mode {
       if (statesOwn(animation)) {
         return;
       }
-      const effect = animation.effect as KeyframeEffect | null;
-      if ((Number(effect?.getComputedTiming().duration) || 0) > 0) {
-        // Its frames and timing as the engine has them when first seen: a transition's engine drops its effect once it ends.
-        const keyframes = effect?.getKeyframes() ?? [];
-        // An authored clip's custom property interpolates as it runs, so a mockup binds to its live value.
-        interpolated(keyframes);
-        const iterations = Number(effect?.getComputedTiming().iterations ?? 1);
-        taken.push({
-          animation,
-          first,
-          target: effect?.target ?? null,
-          keyframes,
-          iterations: Number.isFinite(iterations) ? iterations : 0,
-          property: propertyOf(animation),
-          read: readAnimation(animation, t0Timeline),
-        });
+      const one = takenOf(animation, first, t0Timeline);
+      if (one) {
+        // An authored clip's custom property on the drawing's root interpolates as it runs, so a mockup binds to its live value.
+        if (one.target && rootOf(one.target)) {
+          interpolated(one.keyframes);
+        }
+        taken.push(one);
       }
       if (still) {
         land(animation);
