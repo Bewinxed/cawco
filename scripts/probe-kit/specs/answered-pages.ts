@@ -40,17 +40,46 @@
  *     agent asked on, a canvas a page only embeds with a pin asking, and a
  *     preview handed up with his tuned values are no need and ask nothing.
  *
+ * Live in nightly 6821 (the cockpit session, 2026-11-05), three faults:
+ * (f) artifact_read said "The person pressed Send just now" of the hub's
+ *     own send (presenters/artifacts.ts read `sentAt` whoever sent) while he
+ *     was away. A page the hub sent reads as the hub's send, he did not
+ *     press Send, with his last answer's time; his own still reads as his.
+ *     On main `sentBy` is not kept and the hub's send reads as his.
+ * (g) The first restart sent every answered page touched within a day
+ *     (service.ts `resumeMarks` → `marked` → `sendAnswered`) and woke its
+ *     writer with answers it had read days before. Answers changed before
+ *     the writer's last read (`readSeq`) or notice (`deliveredSeq`) are no
+ *     news (needs.ts `answersUnheard`): the page settles telling no one; a
+ *     note of his after the read is news.
+ * (h) Every doc write ran `answersMoved`, the hub's own bookkeeping
+ *     (`meta.drawn`) included, which reset the quiet timer of a pending
+ *     send as if he had changed something. The docs tell a hub or agent
+ *     write from his (docs.ts `keep`: only a joined client's is "person");
+ *     only his pushes the delivery back (`personMarked`), and another's
+ *     never sends while his delivery is coming (needs.ts `sendsOnChange`).
+ *
  *   bun scripts/probe-kit/run.ts answered-pages
  */
+
+import type { CanvasAuthor } from "../../../packages/core/src/canvas";
 import type { ChoiceEntry } from "../../../packages/core/src/choices";
 import type { Pin } from "../../../packages/core/src/comments";
 import type { DecisionCard } from "../../../packages/core/src/decisions";
+import { DAY_MS, MINUTE_MS } from "../../../packages/core/src/time";
+import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
+import {
+  type ArtifactClient,
+  createArtifactDocs,
+} from "../../../packages/hub/src/artifacts/docs";
 import {
   type ArtifactFacts,
   type ArtifactSessions,
   answeredWhole,
+  answersUnheard,
   needOf,
   pendingOf,
+  sendsOnChange,
 } from "../../../packages/hub/src/artifacts/needs";
 import {
   answersOf,
@@ -61,9 +90,18 @@ import {
   questionsOf,
   stillAsked,
 } from "../../../packages/hub/src/artifacts/questions";
-import type { AskedOf } from "../../../packages/hub/src/artifacts/service";
-import type { ArtifactRow } from "../../../packages/hub/src/db/artifacts";
+import type {
+  ArtifactRead,
+  AskedOf,
+  SentBy,
+} from "../../../packages/hub/src/artifacts/service";
+import type {
+  ArtifactRow,
+  ArtifactsDb,
+} from "../../../packages/hub/src/db/artifacts";
+import type { HubLifetimeShape } from "../../../packages/hub/src/lifetime";
 import { openItemsSection } from "../../../packages/hub/src/open-items";
+import { artifactReadWords } from "../../../packages/hub/src/presenters/artifacts";
 import type { Kit, Spec } from "../kit";
 
 const PAGE = "109f7c53-44db-47c7-bc7f-7805647dd14a";
@@ -486,6 +524,104 @@ const run = ({ check }: Kit) => {
       askingPin[0]?.state === "open" &&
       needOf(canvasRow("try"), pinned, sessions(CANVAS)) !== null,
     JSON.stringify({ working, embedded, askingPin: states(askingPin) })
+  );
+
+  // (f) The hub's Send is said as the hub's, his last answer's time beside it.
+  const sentRead = (sentBy: SentBy) =>
+    artifactReadWords({
+      id: PAGE,
+      kind: "page",
+      name: page.name,
+      title: page.title,
+      revision: 4,
+      pageHash: HASH,
+      sentAt: new Date(Date.now() - MINUTE_MS).toISOString(),
+      sentBy,
+      answeredAt: new Date(Date.now() - 3 * DAY_MS).toISOString(),
+      seq: 40,
+      state: {},
+    } as unknown as ArtifactRead) as string;
+  const byHub = sentRead("hub");
+  const byHim = sentRead("person");
+  check(
+    "f: a page the hub sent reads as the hub's send, never as his Send, with his last answer's time; his own Send still reads as his",
+    byHub.includes(artifactToolWords.readSentByHub("1 min ago")) &&
+      !byHub.includes(artifactToolWords.readSentByPerson("1 min ago", null)) &&
+      byHub.includes(artifactToolWords.readLastAnswer("3 days ago")) &&
+      byHim.includes(artifactToolWords.readSentByPerson("1 min ago", null)),
+    JSON.stringify({ byHub, byHim })
+  );
+
+  // (g) Answers the writer read settle the page with nothing sent to it.
+  const heard = {
+    "sheet-close": entry({ options: ["x"] }),
+    "card-close": entry({ options: ["x"] }),
+    "head-name": entry({ options: [], note: "the name, bigger" }),
+  };
+  const changesOf = [
+    { by: "person" as const, key: "sheet-close", seq: 31 },
+    { by: "person" as const, key: "card-close", seq: 33 },
+    { by: "person" as const, key: "head-name", seq: 35 },
+    { by: "agent" as const, key: "drawn", seq: 39 },
+  ];
+  const readAll = { readSeq: 38, deliveredSeq: 12 };
+  const newer = [
+    ...changesOf,
+    { by: "person" as const, key: "head-name", seq: 41 },
+  ];
+  const pinAfter = [
+    ...changesOf,
+    { by: "person" as const, key: "pin:7", seq: 41 },
+  ];
+  check(
+    "g: every answer read with artifact_read (or told by a Send) before the hub's send is no news, and the page settles telling no one; a note of his after the read is news",
+    !(
+      answersUnheard(readAll, changesOf, heard) ||
+      answersUnheard({ readSeq: 0, deliveredSeq: 36 }, changesOf, heard)
+    ) &&
+      answersUnheard(readAll, newer, heard) &&
+      !answersUnheard(readAll, pinAfter, heard) &&
+      answersUnheard({ readSeq: 30, deliveredSeq: 0 }, changesOf, heard)
+  );
+
+  // (h) Only his writes are his change: a hub write never moves the quiet timer.
+  const told: CanvasAuthor[] = [];
+  const timers: (() => void)[] = [];
+  const docs = createArtifactDocs({
+    db: {
+      append: () => undefined,
+      updateCount: () => 0,
+      compact: () => undefined,
+      updates: () => [],
+    } as unknown as ArtifactsDb,
+    lifetime: {
+      every: () => ({}),
+      after: (_ms: number, later: () => void) => {
+        timers.push(later);
+        return {};
+      },
+      cancel: () => undefined,
+    } as unknown as HubLifetimeShape,
+    updated: (_id, by) => told.push(by),
+  });
+  docs.transact(PAGE, "hub", (doc) => doc.getMap("meta").set("drawn", AT));
+  docs.transact(PAGE, "agent", (doc) =>
+    doc.getMap("meta").set("revisedAt", AT)
+  );
+  docs.transact(PAGE, { client: {} as ArtifactClient }, (doc) =>
+    doc.getMap("state").set("head-name", heard["head-name"])
+  );
+  check(
+    "h: the hub's own write and an agent's are not his change: neither sends while his delivery is coming (its timer untouched), one that finds the page whole and nothing coming sends it at once; his write sends only from his quiet delivery",
+    JSON.stringify(told) === JSON.stringify(["agent", "agent", "person"]) &&
+      !sendsOnChange(told[0] as CanvasAuthor, { coming: true, whole: true }) &&
+      sendsOnChange(told[0] as CanvasAuthor, { coming: false, whole: true }) &&
+      !sendsOnChange(told[0] as CanvasAuthor, {
+        coming: false,
+        whole: false,
+      }) &&
+      !sendsOnChange("person", { coming: false, whole: true }),
+    JSON.stringify(told)
   );
   return Promise.resolve();
 };

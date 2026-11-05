@@ -129,6 +129,23 @@ export const artifactToolWords = {
   /** What a page Send carried, in its log line. */
   sendCarried: (changes: number, note: boolean) =>
     `${changes} choice change(s) since the last Send${note ? ", with a note" : ""}`,
+  /** artifact_read: a page not sent yet. */
+  readNotSent: "The person has not pressed Send yet.",
+  /** artifact_read: the person's own Send, `ago` before the read, with the words the page sent with it. */
+  readSentByPerson: (ago: string, text: string | null) =>
+    `The person pressed Send ${ago}${text ? `, the page sending ${text}` : ""}.`,
+  /** artifact_read: the hub's send once every question had his answer, `ago` before the read; no act of his, who may be nowhere near the page. */
+  readSentByHub: (ago: string) =>
+    `Every question had his answer, so the hub sent the page ${ago}; he did not press Send.`,
+  /** artifact_read: when his newest pick, note or value came. */
+  readLastAnswer: (ago: string) => `His last answer came ${ago}.`,
+  /** artifact_list: sent since the session's last change, by him or by the hub. */
+  listSentByPerson: "Send pressed since your last change",
+  listSentByHub:
+    "sent by the hub since your last change, every question answered (he did not press Send)",
+  /** The hub's own Send of a page whose answers its writer had all read: settled, and nothing told to the session. */
+  sendSettled:
+    "settled without telling its session, which had read every answer",
   /** A page Send refused, in its log line. */
   sendRefused: (why: string) => `refused, ${why}`,
   /** The hub's log: one step of a show (open, reach, publish, shown wait) that took longer than it should, for which panel. */

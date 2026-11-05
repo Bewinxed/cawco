@@ -157,7 +157,13 @@ const statusLine = (status: ArtifactStatus, now: number): string => {
       : []),
     ...(status.unread > 0 ? [`${count(status.unread, "change")} unread`] : []),
     ...(status.pins > 0 ? [`${count(status.pins, "open pin")}`] : []),
-    ...(status.sent ? ["Send pressed since your last change"] : []),
+    ...(status.sent
+      ? [
+          status.sentBy === "hub"
+            ? artifactToolWords.listSentByHub
+            : artifactToolWords.listSentByPerson,
+        ]
+      : []),
     moveWords(status.waitingOn),
     ...(status.sessionLink ? [`made in ${status.sessionLink}`] : []),
     ...(status.madeByLink ? [`put here by ${status.madeByLink}`] : []),
@@ -228,9 +234,21 @@ const sentWords = (read: ArtifactRead, now: number): string => {
   if (read.kind === "canvas") {
     return "";
   }
-  return read.sentAt === null
-    ? "The person has not pressed Send yet."
-    : `The person pressed Send ${ago(read.sentAt, now)}${read.sentText ? `, the page sending ${verbatim(read.sentText)}` : ""}.`;
+  const last = read.answeredAt
+    ? ` ${artifactToolWords.readLastAnswer(ago(read.answeredAt, now))}`
+    : "";
+  if (read.sentAt === null) {
+    return `${artifactToolWords.readNotSent}${last}`;
+  }
+  // The hub's send is no act of his: he may be nowhere near the page.
+  return `${
+    read.sentBy === "hub"
+      ? artifactToolWords.readSentByHub(ago(read.sentAt, now))
+      : artifactToolWords.readSentByPerson(
+          ago(read.sentAt, now),
+          read.sentText ? verbatim(read.sentText) : null
+        )
+  }${last}`;
 };
 
 /** A stage or served preview's state, in words. */

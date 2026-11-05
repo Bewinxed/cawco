@@ -110,7 +110,7 @@ const artifactOf = ({
 };
 
 /** One key's last change on an artifact: the seq it changed at, and who changed it. */
-interface ArtifactChange {
+export interface ArtifactChange {
   by: "person" | "agent";
   key: string;
   seq: number;

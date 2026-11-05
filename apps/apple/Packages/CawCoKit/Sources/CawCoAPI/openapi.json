@@ -43237,8 +43237,12 @@
             "type": "number"
           },
           "sent": {
-            "description": "The person pressed Send since your last change (a revision, or a new ask).",
+            "description": "It was sent since your last change (a revision, or a new ask), by him or by the hub ({@link sentBy}).",
             "type": "boolean"
+          },
+          "sentBy": {
+            "$ref": "#/components/schemas/ArtifactReadSentBy",
+            "description": "Who sent it last, when it was sent."
           },
           "session": {
             "description": "The session that made it, when it is not the caller's own (a conversation reading its project's).",
@@ -43291,6 +43295,13 @@
       "ArtifactRead": {
         "type": "object",
         "properties": {
+          "answeredAt": {
+            "description": "When his newest pick, note or value on it came; null before any.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "changed": {
             "description": "A canvas's elements the person changed since `since` (or since your last read).",
             "type": "array",
@@ -43433,11 +43444,15 @@
             "type": "string"
           },
           "sentAt": {
-            "description": "When the person last pressed Send; null before they have (and on a canvas, which has no Send).",
+            "description": "When the page was last sent, by him or by the hub ({@link sentBy}); null before it was (and on a canvas, which has no Send).",
             "type": [
               "null",
               "string"
             ]
+          },
+          "sentBy": {
+            "$ref": "#/components/schemas/ArtifactReadSentBy",
+            "description": "Who sent it at {@link sentAt}: the person pressing Send, or the hub once every question had his answer (needs.ts `answeredWhole`)."
           },
           "sentText": {
             "description": "What the page's `cawco.send(text)` sent with the person's last send.",
@@ -66207,6 +66222,13 @@
           "default",
           "fullSend",
           "plan"
+        ]
+      },
+      "ArtifactReadSentBy": {
+        "type": "string",
+        "enum": [
+          "hub",
+          "person"
         ]
       },
       "ArtifactStatusWaitingOn": {

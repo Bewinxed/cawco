@@ -14722,7 +14722,7 @@ export const createServer = (
         artifacts.personMarked(id);
       }
       // Answered, its plan's page wait goes; every question answered, what he wrote goes by itself.
-      artifacts.answersMoved(id);
+      artifacts.answersMoved(id, by);
       // A task or a plan step waiting on a card or pin of it may settle now.
       waitPageMoved(id);
     },

@@ -65,6 +65,7 @@ import {
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   CANVAS_LIMITS,
+  type CanvasAuthor,
   type CanvasEntry,
   canvasOutline,
   excalidrawFile,
@@ -226,11 +227,13 @@ import {
   type ArtifactFacts,
   type ArtifactSessions,
   answeredWhole,
+  answersUnheard,
   mayWait,
   movedOn,
   needOf,
   noticeOf,
   pendingOf,
+  sendsOnChange,
 } from "./needs";
 import {
   bytesHash,
@@ -651,6 +654,8 @@ export type DecisionAnswer = {
 );
 
 export interface ArtifactRead {
+  /** When his newest pick, note or value on it came; null before any. */
+  answeredAt?: string | null;
   /** A canvas's elements the person changed since `since` (or since your last read). */
   changed?: string[];
   /** A canvas's elements you replaced that the person had changed since your last read: "<id> changed under you". */
@@ -693,8 +698,10 @@ export interface ArtifactRead {
   revision: number;
   /** Where its picture was kept, as the session names the path (`save`). */
   saved?: string;
-  /** When the person last pressed Send; null before they have (and on a canvas, which has no Send). */
+  /** When the page was last sent, by him or by the hub ({@link sentBy}); null before it was (and on a canvas, which has no Send). */
   sentAt: string | null;
+  /** Who sent it at {@link sentAt}: the person pressing Send, or the hub once every question had his answer (needs.ts `answeredWhole`). */
+  sentBy?: SentBy;
   /** What the page's `cawco.send(text)` sent with the person's last send. */
   sentText?: string;
   /** The cursor for the next read's `since`. */
@@ -850,8 +857,10 @@ export interface ArtifactStatus {
   picksAwaiting: number;
   /** Pins the person left open. */
   pins: number;
-  /** The person pressed Send since your last change (a revision, or a new ask). */
+  /** It was sent since your last change (a revision, or a new ask), by him or by the hub ({@link sentBy}). */
   sent: boolean;
+  /** Who sent it last, when it was sent. */
+  sentBy?: SentBy;
   /** The session that made it, when it is not the caller's own (a conversation reading its project's). */
   session?: string;
   /** That session's link, what the agent names it by. */
@@ -1203,13 +1212,35 @@ const stateOf = (doc: Doc): Record<string, ChoiceEntry> =>
 /** A source common practice cites: a web link. */
 const WEB_SOURCE = /^https:\/\/\S+$/u;
 
+/**
+ * Who sent a page: the person pressing Send, or the hub, once every
+ * question had his answer (`sendAnswered`). A send from before the hub
+ * kept it (2026-11-05) reads as his.
+ */
+export type SentBy = "person" | "hub";
+
 const metaOf = (doc: Doc) => {
   const meta = doc.getMap("meta");
+  const sentAt = (meta.get("sentAt") as string | null | undefined) ?? null;
   return {
     pageHash: (meta.get("pageHash") as string | null | undefined) ?? null,
-    sentAt: (meta.get("sentAt") as string | null | undefined) ?? null,
+    sentAt,
+    ...(sentAt === null
+      ? {}
+      : {
+          sentBy:
+            (meta.get("sentBy") as SentBy | undefined) ?? ("person" as const),
+        }),
   };
 };
+
+/** When the person's newest entry in `state` came (a pick, a note, a value); null before any. */
+const answeredAtOf = (state: Record<string, ChoiceEntry>): string | null =>
+  Object.values(state).reduce<string | null>(
+    (latest, entry) =>
+      latest === null || entry.at > latest ? entry.at : latest,
+    null
+  );
 
 /** The words a page's `cawco.send(text)` sent with the person's last send; none when it sent none. */
 const sentTextOf = (doc: Doc): string | null =>
@@ -2211,8 +2242,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * Whether the person pressed Send since the session last changed it: the
-   * doc's `meta.sentAt` newer than its `meta.revisedAt`, which every revision
+   * Whether it was sent since the session last changed it, by the person
+   * or by the hub (`meta.sentBy`): the doc's `meta.sentAt` newer than its
+   * `meta.revisedAt`, which every revision
    * and every new ask moves ({@link stampMeta}, {@link askNow}).
    */
   const sentOf = (row: ArtifactRow): boolean => {
@@ -3963,6 +3995,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       revision: row.revision,
       pageHash: meta.pageHash,
       sentAt: meta.sentAt,
+      ...(meta.sentBy ? { sentBy: meta.sentBy } : {}),
+      answeredAt: answeredAtOf(state),
       seq: row.seq,
       state: Object.fromEntries(
         keys.map((key) => [
@@ -4795,14 +4829,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * (`signal`), the page's Send time stamped. Every Send of a page comes
    * here: its own and the panel's ({@link send}), and the Decisions tab's
    * and the board's Set up (`sendPage`), whether its session stands or has
-   * ended. Answers the session that heard it.
+   * ended. Answers the session that heard it. The hub's own Send of
+   * answers its session already read (`tell` false) settles the page the
+   * same way and tells no one: `sentBy` "hub" keeps that it settled.
    */
   const sendPage = async (
     row: ArtifactRow,
     body: SendBody,
     route: string,
     to: PageHearer,
-    by: "person" | "hub" = "person"
+    by: SentBy = "person",
+    tell = true
   ): Promise<string> => {
     const doc = docs.doc(row.id);
     const state = stateOf(doc);
@@ -4828,10 +4865,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       row,
       body,
       route,
-      artifactToolWords.sendCarried(
-        unsentChoices(state, metaOf(doc).sentAt),
-        note !== null
-      )
+      tell
+        ? artifactToolWords.sendCarried(
+            unsentChoices(state, metaOf(doc).sentAt),
+            note !== null
+          )
+        : artifactToolWords.sendSettled
     );
     if (picked) {
       await deps.sending(to, row, {
@@ -4842,11 +4881,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         setup,
       });
     }
-    const hearer = await deps.signal(to, row, { since: row.deliveredSeq });
+    const hearer =
+      tell || !("session" in to)
+        ? await deps.signal(to, row, { since: row.deliveredSeq })
+        : to.session.id;
     const at = new Date().toISOString();
     docs.transact(row.id, "hub", (live) => {
       const meta = live.getMap("meta");
       meta.set("sentAt", at);
+      meta.set("sentBy", by);
       meta.set("sentText", note);
       // His Send is a look at everything on this revision: every change and every answer. The hub's is none.
       const changes =
@@ -7105,8 +7148,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * The hub's own Send of `row` once the person's changes stand quiet
    * ({@link marked}), when it sends itself ({@link sendsItself}): the same
    * Send as his (`sendPage`: a decision page decided, the session told to
-   * read), taken as no look of his. Its session ended, it waits for the
-   * session that takes it up.
+   * read), taken as no look of his. Its session is told only of answers it
+   * has not had ({@link unheardAnswers}); with none, the page settles and
+   * nothing goes to it. Its session ended, it waits for the session that
+   * takes it up.
    */
   const sendAnswered = async (id: string): Promise<void> => {
     const row = db.get(id);
@@ -7119,18 +7164,31 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       { control: "answered" },
       "hub",
       { session: owner },
-      "hub"
+      "hub",
+      unheardAnswers(row)
     );
   };
 
+  /** Whether `row` holds a pick, note or value of the person's its session has not had (needs.ts `answersUnheard`). */
+  const unheardAnswers = (row: ArtifactRow): boolean =>
+    answersUnheard(
+      row,
+      db.changes(row.id, { by: "person" }),
+      stateOf(docs.doc(row.id))
+    );
+
   /**
    * Any change of artifact `row`'s doc, by anyone (a pick, a note, a value,
-   * a pin's reply or resolve, the agent's close): with nothing on it asking
-   * the person, its writer's plan waits on it no more (needs.ts rule 1, the
-   * page wait the hub set); with every question answered, what he wrote
-   * goes by itself once his changes stand quiet ({@link sendAnswered}).
+   * a pin's reply or resolve, the agent's close, the hub's own bookkeeping),
+   * `by` whom: with nothing on it asking the person, its writer's plan waits
+   * on it no more (needs.ts rule 1, the page wait the hub set). Only his
+   * change moves when what he wrote goes by itself: his own pushes the
+   * quiet delivery back ({@link personMarked}, which then sends it,
+   * {@link sendAnswered}); anyone else's that leaves every question
+   * answered sends it now, unless a delivery of his changes is already
+   * coming, whose timer it never moves.
    */
-  const answersMoved = (row: ArtifactRow): void => {
+  const answersMoved = (row: ArtifactRow, by: CanvasAuthor): void => {
     // Only a pick or a judgement is waited on (askedNow) or sends itself.
     if (row.does !== "pick" && row.does !== "judge") {
       return;
@@ -7139,9 +7197,22 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (writer && !pendingFor(row)) {
       deps.clearArtifactWait(writer, row.id);
     }
-    if (sendsItself(row)) {
-      marked(row.id, COMMENTS_QUIET_MS);
+    if (
+      !sendsOnChange(by, {
+        coming: bursts.has(row.id) || delivering.has(row.id),
+        whole: sendsItself(row),
+      })
+    ) {
+      return;
     }
+    delivering.add(row.id);
+    sendAnswered(row.id)
+      .catch((error: unknown) => {
+        console.warn(
+          `[artifacts] ${row.id}: the person's answers did not go by themselves: ${error instanceof Error ? error.message : String(error)}`
+        );
+      })
+      .finally(() => delivering.delete(row.id));
   };
 
   /**
@@ -7164,7 +7235,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const statusOf = (caller: InstanceRow, row: ArtifactRow): ArtifactStatus => {
     const doc = docs.doc(row.id);
     const state = stateOf(doc);
-    const { sentAt } = metaOf(doc);
+    const { sentAt, sentBy } = metaOf(doc);
     const unread = db.changes(row.id, { after: row.readSeq, by: "person" });
     const picksAwaiting = unread.filter(
       ({ key, seq }) => key in state && seq <= row.deliveredSeq
@@ -7220,6 +7291,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       shown,
       opened,
       sent: sentOf(row),
+      ...(sentBy ? { sentBy } : {}),
       updatedAt: row.updatedAt.toISOString(),
       pins,
       unread: unread.length,
@@ -9268,11 +9340,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return { as: close.as, link: question.link, words: question.words };
     },
 
-    /** Anyone changed artifact `id`'s doc: what waits on its answers moves ({@link answersMoved}). */
-    answersMoved: (id: string): void => {
+    /** Anyone changed artifact `id`'s doc, `by` whom: what waits on its answers moves ({@link answersMoved}). */
+    answersMoved: (id: string, by: CanvasAuthor): void => {
       const row = db.get(id);
       if (row) {
-        answersMoved(row);
+        answersMoved(row, by);
       }
     },
 

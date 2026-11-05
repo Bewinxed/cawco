@@ -18,6 +18,7 @@ typeOverrides:
     AreaViewCawMode: OpenEnums.AreaViewCawMode
     ArtifactDoes: OpenEnums.ArtifactDoes
     ArtifactKind: OpenEnums.ArtifactKind
+    ArtifactReadSentBy: OpenEnums.ArtifactReadSentBy
     ArtifactStatusWaitingOn: OpenEnums.ArtifactStatusWaitingOn
     AskAnswerBehavior: OpenEnums.AskAnswerBehavior
     AskAnswerVia: OpenEnums.AskAnswerVia

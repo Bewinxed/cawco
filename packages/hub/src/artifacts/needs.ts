@@ -63,8 +63,9 @@ import {
   planWaitsOnArtifact,
   setupLanding,
 } from "@cawco/core";
+import type { CanvasAuthor } from "@cawco/core/canvas";
 import { unhandled } from "@cawco/core/unhandled";
-import type { ArtifactRow } from "../db/artifacts";
+import type { ArtifactChange, ArtifactRow } from "../db/artifacts";
 import { isSetupPage } from "../setup";
 
 /**
@@ -202,6 +203,38 @@ export const answeredWhole = (
     ? facts.answers.answered === facts.answers.asked
     : row.does === "judge" && facts.judged;
 };
+
+/**
+ * Whether the person's answers on a page are news to its session: a pick,
+ * note or value of his (a key of `state`) changed after both the session's
+ * last read (`artifact_read` stamps `readSeq`) and its last notice to read
+ * (`deliveredSeq`, which a Send stamps). Answers it had settle the page
+ * with nothing sent to it (artifacts/service.ts `sendAnswered`).
+ */
+export const answersUnheard = (
+  row: Pick<ArtifactRow, "deliveredSeq" | "readSeq">,
+  changes: readonly ArtifactChange[],
+  state: Readonly<Record<string, unknown>>
+): boolean => {
+  const heard = Math.max(row.readSeq, row.deliveredSeq);
+  return changes.some(
+    (change) =>
+      change.by === "person" && change.seq > heard && change.key in state
+  );
+};
+
+/**
+ * Whether a change to a page's doc by `by` sends what the person wrote on
+ * it now (artifacts/service.ts `answersMoved`): never his own, which pushes
+ * the quiet delivery back and sends it from there (`personMarked`); anyone
+ * else's (the agent's reply or close, the hub's bookkeeping) when it
+ * leaves the page answered whole and no delivery of his changes is
+ * `coming`, whose timer it never moves.
+ */
+export const sendsOnChange = (
+  by: CanvasAuthor,
+  page: { coming: boolean; whole: boolean }
+): boolean => by !== "person" && !page.coming && page.whole;
 
 /**
  * Rule 2: the writer moved on. Its plan waiting on the artifact holds the
