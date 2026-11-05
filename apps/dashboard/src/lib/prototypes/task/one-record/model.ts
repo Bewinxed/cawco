@@ -165,6 +165,8 @@ export type Entry =
 export interface Wait {
   /** Blocked for good (closed unmerged, deleted, not in the project): only re-pointing or removing helps. */
   flag: string | null;
+  /** Where it opens: its `cawco:` reference (a decision page at its question), or the pull request's or run's page. */
+  href: string;
   kind: TaskWait["kind"];
   label: string;
   settled: boolean;

@@ -21,7 +21,7 @@ import {
   IconPen,
   IconPlay,
   IconPlus,
-  IconResult,
+  IconReport,
   IconShield,
   IconStopped,
   IconTick,
@@ -55,7 +55,7 @@ export const entryGlyph = (entry: Entry): { glyph: Glyph; tone: Tone } => {
         ? { glyph: IconError, tone: "fail" }
         : { glyph: IconStopped, tone: "muted" };
     case "handed":
-      return { glyph: IconResult, tone: "muted" };
+      return { glyph: IconReport, tone: "muted" };
     case "refused":
       return { glyph: IconError, tone: "fail" };
     case "comment":

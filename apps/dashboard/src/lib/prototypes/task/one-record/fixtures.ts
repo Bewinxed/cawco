@@ -831,6 +831,7 @@ const T226_WAITS: Wait[] = [
   {
     kind: "card",
     label: "What names the artifact at the head of its panel?",
+    href: "cawco:decision/109f7c53-44db-47c7-bc7f-7805647dd14a/head-name",
     state: "open",
     settled: false,
     flag: null,
@@ -842,6 +843,7 @@ const T226_WAITS: Wait[] = [
     kind: "card",
     label:
       "On a phone, does the Comments sheet's Close share a group with Search, Sort and Comment on the whole page?",
+    href: "cawco:decision/109f7c53-44db-47c7-bc7f-7805647dd14a/rail-close",
     state: "open",
     settled: false,
     flag: null,
@@ -853,6 +855,7 @@ const T226_WAITS: Wait[] = [
     kind: "task",
     label:
       "Replace the component canvas's grid of frames with the design graph",
+    href: "cawco:task/70ac3d41-5a28-4a31-8e9e-3be2b03d1516/tsk-18",
     state: "ready",
     settled: false,
     flag: null,
@@ -1061,6 +1064,7 @@ export const t112Dropped: TaskView = {
     {
       kind: "task",
       label: "Settle one error-state and one placement rule for every surface",
+      href: "cawco:task/70ac3d41-5a28-4a31-8e9e-3be2b03d1516/tsk-82",
       state: "ready",
       settled: false,
       flag: null,
