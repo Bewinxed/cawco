@@ -53,7 +53,8 @@
    * face; "now" at its start. The words are its accessible name and tooltip.
    */
   import { DAY_MS, HOUR_MS } from "@cawco/core/time";
-  import { frameSize } from "#lib/cawco/frame-observer.js";
+  import { untrack } from "svelte";
+  import { frameObserver } from "#lib/cawco/frame-observer.js";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { barPlace } from "#lib/cawco/usage/bar-place.js";
 
@@ -76,10 +77,12 @@
 
   const schedule = $derived(stripOf(runs, now));
   /**
-   * A mark's shift from its time (`--f` of the strip): centred (-50% of
-   * itself), but never past the strip's start (-f of its width) nor its end
-   * ((1 - f) of its width, less itself). Read where it is used, so % is the
-   * mark's own width and cqi the strip's.
+   * A mark's or a run tick's shift from its time (`--f` of the strip):
+   * centred (-50% of itself), but never past the strip's start (-f of its
+   * width) nor its end ((1 - f) of its width, less itself). Read where it is
+   * used, so % is its own width and cqi the strip's (the groove and the
+   * marks' row are each a container). Centred as it was, a run at the
+   * strip's end stood a pixel past it, a pixel wider than the form.
    */
   const KEEP =
     "clamp(calc(var(--f) * -100cqi), -50%, calc((1 - var(--f)) * 100cqi - 100%))";
@@ -113,9 +116,8 @@
     return out;
   });
 
-  /** The marks' row, and its width as drawn. */
+  /** The marks' row. */
   let markRow = $state<HTMLElement>();
-  let rowWidth = $state(0);
   /**
    * The marks whose label would stand on the one before it, by their time:
    * each label held where it draws (centred on its time, flush inside
@@ -125,18 +127,45 @@
    * hairline stays; the label stands hidden.
    */
   let crowded = $state<ReadonlySet<number>>(new Set());
+  /**
+   * Measured again whenever the row or any label changes size: the row's
+   * width, and each label's own as its face draws it. Read once as it
+   * mounted, a label measured in the fallback face (24px for "now", 21px
+   * in JetBrains Mono) kept that answer after the house face arrived, so a
+   * day's label stood hidden beside room for it, or shown over "now".
+   */
   $effect(() => {
     const row = markRow;
-    const width = rowWidth;
     const all = marks;
     const span = schedule?.span ?? 0;
-    if (!row || width <= 0 || span <= 0) {
+    if (!row || span <= 0) {
       crowded = new Set();
       return;
     }
     const labels = [...row.querySelectorAll<HTMLElement>("[data-mark-label]")];
-    const gap = numberOf("--space-1");
+    const measure = () => {
+      crowded = crowdedOf(all, span, row.clientWidth, labels);
+    };
+    const sized = frameObserver(measure);
+    sized.observe(row);
+    for (const one of labels) {
+      sized.observe(one);
+    }
+    untrack(measure);
+    return () => sized.disconnect();
+  });
+
+  function crowdedOf(
+    all: readonly { at: number }[],
+    span: number,
+    width: number,
+    labels: readonly HTMLElement[]
+  ): ReadonlySet<number> {
     const out = new Set<number>();
+    if (width <= 0) {
+      return out;
+    }
+    const gap = numberOf("--space-1");
     let lastRight = Number.NEGATIVE_INFINITY;
     all.forEach((mark, i) => {
       const w = labels[i]?.offsetWidth ?? 0;
@@ -148,8 +177,8 @@
         lastRight = left + w;
       }
     });
-    crowded = out;
-  });
+    return out;
+  }
 </script>
 
 {#if schedule}
@@ -163,14 +192,14 @@
   >
     <span
       data-slot="schedule-bar"
-      class="relative block h-space-2 rounded-hair bg-border-control"
+      class="@container relative block h-space-2 rounded-hair bg-border-control"
     >
       {#each schedule.runs as at, i (at)}
         {@const nextRun = i === 0 && !paused}
         <span
           data-run-tick
           class={[
-            "absolute start-(--at) w-space-row -translate-x-1/2 rounded-hair",
+            "absolute start-(--at) w-space-row translate-x-(--keep) rounded-hair",
             nextRun && "-inset-y-space-row bg-ink-strong",
             !nextRun && "inset-y-0",
             !nextRun && (paused ? "bg-ink-subtle" : "bg-ink-muted"),
@@ -178,6 +207,8 @@
           data-at={at / schedule.span}
           data-next={nextRun ? "" : undefined}
           style:--at={place(at, schedule.span)}
+          style:--f={Math.min(1, at / schedule.span)}
+          style:--keep={KEEP}
         ></span>
       {/each}
     </span>
@@ -189,9 +220,6 @@
            cut, at any width. -->
       <span
         bind:this={markRow}
-        {@attach frameSize((node: HTMLElement) => {
-          rowWidth = node.clientWidth;
-        })}
         aria-hidden="true"
         class="@container relative block h-(--marks-h) type-meta num text-ink-subtle"
         style:--marks-h={"calc(var(--space-1) + var(--text-meta) * var(--leading-meta))"}
