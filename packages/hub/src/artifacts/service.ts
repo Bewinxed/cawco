@@ -276,6 +276,18 @@ export class ArtifactRefusal extends Error {
   }
 }
 
+/**
+ * A Send that carries nothing new: every pick has gone to the session (by
+ * the hub's own send or an earlier press). Agents and the API hear it as
+ * the 409 it is; the page's own Send reads it as sent (sync.ts
+ * `artifactSend`), since what he asked for already holds.
+ */
+export class NothingNewToSend extends ArtifactRefusal {
+  constructor() {
+    super(409, "Nothing new to send: every pick here has gone to the session.");
+  }
+}
+
 /** A program the hub can't keep, refused as the artifact's (decision-program.ts). */
 const refusedProgram = (error: ProgramRefusal): ArtifactRefusal =>
   new ArtifactRefusal(error.status, error.message, { cause: error });
@@ -4768,10 +4780,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       Object.values(state).some((entry) => !sentAt || entry.at > sentAt);
     const note = body.text?.trim() || null;
     if (!(picked || note)) {
-      throw new ArtifactRefusal(
-        409,
-        "Nothing new to send: every pick here has gone to the session."
-      );
+      throw new NothingNewToSend();
     }
     return { picked, note };
   };

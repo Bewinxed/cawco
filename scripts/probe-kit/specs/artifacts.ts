@@ -1614,6 +1614,8 @@ const askChecks = async ({
   };
   // title 1: the tool refuses a create with no title, saying how to write one.
   const untitled = await call(CREATE, {
+    // Left out on purpose (JSON drops it): the leg proves the refusal.
+    title: undefined,
     kind: "page",
     name: "untitled",
     does: "judge",

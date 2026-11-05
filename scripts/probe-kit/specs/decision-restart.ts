@@ -28,6 +28,11 @@
  *    it is back, no error to retry, and the doc holds the pick and a newer
  *    `sentAt`.
  *
+ * 5. Every question answered, the hub's own send gone (the page's Send says
+ *    Sent), then a press: it resolves, Send still says Sent, and no error
+ *    stands in the pane (hub artifacts/sync.ts: a Send with nothing new
+ *    reads as sent on the page's own route).
+ *
  * Every leg runs in the frame the page first loaded in: a restart keeps the
  * show's revision (hub db `shown_previews.revision`), so no panel loads its
  * page again and no press in it is lost (r453: "Frame was detached" in leg 2,
@@ -59,17 +64,15 @@ const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 /** The pane's word that the page's link is down (PreviewPane `linkDown`). */
 const DOWN = `${PANE} button[data-slot="comments"][data-link-down]`;
 
-const PAGE = `<!doctype html>
-<html lang="en">
-  <head><meta charset="utf-8"><title>Close the rail</title></head>
-  <body>
-    <h1>How the rail closes</h1>
-    <div data-cawco-choice="rail-close">
-      <button data-option="a" type="button">Its own close</button>
-      <button data-option="b" type="button">The head's close</button>
-    </div>
-  </body>
-</html>`;
+/** A decision page of one card: answered by one pick, so the hub sends it by itself once his changes stand quiet (artifacts/service.ts `sendAnswered`). */
+const PROGRAM = `root = Decisions("How the rail closes", [close])
+close = Decision("rail-close", "How does the rail close?", [a, b], "Either reads.", [], [], false, null, "look")
+a = Option("a", "Its own close", "A close on the rail.", true, [], "One more control.")
+b = Option("b", "The head's close", "The panel head closes it.", false, [], "Further to reach.")`;
+/** The page's own Send, in its foot. */
+const SEND = '[data-slot="page-foot"] [data-send]';
+/** The pane's own failure line, where a refused Send of the page's is said. */
+const FAILURE = `${PANE} [data-pane-failure]`;
 
 const calls = new ToolCalls();
 
@@ -132,9 +135,10 @@ const run = async (kit: Kit) => {
     response_format: "detailed",
     kind: "page",
     does: "pick",
+    title: "How the rail closes",
     ask: "Pick how the rail closes",
     name: "rail-close",
-    html: PAGE,
+    program: PROGRAM,
   });
   const id = String(created).match(ANSWERED_ID)?.[1];
   if (!id) {
@@ -162,6 +166,16 @@ const run = async (kit: Kit) => {
   const frame = await pageFrame(tab);
   await frame.locator('[data-option="a"]').waitFor();
   const kept = () => (frame.isDetached() ? "loaded again" : "kept");
+  /** What the page's Send says, its words alone. */
+  const sendSays = async () =>
+    (
+      await frame
+        .locator(SEND)
+        .textContent({ timeout: 1000 })
+        .catch(() => null)
+    )
+      ?.replace(/\s+/gu, " ")
+      .trim() ?? null;
   const pick = (option: string) =>
     frame.locator(`[data-option="${option}"]`).click({ timeout: 10_000 });
   const reached = (option: string, within = REACH_MS) =>
@@ -263,6 +277,35 @@ const run = async (kit: Kit) => {
       sentAfter !== sentBefore &&
       !frame.isDetached(),
     `send ${pressedDown}; hub holds "${await pickOf()}", sentAt ${sentBefore} → ${sentAfter}; page ${kept()}`
+  );
+
+  // 5. A press after the hub's own send: already sent, so it reads as sent.
+  const sentByPress = (await read()).sentAt;
+  await pick("b");
+  const hubSent = await until(
+    "the hub's own send of the answered page",
+    async () => (await read()).sentAt,
+    (at) => at !== null && at !== sentByPress,
+    REACH_MS
+  ).catch(() => null);
+  const spentBefore = await until(
+    "the page's Send saying Sent",
+    () => sendSays(),
+    (words) => words === "Sent",
+    REACH_MS
+  ).catch(() => sendSays());
+  const pressedSpent = await press();
+  await tab.waitForTimeout(2000);
+  const failures = await tab.locator(FAILURE).allTextContents();
+  const spentAfter = await sendSays();
+  kit.check(
+    "5: every question answered and the hub's own send gone, a press reads as sent: it resolves, the Send still says Sent, and no error stands",
+    hubSent !== null &&
+      spentBefore === "Sent" &&
+      pressedSpent === "resolved" &&
+      spentAfter === "Sent" &&
+      failures.length === 0,
+    `hub's send ${hubSent ?? "none"}; Send said "${spentBefore}", then "${spentAfter}"; press ${pressedSpent}; failure ${failures.join(" | ") || "none"}`
   );
   tunnel.stop();
 };

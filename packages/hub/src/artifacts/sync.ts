@@ -80,7 +80,7 @@ import {
   elementsOf,
   MAPS,
 } from "./docs";
-import { ArtifactRefusal } from "./service";
+import { ArtifactRefusal, NothingNewToSend } from "./service";
 
 /** y-websocket's sync message type (its server's `messageSync`). */
 const MESSAGE_SYNC = 0;
@@ -815,12 +815,25 @@ export const artifactSend =
         )
       );
     } catch (error) {
-      if (error instanceof ArtifactRefusal) {
-        return new Response(error.message, { status: error.status });
-      }
-      throw error;
+      return refusedSend(error);
     }
   };
+
+/**
+ * The page's answer for a Send the service refused, in its words and
+ * status; a Send with nothing new reads as sent (his press after every pick
+ * had gone, by the hub's own send or an earlier press: what he asked for
+ * holds). Anything else is thrown on.
+ */
+const refusedSend = (error: unknown): Response => {
+  if (error instanceof NothingNewToSend) {
+    return Response.json({ sent: "already" });
+  }
+  if (error instanceof ArtifactRefusal) {
+    return new Response(error.message, { status: error.status });
+  }
+  throw error;
+};
 
 /** The listener's handlers for artifact sockets. */
 export const artifactSocket = (docs: ArtifactDocs) => ({
