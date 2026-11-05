@@ -417,10 +417,6 @@
   {/if}
 {/snippet}
 
-<!-- A later entry of one speaker's run: its words, and its age at the end
-     of their first line, on its baseline (a row's meta on its words' line,
-     The Row Dress Rule), the words wrapping in their own column as prose
-     does. -->
 <!-- The pin's pill, while the page's own is out of view. -->
 {#snippet headPill()}
   <span class="mark-cell" data-slot="head-pill">
@@ -432,14 +428,18 @@
     />
   </span>
 {/snippet}
+<!-- A later entry of one speaker's run: its words, and its age at the end
+     of their first line, on its baseline (a row's meta on its words' line,
+     The Row Dress Rule). -->
 {#snippet later(text: string, at: string, who: string, you: boolean)}
-  <div class="flex items-baseline" data-slot="later">
-    <div class="min-w-0 flex-1">
-      {#if text.trim()}
-        <MessageBody source={text} wrap="pretty" />
-      {/if}
-    </div>
+  <!-- Its age where the transcript puts a later entry's: floated at the end
+       of its words' first line (Who `grouped`), so the words take the
+       thread's whole width under it, as his first words do. -->
+  <div class="flow-root" data-slot="later">
     <Who grouped name={who} shown timestamp={at} {you} />
+    {#if text.trim()}
+      <MessageBody source={text} wrap="pretty" />
+    {/if}
   </div>
 {/snippet}
 <!-- No head band (the artifact panel's surface brief, A thread beside its
