@@ -186,6 +186,7 @@
     "./words/fleet-faults": "./src/words/fleet-faults.ts",
     "./words/machine": "./src/words/machine.ts",
     "./words/made": "./src/words/made.ts",
+    "./words/rail-of-places": "./src/words/rail-of-places.ts",
     "./words/pairing": "./src/words/pairing.ts",
     "./words/place": "./src/words/place.ts",
     "./words/project": "./src/words/project.ts",
