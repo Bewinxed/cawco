@@ -2598,6 +2598,13 @@
       "when": 1793904965831,
       "tag": "0378_limit_stops",
       "breakpoints": true
+    },
+    {
+      "idx": 379,
+      "version": "6",
+      "when": 1793911093826,
+      "tag": "0379_plan_page_waits_derived",
+      "breakpoints": true
     }
   ]
 }

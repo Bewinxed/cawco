@@ -166,7 +166,6 @@ import {
   attachedFileName,
   attachedPictureLine,
   awayNotesOf,
-  awayWaitsOf,
   BACK_MESSAGE,
   BOUNDARY_RELAUNCH,
   byPerson,
@@ -374,6 +373,7 @@ import {
   permissionModeNamed,
   pictureName,
   placeAtLink,
+  planWaitsOf,
   presenceLine,
   previewEnterUrl,
   previewRoute,
@@ -10041,7 +10041,7 @@ export const createServer = (
    * is first handed (a held session's when it next runs): the notes the
    * session kept in its plan while the person was away (`awayNotesOf`) and
    * what of the session's waits on them now, exactly as Needs you lists it
-   * (core `awayWaitsOf`), with the hub's own away-since. Once per return
+   * (core `planWaitsOf`), with the hub's own away-since. Once per return
    * (notifications.ts `takeRecap`, kept on the hub through a restart), and
    * never notes the person has seen (`session_plans.away_seen`: opened in
    * the plan, or recapped before). Recapped, they are seen: the plan ring's
@@ -10065,7 +10065,7 @@ export const createServer = (
       return undefined;
     }
     detach(plans.seeAway(instanceId), "away notes recapped are seen");
-    const waiting = awayWaitsOf(
+    const waiting = planWaitsOf(
       instanceId,
       plan?.steps ?? [],
       artifactLane.now().needs
@@ -14700,7 +14700,7 @@ export const createServer = (
       if (by === "person") {
         artifacts.personMarked(id);
       }
-      // Answered, its plan's page wait goes; every question answered, what he wrote goes by itself.
+      // Every question answered, what he wrote goes by itself.
       artifacts.answersMoved(id, by);
       // A task or a plan step waiting on a card or pin of it may settle now.
       waitPageMoved(id);
@@ -15190,11 +15190,9 @@ export const createServer = (
     looked: (id) => {
       notifications.clear([artifactCollapseId(id)], "look");
     },
-    waits: (instanceId) => plans.waits(instanceId),
+    steps: (instanceId) => plans.steps(instanceId),
     setUp: (projectId) => isSetUp(projectId, db.project(projectId)),
-    waitOn: (instanceId, artifactId) => plans.waitOn(instanceId, artifactId),
-    clearArtifactWait: (instanceId, artifactId) =>
-      plans.clearArtifactWait(instanceId, artifactId),
+    askedAt: (instanceId, artifactId) => plans.askedAt(instanceId, artifactId),
     stranded,
     itemEnded,
     // Cold as handoff's check finds it: what it left, its project takes up.
@@ -27118,12 +27116,15 @@ export const createServer = (
   const plans = createPlans({
     db,
     tasks,
+    needs: () => artifactLane.now().needs,
     publish: (instanceId, message) => {
       streams.planToFollowers(instanceId, message);
       // A step ticked, removed or waiting: an artifact's ask stands on it.
       artifactLane.moved();
     },
   });
+  // What a plan waits on the person on is Needs you's (core `planWaitsOf`): a change there is read again.
+  artifactLane.listen((read) => plans.needsMoved(read.needs));
   tasks.listen(plans.taskChanged);
   // A session's open items, built from its records: what every compaction
   // and every person's Continue carries (open-items.ts).

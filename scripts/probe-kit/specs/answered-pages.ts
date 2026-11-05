@@ -12,7 +12,7 @@
  * `picksMade`: "A note alone is a note, never a pick") and its writes not
  * sent (needs.ts `unsent` reason, from core `unsentChoices`), so a note
  * left the card open and every pick held the page in Needs you until Send;
- * the plan's page wait (plans.ts `waitOn`) dropped only at a Send
+ * the plan's page wait (plans.ts `waitOn`, gone since) dropped only at a Send
  * (artifacts/service.ts `answeredBy`). Main fails every leg: questions.ts
  * is not there (the spec does not load), and needs.ts read `picks` and
  * `unsent`.
@@ -20,8 +20,8 @@
  * No fleet; each leg is the hub's own rule, called:
  * (a) title-bars-close as he left it: two picks and a note, no Send. Every
  *     question reads answered (pick, pick, note), Needs you lists nothing
- *     (`needOf`), nothing waits on him (`pendingOf`: the hub's
- *     `answersMoved` drops the plan's page wait when this is null), and
+ *     (`needOf`), nothing waits on him (`pendingOf`: its writer's
+ *     plan, read from Needs you, waits on it no more), and
  *     his answers go to the session by themselves once quiet
  *     (`answeredWhole`). The note taken away, `head-name` is open: the
  *     page is in Needs you at `head-name`, "2 of 3 answered", and still
@@ -279,14 +279,14 @@ const factsFrom = (
   };
 };
 
-/** Its writer live, its plan waiting on the page the hub set (plans.ts `waitOn`). */
-const sessions = (waitsOn: string): ArtifactSessions => ({
+/** Its writer live; its plan holds the ask by the step it was asked at (needs.ts `planHolds`, the facts' `asked.step`). */
+const SESSIONS: ArtifactSessions = {
   ended: false,
   harness: "claude",
   machineId: "machine-1",
   setUp: true,
-  waits: { pageWaits: [waitsOn], steps: [] },
-});
+  steps: [],
+};
 
 const states = (questions: Question[]): string =>
   questions.map((one) => `${one.key}=${one.state}`).join(", ");
@@ -296,24 +296,24 @@ const run = async ({ check }: Kit) => {
   const answered = questionsOfPage(ANSWERED);
   const facts = factsFrom(answered);
   check(
-    "a: two picks and a note, no Send: every question answered (pick, pick, note), no need, nothing waits on him (the plan's page wait drops), and his answers go by themselves once quiet",
+    "a: two picks and a note, no Send: every question answered (pick, pick, note), no need, nothing waits on him (nor in its writer's plan), and his answers go by themselves once quiet",
     answered.every((one) => one.state === "answered") &&
       answered.map((one) => one.answer?.by).join() === "pick,pick,note" &&
-      needOf(page, facts, sessions(PAGE)) === null &&
-      pendingOf(page, facts, sessions(PAGE)) === null &&
+      needOf(page, facts, SESSIONS) === null &&
+      pendingOf(page, facts, SESSIONS) === null &&
       answeredWhole(page, facts),
-    `${states(answered)}; need ${JSON.stringify(needOf(page, facts, sessions(PAGE))?.pending)}`
+    `${states(answered)}; need ${JSON.stringify(needOf(page, facts, SESSIONS)?.pending)}`
   );
   const { "head-name": _note, ...twoPicks } = ANSWERED;
   const open = factsFrom(questionsOfPage(twoPicks));
-  const need = needOf(page, open, sessions(PAGE));
+  const need = needOf(page, open, SESSIONS);
   check(
     "a: head-name with no answer still waits on him: in Needs you at head-name, 2 of 3 answered, pending, and nothing goes by itself",
     need?.pending[0]?.kind === "answers" &&
       JSON.stringify(need.pending[0]) ===
         JSON.stringify({ kind: "answers", asked: 3, answered: 2 }) &&
       JSON.stringify(need.stop) === JSON.stringify({ card: "head-name" }) &&
-      pendingOf(page, open, sessions(PAGE)) !== null &&
+      pendingOf(page, open, SESSIONS) !== null &&
       !answeredWhole(page, open),
     JSON.stringify(need)
   );
@@ -349,7 +349,7 @@ const run = async ({ check }: Kit) => {
   check(
     "b: a pin on head-name the agent replied to and resolved answers it (unresolved, it does not); a selector that only starts with another card's id names no card; a pin in a card's Preview answers that card",
     byPin.find((one) => one.key === "card:head-name")?.answer?.by === "pin" &&
-      needOf(page, factsFrom(byPin), sessions(PAGE)) === null &&
+      needOf(page, factsFrom(byPin), SESSIONS) === null &&
       openPin.find((one) => one.key === "card:head-name")?.state === "open" &&
       pinCard(
         { selector: "#decision-head-name > header", source: null },
@@ -391,13 +391,13 @@ const run = async ({ check }: Kit) => {
   check(
     "c: taken, head-name still counts answered and leaves the asking session's list; a newer note of his stands answered again; withdrawn, it is no longer asked (2 of 2) and nothing waits on him",
     afterTake.find((one) => one.key === "card:head-name")?.state === "taken" &&
-      needOf(page, factsFrom(afterTake), sessions(PAGE)) === null &&
+      needOf(page, factsFrom(afterTake), SESSIONS) === null &&
       stillAsked(afterTake).length === 2 &&
       !stillAsked(afterTake).some((one) => one.key === "card:head-name") &&
       anew.find((one) => one.key === "card:head-name")?.state === "answered" &&
       JSON.stringify(factsFrom(withdrawn).answers) ===
         JSON.stringify({ asked: 2, answered: 2 }) &&
-      pendingOf(page, factsFrom(withdrawn), sessions(PAGE)) === null,
+      pendingOf(page, factsFrom(withdrawn), SESSIONS) === null,
     `taken ${states(afterTake)}; anew ${states(anew)}; withdrawn ${JSON.stringify(factsFrom(withdrawn).answers)}`
   );
 
@@ -500,11 +500,11 @@ const run = async ({ check }: Kit) => {
       ask: "",
     }) as ArtifactRow;
   const pinned = factsFrom([], { asking: [7], askingAt: AT, unsent: 0 });
-  const working = needOf(canvasRow("draw"), pinned, sessions(CANVAS));
+  const working = needOf(canvasRow("draw"), pinned, SESSIONS);
   const embedded = needOf(
     canvasRow("judge"),
     { ...pinned, media: true },
-    sessions(CANVAS)
+    SESSIONS
   );
   const preview = {
     ...page,
@@ -541,11 +541,11 @@ const run = async ({ check }: Kit) => {
     "e: a draw canvas with a pin asking, a canvas a page only embeds with a pin asking, and a handed-up preview with his tuned values are no need and nothing goes by itself (the same pin on a canvas of his asks)",
     working === null &&
       embedded === null &&
-      needOf(preview, handed, sessions(PREVIEW)) === null &&
-      pendingOf(preview, handed, sessions(PREVIEW)) === null &&
+      needOf(preview, handed, SESSIONS) === null &&
+      pendingOf(preview, handed, SESSIONS) === null &&
       !answeredWhole(preview, handed) &&
       askingPin[0]?.state === "open" &&
-      needOf(canvasRow("try"), pinned, sessions(CANVAS)) !== null,
+      needOf(canvasRow("try"), pinned, SESSIONS) !== null,
     JSON.stringify({ working, embedded, askingPin: states(askingPin) })
   );
 

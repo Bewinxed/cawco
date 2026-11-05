@@ -49,12 +49,11 @@ import {
   machineLabel,
   noteText,
   PICTURE_VIEW,
-  type PlanWaits,
+  type PlanStep,
   type PreviewAddress,
   type PreviewSource,
   parseReference,
   pinLink,
-  planWaitsOnArtifact,
   type SendAttachment,
   type SettledBy,
   type ShownFailure,
@@ -233,6 +232,7 @@ import {
   needOf,
   noticeOf,
   pendingOf,
+  planHolds,
   sendsOnChange,
 } from "./needs";
 import {
@@ -1791,14 +1791,14 @@ export interface ArtifactServiceDeps {
     writer: InstanceRow | undefined,
     artifact: ArtifactRow
   ) => PageHearer | null;
+  /** The step of the session's plan an ask of the artifact is made at: the open one naming it, else the one in progress; null when it is at work on none (plans.ts `askedAt`). */
+  askedAt: (instanceId: string, artifactId: string) => string | null;
   /**
    * Where session `instance`'s own browser opens artifact `row`, which it
    * may read (`artifact_browse`, server.ts `browseAt`): its address, behind
    * a one-time entry and a pass of the session's own in host mode.
    */
   browse: (instance: InstanceRow, row: ArtifactRow) => Browsed;
-  /** Nothing on the artifact waits on the person: the session's plan waits on it whole no more (plans.ts `clearArtifactWait`). */
-  clearArtifactWait: (instanceId: string, artifactId: string) => void;
   /** Closes session `instanceId`'s panel: it shows nothing, and every view of it hears so. */
   close: (instanceId: string) => void;
   /**
@@ -2104,6 +2104,8 @@ export interface ArtifactServiceDeps {
    * Throws an {@link ArtifactRefusal} saying why it can't.
    */
   stageWrite: (at: StageAt, write: SheetWrite) => Promise<SheetWritten>;
+  /** The session's plan's steps: an open one naming a card or pin of an artifact holds its ask (needs.ts `planHolds`). */
+  steps: (instanceId: string) => readonly PlanStep[];
   /**
    * Whether a session can no longer act, ever: no one, its parent and the
    * person included, can give it a turn again. Its item ended and its
@@ -2134,10 +2136,6 @@ export interface ArtifactServiceDeps {
    * the ask did, one sentence.
    */
   verify: (requester: InstanceRow, artifact: AskedArtifact) => Promise<string>;
-  /** The session's current step waits on the artifact; the step that does, or null (plans.ts `waitOn`). */
-  waitOn: (instanceId: string, artifactId: string) => string | null;
-  /** The session's plan's page waits and steps: what a wait on its artifacts stands on (plans.ts `waits`). */
-  waits: (instanceId: string) => PlanWaits;
   /**
    * One stage warmed for a decision page as it goes out (agent stage.ts
    * `warmStage`): started or woken there and every canvas of `warm` compiled
@@ -4932,11 +4930,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         }
       }
     });
-    answeredBy(
-      db.update(row.id, {
-        deliveredSeq: (db.get(row.id) as ArtifactRow).seq,
-      }) as ArtifactRow
-    );
+    db.update(row.id, { deliveredSeq: (db.get(row.id) as ArtifactRow).seq });
+    // What it answered leaves Needs you, and with it the writer's plan (core `planWaitsOf`).
+    deps.needsMoved();
     return hearer;
   };
 
@@ -7013,7 +7009,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       harness: owner?.harness ?? null,
       machineId: owner?.machineId ?? null,
       setUp: project !== null && deps.setUp(project),
-      waits: writer ? deps.waits(writer) : { pageWaits: [], steps: [] },
+      steps: writer ? deps.steps(writer) : [],
     };
   };
 
@@ -7048,7 +7044,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     const sessions = sessionsOf(row, kept);
     return !(
-      sessions.ended || movedOn(row.id, askOf(row, kept), sessions.waits)
+      sessions.ended || movedOn(row.id, askOf(row, kept), sessions.steps)
     );
   };
 
@@ -7126,8 +7122,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /**
    * `writer`'s create, revision or show of artifact `id`: its ask stands
-   * again from now, and when it asks a pick or a judgement the writer's
-   * current step waits on it (plans.ts `waitOn`; needs.ts rule 2).
+   * again from now, and when it asks a pick or a judgement made while the
+   * writer is at work on its plan, the step it was asked at is kept in its
+   * ask (plans.ts `askedAt`): its plan holds it until it is answered or
+   * deleted (needs.ts `planHolds`, rule 2).
    */
   const askedNow = (writer: InstanceRow, id: string): void => {
     const row = db.get(id);
@@ -7141,7 +7139,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     const step =
       row.does === "pick" || row.does === "judge"
-        ? deps.waitOn(writer.id, row.id)
+        ? deps.askedAt(writer.id, row.id)
         : null;
     const asked: ArtifactAsked = {
       by: writer.id,
@@ -7151,15 +7149,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     docs.transact(row.id, "hub", (doc) =>
       doc.getMap("meta").set("asked", asked)
     );
-    deps.needsMoved();
-  };
-
-  /** The person's Send of `row`: answered whole (needs.ts rule 1), no step of its writer waits on it any more. */
-  const answeredBy = (row: ArtifactRow): void => {
-    const writer = askOf(row, factsOf(row))?.by;
-    if (writer && !pendingFor(row)) {
-      deps.clearArtifactWait(writer, row.id);
-    }
     deps.needsMoved();
   };
 
@@ -7208,22 +7197,18 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /**
    * Any change of artifact `row`'s doc, by anyone (a pick, a note, a value,
    * a pin's reply or resolve, the agent's close, the hub's own bookkeeping),
-   * `by` whom: with nothing on it asking the person, its writer's plan waits
-   * on it no more (needs.ts rule 1, the page wait the hub set). Only his
-   * change moves when what he wrote goes by itself: his own pushes the
+   * `by` whom: only his change moves when what he wrote goes by itself
+   * (what it answered leaves Needs you, and with it the writer's plan, by
+   * the doc's own write: `needsMoved`): his own pushes the
    * quiet delivery back ({@link personMarked}, which then sends it,
    * {@link sendAnswered}); anyone else's that leaves every question
    * answered sends it now, unless a delivery of his changes is already
    * coming, whose timer it never moves.
    */
   const answersMoved = (row: ArtifactRow, by: CanvasAuthor): void => {
-    // Only a pick or a judgement is waited on (askedNow) or sends itself.
+    // Only a pick or a judgement sends itself.
     if (row.does !== "pick" && row.does !== "judge") {
       return;
-    }
-    const writer = askOf(row, factsOf(row))?.by;
-    if (writer && !pendingFor(row)) {
-      deps.clearArtifactWait(writer, row.id);
     }
     sendIfWhole(row, by);
   };
@@ -7648,7 +7633,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return;
       }
       const from = before.toISOString();
-      const waits = deps.waits(instanceId);
+      const steps = deps.steps(instanceId);
       let moved = false;
       for (const row of db.asking()) {
         const facts = factsOf(row);
@@ -7658,8 +7643,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           asked.by !== instanceId ||
           asked.movedAt ||
           asked.at >= from ||
-          movedOn(row.id, asked, waits) ||
-          planWaitsOnArtifact(waits, row.id) ||
+          planHolds(row.id, asked, steps) ||
           !pendingFor(row)
         ) {
           continue;

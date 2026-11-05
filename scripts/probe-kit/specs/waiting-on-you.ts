@@ -114,14 +114,14 @@ const factsOf = (by: string, more: Partial<ArtifactFacts>): ArtifactFacts => ({
   ...more,
 });
 
-/** Its writer live on a machine, its plan waiting on `waitsOn`. */
-const sessionsOf = (waitsOn: string): ArtifactSessions => ({
+/** Its writer live on a machine; its plan holds the ask by the step it was asked at (needs.ts `planHolds`, the facts' `asked.step`). */
+const SESSIONS: ArtifactSessions = {
   ended: false,
   harness: "claude",
   machineId: "machine-1",
   setUp: false,
-  waits: { pageWaits: [waitsOn], steps: [] },
-});
+  steps: [],
+};
 
 const page = rowOf({
   id: PAGE,
@@ -148,7 +148,7 @@ export default {
         answers: { asked: 5, answered: 0 },
         firstOpen: "head",
       }),
-      sessionsOf(PAGE)
+      SESSIONS
     );
     const waiting = waitingOnYou({ asks: [], artifacts: needs(open) });
     check(
@@ -160,7 +160,7 @@ export default {
     const answered = needOf(
       page,
       factsOf(CAW, { answers: { asked: 5, answered: 5 } }),
-      sessionsOf(PAGE)
+      SESSIONS
     );
     const afterAnswer = waitingOnYou({ asks: [], artifacts: needs(answered) });
     check(
@@ -189,7 +189,7 @@ export default {
         instanceId: CAW,
       }),
       factsOf(CAW, {}),
-      sessionsOf(CANVAS)
+      SESSIONS
     );
     const both = waitingOnYou({
       asks: [{ instanceId: OTHER }, { instanceId: null }],

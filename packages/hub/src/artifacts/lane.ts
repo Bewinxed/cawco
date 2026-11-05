@@ -43,6 +43,8 @@ export const createArtifactLane = (deps: ArtifactLaneDeps) => {
   let timer: HubTimer | undefined;
   /** Whether {@link current} is the lane as it stands: nothing it is read from moved since it was read. */
   let held = false;
+  /** Who hears each change besides the screens ({@link listen}). */
+  const listeners = new Set<(read: ArtifactNeedsRead) => void>();
 
   /** Reads the lane; tells every screen, and the push, what changed. */
   const settle = (): ArtifactNeedsRead => {
@@ -72,6 +74,9 @@ export const createArtifactLane = (deps: ArtifactLaneDeps) => {
       }
     }
     deps.broadcast({ kind: "artifact.needs", ...read });
+    for (const listener of listeners) {
+      listener(read);
+    }
     return current;
   };
 
@@ -84,6 +89,10 @@ export const createArtifactLane = (deps: ArtifactLaneDeps) => {
     /** The lane as it stands now: the read it holds, or read at once when something moved since. */
     now(): ArtifactNeedsRead {
       return held ? current : settle();
+    },
+    /** Hears each change of the lane, as every screen does: a session's plan reads what of it waits on the person from it (plans.ts `needsMoved`). */
+    listen(listener: (read: ArtifactNeedsRead) => void): void {
+      listeners.add(listener);
     },
     /** The frame every screen holds now: the `/api/pending` envelope carries it whole. */
     frame(): ArtifactNeedsFrame {

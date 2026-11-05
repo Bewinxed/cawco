@@ -13,10 +13,11 @@
  * plan-changes.ts decides who hears it and when. A write of the session's
  * steps names every step's wait whole: a step it gives none waits on
  * nothing. An id the session gives no step is only its place, so nothing is
- * kept by id across its writes. A page the session asked the person on is
- * the plan's wait, not a step's ({@link Plans.waitOn}): it stands while the
- * page is unanswered and not deleted, whatever the steps become, shown on
- * the open step whose `waitsOn` names the page, else in the plan's `needs`.
+ * kept by id across its writes. What of the session's waits on the person
+ * is read from Needs you on every read, never stored (core `planWaitsOf`):
+ * shown on the open step whose `waitsOn` names a card or pin of it, else in
+ * the plan's `needs`, and gone from both once Needs you lists it no more
+ * ({@link Plans.needsMoved}).
  * The person's comments stay on the step of the same words, wherever it
  * stands, else on the plan as orphaned comments ({@link keepComments}).
  * A step's wait is a task's wait (wait-targets.ts): the hub's one
@@ -32,6 +33,7 @@
  * and the deltas after it never cross.
  */
 import {
+  type ArtifactNeed,
   artifactLink,
   awayNotesOf,
   type InstanceRow,
@@ -43,7 +45,7 @@ import {
   type PlanReceiver,
   type PlanSnapshot,
   type PlanStep,
-  type PlanWaits,
+  planNeedsOf,
   type SessionPlan,
   stepLink,
   stepNamesArtifact,
@@ -65,7 +67,6 @@ export interface PlansDeps {
     | "getInstancesByIds"
     | "planChangesOf"
     | "putAwaySeen"
-    | "putPageWaits"
     | "putPlanChange"
     | "putSessionSpec"
     | "putSessionSteps"
@@ -74,6 +75,8 @@ export interface PlansDeps {
     | "unsettledPlanChanges"
     | "workItem"
   >;
+  /** Needs you as it stands (artifacts/lane.ts `now`): what of a session's waits on the person, derived, never stored. */
+  needs: () => readonly ArtifactNeed[];
   /** Fans a plan frame out to the session's followers (stream.ts). */
   publish: (instanceId: string, message: PlanSnapshot | PlanDelta) => void;
   tasks: Pick<Tasks, "get" | "waitState">;
@@ -518,9 +521,7 @@ export const createPlans = (deps: PlansDeps) => {
     const changes = db.planChangesOf(row.id, CHANGES_SHOWN).map(changeOf);
     const away = awayNotesOf(own?.spec ?? undefined);
     const steps = own?.steps ?? [];
-    const needs = (own?.pageWaits ?? []).filter(
-      (page) => !steps.some((step) => stepNamesArtifact(step, page))
-    );
+    const needs = planNeedsOf(row.id, steps, deps.needs());
     return {
       ...(away && away.notes !== own?.awaySeen
         ? { awayUnseen: { since: away.since } }
@@ -582,20 +583,10 @@ export const createPlans = (deps: PlansDeps) => {
     }
   };
 
-  /** A page the plan waits on that is deleted waits on no one: it goes. */
-  const dropGonePages = (instanceId: string): void => {
-    const pageWaits = db.sessionPlan(instanceId)?.pageWaits ?? [];
-    const standing = pageWaits.filter((page) => db.artifacts.get(page));
-    if (standing.length < pageWaits.length) {
-      db.putPageWaits(instanceId, standing);
-    }
-  };
-
   const settle = (instanceId: string): Promise<Held> =>
     inTurn(instanceId, async () => {
       const row = rowOf(instanceId);
       await dropSettled(row);
-      dropGonePages(instanceId);
       const plan = await compute(row);
       const before = held.get(instanceId);
       if (!before) {
@@ -618,19 +609,6 @@ export const createPlans = (deps: PlansDeps) => {
       );
       return after;
     });
-
-  /** The session's plan stops waiting on page `artifactId` whole; its followers hear it. */
-  const dropPageWait = (instanceId: string, artifactId: string): void => {
-    const pageWaits = db.sessionPlan(instanceId)?.pageWaits ?? [];
-    if (!pageWaits.includes(artifactId)) {
-      return;
-    }
-    db.putPageWaits(
-      instanceId,
-      pageWaits.filter((page) => page !== artifactId)
-    );
-    settleQuietly(instanceId);
-  };
 
   const settleQuietly = (instanceId: string): void => {
     settle(instanceId).catch((error: unknown) =>
@@ -674,9 +652,9 @@ export const createPlans = (deps: PlansDeps) => {
      * `todo_write`'s session scope: the session's steps, its spec, or both,
      * each replaced whole, every step's `waitsOn` with them: exactly what the
      * write names. The person's comments stay on the step of the same words,
-     * else on the plan ({@link keepComments}); its page waits are the plan's
-     * and stand as they were. A write of steps
-     * that would undo a change the person made since the session last wrote
+     * else on the plan ({@link keepComments}); an artifact asked at work on
+     * the plan stays held by its ask (needs.ts `planHolds`), whatever the
+     * steps become. A write of steps that would undo a change the person made since the session last wrote
      * them is refused, naming each and the plan as it stands; the next write
      * goes through, whatever it says: the session has heard them.
      */
@@ -768,47 +746,45 @@ export const createPlans = (deps: PlansDeps) => {
     },
 
     /**
-     * Artifact `artifactId` waits on the person (its maker's `artifact_create`
-     * or `artifact_update` with `does: pick` or `judge` returned): while the
-     * session is at work on its plan (an open step names the page, or one is
-     * in progress), the plan waits on the page whole, until the page is
-     * answered or deleted ({@link clearArtifactWait}), whatever its steps are
-     * rewritten to. Answers the step it was asked at: the one naming it, else
-     * the first in progress; null when there is none and the plan waits on
-     * nothing.
+     * The step of its plan session `instanceId` asks artifact `artifactId`
+     * of the person at (its maker's `artifact_create` or `artifact_update`
+     * with `does: pick` or `judge` returned): the open one whose `waitsOn`
+     * names it, else the first in progress; null when it is at work on none.
+     * The ask keeps it (needs.ts `ArtifactAsked.step`), which holds the ask
+     * until it is answered or deleted (needs.ts `planHolds`); nothing here
+     * is written.
      */
-    waitOn(instanceId: string, artifactId: string): string | null {
-      const own = db.sessionPlan(instanceId);
-      const steps = own?.steps ?? [];
+    askedAt(instanceId: string, artifactId: string): string | null {
+      const steps = db.sessionPlan(instanceId)?.steps ?? [];
       const at =
         steps.find((step) => stepNamesArtifact(step, artifactId)) ??
         steps.find((step) => step.status === "in_progress");
-      if (!at) {
-        return null;
-      }
-      const pageWaits = own?.pageWaits ?? [];
-      if (!pageWaits.includes(artifactId)) {
-        db.putPageWaits(instanceId, [...pageWaits, artifactId]);
-        settleQuietly(instanceId);
-      }
-      return at.id;
+      return at?.id ?? null;
     },
 
-    /** Nothing on artifact `artifactId` waits on the person now: the session's plan waits on it whole no more. */
-    clearArtifactWait(instanceId: string, artifactId: string): void {
-      dropPageWait(instanceId, artifactId);
+    /** The session's steps as they stand: an open one naming a card or pin of an artifact holds its ask (needs.ts `planHolds`). */
+    steps(instanceId: string): readonly PlanStep[] {
+      return db.sessionPlan(instanceId)?.steps ?? [];
     },
 
-    /** The session's page waits and steps as they stand: what its artifacts' waits are read against. */
-    waits(instanceId: string): PlanWaits {
-      const own = db.sessionPlan(instanceId);
-      return { pageWaits: own?.pageWaits ?? [], steps: own?.steps ?? [] };
+    /**
+     * Needs you moved (artifacts/lane.ts, as it tells every screen): each
+     * followed plan whose own needs it changes is read again, so the panel
+     * says what Needs you says.
+     */
+    needsMoved(needs: readonly ArtifactNeed[]): void {
+      for (const [instanceId, { plan }] of held) {
+        const now = planNeedsOf(instanceId, plan.steps, needs);
+        if (JSON.stringify(now) !== JSON.stringify(plan.needs ?? [])) {
+          settleQuietly(instanceId);
+        }
+      }
     },
 
     /**
      * A session's steps start another's plan: the new session that goes on
-     * from an ended one. Its page waits stay the ended session's: each page
-     * was asked by it (needs.ts `ArtifactAsked.by`).
+     * from an ended one. What of the ended one's waits on the person stays
+     * its own: each artifact was asked by it (needs.ts `ArtifactAsked.by`).
      */
     copySteps(from: string, to: string): void {
       const steps = db.sessionPlan(from)?.steps;

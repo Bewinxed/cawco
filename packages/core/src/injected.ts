@@ -18,11 +18,10 @@
  * read. Messages stored before the tag were given it once, by the hub's
  * migration over its stored sends (hub db/tag-markers.ts).
  */
-import { type ArtifactNeed, unparked } from "./artifact-needs";
 import { INPUTS_DIR } from "./harness";
 import type { ArtifactKind, CarryRestored } from "./index";
 import { NO_REPLY_TOOL } from "./no-reply";
-import { type PlanStep, stepNamesArtifact } from "./plan";
+import type { PlanWait } from "./plan";
 import { artifactLink, stepLink } from "./references";
 import { unhandled } from "./unhandled";
 import { workWords } from "./words/work";
@@ -479,56 +478,16 @@ export type PresenceSaid = {
         section: string;
         /** When the person went away, HH:MM on the hub's clock, as the hub knows it. */
         since: string;
-        /** What of the session's waits on the person now, as Needs you lists it ({@link awayWaitsOf}). */
-        waiting?: readonly AwayWait[];
+        /** What of the session's waits on the person now, as Needs you lists it (plan.ts `planWaitsOf`). */
+        waiting?: readonly PlanWait[];
       };
     }
   | { kind: "elsewhere" }
   | { kind: "away"; since: string | null }
 );
 
-/**
- * An artifact of the session's that waits on the person, by its chip: on
- * the open step whose `waitsOn` names a card or pin of it, or alone when no
- * step does ({@link awayWaitsOf}).
- */
-export interface AwayWait {
-  /** The page's artifact id and title: its `cawco:artifact` chip. */
-  artifact: { id: string; title: string };
-  /** The session whose plan it is: the step's `cawco:step` chip. */
-  session: string;
-  /** The step that names it, by id and words; absent when no step does. */
-  step?: { content: string; id: string };
-}
-
-/**
- * What the recap names as waiting on the person: exactly the session's
- * items in Needs you (artifact-needs.ts `unparked`, which the hub's
- * artifacts/needs.ts reads from questions.ts: an open question, a canvas to
- * judge not opened, a pin asking), in its order, so a page whose every
- * question is answered, taken or withdrawn is never named. Each goes on the
- * open step whose `waitsOn` names a card or pin of it (plan.ts
- * `stepNamesArtifact`), else alone. A page the plan still holds a wait on
- * (`PlanWaits.pageWaits`) waits on no one by that alone.
- */
-export const awayWaitsOf = (
-  session: string,
-  steps: readonly PlanStep[],
-  needs: readonly ArtifactNeed[]
-): AwayWait[] =>
-  unparked(needs)
-    .filter((need) => need.instanceId === session)
-    .map((need) => {
-      const step = steps.find((one) => stepNamesArtifact(one, need.artifactId));
-      return {
-        session,
-        artifact: { id: need.artifactId, title: need.title },
-        ...(step ? { step: { id: step.id, content: step.content } } : {}),
-      };
-    });
-
 /** A wait as the recap names it: the step's chip, labelled by its words, then its page's chip; the page alone when no step names it. */
-export const waitLine = ({ artifact, session, step }: AwayWait): string =>
+export const waitLine = ({ artifact, session, step }: PlanWait): string =>
   step
     ? `- ${stepLink(session, step.id, step.content)} waits on ${artifactLink(artifact.id, artifact.title)}`
     : `- ${artifactLink(artifact.id, artifact.title)}, which no step names`;

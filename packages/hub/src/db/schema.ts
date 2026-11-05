@@ -4401,14 +4401,6 @@ export const starterOutcomes = sqliteTable(
 export const sessionPlans = sqliteTable("session_plans", {
   instanceId: text("instance_id").primaryKey(),
   steps: storedJson(z.array(PlanStepSchema))("steps").notNull(),
-  /**
-   * The pages it waits on the person on whole, by artifact id (plans.ts
-   * `waitOn`): the page's wait, never a step's, gone once the page is
-   * answered or deleted, whatever the steps are rewritten to.
-   */
-  pageWaits: storedJson(z.array(z.string()))("page_waits")
-    .notNull()
-    .default([]),
   /** The person's step comments whose step's words a write of the session's left out (core plan.ts `OrphanedComments`). */
   orphanedComments: storedJson(z.array(OrphanedCommentsSchema))(
     "orphaned_comments"

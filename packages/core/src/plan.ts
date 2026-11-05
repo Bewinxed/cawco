@@ -27,6 +27,7 @@
  * applied in sequence. `rev` orders them: a delta is for `rev - 1`, and a
  * client holding anything else sends {@link PlanResync} for a snapshot.
  */
+import { type ArtifactNeed, unparked } from "./artifact-needs";
 import { waitArtifact } from "./wait-targets";
 
 export const PLAN_STEP_STATUSES = [
@@ -80,23 +81,55 @@ export const stepNamesArtifact = (
   waitArtifact(step.waitsOn) === artifactId;
 
 /**
- * What of a session's plan waits on artifacts: its steps' waits, and the
- * pages it asked the person on whole (hub plans.ts `waitOn`), by artifact
- * id. A page wait is the page's, never a step's: it stands while the page is
- * unanswered and not deleted, whatever the steps are rewritten to.
+ * An artifact of the session's that waits on the person, by its chip: on
+ * the open step whose `waitsOn` names a card or pin of it, or on the plan
+ * itself when no step does ({@link planWaitsOf}).
  */
-export interface PlanWaits {
-  pageWaits: readonly string[];
-  steps: readonly PlanStep[];
+export interface PlanWait {
+  /** The artifact's id and title: its `cawco:artifact` chip. */
+  artifact: { id: string; title: string };
+  /** The session whose plan it is: the step's `cawco:step` chip. */
+  session: string;
+  /** The step that names it, by id and words; absent when no step does. */
+  step?: { content: string; id: string };
 }
 
-/** Whether a plan waits on artifact `artifactId`: the page whole, or an open step naming a card or pin of it. */
-export const planWaitsOnArtifact = (
-  plan: PlanWaits,
-  artifactId: string
-): boolean =>
-  plan.pageWaits.includes(artifactId) ||
-  plan.steps.some((step) => stepNamesArtifact(step, artifactId));
+/**
+ * What a session's plan waits on the person on: exactly the session's items
+ * in Needs you (artifact-needs.ts `unparked`, which the hub's
+ * artifacts/needs.ts reads from questions.ts: an open question, a canvas to
+ * judge not opened, a pin asking), in its order. Each goes on the open step
+ * whose `waitsOn` names a card or pin of it ({@link stepNamesArtifact}),
+ * else on the plan (`SessionPlan.needs`). Derived on every read, never
+ * stored: a page whose every question is answered, taken or withdrawn, or
+ * deleted, is never named. The plan panel, the away recap (injected.ts
+ * `waitLine`) and Needs you say one thing.
+ */
+export const planWaitsOf = (
+  session: string,
+  steps: readonly PlanStep[],
+  needs: readonly ArtifactNeed[]
+): PlanWait[] =>
+  unparked(needs)
+    .filter((need) => need.instanceId === session)
+    .map((need) => {
+      const step = steps.find((one) => stepNamesArtifact(one, need.artifactId));
+      return {
+        session,
+        artifact: { id: need.artifactId, title: need.title },
+        ...(step ? { step: { id: step.id, content: step.content } } : {}),
+      };
+    });
+
+/** The plan's own needs ({@link planWaitsOf}): what of it waits on the person that no open step names, by artifact id. */
+export const planNeedsOf = (
+  session: string,
+  steps: readonly PlanStep[],
+  needs: readonly ArtifactNeed[]
+): string[] =>
+  planWaitsOf(session, steps, needs).flatMap((wait) =>
+    wait.step ? [] : [wait.artifact.id]
+  );
 
 /** The person's comments on a step whose words no write of the session's has kept: the step's words, and the comments. */
 export interface OrphanedComments {
@@ -249,9 +282,9 @@ export interface SessionPlan {
   /** The person's latest changes to it, newest last. */
   changes?: PlanChange[];
   /**
-   * The plan's own needs: each page it waits on the person on whole (hub
-   * plans.ts `waitOn`), by artifact id, that no open step's `waitsOn` names.
-   * A page a step names shows on that step. Absent when there are none.
+   * The plan's own needs: each artifact of the session's in Needs you, by
+   * id, that no open step's `waitsOn` names ({@link planNeedsOf}). One a
+   * step names shows on that step. Absent when there are none.
    */
   needs?: string[];
   /** The person's step comments whose step's words are gone from the list, oldest step first. Absent when none. */

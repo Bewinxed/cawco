@@ -46294,7 +46294,7 @@
             }
           },
           "needs": {
-            "description": "The plan's own needs: each page it waits on the person on whole (hub\nplans.ts `waitOn`), by artifact id, that no open step's `waitsOn` names.\nA page a step names shows on that step. Absent when there are none.",
+            "description": "The plan's own needs: each artifact of the session's in Needs you, by\nid, that no open step's `waitsOn` names ({@link planNeedsOf}). One a\nstep names shows on that step. Absent when there are none.",
             "type": "array",
             "items": {
               "type": "string"
@@ -60628,7 +60628,7 @@
             }
           },
           "needs": {
-            "description": "The plan's own needs: each page it waits on the person on whole (hub\nplans.ts `waitOn`), by artifact id, that no open step's `waitsOn` names.\nA page a step names shows on that step. Absent when there are none.",
+            "description": "The plan's own needs: each artifact of the session's in Needs you, by\nid, that no open step's `waitsOn` names ({@link planNeedsOf}). One a\nstep names shows on that step. Absent when there are none.",
             "type": "array",
             "items": {
               "type": "string"
