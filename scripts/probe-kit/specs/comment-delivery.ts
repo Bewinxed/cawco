@@ -98,6 +98,8 @@ import {
 const CREATE = "mcp__cawco__artifact_create";
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 const NAME = "comment-delivery";
+/** Its title, what every surface names it by since titles landed (bff305589). */
+const TITLE = "Probe judge artifact";
 /**
  * The tool's result a request answers, whole, as the harness sent it: its
  * newest message's `tool_result` blocks, read as the fleet reads a message
@@ -1384,7 +1386,7 @@ const endedWriterChecks = async (
   const made = await callIn(writer, CREATE, {
     kind: "page",
     does: "judge",
-    title: "Probe judge artifact",
+    title: TITLE,
     ask: "Judge this page: pin anything that reads wrong",
     name: WRITER_PAGE,
     html: WRITER_HTML,
@@ -1502,7 +1504,7 @@ const endedWriterChecks = async (
         !!failed?.reason?.includes("the project's Caw couldn't take them") &&
         drawn.some(
           (words) =>
-            words.includes(`Comments on ${WRITER_PAGE}`) &&
+            words.includes(`Comments on ${TITLE}`) &&
             words.includes("not sent") &&
             words.includes("Caw couldn't take them")
         ),
@@ -1642,7 +1644,7 @@ const run = async (kit: Kit) => {
   const made = await call(CREATE, {
     kind: "page",
     does: "judge",
-    title: "Probe judge artifact",
+    title: TITLE,
     ask: "Judge this page: pin anything that reads wrong",
     name: NAME,
     html,
@@ -1775,7 +1777,7 @@ const run = async (kit: Kit) => {
   kit.check(
     "2: the transcript draws one quiet line, Comments on the page, and no row of the person's",
     drawn.lines.length === 1 &&
-      drawn.lines[0].includes(`Comments on ${NAME}`) &&
+      drawn.lines[0].includes(`Comments on ${TITLE}`) &&
       drawn.person.length === 0,
     JSON.stringify(drawn)
   );

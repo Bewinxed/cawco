@@ -1111,6 +1111,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
               caw: {
                 projectId,
                 line: noticeWords.donePicking(read.title),
+                trigger: "the person sent a decision page",
                 text: `The person is done picking on the decision page “${read.title}” (decisions/${name}/). ${handedToCaw(read)}`,
               },
             }

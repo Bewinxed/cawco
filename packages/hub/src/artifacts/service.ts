@@ -1758,7 +1758,15 @@ export type PageFrom =
  */
 export type PageHearer =
   | { session: InstanceRow }
-  | { caw: { line: string; projectId: string; text: string } };
+  | {
+      caw: {
+        line: string;
+        projectId: string;
+        text: string;
+        /** Why Caw is woken, in its wake's words. */
+        trigger: string;
+      };
+    };
 
 export interface ArtifactServiceDeps {
   /** The notice ids the person acknowledged (hub notices.ts): Not now's among them. */
@@ -1773,6 +1781,16 @@ export interface ArtifactServiceDeps {
     name: string,
     cards: DecisionCard[]
   ) => Promise<AfterLinks>;
+  /**
+   * Who hears the person's answers on `artifact`, which `writer` made, when
+   * the hub sends them itself: the one his marks go to (server.ts
+   * `artifactTaker`), its writer while it takes input, else the session
+   * that delegated it, else the project's Caw; none when no one can.
+   */
+  answersTo: (
+    writer: InstanceRow | undefined,
+    artifact: ArtifactRow
+  ) => PageHearer | null;
   /**
    * Where session `instance`'s own browser opens artifact `row`, which it
    * may read (`artifact_browse`, server.ts `browseAt`): its address, behind
@@ -4840,7 +4858,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     to: PageHearer,
     by: SentBy = "person",
     tell = true
-  ): Promise<string> => {
+  ): Promise<string | null> => {
     const doc = docs.doc(row.id);
     const state = stateOf(doc);
     const program = programOf(row);
@@ -4881,10 +4899,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         setup,
       });
     }
-    const hearer =
-      tell || !("session" in to)
-        ? await deps.signal(to, row, { since: row.deliveredSeq })
-        : to.session.id;
+    const hearer = tell
+      ? await deps.signal(to, row, { since: row.deliveredSeq })
+      : null;
     const at = new Date().toISOString();
     docs.transact(row.id, "hub", (live) => {
       const meta = live.getMap("meta");
@@ -7148,22 +7165,27 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * The hub's own Send of `row` once the person's changes stand quiet
    * ({@link marked}), when it sends itself ({@link sendsItself}): the same
    * Send as his (`sendPage`: a decision page decided, the session told to
-   * read), taken as no look of his. Its session is told only of answers it
-   * has not had ({@link unheardAnswers}); with none, the page settles and
-   * nothing goes to it. Its session ended, it waits for the session that
-   * takes it up.
+   * read), taken as no look of his, whoever wrote it: it goes to whoever
+   * holds the page now, the one his marks go to (`answersTo`: its writer,
+   * else the session that delegated it, which lists it in open_items, else
+   * the project's Caw). That one is told only of answers not read yet
+   * ({@link unheardAnswers}; a read by any of them counts, `readsForOwner`);
+   * with none, the page settles and nothing goes to it. Decided either way.
    */
   const sendAnswered = async (id: string): Promise<void> => {
     const row = db.get(id);
-    const owner = row ? holder(row) : undefined;
-    if (!(row && owner && sendsItself(row)) || deps.finished(owner)) {
+    if (!(row && sendsItself(row))) {
+      return;
+    }
+    const to = deps.answersTo(holder(row), row);
+    if (to === null) {
       return;
     }
     await sendPage(
       row,
       { control: "answered" },
       "hub",
-      { session: owner },
+      to,
       "hub",
       unheardAnswers(row)
     );
@@ -7197,6 +7219,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (writer && !pendingFor(row)) {
       deps.clearArtifactWait(writer, row.id);
     }
+    sendIfWhole(row, by);
+  };
+
+  /**
+   * What the person wrote on `row` goes now, after a change `by` someone
+   * not him, when every question has his answer and no delivery of his
+   * changes is coming (needs.ts `sendsOnChange`), whose timer this never
+   * moves: a doc change ({@link answersMoved}), or the hub's own sweep
+   * after a restart ({@link resumeMarks}).
+   */
+  const sendIfWhole = (row: ArtifactRow, by: CanvasAuthor): void => {
     if (
       !sendsOnChange(by, {
         coming: bursts.has(row.id) || delivering.has(row.id),
@@ -9371,11 +9404,18 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * delivery scheduled again, so the person's marks and a sheet's saves
      * and errors written just before the hub went down still go (nothing
      * owed, nothing goes). A day, our call: a hub down longer than that has
-     * a person who has moved on.
+     * a person who has moved on. Every page answered whole and not sent
+     * goes too ({@link sendIfWhole}), to whoever holds it now.
      */
     resumeMarks: (): void => {
       for (const row of db.touchedSince(new Date(Date.now() - DAY_MS))) {
         marked(row.id);
+      }
+      // A page answered whole goes, however long ago: one whose writer had
+      // ended waited for a holder before (sendAnswered). Read, it settles.
+      for (const row of db.asking()) {
+        // The hub's own act, as docs.ts names the hub's writes.
+        sendIfWhole(row, "agent");
       }
     },
 
@@ -9429,7 +9469,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (!row) {
         throw new ArtifactRefusal(404, artifactToolWords.noArtifact(id));
       }
-      return await sendPage(row, { control: "decisions-done" }, route, to);
+      const hearer = await sendPage(
+        row,
+        { control: "decisions-done" },
+        route,
+        to
+      );
+      // A Send that tells (sendPage's default) always names who heard it.
+      if (hearer === null) {
+        throw new Error(`${labelOf(row)}: its Send told no one.`);
+      }
+      return hearer;
     },
   };
 };

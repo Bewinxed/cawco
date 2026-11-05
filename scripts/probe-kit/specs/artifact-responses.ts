@@ -54,6 +54,8 @@ const NOTICE =
 /** The id in artifact_create's answer, as the tool result carries it. */
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
 const NAME = "coconut-song";
+/** Its title, what every surface names it by since titles landed (bff305589). */
+const TITLE = "Probe judge artifact";
 /** How long the person's changes stand quiet before his answers go by themselves (hub artifacts/service.ts `COMMENTS_QUIET_MS`), with room. */
 const QUIET_MS = 3000 + 2000;
 /** The note as the person leaves it: two lines, the last Return still in the box. */
@@ -229,7 +231,7 @@ const run = async (kit: Kit) => {
   const created = await call(CREATE, {
     kind: "page",
     does: "judge",
-    title: "Probe judge artifact",
+    title: TITLE,
     ask: "Judge this page: pin anything that reads wrong",
     name: NAME,
     html: kitPage(),
@@ -262,11 +264,13 @@ const run = async (kit: Kit) => {
   const busyAt = Date.now();
 
   // 1. A pick and two note edits, each ending on a Return, as typed.
+  // His view's read (routes.ts `/view`), never the session's: an
+  // artifact_read here would count as the agent having read his answers,
+  // which then settle telling it nothing (needs.ts `answersUnheard`).
   const read = () =>
     fleet.api<{
-      seq: number;
-      state: Record<string, { note: string | null; options: string[] }>;
-    }>(`/api/instances/${session}/artifacts/${id}`);
+      choices: Record<string, { note: string | null; options: string[] }>;
+    }>(`/api/instances/${session}/artifacts/${id}/view`);
   await pressIn(frame, '[data-option="cover"]');
   const note = frame.locator('[data-dp-note="song"]');
   const typeNote = async (words: string) => {
@@ -277,7 +281,7 @@ const run = async (kit: Kit) => {
     await until(
       "the note in the hub's read",
       read,
-      (kept) => kept.state.song?.note === words.trimEnd(),
+      (kept) => kept.choices.song?.note === words.trimEnd(),
       10_000
     );
   };
@@ -360,11 +364,11 @@ const run = async (kit: Kit) => {
     };
   }, NAME);
   kit.check(
-    "4: one line, 'Responses on coconut-song' and 'waiting for the agent'; no 'artifact_read' on screen; no person's row holds it",
+    "4: one line, 'Responses on' its title and 'waiting for the agent'; no 'artifact_read' on screen; no person's row holds it",
     drawn.lines.length === 1 &&
       drawn.lines[0].artifact === id &&
       drawn.lines[0].name === NAME &&
-      drawn.lines[0].text.includes(`Responses on ${NAME}`) &&
+      drawn.lines[0].text.includes(`Responses on ${TITLE}`) &&
       drawn.lines[0].text.includes("waiting for the agent") &&
       !drawn.instruction &&
       drawn.personHolds.length === 0,

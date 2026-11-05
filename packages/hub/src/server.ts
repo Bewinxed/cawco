@@ -567,6 +567,7 @@ import {
 import type { RelayFrame } from "@cawco/core/stream-relay";
 import { CAPABILITY_KINDS } from "@cawco/core/suggest";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "@cawco/core/time";
+import { unhandled } from "@cawco/core/unhandled";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { accountsWords } from "@cawco/core/words/accounts";
 import { areaWords } from "@cawco/core/words/areas";
@@ -645,6 +646,7 @@ import {
   artifactSocket,
   takeSentWrites,
 } from "./artifacts/sync";
+import { artifactTaker } from "./artifacts/taker";
 import {
   answeredWithOriginal,
   clientCopy,
@@ -14466,34 +14468,35 @@ export const createServer = (
     delivery
   ) =>
     artifactInOrder(`${artifact.id}:marks`, () => {
-      const refused = inputRefusal(instance.id, {
-        kind: "system",
-        name: ARTIFACT_ORIGIN,
-      });
-      if (!refused) {
-        return marksToSession(instance, artifact, delivery);
-      }
-      const parent = instance.parentInstanceId
-        ? db.getInstancesByIds([instance.parentInstanceId])[0]
-        : undefined;
-      if (
-        parent &&
-        !inputRefusal(parent.id, { kind: "system", name: ARTIFACT_ORIGIN })
-      ) {
-        return marksToSession(parent, artifact, {
-          ...delivery,
-          text: `${delivery.text}\n\nThe session that made it, ${sessionName(instance)}, takes no input now (${refused.reason.replace(CLOSING_STOP, "")}), so these come to you, the session that delegated it: answer each in its pin's thread with comment_reply({ pin, text }), naming the pin by its id above.`,
-        });
-      }
-      return artifact.projectId && lead
-        ? marksToCaw(
-            lead,
+      const taker = takerOf(instance, artifact);
+      switch (taker.to) {
+        case "writer":
+        case "none":
+          return marksToSession(instance, artifact, delivery);
+        case "parent":
+          return marksToSession(taker.session, artifact, {
+            ...delivery,
+            text: `${delivery.text}\n\nThe session that made it, ${sessionName(instance)}, takes no input now (${taker.why}), so these come to you, the session that delegated it: answer each in its pin's thread with comment_reply({ pin, text }), naming the pin by its id above.`,
+          });
+        case "caw":
+          return marksToCaw(
+            taker.caw,
             instance,
-            artifact.projectId,
-            refused.reason,
+            taker.projectId,
+            taker.why,
             delivery
-          )
-        : marksToSession(instance, artifact, delivery);
+          );
+        default:
+          return unhandled("artifact taker", taker);
+      }
+    });
+  /** Who takes what the person did on an artifact `writer` made (artifacts/taker.ts). */
+  const takerOf = (writer: InstanceRow | undefined, artifact: ArtifactRow) =>
+    artifactTaker(writer, artifact, {
+      caw: lead,
+      instance: (id) => db.getInstancesByIds([id])[0],
+      refusal: (id) =>
+        inputRefusal(id, { kind: "system", name: ARTIFACT_ORIGIN })?.reason,
     });
   /** {@link deliverArtifactMarks} to the project's Caw: woken with them, or the writer's transcript says why not. */
   const marksToCaw = async (
@@ -15129,7 +15132,7 @@ export const createServer = (
         ({ instanceId: heard } = await caw.tellYours(to.caw.projectId, {
           by: "act",
           kind: "person-request",
-          trigger: "the person sent a decision page",
+          trigger: to.caw.trigger,
           origin: { name: ACT_ORIGIN, line: to.caw.line },
           text: to.caw.text,
         }));
@@ -15142,6 +15145,33 @@ export const createServer = (
       return heard;
     },
     // Your pins, replies, resolves and ink go on your Send, with your note.
+    // The person's answers the hub sends itself go where his marks go.
+    answersTo: (writer, artifact) => {
+      const taker = takerOf(writer, artifact);
+      switch (taker.to) {
+        case "writer":
+        case "parent":
+          return { session: taker.session };
+        case "caw":
+          return {
+            caw: {
+              projectId: taker.projectId,
+              line: noticeWords.answeredPage(artifact.title),
+              text: noticeWords.answeredPageYours(
+                artifact.title,
+                artifact.id,
+                writer ? sessionName(writer) : null,
+                taker.why
+              ),
+              trigger: noticeWords.answeredPageTrigger,
+            },
+          };
+        case "none":
+          return null;
+        default:
+          return unhandled("artifact taker", taker);
+      }
+    },
     deliverMarks: (instance, artifact, delivery) =>
       deliverArtifactMarks(instance, artifact, delivery),
     // A delegate's artifact handed to its parent unopened: the parent hears it once.

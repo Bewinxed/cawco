@@ -59,6 +59,13 @@
  *     only his pushes the delivery back (`personMarked`), and another's
  *     never sends while his delivery is coming (needs.ts `sendsOnChange`).
  *
+ * (i) An ended delegate's fully answered page was never sent or decided:
+ *     `sendAnswered` returned when `deps.finished(owner)`, though its parent
+ *     held it in open_items. It goes to whoever holds it now, by the rule
+ *     his marks already went by (artifacts/taker.ts, out of server.ts
+ *     `deliverArtifactMarks`): its writer, else the session that delegated
+ *     it, else the project's Caw. On main taker.ts is not there.
+ *
  *   bun scripts/probe-kit/run.ts answered-pages
  */
 
@@ -66,6 +73,7 @@ import type { CanvasAuthor } from "../../../packages/core/src/canvas";
 import type { ChoiceEntry } from "../../../packages/core/src/choices";
 import type { Pin } from "../../../packages/core/src/comments";
 import type { DecisionCard } from "../../../packages/core/src/decisions";
+import type { InstanceRow } from "../../../packages/core/src/protocol";
 import { DAY_MS, MINUTE_MS } from "../../../packages/core/src/time";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import {
@@ -95,6 +103,7 @@ import type {
   AskedOf,
   SentBy,
 } from "../../../packages/hub/src/artifacts/service";
+import { artifactTaker } from "../../../packages/hub/src/artifacts/taker";
 import type {
   ArtifactRow,
   ArtifactsDb,
@@ -622,6 +631,42 @@ const run = ({ check }: Kit) => {
       }) &&
       !sendsOnChange("person", { coming: false, whole: true }),
     JSON.stringify(told)
+  );
+
+  // (i) An ended writer's answered page goes to whoever holds it now.
+  const session = (id: string, parent: string | null = null) =>
+    ({ id, parentInstanceId: parent }) as InstanceRow;
+  const writer = session(DELEGATE, WRITER);
+  const parentRow = session(WRITER);
+  const takerWith = (refusing: string[], projectId: string | null) =>
+    artifactTaker(
+      writer,
+      { projectId },
+      {
+        caw: "project-caw",
+        instance: (id) => (id === WRITER ? parentRow : undefined),
+        refusal: (id) =>
+          refusing.includes(id)
+            ? "Its work's workspace was archived."
+            : undefined,
+      }
+    );
+  const standing = takerWith([], "project-1");
+  const toParent = takerWith([DELEGATE], "project-1");
+  const toCaw = takerWith([DELEGATE, WRITER], "project-1");
+  const toNone = takerWith([DELEGATE, WRITER], null);
+  check(
+    "i: an answered page goes to whoever holds it, the one rule his marks go by: its writer while it takes input; ended, the session that delegated it (its open_items list holds it); that one ended too, the project's Caw; neither, no one",
+    standing.to === "writer" &&
+      standing.session.id === DELEGATE &&
+      toParent.to === "parent" &&
+      toParent.session.id === WRITER &&
+      toParent.why === "Its work's workspace was archived" &&
+      toCaw.to === "caw" &&
+      toCaw.caw === "project-caw" &&
+      toCaw.projectId === "project-1" &&
+      toNone.to === "none",
+    JSON.stringify({ standing, toParent, toCaw, toNone })
   );
   return Promise.resolve();
 };

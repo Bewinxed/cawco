@@ -51,6 +51,19 @@ export const noticeWords = {
   setupFromOffer: "Asked Caw to set up the project you made",
   /** A decision page's "I'm done picking", told to the session that holds it (hub decisions.ts). */
   donePicking: (title: string) => `Told you're done picking on “${title}”`,
+  /** A page whose every question has his answer, sent by the hub to the project's Caw because its writer takes no input. */
+  answeredPage: (title: string) => `Every question answered on “${title}”`,
+  /** Why Caw is woken for it. */
+  answeredPageTrigger:
+    "every question on a decision page is answered and the session that wrote it takes no input",
+  /** What Caw is told with it: the page is its now, and how to read it. */
+  answeredPageYours: (
+    title: string,
+    id: string,
+    writer: string | null,
+    why: string
+  ) =>
+    `Every question on “${title}” has the person's answer, and ${writer ? `the session that wrote it, ${writer}, takes no input now (${why})` : "no session holds it"}, so it is yours: read his picks and notes with artifact_read({ id: "${id}" }).`,
   /** A decided page's Make tasks, asked of the session that holds it. */
   makeTasks: (title: string) => `Asked to make tasks from “${title}”`,
   /** A task the person added at the board, told to the project's conversation (hub task-input.ts). */
