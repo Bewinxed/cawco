@@ -5745,6 +5745,22 @@
       },
       "$description": "The room kept clear under Caw's panel's list on a phone: the composer's row and the home indicator's gap."
     },
+    "c-need-answers-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 16,
+        "unit": "rem"
+      },
+      "$description": "The Home-first prototype's Needs you row: the answers' column at its trailing edge (Approve and Decline as peers, or two answers side by side), beside the row's words once the row is home-need-row wide."
+    },
+    "c-spend-days-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "rem"
+      },
+      "$description": "The Home-first prototype's Spend page: the month's chart, one bar a day, the cap a dashed line across it."
+    },
     "c-lead-card-w": {
       "$type": "dimension",
       "$value": {

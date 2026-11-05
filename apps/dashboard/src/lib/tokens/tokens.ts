@@ -536,6 +536,8 @@ export type TokenSize =
   | "size.c-caw-list-h"
   | "size.c-caw-list-clear"
   | "size.c-caw-list-clear-phone"
+  | "size.c-need-answers-w"
+  | "size.c-spend-days-h"
   | "size.c-lead-card-w"
   | "size.c-lead-card-max-h"
   | "size.c-move-wait-col-w"

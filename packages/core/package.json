@@ -89,6 +89,7 @@
     "./decides": "./src/decides.ts",
     "./house-faces": "./src/house-faces.ts",
     "./words/decisions": "./src/words/decisions.ts",
+    "./words/proto-home-first": "./src/words/proto-home-first.ts",
     "./words/onboarding": "./src/words/onboarding.ts",
     "./words/decides": "./src/words/decides.ts",
     "./words/routines": "./src/words/routines.ts",

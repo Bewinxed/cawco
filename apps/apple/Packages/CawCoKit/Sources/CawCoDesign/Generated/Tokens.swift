@@ -1008,6 +1008,10 @@ public enum Size {
     public static let cCawListClear: Double = 120
     /// The room kept clear under Caw's panel's list on a phone: the composer's row and the home indicator's gap.
     public static let cCawListClearPhone: Double = 96
+    /// The Home-first prototype's Needs you row: the answers' column at its trailing edge (Approve and Decline as peers, or two answers side by side), beside the row's words once the row is home-need-row wide.
+    public static let cNeedAnswersW: Double = 256
+    /// The Home-first prototype's Spend page: the month's chart, one bar a day, the cap a dashed line across it.
+    public static let cSpendDaysH: Double = 96
     /// The session card hung from Caw's seat (the session card, the session tabs' surface brief: 416px wide).
     public static let cLeadCardW: Double = 416
     /// That card's height cap.

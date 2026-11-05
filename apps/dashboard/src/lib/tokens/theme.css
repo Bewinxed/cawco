@@ -18,6 +18,8 @@
   --container-timeline: 30rem;
   --container-table-34rem: 34rem;
   --container-task-frame: 56rem;
+  --container-home-briefing: 56rem;
+  --container-home-need-row: 36rem;
   --container-table-400px: 400px;
   --container-table-424px: 424px;
   --container-table-496px: 496px;
@@ -497,6 +499,8 @@
   --spacing-c-caw-list-h: var(--c-caw-list-h);
   --spacing-c-caw-list-clear: var(--c-caw-list-clear);
   --spacing-c-caw-list-clear-phone: var(--c-caw-list-clear-phone);
+  --spacing-c-need-answers-w: var(--c-need-answers-w);
+  --spacing-c-spend-days-h: var(--c-spend-days-h);
   --spacing-c-lead-card-w: var(--c-lead-card-w);
   --spacing-c-lead-card-max-h: var(--c-lead-card-max-h);
   --spacing-c-move-wait-col-w: var(--c-move-wait-col-w);

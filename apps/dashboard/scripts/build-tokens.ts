@@ -312,6 +312,14 @@ const CONTAINERS = {
   timeline: "30rem",
   "table-34rem": "34rem",
   "task-frame": "56rem",
+  // The Home-first prototype's briefing (prototypes/project/home-first):
+  // the acting column beside the knowing column once its page is as wide as
+  // a 37rem column of rows with answers plus an 18rem column of links; under
+  // it (900, or Caw's pane docked beside it) the knowing column follows.
+  "home-briefing": "56rem",
+  // Its Needs you row: the answers' column (c-need-answers-w, 16rem) beside
+  // words a 20rem floor wide; under it the answers stand under the words.
+  "home-need-row": "36rem",
   "table-400px": "400px",
   // The routine runs ledger's, by the same rule (Result its floor): its
   // card under When and Outcome at their narrow widths (c-ledger-when-w-narrow
