@@ -268,17 +268,21 @@
   let glass = $state<HTMLElement | null>(null);
 
   /**
-   * What always stands (the switch, Close's glass, the glass's own inset)
-   * as drawn; each control's width, and More's, kept while it stands. The
-   * controls stand in the head (the mode) or in its glass (the rest).
+   * What always stands (the switch, Close's glass) as drawn, and the room
+   * the glass's own inset takes (`pads`); each control's width, and More's,
+   * kept while it stands. The controls stand in the head (the mode) or in
+   * its glass (the rest). The inset narrows the room rather than standing
+   * as a member of the row: as a member it took a gap more than it is laid
+   * out with (main's 45ac350ee8, session-sheet leg 18).
    */
   function drawnWidths(el: HTMLElement, name: HTMLElement) {
     const kept: number[] = [];
+    let pads = 0;
     const parts = [...el.children, ...(glass?.children ?? [])];
     for (const child of parts) {
       const one = child as HTMLElement;
       if (glass && one.contains(glass)) {
-        kept.push(insetOf(glass));
+        pads += insetOf(glass);
       } else if (one.dataset.slot !== "join") {
         const width = keepWidth(one);
         if (width !== null && one !== name) {
@@ -286,7 +290,7 @@
         }
       }
     }
-    return { kept };
+    return { kept, pads };
   }
 
   /** The glass's own inset, start and end: what it adds round its controls. */
@@ -405,7 +409,7 @@
       return name;
     }
     const { gap, room } = roomOf(head);
-    const { kept } = drawnWidths(head, identity);
+    const { kept, pads } = drawnWidths(head, identity);
     // More and a form not drawn yet are a bar item, its symbol alone, until
     // they stand to be read.
     const glyph =
@@ -414,7 +418,7 @@
       ) || 0;
     const moreGlyph = widths.get("more") ?? glyph;
     const next = standing(
-      room,
+      room - pads,
       gap,
       [...kept, keeps + nameMargins(identity)],
       { glyph: moreGlyph, counted: widths.get("more:counted") ?? moreGlyph },
