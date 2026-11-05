@@ -1072,7 +1072,7 @@ import {
   type TranscriptPayload,
 } from "./transcripts";
 import { createTreeStops } from "./tree-stops";
-import { turnSpeech } from "./turn-speech";
+import { turnState } from "./turn-state";
 import { turnUsageOf } from "./turn-usage";
 import { unwatchedMode } from "./unwatched-mode";
 import { TOOL_RELEASES } from "./upstreams";
@@ -6788,9 +6788,9 @@ export const createServer = (
       return;
     }
     turnsWritten.add(instanceId);
-    // Its words are its own: none of a turn before it that ended with no
-    // result (its process gone inside it) carries over.
-    speech.began(instanceId);
+    // Its words and its work are its own: none of a turn before it that
+    // ended with no result (its process gone inside it) carries over.
+    turnInFlight.began(instanceId);
     db.openTurn(instanceId, Date.now());
     push.turnBegan(instanceId);
   };
@@ -11026,8 +11026,8 @@ export const createServer = (
     }
   };
   sayKeptAtStart();
-  /** Each session's words in the turn in flight ({@link turnSpeech}). */
-  const speech = turnSpeech();
+  /** What each session's turn in flight has said and done ({@link turnState}). */
+  const turnInFlight = turnState();
   /**
    * The tokens each Claude session's latest top-level request sent (its
    * uncached input plus cache reads and writes), by session: its context as
@@ -11074,8 +11074,6 @@ export const createServer = (
    * off.
    */
   const credentialTurns = new Set<string>();
-  /** Sessions whose turn in flight has called a tool: it has done work, which a refusal never runs again. */
-  const workedTurns = new Set<string>();
   /**
    * A work item's turn its account's refused credential ended and the hub
    * does not carry on: the account, and why not, for the item's failure.
@@ -31627,7 +31625,7 @@ export const createServer = (
       return;
     }
     let stays: string | undefined;
-    if (workedTurns.has(instanceId)) {
+    if (turnInFlight.worked(instanceId)) {
       stays = "its turn had already done work, so it was not run again";
     } else if (
       refusalMoved.has(itemId) &&
@@ -39514,7 +39512,7 @@ export const createServer = (
                     console.error(
                       `[hub] completion ${message.instanceId} has no harness result identity`
                     );
-                    speech.over(message.instanceId);
+                    turnInFlight.over(message.instanceId);
                     break;
                   }
                   if (
@@ -39525,7 +39523,7 @@ export const createServer = (
                       neutral.recovered === true
                     )
                   ) {
-                    speech.over(message.instanceId);
+                    turnInFlight.over(message.instanceId);
                     break;
                   }
                   const [claimed] = db.getInstancesByIds([message.instanceId]);
@@ -39544,7 +39542,6 @@ export const createServer = (
                   } else {
                     turnOver(message.instanceId);
                   }
-                  workedTurns.delete(message.instanceId);
                 }
                 const named = peekSessionKey(message.payload);
                 if (named) {
@@ -39781,6 +39778,15 @@ export const createServer = (
                   publishUsage(message.machineId);
                   break;
                 }
+                // A turn's first frame opens it before anything reads it:
+                // a refusal below reads this turn's state, not the last's.
+                if (
+                  frame.message.type === "assistant" ||
+                  frame.message.type === "user" ||
+                  frame.message.type === "stream_event"
+                ) {
+                  turnUnderWay(message.instanceId);
+                }
                 // Claude Code's error in the model's place: what it says of
                 // the account's credential settles its sign-in there, and
                 // decides who answers the turn's end.
@@ -39803,13 +39809,6 @@ export const createServer = (
                   if (word) {
                     takeCredentialTurn(message.instanceId);
                   }
-                }
-                if (
-                  frame.message.type === "assistant" ||
-                  frame.message.type === "user" ||
-                  frame.message.type === "stream_event"
-                ) {
-                  turnUnderWay(message.instanceId);
                 }
                 observeTurn(message.instanceId, frame);
                 afterPausingCall(message.instanceId, frame.message);
@@ -40120,11 +40119,10 @@ export const createServer = (
                       );
                     }
                   }
-                  if (
-                    speech.frame(message.instanceId, neutral.message.content)
-                  ) {
-                    workedTurns.add(message.instanceId);
-                  }
+                  turnInFlight.frame(
+                    message.instanceId,
+                    neutral.message.content
+                  );
                 } else if (
                   neutral.type === "result" &&
                   credentialTurns.has(message.instanceId)
@@ -40135,7 +40133,7 @@ export const createServer = (
                   const ended = message.instanceId;
                   credentialTurns.delete(ended);
                   limitRefused.delete(ended);
-                  speech.over(ended);
+                  turnInFlight.over(ended);
                   atLimit.signedOut(ended).catch((error: unknown) => {
                     limitAnswerFailed(ended, "its refused sign-in", error);
                   });
@@ -40148,7 +40146,7 @@ export const createServer = (
                   // session is held, moved or continued; no report goes up,
                   // no rule answers it, and what a refused request says of
                   // the context is not the session's context.
-                  speech.over(message.instanceId);
+                  turnInFlight.over(message.instanceId);
                   const refused = message.instanceId;
                   // A move it owes to an account with room is its turn's
                   // end, as any turn's end is.
@@ -40222,7 +40220,9 @@ export const createServer = (
                       "context threshold"
                     );
                   }
-                  const { text, onNoReply } = speech.ended(message.instanceId);
+                  const { text, onNoReply } = turnInFlight.ended(
+                    message.instanceId
+                  );
                   // It ended on no_reply_needed and said nothing after: no
                   // news, no push. A failed turn is news whatever it called.
                   const silent =

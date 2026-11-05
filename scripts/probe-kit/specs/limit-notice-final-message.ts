@@ -1,14 +1,15 @@
 /**
- * A session's final message for a turn holds only that turn's own words:
- * the "You've hit your limit" notice of a turn its account's limit refused
- * never starts the next turn's final message.
+ * A session's turn holds only its own words and work: the "You've hit your
+ * limit" notice of a turn its account's limit refused never starts the next
+ * turn's final message, and the work of a turn that died with no result
+ * never stops the next turn's credential refusal from running it again.
  *
  * Claude Code ends a refused turn with an assistant frame (`error:
  * "rate_limit"`) whose text is the notice, then the turn's `result`. The hub
- * (server.ts) keeps each turn's words in turn-speech.ts `turnSpeech`: every
- * top-level assistant frame goes to `frame`; a turn's start (server.ts
- * `turnUnderWay`, its first frame or its harness reading a send) to
- * `began`; a result the at-limit controller answers, a credential's turn
+ * (server.ts) keeps each turn's words and work in turn-state.ts `turnState`:
+ * every top-level assistant frame goes to `frame`; a turn's start (server.ts
+ * `turnUnderWay`, its first frame or its harness reading a send, ahead of
+ * any refusal that frame carries) to `began`; a result the at-limit controller answers, a credential's turn
  * and a result the hub took already to `over`; any other result to `ended`,
  * which gives the final message handed up. Driven here in that order:
  *
@@ -22,12 +23,16 @@
  *   own words: the notice is that turn's final message.
  * - (no reply) a turn ending on no_reply_needed with nothing after is
  *   silent; one that began after it is not.
+ * - (worked) a turn that called a tool has worked for every frame after it
+ *   (server.ts `takeCredentialTurn` does not run it again); one that died
+ *   there with no result, then a next turn whose first frame is Claude
+ *   Code's credential refusal: that turn has not worked, so it runs again.
  *
  *   bun scripts/probe-kit/run.ts limit-notice-final-message
  */
 import type { NeutralAssistantBlock } from "../../../packages/core/src/harness";
 import { NO_REPLY_TOOL } from "../../../packages/core/src/no-reply";
-import { turnSpeech } from "../../../packages/hub/src/turn-speech";
+import { turnState } from "../../../packages/hub/src/turn-state";
 import type { Kit, Spec } from "../kit";
 
 /** Claude Code's text in its `rate_limit` assistant frame. */
@@ -47,7 +52,7 @@ const call = (name: string): NeutralAssistantBlock[] => [
  * before it anyway): its answer, then its result.
  */
 const normalTurn = (
-  speech: ReturnType<typeof turnSpeech>,
+  speech: ReturnType<typeof turnState>,
   id: string,
   began = true
 ) => {
@@ -59,7 +64,7 @@ const normalTurn = (
 };
 
 const run = (kit: Kit): Promise<void> => {
-  const speech = turnSpeech();
+  const speech = turnState();
 
   const answered = crypto.randomUUID();
   speech.began(answered);
@@ -113,6 +118,22 @@ const run = (kit: Kit): Promise<void> => {
       nextWords.text === DONE &&
       !nextWords.onNoReply,
     JSON.stringify({ quietWords, nextWords })
+  );
+
+  const died = crypto.randomUUID();
+  speech.began(died);
+  speech.frame(died, call("Bash"));
+  speech.frame(died, text("Running the build."));
+  const workedMidTurn = speech.worked(died);
+  // Its process dies here: no result. The next turn's first frame is the
+  // refusal, opened as a turn before it is read.
+  speech.began(died);
+  speech.frame(died, text("Invalid API key · Please run /login"));
+  const workedAfterDeath = speech.worked(died);
+  kit.check(
+    "(worked) a turn that called a tool stays worked to its end; after it died with no result, the next turn's credential refusal finds no work and runs again",
+    workedMidTurn && !workedAfterDeath,
+    JSON.stringify({ workedMidTurn, workedAfterDeath })
   );
   return Promise.resolve();
 };
