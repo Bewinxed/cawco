@@ -88,6 +88,11 @@ import type { Tasks } from "./tasks";
  * description that tells it from delegate_list and find, in place of the
  * hub's database and transcripts read by hand (300 tokens; worker 29,888,
  * delegate 11,196 measured).
+ * 2026-11-06: artifact_create's kind, does, program, html, port and serve
+ * each say what they take, its description now naming none of them, and
+ * words cut from generate_image, artifact_read, todo_write, delegate and
+ * artifact_create's `to`, so the room comes from words, not the budgets
+ * (worker 29,820, delegate 11,142 measured).
  */
 const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 29_900,

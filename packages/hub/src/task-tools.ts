@@ -189,7 +189,7 @@ const namesTasks = (task: TaskView): boolean =>
 
 /** What a wait names, as every task tool takes it: the one grammar task-waits.ts reads. */
 const WAIT_TARGETS =
-  "tsk-12; a card <page>#<card>; a pin <page>/<number>; a GitHub pull request or Actions run URL; a session handle like cockpit#5a167bde";
+  "tsk-12, a card <page>#<card>, a pin <page>/<number>, a GitHub pull request or Actions run URL, or a session handle (cockpit#5a167bde)";
 const landsParameter = () =>
   z
     .enum(LANDS_MODES)
@@ -225,16 +225,12 @@ const stepParameter = () =>
       .trim()
       .min(1)
       .optional()
-      .describe(
-        "On a task attempt, a to-do's id (td-3, what ends its link) makes the step that to-do: completing it ticks it."
-      ),
+      .describe("A task to-do's id (td-3): completing the step ticks it."),
     priority: z.enum(PLAN_STEP_PRIORITIES).optional(),
     waitsOn: z
       .string()
       .optional()
-      .describe(
-        `What it waits on, as task_link's waits_on takes it: ${WAIT_TARGETS}. Absent or '': none.`
-      ),
+      .describe(`What it waits on: ${WAIT_TARGETS}; '' for none.`),
   });
 
 /**

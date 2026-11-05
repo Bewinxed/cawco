@@ -130,6 +130,6 @@ export interface GeneratedImage {
 export const GENERATE_IMAGE = "generateImage";
 export const IMAGE_GENERATION_TIMEOUT_MS = 600_000;
 export const IMAGE_GENERATION_DESCRIPTION =
-  "Generate one image or reference-guided edit through an image provider on this machine's sign-in (the fleet's default, ChatGPT unless changed, unless `provider` says otherwise), from any model or harness. " +
+  "Generate one image or reference-guided edit through an image provider on this machine's sign-in (`provider`). " +
   "For photos, illustrations, textures and raster assets; SVGs, icons and code-native graphics are source to edit instead. " +
   "Saved on your machine; show it with show_image.";

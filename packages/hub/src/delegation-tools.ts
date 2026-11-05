@@ -636,7 +636,7 @@ export function handoffTools(deps: HandoffDeps) {
       "Run bounded work in a new session with its own workspace and fresh context. It reports back once its work passes the hub's merge checks, quoting the output of the commands that prove it.\n\n" +
         "Use it for substantial work that must report back: multi-file implementation, a sweep of dozens of reads, builds or deploys with verification loops, browser audits, evidence across many files or logs. " +
         "Do yourself: one command whose exact output you need, git status, log or diff, grep, a few file reads, a port check, a log tail, a restart, edits to files you are changing, and what the user wants to watch.\n\n" +
-        "Prefer it over start_session when the work must report back, and over handoff for new standalone work.",
+        "Prefer it over start_session, and over handoff for new standalone work.",
       {
         prompt: z
           .string()
@@ -713,7 +713,7 @@ export function handoffTools(deps: HandoffDeps) {
           .array(z.string())
           .optional()
           .describe(
-            "Deliverables that are not commits, from the repository's root; copied into the project's folder under assets/<item>/, as is whatever the delegate leaves in its $TMPDIR/outputs/ without being named here."
+            "Deliverables that are not commits, from the repository's root; copied to the project folder's assets/<item>/, as is anything it leaves in $TMPDIR/outputs/."
           ),
         group: groupParameter().optional(),
         owns: ownsParameter().optional(),

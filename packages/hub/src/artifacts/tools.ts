@@ -162,21 +162,32 @@ export const artifactCreate = {
   name: "artifact_create",
   description:
     "Open something in the person's panel for them to act on; `title` names it to them everywhere, `ask` heads the panel until they act. The `show` skill " +
-    "chooses `does`, `ask` and the kind before you build. A pick is a page with `program` (decision-page skill). A judgement " +
-    "is a component canvas: `file`, its CSF 3 states file, every story drawn live (component-canvas skill); or a " +
-    "preview or page when the whole surface is judged. A try is a preview at `path`: a server on `port` (in a " +
-    "workspace `serve` is its command, which CawCo runs there with PORT and keeps up) or a folder (`dir`). A drawing " +
-    "is a canvas: `elements`, `mermaid`, or empty. A page is also `html`, or `dir` holding page.oui or page.html. " +
-    "Proof, references, a plan or finished work go in your words, not here; a task attempt's result is the exception, shown here for its review (task_result). The same kind and name again replaces " +
-    "it, picks kept.",
+    "chooses `does`, `ask` and `kind` before you build. Proof, references, plans and finished work go in your words; " +
+    "a task attempt's result is the exception (task_result). The same kind and name again replaces it, picks kept.",
   input: {
-    kind: z.enum(MADE_ARTIFACT_KINDS),
-    does,
+    kind: z
+      .enum(MADE_ARTIFACT_KINDS)
+      .describe(
+        "page: `program`, `html`, or `dir` holding page.oui or page.html. component: `file`, every story drawn live (component-canvas skill). preview: a server on `port`, or a folder (`dir`), at `path`. canvas: `elements`, `mermaid`, or empty."
+      ),
+    does: does.describe(
+      "pick: a page with `program`. judge: a component, or a preview or page judged whole. try: a preview. draw: a canvas."
+    ),
     ask,
     title,
     name: z.string().regex(ARTIFACT_NAME).describe("Like onboarding."),
-    program: z.string().min(1).max(PROGRAM_MAX).optional(),
-    html: z.string().min(1).max(PAGE_LIMIT).optional(),
+    program: z
+      .string()
+      .min(1)
+      .max(PROGRAM_MAX)
+      .optional()
+      .describe("Its decision cards (decision-page skill)."),
+    html: z
+      .string()
+      .min(1)
+      .max(PAGE_LIMIT)
+      .optional()
+      .describe("A page's whole document."),
     file: z
       .union([
         z.string().min(1).max(1000).regex(STORY_FILE),
@@ -186,10 +197,18 @@ export const artifactCreate = {
           .max(CANVAS_SPEC_LIMITS.files),
       ])
       .optional()
-      .describe("From your workspace's root; a list for a surface of several."),
+      .describe(
+        "CSF 3 states files from your workspace's root; a list for a surface of several."
+      ),
     ...canvasFields,
     dir: z.string().startsWith("/").max(4096).optional().describe("Absolute."),
-    port: z.number().int().min(1).max(65_535).optional(),
+    port: z
+      .number()
+      .int()
+      .min(1)
+      .max(65_535)
+      .optional()
+      .describe("A dev server's port."),
     path: z
       .string()
       .regex(PREVIEW_START_PATH)
@@ -216,7 +235,10 @@ export const artifactCreate = {
           .optional()
           .describe("From your clone's root."),
       })
-      .optional(),
+      .optional()
+      .describe(
+        "In a workspace, the server's command: CawCo runs it with PORT and keeps it up."
+      ),
     elements,
     mermaid,
   },
@@ -225,7 +247,7 @@ export const artifactCreate = {
 /** What artifact_create adds for a session that has a parent (a delegate): `to`, and its words. */
 export const artifactCreateToParent = {
   description:
-    ' to: "parent" hands it to your parent unopened, to open with artifact_show; once they have, their panel keeps the version it opened until their next artifact_show, and decision pages draw your changes at once.',
+    ' to: "parent" hands it to your parent unopened, for artifact_show; their panel then keeps that version until their next artifact_show, but decision pages draw your changes at once.',
   input: { to: z.literal("parent").optional() },
 };
 
@@ -288,7 +310,7 @@ export const artifactUpdate = {
 export const artifactRead = {
   name: "artifact_read",
   description:
-    "Read the person's picks, notes and values on an artifact (yours, your delegation tree's, your project's pages, what its cold sessions left): each choice " +
+    "Read the person's picks, notes and values on an artifact artifact_list lists: each choice " +
     "picked or not yet. `since`: the seq your last read gave. No id: your newest. `png` adds its picture, pins and all, `width` px wide; " +
     "a preview or a page drawn in `state`, its link's `?query` or `#hash`. `save` keeps it at a .png path in your clone or `$TMPDIR/`. " +
     "A canvas: its outline and what the person changed. A component: its frames, moves, stories, `dials` and `tuned`; `state` adds a frame's style delta, " +
