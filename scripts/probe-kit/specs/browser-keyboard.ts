@@ -1,14 +1,17 @@
 /**
  * A person driving a browser take-over from a phone brings up the keyboard
  * and types into the remote page (Projects spec §5.11, "The view"): letters,
- * an accented letter the keyboard inserts without a key, Backspace, Return
- * and an autocorrected word reach the page's field as typing on a desk does,
- * each once.
+ * a capital, an accented letter the keyboard inserts without a key,
+ * Backspace, Return, an autocorrected word, letters outside Latin-1 and an
+ * emoji reach the page's field as typing on a desk does, each once.
  *
  * On a scratch fleet (real hub, agent and sessiond; the mock model) with the
  * built dashboard on WebKit at 390×844 (touch, mobile), the project's browser
- * on the local host (the container runtime hidden by
- * `DOCKER_HOST=unix:///nonexistent`, so it runs in a workspace's boundary):
+ * on one host ({@link typeIntoTakeover}). This spec takes the local host
+ * (the container runtime hidden by `DOCKER_HOST=unix:///nonexistent`, so it
+ * runs in a workspace's boundary): the view sends its typing as CDP's
+ * `Input.insertText` and key presses. browser-keyboard-container takes the
+ * container host, where it goes as neko's X keysyms.
  *
  * 1. the browser's page is a textarea that counts its Enter key presses;
  *    the person takes it over from the session's panel, which draws its
@@ -17,10 +20,11 @@
  * 3. the band's Show keyboard stands there, and a tap on it focuses the
  *    view's keyboard field (what raises a phone's keyboard), the band then
  *    offering Hide keyboard;
- * 4. typed into that field: "hél" by key, "lo" as the keyboard's inserted
- *    text, a Backspace, a Return, "teh" by key, then the field's "teh"
- *    replaced by "the " as autocorrect replaces a word. The page's textarea
- *    reads `héll\nthe ` and counted one Enter;
+ * 4. typed into that field: "Hél" by key, "lo" as the keyboard's inserted
+ *    text, a Backspace, a Return, "teh" by key, the field's "teh" replaced
+ *    by "the " as autocorrect replaces a word, then "ж€" and "🙂" as the
+ *    keyboard's inserted text. The page's textarea reads
+ *    `Héll\nthe ж€🙂` and counted one Enter;
  * 5. with a keyboard covering 300px of the well's foot (its
  *    `--keyboard-lift`), the view stands above it and the picture inside it;
  * 6. a second tap in the stream keeps the keyboard field focused;
@@ -28,7 +32,7 @@
  *
  * The view is read by the rendered checks driving and with the keyboard up
  * at 390, and driving at 1440; its pictures go to
- * `$TMPDIR/outputs/browser-keyboard/`.
+ * `$TMPDIR/outputs/<spec>/`.
  *
  * What only an iPhone shows is not read here: the soft keyboard coming up
  * on the tap, and iOS's own autocorrect replacing a word.
@@ -40,6 +44,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import type { CdpLink } from "../../../packages/agent/src/browser/cdp-takeover";
+import { readWithin } from "../../../packages/core/src/bounded";
 import type { BrowserKey } from "../../../packages/core/src/browser";
 import { browserWords } from "../../../packages/core/src/words/browser";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
@@ -48,12 +53,8 @@ import { RenderedChecks } from "../rendered-checks";
 
 const MACHINE = "scratch-fleet";
 const VIEW = '[data-slot="browser-view"]';
-/** Where the view's pictures go for a person to look at. */
-const SHOTS = join(
-  process.env.TMPDIR ?? tmpdir(),
-  "outputs",
-  "browser-keyboard"
-);
+/** How long a browser may take to go live: a container host's first start builds its image. */
+const LIVE_WITHIN_MS = 15 * 60_000;
 
 const respond = (_request: Seen): Reply => ({ everyMs: 5, words: ["ok"] });
 
@@ -165,14 +166,40 @@ const fieldOf = async (key: BrowserKey) => {
   };
 };
 
-const run = async (kit: Kit): Promise<void> => {
+/**
+ * The whole leg on `host`: the browser started there, taken over from a
+ * phone, typed into, read back from its page. `name` is the spec's, for its
+ * checks and its pictures.
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one leg in the order a person takes it, a check at each step
+export const typeIntoTakeover = async (
+  kit: Kit,
+  host: "local" | "container",
+  name: string
+): Promise<void> => {
+  const shots = join(process.env.TMPDIR ?? tmpdir(), "outputs", name);
+  let dockerHost = "unix:///nonexistent";
+  if (host === "container") {
+    const { findRuntime } =
+      await import("../../../packages/agent/src/browser/runtime");
+    const runtime = await findRuntime();
+    if ("missing" in runtime) {
+      kit.check(
+        "a container runtime answers on this host",
+        false,
+        runtime.missing
+      );
+      return;
+    }
+    dockerHost = `unix://${runtime.endpoint}`;
+  }
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
   await fleet.hubUp();
   fleet.fileAccount();
-  fleet.launch("agent", [], { DOCKER_HOST: "unix:///nonexistent" });
+  fleet.launch("agent", [], { DOCKER_HOST: dockerHost });
   await fleet.agentUp();
   await fleet.accountSignedIn();
   process.env.XDG_DATA_HOME = fleet.env.XDG_DATA_HOME as string;
@@ -188,17 +215,33 @@ const run = async (kit: Kit): Promise<void> => {
   const session = await fleet.spawn("claude", "Keyboard", fleet.repo, {
     projectId: project.id,
   });
-  const started = await fleet
-    .api<{ state?: string; host?: string }>(`${keyPath}/start`, {
-      machineId: MACHINE,
-    })
-    .catch((error: unknown) => ({ state: String(error), host: undefined }));
+  // Started as the panel starts it; answered once it is live, which on a
+  // container host's first start waits on its image's build.
+  const start = await readWithin(LIVE_WITHIN_MS, async (signal) => {
+    const response = await fetch(`${fleet.base}${keyPath}/start`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ machineId: MACHINE }),
+      signal,
+    });
+    return `${response.status} ${await response.text()}`;
+  });
+  const answered =
+    start.kind === "answered" ? start.value : `no answer (${start.reason})`;
+  const { readBrowser } =
+    await import("../../../packages/agent/src/browser/state");
+  const record = await until(
+    `the project's browser is live on the ${host} host`,
+    () => readBrowser(key),
+    (now) => now?.state === "live" || now?.state === "failed",
+    LIVE_WITHIN_MS
+  ).catch(() => readBrowser(key));
   kit.check(
-    `the project's browser is live on the local host (${started.state}, ${started.host})`,
-    started.state === "live" && started.host === "local",
-    JSON.stringify(started)
+    `the project's browser is live on the ${host} host (${record?.state}, ${record?.host})`,
+    record?.state === "live" && record.host === host,
+    `start answered ${answered}; record ${JSON.stringify({ state: record?.state, host: record?.host, why: record?.why })}`
   );
-  if (started.state !== "live") {
+  if (record?.state !== "live") {
     return;
   }
   await eachPage(key, (link, at) =>
@@ -278,11 +321,11 @@ const run = async (kit: Kit): Promise<void> => {
   if (!shown) {
     return;
   }
-  const checks = new RenderedChecks(kit, "browser-keyboard", { scope: VIEW });
-  await mkdir(SHOTS, { recursive: true });
+  const checks = new RenderedChecks(kit, name, { scope: VIEW });
+  await mkdir(shots, { recursive: true });
   await settle(page);
   await checks.at(page, "phone, driving");
-  await page.screenshot({ path: join(SHOTS, "phone-driving.png") });
+  await page.screenshot({ path: join(shots, "phone-driving.png") });
   await show.tap();
   const raised = await viewOf(page);
   const hide = await page
@@ -300,10 +343,10 @@ const run = async (kit: Kit): Promise<void> => {
 
   await settle(page);
   await checks.at(page, "phone, keyboard up");
-  await page.screenshot({ path: join(SHOTS, "phone-keyboard-up.png") });
+  await page.screenshot({ path: join(shots, "phone-keyboard-up.png") });
 
   // 4. Typing: keys, inserted text, Backspace, Return, an autocorrection.
-  await page.keyboard.type("hél");
+  await page.keyboard.type("Hél");
   await page.keyboard.insertText("lo");
   await page.keyboard.press("Backspace");
   await page.keyboard.press("Enter");
@@ -325,7 +368,9 @@ const run = async (kit: Kit): Promise<void> => {
       })
     );
   });
-  const want = "héll\nthe ";
+  await page.keyboard.insertText("ж€");
+  await page.keyboard.insertText("🙂");
+  const want = "Héll\nthe ж€🙂";
   const typed = await until(
     "the page's textarea holds what was typed",
     () => fieldOf(key),
@@ -343,7 +388,9 @@ const run = async (kit: Kit): Promise<void> => {
     const view = document.querySelector<HTMLElement>(
       '[data-slot="browser-view"]'
     );
-    const picture = document.querySelector('[data-slot="browser-frames"]');
+    const picture = document.querySelector(
+      '[data-slot="browser-frames"], [data-slot="browser-video"]'
+    );
     const well = document.querySelector<HTMLElement>(
       '[data-slot="browser-well"]'
     );
@@ -408,7 +455,7 @@ const run = async (kit: Kit): Promise<void> => {
   );
   await settle(desk);
   await checks.at(desk, "desk, driving");
-  await desk.screenshot({ path: join(SHOTS, "desk-driving.png") });
+  await desk.screenshot({ path: join(shots, "desk-driving.png") });
   checks.report();
   await desk.close();
 
@@ -420,7 +467,7 @@ const run = async (kit: Kit): Promise<void> => {
 const spec: Spec = {
   group: "iPhone Safari",
   name: "browser-keyboard",
-  run,
+  run: (kit) => typeIntoTakeover(kit, "local", "browser-keyboard"),
 };
 
 export default spec;
