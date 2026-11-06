@@ -6,9 +6,9 @@
    * filled in its hue (DESIGN.md, Needs you: "a mark, never a surface …
    * with no card, row, chip or well filled in its hue") and never coral
    * (that is where you act). A press opens the next thing that waits,
-   * where it stands (ProjectPage `nextWait`). Where the head is compact
-   * (`data-form="compact"`) its glyph and count stand alone, named in its
-   * tooltip. The page leaves it out while nothing needs you.
+   * where it stands (ProjectPage `nextWait`). Under the head's head-tools
+   * width (ProjectHead's `@container/head`) its glyph and count stand alone,
+   * named in its tooltip. The page leaves it out while nothing needs you.
    */
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import { IconNeedsYou } from "#lib/icons.js";
@@ -30,7 +30,7 @@
   data-slot="needs"
   aria-label={`Needs you, ${count}`}
   class={cn(
-    "select-none touch-hit mark-line type-label inline-flex h-c-btn-h-sm flex-none items-center gap-space-2 rounded-md bg-transparent px-space-3 in-form-compact:px-space-2 text-status-attn-ink hover:bg-surface-hover transition-[background-color,color] duration-(--dur-control) ease-out motion-safe:active:transform-(--tpress)",
+    "select-none touch-hit mark-line type-label inline-flex h-c-btn-h-sm flex-none items-center gap-space-2 rounded-md bg-transparent px-space-3 @max-head-tools/head:px-space-2 text-status-attn-ink hover:bg-surface-hover transition-[background-color,color] duration-(--dur-control) ease-out motion-safe:active:transform-(--tpress)",
     className
   )}
   style:--tpress="scale(var(--press-scale))"
@@ -44,6 +44,6 @@
     aria-hidden="true"
     class="size-icon-md text-status-attn-glyph"
   />
-  <span class="in-form-compact:hidden">Needs you</span>
+  <span class="@max-head-tools/head:hidden">Needs you</span>
   <span data-slot="num" class="num text-status-attn-ink">{count}</span>
 </button>

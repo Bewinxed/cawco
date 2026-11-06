@@ -20,6 +20,7 @@
   <ProjectHead
     {lead}
     machine={null}
+    newTask={false}
     onaskview={null}
     onfilter={none}
     onnewtask={none}

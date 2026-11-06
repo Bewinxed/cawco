@@ -42,6 +42,9 @@
   --container-section-row: 312px;
   --container-connect-row: 400px;
   --container-suggestion-rows-narrow: 340px;
+  --container-head-tools: 640px;
+  --container-head-place: 470px;
+  --container-head-row: 400px;
 }
 
 @theme inline {

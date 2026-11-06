@@ -758,7 +758,7 @@
 
 <section
   aria-label="Project details"
-  class="@container/details max-w-(--details-max) min-w-0 pt-space-1 pe-space-6 pb-space-3 ps-space-7 max-desk:max-w-none max-desk:pe-space-5 max-desk:ps-space-5"
+  class="@container/details max-w-(--details-max) min-w-0 pt-space-1 pe-space-6 pb-space-3 ps-space-7 @max-phone/project:max-w-none @max-phone/project:pe-space-5 @max-phone/project:ps-space-5"
   data-project-details={project.id}
   style:--details-max={"calc(var(--c-project-details-measure) + var(--space-7) + var(--space-6))"}
   transition:unfold

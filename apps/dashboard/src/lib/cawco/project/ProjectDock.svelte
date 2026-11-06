@@ -53,7 +53,11 @@
       ? "minmax(0, 1fr) 75%"
       : "minmax(0, 1fr) min(var(--c-caw-panel-h), 50%)"}
   >
-    <div class="grid-area-page flex min-h-0 min-w-0 flex-col">
+    <!-- The page's own width, which its rows fold by (`@container/project`):
+         a split's pane, or the phone. -->
+    <div
+      class="@container/project grid-area-page flex min-h-0 min-w-0 flex-col"
+    >
       {@render page()}
     </div>
     {@render dock()}

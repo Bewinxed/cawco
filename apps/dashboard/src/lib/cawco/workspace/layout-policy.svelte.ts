@@ -16,8 +16,12 @@ const phone = new MediaQuery("(width < 900px)");
 const touchPortrait = new MediaQuery(
   "(pointer: coarse) and (orientation: portrait)"
 );
-/** DESIGN.md's phone breakpoint (Breakpoints: "640px (phone: …)"), in px. */
-const PHONE_BREAKPOINT = 640;
+/**
+ * DESIGN.md's phone breakpoint (Breakpoints: "640px (phone: …)"), in px: the
+ * theme's `--container-phone`, which a page's own width is also read
+ * against (ProjectPage's `@container/project`).
+ */
+export const PHONE_BREAKPOINT = 640;
 /** An iPad's regular width: a coarse pointer at the phone breakpoint or wider. */
 const touchRegular = new MediaQuery(
   `(pointer: coarse) and (min-width: ${PHONE_BREAKPOINT}px)`

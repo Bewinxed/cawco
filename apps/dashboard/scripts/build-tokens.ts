@@ -395,6 +395,26 @@ const CONTAINERS = {
   // skeleton stands a second reason line on every row here, on every other
   // row wider (probe-kit suggestions-preview).
   "suggestion-rows-narrow": "340px",
+  // A project's head (project/ProjectHead.svelte, `@container/head`, its
+  // row inside the pane's gutters): its symbols fold into More as the pane
+  // narrows, so the name keeps at least 120px (about 11 characters of the
+  // title role) at every width. The row's three groups stand space-4 (14px)
+  // apart, the symbols inside a group space-2 (7px). Whole, it holds the
+  // name, the place (28px after a space-3), the views menu naming
+  // "Decisions" (about 100px), the filter (30px), Needs you with its word
+  // (about 110px), New task (28px), Caw's 48px seat and the capsule of
+  // Spin off, Full size and More (100px): 640px.
+  "head-tools": "640px",
+  // Under head-tools Needs you keeps its glyph and count (about 52px) and
+  // New task, the filter and Spin off are in More: the name, the place, the
+  // menu, Needs you, Caw and the capsule of Full size and More (68px) need
+  // 120 + 39 + 14 + 100 + 14 + 52 + 7 + 48 + 7 + 68 = 469px.
+  "head-place": "470px",
+  // Under head-place the place and Full size are in More too: the name,
+  // the menu, Needs you, Caw and More's capsule (36px) need
+  // 120 + 14 + 100 + 14 + 52 + 7 + 48 + 7 + 36 = 398px. Narrower, the name
+  // stands under them, on two lines at most.
+  "head-row": "400px",
 };
 const APPLE_DIR = "../apple/Packages/CawCoKit/Sources/CawCoDesign/";
 /** The decision-page skill CawCo ships (packages/hub/src/bundled-skills.ts): its pages wear the same tokens. */

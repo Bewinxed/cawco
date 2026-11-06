@@ -68,6 +68,7 @@
     pagesWaitingOf,
   } from "#lib/cawco/decisions/decisions.svelte.js";
   import { firstRender } from "#lib/cawco/first-render.svelte.js";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
   import {
     failureClause,
     failureSentence,
@@ -122,6 +123,7 @@
   import Split from "#lib/cawco/side/Split.svelte";
   import { store, stored } from "#lib/cawco/storage.js";
   import BulkBar, { type BulkRun } from "#lib/cawco/tasks/BulkBar.svelte";
+  import { COL_PHONE } from "#lib/cawco/tasks/board-cols.js";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
   import {
     CARD_PAGE,
@@ -169,6 +171,7 @@
     viewsOf,
     viewTool,
   } from "#lib/cawco/views-api.js";
+  import { PHONE_BREAKPOINT } from "#lib/cawco/workspace/layout-policy.svelte.js";
   import {
     projectHref,
     projectTab,
@@ -191,7 +194,6 @@
     IconFileTable,
     IconLayers,
     IconMore,
-    IconPlus,
     IconToolTodo,
   } from "#lib/icons.js";
   import { browser } from "$app/env";
@@ -1160,6 +1162,13 @@
     filter = next;
     remember();
   }
+  /**
+   * The page's room: 640px or wider (`--container-phone`, read off the
+   * pane, which spans the page), where the pane's gutters are the desk's,
+   * as its `@max-phone/project` classes say. A split's pane folds as a
+   * phone's page does; the window says nothing.
+   */
+  let roomy = $state(true);
   /** The filter where the head is compact, opened from its ⋯ (ProjectHead `onfilter`). */
   let filterOpen = $state(false);
   let filterAnchor = $state<HTMLElement | null>(null);
@@ -1917,15 +1926,22 @@
 </script>
 
 <!-- The head's views: the menu, then the filter on a view of the tasks,
-     whole where the head has room; compact, its glyph and count while a
-     filter stands, and the head's ⋯ opens it. -->
-{#snippet headViews(compact: boolean)}
+     its glyph and count; under the head's head-tools width it folds into
+     More while no filter stands (ProjectHead `data-fold`). -->
+{#snippet headViews()}
   <div class="flex min-w-0 items-center gap-space-2">
     <ViewMenu {current} onchoose={choose} views={tabs} />
-    {#if filterHere && (!compact || narrowed > 0)}
-      <div data-form="compact" class="flex flex-none items-center">
+    {#if filterHere}
+      <div
+        data-fold="filter"
+        data-form="compact"
+        class={[
+          "flex flex-none items-center",
+          narrowed === 0 && "@max-head-tools/head:hidden",
+        ]}
+      >
         <TaskFilterPopover
-          {compact}
+          compact
           {filter}
           {find}
           onchange={setFilter}
@@ -1936,30 +1952,11 @@
   </div>
 {/snippet}
 
-<!-- What acts on the project, before Caw's seat: Needs you, the one count
-     of what waits, whose press opens the next of it; New task where the
-     head has room (compact, it is in the ⋯). Bare symbols, each named in
-     its tooltip (DESIGN.md, Title bars follow Liquid Glass). -->
-{#snippet headTools(compact: boolean)}
+<!-- Needs you, the one count of what waits, whose press opens the next of
+     it, before the head's New task and Caw's seat. -->
+{#snippet headTools()}
   {#if waitingCount > 0}
     <NeedsYouChip count={waitingCount} onopen={nextWait} />
-  {/if}
-  {#if headNewTask && !compact}
-    <Button
-      aria-label="New task"
-      press="pressable"
-      onclick={() => {
-        if (current !== "table") {
-          choose("board");
-        }
-        adding = true;
-      }}
-      size="icon-sm"
-      title="New task"
-      variant="ghost"
-    >
-      <IconPlus />
-    </Button>
   {/if}
 {/snippet}
 
@@ -2448,8 +2445,11 @@
                 filterAnchor = anchor;
                 filterOpen = true;
               }}
+              newTask={headNewTask}
               onnewtask={() => {
-                choose("board");
+                if (current !== "table") {
+                  choose("board");
+                }
                 adding = true;
               }}
               setup={setupAct}
@@ -2462,7 +2462,7 @@
             {#if lead.problem}
               <Alert
                 data-id-page-notice
-                class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                class="me-space-6 mb-space-3 ms-space-7 w-auto @max-phone/project:mx-space-5"
                 variant="warning"
               >
                 <AlertDescription>{lead.problem}</AlertDescription>
@@ -2471,7 +2471,7 @@
             {#if stages && stages.problems.length > 0}
               <Alert
                 data-id-page-notice
-                class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                class="me-space-6 mb-space-3 ms-space-7 w-auto @max-phone/project:mx-space-5"
                 variant="warning"
               >
                 <AlertDescription>{unreadStages}</AlertDescription>
@@ -2480,7 +2480,7 @@
             {#if list && list.problems.length > 0}
               <Alert
                 data-id-page-notice
-                class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                class="me-space-6 mb-space-3 ms-space-7 w-auto @max-phone/project:mx-space-5"
                 variant="warning"
               >
                 <AlertDescription>{list.problems.join(" ")}</AlertDescription>
@@ -2491,7 +2491,7 @@
                  once, here, with its Retry. -->
               <Alert
                 data-id-page-notice
-                class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
+                class="me-space-6 mb-space-3 ms-space-7 w-auto @max-phone/project:mx-space-5"
                 variant="warning"
               >
                 <AlertDescription>{unread}</AlertDescription>
@@ -2586,17 +2586,16 @@
     data-slot="pane"
     aria-busy={cawco.hub === "unreachable" || awaiting || reading}
     class={[
-      "group flex min-h-0 max-w-full flex-auto flex-col overflow-y-auto pt-0 pe-space-6 ps-space-7 max-desk:px-space-5 view-board:overflow-hidden view-canvas:overflow-hidden view-decisions-page:overflow-hidden max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:basis-0 max-phone:view-canvas:min-h-(--pane-min) max-phone:view-canvas:overflow-visible max-phone:view-decisions-page:basis-0 max-phone:view-decisions-page:min-h-(--pane-min) max-phone:view-decisions-page:overflow-visible",
+      "group flex min-h-0 max-w-full flex-auto flex-col overflow-y-auto pt-0 pe-space-6 ps-space-7 @max-phone/project:px-space-5 view-board:overflow-hidden view-canvas:overflow-hidden view-decisions-page:overflow-hidden max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:basis-0 max-phone:view-canvas:min-h-(--pane-min) max-phone:view-canvas:overflow-visible max-phone:view-decisions-page:basis-0 max-phone:view-decisions-page:min-h-(--pane-min) max-phone:view-decisions-page:overflow-visible",
       fadeOn === "pane" && "kit-edge-fade-block",
       paneFoot,
     ]}
     data-view={reading ? "board" : paneView}
-    style:--draft-bleed-end={sheetQuery.current
-      ? "var(--space-5)"
-      : "var(--space-6)"}
-    style:--draft-bleed-start={sheetQuery.current
-      ? "var(--space-5)"
-      : "var(--space-7)"}
+    style:--draft-bleed-end={roomy ? "var(--space-6)" : "var(--space-5)"}
+    style:--draft-bleed-start={roomy ? "var(--space-7)" : "var(--space-5)"}
+    {@attach frameSize((node: HTMLElement) => {
+      roomy = node.clientWidth >= PHONE_BREAKPOINT;
+    })}
     style:--pane-min={docked ? "calc(50cqb + var(--c-sheet-max-h))" : "50cqb"}
   >
     {#if reading}
@@ -2604,9 +2603,9 @@
              next project's read takes its place in the skeleton's reveal. -->
       <div
         aria-hidden="true"
-        class="grid auto-cols-(--skeleton-col) grid-flow-col gap-space-3 overflow-hidden max-phone:auto-cols-(--skeleton-col-phone)"
+        class="grid auto-cols-(--skeleton-col) grid-flow-col gap-space-3 overflow-hidden @max-phone/project:auto-cols-(--skeleton-col-phone)"
         style:--skeleton-col={"minmax(var(--c-board-col-min), var(--c-board-col-max))"}
-        style:--skeleton-col-phone="calc(100% - var(--space-8))"
+        style:--skeleton-col-phone={COL_PHONE}
         out:revealOut
       >
         {#each stageList.filter((stage) => stage.kind !== "dropped") as stage (stage.name)}
