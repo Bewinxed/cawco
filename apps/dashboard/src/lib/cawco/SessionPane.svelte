@@ -102,6 +102,7 @@
   import { besideOf, putAway, standBeside } from "./tasks/beside.svelte";
   import TaskPane from "./tasks/TaskPane.svelte";
   import Composer, { type ComposerAsk } from "./transcript/Composer.svelte";
+  import ConnectCard from "./transcript/ConnectCard.svelte";
   import ConnectNeedsChip from "./transcript/ConnectNeedsChip.svelte";
   import {
     ComposerDraft,
@@ -987,6 +988,22 @@
   }
 
   /**
+   * The asks for the person its delegates at any depth parked (client
+   * `asksUnder`), each with the name of the delegate that asked.
+   */
+  const asksUnder = $derived(
+    cawco.asksUnder(viewId).map((row) => {
+      const asker = cawco.instanceIndex.byId.get(row.instanceId);
+      return {
+        ...row,
+        asker: asker
+          ? instanceTitle(asker)
+          : row.request.presentation.asker || row.hostname,
+      };
+    })
+  );
+
+  /**
    * The asks this conversation made: its own (one routed to its parent is
    * the parent's to answer, never the reader's queue), then those parked
    * elsewhere that it made (a memory curator run's proposal, on machine
@@ -1012,23 +1029,22 @@
     ...cawco.blocked
       .filter((row) => row.request.originInstanceId === viewId)
       .map((row) => ({ request: row.request, machine: row.machineId })),
-    ...cawco
-      .asksUnder(viewId)
-      .filter((row) => parkedAsks([row.request]).length > 0)
-      .map((row) => {
-        const asker = cawco.instanceIndex.byId.get(row.instanceId);
-        return {
-          request: row.request,
-          machine: row.machineId,
-          under: {
-            asker: asker
-              ? instanceTitle(asker)
-              : row.request.presentation.asker || row.hostname,
-            instanceId: row.instanceId,
-          },
-        };
-      }),
+    ...asksUnder
+      .filter((row) => !row.request.connectAsk)
+      .map((row) => ({
+        request: row.request,
+        machine: row.machineId,
+        under: { asker: row.asker, instanceId: row.instanceId },
+      })),
   ]);
+  /**
+   * The sign-ins its delegates at any depth asked the person for (hub
+   * connect-asks.ts): each its own card after the rows, as in the
+   * delegate's conversation (ConnectCard), named by the delegate that asked.
+   */
+  const connectsUnder = $derived(
+    asksUnder.filter((row) => row.request.connectAsk)
+  );
   /** The first of them, which the composer grows into: one ask at a time. */
   const firstAsk = $derived.by((): ComposerAsk | null => {
     const [first] = parked;
@@ -1286,6 +1302,18 @@
 
 <!-- The composer's two slots, drawn by whichever composer is writing to this
      conversation: the one below on a desk, the deck's on a phone. -->
+{#snippet rowsAfter()}
+  {@render afterRows?.()}
+  {#each connectsUnder as row (row.request.requestId)}
+    <ConnectCard
+      answer={null}
+      asker={row.asker}
+      instanceId={row.instanceId}
+      message={null}
+    />
+  {/each}
+{/snippet}
+
 {#snippet planRing()}
   <ConnectNeedsChip asks={connectsOpen} instanceId={viewId} />
   {#if planProgressNow}
@@ -1469,7 +1497,9 @@
               }}
               parkedHeight={writable ? parkedRoom : 0}
               session={held}
-              {afterRows}
+              afterRows={afterRows || connectsUnder.length > 0
+                ? rowsAfter
+                : undefined}
               {afterRowsAtWork}
               {visible}
             />

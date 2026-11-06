@@ -1,6 +1,8 @@
 /**
  * THE RULE FOR A DELEGATE'S ASK: whatever door an ask comes in by, while a
- * delegate waits on it its parent knows, and hears how it ended. One rule
+ * delegate waits on it its parent knows, and hears how it ended; an ask the
+ * person holds is told so to every session above the delegate, up to the
+ * one the person talks to, however deep it was asked. One rule
  * for every door: a harness's own prompt (server.ts, the machine's
  * `permission_request`), a session's `ask` and approvals (asks.ts), a
  * browser ask (browser-tools.ts), a connect ask (connect-asks.ts), a move
@@ -94,13 +96,17 @@ export interface DelegateWaitsDeps {
   /** The parent the asks of `asker` go to now; none for a session with no parent that can take them. */
   readonly parentOf: (asker: InstanceRow) => InstanceRow | undefined;
   /**
-   * Says `body` to `parent` about its delegate `asker`, under the note's
-   * `line`, in a send that wakes it, named by the ask `requestId` and
-   * `mark`: a send under a name already sent goes nowhere.
+   * Says `body` to `parent` about `asker`, a delegate under it `depth`
+   * sessions down (0: its own), under the note's `line`, in a send that
+   * wakes it, named by the ask `requestId`, `mark` and, above the asker's
+   * own parent, the session told: a send under a name already sent goes
+   * nowhere.
    */
   readonly tell: (
     told: {
       asker: InstanceRow;
+      /** How far above the asker's own parent `parent` stands: 0 for that parent. */
+      depth: number;
       mark: NoticeMark;
       parent: InstanceRow;
       requestId: string;
@@ -148,13 +154,52 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
     return deps.instance(payload.originInstanceId ?? ask.instanceId ?? "");
   };
 
-  /** The asker and the parent that hears of it, when there is one. */
+  /**
+   * The asker and the sessions above it that hear of its asks, nearest
+   * first: its parent, that parent's, and on up to the session the person
+   * talks to (Caw, or whoever started the tree). None when it has no parent.
+   */
   const pairOf = (
     instanceId: string | undefined
-  ): { asker: InstanceRow; parent: InstanceRow } | undefined => {
+  ):
+    | { above: InstanceRow[]; asker: InstanceRow; parent: InstanceRow }
+    | undefined => {
     const asker = instanceId ? deps.instance(instanceId) : undefined;
-    const parent = asker ? deps.parentOf(asker) : undefined;
-    return asker && parent ? { asker, parent } : undefined;
+    if (!asker) {
+      return;
+    }
+    const above: InstanceRow[] = [];
+    const seen = new Set([asker.id]);
+    let next = deps.parentOf(asker);
+    while (next && !seen.has(next.id)) {
+      above.push(next);
+      seen.add(next.id);
+      next = deps.parentOf(next);
+    }
+    const [parent] = above;
+    return parent ? { above, asker, parent } : undefined;
+  };
+
+  /**
+   * One notice of the ask `requestId` to the asker's parent, and with
+   * `all` to every session above it too: an ask the person holds is told up
+   * the whole tree, so the session the person talks to knows of an ask two
+   * deep as it waits and as it ends; one handed to the parent to answer is
+   * that parent's alone.
+   */
+  const tellUp = (
+    pair: NonNullable<ReturnType<typeof pairOf>>,
+    notice: { mark: NoticeMark; requestId: string; what: string },
+    all: boolean,
+    line: string,
+    body: string
+  ): void => {
+    for (const [depth, parent] of (all
+      ? pair.above
+      : [pair.parent]
+    ).entries()) {
+      deps.tell({ ...notice, asker: pair.asker, parent, depth }, line, body);
+    }
   };
 
   /** How `end` reads, for the ask `ask`. */
@@ -220,8 +265,10 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
       const requestId = ask.requestId ?? "";
       const name = deps.link(pair.asker);
       if (escalated) {
-        deps.tell(
-          { ...pair, mark: "persons-now", requestId, what: whatOf(ask) },
+        tellUp(
+          pair,
+          { mark: "persons-now", requestId, what: whatOf(ask) },
+          true,
           delegateWaitWords.personsNowLine(deps.title(pair.asker)),
           delegateWaitWords.personsNow(name, requestId)
         );
@@ -237,8 +284,10 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
       const said = browser
         ? delegateWaitWords.browserHeld(name, browser.origin, browser.reason)
         : delegateWaitWords.held(name, whatOf(ask));
-      deps.tell(
-        { ...pair, mark: "waits", requestId, what: whatOf(ask) },
+      tellUp(
+        pair,
+        { mark: "waits", requestId, what: whatOf(ask) },
+        true,
         delegateWaitWords.waitsLine(deps.title(pair.asker)),
         `${said} ${delegateWaitWords.personOnly}`
       );
@@ -275,13 +324,20 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
       // A take-over takes the ask off every screen; its call waits on.
       const taken =
         end.kind === "answered" && !answer && !!payloadOf(ask).browserAsk;
-      deps.tell(
+      // The person's: one only they answer, or one handed to the parent
+      // that went to them (its routing taken off). The sessions above were
+      // told it waits, and hear it end.
+      const persons =
+        waits.personOnly(ask) ||
+        (payloadOf(ask) as { routedTo?: string }).routedTo !== "parent";
+      tellUp(
+        pair,
         {
-          ...pair,
           mark: "ended",
           requestId: ask.requestId ?? "",
           what: whatOf(ask),
         },
+        persons,
         taken
           ? delegateWaitWords.tookOverLine(title)
           : delegateWaitWords.endedLine(title),
@@ -307,8 +363,10 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
       if (!pair) {
         return;
       }
-      deps.tell(
-        { ...pair, mark: "handed-back", requestId, what: reason },
+      tellUp(
+        pair,
+        { mark: "handed-back", requestId, what: reason },
+        true,
         delegateWaitWords.endedLine(deps.title(pair.asker)),
         delegateWaitWords.ended(
           deps.link(pair.asker),
@@ -329,8 +387,10 @@ export const createDelegateWaits = (deps: DelegateWaitsDeps) => {
       if (!pair) {
         return;
       }
-      deps.tell(
-        { ...pair, mark: "ended-with-hub", requestId, what },
+      tellUp(
+        pair,
+        { mark: "ended-with-hub", requestId, what },
+        true,
         delegateWaitWords.endedLine(deps.title(pair.asker)),
         delegateWaitWords.ended(
           deps.link(pair.asker),

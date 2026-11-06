@@ -36,11 +36,35 @@
  * (f) An ask whose page closed before the person took it: Take over is
  *     refused in the words saying so, and the gate is open to the agents
  *     again.
+ * (g) Every session above the asker is told: the top session and the
+ *     middle one each hear once that the delegate two deep waits on the
+ *     person, once that the person took its browser over, and once that it
+ *     was handed back.
+ * (h) Take over from the Needs you row in Caw's panel takes the person to
+ *     the asking delegate's session, the page it asked about in front.
+ * (i) The delegate two deep asks the person to connect one of the fleet's
+ *     OAuth MCP servers (a stand-in on loopback): the top session's pane
+ *     draws the sign-in card named by the delegate that asked, and the top
+ *     session hears it wait, then hears it end once it is declined.
+ * (j) Its workspace held (its clone holds work that is nowhere else), its
+ *     item ends (turns that do nothing; in the owner's case a finish_item,
+ *     the same end) and words sent to it reopen it (the owner's case: its
+ *     parent's handoff): the delegate two deep still has the page it had
+ *     open, its browser_ask waits on the person, and Take over brings that
+ *     page to the front.
+ * (k) Its workspace retires as its item ends, its boundary and pages
+ *     closing with it; its item is reopened in the same workspace (the rows
+ *     a recut leaves, its session woken outside it: only the host cuts a
+ *     clone and starts a boundary): the pages it had open again, its
+ *     browser_ask waits on the person, and Take over brings the page it had
+ *     to the front.
  *
  *   bun scripts/probe-kit/run.ts browser-ask-tree
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { Page } from "playwright-core";
+import { RESOLVE_PERMISSION } from "../../../packages/core/src/ask-tools";
 import type { BrowserKey } from "../../../packages/core/src/browser";
 import {
   hubRequest,
@@ -50,19 +74,29 @@ import {
 } from "../../../packages/core/src/hub-request";
 import { askWords } from "../../../packages/core/src/words/asks";
 import { browserAskWords } from "../../../packages/core/src/words/browser";
+import { delegateWaitWords } from "../../../packages/core/src/words/delegates";
 import { toolWords } from "../../lib/tool-call";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
+import { caw } from "../caw-head";
 import { doorOf, liveBrowser, servedSite } from "../gated-pages";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
+import { oauthProvider } from "../oauth-provider";
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
 const REASON = `Sign in to the probe's site ${crypto.randomUUID().slice(0, 8)}`;
+/** What the hub answers a call made with a session process's credential that is no longer its own. */
+const STALE_CREDENTIAL = "Invalid session credential";
+/** The fleet's OAuth MCP server the delegate asks the person to connect. */
+const SERVER = "ProbeSignIn";
+/** A work item's states while it runs (work-items.ts `LIVE`). */
+const LIVE_ITEM: ReadonlySet<string> = new Set(["starting", "running"]);
 
 interface Parked {
   instanceId?: string;
   payload: {
     browserAsk?: { key: string; origin: string };
+    connectAsk?: { server: string };
     routedTo?: string;
   };
   requestId?: string;
@@ -115,6 +149,529 @@ const shieldPage = async (
 const pending = (fleet: KitFleet) =>
   fleet.api<Parked[]>(hubRequest("GET /api/pending"));
 
+/** The ask `requestId` of the session's, once it waits on the person. */
+const parkedOf = (
+  fleet: KitFleet,
+  instanceId: string,
+  requestId?: string
+): Promise<Parked | undefined> =>
+  until(
+    `${instanceId.slice(0, 8)}'s ask waiting on the person`,
+    async () =>
+      (await pending(fleet)).find(
+        (one) =>
+          one.instanceId === instanceId &&
+          (!requestId || one.requestId === requestId)
+      ),
+    Boolean,
+    60_000
+  ).catch(() => undefined);
+
+/** The person's Decline (Not now) of ask `requestId`, as a card sends it. */
+const decline = async (
+  fleet: KitFleet,
+  instanceId: string,
+  requestId: string
+): Promise<boolean> => {
+  await fleet.post({
+    type: "command",
+    commandId: crypto.randomUUID(),
+    kind: "permission.answer",
+    machineId: MACHINE,
+    sessionId: instanceId,
+    payload: {
+      instanceId,
+      requestId,
+      method: RESOLVE_PERMISSION,
+      args: [requestId, { behavior: "deny", message: "Not now" }],
+    },
+  });
+  return await until(
+    `${requestId.slice(0, 8)} declined`,
+    async () =>
+      !(await pending(fleet)).some((one) => one.requestId === requestId),
+    Boolean,
+    60_000
+  ).catch(() => false);
+};
+
+/** How many of `to`'s sends tell of ask `requestId` under `said` (a delegate-wait notice's line, carried encoded on its tag, or its words). */
+const toldOf = (
+  fleet: KitFleet,
+  to: string,
+  requestId: string,
+  said: string
+): number =>
+  fleet.query<{ n: number }>(
+    "SELECT count(*) AS n FROM sent_messages WHERE instance_id = ? AND instr(body, ?) > 0 AND (instr(body, ?) > 0 OR instr(body, ?) > 0)",
+    to,
+    `request=${requestId}`,
+    encodeURIComponent(said),
+    said
+  )[0]?.n ?? 0;
+
+/** The top and middle sessions' counts of the notice, once the top's has come (or 30 s went). */
+const toldUp = async (
+  fleet: KitFleet,
+  tree: { middle: string; top: string },
+  requestId: string,
+  said: string
+): Promise<{ middle: number; top: number }> => {
+  await until(
+    `the top session told of ${requestId.slice(0, 8)}: ${said.slice(0, 40)}`,
+    () => Promise.resolve(toldOf(fleet, tree.top, requestId, said)),
+    (n) => n > 0,
+    30_000
+  ).catch(() => 0);
+  return {
+    top: toldOf(fleet, tree.top, requestId, said),
+    middle: toldOf(fleet, tree.middle, requestId, said),
+  };
+};
+
+/** (h) Take over from Caw's Needs you: the person lands in the asking session, the asked page in front. */
+const legNeedsYou = async (
+  { check }: Kit,
+  at: {
+    asked: string;
+    base: string;
+    deep: string;
+    fleet: KitFleet;
+    key: BrowserKey;
+    page: Page;
+    projectId: string;
+    site: string;
+    top: string;
+    /** The asker's workspace: its door's id. */
+    workspace: string;
+  }
+): Promise<void> => {
+  const { fleet, page } = at;
+  // Back on the sign-in page: the one it drove last since is the newer tab.
+  const door = await doorOf(fleet, at.workspace, at.projectId);
+  await door.drive(at.asked);
+  door.close();
+  const call = callAs(
+    fleet,
+    at.deep,
+    "browser_ask",
+    { origin: at.site, reason: `${REASON} from Needs you` },
+    900_000
+  );
+  const parked = await parkedOf(fleet, at.deep);
+  await open(page, `${at.base}/session/${at.top}`, '[data-slot="pane"]');
+  await caw(page).click();
+  const take = page
+    .locator('section[aria-labelledby="caw-needs"]')
+    .getByRole("button", { name: askWords.takeOver });
+  const shown = await take.waitFor({ state: "visible", timeout: 30_000 }).then(
+    () => true,
+    () => false
+  );
+  if (shown) {
+    await take.click();
+  }
+  const went = await until(
+    "(h) the person taken to the asking delegate's session",
+    () => Promise.resolve(new URL(page.url()).pathname),
+    (path) => path === `/session/${at.deep}`,
+    30_000
+  ).catch(() => new URL(page.url()).pathname);
+  const front = await until(
+    "(h) the shield's page",
+    () => shieldPage(fleet, at.key),
+    Boolean,
+    30_000
+  ).catch(() => undefined);
+  check(
+    "(h) Take over on the Needs you row in Caw's panel takes the person to the asking delegate's session, the page it asked about in front",
+    !!parked && shown && went === `/session/${at.deep}` && front === at.asked,
+    JSON.stringify({
+      parked: parked?.requestId,
+      shown,
+      went,
+      front,
+      asked: at.asked,
+    })
+  );
+  await fleet
+    .api(
+      hubRequest("POST /api/browsers/:key/handback", {
+        path: { key: at.key },
+        body: { machineId: MACHINE },
+      })
+    )
+    .catch(() => undefined);
+  await call.catch(() => undefined);
+};
+
+/** (i) A sign-in two deep: drawn on the top session, and told to it as it waits and ends. */
+const legConnect = async (
+  { check }: Kit,
+  at: {
+    base: string;
+    deep: string;
+    fleet: KitFleet;
+    page: Page;
+    tree: { middle: string; top: string };
+  }
+): Promise<void> => {
+  const { fleet, page } = at;
+  const provider = oauthProvider();
+  try {
+    const saved = await fleet
+      .api<{ auth?: { mode?: string } }>(
+        hubRequest("PUT /api/fleet/mcp/:name", {
+          path: { name: SERVER },
+          body: {
+            config: {
+              type: "http",
+              url: `http://127.0.0.1:${provider.port}/mcp`,
+            },
+            enabled: true,
+          },
+        })
+      )
+      .catch((error: unknown) => ({ error: String(error) }));
+    const call = callAs(
+      fleet,
+      at.deep,
+      "connect_ask",
+      { server: SERVER, reason: `${REASON} with ${SERVER}` },
+      900_000
+    );
+    const parked = await until(
+      "(i) the deep delegate's connect ask waiting on the person",
+      async () =>
+        (await pending(fleet)).find(
+          (one) => one.instanceId === at.deep && one.payload.connectAsk
+        ),
+      Boolean,
+      60_000
+    ).catch(() => undefined);
+    await open(page, `${at.base}/session/${at.tree.top}`, '[data-slot="pane"]');
+    const card = page.locator(
+      `section[aria-label="${askWords.connectAskFrom("Ask deep")}"]`
+    );
+    const drawn = await card
+      .waitFor({ state: "visible", timeout: 30_000 })
+      .then(
+        () => true,
+        () => false
+      );
+    const requestId = parked?.requestId ?? "";
+    const waits = await toldUp(
+      fleet,
+      at.tree,
+      requestId,
+      delegateWaitWords.waitsLine("Ask deep")
+    );
+    const declined = requestId
+      ? await decline(fleet, at.deep, requestId)
+      : false;
+    const ended = await toldUp(
+      fleet,
+      at.tree,
+      requestId,
+      delegateWaitWords.endedLine("Ask deep")
+    );
+    const answered = await call.then(
+      (said) => said.text,
+      (error: unknown) => `failed: ${String(error)}`
+    );
+    check(
+      `(i) the delegate two deep asks the person to connect ${SERVER}: the top session's pane draws the sign-in card named by it ("${askWords.connectAskFrom("Ask deep")}"), and the top and middle sessions each hear once that it waits, and once that it ended as the person declined it`,
+      !!parked &&
+        drawn &&
+        waits.top === 1 &&
+        waits.middle === 1 &&
+        declined &&
+        ended.top === 1 &&
+        ended.middle === 1,
+      JSON.stringify({
+        saved,
+        parked: parked?.requestId,
+        drawn,
+        waits,
+        declined,
+        ended,
+        answered: answered.slice(0, 200),
+      })
+    );
+  } finally {
+    provider.stop(true);
+  }
+};
+
+interface Reopening {
+  deep: { id: string; workspace: string };
+  fleet: KitFleet;
+  key: BrowserKey;
+  projectId: string;
+  site: string;
+}
+
+/** The delegate's work item's state now, and when it last ended. */
+const itemOf = (
+  fleet: KitFleet,
+  instanceId: string
+): { ended: number | null; state: string } =>
+  fleet.query<{ ended: number | null; state: string }>(
+    "SELECT state, ended_at AS ended FROM work_items WHERE instance_id = ?",
+    instanceId
+  )[0] ?? { ended: null, state: "none" };
+
+/** The workspace's state now. */
+const workspaceState = (fleet: KitFleet, workspace: string): string =>
+  fleet.query<{ state: string }>(
+    "SELECT state FROM workspaces WHERE id = ?",
+    workspace
+  )[0]?.state ?? "none";
+
+/**
+ * Words to the delegate give it turns that do nothing, and the hub ends its
+ * item on the third (work-items.ts `quietTurn`): an end its parent's
+ * `finish_item` or stop would make the same way, here with its process left
+ * running.
+ */
+const quietEnd = async (
+  at: Reopening,
+  label: string
+): Promise<{ ended: number | null; state: string }> => {
+  await at.fleet.send(at.deep.id, "Nothing to do yet; end your turn.");
+  return await until(
+    `${label} the deep delegate's item ended`,
+    () => Promise.resolve(itemOf(at.fleet, at.deep.id)),
+    (item) => !LIVE_ITEM.has(item.state) && item.ended !== null,
+    120_000
+  ).catch(() => itemOf(at.fleet, at.deep.id));
+};
+
+/**
+ * The delegate's item reopened and its session woken in its workspace, as a
+ * handoff to it does (work-items.ts `reopen`, `rerun`; a retired one's
+ * clone cut again first, `recut`). A workspace's session starts only in a
+ * boundary, which only the host starts: here its item's rows are put as
+ * the reopen leaves them, and its session wakes outside the workspace and
+ * is its item's again once it runs. Its row once awake.
+ */
+const reopenItem = async (
+  at: Reopening,
+  label: string
+): Promise<{ item: string; session: string }> => {
+  const { fleet } = at;
+  const item =
+    fleet.query<{ id: string }>(
+      "SELECT work_item_id AS id FROM instances WHERE id = ?",
+      at.deep.id
+    )[0]?.id ?? "";
+  fleet.write(
+    "UPDATE workspaces SET state = 'active' WHERE id = ?",
+    at.deep.workspace
+  );
+  fleet.write(
+    "UPDATE work_items SET state = 'running', result = NULL, error = NULL, stopped_by = NULL, ended_at = NULL WHERE id = ?",
+    item
+  );
+  fleet.write(
+    "UPDATE instances SET work_item_id = NULL WHERE id = ?",
+    at.deep.id
+  );
+  await fleet.send(
+    at.deep.id,
+    "Go on: ask the person to sign in on the page you had open."
+  );
+  const woken = await until(
+    `${label} the deep delegate's session awake again`,
+    () =>
+      Promise.resolve(
+        fleet.instance(at.deep.id) ?? { status: "gone", turn_open_at: null }
+      ),
+    (row) => row.status === "running" && row.turn_open_at === null,
+    120_000
+  ).catch(() => fleet.instance(at.deep.id));
+  fleet.write(
+    "UPDATE instances SET work_item_id = ? WHERE id = ?",
+    item,
+    at.deep.id
+  );
+  return {
+    item: itemOf(fleet, at.deep.id).state,
+    session: woken?.status ?? "gone",
+  };
+};
+
+/**
+ * The delegate asks the person about the site's origin, with its process's
+ * own credential: whether the ask waits on the person, and the page a Take
+ * over of it brings to the front, against the one `pageOf` names.
+ */
+const askedAgain = async (
+  at: Reopening,
+  label: string,
+  pageOf: () => Promise<string | undefined>
+): Promise<{
+  answered: string;
+  expected?: string;
+  front?: string;
+  settled: string;
+}> => {
+  const { fleet } = at;
+  // A call made with an earlier process's credential is refused at once,
+  // and goes again.
+  const asking = until(
+    `${label} the delegate's browser_ask taken`,
+    () =>
+      callAs(
+        fleet,
+        at.deep.id,
+        "browser_ask",
+        { origin: at.site, reason: `${REASON} reopened` },
+        900_000
+      ),
+    (said) => !said.text.includes(STALE_CREDENTIAL),
+    900_000
+  );
+  const settled = await Promise.race([
+    asking.then((said) => `answered: ${said.text.slice(0, 300)}`),
+    parkedOf(fleet, at.deep.id).then((one) =>
+      one ? `parked ${one.requestId}` : "neither"
+    ),
+  ]);
+  if (!settled.startsWith("parked")) {
+    return { answered: "", settled };
+  }
+  const expected = await pageOf();
+  const before = await shieldPage(fleet, at.key);
+  await fleet
+    .api(
+      hubRequest("POST /api/browsers/:key/takeover", {
+        path: { key: at.key },
+        body: {
+          requestId: settled.slice("parked ".length),
+          machineId: MACHINE,
+        },
+      })
+    )
+    .catch(() => undefined);
+  const front = await until(
+    `${label} the shield's page`,
+    () => shieldPage(fleet, at.key),
+    (page) => !!page && page !== before,
+    60_000
+  ).catch(() => undefined);
+  await fleet
+    .api(
+      hubRequest("POST /api/browsers/:key/handback", {
+        path: { key: at.key },
+        body: { machineId: MACHINE },
+      })
+    )
+    .catch(() => undefined);
+  const answered = await asking.then(
+    (said) => said.text,
+    (error: unknown) => `failed: ${String(error)}`
+  );
+  return { answered: answered.slice(0, 200), expected, front, settled };
+};
+
+/** The page of the delegate's door on `url`, as its browser tool lists its own pages. */
+const pageOn = async (
+  at: Reopening,
+  url: string
+): Promise<string | undefined> => {
+  const door = await doorOf(at.fleet, at.deep.workspace, at.projectId);
+  try {
+    const { targetInfos } = (await door.send("Target.getTargets", {})) as {
+      targetInfos?: { targetId: string; url?: string }[];
+    };
+    return targetInfos?.find((info) => info.url === url)?.targetId;
+  } finally {
+    door.close();
+  }
+};
+
+/**
+ * (j) Its workspace held, its item ended and reopened: the delegate's page
+ * is still open, and its ask is pinned to it.
+ */
+const legKept = async ({ check }: Kit, at: Reopening): Promise<void> => {
+  const { fleet } = at;
+  const door = await doorOf(fleet, at.deep.workspace, at.projectId);
+  const kept = await door.open(`${at.site}/kept`);
+  door.close();
+  // Its clone holds work that is nowhere else, so it is not retired as its
+  // item ends (db schema.ts `WorkspaceState`): its boundary stands while its
+  // session sleeps.
+  fleet.write(
+    "UPDATE workspaces SET state = 'held' WHERE id = ?",
+    at.deep.workspace
+  );
+  const ended = await quietEnd(at, "(j)");
+  const back = await reopenItem(at, "(j)");
+  const asked = await askedAgain(at, "(j)", () => Promise.resolve(kept));
+  check(
+    "(j) its workspace held, its item ended and reopened, the delegate two deep still has the page it had open: its browser_ask waits on the person, and Take over brings that page to the front",
+    !LIVE_ITEM.has(ended.state) &&
+      ended.ended !== null &&
+      LIVE_ITEM.has(back.item) &&
+      asked.settled.startsWith("parked") &&
+      asked.front === kept &&
+      asked.answered.includes(browserAskWords.handedBack(at.site)),
+    JSON.stringify({ kept, ended, back, ...asked })
+  );
+};
+
+/**
+ * (k) Its workspace retired as its item ended, and its item reopened in it
+ * again: the pages it had open again, and its ask pinned to the one it
+ * drove last.
+ */
+const legBack = async ({ check }: Kit, at: Reopening): Promise<void> => {
+  const { fleet } = at;
+  const url = `${at.site}/back`;
+  const door = await doorOf(fleet, at.deep.workspace, at.projectId);
+  const before = await door.open(url);
+  door.close();
+  fleet.write(
+    "UPDATE workspaces SET state = 'active' WHERE id = ?",
+    at.deep.workspace
+  );
+  fleet.write(
+    "UPDATE work_items SET state = 'running', result = NULL, error = NULL, ended_at = NULL WHERE instance_id = ?",
+    at.deep.id
+  );
+  const ended = await quietEnd(at, "(k)");
+  // Its clone holds nothing that is nowhere else: its session is put to
+  // sleep and it retires, its boundary ending (agent boundary.ts `stopNow`)
+  // and its pages closing with it.
+  const retired = await until(
+    "(k) the deep delegate's workspace retired",
+    () => Promise.resolve(workspaceState(fleet, at.deep.workspace)),
+    (state) => state === "archived",
+    120_000
+  ).catch(() => workspaceState(fleet, at.deep.workspace));
+  const back = await reopenItem(at, "(k)");
+  const asked = await askedAgain(at, "(k)", () => pageOn(at, url));
+  check(
+    "(k) its workspace retired as its item ended (its boundary ended, its pages closed), its item reopened in the same workspace, the delegate two deep's pages open again: its browser_ask waits on the person, and Take over brings the page it had to the front",
+    !LIVE_ITEM.has(ended.state) &&
+      retired === "archived" &&
+      asked.settled.startsWith("parked") &&
+      !!asked.expected &&
+      asked.expected !== before &&
+      asked.front === asked.expected &&
+      asked.answered.includes(browserAskWords.handedBack(at.site)),
+    JSON.stringify({
+      before,
+      ended,
+      retired,
+      back,
+      ...asked,
+    })
+  );
+};
+
 const run = async (kit: Kit) => {
   const { check } = kit;
   const site = servedSite("Probe sign-in");
@@ -155,13 +712,18 @@ const run = async (kit: Kit) => {
       const now = Date.now();
       const workspace = crypto.randomUUID();
       const item = crypto.randomUUID();
+      // Its clone, a worktree of the fleet's repository on a branch of its
+      // own, as a delegate's workspace is cut.
+      const path = join(fleet.sandbox, `ws-${workspace.slice(0, 8)}`);
+      const branch = `ws/${workspace.slice(0, 8)}`;
+      await Bun.$`git -C ${fleet.repo} worktree add -q -b ${branch} ${path}`.quiet();
       fleet.write(
         "INSERT INTO workspaces (id, machine_id, repo_root, path, branch, state, created_by_instance_id, created_at) VALUES (?, ?, ?, ?, ?, 'active', ?, ?)",
         workspace,
         MACHINE,
         fleet.repo,
-        join(fleet.sandbox, `ws-${workspace.slice(0, 8)}`),
-        `ws/${workspace.slice(0, 8)}`,
+        path,
+        branch,
         parent,
         now
       );
@@ -257,6 +819,13 @@ const run = async (kit: Kit) => {
     if (!parked?.requestId) {
       return;
     }
+    const tree = { top, middle: first.id };
+    const waitsTold = await toldUp(
+      fleet,
+      tree,
+      parked.requestId,
+      delegateWaitWords.waitsLine("Ask deep")
+    );
 
     // (c) The top session's pane draws it, named by its asker; its tab needs you.
     const base = await fleet.dashboard();
@@ -364,6 +933,38 @@ const run = async (kit: Kit) => {
       answered.includes(browserAskWords.handedBack(site.origin)),
       answered.slice(0, 400)
     );
+    const tookTold = await toldUp(
+      fleet,
+      tree,
+      parked.requestId,
+      delegateWaitWords.tookOverLine("Ask deep")
+    );
+    const backTold = await toldUp(
+      fleet,
+      tree,
+      parked.requestId,
+      delegateWaitWords.handedBack(site.origin)
+    );
+    check(
+      "(g) every session above the asker is told: the top and the middle session each hear once that the delegate two deep waits on the person, once that the person took over its browser, and once that it was handed back",
+      [waitsTold, tookTold, backTold].every(
+        (told) => told.top === 1 && told.middle === 1
+      ),
+      JSON.stringify({ waitsTold, tookTold, backTold })
+    );
+
+    await legNeedsYou(kit, {
+      fleet,
+      key,
+      deep: deep.id,
+      projectId: project.id,
+      workspace: deep.workspace,
+      top,
+      base,
+      page,
+      asked,
+      site: site.origin,
+    });
 
     // (f) The asked page closed before Take over: refused, the gate open again.
     const third = await doorOf(fleet, deep.workspace, project.id);
@@ -410,6 +1011,20 @@ const run = async (kit: Kit) => {
       take.includes(browserAskWords.pageClosed) && reopened,
       `${take.slice(0, 400)}; gate open: ${reopened}`
     );
+    if (second?.requestId) {
+      await decline(fleet, deep.id, second.requestId);
+    }
+
+    await legConnect(kit, { fleet, tree, deep: deep.id, base, page });
+    const reopening: Reopening = {
+      fleet,
+      deep,
+      key,
+      projectId: project.id,
+      site: site.origin,
+    };
+    await legKept(kit, reopening);
+    await legBack(kit, reopening);
   } finally {
     site.stop();
     other.stop();

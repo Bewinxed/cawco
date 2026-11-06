@@ -201,7 +201,8 @@ const frontPage = async (
  * has several there (gate.ts `drivenBy`), else the newest it opened. The
  * ask is pinned to it, so a take-over shows the page the agent asked about
  * whatever tab opens after (a site's pop-up, an extension's page, another
- * session's). Refused in the agent's words when it has none open there.
+ * session's). The pages it had as it last ended open again first (gate.ts
+ * `restore`). Refused in the agent's words when it has none open there.
  */
 export const askedPage = async ({
   key,
@@ -212,6 +213,10 @@ export const askedPage = async ({
   if (record?.state !== "live") {
     throw new Error(browserAskWords.noBrowser(origin));
   }
+  const gate = gateOf(key);
+  // A door that ended and came back (a delegate's item reopened in a clone
+  // cut again) asks about the pages it had: they open again first.
+  await gate?.restore(workspaceId);
   const link = await CdpLink.open(
     `http://127.0.0.1:${portsOf(record).devtools}`
   ).catch((error: unknown) => {
@@ -225,7 +230,7 @@ export const askedPage = async ({
     const own = Object.keys(owners).filter(
       (target) => owners[target] === workspaceId && at.get(target) === origin
     );
-    const driven = gateOf(key)?.drivenBy(workspaceId);
+    const driven = gate?.drivenBy(workspaceId);
     const targetId =
       driven && own.includes(driven) ? driven : (own.at(-1) ?? null);
     if (!targetId) {

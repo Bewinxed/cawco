@@ -453,10 +453,8 @@ import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import { workspaceReach } from "@cawco/core/boundary-reach";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
-  BROWSER_CLOSE_PAGES,
   BROWSER_PAGE,
   type BrowserAskedPage,
-  type BrowserClosePagesArgs,
   type BrowserFrame,
   type BrowserHandedBackFrame,
   type BrowserKey,
@@ -1135,11 +1133,19 @@ const HARNESS_CONFIG_BODY = t.Object({
 /** What an artifact's name keeps of a Diagram's statement name: lowercase letters, digits and dashes. */
 /**
  * The name of a delegate-wait notice's send (delegate-waits.ts): its ask
- * and what it tells. The hub hands a send under a name it holds a record of
- * over once, so each is told once, and the record is found again by it.
+ * and what it tells, and the session told when it stands above the asker's
+ * own parent (`above`). The hub hands a send under a name it holds a record
+ * of over once, so each is told once to each, and the parent's record is
+ * found again by its ask alone.
  */
-const waitNoticeUuid = (requestId: string, mark: NoticeMark): string =>
-  uuidOf(`delegate-wait\u0000${requestId}\u0000${mark}`);
+const waitNoticeUuid = (
+  requestId: string,
+  mark: NoticeMark,
+  above?: string
+): string =>
+  uuidOf(
+    `delegate-wait\u0000${requestId}\u0000${mark}${above ? `\u0000${above}` : ""}`
+  );
 
 /** `text` with `line` after its marker (core `markerTag`, its first line), when there is a line. */
 const withContext = (text: string, line: string | undefined): string => {
@@ -3741,12 +3747,18 @@ export const createServer = (
     handed: (requestId) => db.delegateAsk(requestId) !== undefined,
     hand: (asker, parent, ask) =>
       deliverDelegateAsk(asker, parent, clientCopy(ask)),
-    tell: ({ asker, parent, requestId, mark, what }, line, body) =>
-      tellParentOfWait(parent, waitNoticeUuid(requestId, mark), line, body, {
-        delegate: asker.id,
-        request: requestId,
-        what,
-      }),
+    tell: ({ asker, depth, parent, requestId, mark, what }, line, body) =>
+      tellParentOfWait(
+        parent,
+        waitNoticeUuid(requestId, mark, depth > 0 ? parent.id : undefined),
+        line,
+        body,
+        {
+          delegate: asker.id,
+          request: requestId,
+          what,
+        }
+      ),
     title: (row) => boardTitle(row),
     link: (row) => sessionLink(row.id, boardTitle(row)),
     answererName: (row) => sessionName(row),
@@ -15586,42 +15598,21 @@ export const createServer = (
     },
   });
   /**
-   * Browser sessions end with their item: the session's browser artifact
-   * goes from every list (artifacts/service.ts `dropBrowser`), and its
-   * door's pages close on its machine's browsers (agent browser/gate.ts
-   * `closeWorkspaceBrowsers`), its connections there cut. Until now they
-   * closed only with the workspace's boundary (an archive or a discard).
-   * Another live item in the same workspace keeps them. The browser itself
-   * is its project's, shared by its sessions, and runs on.
+   * A browser session's item ended: its browser artifact goes from every
+   * list (artifacts/service.ts `dropBrowser`), made again if the item is
+   * taken up again and asks (browsers.ts `browserFor`). Its pages are its
+   * door's, and live as long as the door does: they close as the
+   * workspace's boundary ends (agent boundary.ts `stopNow`; a session's own
+   * door with its process, door.ts `closeBrowserDoor`), each one's address
+   * kept, and open again as the door comes back (agent gate.ts `restore`),
+   * so a delegate whose item a handoff reopens (work-items.ts `reopen`), in
+   * the clone or one cut again, asks about the page it had (shield.ts
+   * `askedPage`). Closed at the item's end and never opened again, a
+   * reopened delegate asked about a page it no longer had, and the person
+   * was shown another tab (2026-11-06).
    */
   const endBrowserOf = (item: WorkItemRow): void => {
     artifacts.dropBrowser(item.instanceId);
-    const [workspace] = db.workspacesNamed(item.workspaceId);
-    if (
-      !workspace ||
-      workspace.state === "archived" ||
-      db
-        .workItemsIn(workspace.id)
-        .some((other) => other.id !== item.id && isLive(other.state))
-    ) {
-      return;
-    }
-    const pages: BrowserClosePagesArgs = { id: workspace.id };
-    detach(
-      callAgent(
-        workspace.machineId,
-        BROWSER_CLOSE_PAGES,
-        [pages],
-        BUSY_TIMEOUT_MS
-      ).then((read) =>
-        browserAnswered<unknown>(
-          read,
-          machineName(workspace.machineId),
-          `close workspace ${workspace.id.slice(0, 8)}'s pages`
-        )
-      ),
-      "browser pages close"
-    );
   };
   // The table can't be broken from CawCo: every write of a project's
   // decides.md (the dashboard's, a session's folder_write, the hub's own)

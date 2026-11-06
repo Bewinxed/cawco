@@ -36,6 +36,7 @@ import { setProject } from "../boundary";
 import { reserveBrowser } from "./browsers";
 import {
   closeWorkspaceBrowsers,
+  dropWorkspaceBrowsers,
   ensureGateToken,
   gateTokenFile,
   keyOfWorkspace,
@@ -90,8 +91,8 @@ export const browserDoor = async (
 
 /**
  * A session's own door as its process ends: its pages closed on every
- * browser of the machine, as its browser tool's Chromium once ended with it.
- * Its config stays for its next launch, and for a process an agent restart
+ * browser of the machine, as its browser tool's Chromium once ended with it,
+ * and open again as it comes back (gate.ts `restore`). Its config stays for its next launch, and for a process an agent restart
  * attaches to again, whose browser tool reads it.
  */
 export const closeBrowserDoor = (instanceId: string): void => {
@@ -128,7 +129,7 @@ export const forgetBrowserDoor = async (
     return false;
   }
   try {
-    await closeWorkspaceBrowsers(instanceId);
+    await dropWorkspaceBrowsers(instanceId);
     await Promise.all(
       [
         gateTokenFile(instanceId),

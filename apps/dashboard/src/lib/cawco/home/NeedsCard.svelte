@@ -19,7 +19,8 @@
    * the session's own card sends, and the row leaves when the hub has taken
    * it — the request card above that pane's composer leaves with it. A
    * browser ask's Take over is the card's own take-over (`takeOverBrowser`),
-   * and leaves the same way.
+   * and leaves the same way; taken, the panel closes and the person goes to
+   * the asking session, whose panel the hub opened on the browser.
    *
    * An approved action is the same row with the call laid out under its
    * reason: when it runs (in this browser's zone), the connection and the
@@ -111,6 +112,7 @@
     IconWindow,
   } from "#lib/icons.js";
   import { isTyping } from "#lib/utils/typing.js";
+  import { goto } from "$app/navigation";
   import CopyBox from "../CopyBox.svelte";
   import {
     answerFor,
@@ -123,7 +125,7 @@
   } from "../client.svelte";
   import ErrorText from "../ErrorText.svelte";
   import { answerMachine, answerPairing } from "../hub-auth.svelte";
-  import { conversationHref } from "../links";
+  import { conversationHref, rowHref } from "../links";
   import { notices } from "../notices.svelte";
   import OriginText from "../OriginText.svelte";
   import OsMark from "../OsMark.svelte";
@@ -517,9 +519,17 @@
     takeRefused = null;
     const { browserAsk, requestId } = item.request;
     if (browserAsk && kind === "allow") {
+      const asker = item.instanceId;
       taking = true;
       takeRefused = await takeOverBrowser(requestId, browserAsk);
       taking = takeRefused === null;
+      if (takeRefused === null) {
+        // The browser opens in the asking session's panel (hub browsers.ts
+        // `openPanel`): the person goes there, as from its card in a
+        // session above it (SessionPane `ontaken`).
+        onchoose();
+        detach(goto(rowHref(asker)), "goto asker");
+      }
       return;
     }
     submitCommand(item.instanceId, item.machineId, "permission.answer", {

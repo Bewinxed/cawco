@@ -8476,7 +8476,8 @@ const stopNow = async (ref: WorkspaceRef): Promise<number[]> => {
   await closeGitDoor(ref.id);
   await closeGithubDoor(ref.id);
   // Its sessions' connections to the project's browser cut, and its pages
-  // there closed (browser/gate.ts).
+  // there closed, kept to open again as a clone cut again of it comes back
+  // to them (browser/gate.ts `restore`).
   await closeWorkspaceBrowsers(ref.id);
   const held = await readHeld(ref.id).catch(() => undefined);
   const boundaries = [...(held ? [held] : []), ...(await readRetiring(ref.id))];

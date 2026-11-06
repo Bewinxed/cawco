@@ -111,7 +111,7 @@ export interface BrowsersDeps {
   call: RelayCall;
   db: { artifacts: ArtifactsDb; browsers: BrowsersDb };
   instance: (id: string) => InstanceRow | undefined;
-  /** Whether the session's work item ended: its browser artifact went with it (server.ts `endBrowserOf`), and none is made again. */
+  /** Whether the session's work item ended: its browser artifact went with it (server.ts `endBrowserOf`), and listing makes none again while it stays ended. */
   itemEnded: (instance: InstanceRow) => boolean;
   /** The session's live peers: every session on `machineId` in `projectId` (null: in none) whose process runs; one asleep is never told. */
   liveSessions: (machineId: string, projectId: string | null) => InstanceRow[];

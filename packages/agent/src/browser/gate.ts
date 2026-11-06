@@ -39,9 +39,14 @@
  * mark adds nothing to the page's requests, so a cross-origin fetch it makes
  * is the one it asked for. The shield cuts
  * every connection with {@link SHIELD_CLOSE} and refuses new ones with its
- * sentence until it opens again; a workspace whose boundary ends for good
- * has its connections cut and its pages closed. A connection holds its
- * browser awake, and one to a browser that sleeps wakes it. A session's
+ * sentence until it opens again. A door's pages close as it ends (a
+ * workspace's boundary, a session's process), each one's address kept, and
+ * open again on those addresses as the door comes back (its browser tool
+ * connects again, or its session asks the person about a page): a delegate
+ * whose item is reopened in a clone cut again finds the pages it had. A
+ * session forgotten for good has its pages closed and nothing kept. A
+ * connection holds its browser awake, and one to a browser that sleeps
+ * wakes it. A session's
  * connection, while no other session holds one, has a container made again
  * whose preview-name rules the hub's names no longer want (browsers.ts
  * `RulesAt`); while another does, that waits for the last release.
@@ -155,6 +160,12 @@ const MARK_WAIT_MS = 3000;
 
 /** The page a new target opens on, before the gate takes it to the one asked for. */
 const BLANK = "about:blank";
+
+/** The addresses a closed page opens again on: a site's, never the browser's own or a blank one. */
+const REOPENS = /^https?:\/\//iu;
+
+/** How many doors' closed pages are kept to open again ({@link Gate.restore}): the newest. */
+const CLOSED_KEPT = 64;
 
 /** The largest message either side sends: a full-page screenshot runs to megabytes. */
 const MAX_MESSAGE = 512 * 1024 * 1024;
@@ -352,6 +363,17 @@ export interface GateDeps {
 
 /** Who owns what, as kept in the browser's dir. */
 const OwnersSchema = z.object({
+  /**
+   * The pages each door had open as it ended, by its id ({@link Gate.forget}):
+   * their addresses in the order it opened them, the one it drove last
+   * last, and when, kept until it comes back ({@link Gate.restore}).
+   */
+  closed: z
+    .record(
+      z.string(),
+      z.object({ at: z.number(), pages: z.array(z.string()) })
+    )
+    .default({}),
   contexts: z.record(z.string(), z.string()),
   targets: z.record(z.string(), z.string()),
 });
@@ -375,7 +397,7 @@ export class Gate {
   readonly #deps: GateDeps;
   readonly #links = new Set<Link>();
   #closedWhy: string | undefined;
-  #owners: Owners = { contexts: {}, targets: {} };
+  #owners: Owners = { closed: {}, contexts: {}, targets: {} };
   #loaded: Promise<void> | undefined;
   #saving: Promise<void> = Promise.resolve();
   readonly #infos = new Map<string, TargetInfo>();
@@ -396,6 +418,8 @@ export class Gate {
   readonly #markWaits = new Map<string, Set<() => void>>();
   /** The page each workspace drove last ({@link DRIVES}), by its id: the one a browser ask is pinned to. */
   readonly #driven = new Map<string, string>();
+  /** Each door's closed pages opening again ({@link restore}), by its id: one at a time. */
+  readonly #restoring = new Map<string, Promise<void>>();
   #watch: Watch | undefined;
 
   constructor(deps: GateDeps) {
@@ -454,12 +478,15 @@ export class Gate {
   }
 
   /**
-   * Workspace `id`'s boundary ended for good: its connections are cut, its
-   * pages closed and its contexts disposed where the browser runs, and it
-   * owns nothing here any more.
+   * Door `id` ended (a workspace's boundary, a session's process): its
+   * connections are cut, its pages closed and its contexts disposed where
+   * the browser runs, and it owns nothing here any more. With `keep`, the
+   * address of each page it had is kept, so its pages open again as it
+   * comes back ({@link restore}); without, they are gone for good.
    */
-  async forget(id: string): Promise<void> {
+  async forget(id: string, keep: boolean): Promise<void> {
     await this.#load();
+    const driven = this.#driven.get(id);
     this.#driven.delete(id);
     for (const link of this.#links) {
       if (link.workspace === id) {
@@ -472,7 +499,11 @@ export class Gate {
     const contexts = Object.keys(this.#owners.contexts).filter(
       (context) => this.#owners.contexts[context] === id
     );
+    if (!keep) {
+      delete this.#owners.closed[id];
+    }
     if (targets.length === 0 && contexts.length === 0) {
+      this.#save();
       return;
     }
     for (const target of targets) {
@@ -481,24 +512,124 @@ export class Gate {
     for (const context of contexts) {
       delete this.#owners.contexts[context];
     }
-    this.#save();
+    const url = await this.#browserUrl(false).catch(() => undefined);
+    if (!url) {
+      this.#save();
+      return;
+    }
+    const { calls: wire, socket } = await dialCalls(url);
+    try {
+      if (keep) {
+        const listed = await wire
+          .call("Target.getTargets", {})
+          .catch((): Json => ({}));
+        const at = new Map(
+          (Array.isArray(listed.targetInfos) ? listed.targetInfos : [])
+            .filter(isInfo)
+            .map((info) => [info.targetId, info.url ?? ""])
+        );
+        // In the order it opened them, the one it drove last last: the one
+        // a browser ask of its is pinned to as they open again.
+        const pages = [
+          ...targets.filter((target) => target !== driven),
+          ...targets.filter((target) => target === driven),
+        ]
+          .map((target) => at.get(target) ?? "")
+          .filter((page) => REOPENS.test(page));
+        this.#keepClosed(id, pages);
+      }
+      this.#save();
+      // A tab's page closes with it: the pages alone are named.
+      await Promise.allSettled([
+        ...targets.map((targetId) =>
+          wire.call("Target.closeTarget", { targetId })
+        ),
+        ...contexts.map((browserContextId) =>
+          wire.call("Target.disposeBrowserContext", { browserContextId })
+        ),
+      ]);
+    } finally {
+      socket.close();
+    }
+    console.info(
+      `[browser] ${this.key}: ${id} ended: ${targets.length} page(s) and ${contexts.length} context(s) of its closed${keep ? `, ${this.#owners.closed[id]?.pages.length ?? 0} kept to open again` : ""}`
+    );
+  }
+
+  /** Door `id`'s closed pages kept ({@link forget}), the newest {@link CLOSED_KEPT} doors' alone. */
+  #keepClosed(id: string, pages: string[]): void {
+    delete this.#owners.closed[id];
+    if (pages.length === 0) {
+      return;
+    }
+    this.#owners.closed[id] = { at: Date.now(), pages };
+    const kept = Object.entries(this.#owners.closed).sort(
+      ([, a], [, b]) => b.at - a.at
+    );
+    for (const [old] of kept.slice(CLOSED_KEPT)) {
+      delete this.#owners.closed[old];
+    }
+  }
+
+  /**
+   * Door `id` came back (its browser tool connects, or its session asks the
+   * person about a page, shield.ts `askedPage`): the pages it had as it
+   * ended ({@link forget}) open again as its own, each a window of its own
+   * on the address it was on, and the one it drove last is the one it
+   * drives. Kept while the browser does not run, for its next coming back.
+   * Resolves once they are open and kept as its.
+   */
+  restore(id: string): Promise<void> {
+    const running = this.#restoring.get(id);
+    if (running) {
+      return running;
+    }
+    const restoring = this.#reopen(id).finally(() =>
+      this.#restoring.delete(id)
+    );
+    this.#restoring.set(id, restoring);
+    return restoring;
+  }
+
+  async #reopen(id: string): Promise<void> {
+    await this.#load();
+    const kept = this.#owners.closed[id];
+    if (!kept) {
+      return;
+    }
     const url = await this.#browserUrl(false).catch(() => undefined);
     if (!url) {
       return;
     }
+    delete this.#owners.closed[id];
+    this.#save();
+    const opened: { page: string; targetId: string }[] = [];
     const { calls: wire, socket } = await dialCalls(url);
-    // A tab's page closes with it: the pages alone are named.
-    await Promise.allSettled([
-      ...targets.map((targetId) =>
-        wire.call("Target.closeTarget", { targetId })
-      ),
-      ...contexts.map((browserContextId) =>
-        wire.call("Target.disposeBrowserContext", { browserContextId })
-      ),
-    ]);
-    socket.close();
+    try {
+      for (const page of kept.pages) {
+        const made = await wire
+          .call("Target.createTarget", { url: BLANK, newWindow: true })
+          .catch((): Json => ({}));
+        const targetId = text(made.targetId);
+        if (targetId) {
+          this.own(targetId, id);
+          opened.push({ page, targetId });
+        }
+      }
+    } finally {
+      socket.close();
+    }
+    // Opened blank and taken there once marked, as an agent's own new page.
+    await Promise.allSettled(
+      opened.map(({ page, targetId }) => this.load(targetId, page))
+    );
+    const last = opened.at(-1);
+    if (last) {
+      this.drove(id, last.targetId);
+    }
+    await this.#saving;
     console.info(
-      `[browser] ${this.key}: workspace ${id}'s boundary ended: ${targets.length} page(s) and ${contexts.length} context(s) of its closed`
+      `[browser] ${this.key}: ${id} came back: ${opened.length} of its ${kept.pages.length} page(s) open again`
     );
   }
 
@@ -542,6 +673,12 @@ export class Gate {
     );
     const url = await this.#browserUrl(true, alone);
     await this.#watching(url);
+    // Its pages from before it last ended, open again before it lists any.
+    await this.restore(link.workspace).catch((error: unknown) =>
+      console.warn(
+        `[browser] ${this.key}: ${link.workspace}'s pages did not open again: ${String(error)}`
+      )
+    );
     return dial(url);
   }
 
@@ -1664,20 +1801,30 @@ export const stopGate = (key: BrowserKey): void => {
   gates.delete(key);
 };
 
-/**
- * Workspace `id`'s boundary ended for good: on every browser of this
- * machine, its connections are cut and its pages closed.
- */
-export const closeWorkspaceBrowsers = async (id: string): Promise<void> => {
+/** Door `id`'s pages closed on every browser of this machine ({@link Gate.forget}), kept to open again when `keep`. */
+const forgetOnEvery = async (id: string, keep: boolean): Promise<void> => {
   await Promise.all(
     [...gates.values()].map((gate) =>
       gate
-        .forget(id)
+        .forget(id, keep)
         .catch((error: unknown) =>
           console.warn(
-            `[browser] ${gate.key}: workspace ${id}'s pages were not closed: ${String(error)}`
+            `[browser] ${gate.key}: ${id}'s pages were not closed: ${String(error)}`
           )
         )
     )
   );
 };
+
+/**
+ * Door `id` ended (a workspace's boundary, a session's process): on every
+ * browser of this machine, its connections are cut and its pages closed,
+ * each one's address kept to open again as it comes back ({@link
+ * Gate.restore}).
+ */
+export const closeWorkspaceBrowsers = (id: string): Promise<void> =>
+  forgetOnEvery(id, true);
+
+/** Door `id` gone for good (its session forgotten): its pages closed, and nothing kept of them. */
+export const dropWorkspaceBrowsers = (id: string): Promise<void> =>
+  forgetOnEvery(id, false);
