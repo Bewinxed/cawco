@@ -103,13 +103,17 @@ interface Parts {
 
 const PARAMETER = /^:(.+)$/u;
 
+/** One query value as text: an object as JSON (Elysia's `t.ObjectString`), anything else as it prints. */
+const queryText = (value: unknown): string =>
+  typeof value === "object" ? JSON.stringify(value) : String(value);
+
 /** The query's fields as the hub's query parser reads them: an array as its key repeated, nothing for `undefined`. */
 const queryOf = (query: Record<string, unknown> | undefined): string => {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(query ?? {})) {
     for (const one of Array.isArray(value) ? value : [value]) {
       if (one !== undefined && one !== null) {
-        search.append(key, String(one));
+        search.append(key, queryText(one));
       }
     }
   }
@@ -160,3 +164,17 @@ export function hubRequest<R extends HubRoute, const S>(
 export function hubRequest(route: string, sent: Parts = {}): HubRequest {
   return requestOf(route, sent);
 }
+
+/**
+ * The request for `route` with a body or query sent as given, never held to
+ * the route: only for a probe that proves the hub refuses it (a 422 naming
+ * the field). Its path parameters are still the route's. The ban on hub paths
+ * built outside this door (scripts/lint) lists each file that calls it.
+ */
+export const hubRequestAsGiven = <R extends HubRoute>(
+  route: R,
+  sent: {
+    body?: unknown;
+    query?: Record<string, unknown>;
+  } & (HubSent<R> extends { path: infer P } ? { path: P } : unknown)
+): HubRequest => requestOf(route, sent as Parts);

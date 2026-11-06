@@ -12,7 +12,7 @@
  */
 import type { ProviderRouting } from "./accounts";
 import type { DelegateType } from "./delegate-types";
-import { hubRequest, type ToolInputs } from "./hub-request";
+import { hubRequest, hubRequestAsGiven, type ToolInputs } from "./hub-request";
 
 const ROUTING = "PUT /api/accounts/routing/:provider";
 const DELEGATE_TYPE = "PUT /api/delegate-types/:name";
@@ -112,3 +112,12 @@ declare function waitFor(args: ToolInputs["wait_item"]): void;
 waitFor({ minutes: 1, reason: "a build" });
 // @ts-expect-error `seconds` is no argument of wait_item
 waitFor({ minutes: 1, reason: "a build", seconds: 1 });
+
+// A probe that proves a refusal sends what the route doesn't take as given,
+// by its own name; the route's path parameters are still held.
+hubRequestAsGiven(ROUTING, {
+  path: { provider: "claude" },
+  body: { ...routing, atLimit: { ...routing.atLimit, delegateWork: true } },
+});
+// @ts-expect-error the routing route's path parameter is `provider`
+hubRequestAsGiven(ROUTING, { path: {}, body: {} });
