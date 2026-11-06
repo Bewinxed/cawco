@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Dialog as DialogPrimitive } from "bits-ui";
   import type PhotoSwipe from "photoswipe";
-  import { type Component, mount, onDestroy, unmount } from "svelte";
+  import { onDestroy } from "svelte";
   import OutputBlock from "#lib/components/features/tool-cards/OutputBlock.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { CopyButton } from "#lib/components/ui/copy-button/index.js";
@@ -14,11 +14,10 @@
    * What a thumbnail opens into, one entry point (lightbox-state) for both
    * kinds of attachment.
    *
-   * Pictures open in PhotoSwipe (https://photoswipe.com), loaded the first
-   * time one is opened: the picture zooms out of the thumbnail that was
-   * clicked and back into it on close, and the pictures of one message are
-   * one gallery to swipe through. Its buttons wear the house glyphs and its
-   * surfaces the house tokens (styles below).
+   * Pictures open in the house's PhotoSwipe (photoswipe.ts), loaded the
+   * first time one is opened: the picture zooms out of the thumbnail that
+   * was clicked and back into it on close, and the pictures of one message
+   * are one gallery to swipe through.
    *
    * A pasted document opens in a dialog on the same scrim. The thumb's box
    * grows into the sheet (motion/share.svelte.ts, `grow` from the header it
@@ -28,12 +27,7 @@
    * well.
    */
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import {
-    IconChevronLeft,
-    IconChevronRight,
-    IconClose,
-    IconZoomIn,
-  } from "#lib/icons.js";
+  import { IconClose } from "#lib/icons.js";
   import { dur, ease, motionOk } from "../motion/curves.svelte";
   import { closeInto, land } from "../motion/share.svelte";
   import { hold } from "../page-marks";
@@ -43,21 +37,13 @@
     type LightboxView,
     lightbox,
   } from "./lightbox-state.svelte";
+  import { loadPhotoSwipe } from "./photoswipe";
 
   onDestroy(lightbox.close);
 
   // ── Pictures ────────────────────────────────────────────────────────────
 
   let gallery: PhotoSwipe | undefined;
-
-  /** A glyph component's markup, for PhotoSwipe's `…SVG` button options. */
-  function markup(glyph: Component): string {
-    const host = document.createElement("div");
-    const drawn = mount(glyph, { target: host });
-    const html = host.innerHTML;
-    unmount(drawn);
-    return html;
-  }
 
   /** The caption, path and original under the picture on screen. */
   function describe(bar: HTMLElement, shot: LightboxShot): void {
@@ -92,15 +78,15 @@
   async function showPictures(
     view: Extract<LightboxView, { kind: "image" }>
   ): Promise<void> {
-    const [{ default: PhotoSwipeCore }] = await Promise.all([
-      import("photoswipe"),
+    const [photoSwipe] = await Promise.all([
+      loadPhotoSwipe(),
       import("photoswipe/style.css"),
     ]);
     // Closed again while PhotoSwipe was on its way.
     if (lightbox.current !== view) {
       return;
     }
-    const opened = new PhotoSwipeCore({
+    const opened = photoSwipe({
       dataSource: view.shots.map((shot) => ({
         src: shot.src,
         msrc: shot.src,
@@ -111,17 +97,6 @@
         thumbCropped: shot.cropped,
       })),
       index: view.index,
-      mainClass: "cawco-pswp",
-      bgOpacity: 1,
-      showHideAnimationType: motionOk.current ? "zoom" : "none",
-      showAnimationDuration: dur("--dur-panel"),
-      hideAnimationDuration: dur("--dur-exit"),
-      easing: ease("--ease-drawer"),
-      closeTitle: "Close image",
-      closeSVG: markup(IconClose),
-      arrowPrevSVG: markup(IconChevronLeft),
-      arrowNextSVG: markup(IconChevronRight),
-      zoomSVG: markup(IconZoomIn),
     });
     opened.on("uiRegister", () => {
       opened.ui?.registerElement({

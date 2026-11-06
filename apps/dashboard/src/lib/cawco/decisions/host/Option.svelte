@@ -18,8 +18,8 @@
   stands in its own row, outside the pick, so a click, a hover or a scroll in
   it is the embed's own and never picks; a Preview, drawing or diagram
   stands at its real size and its well tells the card its width, which lays
-  the options out by it; a picture fits the option's column, and pressed to
-  its full size it spans the option across the card (`has-data-full`).
+  the options out by it; a picture fits the option's column, and pressed
+  opens over the page at its own size (Image.svelte).
 -->
 <script lang="ts">
   import { decisionsWords as words } from "@cawco/core/words/decisions";
@@ -92,7 +92,7 @@
 </script>
 
 <div
-  class="grid min-w-0 row-span-(--span) grid-rows-subgrid gap-y-space-2 group-data-lone/options:last:col-span-full has-data-full:col-span-full"
+  class="grid min-w-0 row-span-(--span) grid-rows-subgrid gap-y-space-2 group-data-lone/options:last:col-span-full"
   data-slot="option-cell"
   style:--span={at.span}
 >

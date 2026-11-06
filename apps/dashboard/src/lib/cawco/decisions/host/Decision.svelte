@@ -462,7 +462,7 @@
       disabled={!bridge()}
       {multiple}
     >
-      <!-- Options whose every one carries pictures (Image, which fits its slot) stand in one equal column each where the body holds them (`@pictures-split`), one under another below; a picture pressed to its full size spans its option across the card (Option.svelte). Options with a piece of a real width (a Preview's, a drawing's, a diagram's) stand on their widest picture's pitch, each at its real size in a well that hugs it, as many abreast as the card holds, one under another at the card's full width where one is wider than a column (it scrolls sideways in its well), one left alone on the last row spanning it (`data-lone`); under the phone's line one under another, each well reaching the screen's edges as far as its picture does (`data-bleeds`, Well.svelte). Options of words stand at least 190px each. An option holding a page-sized Preview that names no width (a whole screen that lays itself out to its frame, `data-fills`) stands its card's options one to a row, so it has the card's whole width. -->
+      <!-- Options whose every one carries pictures (Image, which fits its slot) stand in one equal column each where the body holds them (`@pictures-split`), one under another below. Options with a piece of a real width (a Preview's, a drawing's, a diagram's) stand on their widest picture's pitch, each at its real size in a well that hugs it, as many abreast as the card holds, one under another at the card's full width where one is wider than a column (it scrolls sideways in its well), one left alone on the last row spanning it (`data-lone`); under the phone's line one under another, each well reaching the screen's edges as far as its picture does (`data-bleeds`, Well.svelte). Options of words stand at least 190px each. An option holding a page-sized Preview that names no width (a whole screen that lays itself out to its frame, `data-fills`) stands its card's options one to a row, so it has the card's whole width. -->
       <div
         bind:this={optionsGrid}
         class={[
@@ -526,10 +526,10 @@
       </p>
     {/if}
     {#if Array.isArray(props.media) && props.media.length > 0}
-      <!-- A picture pressed to its full size spans the media's columns (`has-data-full`, Image.svelte). Two pictures side by side where the card's body holds both at their real width (each well its pictures' pitch, `grid-cols-fit-story`), or, where neither says its width (a page that takes the room it is given), in equal columns once the body holds two at a readable width; one, three and more, or words (a Row, a Text, a Badge) beside a picture, one under another, where a story's well reaches the screen's edges on a phone (`data-bleeds`, Well.svelte). -->
+      <!-- Two pictures side by side where the card's body holds both at their real width (each well its pictures' pitch, `grid-cols-fit-story`), or, where neither says its width (a page that takes the room it is given), in equal columns once the body holds two at a readable width; one, three and more, or words (a Row, a Text, a Badge) beside a picture, one under another, where a story's well reaches the screen's edges on a phone (`data-bleeds`, Well.svelte). -->
       <div
         class={[
-          "grid min-w-0 gap-space-3 has-data-fills:grid-cols-1 *:has-data-full:col-span-full",
+          "grid min-w-0 gap-space-3 has-data-fills:grid-cols-1",
           mediaColumns,
         ]}
         data-bleeds={pictures ? undefined : ""}

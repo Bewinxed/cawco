@@ -1,0 +1,119 @@
+/* The house's PhotoSwipe chrome (lightbox/photoswipe.ts), imported by the
+   dashboard's sheet (app.css) and the decision host's (host.css). */
+@layer components {
+  /* PhotoSwipe's DOM (its root is appended to <body>), under the
+     `cawco-pswp` mainClass lightbox/photoswipe.ts passes it: its chrome on the house's
+     raised surface and hairline, 44px controls. */
+  .cawco-pswp {
+    --pswp-bg: var(--scrim);
+    --pswp-placeholder-bg: var(--surface-recess);
+    --pswp-icon-color: var(--ink-strong);
+    --pswp-error-text-color: var(--ink-muted);
+    color: var(--ink-strong);
+
+    & .pswp__bg {
+      backdrop-filter: blur(var(--scrim-blur));
+    }
+    & .pswp__top-bar {
+      gap: var(--space-2);
+      padding: var(--space-2);
+      block-size: auto;
+    }
+    & .pswp__button {
+      display: grid;
+      place-items: center;
+      inline-size: var(--c-top-bar-h);
+      block-size: var(--c-top-bar-h);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-sm);
+      background: var(--surface-raised);
+      color: var(--ink-strong);
+      opacity: 1;
+      overflow: visible;
+
+      & svg {
+        inline-size: var(--icon-lg);
+        block-size: var(--icon-lg);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          background: var(--surface-hover);
+        }
+      }
+    }
+    & .pswp__button--arrow {
+      margin-block-start: calc(var(--c-top-bar-h) / -2);
+    }
+    & .pswp__button--arrow--prev {
+      inset-inline-start: var(--space-3);
+    }
+    & .pswp__button--arrow--next {
+      inset-inline-end: var(--space-3);
+    }
+    /* The counter is chrome like the buttons: their chip on the raised
+       surface inside a hairline, so the page under the scrim never reads
+       through it. */
+    & .pswp__counter {
+      display: grid;
+      place-items: center;
+      block-size: var(--c-top-bar-h);
+      margin: 0;
+      padding-inline: var(--space-3);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-sm);
+      background: var(--surface-raised);
+      font-size: var(--text-meta);
+      font-weight: var(--weight-body);
+      font-variant-numeric: tabular-nums;
+      color: var(--ink-strong);
+      text-shadow: none;
+      opacity: 1;
+    }
+    /* PhotoSwipe fades its own chrome with the zoom (`pswp--ui-visible`);
+       the description goes with it. */
+    & .pswp__description {
+      position: absolute;
+      inset-inline: var(--space-3);
+      inset-block-end: var(--space-3);
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-2) var(--space-3);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-sm);
+      background: var(--surface-recess);
+      color: var(--ink-muted);
+      font-size: var(--text-meta);
+      font-weight: var(--weight-body);
+      opacity: 0;
+
+      & .lines {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-inline-size: 0;
+        overflow-wrap: anywhere;
+      }
+      & .path {
+        font-family: var(--font-mono);
+      }
+      & a {
+        white-space: nowrap;
+        text-decoration: underline;
+        color: inherit;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        transition: opacity var(--dur-control) var(--ease-out);
+      }
+    }
+    &.pswp--ui-visible .pswp__description {
+      opacity: 1;
+    }
+    /* One picture has nowhere to swipe to: PhotoSwipe hides its arrows and
+       counter then (`pswp--one-slide`), which the buttons' and counter's
+       `display` above outranks from this layer, so it is said again here. */
+    &.pswp--one-slide :is(.pswp__button--arrow, .pswp__counter) {
+      display: none;
+    }
+  }
+}

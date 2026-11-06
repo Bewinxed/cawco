@@ -10,6 +10,11 @@
 @layer theme, base, vendor, components, utilities, overrides;
 @import "tailwindcss" source(none);
 @import "../../../../design.css";
+/* The house's picture viewer, which a pressed Image opens (Image.svelte):
+   PhotoSwipe's own sheet in the libraries' layer, then the house's chrome
+   over it, one source with the dashboard's (app.css). */
+@import "photoswipe/style.css" layer(vendor);
+@import "../../lightbox/photoswipe.css";
 
 @source "./";
 @source "../../views/openui/OpenUiRenderer.svelte";
@@ -67,7 +72,7 @@
      transcript's precedent). Media is no reason for it: every picture's
      box stands at its size from the first paint (Image.svelte), so a
      picture loading moves nothing; a card's own height tween (a note
-     opening, a picture pressed to full size) still would be fought by
+     opening) still would be fought by
      anchoring frame by frame. */
   :root,
   [data-slot="page-scroll"] {

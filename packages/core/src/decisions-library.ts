@@ -125,7 +125,7 @@ export const decisionLibrary = <C>(
   );
   const Image = define(
     "Image",
-    "A picture: a file beside the program in your work folder, or an absolute path on your machine (a generate_image result). It draws at the size of the screen it was taken on: its pixels over the scale its PNG records in its pHYs (144 dpi for a capture at a device scale of 2; a file that records none draws 1 px to 1 CSS px). It fits the width of its slot, never past that size; pressed, it opens at that size in its card. When every option carries pictures, the options stand side by side at one scale, and the pictures in a Row stand at one height.",
+    "A picture: a file beside the program in your work folder, or an absolute path on your machine (a generate_image result). It draws at the size of the screen it was taken on: its pixels over the scale its PNG records in its pHYs (144 dpi for a capture at a device scale of 2; a file that records none draws 1 px to 1 CSS px). It fits the width of its slot, never past that size; pressed, it opens over the whole page at that size, even where that is wider than its card or the page, from its top-left corner, dragged to see the rest. When every option carries pictures, the options stand side by side at one scale, and the pictures in a Row stand at one height.",
     z.object({
       file: z.string().describe('Like "shots/hero.png".'),
       alt: z.string().describe("What it shows, in one sentence."),

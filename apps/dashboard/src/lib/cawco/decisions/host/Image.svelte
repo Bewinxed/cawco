@@ -13,12 +13,14 @@
   first paint (its `width` and `height`, which the browser keeps as its
   aspect ratio before it loads), so nothing moves as it loads.
 
-  Pressed, it stands at its full size in place: its option's cell, or its
-  cell in the card's media, spans the card's width (`has-data-full`,
-  Decision.svelte, Option.svelte), and the picture fills it up to its own
-  size, with no overlay over the page. Pressed again, or Escape, it fits its
-  slot again. The press turns `data-state`, which the card's height tween
-  hears (motion/morph), so the card grows and settles on the kit's clock.
+  Pressed, it opens in the house's picture viewer (lightbox/photoswipe.ts)
+  over the whole page, at its own size: a screen captured wider than its
+  card, or than the page, reads at the size it was taken at, dragged to see
+  past the page's edges, from its top-left corner. Its card could never show it
+  so: grown in place, its cell stopped at the card's width (a 1920px desktop
+  capture stood at the card's 600). The viewer's zoom shows it whole. A
+  press on the picture again, on the page around it, or Escape closes it,
+  and it zooms back into its place in the card.
 
   In a Row its well grows by its picture's aspect ratio (`picture-row`,
   design.css), so pictures side by side stand at one height, the narrowest
@@ -27,7 +29,9 @@
 -->
 <script lang="ts">
   import { decisionsWords as words } from "@cawco/core/words/decisions";
+  import type PhotoSwipe from "photoswipe";
   import { getContext } from "svelte";
+  import { loadPhotoSwipe } from "../../lightbox/photoswipe";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { PICTURE_RATIOS, type PictureRatios, served } from "./page.svelte.js";
   import Well from "./Well.svelte";
@@ -46,8 +50,56 @@
   let failed = $state(false);
   /** Its width over its height. */
   const ratio = $derived(size ? size.width / size.height : undefined);
-  /** It stands at its full size, its cell across the card. */
-  let full = $state(false);
+  /** The picture in its card, which the viewer zooms out of and back into. */
+  let shown = $state<HTMLImageElement>();
+  /** The viewer it is open in, while it is. */
+  let viewer: PhotoSwipe | undefined;
+  /** PhotoSwipe is on its way: a second press waits for the first. */
+  let opening = false;
+
+  $effect(() => () => viewer?.destroy());
+
+  /** Opens it over the page at its own size. */
+  async function open(): Promise<void> {
+    if (viewer || opening || !src || !size) {
+      return;
+    }
+    opening = true;
+    const photoSwipe = await loadPhotoSwipe().finally(() => {
+      opening = false;
+    });
+    const opened = photoSwipe({
+      dataSource: [
+        {
+          src,
+          msrc: src,
+          width: size.width / size.scale,
+          height: size.height / size.scale,
+          alt,
+          element: shown,
+        },
+      ],
+      // Its own size; the zoom shows it whole.
+      initialZoomLevel: 1,
+      secondaryZoomLevel: "fit",
+      // A press on it closes it as one outside it does; a drag pans it.
+      imageClickAction: "close",
+      tapAction: "close",
+    });
+    // Where it is wider or taller than the page, it opens at its top-left
+    // corner, where a screen is read from, not its middle: PhotoSwipe's
+    // `min` pan is its top-left edge (PanBounds: `min` is the padding, `max`
+    // the far edge).
+    opened.on("initialZoomPan", ({ slide }) => {
+      slide.pan.x = slide.bounds.min.x;
+      slide.pan.y = slide.bounds.min.y;
+    });
+    opened.on("destroy", () => {
+      viewer = undefined;
+    });
+    viewer = opened;
+    opened.init();
+  }
   /** The Row it stands in, which stands its pictures by the narrowest's shape. */
   const row = getContext<PictureRatios | undefined>(PICTURE_RATIOS);
   const key = {};
@@ -61,26 +113,15 @@
 <Well caption={props.caption ? String(props.caption) : undefined} {ratio}>
   {#if src && size && !failed}
     <button
-      aria-label={full ? words.pictureFit : words.pictureFull(named)}
-      class={[
-        "block min-w-0 max-w-full rounded-xs p-0",
-        full ? "cursor-zoom-out" : "cursor-zoom-in",
-      ]}
-      data-full={full || undefined}
-      data-state={full ? "full" : "fit"}
-      onclick={() => {
-        full = !full;
-      }}
-      onkeydown={(event) => {
-        if (event.key === "Escape" && full) {
-          event.stopPropagation();
-          full = false;
-        }
-      }}
+      aria-haspopup="dialog"
+      aria-label={words.pictureFull(named)}
+      class="block min-w-0 max-w-full cursor-zoom-in rounded-xs p-0"
+      onclick={open}
       type="button"
     >
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: a picture that fails to load says so in words. -->
       <img
+        bind:this={shown}
         {alt}
         class="block h-auto max-w-full rounded-xs outline-1 -outline-offset-1 outline-image-outline"
         decoding="async"
