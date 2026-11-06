@@ -6,11 +6,11 @@
    * over the page (title, mode, Comments with its badge, Reload, Open,
    * Expand, Close) and the Comments rail's bar (its title, Search, +), on a
    * desk; under 640px the phone's head and the Comments sheet's bar. Every
-   * symbol stands in the house's bar recipe (BarGlass, `[data-bar-item]`,
+   * symbol stands in the house's bar recipe (BarGlass, BarItem,
    * `--c-bar-symbol`), so each face is drawn at the one size and place the
    * product would draw it.
    */
-  import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { page } from "$app/state";
   import pageDesk from "../artifact-panel/page-desk.webp";
   import pagePhone from "../artifact-panel/page-phone.webp";
@@ -37,39 +37,13 @@
 {/snippet}
 
 {#snippet item(name: Glyph, label: string, pressed = false)}
-  <button
-    aria-label={label}
-    aria-pressed={pressed || undefined}
-    class="select-none press-tint aria-pressed:bg-surface-pressed"
-    data-bar-item
-    data-box
-    title={label}
-    type="button"
-  >
-    {@render glyph(name)}
-  </button>
+  <BarItem {label} {pressed} tip={false}>{@render glyph(name)}</BarItem>
 {/snippet}
 
 {#snippet comments()}
-  <!-- mark-line: the badge is a mark on the symbol's corner, not words set beside it -->
-  <button
-    aria-label={`Comments, ${count} open`}
-    class="select-none press-tint pe-space-6"
-    data-bar-item
-    data-box
-    title="Comments"
-    type="button"
+  <BarItem {count} label={`Comments, ${count} open`} tip={false}
+    >{@render glyph("comments")}</BarItem
   >
-    <span class="relative grid" data-box>
-      {@render glyph("comments")}
-      <span aria-hidden="true" class="absolute end-0 top-0 size-0">
-        <span
-          class="absolute -start-c-count-badge-inset -top-c-count-badge-inset grid h-c-count-badge-h min-w-c-count-badge-h place-items-center rounded-pill bg-ink-solid px-space-1 text-on-ink type-meta num leading-none"
-          >{count}</span
-        >
-      </span>
-    </span>
-  </button>
 {/snippet}
 
 {#snippet title(phone: boolean)}

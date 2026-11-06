@@ -8,9 +8,8 @@
    * that glass (BarMenu).
    */
   import type { Component, Snippet } from "svelte";
-  import { BarMenu } from "#lib/components/ui/bar-glass/index.js";
+  import { BarItem, BarMenu } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
 
   let {
     glyph: Glyph,
@@ -32,21 +31,7 @@
 <DropdownMenu.Root>
   <DropdownMenu.Trigger>
     {#snippet child({ props })}
-      <Tip {keys} label={`Mode: ${word}`}>
-        {#snippet children(tip)}
-          <button
-            {...tip}
-            {...props}
-            aria-label={`Mode: ${word}`}
-            class="select-none touch-hit press-tint"
-            data-bar-item
-            data-box
-            type="button"
-          >
-            <Glyph aria-hidden="true" data-slot="bar-symbol" />
-          </button>
-        {/snippet}
-      </Tip>
+      <BarItem icon={Glyph} {keys} label={`Mode: ${word}`} {props} />
     {/snippet}
   </DropdownMenu.Trigger>
   <BarMenu label="Mode" width="compact">

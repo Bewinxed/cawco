@@ -69,10 +69,12 @@
          * a wider count grows toward its own glyph, as an app icon's badge
          * grows over its icon, never over a neighbour's glyph. In a bar item
          * it straddles the glass's top edge. Its box is the nearest
-         * positioned one round it.
+         * positioned one round it. Dressed by what it counts (`data-look`):
+         * `attn`, what waits on the person, in the needs-you pair; `held`,
+         * what the person holds to send, hollow, as a held row's pill is.
          */
         corner:
-          "pointer-events-none absolute top-[calc(var(--count-foot,0%)_-_var(--icon-md)_/_2)] end-[calc(50%_-_var(--count-glyph)_/_2_-_var(--icon-md)_/_2)] h-icon-md min-w-icon-md rounded-pill bg-ink-solid px-space-1 font-medium text-label text-on-ink tabular-nums",
+          "pointer-events-none absolute top-[calc(var(--count-foot,0%)_-_var(--icon-md)_/_2)] end-[calc(50%_-_var(--count-glyph)_/_2_-_var(--icon-md)_/_2)] h-icon-md min-w-icon-md rounded-pill bg-ink-solid px-space-1 font-medium text-label text-on-ink tabular-nums data-[look=attn]:bg-status-attn-bg data-[look=attn]:text-status-attn-ink data-[look=held]:border data-[look=held]:border-ink-muted data-[look=held]:bg-surface-raised data-[look=held]:text-ink-strong",
       },
       /** Its figures in tabular widths (DESIGN.md, The Tabular Figure Rule). */
       figures: { tabular: "tabular-nums" },

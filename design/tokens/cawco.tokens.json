@@ -4221,27 +4221,6 @@
       },
       "$description": "A symbol in a bar's glass group (the top bar's, a head's): sized to the bar's text as SF Symbols are (\"relative to the cap height of the San Francisco system font\"), so a line glyph at 18px inks about 15px beside the head's 16px title. It was 20px in the bold-duotone cut, which the owner pinned as far too big (artifact panel, 2026-11-05)."
     },
-    "c-count-badge-h": {
-      "$type": "dimension",
-      "$value": {
-        "value": 14,
-        "unit": "px"
-      },
-      "$description": "A count worn as a badge on a bar symbol's top-trailing corner (the artifact panel's Comments bubble): a plain capsule this tall at least, its figures in meta, centred on the symbol's corner so the symbol still reads, as Apple badges a toolbar item (SwiftUI badge: \"Badges appear in list rows, tab bars, toolbar items, and menus\"). It was 16px with a ring of the glass round it, which the owner pinned as too big and glowing (2026-11-05)."
-    },
-    "c-count-badge-inset": {
-      "$type": "dimension",
-      "$value": {
-        "value": 7,
-        "unit": "px"
-      },
-      "$description": "How far a count badge reaches back over its symbol's corner, up and in: half its height, so its leading half-circle is centred on the corner and a longer count grows outward.",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "calc({size.c-count-badge-h} / 2)"
-        }
-      }
-    },
     "c-head-room": {
       "$type": "dimension",
       "$value": {
@@ -5245,19 +5224,6 @@
       "$extensions": {
         "dev.cawco": {
           "css": "32ch"
-        }
-      }
-    },
-    "c-count-w": {
-      "$type": "dimension",
-      "$value": {
-        "value": 24,
-        "unit": "px"
-      },
-      "$description": "A bar button's count holds three figures' room, so the button keeps its width as its count grows and nothing beside it in the bar moves (the artifact panel's Comments).",
-      "$extensions": {
-        "dev.cawco": {
-          "css": "3ch"
         }
       }
     },

@@ -37,7 +37,11 @@
   import { type Component, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery, SvelteSet } from "svelte/reactivity";
-  import { BarGlass, BarMenu } from "#lib/components/ui/bar-glass/index.js";
+  import {
+    BarGlass,
+    BarItem,
+    BarMenu,
+  } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import {
     IconArtifactCanvas,
@@ -313,17 +317,17 @@
   <DropdownMenu.Root bind:open>
     <DropdownMenu.Trigger>
       {#snippet child({ props })}
-        <button
-          {...props}
-          data-artifact-trigger
+        <BarItem
           aria-describedby={line ? lineId : undefined}
-          class="select-none touch-hit press-tint mark-line max-w-full gap-space-1 ps-space-2 pe-space-1 max-phone:h-auto max-phone:min-h-c-bar-item max-phone:rounded-lg data-described:h-auto data-described:min-h-c-bar-item data-described:rounded-lg data-described:py-space-1"
           data-artifact={shown.id}
+          data-artifact-trigger
           data-described={(described && !!line) || undefined}
-          data-bar-item
-          data-box
-          title={line || undefined}
-          type="button"
+          form="title"
+          label={shown.title}
+          lines={described && line ? "two" : "phone-two"}
+          {props}
+          tip={line || false}
+          tipOff={open}
         >
           {#if described && line}
             <!-- The title over its line, a window's subtitle: one line each,
@@ -380,7 +384,7 @@
               class="size-icon-sm flex-none text-ink-muted"
             />
           {/if}
-        </button>
+        </BarItem>
       {/snippet}
     </DropdownMenu.Trigger>
     <BarMenu

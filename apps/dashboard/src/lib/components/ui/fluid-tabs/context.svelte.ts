@@ -11,7 +11,7 @@ import type { FoldMeasure } from "./fold-memory";
 import type { FoldPose } from "./fold-path";
 import type { TabRects } from "./rects.svelte";
 
-export type TabsSize = "default" | "compact" | "bar";
+export type TabsSize = "default" | "compact";
 /** A segmented control in a well, or folder tabs standing on a shelf. */
 export type TabsVariant = "segmented" | "folder";
 /**

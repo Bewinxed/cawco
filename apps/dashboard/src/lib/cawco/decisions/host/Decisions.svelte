@@ -303,7 +303,7 @@
       <header
         class={[
           "mark-line type-title flex min-w-0 items-start gap-space-3 py-space-2",
-          !setupPage && "[:root[data-cawco-headed]_&]:hidden",
+          !setupPage && "in-data-cawco-headed:hidden",
         ]}
         data-slot="page-head"
       >
