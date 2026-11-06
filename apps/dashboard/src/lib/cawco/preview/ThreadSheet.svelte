@@ -70,11 +70,12 @@
      */
     short?: boolean;
     /**
-     * What it holds reads from its top and wants the room (a thread): it
-     * opens at its whole room, and goes there when a thread is pushed into
-     * it, so its question and first message stand in view with the reply
-     * under them (HIG, Sheets: leave out the medium detent "if a sheet's
-     * content is more useful when it displays at full height").
+     * What it holds reads from its top and has no page above it to show (a
+     * comment chip's thread in the transcript): it opens at its whole room,
+     * so its question and first message stand in view with the reply under
+     * them (HIG, Sheets: leave out the medium detent "if a sheet's content
+     * is more useful when it displays at full height"). A thread over its
+     * page opens at half, the page lifting its pill above the sheet.
      */
     tall?: boolean;
     children: Snippet;
@@ -100,11 +101,10 @@
   /** The stop it stands at, by its place in `SHARES`. */
   let stop = $state(0);
   // Each opening starts at half its room. What wants the whole room (a
-  // thread) goes on to it at once, and a thread pushed into the standing
-  // sheet takes it too: vaul places an opening sheet at its first stop
-  // whatever stop is asked, and moves only on a change of stop, so the
-  // whole room is asked a tick after the opening, as a tap on the grabber
-  // asks it (`step`).
+  // chip's thread, `tall`) goes on to it at once: vaul places an opening
+  // sheet at its first stop whatever stop is asked, and moves only on a
+  // change of stop, so the whole room is asked a tick after the opening, as
+  // a tap on the grabber asks it (`step`).
   $effect(() => {
     if (!open) {
       return;

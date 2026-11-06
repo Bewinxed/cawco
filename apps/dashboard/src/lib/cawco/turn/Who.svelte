@@ -98,6 +98,9 @@
   /** A transcript may arrive with its timestamp already serialised to a string. */
   const at = $derived(timestamp ? new Date(timestamp) : null);
   const validAt = $derived(at && !Number.isNaN(at.getTime()) ? at : null);
+  /** A grouped clock's line: the body's size at the words' leading (`--who-lead`, set where a host floats it beside rendered prose), else the body's. */
+  const LINE_H =
+    "calc(var(--text-body) * var(--who-lead, var(--leading-body)))";
   const clock = $derived.by(() => {
     if (!validAt) {
       return "";
@@ -109,8 +112,11 @@
 <!-- The speaker line arrives with its row: it moves with the row's own
      entrance and has no motion of its own. -->
 <!-- With its mark the line is a mark line (app.css): the name and the clock
-     stand on the mark's middle. Grouped it has no mark, and its clock keeps
-     its own line box in the body's first line. -->
+     stand on the mark's middle. Grouped it has no mark, and its clock
+     stands on the baseline of the body's first line: a strut in the body's
+     size and leading (`--who-lead`, the words' own where a host floats it
+     beside rendered prose) sets the line's baseline, and the clock aligns
+     to it. -->
 <h2
   aria-label={actions || end
     ? [name, note, clock].filter(Boolean).join(", ")
@@ -118,13 +124,18 @@
   data-turn-who
   data-grouped={grouped || undefined}
   class={[
-    "flex items-center gap-space-2 text-size-label text-ink-muted font-medium mb-space-2 data-grouped:float-end data-grouped:justify-end data-grouped:text-size-meta data-grouped:min-w-c-turn-clock-w data-grouped:min-h-(--who-line-h) data-grouped:mb-0 data-grouped:ms-space-3",
+    "flex items-center gap-space-2 text-size-label text-ink-muted font-medium mb-space-2 data-grouped:float-end data-grouped:items-baseline data-grouped:justify-end data-grouped:text-size-meta data-grouped:min-w-c-turn-clock-w data-grouped:min-h-(--who-line-h) data-grouped:mb-0 data-grouped:ms-space-3",
     !grouped && "mark-line",
   ]}
-  style:--who-line-h="calc(var(--text-body) * var(--leading-body))"
+  style:--who-line-h={LINE_H}
 >
   {#if grouped}
     <span class="sr-only">{name}</span>
+    <span
+      aria-hidden="true"
+      class="w-0 overflow-clip text-size-body leading-(--who-lead,var(--leading-body))"
+      data-slot="strut">&#8203;</span
+    >
   {:else}
     {#if !you && voice?.face}
       <!-- A pane's own face for its speaker stands bare in the mark's box. -->

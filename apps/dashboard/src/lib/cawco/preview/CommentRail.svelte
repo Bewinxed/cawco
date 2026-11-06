@@ -231,11 +231,15 @@
   const resolvedPins = $derived(pins.filter((pin) => !!pin.resolvedAt));
   /** A comment waiting on him: an answer he hasn't read. */
   const waitsOnYou = (pin: Pin) => unread.has(pin.id) && !live.has(pin.id);
-  /** A list in its order, what waits on him first (his job here is to find and answer it). */
-  const waitingFirst = (list: Pin[]) => [
-    ...list.filter(waitsOnYou),
-    ...list.filter((pin) => !waitsOnYou(pin)),
-  ];
+  /**
+   * A list newest first puts what waits on him first (his job here is to
+   * find and answer it); Top of page first is the page's order, which he
+   * picked, kept whole.
+   */
+  const waitingFirst = (list: Pin[]) =>
+    sort === "top"
+      ? list
+      : [...list.filter(waitsOnYou), ...list.filter((pin) => !waitsOnYou(pin))];
   /**
    * A search looks in every list, never the one in front alone, and its hits
    * stand under the name of the list each is in (Open, Resolved), so a hit

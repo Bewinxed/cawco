@@ -3320,20 +3320,23 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
   const doomed = Object.entries(before).find(
     ([, number]) => number === target
   )?.[0];
-  const card = on.page.locator(`[data-pin-card="${target}"]`);
-  // The head holds the name and what acts on the pin (Resolve, Delete, ⋯, Close) on its row; the foot is the chat composer as the reply.
+  const card = threadOn(on.page, target);
+  // The bar holds what acts on the pin (Resolve, Delete comment, Copy link
+  // or ⋯) on one row, and Close: trailing on a desk's card, leading in a
+  // sheet (the owner's pick on title-bars-close), Back beside it; the foot
+  // is the chat composer as the reply.
   const parts = await card.evaluate((el) => {
-    const head = el.querySelector('[data-slot="head"]');
-    const named = [...(head?.querySelectorAll("button[aria-label]") ?? [])].map(
-      (button) => button.getAttribute("aria-label") ?? ""
-    );
-    const tops = [...(head?.querySelectorAll("button[aria-label]") ?? [])].map(
-      (button) => Math.round(button.getBoundingClientRect().top)
-    );
+    const bar = el.querySelector('[data-slot="bar"]');
+    const items = [
+      ...(bar?.querySelectorAll("[data-bar-item][aria-label]") ?? []),
+    ].filter((button) => button.getAttribute("data-slot") !== "name");
     const foot = el.querySelector('[data-slot="foot"]');
     return {
-      named,
-      tops,
+      sheet: el.matches('[data-slot="thread-sheet"]'),
+      named: items.map((button) => button.getAttribute("aria-label") ?? ""),
+      tops: items.map((button) =>
+        Math.round(button.getBoundingClientRect().top)
+      ),
       foot: [...(foot?.querySelectorAll("button[aria-label]") ?? [])].map(
         (button) => button.getAttribute("aria-label") ?? ""
       ),
@@ -3342,19 +3345,21 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
       ),
     };
   });
+  const resolveAt = parts.named.indexOf("Resolve");
   on.kit.check(
-    "c: the thread's head holds Resolve, Delete comment, its ⋯ and Close on one row, the name under them; its foot is the chat composer, Attach and the Reply glyph",
-    parts.named[0] === "Resolve" &&
-      parts.named[1] === commentWords.deleteComment &&
-      parts.named.at(-1) === "Close" &&
-      parts.named.length === 4 &&
+    "c: the thread's bar holds Resolve then Delete comment on one row, Close trailing on a desk's card and leading in a sheet; its foot is the chat composer, Attach and the Reply glyph",
+    resolveAt >= 0 &&
+      parts.named[resolveAt + 1] === commentWords.deleteComment &&
+      (parts.sheet
+        ? parts.named[0] === "Close"
+        : parts.named.at(-1) === "Close") &&
       new Set(parts.tops).size === 1 &&
       parts.composer &&
       parts.foot.includes("Attach a file or image") &&
       parts.foot.includes("Reply"),
     JSON.stringify(parts)
   );
-  await card.locator('[data-slot="head"] [data-slot="delete"]').click();
+  await card.locator('[data-slot="bar"] [data-slot="delete"]').click();
   const ask = card.locator('[data-ask="delete"]');
   const asked = await ask
     .waitFor({ timeout: 3000 })
@@ -3984,19 +3989,28 @@ const dismissChecks = async (on: On) => {
 };
 
 /**
- * (f) A thread longer than the card's cap: the agent answers pin 1 twenty
- * times; its card, opened from its row, keeps its head and its foot whole
- * and scrolls the thread alone.
+ * (f) A thread longer than the card's cap: the agent answers the first open
+ * pin twenty times; its card, opened from its pill on the page (the list shut, so it
+ * floats beside the pill, never pushed into the Comments sheet of a narrow
+ * pane), keeps its head and its foot whole and scrolls the thread alone.
  */
 const roomChecks = async (on: On) => {
   const frame = await pageFrame(on);
-  const pin = Object.values((await docOf(frame)).pins).find(
-    (one) => Number(one.number) === 1
-  ) as { id: string } | undefined;
+  // An open pin, its pill on the page (a resolved one leaves the page).
+  const [pin] = (
+    Object.values((await docOf(frame)).pins) as {
+      id: string;
+      number?: number;
+      resolvedAt?: string;
+    }[]
+  )
+    .filter((one) => !one.resolvedAt)
+    .sort((x, y) => Number(x.number) - Number(y.number));
   if (!pin) {
-    on.kit.check("f: pin 1 on the page", false, "none");
+    on.kit.check("f: an open pin on the page", false, "none");
     return;
   }
+  const number = Number(pin.number);
   const replies = 20;
   for (let n = 1; n <= replies; n += 1) {
     await on.fleet.api(
@@ -4008,14 +4022,10 @@ const roomChecks = async (on: On) => {
       })
     );
   }
-  await (
-    await rowsOf(on)
-  )
-    .locator('[data-slot="pin-row"][data-pin-row="1"]')
-    .click();
-  const card = threadOn(on.page, 1);
+  await shutList(on);
+  const card = await openThread(on, frame, number);
   await until(
-    "the seeded replies in pin 1's card",
+    `the seeded replies in pin ${number}'s card`,
     () => card.locator('[data-slot="entry"]').count(),
     (count) => count > replies,
     15_000
@@ -4156,7 +4166,7 @@ const titleFits = (card: Locator) =>
     }
     // A title of two lines at most is clamped in its inner span: what shows
     // is that span's box, its lines past the second cut there by design.
-    const clamp = name.querySelector<HTMLElement>(":scope > .line-clamp-2");
+    const clamp = name.querySelector<HTMLElement>(".line-clamp-2");
     const range = document.createRange();
     range.selectNodeContents(name);
     const whole = range.getBoundingClientRect();
@@ -4177,7 +4187,9 @@ const titleFits = (card: Locator) =>
     document.body.append(probe);
     const role = Number.parseFloat(getComputedStyle(probe).lineHeight);
     probe.remove();
-    const style = getComputedStyle(name);
+    // The lines are the clamp's own (a bar's title control sets its words
+    // in a span of their own role inside it), else the name's.
+    const style = getComputedStyle(clamp ?? name);
     return {
       text: name.textContent?.trim() ?? "",
       glyphs: Math.round(glyphs.height * 100) / 100,
@@ -4187,12 +4199,40 @@ const titleFits = (card: Locator) =>
       lineHeight: Number.parseFloat(style.lineHeight),
       role,
       overflow: style.overflowY,
-      // The clamp cuts between lines, never through one: its height whole lines.
-      lines: shown
-        ? Math.round(
-            (shown.height / Number.parseFloat(style.lineHeight)) * 100
-          ) / 100
-        : 1,
+      // The lines it shows: its words' line boxes inside the clamp's box (a
+      // line the clamp cuts through counts by the share of it shown).
+      lines: (() => {
+        if (!shown) {
+          return 1;
+        }
+        const words = document.createRange();
+        words.selectNodeContents(clamp ?? name);
+        // Boxes of one line overlap: each run merged into the line it
+        // shares most of its height with.
+        const lines: { top: number; bottom: number }[] = [];
+        for (const r of [...words.getClientRects()].filter(
+          (b) => b.width > 0
+        )) {
+          const same = lines.find(
+            (line) =>
+              Math.min(line.bottom, r.bottom) - Math.max(line.top, r.top) >
+              Math.min(line.bottom - line.top, r.height) / 2
+          );
+          if (same) {
+            same.top = Math.min(same.top, r.top);
+            same.bottom = Math.max(same.bottom, r.bottom);
+          } else {
+            lines.push({ top: r.top, bottom: r.bottom });
+          }
+        }
+        let count = 0;
+        for (const line of lines) {
+          const seen =
+            Math.min(line.bottom, shown.bottom) - Math.max(line.top, shown.top);
+          count += Math.max(0, Math.min(1, seen / (line.bottom - line.top)));
+        }
+        return Math.round(count * 100) / 100;
+      })(),
     };
   });
 type TitleRead = Awaited<ReturnType<typeof titleFits>>;
@@ -5390,9 +5430,10 @@ const wordlessChecks = async (on: On) => {
     )?.anchor?.selector ?? "#none"
   );
   on.kit.check(
-    "7: a comment on an element with no text is named by its component (StatusBadge.svelte → \"Status badge\"), in the composer's target chip and in its thread's head, never by its selector",
-    chip === "Status badge" &&
-      head.name === "Status badge" &&
+    "7: a comment on an element with no words and no label is named by what it is (a bare box: \"Element\"), in the composer's target chip and in its thread's head, never by its component (the code's word, the owner's \"slugs are for slugs\") nor its selector",
+    chip === "Element" &&
+      head.name === "Element" &&
+      !head.shown.includes("Status badge") &&
       !head.shown.includes(selector),
     `chip ${JSON.stringify(chip)}; ${JSON.stringify(head)}; selector ${selector}`
   );
@@ -6073,12 +6114,16 @@ const targetChecks = async (on: On) => {
   // A thread opens to be read (PinCard): opened from the keyboard or by a
   // press, its reply takes the focus only when he reaches for it, and its
   // caret is its focus.
-  const threadField = '[data-slot="pin-card"] form[data-slot="cin"]';
+  // A row's thread floats in its card, or in a pane too narrow for the
+  // rail beside the page, opens in the Comments sheet.
+  const threadSurface =
+    ':is([data-slot="pin-card"], [data-slot="thread-sheet"]:has([data-slot="pin-top"]))';
+  const threadField = `${threadSurface} form[data-slot="cin"]`;
   await row.focus();
   await on.page.keyboard.press("Enter");
   await on.page.locator(threadField).waitFor({ timeout: 5000 });
   await settle(on.page, 300);
-  const keyOpened = await readRing('[data-slot="pin-card"]');
+  const keyOpened = await readRing(threadSurface);
   on.kit.check(
     "7c: a thread opened from the keyboard (Enter on its row) leaves its reply unfocused",
     !keyOpened.focused,
@@ -6088,11 +6133,11 @@ const targetChecks = async (on: On) => {
   await (await rowsOf(on)).locator('[data-slot="pin-row"]').first().click();
   await on.page.locator(threadField).waitFor({ timeout: 5000 });
   await settle(on.page, 300);
-  const pressOpened = await readRing('[data-slot="pin-card"]');
+  const pressOpened = await readRing(threadSurface);
   await on.page.locator(threadField).getByRole("combobox").click();
   const reached = await until(
     "the reply reached for",
-    () => readRing('[data-slot="pin-card"]'),
+    () => readRing(threadSurface),
     (seen) => seen.focused,
     5000
   ).catch(() => null);
@@ -7096,8 +7141,9 @@ const keyOpenChecks = async (on: On) => {
   await closeThread();
   // J and K stand on pin 2 (its thread was the last opened); Enter on pin 1's row opens pin 1's.
   const other = await enterOn(1);
+  // Pin 2's thread by its name, as a card or as the sheet holding it.
   const wrongCard = await on.page
-    .locator('[data-slot="pin-card"][data-pin-card="2"]')
+    .getByRole("dialog", { name: "Comment 2", exact: true })
     .count();
   await closeThread();
   on.kit.check(
@@ -7607,13 +7653,13 @@ const pickChecks = async (on: On, rig: RailRig) => {
   const empty = await composerRead(on.page);
   const emptyWanted = await readingWidth(on.page);
   on.kit.check(
-    `the reading card: the composer at the element is ${empty.card?.w}px wide (c-pin-card-reading-w, ${emptyWanted}px here), its field ${empty.field?.w}px (178px or wider), its hint commentWords.composeHint.full uncut, its pill ${empty.pill?.h}px at one line (about 87px), Attach the ghost paperclip`,
+    `the reading card: the composer at the element is ${empty.card?.w}px wide (c-pin-card-reading-w, ${emptyWanted}px here), its field ${empty.field?.w}px (178px or wider), its hint commentWords.composeHint.full uncut, its pill ${empty.pill?.h}px at one line over its controls' row (Hold beside the send glyph takes the row under the field: about 128px), Attach the ghost paperclip`,
     Math.abs((empty.card?.w ?? 0) - emptyWanted) <= 1 &&
       (empty.field?.w ?? 0) >= 178 &&
       empty.hint === commentWords.composeHint.full &&
       empty.hintFits &&
-      (empty.pill?.h ?? 0) >= 78 &&
-      (empty.pill?.h ?? 0) <= 92 &&
+      (empty.pill?.h ?? 0) >= 120 &&
+      (empty.pill?.h ?? 0) <= 136 &&
       empty.attach === "Attach a file or image" &&
       !empty.send,
     JSON.stringify(empty)
@@ -7855,7 +7901,7 @@ const hierarchyChecks = async (
   );
   const countOpen = await on.page
     .locator(COMMENTS_TOGGLE)
-    .locator('[data-slot="count"]')
+    .locator('[data-slot="num"]')
     .count();
   const ink = {
     row: await inkOf(on.page, "--ink-row"),
@@ -7872,10 +7918,10 @@ const hierarchyChecks = async (
   };
   const { unread, you, alone: aloneRow, gone } = dresses;
   on.kit.check(
-    "hierarchy, line 1: the place is label 13px at 500 in ink-row (Element gone in ink-subtle), its age meta 12px at 400 in ink-muted, tabular",
-    unread.name?.size === "13px" &&
+    "hierarchy, line 1: the place leads its row, body 14px at 500 in ink-strong (Element gone in ink-subtle), its age meta 12px at 400 in ink-muted, tabular",
+    unread.name?.size === "14px" &&
       unread.name.weight === "500" &&
-      unread.name.color === ink.row &&
+      unread.name.color === ink.strong &&
       unread.name.text === "A heading the comments stand on" &&
       gone.name?.text === commentWords.elementGone &&
       gone.name.color === ink.subtle &&
@@ -7886,10 +7932,10 @@ const hierarchyChecks = async (
     JSON.stringify({ ink, unread, gone })
   );
   on.kit.check(
-    "hierarchy, line 2: the words are body 14px at 400 in ink-strong; a comment with no words says its attachment's name",
+    "hierarchy, line 2: the words under the place are body 14px at 400 in the row's ink (ink-row); a comment with no words says its attachment's name",
     unread.words?.size === "14px" &&
       unread.words.weight === "400" &&
-      unread.words.color === ink.strong &&
+      unread.words.color === ink.row &&
       aloneRow.words?.text === "ref.png",
     JSON.stringify({ unread: unread.words, alone: aloneRow.words })
   );
@@ -7940,6 +7986,11 @@ const railUseChecks = async (
   const railNow = on.page.locator(RAIL);
   const pinsNow = async () => (await docOf(await pageFrame(on))).pins as Pins;
   // Search on Find's engine: the matching words marked; none says so; Esc clears.
+  // The field stands once Search is pressed in the rail's bar (HIG, Search
+  // fields in a toolbar: a symbol that opens the field).
+  await railNow
+    .getByRole("button", { name: commentWords.searchComments })
+    .click();
   const search = railNow.locator('[data-slot="search"]');
   await search.fill("heading");
   await settle(on.page, 400);
@@ -7965,8 +8016,11 @@ const railUseChecks = async (
       (await search.inputValue()) === "",
     JSON.stringify({ found, marked, none, all })
   );
-  // Sort: Top of page first, by the anchors' boxes.
-  await railNow.getByRole("button", { name: "Sort" }).click();
+  // Escape again puts the search away; then the order, in the rail's list
+  // menu under Order: Top of page first, by the anchors' boxes.
+  await search.press("Escape");
+  await settle(on.page, 300);
+  await railNow.locator('[data-slot="list"]').click();
   await on.page
     .getByRole("menuitemradio", { name: commentWords.topOfPageFirst })
     .click();
@@ -7988,7 +8042,7 @@ const railUseChecks = async (
       order.every((n, i) => i === 0 || ys[order[i - 1]] <= ys[n]),
     JSON.stringify({ order, ys })
   );
-  await railNow.getByRole("button", { name: "Sort" }).click();
+  await railNow.locator('[data-slot="list"]').click();
   await on.page
     .getByRole("menuitemradio", { name: commentWords.newestFirst })
     .click();
@@ -8018,9 +8072,7 @@ const railUseChecks = async (
 
   // A row opens its thread beside its pill, in the well, never under the rail.
   await railNow.locator(`[data-slot="pin-row"][data-pin-row="${onB}"]`).click();
-  const thread = on.page.locator(
-    `[data-slot="pin-card"][data-pin-card="${onB}"]`
-  );
+  const thread = threadOn(on.page, onB);
   await thread.waitFor({ timeout: 5000 }).catch(() => undefined);
   await settle(on.page, 600);
   const peeksWithCard = await peek.count();
@@ -8069,7 +8121,7 @@ const railUseChecks = async (
   await shutList(on);
   const countShut = await on.page
     .locator(COMMENTS_TOGGLE)
-    .locator('[data-slot="count"]')
+    .locator('[data-slot="num"]')
     .count();
   on.kit.check(
     "the Comments toggle says its count only while the rail is shut",
@@ -8183,8 +8235,11 @@ const railScenes = async (on: On, artifactId: string) => {
             const r = el?.getBoundingClientRect();
             return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
           };
+          // The sheet is the drawer the rail stands in (ThreadSheet's
+          // surface), its list inset on it.
+          const railEl = document.querySelector(railSel);
           return {
-            rail: box(document.querySelector(railSel)),
+            rail: box(railEl?.closest('[data-slot="thread-sheet"]') ?? railEl),
             well: box(document.querySelector(`${pane} [data-side-well]`)),
           };
         },
@@ -8262,7 +8317,7 @@ const railScenes = async (on: On, artifactId: string) => {
         .boundingBox()
         .catch(() => null);
       on.kit.check(
-        `phone (${theme}): a row's thread rises as the well's foot sheet, the rail standing aside, and its pill stands clear of it`,
+        `phone (${theme}): a row's thread opens in the Comments sheet over its list (the list gone from it), and its pill stands clear of it`,
         sheet.sheet &&
           sheet.rail === 0 &&
           !!sheet.card &&
@@ -8410,7 +8465,8 @@ const chipThread = (screen: Page, pinId: string) =>
       if ((await head.count()) === 0) {
         return null;
       }
-      const pill = head
+      // The pin's pill stands in the card's bar, over its title.
+      const pill = panel
         .locator('[data-slot="head-pill"] [data-figure]')
         .first();
       return {
@@ -8823,7 +8879,7 @@ const pointChecks = async (
     .click()
     .catch(() => undefined);
   const pinned = await frameHolding(on.page, id, "the pin's page in the pane");
-  const thread = on.page.locator('[data-slot="pin-card"][data-pin-card="2"]');
+  const thread = threadOn(on.page, 2);
   const opened = await thread
     .waitFor({ timeout: 10_000 })
     .then(() => true)
@@ -10573,7 +10629,7 @@ const pinSendChecks = async (on: On) => {
       .catch(() => null)
   )?.trim();
   await goneRow.locator('[data-slot="pin-row"]').click();
-  const goneCard = tab.locator('[data-slot="pin-card"][data-pin-card="1"]');
+  const goneCard = threadOn(tab, 1);
   await goneCard.waitFor({ timeout: 5000 }).catch(() => undefined);
   const cardSays = (
     await goneCard
@@ -11049,11 +11105,13 @@ const restartChecks = async (on: On) => {
 const HUB_DOWN =
   /status of 502|ERR_CONNECTION_REFUSED|Connection closed before receiving a handshake response|WebSocket is closed before the connection is established/u;
 
-/** The thread head's controls by their names, and each one's top. */
+/** The thread bar's controls by their names (its title left out), and each one's top. */
 const threadHead = (card: Locator) =>
   card.evaluate((el) => {
-    const head = el.querySelector('[data-slot="head"]');
-    const buttons = [...(head?.querySelectorAll("button[aria-label]") ?? [])];
+    const bar = el.querySelector('[data-slot="bar"]');
+    const buttons = [
+      ...(bar?.querySelectorAll("[data-bar-item][aria-label]") ?? []),
+    ].filter((button) => button.getAttribute("data-slot") !== "name");
     return {
       named: buttons.map((button) => button.getAttribute("aria-label") ?? ""),
       tops: buttons.map((button) =>
@@ -11063,9 +11121,10 @@ const threadHead = (card: Locator) =>
   });
 
 /**
- * Delete is one press in the thread's head (the owner's "deleting the
- * thread shouldn't be two clicks hidden"): Resolve, Delete comment, ⋯ and
- * Close stand on the head's row; ⋯ keeps Copy link alone; one press on
+ * Delete is one press in the thread's bar (the owner's "deleting the
+ * thread shouldn't be two clicks hidden"): Resolve, Delete comment and
+ * Copy link stand on the bar's row (⋯ only while it holds two things),
+ * Close trailing on a desk and leading in a sheet; one press on
  * Delete asks in the card itself ("Delete comment N?", no dialog, the artifact panel's surface brief
  * A thread beside its pin), and its confirm deletes the pin. On the desk,
  * and on the phone's foot sheet.
@@ -11099,15 +11158,21 @@ const deleteHeadChecks = async (on: On) => {
   const deleteOne = async (screen: Page, where: Frame, n: number) => {
     const card = await openThread({ ...on, page: screen }, where, n);
     const head = await threadHead(card);
-    await card
-      .locator(`[data-slot="head"] button[aria-label="More for comment ${n}"]`)
-      .click()
-      .catch(() => undefined);
-    const menu = await screen
-      .getByRole("menuitem")
-      .allTextContents()
-      .catch(() => [] as string[]);
-    await screen.keyboard.press("Escape");
+    // ⋯ stands only while it holds two things: its menu read where it does,
+    // and put away with Escape only then (an Escape with no menu closes the
+    // thread).
+    const more = card.locator(
+      `[data-slot="bar"] [aria-label="More for comment ${n}"]`
+    );
+    let menu: string[] = [];
+    if ((await more.count()) > 0) {
+      await more.click();
+      menu = await screen
+        .getByRole("menuitem")
+        .allTextContents()
+        .catch(() => [] as string[]);
+      await screen.keyboard.press("Escape");
+    }
     await card.locator('[data-slot="delete"]').click();
     const ask = card.locator('[data-ask="delete"]');
     const asked = await ask
@@ -11136,16 +11201,16 @@ const deleteHeadChecks = async (on: On) => {
   };
   const desk = await deleteOne(on.page, frame, 1);
   on.kit.check(
-    'delete (desk): the thread\'s head holds Resolve, Delete comment, ⋯ and Close on one row; ⋯ keeps Copy link alone; one press on Delete asks in the card ("Delete comment 1?", no dialog), and its confirm deletes the pin',
+    'delete (desk): the thread\'s bar holds Resolve, Delete comment, Copy link and Close on one row, no ⋯ for one thing; one press on Delete asks in the card ("Delete comment 1?", no dialog), and its confirm deletes the pin',
     JSON.stringify(desk.head.named.filter((name) => name !== "")) ===
       JSON.stringify([
         "Resolve",
         commentWords.deleteComment,
-        "More for comment 1",
+        commonWords.copyLink,
         "Close",
       ]) &&
       new Set(desk.head.tops).size === 1 &&
-      JSON.stringify(desk.menu) === JSON.stringify([commonWords.copyLink]) &&
+      desk.menu.length === 0 &&
       desk.asked &&
       desk.blocking === 0 &&
       desk.deleted,
@@ -11169,13 +11234,14 @@ const deleteHeadChecks = async (on: On) => {
   await settle(phone, 600);
   const small = await deleteOne(phone, onPhone, 2);
   const target = await phone
-    .locator('[data-slot="pin-card"] [data-slot="delete"]')
+    .locator('[data-slot="thread-sheet"] [data-slot="delete"]')
     .boundingBox()
     .catch(() => null);
   on.kit.check(
-    "delete (phone): the thread's sheet holds Delete comment in its head; one tap asks in the sheet (no dialog), and its confirm deletes the pin",
-    small.head.named.includes(commentWords.deleteComment) &&
-      JSON.stringify(small.menu) === JSON.stringify([commonWords.copyLink]) &&
+    "delete (phone): the thread's sheet holds Close leading and Delete comment in its bar; one tap asks in the sheet (no dialog), and its confirm deletes the pin",
+    small.head.named[0] === "Close" &&
+      small.head.named.includes(commentWords.deleteComment) &&
+      small.menu.length === 0 &&
       small.asked &&
       small.blocking === 0 &&
       small.deleted,
@@ -12025,6 +12091,31 @@ const chipsRead = (screen: Page, ids: Record<string, string>) =>
   }, ids);
 
 /**
+ * Mode `word` chosen in the pane's head: its segment, or where a long title
+ * leaves the head room for the mode's one-button form only (SideSurface's
+ * priorities), that button's menu, or More's.
+ */
+const pickMode = async (screen: Page, word: "Interact" | "Comment") => {
+  const head = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
+  const segment = screen.locator(
+    `${head} [role='tab'][aria-keyshortcuts='${word[0]}']`
+  );
+  if ((await segment.count()) > 0) {
+    await segment.click();
+    return;
+  }
+  const folded = screen.locator(`${head} button[aria-label^="Mode:"]`);
+  await (
+    (await folded.count()) > 0
+      ? folded
+      : screen.locator(`${head} button[aria-label="More"]`)
+  ).click();
+  await screen
+    .getByRole("menuitemradio", { name: new RegExp(`^${word}`, "u") })
+    .click();
+};
+
+/**
  * Chip labels (2): a 40-word decision question, a 40-word session title, a
  * pin on 40 words and the longest artifact title, each named by the agent,
  * at 1440 and at 390: every chip stands inside its line, its label at most
@@ -12061,11 +12152,7 @@ no = Option("no", "No", "It spills.", false, [], "A broken line.")`,
   const frame = await frameHolding(on.page, pid, "the long page in the pane");
   const pane = await on.page.locator(FRAME).boundingBox();
   if (frame && pane) {
-    await on.page
-      .locator(
-        ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
-      )
-      .click();
+    await pickMode(on.page, "Comment");
     await pageInComment(frame, true);
     const words = await boxIn(frame, "#long");
     await commentAt(
@@ -12075,7 +12162,7 @@ no = Option("no", "No", "It spills.", false, [], "A broken line.")`,
       pane.y + words.y + words.h / 2,
       "This runs long."
     );
-    await interactTab(on).click();
+    await pickMode(on.page, "Interact");
   }
   const pinned = frame ? pinNumbered((await docOf(frame)).pins, 1) : undefined;
   // The session's own title, forty words, as the owner names it.

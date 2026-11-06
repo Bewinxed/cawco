@@ -439,7 +439,6 @@
   {/if}
 {/snippet}
 
-<!-- The pin's pill, while the page's own is out of view. -->
 <!-- The title: what the comment stands on, two lines at most, the bar's
      own title control (a press scrolls the page to it and lights its
      element), its whole name in its tooltip. Leading its row (`flush`), its
@@ -455,15 +454,18 @@
         lines="two"
         onclick={onfind}
         tip={name}
-        ><span
+        ><!-- A box of its own (`data-box`), not the bar item's trimmed and
+             padded words: a clamp's padding would show the top of a third
+             line, and a trim round it would cut its first and last. --><span
           class="line-clamp-2 text-pretty wrap-anywhere text-start text-ink-strong type-body font-medium"
-          >{name}</span
+          data-box>{name}</span
         ></BarItem
       >
     </BarGlass>
   </div>
 {/snippet}
 
+<!-- The pin's pill, while the page's own is out of view (or under the sheet holding the thread). -->
 {#snippet headPill()}
   <span class="mark-cell" data-slot="head-pill">
     <PinMark
@@ -480,8 +482,13 @@
 {#snippet later(text: string, at: string, who: string, you: boolean)}
   <!-- Its age where the transcript puts a later entry's: floated at the end
        of its words' first line (Who `grouped`), so the words take the
-       thread's whole width under it, as his first words do. -->
-  <div class="flow-root" data-slot="later">
+       thread's whole width under it, as his first words do; its clock on
+       their first line's baseline, at the prose's leading (Who `--who-lead`). -->
+  <div
+    class="flow-root"
+    data-slot="later"
+    style:--who-lead="var(--leading-prose-sm)"
+  >
     <Who grouped name={who} shown timestamp={at} {you} />
     {#if text.trim()}
       <MessageBody source={text} wrap="pretty" />
