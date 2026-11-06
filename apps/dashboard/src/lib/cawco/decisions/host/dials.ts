@@ -14,15 +14,19 @@
  * of the page's styles (`all: initial`), the house's sheet stands inside it
  * alone (`dials.css`, core page-css.ts `shadowSheet`), and the page's own
  * elements take none of it, so a page draws the same with `{{DIALS}}` and
- * without.
+ * without. Nor do the dials take the page's root: their rem is the
+ * browser's font size (core dials-root.ts `DIALS_REM`), and script reads
+ * the house's tokens off their own root (motion curves `tokensOn`).
  *
  * The page's own script calls `cawcoDials` before this module has loaded
  * (it is a module, deferred): `{{DIALS}}` sets a stand-in first that holds
  * each call's controller and its listeners (`window.cawcoDialsHeld`), and
  * this module draws each of them, then takes `cawcoDials`'s place.
  */
+import { DIALS_REM, DIALS_ROOT } from "@cawco/core/dials-root";
 import { mount } from "svelte";
 import type { DialValues } from "../../graph/dials";
+import { tokensOn } from "../../motion/curves.svelte";
 import { watchEdgeFades } from "../../motion/fade-runs.svelte";
 import DialsRoot, { type Panel, shown } from "./DialsRoot.svelte";
 import { bridge, picks } from "./page.svelte.js";
@@ -74,11 +78,18 @@ async function makeRoot(): Promise<void> {
   const target = document.createElement("div");
   shadow.append(sheet, target);
   (dock ?? document.body).append(host);
+  // A rem in the dials is the browser's own font size, the host's under `all: initial`, never the page's root's.
+  host.style.setProperty(DIALS_REM, getComputedStyle(host).fontSize);
   await new Promise<void>((done) => {
     sheet.addEventListener("load", () => done(), { once: true });
     sheet.addEventListener("error", () => done(), { once: true });
   });
   mount(DialsRoot, { target, props: { docked: dock !== null } });
+  // The house's tokens stand on the dials' own root: script reads its motion and its spaces there.
+  const root = shadow.querySelector(`[${DIALS_ROOT}]`);
+  if (root) {
+    tokensOn(root);
+  }
   // Each edge fade stands only on a scroller that runs past its box.
   watchEdgeFades(shadow);
 }

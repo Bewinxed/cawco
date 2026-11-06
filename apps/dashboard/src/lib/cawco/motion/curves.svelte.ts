@@ -84,7 +84,9 @@ export const easeDrawer = bezier(0.32, 0.72, 0, 1);
  * Read off the root once, all of them in one pass, and again only after the
  * root's class changes — the theme is a class on it (theme.svelte.ts). Read
  * where each was used, every call restyled the whole page in the middle of
- * whatever task asked: a tab switch asked several times.
+ * whatever task asked: a tab switch asked several times. The root is the
+ * document's, or the element the house's tokens stand on where they stand
+ * on no document root ({@link tokensOn}: an HTML page's dials).
  */
 const TOKENS = [
   "--dur-control",
@@ -133,15 +135,29 @@ const TOKENS = [
   "--c-pin-card-w",
 ];
 const tokens = new Map<string, string>();
-let watched = false;
+/** The element the tokens are read off; null for the document's root. */
+let tokenRoot: Element | null = null;
+/** The root watched for a class change, once it is read. */
+let watched: Element | null = null;
+
+/**
+ * The house's tokens read off `root` from now on, not the document's root:
+ * an HTML page's dials, whose tokens stand on their own root in their
+ * shadow root (decisions/host/dials.ts), the page's root holding none.
+ */
+export const tokensOn = (root: Element): void => {
+  tokenRoot = root;
+  tokens.clear();
+};
+
 const rootToken = (name: string): string => {
   const held = tokens.get(name);
   if (held !== undefined) {
     return held;
   }
-  const root = document.documentElement;
-  if (!watched) {
-    watched = true;
+  const root = tokenRoot ?? document.documentElement;
+  if (watched !== root) {
+    watched = root;
     new MutationObserver(() => tokens.clear()).observe(root, {
       attributes: true,
       attributeFilter: ["class"],

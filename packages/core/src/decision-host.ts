@@ -35,7 +35,7 @@ import { readBuildInfo } from "./build-info";
 import { refuseSchemeLowering } from "./bundle-css-guard";
 import { bundled } from "./bundled";
 import { unlayeredRules } from "./css-layers";
-import { DIALS_ROOT } from "./dials-root";
+import { DIALS_REM, DIALS_ROOT } from "./dials-root";
 import { hostFiles, writeHostFiles } from "./host-build";
 import { houseFaceSheet } from "./house-faces";
 import { compileSheets, pageFiles, shadowSheet } from "./page-css";
@@ -325,7 +325,9 @@ export async function buildDecisionHost(): Promise<Map<string, Blob>> {
   const files = pageFiles("The decision host", result.outputs, css);
   files.set(
     "dials.css",
-    new Blob([await shadowSheet(css, DIALS_ROOT)], { type: "text/css" })
+    new Blob([await shadowSheet(css, DIALS_ROOT, DIALS_REM)], {
+      type: "text/css",
+    })
   );
   return files;
 }

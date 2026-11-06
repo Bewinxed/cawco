@@ -126,6 +126,14 @@ function rootedPart(part: SelectorPart, root: string): SelectorPart {
 }
 
 /**
+ * A `rem` length in a minified sheet's declaration values: a number after
+ * a value's `:`, a space, a comma, an open parenthesis or an operator.
+ * Never one after `=`, `<` or `>` (a media or container query's prelude,
+ * which takes no `var()`), nor after `[` (an escaped class name).
+ */
+const REM_LENGTH = /(?<=[:\s,(*/+])(-?(?:\d+\.?\d*|\.\d+))rem(?![\w-])/gu;
+
+/**
  * Compiled sheet `css` for a shadow root whose document root is the element
  * carrying attribute `root` (the decision host's dials, core dials-root.ts):
  * every `:root` in its selectors becomes `[root]`, so the house's tokens,
@@ -136,9 +144,16 @@ function rootedPart(part: SelectorPart, root: string): SelectorPart {
  * root's `@property` rules register nothing (Chromium 156 reads an
  * `@property --x` in a shadow root's sheet as unset: tailwindlabs/tailwindcss
  * #15005, open, "@property isn't supported in shadow roots"). The
- * `@property` rules themselves are dropped.
+ * `@property` rules themselves are dropped. A `rem` is the page's root's
+ * font size, which no shadow root has its own of: each length in rem
+ * becomes that many of custom property `rem` (core dials-root.ts
+ * `DIALS_REM`), which the shadow's host sets.
  */
-export async function shadowSheet(css: string, root: string): Promise<string> {
+export async function shadowSheet(
+  css: string,
+  root: string,
+  rem: string
+): Promise<string> {
   const [{ transform, browserslistToTargets }, { default: browserslist }] =
     await Promise.all([import("lightningcss"), import("browserslist")]);
   const { code } = transform({
@@ -166,7 +181,9 @@ export async function shadowSheet(css: string, root: string): Promise<string> {
       Selector: (selector) => selector.map((part) => rootedPart(part, root)),
     },
   });
-  return new TextDecoder().decode(code);
+  return new TextDecoder()
+    .decode(code)
+    .replace(REM_LENGTH, (_, figure: string) => `calc(${figure}*var(${rem}))`);
 }
 
 /** A bundle's emitted file: a `Bun.BuildArtifact`. */
