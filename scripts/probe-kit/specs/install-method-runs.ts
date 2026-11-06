@@ -24,6 +24,14 @@
  *   runs, and the status names the pin and those methods
  *   (`toolWords.noPinInstaller`), never "no installer for linux".
  *
+ * - (slow) a `claude` whose `--version` sleeps past the agent's bound on a
+ *   need's probe: registration's capabilities read doesn't wait on it and
+ *   advises `claude update`; once the probe is past its bound, claude is
+ *   taken as running (it started; it answers late), so the advice stands.
+ *   The broken npm beside it, advised from what was known at registration,
+ *   moves to the curl script once its probe answers, and the listener the
+ *   agent re-reads its capabilities on hears it.
+ *
  *   bun scripts/probe-kit/run.ts install-method-runs
  */
 import { existsSync } from "node:fs";
@@ -72,6 +80,17 @@ SCRIPT
 `;
 
 interface Said {
+  /** The slow leg's: registration's install advice, how long its read took, the advice after, and how often it moved. */
+  slow?: {
+    after: Record<
+      "claude" | "opencode",
+      { command?: string; refusal?: string }
+    >;
+    capabilitiesMs: number;
+    claude?: string;
+    moved: number;
+    opencode?: string;
+  };
   status?: {
     detail?: string;
     method?: string;
@@ -85,19 +104,26 @@ const writeExecutable = async (path: string, text: string): Promise<void> => {
   await chmod(path, 0o755);
 };
 
-/** Runs OpenCode's install in a child whose PATH is `bin` alone, HOME under `root`. */
+/**
+ * Runs `body` (module code that prints its JSON last) in a child whose PATH
+ * is `bin` alone, HOME under `root`: by default OpenCode's install, or
+ * `tool`'s at `pin`.
+ */
 const installIn = async (
   root: string,
   bin: string,
   tool = "opencode",
-  pin?: string
+  pin?: string,
+  body?: string
 ): Promise<{ said: Said; home: string; log: string }> => {
   const home = join(root, "home");
   const scratch = join(root, "tmp");
   await Promise.all(
     [home, scratch].map((dir) => mkdir(dir, { recursive: true }))
   );
-  const script = `
+  const script =
+    body ??
+    `
     import { installTool } from ${JSON.stringify(join(ROOT, "packages/agent/src/tools.ts"))};
     console.log(JSON.stringify({ status: await installTool(${JSON.stringify(tool)}${pin ? `, ${JSON.stringify(pin)}` : ""}) }));
   `;
@@ -202,6 +228,84 @@ const pinLeg = async (kit: Kit, root: string): Promise<void> => {
   );
 };
 
+/**
+ * How long the slow `claude` takes to answer `--version`: past the agent's
+ * bound on a need's probe (15 s), and short of the child's own life (its
+ * capabilities read, then 17 s), so the version read the agent leaves
+ * running on purpose (claude-version.ts) ends inside it and nothing outlives
+ * the leg.
+ */
+const SLOW_S = 18;
+
+/** A `claude` that started and answers `--version` late, as on a host under load; anything else it ends at once. */
+const SLOW_CLAUDE = `#!${systemProgram("bash")}
+if [ "$1" = "--version" ]; then exec sleep ${SLOW_S}; fi
+exit 0
+`;
+
+/** What `method`'s advice says at CawCo's version of `tool`. */
+const commandOf = (tool: string, needs: string): string | undefined => {
+  const spec = toolSpec(tool);
+  const method = spec?.install.find((one) => one.needs === needs);
+  const version = spec?.exactVersion;
+  return version && method?.pinnedCommand
+    ? method.pinnedCommand.replaceAll("{version}", version)
+    : method?.command;
+};
+
+const slowLeg = async (kit: Kit, root: string): Promise<void> => {
+  const bin = await binWith(root, { curl: true });
+  await writeExecutable(join(bin, "claude"), SLOW_CLAUDE);
+  const sleep = Bun.which("sleep");
+  if (sleep) {
+    await symlink(sleep, join(bin, "sleep"));
+  }
+  const tools = JSON.stringify(join(ROOT, "packages/agent/src/tools.ts"));
+  const capabilities = JSON.stringify(
+    join(ROOT, "packages/agent/src/capabilities.ts")
+  );
+  // Registration's read, then the advice again once every probe it did not
+  // wait on is past its bound.
+  const body = `
+    import { installAdvice, onNeedsAnswered } from ${tools};
+    import { probeCapabilities } from ${capabilities};
+    let moved = 0;
+    onNeedsAnswered(() => { moved += 1; });
+    const started = performance.now();
+    const caps = await probeCapabilities();
+    const capabilitiesMs = Math.round(performance.now() - started);
+    const at = (id) => caps.items.find((item) => item.id === id)?.installCommand;
+    await Bun.sleep(17_000);
+    const after = { claude: await installAdvice("claude"), opencode: await installAdvice("opencode") };
+    console.log(JSON.stringify({ slow: { capabilitiesMs, claude: at("claude"), opencode: at("opencode"), after, moved } }));
+  `;
+  const { said, log } = await installIn(root, bin, "claude", undefined, body);
+  kit.note(`(slow) ${log}`);
+  const update = commandOf("claude", "claude");
+  const { slow } = said;
+  kit.check(
+    "(slow) a claude whose --version sleeps past the need probe's 15 s bound: registration's capabilities read doesn't wait on it, and advises its own updater",
+    slow !== undefined &&
+      slow.capabilitiesMs < 10_000 &&
+      update !== undefined &&
+      slow.claude === update,
+    JSON.stringify(slow)
+  );
+  kit.check(
+    "(slow) once its probe is past the bound, claude is taken as running: the advice is still its own updater",
+    slow !== undefined && slow.after.claude.command === update,
+    JSON.stringify(slow?.after)
+  );
+  kit.check(
+    "(slow) the npm with no node, given from what was known at registration, moves to the curl script once its probe answers, and the capabilities hear it",
+    slow !== undefined &&
+      slow.opencode === commandOf("opencode", "npm") &&
+      slow.after.opencode.command === commandOf("opencode", "curl") &&
+      slow.moved >= 1,
+    JSON.stringify(slow)
+  );
+};
+
 const spec: Spec = {
   group: "The hub and machines",
   name: "install-method-runs",
@@ -213,6 +317,7 @@ const spec: Spec = {
       await fallbackLeg(kit, join(root, "fallback"));
       await noneLeg(kit, join(root, "none"));
       await pinLeg(kit, join(root, "pin"));
+      await slowLeg(kit, join(root, "slow"));
     } finally {
       await rm(root, { recursive: true, force: true });
     }

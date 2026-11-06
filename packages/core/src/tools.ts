@@ -51,8 +51,9 @@ export interface ToolInstallMethod {
   native?: string;
   /**
    * A binary that must already run on the machine for this method to be
-   * eligible — 'npm', 'brew', 'winget': on the PATH, and answering its
-   * {@link needProbe} with exit 0. Absent means always eligible. CawCo
+   * eligible — 'npm', 'brew', 'winget': on the PATH, and its
+   * {@link needProbe} neither failing to start nor exiting other than 0 (one
+   * still running at the agent's bound runs). Absent means always eligible. CawCo
    * never installs it: a machine where it is missing or does not run takes
    * the next method, or is told what is missing and what it said.
    */

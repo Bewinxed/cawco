@@ -57137,7 +57137,7 @@
             "type": "string"
           },
           "needs": {
-            "description": "A binary that must already run on the machine for this method to be\neligible — 'npm', 'brew', 'winget': on the PATH, and answering its\n{@link needProbe} with exit 0. Absent means always eligible. CawCo\nnever installs it: a machine where it is missing or does not run takes\nthe next method, or is told what is missing and what it said.",
+            "description": "A binary that must already run on the machine for this method to be\neligible — 'npm', 'brew', 'winget': on the PATH, and its\n{@link needProbe} neither failing to start nor exiting other than 0 (one\nstill running at the agent's bound runs). Absent means always eligible. CawCo\nnever installs it: a machine where it is missing or does not run takes\nthe next method, or is told what is missing and what it said.",
             "type": "string"
           },
           "pinnedCommand": {

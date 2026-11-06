@@ -27,7 +27,7 @@ import {
   toolRuns,
   toolSpec,
 } from "@cawco/core";
-import { readWithin } from "@cawco/core/bounded";
+import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { type Ran, runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { spawnTethered, untether } from "@cawco/core/tether";
@@ -333,30 +333,144 @@ const asksHold = async (
   return ran?.code === 0 && ran.stdout.trim() !== "";
 };
 
-/** How long a method's need is given to answer its probe (core `needProbe`): brew starts Ruby for it. */
+/**
+ * How long a method's need is given to answer its probe (core `needProbe`)
+ * before it is taken as running: brew starts Ruby for it, and a host under
+ * load answers late. A need that can't run says so at once (a shebang that
+ * finds no interpreter exits 127 within milliseconds).
+ */
 const NEED_WAIT_MS = 15_000;
+
+/** A need's binary as it stands: its real path, mtime and size. A binary replaced or updated is a new one. */
+const binStamp = async (bin: string): Promise<string | undefined> => {
+  try {
+    const real = await realpath(bin);
+    const info = await stat(real);
+    return `${real}:${info.mtimeMs}:${info.size}`;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * Each need's last answer, by the binary it was asked of: its
+ * {@link binStamp}, and why it can't run (`unmet`), none when it runs.
+ */
+const needAnswers = new Map<string, { stamp: string; unmet?: string }>();
+
+/** The probes running now, by binary: one at a time each. */
+const needAsking = new Map<string, Promise<string | undefined>>();
+
+const needListeners = new Set<() => void>();
+
+/**
+ * `listener` hears each time a need's answer moved what {@link installAdvice}
+ * says: a probe {@link methodFor} did not wait for answered otherwise than
+ * what was known. Answers the unsubscribe.
+ */
+export const onNeedsAnswered = (listener: () => void): (() => void) => {
+  needListeners.add(listener);
+  return () => needListeners.delete(listener);
+};
+
+/**
+ * Asks `bin` its probe (core `needProbe`): why it can't run, none when it
+ * runs. It can't run when it does not start (`runCaptured` throws: no
+ * interpreter the kernel can load) or exits other than 0 (an `npm` whose
+ * `#!/usr/bin/env node` finds no `node`: niftybot.art, "/usr/bin/env: 'node':
+ * No such file or directory"). One that started and has not answered within
+ * {@link NEED_WAIT_MS} runs: the probe asks whether it can run, and a slow
+ * host answers late, not never.
+ */
+const askNeed = async (
+  need: string,
+  bin: string
+): Promise<string | undefined> => {
+  let ran: Bounded<Ran>;
+  try {
+    ran = await readWithin(NEED_WAIT_MS, (signal) =>
+      runCaptured([bin, ...needProbe(need)], { env: toolEnv(), signal })
+    );
+  } catch (error) {
+    return toolWords.needBroken(
+      bin,
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+  if (ran.kind !== "answered" || ran.value.code === 0) {
+    return undefined;
+  }
+  return toolWords.needBroken(
+    bin,
+    oneLine(tail(Bun.stripANSI(ran.value.stderr.trim() || ran.value.stdout)))
+  );
+};
+
+/** {@link askNeed}, one at a time per binary, its answer kept by the binary's stamp. */
+const askNeedOnce = (
+  need: string,
+  bin: string,
+  stamp: string | undefined
+): Promise<string | undefined> => {
+  const running = needAsking.get(bin);
+  if (running) {
+    return running;
+  }
+  const asked = askNeed(need, bin)
+    .then((unmet) => {
+      const before = needAnswers.get(bin);
+      if (stamp) {
+        needAnswers.set(bin, { stamp, ...(unmet ? { unmet } : {}) });
+      }
+      // Advice given from what was known (taken as running) moves when it can't.
+      const moved =
+        before !== undefined && before.stamp === stamp
+          ? before.unmet !== unmet
+          : unmet !== undefined;
+      if (moved) {
+        for (const listener of needListeners) {
+          listener();
+        }
+      }
+      return unmet;
+    })
+    .finally(() => needAsking.delete(bin));
+  needAsking.set(bin, asked);
+  return asked;
+};
 
 /**
  * Why a method's need (core `ToolInstallMethod.needs`) can't serve an
  * install here, or none when it runs: on the PATH ({@link resolveBin}) and
- * answering its probe (core `needProbe`) with exit 0 within
- * {@link NEED_WAIT_MS}. Present is not enough: an `npm` whose shebang finds
- * no `node` is on the PATH and runs nothing (niftybot.art: "/usr/bin/env:
- * 'node': No such file or directory"), and was chosen over a curl that ran.
+ * not refused by its probe ({@link askNeed}). Present is not enough: an
+ * `npm` that can't start Node is on the PATH and runs nothing.
+ *
+ * `fresh` (an install about to run): the binary is asked now, whatever was
+ * known, since its runtime can come or go with the binary unchanged (a
+ * `node` installed beside an `npm`). Otherwise (what the machine's
+ * capabilities and a probe's words say, which never wait on a tool): the
+ * last answer for the binary as it stands, and a binary never asked, or
+ * changed since, is taken as running while it is asked in the background;
+ * an answer that moves the advice tells {@link onNeedsAnswered}.
  */
-const needUnmet = async (need: string): Promise<string | undefined> => {
+const needUnmet = async (
+  need: string,
+  fresh: boolean
+): Promise<string | undefined> => {
   const bin = resolveBin(need);
   if (!bin) {
     return toolWords.needMissing(need);
   }
-  const ran = await askProgram([bin, ...needProbe(need)], NEED_WAIT_MS);
-  if (ran?.code === 0) {
-    return undefined;
+  const stamp = await binStamp(bin);
+  if (fresh) {
+    return await askNeedOnce(need, bin, stamp);
   }
-  const said = ran
-    ? oneLine(tail(Bun.stripANSI(ran.stderr.trim() || ran.stdout)))
-    : `it did not answer within ${NEED_WAIT_MS / 1000}s`;
-  return toolWords.needBroken(bin, said);
+  const known = needAnswers.get(bin);
+  if (stamp && known?.stamp === stamp) {
+    return known.unmet;
+  }
+  askNeedOnce(need, bin, stamp).catch(() => undefined);
+  return undefined;
 };
 
 /** Whether a method is for the copies it holds: a footprint, or a question for its package manager. */
@@ -497,7 +611,8 @@ const tracked = (spec: ToolSpec): boolean => spec.install.some(holdsCopies);
 const refusal = async (
   spec: ToolSpec,
   at: Found,
-  version: string | undefined
+  version: string | undefined,
+  fresh: boolean
 ): Promise<string | undefined> => {
   if (!tracked(spec)) {
     return undefined;
@@ -514,7 +629,9 @@ const refusal = async (
   if (!at.method.platforms.includes(platform() as ToolPlatform)) {
     return `${at.path} was installed with ${at.method.label}, which CawCo does not run on ${platform()}`;
   }
-  const unmet = at.method.needs ? await needUnmet(at.method.needs) : undefined;
+  const unmet = at.method.needs
+    ? await needUnmet(at.method.needs, fresh)
+    : undefined;
   return unmet
     ? `${at.path} was installed with ${at.method.label}, and ${unmet}`
     : undefined;
@@ -546,7 +663,7 @@ export const installAdvice = async (
     return { refusal: `${id} is not in the tool catalog` };
   }
   const want = spec.exactVersion ?? version;
-  const choice = await methodFor(spec, await findCopy(spec), want);
+  const choice = await methodFor(spec, await findCopy(spec), want, false);
   if ("refused" in choice) {
     return { refusal: choice.refused };
   }
@@ -584,7 +701,8 @@ interface Unmet {
  * manager's answer, {@link holdsCopies}) takes that method, or why it can't
  * run here (`refusal`); any other install takes the first method this
  * machine can run ({@link needUnmet}: its need runs, not just stands on
- * the PATH) among those that hold no copies, when the tool has any (a
+ * the PATH; asked now when `fresh`, an install about to run, else as last
+ * known) among those that hold no copies, when the tool has any (a
  * package manager's method is for the copy it holds), else among all. A pin takes only a method that installs a given version: a
  * copy's own method that can't says so ({@link toolWords.cannotPin}), and
  * nothing runs.
@@ -592,11 +710,12 @@ interface Unmet {
 const methodFor = async (
   spec: ToolSpec,
   at: Found | undefined,
-  version: string | undefined
+  version: string | undefined,
+  fresh: boolean
 ): Promise<MethodChoice> => {
   const pinned = isPin(spec, version);
   if (at) {
-    const refused = await refusal(spec, at, version);
+    const refused = await refusal(spec, at, version, fresh);
     if (refused) {
       return { refused, ...(at.method ? { method: at.method } : {}) };
     }
@@ -622,7 +741,7 @@ const methodFor = async (
   // In catalog order, each asked only once the ones before it can't run.
   const unmet: string[] = [];
   for (const one of here) {
-    const why = one.needs ? await needUnmet(one.needs) : undefined;
+    const why = one.needs ? await needUnmet(one.needs, fresh) : undefined;
     if (!why) {
       return { method: one };
     }
@@ -1031,7 +1150,7 @@ const probeTool = async (
   }
   // A tool CawCo is built against is installed only at its one version.
   if (want && version !== want) {
-    const refused = await refusal(spec, at, want);
+    const refused = await refusal(spec, at, want, false);
     return {
       id: spec.id,
       state: "failed",
@@ -1318,7 +1437,7 @@ const install = async (
   ask: InstallAsk
 ): Promise<ToolStatus> => {
   const at = tracked(spec) ? await findCopy(spec) : undefined;
-  const choice = await methodFor(spec, at, version);
+  const choice = await methodFor(spec, at, version, true);
   if ("refused" in choice) {
     // A tool CawCo keeps current keeps its copy's standing (the words on a
     // copy that still runs); any other fails, as it always has.

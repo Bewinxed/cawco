@@ -336,7 +336,7 @@ import {
 import { setStageCloneSink } from "./stage-clone";
 import type { RenderAsk } from "./stage-render";
 import { endToolSignins } from "./tool-signin";
-import { onToolsMoved, probeTools } from "./tools";
+import { onNeedsAnswered, onToolsMoved, probeTools } from "./tools";
 import { UsageScans } from "./usage/scans";
 import {
   archiveWorkspace,
@@ -2176,10 +2176,23 @@ const attach = (
         );
       }, 1000);
     });
+    // A need's probe the capabilities did not wait on (tools.ts
+    // `needUnmet`) answered otherwise than what was known: the install
+    // advice they carry is read again and sent.
+    const stopNeedsWatch = onNeedsAnswered(() => {
+      readPart("the machine's capabilities", probeCapabilities)
+        .then((machineCapabilities) => {
+          if (machineCapabilities) {
+            beat({ machineCapabilities });
+          }
+        })
+        .catch(() => undefined);
+    });
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         clearTimeout(toolsSoon);
         stopToolsWatch();
+        stopNeedsWatch();
       })
     );
     // The link's commands, in the handover's order: the register, then the
