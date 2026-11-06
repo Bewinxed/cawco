@@ -270,7 +270,7 @@ Motion is continuity, never decoration: "we fly instead of teleport" (Family), i
 - **Drawer** (`--ease-drawer`): popovers and menus, sheets, page swaps, flights and container size changes.
 - **Linear**: constant motion, a spinner's turn or a steady glide. Progress does not ease.
 
-Two recipes the owner picked from transitions.dev run on `--ease-crossfade`, the one gentle curve, and are bound to their components alone: the skeleton's pulse and reveal, and the folder tab's choice, beats of 400ms and longer. `--ease-goo`, the one overshoot, stands on the `/dev/pin-goo` bench and no shipped component; a comment card grows out of its pin as every popover opens. CSS `ease` is never used.
+Two recipes the owner picked from transitions.dev run on `--ease-crossfade`, the one gentle curve, and are bound to their components alone: the skeleton's pulse and reveal, and the folder tab's choice, beats of 400ms and longer. `--ease-goo`, the one overshoot, is a comment card's pour out of its pin (PinFloat), pin and card one drawn silhouette. CSS `ease` is never used.
 
 **The No Ease-In Rule.** No ease-in curve exists, and no run starts slow: anything that starts slow feels like the interface hesitating.
 

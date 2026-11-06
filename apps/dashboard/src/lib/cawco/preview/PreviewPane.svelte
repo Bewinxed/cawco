@@ -204,7 +204,6 @@
   import CanvasMap from "./map/CanvasMap.svelte";
   import { frameHand, holdOpen } from "./open-pages";
   import PinFloat from "./PinFloat.svelte";
-  import { markFace, markState } from "./PinMark.svelte";
   import PlacePick from "./PlacePick.svelte";
   import { artifactAddress } from "./page-source";
   import { paneFleet } from "./pane-fleet";
@@ -5130,7 +5129,6 @@
         {:else}
           <PinFloat
             box={pinAt?.box ?? null}
-            face={markFace(markState(cardPin))}
             label={`Comment ${cardPin.number}`}
             mark={pinAt?.mark ?? null}
             onclosed={() => {
@@ -5154,7 +5152,6 @@
     {#if peekPin && peekAt && drafts}
       {#key peekPin.id}
         <PinFloat
-          face={markFace(markState(peekPin))}
           label={`Comment ${peekPin.number}`}
           mark={peekAt.mark}
           onpress={() => {

@@ -50,7 +50,7 @@
    * reduced motion there is no breath to set. Any mark that takes the
    * breath (`breathe`) takes it in step by this attachment.
    */
-  export const inStep: Attachment<Element> = (dot) => {
+  const inStep: Attachment<Element> = (dot) => {
     const breath = dot
       .getAnimations()
       .find(

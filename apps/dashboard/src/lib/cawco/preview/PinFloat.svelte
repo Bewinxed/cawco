@@ -38,22 +38,27 @@
   again while it stands, it travels to its new place over `--dur-morph` on
   `--ease-drawer`, never a jump.
 
-  The thread's card is the pill growing (the owner: "a gooey animation
+  The thread's card pours out of its pill (the owner: "a gooey animation
   that morphs out of the comment just how the caw/search/machine bar on the
-  top right does it"): one surface, `pin-surface`, starts as the pill (its
-  box, its round corners, its face's fill and edge) and grows to the card's
-  box, corners, fill and edge over `--dur-pop` on `--ease-out`, the top
-  bar's card's own open (motion/hang); the thread fades in once the shape
-  has room, waiting two fifths of the open. Closing is the same in reverse
-  over `--dur-exit`, the thread gone in its first half, back into the pill; a close
-  caught mid-open turns back from where it is drawn. The card stays on the
-  page through its close: `open` moves it both ways, and only once a close
-  has landed does it say so (`onclosed`) for its holder to take it away, so
-  an open caught mid-close grows back from where it is drawn too. (Closed in
-  an outro, a card opened again mid-close was resumed by Svelte with the
-  outro's fills still on it: a pill-sized surface, its thread unseen.) Taken
-  away, it goes at once: where another pin's card takes its place, or once
-  its close has landed. Without motion it fades. The composer, whose
+  top right does it", and transitions.dev's gooey plus menu he linked): the
+  pill and the card are one vector silhouette (pin-pour.ts), one `<path>`
+  on the raised surface with a 1px `border-control` stroke, redrawn each
+  frame. The card's box grows out of the pill's, its corners from the
+  pill's round to `radius-lg`, over `--dur-goo` on `--ease-goo` (its
+  overshoot), and the union's inward corners round to `--goo-join`, so the
+  card pulls a neck out of its pill that thins and lets go as it comes to
+  rest. The pill itself stays the page's own, seen through the shape (its
+  box cut out of it). The thread fades in over `--dur-goo-content` after
+  `--dur-goo-content-delay`, clipped to the card's box as drawn; its drop
+  comes once the shape is still. Closing drains it back over
+  `--dur-goo-exit` on `--ease-out`, the thread gone over
+  `--dur-goo-content-exit`. Either run starts from where the shape is
+  drawn, so a close caught mid-open, or an open caught mid-close, turns back
+  there. The card stays on the page through its close: `open` turns its
+  clock, and only once a close has landed does it say so (`onclosed`) for
+  its holder to take it away. Taken away, it goes at once: where another
+  pin's card takes its place, or once its close has landed. With no pill on
+  the page to pour from, or without motion, it fades. The composer, whose
   own pill is its surface, opens as every kit popover does (`popMotion`),
   out of the pill; the foot sheet fades in over `--dur-menu` and out over
   `--dur-control`.
@@ -63,23 +68,29 @@
   import { type Snippet, untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import { popMotion } from "#lib/components/ui/popover/index.js";
-  import { dur, ease, easeOut, motionOk } from "../motion/curves.svelte";
+  import {
+    curveOf,
+    dur,
+    ease,
+    easeOut,
+    motionOk,
+    numberOf,
+  } from "../motion/curves.svelte";
   import { type PopSide, popOut } from "../motion/pop.svelte";
   import {
     type Box,
     FLOAT_W,
     FloatPlace,
     type Plan,
-    threadIn,
-    threadOut,
     travelTo,
   } from "./pin-place.svelte";
-
-  /** A pill's face: its fill and its edge, as tokens (PinMark's faces). */
-  interface PinFace {
-    edge: `--${string}`;
-    fill: `--${string}`;
-  }
+  import {
+    outline,
+    type Radii,
+    type Rect,
+    roundedBox,
+    silhouette,
+  } from "./pin-pour";
 
   let {
     mark,
@@ -87,7 +98,6 @@
     room,
     sheet = false,
     bare = false,
-    face = { fill: "--action-solid", edge: "--action-solid" },
     label,
     slot,
     pin,
@@ -99,7 +109,7 @@
     children,
   }: {
     /**
-     * Open (true), or going (false). The thread's card grows back into its
+     * Open (true), or going (false). The thread's card drains back into its
      * pill and says so once it has (`onclosed`); the composer and the foot
      * sheet say so at once, their holder taking them away, which plays
      * their outro.
@@ -116,8 +126,6 @@
     sheet?: boolean;
     /** No card round it: what it holds is its own surface (the composer's pill). */
     bare?: boolean;
-    /** The pill's face, which the card's surface grows from and goes back to. */
-    face?: PinFace;
     /** What it is, read out. */
     label: string;
     /** Its `data-slot`: what the pane and the probes call it. */
@@ -136,12 +144,15 @@
     children: Snippet;
   } = $props();
 
-  /** The thread's card: drawn by its own surface, which grows from the pill. */
+  /** The thread's card: drawn by its own silhouette, poured from the pill. */
   const card = $derived(!(sheet || bare));
-  let surface = $state<HTMLElement>();
   let body = $state<HTMLElement>();
+  let clipWrap = $state<HTMLElement>();
+  let shapePath = $state<SVGPathElement>();
+  let hole = $state<SVGPathElement>();
+  const uid = $props.id();
 
-  /** Placed and not closing: the composer's `data-state` goes from `closed` to `open`, and the card's surface grows. */
+  /** Placed and not closing: the composer's `data-state` goes from `closed` to `open`, and the card pours. */
   let opened = $state(false);
   /** Placed once: from then on `open` moves it (before, its first open waits for its size). */
   let ready = false;
@@ -149,7 +160,7 @@
    * Its size, what it is about as last seen, and its plan (pin-place
    * `FloatPlace`). Opened once the flush that places it has landed: the
    * composer's closed style taken there, so the kit's transition starts
-   * from where it stands; the card's surface grown from the pill it stands
+   * from where it stands; the card poured from the pill it stands
    * beside.
    */
   const placed = new FloatPlace(() => ({ mark, box, room }), {
@@ -163,7 +174,7 @@
         return;
       }
       if (untrack(() => card)) {
-        grow();
+        pour();
       } else {
         // biome-ignore lint/suspicious/noUnusedExpressions: the read takes its closed look at the side it was placed on, the start the kit's transition runs from
         getComputedStyle(el).translate;
@@ -255,158 +266,247 @@
     drawn = { card, side: place?.side };
   });
 
-  /** A colour token as the page computes it now (its scheme's). */
-  const colourOf = (token: `--${string}`): string => {
-    const probe = document.createElement("i");
-    probe.style.color = `var(${token})`;
-    probe.hidden = true;
-    float?.append(probe);
-    const value = probe.isConnected ? getComputedStyle(probe).color : "";
-    probe.remove();
-    return value;
-  };
+  // ---- The pour ----------------------------------------------------------
 
-  /** The pill's shape in the card's own coordinates, as the surface starts and ends: the card standing `at`, the pill `where`, its face `of`. */
-  const pillShape = (at: typeof place, where: typeof seen, of: PinFace) => {
-    if (!(at && where)) {
+  /** The tokens a frame draws with, read at its first frame (the page's, never a server render's). */
+  let tokens: { cardR: number; join: number } | null = null;
+  /** A frame's step at most, ms: a tab hidden mid-run lands its next frame, never a jump past its end. */
+  const FRAME_STEP_MS = 50;
+
+  /** A run of the pour's clock: from where it was drawn to `to`, on a token's curve. */
+  interface Run {
+    curve: (t: number) => number;
+    elapsed: number;
+    from: number;
+    length: number;
+    to: number;
+  }
+  /** How far the card has poured out of its pill: 0 hidden in it, 1 at rest (past 1 on the open's overshoot). */
+  let poured = 0;
+  let run: Run | null = null;
+  let frame = 0;
+  let lastAt = 0;
+
+  const runTo = (from: number, to: boolean): Run => ({
+    from,
+    to: to ? 1 : 0,
+    elapsed: 0,
+    length: dur(to ? "--dur-goo" : "--dur-goo-exit"),
+    curve: curveOf(to ? "--ease-goo" : "--ease-out"),
+  });
+  const runAt = (one: Run) =>
+    one.from +
+    (one.to - one.from) * one.curve(Math.min(1, one.elapsed / one.length));
+
+  /** The card's box at rest, the float's own. */
+  const cardW = $derived(Math.max(0, placed.width));
+  const cardH = $derived(Math.max(0, placed.height));
+  /** The pill where it stands now, in the card's own coordinates; null while it is not on the page. */
+  const pinHere = $derived.by((): Rect | null => {
+    const pill = seen?.mark;
+    if (!(pill && place)) {
       return null;
     }
-    const pill = where.mark;
     return {
-      left: `${pill.x - at.left}px`,
-      top: `${pill.y - at.top}px`,
-      width: `${pill.w}px`,
-      height: `${pill.h}px`,
-      borderRadius: `${pill.h / 2}px`,
-      backgroundColor: colourOf(of.fill),
-      borderColor: colourOf(of.edge),
+      x: pill.x - place.left,
+      y: pill.y - place.top,
+      w: pill.w,
+      h: pill.h,
     };
+  });
+
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+  const unit = (t: number) => Math.max(0, Math.min(1, t));
+
+  /**
+   * Draws the shape as the clock stands: writes only. The card's box from
+   * the pill's toward its own and, while it pours, the pill's box with it,
+   * the union closed by the join; the pill's box cut out of it, so the
+   * page's own pill shows; the thread's clip on the card's box.
+   */
+  function draw() {
+    const path = shapePath;
+    if (!(path && cardW > 0 && cardH > 0)) {
+      return;
+    }
+    tokens ??= {
+      join: numberOf("--goo-join"),
+      cardR: numberOf("--radius-lg"),
+    };
+    const { cardR: CARD_R, join: JOIN } = tokens;
+    const k = unit(poured);
+    const p = pinHere;
+    const from: Rect = p ?? { x: 0, y: 0, w: cardW, h: cardH };
+    const pinR = p ? p.h / 2 : CARD_R;
+    const shape: Rect = {
+      x: lerp(from.x, 0, poured),
+      y: lerp(from.y, 0, poured),
+      w: lerp(from.w, cardW, poured),
+      h: lerp(from.h, cardH, poured),
+    };
+    const radii = [pinR, pinR, pinR, pinR].map((r) =>
+      lerp(r, CARD_R, k)
+    ) as Radii;
+    const shapes = [roundedBox(shape, radii)];
+    // The pill joins the shape only while it pours: at rest the card
+    // stands alone, so a travel to a new place carries no pill with it.
+    const pouring = p && (run !== null || poured < 1);
+    if (pouring) {
+      shapes.push(roundedBox(p, [pinR, pinR, pinR, pinR]));
+    }
+    // The closing joins them only to a neck narrower than their resting
+    // gap, so it lets go as the card comes to rest.
+    const join = Math.max(0, Math.min(JOIN, placed.clear / 2 - 1));
+    path.setAttribute("d", silhouette(shapes, join));
+    // The pill's own box cut out of the shape (an even-odd clip: all the
+    // card's room, less the pill), so the page's own pill shows through.
+    hole?.setAttribute(
+      "d",
+      `M${-cardW} ${-cardH}H${2 * cardW}V${2 * cardH}H${-cardW}Z${pouring ? outline(roundedBox(p, [pinR, pinR, pinR, pinR])) : ""}`
+    );
+    if (clipWrap) {
+      if (run || poured < 1) {
+        const [tl, tr, br, bl] = radii;
+        const edge = (n: number) => `${Math.max(0, n).toFixed(2)}px`;
+        clipWrap.style.clipPath = `inset(${edge(shape.y)} ${edge(cardW - shape.x - shape.w)} ${edge(cardH - shape.y - shape.h)} ${edge(shape.x)} round ${edge(tl)} ${edge(tr)} ${edge(br)} ${edge(bl)})`;
+      } else {
+        clipWrap.style.clipPath = "none";
+      }
+    }
+  }
+
+  function tick(now: number) {
+    const step = Math.max(0, Math.min(now - lastAt, FRAME_STEP_MS));
+    lastAt = now;
+    if (run) {
+      run.elapsed += step;
+      poured = runAt(run);
+      if (run.elapsed >= run.length) {
+        run = null;
+      }
+    }
+    draw();
+    if (run) {
+      frame = requestAnimationFrame(tick);
+    } else {
+      frame = 0;
+      if (float) {
+        delete float.dataset.run;
+      }
+    }
+  }
+
+  /** The card pours out (true) or drains back (false) from where it is drawn. */
+  function pourTo(to: boolean) {
+    const el = float;
+    if (!el) {
+      return;
+    }
+    el.dataset.open = String(to);
+    run = runTo(poured, to);
+    el.dataset.run = "";
+    if (!frame) {
+      lastAt = performance.now();
+      frame = requestAnimationFrame(tick);
+    }
+  }
+
+  /** It stands at `to` at once: no pill to pour from, or no motion. */
+  function standAt(to: boolean) {
+    run = null;
+    cancelAnimationFrame(frame);
+    frame = 0;
+    poured = to ? 1 : 0;
+    if (float) {
+      float.dataset.open = String(to);
+      delete float.dataset.run;
+    }
+    draw();
+  }
+
+  // The shape follows the pill and the card's size between runs.
+  $effect(() => {
+    draw();
+  });
+
+  /** The fade a card plays where it has no pill to pour from, or no motion. */
+  let fade: Animation | null = null;
+  const fadeTo = (to: boolean, length: number) => {
+    const node = float;
+    if (!node) {
+      return;
+    }
+    const shown = getComputedStyle(node).opacity;
+    fade?.cancel();
+    fade = node.animate([{ opacity: shown }, { opacity: to ? 1 : 0 }], {
+      duration: length,
+      easing: ease("--ease-out"),
+      fill: to ? "none" : "forwards",
+    });
   };
 
-  /** The surface as it stands in the card's box: its box, corners, fill and edge. */
-  const surfaceShape = (el: HTMLElement) => {
-    const style = getComputedStyle(el);
-    return {
-      left: `${el.offsetLeft}px`,
-      top: `${el.offsetTop}px`,
-      width: `${el.offsetWidth}px`,
-      height: `${el.offsetHeight}px`,
-      borderRadius: style.borderTopLeftRadius,
-      backgroundColor: style.backgroundColor,
-      borderColor: style.borderTopColor,
-    };
-  };
-
-  /** The thread's card grows out of its pill: the surface from the pill's shape to the card's, the thread fading in once there is room. */
-  function grow() {
-    const shape = surface;
-    const inner = body;
-    if (!(shape && inner)) {
+  /** The thread's card pours out of its pill; with no pill on the page, or without motion, it fades in where it stands. */
+  function pour() {
+    if (!(motionOk.current && pinHere)) {
+      standAt(true);
+      fadeTo(true, dur(motionOk.current ? "--dur-pop" : "--dur-control"));
       return;
     }
-    if (!motionOk.current) {
-      float?.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: dur("--dur-control"),
-        easing: ease("--ease-out"),
-      });
-      return;
-    }
-    const from = untrack(() => pillShape(place, seen, face));
-    if (!from) {
-      // Not on the page: no pill to grow from; it fades in where it stands.
-      float?.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: dur("--dur-pop"),
-        easing: ease("--ease-out"),
-      });
-      return;
-    }
-    const to = surfaceShape(shape);
-    const length = dur("--dur-pop");
-    shape.animate([from, to], { duration: length, easing: ease("--ease-out") });
-    threadIn(inner, length);
+    // Its closed state drawn first (the card hidden in its pill, at the
+    // size it was just measured at), so the run starts from it.
+    standAt(false);
+    pourTo(true);
   }
 
   /** The close in flight: `onclosed` once it lands. */
   let closing = 0;
-  $effect(() => () => window.clearTimeout(closing));
-
-  /** Every run on the card and its parts, cancelled: read where each has it drawn first. */
-  const stopRuns = () => {
-    for (const el of [float, surface, body]) {
-      for (const run of el?.getAnimations() ?? []) {
-        run.cancel();
-      }
-    }
-  };
+  $effect(() => () => {
+    cancelAnimationFrame(frame);
+    window.clearTimeout(closing);
+  });
 
   /**
-   * The thread's card goes back into its pill: the surface from where it is
-   * drawn to the pill's shape, the thread gone by half way; with no pill to
-   * go into, or without motion, it fades where it stands. Its holder takes
-   * it away once that has landed (`onclosed`).
+   * The thread's card drains back into its pill from where it is drawn; with
+   * no pill to go into, or without motion, it fades where it stands. Its
+   * holder takes it away once that has landed (`onclosed`).
    */
-  function shrink() {
-    const node = float;
-    const shape = surface;
-    const inner = body;
+  function drain() {
     opened = false;
     window.clearTimeout(closing);
-    if (!node) {
+    if (!float) {
       onclosed?.();
       return;
     }
-    const to = pillShape(place, seen, face);
-    let length = dur("--dur-exit");
-    if (shape && inner && to && motionOk.current) {
-      // From where it is drawn: a close caught mid-open turns back there.
-      const from = surfaceShape(shape);
-      const shown = getComputedStyle(inner).opacity;
-      stopRuns();
-      shape.animate([from, to], {
-        duration: length,
-        easing: ease("--ease-out"),
-        fill: "forwards",
-      });
-      threadOut(inner, shown, length);
+    let length = dur("--dur-goo-exit");
+    if (motionOk.current && pinHere) {
+      fade?.cancel();
+      pourTo(false);
     } else {
       length = dur("--dur-control");
-      const shown = getComputedStyle(node).opacity;
-      stopRuns();
-      node.animate([{ opacity: shown }, { opacity: 0 }], {
-        duration: length,
-        easing: ease("--ease-out"),
-        fill: "forwards",
-      });
+      fadeTo(false, length);
+      if (float) {
+        float.dataset.open = "false";
+      }
     }
     closing = window.setTimeout(() => onclosed?.(), length);
   }
 
-  /** Opened again before its close landed: it grows back from where the close has it drawn, over `--dur-pop`. */
-  function regrow() {
-    const node = float;
-    const shape = surface;
-    const inner = body;
+  /** Opened again before its close landed: the same clock turns back toward open, from where it is drawn. */
+  function pourAgain() {
     window.clearTimeout(closing);
     opened = true;
-    if (!(node && shape && inner)) {
-      return;
+    if (fade) {
+      fadeTo(true, dur("--dur-control"));
     }
-    const from = surfaceShape(shape);
-    const thread = getComputedStyle(inner).opacity;
-    const whole = getComputedStyle(node).opacity;
-    stopRuns();
-    if (!motionOk.current) {
-      return;
+    if (motionOk.current && pinHere) {
+      pourTo(true);
+    } else {
+      standAt(true);
     }
-    const length = dur("--dur-pop");
-    const timing = { duration: length, easing: ease("--ease-out") };
-    shape.animate([from, surfaceShape(shape)], timing);
-    inner.animate([{ opacity: thread }, { opacity: 1 }], timing);
-    node.animate([{ opacity: whole }, { opacity: 1 }], timing);
   }
 
-  // Each change of `open` once placed: the card closes or opens again where
-  // it stands; the composer and the foot sheet go by their holder.
+  // Each change of `open` once placed: the card drains or pours again from
+  // where it stands; the composer and the foot sheet go by their holder.
   $effect(() => {
     const want = open;
     untrack(() => {
@@ -419,7 +519,7 @@
         }
         return;
       }
-      (want ? regrow : shrink)();
+      (want ? pourAgain : drain)();
     });
   });
 
@@ -431,7 +531,7 @@
     return opened ? "open" : "closed";
   });
 
-  /** The foot sheet fades in; the card grows (`grow`), the composer comes in by the kit's `@starting-style` (`popMotion`). */
+  /** The foot sheet fades in; the card pours (`pour`), the composer comes in by the kit's `@starting-style` (`popMotion`). */
   function arrive(_node: Element): TransitionConfig {
     return sheet
       ? {
@@ -444,7 +544,7 @@
   /**
    * Out: the composer by the kit's `popOut`, the foot sheet by its opacity,
    * both CSS a resume turns back. The card has closed while it stood
-   * (`shrink`), or another pin's card takes its place: it goes at once. It
+   * (`drain`), or another pin's card takes its place: it goes at once. It
    * reads what was last drawn (`drawn`), never a derived.
    */
   function leave(node: HTMLElement): TransitionConfig {
@@ -465,7 +565,7 @@
 <div
   aria-label={label}
   class={[
-    "pointer-events-auto absolute z-2 flex flex-col max-h-(--float-max)",
+    "group/pour pointer-events-auto absolute z-2 flex flex-col max-h-(--float-max)",
     sheet
       ? "inset-x-0 bottom-(--keyboard-lift,0px) w-full max-h-over-keyboard-70"
       : "start-(--float-x) top-(--float-y) w-(--float-w)",
@@ -495,30 +595,60 @@
   out:leave
 >
   {#if card}
-    <!-- The card's one surface: the pill grown (`grow`), behind what it holds. -->
-    <div
+    <!-- The card's one silhouette, poured from its pill (`draw`): the pill's
+         box cut out of it so the page's own pill shows, its drop that same
+         path by reference once it stands still. The stroke stands on the
+         path's group, so the drop draws the fill alone. -->
+    <svg
       aria-hidden="true"
-      class="pointer-events-none absolute inset-0 -z-1 rounded-lg border border-border-control bg-surface-raised shadow-hairline"
+      class="pointer-events-none absolute start-0 top-0 -z-1 size-full overflow-visible"
       data-slot="pin-surface"
-      bind:this={surface}
-    ></div>
+    >
+      <defs>
+        <clipPath id="{uid}-pill">
+          <path bind:this={hole} clip-rule="evenodd" />
+        </clipPath>
+      </defs>
+      <g clip-path="url(#{uid}-pill)">
+        <use
+          class="drop-shadow-drop-near transition-opacity duration-(--dur-goo-content) ease-out group-data-run/pour:opacity-0 group-data-run/pour:duration-(--dur-goo-content-exit) motion-reduce:transition-none"
+          href="#{uid}-shape"
+        />
+        <g class="stroke-border-control" stroke-width="1">
+          <path
+            bind:this={shapePath}
+            class="fill-surface-raised"
+            data-slot="pin-shape"
+            id="{uid}-shape"
+          />
+        </g>
+      </g>
+    </svg>
   {/if}
-  <!-- What it holds: the one part that scrolls, never sideways. -->
+  <!-- What it holds: the one part that scrolls, never sideways; the card's
+       clipped to its shape as drawn while it pours. -->
   <div
-    class={[
-      "flex min-h-0 min-w-0 flex-col",
-      // Squeezed (a keyboard over a short well), the card itself scrolls,
-      // and the house edge fade says what is past its edge.
-      !bare &&
-        "kit-edge-fade-block gap-space-2 overflow-x-hidden overflow-y-auto overscroll-contain",
-      card && "p-space-3",
-      sheet &&
-        "px-space-3 pt-space-3 pb-(--sheet-pb) border-t border-border-hairline rounded-t-lg bg-surface-raised shadow-drawer",
-    ]}
-    data-slot="pin-body"
-    bind:this={body}
+    bind:this={clipWrap}
+    class="flex min-h-0 min-w-0 flex-col"
+    data-slot="pin-clip"
   >
-    {@render children()}
+    <div
+      class={[
+        "flex min-h-0 min-w-0 flex-col",
+        // Squeezed (a keyboard over a short well), the card itself scrolls,
+        // and the house edge fade says what is past its edge.
+        !bare &&
+          "kit-edge-fade-block gap-space-2 overflow-x-hidden overflow-y-auto overscroll-contain",
+        card &&
+          "p-space-3 opacity-0 transition-[opacity] duration-(--dur-goo-content-exit) ease-out group-data-[open=true]/pour:opacity-100 group-data-[open=true]/pour:duration-(--dur-goo-content) group-data-[open=true]/pour:delay-(--dur-goo-content-delay) motion-reduce:transition-none",
+        sheet &&
+          "px-space-3 pt-space-3 pb-(--sheet-pb) border-t border-border-hairline rounded-t-lg bg-surface-raised shadow-drawer",
+      ]}
+      data-slot="pin-body"
+      bind:this={body}
+    >
+      {@render children()}
+    </div>
   </div>
   {#if onpress && pin !== undefined}
     <!-- The peek pressed anywhere: its whole thread opens. -->

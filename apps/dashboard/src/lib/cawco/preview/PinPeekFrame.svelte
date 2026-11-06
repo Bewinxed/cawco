@@ -11,7 +11,7 @@
   import { ComposerDraft } from "../transcript/composer-draft.svelte";
   import PinCard from "./PinCard.svelte";
   import PinFloat from "./PinFloat.svelte";
-  import PinMark, { markFace, markState } from "./PinMark.svelte";
+  import PinMark, { markState } from "./PinMark.svelte";
 
   let {
     pin,
@@ -51,7 +51,6 @@
     class="@container absolute inset-0 pointer-events-none"
   >
     <PinFloat
-      face={markFace(markState(pin))}
       label={`Comment ${pin.number}`}
       {mark}
       onpress={peek ? nothing : undefined}
