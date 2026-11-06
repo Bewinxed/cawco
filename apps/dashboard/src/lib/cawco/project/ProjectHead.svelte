@@ -75,9 +75,8 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { newSession, spawning } from "#lib/cawco/spawn/new-session.svelte.js";
   import { stopWork } from "#lib/cawco/stop-work.svelte.js";
-  import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
+  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconArchive,
     IconColumns,
@@ -147,10 +146,13 @@
   let folded = $state<ReadonlySet<Fold>>(new Set());
   const drawn = (node: HTMLElement | null): boolean =>
     node?.checkVisibility() ?? false;
+  /** A fold's box is `display: contents` while it stands, `none` once folded. */
+  const foldStands = (node: HTMLElement): boolean =>
+    getComputedStyle(node).display !== "none";
   function readFolds(): void {
     folded = new Set(
       [...(head?.querySelectorAll<HTMLElement>("[data-fold]") ?? [])]
-        .filter((node) => !drawn(node))
+        .filter((node) => !foldStands(node))
         .map((node) => node.dataset.fold as Fold)
     );
   }
@@ -188,7 +190,7 @@
    */
   const details = $derived(standing.has(project.id));
   /** The place that opens them: Escape and Done hand the focus back to it. */
-  let placeLine = $state<HTMLButtonElement | null>(null);
+  let placeLine = $state<HTMLElement | null>(null);
 
   function openDetails(): void {
     if (endHost.at === endAt) {
@@ -388,42 +390,32 @@
           </button>
         {/if}
       </h1>
-      <!-- The place, a bare item of the top bar's recipe (app.css, the bar's
-         glass group): its machine's mark, or the hub's folder, named in its
-         tooltip. The project's details unfold under the head. -->
-      <Tip label={placeTip}>
-        {#snippet children(tip)}
-          <button
-            data-bar-item
-            data-box
-            data-place-line
-            {...mergeProps(tip, {
-              onclick: () => {
-                if (details) {
-                  closeDetails();
-                } else {
-                  openDetails();
-                }
-              },
-            })}
-            aria-expanded={details}
-            aria-label={projectWords.details}
-            class="select-none touch-hit press-tint @max-head-place/head:hidden"
-            data-fold="place"
-            type="button"
-            bind:this={placeLine}
-          >
-            {#if primary && machine}
-              <OsMark
-                class="size-c-bar-symbol text-ink-muted"
-                os={machine.os}
-              />
-            {:else}
-              <IconFolder data-slot="bar-symbol" aria-hidden="true" />
-            {/if}
-          </button>
-        {/snippet}
-      </Tip>
+      <!-- The place, a bare BarItem outside the glass: its machine's mark, or
+         the hub's folder, named in its tooltip. The project's details
+         unfold under the head. Under head-place it folds into More (its
+         `data-fold`, a box of no layout of its own). -->
+      <span class="contents @max-head-place/head:hidden" data-fold="place">
+        <BarItem
+          data-place-line
+          expanded={details}
+          label={projectWords.details}
+          onclick={() => {
+            if (details) {
+              closeDetails();
+            } else {
+              openDetails();
+            }
+          }}
+          tip={placeTip}
+          bind:ref={placeLine}
+        >
+          {#if primary && machine}
+            <OsMark class="size-c-bar-symbol text-ink-muted" os={machine.os} />
+          {:else}
+            <IconFolder data-slot="bar-symbol" aria-hidden="true" />
+          {/if}
+        </BarItem>
+      </span>
     </div>
     {#if views}
       <div data-slot="views" class="flex min-w-0 flex-none items-center">
@@ -440,21 +432,9 @@
         </div>
       {/if}
       {#if newTask}
-        <Tip label="New task">
-          {#snippet children(tip)}
-            <button
-              data-bar-item
-              data-box
-              data-fold="new-task"
-              {...mergeProps(tip, { onclick: onnewtask })}
-              aria-label="New task"
-              class="select-none touch-hit press-tint @max-head-tools/head:hidden"
-              type="button"
-            >
-              <IconPlus data-slot="bar-symbol" aria-hidden="true" />
-            </button>
-          {/snippet}
-        </Tip>
+        <span class="contents @max-head-tools/head:hidden" data-fold="new-task">
+          <BarItem icon={IconPlus} label="New task" onclick={onnewtask} />
+        </span>
       {/if}
       <!-- He sits at the head's end, by the capsule, so the name's start edge
          is the same whether he sits here or stands over the empty board.
@@ -470,57 +450,37 @@
          tooltip. Its symbols fold into More as the head narrows. -->
       <BarGlass form="group">
         {#if primary}
-          <Tip label={projectWords.spinOff}>
-            {#snippet children(tip)}
-              <button
-                data-bar-item
-                data-box
-                data-spin-off
-                {...mergeProps(tip, {
-                  onclick: (event: MouseEvent) =>
-                    spinOff(event.currentTarget as HTMLElement),
-                })}
-                aria-haspopup="dialog"
-                aria-label={projectWords.spinOff}
-                class="select-none touch-hit press-tint @max-head-tools/head:hidden"
-                data-fold="spin-off"
-                type="button"
-              >
-                <IconFork data-slot="bar-symbol" aria-hidden="true" />
-              </button>
-            {/snippet}
-          </Tip>
+          <span
+            class="contents @max-head-tools/head:hidden"
+            data-fold="spin-off"
+          >
+            <BarItem
+              aria-haspopup="dialog"
+              data-spin-off
+              icon={IconFork}
+              label={projectWords.spinOff}
+              onclick={(event: MouseEvent) =>
+                spinOff(event.currentTarget as HTMLElement)}
+            />
+          </span>
         {/if}
         <!-- Full size: the tab fills the window, the rail and the tabs put
            away; pressed again, or Escape, they come back (full-size.svelte.ts). -->
-        <Tip
-          label={fullSize.on
-            ? projectWords.exitFullSize
-            : projectWords.fullSize}
+        <span
+          class="contents @max-head-place/head:hidden"
+          data-fold="full-size"
         >
-          {#snippet children(tip)}
-            <button
-              data-bar-item
-              data-box
-              data-full-size
-              {...mergeProps(tip, { onclick: () => fullSize.toggle() })}
-              aria-label={fullSize.on
-                ? projectWords.exitFullSize
-                : projectWords.fullSize}
-              aria-pressed={fullSize.on}
-              aria-keyshortcuts={fullSize.on ? "Escape" : undefined}
-              class="select-none touch-hit press-tint @max-head-place/head:hidden"
-              data-fold="full-size"
-              type="button"
-            >
-              {#if fullSize.on}
-                <IconMinimize data-slot="bar-symbol" aria-hidden="true" />
-              {:else}
-                <IconMaximize data-slot="bar-symbol" aria-hidden="true" />
-              {/if}
-            </button>
-          {/snippet}
-        </Tip>
+          <BarItem
+            aria-keyshortcuts={fullSize.on ? "Escape" : undefined}
+            data-full-size
+            icon={fullSize.on ? IconMinimize : IconMaximize}
+            label={fullSize.on
+              ? projectWords.exitFullSize
+              : projectWords.fullSize}
+            onclick={() => fullSize.toggle()}
+            pressed={fullSize.on}
+          />
+        </span>
         <DropdownMenu.Root
           onOpenChange={(open) => {
             if (open) {
@@ -528,26 +488,17 @@
             }
           }}
         >
-          <Tip label={commonWords.moreFor(project.name)}>
-            {#snippet children(tip)}
-              <DropdownMenu.Trigger>
-                {#snippet child({ props })}
-                  <button
-                    data-bar-item
-                    data-box
-                    data-head-more
-                    {...mergeProps(tip, props)}
-                    aria-label={commonWords.moreFor(project.name)}
-                    class="select-none touch-hit press-tint"
-                    type="button"
-                    bind:this={more}
-                  >
-                    <IconMore data-slot="bar-symbol" aria-hidden="true" />
-                  </button>
-                {/snippet}
-              </DropdownMenu.Trigger>
+          <DropdownMenu.Trigger>
+            {#snippet child({ props })}
+              <BarItem
+                data-head-more
+                icon={IconMore}
+                label={commonWords.moreFor(project.name)}
+                {props}
+                bind:ref={more}
+              />
             {/snippet}
-          </Tip>
+          </DropdownMenu.Trigger>
           <!-- An end asked here keeps the focus its tray took, and the New
              Session form a Spin off opened keeps the focus it took: the menu
              doesn't hand it back to More as it closes. -->

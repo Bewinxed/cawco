@@ -93,7 +93,6 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconChatAdd,
     IconClose,
@@ -549,31 +548,35 @@
             {#if lead.on !== null}
               <!-- Whether he is on, his settings pressed open: his switch and,
                    turning him off with work running, what it stops. -->
-              <Tip label={off ? cawSwitchWords.off : cawSwitchWords.on}>
-                {#snippet children(tip)}
-                  <button
-                    {...tip}
-                    aria-expanded={settingsOpen}
-                    aria-haspopup="dialog"
-                    aria-label={off ? cawSwitchWords.off : cawSwitchWords.on}
-                    class="mark-line select-none touch-hit press-tint"
-                    data-bar-item
-                    data-box
-                    data-caw-on={off ? "off" : "on"}
-                    data-counted={off ? "" : undefined}
-                    onclick={() => {
-                      settingsOpen = !settingsOpen;
-                    }}
-                    type="button"
-                    bind:this={settingsAnchor}
-                  >
-                    <IconSettings aria-hidden="true" data-slot="bar-symbol" />
-                    {#if off}
-                      <span data-slot="num">{cawSwitchWords.off}</span>
-                    {/if}
-                  </button>
-                {/snippet}
-              </Tip>
+              {#if off}
+                <!-- Off, it says so beside its symbol, on the kit's title line. -->
+                <BarItem
+                  aria-haspopup="dialog"
+                  data-caw-on="off"
+                  expanded={settingsOpen}
+                  form="title"
+                  label={cawSwitchWords.off}
+                  onclick={() => {
+                    settingsOpen = !settingsOpen;
+                  }}
+                  bind:ref={settingsAnchor}
+                >
+                  <IconSettings aria-hidden="true" data-slot="bar-symbol" />
+                  <span data-slot="num">{cawSwitchWords.off}</span>
+                </BarItem>
+              {:else}
+                <BarItem
+                  aria-haspopup="dialog"
+                  data-caw-on="on"
+                  expanded={settingsOpen}
+                  icon={IconSettings}
+                  label={cawSwitchWords.on}
+                  onclick={() => {
+                    settingsOpen = !settingsOpen;
+                  }}
+                  bind:ref={settingsAnchor}
+                />
+              {/if}
             {/if}
             {#if shown}
               <BarItem

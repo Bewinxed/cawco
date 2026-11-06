@@ -1382,32 +1382,32 @@
               {#if railed && files.session}
                 <!-- Files, the conversation on screen's artifacts and
                    attachments, leads the group. -->
-              <FilesItem count={filesCounted} />
-            {/if}
-            <!-- Drawn on every screen and hidden on the phone's glass by its
+                <FilesItem count={filesCounted} />
+              {/if}
+              <!-- Drawn on every screen and hidden on the phone's glass by its
                  layout (`desk`: the shell container's desk line,
                  `@max-desk/shell`), as Machines is, so the first client
                  render keeps the bar the server drew. -->
-            <BarItem
-              aria-haspopup="dialog"
-              data-glass-opens="jump"
-              data-share="jump"
-              expanded={barGlass.open === "jump"}
-              keys="⌘K"
-              label={shellWords.jumpToSession}
-              layout="desk"
-              onclick={() => {
-                barGlass.toggle("jump");
-              }}
-            >
-              <IconSearch
-                aria-hidden="true"
-                class="size-icon-md text-ink-muted"
-              />
-            </BarItem>
-            <MachinesButton />
-          </BarGlass>
-          <!-- No always-on hub dot: a green light that is green 99% of the time
+              <BarItem
+                aria-haspopup="dialog"
+                data-glass-opens="jump"
+                data-share="jump"
+                expanded={barGlass.open === "jump"}
+                keys="⌘K"
+                label={shellWords.jumpToSession}
+                layout="desk"
+                onclick={() => {
+                  barGlass.toggle("jump");
+                }}
+              >
+                <IconSearch
+                  aria-hidden="true"
+                  class="size-icon-md text-ink-muted"
+                />
+              </BarItem>
+              <MachinesButton />
+            </BarGlass>
+            <!-- No always-on hub dot: a green light that is green 99% of the time
              says nothing. Connection health is the band below (HubBand), which
              is shown only when the hub is NOT connected. The theme toggle
              lives in the rail's footer with the account row. -->
