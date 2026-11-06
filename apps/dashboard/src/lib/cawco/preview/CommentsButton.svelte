@@ -2,7 +2,7 @@
   /**
    * The Comments rail's toggle in the artifact panel's head (the artifact
    * panel's surface brief, The head): the bar's own item (BarItem), its
-   * bubble, on the pressed surface while the rail stands (BarItem `open`). It is its
+   * bubble, standing open while the rail stands (BarItem `open`). It is its
    * neighbours' size and shape, its bubble at their symbol size and centred,
    * with an even inset round it. Its badge is the kit Badge's `corner`
    * form on the top trailing corner (SwiftUI badge: "Badges appear in list
