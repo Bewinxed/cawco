@@ -280,18 +280,6 @@ import type {
 import { WORK_ITEM_STATES } from "./work-items";
 import type { Policy as PolicyType } from "./workspace-judge";
 
-const DownloadProgressShape = declared(
-  z.object({ received: z.number(), total: z.number() }),
-  "DownloadProgress",
-  "packages/core/src/resumable-download.ts"
-);
-
-export const ArchiveFetchingShape = declared(
-  z.object({ fetching: DownloadProgressShape }),
-  "ArchiveFetching",
-  "packages/core/src/binary-distribution.ts"
-);
-
 const PolicyShape = declared(
   z.object({
     allowRead: z.array(z.string()).readonly(),
@@ -1478,6 +1466,18 @@ const RelayViewShape = declared(
   "packages/core/src/relays.ts"
 );
 export const RelayViewSchema: z.ZodType<RelayViewType> = RelayViewShape;
+
+const DownloadProgressShape = declared(
+  z.object({ received: z.number(), total: z.number() }),
+  "DownloadProgress",
+  "packages/core/src/resumable-download.ts"
+);
+
+export const ArchiveFetchingShape = declared(
+  z.object({ fetching: DownloadProgressShape }),
+  "ArchiveFetching",
+  "packages/core/src/binary-distribution.ts"
+);
 
 const ReleaseManifestShape = declared(
   z.object({
@@ -3144,8 +3144,6 @@ const prove = <Proofs extends true[]>(): Proofs | undefined => undefined;
 /** Every schema of an exported type, proved against that type. */
 prove<
   [
-    Same<z.output<typeof DownloadProgressShape>, DownloadProgressType>,
-    Same<z.output<typeof ArchiveFetchingShape>, ArchiveFetchingType>,
     Same<z.output<typeof PolicyShape>, PolicyType>,
     Same<z.output<typeof MediaPathShape>, MediaPathType>,
     Same<z.output<typeof BrowserPortsShape>, BrowserPortsType>,
@@ -3232,6 +3230,8 @@ prove<
     Same<z.output<typeof RelayProviderShape>, RelayProviderType>,
     Same<z.output<typeof RelayStateShape>, RelayStateType>,
     Same<z.output<typeof RelayViewShape>, RelayViewType>,
+    Same<z.output<typeof DownloadProgressShape>, DownloadProgressType>,
+    Same<z.output<typeof ArchiveFetchingShape>, ArchiveFetchingType>,
     Same<z.output<typeof ReleaseManifestShape>, ReleaseManifestType>,
     Same<z.output<typeof ContextFillShape>, ContextFillType>,
     Same<z.output<typeof FilingStageShape>, FilingStageType>,

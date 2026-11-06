@@ -6,10 +6,12 @@ import type { BinaryUpdatePolicy } from "./binary-updates";
 import { readWithin } from "./bounded";
 import { type ReleaseManifest, verifyManifest } from "./release-manifest";
 import {
+  type Answered,
   type DownloadProgress,
   downloadResumably,
   fileMatches,
 } from "./resumable-download";
+import { ArchiveFetchingShape } from "./stored-shapes";
 import { secondsOf } from "./time";
 import { unhandled } from "./unhandled";
 import { downloadWords } from "./words/downloads";
@@ -422,4 +424,44 @@ export const ARCHIVE_ASK_AGAIN_S = 5;
 /** The hub's answer (503) to an ask of an archive it is still fetching from its release host: how far it is. */
 export interface ArchiveFetching {
   fetching: DownloadProgress;
+}
+
+/**
+ * What a machine's updater makes of its hub's answer to an archive's ask before it is
+ * read as a body: a 503 that says how far the hub's own fetch is
+ * ({@link ArchiveFetching}) is a wait of the hub's `Retry-After`, said on
+ * the way (`hubFetching`); a 416 or another 5xx is read as the download
+ * reads it (start over, or retry); any other refusal (the hub's fetch
+ * failed, 502; a build it does not offer, 404) is this attempt's failure,
+ * said with the hub's own words. The agent's download reads every answer
+ * through it (agent binary-update.ts), and so does ssh-forward-download.
+ */
+export async function archiveAnswered(
+  response: Response,
+  hubFetching: (progress: DownloadProgress) => void
+): Promise<Answered | undefined> {
+  if (response.ok) {
+    return;
+  }
+  const text = await response.text().catch(() => "");
+  if (response.status === 503) {
+    const { fetching: progress } = ((): Partial<ArchiveFetching> => {
+      try {
+        return ArchiveFetchingShape.partial().parse(JSON.parse(text));
+      } catch {
+        return {};
+      }
+    })();
+    if (progress) {
+      hubFetching(progress);
+      const again = Number(response.headers.get("retry-after"));
+      return {
+        waitMs: (again > 0 ? again : ARCHIVE_ASK_AGAIN_S) * 1000,
+      };
+    }
+  }
+  if (response.status === 416 || response.status >= 503) {
+    return;
+  }
+  return { refuse: downloadWords.hubRefused(response.status, text) };
 }

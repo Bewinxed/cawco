@@ -363,7 +363,7 @@ const run = async (kit: Kit) => {
   );
 
   // 3: another quiet sync while the command still runs: said once is enough.
-  const again = await synced(fleet, () => hook("quiet probe hook, a third"));
+  const again = await synced(fleet, () => hook("quiet probe hook renamed"));
   kit.check(
     "3: a third sync, quiet again, while the command runs: no second form-moved line for D and no hand-over",
     again.took &&

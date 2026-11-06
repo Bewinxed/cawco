@@ -21,8 +21,7 @@ import { mkdir, readdir, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { UpdateReport } from "@cawco/core";
 import {
-  ARCHIVE_ASK_AGAIN_S,
-  type ArchiveFetching,
+  archiveAnswered,
   type SignedRelease,
 } from "@cawco/core/binary-distribution";
 import {
@@ -73,18 +72,15 @@ import {
 import { machineId } from "@cawco/core/machine-id";
 import { verifyManifest } from "@cawco/core/release-manifest";
 import {
-  type Answered,
   type CUT_CODES,
   type CutCode,
   cutCode,
-  type DownloadProgress,
   downloadResumably,
   fileMatches,
 } from "@cawco/core/resumable-download";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { readRecord } from "@cawco/core/state-file";
-import { ArchiveFetchingShape } from "@cawco/core/stored-shapes";
 import { unhandled } from "@cawco/core/unhandled";
 import { downloadWords } from "@cawco/core/words/downloads";
 import { updatesWords } from "@cawco/core/words/updates";
@@ -414,45 +410,6 @@ const askHub = async <T>(
       unhandled("read", read);
   }
 };
-
-/**
- * What the agent makes of its hub's answer to an archive's ask before it is
- * read as a body: a 503 that says how far the hub's own fetch is
- * ({@link ArchiveFetching}) is a wait of the hub's `Retry-After`, said on
- * the way (`hubFetching`); a 416 or another 5xx is read as the download
- * reads it (start over, or retry); any other refusal (the hub's fetch
- * failed, 502; a build it does not offer, 404) is this attempt's failure,
- * said with the hub's own words.
- */
-async function hubAnswered(
-  response: Response,
-  hubFetching: (progress: DownloadProgress) => void
-): Promise<Answered | undefined> {
-  if (response.ok) {
-    return;
-  }
-  const text = await response.text().catch(() => "");
-  if (response.status === 503) {
-    const { fetching } = ((): Partial<ArchiveFetching> => {
-      try {
-        return ArchiveFetchingShape.partial().parse(JSON.parse(text));
-      } catch {
-        return {};
-      }
-    })();
-    if (fetching) {
-      hubFetching(fetching);
-      const again = Number(response.headers.get("retry-after"));
-      return {
-        waitMs: (again > 0 ? again : ARCHIVE_ASK_AGAIN_S) * 1000,
-      };
-    }
-  }
-  if (response.status === 416 || response.status >= 503) {
-    return;
-  }
-  return { refuse: downloadWords.hubRefused(response.status, text) };
-}
 
 /**
  * An attempt at an offered build failed (its download, its verification, the
@@ -1679,7 +1636,7 @@ export class BinaryUpdater {
         onProgress: (download) => say({ download, hubFetch: undefined }),
         ends: (error) => HUB_GONE.has(cutCode(error) ?? ""),
         answered: (response) =>
-          hubAnswered(response, (hubFetch) => {
+          archiveAnswered(response, (hubFetch) => {
             saidAt = 0;
             say({ hubFetch });
           }),

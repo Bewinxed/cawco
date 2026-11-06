@@ -20,16 +20,24 @@
  * every answer while the spec says ({@link HOLD_MS}): a release host that
  * slow.
  *
+ * Since 2026-10-24 (1da6018cb) the hub never holds an archive's ask open
+ * on its release host: until it holds the file it answers at once, 503
+ * with how far its own fetch is and Retry-After, and the machine's updater
+ * waits and asks again (core binary-distribution.ts `archiveAnswered`,
+ * read by the agent's download, binary-update.ts). The spec's machine
+ * downloads as the agent does: core's resumable download, its machine
+ * proof (core machine-key.ts `machineFetch`), every answer read through
+ * `archiveAnswered`.
+ *
  * (a) Through the forward, with the key the add wrote, the machine reads
  *     its update settings and then the offered build's archive for this
- *     host's target, as the updater does (core machine-key.ts
- *     `machineFetch`), while the release host's answer is held past the
- *     door's old cut: 200, the bytes the signed manifest names, and the hub
- *     refused nothing as anonymous.
+ *     host's target while the release host's answer is held past the
+ *     door's old cut: the hub says it is still fetching, the machine asks
+ *     again until a 200 brings the bytes the signed manifest names, and
+ *     the hub refused nothing as anonymous (each ask a fresh proof).
  * (b) The same for another target's archive, which the hub fetches afresh,
- *     held {@link HUB_HOLD_MS}: past the hub's own idle timer, which its
- *     archive route lifts for the request (binary-updates.ts), since a cut
- *     there is the door's request sent again with the proof already taken.
+ *     held {@link HUB_HOLD_MS}: past the hub's own idle timer, so the
+ *     machine's asks again span every cut a held-open request would meet.
  *
  *   bun scripts/probe-kit/run.ts ssh-forward-download
  */
@@ -80,6 +88,8 @@ interface Manifest {
 
 /** What the machine's ask said: its settings' status, then the build's answer. */
 interface MachineRead {
+  /** How many of the hub's answers said it was still fetching (503). */
+  fetching: number;
   ms: number;
   said: string;
   settings: number;
@@ -200,20 +210,46 @@ async function run(kit: Kit): Promise<void> {
       return;
     }
 
-    // The machine's asks, as its updater makes them: its settings, then the build.
+    // The machine's asks, as its updater makes them: its settings, then the
+    // build, read as the agent's download reads it (agent binary-update.ts
+    // `#download`): core's resumable download into a partial file, every
+    // answer through `archiveAnswered`, so the hub's 503 "still fetching"
+    // is a wait of its Retry-After and an ask again, never the end.
     const ask = join(dir, "ask-build.ts");
     writeFileSync(
       ask,
-      `import { createHash } from "node:crypto";
+      `import { archiveAnswered } from ${JSON.stringify(join(ROOT, "packages/core/src/binary-distribution.ts"))};
 import { machineFetch } from ${JSON.stringify(join(ROOT, "packages/core/src/machine-key.ts"))};
-const [hub, url] = process.argv.slice(2);
+import { downloadResumably } from ${JSON.stringify(join(ROOT, "packages/core/src/resumable-download.ts"))};
+const [hub, url, partial, size] = process.argv.slice(2);
 const settings = await machineFetch(\`\${hub}/api/binary-updates/settings\`);
 await settings.arrayBuffer();
 console.error("asking");
 const from = Date.now();
-const answer = await machineFetch(url ?? "");
-const bytes = new Uint8Array(await answer.arrayBuffer());
-console.log(JSON.stringify({ settings: settings.status, status: answer.status, sha256: createHash("sha256").update(bytes).digest("hex"), size: bytes.length, ms: Date.now() - from, said: answer.ok ? "" : new TextDecoder().decode(bytes).slice(0, 200) }));
+let status = 0;
+let fetching = 0;
+let said = "";
+try {
+  await downloadResumably({
+    url: url ?? "",
+    partial: partial ?? "",
+    size: Number(size),
+    what: "the offered build from the hub",
+    fetch: machineFetch,
+    log: (line) => console.error(line),
+    answered: async (response) => {
+      status = response.status;
+      return archiveAnswered(response, (progress) => {
+        fetching += 1;
+        console.error(\`hub fetching \${JSON.stringify(progress)}\`);
+      });
+    },
+  });
+} catch (error) {
+  said = error instanceof Error ? error.message : String(error);
+}
+const bytes = new Uint8Array(await Bun.file(partial ?? "").arrayBuffer().catch(() => new ArrayBuffer(0)));
+console.log(JSON.stringify({ settings: settings.status, status, fetching, sha256: new Bun.CryptoHasher("sha256").update(bytes).digest("hex"), size: bytes.length, ms: Date.now() - from, said: said.slice(0, 200) }));
 `
     );
     /** One download of `wanted` through the forward, the release host held `holdMs` once the machine asks. */
@@ -228,16 +264,21 @@ console.log(JSON.stringify({ settings: settings.status, status: answer.status, s
           path: { version: manifest.version, archive: wanted.archive },
         }).path
       }`;
-      const child = Bun.spawn([process.execPath, ask, hubUrl, url], {
-        env: {
-          ...process.env,
-          HOME: home,
-          XDG_CONFIG_HOME: join(home, ".config"),
-          CAWCO_MACHINE_ID: MACHINE,
-        },
-        stdout: "pipe",
-        stderr: "pipe",
-      });
+      const partial = join(dir, `${wanted.archive}.partial`);
+      rmSync(partial, { force: true });
+      const child = Bun.spawn(
+        [process.execPath, ask, hubUrl, url, partial, String(wanted.size)],
+        {
+          env: {
+            ...process.env,
+            HOME: home,
+            XDG_CONFIG_HOME: join(home, ".config"),
+            CAWCO_MACHINE_ID: MACHINE,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        }
+      );
       // The release host answers once the hold is let go.
       const errors = (async () => {
         let said = "";
@@ -268,9 +309,10 @@ console.log(JSON.stringify({ settings: settings.status, status: answer.status, s
           (line) => line.includes(REFUSED) && line.includes(wanted.archive)
         );
       kit.check(
-        `${leg}: through the forward, with the key its add wrote, the machine's download of the offered build's ${wanted.target} archive waits out a release host held ${holdMs / 1000} s (${past}) and comes whole: 200, the signed manifest's bytes, nothing refused as anonymous`,
+        `${leg}: through the forward, with the key its add wrote, the machine's download of the offered build's ${wanted.target} archive waits out a release host held ${holdMs / 1000} s (${past}) and comes whole: the hub says "still fetching" (503) and the updater asks again until a 200 brings the signed manifest's bytes, nothing refused as anonymous`,
         got?.settings === 200 &&
           got.status === 200 &&
+          got.fetching > 0 &&
           got.sha256 === wanted.sha256 &&
           got.size === wanted.size &&
           got.ms >= holdMs &&
