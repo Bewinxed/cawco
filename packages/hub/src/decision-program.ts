@@ -18,6 +18,9 @@
  *   how something looks reaches the person drawn, never told. A page kept
  *   before these rules still loads ({@link readKept}); its next revision
  *   meets them.
+ * - A Dials piece's every control is one the panel draws (core
+ *   dial-config.ts): a spring, a curve or any shape it doesn't read is
+ *   refused, named with its panel, its path and its kind.
  * - It cannot run code or reach the network: no Query, Mutation, `$state`
  *   or action step, and no URL or markup in its words (a Diagram's Mermaid
  *   is Pele's to escape, its links and images off).
@@ -39,6 +42,7 @@ import {
   type DecisionComponentName,
 } from "@cawco/core/decisions-library";
 import spec from "@cawco/core/decisions-spec";
+import { DRAWN_CONTROLS, dialsOfConfig } from "@cawco/core/dial-config";
 import {
   facePreloads,
   named,
@@ -376,6 +380,39 @@ const lookProblems = (root: ElementNode | null): string[] =>
     ];
   });
 
+/** Every element named `name` in the page, in any prop of any element. */
+const elementsNamed = (value: unknown, name: string): ElementNode[] => {
+  if (Array.isArray(value)) {
+    return value.flatMap((one) => elementsNamed(one, name));
+  }
+  if (!isElement(value)) {
+    return [];
+  }
+  return [
+    ...(value.typeName === name ? [value] : []),
+    ...Object.values(value.props).flatMap((one) => elementsNamed(one, name)),
+  ];
+};
+
+/**
+ * A Dials piece's controls the panel doesn't draw (core dial-config.ts,
+ * the same reading the page draws it with): each named, by its panel, its
+ * path and its kind, never dropped from the panel unsaid.
+ */
+const dialsProblems = (root: ElementNode | null): string[] =>
+  elementsNamed(root, "Dials").flatMap(({ props }) => {
+    const config =
+      typeof props.config === "object" &&
+      props.config !== null &&
+      !Array.isArray(props.config)
+        ? (props.config as Record<string, unknown>)
+        : {};
+    return dialsOfConfig(config, () => false).unread.map(
+      (one) =>
+        `Dials "${String(props.name)}": ${one.path} is ${one.kind}, a control the panel doesn't draw. It draws ${DRAWN_CONTROLS}.`
+    );
+  });
+
 /** A decision's `after`s: each an id or `page#id`, one on this page a decision it has, never itself. */
 const afterProblems = (
   card: ProgramRead["cards"][number],
@@ -611,6 +648,7 @@ const checkProgram = (
   const ids = [
     ...idProblems(read, kinds),
     ...lookProblems(result.root),
+    ...dialsProblems(result.root),
     ...whole.problems,
   ];
   if (ids.length > 0) {

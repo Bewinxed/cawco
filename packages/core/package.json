@@ -131,6 +131,7 @@
     "./stage": "./src/stage.ts",
     "./canvas-host": "./src/canvas-host.ts",
     "./decision-host": "./src/decision-host.ts",
+    "./dial-config": "./src/dial-config.ts",
     "./dials-root": "./src/dials-root.ts",
     "./shell-shortcuts": "./src/shell-shortcuts.ts",
     "./paths": "./src/paths.ts",
