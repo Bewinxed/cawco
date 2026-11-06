@@ -438,7 +438,7 @@ printf '{"oauthAccount":{"accountUuid":"00000000-0000-4000-8000-000000000001","e
 EOF
 # The machine's Claude Code as a loaded host's answers: the one its installer placed, answering `--version` and
 # `auth status` $1 seconds late (0: at once), then running as itself. The first call puts the stand-in in the
-# launcher's place, ~/.local/bin/claude, where the agent finds it on its PATH (auth.ts resolveClaudeExecutable), and
+# launcher's place, ~/.local/bin/claude, where the agent finds it on its PATH (auth.ts claudeExecutable), and
 # moves the installer's link aside to ~/.local/bin/.claude-installed; every call sets how late. A late call that is
 # ended at its caller's bound (SIGTERM, Bun.spawn's `timeout`) ends its wait with it, as a CLI killed mid-answer does.
 # Each late call is a line of ~/.cawco-proof/claude-calls.log: `<epoch ms> start|answered|cut <pid> <args>`.

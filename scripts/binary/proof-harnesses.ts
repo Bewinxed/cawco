@@ -36,6 +36,7 @@ import {
   accountReports,
   claudeSignins,
 } from "../../packages/agent/src/accounts";
+import { claudeExecutable } from "../../packages/agent/src/auth";
 import { sessionFleetDenials } from "../../packages/agent/src/denied-tools";
 import {
   fleetHoldings,
@@ -284,7 +285,11 @@ const CLAUDE_REPORTED = { ...CAPABILITIES_NONE, fleet: true };
  * installed Claude Code's own `claude auth status` says of it there, the
  * machine's Claude word from those, and that it converges the fleet. A proof
  * machine is signed in by giving it an account dir holding a credential and
- * `oauthAccount`, as `claude auth login` would leave it. The other harnesses
+ * `oauthAccount`, as `claude auth login` would leave it. Installed when the
+ * agent finds a Claude Code there, as the real adapter finds it (auth.ts
+ * `claudeExecutable`, the tools row's own lookup): a report that said "not
+ * installed" whatever was there left the hub refusing every start as not
+ * installed until the machine's tools read landed. The other harnesses
  * report no sign-in.
  */
 const detected = async (kind: HarnessKind): Promise<MachineHarnessReport> => {
@@ -298,7 +303,7 @@ const detected = async (kind: HarnessKind): Promise<MachineHarnessReport> => {
   }
   return {
     harness: kind,
-    installed: false,
+    installed: (await claudeExecutable()) !== undefined,
     ...claudeSignins(await accountReports()),
     capabilities: CLAUDE_REPORTED,
   };

@@ -17,7 +17,7 @@ import { spawnRead, untether } from "@cawco/core/tether";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { packageInstall, workspaceNeeds } from "@cawco/core/workspace-needs";
-import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "./auth";
+import { CLAUDE_NOT_INSTALLED, claudeExecutable } from "./auth";
 import { mediaForwarding } from "./browser/media-forwarding";
 import { routerAddress } from "./browser/relay-reach";
 import {
@@ -239,7 +239,7 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
   probeStarted();
   const mac = platform() === "darwin";
   const git = resolveBin("git");
-  const claude = resolveClaudeExecutable();
+  const claude = await claudeExecutable();
   const node = resolveBin("node");
   const browser = browserExecutable();
   let service: string | undefined;

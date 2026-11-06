@@ -5,7 +5,10 @@
  * Google sign-in is touched:
  *
  * - a. Signed out: the machine's tool report has Antigravity CLI installed
- *   and signed out, in its own words ("authentication required").
+ *   and signed out, in its own words ("authentication required"), within
+ *   a few seconds: agy says it and then waits 60 s for a login, and the
+ *   read ends where it is said (agent tools.ts `readSignin`), not at the
+ *   wait's end, which held the machine's whole tools read for a minute.
  * - b. Begin: the tool's own sign-in starts and its link on
  *   accounts.google.com comes back.
  * - c. A refused code: refused in words with the exit and the screen, the
@@ -32,6 +35,13 @@ import { TOOL_CATALOG, toolSpec } from "../../../packages/core/src/tools";
 import { toolWords } from "../../../packages/core/src/words/tools";
 import { fakeAgy } from "../fake-agy";
 import type { Kit, Spec } from "../kit";
+
+/**
+ * How long a signed-out read may take: agy says it is signed out at once and
+ * then waits 60 s for a login (fake-agy.ts), so a read that ends where it is
+ * said answers in well under this.
+ */
+const SIGNED_OUT_READ_MS = 5000;
 
 /** What a call answered, or its error's words. */
 const outcome = async <T>(
@@ -62,15 +72,24 @@ export default {
     }
     const report = () => probeToolStatus(spec, { fresh: true });
 
+    const asked = performance.now();
     const out = await report();
+    const tookMs = performance.now() - asked;
     kit.note(`a: ${JSON.stringify(out)}`);
     check(
       "a. signed out: installed 1.5.0, signed out in its own words",
       out.state === "installed" &&
         out.version === "1.5.0" &&
         out.signin?.state === "signed-out" &&
-        (out.signin.detail ?? "").includes(spec.signin?.signedOut[0] ?? "-"),
+        (out.signin.detail ?? "")
+          .toLowerCase()
+          .includes(spec.signin?.signedOut[0] ?? "-"),
       JSON.stringify(out)
+    );
+    check(
+      `a. the read answered within ${SIGNED_OUT_READ_MS / 1000} s, not at the end of agy's wait for a login`,
+      tookMs < SIGNED_OUT_READ_MS,
+      `${(tookMs / 1000).toFixed(2)} s`
     );
 
     const begun = await outcome(() => beginToolSignin("antigravity"));

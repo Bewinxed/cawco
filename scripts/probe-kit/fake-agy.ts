@@ -5,9 +5,11 @@
  *
  * - `--version`: 1.5.0.
  * - `-p /usage --output-format json`: the envelope agy 1.5.0 printed on
- *   obelisk when signed in (2026-11-04, the host read), or "authentication
- *   required" on stderr and exit 1 when not; `broken` mode: a line that says
- *   neither, exit 2.
+ *   obelisk when signed in (2026-11-04, the host read); signed out, what
+ *   agy 1.5.2 says in a HOME with no sign-in (2026-11-07): "Authentication
+ *   required. Please visit the URL to log in:", a link, then a wait of 60 s
+ *   for a login before it exits 1; `broken` mode: a line that says neither,
+ *   exit 2.
  * - `acp --login`: prints a sign-in link on accounts.google.com, reads one
  *   line; `good-code` signs it in (exit 0), anything else exits 3.
  * - `-p <prompt> …` (an image run): by the mode file, the documented JSON
@@ -69,7 +71,11 @@ case "$1" in
   -p)
     if [ "$2" = "/usage" ]; then
       if [ "$mode" = "broken" ]; then echo "something else entirely"; exit 2; fi
-      if [ ! -f "$signed" ]; then echo "Error: authentication required" >&2; exit 1; fi
+      if [ ! -f "$signed" ]; then
+        printf '%s\n' "Authentication required. Please visit the URL to log in:" "  https://accounts.google.com/o/oauth2/auth?client_id=fake&state=probe" "" "Waiting for authentication (timeout 60s)..." "Or, paste the authorization code here and press Enter:" >&2
+        sleep 60
+        echo "error: authentication failed or timed out" >&2; envelope ERROR "authentication failed or timed out" ""; exit 1
+      fi
       echo '{"conversation_id":"","status":"SUCCESS","response":"Gemini Models\tWeekly Limit Remaining\t100%\t2026-11-11T10:03:10Z\n","duration_seconds":0,"num_turns":0}'
       exit 0
     fi
@@ -99,14 +105,23 @@ exit 64
 const at = (name: string): string => join(homedir(), name);
 
 /**
+ * Puts the fake agy in `bin`, whose HOME (the one it runs under) holds its
+ * state: signed out, in `image` mode, while that HOME has no
+ * `.fake-agy-signed-in`.
+ */
+export const putFakeAgy = async (bin: string): Promise<void> => {
+  await mkdir(bin, { recursive: true });
+  await writeFile(join(bin, "agy"), SCRIPT);
+  await chmod(join(bin, "agy"), 0o755);
+};
+
+/**
  * Puts the fake agy at `~/.local/bin/agy` under the spec's HOME and first on
  * the PATH, signed out, in `image` mode. Answers its controls.
  */
 export const fakeAgy = async () => {
   const bin = at(".local/bin");
-  await mkdir(bin, { recursive: true });
-  await writeFile(join(bin, "agy"), SCRIPT);
-  await chmod(join(bin, "agy"), 0o755);
+  await putFakeAgy(bin);
   await writeFile(at(".fake-agy-jpeg"), FAKE_JPEG);
   await rm(at(".fake-agy-signed-in"), { force: true });
   await rm(at(".fake-agy-runs"), { force: true });

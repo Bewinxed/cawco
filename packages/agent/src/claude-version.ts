@@ -14,7 +14,7 @@ import { secondsOf } from "@cawco/core/time";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
 import { toolWords } from "@cawco/core/words/tools";
 import type { Subprocess } from "bun";
-import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "./auth";
+import { CLAUDE_NOT_INSTALLED, claudeExecutable } from "./auth";
 
 /**
  * The first Claude Code whose initialize reply carries `claude_code_version`
@@ -192,7 +192,7 @@ export const claudeHostVersion = async (): Promise<
   Bounded<string | undefined>
 > => {
   const none = { kind: "answered" as const, value: undefined };
-  const path = resolveClaudeExecutable();
+  const path = await claudeExecutable();
   if (!path) {
     return none;
   }
@@ -302,7 +302,7 @@ export class ClaudeRefused extends Error {
  * ({@link claudeHostVersion}) is the one run that does not go through it.
  */
 export const claudeToStart = async (): Promise<string> => {
-  const path = resolveClaudeExecutable();
+  const path = await claudeExecutable();
   if (!path) {
     throw new ClaudeRefused("not-installed", CLAUDE_NOT_INSTALLED);
   }

@@ -635,8 +635,11 @@ export const TOOL_CATALOG: ToolSpec[] = [
     // (Antigravity's terms §6, https://antigravity.google/terms). `/usage`
     // in print mode is answered by the CLI itself, spends nothing, and
     // prints the quota buckets only when signed in; signed out, headless
-    // runs exit with "authentication required"
-    // (https://antigravity.google/docs/cli/headless/). `acp --login`: "Log
+    // runs fail with "authentication required"
+    // (https://antigravity.google/docs/cli/headless/), which 1.5.2 says
+    // ("Authentication required. Please visit the URL to log in:") and then
+    // waits 60 s for a login before it exits (measured 2026-11-07), so the
+    // read ends where the words are said (agent tools.ts `readSignin`). `acp --login`: "Log
     // in with Google interactively, then exit" (`agy acp --help`, 1.5.0).
     signin: {
       status: ["-p", "/usage", "--output-format", "json"],

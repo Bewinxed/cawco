@@ -536,22 +536,9 @@ try {
       (row) => row.accountId === account.id && row.state === "signed-in"
     )
   );
-  // The machine's Claude Code tool cell, which the hub reads before any start
-  // (core harness-refusal.ts `harnessRefusal`: the proof harness reports
-  // itself not installed, so the cell is what says it runs): a start sent
-  // before the agent's tools read answers is refused as not installed.
-  await wait(`${HUB}${hubRequest("GET /api/agents").path}`, restarted, (s) =>
-    (
-      JSON.parse(s) as {
-        machineId: string;
-        tools?: Record<string, { state?: string }>;
-      }[]
-    ).some(
-      (row) =>
-        row.machineId === machine.machineId &&
-        row.tools?.claude?.state === "installed"
-    )
-  );
+  // Started at once, not after the machine's tools read: the restarted
+  // agent's Claude report says Claude Code is installed (proof-harnesses.ts
+  // `detected`), which is what the hub admits a start by.
   // A session started and spoken to the way the app does it, on the capture
   // socket: the board's deltas for it, and its stream's events.
   const sessionId = crypto.randomUUID();

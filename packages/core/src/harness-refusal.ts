@@ -40,6 +40,15 @@ export const harnessSpec = (harness: HarnessKind): ToolSpec => {
  * (or there, where the report found none), already counts as running: the agent reads that report again as the
  * install ends (daemon.ts `reportTools`), and the gap is not the person's
  * to wait out, nor a start's.
+ *
+ * The report is the read a start is admitted by, the cell only a later
+ * word on it: a cell not read yet (an agent whose tools read has not
+ * landed) leaves the report as it stands. Its "not installed" is no
+ * unknown: the agent finds a harness's CLI with the lookup its tools row
+ * makes (agent tools.ts `toolBinary`; Claude Code's, auth.ts
+ * `claudeExecutable`), so the cell, once read, says the same. Unread is the
+ * report's own absence (hub placement.ts `unreportedHarnessRefusal`), as a
+ * model list's is (model-names.ts `ModelListing`).
  */
 export const harnessRefusal = (
   report: Pick<

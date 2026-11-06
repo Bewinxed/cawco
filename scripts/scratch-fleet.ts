@@ -1974,9 +1974,8 @@ async function standUp(
   // signed in as the probe's identity and sends the fake token to the mock.
   // Every machine of the fleet gets the same, in its own HOME (`furnish`).
   const accountDir = join(home, ".cawco", "accounts", ACCOUNT, "claude");
-  const { resolveClaudeExecutable } =
-    await import("../packages/agent/src/auth");
-  const hostClaude = resolveClaudeExecutable();
+  const { claudeExecutable } = await import("../packages/agent/src/auth");
+  const hostClaude = await claudeExecutable();
   const furnish = async (dir: string) => {
     const account = join(dir, ".cawco", "accounts", ACCOUNT, "claude");
     await mkdir(account, { recursive: true });

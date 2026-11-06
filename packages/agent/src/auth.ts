@@ -1,8 +1,9 @@
 import { platform } from "node:os";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { harnessSpec } from "@cawco/core/harness-refusal";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { keychainLocked, loginKeychainPath } from "./login-keychain";
-import { resolveBin } from "./tools";
+import { toolBinary } from "./tools";
 
 /**
  * A prompt that never yields. `query()` starts the CLI and its control channel
@@ -18,16 +19,22 @@ export const idle: AsyncIterable<SDKUserMessage> = {
   }),
 };
 
-/** What a machine with no `claude` on the agent's PATH says, wherever it is asked. */
+/** What a machine where the agent finds no Claude Code ({@link claudeExecutable}) says, wherever it is asked. */
 export const CLAUDE_NOT_INSTALLED =
   "Claude Code is not installed on this machine";
 
 /**
- * The Claude Code installed on this machine: the absolute path of the
- * `claude` on the agent's PATH, then in the dirs installers put binaries in
- * (tools.ts `toolPath`), so one the official installer put in `~/.local/bin`
- * a second ago (the update action, core TOOL_CATALOG's `claude`) runs
- * without a restart. CawCo carries no Claude Code of its own: the
+ * The Claude Code installed on this machine, found as the tool catalog finds
+ * every CLI it holds (tools.ts `toolBinary`): the `claude` on the agent's
+ * PATH, then in the dirs installers put binaries in (tools.ts `toolPath`),
+ * so one the official installer put in `~/.local/bin` a second ago (the
+ * update action, core TOOL_CATALOG's `claude`) runs without a restart, then
+ * npm's global bin, where `npm install -g` under nvm puts it off a service
+ * manager's PATH. The one lookup Claude's report (harnesses/claude.ts
+ * `detect`), its version gate and the machine's tools row make, so the row
+ * never says it is installed while the report the hub refuses starts by
+ * says it is not, as OpenCode's and pi's gates (tools.ts `toolGate`) never
+ * did. CawCo carries no Claude Code of its own: the
  * installed one holds the person's login (on macOS its Keychain item is tied
  * to it), carries their plugins and updates itself. Found, not started:
  * whatever starts it takes its path from the version gate (claude-version.ts
@@ -36,8 +43,8 @@ export const CLAUDE_NOT_INSTALLED =
  * checks the path exists), and without it would reach for its own platform
  * package instead.
  */
-export const resolveClaudeExecutable = (): string | undefined =>
-  resolveBin("claude");
+export const claudeExecutable = (): Promise<string | undefined> =>
+  toolBinary(harnessSpec("claude"));
 
 /**
  * `errSecAuthFailed` (-25293), as `security` exits with it: the OSStatus's

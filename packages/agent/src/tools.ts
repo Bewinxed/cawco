@@ -1243,6 +1243,23 @@ const toolSignin = async (
   return signin;
 };
 
+/**
+ * The first line a sign-in read said (`heard`, its stdout then its stderr)
+ * that holds one of the tool's signed-out words, as it reads; none while
+ * it has said none.
+ */
+const signedOutLine = (
+  signedOut: readonly string[],
+  heard: { err: string; out: string }
+): string | undefined =>
+  Bun.stripANSI(`${heard.out}\n${heard.err}`)
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => {
+      const lower = line.toLowerCase();
+      return signedOut.some((word) => lower.includes(word.toLowerCase()));
+    });
+
 /** {@link toolSignin}'s read itself. */
 const readSignin = async (spec: ToolSpec): Promise<ToolSignin> => {
   const words = spec.signin;
@@ -1265,13 +1282,45 @@ const readSignin = async (spec: ToolSpec): Promise<ToolSignin> => {
       stderr: "pipe",
       signal,
     });
-    const [code, out, err] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
+    const heard = { out: "", err: "" };
+    const { promise: signedOut, resolve: sayOut } =
+      Promise.withResolvers<string>();
+    const listen = async (
+      stream: ReadableStream<Uint8Array>,
+      into: keyof typeof heard
+    ): Promise<void> => {
+      const decoder = new TextDecoder();
+      try {
+        for await (const chunk of stream) {
+          heard[into] += decoder.decode(chunk, { stream: true });
+          const line = signedOutLine(words.signedOut, heard);
+          if (line !== undefined) {
+            sayOut(line);
+          }
+        }
+      } catch {
+        // A pipe that fails has nothing more to say: what it said stands.
+      }
+    };
+    // A signed-out word ends the read where it is said: agy 1.5.2 says
+    // "Authentication required. Please visit the URL to log in:" and then
+    // waits 60 s for a login no one is at (measured 2026-11-07, a HOME
+    // with no sign-in), which held the machine's whole tools read, Claude
+    // Code's cell with it, for that minute.
+    const exited = async (): Promise<{ code: number }> => {
+      const [code] = await Promise.all([
+        child.exited,
+        listen(child.stdout, "out"),
+        listen(child.stderr, "err"),
+      ]);
+      return { code };
+    };
+    const saidOut = async (): Promise<{ line: string }> => ({
+      line: await signedOut,
+    });
+    const ended = await Promise.race([exited(), saidOut()]);
     untether(child.stdin);
-    return { code, out, err };
+    return { ...ended, ...heard };
   }).catch(() => undefined);
   const asked = read?.kind === "answered" ? read.value : undefined;
   if (!asked) {
@@ -1281,11 +1330,15 @@ const readSignin = async (spec: ToolSpec): Promise<ToolSignin> => {
       at: Date.now(),
     };
   }
-  const said = Bun.stripANSI(`${asked.out}\n${asked.err}`).trim();
-  const lower = said.toLowerCase();
-  if (words.signedOut.some((word) => lower.includes(word.toLowerCase()))) {
-    return { state: "signed-out", detail: tail(said), at: Date.now() };
+  if ("line" in asked) {
+    return { state: "signed-out", detail: asked.line, at: Date.now() };
   }
+  // Said as it ended, in the last chunk read.
+  const lastSaid = signedOutLine(words.signedOut, asked);
+  if (lastSaid !== undefined) {
+    return { state: "signed-out", detail: lastSaid, at: Date.now() };
+  }
+  const said = Bun.stripANSI(`${asked.out}\n${asked.err}`).trim();
   return asked.code === 0
     ? { state: "signed-in", at: Date.now() }
     : {

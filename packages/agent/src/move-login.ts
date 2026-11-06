@@ -44,7 +44,7 @@ import { forgetAccount } from "./login";
  *
  * Where Claude Code keeps a login, as the machine's own `claude` reads and
  * writes it (CawCo bundles none: it runs the one on PATH, auth.ts
- * `resolveClaudeExecutable`; read off the 2.1.289 build, and the 2.1.288 and
+ * `claudeExecutable`; read off the 2.1.289 build, and the 2.1.288 and
  * 2.1.301 builds carry the same store names):
  * - macOS: a Keychain generic password, account {@link keychainUser},
  *   service `Claude Code-credentials` for the default dir and

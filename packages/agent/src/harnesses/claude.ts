@@ -159,7 +159,7 @@ import {
   probeAccount,
   projectMemoryRoot,
 } from "../accounts";
-import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "../auth";
+import { CLAUDE_NOT_INSTALLED, claudeExecutable } from "../auth";
 import {
   claudeBoundaryOptions,
   hookFailsOpen,
@@ -4683,13 +4683,14 @@ class ClaudeHarness implements Harness {
    * machine's sentence on why no session starts ({@link versionRefusal}).
    * Read on every report and each minute's re-read, which is where a
    * `claude update` is seen ({@link claudeHostVersion}). With no Claude Code
-   * on PATH it is not installed and unauthenticated, as pi and OpenCode say
+   * where the agent finds one (auth.ts `claudeExecutable`, the tools row's
+   * own lookup) it is not installed and unauthenticated, as pi and OpenCode say
    * of theirs, and no dir is asked: there is no CLI to ask, so the report
    * carries no `accounts` and the hub leaves each dir's sign-in as it was.
    */
   async detect(): Promise<MachineHarnessReport> {
     probeStarted();
-    if (resolveClaudeExecutable() === undefined) {
+    if ((await claudeExecutable()) === undefined) {
       sawTool("claude", "missing");
       this.auth = "unauthenticated";
       return {
@@ -5113,11 +5114,11 @@ class ClaudeHarness implements Harness {
     // servers with it. Its account is the one its process runs on, which the
     // hub sends an attach. What only a launch uses (its flags, its fleet
     // servers, the fleet's denials it was started with) its CLI holds
-    // already: nothing is spawned, so the SDK is handed the `claude` on
-    // PATH, not the version gate's: a process that runs already is taken
+    // already: nothing is spawned, so the SDK is handed the machine's
+    // `claude` (auth.ts `claudeExecutable`), not the version gate's: a process that runs already is taken
     // back whatever its version, and retired at rest ({@link
     // ClaudeSession.outdated}).
-    const executable = resolveClaudeExecutable();
+    const executable = await claudeExecutable();
     if (!executable) {
       throw new Error(CLAUDE_NOT_INSTALLED);
     }

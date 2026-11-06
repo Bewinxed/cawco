@@ -79,7 +79,7 @@ import { writeStateFile } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import { z } from "zod";
 import { accountClaudeJsons, linkUserLayer } from "./accounts";
-import { resolveClaudeExecutable } from "./auth";
+import { claudeExecutable } from "./auth";
 import { excludeFromCheckout, gitIn } from "./checkout-exclude";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
 import { readFleetDenials, sidecarTurn } from "./denied-tools";
@@ -694,7 +694,7 @@ const machineToolchain = async (fresh: boolean): Promise<FleetToolchain> => {
   if (!fresh && toolchainCache) {
     return toolchainCache;
   }
-  const claude = await claudeInstalls(resolveClaudeExecutable());
+  const claude = await claudeInstalls(await claudeExecutable());
   toolchainCache = claude.length > 0 ? { claude } : {};
   return toolchainCache;
 };
