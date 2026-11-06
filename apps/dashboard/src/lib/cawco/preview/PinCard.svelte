@@ -687,7 +687,7 @@
       data-slot="gone"
       class="flex shrink-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta"
     >
-      <p class="m-0 min-w-0 text-ink-muted" role="status">
+      <p class="m-0 min-w-0 text-ink-row" role="status">
         {placing ? said.placeHere : words.pinElementGone}
       </p>
       <Button
