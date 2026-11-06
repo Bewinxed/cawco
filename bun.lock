@@ -27,7 +27,7 @@
         "knip": "6.43.0",
         "multicast-dns": "7.2.5",
         "oxc-parser": "0.155.0",
-        "playwright-core": "^1.64.1",
+        "playwright-core": "^1.65.0",
         "pngjs": "^7.0.0",
         "prettier": "3.9.10",
         "prettier-plugin-svelte": "4.1.1",
@@ -112,7 +112,7 @@
         "@types/bun": "^1.4.3",
         "colorjs.io": "^0.7.1",
         "paneforge": "^1.0.2",
-        "playwright-core": "^1.64.1",
+        "playwright-core": "^1.65.0",
         "postcss": "^8.5.30",
         "postcss-selector-parser": "^7.1.6",
         "style-dictionary": "^5.5.5",
@@ -154,7 +154,7 @@
         "image-size": "2.0.4",
         "modern-screenshot": "4.7.0",
         "perfect-freehand": "1.2.3",
-        "playwright-core": "^1.64.1",
+        "playwright-core": "^1.65.0",
         "react": "19.3.0",
         "react-dom": "19.3.0",
         "turn-server": "0.8.0",
@@ -2663,7 +2663,7 @@
 
     "pkg-types": ["pkg-types@1.3.1", "", { "dependencies": { "confbox": "^0.1.8", "mlly": "^1.7.4", "pathe": "^2.0.1" } }, "sha512-/Jm5M4RvtBFVkKWRu2BLUTNP8/M2a+UwuAX+ae4770q1qVGtfjG+WTCupoZixokjmHiry8uI+dlY8KXYV5HVVQ=="],
 
-    "playwright-core": ["playwright-core@1.64.1", "", { "bin": { "playwright-core": "cli.js" } }, "sha512-BC4s8y6SEVA6Q1rSxZTto8hI1KUI3xXlHGZgvGqP4IqPdI/a6FX9H29IDNz7vKo9l21b6LfYosScPL6M3xxyDQ=="],
+    "playwright-core": ["playwright-core@1.65.0", "", { "bin": { "playwright-core": "cli.js" } }, "sha512-vNSKgH6YqtN7cdT/L334zo0a+YwkrpicyrHJlWWPIm/Q+Nn2SWInil01oT0mbu96U4GgoRtCYQD9CzJQgju+lA=="],
 
     "png-chunk-text": ["png-chunk-text@1.0.0", "", {}, "sha512-DEROKU3SkkLGWNMzru3xPVgxyd48UGuMSZvioErCure6yhOc/pRH2ZV+SEn7nmaf7WNf3NdIpH+UTrRdKyq9Lw=="],
 

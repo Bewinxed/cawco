@@ -69,7 +69,7 @@
     "@types/bun": "^1.4.3",
     "colorjs.io": "^0.7.1",
     "paneforge": "^1.0.2",
-    "playwright-core": "^1.64.1",
+    "playwright-core": "^1.65.0",
     "postcss": "^8.5.30",
     "postcss-selector-parser": "^7.1.6",
     "style-dictionary": "^5.5.5",

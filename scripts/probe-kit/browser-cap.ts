@@ -24,8 +24,8 @@
  * on a cap of gigabytes, so it errs to the safe side.
  *
  * A launch's roots are the children this process gained across the launch
- * whose command names a Playwright browser build (`ms-playwright`, or
- * `PROBE_WEBKIT`'s): launches are made one at a time, so no other launch's
+ * whose command names a Playwright browser build (`ms-playwright`,
+ * `PLAYWRIGHT_BROWSERS_PATH`'s or `PROBE_WEBKIT`'s): launches are made one at a time, so no other launch's
  * root is counted as this one's.
  */
 import { readdirSync, readFileSync } from "node:fs";
@@ -196,11 +196,15 @@ const ownChildren = (): Proc[] => {
 
 const gib = (bytes: number): string => `${(bytes / GIB).toFixed(2)} GiB`;
 
-/** The browser builds a launch runs: Playwright's, or the WebKit `PROBE_WEBKIT` names. */
+/**
+ * The browser builds a launch runs: Playwright's (its default cache, or the
+ * one `PLAYWRIGHT_BROWSERS_PATH` names), or the WebKit `PROBE_WEBKIT` names.
+ */
 const isBrowserBuild = (command: string): boolean =>
   command.includes("ms-playwright") ||
-  (process.env.PROBE_WEBKIT !== undefined &&
-    command.includes(process.env.PROBE_WEBKIT));
+  [process.env.PLAYWRIGHT_BROWSERS_PATH, process.env.PROBE_WEBKIT].some(
+    (path) => path !== undefined && path !== "" && command.includes(path)
+  );
 
 const leg = (): string => {
   const at = process.argv.indexOf("--leg");
