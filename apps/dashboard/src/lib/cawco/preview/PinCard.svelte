@@ -715,8 +715,8 @@
       {said.resolvedAgo(resolvedAge)}
     </p>
   {/if}
-  {#if !peek && whyNotSent && markState(pin) === "unsent"}
-    <!-- Its delivery reached no one, or it stands only on the page: why, with Try again. -->
+  {#if !peek && whyNotSent}
+    <!-- Its delivery reached no one, it stands only on the page, or the hub refused a write of it: why, with Try again (the pane's `notSentWhy` says when). -->
     <div
       data-slot="not-sent"
       data-not-sent=""

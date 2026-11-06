@@ -2,17 +2,19 @@
   import {
     type ActivityLine,
     type ChangedItem,
+    keepAside,
     newAnswer,
     type Pin,
     type PreviewMode,
     pinHeld,
     pinProblem,
+    pinUnsent,
     previewMode,
     type RefusedReplies,
     type RefusedWrites,
-    replyAgain,
     type ThreadEntry,
     withKeptReplies,
+    writeAgain,
   } from "@cawco/core/comments";
   import { detach } from "@cawco/core/detach";
   import {
@@ -1157,50 +1159,33 @@
   }
   /** A refusal's writes the hub doesn't hold, each kept aside with its reason where it was made. */
   function keepRefused(id: string, why: string, lost: RefusedWrites) {
-    const next = { ...refusedReplies };
-    const on = (pin: string) => {
-      next[pin] = { ...(next[pin] ?? { entries: [] }), why };
-      return next[pin];
-    };
-    for (const { pin, entries } of lost.replies) {
-      const was = next[pin]?.entries ?? [];
-      const ids = new Set(entries.map((entry) => entry.id));
-      on(pin).entries = [
-        ...was.filter((entry) => !ids.has(entry.id)),
-        ...entries,
-      ];
-    }
-    for (const { pin, resolved } of lost.resolves) {
-      on(pin).resolved = resolved;
-    }
-    for (const pin of lost.deletes) {
-      on(pin).deleted = true;
-    }
+    const next = keepAside(refusedReplies, lost, why);
     keepReplies(id, next);
     if (lost.sendHeld) {
       keepSendRefused(id, { note: lost.sendHeld.note, why });
     }
   }
   /**
-   * The person's replies the hub refused that the page keeps (written
-   * through the page, as the app writes them: overlay artifact.ts
-   * `refusedReplies`), by pin, as the page last said them
+   * The person's writes on a pin the hub refused that the page keeps (its
+   * replies, resolve or reopen and delete, written through the page, as the
+   * app writes them: overlay artifact.ts `refusedReplies`), by pin, as the
+   * page last said them
    * (`cawco:page-pins`). Drawn in their thread beside the pane's own, with
    * the reason and Try again, which the page writes again
    * (`cawco:resend-pin`).
    */
-  let pageReplies = $state.raw<
-    Record<string, { entries: ThreadEntry[]; why: string }>
-  >({});
+  let pageReplies = $state.raw<RefusedReplies>({});
   /** `said` as the page's refused replies, each part checked: what isn't one is left out. */
-  function pageRepliesOf(said: unknown) {
+  function pageRepliesOf(said: unknown): RefusedReplies {
     if (!said || typeof said !== "object" || Array.isArray(said)) {
       return {};
     }
-    const kept: Record<string, { entries: ThreadEntry[]; why: string }> = {};
+    const kept: RefusedReplies = {};
     for (const [pin, one] of Object.entries(said)) {
-      const { entries, why } = (one ?? {}) as {
+      const { entries, why, resolved, deleted } = (one ?? {}) as {
+        deleted?: unknown;
         entries?: unknown;
+        resolved?: unknown;
         why?: unknown;
       };
       if (typeof why !== "string" || !Array.isArray(entries)) {
@@ -1214,8 +1199,13 @@
           typeof (entry as ThreadEntry).text === "string" &&
           (entry as ThreadEntry).by === "person"
       );
-      if (valid.length > 0) {
-        kept[pin] = { entries: valid, why };
+      // Its delete, or its resolve or reopen, the hub refused, beside its replies.
+      const act = {
+        ...(typeof resolved === "boolean" ? { resolved } : {}),
+        ...(deleted === true ? { deleted: true as const } : {}),
+      };
+      if (valid.length > 0 || Object.keys(act).length > 0) {
+        kept[pin] = { entries: valid, why, ...act };
       }
     }
     return kept;
@@ -1834,13 +1824,24 @@
    * or it stands only in the page's doc while the page's link has stood down
    * past its grace ({@link linkDown}): the hub can't be reached, and it goes
    * once the hub is back. Inside the grace a reopening link says nothing,
-   * and no close code is ever his to read here.
+   * and no close code is ever his to read here. Said while it is unsent,
+   * and on a sent one too while a resolve, reopen or delete of it the hub
+   * refused is kept (core `keepAside`): that act hasn't reached the hub.
    */
-  const notSentWhy = (pin: Pin): string | null =>
-    refusedReplies[pin.id]?.why ??
-    pageReplies[pin.id]?.why ??
-    pin.notSent?.why ??
-    (onlyOnPage(pin.id) && linkDown ? commentWords.hubUnreached : null);
+  const notSentWhy = (pin: Pin): string | null => {
+    const kept = refusedReplies[pin.id] ?? pageReplies[pin.id];
+    if (kept && (kept.resolved !== undefined || kept.deleted)) {
+      return kept.why;
+    }
+    if (pin.resolvedAt || !pinUnsent(pin)) {
+      return null;
+    }
+    return (
+      kept?.why ??
+      pin.notSent?.why ??
+      (onlyOnPage(pin.id) && linkDown ? commentWords.hubUnreached : null)
+    );
+  };
   /** How long a comment only the page holds is given to reach the hub, once its link is opened again, before its Try again says it didn't. Our call. */
   const REACH_HUB_MS = 10_000;
   /** Resolves once the pane's doc holds comment `id` (the page's link carried it to the hub); rejects, saying why, when it doesn't within {@link REACH_HUB_MS}. */
@@ -1905,23 +1906,7 @@
         "The pane lost the page's document, so it wasn't written again. Reload, then try again."
       );
     }
-    const live = doc;
-    let act: string | null = null;
-    if (kept.deleted) {
-      act = live.delete(id);
-    } else if (kept.resolved !== undefined) {
-      act = live.resolve(id, kept.resolved);
-    }
-    if (act) {
-      keepReplies(artifactKey, {
-        ...refusedReplies,
-        [id]: { ...kept, why: act },
-      });
-      throw new Error(act);
-    }
-    const { left, why } = replyAgain(refusedReplies, id, (said) =>
-      live.reply(id, said)
-    );
+    const { left, why } = writeAgain(refusedReplies, id, doc);
     keepReplies(artifactKey, left);
     if (why) {
       throw new Error(why);

@@ -1591,7 +1591,9 @@ export type RefusedReplies = Record<
 export interface RefusedWrites {
   /** Pins the person deleted that the hub still holds. */
   deletes: string[];
-  /** Each pin's replies the hub holds none of ({@link lostReplies}). */
+  /** The person's whole comments the hub holds none of and hasn't deleted: the page's, which writes them (overlay artifact.ts `keepRefused`). */
+  pins: Pin[];
+  /** Each pin's person's entries the hub holds none of, in a thread it holds. */
   replies: { entries: ThreadEntry[]; pin: string }[];
   /** A resolve or reopen the hub didn't keep: what the person asked. */
   resolves: { pin: string; resolved: boolean }[];
@@ -1601,10 +1603,11 @@ export interface RefusedWrites {
 
 /**
  * The person's writes `refused`, a doc the hub refused a write of, held
- * that `hub`, the hub's doc after it, does not: their replies, a resolve or
- * reopen, a delete, and Send all (an entry they let go that the hub still
- * holds held, and its note). A pin the hub holds none of is the page's to
- * keep (overlay artifact.ts `keepRefused`).
+ * that `hub`, the hub's doc after it, does not: whole comments, their
+ * replies, a resolve or reopen, a delete, and Send all (an entry they let
+ * go that the hub still holds held, and its note). The one reading of a
+ * refusal, for the pane (artifact-doc.ts) and the page (overlay
+ * doc-worker.ts) alike.
  */
 export const lostWrites = (refused: MapDoc, hub: MapDoc): RefusedWrites => {
   const before = readPins(refused);
@@ -1619,6 +1622,20 @@ export const lostWrites = (refused: MapDoc, hub: MapDoc): RefusedWrites => {
       : [];
   });
   const goneThere = goneOf(hub);
+  const pins = [...before.values()].filter(
+    (pin) => pin.by === "person" && !after.has(pin.id) && !goneThere.has(pin.id)
+  );
+  const replies = [...before.values()].flatMap((pin) => {
+    const now = after.get(pin.id);
+    if (!now) {
+      return [];
+    }
+    const has = new Set(now.thread.map((entry) => entry.id));
+    const entries = pin.thread.filter(
+      (entry) => entry.by === "person" && !has.has(entry.id)
+    );
+    return entries.length > 0 ? [{ pin: pin.id, entries }] : [];
+  });
   const deletes = [...goneOf(refused).keys()].filter(
     (pin) => after.has(pin) && !goneThere.has(pin)
   );
@@ -1633,7 +1650,8 @@ export const lostWrites = (refused: MapDoc, hub: MapDoc): RefusedWrites => {
   });
   const note = heldNoteOf(refused);
   return {
-    replies: lostReplies(before.values(), after),
+    pins,
+    replies,
     resolves,
     deletes,
     sendHeld: lettingGo
@@ -1666,45 +1684,74 @@ export const withKeptReplies = (
   return more.length > 0 ? [...thread, ...more] : thread;
 };
 
-/**
- * What a refused write lost of the person's replies: their entries in each
- * of `pins`' threads that `held` (the hub's pins after it) still has the pin
- * of but not the entry. A pin the hub holds none of is lost whole, not here.
- */
-export const lostReplies = (
-  pins: Iterable<Pin>,
-  held: Map<string, Pin>
-): { entries: ThreadEntry[]; pin: string }[] =>
-  [...pins].flatMap((pin) => {
-    const now = held.get(pin.id);
-    if (!now) {
-      return [];
-    }
-    const has = new Set(now.thread.map((entry) => entry.id));
-    const entries = pin.thread.filter(
-      (entry) => entry.by === "person" && !has.has(entry.id)
-    );
-    return entries.length > 0 ? [{ pin: pin.id, entries }] : [];
-  });
+/** The person's writes on a pin as a doc takes them (artifact-doc.ts `ArtifactDoc`, the overlay's doc): each answers the refusal's sentence, null once written. */
+export interface PersonWrites {
+  delete: (pin: string) => string | null;
+  reply: (pin: string, said: Said) => string | null;
+  resolve: (pin: string, resolved: boolean) => string | null;
+}
 
 /**
- * Pin `id`'s refused replies sent again by `reply`: answers the refused
- * replies left (pin `id`'s only those refused again) and the last refusal's
- * words, null when every one went.
+ * `lost`, a refusal's writes ({@link lostWrites}), kept aside in `kept`
+ * with the hub's reason `why`, by pin: each reply beside the pin's kept
+ * ones, and its resolve or reopen and delete. Whole comments are the
+ * page's to keep (overlay artifact.ts `keepRefused`).
  */
-export const replyAgain = (
+export const keepAside = (
+  kept: RefusedReplies,
+  lost: RefusedWrites,
+  why: string
+): RefusedReplies => {
+  const next = { ...kept };
+  const on = (pin: string) => {
+    next[pin] = { ...(next[pin] ?? { entries: [] }), why };
+    return next[pin];
+  };
+  for (const { pin, entries } of lost.replies) {
+    const ids = new Set(entries.map((entry) => entry.id));
+    const was = next[pin]?.entries ?? [];
+    on(pin).entries = [
+      ...was.filter((entry) => !ids.has(entry.id)),
+      ...entries,
+    ];
+  }
+  for (const { pin, resolved } of lost.resolves) {
+    on(pin).resolved = resolved;
+  }
+  for (const pin of lost.deletes) {
+    on(pin).deleted = true;
+  }
+  return next;
+};
+
+/**
+ * Pin `id`'s refused writes written again by `write` (its Try again): its
+ * delete, or its resolve or reopen, then each reply. Answers what is left
+ * (pin `id`'s only what was refused again) and the last refusal's words,
+ * null when every one went.
+ */
+export const writeAgain = (
   refused: RefusedReplies,
   id: string,
-  reply: (said: Said) => string | null
+  write: PersonWrites
 ): { left: RefusedReplies; why: string | null } => {
   const { [id]: kept, ...rest } = refused;
   if (!kept) {
     return { left: refused, why: null };
   }
+  let act: string | null = null;
+  if (kept.deleted) {
+    act = write.delete(id);
+  } else if (kept.resolved !== undefined) {
+    act = write.resolve(id, kept.resolved);
+  }
+  if (act) {
+    return { left: { ...rest, [id]: { ...kept, why: act } }, why: act };
+  }
   const again: ThreadEntry[] = [];
   let why: string | null = null;
   for (const entry of kept.entries) {
-    const refusal = reply({
+    const refusal = write.reply(id, {
       text: entry.text,
       ...(entry.attachments ? { attachments: entry.attachments } : {}),
     });

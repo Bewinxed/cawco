@@ -18,7 +18,7 @@
  * Built into the overlay's bundle as text (core preview-proxy.ts
  * `bundleOverlay`), and started from it as a blob (artifact.ts).
  */
-import { honourDeletions, readPins } from "@cawco/core/comments";
+import { honourDeletions, lostWrites } from "@cawco/core/comments";
 import {
   ARTIFACT_GONE,
   RESYNC_MS,
@@ -352,6 +352,14 @@ const connect = () => {
   });
   own.on("sync", (isSynced: boolean) => {
     if (isSynced && own === provider) {
+      // The hub's doc is in after a refusal: what of the person's the
+      // refused doc held that it doesn't is the page's to keep aside.
+      if (refusing) {
+        const { copy, reason } = refusing;
+        refusing = null;
+        post({ type: "refused-writes", writes: lostWrites(copy, doc), reason });
+        copy.destroy();
+      }
       post({ type: "synced" });
     }
   });
@@ -379,18 +387,24 @@ const connect = () => {
 };
 
 /**
- * What the page wrote the hub would not keep: the page keeps aside the
- * person's comments the hub doesn't hold, and the worker goes on from the
+ * What the page wrote the hub would not keep: once the hub's doc is in, the
+ * page keeps aside every write of the person's it doesn't hold (core
+ * `lostWrites`, said as `lost`), and the worker goes on from the
  * hub's doc in a fresh one, a new Yjs client on a socket of its own (Yjs
  * takes one client's updates in clock order only, so the old one's would
  * all wait on the refused write), the device's copy of the old one cleared
  * first so the refused write never comes back into it.
  */
+/** A refusal's reason and a copy of the refused doc, until the hub's doc is in (core `lostWrites`). */
+let refusing: { copy: Doc; reason: string } | null = null;
 const refused = (reason: string) => {
   const refusedCopy = kept;
-  const pins = Object.fromEntries(readPins(doc));
+  const copy = new Doc();
+  applyUpdate(copy, encodeStateAsUpdate(doc));
+  refusing?.copy.destroy();
+  refusing = { copy, reason };
   replaceDoc(generation + 1);
-  post({ type: "refused", generation, pins, reason });
+  post({ type: "refused", generation, reason });
   (refusedCopy?.clearData() ?? Promise.resolve())
     .catch(() => undefined)
     .then(() => {

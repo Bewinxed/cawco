@@ -8,6 +8,7 @@
  * page's does); the worker runs Yjs, y-websocket's protocol over that
  * socket, and the copy kept on the device (y-indexeddb).
  */
+import type { RefusedWrites } from "@cawco/core/comments";
 
 /** One write to a mirrored map: a key set to a plain value, or deleted. */
 export type WriteOp =
@@ -88,14 +89,14 @@ export type FromWorker =
   | { type: "stored" }
   /**
    * The hub would not keep what the page wrote: the doc started again as
-   * `generation`, the pins it held before then, and the hub's reason.
+   * `generation`, and the hub's reason.
    */
-  | {
-      generation: number;
-      pins: Record<string, unknown>;
-      reason: string;
-      type: "refused";
-    }
+  | { generation: number; reason: string; type: "refused" }
+  /**
+   * The hub's doc is in after a refusal: the person's writes the refused
+   * doc held that it doesn't (core `lostWrites`), and the hub's reason.
+   */
+  | { reason: string; type: "refused-writes"; writes: RefusedWrites }
   /** Doc `generation`'s whole state, or one change to it, for the page's replica. */
   | { generation: number; type: "replica"; update: Uint8Array }
   /** What the doc holds that the hub isn't known to (the page's writes, the device's), and its deletions, as one update: the answer to ask `id`. */

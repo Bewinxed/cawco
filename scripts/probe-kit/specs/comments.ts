@@ -273,6 +273,7 @@
  *   bun scripts/probe-kit/run.ts comments --leg yjs      # y1 and y2 alone
  *   bun scripts/probe-kit/run.ts comments --leg sizing   # the sizing leg alone
  *   bun scripts/probe-kit/run.ts comments --leg changed  # Changed since you looked, on a page and a canvas
+ *   bun scripts/probe-kit/run.ts comments --leg refused  # writes the hub refuses: a comment, and a resolve through the page
  */
 import { Database } from "bun:sqlite";
 import { existsSync, readdirSync } from "node:fs";
@@ -918,6 +919,11 @@ const runOn = async (kit: Kit, on: On) => {
     await keptPictureChecks(on);
     return;
   }
+  if (ONLY_LEG === "refused") {
+    await refusedChecks(on);
+    await refusedResolveChecks(on);
+    return;
+  }
   if (ONLY_LEG === "switch") {
     const sized = await sizingPin(on);
     if (sized) {
@@ -988,6 +994,7 @@ const runOn = async (kit: Kit, on: On) => {
     () => sizingChecks(on),
     // Nothing of the person's is lost: a refused write, a hub restart before its delivery.
     () => refusedChecks(on),
+    () => refusedResolveChecks(on),
     () => restartChecks(on),
     // Last: it loads the desk again, which gives the split its kept width.
     () => keyOpenChecks(on),
@@ -10963,6 +10970,126 @@ const refusedChecks = async (on: On) => {
     `row gone ${left}; kept ${String(kept).slice(0, 120)}`
   );
   await shutList(on);
+};
+
+/**
+ * A refused resolve is never lost (core `lostWrites`, overlay artifact.ts
+ * `keepRefused`): with the page's link to the hub down, a comment the hub
+ * holds is resolved through the page, as a host that holds no doc of its
+ * own writes it (the app's `cawco:resolve`), beside a comment the hub won't
+ * keep (its words past what an entry holds). The link back, the hub refuses
+ * the page's writes whole; the resolved comment's row says "Not sent: …"
+ * in the hub's words with Try again, the hub's copy still open, and Try
+ * again resolves it.
+ */
+const refusedResolveChecks = async (on: On) => {
+  const made = await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    title: "Probe judge artifact",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "refused-resolve",
+    html: SEND_PAGE,
+  });
+  const id = made.match(ANSWERED_ID)?.[1] ?? "";
+  const { origin } = new URL(on.page.url());
+  const tab = await on.kit.page("desk");
+  const link: { down: boolean; open: Set<WebSocketRoute> } = {
+    down: false,
+    open: new Set(),
+  };
+  await tab.routeWebSocket(PAGE_SOCKET, (ws) => {
+    if (link.down) {
+      ws.close({ code: 1011, reason: "The probe held the page's link." });
+      return;
+    }
+    ws.connectToServer();
+    link.open.add(ws);
+    ws.onClose(() => link.open.delete(ws));
+  });
+  const there: On = { ...on, page: tab };
+  await open(tab, `${origin}/session/${on.session}`, COMPOSER);
+  const frame = await frameHolding(tab, id, "the refused-resolve page");
+  if (!frame) {
+    on.kit.check(
+      "refused-resolve: the page is shown",
+      false,
+      made.slice(0, 300)
+    );
+    await tab.close();
+    return;
+  }
+  await frame.waitForSelector("#one");
+  const pinId = await writePin(frame, 1, "Resolve me while the link is down.");
+  const onHub = await until(
+    "the comment in the pane's list, from the hub",
+    async () =>
+      (await (
+        await rowsOf(there)
+      )
+        .locator('[data-slot="pin-row"][data-pin-row="1"]')
+        .count()) > 0,
+    Boolean,
+    15_000
+  ).catch(() => false);
+  // The page's link down; the resolve and a comment the hub won't keep written through it.
+  link.down = true;
+  for (const ws of [...link.open]) {
+    await ws.close({
+      code: 1011,
+      reason: "The probe dropped the page's link.",
+    });
+  }
+  await settle(tab, 500);
+  await (
+    await frame.frameElement()
+  ).evaluate((el, pin) => {
+    (el as HTMLIFrameElement).contentWindow?.postMessage(
+      { type: "cawco:resolve", pin, resolved: true },
+      "*"
+    );
+  }, pinId);
+  await writePin(frame, 2, "x".repeat(2001));
+  await settle(tab, 500);
+  link.down = false;
+  // The comment stands open: its row is in the Open list.
+  await showListNamed(there, OPEN_LIST);
+  const told = await until(
+    "the refused resolve's row saying why",
+    () => notSentRow(there, 1),
+    (now) => !!now.said,
+    20_000
+  ).catch(() => notSentRow(there, 1));
+  const openOnHub = !(await docOf(frame)).pins[pinId]?.resolvedAt;
+  on.kit.check(
+    "refused-resolve: a resolve the hub refuses, written through the page with its link down, is kept: the comment's row says \"Not sent: …\" in the hub's words with Try again, the hub's copy still open",
+    onHub &&
+      openOnHub &&
+      !!told.said?.startsWith(`${commentWords.notSentHead} `) &&
+      told.send === commonWords.tryAgain,
+    `on the hub first ${onHub}; still open ${openOnHub}; row ${JSON.stringify(told)}`
+  );
+  await (
+    await rowsOf(there)
+  )
+    .locator(
+      'li:has([data-slot="pin-row"][data-pin-row="1"]) [data-slot="pin-retry"]'
+    )
+    .click()
+    .catch(() => undefined);
+  const resolved = await until(
+    "the resolve written again",
+    async () => !!(await docOf(frame)).pins[pinId]?.resolvedAt,
+    Boolean,
+    15_000
+  ).catch(() => false);
+  const after = await notSentRow(there, 1);
+  on.kit.check(
+    "refused-resolve: Try again writes the resolve again: the comment stands resolved and says nothing of not sent",
+    resolved && !after.said,
+    `resolved ${resolved}; row ${JSON.stringify(after)}`
+  );
+  await tab.close();
 };
 
 /**

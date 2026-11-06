@@ -540,7 +540,8 @@
     if (pinHeld(pin)) {
       return { kind: "held" as const };
     }
-    const why = markState(pin) === "unsent" ? whyNotSent(pin) : null;
+    // Unsent, or a write of it the hub refused: the pane says when (`notSentWhy`).
+    const why = whyNotSent(pin);
     if (why) {
       return { kind: "notSent" as const, why };
     }
