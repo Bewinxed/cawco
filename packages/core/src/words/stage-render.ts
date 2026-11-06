@@ -1,6 +1,7 @@
 /**
  * What a daemon's render of a component canvas says an agent (agent
- * stage-render.ts, core stage.ts `StageRendered`): where its sweep stood
+ * stage-render.ts, core stage.ts `StageRendered`), and a read of sections
+ * a browser was drawing as it answered: where its sweep stood
  * when its limit came, each section it did not draw and the read that draws
  * it, and the refusal when the one state asked never drew. Each names the
  * read to make next, never the same read again.
@@ -46,6 +47,9 @@ export const stageRenderWords = {
    */
   stateUndrawn: (state: string, seconds: number, at: SweepAt | null) =>
     `State ${state}'s section did not finish drawing within ${seconds} s${at ? `: it was still ${stageRenderWords.step(at)} in ${at.file}` : ", and its page never began it"}. That section alone needs longer than one read has: split its states file in two (each a section of the canvas, with its own moves), then read the state again.`,
+  /** The sections a browser was drawing as a read answered, past the read's wait for them (hub component.ts `drawingUnseen`). */
+  drawing: (files: readonly string[]) =>
+    `A browser is drawing ${files.join(", ")} now and has not posted ${files.length === 1 ? "it" : "them"}: ${files.length === 1 ? "its" : "their"} frames read unseen until it does, within seconds. Read again.`,
   /** The page itself never loaded. */
   notLoaded: (seconds: number) =>
     `The canvas page did not load within ${seconds} s: its stage is up but did not serve it. Read the canvas without render to see its stage's state and errors.`,

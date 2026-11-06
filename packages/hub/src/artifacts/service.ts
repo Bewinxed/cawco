@@ -208,6 +208,7 @@ import {
   CREATE_SHAPE,
   canvasProblem,
   type DrawnKept,
+  drawingUnseen,
   drawsHeld,
   errorsSaid,
   movesSaid,
@@ -6060,13 +6061,41 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   ): Promise<Pick<StageRendered, "report" | "undrawn">> => {
     let { report } = opened;
     const deadline = Date.now() + PANEL_DRAW_MS;
-    while (shownNow && unseen(report, story) && Date.now() < deadline) {
+    while (
+      shownNow &&
+      (unseen(report, story) || drawingUnseen(report).length > 0) &&
+      Date.now() < deadline
+    ) {
       await Bun.sleep(PANEL_DRAW_POLL_MS);
       ({ report } = (await deps.stage(at, files[0] as string, files)).opened);
     }
     return unseen(report, story)
       ? await deps.stageRender(at, { files, spec })
       : { report, undrawn: [] };
+  };
+
+  /**
+   * `report` once the browser drawing its unseen sections has posted them,
+   * within {@link PANEL_DRAW_MS}: a read right after the person acts, while
+   * his panel's report stands aside for his act, answers the whole draw, or
+   * says what is still drawing (component.ts `renderSaid`).
+   */
+  const drawnOut = async (
+    row: ArtifactRow,
+    at: StageAt,
+    files: string[],
+    report: RenderReport
+  ): Promise<RenderReport> => {
+    let now = report;
+    const deadline = Date.now() + PANEL_DRAW_MS;
+    while (drawingUnseen(now).length > 0 && Date.now() < deadline) {
+      await Bun.sleep(PANEL_DRAW_POLL_MS);
+      now = drawnHeld(
+        row,
+        (await deps.stage(at, files[0] as string, files)).opened.report
+      );
+    }
+    return now;
   };
 
   /**
@@ -6221,6 +6250,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       if (report) {
         report = drawnHeld(row, report);
+      }
+      if (report && !(ask.render || ask.png)) {
+        report = await drawnOut(row, at, sheet.files, report);
       }
     }
     const meta = docs.doc(row.id).getMap("meta");

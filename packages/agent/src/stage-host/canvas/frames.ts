@@ -1362,6 +1362,8 @@ export function bootFrames(page: Page): Mode {
           mounted: frame.mounted,
         }))
       ),
+    // A frames page (a Preview's embed, the map's card) posts no report.
+    drawing: () => [],
     framesOf: (section) =>
       [...framed(section).frames.values()].map(frameRender),
     mediaWidth: () => {

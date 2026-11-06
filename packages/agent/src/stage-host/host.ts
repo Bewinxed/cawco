@@ -1058,6 +1058,34 @@ const reports = new Map<
   }
 >();
 
+/**
+ * The states files a page said it is drawing (its sweep had not reached
+ * them, or a read of them was under way), each with when it last said so:
+ * a report answers them as drawing until that page posts their section, or
+ * for {@link DRAWING_HELD_MS} after it last said so (a page closed mid-read
+ * says nothing more).
+ */
+const drawingSaid = new Map<string, number>();
+/** How long a page's word that it is drawing a section holds. Ours: past a section's read held aside by the person's acts, which posts again as each section ends. */
+const DRAWING_HELD_MS = 20_000;
+
+/** What a post says of its page's drawing: each section it posts is drawn, each file it names under `drawing` is being drawn now. */
+function keepDrawing(
+  posted: readonly ({ file?: unknown } | null)[],
+  drawing: readonly unknown[]
+): void {
+  for (const section of posted) {
+    if (typeof section?.file === "string") {
+      drawingSaid.delete(section.file);
+    }
+  }
+  for (const file of drawing) {
+    if (typeof file === "string" && storyFile(file)) {
+      drawingSaid.set(file, Date.now());
+    }
+  }
+}
+
 /** A frame across draws of one states file: its story, its state, its scheme and its form. */
 const frameId = (frame: FrameRender): string =>
   `${frame.story}|${frame.interaction}|${frame.scheme}|${frame.form}`;
@@ -1074,6 +1102,7 @@ const frameId = (frame: FrameRender): string =>
 async function keepReport(body: unknown): Promise<void> {
   const report = body as Partial<PostedReport> | null;
   keepUnloaded(report?.unloaded ?? [], report?.sections ?? []);
+  keepDrawing(report?.sections ?? [], report?.drawing ?? []);
   for (const drawn of report?.sections ?? []) {
     if (typeof drawn?.file === "string" && storyFile(drawn.file)) {
       const section: SectionRender = {
@@ -1259,7 +1288,19 @@ async function reportOf(files: string[]): Promise<RenderReport> {
     page: { errors: newest?.errors ?? [] },
     sections,
     unnamed,
+    ...drawingOf(files),
   };
+}
+
+/** The report's `drawing`: those of `files` a page said it is drawing, within {@link DRAWING_HELD_MS}. */
+function drawingOf(files: string[]): Pick<RenderReport, "drawing"> {
+  const now = Date.now();
+  const drawing = files.filter(
+    (file) =>
+      now - (drawingSaid.get(file) ?? Number.NEGATIVE_INFINITY) <
+      DRAWING_HELD_MS
+  );
+  return drawing.length > 0 ? { drawing } : {};
 }
 
 /**

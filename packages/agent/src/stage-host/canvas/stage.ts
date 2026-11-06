@@ -1967,10 +1967,21 @@ export function bootStage(page: Page): Mode {
     reads.set(section, read);
   }
 
-  /** A section read for the report: its stories in the rig, then their probes, then its moves; one pass at a time. */
+  /** The sections whose read is under way: a report says them as drawing, never their half-read frames. */
+  const reading = new Set<Section>();
+  /** The sections the sweep has still to read, in its order. */
+  const unswept = new Set(state.sweeps);
+
+  /**
+   * A section read for the report: its stories in the rig, then their
+   * probes, then its moves; one pass at a time. A report says it as drawing
+   * from the read's start to its end, then posts it.
+   */
   function readSection(section: Section): Promise<void> {
     const before = section.settling ?? Promise.resolve();
-    section.settling = before
+    reading.add(section);
+    page.later();
+    const settling: Promise<void> = before
       .catch(() => undefined)
       .then(async () => {
         sweepOn(section, "draw");
@@ -1978,8 +1989,16 @@ export function bootStage(page: Page): Mode {
         sweepOn(section, "probe");
         await page.probeAll(section);
         await page.playAll(section, (to) => sweepOn(section, "move", to));
+      })
+      .finally(() => {
+        // A read asked since stands in this one's place: the section is drawing until that one ends.
+        if (section.settling === settling) {
+          reading.delete(section);
+          page.later();
+        }
       });
-    return section.settling;
+    section.settling = settling;
+    return settling;
   }
 
   /** Every section read again once the page has been quiet a moment: an edit, or another view, reached what the report says. */
@@ -2004,12 +2023,17 @@ export function bootStage(page: Page): Mode {
     for (const file of state.sweeps) {
       const section = page.sectionOf(file);
       if (!section) {
+        unswept.delete(file);
         continue;
       }
-      sweepOn(section, "load");
-      await page.loadSection(section);
-      if (section.loaded) {
-        await section.settling;
+      try {
+        sweepOn(section, "load");
+        await page.loadSection(section);
+        if (section.loaded) {
+          await section.settling;
+        }
+      } finally {
+        unswept.delete(file);
       }
       sweepOn(section, "post");
       await page.post();
@@ -2184,6 +2208,9 @@ export function bootStage(page: Page): Mode {
             },
           ]
         : []),
+    ],
+    drawing: () => [
+      ...new Set([...unswept, ...[...reading].map((section) => section.file)]),
     ],
     framesOf: (section) =>
       reads.get(section)?.map((one) => {

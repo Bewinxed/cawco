@@ -523,6 +523,8 @@ export interface Mode {
     /** The args its story is written with, no dial's in them: what an `arg` dial goes back to. */
     written?: Record<string, unknown>;
   }>;
+  /** The states files this page is still drawing for its report: a report says them, never their half-read frames. */
+  drawing: () => string[];
   /** A section's module didn't load: it says why in its own place. */
   failed: (section: Section, failure: SectionFailure) => void;
   /** A section's frames as its report says them; null while it has not been read: a report leaves it out, so the stage keeps what an earlier draw saw of it. */
@@ -1667,10 +1669,14 @@ export function boot(options: BootOptions): void {
     reportTimer = setTimeout(() => quietly(post()), REPORT_QUIET_MS);
   }
 
-  function reportNow(): PageReport {
-    // A section loaded and not read yet posts nothing: an empty one would stand over what an earlier draw saw of it.
+  function reportNow(): PageReport & Pick<PostedReport, "drawing"> {
+    // A section loaded and not read yet, or read again now, posts nothing but its file under `drawing`: an empty or half-read one would stand over what an earlier draw saw of it.
+    const drawing = mode?.drawing() ?? [];
     const drawn: PageSection[] = sections.flatMap((section) => {
-      const frames = section.loaded ? mode?.framesOf(section) : null;
+      const frames =
+        section.loaded && !drawing.includes(section.file)
+          ? mode?.framesOf(section)
+          : null;
       return section.mod && frames
         ? [
             {
@@ -1694,6 +1700,7 @@ export function boot(options: BootOptions): void {
       page: { errors: [...pageErrors] },
       sections: drawn,
       unnamed,
+      drawing,
     };
   }
 

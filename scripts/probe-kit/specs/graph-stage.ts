@@ -289,6 +289,21 @@ const respond = (request: Seen): Reply => {
 const ID = /"id":"([0-9a-f-]{36})"/u;
 const short = (said: string) => said.replaceAll(/\s+/gu, " ").slice(0, 500);
 
+/** A read's `render` as the hub answers it (hub component.ts `renderSaid`), or null when the answer has none. */
+interface RenderSaid {
+  at: string;
+  by: string;
+  drawing?: string;
+  frames?: { interaction: string; state: string; story: string }[];
+}
+const renderOf = (said: string): RenderSaid | null => {
+  try {
+    return (JSON.parse(said) as { render?: RenderSaid }).render ?? null;
+  } catch {
+    return null;
+  }
+};
+
 /** The artifact panel, as the session page holds it. */
 const PANE = ':is([data-slot="preview-pane"], [data-side-card="preview"])';
 const GRAPH = `${PANE} [data-slot="design-graph"]`;
@@ -1777,15 +1792,22 @@ const run = async (kit: Kit) => {
   });
   await componentsListed(kit, watching);
 
-  // 2. The panel's own report, read from its rig.
-  const read = await call("2", "mcp__cawco__artifact_read", { id });
-  const states = [...read.matchAll(/"state":"(\w+)"/gu)].map((one) => one[1]);
+  // 2. The panel's own report, read from its rig: the hub's read waits on a section the panel is still drawing, and says one that outlasts its wait.
+  let read = await call("2", "mcp__cawco__artifact_read", { id });
+  // A read that says a section is still drawing is read again, as its words ask.
+  for (let again = 1; again <= 2 && renderOf(read)?.drawing; again += 1) {
+    read = await call(`2-again-${again}`, "mcp__cawco__artifact_read", { id });
+  }
+  const render = renderOf(read);
+  const undrawn = (render?.frames ?? []).filter((one) => one.state !== "drawn");
   kit.check(
     "2: artifact_read answers every state's frame drawn, from the panel's report (by panel)",
-    read.includes('"by":"panel"') &&
-      states.length >= 3 &&
-      states.every((one) => one === "drawn"),
-    short(read)
+    render?.by === "panel" &&
+      (render.frames ?? []).length >= 3 &&
+      undrawn.length === 0,
+    render
+      ? `by ${render.by} at ${render.at}; undrawn: ${undrawn.map((one) => `${one.story} (${one.interaction}) ${one.state}`).join(", ") || "none"}; still drawing: ${render.drawing ?? "none"}`
+      : short(read)
   );
   await inspectorInPanel(kit, watching);
   await watching.close();

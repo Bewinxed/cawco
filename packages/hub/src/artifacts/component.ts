@@ -23,6 +23,7 @@ import {
   type StageError,
   type StageErrorKind,
 } from "@cawco/core/stage";
+import { stageRenderWords } from "@cawco/core/words/stage-render";
 
 /** What a component canvas's create or update names beyond its files. */
 export interface CanvasInput {
@@ -128,13 +129,28 @@ function framesListed(
     : { listed };
 }
 
-/** A render report as an answer says it: who drew, each section's frames (bounded; a state read's from that state, in its section), the unnamed stories, what failed, and the sections the read's render did not draw. */
+/**
+ * The states files of `report` a browser is drawing now whose frames are
+ * all `unseen`: no draw of them as they stand yet, one within moments. A
+ * read waits on them a moment, and says those that outlast it.
+ */
+export const drawingUnseen = (report: RenderReport): string[] =>
+  report.sections
+    .filter(
+      (section) =>
+        report.drawing?.includes(section.file) &&
+        section.frames.every((frame) => frame.state === "unseen")
+    )
+    .map((section) => section.file);
+
+/** A render report as an answer says it: who drew, each section's frames (bounded; a state read's from that state, in its section), the unnamed stories, what failed, the sections a browser is still drawing, and the sections the read's render did not draw. */
 export function renderSaid(
   report: RenderReport,
   undrawn: readonly SectionUndrawn[] = [],
   state?: string
 ) {
   const { listed, cut } = framesListed(report, state);
+  const drawing = drawingUnseen(report);
   return {
     by: report.by,
     at: report.at,
@@ -149,6 +165,9 @@ export function renderSaid(
     unnamed: report.unnamed,
     ...(report.page.errors.length > 0
       ? { pageErrors: report.page.errors }
+      : {}),
+    ...(drawing.length > 0
+      ? { drawing: stageRenderWords.drawing(drawing) }
       : {}),
     ...(undrawn.length > 0 ? { undrawn } : {}),
   };

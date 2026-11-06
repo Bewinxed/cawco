@@ -490,6 +490,13 @@ export interface SectionRender {
 export interface RenderReport {
   at: string;
   by: "panel" | "stage";
+  /**
+   * The states files a browser said it is drawing now (its sweep has not
+   * reached them, or a read of them is under way): a section of them whose
+   * frames are `unseen` is drawn within moments, not left undrawn. Absent
+   * when none.
+   */
+  drawing?: string[];
   page: { errors: PageError[] };
   sections: SectionRender[];
   /** `File:Story` of each story with no doc comment: drawn by its export name alone. */
@@ -509,6 +516,8 @@ export interface SectionUnloaded {
  * its own. The stage keeps each as that section's `page` problem.
  */
 export interface PostedReport extends PageReport {
+  /** The states files the page is still drawing: their sections post once read. */
+  drawing: string[];
   unloaded: SectionUnloaded[];
 }
 

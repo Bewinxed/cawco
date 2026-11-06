@@ -279,11 +279,12 @@ const pageErrorWords = (error: PageError): string =>
     ? `${error.message} (${error.file}${error.line === null ? "" : `:${error.line}`})`
     : error.message;
 
-/** The sections a read's render did not draw, each with the read that draws it alone. */
+/** The sections a browser was still drawing as the read answered, and those a read's render did not draw, each with the read that draws it alone. */
 const undrawnLines = (render: ReturnType<typeof renderSaid>): string[] => {
   const asked = render.undrawn?.filter((one) => one.asked) ?? [];
   const others = render.undrawn?.filter((one) => !one.asked) ?? [];
   return [
+    ...(render.drawing ? [render.drawing] : []),
     ...(asked.length > 0
       ? [
           stageRenderWords.undrawnHead(STAGE_RENDER_MS / 1000),

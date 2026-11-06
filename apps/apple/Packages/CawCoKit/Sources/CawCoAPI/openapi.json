@@ -42401,6 +42401,9 @@
                       "$ref": "#/components/schemas/SectionUndrawn"
                     }
                   },
+                  "drawing": {
+                    "type": "string"
+                  },
                   "pageErrors": {
                     "type": "array",
                     "items": {
