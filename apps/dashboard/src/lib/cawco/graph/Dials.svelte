@@ -60,7 +60,6 @@
     undoable = false,
     open = $bindable(null),
     held = null,
-    coral = "each",
     lang,
     onchange,
     onreset,
@@ -80,12 +79,6 @@
       | { name: string; as: "dragging" }
       | { name: string; as: "typing"; text: string }
       | null;
-    /**
-     * Where the edit's ink stands, while the owner picks (the coral
-     * question): on each changed row's undo glyph (`each`, today's), or on
-     * Reset all alone, the rows' glyphs in ink (`once`).
-     */
-    coral?: "each" | "once";
     lang: string | undefined;
     onchange: (name: string, value: DialValue) => void;
     /** These controls back to as written; `all`: Reset all, which Undo reset takes back. */
@@ -362,7 +355,7 @@
                             onclick={() => onreset([dial.name], false)}
                             press="pressable"
                             size="icon-xs"
-                            tone={coral === "each" ? "edited" : undefined}
+                            tone="edited"
                             variant="ghost"
                           />
                         {/snippet}
@@ -440,7 +433,6 @@
                 label={words.resetAll}
                 onclick={() => onreset(changed, true)}
                 size="sm"
-                tone={coral === "once" ? "edited" : undefined}
                 variant="ghost"
               />
             {:else}
