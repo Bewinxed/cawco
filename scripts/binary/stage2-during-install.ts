@@ -111,7 +111,7 @@ async function fire(id: string): Promise<{ answer: string; refused: boolean }> {
         instanceId: id,
         cwd: "/tmp",
         harness: "claude",
-        model: "stub",
+        model: "default",
       },
     })
   );

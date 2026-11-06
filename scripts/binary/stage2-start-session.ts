@@ -38,7 +38,7 @@ socket.send(
     verb: "spawn",
     machineId,
     instanceId,
-    payload: { instanceId, cwd: "/tmp", harness: "claude", model: "stub" },
+    payload: { instanceId, cwd: "/tmp", harness: "claude", model: "default" },
   })
 );
 await Bun.sleep(1500);

@@ -330,7 +330,8 @@ const parsed = () =>
     (text) =>
       JSON.parse(text) as {
         event?: { frame?: { kind?: string }; sessionId?: string };
-        payload?: { kind?: string };
+        instanceId?: string;
+        payload?: { kind?: string; message?: string };
         type?: string;
         verb?: string;
       }
@@ -341,6 +342,65 @@ const browserDone = process.env.CAWCO_PROOF_BROWSER_DONE;
 /** The session's stub dev server, and the open that shows it as its preview. */
 let devServer: Bun.Server<undefined> | undefined;
 let previewShown: Promise<Record<string, unknown>> | undefined;
+/**
+ * The proof's session once it is asked for: stopped through the hub as the
+ * run ends, so its held process ends with it rather than outliving a run
+ * made outside a container.
+ */
+let started: { machineId: string; sessionId: string } | undefined;
+/**
+ * Asks the hub to stop the proof's session as the dashboard does, a `stop`
+ * frame on a dashboard socket of its own (stage2-stop-session.ts; the
+ * capture socket is closed by then), and waits until the hub no longer has
+ * it running. Undefined when it ended or none started; what was left
+ * otherwise.
+ */
+async function stopStarted(): Promise<string | undefined> {
+  if (!started) {
+    return;
+  }
+  const { machineId, sessionId } = started;
+  const opened = await readWithin(
+    5000,
+    (signal) =>
+      new Promise<WebSocket>((resolve, reject) => {
+        const ws = new WebSocket("ws://127.0.0.1:43456/ws/dashboard");
+        signal.addEventListener("abort", () => ws.close(), { once: true });
+        ws.onopen = () => resolve(ws);
+        ws.onerror = () => reject(new Error("the hub's socket did not open"));
+      })
+  ).catch((error: unknown) => ({ kind: "failed" as const, error }));
+  if (opened.kind !== "answered") {
+    return `the hub's socket did not open (${opened.kind})`;
+  }
+  const socket = opened.value;
+  socket.send(
+    JSON.stringify({
+      verb: "stop",
+      machineId,
+      instanceId: sessionId,
+      payload: { instanceId: sessionId, harness: "claude" },
+    })
+  );
+  try {
+    for (const end = Date.now() + 10_000; Date.now() < end;) {
+      const rows = (await (
+        await fetch(`${HUB}${hubRequest("GET /api/instances").path}`)
+      ).json()) as { id: string; status: string }[];
+      if (
+        !rows.some((row) => row.id === sessionId && row.status === "running")
+      ) {
+        return;
+      }
+      await Bun.sleep(100);
+    }
+    return "it was still running 10 s after the stop";
+  } catch {
+    return "the hub stopped answering";
+  } finally {
+    socket.close();
+  }
+}
 try {
   mkdirSync(home, { recursive: true });
   await exec("proof-fixture");
@@ -476,6 +536,22 @@ try {
       (row) => row.accountId === account.id && row.state === "signed-in"
     )
   );
+  // The machine's Claude Code tool cell, which the hub reads before any start
+  // (core harness-refusal.ts `harnessRefusal`: the proof harness reports
+  // itself not installed, so the cell is what says it runs): a start sent
+  // before the agent's tools read answers is refused as not installed.
+  await wait(`${HUB}${hubRequest("GET /api/agents").path}`, restarted, (s) =>
+    (
+      JSON.parse(s) as {
+        machineId: string;
+        tools?: Record<string, { state?: string }>;
+      }[]
+    ).some(
+      (row) =>
+        row.machineId === machine.machineId &&
+        row.tools?.claude?.state === "installed"
+    )
+  );
   // A session started and spoken to the way the app does it, on the capture
   // socket: the board's deltas for it, and its stream's events.
   const sessionId = crypto.randomUUID();
@@ -489,17 +565,39 @@ try {
         instanceId: sessionId,
         cwd: home,
         harness: "claude",
-        model: "stub",
+        // The proof harness runs a held process whatever the model; the
+        // harness's default is one the hub admits on any listing (core
+        // model-names.ts `modelAdmitted`).
+        model: "default",
         title: "Binary proof",
       },
     })
   );
+  started = { machineId: machine.machineId, sessionId };
+  // The hub's refusal of the start, the frame it answers a refused spawn
+  // with (registry.ts `refusalFrame`): the proof fails in its words rather
+  // than waiting out the deadline for a session that never comes.
+  const refusal = () =>
+    parsed().find(
+      (frame) =>
+        frame.instanceId === sessionId && frame.payload?.kind === "error"
+    );
   // A first start materializes the harness's runtime: as long as stage 2 gives one.
-  await wait(`${HUB}${hubRequest("GET /api/instances").path}`, restarted, (s) =>
-    (JSON.parse(s) as { id: string; status: string }[]).some(
-      (row) => row.id === sessionId && row.status === "running"
-    )
+  await wait(
+    `${HUB}${hubRequest("GET /api/instances").path}`,
+    restarted,
+    (s) =>
+      refusal() !== undefined ||
+      (JSON.parse(s) as { id: string; status: string }[]).some(
+        (row) => row.id === sessionId && row.status === "running"
+      )
   );
+  const refused = refusal();
+  if (refused) {
+    throw new Error(
+      `The hub refused the proof's session: ${refused.payload?.message}`
+    );
+  }
   captureWs.send(JSON.stringify({ type: "stream.subscribe", sessionId }));
   captureWs.send(
     JSON.stringify({
@@ -693,6 +791,12 @@ try {
   console.log(`preview opened: ${JSON.stringify(await previewShown)}`);
   console.log("PASS");
 } finally {
+  const left = await stopStarted();
+  if (left) {
+    console.error(
+      `the proof's session ${started?.sessionId} may outlive the run: ${left}`
+    );
+  }
   // What the socket sent, read by the release, or by whoever reads a failed run's evidence.
   writeFileSync(join(home, "frames.jsonl"), `${captured.join("\n")}\n`);
   devServer?.stop(true);

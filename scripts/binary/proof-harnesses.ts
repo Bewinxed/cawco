@@ -380,7 +380,7 @@ for (const kind of HARNESSES) {
           memory: null,
         });
       }
-      // The hub reads a newly signed-in account's model catalog once; the proof's sessions name model "stub".
+      // The hub reads a newly signed-in account's model catalog once; the proof's sessions start on Claude Code's default, admitted on an empty list.
       if (method === CONTROL_PROBE_ACCOUNT && kind === "claude") {
         return Promise.resolve({ models: [] });
       }
