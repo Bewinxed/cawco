@@ -462,11 +462,12 @@
 {/snippet}
 
 <!-- The rail as a floating glass panel under the head, inset from the
-     card's edges with corners concentric with it (the capsules' radius). -->
+     card's edges, its corners the card's (c-float-panel-r): the capsules
+     of its own bar stand concentric in them, its title's fill too. -->
 {#snippet railBeside()}
   {#if listOpen && !phone.current && railAt !== "hung"}
     <div
-      class="absolute end-space-2 top-c-head-room bottom-space-2 z-1 flex min-h-0 overflow-hidden rounded-(--c-float-inner-r) border border-border-hairline bg-material-panel shadow-overlay glass-backdrop reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"
+      class="absolute end-space-2 top-c-head-room bottom-space-2 z-1 flex min-h-0 overflow-hidden rounded-(--c-float-panel-r) border border-border-hairline bg-material-panel shadow-overlay glass-backdrop reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"
       data-rail-float={railAt}
     >
       {@render railOf("beside")}

@@ -4281,10 +4281,11 @@
 {#snippet inspectBar()}
   <!-- A sheet's inspector: its stories' props as controls, beside the page or over its foot. -->
   <BarItem
+    aria-pressed={inspectOpen}
     icon={IconTuning}
     label={artifactWords.inspect}
     onclick={() => showInspector(!inspectOpen)}
-    pressed={inspectOpen}
+    open={inspectOpen}
     tip={artifactWords.inspectTitle}
   />
 {/snippet}

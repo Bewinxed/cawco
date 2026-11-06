@@ -675,13 +675,11 @@ public enum Size {
     public static let cBarSymbol: Double = 18
     /// The room a pane keeps at its content's top while its head floats over it (Liquid Glass: content runs to the top edge and scrolls beneath the controls): the head's glass, its inset above and the same gap below, so the content's first line starts clear of the glass and scrolls under it.
     public static let cHeadRoom: Double = 50
-    /// A part floating space-2 inside a c-float-panel-r panel (the Comments rail's glass, the phone's inset half sheet): the panel's corner less that inset, the glass capsules' own radius, so it is concentric with the panel and with the capsules beside it.
-    public static let cFloatInnerR: Double = 18
     /// The scroll edge effect under a floating head: the head's room and a fade a step deep under it, where what scrolls beneath the glass blurs and washes toward the panel's ground.
     public static let cScrollEdgeH: Double = 64
     /// What a page beside the floating Comments rail leaves it: the rail's width and its inset on both sides, the page's ground running on beneath the glass.
     public static let cRailFloatRoom: Double = 334
-    /// The corner of a panel whose head floats as glass over its content (the artifact panel): its glass capsules' radius plus their inset from its edge, so a capsule in its corner is concentric with it (Adopting Liquid Glass: windows "adopt rounder corners to fit controls"); a floating part inset space-2 inside it takes the capsule's own radius.
+    /// The corner of a panel whose head floats as glass over its content (the artifact panel): its glass capsules' radius plus their inset from its edge, so a capsule in its corner is concentric with it (Adopting Liquid Glass: windows "adopt rounder corners to fit controls"); the Comments rail floating over the page takes the same corner, so the capsules of its own bar are concentric with it.
     public static let cFloatPanelR: Double = 25
     /// Caw's own glass on the phone bar, its side: round at its leading side, square at its trailing one, its trailing edge c-bar-phone-edge in from the screen's, as the sidebar toggle's glyph is from the other. Caw's phone glass stands centred on the tabs' centre line, as the sidebar toggle's glyph does, clear of the floor; open, his panel hangs from the floor through a neck (half of c-tab-row-h less this, his glass's foot to the row's floor).
     public static let cBarCawGlassPhone: Double = 32

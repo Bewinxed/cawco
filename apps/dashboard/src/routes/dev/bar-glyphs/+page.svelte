@@ -117,7 +117,7 @@
          Comments sheet's (a phone). -->
     <div
       class={[
-        "absolute end-space-2 z-1 flex w-c-comments-w items-center gap-space-1 rounded-(--c-float-inner-r) border border-border-hairline bg-material-panel p-space-2 shadow-overlay glass-backdrop",
+        "absolute end-space-2 z-1 flex w-c-comments-w items-center gap-space-1 rounded-(--c-float-panel-r) border border-border-hairline bg-material-panel p-space-2 shadow-overlay glass-backdrop",
         phone.current
           ? "start-space-2 bottom-space-2 w-auto"
           : "top-c-head-room",

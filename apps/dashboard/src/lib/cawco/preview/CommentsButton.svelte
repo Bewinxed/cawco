@@ -2,7 +2,7 @@
   /**
    * The Comments rail's toggle in the artifact panel's head (the artifact
    * panel's surface brief, The head): the bar's own item (BarItem), its
-   * bubble, in the selected wash while the rail stands. It is its
+   * bubble, on the pressed surface while the rail stands (BarItem `open`). It is its
    * neighbours' size and shape, its bubble at their symbol size and centred,
    * with an even inset round it: the open comments' count is the bar's
    * count badge on its top trailing corner (bar-glass/count.ts; SwiftUI
@@ -78,7 +78,7 @@
   data-slot="comments"
   expanded={open}
   label={name}
-  marked={open}
+  {open}
   {onclick}
   {props}
   tip={label}

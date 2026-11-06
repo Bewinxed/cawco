@@ -9,7 +9,8 @@
    * stands (`concentric-at`, BarGlass: the ends' 18 less the 4px pad, 5px
    * toward a neighbour), a capsule where no glass holds it. Bare until the
    * pointer rests on it (the hover only where a fine pointer can rest),
-   * pressed in the kit's press tint, selected in the selected wash. Its
+   * pressed in the kit's press tint, selected in the selected wash, open
+   * (what it opens stands beside the page) in the pressed surface. Its
    * symbol (`data-slot="bar-symbol"`) is the bar's symbol size in the muted
    * ink, centred. A count takes no room in it: it is the kit Badge's
    * corner form (ui/badge, `corner`) centred on the item's top edge over
@@ -17,7 +18,7 @@
    * item's badge does, so a counted item is its neighbours' size and shape.
    */
   const barItemVariants = tv({
-    base: "group/bar-item relative inline-flex h-c-bar-item min-w-c-bar-item flex-none select-none items-center justify-center rounded-pill glass-item:concentric-at border-0 bg-transparent text-ink-strong transition-control touch-hit press-tint hover:not-data-lit:bg-surface-hover data-lit:bg-selected-bg data-lit:text-selected-ink *:data-[slot=bar-symbol]:size-c-bar-symbol *:data-[slot=bar-symbol]:flex-none",
+    base: "group/bar-item relative inline-flex h-c-bar-item min-w-c-bar-item flex-none select-none items-center justify-center rounded-pill glass-item:concentric-at border-0 bg-transparent text-ink-strong transition-control touch-hit press-tint hover:not-data-lit:not-data-open:bg-surface-hover data-open:not-data-lit:bg-surface-pressed data-lit:bg-selected-bg data-lit:text-selected-ink *:data-[slot=bar-symbol]:size-c-bar-symbol *:data-[slot=bar-symbol]:flex-none",
     variants: {
       /** What it holds: a symbol, a title's words and chevron (a bar's title as a control), an action's words, or Caw's head. */
       form: {
@@ -106,6 +107,7 @@
     tipOff = false,
     pressed,
     marked = false,
+    open = false,
     expanded,
     count,
     countLook,
@@ -136,6 +138,8 @@
     pressed?: boolean;
     /** It holds changed values, or is its switch's chosen segment (BarSegments): the selected wash, without being a toggle. */
     marked?: boolean;
+    /** What it opens stands beside the page, a rail or an inspector it shows and hides: the pressed surface, a neutral on that never takes the selected wash (the coral it would add beside the view's one action), the panel it opened being what says so. */
+    open?: boolean;
     /** What it opens stands (`aria-expanded`). */
     expanded?: boolean;
     /** Its number, beside its symbol above 0 (DESIGN.md, The Earned Count Rule). */
@@ -167,6 +171,7 @@
         "aria-pressed": pressed,
         "aria-expanded": expanded,
         "data-lit": lit || undefined,
+        "data-open": open || undefined,
         "data-counted": counted || undefined,
         "data-tone": tone && tone !== "muted" ? tone : undefined,
       }).filter(([, value]) => value !== undefined)
