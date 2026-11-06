@@ -7,6 +7,8 @@
   export type DragOver = Events["dragover"];
   export type DragMove = Events["dragmove"];
   export type DragEnd = Events["dragend"];
+  /** The place in its list `ids` the thing in the air takes now, or null where it stays (crossing.ts). */
+  export type PlaceIn = (ids: readonly string[]) => number | null;
 
   /**
    * What every draggable and droppable carries for the screen reader: its
@@ -76,6 +78,7 @@
   import { type Snippet, tick } from "svelte";
   import { dur, ease } from "../motion/curves.svelte";
   import { spareKey } from "../motion/keyed.svelte";
+  import { placeOver } from "./crossing";
   import { Follow } from "./follow";
   import { type Lifted, lift } from "./lift";
 
@@ -118,8 +121,9 @@
      */
     fliesHome?: () => boolean;
     onDragStart?: (event: DragStart) => void;
-    onDragOver?: (event: DragOver) => void;
-    onDragMove?: (event: DragMove) => void;
+    /** `placeIn(ids)`: the place in its list `ids` the thing in the air takes now, or null (crossing.ts). */
+    onDragOver?: (event: DragOver, placeIn: PlaceIn) => void;
+    onDragMove?: (event: DragMove, placeIn: PlaceIn) => void;
     onDragEnd?: (event: DragEnd) => void;
   } = $props();
 
@@ -240,6 +244,16 @@
     manager.destroy();
     handing?.close();
   });
+
+  /** The place a move takes in a list, its things found as dnd kit holds them. */
+  const placing =
+    (event: DragOver | DragMove): PlaceIn =>
+    (ids) =>
+      placeOver(
+        event,
+        ids,
+        (id) => manager.registry.droppables.get(id)?.element
+      );
 
   /** The thing in the hand, while there is one. */
   let held: Lifted | null = null;
@@ -421,7 +435,7 @@
 
   function over(event: DragOver) {
     betweenFrames(() => {
-      onDragOver?.(event);
+      onDragOver?.(event, placing(event));
       said();
     });
   }
@@ -450,7 +464,7 @@
     // their moves (the step's travel, settling on its place) cross nothing.
     const keys = event.operation.activatorEvent instanceof KeyboardEvent;
     if (onDragMove && !keys) {
-      betweenFrames(() => onDragMove?.(event));
+      betweenFrames(() => onDragMove?.(event, placing(event)));
     }
   }
   function end(event: DragEnd) {

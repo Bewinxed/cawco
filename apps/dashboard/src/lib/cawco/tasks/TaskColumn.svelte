@@ -33,7 +33,6 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconNeedsYou } from "#lib/icons.js";
   import { markOf } from "./stage-look";
   import TaskCard from "./TaskCard.svelte";
@@ -91,7 +90,13 @@
     foot?: Snippet;
     /** The card just added from the board: marked new for a moment (`row-flash`). */
     fresh?: string | null;
-    /** A card whose move the hub has not answered: it stands here, moving. */
+    /**
+     * A card whose move the hub has not answered: it stands where it was
+     * let go, faded and busy (`aria-busy`), and nothing around it moves.
+     * No line under it: one that came and went with the answer pushed the
+     * cards below down and pulled them back up after every drop; a refusal
+     * is said under the card (`refused`).
+     */
     moving?: (id: string) => boolean;
     /** A move the hub refused: the card is back here, the reason under it. */
     refused?: (id: string) => { again: () => void; reason: string } | null;
@@ -170,13 +175,6 @@
         reveal="card-pick"
         style="--pick-top: calc(var(--space-2) + (var(--c-badge-h) - var(--icon-md)) / 2)"
       />
-    {/if}
-    {#if moving?.(task.id)}
-      <span
-        data-slot="moving"
-        class="mark-line flex items-center gap-space-1 px-space-2 pt-space-1 pb-0 type-meta text-ink-muted"
-        ><Spinner aria-hidden="true" box="small" /><span>Moving…</span></span
-      >
     {/if}
     <RowFault
       again={fault?.again}

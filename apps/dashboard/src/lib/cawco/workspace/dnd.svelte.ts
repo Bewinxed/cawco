@@ -25,13 +25,13 @@
  * than one of them not existing, the menu carrying the same commands.
  */
 import { move as moveAmong } from "@dnd-kit/helpers";
-import { crossed } from "../drag/crossing";
 import type {
   DragData,
   DragEnd,
   DragMove,
   DragOver,
   DragStart,
+  PlaceIn,
 } from "../drag/DragProvider.svelte";
 import { depart } from "../motion/share.svelte";
 import { workingSet } from "../working-set.svelte";
@@ -235,34 +235,46 @@ export const workspaceDrag = {
     }
   },
 
-  /** A tab over another tab: the strips make room for it, its own or another's. */
-  over(event: DragOver | DragMove) {
+  /**
+   * A tab moving, or over another tab: over another group's strip it takes
+   * its place among that strip's tabs (dnd kit's `move`); along its own it
+   * takes the place of the tab it covers half of (drag/crossing), once per
+   * crossing, the strip sliding its tabs on its own clock.
+   */
+  over(event: DragOver | DragMove, placeIn: PlaceIn) {
     const { strips, data } = carry;
-    const { source, target } = event.operation;
-    if (!(strips && data?.kind === "tab" && source && target)) {
+    if (!(strips && data?.kind === "tab")) {
       return;
     }
-    // Along its own strip it takes a tab's place once the hand has
-    // crossed that tab's middle (drag/crossing): the strip slides its tabs
-    // on its own clock, and a tab still in flight is not taken back.
-    const own = Object.values(strips).find((ids) =>
-      ids.includes(data.sessionId)
-    );
-    const from = own?.indexOf(data.sessionId) ?? -1;
-    const to = own?.indexOf(String(target.id)) ?? -1;
-    if (to >= 0 && from >= 0 && !crossed(event, from, to)) {
+    const [mine, own] =
+      Object.entries(strips).find(([, ids]) => ids.includes(data.sessionId)) ??
+      [];
+    if (!(mine && own)) {
       return;
     }
-    carry.strips = moveAmong(strips, event as DragOver);
+    const { target } = event.operation;
+    const theirs = (target?.data as SessionCarry | undefined)?.leafId;
+    if (target && theirs && theirs !== mine) {
+      carry.strips = moveAmong(strips, event as DragOver);
+      return;
+    }
+    const from = own.indexOf(data.sessionId);
+    const to = placeIn(own);
+    if (to !== null && to !== from) {
+      carry.strips = {
+        ...strips,
+        [mine]: own.toSpliced(from, 1).toSpliced(to, 0, data.sessionId),
+      };
+    }
   },
 
   /** Over a group's pane, the box the drop would fill; over a strip, a row joins that group. */
-  move(event: DragMove) {
+  move(event: DragMove, placeIn: PlaceIn) {
     const { data } = carry;
     if (!data) {
       return;
     }
-    workspaceDrag.over(event);
+    workspaceDrag.over(event, placeIn);
     const under = underHand(pointOf(event), data.leafId ?? null);
     if (under.kind === "pane") {
       showPaneHint(under.leafId, under.edge);
