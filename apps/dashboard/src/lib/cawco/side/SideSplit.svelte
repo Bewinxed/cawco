@@ -22,7 +22,6 @@
   import { sideWords } from "@cawco/core/words/side";
   import type { Snippet } from "svelte";
   import { untrack } from "svelte";
-  import { BarGlass } from "#lib/components/ui/bar-glass/index.js";
   import {
     TabItem,
     Tabs,
@@ -161,21 +160,19 @@
 
 <!-- The switch, while more than one has something to show. -->
 {#snippet switcher()}
-  <BarGlass form="group">
-    <Tabs
-      onValueChange={(next) => {
-        tab = next as Shown;
-      }}
-      size="compact"
-      value={shown}
-    >
-      <TabsList aria-label={sideWords.label}>
-        {#each opened as each (each)}
-          <TabItem label={LABEL[each]} value={each} />
-        {/each}
-      </TabsList>
-    </Tabs>
-  </BarGlass>
+  <Tabs
+    onValueChange={(next) => {
+      tab = next as Shown;
+    }}
+    size="compact"
+    value={shown}
+  >
+    <TabsList aria-label={sideWords.label}>
+      {#each opened as each (each)}
+        <TabItem label={LABEL[each]} value={each} />
+      {/each}
+    </TabsList>
+  </Tabs>
 {/snippet}
 
 {#snippet surface()}
