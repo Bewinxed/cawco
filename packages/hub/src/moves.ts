@@ -68,6 +68,7 @@ import {
   MoveSnapshotResultShape,
 } from "@cawco/core/stored-shapes";
 import { DAY_MS } from "@cawco/core/time";
+import { spawnWords } from "@cawco/core/words/spawn";
 import {
   checkoutOf,
   type DbShape,
@@ -232,8 +233,8 @@ const SETTLED_KEPT_MS = 10 * 60 * 1000;
 const PROGRESS_KEPT_EVERY_MS = 2000;
 const PUBLISH_EVERY_MS = 250;
 
-const MOVE_IT = "Move it";
-const DONT_MOVE = "Don't move";
+const MOVE_IT = spawnWords.moveIt;
+const DONT_MOVE = spawnWords.dontMove;
 
 /** The stages a job does work in. */
 const WORKING = new Set<MoveStage>(MOVE_JOB_STEPS);

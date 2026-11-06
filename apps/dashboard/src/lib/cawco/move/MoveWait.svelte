@@ -22,6 +22,8 @@
     moveSourceName,
     moveSize as sizeWords,
   } from "@cawco/core/move";
+  import { askWords } from "@cawco/core/words/asks";
+  import { spawnWords } from "@cawco/core/words/spawn";
   import { type Component, untrack } from "svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { msOf } from "#lib/cawco/motion/time.js";
@@ -48,7 +50,8 @@
     IconTick,
   } from "#lib/icons.js";
   import { browser } from "$app/env";
-  import { commandRecord, submitCommand } from "../client.svelte";
+  import { answerFor, submitCommand } from "../client.svelte";
+  import ErrorText from "../ErrorText.svelte";
   import Caw from "../home/Caw.svelte";
   import { machineName } from "../home/home-state.svelte";
   import { crossIn, crossOut, dur } from "../motion/curves.svelte";
@@ -63,8 +66,8 @@
   type Phase = "done" | "active" | "ahead" | "failed" | "stopped" | "asking";
 
   const WORKING: ReadonlySet<string> = new Set(MOVE_JOB_STEPS);
-  const MOVE_IT = "Move it";
-  const DONT_MOVE = "Don't move";
+  const MOVE_IT = spawnWords.moveIt;
+  const DONT_MOVE = spawnWords.dontMove;
 
   const source = $derived(machineName(job.sourceMachineId));
   const target = $derived(machineName(job.targetMachineId));
@@ -342,18 +345,25 @@
 
   /* ── The person ──────────────────────────────────────────────────────── */
 
-  /** The command the approval card's last answer went out as. */
-  let sent = $state<string | null>(null);
   /**
-   * An answer is out: sent, and neither refused nor let go by the ledger. A
-   * refused one frees both buttons for another answer (its words are said
-   * over the session's composer, `noteFailure`); one taken leaves with the ask.
+   * The last answer sent to the approval, from here or from any surface
+   * showing the ask (`answerFor`, as Needs you's row reads it): its stage is
+   * the card's truth. Out, both buttons hold; refused, the hub's words stand
+   * under them and either can be pressed again, the card being the
+   * refusal's one surface while the ask stands (client.svelte.ts
+   * `answerCardStillParked`); taken, the ask leaves.
    */
-  const answered = $derived.by(() => {
-    const record = sent ? commandRecord(sent) : null;
-    return (
-      job.askId !== undefined && record !== null && record.stage !== "failed"
-    );
+  const sent = $derived(job.askId ? answerFor(job.askId) : null);
+  const answered = $derived(sent !== null && sent.stage !== "failed");
+  /** Which answer was pressed here, for its failed mark. */
+  let pressed = $state<typeof MOVE_IT | typeof DONT_MOVE | null>(null);
+  const answerRefused = $derived.by(() => {
+    if (sent?.stage !== "failed") {
+      return null;
+    }
+    return sent.reason
+      ? `${askWords.cantSendAnswer} ${sent.reason}`
+      : askWords.cantSendAnswer;
   });
   /** The approval card's answer, through the same channel as every ask's. */
   function answer(choice: typeof MOVE_IT | typeof DONT_MOVE): void {
@@ -365,8 +375,9 @@
       behavior: "allow",
       updatedInput: { answers: { [ask.title]: choice } },
     };
+    pressed = choice;
     // Parked on the session's own row, which reads "Needs you" until now.
-    sent = submitCommand(
+    submitCommand(
       job.targetInstanceId,
       job.targetMachineId,
       "permission.answer",
@@ -549,6 +560,7 @@
                   >
                     <Button
                       disabled={answered}
+                      failed={answerRefused !== null && pressed === DONT_MOVE}
                       onclick={() => answer(DONT_MOVE)}
                       size="sm"
                       variant="secondary"
@@ -559,6 +571,7 @@
                     <!-- The yes is the action, coral as in New session's step 2. -->
                     <Button
                       disabled={answered}
+                      failed={answerRefused !== null && pressed === MOVE_IT}
                       onclick={() => answer(MOVE_IT)}
                       size="sm"
                     >
@@ -566,6 +579,14 @@
                       <span>{MOVE_IT}</span>
                     </Button>
                   </div>
+                  {#if answerRefused}
+                    <div data-slot="move-wait-refused">
+                      <ErrorText
+                        message={answerRefused}
+                        title="The hub refused that answer"
+                      />
+                    </div>
+                  {/if}
                 </div>
               {/if}
               {#if row.phase === "failed" && job.error}

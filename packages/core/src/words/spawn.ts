@@ -87,6 +87,8 @@ export const spawnWords = {
   startSession: "Start session",
   moveAndStart: "Move & start",
   moveIt: "Move it",
+  /** A move's approval's no (MoveWait, the hub's parked ask). */
+  dontMove: "Don't move",
   /** The prompt's label, and a continuation's. */
   firstPrompt: "First prompt",
   nextStep: "Next step (optional)",
