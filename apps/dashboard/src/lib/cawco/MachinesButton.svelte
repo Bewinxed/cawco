@@ -24,7 +24,7 @@
    */
   import { machineLabel } from "@cawco/core/machine-names";
   import { BarItem } from "#lib/components/ui/bar-glass/index.js";
-  import { IconServer } from "#lib/icons.js";
+  import { IconServerLinear } from "#lib/icons.js";
   import { page } from "$app/state";
   import { barGlass } from "./bar-glass.svelte";
   import { connect } from "./connect/installs.svelte";
@@ -106,7 +106,7 @@
   data-glass-opens="machines"
   data-machines
   expanded={barGlass.open === "machines"}
-  icon={IconServer}
+  icon={IconServerLinear}
   {label}
   layout="desk"
   onclick={() => barGlass.toggle("machines")}

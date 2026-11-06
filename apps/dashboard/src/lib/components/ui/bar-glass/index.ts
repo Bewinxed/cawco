@@ -3,5 +3,4 @@ export { default as BarGlass } from "./bar-glass.svelte";
 export { default as BarItem } from "./bar-item.svelte";
 export { default as BarMenu } from "./bar-menu.svelte";
 export { default as BarMore } from "./bar-more.svelte";
-export { default as BarPopover } from "./bar-popover.svelte";
 export { default as BarSegments } from "./bar-segments.svelte";

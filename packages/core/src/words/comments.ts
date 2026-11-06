@@ -53,11 +53,11 @@ export const commentWords = {
   /** The search's way out: the field folds back into its symbol. */
   /** Puts the rail's search away (its field back into Search), beside the field: never the field's own Clear. */
   cancelSearch: "Cancel",
-  /** The rail's title menu, read out: which comments it lists, and in what order. */
+  /** The rail's segments under its bar, read out: which comments it lists. */
   whichComments: "Which comments",
-  /** The title menu's second group: the order the rows come in. */
+  /** The rail's Sort menu, read out: the order the rows come in. */
   order: "Order",
-  /** The title's dot while another list is in front: what waits in To check. */
+  /** The head's Comments, read out: what waits in To check. */
   toCheckWaiting: (n: number) => `${n} to check`,
   sort: "Sort",
   newestFirst: "Newest first",
@@ -77,6 +77,8 @@ export const commentWords = {
   holdTitle: "Hold it, to send later with the others (⌥↩)",
   /** A held comment's row, and its pill's name: the agent hasn't heard it. */
   unsent: "Unsent",
+  /** The rail's list of what he holds to send together. */
+  held: "Held",
   /** Send all, read out. */
   sendHeldLabel: (n: number) =>
     `Send ${n} held ${n === 1 ? "comment" : "comments"}`,

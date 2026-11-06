@@ -7,7 +7,7 @@
 <script lang="ts">
   import { BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { BAR_ITEM } from "#lib/components/ui/bar-glass/marks.js";
-  import { IconCompare } from "#lib/icons.js";
+  import { IconCompareLinear } from "#lib/icons.js";
 
   let comparing = $state(false);
   const items = () => document.querySelectorAll("[data-bar-item]");
@@ -23,10 +23,10 @@
   }}
   type="button"
 >
-  <IconCompare data-slot="bar-symbol" aria-hidden="true" />
+  <IconCompareLinear data-slot="bar-symbol" aria-hidden="true" />
 </button>
 <BarItem
-  icon={IconCompare}
+  icon={IconCompareLinear}
   label="Compare"
   onclick={() => {
     comparing = !comparing;

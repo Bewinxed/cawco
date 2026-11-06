@@ -18,7 +18,7 @@
   import { causeLine, type Install } from "@cawco/core/install";
   import { connectWords } from "@cawco/core/words/connect";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
-  import { IconClose, IconStop } from "#lib/icons.js";
+  import { IconClose, IconStopLinear } from "#lib/icons.js";
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import { failureWords } from "../hub-read";
@@ -140,7 +140,7 @@
     {#if install.state === "running"}
       <BarGlass form="group">
         <BarItem
-          icon={IconStop}
+          icon={IconStopLinear}
           label={connectWords.stopInstall}
           onclick={askStop}
         />

@@ -360,7 +360,6 @@ export type TokenSize =
   | "size.c-bar-item"
   | "size.c-bar-symbol"
   | "size.c-head-room"
-  | "size.c-scroll-edge-h"
   | "size.c-rail-float-room"
   | "size.c-float-panel-r"
   | "size.c-bar-caw-glass-phone"

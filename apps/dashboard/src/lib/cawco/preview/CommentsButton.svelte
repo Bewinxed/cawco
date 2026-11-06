@@ -17,7 +17,7 @@
    */
   import { commentWords } from "@cawco/core/words/comments";
   import { BarItem } from "#lib/components/ui/bar-glass/index.js";
-  import { IconChat, IconEyeClosed } from "#lib/icons.js";
+  import { IconChatLinear, IconEyeClosedLinear } from "#lib/icons.js";
 
   let {
     open,
@@ -94,11 +94,11 @@
   tip={label}
   tone={down ? "fail" : "muted"}
 >
-  <IconChat aria-hidden="true" data-slot="bar-symbol" />
+  <IconChatLinear aria-hidden="true" data-slot="bar-symbol" />
   {#if !pinsShown}
     <!-- ⇧C hid the pins: a closed eye on the bubble's foot corner, opposite
          the count, taking no room. -->
-    <IconEyeClosed
+    <IconEyeClosedLinear
       aria-hidden="true"
       class="pointer-events-none absolute end-space-row bottom-space-row size-icon-sm rounded-pill bg-surface-raised text-ink-muted"
       data-slot="pins-hidden"

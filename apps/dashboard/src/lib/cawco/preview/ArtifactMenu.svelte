@@ -10,9 +10,10 @@
    * each waiting on the person (core artifact-needs.ts) wearing the
    * needs-you dot, the status's own glyph ink (The Glyph, Word, Hue Rule);
    * choosing one shows it.
-   * Its line (the ask, or "Sent to <session>") is the menu's first row, and
-   * the control's tooltip and description; `described`, it also stands
-   * under the title in the bar, a window's subtitle. The title is never
+   * Its line (the ask, or "Sent to <session>") stands under the title in
+   * the bar, a window's subtitle (the owner's pick "Title over its
+   * description"), and is the menu's first row and the control's tooltip
+   * and description. The title is never
    * hidden (the owner, 2026-11-05: the head names the artifact by the title
    * its agent wrote); a page that says the same title leaves its own out
    * under the panel's head (overlay `data-cawco-headed`).
@@ -69,7 +70,6 @@
     line,
     lineId,
     shown,
-    described = false,
     onrefused,
   }: {
     instanceId: string;
@@ -85,8 +85,6 @@
     held: string[] | undefined;
     /** The artifact the panel shows. */
     shown: { id: string; kind: ArtifactKind; title: string };
-    /** The line stands under the title in the bar, a window's subtitle (macOS: a toolbar's title over its subtitle), each one line cut at its end. */
-    described?: boolean;
     /** A chosen artifact the hub would not show: the words, and which it was. */
     onrefused: (
       reason: string,
@@ -321,15 +319,15 @@
           aria-describedby={line ? lineId : undefined}
           data-artifact={shown.id}
           data-artifact-trigger
-          data-described={(described && !!line) || undefined}
+          data-described={!!line || undefined}
           form="title"
           label={shown.title}
-          lines={described && line ? "two" : "phone-two"}
+          lines={line ? "two" : "phone-two"}
           {props}
           tip={line || false}
           tipOff={open}
         >
-          {#if described && line}
+          {#if line}
             <!-- The title over its line, a window's subtitle: one line each,
                  cut at its end, the chevron beside the title. -->
             <span
@@ -357,7 +355,7 @@
               >
             </span>
           {:else}
-            <!-- On a phone two lines, clamped in the bar's row, so a title of
+            <!-- With no line, the title alone: on a phone two lines, clamped in the bar's row, so a title of
                  ordinary length reads whole at 390 (the artifact panel's
                  surface brief, The title), its chevron inline after its last
                  word (a wrapped box is as wide as its room, so a chevron after
@@ -378,7 +376,7 @@
                 />{/if}</span
             >
           {/if}
-          {#if !(described && line) && (!phone.current || clamped)}
+          {#if !line && (!phone.current || clamped)}
             <IconChevronDown
               aria-hidden="true"
               class="size-icon-sm flex-none text-ink-muted"

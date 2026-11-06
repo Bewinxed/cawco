@@ -55,6 +55,8 @@ export const lastActivity = (pin: Pin): string =>
 
 /** The rail's two orders: newest first by last activity, or as the page stands, top first. */
 export type RailSort = "newest" | "top";
+/** The rail's lists, its segments under its bar: what changed since he looked, the open, the resolved, and what he holds to send. */
+export type RailList = "check" | "open" | "resolved" | "held";
 export const sortedPins = (pins: Pin[], sort: RailSort): Pin[] =>
   pins.toSorted((a, b) => {
     if (sort === "top") {

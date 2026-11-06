@@ -12,7 +12,7 @@
    * places the card in it), as tall as `height` asks.
    */
   import type { Snippet } from "svelte";
-  import { IconSearch, IconServer } from "#lib/icons.js";
+  import { IconSearch, IconServerLinear } from "#lib/icons.js";
   import BarGlass from "./bar-glass.svelte";
   import BarItem from "./bar-item.svelte";
 
@@ -58,7 +58,12 @@
         <BarItem label="Jump to session" layout="desk" tip={false}>
           <IconSearch aria-hidden="true" class="size-icon-md text-ink-muted" />
         </BarItem>
-        <BarItem icon={IconServer} label="Machines" layout="desk" tip={false} />
+        <BarItem
+          icon={IconServerLinear}
+          label="Machines"
+          layout="desk"
+          tip={false}
+        />
       </BarGlass>
     </div>
   </div>

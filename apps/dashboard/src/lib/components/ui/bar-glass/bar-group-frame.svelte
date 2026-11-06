@@ -13,16 +13,18 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
   import {
-    IconChat,
-    IconFolder,
-    IconInteract,
-    IconMore,
-    IconPen,
-    IconPin,
+    IconChatLinear,
+    IconFolderLinear,
+    IconInteractLinear,
+    IconMoreLinear,
+    IconPenLinear,
+    IconPinLinear,
     IconPlus,
     IconRefresh,
+    IconRefreshLinear,
     IconSearch,
     IconTuning,
+    IconTuningLinear,
   } from "#lib/icons.js";
   import { BarGlass, BarItem, BarSegments } from "./index.js";
 
@@ -30,12 +32,17 @@
   const MODES: readonly {
     value: Mode;
     label: string;
-    icon: typeof IconPin;
+    icon: typeof IconPinLinear;
     keys: string;
   }[] = [
-    { value: "interact", label: "Interact", icon: IconInteract, keys: "V" },
-    { value: "comment", label: "Comment", icon: IconPin, keys: "C" },
-    { value: "draw", label: "Draw", icon: IconPen, keys: "D" },
+    {
+      value: "interact",
+      label: "Interact",
+      icon: IconInteractLinear,
+      keys: "V",
+    },
+    { value: "comment", label: "Comment", icon: IconPinLinear, keys: "C" },
+    { value: "draw", label: "Draw", icon: IconPenLinear, keys: "D" },
   ];
 
   let {
@@ -80,9 +87,19 @@
       <div class="flex items-center gap-c-bar-groups-gap">
         <BarGlass form="group">
           <BarItem icon={IconSearch} label="Search" tip={false} />
-          <BarItem count={3} icon={IconFolder} label="Files, 3" tip={false} />
-          <BarItem icon={IconTuning} label="Inspect" pressed tip={false} />
-          <BarItem icon={IconMore} label="More" tip={false} />
+          <BarItem
+            count={3}
+            icon={IconFolderLinear}
+            label="Files, 3"
+            tip={false}
+          />
+          <BarItem
+            icon={IconTuningLinear}
+            label="Inspect"
+            pressed
+            tip={false}
+          />
+          <BarItem icon={IconMoreLinear} label="More" tip={false} />
         </BarGlass>
         {@render modes()}
       </div>
@@ -91,21 +108,21 @@
         {#if holds === "three" || holds === "selected"}
           <BarItem icon={IconPlus} label="New canvas" tip={false} />
           <BarItem
-            icon={IconTuning}
+            icon={IconTuningLinear}
             label="Inspect"
             pressed={holds === "selected"}
             tip={false}
           />
-          <BarItem icon={IconRefresh} label="Reload" tip={false} />
+          <BarItem icon={IconRefreshLinear} label="Reload" tip={false} />
         {:else if holds === "counted"}
           <BarItem
             {count}
-            icon={IconChat}
+            icon={IconChatLinear}
             label={`Comments, ${count} open`}
             {pressed}
             tip={false}
           />
-          <BarItem icon={IconRefresh} label="Reload" tip={false} />
+          <BarItem icon={IconRefreshLinear} label="Reload" tip={false} />
         {:else}
           <Button aria-label="Reload" size="icon-sm" variant="ghost">
             <IconRefresh />

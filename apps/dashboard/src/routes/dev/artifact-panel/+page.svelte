@@ -13,7 +13,7 @@
    * `?state=`: `rest` (the rail shut), `rail` (the open comments; on a
    * phone the sheet at half its room), `full` (the phone's sheet at its
    * whole room), `resolved`, `none` (no comments at all), `check` (To check
-   * holds two while Open is in front), `list` (the rail's title menu open),
+   * holds two while Open is in front), `sort` (the rail's Sort menu open),
    * `search` (searching "HIG", with hits), `miss` (searching, none),
    * `artifacts` (the title's menu open), `thread` (comment 4 opened; on a
    * phone in the Comments sheet, Back leading), `changes` (Changed since you
@@ -37,10 +37,9 @@
    * badge to n (5, 12, 150, 1500).
    * The picture stands for a decision page as the panel shows it: its own
    * title left out under the head, which names it (overlay
-   * `data-cawco-headed`), its top starting the head's room down
-   * (`c-head-room`) and scrolling under the glass. `?rail=` places the
-   * desk's Comments (over, beside, hung) and `?line=1` sets the title over
-   * its description: the structures on the owner's decision page.
+   * `data-cawco-headed`), under the head's room, its scrollbar undrawn
+   * (overlay `data-cawco-bare-scroll`). The head is the owner's picks: the
+   * title over its description, the Comments beside the page.
    */
   import { type Pin, pinHeld } from "@cawco/core/comments";
   import { hubRequest } from "@cawco/core/hub-request";
@@ -57,7 +56,7 @@
   import CommentRail from "#lib/cawco/preview/CommentRail.svelte";
   import CommentsButton from "#lib/cawco/preview/CommentsButton.svelte";
   import { CanvasViewState } from "#lib/cawco/preview/canvas-view.svelte.js";
-  import type { RailSort } from "#lib/cawco/preview/comment-rows.js";
+  import type { RailList, RailSort } from "#lib/cawco/preview/comment-rows.js";
   import ModeButton from "#lib/cawco/preview/ModeButton.svelte";
   import ModeSwitch from "#lib/cawco/preview/ModeSwitch.svelte";
   import PinCard from "#lib/cawco/preview/PinCard.svelte";
@@ -67,19 +66,24 @@
   import ThreadSheet from "#lib/cawco/preview/ThreadSheet.svelte";
   import { setSideExpand } from "#lib/cawco/side/expand.js";
   import { HEAD_PRIORITY, type HeadItem } from "#lib/cawco/side/head.js";
+  import RailFloat from "#lib/cawco/side/RailFloat.svelte";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
-  import { BarItem, BarPopover } from "#lib/components/ui/bar-glass/index.js";
+  import { BarItem } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import * as Popover from "#lib/components/ui/popover/index.js";
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import {
     IconChat,
     IconExternal,
+    IconExternalLinear,
     IconInteract,
+    IconInteractLinear,
     IconPen,
+    IconPenLinear,
     IconPin,
+    IconPinLinear,
     IconRefresh,
+    IconRefreshLinear,
   } from "#lib/icons.js";
   import { page } from "$app/state";
   import pageDesk from "./page-desk.webp";
@@ -90,18 +94,6 @@
   /** The hub's show of an artifact: its id. */
   const SHOW_PATH = /\/artifacts\/([^/]+)\/show$/u;
   const asked = page.url.searchParams.get("state") ?? "rail";
-  /**
-   * Where the Comments rail floats on a desk (`?rail=`): `over` the page's
-   * trailing side, the page keeping its width under it; `beside` the page,
-   * the page stopping short of it with its ground running under the glass
-   * (Adopting Liquid Glass: content "beneath sidebars and inspectors"
-   * without "placing content under it"); or `hung` from the Comments
-   * bubble, as tall as its comments.
-   */
-  const railAt = (page.url.searchParams.get("rail") ?? "beside") as
-    "over" | "beside" | "hung";
-  /** The title over its description in the bar (`?line=1`), a window's subtitle. */
-  const described = page.url.searchParams.get("line") === "1";
   const phone = new MediaQuery("(width < 640px)");
   /** The picture stands scrolled to its foot. */
   const scrolled = asked === "scrolled" || asked === "changes";
@@ -172,7 +164,7 @@
   let listOpen = $state(
     asked !== "rest" && asked !== "changes" && asked !== "scrolled"
   );
-  let filter = $state<"check" | "open" | "resolved">(
+  let filter = $state<RailList>(
     asked === "resolved" || asked === "found" ? "resolved" : "open"
   );
   let sort = $state<RailSort>("newest");
@@ -225,9 +217,9 @@
   const checked = asked === "check" ? [PINS[3]?.id, PINS[4]?.id] : [];
   let mode = $state<"interact" | "comment" | "draw">("interact");
   const MODE_GLYPHS = {
-    interact: IconInteract,
-    comment: IconPin,
-    draw: IconPen,
+    interact: IconInteractLinear,
+    comment: IconPinLinear,
+    draw: IconPenLinear,
   };
   const MODE_WORDS = { interact: "Interact", comment: "Comment", draw: "Draw" };
   /** A canvas's view (Map, Verify), standing for a component artifact's in the head. */
@@ -384,7 +376,7 @@
   /** Opens what the state names once the panel stands (its head fitted, which draws More): a menu, the search with its words, the sheet's whole room. */
   /** The control each state presses once the panel stands. */
   const PRESSES: Record<string, string> = {
-    list: '[data-slot="list"]',
+    sort: '[data-slot="sort"]',
     more: '[data-slot="more"]',
     view: '[aria-label="Canvas view"]',
     mode: '[aria-label^="Mode:"]',
@@ -488,54 +480,16 @@
   <CanvasView as="sub" onverify={() => undefined} {view} />
 {/snippet}
 {#snippet commentsBar()}
-  {#if railAt === "hung" && !phone.current}
-    <!-- The rail hung from the bubble's glass as one shape with it, as tall
-         as its comments up to the well's foot; it stays while the page is
-         pressed (Comment mode marks the page under it). -->
-    <Popover.Root
-      onOpenChange={(next) => {
-        listOpen = next;
-      }}
-      open={listOpen}
-    >
-      <Popover.Trigger>
-        {#snippet child({ props })}
-          <CommentsButton
-            count={badgeCount}
-            held={heldCount}
-            label="Comments (⇧C hides the pins)"
-            open={listOpen}
-            {props}
-            toCheck={checked.length}
-          />
-        {/snippet}
-      </Popover.Trigger>
-      <BarPopover
-        interactOutsideBehavior="ignore"
-        label={commentWords.comments}
-        onOpenAutoFocus={(event: Event) => event.preventDefault()}
-        trapFocus={false}
-      >
-        <div
-          class="flex max-h-(--bits-popover-content-available-height) min-h-0 w-c-comments-w"
-          data-rail-float="hung"
-        >
-          {@render railOf("beside")}
-        </div>
-      </BarPopover>
-    </Popover.Root>
-  {:else}
-    <CommentsButton
-      count={badgeCount}
-      label="Comments (⇧C hides the pins)"
-      onclick={() => {
-        listOpen = !listOpen;
-      }}
-      held={heldCount}
-      open={listOpen && !(phone.current && composing)}
-      toCheck={checked.length}
-    />
-  {/if}
+  <CommentsButton
+    count={badgeCount}
+    label="Comments (⇧C hides the pins)"
+    onclick={() => {
+      listOpen = !listOpen;
+    }}
+    held={heldCount}
+    open={listOpen && !(phone.current && composing)}
+    toCheck={checked.length}
+  />
 {/snippet}
 {#snippet commentsMenu()}
   <DropdownMenu.Item
@@ -545,13 +499,13 @@
   >
 {/snippet}
 {#snippet reloadBar()}
-  <BarItem icon={IconRefresh} label="Reload" onclick={() => undefined} />
+  <BarItem icon={IconRefreshLinear} label="Reload" onclick={() => undefined} />
 {/snippet}
 {#snippet reloadMenu()}
   <DropdownMenu.Item><IconRefresh /><span>Reload</span></DropdownMenu.Item>
 {/snippet}
 {#snippet openBar()}
-  <BarItem href="#open" icon={IconExternal} label="Open in new tab" />
+  <BarItem href="#open" icon={IconExternalLinear} label="Open in new tab" />
 {/snippet}
 {#snippet openMenu()}
   <DropdownMenu.Item
@@ -563,7 +517,6 @@
   <ArtifactMenu
     held={ARTIFACTS.map((one) => one.id)}
     instanceId={INSTANCE}
-    {described}
     line={shown?.ask ?? ""}
     lineId="bench-line"
     onrefused={() => undefined}
@@ -640,17 +593,12 @@
   />
 {/snippet}
 
-<!-- The rail as a floating glass panel under the head, inset from the
-     card's edges, its corners the card's (c-float-panel-r): the capsules
-     of its own bar stand concentric in them, its title's fill too. -->
+<!-- The rail beside the page, a floating glass panel (RailFloat). -->
 {#snippet railBeside()}
-  {#if listOpen && !phone.current && railAt !== "hung"}
-    <div
-      class="absolute end-space-2 top-c-head-room bottom-space-2 z-1 flex min-h-0 overflow-hidden rounded-(--c-float-panel-r) border border-border-hairline bg-material-panel shadow-overlay glass-backdrop reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"
-      data-rail-float={railAt}
-    >
+  {#if listOpen && !phone.current}
+    <RailFloat>
       {@render railOf("beside")}
-    </div>
+    </RailFloat>
   {/if}
 {/snippet}
 
@@ -759,11 +707,10 @@
       titleControl={title}
       float
     >
-      <!-- The page runs to the card's top under the floating head, keeping
-           the head's room at its top (c-head-room) so its first line starts
-           clear of the glass and scrolls beneath it. -->
+      <!-- The page under the head's room, its scrollbar undrawn as the
+           overlay leaves a page's (`data-cawco-bare-scroll`). -->
       <div
-        class="size-full overflow-y-auto overscroll-contain pt-c-head-room"
+        class="size-full overflow-y-auto overscroll-contain no-scrollbar"
         data-slot="bench-page"
         onscroll={readMark}
         bind:this={benchPage}
@@ -771,22 +718,10 @@
       >
         <!-- The picture and the open comments' pills on it, as the page's
              overlay draws them: each a press that opens its thread. -->
-        <div
-          class={[
-            "relative w-fit max-w-full",
-            !phone.current && railAt !== "beside" && "w-full",
-          ]}
-          data-slot="bench-picture"
-        >
+        <div class="relative w-fit max-w-full" data-slot="bench-picture">
           <img
             alt={shown?.title}
-            class={[
-              "block h-auto max-w-full",
-              // The page lays itself out to the well's whole width where the
-              // rail floats over it (the picture drawn to it), so what the
-              // glass covers is page, as it would be.
-              !phone.current && railAt !== "beside" && "w-full",
-            ]}
+            class="block h-auto max-w-full"
             src={phone.current ? pagePhone : pageDesk}
             {@attach (img) => {
               // Scrolled to its foot once the picture has its height, and

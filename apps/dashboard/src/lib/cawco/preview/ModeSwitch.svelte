@@ -10,7 +10,11 @@
   import { type PreviewMode, previewMode } from "@cawco/core/comments";
   import { previewWords } from "@cawco/core/words/preview";
   import { BarSegments } from "#lib/components/ui/bar-glass/index.js";
-  import { IconInteract, IconPen, IconPin } from "#lib/icons.js";
+  import {
+    IconInteractLinear,
+    IconPenLinear,
+    IconPinLinear,
+  } from "#lib/icons.js";
 
   let {
     mode,
@@ -26,21 +30,21 @@
     {
       value: "interact",
       label: "Interact",
-      icon: IconInteract,
+      icon: IconInteractLinear,
       keys: "V",
       tip: "Interact (V): the page gets every click",
     },
     {
       value: "comment",
       label: "Comment",
-      icon: IconPin,
+      icon: IconPinLinear,
       keys: "C",
       tip: "Comment (C): a click pins a comment",
     },
     {
       value: "draw",
       label: "Draw",
-      icon: IconPen,
+      icon: IconPenLinear,
       keys: "D",
       tip: "Draw (D): drag to draw on the page",
     },

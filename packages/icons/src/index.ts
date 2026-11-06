@@ -48,7 +48,10 @@ export { default as IconArrowRight } from "~icons/solar/arrow-right-linear";
 /** Opens elsewhere: Solar's bare arrow out, with no square for it to leave. */
 export { default as IconExternal } from "~icons/solar/arrow-right-up-bold-duotone";
 /** A link that opens in another tab. */
-export { default as IconArrowUpRight } from "~icons/solar/arrow-right-up-linear";
+export {
+  default as IconArrowUpRight,
+  default as IconExternalLinear,
+} from "~icons/solar/arrow-right-up-linear";
 export { default as IconArrowUp } from "~icons/solar/arrow-up-linear";
 /** What happened that nobody asked for: Caw's Notices section (CawPanel). */
 export { default as IconNotices } from "~icons/solar/bell-bold-duotone";
@@ -74,7 +77,18 @@ export { default as IconUsage } from "~icons/solar/chart-2-bold-duotone";
  */
 export { default as IconTranscript } from "~icons/solar/chat-round-bold-duotone";
 export { default as IconChat } from "~icons/solar/chat-square-bold-duotone";
+/*
+ * A bar's symbols (the owner's pick on the artifact panel's decision page,
+ * Solar Linear): every symbol standing in a bar's glass is Solar's linear
+ * cut, the thin line Apple draws in a bar, each the twin of the product
+ * icon of the same name; the bold duotone stays for status, tiles and rows
+ * (DESIGN.md, The Solar Duotone Rule). A bar draws no duotone
+ * (golar house/bar-symbol-linear). Undock and Room share one sidebar, as
+ * their duotone does.
+ */
+export { default as IconChatLinear } from "~icons/solar/chat-square-linear";
 export { default as IconSuccess } from "~icons/solar/check-bold-duotone";
+export { default as IconSuccessLinear } from "~icons/solar/check-linear";
 /**
  * A to-do list, and a starter that files tasks: Solar's bare checklist, the
  * ticks and lines checklist-minimalistic holds in a squircle.
@@ -124,11 +138,13 @@ export {
   default as IconInteract,
   default as IconToolScreen,
 } from "~icons/solar/cursor-bold-duotone";
+export { default as IconInteractLinear } from "~icons/solar/cursor-linear";
 export { default as IconWarningTriangle } from "~icons/solar/danger-triangle-bold-duotone";
 export { default as IconDatabase } from "~icons/solar/database-bold-duotone";
 // A new conversation: two speech bubbles. Its full-weight marks are as large as
 // a menu's other glyphs' (an add mark inside a tile read smaller beside them).
 export { default as IconChatAdd } from "~icons/solar/dialog-2-bold-duotone";
+export { default as IconChatAddLinear } from "~icons/solar/dialog-2-linear";
 export { default as IconDocumentAlt } from "~icons/solar/document-bold-duotone";
 export {
   default as IconArtifactPage,
@@ -142,13 +158,17 @@ export { default as IconDownload } from "~icons/solar/download-bold-duotone";
 export { default as IconAlert } from "~icons/solar/exclamation-mark-bold-duotone";
 export { default as IconEye } from "~icons/solar/eye-bold-duotone";
 export { default as IconEyeClosed } from "~icons/solar/eye-closed-bold-duotone";
+export { default as IconEyeClosedLinear } from "~icons/solar/eye-closed-linear";
+export { default as IconEyeLinear } from "~icons/solar/eye-linear";
 export { default as IconDocument } from "~icons/solar/file-text-bold-duotone";
 /** What narrows a project's tasks (TaskFilterPopover). */
 export { default as IconFilter } from "~icons/solar/filter-bold-duotone";
 export { default as IconFire } from "~icons/solar/fire-bold-duotone";
 export { default as IconFiles } from "~icons/solar/folder-2-bold-duotone";
+export { default as IconFilesLinear } from "~icons/solar/folder-2-linear";
 export { default as IconFolder } from "~icons/solar/folder-bold-duotone";
 export { default as IconFolderGit } from "~icons/solar/folder-git-bold-duotone";
+export { default as IconFolderLinear } from "~icons/solar/folder-linear";
 export { default as IconFolderOpen } from "~icons/solar/folder-open-bold-duotone";
 export { default as IconToolFiles } from "~icons/solar/folder-with-files-bold-duotone";
 export { default as IconImage } from "~icons/solar/gallery-bold-duotone";
@@ -160,8 +180,10 @@ export {
 } from "~icons/solar/ghost-smile-bold-duotone";
 /** What differs between two states: Compare (bare: the scale stands on a tile, The Solar Duotone Rule). */
 export { default as IconCompare } from "~icons/solar/git-diff-bold-duotone";
+export { default as IconCompareLinear } from "~icons/solar/git-diff-linear";
 /** Fork, Spin off: a session forked from another (the bare cut, no enclosure). */
 export { default as IconFork } from "~icons/solar/git-fork-bold-duotone";
+export { default as IconForkLinear } from "~icons/solar/git-fork-linear";
 export {
   default as IconGlobe,
   default as IconToolWeb,
@@ -178,14 +200,17 @@ export { default as IconKeyboard } from "~icons/solar/keyboard-bold-duotone";
 export { default as IconLaptopAlt } from "~icons/solar/laptop-bold-duotone";
 export { default as IconLaptop } from "~icons/solar/laptop-minimalistic-bold-duotone";
 export { default as IconLayers } from "~icons/solar/layers-bold-duotone";
+export { default as IconLayersLinear } from "~icons/solar/layers-linear";
 export { default as IconLayersMinimal } from "~icons/solar/layers-minimalistic-bold-duotone";
 export { default as IconLeaf } from "~icons/solar/leaf-bold-duotone";
 /** A connection: Configure › Connections' rail glyph, and a row whose service has no mark. */
 export { default as IconConnection } from "~icons/solar/link-bold-duotone";
 export { default as IconLink } from "~icons/solar/link-minimalistic-2-bold-duotone";
+export { default as IconLinkLinear } from "~icons/solar/link-minimalistic-2-linear";
 /** Files' artifacts one row each (FilesList's Thumbnails | List). */
 export { default as IconListRows } from "~icons/solar/list-bold-duotone";
 export { default as IconListCheck } from "~icons/solar/list-check-bold-duotone";
+export { default as IconListRowsLinear } from "~icons/solar/list-linear";
 /** Waits on another task that has not landed. */
 export { default as IconLock } from "~icons/solar/lock-keyhole-minimalistic-bold-duotone";
 export { default as IconLogout } from "~icons/solar/logout-2-bold-duotone";
@@ -200,12 +225,15 @@ export { default as IconToolSearch } from "~icons/solar/magnifer-bold-duotone";
 export { default as IconSearch } from "~icons/solar/magnifer-linear";
 export { default as IconMapPoint } from "~icons/solar/map-point-bold-duotone";
 export { default as IconMaximize } from "~icons/solar/maximize-bold-duotone";
+export { default as IconMaximizeLinear } from "~icons/solar/maximize-linear";
 export { default as IconMore } from "~icons/solar/menu-dots-bold-duotone";
+export { default as IconMoreLinear } from "~icons/solar/menu-dots-linear";
 export { default as IconMic } from "~icons/solar/microphone-bold-duotone";
 export { default as IconZoomIn } from "~icons/solar/minimalistic-magnifer-zoom-in-bold-duotone";
 /** Fit: a zoomed timeline put back to its whole move (the design graph's Animation face). */
 export { default as IconZoomOut } from "~icons/solar/minimalistic-magnifer-zoom-out-bold-duotone";
 export { default as IconMinimize } from "~icons/solar/minimize-bold-duotone";
+export { default as IconMinimizeLinear } from "~icons/solar/minimize-linear";
 /**
  * Minus, Solar's bare linear cut: a checkbox's mixed state, zoom out, and the
  * neutral status (a routine that has not run yet, or a run that ended without
@@ -240,6 +268,7 @@ export {
   default as IconPenLine,
   default as IconToolWrite,
 } from "~icons/solar/pen-bold-duotone";
+export { default as IconPenLinear } from "~icons/solar/pen-linear";
 /**
  * Comment, the artifact panel's mode (a click pins a comment), and a pin
  * placed elsewhere (PinCard). Not a bubble: the panel's Comments, beside
@@ -247,6 +276,7 @@ export {
  * by side.
  */
 export { default as IconPin } from "~icons/solar/pin-bold-duotone";
+export { default as IconPinLinear } from "~icons/solar/pin-linear";
 export {
   default as IconSend,
   default as IconToolMessage,
@@ -264,10 +294,12 @@ export {
   default as IconRenew,
   default as IconWorking,
 } from "~icons/solar/refresh-bold-duotone";
+export { default as IconRefreshLinear } from "~icons/solar/refresh-linear";
 /** Repeat: a move played round again each time it ends (the design graph's Animation face). */
 export { default as IconRepeat } from "~icons/solar/repeat-bold-duotone";
 /** Reopen a resolved pin. */
 export { default as IconReopen } from "~icons/solar/restart-bold-duotone";
+export { default as IconReopenLinear } from "~icons/solar/restart-linear";
 /*
  * The marks a folder can be given by hand (see `FOLDER_MARKS` in
  * lib/cawco/folder-prefs.svelte.ts), picked to span the kinds of work a
@@ -283,6 +315,7 @@ export { default as IconRulerPen } from "~icons/solar/ruler-cross-pen-bold-duoto
 /** Two things weighed against each other: Jev. */
 export { default as IconJev } from "~icons/solar/scale-bold-duotone";
 export { default as IconServer } from "~icons/solar/server-2-bold-duotone";
+export { default as IconServerLinear } from "~icons/solar/server-2-linear";
 export { default as IconServerAlt } from "~icons/solar/server-bold-duotone";
 export { default as IconServerSquare } from "~icons/solar/server-square-bold-duotone";
 export { default as IconSettings } from "~icons/solar/settings-bold-duotone";
@@ -299,6 +332,10 @@ export {
   default as IconUndock,
 } from "~icons/solar/sidebar-minimalistic-bold-duotone";
 export { default as IconSidebar } from "~icons/solar/sidebar-minimalistic-line-duotone";
+export {
+  default as IconRoomLinear,
+  default as IconUndockLinear,
+} from "~icons/solar/sidebar-minimalistic-linear";
 /** Replay: a move played again from its start, wherever its playhead stands (the design graph's Animation face). */
 export { default as IconReplay } from "~icons/solar/skip-previous-bold-duotone";
 export { default as IconToolGeneric } from "~icons/solar/sledgehammer-bold-duotone";
@@ -309,6 +346,7 @@ export { default as IconPhone } from "~icons/solar/smartphone-bold-duotone";
  * without their containers").
  */
 export { default as IconSort } from "~icons/solar/sort-from-top-to-bottom-bold-duotone";
+export { default as IconSortLinear } from "~icons/solar/sort-from-top-to-bottom-linear";
 export { default as IconUnfold } from "~icons/solar/sort-vertical-bold-duotone";
 /** A release's New section (ReleaseNotes). */
 export { default as IconStars } from "~icons/solar/stars-bold-duotone";
@@ -317,6 +355,7 @@ export {
   default as IconStop,
   default as IconStopped,
 } from "~icons/solar/stop-bold-duotone";
+export { default as IconStopLinear } from "~icons/solar/stop-linear";
 /** A work tab's Structure toggle, on: the solid cut beside its duotone off. */
 export { default as IconStructureSolid } from "~icons/solar/structure-bold";
 export { default as IconStructure } from "~icons/solar/structure-bold-duotone";
@@ -329,10 +368,13 @@ export {
   default as IconMoveTab,
   default as IconTransfer,
 } from "~icons/solar/transfer-horizontal-bold-duotone";
+export { default as IconMoveTabLinear } from "~icons/solar/transfer-horizontal-linear";
 export { default as IconTrash } from "~icons/solar/trash-bin-minimalistic-bold-duotone";
+export { default as IconTrashLinear } from "~icons/solar/trash-bin-minimalistic-linear";
 /** A project deleted for good: the bin with its lid's lines, beside Forget's plain bin. */
 export { default as IconDeleteForGood } from "~icons/solar/trash-bin-trash-bold-duotone";
 export { default as IconTuning } from "~icons/solar/tuning-2-bold-duotone";
+export { default as IconTuningLinear } from "~icons/solar/tuning-2-linear";
 export { default as IconReset } from "~icons/solar/undo-left-bold-duotone";
 export { default as IconUser } from "~icons/solar/user-bold-duotone";
 /** Delegated work: the subagents a session still has out. Accounts: Configure's sign-ins. */
@@ -345,6 +387,7 @@ export { default as IconVideo } from "~icons/solar/video-library-bold-duotone";
 export { default as IconSoundOff } from "~icons/solar/volume-cross-bold-duotone";
 /** A dial: the design graph's Dials, the values an agent lets the person tune. */
 export { default as IconDial } from "~icons/solar/volume-knob-bold-duotone";
+export { default as IconDialLinear } from "~icons/solar/volume-knob-linear";
 export { default as IconSound } from "~icons/solar/volume-loud-bold-duotone";
 export { default as IconColumns } from "~icons/solar/widget-2-bold-duotone";
 /** A sheet: a component's states, side by side, each a tile. */

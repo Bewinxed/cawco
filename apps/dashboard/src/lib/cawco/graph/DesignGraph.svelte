@@ -70,16 +70,17 @@
   import {
     IconChevronDown,
     IconClose,
-    IconCompare,
+    IconCompareLinear,
     IconDial,
-    IconEye,
+    IconDialLinear,
+    IconEyeLinear,
     IconListRows,
     IconMaximize,
     IconMonitor,
     IconMoon,
     IconPhone,
     IconPlay,
-    IconRoom,
+    IconRoomLinear,
     IconStructure,
     IconSun,
     IconTablet,
@@ -1630,7 +1631,7 @@
         <BarGlass form="group" joined={viewJoined || dialsJoined}>
           {#if !single}
             <BarItem
-              icon={IconCompare}
+              icon={IconCompareLinear}
               label={words.compare}
               onclick={() => setComparing(!comparing)}
               pressed={comparing}
@@ -1644,7 +1645,7 @@
                   <!-- Closed with values changed, the glyph wears the
                        selected wash and says how many, as Compare on does. -->
                   <BarItem
-                    icon={IconDial}
+                    icon={IconDialLinear}
                     label={dialsChanged > 0
                       ? words.dials.glassChanged(figure(dialsChanged))
                       : words.dialsFace}
@@ -1685,7 +1686,7 @@
             <Popover.Trigger>
               {#snippet child({ props })}
                 <BarItem
-                  icon={IconEye}
+                  icon={IconEyeLinear}
                   label={words.stageView}
                   props={mergeProps(props, {
                     onblur: () => {
@@ -1823,7 +1824,7 @@
           </Popover.Root>
           {#if !roomShown}
             <BarItem
-              icon={IconRoom}
+              icon={IconRoomLinear}
               label={words.openRoom(roomName)}
               onclick={() => {
                 roomOpen = true;

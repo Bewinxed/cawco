@@ -62,11 +62,13 @@
     IconChevronLeft,
     IconClose,
     IconLink,
-    IconMore,
+    IconLinkLinear,
+    IconMoreLinear,
     IconPin,
-    IconReopen,
-    IconSuccess,
-    IconTrash,
+    IconPinLinear,
+    IconReopenLinear,
+    IconSuccessLinear,
+    IconTrashLinear,
   } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import AskHere from "../AskHere.svelte";
@@ -372,13 +374,19 @@
     asked = id;
   });
 
-  /** ⋯'s actions: Copy link, and Pin it somewhere else while its element is gone. */
+  /** ⋯'s actions: Copy link, and Pin it somewhere else while its element is gone; each with its glyph as a row (duotone) and as a bar's symbol (linear), where one stands alone in the bar. */
   const moreActions = $derived([
-    { icon: IconLink, label: said.copyLink, onselect: copyLink },
+    {
+      icon: IconLink,
+      barIcon: IconLinkLinear,
+      label: said.copyLink,
+      onselect: copyLink,
+    },
     ...(pin.movedAt
       ? [
           {
             icon: IconPin,
+            barIcon: IconPinLinear,
             label: said.placeElsewhere,
             onselect: () => onplace(true),
           },
@@ -559,13 +567,13 @@
         <BarGlass form="group">
           {#if pin.resolvedAt}
             <BarItem
-              icon={IconReopen}
+              icon={IconReopenLinear}
               label={said.reopen}
               onclick={() => onresolve(false)}
             />
           {:else}
             <BarItem
-              icon={IconSuccess}
+              icon={IconSuccessLinear}
               label={said.resolve}
               onclick={() => onresolve(true)}
             />
@@ -577,7 +585,7 @@
             <BarItem
               data-slot="delete"
               expanded={asks.pending?.at === "delete"}
-              icon={IconTrash}
+              icon={IconTrashLinear}
               label={said.deleteComment}
               onclick={askDelete}
               open={asks.pending?.at === "delete"}
@@ -586,7 +594,7 @@
               {@const only = moreActions[0]}
               <!-- One thing is a button of its own, never a More holding it. -->
               <BarItem
-                icon={only.icon}
+                icon={only.barIcon}
                 label={only.label}
                 onclick={only.onselect}
               />
@@ -595,7 +603,7 @@
                 <DropdownMenu.Trigger>
                   {#snippet child({ props })}
                     <BarItem
-                      icon={IconMore}
+                      icon={IconMoreLinear}
                       label={commonWords.moreFor(`comment ${pin.number}`)}
                       {props}
                     />

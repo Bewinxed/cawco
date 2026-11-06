@@ -42,7 +42,7 @@
     IconExternal,
     IconFolder,
     IconFork,
-    IconMaximize,
+    IconMaximizeLinear,
     IconStop,
     IconTick,
   } from "#lib/icons.js";
@@ -363,7 +363,7 @@
         <BarGlass form="group">
           <BarItem
             href={target.href}
-            icon={IconMaximize}
+            icon={IconMaximizeLinear}
             label={peekWords.open}
           />
         </BarGlass>

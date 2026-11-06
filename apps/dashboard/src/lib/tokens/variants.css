@@ -599,6 +599,7 @@
 @custom-variant slot-sidebar-row-lead (&[data-slot="sidebar-row-lead"]);
 @custom-variant slot-sidebar-settings (&[data-slot="sidebar-settings"]);
 @custom-variant slot-slot (&[data-slot="slot"]);
+@custom-variant slot-sort (&[data-slot="sort"]);
 @custom-variant slot-source (&[data-slot="source"]);
 @custom-variant slot-srow (&[data-slot="srow"]);
 @custom-variant slot-stack (&[data-slot="stack"]);

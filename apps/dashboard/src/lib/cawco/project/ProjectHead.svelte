@@ -76,16 +76,17 @@
   import * as Popover from "#lib/components/ui/popover/index.js";
   import {
     IconArchive,
-    IconChatAdd,
+    IconChatAddLinear,
     IconColumns,
     IconDeleteForGood,
     IconFilter,
-    IconFolder,
+    IconFolderLinear,
     IconFork,
+    IconForkLinear,
     IconInfo,
-    IconMaximize,
-    IconMinimize,
-    IconMore,
+    IconMaximizeLinear,
+    IconMinimizeLinear,
+    IconMoreLinear,
     IconPlus,
     IconSettings,
     IconSparkles,
@@ -385,7 +386,7 @@
       {#if primary && machine}
         <OsMark class="size-c-bar-symbol text-ink-muted" os={machine.os} />
       {:else}
-        <IconFolder data-slot="bar-symbol" aria-hidden="true" />
+        <IconFolderLinear data-slot="bar-symbol" aria-hidden="true" />
       {/if}
     </BarItem>
   </div>
@@ -407,7 +408,7 @@
            conversation, the caret in his composer. -->
       <BarItem
         data-new-session
-        icon={IconChatAdd}
+        icon={IconChatAddLinear}
         label={projectWords.askCaw}
         layout="wide"
         onclick={() => lead.newConversation()}
@@ -416,7 +417,7 @@
         <BarItem
           aria-haspopup="dialog"
           data-spin-off
-          icon={IconFork}
+          icon={IconForkLinear}
           label={projectWords.spinOff}
           layout="wide"
           onclick={(event: MouseEvent) =>
@@ -428,7 +429,7 @@
       <BarItem
         aria-keyshortcuts={fullSize.on ? "Escape" : undefined}
         data-full-size
-        icon={fullSize.on ? IconMinimize : IconMaximize}
+        icon={fullSize.on ? IconMinimizeLinear : IconMaximizeLinear}
         label={fullSize.on ? projectWords.exitFullSize : projectWords.fullSize}
         onclick={() => fullSize.toggle()}
         pressed={fullSize.on}
@@ -438,7 +439,7 @@
           {#snippet child({ props })}
             <BarItem
               data-head-more
-              icon={IconMore}
+              icon={IconMoreLinear}
               label={commonWords.moreFor(project.name)}
               {props}
               bind:ref={more}
