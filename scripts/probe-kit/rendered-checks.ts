@@ -35,7 +35,7 @@
  * | made-up     | own code                    | no fixture or probe words (`PROBE-`, `/tmp/`, `Lorem` …), a lone "Body", text outside the spec's `allowedText` source |
  * | tight-inset | own code                    | words on an edged, rounded surface of 160×48 or more stand 8px or more from its sides (DESIGN.md, The Row Grid Rule) |
  * | tight-control | own code                  | a drawn button stands 7px (`space-2`) or more under the field, line or card above it |
- * | uneven-inset | own code                   | a drawn row its children fill (to its padding at both ends) keeps one inset at both ends, a child that paints nothing (a ghost, a wrapper) read by its ink: the smaller end not under 55% of a 16px or larger one (DESIGN.md, The Row Grid Rule) |
+ * | uneven-inset | own code                   | a drawn row its children fill (to its padding at both ends) keeps one inset at both ends, a child that paints nothing (a ghost, a wrapper) read by its ink; a row holding a track (a child whose ink all stands out of flow, placed on a scale) is a plot, not read: the smaller end not under 55% of a 16px or larger one (DESIGN.md, The Row Grid Rule) |
  * | fat-row     | own code                    | one-line rows of a list (its children of its commonest kind) not over 3.4 lines and 48px tall, a row that draws nothing less the margins its children keep inside it |
  * | loose-list  | own code                    | a list's alike rows, where two stand next to each other, not further apart than they are tall, and 24px |
  * | empty-pane  | own code                    | a landmark or pane of 120px or more holds a word, mark, control (an editor's `contenteditable` too) or drawn block |
@@ -2193,23 +2193,57 @@ function readInPage(args: InPageArgs): InPageRead {
   // whatever it held. A row whose children stop
   // short of its padding on a side (a tab strip with room after its last
   // tab) has free space there, and is a layout.
+  //
+  // The rule is a row's: its mark, its words and its last control stand in
+  // flow, one after another. A track (a timeline's lane, a ruler, a
+  // meter) draws only what is placed by position (out of flow, at a time or
+  // a value on its scale): its gaps are a delay or room left on the scale,
+  // not an inset, and a box holding one is a plot, never read. On the
+  // Animation face every lane and its ruler read as uneven rows, 290 times.
   if (!skip.has("uneven-inset")) {
-    /** Where `el` draws, sideways: its box when it paints, else (a ghost, a wrapper) its words, glyphs and painted boxes inside. */
-    const drawnSides = (el: Element): { left: number; right: number } => {
+    /** Whether `node`, inside `el`, is placed out of flow: it or a box between it and `el` stands absolute or fixed. */
+    const placedWithin = (node: Element, el: Element): boolean => {
+      for (
+        let at: Element | null = node;
+        at && at !== el;
+        at = at.parentElement
+      ) {
+        if (/absolute|fixed/u.test(style(at).position)) {
+          return true;
+        }
+      }
+      return false;
+    };
+    /**
+     * What `el` draws, sideways: its box when it paints, else (a ghost, a
+     * wrapper) its words, glyphs and painted boxes inside; and whether it is
+     * a track, everything it draws inside placed out of flow.
+     */
+    const inkOf = (
+      el: Element
+    ): { left: number; right: number; track: boolean } => {
       const box = el.getBoundingClientRect();
       if (paints(el).length > 0) {
-        return box;
+        return { left: box.left, right: box.right, track: false };
       }
       let left = Number.POSITIVE_INFINITY;
       let right = Number.NEGATIVE_INFINITY;
-      const take = (one: { left: number; right: number }) => {
+      let inFlow = false;
+      let placed = false;
+      const take = (one: { left: number; right: number }, at: Element) => {
         left = Math.min(left, one.left);
         right = Math.max(right, one.right);
+        if (placedWithin(at, el)) {
+          placed = true;
+        } else {
+          inFlow = true;
+        }
       };
       for (const t of texts) {
-        if (el.contains(t.node)) {
+        const at = t.node.parentElement;
+        if (at && el.contains(t.node)) {
           for (const one of t.rects) {
-            take(one);
+            take(one, at);
           }
         }
       }
@@ -2219,10 +2253,12 @@ function readInPage(args: InPageArgs): InPageRead {
           !one.parentElement?.closest("svg") &&
           (one.matches("svg, img, canvas, video") || paints(one).length > 0)
         ) {
-          take(one.getBoundingClientRect());
+          take(one.getBoundingClientRect(), one);
         }
       }
-      return Number.isFinite(left) ? { left, right } : box;
+      return Number.isFinite(left)
+        ? { left, right, track: placed && !inFlow }
+        : { left: box.left, right: box.right, track: false };
     };
     for (const row of inFlowBoxes) {
       const r = row.getBoundingClientRect();
@@ -2271,7 +2307,10 @@ function readInPage(args: InPageArgs): InPageRead {
       if (reachLeft - contentLeft > 1 || contentRight - reachRight > 1) {
         continue;
       }
-      const ink = kids.map((kid) => drawnSides(kid.el));
+      const ink = kids.map((kid) => inkOf(kid.el));
+      if (ink.some((one) => one.track)) {
+        continue;
+      }
       const first = Math.min(...ink.map((one) => one.left));
       const last = Math.max(...ink.map((one) => one.right));
       const leftIn = first - r.left;
