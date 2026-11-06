@@ -111,6 +111,8 @@
 
   /** Where a press on the field began, while it may become a drag. */
   let pressAt: { x: number; id: number } | null = null;
+  /** A drag just ended: the click it ends in is the drag's, never a press on the field. */
+  let dragged = false;
   /** A pointer that moves this far from its press is a drag, not a press to type. */
   const DRAG_FROM = 3;
   /** The value where the pointer stands across the field. */
@@ -161,6 +163,7 @@
       return;
     }
     const pressed = !dragging;
+    dragged = !pressed;
     pressAt = null;
     dragging = false;
     if (pressed) {
@@ -181,6 +184,14 @@
 <InputGroup.Root
   data-dial-field
   data-vaul-no-drag
+  onclickcapture={(event: MouseEvent) => {
+    // The frame's own click (InputGroup's, which focuses its field) is no
+    // press after a drag: the caret would stand where the drag let go.
+    if (dragged) {
+      dragged = false;
+      event.stopImmediatePropagation();
+    }
+  }}
   mark={was === null ? null : shareOf(was, range)}
   data-dragging={dragging || undefined}
   onmousedown={hold}

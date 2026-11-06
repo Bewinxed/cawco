@@ -27,6 +27,8 @@
     height: number;
   } = $props();
 
+  /** Under this room width the room is the phone's drawer, px (a 390 screen's). */
+  const PHONE_WIDE = 391;
   const faces = [
     { value: "states", label: words.statesFace, icon: IconListRows },
     { value: "map", label: words.wholeSet, icon: IconStructure },
@@ -44,8 +46,11 @@
     <div
       class="flex min-h-c-top-bar-h min-w-0 flex-none items-center gap-space-2 border-b border-border-hairline ps-space-4 pe-space-2"
     >
+      <!-- At a phone drawer's width the faces' switch draws the shown face's
+           name and the others' glyphs, as the graph's drawer does. -->
       <RoomFaces
         {faces}
+        glyphs={width < PHONE_WIDE}
         label={words.room(faces.map((one) => one.label))}
         onchoose={() => undefined}
         value="dials"

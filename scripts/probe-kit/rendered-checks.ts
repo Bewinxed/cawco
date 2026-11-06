@@ -38,7 +38,7 @@
  * | made-up     | own code                    | no fixture or probe words (`PROBE-`, `/tmp/`, `Lorem` …), a lone "Body", text outside the spec's `allowedText` source |
  * | tight-inset | own code                    | words on an edged, rounded surface of 160×48 or more stand 8px or more from its sides (DESIGN.md, The Row Grid Rule) |
  * | tight-control | own code                  | a drawn button stands 7px (`space-2`) or more under the field, line or card above it; a fixed strip that takes no press and is hidden from the reader (the screen's edges) is none of those |
- * | uneven-inset | own code                   | a drawn row its children fill (to its padding at both ends) keeps one inset at both ends, a child that paints nothing (a ghost, a wrapper) read by its ink; a row holding a track (a child whose ink all stands out of flow, placed on a scale) is a plot, not read: the smaller end not under 55% of a 16px or larger one (DESIGN.md, The Row Grid Rule) |
+ * | uneven-inset | own code                   | a drawn row its children fill (to its padding at both ends) keeps one inset at both ends, a child that paints nothing (a ghost, a wrapper) read by its ink; a row holding a track (a child whose ink all stands out of flow, placed on a scale) is a plot, and a control whose value is set at its end (text-align end) a field, neither read: the smaller end not under 55% of a 16px or larger one (DESIGN.md, The Row Grid Rule) |
  * | fat-row     | own code                    | one-line rows of a list (its children of its commonest kind) not over 3.4 lines and 48px tall, a row that draws nothing less the margins its children keep inside it |
  * | loose-list  | own code                    | a list's alike rows, where two stand next to each other, not further apart than they are tall, and 24px |
  * | empty-pane  | own code                    | a landmark or pane of 120px or more holds a word, mark, control (an editor's `contenteditable` too) or drawn block |
@@ -2458,6 +2458,15 @@ function readInPage(args: InPageArgs): InPageRead {
       }
       const ink = kids.map((kid) => inkOf(kid.el));
       if (ink.some((one) => one.track)) {
+        continue;
+      }
+      // A field that writes its value at its end (a select whose options are
+      // a figure and a unit, as a number field writes its figure: the design
+      // graph's Controls) is a field aligned as figures are, not a row.
+      if (
+        row.matches("button, [role=combobox]") &&
+        /end|right/u.test(style(kids[0]?.el ?? row).textAlign)
+      ) {
         continue;
       }
       const first = Math.min(...ink.map((one) => one.left));
