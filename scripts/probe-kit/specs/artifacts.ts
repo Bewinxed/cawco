@@ -11,13 +11,16 @@
  * 1. `artifact_create` of a page holding one `data-cawco-choice` answers an
  *    id, and the panel's menu lists it.
  * 2. A click on an option in the page (inside the panel's frame) is in
- *    the hub's read of the artifact within 5 s.
+ *    the hub's read of his view within 5 s (never the session's read,
+ *    which would count as the agent having heard it: {@link View}).
  * 3. A reload of the dashboard shows the pick still marked
  *    (`data-cawco-picked`).
  * 4. `artifact_update` with a JSON Patch changes the state, and the page
  *    reads it back (the other option marked).
- * 5. The session hears nothing of the person's change, or of the agent's own
- *    patch: only a Send tells it (artifact-responses.ts).
+ * 5. With its one question answered, the page goes to the session by
+ *    itself once his changes stand quiet, no Send: its responses notice,
+ *    named by its title, never his picks as words. Heard before 4, whose
+ *    patch answers with the session's read.
  * 6. None of the tools the artifact tools replaced (show_preview, page_show,
  *    page_choices, canvas_choices, read_choices) is among the session's
  *    tools; the artifact tools are.
@@ -25,7 +28,7 @@
  * Slice 2, on a page of fields (a text input `title`, a radio group `size`,
  * a select `tone`, and a `data-cawco-choice` `mood`):
  *
- * 7. Typing into `title` is in artifact_read within 2 s as its `value`;
+ * 7. Typing into `title` is in his view within 2 s as its `value`;
  *    picking a radio and an option is there as `options`; the session hears
  *    nothing of them.
  * 8. A dashboard reload shows all three from the doc on the page's
@@ -34,7 +37,9 @@
  *    HTML morphs the page: the heading changes, focus, text and scroll stay,
  *    no `load` fires and no socket is opened again.
  * 10. The artifact's own tab (`/artifact/<id>`) shows the same state, and a
- *    pick made there is marked in the first page within 2 s.
+ *    pick made there is marked in the first page within 2 s. That pick
+ *    answers its last question, so the page goes to the session by itself
+ *    once quiet, named by its title, and his view reads it sent.
  * 11. No JSON-RPC message crosses postMessage in any window during 7–10.
  *
  * `opened` is a view's word, not the publish's:
@@ -58,7 +63,8 @@
  * 19. The head says no path under the artifact's title (owner: "a stray /
  *    below the preview title"): for the page, the live preview and a canvas
  *    the session makes, at 1440 and at 390, the head stands named by the
- *    artifact's title with its own ask as its line under it, and no text
+ *    artifact's title with its own ask as its line under it (the fields
+ *    page, sent by itself at 10, reads "Sent to <session>"), and no text
  *    or label in the panel holds a route or the artifact's slug.
  *
  * `artifact_promote` (slice 6), read from the project's folder on the hub
@@ -164,6 +170,7 @@ import type { Frame, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
+import { artifactWords } from "../../../packages/core/src/words/artifacts";
 import { previewWords } from "../../../packages/core/src/words/preview";
 import { shellWords } from "../../../packages/core/src/words/shell";
 import { CREATE_SHAPE } from "../../../packages/hub/src/artifacts/component";
@@ -209,6 +216,8 @@ const REPLACED = [
 const PREVIEW_TOOL = new RegExp(`\\b(?:${REPLACED.join("|")})\\b`, "gu");
 /** The id in artifact_create's answer, as the tool result carries it. */
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/u;
+/** The session's name, which a sent page's head names (core `artifactWords.sentTo`). */
+const SESSION_NAME = "Artifacts";
 /** How long a probe listens for a word the session must not hear. Our call: past any debounce the hub could have. */
 const LISTEN_MS = 6000;
 /** How long a show waits for a view's word (artifacts/service.ts `SHOWN_WAIT_MS`). */
@@ -388,9 +397,16 @@ const respond = (request: Seen): Reply => {
   return calls.reply(request) ?? text("ok");
 };
 
-interface Read {
-  seq: number;
-  state: Record<string, { options: string[]; value: unknown }>;
+/**
+ * The person's view of a page (hub routes.ts `/view`): his picks and their
+ * send. The probe waits on his answers here, never through the session's
+ * read: that counts as the agent having read them (`artifact_read` stamps
+ * `readSeq`), and answers it read settle with nothing sent to it (needs.ts
+ * `answersUnheard`), so a hub send this spec waits for would never come.
+ */
+interface View {
+  choices: Record<string, { options: string[]; value: unknown }>;
+  sentAt: string | null;
 }
 
 /** The picked options the page marks, inside the panel's frame. */
@@ -412,7 +428,7 @@ const run = async (kit: Kit) => {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
-  const session = await fleet.spawn("claude", "Artifacts", fleet.repo);
+  const session = await fleet.spawn("claude", SESSION_NAME, fleet.repo);
 
   let sent = 0;
   /** Asks session `on` to call `tool` with `input`; what it answered. */
@@ -439,8 +455,8 @@ const run = async (kit: Kit) => {
   // H, P: a hand-up's own sessions, before anything opens a dashboard.
   await handChecks({ kit, fleet, callIn });
   const read = (artifact: string) =>
-    fleet.api<Read>(
-      hubRequest("GET /api/instances/:id/artifacts/:artifact", {
+    fleet.api<View>(
+      hubRequest("GET /api/instances/:id/artifacts/:artifact/view", {
         path: { id: session, artifact },
       })
     );
@@ -577,14 +593,14 @@ const run = async (kit: Kit) => {
   const heard = await until(
     "the pick in artifact_read",
     () => read(id),
-    (answer) => answer.state.hero?.options.join() === "b",
+    (answer) => answer.choices.hero?.options.join() === "b",
     5000
   ).then(
     () => Date.now() - clickedAt,
     () => null
   );
   kit.check(
-    "2: the click is in artifact_read within 5 s",
+    "2: the click is in the hub's read of his view within 5 s",
     heard !== null,
     heard === null
       ? `not within 5 s; the page marks ${(await picked(page)).join() || "nothing"}; toasts: ${(await page.locator("[data-sonner-toast]").allTextContents()).join(" | ") || "none"}; said: ${said.slice(-8).join(" | ") || "nothing"}`
@@ -606,6 +622,24 @@ const run = async (kit: Kit) => {
     `marked: ${afterReload.join() || "nothing"}`
   );
 
+  // 5. The page asks one question and the person's pick answers it, so once
+  // his changes stand quiet it goes to the session by itself, no Send
+  // (905b7aecf, service `sendAnswered`): its responses notice, named by its
+  // title, and never his picks as words. Heard before leg 4: the agent's
+  // patch answers with its read, and answers it has read settle with
+  // nothing sent to it (needs.ts `answersUnheard`), so a patch before his
+  // quiet window closes would race the send.
+  const answered = await sentItself(fleet, id);
+  const asWords = fleet.seen.filter((one) => PICKS_AS_WORDS.test(one.last));
+  kit.check(
+    "5: with its one question answered, the page goes to the session by itself once quiet, no Send: its responses notice names it by its title, and the picks never travel as words",
+    answered.length > 0 &&
+      answered[0]?.last.includes(`title=${encodeURIComponent("Hero pick")}`) ===
+        true &&
+      asWords.length === 0,
+    `${answered.length} notice(s): ${answered[0]?.last.slice(0, 200) ?? "none"}; picks as words: ${asWords.length}`
+  );
+
   // 4. The agent patches the state; the page reads it back.
   const updated = await call(UPDATE, {
     id,
@@ -621,29 +655,6 @@ const run = async (kit: Kit) => {
     "4: artifact_update's patch is the state the page reads back",
     updated.includes('"options":["a"]') && readBack.join() === "a",
     `tool: ${updated.slice(0, 200)}; page marks ${readBack.join() || "nothing"}`
-  );
-
-  // 5. The page asks one question and the person's pick answers it, so once
-  // his changes stand quiet it goes to the session by itself, no Send
-  // (905b7aecf, service `sendAnswered`): its responses notice, named by its
-  // title, and never his picks as words.
-  const answered = await until(
-    "the page's responses notice, sent by itself",
-    () =>
-      fleet.seen.filter((one) =>
-        one.last.includes(`[cawco:artifact-responses id=${id} `)
-      ),
-    (found) => found.length > 0,
-    LISTEN_MS + 4000
-  ).catch(() => []);
-  const asWords = fleet.seen.filter((one) => PICKS_AS_WORDS.test(one.last));
-  kit.check(
-    "5: with its one question answered, the page goes to the session by itself once quiet, no Send: its responses notice names it by its title, and the picks never travel as words",
-    answered.length > 0 &&
-      answered[0]?.last.includes(`title=${encodeURIComponent("Hero pick")}`) ===
-        true &&
-      asWords.length === 0,
-    `${answered.length} notice(s): ${answered[0]?.last.slice(0, 200) ?? "none"}; picks as words: ${asWords.length}`
   );
 
   // 6. The session's own tool list.
@@ -2019,12 +2030,12 @@ const promoteChecks = async ({
   await until(
     "the pick in the hub's read",
     () =>
-      fleet.api<Read>(
-        hubRequest("GET /api/instances/:id/artifacts/:artifact", {
+      fleet.api<View>(
+        hubRequest("GET /api/instances/:id/artifacts/:artifact/view", {
           path: { id: inProject, artifact: keptId },
         })
       ),
-    (answer) => answer.state.hero?.options.join() === "b",
+    (answer) => answer.choices.hero?.options.join() === "b",
     10_000
   );
   // The person's pin, written by the page's own doc client as the overlay writes one.
@@ -2229,6 +2240,16 @@ const HEAD_ASKS = {
   page: "Judge this page: pin anything that reads wrong",
   preview: "Try this page and say whether it works",
   canvas: "Draw on this canvas",
+};
+
+/**
+ * The line each head stands with: its ask, but the fields page's, which went
+ * to the session by itself once leg 10 answered its last question, reads as
+ * sent (dashboard PreviewPane.svelte `headLine`).
+ */
+const HEAD_LINES = {
+  ...HEAD_ASKS,
+  page: artifactWords.sentTo(SESSION_NAME),
 };
 
 /** {@link headLine} at the desk (1440) and at 390, the desk's size given back after. */
@@ -2450,14 +2471,14 @@ const themeChecks = async (
   }
   const reads = Object.values(lines).flatMap((one) => [one.desk, one.phone]);
   kit.check(
-    "19: for the page, the live preview and a canvas, at 1440 and 390, the head stands named by each one's title with its ask as its line under it, no route and no slug in the panel",
+    "19: for the page, the live preview and a canvas, at 1440 and 390, the head stands named by each one's title with its line under it (its ask; the page's, sent by itself, reads as sent), no route and no slug in the panel",
     Object.keys(lines).length === 3 &&
       Object.entries(lines).every(([kind, read]) =>
         [read.desk, read.phone].every(
           (one) =>
             one.head &&
             one.title === HEAD_TITLES[kind as keyof typeof HEAD_TITLES] &&
-            one.line === HEAD_ASKS[kind as keyof typeof HEAD_ASKS] &&
+            one.line === HEAD_LINES[kind as keyof typeof HEAD_LINES] &&
             !one.route &&
             one.slugs.length === 0
         )
@@ -2468,8 +2489,46 @@ const themeChecks = async (
 };
 
 /** One entry of a read, or none. */
-const entryOf = (answer: Read, key: string) =>
-  answer.state[key] as Read["state"][string] | undefined;
+const entryOf = (answer: View, key: string) =>
+  answer.choices[key] as View["choices"][string] | undefined;
+
+/**
+ * The responses notices artifact `id` sent its session by itself (hub
+ * artifacts `sendAnswered`), waited for past the person's quiet window;
+ * none when none came.
+ */
+const sentItself = (fleet: KitFleet, id: string) =>
+  until(
+    "the page's responses notice, sent by itself",
+    () =>
+      fleet.seen.filter((one) =>
+        one.last.includes(`[cawco:artifact-responses id=${id} `)
+      ),
+    (found) => found.length > 0,
+    LISTEN_MS + 4000
+  ).catch(() => []);
+
+/**
+ * Check 10's send: the tab's pick answered the fields page's last question,
+ * so once his changes stand quiet it goes to the session by itself, no
+ * Send, from a page made with the dashboard open, and his view reads it
+ * sent (leg 19's head).
+ */
+const fieldsSentChecks = async (
+  { kit, fleet }: Pick<OnSession, "fleet" | "kit">,
+  fieldsId: string,
+  readFields: () => Promise<View>
+) => {
+  const answered = await sentItself(fleet, fieldsId);
+  const { sentAt } = await readFields();
+  kit.check(
+    "10: with its last question answered in the tab, the page goes to the session by itself once quiet, no Send: its responses notice names it by its title, and his view reads it sent",
+    answered[0]?.last.includes(
+      `title=${encodeURIComponent(HEAD_TITLES.page)}`
+    ) === true && sentAt !== null,
+    `${answered.length} notice(s): ${answered[0]?.last.slice(0, 200) ?? "none"}; sentAt ${sentAt}`
+  );
+};
 
 /** Checks 7–11 (slice 2), on a page of fields. */
 const fieldChecks = async ({
@@ -2536,13 +2595,13 @@ const fieldChecks = async ({
     `ready +${(readyAt ?? Number.NaN) - askedAt} ms, /shown +${(ack?.at ?? Number.NaN) - askedAt} ms ${JSON.stringify(ack?.body)}, shownAt +${(shownAt ?? Number.NaN) - askedAt} ms, answer +${madeAt - askedAt} ms: ${made.slice(made.indexOf('{"id"'), made.indexOf('{"id"') + 200)}`
   );
   const readFields = () =>
-    fleet.api<Read>(
-      hubRequest("GET /api/instances/:id/artifacts/:artifact", {
+    fleet.api<View>(
+      hubRequest("GET /api/instances/:id/artifacts/:artifact/view", {
         path: { id: session, artifact: fieldsId },
       })
     );
   /** Milliseconds until the hub's read passes `test`, or null past 2 s. */
-  const within2s = async (test: (answer: Read) => boolean, from: number) =>
+  const within2s = async (test: (answer: View) => boolean, from: number) =>
     await until("the hub's read", readFields, test, 2000).then(
       () => Date.now() - from,
       () => null
@@ -2566,9 +2625,9 @@ const fieldChecks = async ({
   );
   const fieldsRead = await readFields();
   kit.check(
-    "7: typing is in artifact_read within 2 s as value; a radio and a select as options",
+    "7: typing is in the hub's read of his view within 2 s as value; a radio and a select as options",
     typed !== null && pickedIn !== null,
-    `typed ${typed ?? "not within 2 s"} ms, picked ${pickedIn ?? "not within 2 s"} ms; state ${JSON.stringify(fieldsRead.state).slice(0, 300)}; said: ${said.slice(-6).join(" | ") || "nothing"}`
+    `typed ${typed ?? "not within 2 s"} ms, picked ${pickedIn ?? "not within 2 s"} ms; state ${JSON.stringify(fieldsRead.choices).slice(0, 300)}; said: ${said.slice(-6).join(" | ") || "nothing"}`
   );
   // Its mood still asks him, so nothing goes by itself: the session hears
   // nothing of the fields (leg 10's pick answers it).
@@ -2685,6 +2744,8 @@ const fieldChecks = async ({
       crossed !== null,
     `tab shows ${JSON.stringify(tabValues)}; pick crossed in ${crossed ?? "not within 2 s"} ms; the hub's mood ${JSON.stringify(entryOf(await readFields(), "mood") ?? null)}; the tab marks cool ${await tabFrame.locator('[data-option="cool"][data-cawco-picked]').count()}; the first page's options ${JSON.stringify(await fieldFrame.locator("[data-option]").evaluateAll((all) => all.map((one) => `${one.getAttribute("data-option")}${one.hasAttribute("data-cawco-picked") ? "*" : ""}`)))}`
   );
+
+  await fieldsSentChecks({ kit, fleet }, fieldsId, readFields);
 
   // 11. Nothing spoke JSON-RPC.
   const rpc = [...rpcBefore, ...(await rpcSeen(page)), ...(await rpcSeen(tab))];
