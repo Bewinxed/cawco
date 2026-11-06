@@ -92,6 +92,14 @@ export const rowHolding = (rows: readonly Row[], docId: string): number =>
     recordsOf(row).some((message) => isRecord(message, docId))
   );
 
+/**
+ * The record `at` names among those `row` draws: what a seek finds its drawn
+ * part by (its `data-message`, the record's own id, whichever id `at` is)
+ * and opens the fold of. None for a time, or a row that does not hold it.
+ */
+export const recordIn = (row: Row, at: string): Message | undefined =>
+  recordsOf(row).find((message) => isRecord(message, at));
+
 /** A date and time by its shape, as no record id is. */
 const MOMENT = /^\d{4}-\d{2}-\d{2}T/u;
 

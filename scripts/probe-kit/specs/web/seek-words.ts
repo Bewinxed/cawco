@@ -10,16 +10,32 @@
  * top under the head.
  *
  * On the traffic bench (/motion/traffic, the real transcript) at 390×844,
- * in Safari's engine: a conversation whose middle is one run of 40 calls,
- * the last a test run with 160 lines of output (drawn open, its output
- * capped and scrolling on its own) and the word "flaky" on its 155th line,
- * a bar 56px over the transcript's top. Each leg loads it whole (at its
- * tail), asks the bench to open it at that call, as `askOpenAt` does for
- * the address, and reads the page once the record is marked:
+ * in Safari's engine: a conversation whose middle is a run of 40 calls
+ * (a row each), the last a test run with 160 lines of output (capped, and
+ * scrolling on its own) and the word "flaky" on its 155th line, 30 turns
+ * after it (so no seek is held at the scroll's end), and a bar 56px over
+ * the transcript's top. Each leg loads it whole (at its tail), asks the
+ * bench to open it at the test run, as `askOpenAt` does for the address,
+ * and reads the page once the record is marked:
  *
- *  - words: asked with "flaky", the word's box stands inside the band and
- *    inside the output's own box;
- *  - record: asked with no words, the call's top stands inside the band.
+ *  - words: its body open, asked by its id with "flaky", the word's box
+ *    stands inside the band and inside the output's own box;
+ *  - record: asked with no words, the call's top stands inside the band;
+ *  - held: asked by its stored entry's uuid (`sdkUuid`, which open-at's
+ *    `isRecord` matches as it does the id) with "flaky", while the
+ *    transcript still holds the place the record leg kept (`holdPlace`):
+ *    the seek lets the hold go, and the word stands in the band;
+ *  - folded: its body folded shut, asked by its id with "flaky", the seek
+ *    opens it (as the reader's press would, and it stays open) and the word
+ *    stands in the band and in the output's box;
+ *  - folded, by uuid: the same, asked by its stored entry's uuid: the fold
+ *    the seek opens is the record's that uuid names.
+ *
+ * The folded legs open a tab each: a place kept with the test run's body
+ * open, landed on with it shut, measured the rows round and round (WebKit's
+ * "ResizeObserver loop completed with undelivered notifications", on main
+ * as well): what that leaves to fix is the transcript's own, apart from the
+ * seek.
  *
  *   bun scripts/probe-kit/run.ts web seek-words
  */
@@ -31,6 +47,8 @@ import { open, type Spec } from "../../kit";
 const HEAD = 56;
 /** The call sought: the run's last, the test run. */
 const SOUGHT = "tool-40";
+/** The test run's stored entry's uuid, as a Claude transcript names it. */
+const SOUGHT_UUID = "3f6c2a91-8d4e-4b7a-9c15-e2f0a7d84b36";
 const WORD = "flaky";
 
 /** The conversation, as the hub reads one back. */
@@ -59,11 +77,15 @@ const conversation = () => {
   ] as const;
   const call = (n: number) => {
     const last = n === 40;
-    const [tool, arg] = last
-      ? (["Bash", "bun run test transcript-holds"] as const)
-      : (commands[n % commands.length] as readonly [string, string]);
+    let [tool, arg]: readonly [string, string] = commands[
+      n % commands.length
+    ] as readonly [string, string];
+    if (last) {
+      [tool, arg] = ["Bash", "bun run test transcript-holds"];
+    }
     return {
       id: `tool-${n}`,
+      ...(last ? { sdkUuid: SOUGHT_UUID } : {}),
       toolCallId: `call-${n}`,
       type: "tool.use",
       content: "",
@@ -96,7 +118,7 @@ const conversation = () => {
       timestamp: at(),
     },
     ...Array.from({ length: 40 }, (_, i) => call(i + 1)),
-    ...Array.from({ length: 6 }, (_, i) =>
+    ...Array.from({ length: 30 }, (_, i) =>
       said(
         `after-${i}`,
         `After the run, ${i + 1}: one leg passed only on its third try, so the suite reads green with one retry.`
@@ -111,6 +133,7 @@ interface Bench {
   load: (blocks: unknown[]) => void;
   open: (call: string) => void;
   seek: (at: string, terms?: string[]) => void;
+  shut: (call: string) => void;
 }
 
 /** What a leg reads once the record is marked, px from the page's top. */
@@ -122,16 +145,27 @@ interface Seen {
   word: { top: number; bottom: number } | null;
 }
 
-/** The conversation loaded whole, landed at its tail, then opened at the call. */
-async function seek(page: Page, terms: string[]): Promise<Seen> {
+/**
+ * The conversation loaded whole, the test run's body open or folded shut,
+ * landed at its tail, then opened at the call by `at`.
+ */
+async function seek(
+  page: Page,
+  terms: string[],
+  { at = SOUGHT, folded = false }: { at?: string; folded?: boolean } = {}
+): Promise<Seen> {
   await page.evaluate(
-    ([blocks, head]) => {
+    ([blocks, head, shut]) => {
       const bench = (window as unknown as { __traffic: Bench }).__traffic;
       bench.head(`${head}px`);
-      bench.open("call-40");
+      if (shut) {
+        bench.shut("call-40");
+      } else {
+        bench.open("call-40");
+      }
       bench.load(blocks);
     },
-    [conversation(), HEAD] as const
+    [conversation(), HEAD, folded] as const
   );
   await page.waitForFunction(
     () => (window as unknown as { __traffic: Bench }).__traffic.landed(),
@@ -140,9 +174,9 @@ async function seek(page: Page, terms: string[]): Promise<Seen> {
   );
   await page.waitForTimeout(1000);
   await page.evaluate(
-    ([at, words]) =>
-      (window as unknown as { __traffic: Bench }).__traffic.seek(at, words),
-    [SOUGHT, terms] as const
+    ([record, words]) =>
+      (window as unknown as { __traffic: Bench }).__traffic.seek(record, words),
+    [at, terms] as const
   );
   await page.waitForSelector('[data-marked="on"]', { timeout: 30_000 });
   await page.waitForTimeout(1000);
@@ -205,14 +239,23 @@ const spec: Spec = {
   name: "seek-words",
   group: "iPhone Safari",
   async run(kit) {
-    const page = await kit.page("phone", { engine: "webkit", theme: "light" });
     const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(error.message));
-    await open(
-      page,
-      `${await kit.built()}/motion/traffic`,
-      () => "__traffic" in window
-    );
+    /**
+     * The bench in a tab of its own: its sessionStorage holds no place kept
+     * by an earlier leg's transcript, whose sizes were measured with the
+     * test run's body in another state.
+     */
+    const bench = async (): Promise<Page> => {
+      const tab = await kit.page("phone", { engine: "webkit", theme: "light" });
+      tab.on("pageerror", (error) => errors.push(error.message));
+      await open(
+        tab,
+        `${await kit.built()}/motion/traffic`,
+        () => "__traffic" in window
+      );
+      return tab;
+    };
+    let page = await bench();
 
     const words = await seek(page, [WORD]);
     kit.check(
@@ -232,12 +275,38 @@ const spec: Spec = {
       `record ${px(record.record)}, band ${px(record.band)}`
     );
 
+    const held = await seek(page, [WORD], { at: SOUGHT_UUID });
+    kit.check(
+      `390: opened by the test run's stored uuid with "${WORD}" while the place the last transcript kept is held, the word stands in the band and in its output's box`,
+      held.word !== null &&
+        within(held.word, held.band) &&
+        (held.clip === null || within(held.word, held.clip)),
+      `word ${px(held.word)}, band ${px(held.band)}, output ${px(held.clip)}`
+    );
+    await page.close();
+
+    for (const [by, at] of [
+      ["id", SOUGHT],
+      ["stored uuid", SOUGHT_UUID],
+    ] as const) {
+      page = await bench();
+      const folded = await seek(page, [WORD], { at, folded: true });
+      kit.check(
+        `390: the test run folded shut, opened at it by its ${by} with "${WORD}": the seek opens it, and the word stands in the band and in its output's box`,
+        folded.clip !== null &&
+          folded.word !== null &&
+          within(folded.word, folded.band) &&
+          within(folded.word, folded.clip),
+        `output ${folded.clip === null ? "not drawn (still folded)" : px(folded.clip)}, word ${px(folded.word)}, band ${px(folded.band)}`
+      );
+      await page.close();
+    }
+
     kit.check(
       "no page error",
       errors.length === 0,
       errors.slice(0, 3).join(" | ")
     );
-    await page.close();
   },
 };
 export default spec;

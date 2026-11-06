@@ -306,6 +306,8 @@
       },
       /** A call's body opened, by its call id, as the reader's press opens it: before a `load`, drawn open. */
       open: (call: string) => disclosureAt(INSTANCE, call).set(true),
+      /** A call's body folded shut, by its call id, as the reader's press folds it. */
+      shut: (call: string) => disclosureAt(INSTANCE, call).set(false),
       /** The transcript opened at a record, `terms` the words it matched on, as `?at=…&match=…` asks. */
       seek: (at: string, terms: string[] = []) =>
         askOpenAt(INSTANCE, at, terms),

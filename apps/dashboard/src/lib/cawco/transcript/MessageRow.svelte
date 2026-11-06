@@ -1230,7 +1230,11 @@
   </Turn>
 {:else if kind === "thinking"}
   {#if message.content.trim()}
-    <Thinking {folding} text={message.content} />
+    <Thinking
+      disclosed={disclosure(message)}
+      {folding}
+      text={message.content}
+    />
   {/if}
 {:else if kind === "user.peer" || kind === "user.rule" || kind === "user.delegate_ask"}
   <Peer {message} />

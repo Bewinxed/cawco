@@ -92,6 +92,7 @@
   import { noteChange, repeatedKey, reportRepeat } from "../repeated-keys";
   import { provideSessionHere } from "../session-here";
   import { readJson, writeJson } from "../storage";
+  import type { Message } from "../types";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import { warm } from "../workspace/warm.svelte";
   import AccountMoveDivider from "./AccountMoveDivider.svelte";
@@ -110,7 +111,7 @@
   import { paneDrafts } from "./composer-draft.svelte";
   import { connectReveal } from "./connect-sign-ins.svelte";
   import Delegate from "./Delegate.svelte";
-  import { disclosureAt } from "./disclosure.svelte";
+  import { disclosure, disclosureAt } from "./disclosure.svelte";
   import Latest from "./Latest.svelte";
   import LiveRow from "./LiveRow.svelte";
   import MessageRow from "./MessageRow.svelte";
@@ -120,6 +121,7 @@
     matchBox,
     type OpenAsk,
     openAt,
+    recordIn,
     rowAt,
     rowHolding,
   } from "./open-at.svelte";
@@ -2798,7 +2800,9 @@
    * (`band`). With `terms` and the first of them drawn in the record
    * (open-at.svelte.ts `matchBox`): those words at the band's middle, so a
    * tall row (a test run's output) does not leave them under the composer.
-   * Otherwise the record (its part of the row, or the row while it is not
+   * Not drawn, the record's fold (a call's body, its reasoning) is opened,
+   * as the reader's press opens it and staying so, and they are looked for
+   * again in the next frame. Otherwise the record (its part of the row, or the row while it is not
    * drawn) centred in the band, or, taller than it, its top at the band's
    * top, so its first line is read first, clear of the head. Read each
    * frame of the seek (`restore`): the row is drawn, and its words found,
@@ -2820,6 +2824,9 @@
     if (words) {
       return words.top + words.height / 2 - itemTop - (top + bottom) / 2;
     }
+    if (terms.length > 0 && drawn.message) {
+      disclosure(drawn.message).set(true);
+    }
     const box = drawn.record.getBoundingClientRect();
     const from = box.top - itemTop;
     return box.height < room
@@ -2828,26 +2835,34 @@
   }
 
   /**
-   * The record a seek is after, as the row at `index` draws it: its own
-   * part when the row draws several (a message's, a run's call), else the
-   * whole row; and virtua's item around it, whose top its offsets measure
-   * to. None while the row is not drawn.
+   * The record a seek is after, as the row at `index` draws it: the message
+   * `at` names (open-at.svelte.ts `recordIn`: its id or its stored entry's
+   * uuid), its own part when the row draws several (a message's, a run's
+   * call, by the message's id), else the whole row; and virtua's item
+   * around it, whose top its offsets measure to. None while the row is not
+   * drawn.
    */
-  function recordDrawn(
-    index: number
-  ): { item: Element; record: Element } | null {
+  function recordDrawn(index: number): {
+    item: Element;
+    message: Message | undefined;
+    record: Element;
+  } | null {
     const row = renderedRows[index];
     const drawn = row
       ? listing?.querySelector(`[data-row="${CSS.escape(row.key)}"]`)
       : null;
-    if (!(drawn && resume && "at" in resume)) {
+    if (!(row && drawn && resume && "at" in resume)) {
       return null;
     }
+    const message = recordIn(row, resume.at);
+    const part =
+      message?.id === undefined
+        ? null
+        : drawn.querySelector(`[data-message="${CSS.escape(message.id)}"]`);
     return {
       item: drawn.closest("[data-item]") ?? drawn,
-      record:
-        drawn.querySelector(`[data-message="${CSS.escape(resume.at)}"]`) ??
-        drawn,
+      message,
+      record: part ?? drawn,
     };
   }
 
@@ -3073,6 +3088,12 @@
   function seek({ at, terms }: OpenAsk): void {
     marked = null;
     unfound = null;
+    // A landing's place still held (`holdPlace`) is let go, as the reader's
+    // own scroll lets it go: put back each frame, it undid the seek's writes
+    // until the hold ran out (seek-words, its stored-uuid leg).
+    holdUntil = 0;
+    cancelAnimationFrame(keepFrame);
+    keepFrame = 0;
     resume = { tail: false, at, terms };
     standsAtTail = false;
     if (shown) {

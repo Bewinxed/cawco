@@ -23,6 +23,7 @@
     announce = false,
     fades = false,
     folding = false,
+    disclosed,
   }: {
     text: string;
     live?: boolean;
@@ -35,6 +36,13 @@
      * then folds shut, with the fold's own height tween.
      */
     folding?: boolean;
+    /**
+     * Its open state, kept by the transcript (disclosure.svelte.ts) for a
+     * stored block: it outlives the row, and a seek to words in it opens it
+     * (Transcript `seekInto`). The live block, which no record holds yet,
+     * keeps its own.
+     */
+    disclosed?: { get: () => boolean; set: (open: boolean) => void };
   } = $props();
   const FENCE = /^\s*(```|~~~)/u;
   /** Emphasis, code ticks and heading marks: noise in a three-line glimpse. */
@@ -69,8 +77,23 @@
   }
 
   const paragraphs = $derived(splitBlocks(text));
-  /** A running block starts open; a finished one folds to its tail. */
-  let expanded = $state(untrack(() => live || folding));
+  /** The live block's own open state, where no record keeps one. */
+  let ownOpen = $state(false);
+  const open = untrack(
+    () =>
+      disclosed ?? {
+        get: () => ownOpen,
+        set: (next: boolean) => {
+          ownOpen = next;
+        },
+      }
+  );
+  // A running block starts open; a finished one folds to its tail, or stands
+  // as its reader left it.
+  if (untrack(() => live || folding)) {
+    open.set(true);
+  }
+  const expanded = $derived(open.get());
   /**
    * The live block the reader just watched arrives as it was — its live
    * label too — and becomes "Reasoning" as it folds shut: the two labels
@@ -81,7 +104,7 @@
   let settling = $state(untrack(() => folding));
   $effect(() => {
     if (untrack(() => folding)) {
-      expanded = false;
+      open.set(false);
       settling = false;
     }
   });
@@ -186,7 +209,7 @@
 >
   <ThinkingSteps
     onOpenChange={(value) => {
-      expanded = value;
+      open.set(value);
     }}
     open={expanded}
     size="default"
