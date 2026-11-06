@@ -1071,6 +1071,11 @@ const SOURCE_GONE = "sourceGone";
 
 /** The doc meta key of an option's media whose decision page went: the page's id (service `discard`). */
 const MEDIA_OF = "mediaOf";
+/** A decision page's doc meta: the work folder its relative Images were last published from, and the machine that folder is on. */
+const PROGRAM_DIR = "programDir";
+const PROGRAM_MACHINE = "programMachine";
+/** A decision page's doc meta: the machine each picture it shows was read on, by the name its Image gives. */
+const PICTURE_MACHINES = "pictureMachines";
 
 /** A Not now's notice id (core `notNowId`): the artifact, and the raise it put away. */
 const NOT_NOW = /^artifact-not-now:([0-9a-f-]{36}):(\d+)$/u;
@@ -1774,6 +1779,12 @@ export type PageFrom =
        * that wrote it, its machine away) shows the picture the page keeps.
        */
       shown?: ReadonlyMap<string, Uint8Array>;
+      /**
+       * A revision's: the machine each Image's file is read on (none known:
+       * not read, the picture the page keeps or a refusal); the building
+       * session's own when not given.
+       */
+      readOn?: (file: string) => string | undefined;
     }
   | { html: string }
   | { dir: string }
@@ -4023,29 +4034,90 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
-   * Where a decision page's relative Image files are read on a revision:
-   * the work folder it was last published from (`dir`), kept in its doc's
-   * meta; none for one published inline or from the project's folder. A
-   * revision's statements carry no folder of their own, whichever session
-   * sends them; a picture the page already shows is kept when its file no
-   * longer stands there ({@link shownPictures}).
+   * Where a decision page's Image files stand, kept in its doc's meta for
+   * its revisions: the work folder it was last published from (`dir`, none
+   * for one published inline or from the project's folder) and the machine
+   * that folder is on (`machine`, its publishing session's), and the
+   * machine each picture it shows was read on (`read`), a path naming a
+   * file on that machine alone.
    */
-  const keepProgramDir = (
+  const keepPictureSources = (
     row: ArtifactRow,
-    program: BuiltProgram | undefined,
-    dir: string | undefined
+    program: BuiltProgram,
+    sources: {
+      folder?: { dir: string | undefined; machine: string };
+      read: (file: string) => string | undefined;
+    }
   ) => {
-    if (!program) {
-      return;
+    const read: Record<string, string> = {};
+    for (const name of keptImagePaths(program.program).keys()) {
+      const machine = sources.read(name);
+      if (machine) {
+        read[name] = machine;
+      }
     }
     docs.transact(row.id, "hub", (doc) => {
       const meta = doc.getMap("meta");
-      if (dir === undefined) {
-        meta.delete("programDir");
+      meta.set(PICTURE_MACHINES, read);
+      const { folder } = sources;
+      if (!folder) {
+        return;
+      }
+      if (folder.dir === undefined) {
+        meta.delete(PROGRAM_DIR);
+        meta.delete(PROGRAM_MACHINE);
       } else {
-        meta.set("programDir", dir);
+        meta.set(PROGRAM_DIR, folder.dir);
+        meta.set(PROGRAM_MACHINE, folder.machine);
       }
     });
+  };
+
+  /** A published decision page's picture sources ({@link keepPictureSources}): each read on its maker's machine, where its folder `dir` is too. */
+  const keepPublishedSources = (
+    row: ArtifactRow,
+    program: BuiltProgram | undefined,
+    dir: string | undefined,
+    maker: InstanceRow
+  ) => {
+    if (program) {
+      keepPictureSources(row, program, {
+        folder: { dir, machine: maker.machineId },
+        read: () => maker.machineId,
+      });
+    }
+  };
+
+  /**
+   * The machine a revision of decision page `row` by session `reviser`
+   * reads Image `file` on: the one a picture the page shows was read on;
+   * for a name new to the page, the folder's machine (a relative name,
+   * beside the program it was published from) or the reviser's (an
+   * absolute one, which the reviser wrote). None for a picture the page
+   * shows with no machine kept (a page published before machines were) or
+   * a relative name with no folder's machine: the page keeps the one, the
+   * other is refused.
+   */
+  const revisionReadsOn = (
+    row: ArtifactRow,
+    reviser: InstanceRow,
+    shown: ReadonlyMap<string, Uint8Array>
+  ): ((file: string) => string | undefined) => {
+    const meta = docs.doc(row.id).getMap("meta");
+    const read = (meta.get(PICTURE_MACHINES) ?? {}) as Record<string, string>;
+    const folder = meta.get(PROGRAM_MACHINE);
+    return (file) => {
+      if (Object.hasOwn(read, file)) {
+        return read[file];
+      }
+      if (shown.has(file)) {
+        return;
+      }
+      if (file.startsWith("/")) {
+        return reviser.machineId;
+      }
+      return typeof folder === "string" ? folder : undefined;
+    };
   };
 
   /**
@@ -6968,14 +7040,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   ): Promise<Revised> => {
     // Said before anything is written: the merged program's cards against the person's picks and the project's pages.
     const broken = await brokenBy(row, readKept(merged.merged).cards);
-    const dir = docs.doc(row.id).getMap("meta").get("programDir");
+    const dir = docs.doc(row.id).getMap("meta").get(PROGRAM_DIR);
+    const shown = shownPictures(row.id, existing);
+    const readOn = revisionReadsOn(row, instance, shown);
     const page = await built(
       instance,
       row.name,
       {
         program: merged.merged,
         dir: typeof dir === "string" ? dir : undefined,
-        shown: shownPictures(row.id, existing),
+        shown,
+        readOn,
       },
       row.heldFor === null
     );
@@ -6987,6 +7062,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const moved = db.update(row.id, nextRevision(row)) as ArtifactRow;
     const was = pageWas(moved.id);
     writePage(moved.id, page.html, program);
+    keepPictureSources(moved, program, { read: readOn });
     const hash = pageHash(program.program);
     stampMeta(moved, hash);
     const changes = [
@@ -8211,7 +8287,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       letGo(movedFrom, row);
       const made = html === null ? [] : writeMade(row, html, program);
       stampMeta(row, pageHashOf(html, program));
-      keepProgramDir(row, program, input.dir);
+      keepPublishedSources(row, program, input.dir, making.maker);
       // The server it moved off is let go by the preview that serves it
       // (server.ts `onSourceMoved`); a held next version's moves off none,
       // its artifact still showing it until it is opened (promote).

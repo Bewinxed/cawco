@@ -13745,12 +13745,44 @@ export const createServer = (
   /** The most one Image's file may hold. Our bound: a page's pictures load with it. */
   const IMAGE_LIMIT = 2 * 1024 * 1024;
 
-  /** Where a program's Images are read from: its work folder, the project's folder, and on a revision the pictures its page shows. */
+  /** Where a program's Images are read from: its work folder, the project's folder, and on a revision the pictures its page shows and the machine each is read on. */
   interface ImageAt {
     dir?: string | undefined;
     inFolder?: true;
+    readOn?: ((file: string) => string | undefined) | undefined;
     shown?: ReadonlyMap<string, Uint8Array> | undefined;
   }
+
+  /** Why an Image's file wasn't read: its machine (`machine`, null for the session's own) not connected or not answering. */
+  const machineAway = (
+    away: "offline" | "timeout",
+    machine: string | null
+  ): string => {
+    const subject = machine
+      ? `${machineName(machine)}, where its file is,`
+      : "your machine";
+    return away === "offline"
+      ? `${subject} is not connected.`
+      : `${subject} didn't answer.`;
+  };
+
+  /** Where Image `file` stands: its path, or why it names none, in a sentence (`problem`). */
+  const imagePath = (
+    file: string,
+    at: ImageAt
+  ): { path: string } | { problem: string } => {
+    if (file.startsWith("/")) {
+      return { path: file };
+    }
+    if (at.dir) {
+      return { path: posix.join(at.dir, file) };
+    }
+    return {
+      problem: at.inFolder
+        ? "the project's folder keeps text only: name the picture by its absolute path on your machine."
+        : "a file beside the program needs your work folder: publish with dir, or name the picture by its absolute path.",
+    };
+  };
 
   /** An Image's file as it stands where its name points, or why it can't be read there, in a sentence. */
   const imageFile = async (
@@ -13758,21 +13790,18 @@ export const createServer = (
     file: string,
     at: ImageAt
   ): Promise<{ bytes: Uint8Array } | string> => {
-    let path = file;
-    if (!file.startsWith("/")) {
-      if (!at.dir) {
-        return at.inFolder
-          ? "the project's folder keeps text only: name the picture by its absolute path on your machine."
-          : "a file beside the program needs your work folder: publish with dir, or name the picture by its absolute path.";
-      }
-      path = posix.join(at.dir, file);
+    const where = imagePath(file, at);
+    if ("problem" in where) {
+      return where.problem;
     }
-    const read = await readMachineMedia(row.machineId, path);
-    if (read === "offline") {
-      return "your machine is not connected.";
+    // A path names a file on one machine: a revision's on the machine its picture or folder is on (artifacts/service.ts `revisionReadsOn`).
+    const machine = at.readOn ? at.readOn(file) : row.machineId;
+    if (!machine) {
+      return "the page doesn't know which machine its file is on: name the picture by its absolute path on your machine.";
     }
-    if (read === "timeout") {
-      return "your machine didn't answer.";
+    const read = await readMachineMedia(machine, where.path);
+    if (read === "offline" || read === "timeout") {
+      return machineAway(read, machine === row.machineId ? null : machine);
     }
     return "refused" in read ? read.refused : read;
   };
@@ -13789,7 +13818,12 @@ export const createServer = (
     from: PageFrom
   ): Promise<(ImageAt & { text: string }) | PageRefusal | undefined> => {
     if ("program" in from) {
-      return { text: from.program, dir: from.dir, shown: from.shown };
+      return {
+        text: from.program,
+        dir: from.dir,
+        shown: from.shown,
+        readOn: from.readOn,
+      };
     }
     if ("dir" in from) {
       const agent = registry.agent(row.machineId);
@@ -13815,9 +13849,10 @@ export const createServer = (
 
   /**
    * An Image's file: an absolute path on the session's machine, or one in
-   * the work folder the program came from; on a revision, a picture the
-   * page shows whose file no longer stands there is the one the page keeps
-   * (artifacts/service.ts `PageFrom`).
+   * the work folder the program came from; on a revision, read on the
+   * machine its picture or folder is on, and a picture the page shows whose
+   * file no longer stands there (or whose machine is away) is the one the
+   * page keeps (artifacts/service.ts `PageFrom`).
    */
   const programImage = async (
     row: InstanceRow,
