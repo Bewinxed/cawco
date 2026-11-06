@@ -2,11 +2,12 @@
  * The scheme the page draws in: the host's, once the overlay names it on the
  * root (`data-theme`, preview-overlay page.ts `themeRoot`), else the
  * reader's. What the page draws by scheme and no token carries (Caw's
- * picture, a frame told its theme) reads it here, and the root carries the
- * `dark` class while it draws dark, as mode-watcher puts it on the
- * dashboard's: the house's `dark:` variant keys on it (variants.css
- * `@custom-variant dark`), so a kit part's dark look (the checkbox's fill)
- * holds on the page too.
+ * picture, a frame told its theme) reads it here. A program's page has its
+ * root carry the `dark` class while it draws dark (`darkOn`), as
+ * mode-watcher puts it on the dashboard's: the house's `dark:` variant keys
+ * on it (variants.css `@custom-variant dark`), so a kit part's dark look
+ * (the checkbox's fill) holds on the page too. An HTML page's dials put it
+ * on their own root, never the page's (DialsRoot.svelte).
  */
 import { MediaQuery } from "svelte/reactivity";
 
@@ -28,8 +29,11 @@ export const scheme = {
   },
 };
 
-$effect.root(() => {
-  $effect(() => {
-    root.classList.toggle("dark", scheme.now === "dark");
+/** `node` carries the `dark` class while the page draws dark, from now on. */
+export const darkOn = (node: Element): void => {
+  $effect.root(() => {
+    $effect(() => {
+      node.classList.toggle("dark", scheme.now === "dark");
+    });
   });
-});
+};

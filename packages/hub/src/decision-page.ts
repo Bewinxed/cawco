@@ -14,8 +14,8 @@
  *   tokens.css and page.css.
  * - `{{KIT_JS}}`: the kit's page.js.
  * - `{{DIALS}}`: `cawcoDials`, the design graph's own dial controls, from the
- *   host's sheet and its dials entry on every preview origin
- *   (decision-program.ts `PAGE_DIALS`).
+ *   host's dials entry on every preview origin, drawn in a shadow root of
+ *   their own (decision-program.ts `PAGE_DIALS`).
  * - `{{MK:<id>}}`: `mockups/<id>.html` beside page.html, one mockup fragment.
  * - `src="caw/…"`: a Caw still from the kit; any other relative `src`, an
  *   image beside page.html; both as data: URIs, each distinct one once per

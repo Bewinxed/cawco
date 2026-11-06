@@ -9,14 +9,22 @@
  * under the one `dials` key, each panel's by name and path, and stand again
  * on a reload or a revision.
  *
+ * The panels draw in a shadow root of their own, as the preview overlay
+ * does in every page (agent preview-overlay page.ts): its host takes none
+ * of the page's styles (`all: initial`), the house's sheet stands inside it
+ * alone (`dials.css`, core page-css.ts `shadowSheet`), and the page's own
+ * elements take none of it, so a page draws the same with `{{DIALS}}` and
+ * without.
+ *
  * The page's own script calls `cawcoDials` before this module has loaded
  * (it is a module, deferred): `{{DIALS}}` sets a stand-in first that holds
  * each call's controller and its listeners (`window.cawcoDialsHeld`), and
  * this module draws each of them, then takes `cawcoDials`'s place.
  */
-import { mount, unmount } from "svelte";
+import { mount } from "svelte";
 import type { DialValues } from "../../graph/dials";
-import Dials from "./Dials.svelte";
+import { watchEdgeFades } from "../../motion/fade-runs.svelte";
+import DialsRoot, { type Panel, shown } from "./DialsRoot.svelte";
 import { bridge, picks } from "./page.svelte.js";
 
 type Listener = (values: DialValues) => void;
@@ -46,42 +54,52 @@ bridge()?.on("picks", (next) => {
   picks.now = next;
 });
 
-/** Where a panel stands: the page's own dock, else a column at the page's bottom-right. */
-function dockOf(): HTMLElement {
-  const own = document.querySelector<HTMLElement>("[data-cawco-dials]");
-  if (own) {
-    return own;
-  }
-  let column = document.querySelector<HTMLElement>("[data-cawco-dials-column]");
-  if (!column) {
-    column = document.createElement("div");
-    column.dataset.cawcoDialsColumn = "";
-    // Over the page, on its tokens: the room's width at most, scrolling inside it past the window's height.
-    column.style.cssText =
-      "position: fixed; inset-inline-end: var(--space-4); inset-block-end: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); inline-size: min(var(--c-graph-room-w), calc(100vw - 2 * var(--space-4))); max-block-size: calc(100dvh - 2 * var(--space-4)); overflow-y: auto;";
-    document.body.append(column);
-  }
-  return column;
+/** The host's dials sheet, beside this module. */
+const SHEET = new URL("dials.css", import.meta.url).href;
+
+/**
+ * The dials' shadow root, made on the page's first panel: in the page's own
+ * dock, else fixed over the page out of its flow (a page laid out as a grid
+ * gives it no track); drawn once its sheet has loaded, so no panel shows
+ * unstyled.
+ */
+async function makeRoot(): Promise<void> {
+  const dock = document.querySelector<HTMLElement>("[data-cawco-dials]");
+  const host = document.createElement("cawco-dials");
+  host.style.cssText = `all: initial; ${dock ? "display: block" : "position: fixed"};`;
+  const shadow = host.attachShadow({ mode: "open" });
+  const sheet = document.createElement("link");
+  sheet.rel = "stylesheet";
+  sheet.href = SHEET;
+  const target = document.createElement("div");
+  shadow.append(sheet, target);
+  (dock ?? document.body).append(host);
+  await new Promise<void>((done) => {
+    sheet.addEventListener("load", () => done(), { once: true });
+    sheet.addEventListener("error", () => done(), { once: true });
+  });
+  mount(DialsRoot, { target, props: { docked: dock !== null } });
+  // Each edge fade stands only on a scroller that runs past its box.
+  watchEdgeFades(shadow);
 }
+
+/** Whether the root is made, or being made: once a page. */
+let rooted = false;
 
 /** A panel drawn for `held`: its values handed to its listeners at each turn. */
 function draw(held: Held): void {
   const { controller } = held;
   const listeners = new Set<Listener>(controller.listeners ?? []);
-  const target = document.createElement("div");
-  dockOf().append(target);
-  const drawn = mount(Dials, {
-    target,
-    props: {
-      props: { name: held.name, config: held.config },
-      onvalues: (values: DialValues) => {
-        controller.values = values;
-        for (const listener of listeners) {
-          listener(values);
-        }
-      },
+  const panel: Panel = {
+    name: held.name,
+    config: held.config,
+    onvalues: (values) => {
+      controller.values = values;
+      for (const listener of listeners) {
+        listener(values);
+      }
     },
-  });
+  };
   controller.subscribe = (listener, immediate = true) => {
     listeners.add(listener);
     if (immediate) {
@@ -91,9 +109,13 @@ function draw(held: Held): void {
   };
   controller.destroy = () => {
     listeners.clear();
-    unmount(drawn);
-    target.remove();
+    shown.list = shown.list.filter((one) => one !== panel);
   };
+  shown.list = [...shown.list, panel];
+  if (!rooted) {
+    rooted = true;
+    makeRoot().catch((error: unknown) => console.error("[dials]", error));
+  }
 }
 
 for (const held of window.cawcoDialsHeld ?? []) {

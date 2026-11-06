@@ -97,6 +97,78 @@ export async function compileSheets(
   return new TextDecoder().decode(code);
 }
 
+/** A selector's component, as Lightning CSS's visitor hands it over. */
+type SelectorPart = import("lightningcss").Selector[number];
+
+/** `part`, and every selector inside it (`:is()`, `:where()`, `:not()`, `:has()`), with each `:root` made `[root]`. */
+function rootedPart(part: SelectorPart, root: string): SelectorPart {
+  if (part.type !== "pseudo-class") {
+    return part;
+  }
+  if (part.kind === "root") {
+    return { type: "attribute", name: root };
+  }
+  if (
+    (part.kind === "is" ||
+      part.kind === "where" ||
+      part.kind === "not" ||
+      part.kind === "has") &&
+    part.selectors
+  ) {
+    return {
+      ...part,
+      selectors: part.selectors.map((one) =>
+        one.map((inner) => rootedPart(inner, root))
+      ),
+    };
+  }
+  return part;
+}
+
+/**
+ * Compiled sheet `css` for a shadow root whose document root is the element
+ * carrying attribute `root` (the decision host's dials, core dials-root.ts):
+ * every `:root` in its selectors becomes `[root]`, so the house's tokens,
+ * scheme and `dark`/`light` variants stand on that element and none on the
+ * page's own root; and its registered properties' initial values stand as
+ * declarations, Tailwind's own fallback for a browser without `@property`
+ * (its `properties` layer's `@supports`) taken unconditionally, as a shadow
+ * root's `@property` rules register nothing (Chromium 156 reads an
+ * `@property --x` in a shadow root's sheet as unset: tailwindlabs/tailwindcss
+ * #15005, open, "@property isn't supported in shadow roots"). The
+ * `@property` rules themselves are dropped.
+ */
+export async function shadowSheet(css: string, root: string): Promise<string> {
+  const [{ transform, browserslistToTargets }, { default: browserslist }] =
+    await Promise.all([import("lightningcss"), import("browserslist")]);
+  const { code } = transform({
+    filename: "shadow.css",
+    code: new TextEncoder().encode(css),
+    minify: true,
+    targets: browserslistToTargets(browserslist(CSS_BROWSERS)),
+    visitor: {
+      Rule: {
+        property: () => [],
+        // Every other layer left as it stands: a layer handed back whole fails to deserialize in Lightning CSS 1.33.0 ("expected an object-like struct named Specifier").
+        "layer-block": (rule) =>
+          rule.value.name?.join(".") === "properties"
+            ? {
+                ...rule,
+                value: {
+                  ...rule.value,
+                  rules: rule.value.rules.flatMap((one) =>
+                    one.type === "supports" ? one.value.rules : [one]
+                  ),
+                },
+              }
+            : undefined,
+      },
+      Selector: (selector) => selector.map((part) => rootedPart(part, root)),
+    },
+  });
+  return new TextDecoder().decode(code);
+}
+
 /** A bundle's emitted file: a `Bun.BuildArtifact`. */
 interface Emitted extends Blob {
   path: string;

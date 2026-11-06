@@ -15,6 +15,7 @@ import { watchEdgeFades } from "../../motion/fade-runs.svelte";
 import { relayAway } from "./away";
 import Host from "./Host.svelte";
 import { bridge, picks, sent, takeServed } from "./page.svelte.js";
+import { darkOn } from "./scheme.svelte.js";
 
 /** The commit the host was built from (core decision-host.ts `define`): its reports name it. */
 declare const CAWCO_HOST_BUILD: string;
@@ -28,6 +29,7 @@ bridge()?.on("sent", (at) => {
   sent.at = at;
 });
 relayAway();
+darkOn(document.documentElement);
 
 const target = document.getElementById("decision-root");
 if (target) {

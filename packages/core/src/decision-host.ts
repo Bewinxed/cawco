@@ -20,7 +20,9 @@
  * pieces beside it as `face-<hash>.woff2`, linked by a program's page and
  * imported by an HTML page's `{{KIT_CSS}}`; `dials.js`, the entry an HTML
  * page's `{{DIALS}}` loads (the host's `dials.ts`: `cawcoDials` on the
- * design graph's own dial controls, drawn in `host.css`); `icon.png`, the
+ * design graph's own dial controls, drawn in a shadow root of their own),
+ * and `dials.css`, `host.css` made for that shadow root (page-css.ts
+ * `shadowSheet`), which the page's own document never loads; `icon.png`, the
  * plain CawCo icon the dashboard's tab wears (`tab-icon-working.png`), which
  * every decision page names, so a page in a tab of its own asks the origin
  * for no `/favicon.ico` it doesn't serve.
@@ -33,9 +35,10 @@ import { readBuildInfo } from "./build-info";
 import { refuseSchemeLowering } from "./bundle-css-guard";
 import { bundled } from "./bundled";
 import { unlayeredRules } from "./css-layers";
+import { DIALS_ROOT } from "./dials-root";
 import { hostFiles, writeHostFiles } from "./host-build";
 import { houseFaceSheet } from "./house-faces";
-import { compileSheets, pageFiles } from "./page-css";
+import { compileSheets, pageFiles, shadowSheet } from "./page-css";
 import { embeddedFile, standalone } from "./runtime";
 
 const HOST_DIR = new URL(
@@ -319,7 +322,12 @@ export async function buildDecisionHost(): Promise<Map<string, Blob>> {
     );
   }
   console.log("css layers: host.css, 0 unlayered rules");
-  return pageFiles("The decision host", result.outputs, css);
+  const files = pageFiles("The decision host", result.outputs, css);
+  files.set(
+    "dials.css",
+    new Blob([await shadowSheet(css, DIALS_ROOT)], { type: "text/css" })
+  );
+  return files;
 }
 
 /**

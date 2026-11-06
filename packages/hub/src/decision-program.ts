@@ -878,13 +878,14 @@ export const FACE_PRELOADS = facePreloads(DECISION_ASSETS);
 /** The plain CawCo icon every decision page names (core decision-host.ts `icon.png`): a page in a tab of its own asks for no `/favicon.ico`, which its origin doesn't serve. */
 export const PAGE_ICON = `${DECISION_ASSETS}icon.png`;
 /**
- * An HTML page's dials (its `{{DIALS}}`, decision-page.ts): the host's
- * sheet and its dials entry on every preview origin (core decision-host.ts),
- * after a stand-in `cawcoDials` that holds each call until the entry, a
- * deferred module, draws it on the design graph's own dial controls.
+ * An HTML page's dials (its `{{DIALS}}`, decision-page.ts): the host's dials
+ * entry on every preview origin (core decision-host.ts), after a stand-in
+ * `cawcoDials` that holds each call until the entry, a deferred module,
+ * draws it on the design graph's own dial controls in a shadow root of its
+ * own, on a sheet only that root loads: the page's own elements take none
+ * of the house's styles.
  */
-export const PAGE_DIALS = `<link rel="stylesheet" href="${DECISION_ASSETS}host.css">
-<script>window.cawcoDialsHeld=[];window.cawcoDials=function(name,config){var controller={values:{},listeners:[],subscribe:function(listener){controller.listeners.push(listener);return function(){};},destroy:function(){}};window.cawcoDialsHeld.push({name:name,config:config,controller:controller});return controller;};</script>
+export const PAGE_DIALS = `<script>window.cawcoDialsHeld=[];window.cawcoDials=function(name,config){var controller={values:{},listeners:[],subscribe:function(listener){controller.listeners.push(listener);return function(){};},destroy:function(){}};window.cawcoDialsHeld.push({name:name,config:config,controller:controller});return controller;};</script>
 <script type="module" src="${DECISION_ASSETS}dials.js"></script>`;
 
 /** The page the hub serves for a program: the house faces, its host bundle, the program and its files' addresses in script tags, nothing else. */
