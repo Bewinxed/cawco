@@ -95,6 +95,7 @@
     "./words/decisions": "./src/words/decisions.ts",
     "./words/onboarding": "./src/words/onboarding.ts",
     "./words/decides": "./src/words/decides.ts",
+    "./words/helpers": "./src/words/helpers.ts",
     "./words/routines": "./src/words/routines.ts",
     "./words/graph": "./src/words/graph.ts",
     "./words/story-read": "./src/words/story-read.ts",

@@ -24,6 +24,7 @@
   import {
     holdComposerLayer,
     roomOver,
+    shutOnEscape,
   } from "../transcript/composer-layer.svelte";
   import { type WaitingRow, waitingCounts } from "./rows";
   import WaitingList from "./WaitingList.svelte";
@@ -75,36 +76,10 @@
     () => onclose()
   );
 
-  function onkeydown(event: KeyboardEvent): void {
-    if (event.key === "Escape" && !event.defaultPrevented) {
-      event.preventDefault();
-      shut();
-    }
-  }
-
-  /**
-   * Esc from what stands under it shuts it too: the tray row and the
-   * composer it rises from (its dock), and the page with the focus nowhere
-   * in particular (a pointer opened it). The focus stays where it was: in
-   * the composer, the draft goes on. Anything that took Esc for itself first
-   * (a menu, the composer's own) keeps it.
-   */
-  function onwindowkey(event: KeyboardEvent): void {
-    if (event.key !== "Escape" || event.defaultPrevented) {
-      return;
-    }
-    const at = document.activeElement;
-    const dock = section?.closest('[data-slot="dock"]');
-    if (!at || at === document.body || (dock?.contains(at) ?? false)) {
-      event.preventDefault();
-      onclose();
-    }
-  }
+  // Esc shuts it: from inside, the focus back on its chip; from the tray row or the composer under it, the focus staying where it was.
+  shutOnEscape(() => section, { inside: shut, under: () => onclose() });
 </script>
 
-<svelte:window onkeydown={onwindowkey} />
-
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions: Escape inside the list shuts it, heard as it passes up from the control that has the focus -->
 <section
   data-slot="waiting"
   aria-labelledby={titleId}
@@ -114,7 +89,6 @@
   })}
   data-side="top"
   data-state="open"
-  {onkeydown}
   style:--waiting-foot="calc(100% + var(--space-2))"
   bind:this={section}
   {@attach room}
