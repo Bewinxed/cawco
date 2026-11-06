@@ -10,10 +10,16 @@
  * says), the session publishes an HTML page whose script calls
  * `cawcoDials("Card", …)` with a spring control beside a number and throws
  * as it loads. A browser opens it by the session's `artifact_browse`
- * address, on the session's preview origin, where the overlay injected
- * into it reports what it met to the origin's error path (core
+ * address, as given, on the session's preview origin, where the overlay
+ * injected into it reports what it met to the origin's error path (core
  * `PREVIEW_ERRORS_PATH`). Then:
  *
+ * 0. The address opens as given, from where the run stands, inside a
+ *    workspace's boundary too: its entry answers 302 and the page's own
+ *    document 200. (The scratch hub binds loopback; its address named the
+ *    machine's hostname, which srt's proxy refused inside a workspace,
+ *    "403 … resolved to a loopback address", hub dashboard-url.ts
+ *    `composedHost`.)
  * 1. Within 30 s, the session's `artifact_read` names the spring dial, its
  *    kind and that it is not drawn, at the page's revision now.
  * 2. The same read names the thrown error, its line in the page as served
@@ -25,7 +31,10 @@
  *
  *   bun scripts/probe-kit/run.ts page-faults-live
  */
-import { PREVIEW_ERRORS_PATH } from "../../../packages/core/src/frames";
+import {
+  PREVIEW_ENTER_PATH,
+  PREVIEW_ERRORS_PATH,
+} from "../../../packages/core/src/frames";
 import type { PageFault } from "../../../packages/core/src/page-faults";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
@@ -149,11 +158,26 @@ const run = async (kit: Kit) => {
   });
   const consoled: string[] = [];
   tab.on("console", (message) => consoled.push(message.text()));
-  // On the machine's loopback, as the fleet's own: the address names the
-  // machine by its name, which a workspace's browser may not reach.
-  const local = new URL(url);
-  local.hostname = "127.0.0.1";
-  await tab.goto(local.href, { waitUntil: "load" });
+  // The address as artifact_browse gave it, from where the run stands (inside
+  // a workspace's boundary too): its entry and the page's own document.
+  const answered: string[] = [];
+  tab.on("response", (response) => {
+    if (response.request().resourceType() === "document") {
+      answered.push(`${response.status()} ${new URL(response.url()).pathname}`);
+    }
+  });
+  const opened = await tab
+    .goto(url, { waitUntil: "load" })
+    .then((response) => response?.status() ?? 0)
+    .catch((error: Error) => error.message.split("\n")[0] ?? "");
+  const pagePath = `/__cawco/page/${id}/`;
+  kit.check(
+    "0: the artifact_browse address opens as given: its entry 302, then the page's own document 200",
+    answered[0] === `302 ${PREVIEW_ENTER_PATH}` &&
+      answered.includes(`200 ${pagePath}`) &&
+      opened === 200,
+    `opened ${url}: ${opened}; documents: ${answered.join(", ")}`
+  );
   const trail = () =>
     `opened ${url} → ${tab.url()}; reported ${reported.length}: ${reported.join(" | ").slice(0, 800)}; console: ${consoled.slice(-6).join(" | ").slice(0, 600)}`;
 

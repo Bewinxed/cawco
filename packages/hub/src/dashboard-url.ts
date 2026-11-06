@@ -1,6 +1,7 @@
+import { isIP } from "node:net";
 import { hostname } from "node:os";
-// The port the dashboard is served on, for the composed fallback below.
-import { DASHBOARD_PORT } from "./config";
+// Where the hub listens and the dashboard's port, for the composed fallback below.
+import { BIND_HOST, DASHBOARD_PORT } from "./config";
 import type { RegistryShape } from "./registry";
 
 /**
@@ -23,6 +24,26 @@ const IPV6_BRACKETS = /^\[|\]$/gu;
 /** The names that are the delegate's browser's own machine, not the hub's. */
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "::1"]);
 
+/** The binds every one of the machine's names reaches (`HOST` unset is the first). */
+const WILDCARD_BINDS = new Set(["0.0.0.0", "::"]);
+
+/**
+ * The host a composed link names: the machine's hostname when the hub binds
+ * every interface, else the address it binds, the one place it answers. A
+ * hub bound to loopback (a scratch fleet's, `HOST=127.0.0.1`) answers no
+ * name of the machine's: on a Debian-style host that name is 127.0.1.1,
+ * where nothing listens, and inside a workspace's boundary srt's proxy
+ * refuses it outright ("Connection to <host> blocked: resolved to a
+ * loopback address"), while loopback itself goes direct (`no_proxy`).
+ */
+const composedHost = (): string => {
+  const bound = BIND_HOST.trim().replace(IPV6_BRACKETS, "");
+  if (bound === "" || WILDCARD_BINDS.has(bound)) {
+    return hostname();
+  }
+  return isIP(bound) === 6 ? `[${bound}]` : bound;
+};
+
 /** HTTPS on the tailnet name began (its dashboard address) or stopped (null). */
 export const noteTailnetDashboard = (url: string | null): void => {
   tailnetDashboard = url;
@@ -41,7 +62,7 @@ export const noteTailnetDashboard = (url: string | null): void => {
  *   one of `ownNames` (its LAN or tailnet address, its hostname);
  * - `elsewhere`: when it knows none, the override or the newest origin
  *   observed, an address the person opens that may not open for it;
- * - `none`: no address at all. The hostname guess {@link dashboardUrl}
+ * - `none`: no address at all. The composed guess {@link dashboardUrl}
  *   falls back to is never one: the container's resolver may not know it.
  */
 export const delegateDashboard = (
@@ -83,14 +104,15 @@ export const delegateDashboard = (
  * address while the hub serves it (a link that opens in a secure context on
  * every device of the tailnet), then the last origin observed (loopback and
  * unparseable ones already discarded by the registry), then a URL composed
- * from this machine's hostname — the best guess available on a hub no
+ * from where the hub listens ({@link composedHost}: this machine's hostname,
+ * or the one address it binds) — the best guess available on a hub no
  * dashboard has ever connected to, and better than no link at all.
  */
 export const dashboardUrl = (registry: RegistryShape): string =>
   DASHBOARD_URL_OVERRIDE ??
   tailnetDashboard ??
   registry.dashboardOrigins()[0] ??
-  `http://${hostname()}:${DASHBOARD_PORT}`;
+  `http://${composedHost()}:${DASHBOARD_PORT}`;
 
 /**
  * The dashboard's https address, or null when none is known: where a sign-in
