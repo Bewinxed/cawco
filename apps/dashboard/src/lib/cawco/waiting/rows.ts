@@ -1,10 +1,10 @@
 /**
  * The rows of what a session waits on the person for, in the order he
- * meets them: the permission asks its turn is parked on (they hold the
- * work still), then the questions its tree put to him and he has not
- * answered, its own first, then those he answered that the agent has not
- * taken up yet. Each row is one question: a page of four cards is four
- * rows, each opening at its card.
+ * meets them: the asks its tree's turns are parked on (a permission, a
+ * question, a sign-in: they hold the work still), then the questions its tree put to
+ * him and he has not answered, its own first, then those he answered that
+ * the agent has not taken up yet. Each row is one question: a page of four
+ * cards is four rows, each opening at its card.
  */
 import type { ArtifactStop } from "@cawco/core/artifact-needs";
 import type {
@@ -12,8 +12,15 @@ import type {
   SessionQuestionKind,
 } from "@cawco/core/session-questions";
 
-/** The kind a row's glyph tells: a question's, or a permission ask's. */
-export type WaitingKind = SessionQuestionKind | "permission";
+/**
+ * A parked ask's kind: a permission or the agent's own question, which the
+ * composer grows into (a question folds to its bar on the tray row), or a
+ * sign-in its card in the transcript asks for.
+ */
+type WaitingAskKind = "permission" | "question" | "connect";
+
+/** The kind a row's glyph tells: a question's, or a parked ask's. */
+export type WaitingKind = SessionQuestionKind | WaitingAskKind;
 
 interface RowBase {
   /** The session under this one that asked it; null when it is this session's own. */
@@ -31,18 +38,24 @@ export type WaitingRow =
       stop: ArtifactStop;
     })
   | (RowBase & {
-      kind: "permission";
+      kind: WaitingAskKind;
       state: "open";
-      /** The ask's request id: pressing the row brings the composer's ask into view. */
+      /** The ask's request id: pressing the row brings the ask into view, in the composer or the transcript. */
       requestId: string;
     });
 
-/** A permission ask as the row reads it. */
+/** A parked ask as the row reads it. */
 export interface WaitingAsk {
   from: RowBase["from"];
+  kind: WaitingAskKind;
   requestId: string;
   summary: string;
 }
+
+/** Whether `row` is a parked ask, answered where it stands rather than in an artifact's panel. */
+export const isAsk = (
+  row: WaitingRow
+): row is Extract<WaitingRow, { requestId: string }> => "requestId" in row;
 
 /** The rows of `questions` and `asks`: asks, then open questions, then answered ones. */
 export const waitingRows = (
@@ -61,7 +74,7 @@ export const waitingRows = (
   return [
     ...asks.map((ask): WaitingRow => ({
       key: `ask/${ask.requestId}`,
-      kind: "permission",
+      kind: ask.kind,
       state: "open",
       words: ask.summary,
       from: ask.from,

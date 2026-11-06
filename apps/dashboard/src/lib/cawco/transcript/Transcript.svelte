@@ -38,6 +38,7 @@
 </script>
 
 <script lang="ts">
+  import { bringIntoView } from "@cawco/core/bring-into-view";
   import { detach } from "@cawco/core/detach";
   import { questionsOf } from "@cawco/core/question";
   import { askWords } from "@cawco/core/words/asks";
@@ -4791,8 +4792,9 @@
     });
   });
 
-  // The "1 needs you" chip pressed: the open connect card comes into view,
-  // and its Connect takes the keys once it is drawn there.
+  // A sign-in's row pressed in the list of what waits on the reader: the
+  // open connect card comes into view, and its Connect takes the keys once
+  // it is drawn there. A delegate's card stands after the rows.
   $effect(() => {
     if (!(connectReveal.has(session.instanceId) && active)) {
       return;
@@ -4803,6 +4805,16 @@
         (row) => row.kind === "connect" && row.answer === null
       );
       if (index < 0) {
+        // No open card of its own among the rows: a delegate's, after them.
+        const under = scroller?.querySelector<HTMLElement>(
+          "[data-connect-stage]"
+        );
+        if (under) {
+          bringIntoView(under, { behavior: "smooth" });
+          under
+            .querySelector<HTMLElement>("button")
+            ?.focus({ preventScroll: true });
+        }
         return;
       }
       list?.scrollToIndex(index, { align: "center", smooth: true });

@@ -29,17 +29,23 @@
   import WaitingList from "./WaitingList.svelte";
 
   let {
+    paneId,
     rows,
     failure = null,
     again,
+    faultOf,
     onopen,
     onclose,
   }: {
+    /** The conversation its pane shows: whose composer layer it holds. */
+    paneId: string;
     rows: WaitingRow[];
     /** Why the last read of the list failed; it keeps the rows it had. */
     failure?: string | null;
     /** Reads the list again. */
     again?: () => void;
+    /** Why a row's last open did not go. */
+    faultOf?: (row: WaitingRow) => string | null;
     onopen: (row: WaitingRow) => void;
     onclose: () => void;
   } = $props();
@@ -60,7 +66,11 @@
   }
 
   // It holds the composer's layer while open: the plan or the tray's shelf opening over the same row takes it, and this shuts.
-  holdComposerLayer("waiting", () => onclose());
+  holdComposerLayer(
+    () => paneId,
+    "waiting",
+    () => onclose()
+  );
 
   function onkeydown(event: KeyboardEvent): void {
     if (event.key === "Escape" && !event.defaultPrevented) {
@@ -102,7 +112,7 @@
   <div
     class="kit-edge-fade-block min-h-0 flex-auto overflow-y-auto overscroll-contain touch-pan-y px-space-1 pbe-space-2"
   >
-    <WaitingList {onopen} {rows} />
+    <WaitingList {faultOf} {onopen} {rows} />
     {#if failure}
       <RowFault {again} reason={waitingWords.readFailed(failure)} />
     {/if}

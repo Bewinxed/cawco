@@ -3216,8 +3216,9 @@
      attachments, and the pill's own controls. They fade out and are
      gone, out of the tab order with them (transition-fade-hide), and come
      back the same way as the ask folds. A minimized question's bar takes
-     the tray row: the tray and the plan's ring step aside under it and come
-     back as it goes. At every width the dock's foot stands 14px above the
+     the tray row: the tray steps aside under it and comes back as it goes,
+     and the row's trailing end (what waits on the person, the plan's ring)
+     stands beside the bar, which ends short of it. At every width the dock's foot stands 14px above the
      bottom plus the safe area (the composer's surface brief, Composer column: "docked 14px
      above the bottom plus the safe area"), the room the transcript's foot
      clears for it; on a narrow screen the composer, the tray row and the
@@ -3320,18 +3321,23 @@
     {#if fleet && minimized && ask && askParks}
       <!-- The minimized question, in the tray row's place: Caw's needs-you
            face, what it asks, and the chevron it comes back up by. The
-           tray's chips and the plan's ring step aside meanwhile, as they do
-           while the card is up, so the bar costs the transcript nothing the
-           row did not already keep clear. The bar is the tray row's chip
-           (ui/chip, `variant: "tray"`) in its needs tone (DelegateTray: a
-           session asking for something is the one loud colour), across the
-           composer's width, standing in the tray row as the tray's chips do:
+           tray's chips step aside meanwhile, as they do while the card is
+           up, so the bar costs the transcript nothing the row did not
+           already keep clear; the row's trailing end stays (what waits on
+           the person, whose list holds this question too, and the plan's
+           ring), and the bar ends short of it (`--ring-room`). The bar is
+           the tray row's chip (ui/chip, `variant: "tray"`) in its needs tone
+           (DelegateTray: a session asking for something is the one loud
+           colour), across the composer's width, standing in the tray row as the tray's chips do:
            a tray chip high, a tray gap off the pill. It stands under the
            grown shape (grown.ts's halo, z 1): brought back, the card grows over
            the bar as it fades. -->
       {@const [first] = askQuestions ?? []}
       <div
-        class="absolute inset-0 flex items-box-end pb-c-tray-gap pointer-events-none"
+        class="absolute inset-0 flex items-box-end pb-c-tray-gap pe-(--ring-room,0px) pointer-events-none"
+        style:--ring-room={planRing
+          ? `calc(${ringWidth}px + var(--space-2))`
+          : undefined}
         in:askedIn
         out:askedOut
       >
@@ -3389,7 +3395,7 @@
            takes the pointer, and only the chip is measured. -->
       <div
         data-slot="progress-slot"
-        class="absolute bottom-0 inset-x-0 z-1 flex justify-end items-end h-c-tray-row pb-c-tray-gap pointer-events-none transition-fade-show group-data-minimized/dock:opacity-0 group-data-minimized/dock:invisible group-data-minimized/dock:transition-fade-hide"
+        class="absolute bottom-0 inset-x-0 z-1 flex justify-end items-end h-c-tray-row pb-c-tray-gap pointer-events-none"
       >
         <div
           class="flex items-end gap-space-2 pointer-events-auto"

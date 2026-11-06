@@ -130,7 +130,11 @@
   }
 
   // It holds the composer's layer while it is open: the tray's shelf opening over the same row takes it, and the plan shuts.
-  holdComposerLayer(() => instanceId, "plan", () => onclose());
+  holdComposerLayer(
+    () => instanceId,
+    "plan",
+    () => onclose()
+  );
 
   let section = $state<HTMLElement>();
   let body = $state<HTMLElement>();

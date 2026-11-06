@@ -2,39 +2,47 @@
   import { waitingWords } from "@cawco/core/words/waiting";
   /**
    * What a session waits on the person for, one row per question (rows.ts):
-   * the permission asks its turn is parked on, the questions its tree put
+   * the asks its tree's turns are parked on, the questions its tree put
    * to him and he has not answered, then, under their head, those he
    * answered that the agent has not taken up yet.
    *
    * Every row reads down the same columns (DESIGN.md, The Row Grid Rule):
    * its kind's glyph centred in the 28px lead column (a decision, a canvas
-   * to judge, a pin, a permission), the question in body over its facts in
+   * to judge, a pin, a permission, a question, a sign-in), the question in body over its facts in
    * meta (the artifact, and the session under this one that asked), its
    * state in a trailing column of the same width: empty while it waits on
    * him (the list's own title says so), the tick once he answered. The
    * words alone wrap, from one x.
    *
    * A press opens what asks it where it asks (`onopen`): an artifact in its
-   * session's panel at its card, its pin or its top; a permission ask in
-   * the composer that holds it.
+   * session's panel at its card, its pin or its top; a permission or a
+   * question in the composer that holds it; a sign-in at its card in the transcript.
+   * An open that did not go says why under its row, with Try again
+   * (`faultOf`, RowFault).
    */
   import type { Component } from "svelte";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import {
+    IconAsk,
     IconDecisions,
     IconEye,
+    IconKey,
     IconPin,
     IconShield,
     IconTick,
   } from "#lib/icons.js";
-  import type { WaitingKind, WaitingRow } from "./rows";
+  import RowFault from "../RowFault.svelte";
+  import { isAsk, type WaitingKind, type WaitingRow } from "./rows";
 
   let {
     rows,
     onopen,
+    faultOf = () => null,
   }: {
     rows: WaitingRow[];
     onopen: (row: WaitingRow) => void;
+    /** Why the row's last open did not go; null once it went. */
+    faultOf?: (row: WaitingRow) => string | null;
   } = $props();
 
   const KIND_GLYPH: Record<WaitingKind, Component<Record<string, unknown>>> = {
@@ -42,6 +50,8 @@
     judge: IconEye,
     pin: IconPin,
     permission: IconShield,
+    question: IconAsk,
+    connect: IconKey,
   };
 
   const open = $derived(rows.filter((row) => row.state === "open"));
@@ -55,7 +65,7 @@
         ? waitingWords.fromEnded(row.from.title)
         : waitingWords.fromSession(row.from.title);
     }
-    return [row.kind === "permission" ? null : row.artifact.title, from].filter(
+    return [isAsk(row) ? null : row.artifact.title, from].filter(
       (one): one is string => !!one
     );
   };
@@ -100,7 +110,7 @@
   {@const said = facts(row)}
   <li class="relative" data-waiting-row data-state={row.state}>
     <button
-      aria-label={row.kind === "permission"
+      aria-label={isAsk(row)
         ? waitingWords.showAsk(row.words)
         : waitingWords.open(row.words)}
       class="focus-inset press-tint grid w-full grid-cols-(--waiting-cols) items-start gap-x-c-row-inset rounded-sm px-c-row-inset py-space-2 text-start"
@@ -137,5 +147,11 @@
         <span class="sr-only">{waitingWords.state[row.state]}</span>
       </span>
     </button>
+    <RowFault
+      again={() => onopen(row)}
+      end="var(--c-row-inset)"
+      indent="calc(var(--c-row-inset) * 2 + var(--c-row-lead))"
+      reason={faultOf(row)}
+    />
   </li>
 {/snippet}

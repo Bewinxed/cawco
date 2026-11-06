@@ -652,6 +652,11 @@ export interface components {
         id: string | number;
       };
     };
+    "GET /api/instances/:id/questions": {
+      path: {
+        id: string | number;
+      };
+    };
     "GET /api/instances/:id/transcript": {
       path: {
         id: string | number;

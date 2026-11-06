@@ -1261,15 +1261,6 @@ public enum Words {
         /// While the session's machine is offline.
         public static let connectOffline = "Machine offline — can't connect yet."
 
-        /// The chip at the tray row's end while a card stands open above.
-        public static func connectNeedsYou(n: Int) -> String {
-            "\(n) needs you"
-        }
-
-        public static func showConnectAsk(who: String, server: String) -> String {
-            "Show the connect ask from \(who): \(server)"
-        }
-
         /// The line the card becomes once it settled, in the tool row's form: connected, as whom and with what access; not connected; and a kept sign-in that later lapsed.
         public static func recordConnected(server: String) -> String {
             "Connected \(server)"
