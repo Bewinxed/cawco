@@ -27,7 +27,11 @@
    * `scrolled` (the page scrolled to its foot, its top under the head's glass),
    * `held` (three comments held to send together: Send 3 in the rail's bar,
    * each row Unsent, the head's bubble ringed), `note` (Send all pressed: its
-   * note under the bar), `hold` (a comment being written: Hold beside send).
+   * note under the bar), `hold` (a comment being written: Hold beside send),
+   * and on a desk the card's pour: `pour` (it pours out of comment 4's pill
+   * once the panel stands), `drain` (it drains back), `turn` (it opens and
+   * is closed half way, turning back from where it is drawn); `?slow=n`
+   * runs the pour n times as long.
    * The picture stands for a decision page as the panel shows it: its own
    * title left out under the head, which names it (overlay
    * `data-cawco-headed`), its top starting the head's room down
@@ -41,6 +45,7 @@
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { frameSize } from "#lib/cawco/frame-observer.js";
+  import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import { pressOutside } from "#lib/cawco/press-outside.js";
   import ArtifactMenu from "#lib/cawco/preview/ArtifactMenu.svelte";
   import CanvasView from "#lib/cawco/preview/CanvasView.svelte";
@@ -54,6 +59,7 @@
   import ModeSwitch from "#lib/cawco/preview/ModeSwitch.svelte";
   import PinCard from "#lib/cawco/preview/PinCard.svelte";
   import PinFloat from "#lib/cawco/preview/PinFloat.svelte";
+  import PinMark, { markState } from "#lib/cawco/preview/PinMark.svelte";
   import ThreadSheet from "#lib/cawco/preview/ThreadSheet.svelte";
   import { setSideExpand } from "#lib/cawco/side/expand.js";
   import { HEAD_PRIORITY, type HeadItem } from "#lib/cawco/side/head.js";
@@ -159,9 +165,35 @@
     asked === "resolved" || asked === "found" ? "resolved" : "open"
   );
   let sort = $state<RailSort>("newest");
+  /** The card's pour, on a desk (PinFloat): `pour` opens it once the panel stands, `drain` closes it, `turn` opens it and closes it half way through (caught mid-way, it turns back from where it is drawn). */
   let openPin = $state<string | null>(
-    asked === "thread" || asked === "delete" ? (PINS[3]?.id ?? null) : null
+    asked === "thread" || asked === "delete" || asked === "drain"
+      ? (PINS[3]?.id ?? null)
+      : null
   );
+  /** The desk's card stands poured out; closed, it drains into its pill and then goes (`onclosed`). */
+  let cardOpen = $state(true);
+  // `?slow=n`: the pour's clock and its thread's fade n times as long, to
+  // read a frame of it; set on the root before any run reads them.
+  const slow = Number(page.url.searchParams.get("slow") ?? 1);
+  if (slow > 1) {
+    // `drain` slows its close alone: the card it drains pours at speed.
+    const slowed = [
+      "--dur-goo-exit",
+      "--dur-goo-content-exit",
+      ...(asked === "drain"
+        ? []
+        : ["--dur-goo", "--dur-goo-content", "--dur-goo-content-delay"]),
+    ];
+    for (const name of slowed) {
+      // Read off the root as it stands, never through dur(), which would
+      // keep the token's own value for every later read.
+      const ms = Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue(name)
+      );
+      document.documentElement.style.setProperty(name, `${ms * slow}ms`);
+    }
+  }
   const thread = $derived(pins.find((one) => one.id === openPin) ?? null);
   /** The reply's draft and the next comment's, apart, as the pane keeps them. */
   const replyDraft = new ComposerDraft();
@@ -211,6 +243,13 @@
     return () => removeEventListener("keydown", away);
   });
   let well = $state({ w: 0, h: 0 });
+  /** Comment 4's pill on the page, in the well, px: the card's mark. */
+  const cardMark = $derived({
+    x: Math.max(0, well.w - 360),
+    y: 96,
+    w: 28,
+    h: 28,
+  });
   const measureWell = frameSize<HTMLElement>((node) => {
     well = { w: node.clientWidth, h: node.clientHeight };
   });
@@ -246,6 +285,27 @@
       const control = PRESSES[asked];
       if (control) {
         press(control);
+      }
+      if (asked === "pour" || asked === "turn") {
+        openPin = PINS[3]?.id ?? null;
+        cardOpen = true;
+      }
+      if (asked === "turn") {
+        setTimeout(
+          () => {
+            cardOpen = false;
+          },
+          dur("--dur-goo") / 2
+        );
+      }
+      if (asked === "drain") {
+        // Once it has poured out and stands.
+        setTimeout(
+          () => {
+            cardOpen = false;
+          },
+          dur("--dur-goo") + FITTED
+        );
       }
       if (asked === "remove") {
         setTimeout(() => press("[data-artifact-remove]"), FITTED);
@@ -424,6 +484,7 @@
     onhover={() => undefined}
     onopen={(id) => {
       openPin = id;
+      cardOpen = true;
     }}
     onpage={() => {
       openPin = null;
@@ -490,7 +551,12 @@
     link={`#comment-${one.number}`}
     name={one.title ?? ""}
     onclose={() => {
-      openPin = null;
+      if (phone.current) {
+        openPin = null;
+      } else {
+        // On a desk the card drains into its pill first (PinFloat).
+        cardOpen = false;
+      }
       if (pushed) {
         listOpen = false;
       }
@@ -662,13 +728,28 @@
           </ThreadSheet>
         {/if}
       {:else if thread}
-        <!-- The card beside its pin in the pane's own shell (PinFloat), its
-             pill where the picture draws comment 4's. -->
+        <!-- The card beside its pin in the pane's own shell (PinFloat),
+             poured out of comment 4's pill, drawn here as the page's
+             overlay draws it (PinMark), standing over the picture. -->
+        <div
+          aria-hidden="true"
+          class="pointer-events-none absolute start-(--mark-x) top-(--mark-y) z-1"
+          data-slot="bench-pill"
+          style:--mark-x="{cardMark.x}px"
+          style:--mark-y="{cardMark.y}px"
+        >
+          <PinMark number={thread.number} state={markState(thread)} />
+        </div>
         <div class="contents">
           <PinFloat
             label={`Comment ${thread.number}`}
-            mark={{ x: Math.max(0, well.w - 360), y: 96, w: 28, h: 28 }}
-            open
+            mark={cardMark}
+            onclosed={() => {
+              if (!cardOpen) {
+                openPin = null;
+              }
+            }}
+            open={cardOpen}
             pin={thread.number}
             room={well}
             slot="pin-card"

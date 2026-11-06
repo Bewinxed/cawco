@@ -269,7 +269,7 @@
   // ---- The pour ----------------------------------------------------------
 
   /** The tokens a frame draws with, read at its first frame (the page's, never a server render's). */
-  let tokens: { cardR: number; join: number } | null = null;
+  let tokens: { cardR: number; hair: number; join: number } | null = null;
   /** A frame's step at most, ms: a tab hidden mid-run lands its next frame, never a jump past its end. */
   const FRAME_STEP_MS = 50;
 
@@ -332,8 +332,9 @@
     tokens ??= {
       join: numberOf("--goo-join"),
       cardR: numberOf("--radius-lg"),
+      hair: numberOf("--radius-hair"),
     };
-    const { cardR: CARD_R, join: JOIN } = tokens;
+    const { cardR: CARD_R, hair, join: JOIN } = tokens;
     const k = unit(poured);
     const p = pinHere;
     const from: Rect = p ?? { x: 0, y: 0, w: cardW, h: cardH };
@@ -344,15 +345,18 @@
       w: lerp(from.w, cardW, poured),
       h: lerp(from.h, cardH, poured),
     };
-    const radii = [pinR, pinR, pinR, pinR].map((r) =>
-      lerp(r, CARD_R, k)
-    ) as Radii;
+    // The pill's own corners: round, its tail (bottom-start) a hair, as
+    // the page draws it (PinMark `tail`).
+    const pinRadii: Radii = p
+      ? [pinR, pinR, pinR, hair]
+      : [pinR, pinR, pinR, pinR];
+    const radii = pinRadii.map((r) => lerp(r, CARD_R, k)) as Radii;
     const shapes = [roundedBox(shape, radii)];
     // The pill joins the shape only while it pours: at rest the card
     // stands alone, so a travel to a new place carries no pill with it.
     const pouring = p && (run !== null || poured < 1);
     if (pouring) {
-      shapes.push(roundedBox(p, [pinR, pinR, pinR, pinR]));
+      shapes.push(roundedBox(p, pinRadii));
     }
     // The closing joins them only to a neck narrower than their resting
     // gap, so it lets go as the card comes to rest.
@@ -362,7 +366,7 @@
     // card's room, less the pill), so the page's own pill shows through.
     hole?.setAttribute(
       "d",
-      `M${-cardW} ${-cardH}H${2 * cardW}V${2 * cardH}H${-cardW}Z${pouring ? outline(roundedBox(p, [pinR, pinR, pinR, pinR])) : ""}`
+      `M${-cardW} ${-cardH}H${2 * cardW}V${2 * cardH}H${-cardW}Z${pouring ? outline(roundedBox(p, pinRadii)) : ""}`
     );
     if (clipWrap) {
       if (run || poured < 1) {

@@ -782,7 +782,7 @@
                   >
                   {#if inFront && counted(inFront.count) !== null}
                     <span
-                      class="flex-none text-ink-muted type-label num"
+                      class="flex-none text-ink-muted type-label num group-aria-expanded/bar-item:text-ink-strong"
                       data-slot="count">{counted(inFront.count)}</span
                     >
                   {/if}
@@ -891,7 +891,8 @@
         <!-- Send all: the one prominent action, trailing (HIG, Toolbars:
              "Only specify one primary action, and put it on the trailing
              side"), its count what it sends; pressed, its note unfolds
-             under the bar. -->
+             under the bar, whose own Send is then the one action and this
+             one steps down to the outline. -->
         <Button
           aria-expanded={noting}
           aria-label={said.sendHeldLabel(held)}
@@ -901,6 +902,7 @@
             noteRefused = null;
           }}
           shape="capsule"
+          variant={noting ? "outline" : "default"}
           ><span>{said.send}</span><span class="num">{held}</span></Button
         >
       {/if}
