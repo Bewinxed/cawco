@@ -46,7 +46,8 @@
  * | anchor-drift | own code, over reads        | an open popover, menu or listbox whose height changed between two reads of a page holds its top or its bottom |
  * | decoration-spill | own code                 | an outline (offset past the border edge), a hard box-shadow (blur under 1px, by its spread and offsets), a dashed or dotted border, or an absolutely placed ::before/::after that draws, reaching 0.5px past the box it marks (a pseudo's own element, when that draws; not a pseudo flush outside it, which carries it on) or past the nearest box that clips it or rounded box that draws, its own box inside that one; a clip-path or mask is unread |
  * | nested-radius | own code                    | a wash (a fill or gradient, an element's or an absolute pseudo's) that nearly fills a rounded box (one axis within its radius of both ends) and whose corner stands within that radius of the box's corner (the box drawing or clipping) is outer radius less the mean inset, within 1.5px or a quarter of it, plus half the two insets' difference |
- * | state-shape | own code + CSS.forcePseudoState | each control in a bar and each rounded one, with hover, active and focus-visible forced on it in turn (Chromium; transitions held off) and at rest when drawn selected: the fill or ring that state paints anew (its own, a pseudo's, a child's half its size or more) takes the control's radius less its inset where a child or pseudo draws it, and, inside the glass it stands in (the nearest box that draws over it, rounded, and not scrolling it past its corners), the glass's radius less its inset (a capsule's across it) on the corners facing its ends, and under half that on those facing a neighbour (an item of the glass on that side; a segment excepted), within 1.5px or a tenth (a quarter at a corner) |
+ * | state-shape | own code + CSS.forcePseudoState | each control in a bar and each rounded one, with hover, active and focus-visible forced on it in turn (Chromium; transitions held off) and at rest when drawn selected: the fill or ring that state paints anew (its own, a pseudo's, a child's half its size or more) takes the control's radius less its inset where a child or pseudo draws it, and, inside the glass it stands in (the nearest box that draws over it, rounded, and not scrolling it past its corners), the glass's radius less its inset (a capsule's across it) on the corners facing its ends, and under half that on those facing a neighbour (an item of the glass on that side; a groove's segment excepted, a bar item one not), within 1.5px or a tenth (a quarter at a corner); in a bar's capsule of glass, what each state draws at five points of the control (its centre and 3px in from each side's middle, composed bottom up, glyphs aside) stands 0.02 or more off its rest in OKLab, pressed and, where a pointer can rest and it is not chosen, hovered; focused it draws a ring (an outline of it or a pseudo) a pixel or more inside the glass; and drawn chosen (`aria-pressed`, `aria-selected`, `aria-checked`) there or in a groove (a tab list that paints), it is painted (its wash, or a thumb under it) 0.02 or more off the ground |
+ * | touch       | own code                    | on a coarse pointer, each control in a bar's capsule of glass and each segment of a groove: its box with its placed pseudos (`touch-hit`), each side stopped at the midpoint to the control beside it there, 44×44 or more |
  * | glyph-place | own code                    | a control in a bar's capsule of glass whose only content is one glyph and at most a count: the glyph's centre within 1px of the control's on each axis (its fill's start and end insets around it alike), and the count, a badge on the glyph's corner taking no room, over at most a fifth of the glyph's ink (its shapes' fill and stroke sampled every half pixel) |
  *
  * A sheet of specimens (a bench) says what a view is on the page itself:
@@ -99,7 +100,8 @@ export type CheckName =
   | "decoration-spill"
   | "nested-radius"
   | "state-shape"
-  | "glyph-place";
+  | "glyph-place"
+  | "touch";
 
 /** The states state-shape forces on each control it reads, in the order read. */
 const FORCED = ["hover", "active", "focus-visible"] as const;
@@ -187,6 +189,10 @@ const CHECKS: Record<CheckName, { says: string; by: string }> = {
   },
   "glyph-place": {
     says: "a bar's glyph control draws its glyph at its fill's centre, its count a corner badge over at most a fifth of any glyph's ink (The Earned Count Rule; HIG, Tab bars)",
+    by: "own code",
+  },
+  touch: {
+    says: "under a finger a control in a bar's glass or a groove reaches 44×44, its neighbours stopping it at the midpoint (The 44 Touch Rule)",
     by: "own code",
   },
 };
@@ -3194,6 +3200,52 @@ function readInPage(args: InPageArgs): InPageRead {
       ]),
     };
   };
+  /** Whether a contour is a capsule: every corner round at half its shorter side. */
+  const capsule = (c: Contour) => {
+    const half = Math.min(c.right - c.left, c.bottom - c.top) / 2;
+    return c.r.every(([x, y]) => Math.min(x, y) >= half - 0.5);
+  };
+  /** The capsule of a bar's glass `el` stands in: the nearest box over it that draws (its own fill or a placed pseudo's), when that is a capsule; its element and its box. */
+  const capsuleAround = (el: Element): { box: Contour; el: Element } | null => {
+    for (
+      let up = el.parentElement;
+      up && up !== document.body;
+      up = up.parentElement
+    ) {
+      if (paints(up).length > 0) {
+        const c = contourOf(up);
+        return capsule(c) ? { box: c, el: up } : null;
+      }
+      for (const which of ["::before", "::after"] as const) {
+        const ps = pseudoOf(up, which);
+        const c = ps && paintsOf(ps).length > 0 ? pseudoBox(up, ps) : null;
+        if (c) {
+          return capsule(c) ? { box: c, el: up } : null;
+        }
+      }
+    }
+    return null;
+  };
+  /** Whether `el` is a segment of a groove: a tab in a list that paints its own ground (the kit's segmented control). */
+  const inGroove = (el: Element) => {
+    const list = el.matches('[role="tab"]')
+      ? el.closest('[role="tablist"]')
+      : null;
+    return Boolean(list && paints(list).length > 0);
+  };
+  /**
+   * The bar's capsule of glass a control stands in: the one round it, or,
+   * for a segment of a groove, the one round its groove (a segmented track
+   * put in a bar's glass, the groove a box of its own between them).
+   */
+  const glassFor = (el: Element): { box: Contour; el: Element } | null => {
+    const own = capsuleAround(el);
+    if (own || !inGroove(el)) {
+      return own;
+    }
+    const groove = el.closest('[role="tablist"]');
+    return groove ? capsuleAround(groove) : null;
+  };
   /** The nearest box from `from` up, inside the scope, that draws a rounded shape of its own (a fill, an edge or a shadow), or also one that cuts by it. */
   const roundedHome = (from: Element | null, cuts: boolean): Element | null => {
     for (
@@ -3617,7 +3669,7 @@ function readInPage(args: InPageArgs): InPageRead {
   // the corners: a corner facing the capsule's end (no other item between)
   // takes its radius less the inset across it, and a corner facing a
   // neighbour one small radius, under half that, so a group's leading,
-  // middle and trailing fills read as one row; a segment stays a capsule,
+  // middle and trailing fills read as one row; a groove's segment stays a capsule,
   // as its thumb is. The read at rest names the controls (each in a
   // bar, and each rounded one), keeps what each draws at rest and reads a
   // selected one's fill; each forced state's read (`forcedStates`, the
@@ -3639,7 +3691,131 @@ function readInPage(args: InPageArgs): InPageRead {
       __stateShape?: {
         els: Element[];
         rest: Map<Element, Map<string, string>>;
+        /** What each control in a bar's glass (and each segment of a groove) draws at rest at five points of it. */
+        tones: Map<Element, Rgba[]>;
       };
+    };
+    /** Chosen, as a toggle, a tab or a check says it: what must be painted on it. */
+    const CHOSEN =
+      '[aria-pressed="true"], [aria-selected="true"], [aria-checked="true"]';
+    /** How far apart two colours stand, in OKLab. */
+    const apart = (a: Rgba, b: Rgba) => {
+      const [l1, a1, b1] = oklab(a);
+      const [l2, a2, b2] = oklab(b);
+      return Math.hypot(l1 - l2, a1 - a2, b1 - b2);
+    };
+    /** The least step a state's fill stands off what it covers, in OKLab: the hover ghost on a groove of its own colour stood 0 off it by day. */
+    const SEEN = 0.02;
+    /**
+     * What is drawn at each of five points of `el` (its centre, and 3px in
+     * from the middle of each side, where its fill shows past a glyph or a
+     * face), composed bottom up from the elements painted there (its own
+     * fill and its placed pseudos' that cover the point, each element's),
+     * from `el` down: `el`, what holds it and what
+     * stands under it beside it (a groove's thumb), and its own children half
+     * its size or more over it; a glyph's shapes and what stands over `el`
+     * (a tooltip) are not its drawing. With `ground`, only what holds it.
+     */
+    const tonesOf = (el: Element, ground: boolean): Rgba[] => {
+      const b = el.getBoundingClientRect();
+      const cx = (b.left + b.right) / 2;
+      const cy = (b.top + b.bottom) / 2;
+      const IN = 3;
+      return (
+        [
+          [cx, cy],
+          [b.left + IN, cy],
+          [b.right - IN, cy],
+          [cx, b.top + IN],
+          [cx, b.bottom - IN],
+        ] as const
+      ).map(([x, y]) => toneAt(el, ground, x, y));
+    };
+    /** The greatest of the points' distances between two reads of them. */
+    const apartAll = (a: Rgba[], b: Rgba[]) =>
+      Math.max(0, ...a.map((one, i) => apart(one, b[i] ?? one)));
+    const toneAt = (
+      el: Element,
+      ground: boolean,
+      x: number,
+      y: number
+    ): Rgba => {
+      const b = el.getBoundingClientRect();
+      const stack = stackAt(x, y);
+      const at = stack.indexOf(el);
+      const big = (d: Element) => {
+        const r = d.getBoundingClientRect();
+        return r.width >= b.width / 2 && r.height >= b.height / 2;
+      };
+      const drawn = stack.filter((e, i) => {
+        if (e.closest("svg")) {
+          return false;
+        }
+        if (ground) {
+          return e !== el && e.contains(el);
+        }
+        if (el.contains(e) && e !== el) {
+          return big(e);
+        }
+        return at === -1 || i >= at;
+      });
+      const dark = /dark/u.test(style(document.documentElement).colorScheme);
+      let tone: Rgba = dark ? [18, 18, 18, 1] : [255, 255, 255, 1];
+      for (const e of drawn.reverse()) {
+        const layers = [washOf(style(e))];
+        for (const which of ["::before", "::after"] as const) {
+          const ps = pseudoOf(e, which);
+          const c = ps && !shaped(ps) ? pseudoBox(e, ps) : null;
+          if (
+            ps &&
+            c &&
+            x >= c.left &&
+            x <= c.right &&
+            y >= c.top &&
+            y <= c.bottom
+          ) {
+            layers.push(washOf(ps));
+          }
+        }
+        for (const layer of layers) {
+          if (layer) {
+            tone = over(
+              [
+                layer[0],
+                layer[1],
+                layer[2],
+                layer[3] * Number(style(e).opacity),
+              ],
+              tone
+            );
+          }
+        }
+      }
+      return tone;
+    };
+    /** Its focus ring as drawn: the outline of it or of a pseudo of it, grown from its box by the outline's offset and width; null where none draws. */
+    const ringOf = (el: Element): Contour | null => {
+      const of = (s: CSSStyleDeclaration, box: Contour | null) => {
+        const w = num(s.outlineWidth);
+        return box &&
+          s.outlineStyle !== "none" &&
+          w >= 1 &&
+          rgba(s.outlineColor)[3] > 0.1
+          ? grown(box, num(s.outlineOffset) + w)
+          : null;
+      };
+      const own = of(style(el), contourOf(el));
+      if (own) {
+        return own;
+      }
+      for (const which of ["::before", "::after"] as const) {
+        const ps = pseudoOf(el, which);
+        const ring = ps ? of(ps, pseudoBox(el, ps)) : null;
+        if (ring) {
+          return ring;
+        }
+      }
+      return null;
     };
     const shadowDraws = (s: CSSStyleDeclaration) =>
       s.boxShadow !== "none" &&
@@ -3742,8 +3918,9 @@ function readInPage(args: InPageArgs): InPageRead {
       }
       return null;
     };
-    /** A segment of a segmented control: a capsule like its thumb, wherever it stands in its groove. */
-    const SEGMENT = '[role="tab"], [role="radio"], [role="option"]';
+    /** A segment of a groove: a capsule like its thumb, wherever it stands in it. A segment that is a bar item (a switch in a bar's glass, BarSegments) takes the glass's contour by where it stands, as every bar item does. */
+    const SEGMENT =
+      ':is([role="tab"], [role="radio"], [role="option"]):not([data-bar-item])';
     /** What else stands in a glass as an item of it: a control or a control group. */
     const GLASS_ITEM = `${STATE_CONTROL}, [role="tablist"], [role="radiogroup"], [role="group"]`;
     /** Whether `item` stands inside another item of `glass`. */
@@ -3821,8 +3998,7 @@ function readInPage(args: InPageArgs): InPageRead {
     } | null => {
       const w = outer.right - outer.left;
       const h = outer.bottom - outer.top;
-      const half = Math.min(w, h) / 2;
-      const capsule = outer.r.every(([x, y]) => Math.min(x, y) >= half - 0.5);
+      const pill = capsule(outer);
       const across =
         h <= w
           ? [inner.top - outer.top, outer.bottom - inner.bottom]
@@ -3852,7 +4028,7 @@ function readInPage(args: InPageArgs): InPageRead {
         const big = (orx + ory) / 2;
         let inset: number;
         let room: number;
-        if (capsule) {
+        if (pill) {
           inset = Math.max(0, (a0 + a1) / 2);
           room = Math.max(1.5, (big - inset) * 0.1) + Math.abs(a0 - a1) / 2;
         } else {
@@ -3866,7 +4042,7 @@ function readInPage(args: InPageArgs): InPageRead {
         const [irx = 0, iry = 0] = inner.r[i] ?? [];
         const drawn = (irx + iry) / 2;
         const facesStart = h <= w ? left : top;
-        const joint = capsule && (facesStart ? faces.before : faces.after);
+        const joint = pill && (facesStart ? faces.before : faces.after);
         const off = joint ? drawn - want / 2 : Math.abs(drawn - want) - room;
         if (off > 0 && !(worst && worst.off >= off)) {
           worst = { at, big, drawn, inset, joint, off, want };
@@ -3922,9 +4098,57 @@ function readInPage(args: InPageArgs): InPageRead {
     };
     if (args.forced) {
       const atRest = stash.__stateShape;
+      const fine = matchMedia("(hover: hover)").matches;
       for (const el of atRest?.els ?? []) {
         if (!(el.isConnected && shown(el))) {
           continue;
+        }
+        // A control in a bar's glass draws the state on its own box, seen
+        // (The Glass Contour Rule): the hover where a pointer can rest, on
+        // one not chosen, and the press stand off its rest; the focus is a
+        // ring, inside the glass.
+        const glass = glassFor(el);
+        const was = atRest?.tones.get(el);
+        const state = args.forced;
+        if (
+          glass &&
+          was &&
+          (state === "active" ||
+            (state === "hover" && fine && !el.matches(CHOSEN)))
+        ) {
+          const off = apartAll(tonesOf(el, false), was);
+          if (off < SEEN) {
+            say(
+              "state-shape",
+              el,
+              `${state}: paints nothing seen on its own box in ${selectorOf(glass.el)}'s glass: it stands ${off.toFixed(3)} off its rest in OKLab, under the ${SEEN} a state's fill takes`
+            );
+          }
+        }
+        if (glass && state === "focus-visible") {
+          const ring = ringOf(el);
+          const g = glass.box;
+          const left = ring
+            ? Math.min(
+                ring.left - g.left,
+                ring.top - g.top,
+                g.right - ring.right,
+                g.bottom - ring.bottom
+              )
+            : 0;
+          if (!ring) {
+            say(
+              "state-shape",
+              el,
+              `focus-visible: draws no ring on its own box in ${selectorOf(glass.el)}'s glass (no outline on it or its pseudos)`
+            );
+          } else if (left < 1) {
+            say(
+              "state-shape",
+              el,
+              `focus-visible: its ring reaches ${px(left)} from ${selectorOf(glass.el)}'s glass's edge: it stays inside the glass, a pixel of glass or more past it`
+            );
+          }
         }
         const rest = atRest?.rest.get(el);
         // What a child drew at rest already (a face, a mark) is the
@@ -3947,14 +4171,96 @@ function readInPage(args: InPageArgs): InPageRead {
           (el.closest(BAR) || rounded(contourOf(el)))
       );
       const rest = new Map<Element, Map<string, string>>();
+      const tones = new Map<Element, Rgba[]>();
       for (const el of read) {
         const fills = fillsOf(el);
         rest.set(el, new Map(fills.map((f) => [f.key, f.sig])));
         if (el.matches(SELECTED)) {
           judge(el, fills, "selected");
         }
+        // Chosen in a bar's glass or a groove, it is painted where it
+        // stands (its own wash, or the thumb under it), seen off the ground.
+        const glass = glassFor(el);
+        if (glass || inGroove(el)) {
+          const tone = tonesOf(el, false);
+          tones.set(el, tone);
+          const off = el.matches(CHOSEN)
+            ? apartAll(tone, tonesOf(el, true))
+            : 1;
+          if (off < SEEN) {
+            say(
+              "state-shape",
+              el,
+              `selected: drawn chosen (${["aria-pressed", "aria-selected", "aria-checked"].find((a) => el.getAttribute(a) === "true")}) and nothing paints it: what is drawn on it stands at most ${off.toFixed(3)} off the ground in OKLab, under ${SEEN}`
+            );
+          }
+        }
       }
-      stash.__stateShape = { els: read, rest };
+      stash.__stateShape = { els: read, rest, tones };
+    }
+  }
+
+  // Under a finger every control's area reaches 44×44 (DESIGN.md, The 44
+  // Touch Rule): its box and the placed pseudos round it (`touch-hit`'s
+  // transparent `::after`), each side stopping at the midpoint to the
+  // control beside it there, as the rule's neighbours do. Read on a coarse
+  // pointer, on each control standing in a bar's capsule of glass and each
+  // segment of a groove: three segments 38px wide two pixels apart left
+  // each a 40px area.
+  if (!skip.has("touch") && matchMedia("(pointer: coarse)").matches) {
+    const FLOOR = 44;
+    const read = controls.filter(
+      (el) =>
+        !el.matches(':disabled, [aria-disabled="true"]') &&
+        (glassFor(el) || inGroove(el))
+    );
+    for (const el of read) {
+      const b = el.getBoundingClientRect();
+      const area = {
+        left: b.left,
+        top: b.top,
+        right: b.right,
+        bottom: b.bottom,
+      };
+      for (const which of ["::before", "::after"] as const) {
+        const ps = pseudoOf(el, which);
+        const c = ps ? pseudoBox(el, ps) : null;
+        if (c) {
+          area.left = Math.min(area.left, c.left);
+          area.top = Math.min(area.top, c.top);
+          area.right = Math.max(area.right, c.right);
+          area.bottom = Math.max(area.bottom, c.bottom);
+        }
+      }
+      for (const other of controls) {
+        if (other === el || other.contains(el) || el.contains(other)) {
+          continue;
+        }
+        const o = other.getBoundingClientRect();
+        const rows = o.top < area.bottom && o.bottom > area.top;
+        const columns = o.left < area.right && o.right > area.left;
+        if (rows && o.left >= b.right - 0.5 && o.left < area.right) {
+          area.right = Math.min(area.right, (b.right + o.left) / 2);
+        }
+        if (rows && o.right <= b.left + 0.5 && o.right > area.left) {
+          area.left = Math.max(area.left, (o.right + b.left) / 2);
+        }
+        if (columns && o.top >= b.bottom - 0.5 && o.top < area.bottom) {
+          area.bottom = Math.min(area.bottom, (b.bottom + o.top) / 2);
+        }
+        if (columns && o.bottom <= b.top + 0.5 && o.bottom > area.top) {
+          area.top = Math.max(area.top, (o.bottom + b.top) / 2);
+        }
+      }
+      const w = area.right - area.left;
+      const h = area.bottom - area.top;
+      if (w < FLOOR - 0.5 || h < FLOOR - 0.5) {
+        say(
+          "touch",
+          el,
+          `under a finger its area is ${px(w)}×${px(h)} (its box ${px(b.width)}×${px(b.height)}, its neighbours stopping it at the midpoint): ${FLOOR}×${FLOOR} is the floor`
+        );
+      }
     }
   }
 
@@ -4041,33 +4347,8 @@ function readInPage(args: InPageArgs): InPageRead {
       }
       return inked > 0 ? covered / inked : 0;
     };
-    /** Whether a contour is a capsule: every corner round at half its shorter side. */
-    const capsule = (c: Contour) => {
-      const half = Math.min(c.right - c.left, c.bottom - c.top) / 2;
-      return c.r.every(([x, y]) => Math.min(x, y) >= half - 0.5);
-    };
-    /** The capsule of glass `el` stands in: the nearest box over it that draws, when it is one. */
-    const glassAround = (el: Element): Element | null => {
-      for (
-        let up = el.parentElement;
-        up && up !== document.body;
-        up = up.parentElement
-      ) {
-        if (paints(up).length > 0) {
-          return capsule(contourOf(up)) ? up : null;
-        }
-        for (const which of ["::before", "::after"] as const) {
-          const ps = pseudoOf(up, which);
-          const c = ps && paintsOf(ps).length > 0 ? pseudoBox(up, ps) : null;
-          if (c) {
-            return capsule(c) ? up : null;
-          }
-        }
-      }
-      return null;
-    };
     for (const el of controls) {
-      const around = el.closest(BAR) ? glassAround(el) : null;
+      const around = el.closest(BAR) ? capsuleAround(el)?.el : null;
       if (!around) {
         continue;
       }

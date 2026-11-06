@@ -665,6 +665,8 @@ public enum Size {
     public static let cTabMaxW: Double = 240
     /// The top bar's icon group's inset round its items, and the bar's round its controls: the 44px bar less the 36px control height, halved. The group is a capsule and its items sit concentric inside it.
     public static let cBarGroupPad: Double = 4
+    /// Two capsules of a bar's glass standing side by side (a group of bar items beside a mode switch): the space between their edges.
+    public static let cBarGroupsGap: Double = 8
     /// An item in the top bar's icon group: the group's height, the bar's control height, less its inset on both sides.
     public static let cBarItem: Double = 28
     /// A symbol in the top bar's glass group: the machines glyph and Caw's head.

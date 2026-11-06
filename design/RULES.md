@@ -237,7 +237,7 @@ Under "Named Rules" (DESIGN.md line 450); rule at line 455.
 
 Under "Shapes" (DESIGN.md line 457); rule at line 461.
 
-**The Glass Contour Rule.** A control standing in a bar's glass takes the glass's contour by where it stands: its corners facing the capsule's ends take the capsule's radius less the pad, those facing a neighbour `radius-xs` (BarGlass marks each item leading, middle, trailing or only; design.css `concentric-row`). Hover, pressed, selected and focus are drawn on that one box (`concentric-at`), so every state shares its contour; `state-shape` forces and reads each.
+**The Glass Contour Rule.** A control standing in a bar's glass takes the glass's contour by where it stands: its corners facing the capsule's ends take the capsule's radius less the pad, those facing a neighbour `radius-xs` (BarGlass marks each item leading, middle, trailing or only; design.css `concentric-row`). Hover, pressed, selected and focus are drawn on that one box (`concentric-at`), the ring inside it, so every state shares its contour; `state-shape` forces and reads each.
 
 ## The Concentric Rule
 

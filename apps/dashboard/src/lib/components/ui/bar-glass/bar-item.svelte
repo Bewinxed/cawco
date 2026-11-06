@@ -65,7 +65,8 @@
    * The Title Bars Follow Liquid Glass Rule). It draws its own states, so
    * no caller writes a fill: `pressed` (a toggle that is on, the selected
    * wash), `marked` (the same wash for a control that holds changed values
-   * without being a toggle), `expanded` (what it opens stands), `count`
+   * without being a toggle, or the chosen segment of a switch in glass,
+   * BarSegments), `expanded` (what it opens stands), `count`
    * (its number, shown above 0), `tone` (its symbol's ink). It stands in a
    * BarGlass, or bare in a head beside one (a project's place). A link
    * with `href`, else a button; `props` are a primitive's trigger props (a
@@ -115,7 +116,7 @@
     tipOff?: boolean;
     /** A toggle: on (`aria-pressed`), drawn in the selected wash. */
     pressed?: boolean;
-    /** It holds changed values: the selected wash, without being a toggle. */
+    /** It holds changed values, or is its switch's chosen segment (BarSegments): the selected wash, without being a toggle. */
     marked?: boolean;
     /** What it opens stands (`aria-expanded`). */
     expanded?: boolean;

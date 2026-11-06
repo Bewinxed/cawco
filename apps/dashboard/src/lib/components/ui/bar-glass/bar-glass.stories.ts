@@ -64,25 +64,46 @@ export const SelectedPhone = {
   parameters: { viewport: 390 },
 };
 
-/** The mode switch alone in its glass: a capsule track, the chosen glyph on a capsule thumb. */
+/** The mode switch alone in its glass, Comment chosen: the glass is the switch, each segment a bar item, the chosen one in the selected wash. */
 export const ModeSwitch = {
   component: BarGroupFrame,
-  args: { holds: "mode" },
+  args: { holds: "mode", chosen: "comment" },
   parameters: { viewport: 1440 },
 };
 
-/** A kit Button, Toggle and Tabs list standing in one glass: each takes its place's corners. */
+/** The mode switch on a phone, Comment chosen: each segment a finger's 44px wide. */
+export const ModeSwitchPhone = {
+  component: BarGroupFrame,
+  args: { width: 390, holds: "mode", chosen: "comment" },
+  parameters: { viewport: 390 },
+};
+
+/** The mode switch with its first segment chosen: the wash on the glass's leading end. */
+export const ModeSwitchFirst = {
+  component: BarGroupFrame,
+  args: { holds: "mode", chosen: "interact" },
+  parameters: { viewport: 1440 },
+};
+
+/** A toolbar: four bar items in one glass, the mode switch in its own, the two capsules a group's gap apart. */
+export const Toolbar = {
+  component: BarGroupFrame,
+  args: { holds: "toolbar", chosen: "interact" },
+  parameters: { viewport: 1440 },
+};
+
+/** The toolbar on a phone. */
+export const ToolbarPhone = {
+  component: BarGroupFrame,
+  args: { width: 390, holds: "toolbar", chosen: "interact" },
+  parameters: { viewport: 390 },
+};
+
+/** A kit Button and Toggle standing in one glass: each takes its place's corners. */
 export const KitInGlass = {
   component: BarGroupFrame,
   args: { holds: "kit" },
   parameters: { viewport: 1440 },
-};
-
-/** The mode switch on a phone. */
-export const ModeSwitchPhone = {
-  component: BarGroupFrame,
-  args: { width: 390, holds: "mode" },
-  parameters: { viewport: 390 },
 };
 
 /** The kit's parts in one glass on a phone. */

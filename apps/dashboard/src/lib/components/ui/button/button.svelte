@@ -62,7 +62,8 @@
           "h-c-composer-field gap-(--btn-gap) px-space-4 [--btn-gap:var(--c-btn-gap)] [--btn-icon:var(--icon-md)] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         icon: "size-9",
         "icon-xs": "size-6 [&_svg:not([class*='size-'])]:size-icon-sm",
-        "icon-sm": "size-c-btn-h-sm glass-item:size-c-bar-item",
+        "icon-sm":
+          "size-c-btn-h-sm glass-item:size-c-bar-item glass-item:[&_svg:not([class*='size-'])]:size-c-bar-symbol",
         "icon-lg": "size-11",
         "icon-composer": "size-c-composer-field",
       },

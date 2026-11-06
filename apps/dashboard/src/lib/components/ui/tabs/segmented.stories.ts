@@ -21,3 +21,15 @@ export const Last = {
   args: { chosen: "Month" },
   parameters: { viewport: 390 },
 };
+
+/** Each segment named in its tooltip, the middle one chosen: the thumb still finds it under the tooltip's trigger. */
+export const Tipped = {
+  args: { chosen: "Week", tips: true },
+  parameters: { viewport: 1440 },
+};
+
+/** The segments with their tooltips on a phone. */
+export const TippedPhone = {
+  args: { chosen: "Week", tips: true },
+  parameters: { viewport: 390 },
+};

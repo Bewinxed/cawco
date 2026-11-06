@@ -60,7 +60,9 @@
   let touched = false;
   let wasOpen = false;
 
-  const CONTROL = 'button, a[href], [data-slot="tooltip-trigger"]';
+  // A trigger is known by the primitive's own mark (bits-ui
+  // `data-tooltip-trigger`), never by a slot: the control keeps its own.
+  const CONTROL = "button, a[href], [data-tooltip-trigger]";
   /** Whether an event landed on a control nested in this trigger. */
   const nested = (event: Event): boolean => {
     const own = (event.target as Element | null)?.closest(CONTROL);
@@ -68,7 +70,17 @@
   };
 
   type Handler = ((event: Event) => void) | undefined;
-  const withTap = (props: Record<string, unknown>) => ({
+  /**
+   * The trigger's props for the control, less the kit trigger's slot
+   * (`data-slot="tooltip-trigger"`): spread after the control's own slot
+   * (a kit Tabs trigger's `tabs-trigger`, a fluid tab's `hit`, a Button's
+   * `button`), it took that slot's place, and what is keyed on it was lost
+   * (the segmented thumb found no chosen trigger and stood unpainted).
+   */
+  const withTap = ({
+    "data-slot": _slot,
+    ...props
+  }: Record<string, unknown>) => ({
     ...props,
     onpointerover: (event: PointerEvent) => {
       inside = nested(event);

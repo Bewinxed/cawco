@@ -35,7 +35,10 @@
    * the window), so a frame of any width draws the form its own width
    * would. It knows nothing of the stores: what it holds arrives as
    * `children` (the bar's controls) and `head` (Caw's head), its states as
-   * props (`joined`, bar-glass).
+   * props (`joined`, bar-glass). A host's own attributes land on the
+   * glass's element: a primitive's list props (a tablist's role, its id and
+   * ref, so the glass is the list and each segment one of its items), a
+   * label, `data-` marks.
    *
    * `form="group"` is the same capsule as a head's trailing group (The
    * Title Bars Follow Liquid Glass Rule: "Each group is one capsule of the
@@ -53,6 +56,7 @@
    * on its trailing side, which goes straight on down into the card's.
    */
   import { type Snippet, untrack } from "svelte";
+  import type { HTMLAttributes } from "svelte/elements";
   import { placeItems } from "./place.js";
 
   let {
@@ -61,7 +65,8 @@
     form = "bar",
     flare = "start",
     joined = false,
-  }: {
+    ...attributes
+  }: Omit<HTMLAttributes<HTMLDivElement>, "children" | "class"> & {
     /** Caw's head, last in the group, at the edge (the top bar's; a group has none). */
     head?: Snippet;
     /**
@@ -113,8 +118,9 @@
 <!-- What stands in the glass takes its contour by where it stands
      (design.css `concentric-row`): the glass marks each item it draws
      leading, middle, trailing or only (`placeItems`), and a BarItem or a
-     kit part there (a Button, a Toggle, a segmented track: the
-     `glass-item:` variant, `concentric-at`) takes the capsule's radius less
+     kit part there (a Button, a Toggle: the `glass-item:` variant,
+     `concentric-at`; a segmented control in glass is BarSegments, whose
+     glass is its list and each segment a BarItem) takes the capsule's radius less
      the pad on the corners facing the glass's ends and `radius-xs` on those
      facing a neighbour. A title draws no glass, so its control keeps its
      own corner. The glass is drawn by a layer under the items (`before:`), never by the
@@ -126,6 +132,7 @@
      foot flares into the card (HangCard reads it). Caw, the phone group's
      one item, is the glass's whole box there. -->
 <div
+  {...attributes}
   data-slot="tools"
   class={[
     "group/tools relative isolate flex items-center gap-c-bar-group-pad h-c-btn-h p-c-bar-group-pad rounded-pill concentric-row r-inset-c-bar-group-pad r-join-xs hit-gap-x-c-bar-group-pad coarse:gap-space-5 coarse:hit-gap-x-space-5 before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-hairline before:bg-material-panel before:shadow-tile before:glass-backdrop before:pointer-events-none contrast-more:before:border-border-contrast contrast-more:before:bg-surface-raised contrast-more:before:backdrop-filter-none reduced-transparency:before:border-border-contrast reduced-transparency:before:bg-surface-raised reduced-transparency:before:backdrop-filter-none",

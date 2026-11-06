@@ -8,17 +8,18 @@ import { tv } from "#lib/utils.js";
  * every corner concentric with the groove. Its geometry is custom
  * properties every part reads: `--radius` the groove's corner, `--pad` its
  * inset, `--item` a segment's height, `--shape` the thumb's and the
- * segments' corner (the groove's less the pad). Standing alone the groove is
- * `radius-md` round with `c-segmented-pad` of pad round 30px segments, 36px
- * in all. Standing in a bar's glass (`glass-item:`) it is a capsule the
- * bar item's height wherever it stands among the glass's items (a control
- * group, its own contour for the capsules it holds), a row's pad in, and
- * the thumb and segments capsules inside it. The kit's Tabs and single ToggleGroup draw it from the slots
- * below; the fluid Tabs' segmented track (fluid-tabs/TabsList) takes
+ * segments' corner (the groove's less the pad). The groove is `radius-md`
+ * round with `c-segmented-pad` of pad round 30px segments, 36px in all. It
+ * stands on a page's ground: in a bar's glass a segmented control is
+ * BarSegments (ui/bar-glass), the glass its list and each segment a bar
+ * item, since a groove there drew its hover as the groove's own colour by
+ * day, its ring and thumb only once measured, and its segments under a
+ * finger's 44px. The kit's Tabs and single ToggleGroup draw it from the
+ * slots below; the fluid Tabs' segmented track (fluid-tabs/TabsList) takes
  * {@link SEGMENTED_TRACK} and reads the same properties.
  */
 export const SEGMENTED_TRACK =
-  "rounded-(--radius) bg-surface-recess-deep p-(--pad) [--item:var(--c-btn-h-sm)] [--pad:var(--c-segmented-pad)] [--radius:var(--radius-md)] [--shape:max(0px,calc(var(--radius)_-_var(--pad)))] glass-item:h-c-bar-item glass-item:rounded-[calc(var(--c-bar-item)_/_2)] glass-item:[--pad:var(--space-row)] glass-item:[--shape:calc(var(--c-bar-item)_/_2_-_var(--pad))]";
+  "rounded-(--radius) bg-surface-recess-deep p-(--pad) [--item:var(--c-btn-h-sm)] [--pad:var(--c-segmented-pad)] [--radius:var(--radius-md)] [--shape:max(0px,calc(var(--radius)_-_var(--pad)))]";
 
 /**
  * The kit's segmented parts: the groove (its recipe above), the thumb that
@@ -35,7 +36,7 @@ export const segmentedVariants = tv({
     thumb:
       "pointer-events-none absolute start-0 top-0 origin-top-left rounded-(--shape) bg-surface-lift opacity-0 shadow-raised loops motion-safe:group-data-pending/segmented:animate-breath",
     segment:
-      "relative inline-flex h-(--item) items-center justify-center gap-c-segment-gap rounded-(--shape) px-c-segment-pad-x py-0 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted transition-control mark-line data-[state=active]:text-ink-strong data-[state=on]:text-ink-strong glass-item:h-auto glass-item:self-stretch",
+      "relative inline-flex h-(--item) items-center justify-center gap-c-segment-gap rounded-(--shape) px-c-segment-pad-x py-0 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted transition-control mark-line data-[state=active]:text-ink-strong data-[state=on]:text-ink-strong",
   },
 });
 

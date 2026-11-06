@@ -5,51 +5,66 @@
    * stand-in controls with no store read, so the canvas forces every state
    * of each: `three`, a group of three bar items, leading, middle and
    * trailing; `selected`, the same with its middle item on; `counted`, a
-   * counted item beside a plain neighbour; `mode`, the mode switch (the
-   * fluid Tabs' segmented track, its three glyphs) alone in its glass;
-   * `kit`, a kit Button, Toggle and Tabs list standing in one glass.
+   * counted item beside a plain neighbour; `mode`, the mode switch
+   * (BarSegments, its three glyphs, `chosen` the chosen one) alone in its
+   * glass; `toolbar`, a group of four bar items `c-bar-groups-gap` before
+   * the mode switch; `kit`, a kit Button and Toggle standing in one glass.
    */
   import { Button } from "#lib/components/ui/button/index.js";
-  import {
-    TabItem,
-    Tabs,
-    TabsList,
-  } from "#lib/components/ui/fluid-tabs/index.js";
-  import * as KitTabs from "#lib/components/ui/tabs/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
   import {
     IconChat,
+    IconFolder,
     IconInteract,
+    IconMore,
     IconPen,
     IconPin,
     IconPlus,
     IconRefresh,
+    IconSearch,
     IconTuning,
   } from "#lib/icons.js";
-  import BarGlass from "./bar-glass.svelte";
-  import BarItem from "./bar-item.svelte";
+  import { BarGlass, BarItem, BarSegments } from "./index.js";
+
+  type Mode = "interact" | "comment" | "draw";
+  const MODES: readonly {
+    value: Mode;
+    label: string;
+    icon: typeof IconPin;
+    keys: string;
+  }[] = [
+    { value: "interact", label: "Interact", icon: IconInteract, keys: "V" },
+    { value: "comment", label: "Comment", icon: IconPin, keys: "C" },
+    { value: "draw", label: "Draw", icon: IconPen, keys: "D" },
+  ];
 
   let {
     width,
     holds,
     count = 3,
     pressed = false,
+    chosen = "interact",
   }: {
     /** The frame's width, px. */
     width: number;
     /** What the glass holds. */
-    holds: "three" | "selected" | "counted" | "mode" | "kit";
+    holds: "three" | "selected" | "counted" | "mode" | "toolbar" | "kit";
     /** The counted item's number (`counted`). */
     count?: number;
     /** The counted item is on (`counted`): a toggle held pressed. */
     pressed?: boolean;
+    /** The mode switch's chosen segment (`mode`, `toolbar`). */
+    chosen?: Mode;
   } = $props();
 
-  // The mode the switch stands on, and the kit Tabs' chosen segment, until a
-  // press picks another.
-  let mode = $state("interact");
-  let segment = $state("pin");
+  // The story's chosen mode, until a press picks another (it follows the
+  // story's args while mounted: house/follows-props).
+  let mode = $derived(chosen);
 </script>
+
+{#snippet modes()}
+  <BarSegments label="Mode" segments={MODES} bind:value={mode} />
+{/snippet}
 
 <div
   class="@container/shell contain-layout w-(--frame-w) bg-surface-recess pbe-space-8"
@@ -59,63 +74,47 @@
     class="flex h-c-btn-h-lg items-center justify-end gap-space-1 bg-surface-raised pe-space-3 ps-space-3"
   >
     <span class="me-auto truncate type-label text-ink-strong">index.html</span>
-    <BarGlass form="group">
-      {#if holds === "three" || holds === "selected"}
-        <BarItem icon={IconPlus} label="New canvas" tip={false} />
-        <BarItem
-          icon={IconTuning}
-          label="Inspect"
-          pressed={holds === "selected"}
-          tip={false}
-        />
-        <BarItem icon={IconRefresh} label="Reload" tip={false} />
-      {:else if holds === "counted"}
-        <BarItem
-          {count}
-          icon={IconChat}
-          label={`Comments, ${count} open`}
-          {pressed}
-          tip={false}
-        />
-        <BarItem icon={IconRefresh} label="Reload" tip={false} />
-      {:else if holds === "mode"}
-        <Tabs
-          onValueChange={(next) => {
-            mode = next;
-          }}
-          size="compact"
-          value={mode}
-          values={["interact", "comment", "draw"]}
-        >
-          <TabsList aria-label="Mode">
-            <TabItem
-              glyphOnly
-              icon={IconInteract}
-              label="Interact"
-              value="interact"
-            />
-            <TabItem glyphOnly icon={IconPin} label="Comment" value="comment" />
-            <TabItem glyphOnly icon={IconPen} label="Draw" value="draw" />
-          </TabsList>
-        </Tabs>
-      {:else}
-        <Button aria-label="Reload" size="icon-sm" variant="ghost">
-          <IconRefresh />
-        </Button>
-        <Toggle aria-label="Inspect" size="sm">
-          <IconTuning />
-        </Toggle>
-        <KitTabs.Root bind:value={segment}>
-          <KitTabs.List aria-label="Mode">
-            <KitTabs.Trigger aria-label="Comment" value="pin"
-              ><IconPin /></KitTabs.Trigger
-            >
-            <KitTabs.Trigger aria-label="Draw" value="pen"
-              ><IconPen /></KitTabs.Trigger
-            >
-          </KitTabs.List>
-        </KitTabs.Root>
-      {/if}
-    </BarGlass>
+    {#if holds === "mode"}
+      {@render modes()}
+    {:else if holds === "toolbar"}
+      <div class="flex items-center gap-c-bar-groups-gap">
+        <BarGlass form="group">
+          <BarItem icon={IconSearch} label="Search" tip={false} />
+          <BarItem count={3} icon={IconFolder} label="Files, 3" tip={false} />
+          <BarItem icon={IconTuning} label="Inspect" pressed tip={false} />
+          <BarItem icon={IconMore} label="More" tip={false} />
+        </BarGlass>
+        {@render modes()}
+      </div>
+    {:else}
+      <BarGlass form="group">
+        {#if holds === "three" || holds === "selected"}
+          <BarItem icon={IconPlus} label="New canvas" tip={false} />
+          <BarItem
+            icon={IconTuning}
+            label="Inspect"
+            pressed={holds === "selected"}
+            tip={false}
+          />
+          <BarItem icon={IconRefresh} label="Reload" tip={false} />
+        {:else if holds === "counted"}
+          <BarItem
+            {count}
+            icon={IconChat}
+            label={`Comments, ${count} open`}
+            {pressed}
+            tip={false}
+          />
+          <BarItem icon={IconRefresh} label="Reload" tip={false} />
+        {:else}
+          <Button aria-label="Reload" size="icon-sm" variant="ghost">
+            <IconRefresh />
+          </Button>
+          <Toggle aria-label="Inspect" size="sm">
+            <IconTuning />
+          </Toggle>
+        {/if}
+      </BarGlass>
+    {/if}
   </header>
 </div>

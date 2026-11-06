@@ -383,6 +383,26 @@
     outline-offset: var(--focus-ring-inset);
   }
 
+  /* A control standing in a bar's glass (the `glass-item` variant's
+     elements): the ring on its own box, in its contour (DESIGN.md, The
+     Glass Contour Rule). Drawn outside it, the ring of an item at the
+     glass's end lay on the capsule's edge, with no glass left past it. */
+  :where([data-glass] *):not(
+      :where(
+        [data-glass]
+          :is(
+            [data-hang],
+            [role="menu"],
+            [role="listbox"],
+            [role="dialog"],
+            [data-popover]
+          )
+          *
+      )
+    ):focus-visible {
+    outline-offset: var(--focus-ring-inset);
+  }
+
   /* Text entry draws no ring (DESIGN.md, The Caret Rule): its focus
      indicator is its caret ("When text fields receive focus, a vertical
      bar is displayed in the field", WCAG 2.2 Understanding 2.4.7), and a

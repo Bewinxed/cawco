@@ -865,6 +865,8 @@
     --c-tab-max-w: 240px;
     /* The top bar's icon group's inset round its items, and the bar's round its controls: the 44px bar less the 36px control height, halved. The group is a capsule and its items sit concentric inside it. */
     --c-bar-group-pad: 4px;
+    /* Two capsules of a bar's glass standing side by side (a group of bar items beside a mode switch): the space between their edges. */
+    --c-bar-groups-gap: 8px;
     /* An item in the top bar's icon group: the group's height, the bar's control height, less its inset on both sides. */
     --c-bar-item: calc(var(--c-btn-h) - 2 * var(--c-bar-group-pad));
     /* A symbol in the top bar's glass group: the machines glyph and Caw's head. */

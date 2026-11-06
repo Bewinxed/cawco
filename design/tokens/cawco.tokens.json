@@ -4184,6 +4184,14 @@
       },
       "$description": "The top bar's icon group's inset round its items, and the bar's round its controls: the 44px bar less the 36px control height, halved. The group is a capsule and its items sit concentric inside it."
     },
+    "c-bar-groups-gap": {
+      "$type": "dimension",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
+      "$description": "Two capsules of a bar's glass standing side by side (a group of bar items beside a mode switch): the space between their edges."
+    },
     "c-bar-item": {
       "$type": "dimension",
       "$value": {

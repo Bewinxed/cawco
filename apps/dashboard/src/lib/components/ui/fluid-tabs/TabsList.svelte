@@ -53,8 +53,9 @@
       },
       variant: {
         /* The kit's one segmented recipe (tabs/thumb.ts): its groove, pad,
-           segment height and concentric corners, a capsule in a bar's
-           glass; the chosen segment lifted in surface-lift. */
+           segment height and concentric corners, on a page's ground (in a
+           bar's glass the switch is BarSegments); the chosen segment
+           lifted in surface-lift. */
         segmented: `${SEGMENTED_TRACK} [--sheet:var(--surface-lift)]`,
         folder:
           "isolate gap-0 rounded-none bg-transparent [--item:var(--c-tab-item)] [--pad:var(--space-1)] [--radius:var(--radius-sm)] [--sheet:var(--surface-raised)] ps-[calc(var(--flare)_+_var(--overlap))] pe-(--flare) pb-0 [--choose-dur:var(--dur-settle)] [--choose-ease:var(--ease-crossfade)] [--flare:var(--radius)] [--overlap:var(--flare)] [--shape:var(--radius)_var(--radius)_0_0] [--slope-end:var(--c-tab-slope-end)] [--slope-start:var(--c-tab-slope-start)] [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:relative [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:isolate [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:z-(--z,var(--z-rest,1)) [&>:not([data-slot=segment],[data-slot=ring],[data-slot^=highlight-])]:-ms-(--overlap)",

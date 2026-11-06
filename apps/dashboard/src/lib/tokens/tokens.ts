@@ -355,6 +355,7 @@ export type TokenSize =
   | "size.c-deck-peek"
   | "size.c-tab-max-w"
   | "size.c-bar-group-pad"
+  | "size.c-bar-groups-gap"
   | "size.c-bar-item"
   | "size.c-bar-symbol"
   | "size.c-bar-caw-glass-phone"

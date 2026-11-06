@@ -369,6 +369,7 @@
   --spacing-c-deck-peek: var(--c-deck-peek);
   --spacing-c-tab-max-w: var(--c-tab-max-w);
   --spacing-c-bar-group-pad: var(--c-bar-group-pad);
+  --spacing-c-bar-groups-gap: var(--c-bar-groups-gap);
   --spacing-c-bar-item: var(--c-bar-item);
   --spacing-c-bar-symbol: var(--c-bar-symbol);
   --spacing-c-bar-caw-glass-phone: var(--c-bar-caw-glass-phone);

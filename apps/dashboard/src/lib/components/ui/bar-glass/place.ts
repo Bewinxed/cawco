@@ -2,8 +2,9 @@
  * Where each item of a bar's glass stands (BarGlass): leading, middle,
  * trailing, or the only one, written on the item as `data-glass-at`, so its
  * corners follow (design.css `concentric-row`). An item is the outermost
- * control or control group the glass holds: a BarItem, a kit Button,
- * Toggle or menu trigger, a segmented track. What hangs from the glass in
+ * control or control group the glass holds: a BarItem (a BarSegments'
+ * segment among them, its glass the list), a kit Button, Toggle or menu
+ * trigger. What hangs from the glass in
  * its markup (a card, a menu, a dialog) is no item of it. Only the items
  * drawn are counted: a wrapper's `hidden`, a breakpoint's `display: none`
  * and an item an `{#if}` took away all move the ends, read again on every
