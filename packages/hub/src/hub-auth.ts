@@ -5,8 +5,10 @@
  * (`Authorization: Bearer <its credential>`), the **owner** (a paired
  * device's token, `Authorization: Owner <token>` or the browser's cookie), a
  * **machine** (its key's proof, core machine-key.ts), or **anonymous**.
- * Every route is the owner's unless it is listed below ({@link RULES}): a
- * route that is added starts closed (hub-auth audit §3.1).
+ * Every route is the owner's unless it is listed below ({@link RULES}), or is
+ * a session's read of its artifact, which is that session's alone
+ * ({@link sessionReadOf}): a route that is added starts closed (hub-auth
+ * audit §3.1).
  *
  * - **trusted** (the default): anonymous is the owner, as it always was
  *   here: being on the network is enough for the person's own devices.
@@ -31,6 +33,7 @@
  */
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import {
+  artifactToolWords,
   type CallerKind,
   connectWords,
   type DeviceKind,
@@ -70,18 +73,22 @@ export type Caller =
   | { kind: "anonymous" };
 
 /**
- * Who a route is for, besides the owner and the hub (who reach every route
- * but one):
+ * Who a route is for, besides the hub, who reaches every route, and the
+ * owner, who reaches every route but `machine-proof` (once paired devices
+ * are required) and `session-read`:
  * - `open`: anyone. Public (`/health`, `/install.sh`), a pairing's start and
  *   poll, or a route that authenticates its own caller (the git remote, a
  *   tool call, a credential's ack, the machine socket).
  * - `tool`: a session, or a machine relaying its sessions' calls through
  *   its loopback gateway (agent mcp-oauth.ts), which signs each one.
  * - `session`: a session's own work-item calls.
+ * - `session-read`: the session the path names alone ({@link sessionReadOf}),
+ *   never the owner.
  * - `machine`: what a machine's agent and CLI read and report over HTTP.
  * - `machine-proof`: a machine alone, once paired devices are required.
  */
-type Access = "open" | "tool" | "session" | "machine" | "machine-proof";
+type Access =
+  "open" | "tool" | "session" | "session-read" | "machine" | "machine-proof";
 
 /** Every route that is not the owner's alone, by method (`*` any) and path. */
 const RULES: readonly [string, RegExp, Access][] = [
@@ -156,7 +163,58 @@ const namesAnother = (path: string, machineId: string): boolean =>
     return named !== undefined && decodeURIComponent(named) !== machineId;
   });
 
+/**
+ * A session's read of an artifact (`GET /api/instances/:id/artifacts/:artifact`,
+ * artifacts/routes.ts, the `artifact_read` tool's route): it counts as that
+ * session hearing the person's answers on it (artifacts/service.ts stamps
+ * `readSeq`), and answers it has heard settle with nothing sent to it
+ * (artifacts/needs.ts `answersUnheard`). So it answers that session's own
+ * credential and the hub's tool door acting for it (hub-self.ts), never the
+ * person, a machine or another session: a read by any of them would tell the
+ * hub the session heard what it never read (the artifacts probe's leg 5,
+ * de28a8786). The person reads an artifact at its `/view`.
+ */
+const SESSION_READ = /^\/api\/instances\/([^/]+)\/artifacts\/([^/]+)$/u;
+/** The person's routes beside the session read, at its depth (artifacts/routes.ts): the router takes a fixed segment before `:artifact`. */
+const SESSION_READ_SIBLINGS: ReadonlySet<string> = new Set([
+  "comments",
+  "design-map",
+  "files",
+  "list",
+  "search",
+]);
+
+/** A path segment decoded; one no URI decodes stays as it came, and names no session. */
+const decoded = (segment: string): string => {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+};
+
+/** The session a request for `method path` is that session's read of an artifact for, by its id; null when it is no such read. */
+export const sessionReadOf = (method: string, path: string): string | null => {
+  const verb = method === "HEAD" ? "GET" : method;
+  const [, instance, artifact] = SESSION_READ.exec(path) ?? [];
+  return verb === "GET" &&
+    instance !== undefined &&
+    artifact !== undefined &&
+    !SESSION_READ_SIBLINGS.has(artifact)
+    ? decoded(instance)
+    : null;
+};
+
+/** The refusal of a session read to anyone but its session, in words. */
+const sessionReadRefused = (caller: Caller, path: string, named: string) =>
+  caller.kind === "session"
+    ? artifactToolWords.sessionReadOthers(path, named)
+    : artifactToolWords.sessionReadRefused(path, named);
+
 const accessOf = (method: string, path: string): Access | "owner" => {
+  if (sessionReadOf(method, path) !== null) {
+    return "session-read";
+  }
   const verb = method === "HEAD" ? "GET" : method;
   for (const [ruleMethod, pattern, access] of RULES) {
     if ((ruleMethod === "*" || ruleMethod === verb) && pattern.test(path)) {
@@ -170,6 +228,7 @@ const ALLOWED: Record<Access | "owner", ReadonlySet<CallerKind>> = {
   open: new Set(["owner", "session", "machine", "anonymous"]),
   tool: new Set(["owner", "session", "machine"]),
   session: new Set(["owner", "session"]),
+  "session-read": new Set(["session"]),
   machine: new Set(["owner", "machine"]),
   "machine-proof": new Set(["machine"]),
   owner: new Set(["owner"]),
@@ -587,6 +646,12 @@ export const createHubAuth = ({
     if (caller.kind === "machine" && namesAnother(path, caller.machineId)) {
       return false;
     }
+    if (access === "session-read") {
+      return (
+        caller.kind === "session" &&
+        caller.instanceId === sessionReadOf(method, path)
+      );
+    }
     if (access === "machine-proof" && held === "trusted") {
       return caller.kind === "owner" || caller.kind === "machine";
     }
@@ -600,6 +665,13 @@ export const createHubAuth = ({
     }
     if (caller.kind === "session" && REMOVE_ROUTE.test(path)) {
       return new Response(REMOVE_REFUSED, { status: 403 });
+    }
+    const read = sessionReadOf(method, path);
+    // An unpaired client is told to pair, as on any route.
+    if (read !== null && caller.kind !== "anonymous") {
+      return new Response(sessionReadRefused(caller, path, read), {
+        status: 403,
+      });
     }
     if (caller.kind === "session") {
       return new Response(

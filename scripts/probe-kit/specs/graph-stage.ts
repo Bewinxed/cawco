@@ -1887,7 +1887,8 @@ const run = async (kit: Kit) => {
   );
   if (moveId) {
     const readMove = () =>
-      fleet.api<ValuesRead>(
+      fleet.sessionApi<ValuesRead>(
+        routines,
         hubRequest("GET /api/instances/:id/artifacts/:artifact", {
           path: { id: routines, artifact: moveId },
         })
@@ -1918,7 +1919,8 @@ const run = async (kit: Kit) => {
       base,
       dialsId,
       () =>
-        fleet.api<ValuesRead>(
+        fleet.sessionApi<ValuesRead>(
+          session,
           hubRequest("GET /api/instances/:id/artifacts/:artifact", {
             path: { id: session, artifact: dialsId },
           })
@@ -1934,7 +1936,8 @@ const run = async (kit: Kit) => {
   checks.report();
 
   // 6. A picture of a state, through the daemon's render on the stage.
-  const picture = await fleet.api<{ png?: string | null }>(
+  const picture = await fleet.sessionApi<{ png?: string | null }>(
+    session,
     hubRequest("GET /api/instances/:id/artifacts/:artifact", {
       path: { id: session, artifact: id },
       query: { png: "true", state: JSON.stringify({ story: "Two" }) },

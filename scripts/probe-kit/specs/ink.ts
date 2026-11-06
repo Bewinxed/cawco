@@ -1262,7 +1262,8 @@ const canvasChecks = async (on: On) => {
   );
   await on.page.waitForTimeout(500);
   const read = () =>
-    on.fleet.api<{ outline?: string }>(
+    on.fleet.sessionApi<{ outline?: string }>(
+      on.session,
       hubRequest("GET /api/instances/:id/artifacts/:artifact", {
         path: { id: on.session, artifact: String(id) },
       })

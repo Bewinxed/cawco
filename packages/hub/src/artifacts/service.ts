@@ -244,6 +244,7 @@ import {
   noticeOf,
   pendingOf,
   planHolds,
+  readThrough,
   sendsOnChange,
   unheardKeys,
 } from "./needs";
@@ -4157,12 +4158,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       : {};
   };
 
-  /** Whether a read of `row` `since` a seq passes over an answer of the person's its session hadn't had: it shows only what changed after `since`. */
-  const skipsAnswers = (row: ArtifactRow, since: number | undefined) =>
-    since !== undefined &&
-    db
-      .changes(row.id, { after: heardSeq(row), by: "person" })
-      .some((change) => change.seq <= since);
+  /**
+   * The seq a read of `row` that returned the keys of its state `returned`
+   * names counts as its session's read through (needs.ts `readThrough`).
+   */
+  const readTo = (
+    row: ArtifactRow,
+    state: Record<string, ChoiceEntry>,
+    returned: (key: string) => boolean
+  ): number =>
+    readThrough(
+      row,
+      db.changes(row.id, { after: heardSeq(row), by: "person" }),
+      state,
+      returned
+    );
 
   /** What a browser met drawing `row` at its revision now (`meta.faults`, {@link pageFault}); nothing when it met nothing. */
   const faultsOf = (
@@ -4179,18 +4189,15 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /**
    * A page or preview as the session reads it, which counts as its read
    * when `ownersRead`: its owner's. A maker's read leaves the owner's unread.
-   * It counts only for what it shows: a read `since` a seq past an answer of
-   * the person's the session hadn't had shows only what changed after, so
-   * it leaves the session's read where it was (needs.ts `answersUnheard`).
+   * It counts only for what it shows: a read `since` a seq shows only what
+   * changed after, so an answer of the person's the session hadn't had
+   * before it stays unread (needs.ts `readThrough`).
    */
   const read = (
     row: ArtifactRow,
     since?: number,
     ownersRead = true
   ): ArtifactRead => {
-    if (ownersRead && !skipsAnswers(row, since)) {
-      db.update(row.id, { readSeq: row.seq });
-    }
     const doc = docs.doc(row.id);
     const state = stateOf(doc);
     const meta = metaOf(doc);
@@ -4200,6 +4207,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       since === undefined
         ? null
         : new Set(db.changes(row.id, { after: since }).map(({ key }) => key));
+    if (ownersRead) {
+      db.update(row.id, {
+        readSeq: readTo(row, state, (key) => !changed || changed.has(key)),
+      });
+    }
     const keys = Object.keys(state).filter(
       (key) => !changed || changed.has(key)
     );
@@ -4755,8 +4767,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /*
    * A canvas (Projects spec §5.10, D24–D25). Its `deliveredSeq` is the seq
-   * the session last read it at (a canvas delivers no picks): what "changed
-   * since your last read" and "changed under you" are measured from.
+   * the session last read it through (a canvas delivers no picks; `readCanvas`):
+   * what "changed since your last read" and "changed under you" are measured from.
    */
 
   /** The canvas's latest picture as base64; null until a screen drew one. */
@@ -5433,7 +5445,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       .map(({ key }) => key)
       .filter((id) => present.has(id));
 
-  /** A canvas as the session reads it, which counts as its read when `ownersRead`: its owner's. */
+  /**
+   * A canvas as the session reads it, which counts as its read when
+   * `ownersRead`: its owner's. It returns the canvas's elements, never its
+   * state, so it counts as read only up to an answer of the person's in its
+   * state the session hadn't had (needs.ts `readThrough`): a canvas whose
+   * state kept his picks or notes would otherwise settle them unread.
+   */
   const readCanvas = (
     row: ArtifactRow,
     since?: number,
@@ -5442,9 +5460,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   ): ArtifactRead => {
     const entries = canvasEntries(docs, row.id);
     const present = new Set(entries.map((entry) => entry.el.id));
-    const meta = docs.doc(row.id).getMap("meta");
+    const doc = docs.doc(row.id);
+    const meta = doc.getMap("meta");
     if (ownersRead) {
-      db.update(row.id, { deliveredSeq: row.seq, readSeq: row.seq });
+      const through = readTo(row, stateOf(doc), () => false);
+      db.update(row.id, { deliveredSeq: through, readSeq: through });
     }
     return {
       id: row.id,

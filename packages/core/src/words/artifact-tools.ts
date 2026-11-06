@@ -28,6 +28,12 @@ export const artifactToolWords = {
     }
     return `- Uncaught error${place}: ${fault.message}${fault.source ? `\n  The line: ${fault.source}` : ""}`;
   },
+  /** A session's read of an artifact asked by the person, a machine or anyone but that session (hub hub-auth.ts `sessionReadOf`), at `path`. */
+  sessionReadRefused: (path: string, session: string) =>
+    `GET ${path} is session ${session}'s own read of its artifact (artifact_read): it counts as that session hearing the person's answers, so only that session makes it. The person's view of the artifact is GET ${path}/view.`,
+  /** The same asked by another session, with its own credential. */
+  sessionReadOthers: (path: string, session: string) =>
+    `GET ${path} is session ${session}'s own read of its artifact (artifact_read): a session reads its own artifacts, as itself.`,
   /** The person's Ask again, its section's last line: an update changed what the comment stands on and it got no answer. */
   askedAgain:
     "- The person asks again: your update changed what this comment stands on, and you didn't answer it. Answer it with comment_reply.",

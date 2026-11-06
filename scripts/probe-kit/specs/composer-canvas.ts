@@ -2528,7 +2528,8 @@ const chipCheck = async (on: On): Promise<string | null> => {
 const sendCheck = async (on: On, id: string) => {
   const { kit, page, fleet, session } = on;
   const read = () =>
-    fleet.api<Read>(
+    fleet.sessionApi<Read>(
+      session,
       hubRequest("GET /api/instances/:id/artifacts/:artifact", {
         path: { id: session, artifact: id },
       })

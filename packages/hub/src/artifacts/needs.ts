@@ -229,6 +229,34 @@ export const heardSeq = (
   row: Pick<ArtifactRow, "deliveredSeq" | "readSeq">
 ): number => Math.max(row.readSeq, row.deliveredSeq);
 
+/**
+ * The seq a session's read of an artifact counts as its read through (what
+ * artifacts/service.ts stamps as its `readSeq`): a read counts only for the
+ * state it returned. Through `row.seq` when it returned every answer of the
+ * person's its session hadn't had (a key of `state` he changed after
+ * {@link heardSeq}); else up to, never past, the first of them it left out,
+ * which stays news ({@link answersUnheard}). A canvas's read returns none of
+ * its state; a page's read `since` a seq returns what changed after it.
+ */
+export const readThrough = (
+  row: Pick<ArtifactRow, "deliveredSeq" | "readSeq" | "seq">,
+  changes: readonly ArtifactChange[],
+  state: Readonly<Record<string, unknown>>,
+  returned: (key: string) => boolean
+): number => {
+  const heard = heardSeq(row);
+  const left = changes
+    .filter(
+      (change) =>
+        change.by === "person" &&
+        change.seq > heard &&
+        change.key in state &&
+        !returned(change.key)
+    )
+    .map((change) => change.seq);
+  return left.length === 0 ? row.seq : Math.max(heard, Math.min(...left) - 1);
+};
+
 /** The keys of `state` the person changed after seq `heard`: his answers news to whoever had the page up to it. */
 export const unheardKeys = (
   heard: number,

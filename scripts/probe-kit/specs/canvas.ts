@@ -2702,7 +2702,8 @@ const reader =
   (
     query: HubSent<"GET /api/instances/:id/artifacts/:artifact">["query"] = {}
   ) =>
-    fleet.api<Read>(
+    fleet.sessionApi<Read>(
+      session,
       hubRequest("GET /api/instances/:id/artifacts/:artifact", {
         path: { id: session, artifact: id },
         query,

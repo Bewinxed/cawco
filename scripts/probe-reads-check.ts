@@ -12,7 +12,10 @@
  *
  * Such a probe reads his answers through his view
  * (`GET /api/instances/:id/artifacts/:artifact/view`), and what a session
- * reads through that session's own `artifact_read` tool call.
+ * reads through that session's own `artifact_read` tool call. The route
+ * answers that session alone (hub hub-auth.ts `sessionReadOf`), so any other
+ * probe reads it as the session too (`fleet.sessionApi`), and so moves its
+ * read the same way.
  *
  *   bun scripts/probe-reads-check.ts
  */

@@ -2446,11 +2446,15 @@ async function standUp(
       .slice(-20);
     return `Sockets on ${previewPorts} (ss -tanp, state all): ${sockets.length}\n${sockets.join("\n") || "(none)"}\nThe hub's kept preview ports: ${kept}\nThe hub's last [preview] lines: ${said.length}\n${said.join("\n") || "(none)"}`;
   };
-  const api = async <T>(request: HubRequest): Promise<T> => {
+  /** `request` as `headers` say who sends it: the hub's JSON answer, or its refusal thrown. */
+  const answer = async <T>(
+    request: HubRequest,
+    headers: Record<string, string>
+  ): Promise<T> => {
     const { path } = request;
     const read = await readWithin(30_000, async (signal) => {
       const response = await fetchHub(fetch, base, request, {
-        headers: ownerHeaders(),
+        headers,
         signal,
       });
       const text = await response.text();
@@ -2473,6 +2477,27 @@ async function standUp(
       default:
         unhandled("read", read);
     }
+  };
+  /** `request` as the person. */
+  const api = <T>(request: HubRequest): Promise<T> =>
+    answer<T>(request, ownerHeaders());
+  /**
+   * `request` as session `instanceId`, with its own credential: what only a
+   * session may ask, its read of an artifact included (hub hub-auth.ts
+   * `sessionReadOf`), which counts as that session hearing the person's
+   * answers on it.
+   */
+  const sessionApi = async <T>(
+    instanceId: string,
+    request: HubRequest
+  ): Promise<T> => {
+    const credential = await sessionCredential(instanceId);
+    if (!credential) {
+      throw new Error(
+        `${request.path}: session ${instanceId} has no credential to send it with`
+      );
+    }
+    return answer<T>(request, { authorization: `Bearer ${credential}` });
   };
   let socket: WebSocket | undefined;
   const dashboard = async (): Promise<WebSocket> => {
@@ -3286,6 +3311,7 @@ async function standUp(
     sessionCredential,
     heldProcs,
     api,
+    sessionApi,
     post,
     command,
     controlAnswer,
