@@ -2380,7 +2380,8 @@ rig_hubwire() {
 # @opencode/cli` lays it out (~/.bun/bin/opencode2 into ~/.bun/install/global/node_modules/@opencode/cli): a stub that
 # says the version ~/opencode-version holds, one release below what this tree pins. ~/.bun/bin/bun is a stand-in: each
 # `install -g` it is asked for is a line of ~/bun-calls.log, with how many swaps the update's record (apply-record.json) held then; it fails while
-# ~/bun-fails is there, and otherwise puts the version it was asked for in ~/opencode-version.
+# ~/bun-fails is there, and otherwise puts the version it was asked for in ~/opencode-version. It answers `--version` as
+# bun does, which the agent asks before it takes bun as a method that runs here (core tools.ts `needProbe`).
 plant_bun_opencode() {
   local stub="$rigdir/opencode-stub" bun="$rigdir/bun-stand-in"
   cat > "$stub" << 'EOF'
@@ -2391,6 +2392,7 @@ exit 1
 EOF
   cat > "$bun" << 'EOF'
 #!/bin/sh
+if [ "$1" = --version ]; then echo "1.3.1"; exit 0; fi
 if [ "$1" = install ] && [ "$2" = -g ]; then
   swaps=$(grep -o '"kind":"swap"' "$HOME/.local/share/cawco/binary/apply-record.json" 2> /dev/null | wc -l)
   echo "bun $* swaps=${swaps:-0}" >> "$HOME/bun-calls.log"
