@@ -39,7 +39,7 @@
    * of the folder (FolderFile) opens the same way, in the task's place: one
    * stands beside the view at a time.
    */
-  import { byRank, needsYouOf, waitsOnPick } from "@cawco/core/task-views";
+  import { byRank, needsYouOf, picksOf } from "@cawco/core/task-views";
   import type { ProjectView, StageKind } from "@cawco/core/views";
   import { blocksWords } from "@cawco/core/words/blocks";
   import { commonWords } from "@cawco/core/words/common";
@@ -923,15 +923,14 @@
     ) {
       return null;
     }
-    const ref = CARD_REF.exec(task.waits.find(waitsOnPick)?.href ?? "");
+    const ref = CARD_REF.exec(picksOf(task.kind, task.waits)[0]?.href ?? "");
     const name = ref?.[1] ? pageOf(ref[1]) : null;
     return name && ref?.[2] ? { page: name, card: ref[2] } : null;
   };
   const pagesTasksWaitOn = $derived(
     new Set(
       needsYou.flatMap((task) =>
-        task.waits
-          .filter(waitsOnPick)
+        picksOf(task.kind, task.waits)
           .map((wait) => CARD_PAGE.exec(wait.href)?.[1])
           .filter((id) => id !== undefined)
       )

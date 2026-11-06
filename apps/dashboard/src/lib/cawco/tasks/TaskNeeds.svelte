@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { waitsOnPick } from "@cawco/core/task-views";
+  import { picksOf } from "@cawco/core/task-views";
   import { commonWords } from "@cawco/core/words/common";
   /**
    * What a task needs from you, first, each reason with the way to act on it
@@ -89,11 +89,11 @@
       !task.liveAttempt
   );
   const lastAttempt = $derived(task.attempts[0]);
-  /** The cards it waits on that are not picked yet: yours. */
-  const picks = $derived(task.waits.filter(waitsOnPick));
+  /** The cards it waits on that are not picked yet: yours, while it is open. */
+  const picks = $derived(picksOf(task.kind, task.waits));
   /** Everything else it waits on that is not settled: not yours. */
   const blockers = $derived(
-    task.waits.filter((wait) => !(wait.settled || waitsOnPick(wait)))
+    task.waits.filter((wait) => !(wait.settled || picks.includes(wait)))
   );
   const builtOn = $derived(task.builtOn);
 

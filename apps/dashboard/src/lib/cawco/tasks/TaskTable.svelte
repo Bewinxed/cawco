@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { waitsOnPick } from "@cawco/core/task-views";
+  import { picksOf } from "@cawco/core/task-views";
   import { projectWords } from "@cawco/core/words/project";
   import {
     createSortedRowModel,
@@ -338,7 +338,7 @@
                   >{task.id}</span
                 >
               {:else if cell.column.id === "title"}
-                {@const pick = task.waits.find(waitsOnPick)}
+                {@const pick = picksOf(task.kind, task.waits)[0]}
                 <a
                   data-slot="title"
                   class="flex items-baseline gap-space-2 min-w-0 text-inherit no-underline after:absolute after:inset-0 focus-inset"

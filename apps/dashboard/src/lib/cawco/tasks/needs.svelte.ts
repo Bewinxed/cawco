@@ -6,12 +6,14 @@
  * - a session of one of its attempts asks you something (a permission or a
  *   question its parent does not answer): live, from the fleet's asks;
  * - a session of one of its attempts has a card or canvas in Needs you;
- * - an approved action filed for it waits on your decision, or failed.
+ * - an approved action filed for it waits on your decision, or failed;
+ * and never while its stage is done or dropped (core `needsYouOf`), whatever
+ * it still waits on.
  *
  * The project a card stands in is the page's (`setTaskProject`): an
  * action names its task within its project.
  */
-import { waitsOnPick } from "@cawco/core/task-views";
+import { needsYouOf, picksOf } from "@cawco/core/task-views";
 import { getContext, setContext } from "svelte";
 import { cawco } from "../client.svelte";
 import type { TaskSummary, TaskView } from "../project-tasks";
@@ -49,12 +51,15 @@ export const actionsOf = (projectId: string, taskId: string) =>
 /** It waits on you now, for any reason. */
 export const waitsOnYou = (
   projectId: string,
-  task: Attempted & Pick<TaskSummary, "id" | "needsYou">
+  task: Attempted & Pick<TaskSummary, "id" | "kind" | "waits">
 ): boolean =>
-  task.needsYou ||
-  asksOf(task).length > 0 ||
-  cardsOf(task).length > 0 ||
-  actionsOf(projectId, task.id).length > 0;
+  needsYouOf(
+    task.kind,
+    task.waits,
+    asksOf(task).length > 0 ||
+      cardsOf(task).length > 0 ||
+      actionsOf(projectId, task.id).length > 0
+  );
 
 /**
  * Since when a task has waited on you, ms epoch: the oldest of its reasons'
@@ -72,7 +77,7 @@ export function waitingSince(
     ...asksOf(task).map((one) => one.request.raisedAt),
     ...cardsOf(task).map((need) => need.raisedAt),
     ...actionsOf(projectId, task.id).map((action) => action.createdAt),
-    ...task.waits.filter(waitsOnPick).map((wait) => {
+    ...picksOf(task.kind, task.waits).map((wait) => {
       const page = CARD_PAGE.exec(wait.href)?.[1];
       return page ? pendingSince(page) : null;
     }),

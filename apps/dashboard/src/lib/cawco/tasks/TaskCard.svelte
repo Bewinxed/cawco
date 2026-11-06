@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { waitsOnPick } from "@cawco/core/task-views";
+  import { picksOf, waitsOnPick } from "@cawco/core/task-views";
   import { dragWords } from "@cawco/core/words/drag";
   import { externalItemWords } from "@cawco/core/words/external-items";
   import { projectWords } from "@cawco/core/words/project";
@@ -72,8 +72,8 @@
     project ? actionsOf(project(), task.id).length > 0 : false
   );
   const retry = $derived(isRetry(task));
-  /** A decision card it waits on that is not picked yet: a pick of yours holds it. */
-  const pick = $derived(task.waits.find(waitsOnPick) ?? null);
+  /** A decision card it waits on that is not picked yet: a pick of yours holds it (none once it is done or dropped). */
+  const pick = $derived(picksOf(task.kind, task.waits)[0] ?? null);
   /** What it still waits on, its own and its whole's, as the hub settles it: a task by its id, anything else by its name; a card of yours is said on the line above. */
   const waitsOn = $derived(
     flags.waiting.filter((wait) => !(pick && waitsOnPick(wait)))

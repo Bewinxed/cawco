@@ -33,7 +33,7 @@ import { questionsOf } from "@cawco/core/question";
 import type { RelayJourneyView } from "@cawco/core/stream-relay";
 import { STREAM_RELAY_WORDS } from "@cawco/core/stream-relay";
 import type { TailnetHttps } from "@cawco/core/tailnet-https";
-import { waitsOnPick } from "@cawco/core/task-views";
+import { picksOf } from "@cawco/core/task-views";
 import { contactWords, MACHINE_LOST_MS } from "@cawco/core/words/contact";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { presenceWords } from "@cawco/core/words/presence";
@@ -635,7 +635,7 @@ interface McpItem {
 
 /** Why a task the hub lists waits on you: a card it is held on comes first, a pick being what starts it. */
 const reasonOf = (task: TaskSummary): TaskItem["reason"] => {
-  const pick = task.waits.find(waitsOnPick);
+  const [pick] = picksOf(task.kind, task.waits);
   return pick ? { pick: pick.label } : "review";
 };
 

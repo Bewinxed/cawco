@@ -40,7 +40,7 @@
    * Two columns once the review is wide enough (the pane expanded, the
    * task's own page): the words beside the stage, unclamped.
    */
-  import { waitsOnPick } from "@cawco/core/task-views";
+  import { picksOf } from "@cawco/core/task-views";
   import { commonWords } from "@cawco/core/words/common";
   import {
     taskNeedsWords as needsWords,
@@ -130,7 +130,7 @@
   /** The commits its words say landed. */
   const landed = $derived(unreported ? landedOf(task) : []);
   /** The decision cards it waits on you to pick. */
-  const asked = $derived(task.waits.filter(waitsOnPick));
+  const asked = $derived(picksOf(task.kind, task.waits));
   /** The decision cards it waited on, picked since: what it was held on. */
   const waited = $derived(
     task.waits.filter((wait) => wait.kind === "card" && wait.settled)

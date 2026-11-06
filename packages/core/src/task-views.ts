@@ -10,13 +10,14 @@ import type { LandsMode } from "./injected";
 import type { ProjectStarter } from "./starters";
 import type { TASK_FILE_STATES, TaskHistoryKind } from "./task-history";
 import type { Tracker } from "./trackers";
-import type {
-  Mover,
-  StageColor,
-  StageIcon,
-  StageKind,
-  StagesTemplate,
-  TaskMover,
+import {
+  CLOSED_STAGE_KINDS,
+  type Mover,
+  type StageColor,
+  type StageIcon,
+  type StageKind,
+  type StagesTemplate,
+  type TaskMover,
 } from "./views";
 import type { WaitKind } from "./wait-targets";
 import type { taskLinkWords } from "./words/task-links";
@@ -290,7 +291,7 @@ export interface TaskSummary extends TaskFlags, TaskTimes {
   /**
    * It waits for you (`needsYouOf`): its stage is of kind `you`, where only
    * you move it on, or a decision card it waits on is not picked, a pick
-   * only you make. An attempt that failed or was stopped is its starter's
+   * only you make; never while its stage is done or dropped. An attempt that failed or was stopped is its starter's
    * business, not yours. Derived on read, never stored.
    */
   needsYou: boolean;
@@ -380,15 +381,35 @@ export const waitsOnPick = (
   wait: Pick<WaitState, "kind" | "settled">
 ): boolean => wait.kind === "card" && !wait.settled;
 
+/** Its stage is of a closed kind ({@link CLOSED_STAGE_KINDS}): it was done, or dropped. */
+export const closedKind = (kind: StageKind | null): boolean =>
+  kind !== null && (CLOSED_STAGE_KINDS as readonly StageKind[]).includes(kind);
+
+/**
+ * The cards a task waits on for the person's pick ({@link waitsOnPick}):
+ * none while its stage is done or dropped, where a pick no longer moves it.
+ * What its card, its row and its sheet say is yours to pick.
+ */
+export const picksOf = <Wait extends Pick<WaitState, "kind" | "settled">>(
+  kind: StageKind | null,
+  waits: readonly Wait[]
+): Wait[] => (closedKind(kind) ? [] : waits.filter(waitsOnPick));
+
 /**
  * Whether a task waits for the person ({@link TaskSummary.needsYou}): its
- * stage is of kind `you`, or a card it waits on is not picked. The one
- * answer the hub's list, Caw's Needs you and the project page's count read.
+ * stage is of kind `you`, or a card it waits on is not picked, or
+ * `elsewhere` (what the dashboard hears live: an attempt's session asks or
+ * holds a card in Needs you, an approved action filed for it waits). A task
+ * in a closed stage (done, dropped) needs nothing from the person, whatever
+ * it still waits on. The one answer the hub's list, Caw's Needs you, the
+ * project page's count and its walk read.
  */
 export const needsYouOf = (
   kind: StageKind | null,
-  waits: readonly Pick<WaitState, "kind" | "settled">[]
-): boolean => kind === "you" || waits.some(waitsOnPick);
+  waits: readonly Pick<WaitState, "kind" | "settled">[],
+  elsewhere = false
+): boolean =>
+  !closedKind(kind) && (kind === "you" || waits.some(waitsOnPick) || elsewhere);
 
 /**
  * The order a project's tasks are listed in, by the hub and by a board
