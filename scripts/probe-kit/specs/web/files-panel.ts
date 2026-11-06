@@ -17,7 +17,9 @@
  *  1. desk: the Files control stands inside the bar's glass group, and its
  *     count is the kit's corner badge on the folder's top trailing quarter:
  *     its leading edge at or past the folder's centre, its foot at or above
- *     the folder's middle (pin 1, 9; bar-count holds every width);
+ *     the folder's middle (pin 1, 9; bar-count holds every width); and
+ *     every count on the top bar's items stands whole, its top at or under
+ *     the edge that clips it (the window's top), at 1440 and at 390;
  *  2. desk: Files floats (a fixed box, the page's height unchanged);
  *  3. desk: each region scrolls on its own (scrollHeight > clientHeight on
  *     the region's scroller, the page not growing) (pin 2);
@@ -201,6 +203,40 @@ const cornerOf = (
         aboveMiddle: glyph.y + glyph.h / 2 - count.bottom,
       }
     : null;
+
+/**
+ * Every count badge on a bar item in the top bar, with its top against the
+ * edge that clips it: the nearest of the window's top and each box round it
+ * that clips (overflow not visible), px past it (a clipped badge draws a
+ * wrong mark: the clipped-glyph rule draws a glyph whole).
+ */
+const topBarCounts = (page: Page) =>
+  page.evaluate(() =>
+    [
+      ...document.querySelectorAll(
+        '[data-slot="top"] [data-bar-item] [data-slot="num"]'
+      ),
+    ].map((badge) => {
+      const { top } = badge.getBoundingClientRect();
+      let edge = 0;
+      for (
+        let up = badge.parentElement;
+        up && up !== document.documentElement;
+        up = up.parentElement
+      ) {
+        const st = getComputedStyle(up);
+        if (st.overflowY !== "visible" || st.overflowX !== "visible") {
+          edge = Math.max(edge, up.getBoundingClientRect().top);
+        }
+      }
+      return {
+        said: badge.textContent?.trim() ?? "",
+        top,
+        edge,
+        past: Math.max(0, edge - top),
+      };
+    })
+  );
 
 /** The sidebar row's name once its count stands. */
 const FILES_COUNTED = /Files, \d+/u;
@@ -703,6 +739,12 @@ const desk = async (
       corner.pastCentre >= -0.5 &&
       corner.aboveMiddle >= -0.5,
     JSON.stringify({ ...bar, corner })
+  );
+  const clipped = await topBarCounts(page);
+  kit.check(
+    `1b (${theme}, 1440): every count on the top bar's items stands whole, its top at or under the edge that clips it`,
+    clipped.length > 0 && clipped.every((one) => one.past <= 0.5),
+    JSON.stringify(clipped)
   );
   await sweep(page, `closed 1440 ${theme}`);
 
@@ -1341,6 +1383,14 @@ const reviewLegs = async (
 
   // 21. The phone: earned counts, the burger's focus, the strips, Send, 320px.
   const phone = await openSession(kit, base, "phone", "light", ids.one);
+  const phoneCounts = await topBarCounts(phone);
+  kit.check(
+    "21c (390): every count on the top bar's items stands whole, its top at or under the edge that clips it",
+    phoneCounts.every((one) => one.past <= 0.5),
+    phoneCounts.length > 0
+      ? JSON.stringify(phoneCounts)
+      : "no count on the top bar's items at 390 (Files, Jump and the machines stand in the sidebar there)"
+  );
   // Both strips stand once the conversation on screen is known, and Send with its composer.
   await phone
     .locator('[data-slot="edge-pull"]')

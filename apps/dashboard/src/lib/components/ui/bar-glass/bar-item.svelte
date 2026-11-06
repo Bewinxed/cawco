@@ -19,7 +19,9 @@
    * side, never back across the symbol, its centre half the glass's inset
    * above the item's top edge (between the item's edge and the glass's):
    * high enough that a wide count clears a thin symbol's top stroke and its
-   * neighbour's, so a counted item is its neighbours' size and shape.
+   * neighbour's, so a counted item is its neighbours' size and shape. Where
+   * the glass says less room above it (`--bar-room`: the top bar's, 4px
+   * under the window's top) the lift stops at that edge, the badge whole.
    */
   const barItemVariants = tv({
     base: "group/bar-item relative inline-flex h-c-bar-item min-w-c-bar-item flex-none select-none items-center justify-center rounded-pill glass-item:concentric-at border-0 bg-transparent text-ink-strong transition-control touch-hit press-tint hover:not-data-lit:not-data-open:bg-surface-hover data-open:not-data-lit:not-hover:bg-surface-hover data-open:not-data-lit:hover:bg-surface-pressed data-lit:bg-selected-bg data-lit:text-selected-ink *:data-[slot=bar-symbol]:size-c-bar-symbol *:data-[slot=bar-symbol]:flex-none",
@@ -162,6 +164,16 @@
     onblur?: (event: FocusEvent) => void;
   } = $props();
 
+  /**
+   * Its count's lift: half the glass's inset above the item's top edge,
+   * stopping at the edge that clips the glass where that stands nearer
+   * (`--bar-room`, the room above the glass, set by a glass that knows it:
+   * the top bar's, 4px under the window's top), so the badge is drawn whole.
+   * With no room said, the lift is the corner form's.
+   */
+  const COUNT_FOOT =
+    "max(calc(-1 * var(--c-bar-group-pad) / 2), calc(var(--icon-md) / 2 - var(--c-bar-group-pad) - var(--bar-room, var(--icon-md))))";
+
   /** Caw's head on the phone's glass: its finger's area centred on the glass's height. */
   const CAW_HIT_TOP =
     "calc((var(--c-bar-caw-glass-phone) - var(--c-btn-h-lg)) / 2)";
@@ -206,7 +218,7 @@
     aria-label={label}
     class={look}
     {href}
-    style:--count-foot="calc(-1 * var(--c-bar-group-pad) / 2)"
+    style:--count-foot={COUNT_FOOT}
     style:--count-glyph="var(--c-bar-symbol)"
     style:--caw-hit-top={form === "head" ? CAW_HIT_TOP : undefined}
     type={href ? undefined : "button"}

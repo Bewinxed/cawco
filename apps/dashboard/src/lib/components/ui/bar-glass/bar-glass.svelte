@@ -139,8 +139,11 @@
     // A title's words may take two lines on a phone (ArtifactMenu): its
     // ground grows with them.
     form === "title" ? "before:hidden min-h-c-btn-h" : "h-c-btn-h",
+    // The top bar's glass says the room above it to the window's top
+    // (`--bar-room`: centred in the bar on a desk, `--tools-top` down on a
+    // phone), where a counted item's badge stops its lift (BarItem).
     form === "bar" &&
-      "@max-desk/shell:self-start @max-desk/shell:h-c-bar-caw-glass-phone @max-desk/shell:mt-(--tools-top) @max-desk/shell:p-0 @max-desk/shell:rounded-s-(--tools-round) @max-desk/shell:rounded-e-none @max-desk/shell:caw-neck-(--tools-neck) @max-desk/shell:[--r-inner:var(--tools-round)] @max-desk/shell:**:data-bar-item:rounded-e-none @max-desk/shell:**:data-bar-item:w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:min-w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:h-c-bar-caw-glass-phone",
+      "[--bar-room:calc((var(--c-top-bar-h)_-_var(--c-btn-h))_/_2)] @max-desk/shell:[--bar-room:var(--tools-top)] @max-desk/shell:self-start @max-desk/shell:h-c-bar-caw-glass-phone @max-desk/shell:mt-(--tools-top) @max-desk/shell:p-0 @max-desk/shell:rounded-s-(--tools-round) @max-desk/shell:rounded-e-none @max-desk/shell:caw-neck-(--tools-neck) @max-desk/shell:[--r-inner:var(--tools-round)] @max-desk/shell:**:data-bar-item:rounded-e-none @max-desk/shell:**:data-bar-item:w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:min-w-c-bar-caw-glass-phone @max-desk/shell:**:data-bar-item:h-c-bar-caw-glass-phone",
   ]}
   bind:this={node}
   {@attach (glass) => (form === "title" ? undefined : placeItems(glass))}
