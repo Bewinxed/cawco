@@ -5,7 +5,7 @@
    * bubble, on the pressed surface while the rail stands (BarItem `open`). It is its
    * neighbours' size and shape, its bubble at their symbol size and centred,
    * with an even inset round it: the open comments' count is the bar's
-   * count badge on its top trailing corner (bar-glass/count.ts; SwiftUI
+   * count badge on its top trailing corner (the kit Badge `corner`; SwiftUI
    * badge: "Badges appear in list rows, tab bars, toolbar items, and
    * menus"), taking no room, only above 0 (The Earned Count Rule). While
    * comments wait on him (To check) the badge takes the needs-you pair and
