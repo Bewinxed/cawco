@@ -597,6 +597,20 @@ const quietDir = async (): Promise<string> => {
 };
 
 /**
+ * The machine's opencode.json's text as OpenCode reads it: `{}` when there
+ * is none, as OpenCode starts with no config of the person's (config
+ * discovery skips a file not there), else the file's; null when it cannot be
+ * read. A fresh machine has none (niftybot.art, 2026-11-06: only a 0.x
+ * `config.json`), and taking that for a malformed config left its OpenCode
+ * converging nothing: every fleet MCP server "OpenCode did not load its new
+ * config: malformed config", its account servers never squared.
+ */
+const readDiskConfig = (): Promise<string | null> =>
+  readFile(OPENCODE_CONFIG, "utf8").catch((error: unknown) =>
+    (error as NodeJS.ErrnoException).code === "ENOENT" ? "{}" : null
+  );
+
+/**
  * Every write of the machine's opencode.json goes through here and says who
  * wrote it, so a hash change the watcher reports can be matched to its writer.
  */
@@ -2244,10 +2258,11 @@ export class OpencodeHarness implements Harness {
   /**
    * {@link configHash} of opencode.json as it is on disk now, computed again
    * only when its text changed: the watcher asks every 2 s. Null when it is
-   * missing or malformed.
+   * malformed or cannot be read. None there is the person's config being
+   * empty, as OpenCode reads it ({@link readDiskConfig}).
    */
   async #configFileHash(): Promise<string | null> {
-    const text = await readFile(OPENCODE_CONFIG, "utf8").catch(() => null);
+    const text = await readDiskConfig();
     if (text === null) {
       return null;
     }
@@ -2400,7 +2415,7 @@ export class OpencodeHarness implements Harness {
           JSON.stringify({
             type: "config-convergence",
             state: "error",
-            detail: "malformed or missing opencode.json",
+            detail: "malformed opencode.json",
             at: Date.now(),
           })
         );
@@ -3359,8 +3374,8 @@ export class OpencodeHarness implements Harness {
     }
     this.#checkingPublication = true;
     try {
-      const preCheck = await readJson<Record<string, unknown>>(OPENCODE_CONFIG);
-      if (!preCheck) {
+      const preCheck = await this.#configFileHash();
+      if (preCheck === null) {
         this.#configState = "error";
         this.#configError = "malformed config — will not stop working server";
         return;
@@ -4432,19 +4447,15 @@ export class OpencodeHarness implements Harness {
 
   /**
    * Every model this machine's OpenCode runs: the machine's own
-   * ({@link #currentFacts}), and for each provider an account here is of
-   * whose own server has listed it, that provider's as that server last
-   * listed them (read as each starts). No server is started for it.
+   * ({@link #currentFacts}), and for each provider an account here is of,
+   * that provider's as its account's own server last listed them (read as
+   * each starts). A provider no account's server has listed yet is listed
+   * now ({@link #listAccountsUnlisted}), and the report says it once that
+   * server has.
    */
   async #catalog(): Promise<ModelInfo[]> {
     const own = (await this.#currentFacts()).models;
-    const accounts = new Set<string>();
-    for (const account of credentialAccountIds()) {
-      const held = readHeld(account);
-      if (held) {
-        accounts.add(opencodeProviderOf(held.provider));
-      }
-    }
+    const accounts = this.#listAccountsUnlisted();
     const cached = this.#loadAccountCatalogs();
     const listedBy = [...accounts].filter((provider) => cached[provider]);
     const provided = (row: ModelInfo): string =>
@@ -4504,14 +4515,65 @@ export class OpencodeHarness implements Harness {
    * The accounts on this machine changed (one signed in, keyed, moved in or
    * forgotten). Each running account's server has its credential put on it as
    * it is written; one whose provider settings changed is replaced at rest,
-   * and one whose account is gone retires once idle. A provider's models are
-   * listed as its account's server next starts.
+   * and one whose account is gone retires once idle. A provider no account's
+   * server has listed is listed now ({@link #listAccountsUnlisted}).
    */
   async accountsChanged(): Promise<void> {
+    if ((await opencodeBinary()) !== undefined) {
+      this.#listAccountsUnlisted();
+    }
     if (!this.#client) {
       return;
     }
     await this.#configTick();
+  }
+
+  /** The accounts whose server {@link #listAccountsUnlisted} has started or asked, until it has answered. */
+  readonly #listing = new Set<string>();
+
+  /**
+   * The providers of the accounts held here, each of whose models no
+   * account's server has listed yet ({@link ACCOUNT_CATALOGS}) asked of one
+   * of its accounts' servers now: the running one, else one started, which
+   * lists them as it starts and retires once idle ({@link SERVER_IDLE_MS}).
+   * An account's provider was listed only as a session started its server,
+   * and the picker offers only what is listed, so a machine given an
+   * account (a fresh one, a key added) never offered its models and none
+   * of its sessions started: niftybot.art held the fleet's OpenCode Go key
+   * and offered OpenCode's free models alone (2026-11-06). A failure is
+   * said, and the next report asks again.
+   */
+  #listAccountsUnlisted(): Set<string> {
+    const providers = new Map<string, string>();
+    for (const account of credentialAccountIds()) {
+      const held = readHeld(account);
+      const provider = held && opencodeProviderOf(held.provider);
+      if (provider && !providers.has(provider)) {
+        providers.set(provider, account);
+      }
+    }
+    const cached = this.#loadAccountCatalogs();
+    for (const [provider, account] of providers) {
+      if (cached[provider] || this.#listing.has(account)) {
+        continue;
+      }
+      this.#listing.add(account);
+      const running = this.#accounts.get(account)?.client;
+      detach(
+        (running
+          ? this.#readAccountCatalog(account, running)
+          : this.#ensureAccount(account)
+        )
+          .catch((error: unknown) =>
+            console.warn(
+              `[opencode] account ${account}: its ${provider} models were not listed: ${errorText(error)}`
+            )
+          )
+          .finally(() => this.#listing.delete(account)),
+        "listAccountsUnlisted"
+      );
+    }
+    return new Set(providers.keys());
   }
 
   /** The plugin version this agent's servers load, written once per process. */

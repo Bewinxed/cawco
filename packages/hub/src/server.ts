@@ -513,10 +513,9 @@ import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
 import {
-  modelListed,
   modelNameIn,
   namedModels,
-  providerOf,
+  unlistedModelRefusal,
 } from "@cawco/core/model-names";
 import { placeNesting } from "@cawco/core/place-nesting";
 import type { FolderWeight } from "@cawco/core/preview-proxy";
@@ -1287,13 +1286,8 @@ const CHROME_DEVTOOLS = "chrome-devtools";
 /** A picture's address in the media store (media.ts), its name after it. */
 const MEDIA_ADDRESS = /^\/api\/media\//u;
 
-/** What splits a model id into words (`deepseek-v4.1-flash`: `deepseek`, …). */
-const MODEL_ID_WORD = /[-.]/u;
 /** A picture's number in a comments delivery's words (core comments.ts `attachedLine`). */
 const PICTURE_NUMBER = /\(picture (\d+) of this message/gu;
-
-/** How many offered models a refused model's refusal names. Ours: enough to choose from, short enough to read. */
-const MODELS_NAMED = 12;
 
 /**
  * A file's bytes as an answer to a request that may ask for a range of them:
@@ -5124,65 +5118,23 @@ export const createServer = (
    * OpenCode's catalog dropped, `opencode-go/deepseek-v4-flash` 2026-10-14)
    * is refused before its session is made rather than at its first turn. It
    * names the ids the harness lists, those from the asked id's provider and
-   * sharing its first word first. Undefined when it lists it, for no model
-   * named, and when the harness has listed no models there to judge by.
+   * sharing its first word first (core `unlistedModelRefusal`). Undefined
+   * when it lists it, for no model named, and when the harness has listed no
+   * models there to judge by.
    */
   const modelRefusal = (
     machineId: string,
     harness: HarnessKind,
     model: string | undefined
-  ): string | undefined => {
-    if (!model) {
-      return;
-    }
-    const rows = harnessModels(harness, new Set([machineId]));
-    if (rows.length === 0 || modelListed(harness, rows, model)) {
-      return;
-    }
-    const name = accountsWords.harnesses[harness];
-    const machine = machineName(machineId);
-    const offered = [
-      ...new Set(
-        rows.map((one) => one.value).filter((value) => value !== "default")
-      ),
-    ];
-    const provider = providerOf(model);
-    if (
-      provider !== undefined &&
-      !offered.some((value) => providerOf(value) === provider)
-    ) {
-      return spawnWords.unlistedModel.noProvider(
-        name,
-        machine,
-        model,
-        provider
-      );
-    }
-    const bare = provider ? model.slice(provider.length + 1) : model;
-    const word = bare.split(MODEL_ID_WORD)[0] ?? "";
-    const rank = (value: string): number =>
-      (providerOf(value) === provider ? 0 : 2) +
-      ((providerOf(value) ? value.slice(value.indexOf("/") + 1) : value)
-        .toLowerCase()
-        .startsWith(word.toLowerCase())
-        ? 0
-        : 1);
-    const listed = offered
-      .map((value, order) => ({ value, order }))
-      .sort((a, b) => rank(a.value) - rank(b.value) || a.order - b.order)
-      .map((one) => one.value);
-    const shown = listed.slice(0, MODELS_NAMED);
-    const refusal = spawnWords.unlistedModel.words(
-      name,
-      machine,
-      model,
-      shown,
-      listed.length - shown.length
-    );
-    return harnessNamed(model)
-      ? `${refusal} ${spawnWords.unlistedModel.harnessNamed(model)}`
-      : refusal;
-  };
+  ): string | undefined =>
+    model
+      ? unlistedModelRefusal(
+          harness,
+          machineName(machineId),
+          model,
+          harnessModels(harness, new Set([machineId]))
+        )
+      : undefined;
   /** A new pi session that names no model, so pi's pick in its directory is asked first. */
   const asksPiDefault = (payload: SpawnPayload): boolean =>
     payload.harness === "pi" &&

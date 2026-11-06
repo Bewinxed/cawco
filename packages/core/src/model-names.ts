@@ -22,9 +22,11 @@
  * - Two rows still alike (OpenCode and pi list one model from several
  *   providers) are told apart by provider, else by id.
  */
-import type { HarnessKind, ModelInfo } from "./harness";
+import { type HarnessKind, harnessNamed, type ModelInfo } from "./harness";
 import { unhandled } from "./unhandled";
+import { accountsWords } from "./words/accounts";
 import { decidesWords } from "./words/decides";
+import { spawnWords } from "./words/spawn";
 
 export interface NamedModel {
   name: string;
@@ -228,7 +230,7 @@ const CLAUDE_MODEL_ID = /^claude-[a-z0-9-]+$/u;
  * bare id's model (agent opencode.ts `splitModel`), so it is listed only
  * with its provider.
  */
-export const modelListed = (
+const modelListed = (
   harness: HarnessKind,
   rows: readonly ModelInfo[],
   id: string
@@ -252,4 +254,68 @@ export const modelListed = (
     default:
       return unhandled("harness", harness);
   }
+};
+
+/** What splits a model id into words (`deepseek-v4.1-flash`: `deepseek`, …). */
+const MODEL_ID_WORD = /[-.]/u;
+
+/** How many listed models a refused model's refusal names. Ours: enough to choose from, short enough to read. */
+const MODELS_NAMED = 12;
+
+/**
+ * Why a `harness` session on `machine` cannot run `model`, judged against
+ * `rows`, the models the harness lists there ({@link modelListed}): undefined
+ * when it lists it, and when it lists nothing to judge by. A model from a
+ * provider it lists nothing from says that provider has no sign-in or key
+ * there; any other names what it does list, those from the asked id's
+ * provider and sharing its first word first. The hub's refusal of a start
+ * (server.ts `modelRefusal`) and OpenCode's of a send (agent
+ * opencode-session.ts, `provider.no-route`) say it in these words.
+ */
+export const unlistedModelRefusal = (
+  harness: HarnessKind,
+  machine: string,
+  model: string,
+  rows: readonly ModelInfo[]
+): string | undefined => {
+  if (rows.length === 0 || modelListed(harness, rows, model)) {
+    return;
+  }
+  const name = accountsWords.harnesses[harness];
+  const offered = [
+    ...new Set(
+      rows.map((one) => one.value).filter((value) => value !== "default")
+    ),
+  ];
+  const provider = providerOf(model);
+  if (
+    provider !== undefined &&
+    !offered.some((value) => providerOf(value) === provider)
+  ) {
+    return spawnWords.unlistedModel.noProvider(name, machine, model, provider);
+  }
+  const bare = provider ? model.slice(provider.length + 1) : model;
+  const word = bare.split(MODEL_ID_WORD)[0] ?? "";
+  const rank = (value: string): number =>
+    (providerOf(value) === provider ? 0 : 2) +
+    ((providerOf(value) ? value.slice(value.indexOf("/") + 1) : value)
+      .toLowerCase()
+      .startsWith(word.toLowerCase())
+      ? 0
+      : 1);
+  const listed = offered
+    .map((value, order) => ({ value, order }))
+    .sort((a, b) => rank(a.value) - rank(b.value) || a.order - b.order)
+    .map((one) => one.value);
+  const shown = listed.slice(0, MODELS_NAMED);
+  const refusal = spawnWords.unlistedModel.words(
+    name,
+    machine,
+    model,
+    shown,
+    listed.length - shown.length
+  );
+  return harnessNamed(model)
+    ? `${refusal} ${spawnWords.unlistedModel.harnessNamed(model)}`
+    : refusal;
 };

@@ -23,6 +23,7 @@
  * permission ruleset by `PATCH`, which replaces it, settled #9).
  */
 import { createHash } from "node:crypto";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import type {
   AskAnswer,
@@ -83,6 +84,8 @@ import {
 import { FULL_SEND_ANSWER } from "@cawco/core/asks";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
+import { machineLabel } from "@cawco/core/machine-names";
+import { unlistedModelRefusal } from "@cawco/core/model-names";
 import { readRecordSync, writeStateFileSync } from "@cawco/core/state-file";
 import { unhandled } from "@cawco/core/unhandled";
 import type {
@@ -211,6 +214,16 @@ export const splitModel = (
   return slash < 0
     ? { id: model }
     : { providerID: model.slice(0, slash), id: model.slice(slash + 1) };
+};
+
+/**
+ * The kind OpenCode gives a refusal it answers a call with (a structured
+ * session error, `{ type, message }`: `provider.no-route`, `provider.auth`,
+ * …); none for anything else.
+ */
+const refusalType = (error: unknown): string | undefined => {
+  const type = (error as { type?: unknown } | null | undefined)?.type;
+  return typeof type === "string" ? type : undefined;
 };
 
 const WHITESPACE_RE = /\s+/u;
@@ -2972,11 +2985,44 @@ export class OpencodeSession implements HarnessSession {
         this.#busyValue = false;
       }
       this.#ctx.busy(this.#busy);
-      this.#ctx.rejected(uuid, error);
+      this.#sendRefused(uuid, error);
     } finally {
       handed();
       this.#drained(messageID);
     }
+  }
+
+  /**
+   * A send OpenCode refused, said to its sender. One it could not route
+   * (`provider.no-route`: OpenCode 2.0.29's `ModelUnavailableError`, "Model
+   * unavailable: <provider>/<model>", when no provider of the session's
+   * server runs its model) says what that server does run, in the words the
+   * hub refuses such a start with (core `unlistedModelRefusal`), so the
+   * person can pick one or sign in to the provider here. Any other refusal,
+   * and one whose server's models cannot be read, is OpenCode's own.
+   */
+  #sendRefused(uuid: string, error: unknown): void {
+    const model = this.#model;
+    if (!(model && refusalType(error) === "provider.no-route")) {
+      this.#ctx.rejected(uuid, error);
+      return;
+    }
+    detach(
+      opencodeCatalog(this.#client, this.#directory).then(
+        (rows) =>
+          this.#ctx.rejected(
+            uuid,
+            unlistedModelRefusal(
+              "opencode",
+              machineLabel(hostname()),
+              model,
+              rows
+            ) ?? error
+          ),
+        () => this.#ctx.rejected(uuid, error)
+      ),
+      "sendRefused"
+    );
   }
 
   /**
@@ -3117,7 +3163,7 @@ export class OpencodeSession implements HarnessSession {
         });
       }
     } catch (error) {
-      this.#ctx.rejected(uuid, error);
+      this.#sendRefused(uuid, error);
     } finally {
       handed();
     }
@@ -3183,7 +3229,7 @@ export class OpencodeSession implements HarnessSession {
       });
     } catch (error) {
       this.#compactions.delete(id);
-      this.#ctx.rejected(uuid, error);
+      this.#sendRefused(uuid, error);
     }
   }
 
