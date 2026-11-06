@@ -22,8 +22,14 @@ export const WithDials = {
   parameters: { viewport: 1440 },
 };
 
-/** The room in the phone's drawer, Move shown. */
+/** The room in the phone's drawer at its head, States shown: the grabber over the faces and Close. */
 export const Phone = {
-  args: { width: 390, chosen: "move" },
+  args: { width: 390, drawer: true },
+  parameters: { viewport: 390 },
+};
+
+/** The drawer with the Dials face, Dials shown. */
+export const DrawerDials = {
+  args: { width: 390, drawer: true, dials: true, chosen: "dials" },
   parameters: { viewport: 390 },
 };

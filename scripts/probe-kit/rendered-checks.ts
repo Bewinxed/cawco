@@ -46,7 +46,7 @@
  * | anchor-drift | own code, over reads        | an open popover, menu or listbox whose height changed between two reads of a page holds its top or its bottom |
  * | decoration-spill | own code                 | an outline (offset past the border edge), a hard box-shadow (blur under 1px, by its spread and offsets), a dashed or dotted border, or an absolutely placed ::before/::after that draws, reaching 0.5px past the box it marks (a pseudo's own element, when that draws; not a pseudo flush outside it, which carries it on) or past the nearest box that clips it or rounded box that draws, its own box inside that one; a clip-path or mask is unread |
  * | nested-radius | own code                    | a wash (a fill or gradient, an element's or an absolute pseudo's) that nearly fills a rounded box (one axis within its radius of both ends) and whose corner stands within that radius of the box's corner (the box drawing or clipping) is outer radius less the mean inset, within 1.5px or a quarter of it, plus half the two insets' difference |
- * | state-shape | own code + CSS.forcePseudoState | each control in a bar and each rounded one, with hover, active and focus-visible forced on it in turn (Chromium; transitions held off) and at rest when drawn selected: the fill or ring that state paints anew (its own, a pseudo's, a child's half its size or more) takes the control's radius less its inset where a child or pseudo draws it, and, inside the glass it stands in (the nearest box that draws over it, rounded, and not scrolling it past its corners), the glass's radius less its inset (a capsule's across it) on the corners facing its ends, and under half that on those facing a neighbour (an item of the glass on that side; a groove's segment excepted, a bar item one not), within 1.5px or a tenth (a quarter at a corner); in a bar's capsule of glass, what each state draws at five points of the control (its centre and 3px in from each side's middle, composed bottom up, glyphs aside) stands 0.02 or more off its rest in OKLab, pressed and, where a pointer can rest and it is not chosen, hovered;  drawn chosen (`aria-pressed`, `aria-selected`, `aria-checked`) there or in a groove (a tab list that paints), it is painted (its wash, or a thumb under it) 0.02 or more off the ground; and each tab stop of a bar, a bar's glass or a groove, focused from the keyboard (a Shift press, then `focus()`, so `:focus-visible` matches and a ring placed on `focusin` draws), shows a ring (its outline or a pseudo's, or an edge drawn anew hugging it within 6px) that follows its contour (an edge drawn apart: each corner the control's grown by how far out it stands, within 1.5px or a quarter) and stays a pixel or more inside any bar's glass |
+ * | state-shape | own code + CSS.forcePseudoState | each control in a bar and each rounded one, with hover, active and focus-visible forced on it in turn (Chromium; transitions held off) and at rest when drawn selected: the fill or ring that state paints anew (its own, a pseudo's, a child's half its size or more) takes the control's radius less its inset where a child or pseudo draws it, and, inside the glass it stands in (the nearest box that draws over it, rounded, and not scrolling it past its corners), the glass's radius less its inset (a capsule's across it) on the corners facing its ends, and under half that on those facing a neighbour (an item of the glass on that side; a groove's segment excepted, a bar item one not), within 1.5px or a tenth (a quarter at a corner); in a bar's capsule of glass, what each state draws at five points of the control (its centre and 3px in from each side's middle, composed bottom up, glyphs aside) stands 0.02 or more off its rest in OKLab, pressed and, where a pointer can rest and it is not chosen, hovered;  drawn chosen (`aria-pressed`, `aria-selected`, `aria-checked`) there or in a groove (a tab list that paints), it is painted (its wash, or a thumb under it) 0.02 or more off the ground; and each tab stop of a bar, a bar's glass or a groove, focused as the keyboard focuses it (`focus({ focusVisible: true })`, so `:focus-visible` matches and a ring placed on `focusin` draws; none while focus stands inside an open layer, and focus put back after), shows a ring (its outline or a pseudo's, or an edge drawn anew hugging it within 6px) that follows its contour (an edge drawn apart: each corner the control's grown by how far out it stands, within 1.5px or a quarter) and stays a pixel or more inside any bar's glass |
  * | touch       | own code                    | on a coarse pointer, each control in a bar's capsule of glass and each segment of a groove: its box with its placed pseudos (`touch-hit`), each side stopped at the midpoint to the control beside it there, 44×44 or more |
  * | glyph-place | own code                    | a control in a bar's capsule of glass whose only content is one glyph and at most a count: the glyph's centre within 1px of the control's on each axis (its fill's start and end insets around it alike), and the count, a badge on the glyph's corner taking no room, over at most a fifth of its own glyph's ink and none of a neighbour's (its shapes' fill and stroke sampled every half pixel) |
  *
@@ -4884,98 +4884,171 @@ let scans = 0;
 
 /**
  * state-shape's focus rings, as the person sees them: each tab stop the read
- * at rest named (`__stateShape.rings`) focused in turn from the keyboard, a
- * Shift press setting the keyboard's modality before `focus()`, so it
- * matches `:focus-visible` and a track that places its ring on `focusin`
- * (fluid-tabs TabsList) draws it, then read (`forced: "ring"`) against what
+ * at rest named (`__stateShape.rings`) focused in turn as the keyboard
+ * focuses it (`focus({ focusVisible: true })`, so it matches
+ * `:focus-visible` and a track that places its ring on `focusin`,
+ * fluid-tabs TabsList, draws it), then read (`forced: "ring"`) against what
  * stood round it before (`__ringBefore`, its nearest three holders' boxes
  * and what they hold). Forcing `:focus-visible` (CSS.forcePseudoState) fires
  * no `focusin`, so such a ring stood unread. Only tab stops are focused: a
  * roving group's other segments are reached by its arrows, which choose
  * them, and focusing one would choose it.
+ *
+ * The read leaves the page as it found it, for whatever a spec does next:
+ * no key is pressed (a Shift press for the keyboard's modality had the
+ * next Escape land where the read left things), focus goes back where it
+ * stood, as visibly as it stood, and a tooltip a focus opened shuts with
+ * the blur. With focus inside a layer (a popover, a menu, a dialog, a hang)
+ * nothing is focused: moving focus out of it would dismiss it or have its
+ * trap pull focus back (graph-stage r523, r525: a chip's list stood open
+ * over the next row after its Escape), so the rings there stand unread.
  */
 async function focusRings(
   page: Page,
   args: InPageArgs,
   findings: (CheckFinding & { at: number })[]
 ): Promise<{ read: number; unread: string[] }> {
-  const count = await page.evaluate(
-    () =>
-      (window as unknown as { __stateShape?: { rings?: Element[] } })
-        .__stateShape?.rings?.length ?? 0
-  );
+  const start = await page.evaluate(() => {
+    const kept = window as unknown as {
+      __stateShape?: { rings?: Element[] };
+      __ringWas?: { el: Element | null; visible: boolean };
+      __ringOpen?: number;
+    };
+    const was = document.activeElement;
+    const shownBox = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 1 && r.height > 1;
+    };
+    // Focus inside any layer, or a floating layer open anywhere (a list, a
+    // menu, a popover, a hang, which a focus outside it dismisses).
+    const layer =
+      (was && was !== document.body
+        ? was.closest(
+            '[data-hang], [data-popover], [data-slot="popover-content"], [role="menu"], [role="listbox"], [role="dialog"], [role="alertdialog"]'
+          )
+        : null) ??
+      [
+        ...document.querySelectorAll(
+          '[data-hang], [data-popover], [data-slot="popover-content"], [role="menu"], [role="listbox"]'
+        ),
+      ].find(shownBox) ??
+      null;
+    kept.__ringOpen = [
+      ...document.querySelectorAll(
+        '[data-state="open"], [aria-expanded="true"]'
+      ),
+    ].length;
+    kept.__ringWas = {
+      el: was,
+      visible: Boolean(was?.matches(":focus-visible")),
+    };
+    return {
+      count: kept.__stateShape?.rings?.length ?? 0,
+      layer: layer
+        ? `${layer.tagName.toLowerCase()}${layer.getAttribute("role") ? `[role=${layer.getAttribute("role")}]` : ""}${layer.getAttribute("data-slot") ? `[data-slot=${layer.getAttribute("data-slot")}]` : ""}`
+        : null,
+    };
+  });
+  if (start.layer) {
+    return {
+      read: 0,
+      unread: [
+        `state-shape: a layer stands open (${start.layer}): no tab stop is focused, which would move focus out of it or dismiss it; ${start.count} ring(s) unread`,
+      ],
+    };
+  }
   let read = 0;
   const unfocused: number[] = [];
-  for (let i = 0; i < count; i += 1) {
-    await page.evaluate(async (at) => {
+  let changed = "";
+  try {
+    for (let i = 0; i < start.count; i += 1) {
+      const focused = await page.evaluate(async (at) => {
+        const kept = window as unknown as {
+          __stateShape?: { rings?: HTMLElement[] };
+          __ringBefore?: Map<Element, string>;
+          __ringRoot?: Element;
+        };
+        const frame = () =>
+          new Promise((done) =>
+            requestAnimationFrame(() => requestAnimationFrame(done))
+          );
+        (document.activeElement as HTMLElement | null)?.blur?.();
+        await frame();
+        const el = kept.__stateShape?.rings?.[at];
+        if (!el?.isConnected) {
+          return false;
+        }
+        let root: Element = el;
+        for (
+          let k = 0;
+          k < 3 && root.parentElement && root.parentElement !== document.body;
+          k += 1
+        ) {
+          root = root.parentElement;
+        }
+        const before = new Map<Element, string>();
+        for (const e of [root, ...root.querySelectorAll("*")]) {
+          const st = getComputedStyle(e);
+          before.set(
+            e,
+            `${st.borderTopWidth} ${st.borderTopStyle} ${st.borderTopColor}|${st.outlineStyle} ${st.outlineWidth} ${st.outlineColor}|${st.boxShadow}`
+          );
+        }
+        kept.__ringBefore = before;
+        kept.__ringRoot = root;
+        el.focus({ preventScroll: true, focusVisible: true } as FocusOptions);
+        await frame();
+        return document.activeElement === el && el.matches(":focus-visible");
+      }, i);
+      if (!focused) {
+        unfocused.push(i);
+        continue;
+      }
+      read += 1;
+      const said = await page.evaluate(readInPage, {
+        ...args,
+        forced: "ring" as const,
+        exempt: RULES.filter((rule) => rule !== "state-shape"),
+      });
+      findings.push(...said.findings);
+    }
+  } finally {
+    // Focus back where it stood, as visibly as it stood; none where none did.
+    changed = await page.evaluate(async () => {
       const kept = window as unknown as {
-        __stateShape?: { rings?: Element[] };
-        __ringBefore?: Map<Element, string>;
-        __ringRoot?: Element;
+        __ringWas?: { el: Element | null; visible: boolean };
+        __ringOpen?: number;
       };
-      const frame = () =>
-        new Promise((done) =>
-          requestAnimationFrame(() => requestAnimationFrame(done))
-        );
+      const was = kept.__ringWas;
       (document.activeElement as HTMLElement | null)?.blur?.();
-      await frame();
-      const el = kept.__stateShape?.rings?.[at];
-      let root: Element | null = el ?? null;
-      for (
-        let k = 0;
-        k < 3 && root?.parentElement && root.parentElement !== document.body;
-        k += 1
-      ) {
-        root = root.parentElement;
+      const el = was?.el as HTMLElement | null | undefined;
+      if (el && el !== document.body && el.isConnected) {
+        el.focus({
+          preventScroll: true,
+          focusVisible: was?.visible,
+        } as FocusOptions);
       }
-      const before = new Map<Element, string>();
-      for (const e of root ? [root, ...root.querySelectorAll("*")] : []) {
-        const st = getComputedStyle(e);
-        before.set(
-          e,
-          `${st.borderTopWidth} ${st.borderTopStyle} ${st.borderTopColor}|${st.outlineStyle} ${st.outlineWidth} ${st.outlineColor}|${st.boxShadow}`
-        );
-      }
-      kept.__ringBefore = before;
-      kept.__ringRoot = root ?? undefined;
-    }, i);
-    await page.keyboard.press("Shift");
-    const focused = await page.evaluate(async (at) => {
-      const el = (
-        window as unknown as { __stateShape?: { rings?: HTMLElement[] } }
-      ).__stateShape?.rings?.[at];
-      if (!el?.isConnected) {
-        return false;
-      }
-      el.focus({ preventScroll: true });
       await new Promise((done) =>
         requestAnimationFrame(() => requestAnimationFrame(done))
       );
-      return document.activeElement === el && el.matches(":focus-visible");
-    }, i);
-    if (!focused) {
-      unfocused.push(i);
-      continue;
-    }
-    read += 1;
-    const said = await page.evaluate(readInPage, {
-      ...args,
-      forced: "ring" as const,
-      exempt: RULES.filter((rule) => rule !== "state-shape"),
+      const open = document.querySelectorAll(
+        '[data-state="open"], [aria-expanded="true"]'
+      ).length;
+      return open === kept.__ringOpen
+        ? ""
+        : `state-shape: the focus read left ${open} thing(s) open where ${kept.__ringOpen} stood open before it`;
     });
-    findings.push(...said.findings);
   }
-  await page.evaluate(() =>
-    (document.activeElement as HTMLElement | null)?.blur?.()
-  );
   return {
     read,
-    unread:
-      unfocused.length > 0
+    unread: [
+      ...(unfocused.length > 0
         ? [
-            `state-shape: ${unfocused.length} tab stop(s) took no keyboard focus when focused (gone, or focus moved elsewhere): their rings unread`,
+            `state-shape: ${unfocused.length} tab stop(s) took no focus when focused (gone, or focus moved elsewhere): their rings unread`,
           ]
-        : [],
+        : []),
+      ...(changed ? [changed] : []),
+    ],
   };
 }
 
@@ -5067,7 +5140,7 @@ async function forcedStates(
     return {
       findings,
       named: [
-        `state-shape: ${nodeIds.length} control(s) read at rest and with ${FORCED.join(", ")} forced; ${rung.read} focused from the keyboard, their rings read`,
+        `state-shape: ${nodeIds.length} control(s) read at rest and with ${FORCED.join(", ")} forced; ${rung.read} focused as the keyboard focuses them, their rings read`,
       ],
       unread: rung.unread,
     };

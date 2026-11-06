@@ -275,12 +275,15 @@
          releasing) return;`), so the sheet lagged a stop behind every tap.
          The step is taken a task later, once the release has settled, as
          vaul's own Handle takes its cycle (use-drawer-handle.svelte.js,
-         `handleStartCycle`). -->
+         `handleStartCycle`). Under a finger it stands `space-4` clear of
+         the head row under it, so that row's 28px controls (the design
+         graph's faces) reach their 44px at the midpoint between them: a
+         `space-1` there stopped them at 39.5px (graph-stage r524). -->
     <button
       type="button"
       aria-label={grabber.label}
       data-slot="drawer-grabber"
-      class="touch-hit mx-auto mt-space-2 mb-space-1 hidden h-space-5 w-c-grabber-w shrink-0 place-items-center rounded-pill group-data-[vaul-drawer-direction=bottom]/drawer-content:grid"
+      class="touch-hit mx-auto mt-space-2 mb-space-1 coarse:mb-space-4 hidden h-space-5 w-c-grabber-w shrink-0 place-items-center rounded-pill group-data-[vaul-drawer-direction=bottom]/drawer-content:grid"
       onclick={() => {
         setTimeout(grabber.onpress);
       }}
