@@ -13,6 +13,7 @@ import type {
 import { HARNESSES } from "@cawco/core/harness";
 import { isPublicAddress } from "@cawco/core/public-address";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { spawnRead, untether } from "@cawco/core/tether";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 import { packageInstall, workspaceNeeds } from "@cawco/core/workspace-needs";
@@ -167,17 +168,19 @@ const VERSION = /\d+\.\d+\.\d+(?:[-+][\w.-]+)?/u;
  */
 function toolVersion(path: string): Promise<Bounded<string | undefined>> {
   return readWithin(TOOL_VERSION_MS, async (signal) => {
-    const child = Bun.spawn([path, "--version"], {
+    // Tethered (core tether.ts `spawnRead`): ended at the wait's end, and
+    // with the agent however it ends, never left running past it.
+    const child = spawnRead([path, "--version"], {
       // Never the embedded pi's package dir: `pi --version` would read CawCo's pi as its own.
       env: hostEnvironment(),
-      stdout: "pipe",
       stderr: "pipe",
       signal,
     });
     const [stdout, exitCode] = await Promise.all([
       new Response(child.stdout).text(),
       child.exited,
-    ]);
+      new Response(child.stderr).text(),
+    ]).finally(() => untether(child.stdin));
     const text = stdout.trim();
     return exitCode === 0 ? (VERSION.exec(text)?.[0] ?? text) : undefined;
   });

@@ -10,12 +10,12 @@
  * logind's path.
  *
  * 1. The listener stands: gdbus, which the tether's shell `exec`s in its own
- *    place as the agent's child, the tether's reader (`sh -c`) and its
- *    `cat`, each under the agent.
+ *    place as the agent's child, and the tether's reader (`sh -c`), each
+ *    under the agent.
  * 2. gdbus ends first (SIGTERM): the tether ends with it, the agent alive.
  * 2b. The process the agent spawned for the tether is SIGKILLed, and
- *    nothing else: it is gdbus, so gdbus is gone, and the reader and its
- *    cat go with it, the agent alive.
+ *    nothing else: it is gdbus, so gdbus is gone, and the reader goes with
+ *    it, the agent alive.
  * 3. A second agent's listener; the agent is SIGKILLed: every process of the
  *    listener is gone within a second.
  *
@@ -198,11 +198,8 @@ const spec: Spec = {
         one.args.startsWith(`${systemProgram("sh")} -c`)
       );
       check(
-        "the listener stands under the agent: gdbus, the process the agent spawned, the tether's reader and its cat",
-        first.listening &&
-          gdbus?.ppid === first.agent.pid &&
-          !!tetherReader &&
-          first.under.some((one) => one.args === "cat"),
+        "the listener stands under the agent: gdbus, the process the agent spawned, and the tether's reader",
+        first.listening && gdbus?.ppid === first.agent.pid && !!tetherReader,
         `listening ${first.listening}; ${named(first.under)}`
       );
       if (gdbus) {
@@ -239,7 +236,7 @@ const spec: Spec = {
           GONE_MS
         );
         check(
-          "the process the agent spawned for the tether, SIGKILLed alone, is gdbus, and the tether's reader and cat go with it, the agent alive",
+          "the process the agent spawned for the tether, SIGKILLed alone, is gdbus, and the tether's reader goes with it, the agent alive",
           spawned.args.split(" ")[0]?.endsWith("/gdbus") === true &&
             took !== undefined &&
             runs(signalled.agent.pid),
@@ -253,7 +250,7 @@ const spec: Spec = {
       const second = await start();
       check(
         "a second agent's listener stands",
-        second.listening && second.under.length >= 3,
+        second.listening && second.under.length >= 2,
         `listening ${second.listening}; ${named(second.under)}`
       );
       second.agent.kill("SIGKILL");

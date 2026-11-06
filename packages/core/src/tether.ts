@@ -25,7 +25,12 @@ export const TETHER_UNLED = 125;
  *
  * The reader reads the pipe (as fd 3, because dash(1): "If the shell is not
  * interactive, the standard input of an asynchronous command is set to
- * /dev/null"); at end of file, the parent gone or done ({@link untether}),
+ * /dev/null") with the shell's own `read`, a built-in, so it runs whatever
+ * the caller's PATH holds: a `cat` looked up on the PATH was not found on
+ * one without it, and the reader then signalled the group at once, ending
+ * the command it guards. `read` "shall return … >1 An error occurred" or
+ * end of file as non-zero (POSIX.1-2024 read), which ends its loop. At end
+ * of file, the parent gone or done ({@link untether}),
  * it signals the process group the command leads (`kill -- -PGID`), never
  * a pid. The reader is a member of that group, whose lifetime "ends when
  * the last remaining process in the group leaves the group" (POSIX.1-2024
@@ -55,7 +60,7 @@ const TETHER = `kill -s 0 -- "-$$" 2>/dev/null || {
   exit ${TETHER_UNLED}
 }
 exec 3<&0
-{ cat <&3; kill -s TERM -- "-$$"; } >/dev/null 2>&1 &
+{ while read -r _; do :; done <&3; kill -s TERM -- "-$$"; } >/dev/null 2>&1 &
 exec "$@" </dev/null 3<&-`;
 
 /**
@@ -98,6 +103,37 @@ export const spawnTethered = <
     detached: true,
   });
 };
+
+/**
+ * A read of a program that must end with this process, as
+ * {@link spawnTethered} starts it, with `signal` ending it sooner: its
+ * stdin is the tether's pipe, which the caller lets go with
+ * {@link untether} once it has ended. On win32, which has no `sh` to run
+ * the tether, a plain child with a pipe of its own for stdin: it ends with
+ * `signal`, and outlives a process killed outright.
+ */
+export const spawnRead = <const Err extends "pipe" | "ignore">(
+  argv: readonly string[],
+  options: {
+    env: Record<string, string | undefined>;
+    signal?: AbortSignal;
+    stderr: Err;
+  }
+): Bun.Subprocess<"pipe", "pipe", Err> =>
+  process.platform === "win32"
+    ? Bun.spawn([...argv], {
+        env: options.env,
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: options.stderr,
+        ...(options.signal ? { signal: options.signal } : {}),
+      })
+    : spawnTethered(argv, {
+        env: options.env,
+        stdout: "pipe",
+        stderr: options.stderr,
+        ...(options.signal ? { signal: options.signal } : {}),
+      });
 
 /**
  * Lets the tether's reader go once its command has ended on its own: the

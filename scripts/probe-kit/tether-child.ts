@@ -79,9 +79,9 @@ const within = async (test: () => Promise<boolean>): Promise<boolean> => {
   return false;
 };
 
-/** The tether's group stands: the spawned process, its reader and the reader's cat. */
+/** The tether's group stands: the spawned process and its reader. */
 const stands = (pid: number) =>
-  within(async () => (await running(pid)).length >= 3);
+  within(async () => (await running(pid)).length >= 2);
 
 const mode = process.argv.at(-1);
 

@@ -9,7 +9,7 @@ import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { claudeVersionPath } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { spawnTethered, untether } from "@cawco/core/tether";
+import { spawnRead, untether } from "@cawco/core/tether";
 import { secondsOf } from "@cawco/core/time";
 import { harnessRefusedWords } from "@cawco/core/words/harness";
 import { toolWords } from "@cawco/core/words/tools";
@@ -119,7 +119,7 @@ const tellAnswered = (): void => {
  * Starts `path --version` and reads it to its end. One that cannot even be
  * run says no version. It outlives a caller's wait on purpose (its late
  * answer is news, {@link onVersionAnswered}), never the agent: it runs
- * tethered (core tether.ts) off Windows, so an agent that ends however it
+ * tethered (core tether.ts `spawnRead`) off Windows, so an agent that ends however it
  * ends, mid-read, ends it too, where a plain spawn was left running,
  * reparented.
  */
@@ -127,19 +127,10 @@ const readVersion = (path: string, binary: string): VersionRead => {
   let child: Subprocess<"pipe", "pipe", "ignore"> | undefined;
   let version: Promise<string | undefined>;
   try {
-    const argv = [path, "--version"];
-    const env = hostEnvironment();
-    // Windows has no `sh` for the tether to run in (core tether.ts
-    // `spawnTethered` throws there): its read is a plain child.
-    const spawned =
-      process.platform === "win32"
-        ? Bun.spawn(argv, {
-            env,
-            stdin: "pipe",
-            stdout: "pipe",
-            stderr: "ignore",
-          })
-        : spawnTethered(argv, { env, stdout: "pipe", stderr: "ignore" });
+    const spawned = spawnRead([path, "--version"], {
+      env: hostEnvironment(),
+      stderr: "ignore",
+    });
     child = spawned;
     version = Promise.all([new Response(spawned.stdout).text(), spawned.exited])
       .then(([said, code]) => (code === 0 ? SAID.exec(said)?.[0] : undefined))

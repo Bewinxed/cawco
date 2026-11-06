@@ -30,7 +30,7 @@ import {
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { type Ran, runCaptured } from "@cawco/core/run-captured";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { spawnTethered, untether } from "@cawco/core/tether";
+import { spawnRead, spawnTethered, untether } from "@cawco/core/tether";
 import { toolWords } from "@cawco/core/words/tools";
 import { cawcoCommand } from "./cawco-command";
 import { type SettingsRead, SettingsReadSchema } from "./claude-settings";
@@ -388,9 +388,21 @@ const askNeed = async (
 ): Promise<string | undefined> => {
   let ran: Bounded<Ran>;
   try {
-    ran = await readWithin(NEED_WAIT_MS, (signal) =>
-      runCaptured([bin, ...needProbe(need)], { env: toolEnv(), signal })
-    );
+    // Tethered (core tether.ts `spawnRead`): ended at the bound, and with
+    // the agent however it ends, never left running past it.
+    ran = await readWithin(NEED_WAIT_MS, async (signal) => {
+      const child = spawnRead([bin, ...needProbe(need)], {
+        env: toolEnv(),
+        stderr: "pipe",
+        signal,
+      });
+      const [code, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]).finally(() => untether(child.stdin));
+      return { code, signalCode: child.signalCode, stdout, stderr };
+    });
   } catch (error) {
     return toolWords.needBroken(
       bin,

@@ -6,7 +6,7 @@
  * `install`). The hub's legs run here on the hub's own code against a
  * stand-in of Claude Code's release channel; the machine's legs run in
  * children with a scratch HOME and a PATH holding only the stand-in's
- * folder, `ln`, `sleep`, `bash` and `cat`. The stand-in `claude` is laid out as
+ * folder, `ln`, `sleep` and `bash`. The stand-in `claude` is laid out as
  * the native installer lays it out: each build a file under its
  * `versions/`, its launcher `bin/claude` a link to one, and `claude update`
  * re-pointing the launcher at the channel's build with the old one left in
@@ -335,7 +335,7 @@ const standIn = async (
  * Runs one machine's legs in a child: `script`'s last line, JSON, with a
  * scratch HOME (`home`, written first with `settings` as Claude Code's user
  * settings when given) and a PATH of the stand-in's folder, then `ln`,
- * `sleep`, `bash` and `cat` alone.
+ * `sleep` and `bash` alone.
  */
 const onMachine = async <T>(
   kit: Kit,
@@ -357,9 +357,7 @@ const onMachine = async <T>(
       JSON.stringify(settings)
     );
   }
-  // `cat` for the tether a Claude Code version read runs under (core
-  // tether.ts: its reader is `cat`), as every machine has it.
-  for (const tool of ["ln", "sleep", "bash", "cat"]) {
+  for (const tool of ["ln", "sleep", "bash"]) {
     const at = Bun.which(tool);
     if (at && !existsSync(join(bin, tool))) {
       await symlink(at, join(bin, tool));

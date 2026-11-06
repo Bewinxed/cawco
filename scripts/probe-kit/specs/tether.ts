@@ -7,7 +7,12 @@
  * (sleep-listener).
  *
  * 1. The process the caller spawned runs the command itself; the tether's
- *    reader (`sh -c`) and the reader's `cat` stand in its group.
+ *    reader (`sh -c`, reading with its own `read`, so it needs no PATH)
+ *    stands in its group.
+ * 1b. Spawned with a PATH holding nothing: the reader stands all the same
+ *    and the command runs on, never signalled by a reader that could not
+ *    start (a `cat` looked up on the PATH was not found there, and the
+ *    reader ended the command at once).
  * 2. That process SIGKILLed, and nothing else: the caller's read of its
  *    stderr ends and its exit is seen within {@link GONE_MS}, the end the
  *    hub reads as its connection's (ssh-tunnels.ts `connect`), and the
@@ -15,7 +20,7 @@
  *    (node too), and the reader ends what is left of the group: every
  *    process of it gone within {@link GONE_MS}, `untether` then nothing.
  * 3. The caller SIGKILLed (tether-child.ts `caller`): the command, the
- *    reader and its `cat` are gone within {@link GONE_MS}.
+ *    reader are gone within {@link GONE_MS}.
  * 4. Spawned in its caller's process group, not detached (`spawnTethered`'s
  *    own spawn with its `detached` dropped, which no caller can write): the
  *    tether exits `TETHER_UNLED` with its words, and its command never runs.
@@ -115,7 +120,7 @@ async function spawnedKilled(kit: Kit): Promise<void> {
   const lines: string[] = [];
   const reading = readAll(child.stderr, lines);
   await holdsWithin(
-    async () => lines.includes(UP) && (await group(child.pid)).length >= 3,
+    async () => lines.includes(UP) && (await group(child.pid)).length >= 2,
     STAND_MS
   );
   const standing = await group(child.pid);
@@ -123,12 +128,9 @@ async function spawnedKilled(kit: Kit): Promise<void> {
     process.execPath
   );
   check(
-    "1: the process the caller spawned runs the command itself, its reader (sh) and the reader's cat in its group",
+    "1: the process the caller spawned runs the command itself, its reader (sh) in its group",
     runsCommand === true &&
-      standing.some(({ args }) =>
-        args.startsWith(`${systemProgram("sh")} -c`)
-      ) &&
-      standing.some(({ args }) => args === "cat"),
+      standing.some(({ args }) => args.startsWith(`${systemProgram("sh")} -c`)),
     named(standing)
   );
 
@@ -159,6 +161,35 @@ async function spawnedKilled(kit: Kit): Promise<void> {
   );
 }
 
+/** How long 1b watches the command run on under a PATH holding nothing. */
+const NO_PATH_MS = 1500;
+
+/** 1b: a PATH holding nothing. */
+async function noPath(kit: Kit): Promise<void> {
+  const child = spawnTethered(COMMAND, {
+    env: { PATH: "" },
+    stdout: "ignore",
+    stderr: "pipe",
+  });
+  const lines: string[] = [];
+  const reading = readAll(child.stderr, lines);
+  const stood = await holdsWithin(
+    async () => lines.includes(UP) && (await group(child.pid)).length >= 2,
+    STAND_MS
+  );
+  await Bun.sleep(NO_PATH_MS);
+  const runs = child.exitCode === null && child.signalCode === null;
+  untether(child.stdin);
+  const ended =
+    (await readWithin(GONE_MS, () => Promise.all([reading, child.exited])))
+      .kind === "answered";
+  kit.check(
+    `1b: with a PATH holding nothing, the reader stands and the command runs on ${NO_PATH_MS} ms later, then ends once let go`,
+    stood !== undefined && runs && ended,
+    `stood ${stood ?? "never"}; ${runs ? "running" : `ended by ${child.signalCode ?? child.exitCode}`} after ${NO_PATH_MS} ms; ${ended ? "ended once let go" : "still running once let go"}; stderr ${JSON.stringify(lines)}`
+  );
+}
+
 /** 3: the caller SIGKILLed. */
 async function callerKilled(kit: Kit): Promise<void> {
   const caller = Bun.spawn([process.execPath, CHILD, "caller"], {
@@ -182,8 +213,8 @@ async function callerKilled(kit: Kit): Promise<void> {
     GONE_MS
   );
   kit.check(
-    `3: the caller SIGKILLed, the command, the reader and its cat are gone within ${GONE_MS} ms`,
-    standing.length >= 3 && gone !== undefined,
+    `3: the caller SIGKILLed, the command and the reader are gone within ${GONE_MS} ms`,
+    standing.length >= 2 && gone !== undefined,
     `standing: ${named(standing)}; ${gone === undefined ? `still running: ${named(await group(tether))}` : `gone ${gone} ms after the caller`}`
   );
 }
@@ -299,6 +330,7 @@ const spec: Spec = {
   name: "tether",
   async run(kit: Kit) {
     await spawnedKilled(kit);
+    await noPath(kit);
     await callerKilled(kit);
     await unled(kit);
     await pidHeld(kit);
