@@ -22,26 +22,19 @@
   import { MINUTE_MS } from "@cawco/core/time";
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import type { TransitionConfig } from "svelte/transition";
   import { blankSession } from "#lib/cawco/client.svelte.js";
   import FindField from "#lib/cawco/find/FindField.svelte";
   import FindRow from "#lib/cawco/find/FindRow.svelte";
   import type { Row as FindRowData, Run } from "#lib/cawco/find/find-rows.js";
-  import {
-    crossIn,
-    crossOut,
-    dur,
-    easeOut,
-    motionOk,
-    rise,
-  } from "#lib/cawco/motion/curves.svelte.js";
+  import { frameSize } from "#lib/cawco/frame-observer.js";
+  import { crossIn, crossOut, rise } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import SessionPane from "#lib/cawco/SessionPane.svelte";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { composerFleet } from "#lib/cawco/transcript/composer-fleet.js";
-    import { disclosureAt } from "#lib/cawco/transcript/disclosure.svelte.js";
+  import { disclosureAt } from "#lib/cawco/transcript/disclosure.svelte.js";
   import { askOpenAt } from "#lib/cawco/transcript/open-at.svelte.js";
   import type { Message } from "#lib/cawco/types.js";
   import {
@@ -304,7 +297,9 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
     });
   }
 
-  const leaf = $state<LeafNode>(untrack(() => benchLeaf("find-shape", ids, "1")));
+  const leaf = $state<LeafNode>(
+    untrack(() => benchLeaf("find-shape", ids, "1"))
+  );
 
   const PLACE = 3;
   const PLACES = 8;
@@ -368,7 +363,7 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
         return { glyph: IconAgent, title: AGENT, word: "Message" };
       case "thinking":
         return { glyph: IconStars, title: AGENT, word: "Reasoning" };
-      default:
+      case "tool":
         return {
           glyph: s.name === "Grep" ? IconToolSearch : IconToolTerminal,
           title: `${s.name} output`,
@@ -531,6 +526,12 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
     if (shape !== "composer") {
       goTo(allPlaces[PLACE - 1]);
     }
+    // The frame reads no hub: the shell's hub band, which would say so over
+    // the conversation, is put away while the frame stands.
+    const band =
+      document.querySelector<HTMLElement>("[data-hub-band-said]")
+        ?.parentElement ?? null;
+    band?.setAttribute("hidden", "");
     glass = document.querySelector<HTMLElement>("[data-bar-group]");
     if (glass && stage) {
       glassRoom =
@@ -566,6 +567,7 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
       observer.disconnect();
       cancelAnimationFrame(asked);
       clearInterval(tick);
+      band?.removeAttribute("hidden");
       window.removeEventListener("resize", measure);
       window.removeEventListener("keydown", onkey);
       clearTimeout(opening);
@@ -651,19 +653,6 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
     }
   }
 
-  /** The glyph leaving a control's box as its next one comes in (Composer `glyphOut`). */
-  function glyphOut(_node: Element): TransitionConfig {
-    const still = !motionOk.current;
-    return {
-      duration: dur("--dur-control"),
-      easing: easeOut,
-      css: (t, u) =>
-        still
-          ? `opacity: ${t}`
-          : `opacity: ${t}; scale: ${1 - u * 0.75}; filter: blur(calc(var(--space-1) * ${u}))`,
-    };
-  }
-
   /** The head row's own height, so the transcript starts under it. */
   let headH = $state(0);
   const headTop = $derived(phone ? 0 : paneTop);
@@ -674,28 +663,6 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
 
 <svelte:head>
   <title>Find in a conversation: {shape} | CawCo</title>
-  <style>
-    [data-shape="composer"] [data-slot="dock"] [data-slot="cin"] {
-      visibility: hidden;
-    }
-    [data-shape] [data-marked]::before {
-      opacity: 0;
-    }
-    [data-find-frame] [data-find-row][data-active] {
-      background-color: var(--surface-hover);
-    }
-    [data-slot="hub-band-slot"] {
-      display: none;
-    }
-    ::highlight(find-place) {
-      background-color: var(--brand-wash);
-      color: inherit;
-    }
-    ::highlight(find-current) {
-      background-color: var(--brand-solid);
-      color: var(--on-brand);
-    }
-  </style>
 </svelte:head>
 
 {#snippet placeStep()}
@@ -705,7 +672,7 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
     aria-live="polite">{placeNo} of {shownPlaces.length}</span
   >
   <button
-    class="select-none grid place-items-center flex-none size-c-btn-h border-none rounded-md bg-transparent text-ink-muted hover:bg-surface-hover active:bg-surface-fill"
+    class="select-none grid place-items-center flex-none size-c-btn-h border-none rounded-md bg-transparent text-ink-muted hover:not-active:bg-surface-hover active:bg-surface-fill"
     onclick={() => step(-1)}
     aria-label="Previous place"
     title="Previous place"
@@ -739,7 +706,9 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
   <div
     data-find-frame
     class="pointer-events-auto flex flex-col bg-surface-recess border-b border-b-border-hairline"
-    bind:offsetHeight={headH}
+    {@attach frameSize((node: HTMLElement) => {
+      headH = node.offsetHeight;
+    })}
   >
     <div
       class="flex items-center gap-space-2 h-c-find-phone-h ps-(--head-x) pe-space-3"
@@ -792,7 +761,7 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
   <div
     bind:this={stage}
     data-shape={shape}
-    class="absolute inset-0 flex justify-end bg-surface-shelf text-ink-strong"
+    class="absolute inset-0 flex justify-end bg-surface-shelf text-ink-strong [&_[data-marked]]:before:opacity-0 [&_*::highlight(find-place)]:bg-brand-wash [&_*::highlight(find-place)]:text-inherit [&_*::highlight(find-current)]:bg-brand-solid [&_*::highlight(find-current)]:text-on-brand data-[shape=composer]:[&_[data-slot=dock]_[data-slot=cin]]:invisible"
   >
     <div
       class="relative flex min-h-0 w-c-panel-w m-space-6 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile"
@@ -803,7 +772,7 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
       >
         {#if shape === "head"}
           <div
-            class="absolute inset-x-0 top-0 z-1 pt-(--c-top-bar-h) bg-surface-recess"
+            class="absolute inset-x-0 top-0 z-1 pt-c-top-bar-h bg-surface-recess"
           >
             {@render headRow()}
           </div>
@@ -849,12 +818,12 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
   <div
     bind:this={stage}
     data-shape={shape}
-    class="@container/leaf pointer-events-none absolute inset-0 flex flex-col text-ink-strong"
+    class="@container/leaf pointer-events-none absolute inset-0 flex flex-col text-ink-strong [&_[data-marked]]:before:opacity-0 [&_*::highlight(find-place)]:bg-brand-wash [&_*::highlight(find-place)]:text-inherit [&_*::highlight(find-current)]:bg-brand-solid [&_*::highlight(find-current)]:text-on-brand data-[shape=composer]:[&_[data-slot=dock]_[data-slot=cin]]:invisible"
     onclickcapture={benchClick(leaf)}
   >
     <div
-      class="pointer-events-auto bg-surface-shelf"
-      style:margin-inline-end="{glassRoom}px"
+      class="pointer-events-auto me-(--glass-room) bg-surface-shelf"
+      style:--glass-room="{glassRoom}px"
     >
       <PaneTabs {leaf} />
     </div>
@@ -866,10 +835,10 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
         {@const shown = leaf.active === id}
         <div
           data-slot="slot"
-          class="absolute inset-x-0 bottom-0 flex data-hidden:pointer-events-none data-hidden:content-visibility-hidden"
+          class="absolute inset-x-0 bottom-0 flex data-hidden:pointer-events-none data-hidden:content-visibility-hidden top-(--pane-inset)"
           data-hidden={!shown || undefined}
           data-pane={id}
-          style:top="{paneInset}px"
+          style:--pane-inset="{paneInset}px"
         >
           <SessionPane
             active={shown}
@@ -895,8 +864,8 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
     </div>
     {#if shape === "head"}
       <div
-        class="absolute inset-x-0 z-(--layer-dock)"
-        style:top="{headTop}px"
+        class="absolute inset-x-0 top-(--head-top) z-(--layer-dock)"
+        style:--head-top="{headTop}px"
       >
         {@render headRow()}
       </div>
@@ -916,11 +885,11 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
     data-finding={finding || undefined}
     class={dockShellVariants({
       class:
-        "fixed z-(--layer-float) flex flex-col py-(--cin-pad) pe-(--cin-pad) ps-space-3",
+        "fixed start-(--pill-x) bottom-(--pill-bottom) w-(--pill-w) z-(--layer-float) flex flex-col py-(--cin-pad) pe-(--cin-pad) ps-space-3",
     })}
-    style:left="{pill.x}px"
-    style:bottom="calc(100dvh - {pill.y + pill.h}px)"
-    style:width="{pill.w}px"
+    style:--pill-x="{pill.x}px"
+    style:--pill-bottom="calc(100dvh - {pill.y + pill.h}px)"
+    style:--pill-w="{pill.w}px"
     style:--cin-pad="var(--c-composer-inset)"
     aria-label={finding ? "Find in this conversation" : "Message the agent"}
     onsubmit={(event) => {
@@ -945,6 +914,8 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
           >Back where you were</span
         >
       </button>
+      <!-- mark-line: the speaker marks are the toolbar's own buttons and the
+           place stands at the row's far end; no words stand beside a mark. -->
       <div
         class="flex items-center gap-space-2 pb-space-2 pe-space-1"
         transition:unfold
@@ -1033,18 +1004,17 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
       >
         <DropdownMenu.Trigger
           aria-label={finding ? "Previous place" : "Attach, draw or find"}
-          class="flex-none grid"
           look="attach"
           title={finding ? "Previous place" : "Attach, draw or find"}
         >
           {#key finding}
             <span
               class="row-start-1 col-start-1 grid place-items-center motion-safe:animate-icon-swap motion-reduce:animate-icon-swap-still"
-              out:glyphOut
+              out:crossOut
             >
-              {#if finding}<IconChevronUp class="size-icon-md" />{:else}<IconPlus
+              {#if finding}<IconChevronUp
                   class="size-icon-md"
-                />{/if}
+                />{:else}<IconPlus class="size-icon-md" />{/if}
             </span>
           {/key}
         </DropdownMenu.Trigger>
@@ -1075,7 +1045,7 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
         {#key finding}
           <span
             class="row-start-1 col-start-1 grid place-items-center motion-safe:animate-icon-swap motion-reduce:animate-icon-swap-still"
-            out:glyphOut
+            out:crossOut
           >
             {#if finding}<IconChevronDown />{:else}<IconSend />{/if}
           </span>
@@ -1112,8 +1082,10 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
   >
     <span
       class="mark-line inline-flex items-center gap-space-row h-c-pill-h ps-space-3 pe-space-row border border-transparent rounded-pill bg-brand-wash type-label text-brand-ink"
-      ><span>In {inCaw ? "Caw's conversation" : "Fix the relay's reconnect"}</span
+      ><span
+        >In {inCaw ? "Caw's conversation" : "Fix the relay's reconnect"}</span
       ><button
+        data-box
         class="select-none grid place-items-center size-icon-lg border-none rounded-pill bg-transparent"
         aria-label="Find everywhere"
         type="button"><IconClose class="size-icon-sm" /></button
@@ -1143,7 +1115,7 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
              the keyboard and the place nearest it (Finder, phone). -->
         <div
           data-find-frame
-          class="group/finder flex flex-col w-[calc(100vw-var(--space-4))] h-[calc(100dvh-var(--c-top-bar-h)-var(--space-6))]"
+          class="group/finder flex flex-col w-full h-(--frame-h)"
           data-phone
         >
           <div
@@ -1164,7 +1136,7 @@ packages/hub/src/relay.ts:240:  return fatal("refused");`,
       {:else}
         <div
           data-find-frame
-          class="group/finder flex flex-col w-c-find-w max-h-[min(640px,calc(100dvh-var(--space-10)))]"
+          class="group/finder flex flex-col w-c-find-w max-h-(--frame-h)"
         >
           <FindField
             aria-label="Find"
