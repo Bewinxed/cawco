@@ -402,14 +402,25 @@ const stageIn = (id: string): Stage | undefined =>
  * place's stage clone in its clone's turn: refused while a stage runs in it,
  * and passing over every change that stands as in its checkout
  * (stage-clone.ts `sameAsCheckout`), so only what the checkout lacks holds
- * it. Any other workspace's stages end first: nothing of it is left to serve.
+ * it. Any other workspace's stages end first, and only that workspace's:
+ * nothing of it is left to serve. A request naming no workspace is refused
+ * at the door, nothing ended: every caller (hub work-items.ts `archive`,
+ * `discardCreate` and its sweep's re-close, project-delete.ts `dropClone`)
+ * sends core `WorkspaceArchive`, whose `id` is required.
  */
 export const closingStages = <T>(
-  request: { id?: string; path?: string; skip?: string[] } | null,
+  request: { id?: unknown; path?: string; skip?: string[] } | null,
   close: (request: unknown) => Promise<T>
 ): Promise<T> => {
   const id = request?.id;
-  if (!(id && isStageClone(id))) {
+  if (!(typeof id === "string" && id)) {
+    return Promise.reject(
+      new Error(
+        "A workspace's archive names the workspace by its id; this request names none, so nothing was ended or deleted."
+      )
+    );
+  }
+  if (!isStageClone(id)) {
     stopStages(id);
     return close(request);
   }
@@ -1935,10 +1946,10 @@ function stopOne(stage: Stage): void {
   }
 }
 
-/** Stops every stage of workspace `id` (its archive), or every stage (the daemon's end). */
-function stopStages(id?: string): void {
+/** Stops every stage of workspace `id`: its archive. */
+function stopStages(id: string): void {
   for (const stage of [...stages.values()]) {
-    if (id === undefined || stage.workspace.id === id) {
+    if (stage.workspace.id === id) {
       stopOne(stage);
     }
   }
@@ -2006,7 +2017,9 @@ export function carryStages(): void {
       `[stage] the ${carried.length} stage(s) that answer were not written down for the next agent: ${error instanceof Error ? error.message : String(error)}`
     );
   }
-  stopStages();
+  for (const stage of [...stages.values()]) {
+    stopOne(stage);
+  }
 }
 
 /** The stages the last daemon carried ({@link carryStages}), the record taken as read; none when it left none or the record is damaged. */

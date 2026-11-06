@@ -24,13 +24,24 @@
  *    started once since the restart: the request found it live, never woke
  *    it.
  *
+ * Beside it, before the restart, a delegate in a workspace of its own hands
+ * up a preview whose server CawCo's stage runs there (`serve`, agent
+ * stage.ts `ensureServed`), then rests in a wait, its item live; nobody
+ * opens the preview but the probe's one read of it (1b). Across the same
+ * restart:
+ *
+ * 2b. With nothing asked of it, the new agent's log says the served
+ *     preview's port `live` and started again after the agent's restart.
+ * 4. Then the preview's origin answers the delegate's page, and the server
+ *    started once since the restart.
+ *
  *   bun scripts/probe-kit/run.ts stage-carried
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fetchHub, hubRequest } from "../../../packages/core/src/hub-request";
 import { STAGE_RESUMED_SAID } from "../../../packages/core/src/stage";
-import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { ToolCalls } from "../../tool-calls";
 import type { Kit, Spec } from "../kit";
 import { passedFetch } from "../preview-pass";
@@ -43,15 +54,88 @@ const short = (said: string) => said.replaceAll(/\s+/gu, " ").slice(0, 600);
 /** Ours: a stage clone's install and its host's start, with room. */
 const BACK_MS = 240_000;
 
+const WAIT = "mcp__cawco__wait_item";
+/** The delegate's prompt marker. */
+const DELEGATE = "PROBE-STAGE-CARRIED-D";
+/** The port the delegate's server is served on, in its workspace. */
+const SERVED_PORT = 47_651;
+const SERVED_WORD = "carried served page";
+/** The stage's name for it in the agent's `[stage]` lines (stage.ts `tell`). */
+const SERVED_AT = `port ${SERVED_PORT}`;
+
+/** `word` as one single-quoted shell word. */
+const quoted = (word: string): string => `'${word.replaceAll("'", `'\\''`)}'`;
+
+/** What serves the delegate's preview: a page saying {@link SERVED_WORD} on the `PORT` the stage gives it. */
+const SERVED = `bun -e ${quoted(
+  `const page=${JSON.stringify(`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${SERVED_WORD}</title></head><body><h1 id="word">${SERVED_WORD}</h1></body></html>`)};Bun.serve({hostname:"127.0.0.1",port:Number(process.env.PORT),fetch:()=>new Response(page,{headers:{"content-type":"text/html"}})});`
+)}`;
+
 /** The session's numbered calls (scripts/tool-calls.ts). */
 const calls = new ToolCalls();
 
+const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
+const tool = (name: string, input: object): Reply => ({
+  everyMs: 5,
+  words: [],
+  tool: { name, input },
+});
+
+/** The delegate's step: 1 once it asked for its hand-up, 2 once it asked for its wait. */
+let step = 0;
+/** The CawCo tool the delegate asked for once ToolSearch has loaded it. */
+let pending: { input: object; name: string } | undefined;
+
+/** A call of `name`, through ToolSearch while it is not loaded yet. */
+const want = (request: Seen, name: string, input: object): Reply => {
+  if (request.toolNames.includes(name)) {
+    pending = undefined;
+    return tool(name, input);
+  }
+  pending = { name, input };
+  return request.toolNames.includes("ToolSearch")
+    ? tool("ToolSearch", { query: `select:${name}`, max_results: 1 })
+    : text(`${name} is not offered`);
+};
+
+/** The delegate: its served preview, in its own turn, then a wait, its item live. */
+const work = (request: Seen): Reply => {
+  if (step === 0) {
+    step = 1;
+    return want(request, CREATE, {
+      kind: "preview",
+      does: "try",
+      title: "Probe try artifact",
+      ask: "Try this page and say whether it works",
+      name: "served",
+      port: SERVED_PORT,
+      serve: { command: SERVED },
+    });
+  }
+  if (!request.afterTool) {
+    return text("ok");
+  }
+  if (pending) {
+    return want(request, pending.name, pending.input);
+  }
+  if (step === 1) {
+    step = 2;
+    return want(request, WAIT, {
+      minutes: 30,
+      reason: "its parent's word on the page",
+    });
+  }
+  return text("ok");
+};
+
 const respond = (request: Seen): Reply => {
-  const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("Probe title");
   }
-  return calls.reply(request) ?? text("ok");
+  if (calls.markerOf(request)) {
+    return calls.reply(request) ?? text("ok");
+  }
+  return request.all.includes(DELEGATE) ? work(request) : text("ok");
 };
 
 /** A Vite + Svelte project with one card and its states file. */
@@ -85,14 +169,31 @@ export const One = { args: {} };
 `,
 };
 
-const ROOT_STAGE_LINE = /\[stage\] [0-9a-z-]+ \.: (.*)$/u;
+const STAGE_MARK = "[stage] ";
 
-/** The agent's `[stage]` lines for the sheet stage at the checkout's root (stage.ts `tell`): what each says after its name. */
-const rootStageLines = (log: string): string[] =>
-  log
-    .split("\n")
-    .map((line) => ROOT_STAGE_LINE.exec(line)?.[1])
-    .filter((said): said is string => said !== undefined);
+/**
+ * The agent's `[stage]` lines for the stage it names `at` after its
+ * workspace (stage.ts `tell`): `.` for the sheet stage at the checkout's
+ * root, `port <n>` for a served preview. What each says after that name.
+ */
+const stageLines = (log: string, at: string): string[] =>
+  log.split("\n").flatMap((line) => {
+    const mark = line.indexOf(STAGE_MARK);
+    if (mark < 0) {
+      return [];
+    }
+    const rest = line.slice(mark + STAGE_MARK.length);
+    const named = rest.slice(rest.indexOf(" ") + 1);
+    return named.startsWith(`${at}: `) ? [named.slice(at.length + 2)] : [];
+  });
+const rootStageLines = (log: string): string[] => stageLines(log, ".");
+/** Whether a stage's lines say it answered again after the restart: `live`, and started again by it. */
+const backAfter = (said: string[]): boolean =>
+  said.some((one) => one.startsWith("live")) &&
+  said.some((one) => one.startsWith(STAGE_RESUMED_SAID));
+/** How many times its lines say it started. */
+const startsIn = (said: string[]): number =>
+  said.filter((one) => one === "starting" || one === "waking").length;
 
 const run = async (kit: Kit) => {
   const { check } = kit;
@@ -150,24 +251,93 @@ const run = async (kit: Kit) => {
     return;
   }
 
+  // 1b. A delegate's served preview in its workspace, its item resting in a wait.
+  const home = fleet.env.HOME as string;
+  const repo = join(fleet.sandbox, "code");
+  await Bun.$`mkdir -p ${repo} && cd ${repo} && git init -q -b main && echo carried > README.md && git add -A && git -c user.name=Owner -c user.email=owner@probe.test commit -qm 'First commit'`
+    .env({ ...process.env, HOME: home })
+    .quiet();
+  const project = await fleet.api<{ id: string }>(
+    hubRequest("POST /api/projects", {
+      body: { name: "Stage carried", machineId: MACHINE, cwd: repo },
+    })
+  );
+  const parent = await fleet.spawn("claude", "Parent", repo, {
+    projectId: project.id,
+  });
+  await fleet.api(
+    hubRequest("POST /api/work-items", {
+      body: {
+        parentInstanceId: parent,
+        title: "Serve a page",
+        prompt: `${DELEGATE}: hand up your page, then wait.`,
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        cwd: repo,
+      },
+    })
+  );
+  await until(
+    "the delegate resting in its wait",
+    () => step,
+    (at) => at >= 2,
+    BACK_MS
+  ).catch(() => undefined);
+  const servedId = fleet.query<{ id: string }>(
+    "SELECT id FROM artifacts WHERE name = 'served' AND kind = 'preview'"
+  )[0]?.id;
+  /** What the served preview's own origin answers at its root: its status and whether it is the delegate's page. */
+  const servedReads = async () => {
+    if (!servedId) {
+      return "no preview row";
+    }
+    const { port: at } = await fleet.api<{ port: number }>(
+      hubRequest("POST /api/artifacts/:artifact/preview-address", {
+        path: { artifact: servedId },
+      })
+    );
+    const response = await passedFetch(fleet, `http://127.0.0.1:${at}/`, {
+      headers: { "sec-fetch-mode": "navigate" },
+    }).catch((error: unknown) => String(error));
+    if (typeof response === "string") {
+      return response;
+    }
+    const body = await response.text();
+    return `${response.status} ${body.includes(SERVED_WORD) ? "the page" : body.slice(0, 160)}`;
+  };
+  const servedFirst = await until(
+    "the served preview",
+    servedReads,
+    (said) => said === "200 the page",
+    60_000
+  ).catch(servedReads);
+  check(
+    "1b: the delegate's served preview answers its page through its origin, its item resting in a wait",
+    step >= 2 && servedFirst === "200 the page",
+    `delegate step ${step}; the preview: ${servedFirst}`
+  );
+
   // 2. The agent's restart, as an update's: the stage is started again with nothing asked of it.
   const mark = await fleet.logMark("agent");
   await fleet.stop("agent");
   fleet.launch("agent");
   await fleet.agentUp();
   const resumed = await until(
-    "the stage started again after the agent's restart",
-    async () => rootStageLines(await mark.since()),
-    (said) =>
-      said.some((one) => one.startsWith("live")) &&
-      said.some((one) => one.startsWith(STAGE_RESUMED_SAID)),
+    "the stages started again after the agent's restart",
+    async () => await mark.since(),
+    (log) =>
+      backAfter(rootStageLines(log)) && backAfter(stageLines(log, SERVED_AT)),
     BACK_MS
-  ).catch(async () => rootStageLines(await mark.since()));
+  ).catch(async () => await mark.since());
   check(
     "2: with no viewer and no request, the restarted agent starts the stage that was live, which answers live, said as started again after the restart",
-    resumed.some((one) => one.startsWith("live")) &&
-      resumed.some((one) => one.startsWith(STAGE_RESUMED_SAID)),
-    `the stage's lines since the restart: ${resumed.join(" | ") || "none"}`
+    backAfter(rootStageLines(resumed)),
+    `the stage's lines since the restart: ${rootStageLines(resumed).join(" | ") || "none"}`
+  );
+  check(
+    "2b: with nothing viewing it, the restarted agent starts the served preview's server that was live, which answers live, said as started again after the restart",
+    backAfter(stageLines(resumed, SERVED_AT)),
+    `its lines since the restart: ${stageLines(resumed, SERVED_AT).join(" | ") || "none"}`
   );
 
   // 3. Its canvas answers through its preview origin, and the request woke nothing.
@@ -194,19 +364,31 @@ const run = async (kit: Kit) => {
     (said) => said === "200",
     60_000
   ).catch(answered);
-  const starts = rootStageLines(await mark.since()).filter(
-    (one) => one === "starting" || one === "waking"
-  );
+  const starts = startsIn(rootStageLines(await mark.since()));
   check(
     "3: after the restart its canvas answers 200 through its preview origin, the stage started once since: the request found it live",
-    status === "200" && starts.length === 1,
-    `preview port ${port}: ${status}; starts since the restart: ${starts.length}`
+    status === "200" && starts === 1,
+    `preview port ${port}: ${status}; starts since the restart: ${starts}`
+  );
+
+  // 4. The served preview answers at its port, and the read woke nothing.
+  const servedAfter = await until(
+    "the served preview after the restart",
+    servedReads,
+    (said) => said === "200 the page",
+    60_000
+  ).catch(servedReads);
+  const servedStarts = startsIn(stageLines(await mark.since(), SERVED_AT));
+  check(
+    "4: after the restart the served preview answers the delegate's page through its origin, its server started once since: the read found it live",
+    servedAfter === "200 the page" && servedStarts === 1,
+    `the preview: ${servedAfter}; starts since the restart: ${servedStarts}`
   );
 };
 
 export default {
   group: "Previews, pages and comments",
   name: "stage-carried",
-  host: "it starts a stage, whose place's stage clone runs in a boundary of its own",
+  host: "it starts stages in boundaries: a place's stage clone's and a delegate's workspace's",
   run,
 } satisfies Spec;
