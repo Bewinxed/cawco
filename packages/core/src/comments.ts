@@ -213,6 +213,13 @@ export interface PageAnchor {
    */
   frames?: string[];
   /**
+   * What a person calls the spot, read off the element as the page drew it
+   * (agent preview-overlay spot-name.ts: its label and what it is, "Search
+   * comments field"): the pin's name (core pin-name.ts), never a
+   * component's name or its text run together.
+   */
+  name?: string;
+  /**
    * Named by its place alone: the hash of the document it stands in, as it was
    * served when the anchor was read. While the document is that one, the words at its place have changed
    * only by the page's own running, so the element there is the mark's

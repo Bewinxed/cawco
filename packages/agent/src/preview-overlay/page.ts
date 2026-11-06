@@ -111,6 +111,7 @@ import { type DraftTarget, type Pins, padded, startPins } from "./pins";
 import { inkChrome } from "./radial";
 import { drawInScheme, type Scheme } from "./schemes";
 import { scrollerRound } from "./scrollers";
+import { spotName } from "./spot-name";
 
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/u;
 /** A page hash: sha256, hex. */
@@ -1953,6 +1954,12 @@ function anchorToday(anchor: PageAnchor, at: string): PageAnchor {
     : { ...anchor, page: pageHash };
 }
 
+/** What a person calls `el` (./spot-name.ts), kept on its anchor when it says anything. */
+function nameOf(el: Element): { name?: string } {
+  const name = spotName(el);
+  return name ? { name } : {};
+}
+
 function anchorOf(el: Element): PageAnchor {
   const remote = embeds.anchorOf(el);
   if (remote) {
@@ -1975,6 +1982,7 @@ function anchorOf(el: Element): PageAnchor {
     source: sourceOf(el),
     ...(sheetChain(el) ?? {}),
     ...(whole ? {} : { text: textOf(el) }),
+    ...(whole ? {} : nameOf(el)),
     ...(hash && !stableSelector(selector) ? { page: hash } : {}),
     box: {
       x: Math.round(x + scrollX),

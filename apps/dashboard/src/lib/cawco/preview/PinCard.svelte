@@ -110,6 +110,7 @@
     onplace,
     onclose,
     back,
+    sheet = false,
     onfind,
     ondraft,
     changes,
@@ -169,6 +170,14 @@
      * pane's): Back leads, going to `to` (the list's name).
      */
     back?: { to: string; onback: () => void };
+    /**
+     * It stands in a phone's sheet (ThreadSheet): Close leads its bar, as it
+     * leads every view of a sheet (the owner's pick on title-bars-close:
+     * Close at the sheet's leading edge), with Back beside it in the same
+     * glass where the thread was opened from the list; on a desk the card's
+     * Close trails, as a card's does.
+     */
+    sheet?: boolean;
     /** Its name pressed: the page scrolls to the pin and lights its element. */
     onfind: () => void;
     ondraft?: () => void;
@@ -447,14 +456,17 @@
 {/snippet}
 <!-- No head band (the artifact panel's surface brief, A thread beside its
      pin; The Title Bars Follow Liquid Glass Rule): the bar is one row of
-     floating groups with no ground, Back leading where the card opened from
-     the Comments list, then the pin's pill, and trailing Resolve or Reopen, Delete comment and
-     Copy link (or More, where it holds more than one thing) as one glass
-     group and Close in its own (HIG, Toolbars: "Group navigation controls
-     and critical actions like Done, Close, or Save in dedicated, familiar,
-     and visually distinct sections"). Under it the title, then Delete's
-     question where Delete was pressed, then the thread, the one part that
-     scrolls. The peek takes no press, so it has none. -->
+     floating groups with no ground. In a phone's sheet Close leads it, Back
+     beside it in one glass where the thread was opened from the list (the
+     sheet's navigation, HIG Toolbars: "Group navigation controls and
+     critical actions like Done, Close, or Save in dedicated … sections");
+     then the pin's pill while the page's own is out of view, and the title,
+     the bar's own title control in its leading room, a press finding it on
+     the page; trailing, Resolve or Reopen, Delete comment and Copy link (or
+     More) as one glass, and on a desk Close in its own. Under the bar the
+     element's parent where it says more, Delete's question where Delete was
+     pressed, then the thread, the one part that scrolls. The peek takes no
+     press, so it has none. -->
 <div
   bind:this={head}
   class="flex shrink-0 flex-col gap-space-2"
@@ -462,29 +474,58 @@
 >
   {#if !peek}
     <div
-      class="flex h-c-top-bar-h items-center justify-between gap-space-2"
+      class="flex min-h-c-top-bar-h items-center gap-space-2"
       data-slot="bar"
     >
-      <div class="flex min-w-0 items-center gap-space-2">
-        {#if back}
-          <!-- Opened from the list in the same sheet: Back leads, the
-               chevron alone, named by where it goes (HIG, Sheets: "Display
-               only one sheet at a time"; a sheet's views push and pop
-               within it). -->
-          <BarGlass form="group">
+      {#if sheet}
+        <BarGlass form="group">
+          <BarItem
+            data-slot="close"
+            icon={IconClose}
+            label={said.close}
+            onclick={onclose}
+          />
+          {#if back}
             <BarItem
               data-slot="back"
               icon={IconChevronLeft}
               label={commonWords.backTo(back.to)}
               onclick={back.onback}
             />
-          </BarGlass>
-        {/if}
-        {#if !marked}
-          <!-- The pin's pill leads the bar, what the card is (as a sheet's
-               title leads after Back), while the page's own is out of view. -->
-          {@render headPill()}
-        {/if}
+          {/if}
+        </BarGlass>
+      {:else if back}
+        <BarGlass form="group">
+          <BarItem
+            data-slot="back"
+            icon={IconChevronLeft}
+            label={commonWords.backTo(back.to)}
+            onclick={back.onback}
+          />
+        </BarGlass>
+      {/if}
+      {#if !marked}
+        <!-- The pin's pill, what the card is, while the page's own is out of view. -->
+        {@render headPill()}
+      {/if}
+      <!-- The title: what the comment stands on, two lines at most, the
+           bar's own title control (a press scrolls the page to it and lights
+           its element), its whole name in its tooltip. -->
+      <div class="flex min-w-0 flex-1">
+        <BarGlass form="title">
+          <BarItem
+            data-slot="name"
+            form="title"
+            label={name}
+            lines="two"
+            onclick={onfind}
+            tip={name}
+            ><span
+              class="line-clamp-2 text-pretty wrap-anywhere text-start text-ink-strong type-body font-medium"
+              >{name}</span
+            ></BarItem
+          >
+        </BarGlass>
       </div>
       <div class="flex flex-none items-center gap-space-2">
         <BarGlass form="group">
@@ -544,9 +585,11 @@
             {/if}
           {/if}
         </BarGlass>
-        <BarGlass form="group">
-          <BarItem icon={IconClose} label={said.close} onclick={onclose} />
-        </BarGlass>
+        {#if !sheet}
+          <BarGlass form="group">
+            <BarItem icon={IconClose} label={said.close} onclick={onclose} />
+          </BarGlass>
+        {/if}
       </div>
     </div>
   {/if}
@@ -559,42 +602,34 @@
          It has the card's whole width under the bar, as a large title stands
          under its bar (HIG, Navigation bars), never squeezed beside the
          groups. -->
-  <div data-slot="head" class="flex shrink-0 items-start gap-space-2">
-    {#if peek && !marked}
-      {@render headPill()}
-    {/if}
-    <div class="flex min-w-0 flex-1 flex-col gap-space-row">
-      <!-- Two lines at most, clamped in an inner span (The Truncate Inside Rule): WebKit clamps no button. -->
-      {#if peek}
-        <p
-          data-slot="name"
-          class="m-0 min-w-0 text-start text-ink-strong type-label"
-          title={name}
-        >
-          <span class="line-clamp-2 text-pretty wrap-anywhere">{name}</span>
-        </p>
-      {:else}
-        <button
-          data-slot="name"
-          class="min-w-0 self-start px-0 border-none bg-transparent text-start text-ink-strong type-label rounded-xs hover:text-ink-row focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring"
-          onclick={onfind}
-          title={name}
-          type="button"
-          ><span class="line-clamp-2 text-pretty wrap-anywhere">{name}</span
-          ></button
-        >
+  {#if peek || (parent && parent !== name)}
+    <div data-slot="head" class="flex shrink-0 items-start gap-space-2">
+      {#if peek && !marked}
+        {@render headPill()}
       {/if}
-      {#if parent && parent !== name}
-        <p
-          data-slot="chain"
-          class="m-0 min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted type-meta"
-          title={`on ${parent}`}
-        >
-          on {parent}
-        </p>
-      {/if}
+      <div class="flex min-w-0 flex-1 flex-col gap-space-row">
+        {#if peek}
+          <!-- Two lines at most, clamped in an inner span (The Truncate Inside Rule). -->
+          <p
+            data-slot="name"
+            class="m-0 min-w-0 text-start text-ink-strong type-label"
+            title={name}
+          >
+            <span class="line-clamp-2 text-pretty wrap-anywhere">{name}</span>
+          </p>
+        {/if}
+        {#if parent && parent !== name}
+          <p
+            data-slot="chain"
+            class="m-0 min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted type-meta"
+            title={`on ${parent}`}
+          >
+            on {parent}
+          </p>
+        {/if}
+      </div>
     </div>
-  </div>
+  {/if}
   {#if !peek}
     <!-- Delete, asked here, under the bar where it was pressed: a question
          of its own (AskHere), never a line of the foot's. -->

@@ -1,9 +1,4 @@
-import {
-  type PageAnchor,
-  type Pin,
-  type PinnedElement,
-  wholePage,
-} from "./comments";
+import { type Pin, type PinnedElement, wholePage } from "./comments";
 
 /** A pin on the page as a whole (core `wholePage`), by name. Our call. */
 const PAGE_WORDS = "Whole page";
@@ -44,8 +39,6 @@ const TAG_WORDS: Record<string, string> = {
 const CASE_BREAK = /([a-z0-9])([A-Z])/gu;
 const SEPARATORS = /[-_.]+/gu;
 const SPACES = /\s+/gu;
-/** A component's file: its name, when it is a component's. */
-const COMPONENT_FILE = /^(.+)\.(svelte|vue|[jt]sx)$/u;
 
 /** `SubagentCard`, `subagent-card`, `subagent_card` → "Subagent card". */
 function words(name: string): string {
@@ -55,21 +48,6 @@ function words(name: string): string {
     .trim()
     .toLowerCase();
   return spaced ? spaced[0].toUpperCase() + spaced.slice(1) : "";
-}
-
-/**
- * The component the element is written in: the page's dev build's name for
- * it, else a sheet's innermost component, else its file's.
- */
-function componentOf(anchor: PageAnchor): string | null {
-  const { source } = anchor;
-  const named = source?.component || anchor.chain?.[0]?.component;
-  if (named) {
-    return words(named);
-  }
-  const file = source?.file?.split("/").pop();
-  const base = file?.match(COMPONENT_FILE)?.[1];
-  return base && base !== "+page" && base !== "index" ? words(base) : null;
 }
 
 /** The element itself, when it says nothing: its id, its first class, else what it is. */
@@ -116,12 +94,27 @@ export function elementName(element: {
   return (named && words(named)) || kind || "Element";
 }
 
+/** The most of an element's text a name keeps, in characters, cut at a word: about one headline line. Our call. */
+const TEXT_MOST = 48;
+
+/** `text` cut at a word past {@link TEXT_MOST}, with an ellipsis. */
+function shortText(text: string): string {
+  if (text.length <= TEXT_MOST) {
+    return text;
+  }
+  const cut = text.slice(0, TEXT_MOST);
+  const at = cut.lastIndexOf(" ");
+  return `${(at > TEXT_MOST / 2 ? cut.slice(0, at) : cut).trimEnd()}…`;
+}
+
 /**
- * What a pin stands on, in words, as its row and its card name it: the
- * component it is written in and the element's own text ("Subagent card ·
- * Coconut cover take 3"); either alone; else the element by its id, class or
- * kind. A pin on the page as a whole is the page. The selector is never the
- * name: it is the head's tooltip.
+ * What a pin stands on, in words, as its row and its card name it: what a
+ * person calls the spot (`anchor.name`, read by the overlay as the pin was
+ * made: "Search comments field"); for an anchor from before it kept one,
+ * the start of the element's own words, else the element by its id, class
+ * or kind. Never a component's name (the code's word for it), never the
+ * selector, which is the head's tooltip. A pin on the page as a whole is
+ * the page.
  */
 export function pinName(pin: Pin): string {
   if (pin.title) {
@@ -134,13 +127,12 @@ export function pinName(pin: Pin): string {
   if (wholePage(anchor)) {
     return PAGE_WORDS;
   }
-  const text = anchor.text?.replace(SPACES, " ").trim();
-  const component = componentOf(anchor);
-  if (component && text) {
-    return `${component} · ${text}`;
+  if (anchor.name) {
+    return anchor.name;
   }
-  if (text || component) {
-    return text || component || "";
+  const text = anchor.text?.replace(SPACES, " ").trim();
+  if (text) {
+    return shortText(text);
   }
   const [first] = pin.elements;
   return elementWords(typeof first === "string" ? undefined : first);
