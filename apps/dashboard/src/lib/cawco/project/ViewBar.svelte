@@ -219,11 +219,14 @@
       {/if}
     </div>
     <span class="flex-auto"></span>
+    <!-- Ask Caw stands in a glass of its own, so it is grouped: its press
+         tints its own box, as a bar item's does (The Press Rule; The Glass
+         Contour Rule), where a scale drew nothing on it. -->
     <div data-slot="ask-group" class={glass("flex flex-none")}>
       <Button
         aria-label="Ask Caw"
         onclick={onnewsession}
-        press="pressable"
+        press="tint"
         shape="inset"
         size="icon-composer"
         title="Ask Caw"

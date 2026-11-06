@@ -413,6 +413,11 @@ const run = async (kit: Kit) => {
       );
       if (await expand.isVisible().catch(() => false)) {
         await expand.click();
+        // The click leaves the pointer on the item, which is Back to
+        // conversation once expanded: drawn hovered at rest, its forced
+        // hover read nothing new on its box. The rest is read with the
+        // pointer off the panel, at the window's corner.
+        await tab.mouse.move(0, 0);
         await tab.waitForTimeout(900);
       }
     },

@@ -86,6 +86,8 @@ scripts/lint/fixtures/fetch-alias-const.ts:5:9 house/no-fetch-alias
 scripts/lint/fixtures/fetch-alias.ts:2:22 house/no-fetch-alias
 scripts/lint/fixtures/design/planted-bar-menu.svelte:20:5 house/no-detached-bar-menu
 scripts/lint/fixtures/design/planted-bar-menu.svelte:33:3 house/no-detached-bar-menu
-scripts/lint/fixtures/design/planted-bar-symbol.svelte:21:16 house/bar-symbol-linear
-scripts/lint/fixtures/design/planted-bar-symbol.svelte:22:43 house/bar-symbol-linear
-scripts/lint/fixtures/design/planted-bar-symbol.svelte:23:27 house/bar-symbol-linear
+scripts/lint/fixtures/design/planted-bar-symbol.svelte:25:16 house/bar-symbol-linear
+scripts/lint/fixtures/design/planted-bar-symbol.svelte:26:43 house/bar-symbol-linear
+scripts/lint/fixtures/design/planted-bar-symbol.svelte:27:27 house/bar-symbol-linear
+scripts/lint/fixtures/design/planted-bar-symbol.svelte:30:23 house/bar-symbol-linear
+scripts/lint/fixtures/design/planted-bar-symbol.svelte:31:24 house/bar-symbol-linear

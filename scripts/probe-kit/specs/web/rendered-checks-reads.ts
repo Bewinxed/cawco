@@ -32,6 +32,11 @@
  * 11. bar-room, a page under a bar's room: the head in flow over a page
  *     in a frame, another document whose layout is not the host's to
  *     inset: named, no finding.
+ * 12. mixed-icons, a bar hosting tabs: a header holding a tab list whose
+ *     tab leads with a filled tile, and a glass of two outlined symbols.
+ *     The tabs are read in their own list: no finding.
+ * 13. mixed-icons, a filled symbol in a bar's glass: the same header, a
+ *     filled symbol beside the outlined ones in its glass: named.
  *
  *   bun scripts/probe-kit/run.ts web rendered-checks-reads
  */
@@ -82,6 +87,25 @@ const ROWS = [
 ]
   .map((row) => `<p>${row}</p>`)
   .join("");
+/** A bar's glass of outlined symbols (a lens, a box), and `extra` in it. */
+const GLASS = (extra: string) =>
+  `<div class="glass">${[
+    "M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14Z",
+    "M4 6h16v12H4Z",
+  ]
+    .map(
+      (d) =>
+        `<button type="button" aria-label="Symbol"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="${d}"/></svg></button>`
+    )
+    .join("")}${extra}</div>`;
+/** A filled mark, Solar's bold cut drawn as one shape. */
+const FILLED = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M2 6h8l2 2h10v12H2Z"/></svg>`;
+const TABS_BAR = `<style>
+  header { display: flex; align-items: center; gap: 12px; inline-size: 360px; padding: 8px; }
+  [role="tab"] { display: inline-flex; align-items: center; gap: 4px; }
+  .glass { display: flex; margin-inline-start: auto; border-radius: 18px; padding: 4px; background: #eee; }
+  .glass button { all: unset; display: grid; place-items: center; inline-size: 32px; block-size: 32px; }
+</style>`;
 
 interface Case {
   html: string;
@@ -171,6 +195,16 @@ const CASES: Record<string, Case> = {
     rule: "coral",
     want: "finding",
     html: `${BASE}${CORAL}<div class="card chosen"><button type="button">Hub didn't answer</button></div><button class="act" type="button">Create routine</button>`,
+  },
+  "a bar hosting tabs": {
+    rule: "mixed-icons",
+    want: "none",
+    html: `${BASE}${TABS_BAR}<header><div role="tablist"><div role="tab" aria-selected="true">${FILLED}<span>Glass bars</span></div></div>${GLASS("")}</header>`,
+  },
+  "a filled symbol in a bar's glass": {
+    rule: "mixed-icons",
+    want: "finding",
+    html: `${BASE}${TABS_BAR}<header><span>Glass bars</span>${GLASS(`<button type="button" aria-label="Place">${FILLED}</button>`)}</header>`,
   },
 };
 

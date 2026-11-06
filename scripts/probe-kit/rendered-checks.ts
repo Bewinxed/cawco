@@ -43,7 +43,7 @@
  * | loose-list  | own code                    | a list's alike rows, where two stand next to each other, not further apart than they are tall, and 24px |
  * | empty-pane  | own code                    | a landmark or pane of 120px or more holds a word, mark, control (an editor's `contenteditable` too) or drawn block |
  * | clipped-glyph | own code                  | an svg draws inside its viewBox, and no box that clips without scrolling cuts it |
- * | mixed-icons | own code                    | no outlined mark beside a filled one in a bar, nav or list; an open-stroked glyph (chevron, arrow, close, plus, tick) is allowed, and a ring (circles on one centre, stroked: a task ring, a spinner) is a figure; a shape at opacity 0 is not drawn |
+ * | mixed-icons | own code                    | no outlined mark beside a filled one in a bar, nav or list (a tab list a bar hosts read on its own, its tabs' tiles and status glyphs not beside the bar's symbols); an open-stroked glyph (chevron, arrow, close, plus, tick) is allowed, and a ring (circles on one centre, stroked: a task ring, a spinner) is a figure; a shape at opacity 0 is not drawn |
  * | small-text  | own code                    | at a width under 600, no words drawn under 10px |
  * | text-overlap | own code                   | no two drawn text runs cross (an aria-hidden ruler's figures included); a layer over the page, or a pinned bar over what scrolls under it, is its own |
  * | anchor-drift | own code, over reads        | an open popover, menu or listbox whose height changed between two reads of a page holds its top or its bottom |
@@ -2834,9 +2834,18 @@ function readInPage(args: InPageArgs): InPageRead {
         `${BAR}, nav, [role="tablist"], [role="list"], ul`
       ),
     ].filter(shown);
+    // A tab strip a bar hosts is a holder of its own: its tabs lead with
+    // what each tab is (a project's tile, a session's status glyph), which
+    // keep the duotone (The Solar Duotone Rule: "the duotone kept for
+    // status, tiles and rows"), so they are read beside each other in the
+    // tab list, not beside the bar's linear symbols.
+    const ownTabs = (holder: Element, svg: Element) => {
+      const tabs = svg.closest('[role="tablist"]');
+      return !tabs || tabs === holder || !holder.contains(tabs);
+    };
     for (const holder of holders) {
       const faces = glyphs
-        .filter((svg) => holder.contains(svg))
+        .filter((svg) => holder.contains(svg) && ownTabs(holder, svg))
         .filter((svg) => svg.getBoundingClientRect().width <= 32)
         .map((svg) => ({ svg, face: faceOf(svg) }));
       const outlined = faces.filter((one) => one.face === "outlined");

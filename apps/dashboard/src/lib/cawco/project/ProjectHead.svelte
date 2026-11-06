@@ -366,7 +366,7 @@
         </button>
       {/if}
     </h1>
-    <!-- The place, a bare BarItem outside the glass: its machine's mark, or
+    <!-- The place, a bare BarItem outside the glass: its machine's mark in its linear face, or
          the hub's folder, named in its tooltip. The project's details
          unfold under the head. -->
     <BarItem
@@ -384,7 +384,12 @@
       bind:ref={placeLine}
     >
       {#if primary && machine}
-        <OsMark class="size-c-bar-symbol text-ink-muted" os={machine.os} />
+        <OsMark
+          data-slot="bar-symbol"
+          aria-hidden="true"
+          face="linear"
+          os={machine.os}
+        />
       {:else}
         <IconFolderLinear data-slot="bar-symbol" aria-hidden="true" />
       {/if}
