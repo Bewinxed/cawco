@@ -37,7 +37,7 @@ const MODIFIERS = new Set([
  * and then Shift held drew its ring; a card opened by a press and closed by
  * Escape lit its pin's.
  */
-export const keyboardUse = (event: KeyboardEvent): boolean =>
+const keyboardUse = (event: KeyboardEvent): boolean =>
   event.key !== "Escape" && !MODIFIERS.has(event.key);
 
 if (typeof window !== "undefined") {

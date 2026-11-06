@@ -17,10 +17,7 @@
   import { frameSize } from "#lib/cawco/frame-observer.js";
   import PinCard from "#lib/cawco/preview/PinCard.svelte";
   import PinFloat from "#lib/cawco/preview/PinFloat.svelte";
-  import PinMark, {
-    markFace,
-    markState,
-  } from "#lib/cawco/preview/PinMark.svelte";
+  import PinMark, { markState } from "#lib/cawco/preview/PinMark.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
 
   const AT = "2026-10-23T09:00:00.000Z";
@@ -167,7 +164,6 @@
     </span>
     {#if shown}
       <PinFloat
-        face={markFace(markState(pin))}
         label="Comment {pin.number}"
         mark={MARK}
         onclosed={() => {

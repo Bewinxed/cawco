@@ -121,7 +121,7 @@ export function foldPath(
  * tapers from its tips by it: a folder tab's from each foot (taperStops), a
  * comment pin's from the two ends of its far curve.
  */
-export const taperInk = (along: number, taper: number, ease: number): number =>
+const taperInk = (along: number, taper: number, ease: number): number =>
   taper <= 0 ? 1 : 1 - (1 - Math.min(1, Math.max(0, along) / taper)) ** ease;
 
 export interface TaperStop {

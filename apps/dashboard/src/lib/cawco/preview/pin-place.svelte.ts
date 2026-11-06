@@ -1,6 +1,6 @@
 /**
  * Where a comment's card stands beside its pill over the page, and how it
- * goes there (PinFloat, and the /dev/pin-goo bench's PinFloatGoo): its size
+ * goes there (PinFloat): its size
  * read as it changes, what it is about as last seen, the plan (the side,
  * what it stands beside, its tallest) chosen again only when what it was
  * chosen from changes size, and its travel to a new place. PinFloat's
@@ -133,8 +133,6 @@ const shownOf = (whole: Box, pill: Box, room: Room): Box => {
 
 /** What a plan is chosen from. */
 interface Placing {
-  /** It stands at its pill alone, never beside what that is about (the /dev/pin-goo bench's joined card). */
-  besidePill: boolean;
   /** Its distance from the pill's box, past the pill's focus ring. */
   clear: number;
   /** Its distance from the well's edges. */
@@ -149,10 +147,7 @@ interface Placing {
  * else beside its pill alone; else under or over the pill, whichever holds
  * more. At the well's top-right with nothing seen.
  */
-const decide = (
-  at: Seen | null,
-  { besidePill, clear, gap, room, size }: Placing
-): Plan => {
+const decide = (at: Seen | null, { clear, gap, room, size }: Placing): Plan => {
   const full = Math.max(0, room.h - 2 * gap);
   /** Its height as it will stand beside the pill: what it holds, up to the well's. */
   const tall = Math.min(size.natural || size.height, full);
@@ -169,14 +164,14 @@ const decide = (
   };
   const under = room.h - (subject.y + subject.h + clear) - gap;
   const over = subject.y - clear - gap;
-  const nextTo = besidePill ? null : fits(subject);
+  const nextTo = fits(subject);
   if (nextTo) {
     return { along: "subject", side: nextTo, max: full };
   }
-  if (!besidePill && under >= tall) {
+  if (under >= tall) {
     return { along: "subject", side: "bottom", max: under };
   }
-  if (!besidePill && over >= tall) {
+  if (over >= tall) {
     return { along: "subject", side: "top", max: over };
   }
   const alone = fits(pill);
@@ -200,7 +195,6 @@ const heldPlan = () => {
   let held: Plan | null = null;
   return (at: Seen | null, placing: Placing): Plan => {
     const key = [
-      placing.besidePill,
       placing.room.w,
       placing.room.h,
       placing.size.width,
@@ -218,12 +212,8 @@ const heldPlan = () => {
 
 /** What a card is placed over: its pill, what that stands on, the well. */
 interface Over {
-  /** It stands at its pill alone ({@link Placing}); PinFloat never does. */
-  besidePill?: boolean;
   /** The box of what the pill stands on, in the well, px. */
   box?: Box | null;
-  /** Its distance from the pill's box, px, where it is not {@link FloatPlace.clear}'s (a goo card joined to its pin stands within the goo's reach). */
-  clear?: number;
   /** The pill's box in the well, px; null while it is not on screen. */
   mark: Box | null;
   room: Room;
@@ -255,9 +245,9 @@ export class FloatPlace {
   /**
    * Its distance from the pill's box: `--space-2` from the pill as drawn,
    * past its focus ring (PinMark `data-focused`: a 2px outline 2px out), so
-   * nothing of the pill ever stands on it; or what `over` names.
+   * nothing of the pill ever stands on it.
    */
-  readonly clear = $derived.by(() => this.#over().clear ?? this.gap + 4);
+  readonly clear = $derived.by(() => this.gap + 4);
   readonly #seenOf = lastSeen();
   readonly #hold = heldPlan();
 
@@ -290,7 +280,6 @@ export class FloatPlace {
   });
 
   readonly #placing: Placing = $derived.by(() => ({
-    besidePill: this.#over().besidePill ?? false,
     clear: this.clear,
     gap: this.gap,
     room: this.#over().room,
@@ -331,7 +320,7 @@ interface Spot {
 }
 
 /** How far a travel in flight has it from where it stands, px: its `translate` as drawn. */
-export const drawnShift = (el: HTMLElement): [number, number] => {
+const drawnShift = (el: HTMLElement): [number, number] => {
   const shift = getComputedStyle(el).translate;
   const [dx = 0, dy = 0] =
     shift === "none"
@@ -363,33 +352,4 @@ export const travelTo = (
     ],
     { duration: dur("--dur-morph"), easing: ease("--ease-drawer") }
   );
-};
-
-/** The thread comes in once its shape has room: held hidden two fifths of the `length`, then up out of a blur over the rest. */
-export const threadIn = (inner: HTMLElement, length: number): void => {
-  inner.animate(
-    [
-      { opacity: 0, filter: "blur(var(--part-blur))" },
-      { opacity: 1, filter: "blur(0px)" },
-    ],
-    {
-      delay: length * 0.4,
-      duration: length * 0.6,
-      easing: ease("--ease-out"),
-      fill: "backwards",
-    }
-  );
-};
-
-/** The thread goes in the first half of the `length`, from the opacity it is `shown` at, before the shape is too small to hold it. */
-export const threadOut = (
-  inner: HTMLElement,
-  shown: string,
-  length: number
-): void => {
-  inner.animate([{ opacity: shown }, { opacity: 0 }], {
-    duration: length / 2,
-    easing: ease("--ease-out"),
-    fill: "forwards",
-  });
 };
