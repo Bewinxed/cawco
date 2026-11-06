@@ -4,7 +4,11 @@
  * PATH under a scratch HOME (fake-agy.ts), so no Google quota is spent:
  *
  * - a. Signed out: refused before any image run, naming the fix and the
- *   other provider.
+ *   other provider, in the line agy said it with.
+ * - l. Signed in by its own read, and its image run says it is signed out:
+ *   refused within a few seconds, in the line agy said it with. agy says
+ *   it and then waits 60 s for a login (fake-agy.ts, as agy 1.5.2 does);
+ *   the run ends where it is said (agent tools.ts `heardUntilSignedOut`).
  * - b. Two reference images (a PNG, a JPEG): saved; each is written into
  *   agy's own working folder as `reference-<n>` by its type, the bytes the
  *   call named, before agy starts; the prompt numbers them as the call's
@@ -54,6 +58,16 @@ const PNG_1X1 =
 const JPEG_32X24 = "/9j/4AAQSkZJRgABAQAAAQABAAD/wAARCAAYACADASIAAhEBAxEB/9k=";
 const sha = (base64: string): string =>
   createHash("sha256").update(Buffer.from(base64, "base64")).digest("hex");
+
+/** The line agy 1.5.2 says it is signed out with (fake-agy.ts). */
+const SIGNED_OUT_LINE =
+  "Authentication required. Please visit the URL to log in:";
+/**
+ * How long a signed-out image run may take: agy says it at once and then
+ * waits 60 s for a login, so a run that ends where it is said answers in
+ * well under this.
+ */
+const SIGNED_OUT_RUN_MS = 5000;
 
 const NOT_FOUND = "NOT_FOUND (code 404): Requested entity was not found.";
 const QUOTA =
@@ -195,15 +209,28 @@ export default {
       "a. signed out: refused before any image run, naming the sign-in and chatgpt",
       !signedOut.ok &&
         signedOut.error ===
-          refused(
-            imageGenerationWords.agySignedOut("Error: authentication required")
-          ) &&
+          refused(imageGenerationWords.agySignedOut(SIGNED_OUT_LINE)) &&
         signedOut.error.includes('provider "chatgpt"') &&
         (await imageRuns()).length === 0,
       JSON.stringify(signedOut)
     );
 
     await agy.signedIn(true);
+    await agy.mode("signed-out");
+    const asked = performance.now();
+    const runSignedOut = await attempt({ output_path: "l.png" });
+    const tookMs = performance.now() - asked;
+    kit.note(`l: ${JSON.stringify(runSignedOut)}`);
+    check(
+      `l. an image run that says it is signed out: refused within ${SIGNED_OUT_RUN_MS / 1000} s, in agy's line, no file`,
+      !runSignedOut.ok &&
+        runSignedOut.error ===
+          refused(imageGenerationWords.agySignedOut(SIGNED_OUT_LINE)) &&
+        tookMs < SIGNED_OUT_RUN_MS &&
+        !existsSync(join(out, "l.jpg")),
+      `${(tookMs / 1000).toFixed(2)} s: ${JSON.stringify(runSignedOut)}`
+    );
+    await agy.mode("image");
     await referencesRun(kit, agy, attempt, imageRuns);
 
     const model = await attempt({ output_path: "c.png", model: "other" });

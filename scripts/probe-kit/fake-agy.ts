@@ -12,7 +12,8 @@
  *   exit 2.
  * - `acp --login`: prints a sign-in link on accounts.google.com, reads one
  *   line; `good-code` signs it in (exit 0), anything else exits 3.
- * - `-p <prompt> …` (an image run): by the mode file, the documented JSON
+ * - `-p <prompt> …` (an image run): signed out (or in `signed-out` mode),
+ *   as `/usage` says it; else by the mode file, the documented JSON
  *   envelope (https://antigravity.google/docs/cli/headless/), writing a
  *   JPEG under `~/.gemini/antigravity-cli/brain/<conversation_id>/` first
  *   where the mode makes one.
@@ -41,7 +42,7 @@ export type FakeAgyMode =
   | "quota"
   /** Writes nothing: 500 INTERNAL, as every image run on Plus did, exit 1. */
   | "internal"
-  /** Not signed in: "authentication required", exit 1. */
+  /** An image run says it is signed out, as agy 1.5.2 does, and waits a minute for a login, whatever `/usage` says. */
   | "signed-out"
   /** Never ends on its own. */
   | "hang";
@@ -58,6 +59,13 @@ signed="$home/.fake-agy-signed-in"
 mode="$(cat "$home/.fake-agy-mode" 2>/dev/null || echo image)"
 id="fa4e0000-0000-4000-8000-$(date +%s%N | tail -c 13)"
 brain="$home/.gemini/antigravity-cli/brain/$id"
+# Signed out, as agy 1.5.2 says it on any print run in a HOME with no
+# sign-in (2026-11-07): the words and a link, then a minute's wait for a login.
+signed_out() {
+  printf '%s\n' "Authentication required. Please visit the URL to log in:" "  https://accounts.google.com/o/oauth2/auth?client_id=fake&state=probe" "" "Waiting for authentication (timeout 60s)..." "Or, paste the authorization code here and press Enter:" >&2
+  sleep 60
+  echo "error: authentication failed or timed out" >&2; envelope ERROR "authentication failed or timed out" ""; exit 1
+}
 envelope() { printf '{"conversation_id":"%s","status":"%s","response":"%s","error":"%s","duration_seconds":1,"num_turns":1%s}\n' "$id" "$1" "$4" "$2" "$3"; }
 case "$1" in
   --version) echo "1.5.0"; exit 0 ;;
@@ -71,17 +79,11 @@ case "$1" in
   -p)
     if [ "$2" = "/usage" ]; then
       if [ "$mode" = "broken" ]; then echo "something else entirely"; exit 2; fi
-      if [ ! -f "$signed" ]; then
-        printf '%s\n' "Authentication required. Please visit the URL to log in:" "  https://accounts.google.com/o/oauth2/auth?client_id=fake&state=probe" "" "Waiting for authentication (timeout 60s)..." "Or, paste the authorization code here and press Enter:" >&2
-        sleep 60
-        echo "error: authentication failed or timed out" >&2; envelope ERROR "authentication failed or timed out" ""; exit 1
-      fi
+      if [ ! -f "$signed" ]; then signed_out; fi
       echo '{"conversation_id":"","status":"SUCCESS","response":"Gemini Models\tWeekly Limit Remaining\t100%\t2026-11-11T10:03:10Z\n","duration_seconds":0,"num_turns":0}'
       exit 0
     fi
-    if [ ! -f "$signed" ] || [ "$mode" = "signed-out" ]; then
-      echo "Error: authentication required" >&2; envelope ERROR "authentication required" ""; exit 1
-    fi
+    if [ ! -f "$signed" ] || [ "$mode" = "signed-out" ]; then signed_out; fi
     case "$mode" in
       hang) sleep 3600 ;;
       quota) envelope ERROR 'RESOURCE_EXHAUSTED (code 429): You have exhausted your capacity on this model. Your quota will reset after 3s.' ""; exit 1 ;;

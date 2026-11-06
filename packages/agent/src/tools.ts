@@ -1244,13 +1244,12 @@ const toolSignin = async (
 };
 
 /**
- * The first line a sign-in read said (`heard`, its stdout then its stderr)
- * that holds one of the tool's signed-out words, as it reads; none while
- * it has said none.
+ * The first line a run of a tool said (`heard`, its stdout then its stderr)
+ * that holds one of the tool's signed-out words; none while it has said none.
  */
 const signedOutLine = (
   signedOut: readonly string[],
-  heard: { err: string; out: string }
+  heard: ToolHeard
 ): string | undefined =>
   Bun.stripANSI(`${heard.out}\n${heard.err}`)
     .split("\n")
@@ -1259,6 +1258,78 @@ const signedOutLine = (
       const lower = line.toLowerCase();
       return signedOut.some((word) => lower.includes(word.toLowerCase()));
     });
+
+/** What a run of a tool said so far, on its stdout and its stderr. */
+interface ToolHeard {
+  err: string;
+  out: string;
+}
+
+/**
+ * How a run of a tool with a sign-in of its own ended, as
+ * {@link heardUntilSignedOut} heard it: its exit, or the first line it said
+ * that holds a signed-out word, said before or as it ended.
+ */
+export type ToolRunEnd = ToolHeard & ({ code: number } | { line: string });
+
+/**
+ * THE ONE READER of every run of a tool with a sign-in of its own (core
+ * `ToolSigninSpec.signedOut`): its stdout and stderr read as they come, and
+ * its end the first of its exit and its first line holding a signed-out
+ * word. A run that says it is signed out is not waited on: agy 1.5.2 says
+ * "Authentication required. Please visit the URL to log in:" on any print
+ * run and then waits 60 s for a login no one is at (measured 2026-11-07, a
+ * HOME with no sign-in), which held the machine's whole tools read, Claude
+ * Code's cell with it, for that minute, and an image run as long. A run
+ * still going when this answers is the caller's to end, its own way (the
+ * tether's pipe, its process group).
+ */
+export const heardUntilSignedOut = async (
+  child: {
+    exited: Promise<number>;
+    stderr: ReadableStream<Uint8Array>;
+    stdout: ReadableStream<Uint8Array>;
+  },
+  signedOut: readonly string[]
+): Promise<ToolRunEnd> => {
+  const heard: ToolHeard = { out: "", err: "" };
+  const { promise: saidOut, resolve: sayOut } = Promise.withResolvers<string>();
+  const listen = async (
+    stream: ReadableStream<Uint8Array>,
+    into: keyof ToolHeard
+  ): Promise<void> => {
+    const decoder = new TextDecoder();
+    try {
+      for await (const chunk of stream) {
+        heard[into] += decoder.decode(chunk, { stream: true });
+        const line = signedOutLine(signedOut, heard);
+        if (line !== undefined) {
+          sayOut(line);
+        }
+      }
+    } catch {
+      // A pipe that fails has nothing more to say: what it said stands.
+    }
+  };
+  const exited = async (): Promise<{ code: number }> => {
+    const [code] = await Promise.all([
+      child.exited,
+      listen(child.stdout, "out"),
+      listen(child.stderr, "err"),
+    ]);
+    return { code };
+  };
+  const signedOutFirst = async (): Promise<{ line: string }> => ({
+    line: await saidOut,
+  });
+  const ended = await Promise.race([exited(), signedOutFirst()]);
+  if ("line" in ended) {
+    return { ...heard, ...ended };
+  }
+  // Said as it ended, in the last chunk read.
+  const line = signedOutLine(signedOut, heard);
+  return line === undefined ? { ...heard, ...ended } : { ...heard, line };
+};
 
 /** {@link toolSignin}'s read itself. */
 const readSignin = async (spec: ToolSpec): Promise<ToolSignin> => {
@@ -1282,45 +1353,9 @@ const readSignin = async (spec: ToolSpec): Promise<ToolSignin> => {
       stderr: "pipe",
       signal,
     });
-    const heard = { out: "", err: "" };
-    const { promise: signedOut, resolve: sayOut } =
-      Promise.withResolvers<string>();
-    const listen = async (
-      stream: ReadableStream<Uint8Array>,
-      into: keyof typeof heard
-    ): Promise<void> => {
-      const decoder = new TextDecoder();
-      try {
-        for await (const chunk of stream) {
-          heard[into] += decoder.decode(chunk, { stream: true });
-          const line = signedOutLine(words.signedOut, heard);
-          if (line !== undefined) {
-            sayOut(line);
-          }
-        }
-      } catch {
-        // A pipe that fails has nothing more to say: what it said stands.
-      }
-    };
-    // A signed-out word ends the read where it is said: agy 1.5.2 says
-    // "Authentication required. Please visit the URL to log in:" and then
-    // waits 60 s for a login no one is at (measured 2026-11-07, a HOME
-    // with no sign-in), which held the machine's whole tools read, Claude
-    // Code's cell with it, for that minute.
-    const exited = async (): Promise<{ code: number }> => {
-      const [code] = await Promise.all([
-        child.exited,
-        listen(child.stdout, "out"),
-        listen(child.stderr, "err"),
-      ]);
-      return { code };
-    };
-    const saidOut = async (): Promise<{ line: string }> => ({
-      line: await signedOut,
-    });
-    const ended = await Promise.race([exited(), saidOut()]);
+    const ended = await heardUntilSignedOut(child, words.signedOut);
     untether(child.stdin);
-    return { ...ended, ...heard };
+    return ended;
   }).catch(() => undefined);
   const asked = read?.kind === "answered" ? read.value : undefined;
   if (!asked) {
@@ -1332,11 +1367,6 @@ const readSignin = async (spec: ToolSpec): Promise<ToolSignin> => {
   }
   if ("line" in asked) {
     return { state: "signed-out", detail: asked.line, at: Date.now() };
-  }
-  // Said as it ended, in the last chunk read.
-  const lastSaid = signedOutLine(words.signedOut, asked);
-  if (lastSaid !== undefined) {
-    return { state: "signed-out", detail: lastSaid, at: Date.now() };
   }
   const said = Bun.stripANSI(`${asked.out}\n${asked.err}`).trim();
   return asked.code === 0

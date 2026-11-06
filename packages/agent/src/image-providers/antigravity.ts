@@ -13,7 +13,12 @@ import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { imageGenerationWords } from "@cawco/core/words/image-generation";
 import { systemProgram } from "@cawco/core/workspace-needs";
 import { z } from "zod";
-import { probeToolStatus, toolBinary, toolEnv } from "../tools";
+import {
+  heardUntilSignedOut,
+  probeToolStatus,
+  toolBinary,
+  toolEnv,
+} from "../tools";
 import { ratioOf } from "./aspect";
 import type { ImageJob, ImageProvider, MadeImage } from "./provider";
 
@@ -206,8 +211,7 @@ const madeImage = async (
   return undefined;
 };
 
-/** What agy says when it is not signed in (headless doc), out of quota, and failed inside Google's service (measured on Plus). */
-const SIGNED_OUT = /authentication required/iu;
+/** What agy says when it is out of quota, and failed inside Google's service (measured on Plus). */
 const QUOTA = /RESOURCE_EXHAUSTED|code 429/u;
 const INTERNAL = /INTERNAL \(code 500\)|\b500 INTERNAL\b/u;
 
@@ -218,7 +222,9 @@ const tailOf = (text: string): string =>
 /**
  * A run that ended with no image, as a refusal in words, by what agy said:
  * its error, its answer and the tail of its stderr, so a limit of agy's
- * own (a tool call it refused) reaches the person in its words.
+ * own (a tool call it refused) reaches the person in its words. One that
+ * said it is signed out never gets here: it ends where it says so
+ * ({@link runAgy}).
  */
 const noImage = (envelope: Envelope | undefined, stderr: string): Error => {
   const error = envelope?.error ?? "";
@@ -226,9 +232,6 @@ const noImage = (envelope: Envelope | undefined, stderr: string): Error => {
     .filter(Boolean)
     .join(" / ");
   const all = `${error}\n${said}`;
-  if (SIGNED_OUT.test(all)) {
-    return new Error(imageGenerationWords.agySignedOut(error || said));
-  }
   if (QUOTA.test(all)) {
     return new Error(imageGenerationWords.agyQuota(error || said));
   }
@@ -254,6 +257,7 @@ const noImage = (envelope: Envelope | undefined, stderr: string): Error => {
  */
 const runAgy = async (
   bin: string,
+  signedOut: readonly string[],
   job: ImageJob,
   signal: AbortSignal
 ): Promise<MadeImage> => {
@@ -308,11 +312,15 @@ const runAgy = async (
       );
     };
     signal.addEventListener("abort", stop, { once: true });
-    const [code, out, err] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
+    // Read as every run of agy is (tools.ts `heardUntilSignedOut`): signed
+    // out, it says so and then waits a minute for a login, so the run ends
+    // where it says it, and that line is the refusal's reason.
+    const ended = await heardUntilSignedOut(child, signedOut);
+    if ("line" in ended) {
+      stop();
+      throw new Error(imageGenerationWords.agySignedOut(ended.line));
+    }
+    const { code, out, err } = ended;
     const envelope = envelopeOf(out);
     const bytes = await madeImage(envelope, cwd, since, job.references);
     if (!bytes) {
@@ -375,7 +383,7 @@ async function readiness(): ReturnType<ImageProvider["readiness"]> {
     ready: true,
     notes,
     generate: async (job, signal) => {
-      const made = await runAgy(bin, job, signal);
+      const made = await runAgy(bin, spec.signin?.signedOut ?? [], job, signal);
       return {
         bytes: made.bytes,
         notes: [
