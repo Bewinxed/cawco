@@ -30,7 +30,6 @@ import { PREVIEW_DOWNS, type PreviewDown } from "./protocol";
  * served there (a decision page), behind host mode's pass like the rest.
  */
 export const PREVIEW_REACH_PATH = "/__cawco/reach";
-export const PREVIEW_REACH_API = "/api/preview-reach";
 
 /**
  * How long a page loaded in a pane's frame has for its overlay to answer
@@ -264,7 +263,7 @@ const answeredWith = async (
   return said === null ? null : { cause: "down", ...said };
 };
 
-/** The hub's answer at `url` (a {@link PREVIEW_REACH_PATH} or {@link PREVIEW_REACH_API} with `?origin=`), or null when the hub can't be asked. */
+/** The hub's answer at `url` (a {@link PREVIEW_REACH_PATH} or the hub's `GET /api/preview-reach` with `?origin=` (core `hubRequest`)), or null when the hub can't be asked. */
 export const askHubReach = async (
   url: string,
   heard?: (ways: PreviewWays) => void

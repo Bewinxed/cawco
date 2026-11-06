@@ -6,6 +6,7 @@ import {
   readEnv,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { fetchHub, hubRequest } from "@cawco/core/hub-request";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { unhandled } from "@cawco/core/unhandled";
 import { Bonjour, type Service } from "bonjour-service";
@@ -65,9 +66,11 @@ export const hubIdAt = (
   httpUrl: string
 ): Promise<Bounded<string | undefined>> =>
   readWithin(PROBE_TIMEOUT_MS, async (signal) => {
-    const body: { hubId?: unknown } = await fetch(`${httpUrl}/health`, {
-      signal,
-    })
+    const body: { hubId?: unknown } = await fetchHub(
+      httpUrl,
+      hubRequest("GET /health"),
+      { signal }
+    )
       .then((response) =>
         response.ok ? (response.json() as Promise<{ hubId?: unknown }>) : {}
       )

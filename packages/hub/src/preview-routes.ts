@@ -8,9 +8,8 @@
  * preview origin.
  */
 import type { PreviewAddress } from "@cawco/core";
-import { PREVIEW_NAMES_PATH, type PreviewNames } from "@cawco/core/browser";
+import type { PreviewNames } from "@cawco/core/browser";
 import { SEND_CONTROLS } from "@cawco/core/comments";
-import { PREVIEW_REACH_API } from "@cawco/core/preview-reach";
 import type { ServerWebSocket } from "bun";
 import { Elysia, t } from "elysia";
 import type { ArtifactSocket } from "./artifacts/sync";
@@ -87,7 +86,7 @@ export const previewRoutes = (deps: {
       // browser didn't (core preview-reach.ts): the pane says which side
       // fails.
       .get(
-        PREVIEW_REACH_API,
+        "/api/preview-reach",
         { query: t.Object({ origin: t.String({ maxLength: 300 }) }) },
         ({ query }) => deps.listeners.reach(query.origin)
       )
@@ -106,7 +105,7 @@ export const previewRoutes = (deps: {
       // for its machine's browser container to resolve (agent
       // container-host.ts): host mode's domain, else the host the hub's
       // links name, which port mode's origins stand on.
-      .get(PREVIEW_NAMES_PATH, hidden, (): PreviewNames => ({
+      .get("/api/preview-names", hidden, (): PreviewNames => ({
         names: deps.listeners.names() ?? deps.portNames(),
       }))
       // A ticket into the previews, a host-mode name or an origin's own port

@@ -13,6 +13,12 @@
 import type { PairingPoll, PairingStart } from "@cawco/core";
 import { OWNER_SCHEME } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import {
+  fetchHub,
+  type HubRequest,
+  hubAt,
+  hubRequest,
+} from "@cawco/core/hub-request";
 import { secondsOf } from "@cawco/core/time";
 import { unhandled } from "@cawco/core/unhandled";
 
@@ -37,12 +43,11 @@ const PAIR_ANSWER_MS = 15_000;
 /** Asks the person to approve this run of `command`, and waits for the answer. */
 const approve = async (origin: string, command: string): Promise<string> => {
   const started = await readWithin(PAIR_ANSWER_MS, async (signal) => {
-    const response = await fetch(`${origin}/api/pair`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind: "cli", name: command }),
-      signal,
-    });
+    const response = await fetchHub(
+      origin,
+      hubRequest("POST /api/pair", { body: { kind: "cli", name: command } }),
+      { signal }
+    );
     return response.ok
       ? { ok: true as const, pairing: (await response.json()) as PairingStart }
       : {
@@ -76,12 +81,13 @@ const approve = async (origin: string, command: string): Promise<string> => {
   while (Date.now() < deadline) {
     await Bun.sleep(interval);
     const polled = await readWithin(PAIR_ANSWER_MS, async (signal) => {
-      const response = await fetch(`${origin}/api/pair/poll`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ deviceCode: pairing.deviceCode }),
-        signal,
-      });
+      const response = await fetchHub(
+        origin,
+        hubRequest("POST /api/pair/poll", {
+          body: { deviceCode: pairing.deviceCode },
+        }),
+        { signal }
+      );
       return (await response.json()) as PairingPoll & { token?: string };
     });
     let answer: PairingPoll & { token?: string };
@@ -170,14 +176,13 @@ export const ownerFetch = async (
  */
 export const ownerAsk = async (
   hub: string,
-  path: string,
-  init: RequestInit,
+  request: HubRequest,
   command: string,
   ms: number,
   Fail: new (message: string) => Error,
   unanswered: (seconds: number) => string
 ): Promise<OwnerAnswer> => {
-  const answer = await ownerFetch(`${hub}${path}`, init, command, ms).catch(
+  const answer = await ownerFetch(...hubAt(hub, request), command, ms).catch(
     (error: unknown) => {
       if (error instanceof OwnerApprovalError) {
         throw new Fail(error.message);

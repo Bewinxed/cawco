@@ -216,6 +216,20 @@ export const hubInit = (
 };
 
 /**
+ * `request` at the hub at `base` as `fetch`'s two arguments, its URL and its
+ * init (`init`'s own fields beside it): spread into any sender that takes
+ * them (`fetch`, a machine's proven fetch, a deadline's).
+ */
+export const hubAt = (
+  base: string,
+  request: HubRequest,
+  init: RequestInit = {}
+): [url: string, init: RequestInit] => [
+  `${base}${request.path}`,
+  hubInit(request, init),
+];
+
+/**
  * `request` sent to the hub at `base` (its origin, or `""` on a page the hub
  * serves through its own origin), `init`'s own fields beside it, through
  * `through`: `fetch`, or a caller's own (a SvelteKit load's).
@@ -225,5 +239,4 @@ export const fetchHub = (
   request: HubRequest,
   init: RequestInit = {},
   through: typeof fetch = fetch
-): Promise<Response> =>
-  through(`${base}${request.path}`, hubInit(request, init));
+): Promise<Response> => through(...hubAt(base, request, init));

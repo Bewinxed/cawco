@@ -33,6 +33,7 @@ import type {
   BinaryUpdateState,
 } from "@cawco/core/binary-updates";
 import { writeWrapper } from "@cawco/core/binary-wrapper";
+import { fetchHub, hubRequest } from "@cawco/core/hub-request";
 import { machineId } from "@cawco/core/machine-id";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { secondsOf } from "@cawco/core/time";
@@ -207,11 +208,10 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
   }
   if (options.role === "hub") {
     await awaitFirstMachineReady(options.hubUrl, note);
-    const saved = await fetch(`${options.hubUrl}/api/binary-updates/settings`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(options.policy),
-    });
+    const saved = await fetchHub(
+      options.hubUrl,
+      hubRequest("PUT /api/binary-updates/settings", { body: options.policy })
+    );
     if (!saved.ok) {
       throw new Error(
         `The hub did not save the update settings: ${await saved.text()}`

@@ -9,6 +9,7 @@
  * never the key.
  */
 import { CAWCO_ENV, readEnv } from "@cawco/core";
+import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import { z } from "zod";
 import { ConnectionKeyError, pipedKey, typedKey } from "./connections";
 import { ownerAsk } from "./owner";
@@ -31,16 +32,15 @@ const ROUTE_LINE: Record<NonNullable<JevView["route"]> | "off", string> = {
 
 const routeLine = (view: JevView): string => ROUTE_LINE[view.route ?? "off"];
 
-/** Sends `init` to the hub's `/api/jev/typesafe-key`; answers the view it returns. */
+/** Sends `request` (the TypeSafe key's route) to the hub; answers the view it returns. */
 const callHub = async (
   hub: string,
-  init: RequestInit,
+  request: HubRequest,
   refused: string
 ): Promise<JevView> => {
   const { ok, said, status } = await ownerAsk(
     hub,
-    "/api/jev/typesafe-key",
-    init,
+    request,
     "cawco jev",
     30_000,
     ConnectionKeyError,
@@ -74,11 +74,7 @@ export const setJevKey = async (hub: string): Promise<string[]> => {
   }
   const view = await callHub(
     hub,
-    {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ key }),
-    },
+    hubRequest("PUT /api/jev/typesafe-key", { body: { key } }),
     "refused the TypeSafe key"
   );
   return [
@@ -91,7 +87,7 @@ export const setJevKey = async (hub: string): Promise<string[]> => {
 export const removeJevKey = async (hub: string): Promise<string[]> => {
   const view = await callHub(
     hub,
-    { method: "DELETE" },
+    hubRequest("DELETE /api/jev/typesafe-key"),
     "did not remove the TypeSafe key"
   );
   return ["TypeSafe key removed", routeLine(view)];

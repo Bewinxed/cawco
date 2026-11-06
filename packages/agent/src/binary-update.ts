@@ -61,6 +61,7 @@ import {
 import { BINARY_WRAPPER, writeWrapper } from "@cawco/core/binary-wrapper";
 import { readWithin } from "@cawco/core/bounded";
 import { timerMs } from "@cawco/core/clock";
+import { fetchHub, type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import {
   answers,
   currentKeeper,
@@ -171,8 +172,8 @@ async function readReadiness(
   const theirs = await askHub(
     "what its restart would cut",
     5000,
-    `${hub}/api/binary-updates/hub-readiness`,
-    {},
+    hub,
+    hubRequest("GET /api/binary-updates/hub-readiness"),
     async (response) => {
       if (!response.ok) {
         throw new Error(
@@ -205,8 +206,8 @@ async function readHubProtocol(hub: string): Promise<{
   const health = await askHub(
     "with its wire protocol",
     20_000,
-    `${hub}/health`,
-    {},
+    hub,
+    hubRequest("GET /health"),
     async (response) => {
       if (!response.ok) {
         throw new Error(`its /health answered ${response.status}`);
@@ -232,12 +233,8 @@ async function fenceHub(hub: string, ms: number): Promise<void> {
   await askHub(
     "its fence",
     5000,
-    `${hub}/api/binary-updates/hub-fence`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ms }),
-    },
+    hub,
+    hubRequest("POST /api/binary-updates/hub-fence", { body: { ms } }),
     (response) => {
       if (!response.ok) {
         throw new Error(`The hub did not take its fence: ${response.status}`);
@@ -391,19 +388,19 @@ const HUB_GONE: ReadonlySet<string> = new Set([
 const askHub = async <T>(
   what: string,
   ms: number,
-  url: string,
-  init: RequestInit,
+  hub: string,
+  request: HubRequest,
   take: (response: Response) => Promise<T>
 ): Promise<T> => {
   const read = await readWithin(ms, async (signal) =>
-    take(await fetch(url, { ...init, signal }))
+    take(await fetchHub(hub, request, { signal }))
   ).catch((error: unknown) => {
     const code = cutCode(error);
     if (code === undefined) {
       throw error;
     }
     throw new HubUnreachable(
-      updatesWords.hubDropped(new URL(url).origin, code, what)
+      updatesWords.hubDropped(new URL(hub).origin, code, what)
     );
   });
   switch (read.kind) {
@@ -1283,8 +1280,8 @@ export class BinaryUpdater {
     const body = await askHub(
       "with the build it offers",
       20_000,
-      `${hub}/api/binary-updates/latest`,
-      {},
+      hub,
+      hubRequest("GET /api/binary-updates/latest"),
       async (response) => {
         // A hub that failed to answer its offer (its release host's read
         // failed, it is starting up) is no answer: the command stands and
@@ -1337,8 +1334,8 @@ export class BinaryUpdater {
     >(
       "with its update settings",
       10_000,
-      `${installation.hubUrl}/api/binary-updates/settings`,
-      {},
+      installation.hubUrl,
+      hubRequest("GET /api/binary-updates/settings"),
       async (response) =>
         response.ok
           ? { policy: (await response.json()) as BinaryUpdatePolicy }
@@ -1652,7 +1649,11 @@ export class BinaryUpdater {
       download: { received: Bun.file(partial).size, total: artifact.size },
       hubFetch: undefined,
     });
-    const url = `${hub}/api/binary-updates/artifacts/${encodeURIComponent(version)}/${encodeURIComponent(artifact.archive)}`;
+    const url = `${hub}${
+      hubRequest("GET /api/binary-updates/artifacts/:version/:archive", {
+        path: { version, archive: artifact.archive },
+      }).path
+    }`;
     const what = downloadWords.fromHub(artifact.archive);
     let saidAt = 0;
     const say = (
@@ -1714,12 +1715,11 @@ export class BinaryUpdater {
     await askHub(
       "for the update state",
       10_000,
-      `${installation.hubUrl}/api/binary-updates/machines/${await machineId()}/state`,
-      {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(this.#state),
-      },
+      installation.hubUrl,
+      hubRequest("PUT /api/binary-updates/machines/:machineId/state", {
+        path: { machineId: await machineId() },
+        body: this.#state,
+      }),
       (response) => {
         if (!response.ok) {
           throw new Error(

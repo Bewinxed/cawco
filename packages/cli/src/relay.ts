@@ -15,6 +15,8 @@
  *   whose transcript a secret must never reach. Nothing prints it back.
  */
 import { CAWCO_ENV, type RelayView, readEnv } from "@cawco/core";
+import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
+import { RELAY_PROVIDERS, type RelayProvider } from "@cawco/core/relays";
 import { RelayViewSchema } from "@cawco/core/stored-shapes";
 import { z } from "zod";
 import { ConnectionKeyError, pipedKey, typedKey } from "./connections";
@@ -53,25 +55,15 @@ const sessionOf = (flag: string | undefined): string | undefined =>
 
 const call = async (
   hub: string | undefined,
-  method: string,
-  path: string,
-  body?: unknown
+  request: HubRequest
 ): Promise<unknown> => {
   if (!hub) {
     throw new RelayError("no hub found");
   }
+  const { method, path } = request;
   const { ok, said, status } = await ownerAsk(
     hub,
-    path,
-    {
-      method,
-      ...(body === undefined
-        ? {}
-        : {
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-          }),
-    },
+    request,
     "cawco relay",
     // Opening a relay waits on Tailscale and on GitHub's ping.
     180_000,
@@ -93,7 +85,7 @@ const projectId = async (
   if (!named) {
     throw new RelayError("name the project, by id or name");
   }
-  const projects = (await call(hub, "GET", "/api/projects")) as {
+  const projects = (await call(hub, hubRequest("GET /api/projects"))) as {
     id: string;
     name: string;
   }[];
@@ -143,8 +135,19 @@ const confirmed = async (question: string): Promise<boolean> => {
   return false;
 };
 
+/** `--provider` as one the hub's relay routes take; any other is refused here, naming them. */
+const providerOf = (named = "github"): RelayProvider => {
+  const provider = RELAY_PROVIDERS.find((one) => one === named);
+  if (!provider) {
+    throw new RelayError(
+      `the provider is one of ${RELAY_PROVIDERS.join(", ")}, not ${named}`
+    );
+  }
+  return provider;
+};
+
 const relayInput = (args: RelayArgs) => ({
-  provider: args.provider ?? "github",
+  provider: providerOf(args.provider),
   ...(args.connection ? { connection: args.connection } : {}),
   ...(args.signatureHeader ? { signatureHeader: args.signatureHeader } : {}),
   ...(args.timestampHeader ? { timestampHeader: args.timestampHeader } : {}),
@@ -177,9 +180,10 @@ const on = async (args: RelayArgs): Promise<string[]> => {
   const id = await projectId(args.hub, args.rest[0]);
   const { public: shown } = (await call(
     args.hub,
-    "POST",
-    `/api/projects/${id}/relays/preview`,
-    input
+    hubRequest("POST /api/projects/:id/relays/preview", {
+      path: { id },
+      body: input,
+    })
   )) as { public: string };
   console.log(shown);
   if (!args.yes) {
@@ -195,9 +199,7 @@ const on = async (args: RelayArgs): Promise<string[]> => {
   return createdLines(
     (await call(
       args.hub,
-      "POST",
-      `/api/projects/${id}/relays`,
-      input
+      hubRequest("POST /api/projects/:id/relays", { path: { id }, body: input })
     )) as Created
   );
 };
@@ -220,9 +222,13 @@ const setSecret = async (args: RelayArgs): Promise<string[]> => {
   if (!secret) {
     throw new ConnectionKeyError("no secret was given; nothing was sent");
   }
-  const view = (await call(args.hub, "PUT", `/api/relays/${id}/secret`, {
-    secret,
-  })) as RelayView;
+  const view = (await call(
+    args.hub,
+    hubRequest("PUT /api/relays/:id/secret", {
+      path: { id },
+      body: { secret },
+    })
+  )) as RelayView;
   return [
     `Secret set for relay ${id} (${secret.length} characters)`,
     ...describe(view),
@@ -254,7 +260,10 @@ export const runRelay = async (args: RelayArgs): Promise<string[]> => {
                 )
               )
             )
-        : ((await call(args.hub, "DELETE", `/api/relays/${id}`)) as {
+        : ((await call(
+            args.hub,
+            hubRequest("DELETE /api/relays/:id", { path: { id } })
+          )) as {
             github: string;
             relay: RelayView;
           });
@@ -271,8 +280,9 @@ export const runRelay = async (args: RelayArgs): Promise<string[]> => {
             )
         : ((await call(
             args.hub,
-            "GET",
-            `/api/projects/${await projectId(args.hub, args.rest[0])}/relays`
+            hubRequest("GET /api/projects/:id/relays", {
+              path: { id: await projectId(args.hub, args.rest[0]) },
+            })
           )) as RelayView[]);
       return views.length === 0
         ? ["No relays."]

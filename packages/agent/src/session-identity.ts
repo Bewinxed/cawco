@@ -1,3 +1,4 @@
+import { hubAt, hubRequest } from "@cawco/core/hub-request";
 import { delegationHubUrl } from "./delegation";
 import { hubAnswer } from "./hub-away";
 
@@ -23,15 +24,11 @@ export const acknowledgeSessionCredential = async (
   credential: string
 ): Promise<void> => {
   const response = await hubAnswer(
-    `${delegationHubUrl()}/api/session-identities/ack`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${credential}`,
-        "Content-Type": "application/json",
-      },
-      body: "{}",
-    },
+    ...hubAt(
+      delegationHubUrl(),
+      hubRequest("POST /api/session-identities/ack", { body: {} }),
+      { headers: { Authorization: `Bearer ${credential}` } }
+    ),
     15_000,
     NOT_ACKNOWLEDGED
   );

@@ -6,6 +6,7 @@ import {
   readEnv,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { hubAt, hubRequest } from "@cawco/core/hub-request";
 import { LONG_CALL_WALL_MS, runsLong } from "@cawco/core/long-calls";
 import { unhandled } from "@cawco/core/unhandled";
 import { hubAnswer } from "./hub-away";
@@ -55,13 +56,16 @@ export const delegationMcp = (instanceId: string, credential?: string) => ({
  * ({@link hubAnswer}) rather than failing the start.
  */
 export async function delegationTools(instanceId?: string, lister?: "pi") {
-  const query = new URLSearchParams({
-    ...(instanceId ? { instanceId } : {}),
-    ...(lister ? { lister } : {}),
-  }).toString();
   const response = await hubAnswer(
-    harnessMcpUrl(`/api/delegation/tools${query ? `?${query}` : ""}`),
-    {},
+    ...hubAt(
+      harnessMcpUrl(""),
+      hubRequest("GET /api/delegation/tools", {
+        query: {
+          ...(instanceId ? { instanceId } : {}),
+          ...(lister ? { lister } : {}),
+        },
+      })
+    ),
     5000,
     "Could not discover CawCo tools"
   );
@@ -108,7 +112,10 @@ export const OPEN_ITEMS_TOOL = "open_items";
  * after it: {@link callDelegationTool}'s, and CawCo's OpenCode plugin's,
  * which hands the open items' words to the model as they are.
  */
-export const TOOL_DOOR = "/api/delegation/call/";
+export const TOOL_DOOR = hubRequest("POST /api/delegation/call/:instanceId", {
+  path: { instanceId: "" },
+  body: {},
+}).path;
 
 export async function callDelegationTool(
   instanceId: string,
@@ -118,19 +125,18 @@ export async function callDelegationTool(
   /** The harness's own id for this call (pi's `toolCallId`): the hub runs a keyed tool once per id (hub call-keys.ts). */
   callId?: string
 ) {
-  const url = harnessMcpUrl(`${TOOL_DOOR}${encodeURIComponent(instanceId)}`);
-  const init = {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
-    },
-    body: JSON.stringify({
-      name,
-      arguments: args,
-      ...(callId ? { callKey: `pi:${callId}` } : {}),
+  const [url, init] = hubAt(
+    harnessMcpUrl(""),
+    hubRequest("POST /api/delegation/call/:instanceId", {
+      path: { instanceId },
+      body: {
+        name,
+        arguments: args,
+        ...(callId ? { callKey: `pi:${callId}` } : {}),
+      },
     }),
-  };
+    credential ? { headers: { Authorization: `Bearer ${credential}` } } : {}
+  );
   const take = async (response: Response) => {
     if (!response.ok) {
       // A refusal says why in its body (a restarting agent: not started, retry), and the model reads it.

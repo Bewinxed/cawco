@@ -165,15 +165,13 @@ export interface BrowserStartArgs {
 }
 
 /**
- * Where a machine reads the names the hub's previews stand on (a machine's
- * `GET`): what `artifact_browse` hands a session's browser. A browser
+ * What a machine reads at the hub's `GET /api/preview-names`: the names the
+ * hub's previews stand on, what `artifact_browse` hands a session's browser. A browser
  * container's loopback is its own, so where those names resolve to the
  * machine's loopback the container maps them to the machine (agent
  * container-host.ts).
  */
-export const PREVIEW_NAMES_PATH = "/api/preview-names";
-
-/** The hub's answer at {@link PREVIEW_NAMES_PATH}. */
+/** The hub's answer at `GET /api/preview-names`. */
 export interface PreviewNames {
   /**
    * The names as Chromium's `--host-resolver-rules` takes them (`*.example.com`,

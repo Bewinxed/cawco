@@ -12,6 +12,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import { z } from "zod";
 import { MACHINE_PROOF_HEADER } from "./hub-auth";
+import { hubRequest } from "./hub-request";
 import { machineId as hostMachineId } from "./machine-id";
 import { cawcoConfigDir } from "./paths";
 import {
@@ -144,7 +145,7 @@ export const machineFetch = async (
     return fetch(url, init);
   }
   const { origin } = new URL(url);
-  const health = await fetch(`${origin}/health`, {
+  const health = await fetch(`${origin}${hubRequest("GET /health").path}`, {
     ...(init.signal ? { signal: init.signal } : {}),
   });
   const hubId = await (health.json() as Promise<{ hubId?: unknown }>)

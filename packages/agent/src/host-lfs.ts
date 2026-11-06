@@ -19,6 +19,7 @@
 import { spawn } from "node:child_process";
 import { CAWCO_ENV } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { hubAt, hubRequest } from "@cawco/core/hub-request";
 import { machineId } from "@cawco/core/machine-id";
 import { workspaceProjectFile } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
@@ -55,8 +56,10 @@ export const declaredLfs = async (
     return;
   }
   const { declared } = (await askHub(
-    `${hub}/api/lfs/projects/${encodeURIComponent(projectId)}`,
-    {},
+    ...hubAt(
+      hub,
+      hubRequest("GET /api/lfs/projects/:id", { path: { id: projectId } })
+    ),
     `where project ${projectId}'s large files live`
   ).catch((error: Error) => {
     throw new Error(`${error.message}, so git-lfs did not run`, {
@@ -238,12 +241,13 @@ export const noteRefused = async (
     return;
   }
   await askHub(
-    `${hub}/api/lfs/projects/${encodeURIComponent(projectId)}/refused`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ root, endpoint, machineId: await machineId() }),
-    },
+    ...hubAt(
+      hub,
+      hubRequest("POST /api/lfs/projects/:id/refused", {
+        path: { id: projectId },
+        body: { root, endpoint, machineId: await machineId() },
+      })
+    ),
     "it told the project's conversation"
   ).catch((error: unknown) =>
     console.warn(

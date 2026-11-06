@@ -12,6 +12,7 @@
  * length and the connection's state; never the key.
  */
 import { CAWCO_ENV, CONNECTION_NAME, readEnv } from "@cawco/core";
+import { hubRequest } from "@cawco/core/hub-request";
 import { ConnectionViewSchema } from "@cawco/core/stored-shapes";
 import { ownerAsk } from "./owner";
 
@@ -117,12 +118,10 @@ export const setConnectionKey = async (
   }
   const response = await ownerAsk(
     hub,
-    `/api/connections/${encodeURIComponent(name)}/key`,
-    {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ key }),
-    },
+    hubRequest("PUT /api/connections/:name/key", {
+      path: { name },
+      body: { key },
+    }),
     `cawco connections ${name}`,
     90_000,
     ConnectionKeyError,

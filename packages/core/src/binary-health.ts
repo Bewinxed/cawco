@@ -12,6 +12,7 @@
  */
 import type { BinaryInstallation } from "./binary-installation";
 import { type Bounded, readWithin } from "./bounded";
+import { hubRequest } from "./hub-request";
 import { machineFetch } from "./machine-key";
 import { unhandled } from "./unhandled";
 
@@ -176,7 +177,7 @@ async function probeHubMachine(
   // A probe with no answer is a problem that stands for now: the trial's
   // verification asks again until its deadline (cli binary-apply.ts `verify`).
   const health = await ask(
-    `${installation.hubUrl}/health`,
+    `${installation.hubUrl}${hubRequest("GET /health").path}`,
     json<HealthBody>,
     byMs
   );
@@ -232,7 +233,9 @@ async function probeAgentRow(options: {
   const { installation, machineId, version, agentSince } = options;
   // This machine's own row: the fleet's list is the person's (hub hub-auth.ts).
   const asked = await ask(
-    `${installation.hubUrl}/api/agents/${encodeURIComponent(machineId)}`,
+    `${installation.hubUrl}${
+      hubRequest("GET /api/agents/:machineId", { path: { machineId } }).path
+    }`,
     json<AgentRow>,
     options.byMs
   );

@@ -19,6 +19,7 @@ import {
   readEnv,
 } from "@cawco/core";
 import { SERVICE_IDS } from "@cawco/core/binary-installation";
+import { hubAt, hubRequest } from "@cawco/core/hub-request";
 import { hubCredentialSocket } from "@cawco/core/paths";
 import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
 import { AgentRowSchema } from "@cawco/core/stored-shapes";
@@ -426,8 +427,7 @@ const status = async (args: Args): Promise<number> => {
   // The fleet's list is the person's (hub hub-auth.ts): a hub that requires
   // paired devices asks the person to approve this run (owner.ts).
   const asked = await ownerFetch(
-    `${hub.httpUrl}/api/agents`,
-    {},
+    ...hubAt(hub.httpUrl, hubRequest("GET /api/agents")),
     "cawco status",
     STATUS_ANSWER_MS
   ).catch((error: unknown) => {

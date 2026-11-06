@@ -16,6 +16,7 @@ import { SERVICE_IDS, type ServiceId } from "@cawco/core/binary-installation";
 import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
 import { type Bounded, Gone, readWithin } from "@cawco/core/bounded";
 import { withFetchCap } from "@cawco/core/fetch-cap";
+import { hubRequest } from "@cawco/core/hub-request";
 import { keeperEndpoint, keeperService } from "@cawco/core/keepers";
 import {
   forgetLaunchdStart,
@@ -562,7 +563,7 @@ const probeStatus = (url: string): Promise<Bounded<number>> =>
   });
 
 const probeHub = async (): Promise<string> => {
-  const url = `${hubOrigin()}/health`;
+  const url = `${hubOrigin()}${hubRequest("GET /health").path}`;
   const health = await probeJson<{ version: string }>(url);
   switch (health.kind) {
     case "unanswered":
@@ -613,7 +614,11 @@ const ownRow = async (hub: string): Promise<AgentRow | null | string> => {
   const { machineId } = await import("@cawco/core/machine-id");
   const row = jsonBody<AgentRow>();
   const self = await probe(
-    `${hub}/api/agents/${encodeURIComponent(await machineId())}`,
+    `${hub}${
+      hubRequest("GET /api/agents/:machineId", {
+        path: { machineId: await machineId() },
+      }).path
+    }`,
     async (response): Promise<Said<AgentRow | null>> => {
       if (response.status === 404) {
         await response.body?.cancel();
@@ -708,7 +713,7 @@ export const awaitFirstMachineReady = async (
     [
       "hub",
       async () => {
-        const url = `${hub}/health`;
+        const url = `${hub}${hubRequest("GET /health").path}`;
         const health = await probeJson<{ ok: boolean }>(url);
         switch (health.kind) {
           case "unanswered":
@@ -1905,7 +1910,11 @@ const sessionsMidTurn = async (): Promise<Cut> => {
   }
   // Imported here rather than at the top so no other verb pays for the agent SDK.
   const { machineId } = await import("@cawco/core/machine-id");
-  const url = `${hub}/api/agents/${await machineId()}/busy`;
+  const url = `${hub}${
+    hubRequest("GET /api/agents/:machineId/busy", {
+      path: { machineId: await machineId() },
+    }).path
+  }`;
   const answer = await probeJson<BusyReport>(url);
   switch (answer.kind) {
     case "unanswered":

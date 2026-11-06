@@ -16,6 +16,7 @@ import {
   JOIN_WAIT_STEP,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { hubAt, hubRequest } from "@cawco/core/hub-request";
 import { machineId } from "@cawco/core/machine-id";
 import {
   machineFetch,
@@ -45,8 +46,14 @@ const readOwnRow = (
   readWithin(5000, async (signal) => {
     const code = process.env[INSTALL_CODE_ENV];
     const response = await machineFetch(
-      `${hubUrl}/api/agents/${encodeURIComponent(id)}`,
-      { signal, ...(code ? { headers: { [INSTALL_CODE_HEADER]: code } } : {}) }
+      ...hubAt(
+        hubUrl,
+        hubRequest("GET /api/agents/:machineId", { path: { machineId: id } }),
+        {
+          signal,
+          ...(code ? { headers: { [INSTALL_CODE_HEADER]: code } } : {}),
+        }
+      )
     );
     const pairing = response.headers.get("x-cawco-pairing");
     if (!response.ok) {

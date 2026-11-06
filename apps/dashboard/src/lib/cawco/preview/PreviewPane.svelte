@@ -26,7 +26,6 @@
   import {
     askHubReach,
     PAGE_SILENT_MS,
-    PREVIEW_REACH_API,
     previewsNeedWords,
     previewUnreachedWords,
     probePreview,
@@ -568,7 +567,10 @@
     // hub (`artifactShown`).
     const failed = unreachedOf(
       await probePreview(origin, (asked) =>
-        askHubReach(`${PREVIEW_REACH_API}?origin=${encodeURIComponent(asked)}`)
+        askHubReach(
+          hubRequest("GET /api/preview-reach", { query: { origin: asked } })
+            .path
+        )
       )
     );
     if (failed) {
@@ -849,7 +851,8 @@
         downTries += 1;
         probePreview(origin, (asked) =>
           askHubReach(
-            `${PREVIEW_REACH_API}?origin=${encodeURIComponent(asked)}`
+            hubRequest("GET /api/preview-reach", { query: { origin: asked } })
+              .path
           )
         ).then((failed) => {
           if (!live) {

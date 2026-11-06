@@ -16,7 +16,8 @@
  * own network, and maps nothing.
  */
 import { readWithin } from "@cawco/core/bounded";
-import { PREVIEW_NAMES_PATH, type PreviewNames } from "@cawco/core/browser";
+import type { PreviewNames } from "@cawco/core/browser";
+import { hubRequest } from "@cawco/core/hub-request";
 import { delegationHubUrl } from "../delegation";
 import { provenFetch } from "../hub-proof";
 import type { Runtime } from "./runtime";
@@ -82,7 +83,7 @@ const readNames = async (
   signal: AbortSignal
 ): Promise<{ loopback: boolean; names: PreviewNames["names"] }> => {
   const answer = await provenFetch(
-    `${delegationHubUrl()}${PREVIEW_NAMES_PATH}`,
+    `${delegationHubUrl()}${hubRequest("GET /api/preview-names").path}`,
     {
       signal,
     }

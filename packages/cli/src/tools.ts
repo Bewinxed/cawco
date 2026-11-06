@@ -16,6 +16,7 @@
  * call on a session's name alone.
  */
 import { CAWCO_ENV } from "@cawco/core";
+import { type HubRequest, hubAt, hubRequest } from "@cawco/core/hub-request";
 import {
   envelopeText,
   NotARecord,
@@ -44,17 +45,18 @@ export const toolDoor = (): string | undefined =>
 /** One of the two tool routes, through the workspace's tool door when there is one, else at `hub`. */
 const toolRoute = (
   hub: string | undefined,
-  path: string,
+  request: HubRequest,
   init: BunFetchRequestInit = {}
 ): Promise<Response> => {
   const door = toolDoor();
   if (door) {
-    return fetch(`http://cawco${path}`, { ...init, unix: door });
+    const [url, sent] = hubAt("http://cawco", request, init);
+    return fetch(url, { ...sent, unix: door });
   }
   if (!hub) {
     throw new ToolError("no hub to call the tools of");
   }
-  return fetch(`${hub}${path}`, init);
+  return fetch(...hubAt(hub, request, init));
 };
 
 const credentialHeader = (): Record<string, string> => {
@@ -85,7 +87,7 @@ export const listTools = async (
 ): Promise<string> => {
   const response = await toolRoute(
     hub,
-    `/api/delegation/tools?instanceId=${encodeURIComponent(instanceId)}`
+    hubRequest("GET /api/delegation/tools", { query: { instanceId } })
   );
   if (!response.ok) {
     throw new ToolError(`${response.status}: ${await response.text()}`);
@@ -130,14 +132,15 @@ export const callTool = async (
   }
   const response = await toolRoute(
     hub,
-    `/api/delegation/call/${encodeURIComponent(instanceId)}`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json", ...credentialHeader() },
-      body: JSON.stringify({
+    hubRequest("POST /api/delegation/call/:instanceId", {
+      path: { instanceId },
+      body: {
         name,
         arguments: toolArguments(args as Record<string, unknown>, form),
-      }),
+      },
+    }),
+    {
+      headers: credentialHeader(),
       // An admin write waits for the person to approve it; Bun's fetch would
       // otherwise drop a response silent for five minutes.
       timeout: false,
