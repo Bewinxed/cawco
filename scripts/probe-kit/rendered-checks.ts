@@ -5274,10 +5274,9 @@ let scans = 0;
  * next Escape land where the read left things), and focus goes back where
  * it stood, as visibly as it stood, its `focus` event held from the
  * element: its handlers ran when it took focus the first time, and run
- * again they acted anew (a kit Tip opens on any focus, bits-ui
- * `ignoreNonKeyboardFocus` off: restored to the Compare button a press
- * had focused, its tooltip stood open over it for the reads after,
- * graph-stage r529). A tooltip a tab stop's focus opened shuts with its
+ * again they acted anew (a kit Tip opens on a focus drawn visible:
+ * restored to the Compare button a press had focused, its tooltip stood
+ * open over it for the reads after, graph-stage r529). A tooltip a tab stop's focus opened shuts with its
  * blur. Nothing is focused with focus inside a layer (a popover, a menu, a
  * dialog, a hang) or such a floating layer open (moving focus out of it
  * would dismiss it or have its trap pull focus back: graph-stage r523,
@@ -5745,6 +5744,52 @@ async function fadeCues(
 const POINTED =
   'a[href], button, input, select, textarea, summary, label, iframe, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="option"], [role="switch"], [role="checkbox"], [role="radio"], [role="slider"], [tabindex]:not([tabindex="-1"]), [contenteditable]:not([contenteditable="false"])';
 
+/** A tooltip drawn open: the kit Tip's content (bits-ui), or any `role="tooltip"`. */
+const TIP =
+  '[data-slot="tooltip-content"]:not([data-state="closed"]), [data-tooltip-content]:not([data-state="closed"]), [role="tooltip"]';
+
+/**
+ * Each tooltip the focus holds open put away, the focus kept: a tooltip
+ * opened by its trigger's focus (a tab stop the spec focused, a dialog's
+ * Close its autofocus took) shuts on that trigger's blur, and the trigger
+ * is focused again at once, as visibly as it stood, its `focus` event held
+ * at the window so what opened the tooltip does not run again (focusRings
+ * restores focus the same way). The trigger is the focused element whose
+ * `aria-describedby` names a tooltip drawn open (bits-ui sets it while open).
+ */
+const TIPS_AWAY = (tip: string): void => {
+  const el = document.activeElement as HTMLElement | null;
+  if (!el || el === document.body) {
+    return;
+  }
+  const opened = (el.getAttribute("aria-describedby") ?? "")
+    .split(/\s+/u)
+    .filter(Boolean)
+    .map((id) => document.getElementById(id))
+    .some((one) => {
+      const held = one?.matches(tip) ? one : one?.closest(tip);
+      if (!held) {
+        return false;
+      }
+      const r = held.getBoundingClientRect();
+      return r.width > 1 && r.height > 1;
+    });
+  if (!opened) {
+    return;
+  }
+  const visible = el.matches(":focus-visible");
+  el.blur();
+  const hold = (event: Event) => event.stopImmediatePropagation();
+  addEventListener("focus", hold, { capture: true });
+  addEventListener("focusin", hold, { capture: true });
+  try {
+    el.focus({ preventScroll: true, focusVisible: visible } as FocusOptions);
+  } finally {
+    removeEventListener("focus", hold, { capture: true });
+    removeEventListener("focusin", hold, { capture: true });
+  }
+};
+
 /**
  * The pointer moved off every control before a read: a spec's last click
  * leaves the pointer on what it clicked (Expand turns into Back to
@@ -5753,10 +5798,13 @@ const POINTED =
  * the first, scanning from the window's corners in, where nothing a pointer
  * acts on stands, and no box under it draws a pointer cursor; what the
  * move starts that ends (a hover fill fading, a highlight easing out) is
- * let finish, for a second at most. Null when the window holds no such
- * point: the read is then said unread.
+ * let finish, for a second at most. A tooltip left open over the page is
+ * put away with it: one the pointer opened shuts as the pointer leaves its
+ * trigger, one its trigger's focus opened shuts on a blur (TIPS_AWAY), and
+ * its exit is waited for with the rest. What it says: the window holds no
+ * point off every control, or a tooltip still stands open after it.
  */
-async function parkPointer(page: Page): Promise<string | null> {
+async function parkPointer(page: Page): Promise<string[]> {
   const at = await page.evaluate((pointed) => {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -5793,10 +5841,15 @@ async function parkPointer(page: Page): Promise<string | null> {
     }
     return null;
   }, POINTED);
-  if (!at) {
-    return "pointer: no point in the window stands off every control, so the read is taken where the spec left the pointer";
+  const said: string[] = [];
+  if (at) {
+    await page.mouse.move(at.x, at.y);
+  } else {
+    said.push(
+      "pointer: no point in the window stands off every control, so the read is taken where the spec left the pointer"
+    );
   }
-  await page.mouse.move(at.x, at.y);
+  await page.evaluate(TIPS_AWAY, TIP);
   await page.evaluate(
     () =>
       new Promise<void>((done) => {
@@ -5819,7 +5872,22 @@ async function parkPointer(page: Page): Promise<string | null> {
         );
       })
   );
-  return null;
+  const standing = await page.evaluate(
+    (tip) =>
+      [...document.querySelectorAll(tip)]
+        .filter((one) => {
+          const r = one.getBoundingClientRect();
+          return r.width > 1 && r.height > 1;
+        })
+        .map((one) => `“${one.textContent?.trim().slice(0, 40)}”`),
+    TIP
+  );
+  if (standing.length > 0) {
+    said.push(
+      `pointer: ${standing.length} tooltip(s) stand open after the park, neither hovered nor its trigger focused (${standing.join(", ")}), and are read as drawn`
+    );
+  }
+  return said;
 }
 
 /**
@@ -5851,11 +5919,11 @@ async function renderedChecks(
     ),
     exempt,
   };
-  const unparked = opts.pointer === "kept" ? null : await parkPointer(page);
+  const unparked = opts.pointer === "kept" ? [] : await parkPointer(page);
   const canvasFailed = await canvasFailure(page);
   const read = await page.evaluate(readInPage, args);
   const findings: (CheckFinding & { at: number })[] = [...read.findings];
-  const unread = [...read.unread, ...(unparked ? [unparked] : [])];
+  const unread = [...read.unread, ...unparked];
   const stateNamed: string[] = [];
   if (!exempt.includes("state-shape")) {
     const states = await forcedStates(page, args);

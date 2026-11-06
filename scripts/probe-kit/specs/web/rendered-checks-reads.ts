@@ -62,12 +62,22 @@
  *     graph-dials-questions `coral`), no finding.
  * 21. coral, an edit mark that says words: the same mark with "Reset" in
  *     it beside the act: a second act, named.
+ * 22. text-overlap, a tooltip left open over its trigger: a button its
+ *     focus left holding its tooltip open, drawn over its words (a dialog's
+ *     Close its autofocus took, title-bars' kit sheet): the park before the
+ *     read puts it away, the focus kept, and nothing is named.
+ * 23. text-overlap, the same tooltip read where the spec left it (`pointer:
+ *     kept`, no park): its words over the button's, named.
  *
  *   bun scripts/probe-kit/run.ts web rendered-checks-reads
  */
 
 import type { Spec } from "../../kit";
-import { type CheckName, RenderedChecks } from "../../rendered-checks";
+import {
+  type CheckName,
+  type CheckOptions,
+  RenderedChecks,
+} from "../../rendered-checks";
 
 const BASE = `<!doctype html>
 <meta name="viewport" content="width=device-width">
@@ -170,10 +180,30 @@ const TAIL = (keep: string) => `<style>
   .join("")}</div>`;
 
 interface Case {
+  /** What the plant must draw before the read, or the case reads nothing. */
+  drawn?: string;
   html: string;
+  /** What the read takes beyond the spec's options. */
+  more?: CheckOptions;
   rule: CheckName;
   want: "finding" | "none";
 }
+
+/** A button its focus left holding its tooltip open over its words (bits-ui marks the trigger `aria-describedby` while open; a blur shuts it). */
+const LEFT_OPEN = `<style>
+  .tipped { position: relative; margin: 16px; }
+  .tip { position: absolute; inset-inline-start: 0; inset-block-start: 4px; padding: 2px 6px; border-radius: 4px; background: #222; color: #fff; font-size: 12px; white-space: nowrap; }
+</style><div class="tipped"><button id="press" type="button">Press</button><div class="tip" id="press-tip" role="tooltip" data-slot="tooltip-content" hidden>Press to close</div></div>
+<script>
+  // In a block: setContent writes into the same window, whose earlier case declared these.
+  {
+    const press = document.getElementById("press");
+    const tip = document.getElementById("press-tip");
+    press.addEventListener("focus", () => { tip.hidden = false; press.setAttribute("aria-describedby", "press-tip"); });
+    press.addEventListener("blur", () => { tip.hidden = true; press.removeAttribute("aria-describedby"); });
+    press.focus();
+  }
+</script>`;
 
 const CASES: Record<string, Case> = {
   "a field column": {
@@ -273,6 +303,19 @@ const CASES: Record<string, Case> = {
     want: "finding",
     html: `${BASE}${CORAL}${EDIT_MARKS}${editMark("Corner radius", "Reset")}<button class="act" type="button">Create routine</button>`,
   },
+  "a tooltip left open over its trigger": {
+    drawn: "#press-tip",
+    rule: "text-overlap",
+    want: "none",
+    html: `${BASE}${LEFT_OPEN}`,
+  },
+  "a tooltip left open, read unparked": {
+    rule: "text-overlap",
+    want: "finding",
+    drawn: "#press-tip",
+    more: { pointer: "kept" },
+    html: `${BASE}${LEFT_OPEN}`,
+  },
   "a card not chosen": {
     rule: "coral",
     want: "finding",
@@ -323,9 +366,17 @@ const spec: Spec = {
     const checks = new RenderedChecks(kit, "rendered-checks-reads", {
       noImpeccable: "planted pages, read by the house's own code",
     });
-    for (const [label, { html, rule, want }] of Object.entries(CASES)) {
+    for (const [label, { html, drawn, more, rule, want }] of Object.entries(
+      CASES
+    )) {
       await page.setContent(html);
-      const read = await checks.at(page, label);
+      if (drawn) {
+        kit.check(
+          `rendered-checks-reads: ${label}, ${drawn} stands drawn before the read`,
+          await page.locator(drawn).isVisible()
+        );
+      }
+      const read = await checks.at(page, label, more);
       const named = read.findings.filter((one) => one.rule === rule);
       kit.check(
         want === "finding"
