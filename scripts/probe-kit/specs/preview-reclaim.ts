@@ -16,6 +16,10 @@
  * Drives the hub's real listeners in-process (`createPreviewListeners`) on a
  * range of {@link SIZE} ports, its db's rows kept in memory as db
  * previews.ts keeps them (`portsByUse` ordered by `used_at`):
+ * 0. Started, before any port is handed out: every port of the range binds
+ *    for another program (a plain bind, as systemd's socket units make).
+ *    The hub held every free one once (35b2e437f), and the release proof's
+ *    socket on 43458, inside its hub's range, failed to start.
  * 1. The range filled by artifacts of a session that runs, none on a
  *    screen, then one used again: a new artifact's show opens, on the port
  *    of the one used least recently, which alone let its port go (`letGo`);
@@ -27,9 +31,9 @@
  *    document`, its pass sent): answered 302 to the page's own tab on the
  *    dashboard (`/artifact/<id>`); a frame's load of it is no tab's and
  *    stays 404.
- * 4. A port let go by its origin and taken by none: the hub holds it, and
- *    the same tab there is answered as on another origin's port, never the
- *    browser's connection error.
+ * 4. A port let go by its origin and taken by none: the hub holds it (for
+ *    preview.ts `VACANT_HOLD_MS`), and the same tab there is answered as on
+ *    another origin's port, never the browser's connection error.
  * 5. An `artifact_browse` url (a session's ticket into the page's session
  *    origin) loaded on a port that origin no longer holds: sent, its ticket
  *    unspent, to the entry where the origin stands now, which spends it and
@@ -149,6 +153,27 @@ const run = async (kit: Kit) => {
     return listeners.embed(key(n), RUNNING).port;
   };
   try {
+    // 0. The hub up, no port handed out: every one stays free for another program.
+    listeners.start();
+    const bindable = Array.from({ length: SIZE }, (_, at) => {
+      const port = FIRST + at;
+      try {
+        Bun.serve({
+          hostname: "127.0.0.1",
+          port,
+          fetch: () => new Response(null),
+        }).stop(true);
+        return `${port} bound`;
+      } catch (error) {
+        return `${port} ${(error as { code?: string }).code ?? String(error)}`;
+      }
+    });
+    kit.check(
+      "0: with the hub started, a port of its range it never handed out binds for another program (no SO_REUSEPORT), as a systemd socket does",
+      bindable.every((one) => one.endsWith("bound")),
+      bindable.join(", ")
+    );
+
     // 1. Filled by a running session's artifacts no screen shows; one used again.
     const before = new Map<number, number>();
     for (let n = 1; n <= SIZE; n += 1) {

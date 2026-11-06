@@ -108,7 +108,7 @@ const PASS_MS = 30 * DAY_MS;
  * used: 15 minutes, absolute (the orchestrator's call; a session mints
  * another whenever it needs one).
  */
-const SESSION_PASS_MS = 15 * 60_000;
+export const SESSION_PASS_MS = 15 * 60_000;
 /**
  * How long a pass stands once an entry has replaced it: what the browser sent
  * before the new cookie reached it. A page whose link stood down enters again

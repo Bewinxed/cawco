@@ -97,6 +97,7 @@ import {
   lockedResponse,
   type PassLock,
   passOf,
+  SESSION_PASS_MS,
   sessionTicketScope,
 } from "./preview-access";
 import { FolderRefusal, folderPath } from "./project-folder";
@@ -595,6 +596,14 @@ const PING_RELAY_MS = 5000;
 
 /** How often an origin's use is written to its port row at most (`used`): the reclaim's order needs no finer grain. Our call. */
 const USE_WRITE_MS = MINUTE_MS;
+/**
+ * How long a port an origin let go stays held for its stale addresses
+ * (createPreviewListeners' `holdVacant`): a session's pass ticket's life
+ * (preview-access.ts `SESSION_PASS_MS`), the longest an `artifact_browse`
+ * url can still be entered, which a tab kept open past it outlives only
+ * on a reload. Past it, the port is free for any program.
+ */
+const VACANT_HOLD_MS = SESSION_PASS_MS;
 
 /** A thrown fetch's short name for the pane: its code (`ECONNRESET`), else its kind. */
 const codeOf = (error: unknown): string => {
@@ -1809,15 +1818,24 @@ export function createPreviewListeners(
   /** Host mode's one listener. */
   let byHost: Listener | undefined;
   /**
-   * Each port of the range no origin holds, held by the hub: a stale
-   * address there (a tab or an `artifact_browse` url kept from before its
-   * origin's port moved on) is answered as one on another origin's port is
-   * ({@link movedOn}), not with the browser's connection error. Let go the
-   * moment an origin takes the port ({@link takeVacant}).
+   * Each port an origin of this hub served and let go ({@link release}),
+   * held a while: a stale address there (a tab, or an `artifact_browse` url
+   * kept from before its origin ended or moved) is answered as one on
+   * another origin's port is ({@link movedOn}), not with the browser's
+   * connection error. Only a port the hub handed out is ever held: one it
+   * never gave a preview stays free for any program the person runs (the
+   * release proof's systemd socket on 43458, inside its hub's range, failed
+   * to start when every free port was held, a4df55bbc).
+   *
+   * A held port can't stand down for another program: nothing tells a
+   * listener that another bind was refused (a plain bind just fails
+   * EADDRINUSE; `reusePort` would split its connections, not hand the port
+   * over). So the hold is bounded: {@link VACANT_HOLD_MS}, then the port is
+   * free. Let go at once when an origin takes it ({@link takeVacant}).
    */
   const vacant = new Map<number, Listener>();
 
-  /** Port `port` held while no origin and no other program has it. */
+  /** Port `port`, which an origin served until now, held for {@link VACANT_HOLD_MS} while no origin and no other program has it. */
   const holdVacant = (port: number): void => {
     if (
       !listens ||
@@ -1829,25 +1847,18 @@ export function createPreviewListeners(
       return;
     }
     try {
-      if (unheld(port)) {
-        vacant.set(
-          port,
-          listen(port, () => undefined, portLock)
-        );
+      if (!unheld(port)) {
+        return;
       }
+      const held = listen(port, () => undefined, portLock);
+      vacant.set(port, held);
+      after(VACANT_HOLD_MS, () => {
+        if (vacant.get(port) === held) {
+          takeVacant(port);
+        }
+      });
     } catch (thrown) {
       previewFailed(HOP, null, `port ${port} wasn't held: ${causeOf(thrown)}`);
-    }
-  };
-
-  /** Every free port of the range held ({@link holdVacant}). */
-  const holdVacants = (): void => {
-    for (
-      let port = PREVIEW_PORTS.first;
-      port <= PREVIEW_PORTS.last;
-      port += 1
-    ) {
-      holdVacant(port);
     }
   };
 
@@ -2086,7 +2097,7 @@ export function createPreviewListeners(
     return count;
   };
 
-  /** Origin `key`'s listener stops and its port is free again, held by the hub until an origin takes it ({@link holdVacant}). */
+  /** Origin `key`'s listener stops and its port is free again, held by the hub a while for a stale address of it ({@link holdVacant}). */
   const release = (key: string): void => {
     const listener = sessions.get(key) ?? embeds.get(key)?.listener;
     if (listener) {
@@ -2371,7 +2382,6 @@ export function createPreviewListeners(
         hostModeOnceFree();
       }
       bindKept();
-      holdVacants();
     },
 
     /**
@@ -2503,7 +2513,6 @@ export function createPreviewListeners(
         // Its sessions' own ports, which clients reached outside the
         // pattern's domain load (core `previewRoute`).
         bindKept();
-        holdVacants();
         return this.settings();
       }
       await stopAll();
