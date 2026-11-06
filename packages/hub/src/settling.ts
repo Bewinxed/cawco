@@ -18,6 +18,9 @@
  *   connection carries the question, an agent whose harness is on no online
  *   machine, Caw while he isn't leading the project): the card comes to the
  *   person, its ledger row signed with the reason, and the writer is told.
+ * - **A project's setup page** (setup.ts `isSetupPage`): every card on it
+ *   waits on the person, whatever its kind and the table, and no session
+ *   may `settle` one: the page decides what the project is.
  *
  * Every card the hub sends somewhere has its row in `card_settlings`, the
  * ledger the decision surface reads. Who may `settle` a card (`settler`):
@@ -35,6 +38,7 @@ import {
   type Member,
   memberOf,
   type RouteState,
+  type RouteWhere,
   routeLine,
 } from "@cawco/core/decides";
 import { type DecisionCard, pickMade } from "@cawco/core/decisions";
@@ -45,6 +49,7 @@ import type { ArtifactRow } from "./db/artifacts";
 import type { CardSettlingRow, DecidesDb } from "./db/decides";
 import { decidesTable, SettleRefusal } from "./decides-file";
 import { sessionLabel } from "./labels";
+import { isSetupPage } from "./setup";
 import {
   SESSION_TITLE_MAX,
   type WorkItemRequest,
@@ -123,10 +128,10 @@ export interface Decided {
 /** Where a card's member stands, or why it can't be reached. */
 type Reach = { ok: true } | { ok: false; reason: string };
 
-/** A card routed: its member, and where its table came from. */
+/** A card routed: its member, and where its route was read. */
 interface Routed {
   member: Member;
-  where: "project" | "fleet";
+  where: RouteWhere;
 }
 
 /** One option of a card, as the member reads it. */
@@ -235,12 +240,22 @@ const onIt = (deps: SettlingDeps, kept: CardSettlingRow | undefined) =>
     : deps.live(kept.workItemId));
 
 export const createSettling = (deps: SettlingDeps) => {
-  /** Card `card`'s member on page `row`, by the project's table, and the table's problems. */
+  /**
+   * Card `card`'s member on page `row`, by the project's table, and the
+   * table's problems. Every card of a project's setup page (setup.ts
+   * `isSetupPage`) is the person's, whatever its kind and the table: that
+   * page decides what the project is. Every way a card is sent or settled
+   * reads its member here ({@link routed}, {@link stranded},
+   * {@link settler}).
+   */
   const routeOf = async (
     fleet: FleetDecides,
     row: ArtifactRow,
     card: DecisionCard
   ): Promise<Routed & { problems: string[] }> => {
+    if (row.projectId !== null && isSetupPage(row)) {
+      return { member: BUILT_IN.you, where: "setup", problems: [] };
+    }
     const table = await decidesTable(
       {
         projectId: row.projectId,
@@ -430,8 +445,32 @@ export const createSettling = (deps: SettlingDeps) => {
     return { state: "running" };
   };
 
-  /** The other pages of the project whose cards still wait on the member, their run gone. */
-  const stranded = (page: PageCards, kept: CardSettlingRow[]): PageCards[] => {
+  /** The cards of `page` that {@link routeOf} sends `member` now. */
+  const stillTheirs = async (
+    fleet: FleetDecides,
+    member: Member,
+    page: PageCards
+  ): Promise<DecisionCard[]> => {
+    const still: DecisionCard[] = [];
+    for (const card of page.cards) {
+      if ((await routeOf(fleet, page.row, card)).member.id === member.id) {
+        still.push(card);
+      }
+    }
+    return still;
+  };
+
+  /**
+   * The other pages of the project whose cards still wait on the member,
+   * their run gone: each card the ledger has on it that {@link routeOf}
+   * still sends it (none of a setup page's, nor of a kind he took back).
+   */
+  const stranded = async (
+    fleet: FleetDecides,
+    member: Member,
+    page: PageCards,
+    kept: CardSettlingRow[]
+  ): Promise<PageCards[]> => {
     const cards = new Map<string, string[]>();
     for (const one of kept) {
       if (
@@ -445,10 +484,15 @@ export const createSettling = (deps: SettlingDeps) => {
         ]);
       }
     }
-    return [...cards].flatMap(([artifactId, ids]) => {
+    const pages: PageCards[] = [];
+    for (const [artifactId, ids] of cards) {
       const read = deps.pageCards(artifactId, ids);
-      return read && read.cards.length > 0 ? [read] : [];
-    });
+      const still = read ? await stillTheirs(fleet, member, read) : [];
+      if (read && still.length > 0) {
+        pages.push({ ...read, cards: still });
+      }
+    }
+    return pages;
   };
 
   /** One run of the member's delegate type under `asker`, with every card of `pages`. */
@@ -516,7 +560,10 @@ export const createSettling = (deps: SettlingDeps) => {
     try {
       return session
         ? await handTo(fleet, member, session, asker, page)
-        : await startRun(fleet, member, asker, [page, ...stranded(page, kept)]);
+        : await startRun(fleet, member, asker, [
+            page,
+            ...(await stranded(fleet, member, page, kept)),
+          ]);
     } catch (error) {
       const said = error instanceof Error ? error.message : String(error);
       console.warn(
@@ -701,7 +748,7 @@ export const createSettling = (deps: SettlingDeps) => {
             card.id,
             now
               ? `${link}: ${routeLine(kindName(fleet, card.kind), member.name, where, now)}${said}`
-              : `${link}: decided already.`,
+              : `${link}: ${decidesWords.decidedAlready}`,
           ];
         })
       );
@@ -733,7 +780,7 @@ export const createSettling = (deps: SettlingDeps) => {
       if (member.type === "you" || kept?.route === "you") {
         throw new SettleRefusal(
           403,
-          decidesWords.settleYours(name, decidesWords.here(where === "project"))
+          decidesWords.settleYours(name, decidesWords.here(where))
         );
       }
       if (member.type === "asker") {

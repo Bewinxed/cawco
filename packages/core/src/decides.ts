@@ -299,14 +299,21 @@ export type RouteState =
   | { state: "failed"; why: string }
   | { state: "unreachable"; reason: string };
 
+/**
+ * Where a card's route was read: its project's table, the fleet's (a page
+ * outside any project), or none, on a project's setup page, whose every
+ * card is the person's (hub settling.ts `routeOf`).
+ */
+export type RouteWhere = "project" | "fleet" | "setup";
+
 /** Where a card goes, said to the session that wrote it, after the card's link (one line per card). */
 export const routeLine = (
   kind: string,
   member: string,
-  where: "project" | "fleet",
+  where: RouteWhere,
   state: RouteState
 ): string => {
-  const here = decidesWords.here(where === "project");
+  const here = decidesWords.here(where);
   switch (state.state) {
     case "you":
       return decidesWords.routedYou(kind, here);
