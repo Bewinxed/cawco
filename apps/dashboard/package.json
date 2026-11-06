@@ -19,6 +19,7 @@
     "vite": "^8.3.5"
   },
   "dependencies": {
+    "@ark-ui/svelte": "^5.25.1",
     "@atlaskit/pragmatic-drag-and-drop": "^4.0.0",
     "@atlaskit/pragmatic-drag-and-drop-hitbox": "^3.0.0",
     "@cawco/core": "workspace:*",

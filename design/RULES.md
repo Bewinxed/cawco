@@ -267,7 +267,7 @@ Under "Components" (DESIGN.md line 475); rule at line 479.
 
 Under "Buttons" (DESIGN.md line 481); rule at line 487.
 
-**The Press Rule.** A compact standalone control (a button, a chip, a switch) scales to `--press-scale`; anything wide or grouped (rows, cards, tabs, segments) tints to `surface-pressed` and moves nothing. A link dims. The tint outranks a control's own fill by specificity, never `!important`.
+**The Press Rule.** A compact standalone control (a button, a chip, a switch) scales to `--press-scale`; anything wide or grouped (rows, cards, tabs, segments), and any control that opens a list, menu or card, tints to `surface-pressed` and moves nothing. A link dims. The tint outranks a control's own fill by specificity, never `!important`.
 
 ## The Hold-To-Select Rule
 

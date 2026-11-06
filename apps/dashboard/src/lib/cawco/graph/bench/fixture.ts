@@ -2,8 +2,8 @@
  * The dials an agent puts on the routine form for its design run's pages:
  * one of each kind, each on a value the form reads (the controls' radius
  * and height, its fields' fill (every field reads it; no one ink token
- * carries all the form's text: labels read `--ink-row`, values `--ink-strong`), an arg that has every blank field say
- * what it needs).
+ * carries all the form's text: labels read `--ink-row`, values `--ink-strong`), an arg that has every blank field show
+ * its error).
  */
 import type { GraphDial } from "../dials";
 
@@ -34,7 +34,7 @@ export const ROUTINE_DIALS: GraphDial[] = [
   {
     kind: "toggle",
     name: "attempted",
-    label: "Show what each blank field needs",
+    label: "Show field errors",
     target: { arg: "attempted" },
   },
 ];

@@ -484,7 +484,7 @@ Tactile and quiet: a hairline-edged raised block that dips under the hand.
 - **Outline (default):** raised, a `border-button-outline` edge, strong ink. **Primary:** `action-surface`, `on-action` text. **Secondary:** recess with a hairline. **Ghost:** transparent until hovered. **Destructive:** an `error-9` edge and `error-11` text. **Disabled:** 50%.
 - **Pending:** a running button keeps its focus and place and swallows presses; its slot cross-fades to a spinner, then a check, and its label and pending wording share one cell, so it never changes width.
 
-**The Press Rule.** A compact standalone control (a button, a chip, a switch) scales to `--press-scale`; anything wide or grouped (rows, cards, tabs, segments) tints to `surface-pressed` and moves nothing. A link dims. The tint outranks a control's own fill by specificity, never `!important`.
+**The Press Rule.** A compact standalone control (a button, a chip, a switch) scales to `--press-scale`; anything wide or grouped (rows, cards, tabs, segments), and any control that opens a list, menu or card, tints to `surface-pressed` and moves nothing. A link dims. The tint outranks a control's own fill by specificity, never `!important`.
 
 **The cursor.** An enabled button shows the pointer and a disabled or pending one the arrow, from one base style in `design.css`.
 

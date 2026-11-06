@@ -1,10 +1,10 @@
 /**
- * The Dials face's own states (Component Story Format 3, live components),
- * fed the dials an agent puts on the routine form: one of each kind, as
- * the page reads each one's value off the drawing. Each story is one way
- * the face stands, at the room's least width beside a 1440 stage (400) or
- * in the phone's drawer (390). The number dial is drawn in both of the
- * forms the owner picks between (tsk-193, tsk-198).
+ * The Controls face's own states (Component Story Format 3, live
+ * components), fed the controls an agent puts on the routine form under its
+ * two headings: one of each kind, as the page reads each one's value off the
+ * drawing. Each story is one way the face stands in the room (dials-frame),
+ * at the room's least width beside a 1440 stage (400) or at the phone
+ * drawer's (354 inside a 390 screen).
  */
 
 import {
@@ -12,120 +12,111 @@ import {
   ROUTINE_DIALS_GROUPED,
   ROUTINE_WRITTEN,
 } from "./bench/fixture";
-import Dials from "./Dials.svelte";
+import DialsFrame from "./dials-frame.svelte";
 
 const nothing = () => undefined;
+const ONE_TURNED = { radius: 4 };
+/** The screen a 400px room and its page's gutters stand in. */
+const DESK = 436;
+/** The phone drawer's body, its inset each side of a 390 screen. */
+const PHONE = { width: 354 };
 
 export default {
-  title: "Design graph/Dials",
-  component: Dials,
+  title: "Design graph/Controls",
+  component: DialsFrame,
   args: {
-    dials: ROUTINE_DIALS,
+    width: 400,
+    height: 600,
+    dials: ROUTINE_DIALS_GROUPED,
     written: ROUTINE_WRITTEN,
     values: {},
     lang: "en",
     onchange: nothing,
     onreset: nothing,
-    onversion: nothing,
   },
 };
 
-/** One of each kind as written: the number dial a pill, its knob carrying its figure. */
-export const AsWritten = { parameters: { viewport: 400 } };
-
-/** Two turned: the radius dragged to 4 px and the colour picked; each changed value in the edit's ink with its way back, and the head's two versions, Copy values and Reset all. */
-export const Turned = {
-  args: { values: { radius: 4, fill: "#e8f1ee" } },
-  parameters: { viewport: 400 },
+/** One turned: the corner radius dragged to 4 px, its undo glyph after it in the edit's ink, Reset all under the rows. */
+export const OneChanged = {
+  args: { values: ONE_TURNED },
+  parameters: { viewport: DESK },
 };
 
-/** The same, a changed value marked by its restore glyph alone in the edit's ink, its words as they are. */
-export const TurnedGlyph = {
+/** Every control at the agent's value: no undo glyph, nothing under the rows. */
+export const AgentValues = { parameters: { viewport: DESK } };
+
+/** The field colour's picker open under its field. */
+export const PickerOpen = {
+  args: { values: ONE_TURNED, open: "fill" },
+  parameters: { viewport: DESK },
+};
+
+/** The corner radius under a drag: its edge steps up, its fill follows the hand. */
+export const Dragging = {
   args: {
-    values: { radius: 4, fill: "#e8f1ee", height: "44px" },
-    changedMark: "glyph",
+    values: { radius: 14 },
+    held: { name: "radius", as: "dragging" },
   },
-  parameters: { viewport: 400 },
+  parameters: { viewport: DESK },
 };
 
-export const TurnedGlyphPhone = {
+/** A figure typed into the corner radius, not yet kept. */
+export const Typing = {
   args: {
-    values: { radius: 4, fill: "#e8f1ee", height: "44px" },
-    changedMark: "glyph",
+    values: ONE_TURNED,
+    held: { name: "radius", as: "typing", text: "12" },
   },
-  parameters: { viewport: 390 },
+  parameters: { viewport: DESK },
 };
 
-/** Three turned, the hub having sent them to the agent by itself. */
-export const Sent = {
+/** The field height's list open. */
+export const ListOpen = {
+  args: { values: ONE_TURNED, open: "height" },
+  parameters: { viewport: DESK },
+};
+
+/** Every control turned. */
+export const AllChanged = {
   args: {
-    values: { radius: 4, fill: "#e8f1ee", height: "44px" },
-    sent: { at: "2026-11-05T14:32:00", by: "hub" },
+    values: { radius: 4, height: "44px", fill: "#e8f1ee", attempted: true },
   },
-  parameters: { viewport: 400 },
-};
-
-/** The same, a changed value marked by its words in the edit's ink (today's tone). */
-export const TurnedInk = {
-  args: { values: { radius: 4, fill: "#e8f1ee", height: "44px" } },
-  parameters: { viewport: 400 },
-};
-
-export const TurnedInkPhone = {
-  args: { values: { radius: 4, fill: "#e8f1ee", height: "44px" } },
-  parameters: { viewport: 390 },
-};
-
-/** The same, the number dial a field, its figure at its end and its fill to its value. */
-export const TurnedField = {
-  args: { values: { radius: 4, fill: "#e8f1ee" }, numberForm: "field" },
-  parameters: { viewport: 400 },
-};
-
-export const TurnedFieldPhone = {
-  args: { values: { radius: 4, fill: "#e8f1ee" }, numberForm: "field" },
-  parameters: { viewport: 390 },
-};
-
-/** The same, the number dial a slider with its figure beside it. */
-export const TurnedSlider = {
-  args: { values: { radius: 4, fill: "#e8f1ee" }, numberForm: "slider" },
-  parameters: { viewport: 400 },
-};
-
-/** As written shown while two are turned: the agent's values, read only. */
-export const AsWrittenShown = {
-  args: { values: { radius: 4, fill: "#e8f1ee" }, version: "written" },
-  parameters: { viewport: 400 },
+  parameters: { viewport: DESK },
 };
 
 /** Reset all just pressed: Undo reset in its place. */
 export const ResetAll = {
   args: { undoable: true },
-  parameters: { viewport: 400 },
+  parameters: { viewport: DESK },
 };
 
-/** Under the agent's headings, as a panel's folders are. */
-export const UnderHeadings = {
-  args: { dials: ROUTINE_DIALS_GROUPED, values: { radius: 4 } },
-  parameters: { viewport: 400 },
+/** Under no heading: one list of rows. */
+export const NoHeadings = {
+  args: { dials: ROUTINE_DIALS, values: ONE_TURNED },
+  parameters: { viewport: DESK },
 };
 
-/** In the phone's drawer: each name over its control. */
-export const TurnedPhone = {
-  args: { values: { radius: 4, fill: "#e8f1ee" } },
+/** In the phone's drawer: each name beside its control. */
+export const OneChangedPhone = {
+  args: { ...PHONE, values: ONE_TURNED },
   parameters: { viewport: 390 },
 };
 
-export const TurnedSliderPhone = {
-  args: { values: { radius: 4, fill: "#e8f1ee" }, numberForm: "slider" },
+/** The field colour's picker open in the phone's drawer. */
+export const PickerOpenPhone = {
+  args: { ...PHONE, values: ONE_TURNED, open: "fill" },
   parameters: { viewport: 390 },
 };
 
-/** The hardening case's dials and values. */
+/** The field height's list open in the phone's drawer. */
+export const ListOpenPhone = {
+  args: { ...PHONE, values: ONE_TURNED, open: "height" },
+  parameters: { viewport: 390 },
+};
+
+/** The hardening case's controls and values. */
 const HARDENED = {
   dials: [
-    ...ROUTINE_DIALS,
+    ...ROUTINE_DIALS_GROUPED,
     {
       kind: "number",
       name: "pace",
@@ -156,13 +147,14 @@ const HARDENED = {
   values: { pace: 2_400_000 },
 };
 
-/** The longest name an agent writes, a figure in the millions in the knob, a text dial and an action. */
+/** The longest name an agent writes, a figure in the millions, a line of words and an action. */
 export const Hardened = {
   args: HARDENED,
-  parameters: { viewport: 400 },
+  parameters: { viewport: DESK },
 };
 
+/** The hardening case in the phone's drawer. */
 export const HardenedPhone = {
-  args: HARDENED,
+  args: { ...HARDENED, ...PHONE },
   parameters: { viewport: 390 },
 };

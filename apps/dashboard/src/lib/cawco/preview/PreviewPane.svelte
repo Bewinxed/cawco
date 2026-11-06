@@ -1084,13 +1084,6 @@
    * Send (the hub's artifacts/service.ts `send`).
    */
   let view = $state.raw<ArtifactView | null>(null);
-  /** His dial values went to the agent since he last turned one: when, and by the hub by itself or by his Send. */
-  const dialsSent = $derived.by(() => {
-    const entry = view?.choices.dials;
-    const at = view?.sentAt ?? null;
-    const by = view?.sentBy ?? null;
-    return entry && at && by && at >= entry.at ? { at, by } : null;
-  });
   /** His dial values as the artifact's doc keeps them (`dials`), by name: the design graph stands them again on open. */
   const keptDials = $derived.by(() => {
     const kept = view?.choices.dials?.value;
@@ -4812,7 +4805,6 @@
           frame={frameTags}
           inspector={inspectorInRoom ? roomInspector : undefined}
           {link}
-          {dialsSent}
           {keptDials}
           memory={`cawco-graph-kept:${artifact.id}`}
           {keptTuned}

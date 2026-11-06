@@ -18,7 +18,8 @@ export const graphWords = {
   statesFace: "States",
   wholeSet: "Map",
   moveFace: "Animation",
-  dialsFace: "Dials",
+  /** The values an agent lets him tune, by what tools call such a panel (Storybook's Controls). */
+  dialsFace: "Controls",
   /** The panel's own name, whichever face it shows, from the faces it has: the room's aside and the phone drawer's title ("States, map and animation"). */
   room: (faces: readonly string[]) =>
     andList(faces.map((face, at) => (at === 0 ? face : face.toLowerCase()))),
@@ -338,28 +339,24 @@ export const graphWords = {
   stale: "Not live: the hub can't be reached. This is the last view it sent.",
 
   /**
-   * The agent's dials (its canvas spec's `dials`): the values it lets the
-   * person tune on the drawing, each a row of the Dials face.
+   * The agent's controls (its canvas spec's `dials`): the values it lets
+   * the person tune on the drawing, each a row of the Controls face.
    */
   dials: {
-    /** The two whole sets of values once he changed any, as the move's timing has. */
-    versions: "Values",
-    /** A changed dial's restore glyph: what it goes back to. */
+    /** A changed control's undo glyph: what it goes back to. */
     reset: (dial: string, value: string) => `Reset ${dial} to ${value}`,
     resetAllSaid: "Reset all values",
-    /** A colour dial's swatch: the platform's picker. */
+    /** A colour control's swatch: it opens the picker. */
     pick: (dial: string) => `Pick ${dial}`,
+    /** The picker's square, its thumb: the colour's saturation across, its brightness down. */
+    area: "Saturation and brightness",
+    hue: "Hue",
+    alpha: "Opacity",
+    /** The picker's eyedropper, where the browser has one. */
+    eyedropper: "Pick a colour from the screen",
     /** A colour typed that the browser reads as none: under its field until it is one (what he typed stands in the field above it). */
     notAColour: "Not a colour. Type one like #2a6df4.",
     on: "On",
     off: "Off",
-    /** The head's line while As written is shown: the dials take no turn, and the way on is Yours. */
-    readOnly: "Switch to Yours to change the values.",
-    /** The head's line otherwise: his values are the artifact's answer, and the hub sends them to the agent by itself once his changes stand quiet (hub artifacts `sendAnswered`, `COMMENTS_QUIET_MS`). */
-    reachAgent: "These go to the agent 3 seconds after your last change.",
-    /** The head's line once his values went to the agent (by the hub by itself after his last change, or by his own Send: either way they went); the time in the page's language. */
-    sent: (time: string) => `Sent to the agent at ${time}.`,
-    /** The dial glyph in the bar's glass while values are changed: its name says how many. */
-    glassChanged: (n: Figure) => `Dials, ${n} changed`,
   },
 } as const;

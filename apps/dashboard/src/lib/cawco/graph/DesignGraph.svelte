@@ -71,8 +71,6 @@
     IconChevronDown,
     IconClose,
     IconCompareLinear,
-    IconDial,
-    IconDialLinear,
     IconEyeLinear,
     IconListRows,
     IconMaximize,
@@ -84,16 +82,12 @@
     IconStructure,
     IconSun,
     IconTablet,
+    IconTuning,
   } from "#lib/icons.js";
   import { browser } from "$app/env";
   import { besideLine, DIVIDER } from "./beside";
   import Dials from "./Dials.svelte";
-  import {
-    changedOf,
-    type DialValue,
-    type DialValues,
-    type GraphDial,
-  } from "./dials";
+  import type { DialValue, DialValues, GraphDial } from "./dials";
   import { figureOf, pageLang } from "./figures";
   import Journey from "./Journey.svelte";
   import { keepUnder, keptUnder } from "./kept";
@@ -129,12 +123,8 @@
     onroom,
     inspector,
     memory,
-    dialsAt = "face",
-    numberForm = "pill",
     startFace,
     keptDials = {},
-    dialsSent = null,
-    changedMark = "plain",
     ondials,
     keptTuned = [],
     ontuned,
@@ -175,22 +165,10 @@
      * reload, for the ask they were kept under (kept.ts).
      */
     memory?: string;
-    /**
-     * Where the agent's dials open (the owner's pick, tsk-198's view
-     * switch): a face of the room, or a card hung from a glyph in the bar's
-     * glass.
-     */
-    dialsAt?: "face" | "glass";
-    /** How a number dial is drawn (the owner's pick, tsk-193 and tsk-198). */
-    numberForm?: "pill" | "field" | "slider";
     /** The room's face the graph opens on (the ask's `face`); the states when it names none or one the room lacks. */
     startFace?: "map" | "move" | "dials";
     /** His dial values as the artifact keeps them (its doc's `dials`), by name: they stand again on open. */
     keptDials?: DialValues;
-    /** His dial values went to the agent since he last turned one (the doc's `sentAt`, `sentBy`); null while they haven't. */
-    dialsSent?: { at: string; by: "hub" | "person" } | null;
-    /** How a changed dial is marked (the owner's pick, graph-dials-questions `changed-mark`, still open; Dials.svelte says why `plain` is the default). */
-    changedMark?: "ink" | "glyph" | "plain";
     /** His dial values changed: the artifact keeps them (its doc's `dials`, which `artifact_read` answers). */
     ondials?: (values: DialValues) => void;
     /** His tuning of every move as the artifact keeps it (its doc's `tuned`): put back on each move's first read. */
@@ -287,8 +265,8 @@
     { value: "states", label: words.statesFace, icon: IconListRows },
     { value: "map", label: words.wholeSet, icon: IconStructure },
     { value: "move", label: words.moveFace, icon: IconPlay },
-    ...(dials.length > 0 && dialsAt === "face"
-      ? [{ value: "dials", label: words.dialsFace, icon: IconDial }]
+    ...(dials.length > 0
+      ? [{ value: "dials", label: words.dialsFace, icon: IconTuning }]
       : []),
   ] as const);
   type Face = "states" | "map" | "move" | "dials";
@@ -296,23 +274,15 @@
   const roomName = $derived(words.room(FACES.map((one) => one.label)));
   /** The face the room shows: the states until he picks another. */
   let face = $state<Face>(untrack(() => startFace) ?? "states");
-  /** His values of the dials, by name; As written or Yours on the face and the drawing; the values Reset all took, while nothing has changed since. */
+  /** His values of the controls, by name, on the face and the drawing; the values Reset all took, while nothing has changed since. */
   let dialValues = $state<DialValues>({});
-  let dialVersion = $state<Version>("yours");
-  /** The values he kept as versions of their own, in the order he kept them. */
-  let dialsKept = $state<DialValues[]>([]);
   let dialsUndo = $state<DialValues | null>(null);
-  /** The dials as set on the drawing: his over as written, or as written alone. */
-  const dialsSet = $derived.by((): DialValues => {
-    if (typeof dialVersion === "number") {
-      return dialsKept[dialVersion] ?? dialValues;
-    }
-    return dialVersion === "written" ? {} : dialValues;
-  });
+  /** The control whose layer stands open on the Controls face (a select's list, a colour's picker). */
+  let dialOpen = $state<string | null>(null);
   // The drawing takes every turn: the whole set, each time it changes, and
   // again on a new page, which holds none of them.
   $effect(() => {
-    const set = $state.snapshot(dialsSet);
+    const set = $state.snapshot(dialValues);
     const { loads } = link;
     if (dials.length > 0 && loads > 0) {
       untrack(() => link.turn(set));
@@ -331,18 +301,8 @@
     dialValues = Object.fromEntries(
       Object.entries(dialValues).filter(([name]) => !names.includes(name))
     );
-    dialVersion = "yours";
     ondials?.(dialValues);
   };
-  /** The glass's dials card is open (the dials hung from the bar's glass), and drawn out of it. */
-  let dialsOpen = $state(
-    untrack(() => dialsAt === "glass" && startFace === "dials")
-  );
-  let dialsJoined = $state(false);
-  /** How many dials he changed from as written (Yours' count). */
-  const dialsChanged = $derived(
-    changedOf(dials, link.dialsWritten ?? {}, dialValues).length
-  );
   // His values as the artifact keeps them come with its doc, after the graph
   // stands: taken once they come, while he has turned nothing here.
   let keptTaken = false;
@@ -358,7 +318,6 @@
       }
     });
   });
-  let dialsTrigger = $state<HTMLElement | null>(null);
   /** The face the room shows: his, while the room has it (the dials come once the page has read them); else the states. */
   const shownFace = $derived<Face>(
     FACES.some((one) => one.value === face) ? face : "states"
@@ -1040,7 +999,6 @@
       untrack(() => {
         viewOpen = false;
         menuOpen = false;
-        dialsOpen = false;
       });
     }
   });
@@ -1109,7 +1067,7 @@
   // transport and the move on one line over the stage, as a press on that
   // face's tab leaves it.
   onMount(() => {
-    if (startFace === "map" || (startFace === "dials" && dialsAt === "face")) {
+    if (startFace === "map" || startFace === "dials") {
       requestAnimationFrame(() => {
         if (!desk && SNAPS.length > 1) {
           stopAt = 1;
@@ -1345,10 +1303,9 @@
 
 {#snippet dialsBody()}
   <Dials
-    {changedMark}
+    bind:open={dialOpen}
     {dials}
     {lang}
-    {numberForm}
     onchange={turnDial}
     onreset={resetDials}
     onundo={() => {
@@ -1356,17 +1313,8 @@
       dialsUndo = null;
       ondials?.(dialValues);
     }}
-    onversion={(next) => {
-      dialVersion = next;
-    }}
-    kept={dialsKept}
-    onkeep={() => {
-      dialsKept = [...dialsKept, dialValues];
-    }}
-    sent={dialsSent}
     undoable={dialsUndo !== null}
     values={dialValues}
-    version={dialVersion}
     written={link.dialsWritten ?? {}}
   />
 {/snippet}
@@ -1464,9 +1412,10 @@
   {/if}
 {/snippet}
 
-{#snippet faces()}
+{#snippet faces(glyphs: boolean)}
   <RoomFaces
     faces={FACES}
+    {glyphs}
     label={roomName}
     onchoose={(next) => {
       face =
@@ -1628,7 +1577,7 @@
       >
         <!-- Compare and the view; Show states only while the room is put
              away. The room's one close is its own. -->
-        <BarGlass form="group" joined={viewJoined || dialsJoined}>
+        <BarGlass form="group" joined={viewJoined}>
           {#if !single}
             <BarItem
               icon={IconCompareLinear}
@@ -1636,47 +1585,6 @@
               onclick={() => setComparing(!comparing)}
               pressed={comparing}
             />
-          {/if}
-          {#if dialsAt === "glass" && dials.length > 0}
-            <!-- The agent's dials, hung from the glass as the view is. -->
-            <Popover.Root bind:open={dialsOpen}>
-              <Popover.Trigger>
-                {#snippet child({ props })}
-                  <!-- Closed with values changed, the glyph wears the
-                       selected wash and says how many, as Compare on does. -->
-                  <BarItem
-                    icon={IconDialLinear}
-                    label={dialsChanged > 0
-                      ? words.dials.glassChanged(figure(dialsChanged))
-                      : words.dialsFace}
-                    marked={dialsChanged > 0}
-                    {props}
-                    tipOff={dialsOpen}
-                    bind:ref={dialsTrigger}
-                  />
-                {/snippet}
-              </Popover.Trigger>
-              <HangCard
-                align="end"
-                anchor={glass}
-                aria-label={words.dialsFace}
-                bind:joined={dialsJoined}
-                customAnchor={glass}
-                onCloseAutoFocus={(event: Event) =>
-                  quietFocus(event, dialsTrigger)}
-                onOpenAutoFocus={(event: Event) =>
-                  quietFocus(event, dialsTrigger)}
-                frame="settings"
-                side="bottom"
-                sideOffset={0}
-              >
-                <div
-                  class="flex w-c-graph-room-w max-w-full min-w-0 flex-col p-space-4"
-                >
-                  {@render dialsBody()}
-                </div>
-              </HangCard>
-            </Popover.Root>
           {/if}
           <Popover.Root bind:open={viewOpen}>
             <!-- No tooltip over its own open card: shown, it took the
@@ -1947,7 +1855,7 @@
                 <div
                   class="flex min-h-c-top-bar-h min-w-0 flex-none items-center gap-space-2 border-b border-border-hairline ps-space-4 pe-space-2"
                 >
-                  {@render faces()}
+                  {@render faces(false)}
                   <Tip label={words.closeRoom(roomName)}>
                     {#snippet children(tip)}
                       <button
@@ -2044,7 +1952,7 @@
               style:--snap-drop="{Math.max(0, layerHeight - cover)}px"
             >
               <div class="flex min-w-0 items-center gap-space-2">
-                {@render faces()}
+                {@render faces(true)}
                 <!-- The drawer's one Close, the ghost the kit's sheet heads
                      draw. It puts the room away itself: vaul's Close asks
                      the dialog to close, and a root that is not

@@ -12,10 +12,10 @@
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import {
     IconClose,
-    IconDial,
     IconListRows,
     IconPlay,
     IconStructure,
+    IconTuning,
   } from "#lib/icons.js";
   import RoomFaces from "./RoomFaces.svelte";
 
@@ -31,7 +31,7 @@
     width: number;
     /** The face shown. */
     chosen?: Face;
-    /** The routine put dials on the drawing: the Dials face stands. */
+    /** The routine put controls on the drawing: the Controls face stands. */
     dials?: boolean;
     /** The room is the phone's drawer, open at its head. */
     drawer?: boolean;
@@ -44,7 +44,7 @@
     { value: "map", label: words.wholeSet, icon: IconStructure },
     { value: "move", label: words.moveFace, icon: IconPlay },
     ...(dials
-      ? [{ value: "dials" as const, label: words.dialsFace, icon: IconDial }]
+      ? [{ value: "dials" as const, label: words.dialsFace, icon: IconTuning }]
       : []),
   ]);
   const roomName = $derived(words.room(faces.map((one) => one.label)));
@@ -57,6 +57,7 @@
 {#snippet switcher()}
   <RoomFaces
     {faces}
+    glyphs={drawer}
     label={roomName}
     onchoose={(next) => {
       face = next;

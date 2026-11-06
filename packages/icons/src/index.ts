@@ -287,6 +287,8 @@ export { default as IconPenLinear } from "~icons/solar/pen-linear";
  */
 export { default as IconPin } from "~icons/solar/pin-bold-duotone";
 export { default as IconPinLinear } from "~icons/solar/pin-linear";
+/** A colour taken from the screen: a colour picker's eyedropper. */
+export { default as IconPipette } from "~icons/solar/pipette-bold-duotone";
 export {
   default as IconSend,
   default as IconToolMessage,
@@ -383,6 +385,7 @@ export { default as IconTrash } from "~icons/solar/trash-bin-minimalistic-bold-d
 export { default as IconTrashLinear } from "~icons/solar/trash-bin-minimalistic-linear";
 /** A project deleted for good: the bin with its lid's lines, beside Forget's plain bin. */
 export { default as IconDeleteForGood } from "~icons/solar/trash-bin-trash-bold-duotone";
+/** Values to tune: a hook's common fields, a tool's settings, the design graph's Controls. */
 export { default as IconTuning } from "~icons/solar/tuning-2-bold-duotone";
 export { default as IconTuningLinear } from "~icons/solar/tuning-2-linear";
 export { default as IconReset } from "~icons/solar/undo-left-bold-duotone";
@@ -395,9 +398,6 @@ export {
 } from "~icons/solar/users-group-rounded-bold-duotone";
 export { default as IconVideo } from "~icons/solar/video-library-bold-duotone";
 export { default as IconSoundOff } from "~icons/solar/volume-cross-bold-duotone";
-/** A dial: the design graph's Dials, the values an agent lets the person tune. */
-export { default as IconDial } from "~icons/solar/volume-knob-bold-duotone";
-export { default as IconDialLinear } from "~icons/solar/volume-knob-linear";
 export { default as IconSound } from "~icons/solar/volume-loud-bold-duotone";
 export { default as IconColumns } from "~icons/solar/widget-2-bold-duotone";
 /** A sheet: a component's states, side by side, each a tile. */

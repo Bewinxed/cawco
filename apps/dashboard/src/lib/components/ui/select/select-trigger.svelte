@@ -47,7 +47,6 @@
     class: className,
     children,
     size = "default",
-    press = "scale",
     mark = "unfold",
     measure,
     tone,
@@ -56,9 +55,6 @@
     ...restProps
   }: WithoutChild<SelectPrimitive.TriggerProps> &
     SelectTriggerLooks & {
-      /** A trigger stretched wider than a control tints on press instead of
-        scaling (app.css, press feedback). */
-      press?: "scale" | "tint";
       /** Its trailing mark: the unfold mark, or a chevron that turns over
         --dur-control while the list is open (a list that opens one way). */
       mark?: "unfold" | "chevron";
@@ -68,9 +64,8 @@
 <SelectPrimitive.Trigger
   class={cn(
     "touch-hit rounded-md shadow-xs",
-    press === "scale"
-      ? "pressable [transition:var(--transition-control),transform_var(--dur-toggle)_var(--ease-out)]"
-      : "press-tint [transition:var(--transition-control)]",
+    // It opens a list, so it tints under a press and never moves (The Press Rule).
+    "press-tint [transition:var(--transition-control)]",
     "mark-line flex w-fit",
     "items-center justify-between gap-1.5 whitespace-nowrap",
     "border border-border-control [--hit-edge:1px]",
