@@ -69,7 +69,9 @@
     caw?: boolean;
   } = $props();
 
-  const SESSION = "s-orchestrator";
+  /** Each frame's own session, so each frame's composer layer is its own and every frame can stand open at once. */
+  const frame = $props.id();
+  const SESSION = `s-orchestrator-${frame}`;
 
   // A story's args are the live instance's inputs: the press flips its own copy, and a new arg resets it.
   let shown = $state(false);
@@ -151,6 +153,7 @@
   />
   {#if shown && rows.length > 0}
     <WaitingCard
+      agent={caw ? "Caw" : "Claude Code"}
       onclose={() => {
         shown = false;
       }}
@@ -257,9 +260,10 @@
       data-slot="session-fixture"
       style:--fixture-h="{height}px"
     >
-      <!-- The shelf: the session's tab, then the bar's trailing glass. -->
+      <!-- The shelf: the session's tab, then the bar's trailing glass, a
+           step of room above it for the glass's corner counts. -->
       <div
-        class="relative z-2 flex h-c-top-bar-h flex-none items-end gap-space-3 ps-space-3 pe-space-2"
+        class="relative z-2 box-content flex h-c-top-bar-h flex-none items-end gap-space-3 pbs-space-3 ps-space-3 pe-space-2"
       >
         <div class="relative min-w-0 flex-auto">
           <Tabs value="this" variant="folder">

@@ -1,8 +1,9 @@
 /**
  * What an orchestrator of the Cawco-Dev project waits on the person for,
  * shaped as the hub answers it (core session-questions.ts) and the
- * composer's parked asks (a question folded to its bar): the states the
- * session's list reaches.
+ * composer's parked asks (a question folded to its bar, a permission, a
+ * sign-in, its own and a delegate's): the states the session's list
+ * reaches.
  */
 import type { SessionQuestion } from "@cawco/core/session-questions";
 import { type WaitingAsk, type WaitingRow, waitingRows } from "../rows";
@@ -17,7 +18,7 @@ const card = (
   kind: "card",
   words,
   state: "open",
-  answeredAt: null,
+  answer: null,
   stop: { card: id },
   artifact,
   session: null,
@@ -68,7 +69,7 @@ const SEVERAL: SessionQuestion[] = [
     words:
       "Judge a member's Record at the foot of its settings: pin anything that reads wrong",
     state: "open",
-    answeredAt: null,
+    answer: null,
     stop: { top: true },
     artifact: RECORD,
     session: null,
@@ -79,7 +80,7 @@ const SEVERAL: SessionQuestion[] = [
     words:
       "Should the decided count link to the Decisions tab, or open the member's own record?",
     state: "open",
-    answeredAt: null,
+    answer: null,
     stop: { pin: 7 },
     artifact: RECORD,
     session: null,
@@ -93,6 +94,36 @@ export const ASKED =
 /** That question, as its row reads it. */
 const ASK: WaitingAsk[] = [
   { kind: "question", requestId: "r-question", summary: ASKED, from: null },
+];
+
+/** A permission a delegate's turn is parked on, and two sign-ins: this session's own and a delegate's. */
+const PARKED: WaitingAsk[] = [
+  {
+    kind: "permission",
+    requestId: "r-push",
+    summary: "Push 3 commits to bewinxed/cockpit on cawco/2d728bdf",
+    from: {
+      id: "s-land",
+      title: "Land the title bars",
+      ended: false,
+    },
+  },
+  {
+    kind: "connect",
+    requestId: "r-linear",
+    summary: "Connect Linear",
+    from: null,
+  },
+  {
+    kind: "connect",
+    requestId: "r-figma",
+    summary: "Connect Figma",
+    from: {
+      id: "s-rail",
+      title: "Design the Comments rail and sheet whole",
+      ended: false,
+    },
+  },
 ];
 
 /** A delegate's question, under this session. */
@@ -114,7 +145,7 @@ const DELEGATE: SessionQuestion[] = [
     kind: "judge",
     words: "Judge the delegate tray at 390: pin what crowds the row",
     state: "open",
-    answeredAt: null,
+    answer: null,
     stop: { top: true },
     artifact: TRAY,
     session: {
@@ -131,8 +162,33 @@ const ANSWERED: SessionQuestion[] = [
     "count-badge",
     "Does a tab's count stand in the tab's status pair?",
     BARS,
-    { state: "answered", answeredAt: "2026-11-05T14:52:00Z" }
+    {
+      state: "answered",
+      answer: {
+        at: "2026-11-05T14:52:00Z",
+        by: "pick",
+        said: "Beside the glyph, on its top trailing corner",
+      },
+    }
   ),
+  {
+    key: "pin:p3",
+    kind: "pin",
+    words: "Is the sheet's grabber too faint on the dark ground?",
+    state: "answered",
+    answer: {
+      at: "2026-11-05T15:10:00Z",
+      by: "reply",
+      said: "Yes, give it the hairline's ink",
+    },
+    stop: { pin: 3 },
+    artifact: RAIL,
+    session: {
+      id: "s-rail",
+      title: "Design the Comments rail and sheet whole",
+      ended: false,
+    },
+  },
 ];
 
 /** The rows of each state, as the list draws them. */
@@ -142,8 +198,8 @@ export const STATES: Record<
 > = {
   none: [],
   one: waitingRows(ONE_PAGE, []),
-  several: waitingRows(SEVERAL, ASK),
+  several: waitingRows(SEVERAL, [...ASK, ...PARKED]),
   answered: waitingRows(ANSWERED, []),
   delegate: waitingRows([...ONE_PAGE, ...DELEGATE], []),
-  all: waitingRows([...SEVERAL, ...DELEGATE, ...ANSWERED], ASK),
+  all: waitingRows([...SEVERAL, ...DELEGATE, ...ANSWERED], [...ASK, ...PARKED]),
 };

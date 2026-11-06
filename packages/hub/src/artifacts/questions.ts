@@ -36,7 +36,10 @@ import { type Anchor, type Pin, pinAsks } from "@cawco/core/comments";
 import { type DecisionCard, pickMade } from "@cawco/core/decisions";
 import { pinName } from "@cawco/core/pin-name";
 import { artifactLink, decisionLink, pinLink } from "@cawco/core/references";
-import type { SessionQuestionKind } from "@cawco/core/session-questions";
+import type {
+  SessionAnswerHow,
+  SessionQuestionKind,
+} from "@cawco/core/session-questions";
 import { cssEscape } from "./page-changes";
 
 /** The doc's `meta` key holding the agent's closes, by question key: the hub's alone to write. */
@@ -55,7 +58,7 @@ export interface QuestionClose {
 /** What he answered with, in his words. */
 export interface QuestionAnswer {
   at: string;
-  by: "pick" | "note" | "value" | "pin" | "reply" | "resolve";
+  by: SessionAnswerHow;
   /** The options he picked, by label; a pick only. */
   options?: string[];
   /** His words: the note, the set keys, the pin's or reply's text; empty for a resolve. */

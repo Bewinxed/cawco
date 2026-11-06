@@ -3387,15 +3387,17 @@
       {/key}
     {/if}
     {#if planRing}
-      <!-- The plan's chip (and before it, while a connect card stands open in
-           the transcript, its "1 needs you"), at the tray row's trailing end, standing on the
-           tray's line: the step off the panel the delegate chips stand on.
-           The slot spans the row, so the plan the chip opens (PlanPane)
-           stands over the row across the composer's width; only the chip
-           takes the pointer, and only the chip is measured. -->
+      <!-- The plan's chip (and before it, while anything waits on the
+           person, the chip of what waits: waiting/WaitingChip), at the tray
+           row's trailing end, standing on the tray's line: the step off the
+           panel the delegate chips stand on. The slot spans the row, so the
+           plan the chip opens (PlanPane) and the list of what waits stand
+           over the row across the composer's width; only the chips take the
+           pointer, and only the chips are measured. The slot is the `tray`
+           container its chips fold their words by. -->
       <div
         data-slot="progress-slot"
-        class="absolute bottom-0 inset-x-0 z-1 flex justify-end items-end h-c-tray-row pb-c-tray-gap pointer-events-none"
+        class="@container/tray absolute bottom-0 inset-x-0 z-1 flex justify-end items-end h-c-tray-row pb-c-tray-gap pointer-events-none"
       >
         <div
           class="flex items-end gap-space-2 pointer-events-auto"

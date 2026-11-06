@@ -288,6 +288,8 @@ export {
   default as IconAsk,
   default as IconToolQuestion,
 } from "~icons/solar/question-mark-bold-duotone";
+/** The agent's own question waiting on the person, a tile beside the decision's and the pin's (waiting/WaitingList). */
+export { default as IconQuestion } from "~icons/solar/question-square-bold-duotone";
 /** Working: the session status glyph (DESIGN.md, Session status); and a starter that refreshes something (StarterCards). */
 export {
   default as IconRefresh,
