@@ -12,7 +12,7 @@
  */
 import type { ProviderRouting } from "./accounts";
 import type { DelegateType } from "./delegate-types";
-import { hubRequest } from "./hub-request";
+import { hubRequest, type ToolInputs } from "./hub-request";
 
 const ROUTING = "PUT /api/accounts/routing/:provider";
 const DELEGATE_TYPE = "PUT /api/delegate-types/:name";
@@ -78,3 +78,37 @@ hubRequest(ROUTING, { path: {}, body: routing });
 hubRequest(ROUTING, { path: { provider: "claude", name }, body: routing });
 // @ts-expect-error the routing route needs its path and body
 hubRequest(ROUTING);
+
+// A literal's arrays and literal unions are read as the route's.
+hubRequest(DELEGATE_TYPE, {
+  path: { name: "medium" },
+  body: {
+    description: "d",
+    harness: "claude",
+    model: "m",
+    skills: ["a"],
+    effort: "high",
+  },
+});
+
+// A query: the names the route takes, and one it doesn't.
+const HISTORY = "GET /api/projects/:id/folder/history";
+hubRequest(HISTORY, { path: { id: "p" } });
+hubRequest(HISTORY, { path: { id: "p" }, query: { limit: 5, path: "a.md" } });
+// @ts-expect-error `cursor` is no query name of the folder history route
+hubRequest(HISTORY, { path: { id: "p" }, query: { cursor: "c" } });
+
+// A route that needs nothing is called with no `sent`, and takes no body.
+hubRequest("GET /api/openrouter");
+// @ts-expect-error the route takes no body
+hubRequest("GET /api/openrouter", { body: { a: 1 } });
+
+// What it sends typed `any` as a whole is refused as its body is.
+// @ts-expect-error `sent` typed `any`
+hubRequest(HISTORY, anything);
+
+// Each tool's arguments are in the same file, by its name.
+declare function waitFor(args: ToolInputs["wait_item"]): void;
+waitFor({ minutes: 1, reason: "a build" });
+// @ts-expect-error `seconds` is no argument of wait_item
+waitFor({ minutes: 1, reason: "a build", seconds: 1 });

@@ -21,16 +21,29 @@
  */
 import type { components } from "./hub-routes.gen";
 
+type Generated = components["schemas"];
+
 /** Every hub route by `METHOD /path`, and what it takes: `path`, `query`, `body`. */
-type HubRoutes = components["schemas"];
+type HubRoutes = {
+  [
+    K in keyof Generated as K extends `tool ${string}` ? never : K
+  ]: Generated[K];
+};
 type HubRoute = keyof HubRoutes;
+
+/** Every CawCo tool a session is listed, by name, and the arguments it takes. */
+export type ToolInputs = {
+  [
+    K in keyof Generated as K extends `tool ${infer N}` ? N : never
+  ]: Generated[K];
+};
 
 /** What `route` takes. */
 type HubSent<R extends HubRoute> = HubRoutes[R];
 
 /** The routes that take nothing they need, called with no `sent`. */
 type BareRoute = {
-  [R in HubRoute]: object extends HubRoutes[R] ? R : never;
+  [R in HubRoute]: Record<string, never> extends HubRoutes[R] ? R : never;
 }[HubRoute];
 
 declare const notTaken: unique symbol;
@@ -140,9 +153,9 @@ const requestOf = (route: string, parts: Parts): HubRequest => {
  * and body, each held exactly to what the route takes ({@link Exact}).
  */
 export function hubRequest<R extends BareRoute>(route: R): HubRequest;
-export function hubRequest<R extends HubRoute, const S extends HubSent<R>>(
+export function hubRequest<R extends HubRoute, const S>(
   route: R,
-  sent: S & Exact<S, HubSent<R>>
+  sent: 0 extends 1 & S ? never : S & HubSent<R> & Exact<S, HubSent<R>>
 ): HubRequest;
 export function hubRequest(route: string, sent: Parts = {}): HubRequest {
   return requestOf(route, sent);

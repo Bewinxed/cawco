@@ -25,13 +25,14 @@ import { Glob } from "bun";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 
-/** Where the door may be named: the two clients, the pi bridge that hands the model the answer as given, the workspace's door that forwards it, the hub's route. */
+/** Where the door may be named: the two clients, the pi bridge that hands the model the answer as given, the workspace's door that forwards it, the hub's route, and the route table's types (core hub-routes.gen.ts), which key it by its path. */
 const DOOR_OWNERS = new Set([
   "scripts/lib/tool-call.ts",
   "packages/cli/src/tools.ts",
   "packages/agent/src/delegation.ts",
   "packages/agent/src/tool-door.ts",
   "packages/hub/src/server.ts",
+  "packages/core/src/hub-routes.gen.ts",
 ]);
 
 const DOOR = "/api/delegation/call";
