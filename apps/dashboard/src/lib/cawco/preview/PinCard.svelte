@@ -430,6 +430,30 @@
 {/snippet}
 
 <!-- The pin's pill, while the page's own is out of view. -->
+<!-- The title: what the comment stands on, two lines at most, the bar's
+     own title control (a press scrolls the page to it and lights its
+     element), its whole name in its tooltip. Leading its row (`flush`), its
+     words stand on the card's text column, its hover reaching out into the
+     card's inset. -->
+{#snippet title(flush: boolean)}
+  <div class={["flex min-w-0 flex-1", flush && "-ms-space-3"]}>
+    <BarGlass form="title">
+      <BarItem
+        data-slot="name"
+        form="title"
+        label={name}
+        lines="two"
+        onclick={onfind}
+        tip={name}
+        ><span
+          class="line-clamp-2 text-pretty wrap-anywhere text-start text-ink-strong type-body font-medium"
+          >{name}</span
+        ></BarItem
+      >
+    </BarGlass>
+  </div>
+{/snippet}
+
 {#snippet headPill()}
   <span class="mark-cell" data-slot="head-pill">
     <PinMark
@@ -508,25 +532,12 @@
         <!-- The pin's pill, what the card is, while the page's own is out of view. -->
         {@render headPill()}
       {/if}
-      <!-- The title: what the comment stands on, two lines at most, the
-           bar's own title control (a press scrolls the page to it and lights
-           its element), its whole name in its tooltip. -->
-      <div class="flex min-w-0 flex-1">
-        <BarGlass form="title">
-          <BarItem
-            data-slot="name"
-            form="title"
-            label={name}
-            lines="two"
-            onclick={onfind}
-            tip={name}
-            ><span
-              class="line-clamp-2 text-pretty wrap-anywhere text-start text-ink-strong type-body font-medium"
-              >{name}</span
-            ></BarItem
-          >
-        </BarGlass>
-      </div>
+      {#if !sheet}
+        <!-- On a desk the title takes the bar's leading room. -->
+        {@render title(!back && marked)}
+      {:else}
+        <span class="flex-1"></span>
+      {/if}
       <div class="flex flex-none items-center gap-space-2">
         <BarGlass form="group">
           {#if pin.resolvedAt}
@@ -602,6 +613,11 @@
          It has the card's whole width under the bar, as a large title stands
          under its bar (HIG, Navigation bars), never squeezed beside the
          groups. -->
+  {#if sheet && !peek}
+    <!-- In a phone's sheet the bar holds its controls, and the title stands
+         under it at the sheet's whole width, as a sheet's large title does. -->
+    {@render title(true)}
+  {/if}
   {#if peek || (parent && parent !== name)}
     <div data-slot="head" class="flex shrink-0 items-start gap-space-2">
       {#if peek && !marked}
