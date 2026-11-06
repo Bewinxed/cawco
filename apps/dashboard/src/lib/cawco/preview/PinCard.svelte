@@ -693,7 +693,7 @@
     <!-- Its element is gone: said once, and pinned anew with the next tap on the page. Its action a small outline button, never the link's coral beside Reply's (one coral per view). -->
     <div
       data-slot="gone"
-      class="flex shrink-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta"
+      class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
     >
       <p class="m-0 min-w-0 text-ink-row" role="status">
         {placing ? said.placeHere : words.pinElementGone}
@@ -720,7 +720,7 @@
     <div
       data-slot="not-sent"
       data-not-sent=""
-      class="flex shrink-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta"
+      class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
     >
       <p
         class="m-0 min-w-0 text-pretty wrap-anywhere text-status-fail-ink"

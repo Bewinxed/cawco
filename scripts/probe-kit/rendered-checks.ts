@@ -48,9 +48,10 @@
  * | anchor-drift | own code, over reads        | an open popover, menu or listbox whose height changed between two reads of a page holds its top or its bottom |
  * | decoration-spill | own code                 | an outline (offset past the border edge), a hard box-shadow (blur under 1px, by its spread and offsets), a dashed or dotted border, or an absolutely placed ::before/::after that draws, reaching 0.5px past the box it marks (a pseudo's own element, when that draws; not a pseudo flush outside it, which carries it on) or past the nearest box that clips it or rounded box that draws, its own box inside that one; a clip-path or mask is unread |
  * | nested-radius | own code                    | a wash (a fill or gradient, an element's or an absolute pseudo's) that nearly fills a rounded box (one axis within its radius of both ends) and whose corner stands within that radius of the box's corner (the box drawing or clipping) is outer radius less the mean inset, within 1.5px or a quarter of it, plus half the two insets' difference |
- * | state-shape | own code + CSS.forcePseudoState | each control in a bar and each rounded one, with hover, active and focus-visible forced on it in turn (Chromium; transitions held off) and at rest when drawn selected: the fill or ring that state paints anew (its own, a pseudo's, a child's half its size or more) takes the control's radius less its inset where a child or pseudo draws it, and, inside the glass it stands in (the nearest box that draws over it, rounded, and not scrolling it past its corners), the glass's radius less its inset (a capsule's across it) on the corners facing its ends, and under half that on those facing a neighbour (an item of the glass on that side; a groove's segment excepted, a bar item one not), within 1.5px or a tenth (a quarter at a corner); in a bar's capsule of glass, what each state draws at five points of the control (its centre and 3px in from each side's middle, composed bottom up, glyphs aside) stands 0.02 or more off its rest in OKLab, pressed and, where a pointer can rest and it is not chosen, hovered;  drawn chosen (`aria-pressed`, `aria-selected`, `aria-checked`) there or in a groove (a tab list that paints), it is painted (its wash, or a thumb under it) 0.02 or more off the ground; and each tab stop of a bar, a bar's glass or a groove, focused as the keyboard focuses it (`focus({ focusVisible: true })`, so `:focus-visible` matches and a ring placed on `focusin` draws; none while focus stands inside an open layer, and focus put back after), shows a ring (its outline or a pseudo's, or an edge drawn anew hugging it within 6px) that follows its contour (an edge drawn apart: each corner the control's grown by how far out it stands, within 1.5px or a quarter) and stays a pixel or more inside any bar's glass |
+ * | state-shape | own code + CSS.forcePseudoState | each control in a bar and each rounded one, with hover, active and focus-visible forced on it in turn (Chromium; transitions held off) and at rest when drawn selected: the fill or ring that state paints anew (its own, a pseudo's, a child's half its size or more) takes the control's radius less its inset where a child or pseudo draws it, and, inside the glass it stands in (the nearest box that draws over it, rounded, and not scrolling it past its corners), the glass's radius less its inset (a capsule's across it) on the corners facing its ends, and under half that on those facing a neighbour (an item of the glass on that side; a groove's segment excepted, a bar item one not), within 1.5px or a tenth (a quarter at a corner); in a bar's capsule of glass, what each state draws on the control's box (at four points 3px in from each side's middle, composed bottom up, glyphs aside; a glyph or face changing at its centre alone draws nothing on the box) stands 0.02 or more off its rest in OKLab, pressed and, where a pointer can rest and it is not chosen, hovered;  drawn chosen (`aria-pressed`, `aria-selected`, `aria-checked`) there or in a groove (a tab list that paints), it is painted (its wash, or a thumb under it) 0.02 or more off the ground; and each tab stop of a bar, a bar's glass or a groove, focused as the keyboard focuses it (`focus({ focusVisible: true })`, so `:focus-visible` matches and a ring placed on `focusin` draws; none while focus stands inside an open layer, and focus put back after), shows a ring (its outline or a pseudo's, or an edge drawn anew hugging it within 6px) that follows its contour (an edge drawn apart: each corner the control's grown by how far out it stands, within 1.5px or a quarter) and stays a pixel or more inside any bar's glass |
  * | touch       | own code                    | on a coarse pointer, each control in a bar's capsule of glass and each segment of a groove: its box with its placed pseudos (`touch-hit`), a field in a frame (InputGroup) with the frame's too, each side stopped at the midpoint to the control beside it there that a press at its centre reaches (the page under a sheet stops nothing), 44×44 or more |
  * | glyph-place | own code                    | a control in a bar's capsule of glass whose only content is one glyph and at most a count: the glyph's centre within 1px of the control's on each axis (its fill's start and end insets around it alike), and the count, a badge on the glyph's corner taking no room, over at most a fifth of its own glyph's ink and none of a neighbour's (its shapes' fill and stroke sampled every half pixel) |
+ * | baseline    | own code                    | in a flex row set on first baselines (`items-baseline`), each item that is or holds a control stands its first words' baseline within 1px of the first other item's words on its line (a text run's baseline: its line box's top plus the font's ascent share of its height) |
  *
  * A sheet of specimens (a bench) says what a view is on the page itself:
  * each specimen that stands for a screen of its own carries `data-specimen`,
@@ -103,6 +104,7 @@ export type CheckName =
   | "nested-radius"
   | "state-shape"
   | "glyph-place"
+  | "baseline"
   | "touch";
 
 /** The states state-shape forces on each control it reads, in the order read. */
@@ -191,6 +193,10 @@ const CHECKS: Record<CheckName, { says: string; by: string }> = {
   },
   "glyph-place": {
     says: "a bar's glyph control draws its glyph at its fill's centre, its count a corner badge over at most a fifth of its own glyph's ink and none of a neighbour's (The Earned Count Rule; HIG, Tab bars)",
+    by: "own code",
+  },
+  baseline: {
+    says: "a control in a row set on baselines stands its words on the row's words' line",
     by: "own code",
   },
   touch: {
@@ -4274,8 +4280,12 @@ function readInPage(args: InPageArgs): InPageRead {
         }
         // A control in a bar's glass draws the state on its own box, seen
         // (The Glass Contour Rule): the hover where a pointer can rest, on
-        // one not chosen, and the press stand off its rest. Its focus ring
-        // is read with the control focused from the keyboard (`ring`).
+        // one not chosen, and the press stand off its rest. Read at the four
+        // points 3px in from its sides, where its box's fill shows: a glyph
+        // or a face changing at its centre alone is the drawing, not a state
+        // drawn on the box (BarItem draws its hover and press on its box,
+        // Caw's head among them). Its focus ring is read with the control
+        // focused from the keyboard (`ring`).
         const glass = glassFor(el);
         const was = atRest?.tones.get(el);
         const state = args.forced;
@@ -4285,7 +4295,7 @@ function readInPage(args: InPageArgs): InPageRead {
           (state === "active" ||
             (state === "hover" && fine && !el.matches(CHOSEN)))
         ) {
-          const off = apartAll(tonesOf(el, false), was);
+          const off = apartAll(tonesOf(el, false).slice(1), was.slice(1));
           if (off < SEEN) {
             say(
               "state-shape",
@@ -4616,6 +4626,97 @@ function readInPage(args: InPageArgs): InPageRead {
               "glyph-place",
               el,
               `its count "${count.textContent?.trim()}" (${px(c.left - box.left)}–${px(c.right - box.left)} × ${px(c.top - box.top)}–${px(c.bottom - box.top)} in the control) lies on ${Math.round(share * 100)}% of ${whose} ink: a corner badge covers at most ${INK_SHARE * 100}% of its own glyph's and none of a neighbour's`
+            );
+          }
+        }
+      }
+    }
+  }
+
+  // A row set on baselines: a control's words stand on the line its
+  // neighbours' words stand on. An item's baseline is the engine's to pick
+  // (its first in-flow box's), and a box with no words in it (a button's
+  // empty icon slot) gives its bottom edge for one, lifting the words after
+  // it: so the words are read, not the boxes. A run's baseline is its line
+  // box's top plus the font's ascent share of the box's height (the box is
+  // the font's ascent and descent tall). Items on one flex line share a
+  // baseline; a wrapped row's lines are read apart.
+  if (!skip.has("baseline")) {
+    const measure = document.createElement("canvas").getContext("2d");
+    const baselineOf = (item: Element): number | null => {
+      const run = texts.find((t) => item.contains(t.node));
+      const box = run?.rects[0];
+      if (!(run && box && measure)) {
+        return null;
+      }
+      const s = style(run.parent);
+      measure.font = `${s.fontStyle} ${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;
+      const m = measure.measureText(run.node.data.trim());
+      const tall = m.fontBoundingBoxAscent + m.fontBoundingBoxDescent;
+      return tall > 0
+        ? box.top + (box.height * m.fontBoundingBoxAscent) / tall
+        : null;
+    };
+    const firstBaseline = (value: string) =>
+      value === "baseline" || value === "first baseline";
+    for (const row of scope.querySelectorAll("*")) {
+      const s = style(row);
+      if (!(
+        (s.display === "flex" || s.display === "inline-flex") &&
+        s.flexDirection.startsWith("row") &&
+        shown(row)
+      )) {
+        continue;
+      }
+      const items = [...row.children].filter((item) => {
+        const own = style(item);
+        return (
+          shown(item) &&
+          own.position !== "absolute" &&
+          own.position !== "fixed" &&
+          firstBaseline(own.alignSelf === "auto" ? s.alignItems : own.alignSelf)
+        );
+      });
+      if (items.length < 2) {
+        continue;
+      }
+      // The flex lines: an item that stands wholly under the line so far
+      // starts the next.
+      const lines: Element[][] = [];
+      let foot = Number.NEGATIVE_INFINITY;
+      for (const item of items) {
+        const r = item.getBoundingClientRect();
+        const line = lines.at(-1);
+        if (line && r.top < foot - 0.5) {
+          line.push(item);
+          foot = Math.max(foot, r.bottom);
+        } else {
+          lines.push([item]);
+          foot = r.bottom;
+        }
+      }
+      for (const line of lines) {
+        const read = line
+          .map((item) => ({
+            item,
+            at: baselineOf(item),
+            control: item.matches(CONTROL) || !!item.querySelector(CONTROL),
+          }))
+          .filter(
+            (one): one is { item: Element; at: number; control: boolean } =>
+              one.at !== null
+          );
+        const beside = read.find((one) => !one.control);
+        if (!beside) {
+          continue;
+        }
+        for (const one of read) {
+          const off = one.at - beside.at;
+          if (one.control && Math.abs(off) > 1) {
+            say(
+              "baseline",
+              one.item,
+              `its words stand ${px(Math.abs(off))} ${off < 0 ? "above" : "below"} the baseline of ${selectorOf(beside.item)}'s beside it in a row set on baselines (${selectorOf(row)}): within 1px`
             );
           }
         }

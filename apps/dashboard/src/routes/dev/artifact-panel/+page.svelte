@@ -25,6 +25,8 @@
    * `remove` (the artifacts menu's Remove pressed: its question in the menu),
    * `gone` (comment 4 opened, its element gone from the page), `place` (its
    * Pin it somewhere else pressed: on a phone the sheet at its low stop),
+   * `unsent` (comment 4 opened, its edit's delivery reaching no one: why,
+   * with Try again),
    * `found` (Resolved in front, searching "HIG": the hits in every list),
    * `scrolled` (the page scrolled to its foot, its top under the head's glass),
    * `held` (three comments held to send together: Send 3 trailing the rail's
@@ -128,6 +130,8 @@
   /** The pins as the state has them: none, or resolved three, or as they stand. */
   /** Comment 4's element is gone from the page (`gone`), and being placed again (`place`). */
   const gone = asked === "gone" || asked === "place";
+  /** Comment 4's edit went to no one (`unsent`): the session heard its earlier words, and the hub says why the last delivery failed. */
+  const unsent = asked === "unsent";
   const pins: Pin[] = $derived.by(() => {
     if (holding) {
       return [
@@ -160,6 +164,20 @@
         at === 3 ? { ...one, movedAt: "2026-11-05T10:00:00.000Z" } : one
       );
     }
+    if (unsent) {
+      return PINS.map((one, at) =>
+        at === 3
+          ? {
+              ...one,
+              heard: "the earlier wording of this comment",
+              notSent: {
+                at: "2026-11-05T10:00:00.000Z",
+                why: "the session had ended before it arrived",
+              },
+            }
+          : one
+      );
+    }
     return PINS;
   });
   let listOpen = $state(
@@ -171,7 +189,11 @@
   let sort = $state<RailSort>("newest");
   /** The card's pour, on a desk (PinFloat): `pour` opens it once the panel stands, `drain` closes it, `turn` opens it and closes it half way through (caught mid-way, it turns back from where it is drawn). */
   let openPin = $state<string | null>(
-    asked === "thread" || asked === "delete" || asked === "drain" || gone
+    asked === "thread" ||
+      asked === "delete" ||
+      asked === "drain" ||
+      gone ||
+      unsent
       ? (PINS[3]?.id ?? null)
       : null
   );
@@ -644,6 +666,7 @@
     pin={one}
     placing={placing === one.id}
     problem={null}
+    whyNotSent={one.notSent?.why ?? null}
   />
 {/snippet}
 

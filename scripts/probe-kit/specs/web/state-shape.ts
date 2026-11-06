@@ -19,6 +19,9 @@
  *     under the pointer, the middle one's corners and the ends' inner
  *     corners round toward their neighbours (the group before position
  *     decided the corners).
+ *  5b. a face that darkens alone: Caw's head whose hover darkens only his
+ *     face, nothing drawn on its box (The Glass Contour Rule: hover is drawn
+ *     on the item's one box; a glyph's or a face's change is the drawing).
  *
  * Drawn right, the rule finds nothing:
  *
@@ -29,8 +32,10 @@
  *     darker over its wash (as BarItem `open` shows hover and press).
  *  7. the only item: one capsule alone in its glass, round at both ends.
  *  8. a face that darkens: a glass's only item holding a face (Caw's
- *     head), a 20px disc drawn at rest that darkens under hover and press; the
- *     disc is the drawing, no state's fill, and its own fill is concentric.
+ *     head), a 20px disc drawn at rest that darkens under the press, the
+ *     item's box filled under hover and press as BarItem fills Caw's head;
+ *     the disc is the drawing, no state's fill, and its own fill is
+ *     concentric.
  *  9. a counted item on: its badge, a child standing on its corner
  *     past its box, is drawn over it, no fill of it.
  * 10. round with its own fill: the round Close filling itself, and one
@@ -143,14 +148,26 @@ const FIXTURES: Record<string, Fixture> = {
   "a face that darkens": {
     html: `${BASE}<style>
   .glass button { border-radius: 15px; }
-  .glass button:active { background: #e6e0d6; }
+  .glass button:is(:hover, :active) { background: #e6e0d6; }
   .face { inline-size: 20px; block-size: 20px; border-radius: 999px; background: #8a8178; }
-  .glass button:is(:hover, :active) .face { background: #2b2622; }
+  .glass button:active .face { background: #2b2622; }
 </style>
 <div class="glass" role="toolbar" aria-label="Bar">
   <button type="button" aria-label="Caw"><span class="face"></span></button>
 </div>`,
     want: null,
+  },
+  "a face that darkens alone": {
+    html: `${BASE}<style>
+  .glass button { border-radius: 15px; }
+  .glass button:active { background: #e6e0d6; }
+  .face { inline-size: 20px; block-size: 20px; border-radius: 999px; background: #8a8178; }
+  .glass button:is(:hover, :active) .face { background: #2b2622; }
+</style>
+<div class="glass" role="toolbar" aria-label="Bar">
+  <button class="caw" type="button" aria-label="Caw"><span class="face"></span></button>
+</div>`,
+    want: "button.caw",
   },
   "a counted item on": {
     html: `${BASE}<style>
