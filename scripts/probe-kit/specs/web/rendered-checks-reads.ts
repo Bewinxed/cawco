@@ -56,6 +56,12 @@
  * 19. overflow, a pane over its scroller: a page's column whose middle
  *     pane hides its overflow and holds the scroller its words run in,
  *     shrunk to the room left on purpose: no finding.
+ * 20. coral, his edit marks: three bare undo glyphs in coral ink, each
+ *     after a value he changed (`data-edited`), and the view's coral act:
+ *     his own marks, as checked controls are (the owner's pick on
+ *     graph-dials-questions `coral`), no finding.
+ * 21. coral, an edit mark that says words: the same mark with "Reset" in
+ *     it beside the act: a second act, named.
  *
  *   bun scripts/probe-kit/run.ts web rendered-checks-reads
  */
@@ -82,6 +88,15 @@ const CORAL = `<style>
   .chosen { border-color: oklch(64.5% 0.175 33); }
   .act { margin: 16px; padding: 8px 16px; border: 0; border-radius: 8px; background: oklch(64.5% 0.175 33); color: #fff; }
 </style>`;
+
+/** His edit marks: bare undo glyphs in the coral ink, no fill, no edge. */
+const EDIT_MARKS = `<style>
+  .row { display: flex; align-items: center; gap: 8px; margin: 8px 16px; }
+  .mark { all: unset; display: grid; place-items: center; inline-size: 24px; block-size: 24px; color: oklch(64.5% 0.175 33); }
+</style>`;
+const GLYPH = `<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h11a5 5 0 0 1 0 10H8M4 9l4-4M4 9l4 4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
+const editMark = (name: string, words = "") =>
+  `<div class="row"><span>${name}</span><button class="mark" type="button" data-edited="${name}" aria-label="${name}: reset">${GLYPH}${words}</button></div>`;
 
 /** A side card: its head, and a list of rows that scrolls. */
 const CARD = `<style>
@@ -247,6 +262,16 @@ const CASES: Record<string, Case> = {
     rule: "bar-room",
     want: "none",
     html: `${BASE}${SHEET}<div class="sheet" role="dialog" aria-label="Usage limits" data-slot="drawer-content"><div class="float" data-slot="drawer-head">${SHEET_HEAD}</div><div class="list under">${ROWS}${ROWS}</div></div>`,
+  },
+  "his edit marks": {
+    rule: "coral",
+    want: "none",
+    html: `${BASE}${CORAL}${EDIT_MARKS}${editMark("Corner radius")}${editMark("Field height")}${editMark("Field colour")}<button class="act" type="button">Create routine</button>`,
+  },
+  "an edit mark that says words": {
+    rule: "coral",
+    want: "finding",
+    html: `${BASE}${CORAL}${EDIT_MARKS}${editMark("Corner radius", "Reset")}<button class="act" type="button">Create routine</button>`,
   },
   "a card not chosen": {
     rule: "coral",

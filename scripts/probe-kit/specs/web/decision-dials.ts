@@ -12,8 +12,8 @@
  *    the page, and its pick lands.
  * 3. On a page with no kit tokens whose `html` sets `font-size: 20px`, the
  *    dials measure as on the kit page (their type, a row, the column), and
- *    the version switch's thumb glides over `--dur-pop` as their own root
- *    holds it, never 0 ms.
+ *    the colour's picker opens over `--dur-pop` as their own root holds it,
+ *    never 0 ms.
  * 4. A play's clip that runs twice with `direction: "alternate"` reads that
  *    direction and a move of both its runs, and Play replays it there and
  *    back to the move's end.
@@ -279,32 +279,46 @@ async function rootlessPage(
       JSON.stringify(onKit) === JSON.stringify(onRootless),
     `kit page ${JSON.stringify(onKit)}; rootless ${JSON.stringify(onRootless)}`
   );
-  // A value changed brings the version switch; As written glides its thumb.
-  await pickTone(rootless, "loud");
-  const written = rootless
-    .locator(`${DIALS_HOST} [data-slot=toggle-group-item][data-value=written]`)
-    .filter({ visible: true });
-  await written.waitFor({ timeout: 10_000 });
-  await written.click();
-  const glide = await written.evaluate((item, root) => {
-    const thumb = item
-      .closest("[data-slot=toggle-group]")
-      ?.querySelector(":scope > span[aria-hidden=true]");
-    const run = thumb?.getAnimations()[0];
-    const tokens = item.closest(`[${root}]`);
+  // The colour's picker opens over --dur-pop (the kit popover's own
+  // motion) as the dials' own root holds it.
+  const swatch = rootless
+    .locator(`${DIALS_HOST} [data-slot=popover-trigger]`)
+    .filter({ visible: true })
+    .first();
+  await swatch.waitFor({ timeout: 10_000 });
+  await swatch.click();
+  const content = rootless
+    .locator(`${DIALS_HOST} [data-slot=popover-content]`)
+    .first();
+  await content.waitFor({ timeout: 10_000 });
+  const glide = await content.evaluate((card, root) => {
+    // Its fade's duration as the card computes it (the transition has
+    // ended by the time the card is read): the token resolved, never 0 ms.
+    const style = getComputedStyle(card);
+    const properties = style.transitionProperty
+      .split(",")
+      .map((one) => one.trim());
+    const durations = style.transitionDuration
+      .split(",")
+      .map((one) => one.trim());
+    const fade = durations[properties.indexOf("opacity")] ?? "0s";
+    const ran = fade.endsWith("ms")
+      ? Number.parseFloat(fade)
+      : Number.parseFloat(fade) * 1000;
+    const tokens = card.closest(`[${root}]`);
     // A duration token as written, `260ms` or `.26s`, in ms.
     const said = tokens
       ? getComputedStyle(tokens).getPropertyValue("--dur-pop").trim()
       : "";
     const figure = Number.parseFloat(said);
     return {
-      ran: Number(run?.effect?.getTiming().duration ?? 0),
+      ran,
       token: said.endsWith("ms") ? figure : figure * 1000,
       said,
     };
   }, DIALS_ROOT);
   kit.check(
-    "3: there, the version switch's thumb glides over --dur-pop as the dials' own root holds it",
+    "3: there, the colour's picker opens over --dur-pop as the dials' own root holds it",
     glide.token > 0 && Math.round(glide.ran) === Math.round(glide.token),
     JSON.stringify(glide)
   );
