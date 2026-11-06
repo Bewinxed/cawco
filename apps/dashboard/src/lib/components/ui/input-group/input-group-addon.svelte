@@ -7,7 +7,12 @@
     variants: {
       align: {
         "inline-start": "order-first pl-3 has-[>button]:-ml-space-1",
-        "inline-end": "order-last pr-3 has-[>button]:-mr-space-1",
+        /* In a bar's search capsule, under a finger, its button stands
+           clear of the field before it and its touch area reaches across
+           that gap (not the bar's gap round the capsule), so each takes 44
+           wide to the midpoint between them (The 44 Touch Rule). */
+        "inline-end":
+          "order-last pr-3 has-[>button]:-mr-space-1 coarse:in-data-[look=bar]:has-[>button]:ps-space-6 coarse:in-data-[look=bar]:has-[>button]:hit-gap-x-space-6",
         "block-start":
           "order-first w-full justify-start px-3 pt-3 [.border-b]:pb-3",
         "block-end":

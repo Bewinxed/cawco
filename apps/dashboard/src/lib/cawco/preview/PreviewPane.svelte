@@ -3675,6 +3675,12 @@
   const threadPushed = $derived(
     listOpen && railPlaced && !isCanvas && railSheet && openPin !== null
   );
+  /**
+   * The open thread's pin is being placed again (Pin it somewhere else): a
+   * sheet holding it drops to its low stop, so the page above it takes the
+   * tap while the card's bar and its Cancel stay in view.
+   */
+  const placingThread = $derived(placing !== null && placing === openPin);
   /** The list in front holds nothing: the sheet stands low, never half its room empty (ThreadSheet `short`). */
   const railEmpty = $derived(
     listFilter === "check"
@@ -5061,8 +5067,8 @@
       }}
       onmoved={() => sayCovered?.()}
       open={railSheetOpen}
-      short={railEmpty && !threadPushed}
-      tall={threadPushed}
+      short={(railEmpty && !threadPushed) || (threadPushed && placingThread)}
+      tall={threadPushed && !placingThread}
       bind:surface={railSurface}
     >
       {#if threadPushed && cardPin && kit && replyDraft}
@@ -5125,7 +5131,8 @@
             }}
             onmoved={() => sayCovered?.()}
             open={openPin !== null}
-            tall
+            short={placingThread}
+            tall={!placingThread}
             bind:surface={cardFloat}
           >
             {@render thread(cardPin, replyDraft, false, false, true)}

@@ -226,13 +226,23 @@
     }
     const fresh = pin.id !== shownPin;
     shownPin = pin.id;
-    if (fresh || atPlace) {
-      const holder = roomEl;
-      tick().then(() => {
+    if (!(fresh || atPlace)) {
+      return;
+    }
+    // Settled after the entries are drawn, unless the card has gone by
+    // then: its holder takes the pin away as it closes (a thread's sheet
+    // going back to its list), and a gone card's `pin` reads nothing.
+    const holder = roomEl;
+    let gone = false;
+    tick().then(() => {
+      if (!gone) {
         settle(holder);
         atPlace = true;
-      });
-    }
+      }
+    });
+    return () => {
+      gone = true;
+    };
   });
   let head = $state<HTMLElement | null>(null);
   let foot = $state<HTMLDivElement | null>(null);
@@ -498,7 +508,7 @@
 >
   {#if !peek}
     <div
-      class="flex min-h-c-top-bar-h items-center gap-space-2 coarse:py-space-1"
+      class="flex min-h-c-top-bar-h items-center gap-space-2"
       data-slot="bar"
     >
       {#if sheet}
@@ -665,10 +675,10 @@
   bind:this={roomEl}
 >
   {#if !peek && pin.movedAt}
-    <!-- Its element is gone: said once, and pinned anew with the next tap on the page. -->
+    <!-- Its element is gone: said once, and pinned anew with the next tap on the page. Its action a small outline button, never the link's coral beside Reply's (one coral per view). -->
     <div
       data-slot="gone"
-      class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
+      class="flex shrink-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta"
     >
       <p class="m-0 min-w-0 text-ink-muted" role="status">
         {placing ? said.placeHere : words.pinElementGone}
@@ -676,9 +686,8 @@
       <Button
         label={placing ? "Cancel" : said.placeElsewhere}
         onclick={() => onplace(!placing)}
-        pad="none"
         size="sm"
-        variant="link"
+        variant="outline"
       />
     </div>
   {:else if !peek && pin.resolvedAt}
@@ -696,7 +705,7 @@
     <div
       data-slot="not-sent"
       data-not-sent=""
-      class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
+      class="flex shrink-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 type-meta"
     >
       <p
         class="m-0 min-w-0 text-pretty wrap-anywhere text-status-fail-ink"
@@ -709,10 +718,9 @@
         data-slot="pin-retry"
         label={said.tryAgain}
         onclick={onretry}
-        pad="none"
         pending={retrying}
         size="sm"
-        variant="link"
+        variant="outline"
       />
     </div>
   {/if}

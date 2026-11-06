@@ -23,6 +23,8 @@
    * (the mode's one-button form open, where the head draws it), `delete`
    * (comment 4's Delete pressed: its question under the card's bar),
    * `remove` (the artifacts menu's Remove pressed: its question in the menu),
+   * `gone` (comment 4 opened, its element gone from the page), `place` (its
+   * Pin it somewhere else pressed: on a phone the sheet at its low stop),
    * `found` (Resolved in front, searching "HIG": the hits in every list),
    * `scrolled` (the page scrolled to its foot, its top under the head's glass),
    * `held` (three comments held to send together: Send 3 in the rail's bar,
@@ -131,6 +133,8 @@
   let heldSent = $state(false);
   const holding = asked === "held" || asked === "note";
   /** The pins as the state has them: none, or resolved three, or as they stand. */
+  /** Comment 4's element is gone from the page (`gone`), and being placed again (`place`). */
+  const gone = asked === "gone" || asked === "place";
   const pins: Pin[] = $derived.by(() => {
     if (holding) {
       return [
@@ -158,6 +162,11 @@
         at < 3 ? { ...one, resolvedAt: "2026-11-05T10:00:00.000Z" } : one
       );
     }
+    if (gone) {
+      return PINS.map((one, at) =>
+        at === 3 ? { ...one, movedAt: "2026-11-05T10:00:00.000Z" } : one
+      );
+    }
     return PINS;
   });
   let listOpen = $state(
@@ -169,7 +178,7 @@
   let sort = $state<RailSort>("newest");
   /** The card's pour, on a desk (PinFloat): `pour` opens it once the panel stands, `drain` closes it, `turn` opens it and closes it half way through (caught mid-way, it turns back from where it is drawn). */
   let openPin = $state<string | null>(
-    asked === "thread" || asked === "delete" || asked === "drain"
+    asked === "thread" || asked === "delete" || asked === "drain" || gone
       ? (PINS[3]?.id ?? null)
       : null
   );
@@ -197,6 +206,12 @@
     }
   }
   const thread = $derived(pins.find((one) => one.id === openPin) ?? null);
+  /** The pin being placed again (Pin it somewhere else): the next tap on the page places it. */
+  let placing = $state<string | null>(
+    asked === "place" ? (PINS[3]?.id ?? null) : null
+  );
+  /** A sheet holding the thread being placed stands at its low stop, the page above it taking the tap. */
+  const placingThread = $derived(placing !== null && placing === openPin);
   /** The reply's draft and the next comment's, apart, as the pane keeps them. */
   const replyDraft = new ComposerDraft();
   const nextDraft = new ComposerDraft();
@@ -669,12 +684,15 @@
     ondelete={() => Promise.resolve()}
     onfind={() => undefined}
     onhold={() => undefined}
-    onplace={() => undefined}
+    onplace={(on) => {
+      placing = on ? one.id : null;
+    }}
     onreply={() => undefined}
     onresolve={() => undefined}
     onretry={() => undefined}
     parent={null}
     pin={one}
+    placing={placing === one.id}
     problem={null}
   />
 {/snippet}
@@ -864,8 +882,8 @@
             listOpen = false;
           }}
           open={listOpen && !composing}
-          short={pins.length === 0 && !thread}
-          tall={thread !== null}
+          short={(pins.length === 0 && !thread) || placingThread}
+          tall={thread !== null && !placingThread}
         >
           {#if thread}
             {#key thread.id}
@@ -882,7 +900,8 @@
               openPin = null;
             }}
             open
-            tall
+            short={placingThread}
+            tall={!placingThread}
           >
             {@render card(thread)}
           </ThreadSheet>

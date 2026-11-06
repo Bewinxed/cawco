@@ -699,7 +699,7 @@
   <header
     data-slot="head"
     data-searching={searching || undefined}
-    class="flex flex-none items-center gap-space-1 h-c-btn-h-lg coarse:h-auto coarse:py-space-1 px-space-2 hit-gap-x-space-1 coarse:gap-space-5 coarse:hit-gap-x-space-5"
+    class="flex flex-none items-center gap-space-1 h-c-btn-h-lg px-space-2 hit-gap-x-space-1 coarse:gap-space-5 coarse:hit-gap-x-space-5"
   >
     {#if searching}
       <InputGroup.Root class="flex-1" look="bar">
@@ -903,9 +903,12 @@
     {/if}
   </header>
   {#if layout === "beside" && pageOpen && pageComposer}
-    <!-- The whole page's composer, under the bar where + was pressed. -->
+    <!-- The whole page's composer, under the bar where + was pressed;
+         under a finger its field stands clear of the bar's controls, so
+         each keeps 44 tall to the midpoint between them (The 44 Touch
+         Rule), as the held note's does. -->
     <div
-      class="flex flex-none flex-col px-space-3 pb-space-3"
+      class="flex flex-none flex-col px-space-3 pb-space-3 coarse:pt-space-2"
       data-slot="page-composer"
       transition:unfold
     >
@@ -917,7 +920,7 @@
          asks under the card's bar: one note to the agent with everything
          held, then Send. ⌘↩ sends from the note. -->
     <div
-      class="flex flex-none flex-col gap-space-2 px-space-3 pb-space-3"
+      class="flex flex-none flex-col gap-space-2 px-space-3 pb-space-3 coarse:pt-space-2"
       data-slot="held-note"
       transition:unfold
     >

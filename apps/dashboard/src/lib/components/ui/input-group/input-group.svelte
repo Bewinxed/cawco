@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
   import { cn, type WithElementRef } from "#lib/utils.js";
+  import { type GroupLook, provideLook } from "./look.js";
 
   let {
     ref = $bindable(null),
@@ -23,8 +24,9 @@
      * a capsule as tall as the glass beside it, on the glass's material
      * and hairline, so it reads as one of the bar's capsules.
      */
-    look?: "field" | "bar";
+    look?: GroupLook;
   } = $props();
+  provideLook(() => look);
 
   /**
    * A press on the frame's touch area beside its field: the field's own
