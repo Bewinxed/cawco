@@ -46,7 +46,15 @@ export function scan(): string[] {
   // biome-ignore lint/performance/useTopLevelRegex: serialized into the page
   const INLINE = /^(inline|contents)$/u;
   const found: string[] = [];
-  const width = document.documentElement.clientWidth;
+  // The window's own width, by the platform's getter: a page may answer the
+  // root's clientWidth at another box (the component stage answers it at its
+  // drawing's, for floating-ui, stage-host canvas viewport.ts), and the page's
+  // scrollWidth read against that box said a 1440 window holding a 1412
+  // drawing and its gutters scrolled sideways.
+  const width = (
+    Object.getOwnPropertyDescriptor(Element.prototype, "clientWidth")?.get ??
+    (() => document.documentElement.clientWidth)
+  ).call(document.documentElement) as number;
   const height = document.documentElement.clientHeight;
   const root = document.scrollingElement ?? document.documentElement;
   const rootScrollsDown =

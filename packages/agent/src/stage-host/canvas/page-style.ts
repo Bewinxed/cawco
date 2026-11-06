@@ -59,12 +59,14 @@ html.cawco-canvas-page[data-theme="dark"] { color-scheme: dark; }
   animation-name: none !important; transition-property: none !important; }
 
 /* The stage (stage.ts): the component on the page it lives on, the page's gutter round it (the head's inset in the panel),
-   the page itself the scroller, never scaled. A drawing wider than the page scrolls sideways. No scrollbar's gutter stands
-   empty beside the drawing (the preview proxy's floor keeps one): a strip of the panel showed through it. */
+   the page itself the scroller, never scaled. Beside the drawing the gutter gives way to it (stage.ts sets --stage-gutter):
+   a 1440 drawing in a 1440 window stands edge to edge, and the page never scrolls sideways for a gutter. A drawing wider
+   than the page scrolls sideways. No scrollbar's gutter stands empty beside the drawing (the preview proxy's floor keeps
+   one): a strip of the panel showed through it. */
 html.cawco-stage-page { overflow: auto; overscroll-behavior: contain; scrollbar-gutter: auto; background: var(--surface-page); }
 html.cawco-stage-page body { margin: 0; min-block-size: 100%; }
 html.cawco-stage-page .cawco-canvas { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3);
-  box-sizing: border-box; inline-size: max-content; min-inline-size: 100%; min-block-size: 100dvh; padding: var(--space-4); }
+  box-sizing: border-box; inline-size: max-content; min-inline-size: 100%; min-block-size: 100dvh; padding: var(--space-4) var(--stage-gutter, var(--space-4)); }
 /* The drawing laid out at its width (a container its rules answer), shown at its own: no paper stands beside a component held
    to its measure. Its height held while the next drawing mounts, so the page's scroll stays where it stood. What spills
    past its sides is cut, but no nearer than a popover's shadow reaches (DESIGN.md, Shadows: the overlay's 48px blur): cut at

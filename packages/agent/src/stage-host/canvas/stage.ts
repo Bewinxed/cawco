@@ -3,12 +3,16 @@
  * panel frames for a component artifact (`by=panel`) and what the stage's
  * own render draws (`by=stage`). The page holds the project's component
  * and its one live instance, standing in the state the panel keeps, at
- * 1:1: laid out at the width he picked, else its own up to the page's room
- * (a form asked at 1440 lays itself out at the room's width, as a window
- * that wide would), never scaled; a drawing wider than the page scrolls
- * sideways. It stands on the page it lives on, the page's gutter round it,
- * and shows its own width where it stands narrower than the width it was
- * laid out at, so no paper stands beside a form held to its measure.
+ * 1:1: laid out at the width he picked, else its own (a story's viewport,
+ * the width its frames in the report are read at), else the desk's up to
+ * the page's room; never narrowed to the room: a form asked at 1440 laid
+ * out at a 1412px room drew its 1440 content cut at its right edge. A
+ * drawing wider than the page scrolls sideways. It stands on the page it
+ * lives on, the page's gutter round it where the window has room for it,
+ * and none where it hasn't: a 1440 drawing in a 1440 window stands as that
+ * window, edge to edge. It shows its own width where it stands narrower
+ * than the width it was laid out at, so no paper stands beside a form held
+ * to its measure.
  *
  * The panel draws the design graph round the frame that holds this page
  * and says what to stand at by messages alone (core stage-graph.ts):
@@ -163,6 +167,8 @@ const READ_AGAIN_MS = 300;
 const ROW_GAP = 24;
 /** The page's gutter round the drawing (the panel's stage head's inset). */
 const GUTTER = "--space-4";
+/** The gutter the page keeps beside the drawing now (page-style.ts): {@link GUTTER}'s, or less where the window lacks the room. */
+const STAGE_GUTTER_VAR = "--stage-gutter";
 /** The gap between the kept drawing and the compared one where the two stand side by side. */
 const BESIDE_GAP = "--space-6";
 /**
@@ -821,10 +827,14 @@ export function bootStage(page: Page): Mode {
     view.scheme === "both" ? "light" : view.scheme;
   /** The page's room for the drawing: its own width inside its scroller's gutters, less its gutters. */
   const room = () => windowRoom() - 2 * tokenPx(GUTTER);
-  /** The width a story is laid out at: his pick, else its own up to the page's room (the desk's form when it names none). */
+  /** The width a story is laid out at: his pick, else its own, else the desk's up to the page's room. */
   const roomWidth = (story: Story): number =>
     view.widths?.[0] ??
-    Math.min(story.form?.width ?? FORMS.desk, room() > 0 ? room() : FORMS.desk);
+    story.form?.width ??
+    Math.min(FORMS.desk, room() > 0 ? room() : FORMS.desk);
+  /** The page's gutter beside a drawing standing `across` px wide: the token's where the window has room for it, else what room it has. */
+  const gutterBeside = (across: number): number =>
+    Math.max(0, Math.min(tokenPx(GUTTER), (windowRoom() - across) / 2));
   const columnOf = (story: Story): Column => ({
     interaction: "rest",
     scheme: scheme(),
@@ -1496,6 +1506,10 @@ export function bootStage(page: Page): Mode {
     frame.style.setProperty("--frame-w", `${drawn}px`);
     const scale = scaleOf(drawn);
     frame.style.zoom = scale < 1 ? String(scale) : "";
+    canvas.style.setProperty(
+      STAGE_GUTTER_VAR,
+      `${gutterBeside(drawn * scale)}px`
+    );
     const laidOut: StageLaid = {
       need: Math.ceil(
         drawn * scale + 2 * tokenPx(GUTTER) + windowWidth() - windowRoom()
@@ -1522,7 +1536,7 @@ export function bootStage(page: Page): Mode {
    * the only sign.
    */
   function scaleOf(drawn: number): number {
-    const across = room();
+    const across = windowRoom();
     return view.fit &&
       view.widths?.[0] !== undefined &&
       across > 0 &&
@@ -2322,10 +2336,7 @@ export function bootStage(page: Page): Mode {
   const lacks = (key: string) =>
     posed?.key === key
       ? {
-          w: Math.max(
-            0,
-            Math.ceil(frame.offsetWidth + 2 * tokenPx(GUTTER) - windowRoom())
-          ),
+          w: Math.max(0, Math.ceil(frame.offsetWidth - windowRoom())),
           h: Math.max(
             0,
             Math.ceil(frame.offsetHeight + 2 * tokenPx(GUTTER) - windowHeight())
@@ -2354,6 +2365,10 @@ export function bootStage(page: Page): Mode {
       }
       drawing.dataset.cawcoInteraction = interaction;
     }
+    // Laid out at the window as it stands now: one just grown for the
+    // picture answers its resize a frame later, and a drawing still scaled
+    // to the old window's room was refused as scaled.
+    relay();
     scrollTo({ top: 0, left: 0, behavior: "instant" });
     return lacks(key);
   }
