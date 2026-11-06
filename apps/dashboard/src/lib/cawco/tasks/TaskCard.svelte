@@ -111,7 +111,7 @@
   aria-roledescription={grip ? dragWords.movableLink : undefined}
   role={grip ? "link" : undefined}
   {@attach grip}
-  {@attach land(() => key, { uniform: true })}
+  {@attach land(() => key, { above: true, uniform: true })}
 >
   <span
     data-task-head

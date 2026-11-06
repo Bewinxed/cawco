@@ -2,6 +2,7 @@
   import { byRank } from "@cawco/core/task-views";
   import { onMount } from "svelte";
   import { standBench } from "#lib/cawco/bench-api.js";
+  import { depart } from "#lib/cawco/motion/share.svelte.js";
   /**
    * BOARD BENCH (dev only): a set-up project's board as its cards are
    * carried between columns, drawn by the real board (TaskBoard on
@@ -13,8 +14,10 @@
    * may not go to step back. This bench's moves, as a project's stages.md
    * would set them: Sending and Sent are the sender's, so a person's card
    * may go anywhere but there. The bench answers each move as the hub does,
-   * after a beat: a card let go in Won is refused, with the hub's sentence
-   * under it and Try again; any other move is taken. One card stands in a
+   * after a beat: a card let go in Won is refused, as the hub refuses what
+   * only it knows at the drop (here, an attempt still live), and the card
+   * flies back to its column while Won says why, with Try again; any other
+   * move is taken. One card stands in a
    * stage stages.md does not name (Parked), in Other stages, and is carried
    * out of it like any other.
    *
@@ -118,13 +121,21 @@
       const { [id]: _done, ...still } = moving;
       moving = still;
       if (stage === "won") {
+        // The card flies back from where it was let go, as the page's does
+        // (motion/share).
+        const card = document.querySelector<HTMLElement>(
+          `[data-share="task:${id}"]`
+        );
+        if (card) {
+          depart(card);
+        }
         tasks = before;
         refused = {
           ...refused,
           [id]: {
             stage,
             ranks,
-            reason: `${id} has to-dos still open, so it can't move to won. It can move to inbox, scouting, drafting, your-call, follow-up or dropped.`,
+            reason: `${id} can't go to won while an attempt at it is live. Stop the attempt, or let it finish first.`,
           },
         };
         return;
@@ -161,6 +172,7 @@
         const one = refused[id];
         return one
           ? {
+              stage: one.stage,
               reason: one.reason,
               again: () => move(id, one.stage, one.ranks),
             }
