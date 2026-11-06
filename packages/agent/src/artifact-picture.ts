@@ -125,8 +125,11 @@ const READY_POLL_MS = 100;
 /**
  * Whether a document is ready ({@link watchReadiness}): its fonts loaded, its
  * content painted, nothing of its own in flight, all of it still for `settle`
- * ms, and no decision page's Preview still waiting in its view: the skeleton
- * in its well, which stands for the whole wait (decisions host Preview.svelte). A
+ * ms, no decision page's Preview still waiting in its view: the skeleton
+ * in its well, which stands for the whole wait (decisions host Preview.svelte),
+ * and no picture in its view still loading: decision pages' pictures load
+ * lazily (decisions host Image.svelte), so one comes in only once the window
+ * grows to reach it. A
  * skeleton inside a frame is that design's own, a story of its loading state.
  * A frame's painted content is its words as well: one that stood at no height
  * while it painted (a canvas, until it says its shape) is never told a
@@ -144,6 +147,7 @@ const documentReady = ({
       body: { textContent: string | null } | null;
       fonts: { status: string };
       querySelectorAll: (selector: string) => Iterable<{
+        complete?: boolean;
         getBoundingClientRect: () => {
           bottom: number;
           height: number;
@@ -154,19 +158,33 @@ const documentReady = ({
     };
     innerHeight: number;
   };
+  const inView = (one: {
+    getBoundingClientRect: () => {
+      bottom: number;
+      height: number;
+      top: number;
+    };
+  }): boolean => {
+    const box = one.getBoundingClientRect();
+    return box.height > 0 && box.top < doc.innerHeight && box.bottom > 0;
+  };
   const waiting = [
     ...doc.document.querySelectorAll(
       '[data-slot="media"] [data-slot="skeleton"]'
     ),
-  ].some((one) => {
+  ].some(inView);
+  // A picture not yet loaded may stand at no height, so only its place counts.
+  const loading = [...doc.document.querySelectorAll("img")].some((one) => {
     const box = one.getBoundingClientRect();
-    return box.height > 0 && box.top < doc.innerHeight && box.bottom > 0;
+    return (
+      one.complete === false && box.top < doc.innerHeight && box.bottom >= 0
+    );
   });
   const painted =
     doc.__cawcoPainted === true ||
     (framed && !!doc.document.body?.textContent?.trim());
   return (
-    !waiting &&
+    !(waiting || loading) &&
     painted &&
     doc.document.readyState === "complete" &&
     doc.document.fonts.status === "loaded" &&
