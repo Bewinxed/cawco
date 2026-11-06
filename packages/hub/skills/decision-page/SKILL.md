@@ -69,7 +69,7 @@ Each row refuses the page until it is fixed.
 
 | Refuse | Fix |
 | --- | --- |
-| Wireframes, box drawings on a build's card | A look option is the real thing at real size; only a `shape-first` shape card shows fat-marker sketches, each a `Canvas` |
+| Wireframes, box drawings | A look option is the real thing at real size |
 | A `look` card with an option lacking a picture | Give every option an `Image`, `Preview` or `Canvas` in its media; media every option shares goes once in the Decision's media, above them. For a verdict on one design (the `pins` card), the Decision carries the picture and its options none |
 | A card with no question | Ask the choice in the person's plain words, ending in "?" |
 | An option with no cost line | Give its `cost`: what picking it takes away or makes harder |
