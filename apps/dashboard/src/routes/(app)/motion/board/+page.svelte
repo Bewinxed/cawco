@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { byRank } from "@cawco/core/task-views";
+  import { byRank, stageLabel } from "@cawco/core/task-views";
   import { onMount } from "svelte";
   import { standBench } from "#lib/cawco/bench-api.js";
+  import { HUB_UNREACHABLE } from "#lib/cawco/hub-read.js";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
   /**
    * BOARD BENCH (dev only): a set-up project's board as its cards are
@@ -14,10 +15,13 @@
    * may not go to step back. This bench's moves, as a project's stages.md
    * would set them: Sending and Sent are the sender's, so a person's card
    * may go anywhere but there. The bench answers each move as the hub does,
-   * after a beat: a card let go in Won is refused, as the hub refuses what
-   * only it knows at the drop (here, an attempt still live), and the card
-   * flies back to its column while Won says why, with Try again; any other
-   * move is taken. One card stands in a
+   * after a beat, and refuses two as only the hub knows to at the drop; the
+   * card flies back to its column while the column says why, under it Show:
+   * a card let go in Follow up, which here runs no type, is refused with
+   * the hub's own sentence (stages.ts `nobodyProblem`), a rule that answers
+   * the same again, so no Try again; one let go in Won gets no answer, as
+   * when the hub is unreachable, so Try again stands. Any other move is
+   * taken. One card stands in a
    * stage stages.md does not name (Parked), in Other stages, and is carried
    * out of it like any other.
    *
@@ -44,8 +48,12 @@
 
   /** The sender's stages: a person's card is not moved into them. */
   const SENDERS = new Set(["sending", "sent"]);
+  /** Follow up runs no type here, so nothing would work on a card let go in it. */
   const stagesView: StagesView = {
     ...PO_STAGES,
+    stages: PO_STAGES.stages.map((stage) =>
+      stage.name === "follow-up" ? { ...stage, hooks: {} } : stage
+    ),
     moves: PO_STAGES.stages
       .filter((stage) => !SENDERS.has(stage.name))
       .map((stage) => ({ from: "*", to: stage.name, who: ["you"] })),
@@ -97,8 +105,26 @@
   let moving = $state<Record<string, string>>({});
   /** Moves it refused, by task. */
   let refused = $state<
-    Record<string, { reason: string; stage: string; ranks: RankWrite[] }>
+    Record<
+      string,
+      { again: boolean; reason: string; stage: string; ranks: RankWrite[] }
+    >
   >({});
+  /** What the bench's hub says of a move it refuses, and whether again could go otherwise; null for one it takes. */
+  function refusal(
+    id: string,
+    from: string,
+    stage: string
+  ): { again: boolean; reason: string } | null {
+    if (stage === "follow-up") {
+      const into = stageLabel(stage);
+      return {
+        again: false,
+        reason: `${id} cannot go from ${stageLabel(from)} to ${into}: nothing would work on it there. No attempt at it is live, ${into} runs no type, and this project does not start attempts on its own. Start an attempt at it instead, which puts it in ${into}.`,
+      };
+    }
+    return stage === "won" ? { again: true, reason: HUB_UNREACHABLE } : null;
+  }
 
   /** The bench's list takes `ranks` and sorts as the hub does (core `byRank`). */
   function holdRanks(ranks: RankWrite[]) {
@@ -115,12 +141,14 @@
     const { [id]: _, ...rest } = refused;
     refused = rest;
     const before = tasks;
+    const from = tasks.find((task) => task.id === id)?.stage ?? "";
     holdRanks(ranks);
     moving = { ...moving, [id]: stage };
     setTimeout(() => {
       const { [id]: _done, ...still } = moving;
       moving = still;
-      if (stage === "won") {
+      const no = refusal(id, from, stage);
+      if (no) {
         // The card flies back from where it was let go, as the page's does
         // (motion/share).
         const card = document.querySelector<HTMLElement>(
@@ -132,11 +160,7 @@
         tasks = before;
         refused = {
           ...refused,
-          [id]: {
-            stage,
-            ranks,
-            reason: `${id} can't go to won while an attempt at it is live. Stop the attempt, or let it finish first.`,
-          },
+          [id]: { ...no, stage, ranks },
         };
         return;
       }
@@ -174,7 +198,9 @@
           ? {
               stage: one.stage,
               reason: one.reason,
-              again: () => move(id, one.stage, one.ranks),
+              again: one.again
+                ? () => move(id, one.stage, one.ranks)
+                : undefined,
             }
           : null;
       }}

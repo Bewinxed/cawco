@@ -33,6 +33,7 @@
  * field (SEP-3182 proposed one and was closed), so a server dedupes on it
  * only if it reads that key; the hub's own at-most-once does not depend on it.
  */
+
 import { createHash } from "node:crypto";
 import {
   ACTION_STATES,
@@ -41,6 +42,7 @@ import {
   type SessionRole,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import { stageLabel } from "@cawco/core/task-views";
 import { DAY_MS } from "@cawco/core/time";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import Ajv2020 from "ajv/dist/2020";
@@ -590,9 +592,9 @@ export const createActions = ({
         row.thenStage,
         actionActor(row.id, `${row.connection}/${row.tool} done`)
       );
-      said = `Moved ${task.id} to ${task.stage}.`;
+      said = `Moved ${task.id} to ${stageLabel(task.stage)}.`;
     } catch (error) {
-      said = `${row.taskId} did not move to ${row.thenStage}: ${wordsOf(error)}`;
+      said = `${row.taskId} did not move to ${stageLabel(row.thenStage)}: ${wordsOf(error)}`;
     }
     store.settle(row.id, ["done"], { stageResult: said });
     console.info(`[actions] ${row.id}: ${said}`);

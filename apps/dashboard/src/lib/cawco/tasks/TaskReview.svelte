@@ -33,6 +33,7 @@
     deliverableKind,
     type ResultArtifact,
   } from "@cawco/core/deliverables";
+  import { stageLabel } from "@cawco/core/task-views";
   import { commonWords } from "@cawco/core/words/common";
   import { taskReviewWords as words } from "@cawco/core/words/task-review";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
@@ -65,7 +66,6 @@
     retryTask,
     reviewOf,
     type StagesView,
-    stageLabel,
     type TaskView,
   } from "../project-tasks";
   import RowFault from "../RowFault.svelte";

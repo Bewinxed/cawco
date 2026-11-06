@@ -29,6 +29,15 @@ export interface WaitWitness {
   value: string;
 }
 
+/**
+ * A stage as its column head says it, and as every sentence about a move
+ * names it: `ready` → `Ready`, `follow_up` → `Follow up`.
+ */
+export const stageLabel = (name: string): string => {
+  const words = name.replace(/[-_]+/gu, " ").trim();
+  return words ? words[0].toUpperCase() + words.slice(1) : "No stage";
+};
+
 interface StageHooks {
   /** `after:` as written, like `48h`. */
   after?: string;

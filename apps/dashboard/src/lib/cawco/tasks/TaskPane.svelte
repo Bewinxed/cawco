@@ -1,6 +1,7 @@
 <script lang="ts">
   import { DECIDED_FIELD, decidedOf } from "@cawco/core/decisions";
   import { detach } from "@cawco/core/detach";
+  import { stageLabel } from "@cawco/core/task-views";
   /**
    * A task, whole, in the page beside what it was opened from (DESIGN.md,
    * The Open Page Rule): on a desk the side card of a split (Split, through
@@ -70,7 +71,6 @@
     readTask,
     reviewOf,
     type StagesView,
-    stageLabel,
     syncTracker,
     type TaskHistoryEvent,
     type TaskLinks,

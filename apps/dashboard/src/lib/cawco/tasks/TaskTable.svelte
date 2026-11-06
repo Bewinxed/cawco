@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stageLabel } from "@cawco/core/task-views";
   import {
     createSortedRowModel,
     createTable,
@@ -6,11 +7,7 @@
     sortFn_basic,
     tableFeatures,
   } from "@tanstack/svelte-table";
-  import {
-    type Stage,
-    stageLabel,
-    type TaskSummary,
-  } from "#lib/cawco/project-tasks.js";
+  import type { Stage, TaskSummary } from "#lib/cawco/project-tasks.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import * as Table from "#lib/components/ui/table/index.js";

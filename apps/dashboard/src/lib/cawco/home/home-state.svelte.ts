@@ -34,6 +34,7 @@ import { questionsOf } from "@cawco/core/question";
 import type { RelayJourneyView } from "@cawco/core/stream-relay";
 import { STREAM_RELAY_WORDS } from "@cawco/core/stream-relay";
 import type { TailnetHttps } from "@cawco/core/tailnet-https";
+import { stageLabel } from "@cawco/core/task-views";
 import { contactWords, MACHINE_LOST_MS } from "@cawco/core/words/contact";
 import { mcpWords } from "@cawco/core/words/mcp";
 import { presenceWords } from "@cawco/core/words/presence";
@@ -72,11 +73,7 @@ import { signInWarning } from "../machine";
 import { type MarkHue, markHue } from "../mark";
 import { heldOrder } from "../motion/held-order.svelte";
 import { asksHere, onPhone, person, rowAsks } from "../person.svelte";
-import {
-  listTasksWaiting,
-  stageLabel,
-  type TaskSummary,
-} from "../project-tasks";
+import { listTasksWaiting, type TaskSummary } from "../project-tasks";
 import { folderOf } from "../projects";
 import { rail } from "../rail.svelte";
 import { sameRow } from "../same-row";

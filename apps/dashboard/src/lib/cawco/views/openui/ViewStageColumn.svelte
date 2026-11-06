@@ -4,7 +4,7 @@
    * nothing to drop. Its stage is a row of the `stages` tool, so an empty
    * stage keeps its kind.
    */
-  import { stageLabel } from "#lib/cawco/project-tasks.js";
+  import { stageLabel } from "@cawco/core/task-views";
   import TaskColumn from "#lib/cawco/tasks/TaskColumn.svelte";
   import {
     rowsOf,

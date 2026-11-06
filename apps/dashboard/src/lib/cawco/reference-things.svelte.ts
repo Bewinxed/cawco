@@ -15,12 +15,13 @@ import { type HubRequest, hubRequest } from "@cawco/core/hub-request";
 import { machineLabel } from "@cawco/core/machine-names";
 import type { SessionPlan } from "@cawco/core/plan";
 import { type ReferenceKind, referenceParts } from "@cawco/core/references";
+import { stageLabel } from "@cawco/core/task-views";
 import { planWords } from "@cawco/core/words/plan";
 import { SvelteMap } from "svelte/reactivity";
 import { hubFetch } from "#lib/cawco/hub-read.js";
 import { cawco } from "./client.svelte";
 import { planProgress } from "./plan/PlanPane.svelte";
-import { readTask, stageLabel, type TaskView } from "./project-tasks";
+import { readTask, type TaskView } from "./project-tasks";
 import type { Routine } from "./routines/routines-api";
 
 /** The kinds this module names. */

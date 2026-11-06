@@ -111,7 +111,7 @@ import type {
   TaskWait,
   WaitState,
 } from "@cawco/core/task-views";
-import { byRank } from "@cawco/core/task-views";
+import { byRank, stageLabel } from "@cawco/core/task-views";
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
 import type { Tracker, WorkBudget } from "./db/schema";
@@ -159,6 +159,7 @@ import {
   type Stages,
   type StagesReading,
   sendBackOf,
+  stageCalled,
   stageNamed,
   startProblem,
   templateHolding,
@@ -1455,7 +1456,7 @@ const hubProblem = (stages: Stages, stage: string): string | undefined => {
     return `${stage} is not a stage of this project.`;
   }
   return to.hooks.by === "action"
-    ? `Only an approved action moves a task to ${stage}.`
+    ? `Only an approved action moves a task to ${stageLabel(stage)}.`
     : undefined;
 };
 
@@ -2644,7 +2645,9 @@ export const createTasks = (store: TaskStore) => {
       "tell where a new task starts"
     );
     const stage =
-      asked === undefined ? firstStage(stages).name : stageName(asked);
+      asked === undefined
+        ? firstStage(stages).name
+        : (stageCalled(stages, asked) ?? stageName(asked));
     if (actor.mover === "action") {
       refuse(403, "An approved action moves its task; it never files one.");
     }
@@ -3252,7 +3255,7 @@ export const createTasks = (store: TaskStore) => {
     ) {
       refuse(
         403,
-        `This task cannot go to ${to} as an approved action: only an action the owner approved, once its call is done, moves its own task to the stage it named.`
+        `This task cannot go to ${stageLabel(to)} as an approved action: only an action the owner approved, once its call is done, moves its own task to the stage it named.`
       );
     }
     refuseMove(
@@ -3711,7 +3714,7 @@ export const createTasks = (store: TaskStore) => {
     let approved = false;
     const task = await change(projectId, ref, actor, async (doc, id) => {
       const stages = await usableStages(projectId, "check a stage change");
-      const to = stageName(stage);
+      const to = stageCalled(stages, stage) ?? stageName(stage);
       moved = moveTo(projectId, doc, id, stages, to, actor);
       if (!moved) {
         return `stage ${to}`;

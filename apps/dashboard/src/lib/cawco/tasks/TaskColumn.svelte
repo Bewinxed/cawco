@@ -1,9 +1,8 @@
 <script lang="ts" module>
   /** A move the hub refused, said in the column that refused it (TaskBoard `noticesIn`). */
   export interface RefusedNotice {
-    again: () => void;
-    /** The column the card went back to, as the board names it. */
-    back: string;
+    /** Makes the move again, where again can go otherwise (ProjectPage `refuse`). */
+    again?: () => void;
     id: string;
     reason: string;
     /** Brings the card into the board's view. */
@@ -45,7 +44,6 @@
   import { land } from "#lib/cawco/motion/share.svelte.js";
   import type { TaskSummary } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
-  import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconNeedsYou } from "#lib/icons.js";
@@ -119,7 +117,7 @@
      */
     refused?: (
       id: string
-    ) => { again: () => void; reason: string; stage?: string } | null;
+    ) => { again?: () => void; reason: string; stage?: string } | null;
     /** The moves this column refused: what came of each, at its head, where the card was let go. */
     notices?: RefusedNotice[];
   } = $props();
@@ -267,27 +265,19 @@
       bind:this={list}
       {@attach reflow()}
     >
-      <!-- A card the hub would not take here went back to its column: said
-           where it was let go, at the head of the cards, with the hub's
-           sentence and Try again; Show brings the card into view. -->
+      <!-- A card the hub would not take here: the hub's sentence, said where
+           it was let go, at the head of the cards (the card itself flew
+           back to its column), then Show, which brings the card into view
+           where it stands, and Try again where again can go otherwise.
+           Show takes its name from the sentence above it. -->
       {#each notices as notice (notice.id)}
         <li class="flex flex-col gap-0" data-flip data-slot="refused-move">
-          <span
-            class="mark-line flex flex-wrap items-center gap-x-space-2 px-space-2 pt-space-1 type-meta text-ink-muted"
-            ><span>{projectWords.movedBack(notice.id, notice.back)}</span
-            ><Button
-              data-box
-              label={projectWords.showTask(notice.id)}
-              onclick={notice.show}
-              size="xs"
-              variant="ghost"
-            /></span
-          >
           <RowFault
             again={notice.again}
             end="var(--space-2)"
             indent="var(--space-2)"
             reason={notice.reason}
+            act={{ label: projectWords.showTask(notice.id), run: notice.show }}
           />
         </li>
       {/each}

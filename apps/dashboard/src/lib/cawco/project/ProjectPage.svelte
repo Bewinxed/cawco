@@ -37,7 +37,7 @@
    * of the folder (FolderFile) opens the same way, in the task's place: one
    * stands beside the view at a time.
    */
-  import { byRank } from "@cawco/core/task-views";
+  import { byRank, stageLabel } from "@cawco/core/task-views";
   import type { ProjectView, StageKind } from "@cawco/core/views";
   import { blocksWords } from "@cawco/core/words/blocks";
   import { commonWords } from "@cawco/core/words/common";
@@ -68,6 +68,7 @@
     failureClause,
     failureSentence,
     type HubRead,
+    HubRefused,
     failureWords as message,
     unreachable,
   } from "#lib/cawco/hub-read.js";
@@ -108,7 +109,6 @@
     moveTask,
     readStages,
     type StagesView,
-    stageLabel,
     type TaskList,
     type TaskSummary,
     type TaskView,
@@ -1030,12 +1030,14 @@
    * under it, and Try again makes the same move.
    */
   let refusedMoves = $state<
-    Record<string, { reason: string; again: () => void; stage?: string }>
+    Record<string, { reason: string; again?: () => void; stage?: string }>
   >({});
   /**
-   * A refusal of card `id`'s change, Try again making it again: a move's is
-   * said in the column that refused it (`stage`, TaskBoard), an order's
-   * under the card.
+   * A refusal of card `id`'s change: a move's is said in the column that
+   * refused it (`stage`, TaskBoard), an order's under the card. Try again
+   * makes it again only where again can go otherwise: the change did not
+   * reach the hub, or the hub failed it. A refusal of the hub's own
+   * (`HubRefused`, a rule it holds) answers the same a second later.
    */
   const refuse = (
     id: string,
@@ -1045,7 +1047,11 @@
   ) => {
     refusedMoves = {
       ...refusedMoves,
-      [id]: { reason: message(error), again, stage },
+      [id]: {
+        reason: message(error),
+        again: error instanceof HubRefused ? undefined : again,
+        stage,
+      },
     };
   };
   const unrefuse = (id: string) => {

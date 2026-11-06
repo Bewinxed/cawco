@@ -17,16 +17,16 @@
    * there; "edited" when its words were changed there since.
    */
   import type { ExternalComment } from "@cawco/core/external-items";
+  import { stageLabel } from "@cawco/core/task-views";
   import { externalItemWords } from "@cawco/core/words/external-items";
   import Choice from "#lib/cawco/config/Choice.svelte";
   import { failureWords, unreachable } from "#lib/cawco/hub-read.js";
   import { idForWords, type SentWords } from "#lib/cawco/id.js";
   import MessageBody from "#lib/cawco/MessageBody.svelte";
   import { reveal, revealOut } from "#lib/cawco/motion/curves.svelte.js";
-  import {
-    stageLabel,
-    type TaskComment,
-    type TaskHistoryEvent,
+  import type {
+    TaskComment,
+    TaskHistoryEvent,
   } from "#lib/cawco/project-tasks.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";

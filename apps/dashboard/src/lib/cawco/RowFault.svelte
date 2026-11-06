@@ -4,16 +4,22 @@
    * in the words of whatever refused it, unfolding under the row that asked
    * (DESIGN.md, The Stay In Context Rule: same place, same state, told why,
    * able to go on). `again` offers the way on beside it ("Try again" unless
-   * `againLabel` says otherwise, with the refresh glyph unless `againIcon`
-   * names its own act's); while it runs the button is pending, and a
-   * throw from it becomes the reason shown, so nothing it does reaches the
-   * page's unhandled-rejection reporter.
+   * `againLabel` says otherwise), in words alone unless `againIcon` names
+   * its own act's glyph: a circling refresh glyph beside a fault reads as
+   * the retry already running. While it runs the button is pending (the
+   * spinner over its label's start), and a throw from it becomes the reason
+   * shown, so nothing it does reaches the page's unhandled-rejection
+   * reporter.
    *
    * A fault that carries its own reading and remedy (a fleet fault) is drawn
    * as `children` in the same place instead of a reason line.
    *
    * `goTo`: the way on as a place, where `again` is an act: a link at the
    * same place in its actions (a server's sign-in, in Configure).
+   *
+   * `act`: an act of the row's own beside the fault, first in its actions
+   * (a refused card's Show, which brings the card into view where it went
+   * back to).
    *
    * `details`: what refused it, word for word, where the reason line is the
    * plain sentence for it (a machine's own error, its paths and ids): Show
@@ -43,7 +49,6 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import CopyButton from "#lib/components/ui/copy-button/copy-button.svelte";
-  import { IconRefresh } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
   import { unfold } from "./motion/fold.svelte";
 
@@ -51,8 +56,9 @@
     reason,
     again,
     goTo,
+    act,
     againLabel = configureWords.tryAgain,
-    againIcon = IconRefresh,
+    againIcon,
     againPending = "Trying again…",
     class: className,
     children,
@@ -80,8 +86,10 @@
       label: string;
       icon?: Component<SVGAttributes<SVGSVGElement>>;
     };
+    /** An act of the row's own, first in its actions. */
+    act?: { label: string; run: () => void };
     againLabel?: string;
-    /** The glyph of `again`'s act: IconRefresh for a retry. */
+    /** The glyph of `again`'s own act (SetupBoard's columns); none for a retry. */
     againIcon?: Component<SVGAttributes<SVGSVGElement>>;
     againPending?: string;
     class?: string;
@@ -152,9 +160,18 @@
         >
           {said}
         </p>
-        {#if details || again || goTo}
+        {#if details || again || goTo || act}
           <!-- One cluster at the trailing edge, beside the reason or on the line under it, so Show details and Retry never part and every row's stand in the same place. -->
           <span data-slot="actions" class="ms-auto flex flex-none gap-space-1">
+            {#if act}
+              <Button
+                data-act
+                label={act.label}
+                onclick={act.run}
+                size="xs"
+                variant="ghost"
+              />
+            {/if}
             {#if details}
               <Button
                 data-details
