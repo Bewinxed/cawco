@@ -346,11 +346,9 @@ export class Replays {
     this.#tuning = new Map();
   }
 
-  /** The tuning the replays stand on from now: `tuning` for his version, none for the agent's as written. */
-  tune(tuning: readonly Tuning[], version: "yours" | "written"): void {
-    this.#tuning = new Map(
-      version === "written" ? [] : tuning.map((one) => [one.id, one])
-    );
+  /** The tuning the replays stand on from now: his. */
+  tune(tuning: readonly Tuning[]): void {
+    this.#tuning = new Map(tuning.map((one) => [one.id, one]));
   }
 
   /** The move's length as it stands tuned, ms. */
@@ -527,7 +525,7 @@ export function answerMoves(replays: Replays, page: MoveAnswers): void {
     if (!asking) {
       return;
     }
-    replays.tune(asking.tuning, asking.version);
+    replays.tune(asking.tuning);
     if (!asking.still) {
       replays.play(asking.from, asking.repeat, asking.loopFrom);
       return;
@@ -550,7 +548,7 @@ export function answerMoves(replays: Replays, page: MoveAnswers): void {
     if (!asking) {
       return;
     }
-    replays.tune(asking.tuning, asking.version);
+    replays.tune(asking.tuning);
     seekAt = asking.t;
     seekFrame ||= requestAnimationFrame(() => {
       seekFrame = 0;
@@ -571,7 +569,7 @@ export function answerMoves(replays: Replays, page: MoveAnswers): void {
     if (!asking) {
       return;
     }
-    replays.tune(asking.tuning, "yours");
+    replays.tune(asking.tuning);
     if (asking.replayFrom === null) {
       replays.restand();
     } else {

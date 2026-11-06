@@ -236,17 +236,6 @@ export const graphWords = {
   /** Every value of every row back: its visible words, and what a reader hears. */
   resetAll: "Reset all",
   resetAllSaid: "Reset all edits",
-  /** The two whole versions of the move's timing, once he changed any. */
-  versions: "Timing",
-  written: "As written",
-  yours: "Yours",
-  /** How many animations his version changes, beside Yours. */
-  changedCount: (n: Figure) => `${n} changed`,
-  /** Yours kept as a version of its own, named by its place after As written. */
-  keep: "Keep as a version",
-  versionN: (n: Figure) => `Version ${n}`,
-  /** Past three kept versions, the rest in a menu. */
-  moreVersions: "More versions",
 
   /** A row with several animations, opened into one row each. */
   showClips: "Show its animations",
@@ -276,8 +265,6 @@ export const graphWords = {
     "border-color": "Edge colour",
     "box-shadow": "Shadow",
   } as Record<string, string>,
-  /** The As written view, under its rows: its rows take no press, and the way on is Yours. */
-  readOnly: "Switch to Yours to change the timing.",
   /** A row under a row that moves several parts of its thing at once (a morphed text's letters): how many. */
   partsCount: (n: number) => `${n} parts`,
   /** A drawn curve's two handles, for a reader. */
@@ -343,8 +330,12 @@ export const graphWords = {
    * the person tune on the drawing, each a row of the Controls face.
    */
   dials: {
-    /** A changed control's undo glyph: what it goes back to. */
-    reset: (dial: string, value: string) => `Reset ${dial} to ${value}`,
+    /** A changed control's undo glyph, its tooltip beside the control's name: what it goes back to. */
+    resetTo: (value: string) => `Reset to ${value}`,
+    /** The same glyph's name to a reader, the control's name first as the agent wrote it. */
+    resetSaid: (dial: string, value: string) => `${dial}: reset to ${value}`,
+    /** The agent's option in a select's list while his differs, said to a reader (the undo glyph marks it). */
+    agentsValue: "the agent's value",
     resetAllSaid: "Reset all values",
     /** A colour control's swatch: it opens the picker. */
     pick: (dial: string) => `Pick ${dial}`,

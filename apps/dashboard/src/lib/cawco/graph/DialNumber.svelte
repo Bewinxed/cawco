@@ -14,7 +14,8 @@
    * Up and Down a step, Shift or Page Up and Page Down ten, Home and End
    * the range's ends. A figure typed past an end is kept as typed (the fill
    * stands at that end). The figure keeps its own ink whatever its value:
-   * a changed value is marked by its row's undo glyph.
+   * a changed value is marked by its row's undo glyph, and a tick on the
+   * fill shows where the agent's value stands.
    */
   import { untrack } from "svelte";
   import * as InputGroup from "#lib/components/ui/input-group/index.js";
@@ -33,6 +34,7 @@
     range,
     lang,
     label,
+    was = null,
     dragging = $bindable(false),
     typing = $bindable(null),
     onchange,
@@ -43,6 +45,8 @@
     lang: string | undefined;
     /** Its name, said to a reader. */
     label: string;
+    /** The agent's value while his differs: a tick on the fill where it stands; null while they agree. */
+    was?: number | null;
     /** A drag across it is under way. */
     dragging?: boolean;
     /** The figure while he types it; null while he doesn't. */
@@ -172,8 +176,12 @@
 <!-- The field: its fill to the value, its figure and unit at its end. A
      press anywhere on it is the field's own (`down`, `up`), so the figure
      takes the caret only from a press without a drag. -->
+<!-- `data-vaul-no-drag`: in the phone's drawer a drag across the field is the
+     field's, never the drawer's. -->
 <InputGroup.Root
   data-dial-field
+  data-vaul-no-drag
+  mark={was === null ? null : shareOf(was, range)}
   data-dragging={dragging || undefined}
   onmousedown={hold}
   onpointercancel={up}

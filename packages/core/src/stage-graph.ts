@@ -255,7 +255,7 @@ export interface Tuning {
 /**
  * Pane → page: the move the page last read played from `from` ms on its
  * own replays, timed as `tuning` says (the clips it names; the rest as
- * read), or as read where `version` is the agent's (`written`). `repeat`:
+ * read). `repeat`:
  * round again from `loopFrom` ms each time it ends. `still`: stood at its
  * end at once, the drawing fading in. The page is the clock, and says the
  * time as it starts, at each wrap and at its end ({@link STAGE_TIME}).
@@ -268,7 +268,6 @@ export interface StagePlay {
   repeat: boolean;
   still: boolean;
   tuning: Tuning[];
-  version: "yours" | "written";
 }
 
 /** Pane → page: every replay paused where it stands; answered with the time. */
@@ -280,7 +279,6 @@ export interface StageSeek {
   ask: number;
   t: number;
   tuning: Tuning[];
-  version: "yours" | "written";
 }
 
 /** Pane → page: a scrub let go at `t`: on the move's end the replays let the drawing go, the kept state as it stands; elsewhere the hold stays. */
@@ -789,9 +787,6 @@ const tuningOf = (value: unknown): Tuning[] =>
         .filter((one): one is Tuning => one !== null)
     : [];
 
-const versionOf = (value: unknown): "yours" | "written" =>
-  value === "written" ? "written" : "yours";
-
 /** A {@link StagePlay} as it crossed the frame; null when it is none. */
 export function stagePlayOf(value: unknown): StagePlay | null {
   const said = isRecord(value) ? value : null;
@@ -807,7 +802,6 @@ export function stagePlayOf(value: unknown): StagePlay | null {
     repeat: said.repeat === true,
     still: said.still === true,
     tuning: tuningOf(said.tuning),
-    version: versionOf(said.version),
   };
 }
 
@@ -829,9 +823,7 @@ export function stageLetGoOf(value: unknown): StageLetGo | null {
 export function stageSeekOf(value: unknown): StageSeek | null {
   const at = stageLetGoOf(value);
   const said = value as Record<string, unknown>;
-  return at
-    ? { ...at, tuning: tuningOf(said.tuning), version: versionOf(said.version) }
-    : null;
+  return at ? { ...at, tuning: tuningOf(said.tuning) } : null;
 }
 
 /** A {@link StageRetime} as it crossed the frame; null when it is none. */

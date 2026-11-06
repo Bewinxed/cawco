@@ -587,8 +587,10 @@ public enum Size {
     public static let cGraphNodeW: Double = 208
     /// The widest a move's act stands on its arrow in the design graph's whole set ("Each run an orchestrator" on one line, a longer act wrapping), so dagre leaves it room between the ranks and it never stands on a card.
     public static let cGraphLabel: Double = 160
-    /// The design graph's Animation face: the column a row's name stands in beside its lane, one width for every move and both versions, so the lanes start on one x however the names run ("Button “Create routine” changes" in the label role, a longer name cut with the whole in its tooltip).
+    /// The design graph's Animation face: the column a row's name stands in beside its lane, one width for every move, so the lanes start on one x however the names run ("Button “Create routine” changes" in the label role, a longer name cut with the whole in its tooltip).
     public static let cGraphMoveNameW: Double = 192
+    /// The design graph's Controls face: the most a control's column takes beside its name, so a changed value's undo glyph stands beside the control it marks on a wide room, and the longest colour an agent writes ("oklch(0.993 0.004 85)" after its swatch) reads whole.
+    public static let cGraphControlW: Double = 256
     /// A value's field in the design graph's clip editor: a figure with its unit and its two steppers inside the field ("− 1,250 ms +"), and the curve list beside it at the same width, so the editor's values read down one column.
     public static let cGraphFigureW: Double = 168
     /// The design graph's drawer at its head stop under the desk line: the grabber, the faces' segmented row and the journey's steps, each 44px to a finger, so the stage above stands whole (spec, Widths: 390).

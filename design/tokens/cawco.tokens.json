@@ -3854,7 +3854,15 @@
         "value": 192,
         "unit": "px"
       },
-      "$description": "The design graph's Animation face: the column a row's name stands in beside its lane, one width for every move and both versions, so the lanes start on one x however the names run (\"Button “Create routine” changes\" in the label role, a longer name cut with the whole in its tooltip)."
+      "$description": "The design graph's Animation face: the column a row's name stands in beside its lane, one width for every move, so the lanes start on one x however the names run (\"Button “Create routine” changes\" in the label role, a longer name cut with the whole in its tooltip)."
+    },
+    "c-graph-control-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 256,
+        "unit": "px"
+      },
+      "$description": "The design graph's Controls face: the most a control's column takes beside its name, so a changed value's undo glyph stands beside the control it marks on a wide room, and the longest colour an agent writes (\"oklch(0.993 0.004 85)\" after its swatch) reads whole."
     },
     "c-graph-figure-w": {
       "$type": "dimension",

@@ -123,14 +123,17 @@
   });
 
   /**
-   * The inspector grid: the Animation face's names' column, the control,
-   * and the undo glyph's column held in every row, so every control starts
-   * on one edge and ends on another.
+   * The inspector grid: the Animation face's names' column, the control
+   * (`c-graph-control-w` at most, the grid standing at the face's start, so
+   * on a wide room the undo glyph stays beside what it marks), and the undo
+   * glyph's column held in every row, so every control starts on one edge
+   * and ends on another.
    */
   const COLUMNS =
-    "minmax(0, var(--c-graph-move-name-w)) minmax(0, 1fr) var(--c-btn-h-xs)";
-  /** Narrow: the name and its control share the row, two to three. */
-  const NARROW_COLUMNS = "minmax(0, 2fr) minmax(0, 3fr) var(--c-btn-h-xs)";
+    "minmax(0, var(--c-graph-move-name-w)) minmax(0, var(--c-graph-control-w)) var(--c-btn-h-xs)";
+  /** Narrow: the name takes what it needs up to two fifths, its control the rest. */
+  const NARROW_COLUMNS =
+    "fit-content(40%) minmax(0, var(--c-graph-control-w)) var(--c-btn-h-xs)";
   /** Presses of each action so far, by name: what its arg is set to. */
   let presses = $state<Record<string, number>>({});
   const layer = (name: string) => ({
@@ -179,7 +182,7 @@
           <!-- One grid for the section; each control its own subgrid row,
                its name beside it, rows a step apart as a panel's are. -->
           <div
-            class="grid min-w-0 grid-cols-(--cols) gap-x-space-3 gap-y-space-2 @max-timeline/dials:grid-cols-(--narrow)"
+            class="grid min-w-0 grid-cols-(--cols) justify-start gap-x-space-3 gap-y-space-2 @max-timeline/dials:grid-cols-(--narrow)"
             style:--cols={COLUMNS}
             style:--narrow={NARROW_COLUMNS}
           >
@@ -223,6 +226,7 @@
                           {lang}
                           onchange={(next) => onchange(dial.name, next)}
                           range={rangeOf(dial, start)}
+                          was={edited ? start : null}
                           typing={hand?.as === "typing" ? hand.text : null}
                           value={Number(value ?? start)}
                         />
@@ -234,6 +238,7 @@
                           onchange={(next) => onchange(dial.name, next)}
                           {...layer(dial.name)}
                           value={String(value ?? "")}
+                          was={edited ? String(written[dial.name] ?? "") : null}
                         />
                       </div>
                     {:else if dial.kind === "select"}
@@ -252,9 +257,13 @@
                         >
                           <!-- Its value in the fields' own size, the 16px floor
                                a field takes on a phone and under a finger
-                               (design.css), so every control's value reads alike. -->
+                               (design.css), so every control's value reads alike;
+                               a figure at the field's end, as a number's is. -->
                           <span
-                            class="min-w-0 truncate num max-phone:text-(length:--text-field-floor) coarse:text-(length:--text-field-floor)"
+                            class={[
+                              "min-w-0 truncate num max-phone:text-(length:--text-field-floor) coarse:text-(length:--text-field-floor)",
+                              shown.unit && "flex-1 text-end",
+                            ]}
                             >{shown.figure}{#if shown.unit}<span
                                 class="ms-space-1 text-ink-muted"
                                 >{shown.unit}</span
@@ -264,7 +273,9 @@
                         <Select.Content>
                           {#each dial.options ?? [] as option (option)}
                             {@const shownOption = splitUnit(option)}
-                            <!-- Each option as the field writes it: its figure, its unit muted. -->
+                            <!-- Each option as the field writes it: its figure, its unit
+                                 muted; while his differs, the agent's marked by the undo
+                                 glyph that takes it back. -->
                             <Select.Item label={option} value={option}>
                               {#snippet children()}
                                 <span class="num"
@@ -273,6 +284,15 @@
                                       >{shownOption.unit}</span
                                     >{/if}</span
                                 >
+                                {#if edited && option === written[dial.name]}
+                                  <IconReset
+                                    aria-hidden="true"
+                                    class="size-icon-sm text-ink-muted"
+                                  />
+                                  <span class="sr-only"
+                                    >{words.dials.agentsValue}</span
+                                  >
+                                {/if}
                               {/snippet}
                             </Select.Item>
                           {/each}
@@ -303,15 +323,15 @@
                     class="flex h-c-input-h w-c-btn-h-xs items-center justify-center"
                   >
                     {#if edited}
-                      {@const back = words.dials.reset(
-                        nameOf(dial),
-                        said(dial, written[dial.name])
-                      )}
-                      <Tip label={back}>
+                      {@const was = said(dial, written[dial.name])}
+                      <Tip label={words.dials.resetTo(was)}>
                         {#snippet children(tip)}
                           <Button
                             {...tip}
-                            aria-label={back}
+                            aria-label={words.dials.resetSaid(
+                              nameOf(dial),
+                              was
+                            )}
                             data-edited={dial.name}
                             icon={IconReset}
                             onclick={() => onreset([dial.name], false)}
@@ -334,8 +354,10 @@
         <!-- After the rows, at the controls' end, so nothing above it moves
              as it comes and goes. -->
         <div
-          class="flex min-w-0 items-center justify-end pt-space-3"
+          class="grid min-w-0 grid-cols-(--cols) justify-start gap-x-space-3 pt-space-3 @max-timeline/dials:grid-cols-(--narrow) [&>*]:col-span-2 [&>*]:col-start-2 [&>*]:justify-self-end"
           data-slot="dials-foot"
+          style:--cols={COLUMNS}
+          style:--narrow={NARROW_COLUMNS}
         >
           {#if changed.length > 0}
             <Button

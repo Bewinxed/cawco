@@ -25,6 +25,9 @@
         },
         /** A figure before its unit, at the field's end (a dial's value). */
         figure: { field: "text-end tabular-nums" },
+        /** A colour as written (a dial's value): longer than its field, it
+            ends in an ellipsis while the field hasn't the caret. */
+        colour: { field: "text-ellipsis" },
       },
       measure: {
         shrink: { box: "min-w-0" },

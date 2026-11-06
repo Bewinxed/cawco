@@ -18,7 +18,7 @@
         "@types/node": "^26.6.4",
         "@types/pngjs": "^6.0.5",
         "@types/ssh2": "^1.15.6",
-        "bits-ui": "^2.20.5",
+        "bits-ui": "^2.20.6",
         "buffer": "^6.0.3",
         "colorjs.io": "^0.7.1",
         "events": "^3.3.0",
@@ -62,7 +62,7 @@
       "name": "@cawco/dashboard",
       "version": "0.0.1",
       "dependencies": {
-        "@ark-ui/svelte": "5.25.1",
+        "@ark-ui/svelte": "^5.25.1",
         "@atlaskit/pragmatic-drag-and-drop": "^4.0.0",
         "@atlaskit/pragmatic-drag-and-drop-hitbox": "^3.0.0",
         "@cawco/core": "workspace:*",
@@ -76,7 +76,7 @@
         "@rive-app/canvas": "2.44.0",
         "@tanstack/svelte-table": "9.2.6",
         "@xyflow/svelte": "^1.7.0",
-        "bits-ui": "^2.20.5",
+        "bits-ui": "^2.20.6",
         "clipper2-ts": "2.0.1-18",
         "clsx": "^2.1.1",
         "cuelume": "0.2.4",
@@ -336,9 +336,9 @@
     "socket-activation",
   ],
   "patchedDependencies": {
-    "bits-ui@2.20.5": "patches/bits-ui@2.20.5.patch",
     "virtua@0.54.1": "patches/virtua@0.54.1.patch",
     "postcss-selector-parser@7.1.6": "patches/postcss-selector-parser@7.1.6.patch",
+    "bits-ui@2.20.6": "patches/bits-ui@2.20.6.patch",
     "openai@7.19.0": "patches/openai@7.19.0.patch",
     "vaul-svelte@1.0.0-next.7": "patches/vaul-svelte@1.0.0-next.7.patch",
     "@excalidraw/excalidraw@0.18.1": "patches/@excalidraw%2Fexcalidraw@0.18.1.patch",
@@ -1868,7 +1868,7 @@
 
     "bindings": ["bindings@1.5.0", "", { "dependencies": { "file-uri-to-path": "1.0.0" } }, "sha512-p2q/t/mhvuOj/UeLlV6566GD/guowlr0hHxClI0W9m7MWYkL1F0hLo+0Aexs9HSPCtR1SXQ0TD3MMKrXZajbiQ=="],
 
-    "bits-ui": ["bits-ui@2.20.5", "", { "dependencies": { "@floating-ui/core": "^1.8.0", "@floating-ui/dom": "^1.8.0", "esm-env": "^1.2.2", "runed": "^0.35.1", "svelte-toolbelt": "^0.10.6", "tabbable": "^6.5.0" }, "peerDependencies": { "@internationalized/date": "^3.8.1", "svelte": "^5.33.0" } }, "sha512-8NFzjKKVyU8oLyKGmum+sYYQXI8T/aq8XogS5zUPMddqgRAVFbyZ7qDIpK9RTpiJF5E7CyOVEWUzlcDwrTf5ZA=="],
+    "bits-ui": ["bits-ui@2.20.6", "", { "dependencies": { "@floating-ui/core": "^1.8.0", "@floating-ui/dom": "^1.8.0", "esm-env": "^1.2.2", "runed": "^0.35.1", "svelte-toolbelt": "^0.10.7", "tabbable": "^6.5.1" }, "peerDependencies": { "@internationalized/date": "^3.8.1", "svelte": "^5.33.0" } }, "sha512-V4fgaFAtw+d8xS+3SBuLqouDsAo06991oJnW3hdEx0O1O/sl+BGLKKdZ0i4ZI1mgqT0JXJJ+6avI750OkvgZrA=="],
 
     "bl": ["bl@4.1.0", "", { "dependencies": { "buffer": "^5.5.0", "inherits": "^2.0.4", "readable-stream": "^3.4.0" } }, "sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w=="],
 
@@ -3134,11 +3134,11 @@
 
     "svelte-streamdown": ["svelte-streamdown@4.2.1", "", { "dependencies": { "@floating-ui/dom": "^1.7.4", "@tanstack/highlight": "^1.0.0", "clsx": "^2.1.1", "katex": "^0.16.22", "marked": "18.0.12", "mermaid": "^11.15.0", "tailwind-merge": "^3.3.1" }, "peerDependencies": { "svelte": "^5.0.0" } }, "sha512-Vt1fG9x1xCnKfkxHMuuBbVwigrpsunTAg5lQxd7JvMz7ILnotpWLzOddmuSxod+oYjBkq6bdXohan1V0Wnhxzg=="],
 
-    "svelte-toolbelt": ["svelte-toolbelt@0.10.6", "", { "dependencies": { "clsx": "^2.1.1", "runed": "^0.35.1", "style-to-object": "^1.0.8" }, "peerDependencies": { "svelte": "^5.30.2" } }, "sha512-YWuX+RE+CnWYx09yseAe4ZVMM7e7GRFZM6OYWpBKOb++s+SQ8RBIMMe+Bs/CznBMc0QPLjr+vDBxTAkozXsFXQ=="],
+    "svelte-toolbelt": ["svelte-toolbelt@0.10.7", "", { "dependencies": { "clsx": "^2.1.1", "runed": "^0.35.1", "style-to-object": "^1.0.8" }, "peerDependencies": { "svelte": "^5.30.2" } }, "sha512-gjuUVEEpo38UJCeI1ssE3NxG31tYENczPTcTGTXf4338qAQNdR9I1oAEbQY0KQFmbdUojNIhHuRNix7ThwFNxQ=="],
 
     "svelte2tsx": ["svelte2tsx@0.7.61", "", { "dependencies": { "dedent-js": "^1.0.1", "scule": "^1.3.0" }, "peerDependencies": { "svelte": "^3.55 || ^4.0.0-next.0 || ^4.0 || ^5.0.0-next.0", "typescript": "^4.9.4 || ^5.0.0 || ^6.0.0" } }, "sha512-EpQ/+UHITBULeUojx/LLD3uTYasZXcX1BrqlrzfLUnT9vdUhaOWK59a3ryWcFU8L0sY1SP+gRhJ2Beiis98+qw=="],
 
-    "tabbable": ["tabbable@6.5.0", "", {}, "sha512-wieBHXygIm7OyQOu5hQlkk62/WyCFYGlWg7L6/ZCUZwx0o398Zkn4pVmMyfYhfMG8kGrj/Krt8eIk6UKC6VzwA=="],
+    "tabbable": ["tabbable@6.5.1", "", {}, "sha512-dMCuwDUY6Noz3zVKLefBC4wq+aJV20yc7vWmM7uTNGwtQSFF5kX7OUIUsxuVajz/bdt5Xqdah3/0NLjth+cM5A=="],
 
     "tagged-tag": ["tagged-tag@1.0.0", "", {}, "sha512-yEFYrVhod+hdNyx7g5Bnkkb0G6si8HJurOoOEgC8B/O0uXLHlaey/65KRv6cuWBNhBgHKAROVpc7QyYqE5gFng=="],
 
