@@ -1613,6 +1613,7 @@ async function dialsLegs(
     (await rows()) === DIALS.length,
     String(await rows())
   );
+  await settle(page);
   await checks.at(page, "1440, the Dials face");
   const drawn = () =>
     frame.evaluate(() => {
@@ -1734,6 +1735,8 @@ async function dialsLegs(
     narrow >= DIALS.length,
     String(narrow)
   );
+  // The drawer's title morphs once as the dials arrive and name the Dials face in it ("States, map, animation and dials"): read once it lands.
+  await settle(phone.page);
   await checks.at(phone.page, "390, the Dials face in the drawer");
   await phone.page.close();
 }
