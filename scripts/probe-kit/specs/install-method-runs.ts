@@ -32,6 +32,10 @@
  *   moves to the curl script once its probe answers, and the listener the
  *   agent re-reads its capabilities on hears it.
  *
+ * - (orphan) an agent that ends however it ends (SIGKILL) while its read of
+ *   Claude Code's version (claude-version.ts `claudeHostVersion`) still runs
+ *   leaves no `claude --version` behind: the read is tethered to it.
+ *
  *   bun scripts/probe-kit/run.ts install-method-runs
  */
 import { existsSync } from "node:fs";
@@ -39,6 +43,11 @@ import { chmod, mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
+import {
+  isAlive,
+  listedPid,
+  signal as sendSignal,
+} from "../../../packages/core/src/signal";
 import { OPENCODE_VERSION, toolSpec } from "../../../packages/core/src/tools";
 import { toolWords } from "../../../packages/core/src/words/tools";
 import { systemProgram } from "../../../packages/core/src/workspace-needs";
@@ -306,6 +315,76 @@ const slowLeg = async (kit: Kit, root: string): Promise<void> => {
   );
 };
 
+/** How long the orphan leg's `claude --version` would run on its own: far past the leg. */
+const ORPHAN_S = 120;
+
+/** A `claude` whose `--version` says its pid in `$CLAUDE_PID_FILE`, then runs as `sleep` in its place. */
+const PID_CLAUDE = `#!${systemProgram("bash")}
+if [ "$1" = "--version" ]; then echo $$ > "$CLAUDE_PID_FILE"; exec sleep ${ORPHAN_S}; fi
+exit 0
+`;
+
+/** How long the orphan leg gives the read to start, and its tether to end it. */
+const ORPHAN_WAIT_MS = 10_000;
+
+/** Whether process `pid` is there (core signal-wall.ts `isAlive`). */
+const alive = (pid: number): boolean => isAlive(listedPid(pid));
+
+const orphanLeg = async (kit: Kit, root: string): Promise<void> => {
+  const bin = join(root, "bin");
+  const home = join(root, "home");
+  await Promise.all([bin, home].map((dir) => mkdir(dir, { recursive: true })));
+  await writeExecutable(join(bin, "claude"), PID_CLAUDE);
+  for (const tool of ["sleep", "cat", "kill"]) {
+    const at = Bun.which(tool);
+    if (at) {
+      await symlink(at, join(bin, tool));
+    }
+  }
+  const pidFile = join(root, "claude.pid");
+  const script = `
+    import { claudeHostVersion } from ${JSON.stringify(join(ROOT, "packages/agent/src/claude-version.ts"))};
+    await claudeHostVersion();
+    await Bun.sleep(${ORPHAN_S * 1000});
+  `;
+  const agent = Bun.spawn([process.execPath, "-e", script], {
+    cwd: ROOT,
+    env: {
+      HOME: home,
+      PATH: bin,
+      TMPDIR: root,
+      CLAUDE_PID_FILE: pidFile,
+    },
+    stdout: "ignore",
+    stderr: "ignore",
+  });
+  const started = performance.now();
+  while (!existsSync(pidFile) && performance.now() - started < ORPHAN_WAIT_MS) {
+    await Bun.sleep(100);
+  }
+  const pid = Number.parseInt(
+    existsSync(pidFile) ? (await Bun.file(pidFile).text()).trim() : "",
+    10
+  );
+  const reading = Number.isInteger(pid) && alive(pid);
+  agent.kill("SIGKILL");
+  await agent.exited;
+  const ending = performance.now();
+  while (reading && alive(pid) && performance.now() - ending < ORPHAN_WAIT_MS) {
+    await Bun.sleep(100);
+  }
+  const left = reading && alive(pid);
+  if (left) {
+    // What the leg started goes with it, whatever it found.
+    sendSignal(listedPid(pid), "SIGKILL");
+  }
+  kit.check(
+    "(orphan) an agent killed (SIGKILL) mid-read of Claude Code's version leaves no claude --version running",
+    reading && !left,
+    JSON.stringify({ pid, reading, left })
+  );
+};
+
 const spec: Spec = {
   group: "The hub and machines",
   name: "install-method-runs",
@@ -318,6 +397,7 @@ const spec: Spec = {
       await noneLeg(kit, join(root, "none"));
       await pinLeg(kit, join(root, "pin"));
       await slowLeg(kit, join(root, "slow"));
+      await orphanLeg(kit, join(root, "orphan"));
     } finally {
       await rm(root, { recursive: true, force: true });
     }
