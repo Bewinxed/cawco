@@ -59,11 +59,6 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
-  import {
-    TabItem,
-    Tabs,
-    TabsList,
-  } from "#lib/components/ui/fluid-tabs/index.js";
   import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
@@ -114,6 +109,7 @@
     withTuned,
     withTuning,
   } from "./motion";
+  import RoomFaces from "./RoomFaces.svelte";
   import StagePane from "./StagePane.svelte";
   import Stepper from "./Stepper.svelte";
   import type { StageLink } from "./stage-link.svelte";
@@ -1468,12 +1464,10 @@
 {/snippet}
 
 {#snippet faces()}
-  <!-- The room's faces on one switch (fluid-tabs), each its Solar duotone
-       glyph before its name at the tabs' own icon size and ink; the switch
-       is named as the room is, by its faces. -->
-  <Tabs
-    class="min-w-0 flex-1"
-    onValueChange={(next: string) => {
+  <RoomFaces
+    faces={FACES}
+    label={roomName}
+    onchoose={(next) => {
       face =
         next === "map" || next === "move" || next === "dials" ? next : "states";
       // In the drawer at its head stop a face of its own body (the map, the
@@ -1492,15 +1486,8 @@
         });
       }
     }}
-    size="compact"
     value={shownFace}
-  >
-    <TabsList aria-label={roomName}>
-      {#each FACES as one (one.value)}
-        <TabItem icon={one.icon} label={one.label} value={one.value} />
-      {/each}
-    </TabsList>
-  </Tabs>
+  />
 {/snippet}
 
 {#snippet stepper()}
