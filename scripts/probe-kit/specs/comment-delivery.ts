@@ -70,6 +70,13 @@
  *    decision page (its doc's `ownSend`).
  * 13. The same session asleep: a reply on its pin wakes it, the delivery
  *    its turn's first message.
+ * 14. Held comments (the owner, 2026-11-05: one key sends, another holds,
+ *    one act sends everything held; core comments.ts `ThreadEntry.held`,
+ *    `sendHeld`): two comments held with Alt+Enter never reach the session,
+ *    nor its comment_read, while a comment sent at once with Enter between
+ *    them still goes by itself, alone; the rail's Send 2 with a note sends
+ *    both held ones as one delivery with the note, once, through the same
+ *    quiet delivery, and stamps them sent.
  *
  *   bun scripts/probe-kit/run.ts comment-delivery
  */
@@ -77,7 +84,11 @@ import { Database } from "bun:sqlite";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Frame, Page, WebSocketRoute } from "playwright-core";
-import { type Pin, wroteLine } from "../../../packages/core/src/comments";
+import {
+  notedLine,
+  type Pin,
+  wroteLine,
+} from "../../../packages/core/src/comments";
 import { hubRequest } from "../../../packages/core/src/hub-request";
 import { CLAUDE_CONVERSATION_GONE } from "../../../packages/core/src/index";
 import { artifactToolWords } from "../../../packages/core/src/words/artifact-tools";
@@ -464,7 +475,8 @@ const commentAt = async (
   frame: Frame,
   x: number,
   y: number,
-  words: string
+  words: string,
+  key: "Enter" | "Alt+Enter" = "Enter"
 ) => {
   await page.mouse.move(x, y, { steps: 4 });
   await pressAt(frame, { x, y });
@@ -475,7 +487,7 @@ const commentAt = async (
     .catch(() => false);
   if (opened) {
     await composer.getByRole("combobox").fill(words);
-    await page.keyboard.press("Enter");
+    await page.keyboard.press(key);
     await composer
       .waitFor({ state: "detached", timeout: 8000 })
       .catch(() => undefined);
@@ -542,7 +554,8 @@ const pinWith = async (
   frame: Frame,
   selector: string,
   number: number,
-  words: string
+  words: string,
+  key: "Enter" | "Alt+Enter" = "Enter"
 ) => {
   const comment = on.page.locator(
     ':is([data-slot="preview-pane"], [data-side-card="preview"]) button[aria-keyshortcuts=\'C\']'
@@ -555,7 +568,14 @@ const pinWith = async (
   await settle(on.page, 300);
   const b = await screenBox(on, frame, selector);
   if (
-    !(await commentAt(on.page, frame, b.x + b.w * 0.3, b.y + b.h / 2, words))
+    !(await commentAt(
+      on.page,
+      frame,
+      b.x + b.w * 0.3,
+      b.y + b.h / 2,
+      words,
+      key
+    ))
   ) {
     const pins = Object.values((await docOf(frame)).pins).map(
       (pin) => pin.number
@@ -625,6 +645,95 @@ const asleep = async (fleet: On["fleet"], id: string) => {
     (status) => status === "sleeping",
     90_000
   ).catch(() => fleet.instance(id)?.status);
+};
+
+const HELD_WORDS = [
+  "Held: the heading is too loud.",
+  "Held: this paragraph runs long.",
+] as const;
+const AT_ONCE_WORDS = "Sent at once between the held ones.";
+const HELD_NOTE = "Two from one pass over the page; fix them together.";
+
+/**
+ * 14. Held comments: Alt+Enter holds a comment instead of sending it. Held
+ * ones never reach the session (nor its comment_read) while one sent at
+ * once with Enter still goes, alone; the rail's Send all sends the held ones
+ * once, as one delivery with the person's note, and they are stamped sent.
+ */
+const heldChecks = async (
+  on: On,
+  frame: Frame,
+  artifact: string,
+  callIn: (to: string, tool: string, input: object) => Promise<string>
+) => {
+  const { kit, page, session } = on;
+  const top = Math.max(
+    0,
+    ...Object.values((await docOf(frame)).pins).map((pin) => pin.number)
+  );
+  const [first, atOnce, second] = [top + 1, top + 2, top + 3];
+  const before = heard.length;
+  await pinWith(on, frame, "#a", first, HELD_WORDS[0], "Alt+Enter");
+  await pinWith(on, frame, "#b", atOnce, AT_ONCE_WORDS);
+  await pinWith(on, frame, "#c", second, HELD_WORDS[1], "Alt+Enter");
+  const sent = await nextDelivery(
+    "the comment sent at once",
+    before,
+    MARK_TO_MODEL_MS + 5000
+  );
+  await Bun.sleep(STILL_MS);
+  const heldNow = (await docOf(frame)).pins;
+  const words = sent?.last ?? "";
+  const stillHeld = [first, second].map((n) => numbered(heldNow, n));
+  kit.check(
+    "14: two comments held with Alt+Enter never go, while a comment sent at once with Enter between them goes by itself, alone",
+    deliveries(before).length === 1 &&
+      words.includes(wroteLine(AT_ONCE_WORDS)) &&
+      HELD_WORDS.every((held) => !words.includes(wroteLine(held))) &&
+      stillHeld.every(
+        (pin) => !!pin?.thread[0]?.held && !pin.sentAt && !pin.heard
+      ),
+    `${deliveries(before).length} deliveries; heard ${words.slice(0, 400)}; held ${JSON.stringify(stillHeld.map((pin) => pin && { held: pin.thread[0]?.held, sentAt: pin.sentAt }))}`
+  );
+  const read = await callIn(session, READ_TOOL, { artifact });
+  kit.check(
+    "14: the session's comment_read shows nothing held",
+    HELD_WORDS.every((held) => !read.includes(held)),
+    read.slice(0, 300)
+  );
+  // Send all, from the rail's bar, with a note.
+  const beforeSend = heard.length;
+  await page.locator(`${PANE} [data-slot="comments"]`).first().click();
+  const sendAll = page.locator(`${RAIL} [data-slot="send-held"]`);
+  await sendAll.waitFor({ timeout: 5000 });
+  const says = await sendAll.getAttribute("aria-label");
+  await sendAll.click();
+  await page
+    .locator(`${RAIL} [data-slot="held-note"] textarea`)
+    .fill(HELD_NOTE);
+  await page.locator(`${RAIL} [data-slot="send-held-now"]`).click();
+  const together = await nextDelivery(
+    "the held comments' delivery",
+    beforeSend,
+    MARK_TO_MODEL_MS + 5000
+  );
+  await Bun.sleep(STILL_MS);
+  const all = together?.last ?? "";
+  const after = (await docOf(frame)).pins;
+  const nowSent = [first, second].map((n) => numbered(after, n));
+  kit.check(
+    "14: Send all (Send 2) sends both held comments once, as one delivery with the note, and stamps them sent",
+    says === "Send 2 held comments" &&
+      deliveries(beforeSend).length === 1 &&
+      all.includes(notedLine(HELD_NOTE)) &&
+      HELD_WORDS.every((held) => all.includes(wroteLine(held))) &&
+      !all.includes(wroteLine(AT_ONCE_WORDS)) &&
+      nowSent.every(
+        (pin) => !!pin?.sentAt && !pin.thread.some((entry) => entry.held)
+      ),
+    `Send said "${says}"; ${deliveries(beforeSend).length} deliveries; heard ${all.slice(0, 500)}`
+  );
+  await shutList(page);
 };
 
 /**
@@ -1900,6 +2009,9 @@ const run = async (kit: Kit) => {
 
   // 11. Pins kept on the page-sized container before the body was the page's.
   await oldPageAnchorChecks(on, frame);
+
+  // 14. Comments held, one sent at once between them, then Send all with a note.
+  await heldChecks(on, frame, id, callIn);
 
   // 6. Everything sent: no Send.
   const atEnd = await sendControls();

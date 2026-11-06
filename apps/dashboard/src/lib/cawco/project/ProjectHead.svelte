@@ -66,7 +66,7 @@
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { newSession, spawning } from "#lib/cawco/spawn/new-session.svelte.js";
   import { cawOffAt, stopWork } from "#lib/cawco/stop-work.svelte.js";
-  import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
+  import { BarGlass, BarItem, BarMenu } from "#lib/components/ui/bar-glass/index.js";
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
@@ -444,8 +444,9 @@
         <!-- An end asked here keeps the focus its tray took, and the New
              Session form a Spin off opened keeps the focus it took: the menu
              doesn't hand it back to More as it closes. -->
-        <DropdownMenu.Content
-          align="end"
+        <!-- Hung from the head's glass as one shape with it (BarMenu). -->
+        <BarMenu
+          label={commonWords.moreFor(project.name)}
           width="regular"
           onCloseAutoFocus={(event) => {
             if (endHost.at === endAt || spawning.open) {
@@ -529,7 +530,7 @@
             <IconDeleteForGood />
             <span>{projectEndWords.deleteProject}</span>
           </DropdownMenu.Item>
-        </DropdownMenu.Content>
+        </BarMenu>
       </DropdownMenu.Root>
     </BarGlass>
   </div>

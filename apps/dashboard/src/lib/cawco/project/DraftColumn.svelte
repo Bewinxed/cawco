@@ -19,12 +19,12 @@
   import StageLookItems from "#lib/cawco/project/StageLookItems.svelte";
   import type { SetupDelegate, Stage } from "#lib/cawco/project/setup-stage.js";
   import { markOf } from "#lib/cawco/tasks/stage-look.js";
+  import { BarMore } from "#lib/components/ui/bar-glass/index.js";
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import {
     IconChevronLeft,
     IconChevronRight,
-    IconMore,
     IconNeedsYou,
   } from "#lib/icons.js";
 
@@ -145,22 +145,17 @@
            touch screen is a level in the same menu): Kind and Look each
            replace the menu's items with theirs under a Back row, so it
            never flies out beside its row nor runs past a phone's screen. -->
-      <DropdownMenu.Root
-        onOpenChange={(open) => {
-          if (!open) {
-            level = "root";
-          }
-        }}
-      >
-        <DropdownMenu.Trigger
-          aria-label={setupPageWords.moreFor(stage.name)}
-          class="ms-auto"
-          size="icon-sm"
-          variant="ghost"
+      <!-- More in a glass of its own at the column head's end. -->
+      <span class="ms-auto flex flex-none">
+        <BarMore
+          label={setupPageWords.moreFor(stage.name)}
+          onOpenChange={(open) => {
+            if (!open) {
+              level = "root";
+            }
+          }}
+          width="tiles"
         >
-          <IconMore />
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end" width="tiles">
           {#if level === "root"}
             <DropdownMenu.Item
               closeOnSelect={false}
@@ -258,8 +253,8 @@
               <StageLookItems onlook={(patch) => onchange(patch)} {stage} />
             {/if}
           {/if}
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
+        </BarMore>
+      </span>
     </span>
     {#if showsKind}
       <span

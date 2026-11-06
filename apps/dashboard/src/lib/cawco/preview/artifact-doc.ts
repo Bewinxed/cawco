@@ -20,6 +20,7 @@ import {
   seeChanges,
   seenOf,
   seePin,
+  sendHeld,
   type ThreadEntry,
 } from "@cawco/core/comments";
 import {
@@ -146,6 +147,8 @@ export interface ArtifactDoc {
   see: (pin: string) => void;
   /** The person looked at these of revision `revision`'s changes: each is seen. */
   seeChanges: (revision: number, anchors: string[]) => void;
+  /** The person's Send all: every comment and reply they held let go with `note` (core `sendHeld`); a sentence when nothing went. */
+  sendHeld: (note: string) => string | null;
 }
 
 /** A sentence's last mark. */
@@ -506,6 +509,10 @@ export function joinArtifact(
   return {
     reply: (pin, said) => replyToPin(doc, pin, said),
     resolve: (pin, resolved) => resolvePin(doc, pin, resolved),
+    sendHeld: (note) => {
+      const sent = sendHeld(doc, note);
+      return typeof sent === "string" ? sent : null;
+    },
     see: (pin) => seePin(doc, pin, new Date().toISOString()),
     seeChanges: (revision, anchors) => seeChanges(doc, revision, anchors),
     delete: (pin) => deletePin(doc, pin),

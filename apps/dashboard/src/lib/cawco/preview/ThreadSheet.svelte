@@ -47,6 +47,7 @@
     onclosed,
     onmoved,
     surface = $bindable(),
+    short = false,
     children,
   }: {
     open: boolean;
@@ -60,11 +61,16 @@
     onmoved?: () => void;
     /** The sheet as drawn: what covers the page, for its holder to tell. */
     surface?: HTMLElement;
+    /** What it holds is a line or two (an empty list): its lower stop is low enough to hold that, never half its room standing empty. */
+    short?: boolean;
     children: Snippet;
   } = $props();
 
   /** Its stops, as shares of its room: half, where it opens (the thread's head and the reply in view), and the whole room, to read a long thread. */
-  const SHARES = [0.5, 1];
+  const HALF = [0.5, 1];
+  /** Holding a line or two: its bar and that line, and the whole room. Our call: under a quarter, which holds the bar and a line on a phone of 640px or taller. */
+  const LOW = [0.22, 1];
+  const SHARES = $derived(short ? LOW : HALF);
   /** Its foot clears the home indicator. */
   const FOOT = "calc(var(--space-3) + env(safe-area-inset-bottom, 0px))";
 
@@ -120,6 +126,45 @@
     requestAnimationFrame(look);
   }
 
+  /*
+   * A panel's floating head (SideSurface `float`) yields to the sheet as the
+   * sheet's top comes within a head's height of its foot, and is gone by the
+   * time the top reaches it (`--head-shown` on the card, 1 down to 0), so the
+   * sheet never covers a head still drawn; read
+   * every frame the sheet stands open, since vaul moves it by a transform no
+   * observer hears. At half its room the head stands whole over the page; at
+   * the whole room the sheet is the screen and its own bar stands where the
+   * head was, the head gone under it; between, the two bars never overlap.
+   * The sheet stands over the head (its host's `z-3`).
+   */
+  $effect(() => {
+    const at = host;
+    const card = at?.closest<HTMLElement>('[data-slot="side-card"]');
+    if (!(open && at && card)) {
+      return;
+    }
+    // The head's own height: its room, as laid out.
+    const headRoom =
+      card.querySelector<HTMLElement>('[data-slot="side-head"]')
+        ?.offsetHeight || 1;
+    let frame = 0;
+    const look = () => {
+      const top = surface
+        ? surface.getBoundingClientRect().top - at.getBoundingClientRect().top
+        : headRoom;
+      card.style.setProperty(
+        "--head-shown",
+        String(Math.min(1, Math.max(0, (top - headRoom) / headRoom)))
+      );
+      frame = requestAnimationFrame(look);
+    };
+    look();
+    return () => {
+      cancelAnimationFrame(frame);
+      card.style.removeProperty("--head-shown");
+    };
+  });
+
   let grabbedAt = 0;
   let dragged = false;
   /** A tap on the grabber steps the sheet to its other stop; a drag is vaul's. */
@@ -135,7 +180,7 @@
 
 <div
   bind:this={host}
-  class="pointer-events-none absolute inset-x-0 top-0 bottom-(--keyboard-lift,0px) overflow-clip"
+  class="pointer-events-none absolute inset-x-0 top-0 z-3 bottom-(--keyboard-lift,0px) overflow-clip"
   data-slot="thread-sheet-host"
   onanimationend={watchRest}
   onanimationstart={watchRest}
@@ -186,11 +231,21 @@
       title={label}
       trapFocus={false}
     >
+      <!-- At half its room it floats as glass, inset from the room's sides
+           and foot with corners concentric with the screen's glass, the page
+           peeking round it; at the whole room it meets the edges and turns
+           opaque (Adopting Liquid Glass: "half sheets are inset from the edge
+           of the display to allow content to peek through from beneath them.
+           When a half sheet expands to full height, it transitions to a more
+           opaque appearance"). -->
       <div
         bind:this={surface}
-        class="relative flex h-(--sheet-shown) min-h-0 flex-col pt-space-3 rounded-t-lg border-t border-border-hairline bg-surface-raised shadow-drawer"
+        class="relative flex h-(--sheet-shown) min-h-0 flex-col pt-space-3 rounded-t-lg border-t border-border-hairline bg-surface-raised shadow-drawer motion-safe:transition-[margin,border-radius,background-color] motion-safe:duration-(--dur-panel) motion-safe:ease-drawer data-inset:mx-space-2 data-inset:rounded-(--c-float-inner-r) data-inset:border data-inset:bg-material-panel data-inset:glass-backdrop reduced-transparency:data-inset:bg-surface-raised reduced-transparency:data-inset:backdrop-filter-none"
+        data-inset={stop === 0 || undefined}
         data-slot="thread-sheet"
-        style:--sheet-shown="calc(100% - {below}px)"
+        style:--sheet-shown="calc(100% - {below}px - {stop === 0
+          ? 'var(--space-2)'
+          : '0px'})"
         style:--sheet-pb={FOOT}
       >
         <Vaul.Handle
@@ -208,7 +263,7 @@
           preventCycle
         />
         <div
-          class="flex min-h-0 min-w-0 flex-1 flex-col gap-space-2 overflow-x-hidden px-space-3 pt-space-2 pb-(--sheet-pb)"
+          class="kit-edge-fade-block flex min-h-0 min-w-0 flex-1 flex-col gap-space-2 overflow-x-hidden px-space-3 pt-space-2 pb-(--sheet-pb)"
           data-slot="thread-sheet-body"
         >
           {@render children()}

@@ -228,7 +228,7 @@
     /** How the popover's box tweens to a new size (motion/morph): the popover's own `as` only. */
     morphs?: Morph;
     /** A bar menu's width (BarMenu): the kit dropdown menu's own `width`. */
-    menuWidth?: "compact" | "regular" | "wide";
+    menuWidth?: "compact" | "regular" | "wide" | "tiles" | "titles";
     children: Snippet;
   };
 

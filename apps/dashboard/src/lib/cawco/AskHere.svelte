@@ -20,6 +20,7 @@
    */
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { lastInput } from "#lib/components/ui/fluid-tabs/last-input.js";
   import { IconShield } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
   import AskItems from "./AskItems.svelte";
@@ -96,7 +97,12 @@
   function arrive(node: HTMLElement) {
     const frame = requestAnimationFrame(() => {
       bringIntoView(node);
-      node.querySelector<HTMLElement>("[data-ask-cancel]")?.focus();
+      // Its Cancel takes the focus, ringed only when a key asked (The One
+      // Ring Rule: keyboard focus only): asked by a press, the safe choice
+      // never wears the ring the destructive one would read as.
+      node
+        .querySelector<HTMLElement>("[data-ask-cancel]")
+        ?.focus({ focusVisible: lastInput.current === "key" });
     });
     const onEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !running) {

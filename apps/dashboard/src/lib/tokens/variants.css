@@ -326,6 +326,7 @@
 @custom-variant phase-done (&[data-phase="done"]);
 @custom-variant phase-failed (&[data-phase="failed"]);
 @custom-variant phase-stopped (&[data-phase="stopped"]);
+@custom-variant rail-float-beside (&[data-rail-float="beside"]);
 @custom-variant removed-true (&[data-removed="true"]);
 @custom-variant role-display (&[data-role="display"]);
 @custom-variant role-heading (&[data-role="heading"]);
@@ -367,6 +368,7 @@
 @custom-variant slot-att-btn (&[data-slot="att-btn"]);
 @custom-variant slot-atts (&[data-slot="atts"]);
 @custom-variant slot-badge (&[data-slot="badge"]);
+@custom-variant slot-bar (&[data-slot="bar"]);
 @custom-variant slot-bar-fill (&[data-slot="bar-fill"]);
 @custom-variant slot-beat (&[data-slot="beat"]);
 @custom-variant slot-block (&[data-slot="block"]);
@@ -412,6 +414,7 @@
 @custom-variant slot-crumb (&[data-slot="crumb"]);
 @custom-variant slot-ctrls (&[data-slot="ctrls"]);
 @custom-variant slot-cwd (&[data-slot="cwd"]);
+@custom-variant slot-delete (&[data-slot="delete"]);
 @custom-variant slot-desktop (&[data-slot="desktop"]);
 @custom-variant slot-details-body (&[data-slot="details-body"]);
 @custom-variant slot-details-measure (&[data-slot="details-measure"]);
@@ -570,6 +573,7 @@
 @custom-variant slot-section-row-label (&[data-slot="section-row-label"]);
 @custom-variant slot-segment (&[data-slot="segment"]);
 @custom-variant slot-select-trigger (&[data-slot="select-trigger"]);
+@custom-variant slot-send-held (&[data-slot="send-held"]);
 @custom-variant slot-session-details (&[data-slot="session-details"]);
 @custom-variant slot-session-row-note (&[data-slot="session-row-note"]);
 @custom-variant slot-session-status (&[data-slot="session-status"]);

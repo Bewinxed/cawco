@@ -1689,12 +1689,24 @@ public enum Words {
             "\(page) diagram"
         }
 
-        /// A row's Remove, for a screen reader: its trailing glyph says it.
-        public static func removeNamed(title: String) -> String {
-            "Remove \(title)"
-        }
+        /// The menu the title opens, for a screen reader: the session's artifacts.
+        public static let artifacts = "This session's artifacts"
 
         public static let remove = "Remove"
+
+        /// The artifacts menu's last item: removes the one on show, whose row the menu marks above it.
+        public static let removeShown = "Remove from this session"
+
+        /// Its question; one asked from another row (Delete on it) names that one.
+        public static let removeShownAsk = "Remove this artifact?"
+
+        public static func removeArtifactAsk(title: String) -> String {
+            "Remove \(title)?"
+        }
+
+        public static let removeArtifactBody = "This can't be undone."
+
+        public static let removingArtifact = "Removing…"
 
         /// A promoted row's tag: its commit, short.
         public static func promoted(commit: String) -> String {
@@ -1707,7 +1719,7 @@ public enum Words {
             "\(title) wasn't removed: \(why)"
         }
 
-        /// The head's line under the name once the person's Send is in and the session has not changed it since.
+        /// What describes the title (the menu's first row and its tooltip) once the person's Send is in and the session has not changed it since.
         public static func sentTo(session: String) -> String {
             "Sent to \(session)"
         }

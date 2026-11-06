@@ -128,6 +128,7 @@
     [attribute: `data-${string}`]: unknown;
     [aria: `aria-${string}`]: unknown;
     onpointerdown?: (event: PointerEvent) => void;
+    onkeydown?: (event: KeyboardEvent) => void;
     onpointerenter?: (event: PointerEvent) => void;
     onpointerleave?: (event: PointerEvent) => void;
     onblur?: (event: FocusEvent) => void;

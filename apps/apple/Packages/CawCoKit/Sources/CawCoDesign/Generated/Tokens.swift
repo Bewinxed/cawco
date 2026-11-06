@@ -553,6 +553,8 @@ public enum Size {
     public static let cArtifactRowH: Double = 44
     /// A comment's pill: its height on the page, in the Comments rail and in its thread's head, and its least width, a square at one figure: past the 24 Pointer Rule's floor, so the bubble has room round its number and is a whole target under a mouse (the artifact panel's surface brief, A pin's pill).
     public static let cPin: Double = 28
+    /// A list row's pill cell holds a three-figure pill, so the words beside it stand at one x whatever the number (the Comments rail).
+    public static let cPinCellW: Double = 40
     /// A comment's pill: the room each side of its figures, so it grows from the `c-pin` square into a pill once they need more: 7 is 28px wide, 42 is 32px, 128 is 40px, in every state (the artifact panel's surface brief, A pin's pill).
     public static let cPinPad: Double = 8
     /// A comment whose element is gone, in the Comments rail: its pill's dashed `border-control` ring, 2px out (the artifact panel's surface brief, The Comments rail). Whole, as every border and outline is (lint: a fractional width snaps to whole device pixels, and a dashed stroke has no inset-ring form).
@@ -669,8 +671,22 @@ public enum Size {
     public static let cBarGroupsGap: Double = 8
     /// An item in the top bar's icon group: the group's height, the bar's control height, less its inset on both sides.
     public static let cBarItem: Double = 28
-    /// A symbol in the top bar's glass group: the machines glyph and Caw's head.
-    public static let cBarSymbol: Double = 20
+    /// A symbol in a bar's glass group (the top bar's, a head's): sized to the bar's text as SF Symbols are ("relative to the cap height of the San Francisco system font"), so a line glyph at 18px inks about 15px beside the head's 16px title. It was 20px in the bold-duotone cut, which the owner pinned as far too big (artifact panel, 2026-11-05).
+    public static let cBarSymbol: Double = 18
+    /// A count worn as a badge on a bar symbol's top-trailing corner (the artifact panel's Comments bubble): a plain capsule this tall at least, its figures in meta, centred on the symbol's corner so the symbol still reads, as Apple badges a toolbar item (SwiftUI badge: "Badges appear in list rows, tab bars, toolbar items, and menus"). It was 16px with a ring of the glass round it, which the owner pinned as too big and glowing (2026-11-05).
+    public static let cCountBadgeH: Double = 14
+    /// How far a count badge reaches back over its symbol's corner, up and in: half its height, so its leading half-circle is centred on the corner and a longer count grows outward.
+    public static let cCountBadgeInset: Double = 7
+    /// The room a pane keeps at its content's top while its head floats over it (Liquid Glass: content runs to the top edge and scrolls beneath the controls): the head's glass, its inset above and the same gap below, so the content's first line starts clear of the glass and scrolls under it.
+    public static let cHeadRoom: Double = 50
+    /// A part floating space-2 inside a c-float-panel-r panel (the Comments rail's glass, the phone's inset half sheet): the panel's corner less that inset, the glass capsules' own radius, so it is concentric with the panel and with the capsules beside it.
+    public static let cFloatInnerR: Double = 18
+    /// The scroll edge effect under a floating head: the head's room and a fade a step deep under it, where what scrolls beneath the glass blurs and washes toward the panel's ground.
+    public static let cScrollEdgeH: Double = 64
+    /// What a page beside the floating Comments rail leaves it: the rail's width and its inset on both sides, the page's ground running on beneath the glass.
+    public static let cRailFloatRoom: Double = 334
+    /// The corner of a panel whose head floats as glass over its content (the artifact panel): its glass capsules' radius plus their inset from its edge, so a capsule in its corner is concentric with it (Adopting Liquid Glass: windows "adopt rounder corners to fit controls"); a floating part inset space-2 inside it takes the capsule's own radius.
+    public static let cFloatPanelR: Double = 25
     /// Caw's own glass on the phone bar, its side: round at its leading side, square at its trailing one, its trailing edge c-bar-phone-edge in from the screen's, as the sidebar toggle's glyph is from the other. Caw's phone glass stands centred on the tabs' centre line, as the sidebar toggle's glyph does, clear of the floor; open, his panel hangs from the floor through a neck (half of c-tab-row-h less this, his glass's foot to the row's floor).
     public static let cBarCawGlassPhone: Double = 32
     /// Caw's head in his phone glass: the glass less the desktop item's 4px margin round its head on each side.
@@ -869,6 +885,8 @@ public enum Size {
     public static let cMeasureShort: Double = 480
     /// A meta line's measure under the thing it qualifies: a pending control's failure reason, an editor head's machines line.
     public static let cMeasureMeta: Double = 256
+    /// A bar button's count holds three figures' room, so the button keeps its width as its count grows and nothing beside it in the bar moves (the artifact panel's Comments).
+    public static let cCountW: Double = 24
     /// A count's box keeps one digit's width, so a lone digit does not collapse it.
     public static let cCountDigit: Double = 8
     /// The Configure rail's count column: three digits, so the dash and the figure hold one box.

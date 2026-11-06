@@ -63,6 +63,8 @@
     "has-[>[data-align=block-start]]:[&>input]:pb-3",
     "has-[>[data-align=inline-start]]:[&>input]:pl-1.5",
     share !== undefined && "isolate cursor-ew-resize overflow-clip",
+    // The group's own Clear stands for the engine's: its search cancel glyph is not drawn.
+    "[&>input::-webkit-search-cancel-button]:appearance-none",
     className
   )}
   data-slot="input-group"
