@@ -81,7 +81,28 @@
       shut();
     }
   }
+
+  /**
+   * Esc from what stands under it shuts it too: the tray row and the
+   * composer it rises from (its dock), and the page with the focus nowhere
+   * in particular (a pointer opened it). The focus stays where it was: in
+   * the composer, the draft goes on. Anything that took Esc for itself first
+   * (a menu, the composer's own) keeps it.
+   */
+  function onwindowkey(event: KeyboardEvent): void {
+    if (event.key !== "Escape" || event.defaultPrevented) {
+      return;
+    }
+    const at = document.activeElement;
+    const dock = section?.closest('[data-slot="dock"]');
+    if (!at || at === document.body || (dock?.contains(at) ?? false)) {
+      event.preventDefault();
+      onclose();
+    }
+  }
 </script>
+
+<svelte:window onkeydown={onwindowkey} />
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions: Escape inside the list shuts it, heard as it passes up from the control that has the focus -->
 <section
@@ -99,9 +120,9 @@
   {@attach room}
   out:popOut|global={{ side: "top" }}
 >
-  <header
-    class="flex h-c-top-bar-h flex-none items-center gap-space-2 pe-space-2 ps-space-4"
-  >
+  <!-- Close stands one step in from the card's top and trailing edges
+       alike, the title on its centre line. -->
+  <header class="flex flex-none items-center gap-space-2 p-space-2 ps-space-4">
     <h2
       class="m-0 min-w-0 flex-auto truncate text-size-label font-medium text-ink-strong"
       id={titleId}

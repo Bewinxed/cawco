@@ -342,6 +342,8 @@ export { default as IconSettings } from "~icons/solar/settings-bold-duotone";
 export { default as IconShield } from "~icons/solar/shield-bold-duotone";
 /** Rules: a standing guard over what sessions say, distinct from bare `shield`. */
 export { default as IconRules } from "~icons/solar/shield-check-bold-duotone";
+/** A permission waiting on the person in a list of kinds: the shield as a half-tone tile with its keyhole, the weight of the decision's, the pin's and the question's tiles (waiting/WaitingList). */
+export { default as IconShieldKeyhole } from "~icons/solar/shield-keyhole-bold-duotone";
 /** HTTPS on the tailnet: the hub's name served over TLS to every device on it. */
 export { default as IconTailnetHttps } from "~icons/solar/shield-network-bold-duotone";
 export { default as IconShop } from "~icons/solar/shop-bold-duotone";

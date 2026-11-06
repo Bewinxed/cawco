@@ -1386,6 +1386,7 @@
 
 {#snippet planRing()}
   <WaitingChip
+    agent={agentName}
     answered={waitList.counts.answered}
     onopen={() => {
       waitList.shown = !waitList.shown;

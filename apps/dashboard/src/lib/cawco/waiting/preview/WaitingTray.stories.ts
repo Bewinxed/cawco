@@ -9,7 +9,7 @@ import { ASKED, STATES } from "./fixtures";
 import SessionWaitingFixture from "./SessionWaitingFixture.svelte";
 
 export default {
-  title: "Waiting on you/Tray",
+  title: "Needs you/Tray",
   component: SessionWaitingFixture,
   args: { rows: STATES.all, opened: true, height: 900 },
 };
@@ -108,4 +108,34 @@ export const CawPhone = {
 export const Wide = {
   args: { asked: ASKED },
   parameters: { viewport: 2529 },
+};
+
+/** A card's row pressed (desk): its page opens beside the conversation at that card, the list still open over the composer. */
+export const CardOpenedDesk = {
+  args: { rows: STATES.several, asked: ASKED, landed: "card" },
+  parameters: { viewport: 1440 },
+};
+
+/** A card's row pressed (phone): its page rises as a sheet over the conversation. */
+export const CardOpenedPhone = {
+  args: { rows: STATES.several, asked: ASKED, landed: "card", height: 780 },
+  parameters: { viewport: 390 },
+};
+
+/** The question's row pressed (desk): the list put away, the composer grown into the question, answered there. */
+export const AskGrownDesk = {
+  args: { rows: STATES.several, asked: ASKED, landed: "ask", opened: false },
+  parameters: { viewport: 1440 },
+};
+
+/** The question's row pressed (phone). */
+export const AskGrownPhone = {
+  args: {
+    rows: STATES.several,
+    asked: ASKED,
+    landed: "ask",
+    opened: false,
+    height: 780,
+  },
+  parameters: { viewport: 390 },
 };

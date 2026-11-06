@@ -15,8 +15,8 @@
    *
    * Whose move it is is said by where a row stands: the list's title says
    * what waits on him; what he answered that the agent has not taken up
-   * stands under a head of the same form naming the agent ("Waiting on
-   * Claude Code"), its question quieter and his answer under it.
+   * stands under a head of the same form naming the agent ("Needs Claude
+   * Code"), its question quieter and his answer under it.
    *
    * A press opens what asks it where it asks (`onopen`): an artifact in its
    * session's panel at its card, its pin or its top; a permission or a
@@ -32,7 +32,7 @@
     IconKey,
     IconPin,
     IconQuestion,
-    IconShield,
+    IconShieldKeyhole,
   } from "#lib/icons.js";
   import RowFault from "../RowFault.svelte";
   import { isAsk, type WaitingKind, type WaitingRow } from "./rows";
@@ -55,7 +55,7 @@
     card: IconDecisions,
     judge: IconEye,
     pin: IconPin,
-    permission: IconShield,
+    permission: IconShieldKeyhole,
     question: IconQuestion,
     connect: IconKey,
   };
@@ -90,10 +90,14 @@
     </ul>
   {/if}
   {#if answered.length > 0}
-    <!-- Headed only under rows that wait on him: alone, the list's title says it. -->
+    <!-- Headed, and named as a region, only under rows that wait on him:
+         alone, the card's title says it, and a second region of the same
+         name would say it twice. -->
     <section
       class="flex flex-col not-first:mbs-space-2 not-first:pbs-space-2 not-first:border-bs not-first:border-bs-border-hairline"
-      aria-label={waitingWords.answeredHead(agent)}
+      aria-label={open.length > 0
+        ? waitingWords.answeredHead(agent)
+        : undefined}
     >
       {#if open.length > 0}
         <h3
@@ -152,7 +156,7 @@
             >{said.join(" · ")}</span
           >
         {/if}
-        <span class="sr-only">{waitingWords.state[row.state]}</span>
+        <span class="sr-only">{waitingWords.state(row.state, agent)}</span>
       </span>
     </button>
     <RowFault
