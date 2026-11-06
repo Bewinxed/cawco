@@ -41,6 +41,26 @@ export const previewWords = {
     `Show me ${name} again: its workspace is gone, so make it again from a workspace that runs.`,
   goneCantAsk:
     "Its session isn't open here, so it can only be asked from there.",
+  /**
+   * A preview whose server answered its page with an error status (core
+   * `PreviewDown` `error`: a route that isn't there any more answers 404, a
+   * render that throws answers 500), `why` the status and the error's first
+   * line. A preview whose page threw before it loaded and shows nothing
+   * (`crashed`), `why` what it threw. `…Title` and `…Line` are the pane's
+   * down state (dashboard PreviewPane); `…Page` the sentence on CawCo's own
+   * page in their place, read in an artifact's tab of its own (core
+   * preview-proxy `DOWN_WORDS`).
+   */
+  errorTitle: "The page's server answered with an error",
+  errorLine: (why: string) =>
+    `It answered ${why}, so there is no page to show. Ask its session to fix the page, or to show the address it moved to, then try again.`,
+  errorPage:
+    "This page's server answered it with an error, so there is no page to show. Ask its session to fix the page, or to show the address it moved to, then reload.",
+  crashedTitle: "The page broke as it loaded",
+  crashedLine: (why: string) =>
+    `A script of the page threw before it loaded (${why}), and it shows nothing. Ask its session to fix it, then try again.`,
+  crashedPage:
+    "A script of this page threw before it loaded, and it shows nothing. Ask its session to fix it, then reload.",
   /** Its server is down: the port it listened on, and the way back from its session. */
   nothingOnPort: (port: number) => `Nothing is running on port ${port}`,
   startFromSession: "Start it again from its session, then try again.",

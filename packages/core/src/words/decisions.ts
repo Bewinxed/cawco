@@ -102,6 +102,12 @@ export const decisionsWords = {
     `the way to its server didn't open (${why}). Try again; if it fails again, start the server again from its session.`,
   previewClosed:
     "its session shows something else now, or has ended. Open its session to show it again.",
+  /** Its server answered its page with an error status (core `PreviewDown` `error`), `why` the status and the error's first line. */
+  previewErrored: (why: string) =>
+    `its server answered ${why}. Ask its session to fix the page, or to show the address it moved to, then try again.`,
+  /** A script of its page threw before it loaded and it shows nothing (core `PreviewDown` `crashed`), `why` what it threw. */
+  previewCrashed: (why: string) =>
+    `a script of its page threw before it loaded (${why}), and it shows nothing. Ask its session to fix it, then try again.`,
   /** A canvas told to draw that said neither its shape nor why within `seconds`. */
   previewLate: (seconds: number) =>
     `its stage didn't draw it within ${seconds} s. Try again; if it stays empty, open the canvas in its session to see why.`,

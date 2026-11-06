@@ -796,9 +796,10 @@
   }
   /*
    * A down page comes back by itself: while the frame stands on the proxy's
-   * down page (any hop but `closed`, which only a show reopens, and `gone`,
+   * down page (any hop but `closed`, which only a show reopens; `gone`,
    * whose workspace no longer is: only its session making it again brings
-   * it back, as a new open) in a pane
+   * it back, as a new open; and `error` and `crashed`, whose server answers:
+   * its page is what is broken, and Try again loads it once its session fixed it) in a pane
    * someone has on screen, the origin's ping is probed on the unreached
    * state's backoff (`PROBE_FIRST_MS` doubling to `PROBE_MOST_MS`), and once
    * it answers the frame loads again. Only a pane on screen asks, so a
@@ -808,6 +809,13 @@
    * says it is ready starts the count again.
    */
   let downTries = 0;
+  /** The hops that come back by themselves once what didn't answer does. */
+  const COMES_BACK: ReadonlySet<PreviewDown> = new Set([
+    "server",
+    "machine",
+    "workspace",
+    "reach",
+  ]);
   /** Each one probes the down page's origin again: a probe that failed, waiting out its backoff. */
   let downProbe = $state(0);
   $effect(() => {
@@ -815,7 +823,7 @@
     const origin = paneOrigin;
     const seen = pageVisible.current && onScreen;
     track(downProbe);
-    if (!(hop && hop !== "closed" && hop !== "gone" && origin && seen)) {
+    if (!(hop && origin && seen && COMES_BACK.has(hop))) {
       return;
     }
     let live = true;
@@ -879,6 +887,10 @@
         return "This preview is closed";
       case "gone":
         return previewWords.goneTitle;
+      case "error":
+        return previewWords.errorTitle;
+      case "crashed":
+        return previewWords.crashedTitle;
       case "machine":
       case null:
         break;
@@ -4930,6 +4942,10 @@
           {:else if shownDown === "closed"}
             Its session shows something else now, or has ended, so there is no
             page here. Open its session to show it again.
+          {:else if shownDown === "error"}
+            {previewWords.errorLine(shownWhy ?? "with an error")}
+          {:else if shownDown === "crashed"}
+            {previewWords.crashedLine(shownWhy ?? "no message")}
           {:else}
             The preview comes from {ownerMachine}, which isn't answering the hub{shownWhy
               ? `: ${shownWhy}`

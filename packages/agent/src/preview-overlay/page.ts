@@ -85,6 +85,7 @@ import {
   EMBED_PLACE,
   type Remote,
   startEmbeds,
+  tellBroken,
 } from "./embeds";
 import { faultsGoTo } from "./faults";
 import { fillFields, trackFields } from "./fields";
@@ -766,6 +767,8 @@ function ready() {
     url: location.href,
     title: document.title,
   });
+  // A page that broke as it loaded is still broken, whatever it answers.
+  tellBroken();
 }
 
 /*

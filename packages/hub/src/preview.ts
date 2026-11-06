@@ -1,12 +1,10 @@
 import { createHash } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
-import { STATUS_CODES } from "node:http";
 import { join, relative, sep } from "node:path";
 import {
   type ArtifactKind,
   CAWCO_ENV,
   DASHBOARD_COOKIE,
-  type HandUpFailure,
   OVERLAY_PATH,
   PREVIEW_ENTER_PATH,
   PREVIEW_ERRORS_PATH,
@@ -66,7 +64,6 @@ import {
   previewPortWords,
 } from "@cawco/core/words/preview-ports";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
-import { z } from "zod";
 import { serveCanvas } from "./artifacts/canvas";
 import {
   ARTIFACT_PATH,
@@ -676,84 +673,14 @@ async function pingSession(
   }
 }
 
-/** The longest line of a page's error a hand-up's refusal quotes. Our call: one sentence of a stack's head. */
-const ERROR_LINE_CHARS = 240;
-/** Vite's own error page (vite 8.3.5 `errorMiddleware`): "const error = ${JSON.stringify(prepareError(err))…}", on one line. */
-const VITE_ERROR = /const error = (\{.*\})\s*$/mu;
-/** The part of Vite's error object read: its message. */
-const VITE_ERROR_SHAPE = z.object({ message: z.string() });
-/** A line naming an error: "TypeError: …", "Error: …", "Internal Server Error". */
-const ERROR_NAMED = /\b(?:[A-Z]\w*)?Error\b/u;
-const HTML_ENTITIES: Record<string, string> = {
-  "&amp;": "&",
-  "&lt;": "<",
-  "&gt;": ">",
-  "&quot;": '"',
-  "&#39;": "'",
-  "&nbsp;": " ",
-};
-/** `html`'s text, a line per block, entities read back. */
-const textLines = (html: string): string[] =>
-  html
-    .replaceAll(/<(script|style|template)\b[^>]*>[\s\S]*?<\/\1\s*>/giu, "\n")
-    .replaceAll(/<!--[\s\S]*?-->/gu, "\n")
-    .replaceAll(/<[^>]*>/gu, "\n")
-    .replaceAll(
-      /&(?:amp|lt|gt|quot|#39|nbsp);/gu,
-      (one) => HTML_ENTITIES[one] ?? one
-    )
-    .split("\n")
-    .map((line) => line.replaceAll(/\s+/gu, " ").trim())
-    .filter(Boolean);
-/** `html`'s first heading. */
-const HEADING = /<h1\b[^>]*>([\s\S]*?)<\/h1\s*>/iu;
-
-/**
- * The first line of the error a page that answered an error status shows,
- * as a person opening it would read it first: Vite's error page's own
- * message (its overlay draws it), else the page's first line naming an
- * error ("TypeError: …"), its first heading (SvelteKit's error page puts
- * the error's message there), its first line of text (its title, or a
- * plain text answer's first line); null for a page with no text.
- */
-const errorLineOf = (body: string): string | null => {
-  const firstLine = (text: string): string | undefined =>
-    text
-      .split("\n")
-      .map((one) => one.trim())
-      .find(Boolean);
-  const vite = VITE_ERROR.exec(body)?.[1];
-  let viteSaid: string | undefined;
-  if (vite) {
-    try {
-      const read = VITE_ERROR_SHAPE.safeParse(JSON.parse(vite));
-      viteSaid = read.success ? firstLine(read.data.message) : undefined;
-    } catch {
-      // Not Vite's object after all: the page's own text says it.
-    }
-  }
-  const lines = textLines(body);
-  const said =
-    viteSaid ??
-    lines.find((one) => ERROR_NAMED.test(one)) ??
-    (textLines(HEADING.exec(body)?.[1] ?? "").join(" ") || undefined) ??
-    lines[0];
-  if (!said) {
-    return null;
-  }
-  return said.length > ERROR_LINE_CHARS
-    ? `${said.slice(0, ERROR_LINE_CHARS - 1)}…`
-    : said;
-};
-
 /**
  * A preview no panel shows, loaded once through its machine's listener `at`
  * as a pane's load is (a sleeping stage or served server wakes for it): null
- * when nothing stands in its way, else what failed and why. A page CawCo's
- * own down page answers names the hop that didn't answer (`downOf`); any
- * other page answered with an error status (4xx, 5xx, as a render that
- * throws answers 500) is an `error`, its `why` the status and the first line
- * of the error the page shows ({@link errorLineOf}), else the status line. A
+ * when nothing stands in its way, else what failed and why, as CawCo's own
+ * down page names it (`downOf`): a hop that didn't answer, or `error`, a page
+ * its server answered with an error status (4xx, 5xx, as a render that
+ * throws answers 500), which the machine's listener answers with that page
+ * in its place (core `errorPageResponse`). A
  * page with no answer within `waitMs` is a server still making it (a first
  * compile, a build holding its event loop), and no failure: a served server
  * is up once its port listens, however long its pages take (agent stage.ts
@@ -764,7 +691,7 @@ export async function loadedOnce(
   at: Upstream,
   path: string | undefined,
   waitMs: number
-): Promise<{ failure: HandUpFailure; why: string | null } | null> {
+): Promise<{ failure: PreviewDown; why: string | null } | null> {
   const address = at.address.includes(":") ? `[${at.address}]` : at.address;
   const said = (html: string) => {
     const down = downOf(html);
@@ -778,21 +705,10 @@ export async function loadedOnce(
         redirect: "manual",
         signal,
       });
-      return { status: answer.status, body: await answer.text() };
+      return await answer.text();
     });
     if (page.kind === "answered") {
-      const { status, body } = page.value;
-      const down = said(body);
-      if (down || status < 400) {
-        return down;
-      }
-      const line = errorLineOf(body);
-      return {
-        failure: "error",
-        why: line
-          ? `${status}: ${line}`
-          : `${status} ${STATUS_CODES[status] ?? ""}`.trim(),
-      };
+      return said(page.value);
     }
     const pinged = await readWithin(PING_RELAY_MS, async (signal) => {
       const answer = await fetch(

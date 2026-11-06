@@ -13540,6 +13540,9 @@ export const createServer = (
     reach: 500,
     server: 500,
     gone: 409,
+    // A start never names these: a page's own load does.
+    error: 500,
+    crashed: 500,
   };
 
   /**

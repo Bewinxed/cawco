@@ -64,12 +64,15 @@ export const artifactToolWords = {
   notHanded: "It wasn't handed to your parent.",
   /**
    * A hand-up's check loaded `subject`'s page and it answered an error
-   * status (core `HandUpFailure` `error`, hub preview.ts `loadedOnce`): the
+   * status (core `PreviewDown` `error`, hub preview.ts `loadedOnce`): the
    * refusal goes on with the status and the error's first line in brackets,
    * then {@link artifactToolWords.notHanded}.
    */
   pageErrored: (subject: string) =>
     `${subject} answered its page with an error.`,
+  /** A view loaded `subject`'s page, and a script of it threw before its load and it showed nothing (core `PreviewDown` `crashed`). */
+  pageCrashed: (subject: string) =>
+    `${subject} answered a page that threw before it loaded and showed nothing.`,
   /** A view couldn't load `subject` as its workspace is gone (core `PreviewDown` `gone`): a show's or a hand-up check's refusal. */
   workspaceGone: (subject: string) =>
     `${subject} is gone with its workspace, so this version can't be shown again. Make it again from a workspace that runs and hand that up; showing this one again changes nothing.`,

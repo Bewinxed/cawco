@@ -173,6 +173,28 @@ const isFault = (value: unknown): value is PageFault =>
   value !== null &&
   ["dial", "error", "asset"].includes((value as PageFault).kind);
 
+/** What the page first threw, uncaught, before its load: null while it threw nothing then. */
+let thrownEarly: string | null = null;
+
+/**
+ * What a script of the page first threw, uncaught or a rejection no one
+ * handled, before the page's load: a page that shows nothing at its load
+ * broke on it (embeds.ts `tellDrawn`, core `PreviewDown` `crashed`). Null
+ * when it threw nothing before its load.
+ */
+export const thrownBeforeLoad = (): string | null => thrownEarly;
+
+/** `thrown` kept as the page's first throw, while its load is still to come. */
+function early(thrown: unknown): void {
+  if (thrownEarly === null && document.readyState !== "complete") {
+    thrownEarly = clip(
+      thrown instanceof Error && thrown.message
+        ? `${thrown.name}: ${thrown.message}`
+        : messageOf(thrown)
+    );
+  }
+}
+
 /** Starts hearing the page's faults: once, before any script of the page's. */
 export function watchFaults(): void {
   // In the capture phase: an element's failed load does not bubble.
@@ -180,6 +202,7 @@ export function watchFaults(): void {
     "error",
     (event) => {
       if (event instanceof ErrorEvent) {
+        early(event.error ?? event.message);
         heard(
           thrownFault(event.error ?? event.message, {
             file: event.filename,
@@ -196,9 +219,10 @@ export function watchFaults(): void {
     },
     true
   );
-  addEventListener("unhandledrejection", (event: PromiseRejectionEvent) =>
-    heard(thrownFault(event.reason))
-  );
+  addEventListener("unhandledrejection", (event: PromiseRejectionEvent) => {
+    early(event.reason);
+    heard(thrownFault(event.reason));
+  });
   addEventListener(PAGE_FAULT_EVENT, (event) => {
     const { detail } = event as CustomEvent<unknown>;
     if (isFault(detail)) {

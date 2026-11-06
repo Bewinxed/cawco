@@ -44,13 +44,13 @@ import {
   decisionLink,
   decisionReference,
   fileHash,
-  type HandUpFailure,
   type InstanceRow,
   machineLabel,
   noteText,
   PICTURE_VIEW,
   type PlanStep,
   type PreviewAddress,
+  type PreviewDown,
   type PreviewSource,
   parseReference,
   pinLink,
@@ -2070,7 +2070,7 @@ export interface ArtifactServiceDeps {
    */
   reachable: (
     row: ArtifactRow
-  ) => Promise<{ failure: HandUpFailure; why: string | null } | null>;
+  ) => Promise<{ failure: PreviewDown; why: string | null } | null>;
   /**
    * Every view of session `instanceId`'s panel hears its artifacts again on
    * the frame it follows (the panel's open frame, unchanged otherwise); none
@@ -4630,10 +4630,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /** Why a view could not load the artifact, in DESIGN.md's error formula: what failed, and why. */
-  const notLoaded = (
-    row: Placed,
-    failure: ShownFailure | HandUpFailure
-  ): string => {
+  const notLoaded = (row: Placed, failure: ShownFailure): string => {
     const { source } = row;
     const machine = machineOf(row);
     const subject =
@@ -4660,6 +4657,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return artifactToolWords.workspaceGone(subject);
       case "error":
         return artifactToolWords.pageErrored(subject);
+      case "crashed":
+        return artifactToolWords.pageCrashed(subject);
       case "page":
         break;
     }

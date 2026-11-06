@@ -35,6 +35,7 @@ import type {
 } from "@cawco/core/comments";
 import { PAGE_TOUCHED_MESSAGE } from "@cawco/core/frames";
 import { EMBED_DRAWN, EMBEDDED } from "@cawco/core/stage";
+import { thrownBeforeLoad } from "./faults";
 import {
   contentBox,
   type FrameElement,
@@ -344,6 +345,24 @@ function showsAny(own: (node: Node) => boolean): boolean {
   return [...document.body.querySelectorAll(DRAWS)].some((el) => seen(el, el));
 }
 
+/** What the page threw before a load at which it showed nothing ({@link tellDrawn}); null while it hasn't broken so. */
+let broke: string | null = null;
+
+/**
+ * Tells the page holding this one that this page broke as it loaded, when
+ * it did: at its load, and again after each `cawco:ready` (page.ts
+ * `ready`), which tells a pane the page answers and clears what it heard of
+ * the load before.
+ */
+export function tellBroken(): void {
+  if (broke !== null && window.parent !== window) {
+    window.parent.postMessage(
+      { type: "cawco:down", down: "crashed", why: broke },
+      "*"
+    );
+  }
+}
+
 /**
  * Tells the page holding this one, once, that it has loaded and shows
  * something of its own (core `EMBED_DRAWN`), to any parent: nothing else.
@@ -351,6 +370,12 @@ function showsAny(own: (node: Node) => boolean): boolean {
  * an app whose root keeps the window's size (a dashboard) shows nothing at
  * its load and mounts later. Watched by its changes, never an animation
  * frame, which Chromium gives no cross-origin frame off screen or unseen.
+ *
+ * A page that shows nothing at its load after a script of it threw
+ * (faults.ts `thrownBeforeLoad`) broke as it loaded: its parent hears so at
+ * once, as the proxy's own page says a hop that didn't answer (`cawco:down`,
+ * core `PreviewDown` `crashed`), what it threw as its why, and draws why in
+ * its place rather than a blank frame.
  */
 function tellDrawn(own: (node: Node) => boolean): void {
   const start = () => {
@@ -364,6 +389,8 @@ function tellDrawn(own: (node: Node) => boolean): void {
     if (tell()) {
       return;
     }
+    broke = thrownBeforeLoad();
+    tellBroken();
     const changes = new MutationObserver((records) => {
       if (records.some((record) => !own(record.target)) && tell()) {
         changes.disconnect();

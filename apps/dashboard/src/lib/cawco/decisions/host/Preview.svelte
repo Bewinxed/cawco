@@ -52,7 +52,9 @@
   turn, or opening. One that can't stand says why in
   one line in its place and shape, with Try again: an origin unreached, the
   proxy's own page in its frame (`cawco:down`: its workspace not running,
-  its server stopped, its session closed it), a canvas that says it can't
+  its server stopped, its session closed it, its server answered the page
+  with an error status) or its overlay's word that the page threw before it
+  loaded and shows nothing (`crashed`), a canvas that says it can't
   draw what it names (core `CANVAS_EMBED_FAILED`), or one told to draw that
   says neither its shape nor why within `DRAW_MS`. One the hub no longer
   holds says so in words where it would stand.
@@ -451,6 +453,10 @@
         return decisionsWords.previewClosed;
       case "gone":
         return decisionsWords.previewGone;
+      case "error":
+        return decisionsWords.previewErrored(why ?? "with an error");
+      case "crashed":
+        return decisionsWords.previewCrashed(why ?? "no message");
       default:
         return hop satisfies never;
     }

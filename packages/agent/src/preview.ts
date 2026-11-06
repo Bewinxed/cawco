@@ -15,6 +15,7 @@ import {
   causeOf,
   decodedHeaders,
   downResponse,
+  errorPageResponse,
   type FolderWeight,
   folderGone,
   folderKey,
@@ -23,6 +24,7 @@ import {
   IMMUTABLE,
   injectOverlay,
   isFolderGone,
+  loadsDocument,
   notUpYet,
   PREVIEW_SERVED_HEADER,
   type PreviewSocket,
@@ -972,18 +974,23 @@ async function start(
           source.dir,
           `.${decodeURIComponent(asked === "/" ? "/index.html" : asked)}`
         );
+        /** A file the folder doesn't serve: a document's load is answered with CawCo's own page (core `errorPageResponse`). */
+        const missing = (status: 403 | 404, text: string) =>
+          loadsDocument(request)
+            ? errorPageResponse(status, text)
+            : new Response(text, { status });
         let actual: string;
         try {
           actual = await realpath(filePath);
         } catch {
-          return new Response("Not found", { status: 404 });
+          return missing(404, "Not found");
         }
         const path = relative(source.dir, actual);
         if (path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path)) {
-          return new Response("Forbidden", { status: 403 });
+          return missing(403, "Forbidden");
         }
         if (!(await stat(actual)).isFile()) {
-          return new Response("Not found", { status: 404 });
+          return missing(404, "Not found");
         }
         // A file at its folder's key never changes its bytes, so it is kept
         // for good (core `IMMUTABLE`, longer than any TTL a CDN would set);
@@ -1025,6 +1032,21 @@ async function start(
             );
           }
         }
+      }
+      // A document's load its server answered with an error status: no page
+      // the preview can draw, and with nothing in it the browser draws its
+      // own broken-frame face, with no words. CawCo's own page names it in
+      // its place (core `PreviewDown` `error`); a page's own fetches and
+      // modules keep theirs.
+      if (response.status >= 400 && loadsDocument(request)) {
+        const failed = errorPageResponse(
+          response.status,
+          await response.text()
+        );
+        if ("port" in source) {
+          failed.headers.set(PREVIEW_SERVED_HEADER, "1");
+        }
+        return failed;
       }
       let body: ReadableStream<Uint8Array> | string | null = response.body;
       if (

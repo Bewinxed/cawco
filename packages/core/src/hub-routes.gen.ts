@@ -2033,6 +2033,8 @@ export interface components {
           | "reach"
           | "closed"
           | "gone"
+          | "error"
+          | "crashed"
           | "page";
         ok: boolean;
         revision: string;

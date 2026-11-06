@@ -1688,7 +1688,7 @@ export interface ArtifactPromotion {
   commit: string;
 }
 
-/** Every hop a preview's page can say did not answer ({@link PreviewDown}). */
+/** Every reason a preview's page can say it can't be drawn ({@link PreviewDown}). */
 export const PREVIEW_DOWNS = [
   "server",
   "machine",
@@ -1696,6 +1696,8 @@ export const PREVIEW_DOWNS = [
   "reach",
   "closed",
   "gone",
+  "error",
+  "crashed",
 ] as const;
 /**
  * A preview whose page nothing serves: the hop that did not answer, as the
@@ -1712,7 +1714,15 @@ export const PREVIEW_DOWNS = [
  * now (it was closed, or the session ended). `gone`: the workspace that
  * served it is not on its machine any more (archived, discarded), so this
  * version of it can't be shown again; only its session making it again
- * brings it back.
+ * brings it back. `error`: every hop answered, and the page's server
+ * answered its load with an error status (a route that isn't there any more
+ * answers 404, a render that throws answers 500): the machine's listener
+ * answers the load with its own page in place of the server's (agent
+ * preview.ts), the status and the error's first line as its why
+ * (`errorLineOf`), never the browser's own error face. `crashed`: the page
+ * loaded, but a script of its threw before its load and it shows nothing:
+ * its overlay names it, the thrown message as its why (agent
+ * preview-overlay embeds.ts `tellDrawn`).
  */
 export type PreviewDown = (typeof PREVIEW_DOWNS)[number];
 export const PREVIEW_DOWN_META = "cawco-preview-down";
@@ -1727,15 +1737,6 @@ export const PREVIEW_WHY_META = "cawco-preview-why";
  */
 export const SHOWN_FAILURES = [...PREVIEW_DOWNS, "page"] as const;
 export type ShownFailure = (typeof SHOWN_FAILURES)[number];
-/**
- * Why a preview handed to a parent was refused (hub preview.ts
- * `loadedOnce`): a hop that did not answer ({@link PreviewDown}), or
- * `error`: every hop answered, and its page came back with an error status
- * (4xx or 5xx), as a server whose render throws answers 500. Not a
- * {@link PreviewDown}: no proxy page names it, and no pane can read a
- * frame's status to report it.
- */
-export type HandUpFailure = PreviewDown | "error";
 
 export interface PreviewElement {
   classes: string[];

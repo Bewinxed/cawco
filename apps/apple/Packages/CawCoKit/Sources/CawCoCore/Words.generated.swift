@@ -1525,6 +1525,23 @@ public enum Words {
 
         public static let goneCantAsk = "Its session isn't open here, so it can only be asked from there."
 
+        /// A preview whose server answered its page with an error status (core `PreviewDown` `error`: a route that isn't there any more answers 404, a render that throws answers 500), `why` the status and the error's first line. A preview whose page threw before it loaded and shows nothing (`crashed`), `why` what it threw. `…Title` and `…Line` are the pane's down state (dashboard PreviewPane); `…Page` the sentence on CawCo's own page in their place, read in an artifact's tab of its own (core preview-proxy `DOWN_WORDS`).
+        public static let errorTitle = "The page's server answered with an error"
+
+        public static func errorLine(why: String) -> String {
+            "It answered \(why), so there is no page to show. Ask its session to fix the page, or to show the address it moved to, then try again."
+        }
+
+        public static let errorPage = "This page's server answered it with an error, so there is no page to show. Ask its session to fix the page, or to show the address it moved to, then reload."
+
+        public static let crashedTitle = "The page broke as it loaded"
+
+        public static func crashedLine(why: String) -> String {
+            "A script of the page threw before it loaded (\(why)), and it shows nothing. Ask its session to fix it, then try again."
+        }
+
+        public static let crashedPage = "A script of this page threw before it loaded, and it shows nothing. Ask its session to fix it, then reload."
+
         /// Its server is down: the port it listened on, and the way back from its session.
         public static func nothingOnPort(port: Int) -> String {
             "Nothing is running on port \(port)"
@@ -2319,6 +2336,16 @@ public enum Words {
         }
 
         public static let previewClosed = "its session shows something else now, or has ended. Open its session to show it again."
+
+        /// Its server answered its page with an error status (core `PreviewDown` `error`), `why` the status and the error's first line.
+        public static func previewErrored(why: String) -> String {
+            "its server answered \(why). Ask its session to fix the page, or to show the address it moved to, then try again."
+        }
+
+        /// A script of its page threw before it loaded and it shows nothing (core `PreviewDown` `crashed`), `why` what it threw.
+        public static func previewCrashed(why: String) -> String {
+            "a script of its page threw before it loaded (\(why)), and it shows nothing. Ask its session to fix it, then try again."
+        }
 
         /// A canvas told to draw that said neither its shape nor why within `seconds`.
         public static func previewLate(seconds: Int) -> String {
