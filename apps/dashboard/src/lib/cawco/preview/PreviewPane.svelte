@@ -5068,7 +5068,6 @@
       onmoved={() => sayCovered?.()}
       open={railSheetOpen}
       short={(railEmpty && !threadPushed) || (threadPushed && placingThread)}
-      tall={threadPushed && !placingThread}
       bind:surface={railSurface}
     >
       {#if threadPushed && cardPin && kit && replyDraft}
@@ -5120,7 +5119,10 @@
       {#key cardPin.id}
         {#if floatSheet}
           <!-- On a phone and under a finger, the thread is the well's
-               bottom sheet, dragged between its stops (ThreadSheet). -->
+               bottom sheet, dragged between its stops (ThreadSheet): it
+               opens at half its room, the page lifted so the pin's pill
+               and its element stand above it (what the comment is about
+               in view), and goes to the whole room on a drag. -->
           <ThreadSheet
             label={`Comment ${cardPin.number}`}
             onclose={() => closeCard()}
@@ -5132,7 +5134,6 @@
             onmoved={() => sayCovered?.()}
             open={openPin !== null}
             short={placingThread}
-            tall={!placingThread}
             bind:surface={cardFloat}
           >
             {@render thread(cardPin, replyDraft, false, false, true)}

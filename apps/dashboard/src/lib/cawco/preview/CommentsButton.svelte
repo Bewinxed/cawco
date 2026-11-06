@@ -7,7 +7,8 @@
    * with an even inset round it. Its badge is the kit Badge's `corner`
    * form on the top trailing corner (SwiftUI badge: "Badges appear in list
    * rows, tab bars, toolbar items, and menus"), taking no room, only above 0
-   * (The Earned Count Rule), and it says one count in that count's own
+   * (The Earned Count Rule) and only while the rail is shut (the rail's
+   * title says its count while it stands), and it says one count in that count's own
    * look: what waits on him (To check) in the needs-you pair, else what he
    * holds to send hollow, as a held pill is, else the open comments in
    * plain ink. Comments not reaching the agent draw the bubble in the fail
@@ -81,7 +82,7 @@
 </script>
 
 <BarItem
-  count={badge.n}
+  count={open ? 0 : badge.n}
   countLook={badge.look}
   data-link-down={down ? "" : undefined}
   data-slot="comments"

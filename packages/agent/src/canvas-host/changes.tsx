@@ -31,6 +31,7 @@ import {
   seeChanges,
   seenOf,
 } from "@cawco/core/comments";
+import { commentWords } from "@cawco/core/words/comments";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import {
@@ -450,9 +451,10 @@ export function Changes({
     [step]
   );
   const total = tour?.length ?? stops.length;
+  // The panel's own words (ChangesTag), so the canvas's tag reads as the page's.
   const said = tour
-    ? `${at + 1} of ${total}`
-    : `${total} changed since you looked`;
+    ? commentWords.changeOf(at + 1, total)
+    : commentWords.changedSince(total);
 
   return (
     <>

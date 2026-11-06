@@ -883,7 +883,6 @@
           }}
           open={listOpen && !composing}
           short={(pins.length === 0 && !thread) || placingThread}
-          tall={thread !== null && !placingThread}
         >
           {#if thread}
             {#key thread.id}
@@ -901,7 +900,6 @@
             }}
             open
             short={placingThread}
-            tall={!placingThread}
           >
             {@render card(thread)}
           </ThreadSheet>
