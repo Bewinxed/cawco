@@ -83,6 +83,25 @@ export const AllChanged = {
   parameters: { viewport: DESK },
 };
 
+/** Every control turned, in the room beside a 1440 stage, for the coral question. */
+const EVERY_TURNED = {
+  width: 690,
+  height: 500,
+  values: { radius: 4, height: "44px", fill: "#e8f1ee", attempted: true },
+};
+
+/** Coral on each: every changed row's undo glyph in the edit's ink, Reset all in ink (today's look). */
+export const CoralEach = {
+  args: { ...EVERY_TURNED, coral: "each" },
+  parameters: { viewport: 1440 },
+};
+
+/** Coral once: the rows' undo glyphs in ink, Reset all alone in the edit's ink. */
+export const CoralOnce = {
+  args: { ...EVERY_TURNED, coral: "once" },
+  parameters: { viewport: 1440 },
+};
+
 /** Reset all just pressed: Undo reset in its place. */
 export const ResetAll = {
   args: { undoable: true },
