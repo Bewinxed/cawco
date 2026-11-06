@@ -27,6 +27,11 @@
  * the writer for the asker, the conversation's session for Caw, the
  * member's session in the ledger for an agent member; no one for the
  * person. The pick itself is written by artifacts/service.ts `settle`.
+ *
+ * His own pick takes a card back from its member (`personWrote`): one the
+ * member settled that he picked otherwise, and one still waiting on it that
+ * he picked first. Its row leaves the member's open cards, and its record
+ * counts as decided only what the member settled itself.
  */
 import type { DelegateType, InstanceRow } from "@cawco/core";
 import type { ChoiceEntry, SettledBy } from "@cawco/core/choices";
@@ -46,7 +51,7 @@ import { decisionLink, sessionLink } from "@cawco/core/references";
 import { unhandled } from "@cawco/core/unhandled";
 import { decidesWords } from "@cawco/core/words/decides";
 import type { ArtifactRow } from "./db/artifacts";
-import type { CardSettlingRow, DecidesDb } from "./db/decides";
+import { type CardSettlingRow, type DecidesDb, holds } from "./db/decides";
 import { decidesTable, SettleRefusal } from "./decides-file";
 import { sessionLabel } from "./labels";
 import { isSetupPage } from "./setup";
@@ -103,6 +108,8 @@ export interface SettlingDeps {
         name: string;
       }
     | undefined;
+  /** He wrote on card `card` of `artifactId`, which a member settled: its push is over (push.ts `decidedSeen`). */
+  readonly seen: (artifactId: string, card: string) => void;
   /** Files and spawns a work item (work-items.ts `start`): what dispatch starts an attempt through. */
   readonly start: (request: WorkItemRequest) => Promise<WorkItemStart>;
   /** Tells the project's conversation a `decision` event (caw.ts `tell`): its session, or why it didn't take it. */
@@ -230,10 +237,37 @@ const briefOf = (
   ].join("\n\n");
 };
 
+/** The once-pass's name in `data_migrations` ({@link createSettling} `takeBackPickedOnce`). */
+const PICKED_TAKEN_BACK = "picked_cards_taken_back";
+
+/**
+ * Whether the person's entry on `kept`'s card takes it from its member: on
+ * a card the member settled, an entry no longer carrying its `settled` (he
+ * picked otherwise, or cleared it); on a card still waiting on the member,
+ * a pick of his own (core decisions.ts `pickMade`, no `settled`). A card
+ * taken back already stays so.
+ */
+const takenBy = (kept: CardSettlingRow, page: PageCards): boolean => {
+  if (kept.takenBackAt) {
+    return false;
+  }
+  const entry = page.state[kept.card];
+  if (entry?.settled) {
+    return false;
+  }
+  return (
+    kept.settledAt !== null ||
+    pickMade(
+      page.all.find((card) => card.id === kept.card),
+      entry
+    )
+  );
+};
+
 /** Whether a ledger row stands for a member still on its card. */
 const onIt = (deps: SettlingDeps, kept: CardSettlingRow | undefined) =>
   !!kept &&
-  kept.settledAt === null &&
+  holds(kept) &&
   kept.instanceId !== null &&
   (kept.workItemId === null
     ? deps.warm(kept.instanceId)
@@ -473,11 +507,7 @@ export const createSettling = (deps: SettlingDeps) => {
   ): Promise<PageCards[]> => {
     const cards = new Map<string, string[]>();
     for (const one of kept) {
-      if (
-        one.artifactId !== page.row.id &&
-        one.settledAt === null &&
-        !onIt(deps, one)
-      ) {
+      if (one.artifactId !== page.row.id && holds(one) && !onIt(deps, one)) {
         cards.set(one.artifactId, [
           ...(cards.get(one.artifactId) ?? []),
           one.card,
@@ -815,6 +845,65 @@ export const createSettling = (deps: SettlingDeps) => {
           why: answer.why,
         });
       }
+    },
+
+    /**
+     * The person wrote cards `keys` of page `artifactId`: the one way his
+     * pick reaches the hub, every view's socket (the dashboard's, the phone
+     * app's page) and a Send's carried writes alike (docs.ts `changed` by
+     * `person`, artifacts/sync.ts `takeUpdate`). Each card a member holds
+     * in the ledger is taken back from it ({@link takenBy}); a card it
+     * settled, his write ends its push.
+     */
+    personWrote: (artifactId: string, keys: readonly string[]): void => {
+      let page: PageCards | undefined;
+      for (const key of keys) {
+        const kept = deps.db.settling(artifactId, key);
+        if (!kept || kept.route === BUILT_IN.you.id) {
+          continue;
+        }
+        if (kept.settledAt) {
+          deps.seen(artifactId, key);
+        }
+        page ??= deps.pageCards(artifactId, []);
+        if (page && takenBy(kept, page)) {
+          deps.db.markTakenBack(artifactId, key, new Date());
+        }
+      }
+    },
+
+    /**
+     * Once, as the hub starts: each card a member still holds that he had
+     * picked himself before {@link personWrote} took such picks back, read
+     * from its page's state and taken back at his pick's time. Answers how
+     * many, or null when it had run.
+     */
+    takeBackPickedOnce: (migrated: {
+      dataMigrated: (name: string) => boolean;
+      markDataMigrated: (name: string) => void;
+    }): number | null => {
+      if (migrated.dataMigrated(PICKED_TAKEN_BACK)) {
+        return null;
+      }
+      const pages = new Map<string, PageCards | undefined>();
+      let taken = 0;
+      for (const kept of deps.db.open()) {
+        if (!pages.has(kept.artifactId)) {
+          pages.set(kept.artifactId, deps.pageCards(kept.artifactId, []));
+        }
+        const page = pages.get(kept.artifactId);
+        const picked = page?.state[kept.card];
+        if (page && picked && takenBy(kept, page)) {
+          deps.db.markTakenBack(
+            kept.artifactId,
+            kept.card,
+            new Date(picked.at)
+          );
+          taken += 1;
+        }
+      }
+      migrated.markDataMigrated(PICKED_TAKEN_BACK);
+      return taken;
     },
   };
 };

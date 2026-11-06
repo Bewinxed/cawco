@@ -14777,23 +14777,12 @@ export const createServer = (
       waitPageMoved(id);
     },
     // A pick or a note on a project's page moves its Decisions tab, and,
-    // once quiet, its record when the page is decided. A card a member of
-    // Who decides settled that the person picked otherwise is taken back:
-    // its pick no longer carries the member's record.
+    // once quiet, its record when the page is decided. A card he picks
+    // himself is taken back from the member of Who decides it went to
+    // (settling.ts `personWrote`).
     changed: (id, keys, by) => {
       if (by === "person") {
-        const state = artifactDocs.doc(id).getMap("state");
-        for (const key of keys) {
-          const kept = db.decides.settling(id, key);
-          if (kept?.settledAt) {
-            push.decidedSeen(id, key);
-            if (
-              !(state.get(key) as { settled?: unknown } | undefined)?.settled
-            ) {
-              db.decides.markTakenBack(id, key, new Date());
-            }
-          }
-        }
+        settling.personWrote(id, keys);
       }
       const row = db.artifacts.get(id);
       if (row?.kind === "page" && row.projectId) {
@@ -15148,6 +15137,7 @@ export const createServer = (
       return told.woke ? { instanceId: told.instanceId } : { why: told.why };
     },
     heard: (decided) => push.decided(decided),
+    seen: (artifactId, card) => push.decidedSeen(artifactId, card),
   });
   const artifacts: Artifacts = createArtifacts({
     decides: {
@@ -15627,6 +15617,17 @@ export const createServer = (
   });
   if (settledNamed !== null) {
     console.info(`[hub] ${settledNamed} settled pick(s) named by their member`);
+  }
+  // Cards he picked himself while they waited on a member, before his pick
+  // took them back, are taken back once (settling.ts `takeBackPickedOnce`).
+  const pickedTaken = settling.takeBackPickedOnce({
+    dataMigrated: (name) => db.dataMigrated(name),
+    markDataMigrated: (name) => db.markDataMigrated(name),
+  });
+  if (pickedTaken !== null) {
+    console.info(
+      `[hub] ${pickedTaken} card(s) he picked taken back from their member`
+    );
   }
   // Artifacts made before titles take their agent's words once (artifact-titles.ts).
   const titled = titleUntitledOnce({

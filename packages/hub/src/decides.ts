@@ -670,7 +670,7 @@ export const decidesRoutes = (deps: DecidesDeps) => {
               decided: record.decided,
               lastAt: record.lastAt?.toISOString() ?? null,
               takenBack: record.takenBack,
-              waiting: record.unsettled.filter((row) =>
+              waiting: record.open.filter((row) =>
                 row.workItemId ? deps.live(row.workItemId) : row.signed === null
               ).length,
               spendUsd: deps.spend(record.instances, month),

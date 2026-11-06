@@ -231,6 +231,7 @@ const run = async (kit: Kit): Promise<void> => {
       harnessName: () => accountsWords.harnesses.claude,
       harnessOnline: () => true,
       heard: () => undefined,
+      seen: () => undefined,
       instance: (id) => sessions.get(id),
       live: () => false,
       modelName: () => "Opus 5.5",

@@ -19,6 +19,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  ne,
   sql,
 } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
@@ -35,6 +36,13 @@ import {
 export type CardSettlingRow = typeof cardSettlings.$inferSelect;
 type MemberRow = typeof decidesMembers.$inferSelect;
 type SettingsRow = typeof decidesSettings.$inferSelect;
+
+/**
+ * Whether a ledger row's card is still its member's: not settled by it, and
+ * not taken back by the person's own pick ({@link DecidesDb.markTakenBack}).
+ */
+export const holds = (row: CardSettlingRow): boolean =>
+  row.settledAt === null && row.takenBackAt === null;
 
 /** The one {@link decidesSettings} row's key. */
 const DECIDES_ID = "decides";
@@ -53,9 +61,10 @@ export interface MemberRecord {
   /** The sessions that settled for it, for their spend (`spend`). */
   instances: string[];
   lastAt: Date | null;
+  /** The cards it still holds ({@link holds}), as rows (the caller asks which runs are live). */
+  open: CardSettlingRow[];
+  /** The cards it settled that he picked otherwise. */
   takenBack: number;
-  /** Its cards not settled yet, as rows (the caller asks which runs are live). */
-  unsettled: CardSettlingRow[];
 }
 
 /** Who decides' rows: the fleet's table, its members and kinds (decides.ts), and where every card went (settling.ts). */
@@ -66,7 +75,13 @@ export interface DecidesDb {
   readonly kinds: () => Kind[];
   /** Stamps card `card` of `artifactId` settled at `at`. */
   readonly markSettled: (artifactId: string, card: string, at: Date) => void;
-  /** Stamps a settled card the person picked again. */
+  /**
+   * Stamps card `card` of `artifactId` taken from its member by the person's
+   * own pick: one it settled that he picked otherwise, or one still waiting
+   * on it that he picked first. Neither counts as the member's: its record's
+   * `decided` reads `settledAt` alone, and a card it never settled leaves
+   * its `open`.
+   */
   readonly markTakenBack: (artifactId: string, card: string, at: Date) => void;
   /** The members he added, as rows. */
   readonly members: () => MemberRow[];
@@ -79,6 +94,8 @@ export interface DecidesDb {
     member: string,
     projectId: string | null
   ) => CardSettlingRow[];
+  /** Every card a member still holds ({@link holds}), a card that came to him aside. */
+  readonly open: () => CardSettlingRow[];
   /** A kind added or renamed. */
   readonly putKind: (kind: Kind) => void;
   /** A member he added, with its delegate type, in one transaction. */
@@ -302,6 +319,18 @@ export const decidesDb = (
           )
         )
         .get(),
+    open: () =>
+      db
+        .select()
+        .from(cardSettlings)
+        .where(
+          and(
+            isNull(cardSettlings.settledAt),
+            isNull(cardSettlings.takenBackAt),
+            ne(cardSettlings.route, BUILT_IN.you.id)
+          )
+        )
+        .all(),
     onProject: (member, projectId) =>
       db
         .select({ row: cardSettlings })
@@ -351,7 +380,6 @@ export const decidesDb = (
           and(
             eq(cardSettlings.artifactId, artifactId),
             eq(cardSettlings.card, card),
-            isNotNull(cardSettlings.settledAt),
             isNull(cardSettlings.takenBackAt)
           )
         )
@@ -373,7 +401,7 @@ export const decidesDb = (
         decided: settled.length,
         lastAt: last,
         takenBack: settled.filter((row) => row.takenBackAt !== null).length,
-        unsettled: rows.filter((row) => row.settledAt === null),
+        open: rows.filter(holds),
         instances: [
           ...new Set(
             rows.flatMap((row) => (row.instanceId ? [row.instanceId] : []))
