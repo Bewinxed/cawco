@@ -570,10 +570,13 @@
 
   <!-- The tail grows by whole turns and by streamed characters, and follows
        either: what a peek is for is the last thing said. Each session
-       peeked opens at its own end. -->
+       peeked opens at its own end. Its rows keep their height
+       (`*:shrink-0`): a clamped paragraph hides its overflow, so a flex
+       column longer than the tail shrank it below its lines, cutting them
+       and drawing the next row over them. -->
   {#key target.viewId}
     <div
-      class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto border-t border-border/50 px-4 py-3"
+      class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto border-t border-border/50 px-4 py-3 *:shrink-0"
       {@attach followTail()}
     >
       {#if session?.loading && tail.length === 0}
