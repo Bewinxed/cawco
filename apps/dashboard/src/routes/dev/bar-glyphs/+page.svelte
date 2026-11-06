@@ -5,11 +5,14 @@
    * hugeicons`), for the owner's pick of the face: the head as it floats
    * over the page (title, mode, Comments with its badge, Reload, Open,
    * Expand, Close) and the Comments rail's bar (its title, Search, +), on a
-   * desk; under 640px the phone's head and the Comments sheet's bar. Every
+   * desk, with comment 4's card bar (Resolve, Delete, More, Close); under
+   * 640px the phone's head and comment 4 opened in the Comments sheet (the
+   * app's drawer), Back leading. Every
    * symbol stands in the house's bar recipe (BarGlass, BarItem,
    * `--c-bar-symbol`), so each face is drawn at the one size and place the
    * product would draw it.
    */
+  import PinMark from "#lib/cawco/preview/PinMark.svelte";
   import { BarGlass, BarItem } from "#lib/components/ui/bar-glass/index.js";
   import { page } from "$app/state";
   import pageDesk from "../artifact-panel/page-desk.webp";
@@ -69,6 +72,43 @@
   </button>
 {/snippet}
 
+{#snippet listTitle()}
+  <button
+    class="mark-line flex min-w-0 flex-1 items-center gap-space-2 ps-space-2 text-start"
+    type="button"
+  >
+    <span class="text-ink-strong type-label">Open</span>
+    <span class="text-ink-muted type-label num">5</span>
+    <svg
+      aria-hidden="true"
+      class="size-icon-sm flex-none text-ink-muted"
+      fill="none"
+      viewBox="0 0 {box} {box}"
+      xmlns="http://www.w3.org/2000/svg">{@html GLYPH_SETS[face].chevron}</svg
+    >
+  </button>
+{/snippet}
+
+<!-- A comment's card bar (PinCard): Back where it was opened from a list,
+     its pill, Resolve, Delete and More in one glass, Close in its own. -->
+{#snippet cardBar(back: boolean)}
+  <div class="flex items-center gap-space-2">
+    {#if back}
+      <BarGlass form="group"
+        >{@render item("back", "Back to Comments")}</BarGlass
+      >
+    {/if}
+    <PinMark number={4} state="sent" />
+    <span class="me-auto"></span>
+    <BarGlass form="group">
+      {@render item("resolve", "Resolve")}
+      {@render item("delete", "Delete comment")}
+      {@render item("more", "More for comment 4")}
+    </BarGlass>
+    <BarGlass form="group">{@render item("close", "Close")}</BarGlass>
+  </div>
+{/snippet}
+
 <div
   class="h-dvh bg-surface-recess p-space-2 max-phone:p-0"
   data-bar-glyphs={face}
@@ -113,40 +153,33 @@
         {@render item("more", "More")}
       </BarGlass>
     </header>
-    <!-- The Comments rail's bar, in its floating glass (a desk), or the
-         Comments sheet's (a phone). -->
-    <div
-      class={[
-        "absolute end-space-2 z-1 flex w-c-comments-w items-center gap-space-1 rounded-(--c-float-panel-r) border border-border-hairline bg-material-panel p-space-2 shadow-overlay glass-backdrop",
-        phone.current
-          ? "start-space-2 bottom-space-2 w-auto"
-          : "top-c-head-room",
-      ]}
-    >
-      {#if phone.current}
-        <BarGlass form="group"
-          >{@render item("close", "Close Comments")}</BarGlass
-        >
-      {/if}
-      <button
-        class="mark-line flex min-w-0 flex-1 items-center gap-space-2 ps-space-2 text-start"
-        type="button"
+    <!-- A desk: the Comments rail's bar in its floating glass, and comment
+         4's card standing on the page, its own bar. -->
+    {#if !phone.current}
+      <div
+        class="absolute end-space-2 top-c-head-room z-1 flex w-c-comments-w items-center gap-space-1 rounded-(--c-float-panel-r) border border-border-hairline bg-material-panel p-space-2 shadow-overlay glass-backdrop"
       >
-        <span class="text-ink-strong type-label">Open</span>
-        <span class="text-ink-muted type-label num">5</span>
-        <svg
-          aria-hidden="true"
-          class="size-icon-sm flex-none text-ink-muted"
-          fill="none"
-          viewBox="0 0 {box} {box}"
-          xmlns="http://www.w3.org/2000/svg"
-          >{@html GLYPH_SETS[face].chevron}</svg
-        >
-      </button>
-      <BarGlass form="group">
-        {@render item("search", "Search comments")}
-        {@render item("plus", "Comment on the whole page")}
-      </BarGlass>
-    </div>
+        {@render listTitle()}
+        <BarGlass form="group">
+          {@render item("search", "Search comments")}
+          {@render item("plus", "Comment on the whole page")}
+        </BarGlass>
+      </div>
+      <div
+        class="absolute start-space-6 top-c-head-room z-1 w-c-pin-card-w rounded-lg border border-border-control bg-surface-raised p-space-3 shadow-overlay"
+        data-slot="glyph-card"
+      >
+        {@render cardBar(false)}
+      </div>
+    {:else}
+      <!-- A phone: comment 4 opened in the Comments sheet, the app's
+           drawer, Back leading. -->
+      <div
+        class="absolute inset-x-0 bottom-0 z-1 rounded-t-lg border-t border-border-hairline bg-surface-raised px-space-3 pt-space-3 pb-space-6 shadow-drawer"
+        data-slot="glyph-sheet"
+      >
+        {@render cardBar(true)}
+      </div>
+    {/if}
   </section>
 </div>

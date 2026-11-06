@@ -3,8 +3,12 @@
  * copy, not the product's icons): Solar's bold-duotone cut (today), Solar's
  * linear cut, and Hugeicons' free Stroke Rounded, read from Iconify's sets
  * (Solar 1.2.13 from the repository's @iconify-json/solar, Hugeicons from
- * api.iconify.design on 2026-11-05). Close and Plus are the dashboard's own
- * glyphs in both Solar faces, as the product draws them.
+ * api.iconify.design on 2026-11-05 and 2026-11-06). Every glyph of a face is
+ * that face's own, so each option is drawn in one family: in the
+ * bold-duotone face the chevrons, Back and the lens are Solar's
+ * bold-duotone cuts, and Close and Plus, which Solar draws only inside a
+ * circle or a square, are drawn bare in its duotone manner (one stroke whole,
+ * the other at half ink, as its check is).
  */
 export type Glyph =
   | "close"
@@ -18,13 +22,16 @@ export type Glyph =
   | "expand"
   | "more"
   | "search"
-  | "plus";
+  | "plus"
+  | "back"
+  | "resolve"
+  | "delete";
 export const GLYPH_SETS = {
   duotone: {
     close:
-      '<path d="M4.5 4.5l15 15M19.5 4.5l-15 15" stroke="currentColor" stroke-linecap="round" stroke-width="1.5" fill="none"/>',
+      '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"><path d="M5.5 5.5l13 13"/><path d="M18.5 5.5l-13 13" opacity=".5"/></g>',
     chevron:
-      '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 9L12 15L5 9"/>',
+      '<g fill="currentColor"><path d="M8.30273 12.4044L11.6296 15.8351C11.8428 16.0549 12.1573 16.0549 12.3704 15.8351L18.8001 9.20467C19.2013 8.79094 18.9581 8 18.4297 8H12.7071L8.30273 12.4044Z"/><path d="M11.2929 8H5.5703C5.04189 8 4.79869 8.79094 5.1999 9.20467L7.60648 11.6864L11.2929 8Z" opacity=".5"/></g>',
     interact:
       '<g fill="currentColor"><path fill-rule="evenodd" d="M11.4334 16.4643L12.6361 15.2616L15.2616 12.6361L16.4643 11.4334C17.6955 10.2022 18.3111 9.58656 18.1658 8.92489C18.0204 8.26322 17.2035 7.96225 15.5696 7.3603L10.1205 5.35271C6.86106 4.15187 5.23136 3.55146 4.39141 4.39141C3.55146 5.23136 4.15187 6.86106 5.3527 10.1205L7.3603 15.5696C7.96225 17.2035 8.26322 18.0204 8.92489 18.1658C9.58656 18.3111 10.2022 17.6955 11.4334 16.4643Z" clip-rule="evenodd"/><path d="M12.6357 15.2618L16.574 19.2001C16.9818 19.6079 17.1857 19.8117 17.4132 19.906C17.7164 20.0316 18.0572 20.0316 18.3605 19.906C18.5879 19.8117 18.7918 19.6078 19.1996 19.2001C19.6074 18.7923 19.8113 18.5884 19.9055 18.3609C20.0311 18.0577 20.0311 17.7169 19.9055 17.4137C19.8113 17.1862 19.6074 16.9823 19.1996 16.5745L15.2613 12.6362L12.6357 15.2618Z" opacity=".5"/></g>',
     comment:
@@ -39,8 +46,13 @@ export const GLYPH_SETS = {
       '<g fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"><path d="M8.60714 22C8.60714 22.4142 8.27136 22.75 7.85714 22.75H2C1.58579 22.75 1.25 22.4142 1.25 22V16.1429C1.25 15.7286 1.58579 15.3929 2 15.3929C2.41421 15.3929 2.75 15.7286 2.75 16.1429V20.1893L8.46967 14.4697C8.76256 14.1768 9.23744 14.1768 9.53033 14.4697C9.82322 14.7626 9.82322 15.2374 9.53033 15.5303L3.81066 21.25H7.85714C8.27136 21.25 8.60714 21.5858 8.60714 22Z" opacity=".5"/><path d="M15.3929 2C15.3929 1.58579 15.7286 1.25 16.1429 1.25H22C22.4142 1.25 22.75 1.58579 22.75 2V7.85714C22.75 8.27136 22.4142 8.60714 22 8.60714C21.5858 8.60714 21.25 8.27136 21.25 7.85714V3.81066L15.5303 9.53033C15.2374 9.82322 14.7626 9.82322 14.4697 9.53033C14.1768 9.23744 14.1768 8.76256 14.4697 8.46967L20.1893 2.75H16.1429C15.7286 2.75 15.3929 2.41421 15.3929 2Z"/></g>',
     more: '<g fill="currentColor"><path d="M7 12C7 13.1046 6.10457 14 5 14C3.89543 14 3 13.1046 3 12C3 10.8954 3.89543 10 5 10C6.10457 10 7 10.8954 7 12Z"/><path d="M21 12C21 13.1046 20.1046 14 19 14C17.8954 14 17 13.1046 17 12C17 10.8954 17.8954 10 19 10C20.1046 10 21 10.8954 21 12Z"/><path d="M14 12C14 13.1046 13.1046 14 12 14C10.8954 14 10 13.1046 10 12C10 10.8954 10.8954 10 12 10C13.1046 10 14 10.8954 14 12Z" opacity=".5"/></g>',
     search:
-      '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"><circle cx="11.5" cy="11.5" r="9.5"/><path d="M18.2173 18.2178L21.9999 22.0004"/></g>',
-    plus: '<path d="M12 3v18M3 12h18" stroke="currentColor" stroke-linecap="round" stroke-width="1.5" fill="none"/>',
+      '<path fill="currentColor" d="M20.313 11.157a9.157 9.157 0 1 1-18.313 0a9.157 9.157 0 0 1 18.313 0" opacity=".5"/><path fill="currentColor" d="m17.1 18.122l3.666 3.666a.723.723 0 0 0 1.023-1.022L18.122 17.1a9 9 0 0 1-1.022 1.022"/>',
+    plus: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"><path d="M12 4v16"/><path d="M4 12h16" opacity=".5"/></g>',
+    back: '<g fill="currentColor"><path d="M11.5956 8.30273L8.16485 11.6296C7.94505 11.8428 7.94505 12.1573 8.16485 12.3704L14.7953 18.8001C15.2091 19.2013 16 18.9581 16 18.4297V12.7071L11.5956 8.30273Z"/><path d="M15.9999 11.2929L15.9999 5.5703C15.9999 5.04189 15.2089 4.79869 14.7952 5.1999L12.3135 7.60648L15.9999 11.2929Z" opacity=".5"/></g>',
+    resolve:
+      '<g fill="currentColor"><path d="M18.4697 6.46967C18.7626 6.17678 19.2373 6.17678 19.5302 6.46967C19.8231 6.76256 19.8231 7.23732 19.5302 7.53022L9.53022 17.5302C9.23732 17.8231 8.76256 17.8231 8.46967 17.5302C8.17678 17.2373 8.17678 16.7626 8.46967 16.4697L18.4697 6.46967Z" opacity=".5"/><path d="M4.46967 12.4697C4.76256 12.1768 5.23732 12.1768 5.53022 12.4697L9.53022 16.4697C9.82311 16.7626 9.82311 17.2373 9.53022 17.5302C9.23732 17.8231 8.76256 17.8231 8.46967 17.5302L4.46967 13.5302C4.17678 13.2373 4.17678 12.7626 4.46967 12.4697Z"/></g>',
+    delete:
+      '<g fill="currentColor"><path d="M9.42578 11.4814C9.83777 11.4383 10.2049 11.7548 10.2461 12.1885L10.7461 17.4521C10.7871 17.8858 10.4862 18.2721 10.0742 18.3154C9.66223 18.3586 9.29511 18.0421 9.25391 17.6084L8.75391 12.3457C8.71269 11.9119 9.01362 11.5248 9.42578 11.4814Z"/><path d="M14.5742 11.4814C14.9864 11.5248 15.2873 11.9119 15.2461 12.3457L14.7461 17.6084C14.7049 18.0421 14.3378 18.3586 13.9258 18.3154C13.5138 18.2721 13.2129 17.8858 13.2539 17.4521L13.7539 12.1885C13.7951 11.7548 14.1623 11.4383 14.5742 11.4814Z"/><path d="M12 2C12.9919 2 13.8928 2.38831 14.5498 3.0166C15.3846 3.81496 15.4759 4.96836 15.4824 5.80957H20.2705C20.6733 5.80969 20.9998 6.1292 21 6.52344C21 6.91785 20.6734 7.23816 20.2705 7.23828H3.72949C3.32658 7.23816 3 6.91785 3 6.52344C3.00021 6.1292 3.32671 5.80969 3.72949 5.80957H8.51758C8.52408 4.96836 8.61542 3.81496 9.4502 3.0166C10.1072 2.38831 11.0081 2 12 2Z"/><path d="M11.5956 22.0001H12.4044C15.1871 22.0001 16.5785 22.0001 17.4831 21.1142C18.3878 20.2283 18.4803 18.7751 18.6654 15.8686L18.9321 11.6807C19.0326 10.1037 19.0828 9.31524 18.6289 8.81558C18.1751 8.31592 17.4087 8.31592 15.876 8.31592H8.12405C6.59127 8.31592 5.82488 8.31592 5.37105 8.81558C4.91722 9.31524 4.96744 10.1037 5.06788 11.6807L5.33459 15.8686C5.5197 18.7751 5.61225 20.2283 6.51689 21.1142C7.42153 22.0001 8.81289 22.0001 11.5956 22.0001Z" opacity=".5"/></g>',
   },
   linear: {
     close:
@@ -63,6 +75,11 @@ export const GLYPH_SETS = {
     search:
       '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"><circle cx="11.5" cy="11.5" r="9.5"/><path d="M18.2173 18.2178L21.9999 22.0004"/></g>',
     plus: '<path d="M12 3v18M3 12h18" stroke="currentColor" stroke-linecap="round" stroke-width="1.5" fill="none"/>',
+    back: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 5L9 12L15 19"/>',
+    resolve:
+      '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 13L9 17L19 7"/>',
+    delete:
+      '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"><path d="M9.1709 4C9.58273 2.83481 10.694 2 12.0002 2C13.3064 2 14.4177 2.83481 14.8295 4"/><path d="M20.5001 6H3.5"/><path d="M18.8332 8.5L18.3732 15.3991C18.1962 18.054 18.1077 19.3815 17.2427 20.1907C16.3777 21 15.0473 21 12.3865 21H11.6132C8.95235 21 7.62195 21 6.75694 20.1907C5.89194 19.3815 5.80344 18.054 5.62644 15.3991L5.1665 8.5"/><path d="M9.5 11L10 16"/><path d="M14.5 11L14 16"/></g>',
   },
   hugeicons: {
     close:
@@ -85,6 +102,11 @@ export const GLYPH_SETS = {
     search:
       '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="m17 17l4 4m-2-10a8 8 0 1 0-16 0a8 8 0 0 0 16 0"/>',
     plus: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12.001 5v14.002m7.001-7H5"/>',
+    back: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 6s-6 4.419-6 6s6 6 6 6"/>',
+    resolve:
+      '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="m5 14l3.5 3.5L19 6.5"/>',
+    delete:
+      '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5" d="m19.5 5.5l-.62 10.025c-.158 2.561-.237 3.842-.88 4.763a4 4 0 0 1-1.2 1.128c-.957.584-2.24.584-4.806.584c-2.57 0-3.855 0-4.814-.585a4 4 0 0 1-1.2-1.13c-.642-.922-.72-2.205-.874-4.77L4.5 5.5M3 5.5h18m-4.944 0l-.683-1.408c-.453-.936-.68-1.403-1.071-1.695a2 2 0 0 0-.275-.172C13.594 2 13.074 2 12.035 2c-1.066 0-1.599 0-2.04.234a2 2 0 0 0-.278.18c-.395.303-.616.788-1.058 1.757L8.053 5.5m1.447 11v-6m5 6v-6"/>',
   },
 } as const satisfies Record<string, Record<Glyph, string>>;
 export const VIEWBOX = { duotone: 24, linear: 24, hugeicons: 24 } as const;
