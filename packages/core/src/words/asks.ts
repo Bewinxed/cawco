@@ -69,6 +69,13 @@ export const askWords = {
     `Nothing was connected, and ${who} is still waiting. Show details has what the hub said; Try again starts it again.`,
   /** Not now, refused on its way: what refused it goes after. */
   cantSendAnswer: "Couldn't send that answer.",
+  /**
+   * A proposal to a project file the file outgrew before it was approved
+   * (hub memory.ts `apply`): said after "Couldn't send that answer.", with
+   * Deny still there to reject it.
+   */
+  proposalStale: (path: string, proposer: string) =>
+    `${path} changed since this was proposed, and the proposal no longer applies to it. Reject it; ${proposer} proposes again from what the file says now.`,
   /** While the session's machine is offline. */
   connectOffline: "Machine offline — can't connect yet.",
   /** The chip at the tray row's end while a card stands open above. */

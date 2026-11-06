@@ -1209,6 +1209,11 @@ public enum Words {
         /// Not now, refused on its way: what refused it goes after.
         public static let cantSendAnswer = "Couldn't send that answer."
 
+        /// A proposal to a project file the file outgrew before it was approved (hub memory.ts `apply`): said after "Couldn't send that answer.", with Deny still there to reject it.
+        public static func proposalStale(path: String, proposer: String) -> String {
+            "\(path) changed since this was proposed, and the proposal no longer applies to it. Reject it; \(proposer) proposes again from what the file says now."
+        }
+
         /// While the session's machine is offline.
         public static let connectOffline = "Machine offline — can't connect yet."
 

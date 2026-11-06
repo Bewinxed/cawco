@@ -139,13 +139,13 @@
     }
     pressed = "allow";
     takeRefused = null;
+    taking = true;
     takeRefused = await takeOverBrowser(request.requestId, browserAsk);
-    // Refused: the button is free again.
-    if (takeRefused !== null) {
-      pressed = null;
-      return;
+    // Refused: the button is free again; taken, the ask leaves with it.
+    taking = takeRefused === null;
+    if (takeRefused === null) {
+      ontaken?.();
     }
-    ontaken?.();
   }
 
   /** Deny, with the words the person wrote on the "Other" line, if any. */
@@ -154,6 +154,7 @@
       return;
     }
     pressed = "deny";
+    takeRefused = null;
     commandId = onanswer({
       behavior: "deny",
       message: (others[browserAsk.reason] ?? "").trim(),
@@ -467,17 +468,23 @@
   }
 
   // A permission blocks the turn that asked it, so its answer must land exactly
-  // once and only when it can reach the daemon that asked. `pressed` latches
-  // the card the instant it is answered — a double-tap, or an Enter after a
-  // click, cannot answer twice — and every path refuses while the hub is
-  // unreachable, or the session's machine is (its row reads `unknown`, as
-  // NeedsCard holds a stale ask): the answer would resolve into nothing and
-  // leave the turn wedged, so the card waits, and is live again the moment
-  // the machine is. The pressed button pends (the kit's pending: spinner, its
-  // label morphing to what it is doing) while its peers dim, until the gate
-  // leaves; refused, it stops and the reason sits under the buttons.
+  // once and only when it can reach the daemon that asked. An answer that is
+  // out (`out`) latches the card from the instant it is pressed — a
+  // double-tap, or an Enter after a click, cannot answer twice — and every
+  // path refuses while the hub is unreachable, or the session's machine is
+  // (its row reads `unknown`, as NeedsCard holds a stale ask): the answer
+  // would resolve into nothing and leave the turn wedged, so the card waits,
+  // and is live again the moment the machine is. The pressed button pends
+  // (the kit's pending: spinner, its label morphing to what it is doing)
+  // while its peers dim, until the gate leaves. Refused, the latch lets go:
+  // the pressed button is marked failed, the reason sits under the buttons,
+  // and every answer can be pressed again (a proposal the hub can no longer
+  // apply is still denied from here).
   type Choice = "allow" | "deny" | "always" | "answer";
+  /** The last button pressed, for its pending and failed marks. */
   let pressed = $state<Choice | null>(null);
+  /** A take-over on its way (`takeOverBrowser`), which goes out as no command. */
+  let taking = $state(false);
   const row = $derived(cawco.instanceIndex.byId.get(request.instanceId));
   /** The session's machine is offline: the ask stands, its answer waits. */
   const offline = $derived(row ? isStale(row) : false);
@@ -485,7 +492,6 @@
   const hub = hubSeam();
   /** An answer can reach the daemon that asked: the hub is live, and its machine. */
   const reachable = $derived(hub.state === "connected" && !offline);
-  const answerable = $derived(pressed === null && reachable);
 
   /**
    * The command this card's answer went out as. The card reads its OWN id
@@ -504,6 +510,15 @@
       ? `Couldn't send that answer. ${record.reason}`
       : "Couldn't send that answer.";
   });
+  /**
+   * An answer is out: a take-over on its way, or the command pressed and
+   * neither refused nor let go by the ledger. A refused answer frees the
+   * card; one taken leaves it with the ask.
+   */
+  const out = $derived(
+    taking || (pressed !== null && record !== null && record.stage !== "failed")
+  );
+  const answerable = $derived(!out && reachable);
 
   function answer(kind: "allow" | "deny" | "always"): void {
     if (!answerable) {
@@ -514,12 +529,11 @@
   }
 
   /** A button's part in the answer: pending while its answer is out, and the rest dimmed. */
-  const pendingOf = (choice: Choice): boolean =>
-    pressed === choice && refused === null;
+  const pendingOf = (choice: Choice): boolean => out && pressed === choice;
   const failedOf = (choice: Choice): boolean =>
-    pressed === choice && refused !== null;
+    !out && pressed === choice && refused !== null;
   const disabledOf = (choice: Choice): boolean =>
-    pressed === null ? !reachable : !pendingOf(choice);
+    out ? !pendingOf(choice) : !reachable;
 
   /**
    * Which question is being answered, said where the eye is: a hairline
@@ -638,7 +652,7 @@
     >
       {takeRefused ?? refused}
     </p>
-  {:else if pressed === null && offline}
+  {:else if !out && offline}
     <p
       data-slot="wait"
       class="mt-space-2 text-size-meta font-normal text-ink-muted"
@@ -646,7 +660,7 @@
     >
       Machine offline — can't answer yet.
     </p>
-  {:else if pressed === null && !reachable}
+  {:else if !(out || reachable)}
     <p
       data-slot="wait"
       class="mt-space-2 text-size-meta font-normal text-ink-muted"
@@ -1023,7 +1037,7 @@
       <div class="flex gap-space-2">
         <Button
           fit="prompt-wide"
-          disabled={disabledOf("answer") || (pressed === null && !allAnswered)}
+          disabled={disabledOf("answer") || !(out || allAnswered)}
           failed={failedOf("answer")}
           icon={IconCheck}
           label="Answer"

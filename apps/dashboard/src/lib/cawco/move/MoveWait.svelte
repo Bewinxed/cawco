@@ -48,7 +48,7 @@
     IconTick,
   } from "#lib/icons.js";
   import { browser } from "$app/env";
-  import { submitCommand } from "../client.svelte";
+  import { commandRecord, submitCommand } from "../client.svelte";
   import Caw from "../home/Caw.svelte";
   import { machineName } from "../home/home-state.svelte";
   import { crossIn, crossOut, dur } from "../motion/curves.svelte";
@@ -342,11 +342,18 @@
 
   /* ── The person ──────────────────────────────────────────────────────── */
 
-  let answered = $state<string | null>(null);
-  $effect(() => {
-    if (!job.askId) {
-      answered = null;
-    }
+  /** The command the approval card's last answer went out as. */
+  let sent = $state<string | null>(null);
+  /**
+   * An answer is out: sent, and neither refused nor let go by the ledger. A
+   * refused one frees both buttons for another answer (its words are said
+   * over the session's composer, `noteFailure`); one taken leaves with the ask.
+   */
+  const answered = $derived.by(() => {
+    const record = sent ? commandRecord(sent) : null;
+    return (
+      job.askId !== undefined && record !== null && record.stage !== "failed"
+    );
   });
   /** The approval card's answer, through the same channel as every ask's. */
   function answer(choice: typeof MOVE_IT | typeof DONT_MOVE): void {
@@ -354,13 +361,12 @@
     if (!(ask && askId) || answered) {
       return;
     }
-    answered = choice;
     const result: PermissionResult = {
       behavior: "allow",
       updatedInput: { answers: { [ask.title]: choice } },
     };
     // Parked on the session's own row, which reads "Needs you" until now.
-    submitCommand(
+    sent = submitCommand(
       job.targetInstanceId,
       job.targetMachineId,
       "permission.answer",
@@ -542,7 +548,7 @@
                     class="flex justify-between gap-space-8 group-data-phone/wait:gap-space-4"
                   >
                     <Button
-                      disabled={answered !== null}
+                      disabled={answered}
                       onclick={() => answer(DONT_MOVE)}
                       size="sm"
                       variant="secondary"
@@ -552,7 +558,7 @@
                     </Button>
                     <!-- The yes is the action, coral as in New session's step 2. -->
                     <Button
-                      disabled={answered !== null}
+                      disabled={answered}
                       onclick={() => answer(MOVE_IT)}
                       size="sm"
                     >

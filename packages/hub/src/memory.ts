@@ -111,6 +111,7 @@ import {
 import type { JevChoiceAnswer, JevQuestion } from "@cawco/core/jev";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { parseRecord, writeStateFile } from "@cawco/core/state-file";
+import { askWords } from "@cawco/core/words/asks";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
 import { MEMORY_ARCHIVE_DAYS, MEMORY_FILE_CHARS } from "./config";
@@ -2894,7 +2895,10 @@ export const createMemory = ({
             : await mergeThree(now, file.before, file.content);
         if (next === undefined) {
           throw new Error(
-            `${file.path} changed since this was proposed, and the proposal no longer applies to it. Reject it; ${file.path.startsWith(DELEGATES_DIR) ? "Caw" : "the curator"} proposes again from what the file says now.`
+            askWords.proposalStale(
+              file.path,
+              file.path.startsWith(DELEGATES_DIR) ? "Caw" : "the curator"
+            )
           );
         }
         return { path: file.path, content: next };
